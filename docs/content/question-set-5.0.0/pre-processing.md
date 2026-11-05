@@ -1,6 +1,6 @@
 # Question set 5.0.0, pre-processing: proposed revision
 
-Proposal status: revised. Base: d13be0c data/questionBank.json (sha256 18e39eb8f4e0cbfbffb79bd4da15fb38ccc0ac704b70fa13f3bb14813e66b009).
+Proposal status: approved. Base: d13be0c data/questionBank.json (sha256 18e39eb8f4e0cbfbffb79bd4da15fb38ccc0ac704b70fa13f3bb14813e66b009).
 
 24 questions in v0.5.0, 22 proposed: keep 21, reword 0, merge 2, cut 0, replace 1.
 
@@ -41,10 +41,10 @@ Proposal status: revised. Base: d13be0c data/questionBank.json (sha256 18e39eb8f
 
 ## Proposed decisions
 
-**OD-08.** Proposed: none of the six follow-up questions stays a question of its own. Shown to every team, each asks a practice that another question of its stage already asks, so each is merged into that question, which takes the union of both mappings: Q-IP-EXTRA-01 into Q-IP-04, Q-IP-EXTRA-02 into Q-IP-08, Q-PO-EXTRA-01 into Q-PO-17, Q-PO-EXTRA-02 into Q-PO-20, Q-PO-EXTRA-03 into Q-PO-07, Q-PO-EXTRA-04 into Q-PO-14. The mechanism of FR-CNT-06 is built as written (OD-22 (a)): no unlock rules, every question shown to every team, Q-IP-06 always shown. With no follow-up kept, the QC-06 help-text rule applies to no question.
+**OD-08.** Settled by the owner, 5 Nov 2026 12:23 EAT (sitting 1, verbatim "Accept as proposed", D2 option A): none of the six follow-up questions stays a question of its own. Each is merged into the question of its stage that already asks the same practice, which takes the union of both mappings: Q-IP-EXTRA-01 into Q-IP-04, Q-IP-EXTRA-02 into Q-IP-08, Q-PO-EXTRA-01 into Q-PO-17, Q-PO-EXTRA-02 into Q-PO-20, Q-PO-EXTRA-03 into Q-PO-07, Q-PO-EXTRA-04 into Q-PO-14. The mechanism of FR-CNT-06 is built as written (OD-22 (a)): no unlock rules, every question shown to every team, Q-IP-06 always shown. With no follow-up kept, the QC-06 help-text rule applies to no question. This departs from revision 0.5's starting point (always show the follow-ups).
 
-**OD-09.** Proposed: keep the gate and all five checklists, each recorded as one decision (FR-CNT-03, FR-CNT-04 as built, OD-22 (a)). The gate Q-PP-GATE-SENSITIVE stays a scope answer (yes, no, not sure) that raises no finding and decides whether Q-PP-13 and Q-PP-14 apply. The checklists Q-PP-16, Q-PP-17, Q-IP-06, Q-IP-13 and Q-PO-11 keep their stems and options; Q-IP-06 absorbs Q-IP-05, because a checklist's status already records which measures fit the project.
+**OD-09.** Settled by the owner, 5 Nov 2026 12:23 EAT (sitting 1, verbatim "Accept as proposed", D3 option A): keep the gate and all five checklists, each recorded as one decision (FR-CNT-03, FR-CNT-04 as built, OD-22 (a)). The gate Q-PP-GATE-SENSITIVE stays a scope answer (yes, no, not sure) that raises no finding and decides whether Q-PP-13 and Q-PP-14 apply. The checklists Q-PP-16, Q-PP-17, Q-IP-06, Q-IP-13 and Q-PO-11 keep their stems and options; Q-IP-06 absorbs Q-IP-05, because a checklist's status already records which measures fit the project.
 
-**OD-C3.** Proposed: replace Q-PP-06 with the practice question of worked example 2 under the new id Q-PP-24, mapped like Q-PP-06 (PP-03, PP-04). Under R-61 a rewording that changes what done means takes a new id, and this one does: the old stem asked how diverse the team is, the new one whether the team found and filled the perspectives the problem needs. Revision 0.5 proposed a reword that keeps the id Q-PP-06; keeping it would need your explicit choice to set R-61 aside for this question. Its why-this-is-asked text names C-20 Multi-stakeholder Consultation (CG-19).
+**OD-C3.** Settled by the owner, 5 Nov 2026 12:23 EAT (sitting 1, verbatim "Accept as proposed", D1 option A): Q-PP-06 is replaced by the practice question of worked example 2 under the new id Q-PP-24, mapped like Q-PP-06 (PP-03, PP-04), in Q-PP-06's place. Under R-61 a rewording that changes what done means takes a new id; R-61 is not set aside. Its why-this-is-asked text names C-20 Multi-stakeholder Consultation (CG-19).
 
 Batch hash (question-set:pre-processing, SHA-256 of the canonical JSON of its 22 approved stems): `3996fee4a4e4b120f417151cdbeca27f08c954c19632a1e92d14156b5d1f1a20`

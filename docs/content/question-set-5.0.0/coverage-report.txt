@@ -1,6 +1,6 @@
 LIST inputs bank-sha256=18e39eb8f4e0cbfbffb79bd4da15fb38ccc0ac704b70fa13f3bb14813e66b009 areas-sha256=a5aef6d06b7ae768046675d6ca25cf23fae0a44d3d251aecc4259ccda01fbd02
 LIST base questions=78 areas=21 controls=28
-LIST proposal status=revised actions=78 keep=66 reword=0 merge=11 cut=0 replace=1
+LIST proposal status=approved actions=78 keep=66 reword=0 merge=11 cut=0 replace=1
 LIST fieldmaps documents=data_card,mitigation_plan,model_card fields=78 question-sources=50 repoints=5
 LIST questions=67 pre-processing=22 in-processing=22 post-processing=23
 LIST pairs=283
