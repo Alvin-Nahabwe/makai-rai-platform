@@ -555,13 +555,13 @@ const ITEM_SOURCES: readonly ItemSource[] = [
   { type: 'organisation_event', table: 'organisation_events', date: 'at', people: [['actorId', 'acted'], ['targetUserId', 'named']], kind: 'action' },
   { type: 'request_receipt', table: 'request_receipts', date: 'createdAt', people: [['actorUserId', 'entered']], kind: 'route' },
   { type: 'invitation', table: 'invitations', date: 'createdAt', people: [['invitedById', 'entered']], kind: 'kind', byEmail: { column: 'email', own: ['email', 'acceptedAt'] } },
-  { type: 'organisation_agreement', table: 'organization_agreements', date: 'recordedAt', people: [['recordedById', 'entered']], kind: 'agreementVersion' },
 ];
 /**
- * The tables personalExport reads for items (NFR-PRIV-08's test compares them with the allow-list): the sixteen read
- * per membership, and platform_events, read with the platform-lane rows through `personal_platform_rows`.
+ * The tables personalExport reads for items (NFR-PRIV-08's test compares them with the allow-list): the fifteen read
+ * per membership, and platform_events and organization_agreements, read across every organisation by
+ * `personalPlatformRows` (lib/data/definer.ts).
  */
-export const PERSONAL_ITEM_TABLES: readonly string[] = [...ITEM_SOURCES.map((s) => s.table), 'platform_events'];
+export const PERSONAL_ITEM_TABLES: readonly string[] = [...ITEM_SOURCES.map((s) => s.table), 'platform_events', 'organization_agreements'];
 
 const iso = (d: Date | null): string | null => (d === null ? null : d.toISOString());
 
@@ -605,7 +605,7 @@ async function itemRows(tx: TenantTx, source: ItemSource, userId: string, email:
  * - `acceptances`: every consent_records row of the account, void ones included.
  * - `signIn`: known devices, and password reset requests with `tokenHash` as 'withheld'.
  * - `items`: per current membership, one `withOrg` reading only ids, times and person columns of
- *   the ten record tables; a row naming the person in two columns is one item with both roles.
+ *   the record tables of ITEM_SOURCES; a row naming the person in two columns is one item with both roles.
  */
 export async function personalExport(userId: string): Promise<PersonalExport> {
   const user = await identityDb.user.findUniqueOrThrow({ where: { id: userId }, select: {
@@ -635,12 +635,16 @@ export async function personalExport(userId: string): Promise<PersonalExport> {
     });
     items.push(...found);
   }
-  // The rows no application lane can read for the person: platform_events, and what a platform administrator wrote
-  // outside any membership (migration 20261105000000). A row already listed through a membership is not listed twice.
+  // The rows no membership shows the person, from every organisation: platform_events, the organisation events a
+  // platform administrator acted in, and the agreements they recorded or that name their address as DP contact
+  // (personalPlatformRows). A row already listed through a membership is not listed twice.
   const listed = new Set(items.map((i) => `${i.type}:${i.id}`));
   for (const r of await personalPlatformRows(userId)) {
     if (listed.has(`${r.source}:${r.id}`)) continue;
-    items.push({ orgId: r.orgId, organisation: r.organisation, type: r.source, id: r.id, date: r.at.toISOString(), roles: [r.role], kind: r.kind });
+    items.push({
+      orgId: r.orgId, organisation: r.organisation, type: r.source, id: r.id, date: r.at.toISOString(), roles: r.roles, kind: r.kind,
+      ...(r.own ? { own: r.own } : {}),
+    });
   }
 
   return {

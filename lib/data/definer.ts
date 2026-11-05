@@ -140,24 +140,55 @@ export async function adminSetAccountActive(a: {
   }));
 }
 
-/** One row of `personal_platform_rows` (migration 20261105000000): ids, kinds, times and the person's role only. */
+/**
+ * One platform-lane row of a person's export: ids, kinds, times and the person's roles only, and, for an agreement
+ * naming them as its DP contact, that address as their own field.
+ */
 export type PersonalPlatformRow = {
   source: 'platform_event' | 'organisation_agreement' | 'organisation_event';
-  id: string; orgId: string | null; organisation: string | null; kind: string; at: Date; role: 'acted' | 'named' | 'entered';
+  id: string; orgId: string | null; organisation: string | null; kind: string; at: Date;
+  roles: Array<'acted' | 'named' | 'entered'>;
+  own?: { dpContactEmail: string };
 };
 
 /**
- * FR-EXP-02, NFR-PRIV-08: the rows that name `userId` and that no application lane can read for them: their
- * platform_events (as actor or target), and the agreements and platform-lane organisation events they wrote in
- * any organisation (a platform administrator holds no membership). The organisations are read here on the identity
- * lane and handed to the function, which sets each one's context (as adminSetAccountActive's wrapper does).
+ * FR-EXP-02, NFR-PRIV-08: the rows that name `userId` and that no membership shows them, in every organisation (a
+ * platform administrator holds no membership):
+ * - through `personal_platform_rows` (migration 20261105000000), which no application lane can otherwise read:
+ *   their platform_events (as actor or target) and the organisation events they acted in as platform_admin. The
+ *   organisations are read here on the identity lane and handed to the function, which sets each one's context (as
+ *   adminSetAccountActive's wrapper does). The function trusts the id it is given (ADR-0009, Definer functions), so
+ *   this has one caller, personalExport for route 38's signed-in session
+ *   (__tests__/lint/personal-platform-rows-caller.test.ts).
+ * - directly on the identity lane, whose identity_lane policy shows every agreement (makrai_definer stays INSERT-only
+ *   on them, C4 EXP re-review N-1): the organization_agreements they recorded (`entered`) and those naming their
+ *   address as DP contact, compared without regard to case (`named`, with that address as their own field; the
+ *   controller's M-3 ruling). No other column of an agreement leaves here.
  */
 export async function personalPlatformRows(userId: string): Promise<PersonalPlatformRow[]> {
   return identityLaneClient.$transaction(async (tx) => {
+    const { email } = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { email: true } });
     const orgIds = (await tx.organization.findMany({ select: { id: true } })).map((o) => o.id);
-    return tx.$queryRaw<PersonalPlatformRow[]>`
+    const platform = await tx.$queryRaw<Array<Omit<PersonalPlatformRow, 'roles'> & { role: 'acted' | 'named' }>>`
       SELECT "source", "id", "orgId", "organisation", "kind", "at", "role"
-      FROM personal_platform_rows(${userId}::text, ${orgIds}::text[]) ORDER BY "at", "id"`;
+      FROM personal_platform_rows(${userId}::text, ${orgIds}::text[])`;
+    const agreements = await tx.$queryRaw<Array<{
+      id: string; orgId: string; organisation: string; kind: string; at: Date; entered: boolean; named: boolean; dpContactEmail: string;
+    }>>`
+      SELECT a."id", a."orgId", g."name" AS "organisation", a."agreementVersion" AS "kind", a."recordedAt" AS "at",
+        (a."recordedById" = ${userId}::text) AS "entered", (lower(a."dpContactEmail") = lower(${email}::text)) AS "named",
+        a."dpContactEmail"
+      FROM organization_agreements a JOIN organizations g ON g."id" = a."orgId"
+      WHERE a."recordedById" = ${userId}::text OR lower(a."dpContactEmail") = lower(${email}::text)`;
+    const rows: PersonalPlatformRow[] = [
+      ...platform.map(({ role, ...r }) => ({ ...r, roles: [role] })),
+      ...agreements.map((a) => ({
+        source: 'organisation_agreement' as const, id: a.id, orgId: a.orgId, organisation: a.organisation, kind: a.kind, at: a.at,
+        roles: [...(a.entered ? ['entered' as const] : []), ...(a.named ? ['named' as const] : [])],
+        ...(a.named ? { own: { dpContactEmail: a.dpContactEmail } } : {}),
+      })),
+    ];
+    return rows.sort((x, y) => x.at.getTime() - y.at.getTime() || (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
   });
 }
 

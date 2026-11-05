@@ -1,10 +1,17 @@
 -- The rows of the personal export (FR-EXP-02, NFR-PRIV-08) that no application lane can read:
 -- platform_events (written only by admin_set_account_active; no application role holds SELECT on
--- it), and the rows a platform administrator wrote outside any membership (organization_agreements
--- they recorded, organisation_events they acted in with actorRole 'platform_admin'). The person
--- export reads a member's rows per membership on the app lane; a platform administrator holds no
--- membership (NFR-SEC-04), so without this their own rows never reach their export (C4 EXP-1 SC-1,
--- controller ruling).
+-- it), and the organisation_events a platform administrator acted in outside any membership
+-- (actorRole 'platform_admin'; makrai_identity holds no SELECT on organisation_events). The
+-- personal export reads a member's rows per membership on the app lane; a platform administrator
+-- holds no membership (NFR-SEC-04), so without this their own rows never reach their export (C4
+-- EXP-1 SC-1, controller ruling). organization_agreements are not read here: makrai_identity
+-- reads every agreement through its identity_lane policy, so lib/data/definer.ts reads them on
+-- that lane and makrai_definer stays INSERT-only on them (C4 EXP re-review N-1).
+--
+-- It trusts p_user, as the other definer functions trust their actor argument ("the database
+-- cannot know who is signed in", migration 20261030000500): any makrai_identity session can read
+-- the platform rows of any account it names. Its one caller is route 38, with the session's own
+-- id (ADR-0009, Definer functions; __tests__/lint/personal-platform-rows-caller.test.ts).
 --
 -- Written as the definer functions of migration 20261030000500_v060_05_functions are: SECURITY
 -- DEFINER, owned by the NOLOGIN role makrai_definer, search_path pinned, every table
@@ -40,10 +47,6 @@ BEGIN
   FOREACH o IN ARRAY ARRAY(SELECT DISTINCT x FROM unnest(coalesce(p_org_ids, '{}'::text[])) AS x ORDER BY 1) LOOP
     PERFORM set_config('app.current_org_id', o, true);
     RETURN QUERY
-      SELECT 'organisation_agreement'::text, a."id", a."orgId", g."name", a."agreementVersion", a."recordedAt", 'entered'::text
-      FROM public."organization_agreements" a JOIN public."organizations" g ON g."id" = a."orgId"
-      WHERE a."orgId" = o AND a."recordedById" = p_user
-      UNION ALL
       SELECT 'organisation_event'::text, v."id", v."orgId", g."name", v."action", v."at", 'acted'::text
       FROM public."organisation_events" v JOIN public."organizations" g ON g."id" = v."orgId"
       WHERE v."orgId" = o AND v."actorId" = p_user AND v."actorRole" = 'platform_admin';
@@ -53,9 +56,8 @@ BEGIN
 END
 $$;
 
--- Its reads (ADR-0009, "Function-owner grants": makrai_definer held INSERT only on these three).
+-- Its reads (ADR-0009, "Function-owner grants": makrai_definer held INSERT only on these two).
 GRANT SELECT ON "platform_events" TO makrai_definer;
-GRANT SELECT ON "organization_agreements" TO makrai_definer;
 GRANT SELECT ON "organisation_events" TO makrai_definer;
 
 ALTER FUNCTION personal_platform_rows(text, text[]) OWNER TO makrai_definer;

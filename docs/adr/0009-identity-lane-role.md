@@ -167,16 +167,17 @@ item 2 (WIO-1), `makrai_operator_fn` SELECT and UPDATE (`requestDigest`) on the 
 retry-keyed tables: an erasure replaces the request digest of the erased row's request with
 `'erased'`, the one value the refusal trigger admits there. And, since EXP's C4 fix round
 (migration `20261105000000_exp_personal_platform_rows`), `makrai_definer` SELECT on
-`platform_events`, `organization_agreements` and `organisation_events`: the reads of
-`personal_platform_rows`, which returns a person's own rows of those tables for the personal
-export (NFR-PRIV-08), ids, kinds and times only.
+`platform_events` and `organisation_events`: the reads of `personal_platform_rows`, which returns
+a person's own rows of those tables for the personal export (NFR-PRIV-08), ids, kinds and times
+only. `organization_agreements` stays INSERT-only for it: `makrai_identity` already reads every
+agreement through its `identity_lane` policy, so the export reads them on that lane.
 
 | Role | Table | Column | Grants |
 |---|---|---|---|
 | `makrai_definer` | `invitations` | * | INSERT, SELECT, UPDATE |
 | `makrai_definer` | `memberships` | * | INSERT, SELECT |
 | `makrai_definer` | `organisation_events` | * | INSERT, SELECT |
-| `makrai_definer` | `organization_agreements` | * | INSERT, SELECT |
+| `makrai_definer` | `organization_agreements` | * | INSERT |
 | `makrai_definer` | `organizations` | * | INSERT, SELECT |
 | `makrai_definer` | `organizations` | `name` | UPDATE |
 | `makrai_definer` | `password_reset_tokens` | `usedAt` | SELECT |
