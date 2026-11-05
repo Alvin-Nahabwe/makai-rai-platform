@@ -148,8 +148,9 @@ test('FR-DOC-08 FR-DOC-04 FR-DOC-01 NFR-A11Y-02 NFR-A11Y-05 NFR-SEC-11: generate
 test('UX-20 UX-27: a lost Issue says it may have arrived, with [Retry], and Retry resends the same request id', async ({ page, baseURL }) => {
   test.setTimeout(120_000);
   failOnDialog(page);
+  // The documents routes allow ten previews and issues an hour per user; the first test above, with the C4 SC-1 axe loop, uses nine for the admin seat, so these two sign in as the owner.
   const { projectId, reviewId } = await sealedReview(baseURL!);
-  await signIn(page, 'admin');
+  await signIn(page, 'owner');
   await page.goto(`/orgs/${org.slug}/projects/${projectId}/reviews/${reviewId}/documents`);
   await page.getByRole('button', { name: 'Generate document' }).click();
   await expect(page.getByRole('heading', { name: /^Preview: Data card/ })).toBeFocused();
@@ -181,7 +182,7 @@ test('UX-20 (accessibility audit): a refused typed value is marked aria-invalid,
   test.setTimeout(120_000);
   failOnDialog(page);
   const { projectId, reviewId } = await sealedReview(baseURL!);
-  await signIn(page, 'admin');
+  await signIn(page, 'owner');
   await page.goto(`/orgs/${org.slug}/projects/${projectId}/reviews/${reviewId}/documents`);
   await page.locator('#typed-DC-25').fill('x'.repeat(2001));
   await page.getByRole('button', { name: 'Generate document' }).click();
