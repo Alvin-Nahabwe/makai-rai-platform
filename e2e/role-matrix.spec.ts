@@ -192,6 +192,8 @@ async function findUnclassifiedControls(page: Page, knownNames: readonly string[
       // The buttons in S-32's rows (Unarchive) are not: they stay in the census.
       if (el.matches('a[href]') && el.closest('.projects-list')) return true;
       if (el.closest('nav[aria-label="Breadcrumb"]') || el.closest('.stage-list__jump')) return true;
+      // "Show more" appears on S-32 only once the organisation has more than 50 projects, which the shared fixture reaches as specs add them.
+      if (el.matches('a[href]') && (el.textContent ?? '').trim() === 'Show more') return true;
       return false;
     }
     const main = document.querySelector('main');

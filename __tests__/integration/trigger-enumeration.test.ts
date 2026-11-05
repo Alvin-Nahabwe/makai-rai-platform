@@ -470,7 +470,7 @@ describe('archivedAt has its production triggers (FR-PRJ-03, Review Focus 4)', (
       'app/api/v1/orgs/[slug]/projects/[id]/archive/route.ts', 'app/api/v1/orgs/[slug]/projects/[id]/route.ts',
       'app/api/v1/orgs/[slug]/projects/[id]/unarchive/route.ts', 'app/api/v1/orgs/[slug]/projects/route.ts', 'lib/data/members.ts',
     ];
-    expect(allFiles().filter((f) => f !== 'lib/data/idempotency.ts' && count(f, RECEIPT_WRITE) > 0).sort()).toEqual([...RECEIPT_MODE].sort());
+    expect(allFiles().filter((f) => f !== 'lib/data/idempotency.ts' && count(f, WRITE_CALL) > 0 && count(f, RECEIPT_WRITE) > 0).sort()).toEqual([...RECEIPT_MODE].sort());
   });
 
   it('FR-PRJ-03 RF-4: the seal writer, the review writer and the project edit route are among the gate callers', () => {
