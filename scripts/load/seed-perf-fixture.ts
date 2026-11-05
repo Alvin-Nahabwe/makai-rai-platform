@@ -92,7 +92,9 @@ export function parseArgs(argv: readonly string[]): { databaseUrl: string; out: 
   return { databaseUrl: got['--database-url'], out: got['--out'] };
 }
 
-export type PerfManifest = Omit<FixtureManifest, 'orgs'> & { orgs: readonly [{ id: string; slug: string }] };   // one organisation
+// One organisation and its ten seats; no platform administrator seat (the e2e manifest's `platformAdmin`, which the
+// load script does not read: scripts/load/save-decisions.mjs reads `orgs[0].slug` and the owner and admin users).
+export type PerfManifest = Omit<FixtureManifest, 'orgs' | 'platformAdmin'> & { orgs: readonly [{ id: string; slug: string }] };
 export interface PerfSeedResult {
   manifest: PerfManifest; projectIds: string[]; questionCount: number;
   loadQuestions: string[];        // the first 10 non-gate questions of 'pre-processing', the stage the load script saves in
