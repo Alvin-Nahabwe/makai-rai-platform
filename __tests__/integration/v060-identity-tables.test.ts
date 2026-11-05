@@ -117,7 +117,8 @@ describe('v0.6.0 step 2: identity-lane tables and columns', () => {
     await expect(asOwner(`TRUNCATE platform_events`)).rejects.toThrow(/append-only/);
     expect(await tablePrivileges('makrai_identity', 'platform_events')).toEqual([]);
     expect(await tablePrivileges('makrai_app', 'platform_events')).toEqual([]);
-    expect(await tablePrivileges('makrai_definer', 'platform_events')).toEqual(['INSERT']);
+    // SELECT for personal_platform_rows, the person's own platform rows in their export (NFR-PRIV-08, ADR-0009).
+    expect(await tablePrivileges('makrai_definer', 'platform_events')).toEqual(['INSERT', 'SELECT']);
   });
 
   it('FR-ORG-09 (helper): platform_events takes its time from the database and checks its action', async () => {
@@ -133,6 +134,7 @@ describe('v0.6.0 step 2: identity-lane tables and columns', () => {
     expect(rls).toEqual({ relrowsecurity: true, relforcerowsecurity: true });
     expect(await tablePrivileges('makrai_app', 'organization_agreements')).toEqual(['SELECT']);
     expect(await tablePrivileges('makrai_identity', 'organization_agreements')).toEqual(['SELECT']);
+    // INSERT only: the personal export reads agreements on the identity lane, not through the definer (C4 EXP re-review N-1).
     expect(await tablePrivileges('makrai_definer', 'organization_agreements')).toEqual(['INSERT']);
     await asOwner(`INSERT INTO organization_agreements (id, "orgId", "agreementVersion", "textHash", "acceptedOn", "controllerLegalName", "dpContactEmail", "recordedById")
       VALUES (gen_random_uuid()::text, $1, '1', $2, '2026-10-30', 'Controller Ltd', 'dpo@fixture.test', $3)`, [org, hex('b'), u]);

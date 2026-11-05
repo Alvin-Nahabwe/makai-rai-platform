@@ -1,0 +1,1565 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "makrai.team-export/1",
+  "description": "export.json of a MAK-AI RAI Platform team export (SRS 6.3). Every row is its table's columns as stored: times are UTC instants, calendar dates are YYYY-MM-DD, salts are lowercase hex, a seal manifest is base64. An evidence row's stored file name is under fileName; file is its entry in the ZIP, or null for a link or erased bytes. An issued document has no pdf; file is its entry, or null when erased; withdrawn is its withdrawal, or null.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "exportedAt",
+    "organisation",
+    "scope",
+    "members",
+    "projects",
+    "unattachedEvidence",
+    "tombstones"
+  ],
+  "properties": {
+    "format": {
+      "const": "makrai.team-export/1"
+    },
+    "exportedAt": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    },
+    "organisation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "projectId"
+      ],
+      "properties": {
+        "projectId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "members": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "userId",
+          "name",
+          "role"
+        ],
+        "properties": {
+          "userId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "owner",
+              "admin",
+              "assessor",
+              "reviewer",
+              "viewer"
+            ]
+          }
+        }
+      }
+    },
+    "projects": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/project"
+      }
+    },
+    "unattachedEvidence": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/evidence"
+      }
+    },
+    "tombstones": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/tombstone"
+      }
+    }
+  },
+  "definitions": {
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "description",
+        "createdAt",
+        "archivedAt",
+        "metadata",
+        "decisionVersions",
+        "decisionEvidence",
+        "evidence",
+        "findings",
+        "findingEvents",
+        "mitigationVersions",
+        "mitigationEvidence",
+        "acceptedRisks",
+        "stageReviews",
+        "seals",
+        "issuedDocuments",
+        "issuedDocumentSeals",
+        "documentEvents"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "createdAt": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        },
+        "archivedAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        },
+        "metadata": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/projectMetadata"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "decisionVersions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/decisionVersion"
+          }
+        },
+        "decisionEvidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/decisionEvidence"
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/evidence"
+          }
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/finding"
+          }
+        },
+        "findingEvents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/findingEvent"
+          }
+        },
+        "mitigationVersions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/mitigationVersion"
+          }
+        },
+        "mitigationEvidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/mitigationEvidence"
+          }
+        },
+        "acceptedRisks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/acceptedRisk"
+          }
+        },
+        "stageReviews": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/stageReview"
+          }
+        },
+        "seals": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/seal"
+          }
+        },
+        "issuedDocuments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/issuedDocument"
+          }
+        },
+        "issuedDocumentSeals": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/issuedDocumentSeal"
+          }
+        },
+        "documentEvents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/documentEvent"
+          }
+        }
+      }
+    },
+    "projectMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "orgId",
+        "projectId",
+        "aiSystemType",
+        "aiSystemTypeOther",
+        "institution",
+        "department",
+        "country",
+        "developmentStage",
+        "deploymentSector",
+        "deploymentSectorOther",
+        "targetPopulation",
+        "processesPersonalData",
+        "datasetSize",
+        "datasetType",
+        "datasetTypeOther",
+        "datasetDescription",
+        "teamSize",
+        "fundingSource",
+        "regulatoryContext",
+        "projectStart",
+        "projectEnd",
+        "updatedAt"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "orgId": {
+          "type": "string"
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "aiSystemType": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "aiSystemTypeOther": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "institution": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "department": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "country": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "developmentStage": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "concept",
+                "development",
+                "testing",
+                "deployed",
+                "retired"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "deploymentSector": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "deploymentSectorOther": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "targetPopulation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "processesPersonalData": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "datasetSize": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "small_lt1k",
+                "medium_1k_100k",
+                "large_100k_1m",
+                "very_large_gt1m",
+                "unknown"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "datasetType": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "datasetTypeOther": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "datasetDescription": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "teamSize": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "fundingSource": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "regulatoryContext": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "projectStart": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        },
+        "projectEnd": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        },
+        "updatedAt": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        }
+      }
+    },
+    "decisionVersion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "orgId",
+        "projectId",
+        "stage",
+        "questionId",
+        "contentVersionId",
+        "versionNumber",
+        "baseVersionNumber",
+        "status",
+        "scopeAnswer",
+        "optionsInPlace",
+        "reasonCode",
+        "reason",
+        "reasonSalt",
+        "decidedByUserId",
+        "decidedByRole",
+        "declaredOn",
+        "declaredPrecision",
+        "withdrawalCode",
+        "enteredById",
+        "enteredByRole",
+        "receivedAt",
+        "requestId",
+        "requestDigest"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "orgId": {
+          "type": "string"
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "stage": {
+          "type": "string"
+        },
+        "questionId": {
+          "type": "string"
+        },
+        "contentVersionId": {
+          "type": "string"
+        },
+        "versionNumber": {
+          "type": "integer"
+        },
+        "baseVersionNumber": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "status": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scopeAnswer": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "optionsInPlace": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reasonCode": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reasonSalt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]*$"
+        },
+        "decidedByUserId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "decidedByRole": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "declaredOn": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "declaredPrecision": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "withdrawalCode": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "enteredById": {
+          "type": "string"
+        },
+        "enteredByRole": {
+          "type": "string",
+          "enum": [
+            "owner",
+            "admin",
+            "assessor",
+            "reviewer",
+            "viewer"
+          ]
+        },
+        "receivedAt": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "requestDigest": {
+          "type": "string"
+        }
+      }
+    },
+    "decisionEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "orgId",
+        "versionId",
+        "evidenceId"
+      ],
+      "properties": {
+        "orgId": {
+          "type": "string"
+        },
+        "versionId": {
+          "type": "string"
+        },
+        "evidenceId": {
+          "type": "string"
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "orgId",
+        "assessmentId",
+        "frameworkVersionId",
+        "projectId",
+        "kind",
+        "questionId",
+        "remediationItemId",
+        "fileName",
+        "filenameSalt",
+        "mimeType",
+        "byteSize",
+        "sha256",
+        "url",
+        "urlSalt",
+        "label",
+        "labelSalt",
+        "requestId",
+        "requestDigest",
+        "uploadedById",
+        "uploadedAt",
+        "file"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "orgId": {
+          "type": "string"
+        },
+        "assessmentId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "frameworkVersionId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "projectId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "type": "string"
+        },
+        "questionId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "remediationItemId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fileName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "filenameSalt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]*$"
+        },
+        "mimeType": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "byteSize": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "urlSalt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]*$"
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "labelSalt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]*$"
+        },
+        "requestId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "requestDigest": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "uploadedById": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "uploadedAt": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        },
+        "file": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^evidence/[^/\\\\]+$"
+        }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "orgId",
+        "projectId",
+        "stage",
+        "source",
+        "questionId",
+        "decisionVersionId",
+        "riskArea",
+        "title",
+        "titleSalt",
+        "description",
+        "descriptionSalt",
+        "raisedById",
+        "raisedAt",
+        "requestId",
+        "requestDigest"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "orgId": {
+          "type": "string"
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "stage": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "questionId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "decisionVersionId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "riskArea": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "titleSalt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]*$"
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "descriptionSalt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]*$"
+        },
+        "raisedById": {
+          "type": "string"
+        },
+        "raisedAt": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "requestDigest": {
+          "type": "string"
+        }
+      }
+    },
+    "findingEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "orgId",
+        "findingId",
+        "kind",
+        "eventCode",
+        "reason",
+        "reasonSalt",
+        "byId",
+        "at",
+        "findingSeq",
+        "requestId",
+        "requestDigest"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "orgId": {
+          "type": "string"
+        },
+        "findingId": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "eventCode": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reasonSalt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]*$"
+        },
+        "byId": {
+          "type": "string"
+        },
+        "at": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        },
+        "findingSeq": {
+          "type": "integer"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "requestDigest": {
+          "type": "string"
+        }
+      }
+    },
+    "mitigationVersion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "orgId",
+        "findingId",
+        "mitigationId",
+        "versionNumber",
+        "baseVersionNumber",
+        "what",
+        "whatSalt",
+        "changeNote",
+        "changeNoteSalt",
+        "ownerUserId",
+        "dueDate",
+        "status",
+        "kind",
+        "followsControl",
+        "closureNote",
+        "closureNoteSalt",
+        "closureDecisionVersionId",
+        "cancelReason",
+        "cancelReasonSalt",
+        "enteredById",
+        "enteredByRole",
+        "findingSeq",
+        "receivedAt",
+        "requestId",
+        "requestDigest"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "orgId": {
+          "type": "string"
+        },
+        "findingId": {
+          "type": "string"
+        },
+        "mitigationId": {
+          "type": "string"
+        },
+        "versionNumber": {
+          "type": "integer"
+        },
+        "baseVersionNumber": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "what": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "whatSalt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]*$"
+        },
+        "changeNote": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "changeNoteSalt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]*$"
+        },
+        "ownerUserId": {
+          "type": "string"
+        },
+        "dueDate": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "status": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "followsControl": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "closureNote": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "closureNoteSalt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]*$"
+        },
+        "closureDecisionVersionId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cancelReason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cancelReasonSalt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]*$"
+        },
+        "enteredById": {
+          "type": "string"
+        },
+        "enteredByRole": {
+          "type": "string",
+          "enum": [
+            "owner",
+            "admin",
+            "assessor",
+            "reviewer",
+            "viewer"
+          ]
+        },
+        "findingSeq": {
+          "type": "integer"
+        },
+        "receivedAt": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "requestDigest": {
+          "type": "string"
+        }
+      }
+    },
+    "mitigationEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "orgId",
+        "versionId",
+        "evidenceId"
+      ],
+      "properties": {
+        "orgId": {
+          "type": "string"
+        },
+        "versionId": {
+          "type": "string"
+        },
+        "evidenceId": {
+          "type": "string"
+        }
+      }
+    },
+    "acceptedRisk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "orgId",
+        "findingId",
+        "acceptedByUserId",
+        "acceptedByRole",
+        "accepterRole",
+        "reason",
+        "reasonSalt",
+        "lookAgainNote",
+        "lookAgainNoteSalt",
+        "lookAgainOn",
+        "enteredById",
+        "enteredByRole",
+        "findingSeq",
+        "receivedAt",
+        "requestId",
+        "requestDigest"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "orgId": {
+          "type": "string"
+        },
+        "findingId": {
+          "type": "string"
+        },
+        "acceptedByUserId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "acceptedByRole": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "accepterRole": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "owner",
+                "admin",
+                "assessor",
+                "reviewer",
+                "viewer"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reasonSalt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]*$"
+        },
+        "lookAgainNote": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "lookAgainNoteSalt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]*$"
+        },
+        "lookAgainOn": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "enteredById": {
+          "type": "string"
+        },
+        "enteredByRole": {
+          "type": "string",
+          "enum": [
+            "owner",
+            "admin",
+            "assessor",
+            "reviewer",
+            "viewer"
+          ]
+        },
+        "findingSeq": {
+          "type": "integer"
+        },
+        "receivedAt": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "requestDigest": {
+          "type": "string"
+        }
+      }
+    },
+    "stageReview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "orgId",
+        "projectId",
+        "stage",
+        "numberInStage",
+        "preparedFor",
+        "preparedForSalt",
+        "openedById",
+        "openedAt",
+        "requestId",
+        "requestDigest"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "orgId": {
+          "type": "string"
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "stage": {
+          "type": "string"
+        },
+        "numberInStage": {
+          "type": "integer"
+        },
+        "preparedFor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "preparedForSalt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]*$"
+        },
+        "openedById": {
+          "type": "string"
+        },
+        "openedAt": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "requestDigest": {
+          "type": "string"
+        }
+      }
+    },
+    "seal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "orgId",
+        "stageReviewId",
+        "sealNumber",
+        "format",
+        "contentVersionId",
+        "manifest",
+        "fingerprint",
+        "sealedById",
+        "sealedByRole",
+        "sealedAt",
+        "requestId",
+        "requestDigest"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "orgId": {
+          "type": "string"
+        },
+        "stageReviewId": {
+          "type": "string"
+        },
+        "sealNumber": {
+          "type": "integer"
+        },
+        "format": {
+          "type": "string"
+        },
+        "contentVersionId": {
+          "type": "string"
+        },
+        "manifest": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$"
+        },
+        "fingerprint": {
+          "type": "string"
+        },
+        "sealedById": {
+          "type": "string"
+        },
+        "sealedByRole": {
+          "type": "string",
+          "enum": [
+            "owner",
+            "admin",
+            "assessor",
+            "reviewer",
+            "viewer"
+          ]
+        },
+        "sealedAt": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "requestDigest": {
+          "type": "string"
+        }
+      }
+    },
+    "issuedDocument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "orgId",
+        "projectId",
+        "stageReviewId",
+        "sealId",
+        "documentType",
+        "templateVersion",
+        "typedFields",
+        "plainText",
+        "sha256",
+        "byteSize",
+        "issuedById",
+        "issuedAt",
+        "requestId",
+        "requestDigest",
+        "file",
+        "withdrawn"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "orgId": {
+          "type": "string"
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "stageReviewId": {
+          "type": "string"
+        },
+        "sealId": {
+          "type": "string"
+        },
+        "documentType": {
+          "type": "string"
+        },
+        "templateVersion": {
+          "type": "string"
+        },
+        "typedFields": {
+          "type": "array"
+        },
+        "plainText": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "byteSize": {
+          "type": "integer"
+        },
+        "issuedById": {
+          "type": "string"
+        },
+        "issuedAt": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "requestDigest": {
+          "type": "string"
+        },
+        "file": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^documents/[^/\\\\]+\\.pdf$"
+        },
+        "withdrawn": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "on",
+                "reason"
+              ],
+              "properties": {
+                "on": {
+                  "type": "string",
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "issuedDocumentSeal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "orgId",
+        "documentId",
+        "sealId"
+      ],
+      "properties": {
+        "orgId": {
+          "type": "string"
+        },
+        "documentId": {
+          "type": "string"
+        },
+        "sealId": {
+          "type": "string"
+        }
+      }
+    },
+    "documentEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "orgId",
+        "documentId",
+        "kind",
+        "reason",
+        "byId",
+        "at",
+        "requestId",
+        "requestDigest"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "orgId": {
+          "type": "string"
+        },
+        "documentId": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "byId": {
+          "type": "string"
+        },
+        "at": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "requestDigest": {
+          "type": "string"
+        }
+      }
+    },
+    "tombstone": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "orgId",
+        "targetTable",
+        "targetId",
+        "field",
+        "digest",
+        "erasureCode",
+        "instructionReference",
+        "at"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "orgId": {
+          "type": "string"
+        },
+        "targetTable": {
+          "type": "string"
+        },
+        "targetId": {
+          "type": "string"
+        },
+        "field": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "digest": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "erasureCode": {
+          "type": "string"
+        },
+        "instructionReference": {
+          "type": "string"
+        },
+        "at": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        }
+      }
+    }
+  }
+}

@@ -99,11 +99,18 @@ describe('v0.6.0 rate-limit keys', () => {
     expect(limitOf('POST', '/api/v1/orgs/a/invitations/i/revoke')).toEqual(RATE_LIMITS['default']);
   });
 
+  it('FR-EXP-03 UX-29: account deletion allows 5 tries an hour per account, so one mistyped password does not lock it out (controller ruling)', () => {
+    expect(limitOf('DELETE', '/api/users/me')).toEqual({ window: HOUR, max: 5, keyBy: 'userId' });
+  });
+
+  it('FR-ACC-07 (C4 EXP-1 RE-2): sign out everywhere (route 36) keeps its own limit of 1 an hour, not route 39\'s', () => {
+    expect(limitOf('DELETE', '/api/users/me/sessions')).toEqual({ window: HOUR, max: 1, keyBy: 'userId' });
+  });
+
   it('NFR-SEC-20: the keys that were there stay as they were', () => {
     // The two address-keyed sign-in keys are gone (FR-ACC-05, NFR-SEC-06, ruling 10); proxy.ts skips /api/auth/ paths.
     // ... except the per-account session-read keys (ruling RE-2).
     expect(Object.keys(RATE_LIMITS).filter((k) => k.includes('/api/auth')).sort()).toEqual(['GET:/api/auth/session$', 'POST:/api/auth/session$']);
-    expect(limitOf('DELETE', '/api/users/me')).toEqual({ window: HOUR, max: 1, keyBy: 'userId' });
     expect(limitOf('POST', '/api/v1/orgs')).toEqual({ window: HOUR, max: 5, keyBy: 'userId' });
     // RM removes this key with the assessment routes.
     if ('POST:/api/v1/orgs/*/assessments/*/evidence' in RATE_LIMITS) {

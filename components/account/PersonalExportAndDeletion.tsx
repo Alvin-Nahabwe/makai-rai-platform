@@ -1,11 +1,13 @@
 import type { ReactElement } from 'react';
+import { PersonalExportAndDeletionForm } from './PersonalExportAndDeletionForm';
 
 export type PersonalExportAndDeletionProps = { lastActiveOwnerOf: string[] };
 
 /**
- * The personal export and the account deletion on the account page. A slot of its screen (contract "Screens and slots"): the screen's owner renders it, EXP fills it.
+ * S-21's "My data" and "Delete my account" regions (W-12 notes 4 and 5; FR-EXP-02, FR-EXP-03). A slot of
+ * its screen (contract "Screens and slots"): ACC-b's account page renders it with `lastActiveOwnerOf`
+ * (ACC-b's read), and this unit fills it.
  */
-// SLOT_STUB: EXP
-export function PersonalExportAndDeletion(_props: PersonalExportAndDeletionProps): ReactElement | null {
-  return null;
+export function PersonalExportAndDeletion({ lastActiveOwnerOf }: PersonalExportAndDeletionProps): ReactElement {
+  return <PersonalExportAndDeletionForm lastActiveOwnerOf={lastActiveOwnerOf} />;
 }

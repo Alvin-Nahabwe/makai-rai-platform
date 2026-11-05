@@ -165,20 +165,25 @@ SELECT on `evidence_blobs` (the WHERE of `erase_evidence_bytes`), on `issued_doc
 `userId`, `usedAt`, `voidedAt` (`admin_set_account_active` voids the open tokens). And, since C4
 item 2 (WIO-1), `makrai_operator_fn` SELECT and UPDATE (`requestDigest`) on the eleven
 retry-keyed tables: an erasure replaces the request digest of the erased row's request with
-`'erased'`, the one value the refusal trigger admits there.
+`'erased'`, the one value the refusal trigger admits there. And, since EXP's C4 fix round
+(migration `20261105000000_exp_personal_platform_rows`), `makrai_definer` SELECT on
+`platform_events` and `organisation_events`: the reads of `personal_platform_rows`, which returns
+a person's own rows of those tables for the personal export (NFR-PRIV-08), ids, kinds and times
+only. `organization_agreements` stays INSERT-only for it: `makrai_identity` already reads every
+agreement through its `identity_lane` policy, so the export reads them on that lane.
 
 | Role | Table | Column | Grants |
 |---|---|---|---|
 | `makrai_definer` | `invitations` | * | INSERT, SELECT, UPDATE |
 | `makrai_definer` | `memberships` | * | INSERT, SELECT |
-| `makrai_definer` | `organisation_events` | * | INSERT |
+| `makrai_definer` | `organisation_events` | * | INSERT, SELECT |
 | `makrai_definer` | `organization_agreements` | * | INSERT |
 | `makrai_definer` | `organizations` | * | INSERT, SELECT |
 | `makrai_definer` | `organizations` | `name` | UPDATE |
 | `makrai_definer` | `password_reset_tokens` | `usedAt` | SELECT |
 | `makrai_definer` | `password_reset_tokens` | `userId` | SELECT |
 | `makrai_definer` | `password_reset_tokens` | `voidedAt` | SELECT, UPDATE |
-| `makrai_definer` | `platform_events` | * | INSERT |
+| `makrai_definer` | `platform_events` | * | INSERT, SELECT |
 | `makrai_definer` | `users` | * | SELECT |
 | `makrai_definer` | `users` | `isActive` | UPDATE |
 | `makrai_definer` | `users` | `sessionEpoch` | UPDATE |
@@ -245,13 +250,26 @@ retry-keyed tables: an erasure replaces the request digest of the erased row's r
 
 ### Definer functions
 
-`makrai_identity` may execute exactly eight functions, all SECURITY DEFINER and owned by the
+`makrai_identity` may execute exactly nine functions, all SECURITY DEFINER and owned by the
 NOLOGIN role `makrai_definer` (migration `20261030000500_v060_05_functions`; SRS 9.5 line 3673):
 `accept_invitation`, `admin_create_organisation`, `admin_record_agreement`,
 `admin_issue_owner_invitation`, `admin_resend_invitation`, `admin_revoke_invitation`,
-`admin_set_account_active` and `admin_correct_org_name`. Each administrator function checks
-that its actor is an active platform administrator; each writes its `organisation_events` (or
-`platform_events`) row in the same transaction as the action. `makrai_app` may execute none.
+`admin_set_account_active` and `admin_correct_org_name`, and the read
+`personal_platform_rows` (migration `20261105000000_exp_personal_platform_rows`). Each
+administrator function checks that its actor is an active platform administrator; each writes
+its `organisation_events` (or `platform_events`) row in the same transaction as the action.
+`personal_platform_rows` writes nothing: it returns the rows of `platform_events`, and the
+organisation events an account acted in as `platform_admin`, that name one account, for its
+personal export (FR-EXP-02, NFR-PRIV-08), with no other person's id or address in any one call.
+It trusts its user-id argument, as the administrator functions trust their actor argument (the
+database cannot know who is signed in), and it has no actor check to bound it. So any
+`makrai_identity` session can call it for every id it can read in `users`, and joining those
+results on the row ids rebuilds `platform_events` (actor, target, action and time; never
+`requestReference`) and the id, organisation, action and time of every `platform_admin`
+organisation event, which no application role can otherwise read. Its one caller is
+`personalPlatformRows` (`lib/data/definer.ts`), called only by `personalExport`, which only
+route 38 calls, with the signed-in session's own id; `personal-platform-rows-caller.test.ts`
+pins that path, so a second caller fails CI. `makrai_app` may execute none.
 `role-grants.test.ts` pins the list. The identity lane calls them only through
 `lib/data/definer.ts`, on `identityLaneClient` (`lib/data/identityClient.ts`).
 

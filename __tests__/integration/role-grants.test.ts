@@ -23,7 +23,7 @@ import { adrColumnGrants, adrFunctionOwnerGrants, adrGrants, type FunctionOwnerR
 
 const ROLES: LaneRole[] = ['makrai_identity', 'makrai_app'];
 
-/** The eight definer functions makrai_identity may execute (v0.6.0 step 5), as regprocedure text. */
+/** The nine definer functions makrai_identity may execute (v0.6.0 step 5, and EXP's personal_platform_rows), as regprocedure text. */
 const DEFINER_FUNCTIONS = [
   { fn: 'accept_invitation(text,text,text)', returns: 'record' },
   { fn: 'admin_correct_org_name(text,text,text)', returns: 'text' },
@@ -33,6 +33,7 @@ const DEFINER_FUNCTIONS = [
   { fn: 'admin_resend_invitation(text,text,text,text,timestamp with time zone,boolean)', returns: 'text' },
   { fn: 'admin_revoke_invitation(text,text,text)', returns: 'void' },
   { fn: 'admin_set_account_active(text,text,boolean,text,text[])', returns: 'text[]' },
+  { fn: 'personal_platform_rows(text,text[])', returns: 'record' },
 ];
 const TABLE_PRIVILEGES = ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER'];
 

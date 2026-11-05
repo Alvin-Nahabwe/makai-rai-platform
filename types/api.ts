@@ -184,10 +184,21 @@ export interface PreferencesRequest { reminderEmails: boolean }
 
 /** FR-EXP-02, 6.4 (SRS lines 1079, 1420); gap G067. passwordHash and tokenHash values are the string 'withheld'. */
 export type PersonalItemType = 'decision_version' | 'evidence' | 'finding' | 'finding_event' | 'mitigation_version'
-  | 'accepted_risk' | 'stage_review' | 'seal' | 'issued_document' | 'document_event';
+  | 'accepted_risk' | 'stage_review' | 'seal' | 'issued_document' | 'document_event'
+  // C4 EXP-1 SC-1 (NFR-PRIV-08): every other allow-list table that names a person.
+  | 'project' | 'document_draft_field' | 'organisation_event' | 'request_receipt' | 'invitation' | 'organisation_agreement'
+  | 'platform_event';
+/**
+ * One row that names the person. `kind` is the row's kind or action where the table has one (a draft's document type,
+ * an event's action, a receipt's route, an invitation's kind, an agreement's version). `own` holds the row's fields
+ * that are the person's own (an invitation to their address). No other person's id or address is ever included. A
+ * platform_event belongs to no organisation: its orgId and organisation are null.
+ */
 export interface PersonalExportItem {
-  orgId: string; organisation: string; type: PersonalItemType; id: string; date: UtcInstant;
-  roles: Array<'entered' | 'decided' | 'owns' | 'accepted'>;
+  orgId: string | null; organisation: string | null; type: PersonalItemType; id: string; date: UtcInstant;
+  roles: Array<'entered' | 'decided' | 'owns' | 'accepted' | 'acted' | 'named' | 'invited'>;
+  kind?: string;
+  own?: Record<string, string | null>;
 }
 export interface PersonalExport {
   format: 'makrai.personal-export/1'; exportedAt: UtcInstant;

@@ -140,6 +140,49 @@ export async function adminSetAccountActive(a: {
   }));
 }
 
+/** One platform-lane row of a person's export: ids, kinds, times and the person's roles only. */
+export type PersonalPlatformRow = {
+  source: 'platform_event' | 'organisation_agreement' | 'organisation_event';
+  id: string; orgId: string | null; organisation: string | null; kind: string; at: Date;
+  roles: Array<'acted' | 'named' | 'entered'>;
+};
+
+/**
+ * FR-EXP-02, NFR-PRIV-08: the rows that name `userId` and that no membership shows them, in every organisation (a
+ * platform administrator holds no membership):
+ * - through `personal_platform_rows` (migration 20261105000000), which no application lane can otherwise read:
+ *   their platform_events (as actor or target) and the organisation events they acted in as platform_admin. The
+ *   organisations are read here on the identity lane and handed to the function, which sets each one's context (as
+ *   adminSetAccountActive's wrapper does). The function trusts the id it is given (ADR-0009, Definer functions), so
+ *   this has one caller, personalExport for route 38's signed-in session
+ *   (__tests__/lint/personal-platform-rows-caller.test.ts).
+ * - directly on the identity lane, whose identity_lane policy shows every agreement (makrai_definer stays INSERT-only
+ *   on them, C4 EXP re-review N-1): the organization_agreements they recorded (`entered`), matched by account id
+ *   only. An agreement's dpContactEmail is never matched against the account's address: an address is not proof
+ *   that the account is that contact, so matching it would hand one organisation's agreement to whoever holds the
+ *   address (controller ruling on M-3; the operator answers a DP contact on request). No other column leaves here.
+ */
+export async function personalPlatformRows(userId: string): Promise<PersonalPlatformRow[]> {
+  return identityLaneClient.$transaction(async (tx) => {
+    const orgIds = (await tx.organization.findMany({ select: { id: true } })).map((o) => o.id);
+    const platform = await tx.$queryRaw<Array<Omit<PersonalPlatformRow, 'roles'> & { role: 'acted' | 'named' }>>`
+      SELECT "source", "id", "orgId", "organisation", "kind", "at", "role"
+      FROM personal_platform_rows(${userId}::text, ${orgIds}::text[])`;
+    const agreements = await tx.$queryRaw<Array<{ id: string; orgId: string; organisation: string; kind: string; at: Date }>>`
+      SELECT a."id", a."orgId", g."name" AS "organisation", a."agreementVersion" AS "kind", a."recordedAt" AS "at"
+      FROM organization_agreements a JOIN organizations g ON g."id" = a."orgId"
+      WHERE a."recordedById" = ${userId}::text`;
+    const rows: PersonalPlatformRow[] = [
+      ...platform.map(({ role, ...r }) => ({ ...r, roles: [role] })),
+      ...agreements.map((a) => ({
+        source: 'organisation_agreement' as const, id: a.id, orgId: a.orgId, organisation: a.organisation, kind: a.kind, at: a.at,
+        roles: ['entered' as const],
+      })),
+    ];
+    return rows.sort((x, y) => x.at.getTime() - y.at.getTime() || (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
+  });
+}
+
 /** FR-ORG-10: correct an organisation's name; the earlier name is kept in the change's row. */
 export async function adminCorrectOrgName(a: {
   actorUserId: string; orgId: string; name: string;

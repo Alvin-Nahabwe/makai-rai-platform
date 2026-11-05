@@ -106,14 +106,14 @@ describe('GET /api/users/me/export includes evidence (O-12)', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
 
-    expect(Array.isArray(body.evidence)).toBe(true);
-    expect(body.evidence).toHaveLength(1);
-    const item = body.evidence[0];
-    expect(item.id).toBe(row.id);
-    expect(item.filename).toBe('consent-form.png');
-    expect(item.sha256).toBe(sha256);
-    expect(item.assessmentId).toBe(owner.assessmentId);
-    expect(item.orgId).toBe(owner.orgId);
+    // FR-EXP-02 (SRS 6.4): an upload is an item of type evidence, by organisation, id and date, with no record
+    // text; the file name is the organisation's (the team export carries it, with the stored SHA-256).
+    const evidence = (body.items as Array<Record<string, unknown>>).filter((i) => i.type === 'evidence');
+    expect(evidence).toHaveLength(1);
+    const item = evidence[0];
+    expect(item).toEqual({ orgId: owner.orgId, organisation: expect.any(String), type: 'evidence', id: row.id, date: expect.stringMatching(/Z$/), roles: ['entered'] });
+    expect(JSON.stringify(body)).not.toContain('consent-form.png');
+    expect(JSON.stringify(body)).not.toContain(sha256);
 
     // O-12's own constraint: whatever shape is chosen, no byte payload
     // travels through this route -- checked by key name, not merely by
@@ -148,7 +148,7 @@ describe('GET /api/users/me/export includes evidence (O-12)', () => {
     const { GET } = await import('../../app/api/users/me/export/route');
     const res = await GET();
     const body = await res.json();
-    expect(body.evidence).toEqual([]);
+    expect(body.items.filter((i: { type: string }) => i.type === 'evidence')).toEqual([]);
   });
 
   it("stops including evidence from an org once the caller's membership there is no longer active", async () => {
@@ -163,7 +163,7 @@ describe('GET /api/users/me/export includes evidence (O-12)', () => {
 
     // Sanity: present while the membership is active.
     const before = await (await GET()).json();
-    expect(before.evidence).toHaveLength(1);
+    expect(before.items.filter((i: { type: string }) => i.type === 'evidence')).toHaveLength(1);
 
     // The export must not become a way to read evidence the caller could
     // not read through the normal route (task-11-brief.md's own
@@ -176,7 +176,12 @@ describe('GET /api/users/me/export includes evidence (O-12)', () => {
     });
 
     const after = await (await GET()).json();
-    expect(after.evidence).toEqual([]);
+    expect(after.items.filter((i: { type: string }) => i.type === 'evidence')).toEqual([]);
+    // Nothing read through the suspended membership remains. What does remain is the person's own platform-lane rows,
+    // read across every organisation by personal_platform_rows (NFR-PRIV-08): here the agreement the fixture recorded
+    // in their name.
+    expect(after.items.map((i: { type: string; roles: string[] }) => [i.type, i.roles]))
+      .toEqual([['organisation_agreement', ['entered']]]);
   });
 
   it('returns an empty evidence array for a caller who has uploaded none', async () => {
@@ -187,6 +192,7 @@ describe('GET /api/users/me/export includes evidence (O-12)', () => {
     const res = await GET();
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.evidence).toEqual([]);
+    // The owner created the project and recorded the agreement, which are items of other types (NFR-PRIV-08).
+    expect(body.items.filter((i: { type: string }) => i.type === 'evidence')).toEqual([]);
   });
 });

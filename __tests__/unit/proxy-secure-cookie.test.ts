@@ -41,8 +41,9 @@ import { resetRateLimitStore } from '../../lib/rate-limit';
 
 const SECRET = 'test-secret-for-secure-cookie-resolution';
 const SECURE_COOKIE = '__Secure-authjs.session-token';
-/** max 1 per hour, keyBy userId -- lib/rate-limit.ts:54 */
+/** max 5 per hour, keyBy userId (lib/rate-limit.ts, 'DELETE:/api/users/me$'; 5 since the EXP route 39 ruling) */
 const USERID_KEYED_PATH = '/api/users/me';
+const USERID_KEYED_MAX = 5;
 
 let originalUrl: string | undefined;
 let originalSecret: string | undefined;
@@ -85,8 +86,10 @@ describe('proxy resolves the session cookie under its production (HTTPS) name', 
     const { proxy } = await import('../../proxy');
     const cookie = await productionSessionCookie('user-aaa');
 
-    const first = await proxy(request(cookie, '203.0.113.10'));
-    expect(first.status, 'the first request of a 1/hour rule must be allowed').not.toBe(429);
+    for (let i = 0; i < USERID_KEYED_MAX; i++) {
+      const allowed = await proxy(request(cookie, '203.0.113.10'));
+      expect(allowed.status, `request ${i + 1} of a ${USERID_KEYED_MAX}/hour rule must be allowed`).not.toBe(429);
+    }
 
     // Same user, different client IP. Under userId keying this is the SAME
     // bucket. Under the IP fallback it is a different one and this passes.

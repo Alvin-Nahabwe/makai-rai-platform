@@ -85,7 +85,6 @@ export const PENDING_ROUTES: readonly string[] = [
   'app/api/v1/orgs/[slug]/documents/[documentId]/pdf/route.ts',
   'app/api/v1/orgs/[slug]/documents/[documentId]/text/route.ts',
   'app/api/v1/orgs/[slug]/documents/[documentId]/withdrawal/route.ts',
-  'app/api/v1/orgs/[slug]/export/route.ts',
   'app/api/v1/orgs/[slug]/projects/[id]/archive/route.ts',
   'app/api/v1/orgs/[slug]/projects/[id]/unarchive/route.ts',
   'app/api/internal/reminders/route.ts',

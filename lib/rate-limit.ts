@@ -40,7 +40,10 @@ export const RATE_LIMITS: Record<string, RateLimitConfig> = {
    */
   'GET:/api/auth/session$': { window: 60 * 1000, max: 120, keyBy: 'userId' },
   'POST:/api/auth/session$': { window: 60 * 1000, max: 120, keyBy: 'userId' },
-  'DELETE:/api/users/me': { window: 60 * 60 * 1000, max: 1, keyBy: 'userId' },
+  /** Route 39 (account deletion): 5 an hour, so one mistyped password on S-21 does not block the corrected try for an hour (controller ruling, EXP). Exact, so it is not route 36's limit too (C4 EXP-1 RE-2). */
+  'DELETE:/api/users/me$': { window: 60 * 60 * 1000, max: 5, keyBy: 'userId' },
+  /** Route 36 (sign out everywhere): 1 an hour, the limit it had while it shared route 39's prefix key before EXP's change. ACC-b's to revisit. */
+  'DELETE:/api/users/me/sessions$': { window: 60 * 60 * 1000, max: 1, keyBy: 'userId' },
   /**
    * D-107. Organization creation was unbounded: it matched no key, fell to
    * `default` at 60/min, and nothing capped the total. Organization slugs are
@@ -226,7 +229,7 @@ export function checkRateLimit(
    * bucketing by the MATCHED KEY instead of the literal path collapses
    * exactly the variable segments '*' stands for (org slug, assessment id),
    * which is what makes the aggregate budget mean something. Every
-   * pre-existing key ('DELETE:/api/users/me', 'default') contains no '*',
+   * pre-existing key ('DELETE:/api/users/me$', 'default') contains no '*',
    * so this branch is
    * unreached for them and their bucketing is BYTE-FOR-BYTE unchanged --
    * verified by __tests__/unit/rate-limit.test.ts's regression block.
