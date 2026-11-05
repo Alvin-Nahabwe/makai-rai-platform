@@ -27,7 +27,7 @@ const nextConfig: NextConfig = {
    * `scripts/check-standalone.mjs` fails the build check when either is missing.
    */
   outputFileTracingIncludes: {
-    '/*': ['data/**/*.json', 'data/legal/**/*.md', 'lib/auth/passwordHashWorker.js', 'node_modules/bcryptjs/package.json', 'node_modules/bcryptjs/umd/**'],
+    '/*': ['data/**/*.json', 'data/legal/**/*.md', 'data/fonts/**', 'lib/auth/passwordHashWorker.js', 'node_modules/bcryptjs/package.json', 'node_modules/bcryptjs/umd/**'],
   },
   /**
    * NOT effective against the `.env` leak documented in

@@ -634,14 +634,15 @@ describe('no product claims', () => {
     }
   });
 
-  it('FR-PUB-01: every data-claims-allowed marker states its reason, and the only markers are the four of the About page', () => {
+  it('FR-PUB-01: every data-claims-allowed marker states its reason, and the only markers are the four of the About page and AL-1 of S-18', () => {
     const markers = claimsAllowedMarkers(['app', 'components', 'lib']);
     expect(markers.filter((m) => m.reason === '').map((m) => m.file), 'a marker with no reason').toEqual([]);
     // Every marker in app and components is listed here with its file, so a new one fails until it is added with its
     // AL row (SRS 7.5.3). DOC-a adds AL-1 for the document pages in its own commit.
     const about = join('app', '(public)', 'about', 'page.tsx');
     expect(markers.map((m) => `${m.file} ${m.reason}`).sort()).toEqual(
-      [`${about} about-model-scores`, `${about} about-model-scores`, `${about} not-an-approval-service`, `${about} why-no-score`].sort(),
+      [`${about} about-model-scores`, `${about} about-model-scores`, `${about} not-an-approval-service`, `${about} why-no-score`,
+        'components/documents/GenerateDocumentForm.tsx AL-1 document statement'].sort(),
     );   // why-no-score: the heading only
   });
 

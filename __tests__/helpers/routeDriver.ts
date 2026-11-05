@@ -10,11 +10,12 @@ import type {
   WithdrawDecisionRequest, WithdrawDocumentRequest,
 } from '../../types/api';
 import { testDb } from './db';
+import { sealFixture } from './sealFixture';
 import { sessionFor, clearSession } from './authSession';
 // Aliased: the name starts with "use", and react-hooks/rules-of-hooks reads any such call as a React hook.
 import { useFixtureContent as publishFixtureContent } from './content';
 import {
-  addDecision, addEvidence, addFinding, addIssuedDocument, addMitigationVersion, addProject, addSealRow,
+  addDecision, addEvidence, addFinding, addIssuedDocument, addMitigationVersion, addProject,
   addStageReview, type OrgFixture,
 } from './recordFixture';
 
@@ -25,6 +26,8 @@ import {
  * handler is real: the identity read, `requireOrgContext*`, `can()`, `withOrg`, row-level security, triggers.
  */
 
+// Its fixture seal is REV-a's real one (sealFixture runs sealStageReview), so a route that reads a seal's manifest, such as the document
+// routes, finds a manifest it can read. A test of a route that creates a seal does not need the fixture's.
 export type Method = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
 type RouteHandler = (req: NextRequest, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>;
 type NextRequestInit = ConstructorParameters<typeof NextRequest>[1];
@@ -132,7 +135,7 @@ async function buildObjects(fx: OrgFixture): Promise<FixtureObjects> {
   const finding = await addFinding(fx, project.id, { stage, source: 'team' });
   const mitigation = await addMitigationVersion(fx, finding.id, { status: 'planned', owner: 'assessor', dueDate: '2026-12-01' });
   const review = await addStageReview(fx, project.id, { stage });
-  const seal = await addSealRow(fx, review.id, { contentVersionId });
+  const seal = await sealFixture(fx, review.id, { projectId: project.id });
   const invitationToken = randomBytes(32).toString('hex');
   const invitation = await testDb.invitation.create({ data: {
     orgId: fx.org.id, email: `invitee-${randomUUID().slice(0, 8)}@fixture.test`, role: 'viewer',

@@ -243,6 +243,10 @@ jobs:
           # NODE_ENV says (D-076), so a CI database has to ask for them.
           ALLOW_DEV_DB_PASSWORD: '1'
 
+      - name: Install poppler-utils
+        # __tests__/unit/document-render.test.ts reads the rendered PDF back with pdftotext (C4 M2); in CI that test fails, not skips, without it.
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
+
       - name: Unit + integration tests
         # DATABASE_URL (job-level, above) matches vitest.config.ts's own
         # TEST_DATABASE_URL default exactly
