@@ -2,10 +2,9 @@ import 'dotenv/config';
 import { existsSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { test, expect, request as pwRequest, type Browser } from '@playwright/test';
+import { test, expect, type Browser, type BrowserContext } from '@playwright/test';
 import { testDb } from '../__tests__/helpers/db';
 import { addProject, buildOrg } from '../__tests__/helpers/recordFixture';
-import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
 import { abortIfPendingBackground } from './helpers/pendingLinks';
 import type { PerfManifest } from '../scripts/load/seed-perf-fixture';
 
@@ -31,7 +30,10 @@ import type { PerfManifest } from '../scripts/load/seed-perf-fixture';
  *
  * Run on the production build (`npm run build`, then Playwright with CI=1, which serves `next start`); a dev build's
  * bundles are not what ships. Each case first checks the page it landed on, so a redirect to /login cannot pass a
- * budget (R16-1).
+ * budget (R16-1). The same file runs behind the production nginx configuration under playwright.perf-nginx.config.ts
+ * (baseURL https://makrai.org, mapped to the local nginx by the browser), which counts what nginx sends; the log line
+ * names the document's protocol (h2 once default.conf enables HTTP/2 on 443). So that no request can leave the machine
+ * by resolving makrai.org through DNS, every request here goes through the browser, the setup calls included (`apiPost`).
  */
 
 const S11_BUDGET = 300_000;
@@ -40,6 +42,7 @@ const PUBLIC_BUDGET = 220_000;
 const SIGN_IN_IP = '10.47.0.1';
 const ACCEPTANCES_IP = '10.47.0.2';
 const ACCENTS_IP = '10.47.0.3';
+const PUBLIC_OWNER_IP = '10.47.0.4';
 /** Where a sign-in lands: the dashboard, or the organisation picker for an account with no last organisation. */
 const SIGNED_IN = /^\/(orgs\/[^/]+\/dashboard)?$/;
 
@@ -47,8 +50,41 @@ const SIGNED_IN = /^\/(orgs\/[^/]+\/dashboard)?$/;
 const ACCENTED_INVITATION_CEILING = 228_495;
 
 type Measured = {
-  landed: string; status: number; total: number; sizes: number; bodies: number; failed: string[]; abandonedPrefetches: number; fonts: string[];
+  landed: string; status: number; protocol: string; total: number; sizes: number; bodies: number; failed: string[];
+  abandonedPrefetches: number; fonts: string[];
 };
+
+/**
+ * A POST from inside the signed-in context's page, so it goes through the browser's resolver (and, behind nginx, its
+ * host mapping) with the page's own origin and cookies; a Node request context would resolve the name through DNS.
+ */
+async function apiPost(context: BrowserContext, path: string, data: unknown): Promise<{ status: number; body: unknown; text: string }> {
+  const page = await context.newPage();
+  try {
+    await page.goto('/api/health');
+    return await page.evaluate(async ({ path, data }) => {
+      const r = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(data) });
+      const text = await r.text();
+      let body: unknown = null;
+      try { body = JSON.parse(text); } catch { /* not JSON: the caller reports the status and the text */ }
+      return { status: r.status, body, text };
+    }, { path, data });
+  } finally {
+    await page.close();
+  }
+}
+
+/** An invitation over route 25 from `context` (an owner's session); the raw token is only in the create response. */
+async function invitationPath(context: BrowserContext, slug: string, label: string): Promise<string> {
+  const res = await apiPost(context, `/api/v1/orgs/${slug}/members`,
+    { requestId: randomUUID(), email: `${label}-${Date.now()}@fixture.test`, role: 'viewer', showLink: true });
+  if (res.status !== 201) throw new Error(`invitation create answered ${res.status}: ${res.text}`);
+  const acceptUrl = (res.body as { acceptUrl?: string | null } | null)?.acceptUrl;
+  if (typeof acceptUrl !== 'string') throw new Error(`invitation create answered acceptUrl ${JSON.stringify(acceptUrl)}: stop and report`);
+  const found = /^\/invitations\/([^/]+)$/.exec(new URL(acceptUrl).pathname);
+  if (!found) throw new Error('invitation create answered an acceptUrl whose path is not /invitations/<token>: stop and report');
+  return `/invitations/${found[1]}`;
+}
 
 /**
  * Whether a failed request is a Link prefetch the browser aborted: `net::ERR_ABORTED`, and either the router's own
@@ -76,11 +112,15 @@ async function measure(browser: Browser, baseURL: string, path: string, storageS
     const cdp = await context.newCDPSession(page);
     await cdp.send('Network.enable');
     const urls = new Map<string, string>();
+    let protocol = 'unknown';
     /** Bytes received so far by each request that has not finished: response headers, then each body chunk. */
     const received = new Map<string, number>();
     let total = 0;
     cdp.on('Network.requestWillBeSent', (e) => { urls.set(e.requestId, e.request.url); });
-    cdp.on('Network.responseReceived', (e) => { received.set(e.requestId, (received.get(e.requestId) ?? 0) + e.response.encodedDataLength); });
+    cdp.on('Network.responseReceived', (e) => {
+      received.set(e.requestId, (received.get(e.requestId) ?? 0) + e.response.encodedDataLength);
+      if (e.type === 'Document') protocol = e.response.protocol ?? 'unknown';   // the last document: a redirect's target, where there is one
+    });
     cdp.on('Network.dataReceived', (e) => { received.set(e.requestId, (received.get(e.requestId) ?? 0) + e.encodedDataLength); });
     cdp.on('Network.loadingFinished', (e) => { total += e.encodedDataLength; received.delete(e.requestId); });
     // A request that ends without finishing still transferred what it received before it ended.
@@ -101,7 +141,7 @@ async function measure(browser: Browser, baseURL: string, path: string, storageS
     const each = await Promise.all(sizes);
     const bodies = each.reduce((a, b) => a + b.body, 0);
     const fonts = [...urls.values()].filter((u) => u.endsWith('.woff2')).map((u) => u.split('/').pop()!);
-    return { landed, status: res.status(), total, sizes: bodies + each.reduce((a, b) => a + b.headers, 0), bodies, failed, abandonedPrefetches, fonts };
+    return { landed, status: res.status(), protocol, total, sizes: bodies + each.reduce((a, b) => a + b.headers, 0), bodies, failed, abandonedPrefetches, fonts };
   } finally {
     await context.close();
   }
@@ -116,14 +156,14 @@ function expectRendered(m: Measured, path: string, expected: string, shown: stri
 
 /** `shown` is the route template where the address holds a token, so the log carries no live invitation token. */
 function report(shown: string, m: Measured, budget: number): void {
-  console.log(`route=${shown} bytes=${m.total} budget=${budget} status=${m.status} playwright_sizes=${m.sizes} bodies_only=${m.bodies}`
+  console.log(`route=${shown} bytes=${m.total} budget=${budget} status=${m.status} protocol=${m.protocol} playwright_sizes=${m.sizes} bodies_only=${m.bodies}`
     + ` abandoned_prefetches=${m.abandonedPrefetches} fonts=${m.fonts.join(',')}`);
 }
 
 /** Signs `account` in on the form in a context of its own and saves its storage state at `path`. */
 async function signInAndSave(browser: Browser, baseURL: string, account: { email: string; password: string }, path: string,
   clientIp: string, landsOn: RegExp): Promise<void> {
-  const context = await browser.newContext({ baseURL, extraHTTPHeaders: { 'x-forwarded-for': clientIp } });
+  const context = await browser.newContext({ baseURL, ignoreHTTPSErrors: true, extraHTTPHeaders: { 'x-forwarded-for': clientIp } });
   try {
     const page = await context.newPage();
     await page.goto('/login');
@@ -214,24 +254,15 @@ test.describe('the public budget', () => {
 
   test.beforeAll(async ({ browser }) => {
     const baseURL = test.info().project.use.baseURL!;
-    // [token]: an invitation made over route 25 by a fixture owner; the raw token is only in the create response.
-    const manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8')) as FixtureManifest;
-    const org = manifest.orgs[0];
-    const owner = manifest.users.find((u) => u.orgSlug === org.slug && u.role === 'owner' && u.index === 0);
-    if (!owner) throw new Error(`no owner seat for ${org.slug} in ${MANIFEST_PATH}`);
-    const api = await pwRequest.newContext({ baseURL, storageState: owner.storageStatePath });
+    // [token]: an invitation made over route 25 by this file's own fixture owner (plain ASCII names).
+    const fx = await buildOrg({ label: 'first-visit-public' });
+    const ownerState = 'test-results/first-visit-public-owner.json';
+    await signInAndSave(browser, baseURL, fx.members.owner, ownerState, PUBLIC_OWNER_IP, SIGNED_IN);
+    const owner = await browser.newContext({ baseURL, ignoreHTTPSErrors: true, storageState: ownerState });
     try {
-      const res = await api.post(`/api/v1/orgs/${org.slug}/members`, {
-        data: { requestId: randomUUID(), email: `first-visit-${Date.now()}@fixture.test`, role: 'viewer', showLink: true },
-      });
-      if (res.status() !== 201) throw new Error(`invitation create answered ${res.status()}: ${await res.text()}`);
-      const body = (await res.json()) as { acceptUrl?: string | null };
-      if (typeof body.acceptUrl !== 'string') throw new Error(`invitation create answered acceptUrl ${JSON.stringify(body.acceptUrl)}: stop and report`);
-      const found = /^\/invitations\/([^/]+)$/.exec(new URL(body.acceptUrl, baseURL).pathname);
-      if (!found) throw new Error('invitation create answered an acceptUrl whose path is not /invitations/<token>: stop and report');
-      token = found[1];
+      token = (await invitationPath(owner, fx.org.slug, 'first-visit')).replace(/^\/invitations\//, '');
     } finally {
-      await api.dispose();
+      await owner.close();
     }
     // S-05 renders only for an account missing a v1 acceptance (FR-ACC-04); any other visitor is sent elsewhere, so it
     // is measured signed in as such an account, and the landing check below makes sure it was S-05 that was counted.
@@ -280,19 +311,12 @@ test.describe('S-04 with accented names, against the accepted risk', () => {
     await testDb.user.update({ where: { id: fx.members.owner.userId }, data: { name: 'José Nnaŋŋa' } });
     const ownerState = 'test-results/first-visit-accents-owner.json';
     await signInAndSave(browser, baseURL, fx.members.owner, ownerState, ACCENTS_IP, SIGNED_IN);
-    const api = await pwRequest.newContext({ baseURL, storageState: ownerState });
+    const owner = await browser.newContext({ baseURL, ignoreHTTPSErrors: true, storageState: ownerState });
     let path: string;
     try {
-      const res = await api.post(`/api/v1/orgs/${fx.org.slug}/members`, {
-        data: { requestId: randomUUID(), email: `first-visit-accents-${Date.now()}@fixture.test`, role: 'viewer', showLink: true },
-      });
-      expect(res.status(), await res.text()).toBe(201);
-      const { acceptUrl } = (await res.json()) as { acceptUrl: string | null };
-      const found = typeof acceptUrl === 'string' ? /^\/invitations\/([^/]+)$/.exec(new URL(acceptUrl, baseURL).pathname) : null;
-      expect(found, 'acceptUrl is /invitations/<token>').not.toBeNull();
-      path = `/invitations/${found![1]}`;
+      path = await invitationPath(owner, fx.org.slug, 'first-visit-accents');
     } finally {
-      await api.dispose();
+      await owner.close();
     }
     const m = await measure(browser, baseURL, path);
     report('/invitations/[token] (accented names)', m, ACCENTED_INVITATION_CEILING);
