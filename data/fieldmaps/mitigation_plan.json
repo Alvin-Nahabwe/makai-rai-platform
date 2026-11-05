@@ -1,0 +1,100 @@
+{
+  "documentType": "mitigation_plan",
+  "homeStage": "review",
+  "templateVersion": "5.0.0",
+  "fields": [
+    {
+      "fieldId": "MP-01",
+      "label": "Stage, stage review name and the review's \"Prepared for\" note",
+      "section": "Scope",
+      "sources": [
+        {"kind": "meta", "item": "review"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MP-02",
+      "label": "Counts (whole numbers): open findings; closed by mitigation; closed by accepted risk; mitigations planned, in progress, done, cancelled, overdue",
+      "section": "Scope",
+      "sources": [
+        {"kind": "findings", "stage": "review", "filter": "counts"},
+        {"kind": "mitigations", "stage": "review", "filter": "counts"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MP-03",
+      "label": "Open findings, each with source, risk area, title, description, date raised and its mitigations (what, owner, due date, status, overdue, control followed)",
+      "section": "Remaining risks: open findings and accepted risks",
+      "sources": [
+        {"kind": "findings", "stage": "review", "filter": "open"},
+        {"kind": "mitigations", "stage": "review", "filter": "current"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MP-04",
+      "label": "Controls the framework suggests for each open finding",
+      "section": "Remaining risks: open findings and accepted risks",
+      "sources": [
+        {"kind": "mapping"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MP-06",
+      "label": "Risks accepted: who accepted, why, date to look again",
+      "section": "Remaining risks: open findings and accepted risks",
+      "sources": [
+        {"kind": "accepted_risks", "stage": "review"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MP-05",
+      "label": "Findings closed by a mitigation, with closure evidence or closure note",
+      "section": "Findings closed by a mitigation",
+      "sources": [
+        {"kind": "findings", "stage": "review", "filter": "closed_by_mitigation"},
+        {"kind": "mitigations", "stage": "review", "filter": "done"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MP-07",
+      "label": "Questions of this stage with no decision",
+      "section": "Gaps the reader should know about",
+      "sources": [
+        {"kind": "meta", "item": "no_decision"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MP-08",
+      "label": "Questions marked not applicable, with reason code and reason",
+      "section": "Gaps the reader should know about",
+      "sources": [
+        {"kind": "meta", "item": "not_applicable"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MP-09",
+      "label": "Team note to the reader",
+      "section": "Notes and sign-off",
+      "sources": [
+        {"kind": "typed"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MP-10",
+      "label": "Sealed by, seal number and date",
+      "section": "Notes and sign-off",
+      "sources": [
+        {"kind": "meta", "item": "seals"}
+      ],
+      "typedAddition": false
+    }
+  ]
+}

@@ -1,0 +1,322 @@
+{
+  "documentType": "model_card",
+  "homeStage": "in-processing",
+  "templateVersion": "5.0.0",
+  "fields": [
+    {
+      "fieldId": "MC-01",
+      "label": "Model name",
+      "section": "Model details",
+      "sources": [
+        {"kind": "typed"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MC-02",
+      "label": "Version",
+      "section": "Model details",
+      "sources": [
+        {"kind": "typed"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MC-03",
+      "label": "Model type",
+      "section": "Model details",
+      "sources": [
+        {"kind": "project", "field": "aiSystemType"}
+      ],
+      "typedAddition": true
+    },
+    {
+      "fieldId": "MC-04",
+      "label": "Architecture",
+      "section": "Model details",
+      "sources": [
+        {"kind": "typed"},
+        {"kind": "record", "questionId": "Q-IP-01", "parts": ["status", "reason"]}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MC-05",
+      "label": "Framework",
+      "section": "Model details",
+      "sources": [
+        {"kind": "typed"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MC-06",
+      "label": "Developer(s)",
+      "section": "Model details",
+      "sources": [
+        {"kind": "typed"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MC-07",
+      "label": "Date",
+      "section": "Model details",
+      "sources": [
+        {"kind": "typed"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MC-08",
+      "label": "Licence",
+      "section": "Model details",
+      "sources": [
+        {"kind": "typed"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MC-09",
+      "label": "Primary use case",
+      "section": "Intended use",
+      "sources": [
+        {"kind": "record", "questionId": "Q-PP-02", "parts": ["reason"]}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MC-10",
+      "label": "Primary intended users",
+      "section": "Intended use",
+      "sources": [
+        {"kind": "record", "questionId": "Q-PP-03", "parts": ["reason"]},
+        {"kind": "project", "field": "deploymentSector"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MC-11",
+      "label": "Out-of-scope uses",
+      "section": "Intended use",
+      "sources": [
+        {"kind": "record", "questionId": "Q-IP-20", "parts": ["status", "reason", "evidence"]}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MC-12",
+      "label": "Dataset name",
+      "section": "Training and evaluation data",
+      "sources": [
+        {"kind": "typed"},
+        {"kind": "record", "questionId": "Q-PP-15", "parts": ["evidence"]}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MC-13",
+      "label": "Dataset size",
+      "section": "Training and evaluation data",
+      "sources": [
+        {"kind": "typed"},
+        {"kind": "project", "field": "datasetSize"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MC-14",
+      "label": "Features used",
+      "section": "Training and evaluation data",
+      "sources": [
+        {"kind": "typed"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MC-15",
+      "label": "Geographic scope and demographic composition",
+      "section": "Training and evaluation data",
+      "sources": [
+        {"kind": "record", "questionId": "Q-PP-10", "parts": ["status", "reason"]},
+        {"kind": "project", "field": "country"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MC-16",
+      "label": "Known limitations and under-represented populations",
+      "section": "Training and evaluation data",
+      "sources": [
+        {"kind": "record", "questionId": "Q-PP-09", "parts": ["reason"]},
+        {"kind": "record", "questionId": "Q-PP-22", "parts": ["status", "reason"]}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MC-17",
+      "label": "Evaluation data and how it differs from training data",
+      "section": "Training and evaluation data",
+      "sources": [
+        {"kind": "typed"},
+        {"kind": "record", "questionId": "Q-IP-02", "parts": ["status", "reason"]}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MC-18",
+      "label": "Overall metrics (accuracy, precision, recall, specificity, F1, AUC-ROC)",
+      "section": "Performance",
+      "sources": [
+        {"kind": "typed"},
+        {"kind": "record", "questionId": "Q-IP-03", "parts": ["status", "evidence"]},
+        {"kind": "record_option", "questionId": "Q-IP-13", "option": "AUC-ROC curve analysis"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MC-19",
+      "label": "Disaggregated performance (subgroup x metric table)",
+      "section": "Performance",
+      "sources": [
+        {"kind": "typed"},
+        {"kind": "record", "questionId": "Q-IP-04", "parts": ["status", "evidence"]},
+        {"kind": "record", "questionId": "Q-IP-EXTRA-01", "parts": ["status", "evidence"]}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MC-20",
+      "label": "Fairness metrics with the team's own threshold",
+      "section": "Performance",
+      "sources": [
+        {"kind": "typed"},
+        {"kind": "record", "questionId": "Q-IP-05", "parts": ["reason"]},
+        {"kind": "record", "questionId": "Q-IP-06", "parts": ["options"]}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MC-21",
+      "label": "Does the model use or predict sensitive attributes?",
+      "section": "Ethical considerations",
+      "sources": [
+        {"kind": "record", "questionId": "Q-PP-11", "parts": ["status", "reason"]},
+        {"kind": "record", "questionId": "Q-PP-GATE-SENSITIVE", "parts": ["scope"]}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MC-22",
+      "label": "Potential consequences of model errors",
+      "section": "Ethical considerations",
+      "sources": [
+        {"kind": "record", "questionId": "Q-IP-19", "parts": ["status", "reason"]}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MC-23",
+      "label": "Fairness concerns identified",
+      "section": "Ethical considerations",
+      "sources": [
+        {"kind": "findings", "stage": "in-processing", "filter": "open_and_closed", "areas": ["IP-01", "IP-02", "IP-04"]}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MC-24",
+      "label": "Bias mitigations applied",
+      "section": "Ethical considerations",
+      "sources": [
+        {"kind": "mitigations", "stage": "in-processing", "filter": "done"},
+        {"kind": "record", "questionId": "Q-IP-15", "parts": ["status", "reason"]}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MC-25",
+      "label": "Risks the team accepted",
+      "section": "Ethical considerations",
+      "sources": [
+        {"kind": "accepted_risks", "stage": "in-processing"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MC-26",
+      "label": "Known limitations and failure modes",
+      "section": "Limitations and recommendations",
+      "sources": [
+        {"kind": "record", "questionId": "Q-IP-20", "parts": ["reason"]},
+        {"kind": "record", "questionId": "Q-IP-08", "parts": ["status", "reason"]}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MC-27",
+      "label": "Deployment recommendations",
+      "section": "Limitations and recommendations",
+      "sources": [
+        {"kind": "record", "questionId": "Q-PO-15", "parts": ["status", "reason"]}
+      ],
+      "typedAddition": true
+    },
+    {
+      "fieldId": "MC-28",
+      "label": "Monitoring requirements and retraining triggers",
+      "section": "Limitations and recommendations",
+      "sources": [
+        {"kind": "record", "questionId": "Q-PO-01", "parts": ["status", "reason"]},
+        {"kind": "record", "questionId": "Q-PO-02", "parts": ["status", "reason"]}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MC-33",
+      "label": "Environmental note: compute and energy",
+      "section": "Environmental impact",
+      "sources": [
+        {"kind": "record", "questionId": "Q-PP-07", "parts": ["status", "reason"]},
+        {"kind": "typed"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MC-29",
+      "label": "Model card held by the team",
+      "section": "Record and sign-off",
+      "sources": [
+        {"kind": "record", "questionId": "Q-IP-12", "parts": ["status", "evidence"]}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MC-30",
+      "label": "Decisions above were made by",
+      "section": "Record and sign-off",
+      "sources": [
+        {"kind": "meta", "item": "deciders"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MC-31",
+      "label": "Sealed by, seal numbers and dates",
+      "section": "Record and sign-off",
+      "sources": [
+        {"kind": "meta", "item": "seals"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "MC-32",
+      "label": "Next review date",
+      "section": "Record and sign-off",
+      "sources": [
+        {"kind": "typed"}
+      ],
+      "typedAddition": false
+    }
+  ]
+}

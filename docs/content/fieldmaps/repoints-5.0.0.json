@@ -1,0 +1,32 @@
+[
+  {
+    "documentType": "data_card",
+    "fieldId": "DC-31",
+    "from": "Q-PP-15",
+    "to": "typed_only"
+  },
+  {
+    "documentType": "model_card",
+    "fieldId": "MC-12",
+    "from": "Q-PP-15",
+    "to": "Q-PP-08"
+  },
+  {
+    "documentType": "model_card",
+    "fieldId": "MC-15",
+    "from": "Q-PP-10",
+    "to": "Q-PP-09"
+  },
+  {
+    "documentType": "model_card",
+    "fieldId": "MC-19",
+    "from": "Q-IP-EXTRA-01",
+    "to": "typed_only"
+  },
+  {
+    "documentType": "model_card",
+    "fieldId": "MC-20",
+    "from": "Q-IP-05",
+    "to": "Q-IP-06"
+  }
+]
