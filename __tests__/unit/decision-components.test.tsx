@@ -4,6 +4,7 @@ import type { QuestionPanelData } from '@/lib/question/panel';
 import type { DecisionDraft } from '@/lib/question/draft';
 import type { LoadedQuestion } from '@/types/content';
 import type { DecisionVersionView } from '@/types/api';
+import { gateStatus } from '@/lib/question/saveOutcome';
 
 /**
  * The S-12 regions DEC-b fills (W-3, W-4; UX-09 to UX-12, UX-25, UX-28; NFR-A11Y-03, NFR-A11Y-04), rendered as
@@ -129,6 +130,15 @@ describe('S-12 status line and conflict view', () => {
     const h = renderToStaticMarkup(<SaveStatus status={{ id: 'M-05', text: 'Not saved: connection lost. Your answer is kept on this device. Retry.', live: 'assertive', next: 'retry' }} draftSavedAt={null} storageUnavailable />);
     expect(h).toMatch(/role="alert"[^>]*>Not saved: connection lost\. Your answer is kept on this device\. Retry\. This browser cannot keep drafts\. Save before leaving this page\.</);
     expect(h.match(/This browser cannot keep drafts/g)).toHaveLength(1);
+  });
+
+  it('CR-2 UX-26: a gate alert with no storage is the gate line alone, without "Save before leaving this page"', () => {
+    for (const nav of [{ kind: 'go' as const, href: '/acceptances?callbackUrl=%2Fq' }, { kind: 'go' as const, href: '/change-password?callbackUrl=%2Fq' }]) {
+      const gate = gateStatus(nav);
+      const h = renderToStaticMarkup(<SaveStatus status={gate} draftSavedAt={null} storageUnavailable />);
+      expect(h).toMatch(new RegExp(`role="alert"[^>]*>${gate.text.replace(/[.]/g, '\\.')}</`));
+      expect(h).not.toContain('This browser cannot keep drafts');
+    }
   });
 
   it('CR-1 ruling 5 UX-25: after a save that the person typed past, the line says Saved and also that a newer draft is on the device', () => {

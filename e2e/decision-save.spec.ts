@@ -222,7 +222,9 @@ for (const [code, text, label, target] of [
     const left: string[] = [];
     page.on('request', (r) => { if (new URL(r.url()).pathname === target) left.push(r.url()); });
     await page.getByRole('button', { name: 'Save decision' }).click();
-    await expect(saveAlert(page)).toHaveText(`${text} ${NO_STORAGE_LINE}`);
+    // The gate's line alone: "Save before leaving this page" is wrong where the person cannot save yet.
+    await expect(saveAlert(page)).toHaveText(text);
+    await expect(page.locator('[data-region="answer-form"] .save-status')).not.toContainText(NO_STORAGE_LINE);
     await expect(page.getByRole('link', { name: label })).toHaveAttribute('href', `${target}?callbackUrl=${encodeURIComponent(questionPath(projectId, Q))}`);
     await page.waitForTimeout(1_000);
     expect(left).toEqual([]);

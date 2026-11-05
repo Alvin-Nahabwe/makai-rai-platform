@@ -19,7 +19,9 @@ export type SaveStatusProps = { status: SaveStatusValue | null; draftSavedAt: Ut
 export function SaveStatus({ status, draftSavedAt, storageUnavailable }: SaveStatusProps): ReactElement {
   const polite = status !== null && status.live === 'polite' ? status.text : '';
   // F4: a failure says "kept on this device"; when the browser refused the draft, the same announcement says it could not.
-  const assertive = status !== null && status.live === 'assertive' ? `${status.text}${storageUnavailable ? ` ${NO_STORAGE}` : ''}` : '';
+  // Not on a gate (GATE): there the person cannot save until they pass it, so "Save before leaving" would be wrong.
+  const noStorage = storageUnavailable && status?.id !== 'GATE';
+  const assertive = status !== null && status.live === 'assertive' ? `${status.text}${noStorage ? ` ${NO_STORAGE}` : ''}` : '';
   return (
     <div className="save-status">
       <p role="status" data-message-id={polite === '' ? undefined : status?.id}>{polite}</p>
