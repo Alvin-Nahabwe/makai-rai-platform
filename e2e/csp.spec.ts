@@ -14,7 +14,6 @@ import type { OrgRole } from '@prisma/client';
 import { testDb } from '../__tests__/helpers/db';
 import { buildOrg, buildPlatformAdmin, type FixtureAccount } from '../__tests__/helpers/recordFixture';
 import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from './fixtures/manifest';
-import { fetchRetryingReset } from './helpers/retryFetch';
 import { abortIfPendingBackground, assertNoStalePendingTargets } from './helpers/pendingLinks';
 
 /**
@@ -238,13 +237,12 @@ async function policedContext(
     }
     // maxRedirects 0: hand 3xx responses to the browser, which follows them itself,
     // so cookies and `Location` behave exactly as they do without interception.
-    // A GET that is reset is sent once more (e2e/helpers/retryFetch.ts): one reset must not turn --fail-on-flaky-tests red.
-    const response = await fetchRetryingReset(route.request().method(), () =>
-      route.fetch({
-        maxRedirects: 0,
-        headers: { ...route.request().headers(), ...extraHeaders },
-      }),
-    );
+    // connection: close, because Node's server destroys an idle keep-alive socket 6 s after its last response, and Playwright's
+    // pooled socket has no idle timer: a request sent just then, while the server is busy, is reset (read ECONNRESET).
+    const response = await route.fetch({
+      maxRedirects: 0,
+      headers: { ...route.request().headers(), ...extraHeaders, connection: 'close' },
+    });
     await route.fulfill({ response, headers: { ...response.headers(), 'content-security-policy': csp } });
   });
   await context.addInitScript(() => {

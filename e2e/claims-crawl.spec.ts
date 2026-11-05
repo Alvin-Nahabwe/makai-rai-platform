@@ -609,7 +609,9 @@ test('FR-PUB-01: no page reachable as any organisation role shows a product clai
   // A project, so the dashboard, the projects list and a project page have something to link to.
   const owner = manifest.users.find((u) => u.orgSlug === slug && u.role === 'owner' && u.index === 0);
   if (!owner) throw new Error(`claims-crawl: no owner seat for ${slug} in the fixture manifest`);
-  const api = await pwRequest.newContext({ baseURL, storageState: owner.storageStatePath });
+  // connection: close, because Node's server destroys an idle keep-alive socket 6 s after its last response, and Playwright's
+  // pooled socket has no idle timer: a GET sent just then, while the server is busy, is reset (read ECONNRESET).
+  const api = await pwRequest.newContext({ baseURL, storageState: owner.storageStatePath, extraHTTPHeaders: { connection: 'close' } });
   const created = await api.post(`/api/v1/orgs/${slug}/projects`, {
     headers: { origin: baseURL ?? '' },
     data: { name: `Claims crawl project ${Date.now()}`, aiSystemType: 'classification' },

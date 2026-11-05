@@ -238,7 +238,9 @@ test('FR-RM-01 FR-RM-04: no page a crawled seat can reach shows a score shape', 
   // something to link to. The owner of the first organisation creates it over the app's own API.
   const owner = manifest.users.find((u) => u.orgSlug === slug && u.role === 'owner' && u.index === 0);
   if (!owner) throw new Error(`no-score-crawl: no owner seat for ${slug} in the fixture manifest`);
-  const api = await pwRequest.newContext({ baseURL, storageState: owner.storageStatePath });
+  // connection: close, because Node's server destroys an idle keep-alive socket 6 s after its last response, and Playwright's
+  // pooled socket has no idle timer: a GET sent just then, while the server is busy, is reset (read ECONNRESET).
+  const api = await pwRequest.newContext({ baseURL, storageState: owner.storageStatePath, extraHTTPHeaders: { connection: 'close' } });
   const created = await api.post(`/api/v1/orgs/${slug}/projects`, {
     headers: { origin: baseURL ?? '' },
     data: { name: `No-score crawl project ${Date.now()}`, aiSystemType: 'classification' },
