@@ -1,3 +1,95 @@
 {
-  "records": []
+  "records": [
+    {
+      "batch": "question-set:pre-processing",
+      "approver": "Product owner, MAK-AI",
+      "at": "2026-11-05T12:25:00+03:00",
+      "sha256": "3996fee4a4e4b120f417151cdbeca27f08c954c19632a1e92d14156b5d1f1a20",
+      "items": [
+        "Q-PP-01",
+        "Q-PP-02",
+        "Q-PP-03",
+        "Q-PP-04",
+        "Q-PP-05",
+        "Q-PP-24",
+        "Q-PP-07",
+        "Q-PP-08",
+        "Q-PP-09",
+        "Q-PP-11",
+        "Q-PP-12",
+        "Q-PP-GATE-SENSITIVE",
+        "Q-PP-13",
+        "Q-PP-14",
+        "Q-PP-16",
+        "Q-PP-17",
+        "Q-PP-18",
+        "Q-PP-19",
+        "Q-PP-20",
+        "Q-PP-21",
+        "Q-PP-22",
+        "Q-PP-23"
+      ]
+    },
+    {
+      "batch": "question-set:in-processing",
+      "approver": "Product owner, MAK-AI",
+      "at": "2026-11-05T12:25:00+03:00",
+      "sha256": "fa78660124564f2cd8bc7bfb38f89b1ea066da3aaa4dd6016fd478cc244a46fa",
+      "items": [
+        "Q-IP-01",
+        "Q-IP-02",
+        "Q-IP-03",
+        "Q-IP-04",
+        "Q-IP-06",
+        "Q-IP-07",
+        "Q-IP-08",
+        "Q-IP-16",
+        "Q-IP-17",
+        "Q-IP-18",
+        "Q-IP-09",
+        "Q-IP-10",
+        "Q-IP-11",
+        "Q-IP-12",
+        "Q-IP-13",
+        "Q-IP-14",
+        "Q-IP-15",
+        "Q-IP-19",
+        "Q-IP-20",
+        "Q-IP-21",
+        "Q-IP-22",
+        "Q-IP-24"
+      ]
+    },
+    {
+      "batch": "question-set:post-processing",
+      "approver": "Product owner, MAK-AI",
+      "at": "2026-11-05T12:25:00+03:00",
+      "sha256": "11098ba94ebfe3431e1f5ae83a0b44a8e7b721fd305af6f0ef5efa9089540802",
+      "items": [
+        "Q-PO-01",
+        "Q-PO-02",
+        "Q-PO-03",
+        "Q-PO-04",
+        "Q-PO-05",
+        "Q-PO-06",
+        "Q-PO-07",
+        "Q-PO-16",
+        "Q-PO-17",
+        "Q-PO-18",
+        "Q-PO-08",
+        "Q-PO-09",
+        "Q-PO-10",
+        "Q-PO-11",
+        "Q-PO-12",
+        "Q-PO-13",
+        "Q-PO-14",
+        "Q-PO-15",
+        "Q-PO-20",
+        "Q-PO-21",
+        "Q-PO-22",
+        "Q-PO-23",
+        "Q-PO-24"
+      ]
+    }
+  ]
 }

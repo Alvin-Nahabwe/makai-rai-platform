@@ -94,16 +94,14 @@
               "evidenceExamples": []
             },
             {
-              "id": "Q-PP-06",
-              "text": "How diverse is the team working on the AI system, in terms of disciplinary backgrounds, gender, culture, and nationalities?",
+              "id": "Q-PP-24",
+              "text": "Have you checked which perspectives the problem needs (disciplines, lived experience, gender, language and culture of the people affected) and brought in the ones your team lacks?",
               "type": "likert-5",
               "principle": "Multi-stakeholder Collaboration",
               "gaps": [
                 "PP-03",
                 "PP-04"
               ],
-              "helpText": "Diverse teams are more likely to spot blind spots and biases that homogeneous groups miss.",
-              "example": "A fraud detection team might include data scientists, domain experts from banking, legal counsel, and representatives from communities most affected by false flags.",
               "expectedPractice": "",
               "whyAsked": "",
               "reasonPrompt": "",
@@ -161,26 +159,11 @@
               "principle": "Fairness & Non-discrimination",
               "gaps": [
                 "PP-02",
-                "PP-04"
+                "PP-04",
+                "PP-05"
               ],
               "example": "Does your dataset cover the range of conditions the model will encounter? If you trained on urban data but deploy in rural areas, representation gaps will hurt performance.",
               "helpText": "Representativeness means the training data reflects the diversity of the population the model will serve.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
-            },
-            {
-              "id": "Q-PP-10",
-              "text": "Have you analyzed the demographic distribution of your data across relevant subgroups?",
-              "type": "likert-5",
-              "principle": "Fairness & Non-discrimination",
-              "gaps": [
-                "PP-02",
-                "PP-05"
-              ],
-              "helpText": "Analyzing demographic distributions reveals whether certain groups are over- or under-represented in your data.",
-              "example": "Plot age, gender, income, and geographic distributions. If your loan dataset skews toward high-income urban applicants but the model will serve rural borrowers, that gap matters.",
               "expectedPractice": "",
               "whyAsked": "",
               "reasonPrompt": "",
@@ -261,21 +244,6 @@
               },
               "helpText": "Anonymization removes identifying information; pseudonymization replaces identifiers with artificial ones.",
               "example": "Replace names with random IDs, generalize ages to ranges, and remove rare attributes that could identify individuals through combination.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
-            },
-            {
-              "id": "Q-PP-15",
-              "text": "Have you created or referenced a datasheet for your dataset?",
-              "type": "likert-5",
-              "principle": "Transparency & Explainability",
-              "gaps": [
-                "PO-07"
-              ],
-              "helpText": "Datasheets document dataset motivation, composition, collection process, preprocessing, intended uses, distribution, and maintenance (Gebru et al., 2018).",
-              "example": "A datasheet for a satellite imagery dataset should document geographic coverage, resolution, seasonal variation, labeling methodology, and known gaps.",
               "expectedPractice": "",
               "whyAsked": "",
               "reasonPrompt": "",
@@ -600,25 +568,11 @@
               "principle": "Fairness & Non-discrimination",
               "gaps": [
                 "IP-01",
-                "IP-02"
+                "IP-02",
+                "IP-04"
               ],
               "example": "Compare accuracy, recall, and false negative rates across age groups, income brackets, geographic regions, or whatever subgroups matter for your deployment.",
               "helpText": "Disaggregated evaluation reveals whether the model performs equitably across different demographic groups.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
-            },
-            {
-              "id": "Q-IP-05",
-              "text": "Have you selected and analyzed appropriate fairness metrics for your use case?",
-              "type": "likert-5",
-              "principle": "Fairness & Non-discrimination",
-              "gaps": [
-                "IP-01"
-              ],
-              "helpText": "Fairness metrics include Statistical Parity, Predictive Parity, False Positive Error Rate Balance, False Negative Error Rate Balance, Treatment Equality, and others.",
-              "example": "For a hiring screening tool, false positive error rate balance checks whether qualified candidates from different demographic groups are equally likely to be incorrectly rejected.",
               "expectedPractice": "",
               "whyAsked": "",
               "reasonPrompt": "",
@@ -704,7 +658,9 @@
                 ]
               },
               "principle": "Fairness & Non-discrimination",
-              "gaps": [],
+              "gaps": [
+                "IP-01"
+              ],
               "helpText": "Different fairness metrics capture different aspects of equitable treatment. No single metric is sufficient.",
               "example": "Statistical Parity checks equal selection rates; Predictive Parity checks equal precision; Treatment Equality checks equal error rate ratios.",
               "expectedPractice": "",
@@ -733,7 +689,9 @@
               "type": "likert-5",
               "principle": "Safety & Security",
               "gaps": [
-                "IP-05"
+                "IP-05",
+                "IP-03",
+                "IP-06"
               ],
               "helpText": "Models that perform well in controlled settings may fail in deployment due to data shifts, noise, or unusual inputs.",
               "example": "Test how the model handles inputs from environments it wasn't trained on: different image quality, different dialects in text, different sensor calibrations.",
@@ -1033,21 +991,6 @@
               "evidenceExamples": []
             },
             {
-              "id": "Q-IP-23",
-              "text": "Have you considered the trade-offs between model performance and interpretability for your use case?",
-              "type": "likert-5",
-              "principle": "Transparency & Explainability",
-              "gaps": [
-                "IP-03"
-              ],
-              "helpText": "Higher-stakes decisions generally need more interpretable models, even at some performance cost.",
-              "example": "For decisions that directly affect people's lives or livelihoods, a slightly less accurate but fully interpretable model may be preferable to a black box.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
-            },
-            {
               "id": "Q-IP-24",
               "text": "Have you tested the model's performance on data from different time periods to assess temporal stability?",
               "type": "likert-5",
@@ -1058,38 +1001,6 @@
               ],
               "helpText": "Models trained on historical data may not perform well on recent data due to temporal distribution shifts.",
               "example": "A model trained on 2018-2020 data should be evaluated on 2021-2023 data to check whether it still holds up as conditions change.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
-            },
-            {
-              "id": "Q-IP-EXTRA-01",
-              "text": "Have you performed disaggregated evaluation of model performance across demographic subgroups identified in your data?",
-              "type": "likert-5",
-              "principle": "Fairness & Non-discrimination",
-              "gaps": [
-                "IP-01",
-                "IP-04"
-              ],
-              "helpText": "When data representativeness was not audited before training, model evaluation must explicitly test whether the model performs equally well across all demographic subgroups present in the target population.",
-              "example": "Break down key metrics (accuracy, precision, recall, F1) by age group, gender, ethnicity, socioeconomic status, and any other relevant demographic dimensions. Flag subgroups where performance falls below the overall average by more than 5 percentage points.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
-            },
-            {
-              "id": "Q-IP-EXTRA-02",
-              "text": "Have you conducted sensitivity analysis to assess how data quality variations affect model predictions?",
-              "type": "likert-5",
-              "principle": "Reproducibility & Accountability",
-              "gaps": [
-                "IP-03",
-                "IP-06"
-              ],
-              "helpText": "When data quality checks were absent during pre-processing, sensitivity analysis during training helps detect whether the model is fragile to the specific data quality issues that were not caught upstream.",
-              "example": "Introduce controlled noise (missing values, mislabeled samples, distribution shifts) into validation data and measure prediction stability. Document which quality dimensions have the largest impact on model outputs.",
               "expectedPractice": "",
               "whyAsked": "",
               "reasonPrompt": "",
@@ -1208,7 +1119,8 @@
               "type": "likert-5",
               "principle": "Transparency & Explainability",
               "gaps": [
-                "PO-04"
+                "PO-04",
+                "PO-02"
               ],
               "helpText": "Transparent communication of model capabilities and limitations prevents misuse and builds appropriate trust.",
               "example": "Show confidence intervals alongside predictions. Clearly state what populations or conditions the model was not designed for.",
@@ -1238,7 +1150,8 @@
               "type": "likert-5",
               "principle": "Fairness & Non-discrimination",
               "gaps": [
-                "PO-01"
+                "PO-01",
+                "PO-06"
               ],
               "helpText": "Fairness can degrade in production even when accuracy remains stable, if the demographic composition of served populations shifts.",
               "example": "Monitor whether false negative rates for different demographic groups remain balanced as the model encounters new populations in production.",
@@ -1258,21 +1171,6 @@
               ],
               "helpText": "Automatic safeguards prevent continued use of a degraded model that could cause harm.",
               "example": "Set an alert when weekly prediction accuracy drops below 80%, and automatically route decisions to human review below 70%.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
-            },
-            {
-              "id": "Q-PO-19",
-              "text": "Have you assessed and documented the infrastructure requirements and dependencies for the deployed system?",
-              "type": "likert-5",
-              "principle": "Reproducibility & Accountability",
-              "gaps": [
-                "PO-07"
-              ],
-              "helpText": "Infrastructure documentation ensures the system can be maintained, migrated, and debugged by future teams.",
-              "example": "Document required server specifications, network bandwidth, database dependencies, and API integrations needed for the system to function.",
               "expectedPractice": "",
               "whyAsked": "",
               "reasonPrompt": "",
@@ -1452,7 +1350,9 @@
               "type": "likert-5",
               "principle": "Safety & Security",
               "gaps": [
-                "PO-02"
+                "PO-02",
+                "PO-01",
+                "PO-03"
               ],
               "helpText": "Graceful degradation means the system provides safe, useful output even when encountering unexpected inputs.",
               "example": "When the model encounters input it wasn't trained on, it should flag uncertainty rather than confidently returning a wrong answer.",
@@ -1483,7 +1383,8 @@
               "type": "likert-5",
               "principle": "Multi-stakeholder Collaboration",
               "gaps": [
-                "PO-06"
+                "PO-06",
+                "PO-02"
               ],
               "helpText": "Community involvement ensures the system addresses real needs and doesn't impose solutions that lack local relevance.",
               "example": "Include representatives from the communities affected by the system in reviewing how its outputs are presented, interpreted, and acted on.",
@@ -1549,70 +1450,6 @@
               ],
               "helpText": "AI systems can inadvertently widen or narrow equity gaps in service delivery.",
               "example": "Does the AI tool work equally well for users with limited internet connectivity, older devices, or lower digital literacy?",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
-            },
-            {
-              "id": "Q-PO-EXTRA-01",
-              "text": "Have you implemented disaggregated monitoring for demographic subgroups post-deployment?",
-              "type": "likert-5",
-              "principle": "Fairness & Non-discrimination",
-              "gaps": [
-                "PO-01",
-                "PO-06"
-              ],
-              "helpText": "When protected groups were not thoroughly assessed before training, post-deployment monitoring must track performance across demographic subgroups to catch disparities early.",
-              "example": "Set up automated dashboards that break down prediction accuracy, false positive rates, and false negative rates by age, gender, ethnicity, and other relevant categories.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
-            },
-            {
-              "id": "Q-PO-EXTRA-02",
-              "text": "Have you established external review mechanisms to compensate for limited team perspective diversity?",
-              "type": "likert-5",
-              "principle": "Multi-stakeholder Collaboration",
-              "gaps": [
-                "PO-02",
-                "PO-06"
-              ],
-              "helpText": "When the development team lacks diversity, external advisory boards, community review panels, or third-party audits help surface blind spots that homogeneous teams miss.",
-              "example": "Engage an external ethics advisory board or partner with community organizations representing affected populations to review system behavior quarterly.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
-            },
-            {
-              "id": "Q-PO-EXTRA-03",
-              "text": "Have you implemented runtime explanation generation or user-facing decision rationale features?",
-              "type": "likert-5",
-              "principle": "Transparency & Explainability",
-              "gaps": [
-                "PO-02",
-                "PO-04"
-              ],
-              "helpText": "Models deployed without pre-training explainability analysis need runtime explanation capabilities so users and oversight bodies can understand individual decisions.",
-              "example": "Integrate LIME or SHAP into the prediction pipeline to generate per-decision feature importance scores, or provide natural language rationales for high-stakes outputs.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
-            },
-            {
-              "id": "Q-PO-EXTRA-04",
-              "text": "Have you implemented automated anomaly detection and failsafe mechanisms for production inputs?",
-              "type": "likert-5",
-              "principle": "Safety & Security",
-              "gaps": [
-                "PO-01",
-                "PO-03"
-              ],
-              "helpText": "When robustness was not tested before deployment, production systems need automated guardrails to detect out-of-distribution inputs and trigger fallback behavior.",
-              "example": "Implement input validation that flags anomalous feature distributions, set confidence thresholds below which predictions are routed to human review, and define circuit breakers for sustained degradation.",
               "expectedPractice": "",
               "whyAsked": "",
               "reasonPrompt": "",
