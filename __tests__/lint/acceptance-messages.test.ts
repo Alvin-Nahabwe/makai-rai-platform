@@ -30,7 +30,9 @@ describe('S-04 and S-05 take their shared texts from one place', () => {
   });
 
   it('7.4.2 S-04 / S-05: the not-created copy is written in one component', () => {
-    expect(filesMatching('Not created: connection lost. Nothing was created.')).toEqual(['components/legal/AcceptancesForm.tsx']);
+    // S-24 (ORG) shows the same 7.4.2 sentence for its own create form (SRS line 2387, the S-23 / S-24 row); S-04 and S-05
+    // still take theirs from one component.
+    expect(filesMatching('Not created: connection lost. Nothing was created.')).toEqual(['components/admin/CreateOrganisationForm.tsx', 'components/legal/AcceptancesForm.tsx']);
     expect(filesMatching('Not created: the server had a problem. Nothing was created.')).toEqual(['components/legal/AcceptancesForm.tsx']);
   });
 });

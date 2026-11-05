@@ -94,7 +94,7 @@ export function createResult(out: SendOutcome<CreateOrganisationResponse>): Crea
   }
   if (out.kind === 'not_saved') return { kind: 'not_created', status: NOT_CREATED, retry: true, fields: {} };
   if (out.status === 401) return { kind: 'not_created', status: 'Not created: you have been signed out. Sign in again.', retry: false, fields: {} };
-  if (out.status >= 500) return { kind: 'not_created', status: 'Not created: the server had a problem. Nothing was created. Retry.', retry: true, fields: {} };
+  if (out.status >= 500) return { kind: 'not_created', status: 'Not created: the server had a problem, so nothing was created. Retry.', retry: true, fields: {} };
   switch (out.body.code) {
     case 'validation': return { kind: 'not_created', status: 'Not created: check the fields marked below.', retry: false, fields: serverFieldErrors(out.body.fields) };
     // The slug comes from the name: a second organisation whose name gives the same address is refused. After a lost
