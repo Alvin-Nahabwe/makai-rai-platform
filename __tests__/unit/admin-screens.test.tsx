@@ -286,7 +286,8 @@ describe('S-24, creating and recovering an organisation', () => {
     const html = view({ result: failed, status: failed.status });
     expect(statusText(html)).toBe('Not created: connection lost. Nothing was created.');
     expect(html).toMatch(/<button[^>]*>Retry<\/button>/);
-    expect(createResult({ kind: 'rejected', status: 409, body: { error: 'x', code: 'slug_taken' } }).status).toMatch(/already exists/);
+    expect(createResult({ kind: 'rejected', status: 409, body: { error: 'x', code: 'slug_taken' } }).status)
+      .toBe('Another organisation already uses this web address. Change the name slightly and try again.');   // owner copy (ruling 3)
   });
 
   it('FR-ORG-01: the create form validates every field and refuses an accepted date in the future', () => {

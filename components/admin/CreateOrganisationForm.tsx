@@ -119,7 +119,7 @@ export function createResult(out: SendOutcome<CreateOrganisationResponse>): Crea
     case 'validation': return { kind: 'not_created', status: 'Not created: check the fields marked below.', retry: false, fields: serverFieldErrors(out.body.fields) };
     // The slug comes from the name: a second organisation whose name gives the same address is refused. After a lost
     // reply, the first attempt may be the one that took it.
-    case 'slug_taken': return { kind: 'not_created', status: 'Not created: an organisation with this name, or one very like it, already exists. Check the organisations list, or change the name.', retry: false, fields: {} };
+    case 'slug_taken': return { kind: 'not_created', status: 'Another organisation already uses this web address. Change the name slightly and try again.', retry: false, fields: {} };
     case 'not_platform_admin': return { kind: 'not_created', status: 'Not created: this account is not the MAK-AI administrator.', retry: false, fields: {} };
     default: return { kind: 'not_created', status: 'Not created. Reload the page and try again.', retry: false, fields: {} };
   }
