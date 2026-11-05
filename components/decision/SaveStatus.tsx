@@ -25,7 +25,9 @@ export function SaveStatus({ status, draftSavedAt, storageUnavailable }: SaveSta
       <p role="status" data-message-id={polite === '' ? undefined : status?.id}>{polite}</p>
       <p role="alert" data-message-id={assertive === '' ? undefined : status?.id}>{assertive}</p>
       {storageUnavailable && assertive === '' ? <p className="text-muted">{NO_STORAGE}</p> : null}
-      {!storageUnavailable && status === null && draftSavedAt !== null
+      {/* The draft line also follows "Saved" when the person typed past the save: the field then holds a newer answer
+          than the one saved, and it is on the device only (ruling on CR-1). */}
+      {!storageUnavailable && draftSavedAt !== null && (status === null || status.id === 'M-03' || status.id === 'M-04')
         ? <p className="text-muted">{`Draft on this device, not saved yet (${formatTime(draftSavedAt)})`}</p>
         : null}
     </div>

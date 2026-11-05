@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { conflictText, navigationForOutcome, savingStatus, statusForOutcome, withdrawOutcome, WITHDRAW_TEXT } from '@/lib/question/saveOutcome';
+import { conflictText, gateStatus, navigationForOutcome, savingStatus, statusForOutcome, withdrawOutcome, WITHDRAW_TEXT } from '@/lib/question/saveOutcome';
 import type { SendOutcome } from '@/lib/client/retrySafeWrite';
 import type { DecisionVersionView } from '@/types/api';
 import type { FieldError } from '@/types/record';
@@ -125,5 +125,18 @@ describe('decision save outcome', () => {
     expect(withdrawOutcome(rej(409, 'base_version_moved'))).toEqual({ kind: 'failed', text: WITHDRAW_TEXT.moved, retry: false });
     expect(withdrawOutcome(rej(409, 'project_archived'))).toEqual({ kind: 'failed', text: WITHDRAW_TEXT.archived, retry: false });
     expect(withdrawOutcome(rej(500, 'x'))).toEqual({ kind: 'failed', text: WITHDRAW_TEXT.server, retry: true });
+  });
+
+  it('CR-2 ruling 3: with no storage a 403 gate does not navigate by itself; the line says what to do first and links there', () => {
+    const at = '/orgs/acme/projects/p1/stages/pre-processing/questions/Q-PP-01';
+    const terms = navigationForOutcome(rej(403, 'acceptances_required'), at)!;
+    expect(gateStatus(terms as { kind: 'go'; href: string })).toEqual({
+      id: 'GATE', text: 'Not saved: accept the updated terms first, then come back.', live: 'assertive', next: 'go',
+      action: { label: 'Go to the terms', href: `/acceptances?callbackUrl=${encodeURIComponent(at)}` },
+    });
+    const pw = navigationForOutcome(rej(403, 'must_change_password'), at)!;
+    expect(gateStatus(pw as { kind: 'go'; href: string })).toMatchObject({
+      text: 'Not saved: change your password first, then come back.', action: { label: 'Change password', href: `/change-password?callbackUrl=${encodeURIComponent(at)}` },
+    });
   });
 });

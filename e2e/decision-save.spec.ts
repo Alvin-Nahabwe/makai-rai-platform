@@ -160,10 +160,75 @@ test('CR-1 7.4.1: typing while a save is out is kept: the field keeps it and the
   await expect(saveStatus(page)).toHaveText(/^Saved as version 1 at /);
   await expect(page.getByText('Starting from version 1')).toBeVisible();
   await expect(page.getByLabel('Reason (required)')).toHaveValue('Typed while it was saving');
+  // UX-25 (ruling on CR-1): "Saved" is followed by the line that says the field holds a newer answer, on the device only.
+  await expect(page.locator('[data-region="answer-form"] .save-status')).toContainText('Draft on this device, not saved yet');
   const stored = (await draftValues(page)).map((t) => JSON.parse(t) as { baseVersionNumber: number | null; value: { reason: string } });
   expect(stored).toHaveLength(1);
   expect(stored[0]).toMatchObject({ baseVersionNumber: 1, value: { reason: 'Typed while it was saving' } });
 });
+
+/** A browser that cannot keep drafts (UX-26): every localStorage write throws, so the draft store's probe fails. */
+async function blockStorage(page: import('@playwright/test').Page): Promise<void> {
+  await page.addInitScript(() => {
+    Storage.prototype.setItem = function setItem() { throw new DOMException('Storage is blocked', 'SecurityError'); };
+  });
+}
+const NO_STORAGE_LINE = 'This browser cannot keep drafts. Save before leaving this page.';
+
+test('CR-1 UX-26: with no storage, typing while a save is out is kept when the new version arrives', async ({ page, baseURL }) => {
+  await blockStorage(page);
+  await openQuestion(page, 'assessor', Q, baseURL!);
+  await expect(page.locator('[data-region="answer-form"] .save-status')).toContainText(NO_STORAGE_LINE);
+  await fillValid(page, { reason: 'Sent reason' });
+  let release!: () => void;
+  const held = new Promise<void>((res) => (release = res));
+  await page.route('**/decisions', async (r) => { await held; await r.continue(); });
+  await page.getByRole('button', { name: 'Save decision' }).click();
+  await expect(saveStatus(page)).toHaveText('Saving...');
+  await page.getByLabel('Reason (required)').fill('Typed while it was saving');
+  release();
+  await expect(saveStatus(page)).toHaveText(SAVED_V1);
+  await expect(page.getByText('Starting from version 1')).toBeVisible();
+  await expect(page.getByLabel('Reason (required)')).toHaveValue('Typed while it was saving');
+});
+
+test('CR-1 UX-26: with no storage, typing after Saved and before the new version arrives is kept', async ({ page, baseURL }) => {
+  await blockStorage(page);
+  const projectId = await openQuestion(page, 'assessor', Q, baseURL!);
+  await fillValid(page, { reason: 'Sent reason' });
+  // Hold the refresh that brings version 1 (an RSC request for this page), not the save itself.
+  let release!: () => void;
+  const held = new Promise<void>((res) => (release = res));
+  const path = questionPath(projectId, Q);
+  await page.route((u) => u.pathname === path, async (r) => { if (r.request().headers()['rsc'] === '1') await held; await r.continue(); });
+  await page.getByRole('button', { name: 'Save decision' }).click();
+  await expect(saveStatus(page)).toHaveText(SAVED_V1);
+  await expect(page.getByText('Starting from version 1')).toHaveCount(0);
+  await page.getByLabel('Reason (required)').fill('Typed after it was saved');
+  release();
+  await expect(page.getByText('Starting from version 1')).toBeVisible();
+  await expect(page.getByLabel('Reason (required)')).toHaveValue('Typed after it was saved');
+});
+
+for (const [code, text, label, target] of [
+  ['acceptances_required', 'Not saved: accept the updated terms first, then come back.', 'Go to the terms', '/acceptances'],
+  ['must_change_password', 'Not saved: change your password first, then come back.', 'Change password', '/change-password'],
+] as const) {
+  test(`CR-2 UX-26: with no storage, a 403 ${code} does not leave the page: the answer stays and the line links to ${target}`, async ({ page, baseURL }) => {
+    await blockStorage(page);
+    const projectId = await openQuestion(page, 'assessor', Q, baseURL!);
+    await fillValid(page, { reason: 'The only copy is in the field' });
+    await page.route('**/decisions', (r) => r.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ error: 'x', code }) }));
+    const left: string[] = [];
+    page.on('request', (r) => { if (new URL(r.url()).pathname === target) left.push(r.url()); });
+    await page.getByRole('button', { name: 'Save decision' }).click();
+    await expect(saveAlert(page)).toHaveText(`${text} ${NO_STORAGE_LINE}`);
+    await expect(page.getByRole('link', { name: label })).toHaveAttribute('href', `${target}?callbackUrl=${encodeURIComponent(questionPath(projectId, Q))}`);
+    await page.waitForTimeout(1_000);
+    expect(left).toEqual([]);
+    await expect(page.getByLabel('Reason (required)')).toHaveValue('The only copy is in the field');
+  });
+}
 
 test('NFR-REL-05 B6: after an edit, coming back online sends nothing by itself', async ({ page, context, baseURL }) => {
   const ids = captureDecisionRequestIds(page);

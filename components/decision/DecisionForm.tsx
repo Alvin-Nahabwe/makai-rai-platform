@@ -14,7 +14,7 @@ import { OUTSIDE_ROLE_LABELS, problemSummary } from '@/lib/decision/copy';
 import { formatTime } from '@/lib/format/dates';
 import { draftErrors, draftFromCurrent, draftKeyFor, isDecision, isDraftValue, keptEvidenceLine, toSaveBody, type DecisionDraft } from '@/lib/question/draft';
 import type { QuestionPanelData } from '@/lib/question/panel';
-import { conflictCurrent, navigationForOutcome, savingStatus, statusForOutcome, type SaveStatus as SaveStatusValue } from '@/lib/question/saveOutcome';
+import { conflictCurrent, gateStatus, navigationForOutcome, savingStatus, statusForOutcome, type SaveStatus as SaveStatusValue } from '@/lib/question/saveOutcome';
 import './DecisionForm.css';
 import type { DecisionVersionView, EvidenceItemView } from '@/types/api';
 import type { FieldError, UtcInstant } from '@/types/record';
@@ -84,9 +84,10 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
   const [restoredPressed, setRestoredPressed] = useState(false);
   // True once the form has mounted and read the device's draft: before that, a click is not yet the form's.
   const [ready, setReady] = useState(false);
-  // Set by this form's own save when nothing was typed since the press: the version that save made, arriving through
-  // router.refresh, may then replace the form. Any edit clears it, so typing is never thrown away (CR-1, F11).
-  const [resetOnNextCurrent, setResetOnNextCurrent] = useState(false);
+  // Whether the field holds an answer of the person's that the current version does not: set by every edit and by a
+  // restored draft, cleared by a save of exactly what the field holds and by Discard. The form keeps it itself, so it
+  // holds in a browser that cannot keep drafts too: a new version replaces the form only when this is false (CR-1, F11).
+  const [typedSinceCurrent, setTypedSinceCurrent] = useState(false);
   const saveBar = useRef<HTMLDivElement | null>(null);
 
   const store = useRef<DraftStore | null>(null);
@@ -103,9 +104,8 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
   // A new current version arrived (a save, or someone else's, after router.refresh): open from it, as on a new page.
   if ((data.current?.id ?? null) !== seenCurrentId) {
     setSeenCurrentId(data.current?.id ?? null);
-    // Only after this form's own save with nothing typed since, or with no answer of the person's on the device.
-    if (conflict === null && (resetOnNextCurrent || draftSavedAt === null)) {
-      setResetOnNextCurrent(false);
+    // Only when the field holds nothing of the person's that the new version lacks.
+    if (conflict === null && !typedSinceCurrent) {
       setValue(draftFromCurrent(data));
       setBase(currentNumber);
       setRetry(NO_RETRY);
@@ -130,6 +130,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
     if (found === null || !isDraftValue(found.value)) return;
     const restored = { ...found.value, href: draftFromCurrent(data).href };
     setValue(restored);
+    setTypedSinceCurrent(true);
     setBase(found.baseVersionNumber);
     setRetry(found.retry);
     setDraftSavedAt(found.savedAt);
@@ -160,18 +161,20 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
     return () => { observer.disconnect(); root.style.removeProperty('--decision-save-bar-h'); };
   }, []);
 
-  /** Keeps the draft on this device; false when the browser refused it. */
-  const keep = useCallback((d: StoredDraft<DecisionDraft>): void => {
+  /** Keeps the draft on this device; false when there is no store or the browser refused it. */
+  const keep = useCallback((d: StoredDraft<DecisionDraft>): boolean => {
     const s = store.current;
-    if (s === null) return;
-    if (s.write(key, d)) { setDraftSavedAt(d.savedAt); setStorageUnavailable(false); } else setStorageUnavailable(true);
+    if (s === null) return false;
+    if (s.write(key, d)) { setDraftSavedAt(d.savedAt); setStorageUnavailable(false); return true; }
+    setStorageUnavailable(true);
+    return false;
   }, [key]);
 
   /** An edit: kept on this device, never sent (UX-24). An edit after a press is no longer the answer that was pressed. */
   const edit = useCallback((next: DecisionDraft): void => {
     setValue(next);
     setRestoredPressed(false);
-    setResetOnNextCurrent(false);
+    setTypedSinceCurrent(true);
     keep({ baseVersionNumber: latest.current.base, value: next, savedAt: new Date().toISOString(), savePressedAt: null, retry: latest.current.retry });
   }, [keep]);
 
@@ -184,7 +187,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
     const id = requestIdFor(state, body);
     const now = new Date().toISOString();
     setRetry(id.state);
-    keep({ baseVersionNumber: saveBase, value: d, savedAt: now, savePressedAt: now, retry: id.state });
+    const kept = keep({ baseVersionNumber: saveBase, value: d, savedAt: now, savePressedAt: now, retry: id.state });
     setSaving(true);
     setErrors([]);
     setStatus(savingStatus(false));
@@ -212,14 +215,16 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
         store.current?.remove(key);
         setDraftSavedAt(null);
         setExtraEvidenceIds([]);
-        setResetOnNextCurrent(true);
+        setTypedSinceCurrent(false);
       }
       router.refresh();
       return;
     }
     // The contract's Error codes table (CC-1): S-05, S-29 or the page's own not-found. The draft is already on the
-    // device, its press kept, so Retry is offered when the person comes back.
+    // device, its press kept, so Retry is offered when the person comes back. When this browser could not keep it, the
+    // field is the only copy: a gate does not navigate by itself, it says what to do first and links there (CR-2).
     const nav = navigationForOutcome(outcome, d.href);
+    if (nav !== null && nav.kind === 'go' && !kept) { setStatus(gateStatus(nav)); return; }
     if (nav !== null) {
       setStatus(null);
       if (nav.kind === 'go') router.push(nav.href); else router.refresh();
@@ -323,7 +328,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
             keep({ baseVersionNumber: b, value, savedAt: new Date().toISOString(), savePressedAt: null, retry });
             requestAnimationFrame(() => document.getElementById(data.question.type === 'gate' ? FIELD_TARGET.scopeAnswer : 'decision-reason')?.focus());
           }}
-          onDiscard={() => { store.current?.remove(key); setConflict(null); setStatus(null); setDraftSavedAt(null); setSeenCurrentId('discarded'); router.refresh(); }}
+          onDiscard={() => { store.current?.remove(key); setConflict(null); setStatus(null); setDraftSavedAt(null); setTypedSinceCurrent(false); setSeenCurrentId('discarded'); router.refresh(); }}
         />
       ) : null}
 
@@ -401,6 +406,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
             <button type="submit" className="btn btn--primary" disabled={saving}>Save decision</button>
             {status?.next === 'retry' || (status === null && restoredPressed) ? <button type="button" className="btn btn--secondary" disabled={saving} onClick={() => save(false)}>Retry</button> : null}
             {status?.next === 'sign_in' ? <a className="btn btn--secondary" href={signInHref}>Sign in again</a> : null}
+            {status?.next === 'go' && status.action !== undefined ? <a className="btn btn--secondary" href={status.action.href} data-gate-link>{status.action.label}</a> : null}
           </div>
           <SaveStatus status={status} draftSavedAt={draftSavedAt} storageUnavailable={storageUnavailable} />
           {leftOut.length > 0 && status !== null && (status.id === 'M-03' || status.id === 'M-04')

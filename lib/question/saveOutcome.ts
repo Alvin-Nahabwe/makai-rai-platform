@@ -9,8 +9,13 @@ import type { FieldError } from '@/types/record';
  * every failure assertively) and what the person can do next. Plain TypeScript, so the form imports it.
  */
 
-export type SaveMessageId = 'M-01' | 'M-02' | 'M-03' | 'M-04' | 'M-05' | 'M-06' | 'M-07' | 'M-08' | 'M-09' | 'M-10' | 'M-11' | 'M-12';
-export interface SaveStatus { id: SaveMessageId; text: string; live: 'polite' | 'assertive'; next: 'none' | 'retry' | 'sign_in' | 'conflict' | 'fix' }
+/** M-01 to M-12 (SRS 7.5.7), and GATE: a save refused until the person accepts new terms or changes their password. */
+export type SaveMessageId = 'M-01' | 'M-02' | 'M-03' | 'M-04' | 'M-05' | 'M-06' | 'M-07' | 'M-08' | 'M-09' | 'M-10' | 'M-11' | 'M-12' | 'GATE';
+export interface SaveStatus {
+  id: SaveMessageId; text: string; live: 'polite' | 'assertive'; next: 'none' | 'retry' | 'sign_in' | 'conflict' | 'fix' | 'go';
+  /** A link beside the status line, for `next: 'go'`. */
+  action?: { label: string; href: string };
+}
 
 const M = {
   'M-01': 'Saving...',
@@ -90,6 +95,20 @@ export function navigationForOutcome(o: SendOutcome<DecisionVersionView>, questi
   if (o.status === 403 && o.body.code === 'must_change_password') return { kind: 'go', href: `/change-password?${back}` };
   if (o.status === 404) return { kind: 'refresh' };
   return null;
+}
+
+/**
+ * A 403 gate when this browser cannot keep the answer (ruling on CR-2): the form stays, the answer stays in its field,
+ * and the line says what to do first with a link there, instead of navigating away from the only copy. The texts are
+ * owner copy, queued for the owner's review.
+ */
+export function gateStatus(nav: { kind: 'go'; href: string }): SaveStatus {
+  const terms = nav.href.startsWith('/acceptances');
+  return {
+    id: 'GATE', live: 'assertive', next: 'go',
+    text: terms ? 'Not saved: accept the updated terms first, then come back.' : 'Not saved: change your password first, then come back.',
+    action: { label: terms ? 'Go to the terms' : 'Change password', href: nav.href },
+  };
 }
 
 /** M-10, both variants: another person, or the same account (an earlier attempt from this or another device). */

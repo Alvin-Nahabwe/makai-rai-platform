@@ -17,6 +17,7 @@ const { ConflictView } = await import('@/components/decision/ConflictView');
 const { CurrentDecision } = await import('@/components/decision/CurrentDecision');
 const { draftFromCurrent } = await import('@/lib/question/draft');
 const { safeDraftHref } = await import('@/components/decision/DraftsOnThisDevice');
+const { DecisionForm } = await import('@/components/decision/DecisionForm');
 const { QuestionPanelRegions } = await import('@/app/(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]/page');
 
 const QUESTION = {
@@ -130,6 +131,14 @@ describe('S-12 status line and conflict view', () => {
     expect(h.match(/This browser cannot keep drafts/g)).toHaveLength(1);
   });
 
+  it('CR-1 ruling 5 UX-25: after a save that the person typed past, the line says Saved and also that a newer draft is on the device', () => {
+    const h = renderToStaticMarkup(<SaveStatus status={{ id: 'M-03', text: 'Saved as version 1 at 10:42 EAT. Decided by: you. Entered by: you.', live: 'polite', next: 'none' }} draftSavedAt="2026-10-12T07:43:00.000Z" storageUnavailable={false} />);
+    expect(h).toMatch(/role="status"[^>]*>Saved as version 1 at 10:42 EAT\./);
+    expect(h).toMatch(/Draft on this device, not saved yet \(\d{2}:\d{2} \S+\)/);
+    // with no newer draft, "Saved" stands alone
+    expect(renderToStaticMarkup(<SaveStatus status={{ id: 'M-03', text: 'Saved as version 1 at 10:42 EAT.', live: 'polite', next: 'none' }} draftSavedAt={null} storageUnavailable={false} />)).not.toContain('Draft on this device');
+  });
+
   it('UX-28 M-10: the conflict view shows both reasons, who saved, and the three actions', () => {
     const h = renderToStaticMarkup(<ConflictView current={{ ...V2, reason: 'Theirs' }} mine={{ ...EMPTY, reason: 'Mine' }} viewerId="u-me" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
     expect(h).toContain('Theirs'); expect(h).toContain('Mine'); expect(h).toContain('Version 2 was saved by Joseph K.');
@@ -210,5 +219,28 @@ describe('drafts on this device', () => {
       expect(safeDraftHref({ href: bad })).toBeNull();
     }
     expect(safeDraftHref(null)).toBeNull();
+  });
+});
+
+describe('S-12 answer form before hydration', () => {
+  /** How many <fieldset ...disabled=""> elements enclose each position: 0 means the control is outside every one. */
+  function disabledDepthAt(html: string, at: number): number {
+    const stack: boolean[] = [];
+    const re = /<fieldset([^>]*)>|<\/fieldset>/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(html)) !== null && m.index < at) {
+      if (m[0].startsWith('</')) stack.pop(); else stack.push(/\bdisabled=""/.test(m[1]));
+    }
+    return stack.filter(Boolean).length;
+  }
+
+  it('F5 CR-3: the first markup holds every control of the form in a disabled fieldset, so nothing posts or uploads before hydration', () => {
+    const h = renderToStaticMarkup(<DecisionForm data={PANEL} />);
+    expect(h).toContain('<fieldset disabled=""');
+    const at = (needle: RegExp) => { const m = needle.exec(h); expect(m, String(needle)).not.toBeNull(); return m!.index; };
+    for (const control of [/<textarea[^>]*id="decision-reason"/, /<input[^>]*type="file"/, /<button[^>]*type="submit"[^>]*>Save decision/, /<input[^>]*type="radio"/]) {
+      expect(disabledDepthAt(h, at(control)), String(control)).toBeGreaterThan(0);
+    }
+    expect(h.match(/type="submit"/g)).toHaveLength(1);
   });
 });
