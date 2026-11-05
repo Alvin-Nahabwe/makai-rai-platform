@@ -28,6 +28,8 @@ const { MyMitigationsList } = await import('@/components/project/MyMitigationsLi
 const { ProjectCard } = await import('@/components/dashboard/ProjectCard');
 const { AllProjectsView } = await import('@/components/project/AllProjectsView');
 const { default: ProjectForm } = await import('@/components/project/ProjectForm');
+const { ArchiveProjectControl } = await import('@/components/project/ArchiveProjectControl');
+const { UnarchiveProjectButton } = await import('@/components/project/UnarchiveProjectButton');
 
 const COUNTS: StageCounts = {
   questions: 24, noDecision: 9, byStatus: { done: 7, partly: 3, not_yet: 2, not_applicable: 2 }, doneWithoutEvidence: 2,
@@ -225,5 +227,19 @@ describe('S-09 and S-32 (Task 7)', () => {
     const edit = renderToStaticMarkup(<ProjectForm mode="edit" projectId="p1" initial={{ name: 'Existing', description: 'd', datasetSize: 'small_lt1k', processesPersonalData: false }} />);
     expect(edit).toContain('>Save changes<');
     expect(edit).toContain('value="Existing"');
+  });
+});
+
+describe('the writers\' status regions (UX-27, SPEC-1 ruling)', () => {
+  it('UX-27 UX-25: each of the three writers has an empty role="status" region from its first render, so a later line is announced', () => {
+    expect(renderToStaticMarkup(<ProjectForm mode="create" />)).toContain('<p role="status"></p>');
+    expect(renderToStaticMarkup(<ArchiveProjectControl orgSlug="o" projectId="p" projectName="P" archived={false} />)).toContain('<p role="status"></p>');
+    expect(renderToStaticMarkup(<UnarchiveProjectButton orgSlug="o" projectId="p" projectName="P" />)).toContain('<span role="status"></span>');
+  });
+
+  it('FR-PRJ-01 SPEC-2: a field error is linked to its control and the additional details are in the page, so an opened section shows them', () => {
+    const html = renderToStaticMarkup(<ProjectForm mode="edit" projectId="p1" initial={{ name: 'N', description: '' }} />);
+    expect(html).toContain('id="project-details"');
+    expect(html).not.toMatch(/id="project-details"[^>]*\bhidden\b/);   // edit mode opens them
   });
 });

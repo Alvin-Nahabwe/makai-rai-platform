@@ -222,6 +222,27 @@ test('UX-27 (M-02): create, archive and unarchive each say "Still saving. The co
   void shelvedSlow;
 });
 
+test('SPEC-2 F8: a 422 on a field in the closed details opens them and shows the message beside the field and in the summary; a 403 on Archive keeps its line and disables the button', async ({ browser }) => {
+  const owner = await signedIn(browser, fx.members.owner);
+  await owner.goto(path('/projects/new'));
+  await owner.getByLabel('Project name').fill(`Too long sector ${RUN}`);
+  await owner.getByRole('button', { name: 'Show additional details' }).click();
+  await owner.getByLabel('Sector').fill('s'.repeat(201));
+  await owner.getByRole('button', { name: 'Show additional details' }).click();   // close the section again
+  await owner.getByRole('button', { name: 'Create project' }).click();
+  await expect(owner.getByRole('alert').filter({ hasText: 'There is a problem with this project. What you typed is kept.' })).toBeVisible();
+  await expect(owner.getByLabel('Sector')).toBeVisible();   // the section was opened for the person
+  await expect(owner.locator('#deploymentSector-error')).toContainText('at most 200 characters');
+  await expect(owner.getByLabel('Sector')).toHaveAttribute('aria-describedby', 'deploymentSector-error');
+
+  await owner.goto(path(`/projects/${emptyProject.id}`));
+  await owner.route('**/archive', (r) => r.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ error: 'Forbidden', code: 'forbidden' }) }));
+  await owner.getByRole('button', { name: 'Archive project' }).click();
+  await owner.getByRole('button', { name: 'Archive project' }).last().click();
+  await expect(owner.getByRole('status').filter({ hasText: 'You can no longer change this project.' })).toBeVisible();
+  await expect(owner.getByRole('button', { name: 'Archive project' })).toBeDisabled();
+});
+
 test('FR-PRJ-01: an assessor creates a project with every descriptive field and edits one; S-10 shows both', async ({ browser }) => {
   const page = await signedIn(browser, fx.members.assessor);
   await page.goto(path('/projects/new'));

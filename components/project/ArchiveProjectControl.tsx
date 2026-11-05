@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { InlineConfirm } from '@/components/ui/InlineConfirm';
 import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafeWrite';
 import { signInAgainHref } from '@/lib/auth/idle';
+import { refusalOf } from '@/lib/projects/writeRefusal';
 
 const FRESH: RetryState = { requestId: null, sentBody: null };
 const ARCHIVED_LINE = 'Archived. Nothing in this project can be changed until it is unarchived.';
@@ -26,6 +27,7 @@ export function ArchiveProjectControl(p: { orgSlug: string; projectId: string; p
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [canRetry, setCanRetry] = useState(false);
+  const [stopped, setStopped] = useState(false);   // the role was lowered or the project is gone: the control stays, disabled, with its line
 
   // UX-42: focus moves to the confirmation when it opens.
   useEffect(() => { if (confirming) confirmation.current?.focus(); }, [confirming]);
@@ -49,22 +51,25 @@ export function ArchiveProjectControl(p: { orgSlug: string; projectId: string; p
     if (outcome.kind === 'saved' || (outcome.kind === 'rejected' && outcome.status === 409 && outcome.body.code === 'already_archived')) {
       retry.current = FRESH;
       setStatus(ARCHIVED_LINE);
-    } else if (outcome.status === 401) {
-      window.location.assign(signInAgainHref(window.location.pathname, window.location.search));   // the session ended: sign in, then come back
+      router.refresh();
       return;
-    } else if (outcome.status === 403 || outcome.status === 404) {
+    }
+    const r = refusalOf(outcome.status);
+    if (r.kind === 'signin') {
+      window.location.assign(signInAgainHref(window.location.pathname, window.location.search));   // the session ended: sign in, then come back
+    } else if (r.kind === 'stop') {
       retry.current = FRESH;   // the same request would be refused again
-      setStatus(outcome.status === 403 ? 'You can no longer change this project.' : 'This project no longer exists.');
-    } else if (outcome.status === 409) {
+      setStatus(r.line);       // no refresh: the refreshed page leaves this control out and the line with it
+      setStopped(true);
+    } else if (r.kind === 'refresh') {
       retry.current = FRESH;
       setStatus(null);   // another state: the refreshed page shows what applies now
+      router.refresh();
     } else {
       // A server error or a limit: say so, keep the id, and let the person try again.
       setStatus('Not archived: something went wrong. Please try again.');
       setCanRetry(true);
-      return;
     }
-    router.refresh();
   }
 
   function cancel(): void {
@@ -76,7 +81,7 @@ export function ArchiveProjectControl(p: { orgSlug: string; projectId: string; p
   return (
     <div className="archive-control">
       {!p.archived && !busy && !canRetry ? (
-        <button ref={trigger} type="button" className="btn btn--secondary" onClick={() => setConfirming(true)}>Archive project</button>
+        <button ref={trigger} type="button" className="btn btn--secondary" disabled={stopped} onClick={() => setConfirming(true)}>Archive project</button>
       ) : null}
       {!p.archived && confirming ? (
         <div ref={confirmation} tabIndex={-1}>

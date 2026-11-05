@@ -7,6 +7,9 @@ import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafe
 import { DATASET_SIZE_WORDS, PERSONAL_DATA_WORDS } from '@/lib/project/labels';
 import { LIFECYCLE_STAGE_WORDS } from '@/lib/projects/metadataValues';
 import { signInAgainHref } from '@/lib/auth/idle';
+import { formRefusalOf, TRY_AGAIN_LINE } from '@/lib/projects/writeRefusal';
+import { ErrorSummary } from '@/components/findings/FindingActions';
+import type { FieldError } from '@/types/record';
 import type { PROJECT_METADATA_FIELDS } from '@/lib/validate';
 
 const AI_SYSTEM_TYPES = [
@@ -75,6 +78,8 @@ export default function NewProjectForm(p: Mode) {
   const [showDetails, setShowDetails] = useState(editing);
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [summary, setSummary] = useState<{ text: string; errors: FieldError[] } | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const [loading, setLoading] = useState(false);
   const [slow, setSlow] = useState(false);
   const retry = useRef<RetryState>({ requestId: null, sentBody: null });
@@ -87,6 +92,8 @@ export default function NewProjectForm(p: Mode) {
     e.preventDefault();
     setError('');
     setFieldErrors({});
+    setSummary(null);
+    setAttempt((n) => n + 1);
     if (!form.name.trim()) {
       setError('Project name is required');
       return;
@@ -106,25 +113,19 @@ export default function NewProjectForm(p: Mode) {
       }
       if (outcome.kind === 'not_saved') {
         // The same form sent again keeps its request id, so a request that had arrived is answered again, not repeated.
-        setError('Something went wrong. Please try again.');
+        setError(TRY_AGAIN_LINE);
         return;
       }
-      const rejected = outcome.body as { error: string; code: string; fields?: Array<{ field: string; message: string }> };
-      if (rejected.fields !== undefined && rejected.fields.length > 0) {
-        setFieldErrors(Object.fromEntries(rejected.fields.map((f) => [f.field, f.message])));
-        // A field this form has no control for would otherwise show nothing at all.
-        const unshown = rejected.fields.filter((f) => !(TEXT_FIELDS as readonly string[]).includes(f.field));
-        if (unshown.length > 0) setError(unshown.map((f) => f.message).join(' '));
-      } else if (outcome.status === 401) {
+      const r = formRefusalOf(outcome.status, outcome.body);
+      if (r.kind === 'fields') {
+        setFieldErrors(Object.fromEntries(r.fields.map((f) => [f.field, f.message])));
+        setSummary({ text: r.summary, errors: r.fields });
+        if (r.openDetails) setShowDetails(true);   // a message inside the closed section could not be seen
+      } else if (r.kind === 'signin') {
         window.location.assign(signInAgainHref(window.location.pathname, window.location.search));   // the session ended: sign in, then come back
-      } else if (outcome.status === 403 || outcome.status === 404) {
-        // The same request would be refused again, so the id is dropped and the person is told why (F8).
-        retry.current = { requestId: null, sentBody: null };
-        setError(outcome.status === 403 ? 'You can no longer change this project.' : 'This project no longer exists.');
-      } else if (rejected.code === 'project_archived') {
-        setError('This project is archived. Nothing in it can be changed.');
       } else {
-        setError('Something went wrong. Please try again.');
+        if (r.kind === 'stop') retry.current = { requestId: null, sentBody: null };   // the same request would be refused again
+        setError(r.line);
       }
     } finally {
       setLoading(false);
@@ -132,6 +133,8 @@ export default function NewProjectForm(p: Mode) {
     }
   }
 
+  /** The error linked to its control, so a screen reader reads it with the field (WCAG 3.3.1). */
+  const fieldA = (name: string) => (fieldErrors[name] ? { 'aria-invalid': true as const, 'aria-describedby': `${name}-error` } : {});
   const fieldError = (name: string) => (fieldErrors[name] ? <div className="form-error" id={`${name}-error`}>{fieldErrors[name]}</div> : null);
 
   return (
@@ -146,12 +149,13 @@ export default function NewProjectForm(p: Mode) {
 
       <div className="form-container">
         {error && <div className="form-error" role="alert">{error}</div>}
+        {summary && <ErrorSummary summary={summary.text} errors={summary.errors} focusKey={attempt} />}
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label htmlFor="name">Project name <span className="required">*</span></label>
             <input
-              id="name" type="text" required placeholder="e.g., Patient Triage ML Model"
+              id="name" {...fieldA("name")} type="text" required placeholder="e.g., Patient Triage ML Model"
               value={form.name} onChange={(e) => updateField('name', e.target.value)}
             />
             {fieldError('name')}
@@ -159,7 +163,7 @@ export default function NewProjectForm(p: Mode) {
 
           <div className="form-group">
             <label htmlFor="aiSystemType">AI system type</label>
-            <select id="aiSystemType" value={form.aiSystemType} onChange={(e) => updateField('aiSystemType', e.target.value)}>
+            <select id="aiSystemType" {...fieldA("aiSystemType")} value={form.aiSystemType} onChange={(e) => updateField('aiSystemType', e.target.value)}>
               {AI_SYSTEM_TYPES.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
@@ -170,7 +174,7 @@ export default function NewProjectForm(p: Mode) {
           <div className="form-group">
             <label htmlFor="description">Description</label>
             <textarea
-              id="description" rows={3} placeholder="Brief description of the AI system and its purpose..."
+              id="description" {...fieldA("description")} rows={3} placeholder="Brief description of the AI system and its purpose..."
               value={form.description} onChange={(e) => updateField('description', e.target.value)}
             />
             {fieldError('description')}
@@ -193,12 +197,12 @@ export default function NewProjectForm(p: Mode) {
             <div className="form-row">
               <div className="form-group">
                 <label htmlFor="deploymentSector">Sector</label>
-                <input id="deploymentSector" type="text" placeholder="e.g., Healthcare, Agriculture" value={form.deploymentSector} onChange={(e) => updateField('deploymentSector', e.target.value)} />
+                <input id="deploymentSector" {...fieldA("deploymentSector")} type="text" placeholder="e.g., Healthcare, Agriculture" value={form.deploymentSector} onChange={(e) => updateField('deploymentSector', e.target.value)} />
                 {fieldError('deploymentSector')}
               </div>
               <div className="form-group">
                 <label htmlFor="datasetType">Dataset type</label>
-                <input id="datasetType" type="text" placeholder="e.g., Tabular, images" value={form.datasetType} onChange={(e) => updateField('datasetType', e.target.value)} />
+                <input id="datasetType" {...fieldA("datasetType")} type="text" placeholder="e.g., Tabular, images" value={form.datasetType} onChange={(e) => updateField('datasetType', e.target.value)} />
                 {fieldError('datasetType')}
               </div>
             </div>
@@ -206,7 +210,7 @@ export default function NewProjectForm(p: Mode) {
             <div className="form-row">
               <div className="form-group">
                 <label htmlFor="datasetSize">Dataset size</label>
-                <select id="datasetSize" value={form.datasetSize} onChange={(e) => updateField('datasetSize', e.target.value)}>
+                <select id="datasetSize" {...fieldA("datasetSize")} value={form.datasetSize} onChange={(e) => updateField('datasetSize', e.target.value)}>
                   <option value="">Not chosen</option>
                   {Object.entries(DATASET_SIZE_WORDS).map(([value, words]) => <option key={value} value={value}>{words}</option>)}
                 </select>
@@ -214,7 +218,7 @@ export default function NewProjectForm(p: Mode) {
               </div>
               <div className="form-group">
                 <label htmlFor="processesPersonalData">Personal data</label>
-                <select id="processesPersonalData" value={form.processesPersonalData} onChange={(e) => updateField('processesPersonalData', e.target.value)}>
+                <select id="processesPersonalData" {...fieldA("processesPersonalData")} value={form.processesPersonalData} onChange={(e) => updateField('processesPersonalData', e.target.value)}>
                   <option value="">Not chosen</option>
                   {Object.entries(PERSONAL_DATA_WORDS).map(([value, words]) => <option key={value} value={value}>{words}</option>)}
                 </select>
@@ -225,12 +229,12 @@ export default function NewProjectForm(p: Mode) {
             <div className="form-row">
               <div className="form-group">
                 <label htmlFor="fundingSource">Funding source</label>
-                <input id="fundingSource" type="text" value={form.fundingSource} onChange={(e) => updateField('fundingSource', e.target.value)} />
+                <input id="fundingSource" {...fieldA("fundingSource")} type="text" value={form.fundingSource} onChange={(e) => updateField('fundingSource', e.target.value)} />
                 {fieldError('fundingSource')}
               </div>
               <div className="form-group">
                 <label htmlFor="regulatoryContext">Regulatory context</label>
-                <input id="regulatoryContext" type="text" placeholder="e.g., a national data-protection act" value={form.regulatoryContext} onChange={(e) => updateField('regulatoryContext', e.target.value)} />
+                <input id="regulatoryContext" {...fieldA("regulatoryContext")} type="text" placeholder="e.g., a national data-protection act" value={form.regulatoryContext} onChange={(e) => updateField('regulatoryContext', e.target.value)} />
                 {fieldError('regulatoryContext')}
               </div>
             </div>
@@ -238,7 +242,7 @@ export default function NewProjectForm(p: Mode) {
             <div className="form-row">
               <div className="form-group">
                 <label htmlFor="developmentStage">Lifecycle stage</label>
-                <select id="developmentStage" value={form.developmentStage} onChange={(e) => updateField('developmentStage', e.target.value)}>
+                <select id="developmentStage" {...fieldA("developmentStage")} value={form.developmentStage} onChange={(e) => updateField('developmentStage', e.target.value)}>
                   <option value="">Not chosen</option>
                   {Object.entries(LIFECYCLE_STAGE_WORDS).map(([value, words]) => <option key={value} value={value}>{words}</option>)}
                 </select>
@@ -246,7 +250,7 @@ export default function NewProjectForm(p: Mode) {
               </div>
               <div className="form-group">
                 <label htmlFor="teamSize">Team size</label>
-                <input id="teamSize" type="number" min="0" placeholder="e.g., 5" value={form.teamSize} onChange={(e) => updateField('teamSize', e.target.value)} />
+                <input id="teamSize" {...fieldA("teamSize")} type="number" min="0" placeholder="e.g., 5" value={form.teamSize} onChange={(e) => updateField('teamSize', e.target.value)} />
                 {fieldError('teamSize')}
               </div>
             </div>
@@ -254,12 +258,12 @@ export default function NewProjectForm(p: Mode) {
             <div className="form-row">
               <div className="form-group">
                 <label htmlFor="projectStart">Start date</label>
-                <input id="projectStart" type="date" value={form.projectStart} onChange={(e) => updateField('projectStart', e.target.value)} />
+                <input id="projectStart" {...fieldA("projectStart")} type="date" value={form.projectStart} onChange={(e) => updateField('projectStart', e.target.value)} />
                 {fieldError('projectStart')}
               </div>
               <div className="form-group">
                 <label htmlFor="projectEnd">End date</label>
-                <input id="projectEnd" type="date" value={form.projectEnd} onChange={(e) => updateField('projectEnd', e.target.value)} />
+                <input id="projectEnd" {...fieldA("projectEnd")} type="date" value={form.projectEnd} onChange={(e) => updateField('projectEnd', e.target.value)} />
                 {fieldError('projectEnd')}
               </div>
             </div>
@@ -267,12 +271,12 @@ export default function NewProjectForm(p: Mode) {
             <div className="form-row">
               <div className="form-group">
                 <label htmlFor="institution">Institution</label>
-                <input id="institution" type="text" placeholder="e.g., your institute, ministry, or research organisation" value={form.institution} onChange={(e) => updateField('institution', e.target.value)} />
+                <input id="institution" {...fieldA("institution")} type="text" placeholder="e.g., your institute, ministry, or research organisation" value={form.institution} onChange={(e) => updateField('institution', e.target.value)} />
                 {fieldError('institution')}
               </div>
               <div className="form-group">
                 <label htmlFor="department">Department</label>
-                <input id="department" type="text" placeholder="e.g., Computer Science" value={form.department} onChange={(e) => updateField('department', e.target.value)} />
+                <input id="department" {...fieldA("department")} type="text" placeholder="e.g., Computer Science" value={form.department} onChange={(e) => updateField('department', e.target.value)} />
                 {fieldError('department')}
               </div>
             </div>
@@ -280,12 +284,12 @@ export default function NewProjectForm(p: Mode) {
             <div className="form-row">
               <div className="form-group">
                 <label htmlFor="country">Country</label>
-                <input id="country" type="text" placeholder="e.g., Uganda" value={form.country} onChange={(e) => updateField('country', e.target.value)} />
+                <input id="country" {...fieldA("country")} type="text" placeholder="e.g., Uganda" value={form.country} onChange={(e) => updateField('country', e.target.value)} />
                 {fieldError('country')}
               </div>
               <div className="form-group">
                 <label htmlFor="targetPopulation">Target population</label>
-                <input id="targetPopulation" type="text" placeholder="e.g., Rural communities in East Africa" value={form.targetPopulation} onChange={(e) => updateField('targetPopulation', e.target.value)} />
+                <input id="targetPopulation" {...fieldA("targetPopulation")} type="text" placeholder="e.g., Rural communities in East Africa" value={form.targetPopulation} onChange={(e) => updateField('targetPopulation', e.target.value)} />
                 {fieldError('targetPopulation')}
               </div>
             </div>
