@@ -163,16 +163,16 @@ function parseCMap(text: string): CMap {
     const cs = /begincodespacerange\s*<([0-9a-fA-F]+)>/.exec(text);
     return cs === null ? 1 : cs[1].length / 2;
   })();
-  const utf16 = (hex: string) => Buffer.from(hex, 'hex').swap16().toString('utf16le');
+  const utf16 = (hex: string) => Buffer.from(hex.replace(/\s+/g, ''), 'hex').swap16().toString('utf16le');
   for (const block of text.matchAll(/beginbfchar([\s\S]*?)endbfchar/g)) {
-    for (const e of block[1].matchAll(/<([0-9a-fA-F]+)>\s*<([0-9a-fA-F]+)>/g)) map.set(parseInt(e[1], 16), utf16(e[2]));
+    for (const e of block[1].matchAll(/<([0-9a-fA-F]+)>\s*<([0-9a-fA-F\s]+)>/g)) map.set(parseInt(e[1], 16), utf16(e[2]));
   }
   for (const block of text.matchAll(/beginbfrange([\s\S]*?)endbfrange/g)) {
-    for (const e of block[1].matchAll(/<([0-9a-fA-F]+)>\s*<([0-9a-fA-F]+)>\s*(\[[^\]]*\]|<[0-9a-fA-F]+>)/g)) {
+    for (const e of block[1].matchAll(/<([0-9a-fA-F]+)>\s*<([0-9a-fA-F]+)>\s*(\[[^\]]*\]|<[0-9a-fA-F\s]+>)/g)) {
       const lo = parseInt(e[1], 16);
       const hi = parseInt(e[2], 16);
       if (e[3].startsWith('[')) {
-        [...e[3].matchAll(/<([0-9a-fA-F]+)>/g)].forEach((d, i) => { if (lo + i <= hi) map.set(lo + i, utf16(d[1])); });
+        [...e[3].matchAll(/<([0-9a-fA-F\s]+)>/g)].forEach((d, i) => { if (lo + i <= hi) map.set(lo + i, utf16(d[1])); });
       } else {
         const first = e[3].slice(1, -1);
         const base = parseInt(first, 16);
@@ -197,7 +197,8 @@ function decode(bytes: Buffer, cmap: CMap | null): string {
   return out;
 }
 
-export function pdfTextRuns(pdf: Buffer): string[] {
+/** The runs of each page, pages in page-tree order. */
+export function pdfPageRuns(pdf: Buffer): string[][] {
   const objects = readObjects(pdf);
   const get = (v: PdfValue | undefined): PdfValue | undefined => (isRef(v) ? objects.get(v.ref)?.value : v);
 
@@ -227,8 +228,10 @@ export function pdfTextRuns(pdf: Buffer): string[] {
     return result;
   };
 
-  const runs: string[] = [];
+  const perPage: string[][] = [];
   for (const page of pages) {
+    const runs: string[] = [];
+    perPage.push(runs);
     const resources = get(page.Resources ?? undefined);
     const fonts = isDict(resources) ? get(resources.Font) : undefined;
     const contentsRaw = get(page.Contents);
@@ -254,5 +257,9 @@ export function pdfTextRuns(pdf: Buffer): string[] {
       } else operands.push(t as PdfValue);
     }
   }
-  return runs;
+  return perPage;
+}
+
+export function pdfTextRuns(pdf: Buffer): string[] {
+  return pdfPageRuns(pdf).flat();
 }
