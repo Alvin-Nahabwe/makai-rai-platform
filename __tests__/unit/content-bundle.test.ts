@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
-import { existsSync, readFileSync } from 'node:fs';
+import { afterAll, describe, expect, it } from 'vitest';
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { validateContentVersion } from '@/lib/content/validate';
 
 /**
@@ -42,5 +44,46 @@ describe('content bundle structure', () => {
     for (const c of codes) { expect(c.code).toMatch(/^(na|ny)_[a-z_]+$/); expect(c.status).toBe(c.code.startsWith('na_') ? 'not_applicable' : 'not_yet'); expect(c.label.length).toBeGreaterThan(0); }
     expect(codes.map((c) => c.code)).toEqual(expect.arrayContaining(['na_no_personal_data', 'na_other', 'ny_other']));
     expect(Object.keys(json(`${C}/${v}/documentHelp.json`)).sort()).toEqual(['data_card', 'mitigation_plan', 'model_card']);
+  });
+});
+
+/** A parsed content file, edited by path. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- test-only JSON
+type Json = any;
+
+describe('content check: a mapping key and a resource type the pages would drop or label wrongly', () => {
+  const FIXTURE = '__tests__/fixtures/content/0.0.1-fixture';
+  const roots: string[] = [];
+  afterAll(() => { for (const r of roots) rmSync(r, { recursive: true, force: true }); });
+  /** A copy of H0's fixture bundle with one file edited, checked as the release check checks a version. */
+  function problemsAfter(file: 'questionBank.json' | 'assessmentAreas.json', edit: (j: Json) => void): string[] {
+    const root = mkdtempSync(join(tmpdir(), 'content-key-')); roots.push(root);
+    const dir = join(root, '0.0.1-fixture');   // the directory name is the version
+    cpSync(FIXTURE, dir, { recursive: true });
+    const j = JSON.parse(readFileSync(join(dir, file), 'utf8'));
+    edit(j);
+    writeFileSync(join(dir, file), JSON.stringify(j));
+    return validateContentVersion(dir, { baselineDir: 'data', proposalFile: null, completeness: false });
+  }
+  const checklist = (j: Json) => (Object.values(j.stages) as Json[]).flatMap((st) => st.modules.flatMap((m: Json) => m.questions as Json[])).find((q) => q.id === 'Q-PP-17')!;
+
+  it('FR-CNT-04 FR-SUG-02: an optionGapMap key that is not one of the question\'s options is refused, naming the key and the question', () => {
+    expect(problemsAfter('questionBank.json', () => {})).toEqual([]);   // the unedited copy passes, so the next line is the edit's doing
+    const problems = problemsAfter('questionBank.json', (j) => {
+      const q = checklist(j);
+      q.optionGapMap['Labelling bias'] = q.optionGapMap['Labeling bias'];
+      delete q.optionGapMap['Labeling bias'];
+    });
+    expect(problems.join('\n')).toMatch(/question Q-PP-17: optionGapMap key "Labelling bias" is not one of its options/);
+  });
+
+  it('FR-CNT-01 FR-SUG-04: a control type other than technical, procedural or informational is refused (S-27 has a section for each, the card a word for each)', () => {
+    const problems = problemsAfter('assessmentAreas.json', (j) => { j.controls[0].type = 'strategic'; });
+    expect(problems.join('\n')).toMatch(/control C-01: type "strategic" is not technical, procedural or informational/);
+  });
+
+  it('FR-CNT-01 UX-13: a control resource type outside framework, tool, paper and guidance is refused', () => {
+    const problems = problemsAfter('assessmentAreas.json', (j) => { j.controls[0].resources = [{ title: 'A post', url: 'https://example.org/p', type: 'blog' }]; });
+    expect(problems.join('\n')).toMatch(/control C-01: resource type "blog" is not framework, tool, paper or guidance/);
   });
 });

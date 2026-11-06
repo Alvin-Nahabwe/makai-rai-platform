@@ -3,7 +3,6 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { OrgRole } from '@prisma/client';
 import type { Identity } from '@/lib/auth/identity';
-import type { ControlGroup } from '@/lib/content/suggestions';
 import type { ContentRef } from '@/types/api';
 import { resetDb } from '../helpers/db';
 import { useFixtureContent } from '../helpers/content';
@@ -13,15 +12,12 @@ import type { StageFilter } from '@/lib/question/stageList';
 import { HOSTILE_STRINGS } from '../helpers/hostile';
 
 /**
- * S-11, S-12 and S-13 rendered from real panel data on the fixture bundle (contract "Content bundle"). SUG's
- * `controlsForQuestion` is mocked in this file only, until SUG merges (contract rule 5); the router is the only part
- * of next/navigation a static render cannot provide.
+ * S-11, S-12 and S-13 rendered from real panel data on the fixture bundle (contract "Content bundle"). The router is the
+ * only part of next/navigation a static render cannot provide.
  */
-vi.mock('@/lib/content/suggestions', () => ({ controlsForQuestion: vi.fn(() => ({ first: [], rest: [] })), controlsForArea: vi.fn(() => []) }));
 vi.mock('@/lib/data/reviews', () => ({ listStageReviews: vi.fn(async () => []), changedSinceSeal: vi.fn(async () => null) }));
 vi.mock('next/navigation', async (original) => ({ ...(await original<typeof import('next/navigation')>()), useRouter: () => ({ refresh() {} }), usePathname: () => '/x' }));
 
-const { controlsForQuestion } = await import('@/lib/content/suggestions');
 const { loadQuestionPanel } = await import('@/lib/question/panel');
 const { listStageReviews, changedSinceSeal } = await import('@/lib/data/reviews');
 const { loadStagePage, StageWorkspace } = await import('@/app/(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]/page');
@@ -44,13 +40,13 @@ const identity = (role: OrgRole): Identity => ({
 });
 const panelData = (role: OrgRole, questionId: string) =>
   loadQuestionPanel(ctxFor(fx, role), identity(role), { projectId: project.id, stage: 'pre-processing', questionId });
-const group = (id: string): ControlGroup => ({ area: { id } as ControlGroup['area'], controls: [] });
 
 describe('S-12 page', () => {
   it('UX-08 FR-CNT-02 (screen): QuestionContent gets the suggestion count and the suggestions section carries id="suggestions"', async () => {
-    vi.mocked(controlsForQuestion).mockReturnValueOnce({ first: [group('G1')], rest: [group('G2'), group('G3')] });
     const h = renderToStaticMarkup(createElement(QuestionPanelRegions, { data: await panelData('assessor', 'Q-PP-01') }));
-    expect(h).toContain('Ways teams address this (3)');
+    expect(h).toContain('href="#suggestions">Ways teams address this (3)</a>');
+    expect(h).toContain('<h2 id="s12-suggestions">Ways teams address this</h2>');
+    expect(h).toContain('3 controls for this question&#x27;s risk area');
     expect(h).toMatch(/<section[^>]*id="suggestions"/);
   });
 

@@ -300,6 +300,10 @@ const listOf = (v: unknown, item: (x: unknown) => boolean): boolean => Array.isA
  * record's link, not a request's address: __tests__/unit/redirect-origin.test.ts allows this file exactly one `.url` read.
  */
 const linkUrl = (r: Json): unknown => r.url;
+/** The control types S-27 has a section for and the card has a word for; the card throws for any other. */
+const CONTROL_TYPES = ['technical', 'procedural', 'informational'];
+/** The words the control card has for a resource's type (components/suggestions/ControlCard.tsx); the card throws for any other. */
+const RESOURCE_TYPES = ['framework', 'tool', 'paper', 'guidance'];
 const isText = (x: unknown): boolean => typeof x === 'string';
 const isFilled = (x: unknown): boolean => typeof x === 'string' && x.trim() !== '';
 
@@ -316,6 +320,8 @@ function checkShapes(c: LoadedContent, questions: readonly LoadedQuestion[], say
     if (isRecord(map)) {
       for (const [option, list] of Object.entries(map)) {
         const at = `question ${q.id}: optionGapMap[${JSON.stringify(option)}]`;
+        // A key that names no option is never read by S-12, which walks the options: its areas and controls would vanish unseen.
+        if (!(Array.isArray(q.options) && (q.options as readonly unknown[]).includes(option))) say(`question ${q.id}: optionGapMap key ${JSON.stringify(option)} is not one of its options (${JSON.stringify(q.options ?? [])})`);
         if (!Array.isArray(list)) {
           say(`${at} is not a list`);
           continue;
@@ -416,8 +422,10 @@ function checkStructure(c: LoadedContent, rawBank: Json, rawAreas: Json, questio
   }
 
   for (const k of c.controls.values()) {
+    if (!CONTROL_TYPES.includes(k.type)) say(`control ${k.id}: type ${JSON.stringify(k.type)} is not ${CONTROL_TYPES.slice(0, -1).join(', ')} or ${CONTROL_TYPES[CONTROL_TYPES.length - 1]}`);
     for (const field of ['notebook', 'template']) if (Object.hasOwn(k, field)) say(`control ${k.id}: has ${field}, which lives in data/resources.json (FR-CNT-05)`);
     for (const r of Array.isArray(k.resources) ? k.resources : []) {
+      if (isRecord(r) && !RESOURCE_TYPES.includes(r.type as string)) say(`control ${k.id}: resource type ${JSON.stringify(r.type)} is not ${RESOURCE_TYPES.slice(0, -1).join(', ')} or ${RESOURCE_TYPES[RESOURCE_TYPES.length - 1]} (UX-13)`);
       const url = isRecord(r) ? linkUrl(r) : undefined;
       if (typeof url !== 'string') continue;   // checkShapes' line
       let protocol: string | null = null;

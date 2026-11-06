@@ -1,53 +1,50 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import ControlsLibraryPage from '@/app/(authenticated)/explore/controls/page';
-import assessmentAreas from '@/data/assessmentAreas.json';
+import ControlsPage from '@/app/(authenticated)/explore/controls/page';
 import resources from '@/data/resources.json';
-
-vi.mock('next/navigation', () => ({
-  usePathname: () => '/explore/controls',
-  useSearchParams: () => new URLSearchParams(),
-}));
+import type { ResourcesFile } from '@/types/content';
 
 /**
- * FR-SUG-06: a template that did not pass review "is not linked anywhere". The controls page links the template of
- * each control from data/assessmentAreas.json (a file of the 4.0.0 bundle, so it cannot be edited); the page passes the
- * link on only when it is the file of a passed data/resources.json entry.
+ * FR-SUG-06: a template that did not pass review "is not linked anywhere". The controls page links a control's template
+ * only when it is the file of a passed data/resources.json entry (the ControlCard rule), so a held-back template, C-11's
+ * informed-consent file held back by the owner on 6 Nov, is never linked. Ported from the page this unit replaced.
  */
-const SERVED = new Set(resources.templates.filter((t) => t.review.outcome === 'passed').map((t) => t.file));
+const real = resources as ResourcesFile;
+const SERVED = new Set(real.templates.filter((t) => t.review.outcome === 'passed').map((t) => t.file));
 const hrefs = (html: string) => [...html.matchAll(/href="(\/templates\/[^"]+)"/g)].map((m) => m[1]);
 
 describe('controls page template links', () => {
   it('FR-SUG-06: every template link on the rendered page is the file of a passed entry, and C-11 has none', () => {
-    const html = renderToStaticMarkup(<ControlsLibraryPage />);
+    const html = renderToStaticMarkup(<ControlsPage />);
     const linked = hrefs(html);
     expect(linked.length).toBeGreaterThan(0);
     for (const h of linked) expect(SERVED.has(h), h).toBe(true);
+    expect([...SERVED].sort()).toEqual([...new Set(linked)].sort());
     expect(html).not.toContain('C-11_informed-consent');
   });
 
-  it('FR-SUG-06: no link in the data that lacks a passed entry reaches the page', () => {
-    const unserved = assessmentAreas.controls.map((c) => c.template).filter((f): f is string => !!f && !SERVED.has(f));
-    const linked = hrefs(renderToStaticMarkup(<ControlsLibraryPage />));
-    for (const f of unserved) expect(linked, f).not.toContain(f);
-  });
-
-  it('FR-SUG-06: whatever the data holds, a control whose template has no passed entry shows no link (C-01 removed from the resources)', async () => {
-    // Independent of the live data: C-01 stays in assessmentAreas.json, but its entry is taken out of the resources.
+  it('FR-SUG-06: whatever the data holds, a control whose template entry is not passed shows no link', async () => {
+    // Independent of the live data: C-01's entry is failed, C-11 has a failed entry, C-02 stays passed.
+    const data: ResourcesFile = {
+      ...real,
+      templates: [
+        ...real.templates.map((t) => (t.controlId === 'C-01' ? { ...t, review: { ...t.review, outcome: 'failed' as const } } : t)),
+        { controlId: 'C-11', file: '/templates/C-11_informed-consent.html', kind: 'web page', bytes: 1000, sha256: 'e'.repeat(64),
+          review: { reviewer: 'r', date: '2026-11-06', outcome: 'failed' } },
+      ],
+    };
     vi.resetModules();
-    vi.doMock('@/data/resources.json', () => ({
-      default: { ...resources, templates: resources.templates.filter((t) => t.controlId !== 'C-01') },
-    }));
+    vi.doMock('@/lib/content/resources', () => ({ loadResources: () => data }));
     try {
       const { renderToStaticMarkup: render } = await import('react-dom/server');
       const { default: Page } = await import('@/app/(authenticated)/explore/controls/page');
-      const html = render(<Page />);
-      const c01 = assessmentAreas.controls.find((c) => c.id === 'C-01')?.template;
-      expect(c01, 'C-01 still has a template link in the data').toBeTruthy();
-      expect(hrefs(html)).not.toContain(c01);
-      expect(hrefs(html).length).toBe(SERVED.size - 1);
+      const linked = hrefs(render(<Page />));
+      expect(linked).not.toContain('/templates/C-01_alternatives-analysis.html');
+      expect(linked).not.toContain('/templates/C-11_informed-consent.html');
+      expect(linked).toContain('/templates/C-02_cost-benefit-impact.html');
+      expect(linked.length).toBe(SERVED.size - 1);
     } finally {
-      vi.doUnmock('@/data/resources.json');
+      vi.doUnmock('@/lib/content/resources');
       vi.resetModules();
     }
   });

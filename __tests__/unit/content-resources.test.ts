@@ -57,6 +57,12 @@ describe('resources file', () => {
     expect(() => parseResources({ templates: [{ ...T, controlId: 'C-99' }], notebooks: [] })).toThrow(/C-99/);
   });
 
+  it('FR-CNT-05 FR-SUG-04: two entries of one kind for one control are refused, because a card links only one of them', () => {
+    expect(() => parseResources({ templates: [T, { ...T, file: '/templates/C-01_other.html' }], notebooks: [] })).toThrow(/templates\[1\]\.controlId.*C-01/);
+    expect(() => parseResources({ templates: [], notebooks: [N, { ...N, file: '/notebooks/C-13_other.ipynb', released: false }] })).toThrow(/notebooks\[1\]\.controlId.*C-13/);
+    expect(parseResources({ templates: [T], notebooks: [N] })).toBeTruthy();   // one of each, for different or the same control, is fine
+  });
+
   it('FR-CNT-05 NB-AC-10: a template needs its sha256 and a released notebook needs a passed review', () => {
     expect(parseResources({ templates: [T], notebooks: [N] })).toEqual({ templates: [T], notebooks: [N] });
     const { sha256: _drop, ...noHash } = T;

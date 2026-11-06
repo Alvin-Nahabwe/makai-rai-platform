@@ -20,7 +20,10 @@ vi.mock('@/components/review/SealNote', () => ({ SealNote: slot('SealNote') }));
 vi.mock('next/navigation', async (original) => ({ ...(await original<typeof import('next/navigation')>()), useRouter: () => ({ refresh() {} }), usePathname: () => '/x' }));
 vi.mock('@/components/evidence/EvidenceBlock', () => ({ EvidenceBlock: slot('EvidenceBlock') }));
 vi.mock('@/components/findings/QuestionFindingLink', () => ({ QuestionFindingLink: slot('QuestionFindingLink') }));
-vi.mock('@/components/suggestions/SuggestedControls', () => ({ SuggestedControls: slot('SuggestedControls') }));
+vi.mock('@/components/suggestions/SuggestedControls', async (original) => ({
+  ...(await original<typeof import('@/components/suggestions/SuggestedControls')>()),   // suggestionCount is the real one: the page and the slot share it
+  SuggestedControls: slot('SuggestedControls'),
+}));
 
 const requireIdentity = vi.fn();
 const requireOrgContextFor = vi.fn();
@@ -78,6 +81,18 @@ describe('S-12 shell', () => {
     for (const id of labelled) expect(html, id).toMatch(new RegExp(`<h[23] id="${id}">[^<]+</h[23]>`));
     expect(html).toMatch(/<section[^>]*data-region="suggestions"[^>]*id="suggestions"|<section[^>]*id="suggestions"[^>]*data-region="suggestions"/);
     expect(html.match(/id="suggestions"/g)).toHaveLength(1);
+    // SRS line 1836: the heading has no count (the "(8)" there is a note marker); the slot's line under it gives it.
+    expect(html).toContain('<h2 id="s12-suggestions">Ways teams address this</h2>');
+  });
+
+  it('FR-SUG-02 UX-08: for the gate question (nothing to suggest) the page renders no Ways teams address this section and no link to it', async () => {
+    const gate = { ...QUESTION, id: 'Q-PP-GATE-SENSITIVE', type: 'gate' } as LoadedQuestion;
+    const html = renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, question: gate, runningQuestion: gate } }));
+    expect(html).not.toContain('Ways teams address this');
+    expect(html).not.toContain('s12-suggestions');
+    expect(html).not.toContain('data-region="suggestions"');
+    expect(propsSeen.QuestionContent).toEqual({ question: gate, suggestionCount: 0 });
+    expect(html.match(/<section[^>]*aria-labelledby=/g)).toHaveLength(6);
   });
 
   it('UX-31 FR-PRJ-03: an archived project shows the archived banner on S-12', async () => {
@@ -90,7 +105,7 @@ describe('S-12 shell', () => {
 
   it('FR-DEC-01 (helper): each region\'s component gets the props its contract row names, from the panel data', async () => {
     renderToStaticMarkup(await QuestionPanelRegions({ data: PANEL }));
-    expect(propsSeen.QuestionContent).toEqual({ question: QUESTION, suggestionCount: 0 });
+    expect(propsSeen.QuestionContent).toEqual({ question: QUESTION, suggestionCount: 3 });
     expect(propsSeen.CurrentDecision).toEqual({
       current: CURRENT, historyCount: 2, seals: PANEL.seals,
       historyHref: '/orgs/acme-health/projects/p1/stages/pre-processing/questions/Q-PP-01/history',

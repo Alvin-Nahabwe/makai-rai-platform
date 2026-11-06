@@ -87,15 +87,12 @@ async function onEveryShellPage(
  * container (found with `closest`, so a node in the sidebar, header or footer never matches), and any
  * other rule fails. An entry also fails when its finding is gone, and the allowance is off at the release candidate
  * (RELEASE_CANDIDATE=1), where the full axe check applies.
- *   - /explore/controls, owner CNT and SUG (they rebuild the page): ControlsLibraryPage.css sets its own colours (grey card text on
- *     white; in the dark theme navy headings on the dark card).
  *   - the organisation dashboard and projects list, owner PRJ (the project cards): stat labels fail in the light theme. The cards
  *     exist only when the organisation has projects, which earlier specs of a full run create, so the finding is required only
  *     in light and only when a card is on the page.
  */
 type KnownFinding = { owner: string; path: RegExp; rule: string; container: string; cardSelector: string; requiredIn: 'light' | 'both' };
 const KNOWN_FINDINGS: KnownFinding[] = [
-  { owner: 'CNT and SUG', path: /^\/explore\/controls$/, rule: 'color-contrast', container: '.control-card, .controls-filter-btn', cardSelector: '.control-card', requiredIn: 'both' },
 ];
 
 const RELEASE_CANDIDATE = process.env.RELEASE_CANDIDATE === '1';
