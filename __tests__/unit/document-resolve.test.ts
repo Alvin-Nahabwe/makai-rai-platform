@@ -547,16 +547,6 @@ describe('boundaries', () => {
     expect(existsSync('lib/project/labels.ts')).toBe(true);
   });
 
-  it('DOC-b boundary: the mitigation-plan-only sources throw NotImplementedError(DOC-b)', () => {
-    const snap = snapWith({});
-    expect(() => part('meta', { kind: 'meta', item: 'no_decision' }, snap)).toThrow(/Not implemented/);
-    expect(() => part('meta', { kind: 'meta', item: 'review' }, snap)).toThrow();
-    expect(() => part('mapping', { kind: 'mapping' }, snap)).toThrow();
-    expect(() => part('findings', { kind: 'findings', stage: 'review', filter: 'open' }, snap)).toThrow();
-    expect(() => part('mitigations', { kind: 'mitigations', stage: 'review', filter: 'counts' }, snap)).toThrow();
-    try { part('meta', { kind: 'meta', item: 'no_decision' }, snap); } catch (e) { expect((e as { extra?: { unit?: string } }).extra?.unit).toBe('DOC-b'); }
-  });
-
   it('FR-PUB-01 FR-DOC-02 (SRS 7.5.3): nothing the resolver prints for a decided data card holds a claim word, or a form of "fail"', () => {
     const decided = Object.fromEntries(['Q-PP-08', 'Q-PP-12', 'Q-PP-13', 'Q-PP-18', 'Q-PP-21'].map((q) => [q, decision({ v: 1, status: 'done', reason: 'A plain reason.', evidence: [file(`ev-${q}`)] })]));
     const r = resolveFields(dataCardMap, snapWith(decided, { metadata: { fundingSource: 'GIZ', datasetSize: 'unknown', processesPersonalData: 'true' } }), {});

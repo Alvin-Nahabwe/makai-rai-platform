@@ -7,12 +7,13 @@ import type {
 import type { LoadedContent, LoadedQuestion } from '@/types/content';
 import type { FieldMap, FieldMapEntry, FieldSource, RecordPart, SourceStage } from '@/types/documents';
 import type { SealManifestV1, SealRef } from '@/types/seal';
-import { runningContent } from '@/lib/content/loader';
-import { NotImplementedError } from '@/lib/http/errors';
+import { loadContent, runningContent } from '@/lib/content/loader';
+import { controlsForArea } from '@/lib/content/suggestions';
+import { isOverdue } from '@/lib/followup/overdue';
 import { formatDay, formatDeclaredDate } from '@/lib/format/dates';
 import { DATASET_SIZE_WORDS, PERSONAL_DATA_WORDS } from '@/lib/project/labels';
 import { formatFingerprint } from '@/lib/seal/format';
-import { ETHICS_APPROVED, ETHICS_NOT_REQUIRED, ETHICS_SUBMITTED, FILE_NAME_ERASED, GATE_DERIVED_NA, fileErasedLine, textErasedLine, utcSecond } from './copy';
+import { ETHICS_APPROVED, ETHICS_NOT_REQUIRED, ETHICS_SUBMITTED, FILE_NAME_ERASED, GATE_DERIVED_NA, fileErasedLine, formatUtcDay, textErasedLine, utcSecond } from './copy';
 import type { ResolvedField } from './render';
 
 /**
@@ -182,6 +183,14 @@ function evidenceItem(e: EvidenceItemView, snap: DocumentSnapshot): string {
   return `file ${name}${e.sha256 === null ? '' : ` (SHA-256 ${formatFingerprint(e.sha256, 'short')})`}`;
 }
 
+/** D2: "Not applicable (<the code's label>). Reason: '<reason>'", the reason read from the decision's own content; an erased reason prints the SRS 7.5.6 line without quotes. */
+function notApplicableLine(d: SealedDecision, content: LoadedContent): string {
+  const reasonText = d.reasonErased !== null ? textErasedLine(d.reasonErased.erasedOn) : d.row.reason ?? NOT_RECORDED;
+  const code = content.reasonCodes.find((c) => c.code === d.row.reasonCode);
+  if (code === undefined) throw new Error(`documents: reason code ${String(d.row.reasonCode)} of ${d.row.id} is not in content ${content.semver}`);
+  return d.reasonErased !== null ? `Not applicable (${code.label}). Reason: ${reasonText}` : `Not applicable (${code.label}). Reason: '${reasonText}'`;
+}
+
 function evidenceLine(d: SealedDecision, snap: DocumentSnapshot): string {
   return d.evidence.length === 0 ? NO_EVIDENCE : `Evidence: ${d.evidence.map((e) => evidenceItem(e, snap)).join('; ')}`;
 }
@@ -201,10 +210,7 @@ function extract(d: SealedDecision, snap: DocumentSnapshot, parts: ReadonlySet<P
   const reasonText = d.reasonErased !== null ? textErasedLine(d.reasonErased.erasedOn) : d.row.reason ?? NOT_RECORDED;
   const wantsReason = parts.has('reason') || parts.has('status');
   if (d.row.status === 'not_applicable' && wantsReason) {
-    // D2: the code's label, then the reason.
-    const code = content.reasonCodes.find((c) => c.code === d.row.reasonCode);
-    if (code === undefined) throw new Error(`documents: reason code ${String(d.row.reasonCode)} of ${d.row.id} is not in content ${content.semver}`);
-    lines.push(d.reasonErased !== null ? `Not applicable (${code.label}). Reason: ${reasonText}` : `Not applicable (${code.label}). Reason: '${reasonText}'`);
+    lines.push(notApplicableLine(d, content));
     sources.push({ sourceTable: 'decision_versions', sourceId: d.row.id, field: 'reason' });
   } else {
     if (parts.has('status') && d.row.status !== null) {
@@ -309,41 +315,106 @@ function areaText(snap: DocumentSnapshot, id: string | null): string {
   return name === undefined ? id : `${id} ${name}`;
 }
 
+/** A finding's title: a shortfall finding is raised with none (its question is its subject); a null on any other is an erasure. */
+function findingTitle(f: FindingView, snap: DocumentSnapshot): string {
+  const shortfall = f.source === 'shortfall' && f.questionId !== null;
+  return f.title ?? (shortfall ? `Finding on ${f.questionId}` : textOf(snap, 'findings', f.id, 'title', null));
+}
+
+function findingCounts(sealed: SealedStage): ResolvedPart {
+  const n = (state: FindingView['state']) => sealed.findings.filter(({ finding }) => finding.state === state).length;
+  return part({
+    text: `Open findings: ${n('open')}. Closed by a mitigation: ${n('closed_mitigation')}. Closed by an accepted risk: ${n('closed_accepted_risk')}.`,
+    sealIds: [sealed.seal.sealId],
+  });
+}
+
 function resolveFindings(source: Extract<FieldSource, { kind: 'findings' }>, snap: DocumentSnapshot): ResolvedPart {
-  if (source.filter !== 'all' && source.filter !== 'open_and_closed') throw new NotImplementedError('DOC-b');
   const sealed = stageSource(source.stage, snap);
   if (sealed === null) return part({ text: NOT_RECORDED_AT_ISSUE });
+  if (source.filter === 'counts') return findingCounts(sealed);
   const versions = new Map([...sealed.decisions.values()].map((d) => [d.row.id, d.row.versionNumber]));
+  const wanted = (state: FindingView['state']): boolean => {
+    if (source.filter === 'open') return state === 'open';
+    if (source.filter === 'closed_by_mitigation') return state === 'closed_mitigation';
+    return source.filter === 'all' || state !== 'withdrawn';
+  };
   const items = sealed.findings.filter(({ finding: f }) =>
-    (source.filter === 'all' || f.state !== 'withdrawn') && (source.areas === undefined || (f.riskArea !== null && source.areas.includes(f.riskArea))));
+    wanted(f.state) && (source.areas === undefined || (f.riskArea !== null && source.areas.includes(f.riskArea))));
   const sources: RowRef[] = [];
   const text = items.length === 0 ? NONE : items.map(({ finding: f }, i) => {
     const version = f.decisionVersionId === null ? undefined : versions.get(f.decisionVersionId);
     const origin = f.source === 'team' || f.questionId === null ? 'Raised by the team' : `From ${f.questionId}${version === undefined ? '' : ` v${version}`}`;
     sources.push({ sourceTable: 'findings', sourceId: f.id, field: 'title' }, { sourceTable: 'findings', sourceId: f.id, field: 'description' });
-    // A shortfall finding is raised with no title or description (the question is its subject); a null on any other is an erasure.
     const shortfall = f.source === 'shortfall' && f.questionId !== null;
-    const title = f.title ?? (shortfall ? `Finding on ${f.questionId}` : textOf(snap, 'findings', f.id, 'title', null));
-    return [`${i + 1}. ${title}`, `Source: ${origin}`, `Risk area: ${areaText(snap, f.riskArea)}`,
+    return [`${i + 1}. ${findingTitle(f, snap)}`, `Source: ${origin}`, `Risk area: ${areaText(snap, f.riskArea)}`,
       ...(f.description === null && shortfall ? [] : [`Description: ${textOf(snap, 'findings', f.id, 'description', f.description)}`]),
+      ...(source.filter === 'open' ? [`Raised on: ${formatUtcDay(f.raisedAt)}`] : []),
       `State: ${word(FINDING_STATE_WORD, f.state, 'finding state')}`].join('\n');
   }).join('\n\n');
   return part({ text, sources, sealIds: [sealed.seal.sealId] });
 }
 
+const MITIGATION_STATUS_WORD: Readonly<Record<string, string>> = { planned: 'Planned', in_progress: 'In progress', done: 'Done', cancelled: 'Cancelled' };
+
+/** One mitigation as a document prints it: what, owner, due date, then the control it follows. `sources` takes the rows the text came from. */
+function mitigationLines(m: MitigationVersionView, snap: DocumentSnapshot, sources: RowRef[]): string[] {
+  sources.push({ sourceTable: 'mitigation_versions', sourceId: m.id, field: 'what' });
+  const lines = [textOf(snap, 'mitigation_versions', m.id, 'what', m.what), `Owner: ${m.owner.name}`, `Due: ${formatDay(m.dueDate)}`];
+  if (m.followsControl !== null) {
+    const control = running(snap).controls.get(m.followsControl);
+    lines.push(`Control followed: ${m.followsControl}${control === undefined ? '' : ` ${control.name}`}`);
+  }
+  return lines;
+}
+
+/** The current mitigation versions of the sealed stage, counted by status; those of withdrawn findings are not counted. */
+function mitigationCounts(sealed: SealedStage, snap: DocumentSnapshot): ResolvedPart {
+  const counted = sealed.findings.filter(({ finding }) => finding.state !== 'withdrawn');
+  const all = counted.flatMap(({ finding, mitigations }) => mitigations.map((m) => ({ m, state: finding.state })));
+  const n = (status: string) => all.filter(({ m }) => m.status === status).length;
+  const overdue = all.filter(({ m, state }) => isOverdue({ status: m.status, dueDate: m.dueDate }, state, snap.today)).length;
+  return part({
+    text: `Mitigations planned: ${n('planned')}, in progress: ${n('in_progress')}, done: ${n('done')}, cancelled: ${n('cancelled')}, overdue: ${overdue}.`,
+    sealIds: [sealed.seal.sealId],
+  });
+}
+
+/** MP-03: each open finding's mitigations, from the sealed manifest's versions (NFR-INT-10); nothing when no finding is open. */
+function currentMitigations(sealed: SealedStage, snap: DocumentSnapshot): ResolvedPart {
+  const open = sealed.findings.filter(({ finding }) => finding.state === 'open');
+  if (open.length === 0) return part({ sealIds: [sealed.seal.sealId] });
+  const sources: RowRef[] = [];
+  const text = open.map(({ finding, mitigations }, i) => {
+    sources.push({ sourceTable: 'findings', sourceId: finding.id, field: 'title' });
+    const blocks = mitigations.map((m, j) => {
+      const status = word(MITIGATION_STATUS_WORD, m.status, 'mitigation status');
+      const late = isOverdue({ status: m.status, dueDate: m.dueDate }, finding.state, snap.today) ? ' (overdue)' : '';
+      const [what, ...rest] = mitigationLines(m, snap, sources);
+      return [`Mitigation ${j + 1}: ${what}`, ...rest, `Status: ${status}${late}`].join('\n');
+    });
+    return [`${i + 1}. ${findingTitle(finding, snap)}`, ...(blocks.length === 0 ? ['Mitigations: None'] : blocks)].join('\n');
+  }).join('\n\n');
+  return part({ text, sources, sealIds: [sealed.seal.sealId] });
+}
+
 function resolveMitigations(source: Extract<FieldSource, { kind: 'mitigations' }>, snap: DocumentSnapshot): ResolvedPart {
-  if (source.filter !== 'done') throw new NotImplementedError('DOC-b');
   const sealed = stageSource(source.stage, snap);
   if (sealed === null) return part({ text: NOT_RECORDED_AT_ISSUE });
-  const done = sealed.findings.flatMap((f) => f.mitigations).filter((m) => m.status === 'done');
+  if (source.filter === 'counts') return mitigationCounts(sealed, snap);
+  if (source.filter === 'current') return currentMitigations(sealed, snap);
+  // A mitigation plan lists the done mitigations of the findings it calls closed by a mitigation, each with its finding; the cards list every done one.
+  const plan = snap.documentType === 'mitigation_plan';
+  const done = sealed.findings
+    .filter(({ finding }) => !plan || finding.state === 'closed_mitigation')
+    .flatMap(({ finding, mitigations }) => mitigations.filter((m) => m.status === 'done').map((m) => ({ finding, m })));
+  // The plan's findings list above already says None; a second None under the same field would only repeat it.
+  if (done.length === 0 && plan) return part({ sealIds: [sealed.seal.sealId] });
   const sources: RowRef[] = [];
-  const text = done.length === 0 ? NONE : done.map((m, i) => {
-    const lines = [`${i + 1}. ${textOf(snap, 'mitigation_versions', m.id, 'what', m.what)}`, `Owner: ${m.owner.name}`, `Due: ${formatDay(m.dueDate)}`];
-    sources.push({ sourceTable: 'mitigation_versions', sourceId: m.id, field: 'what' });
-    if (m.followsControl !== null) {
-      const control = running(snap).controls.get(m.followsControl);
-      lines.push(`Control followed: ${m.followsControl}${control === undefined ? '' : ` ${control.name}`}`);
-    }
+  const text = done.length === 0 ? NONE : done.map(({ finding, m }, i) => {
+    const [what, ...rest] = mitigationLines(m, snap, sources);
+    const lines = [`${i + 1}. ${what}`, ...(plan ? [`Finding: ${findingTitle(finding, snap)}`] : []), ...rest];
+    if (plan && finding.title !== null) sources.push({ sourceTable: 'findings', sourceId: finding.id, field: 'title' });
     if (m.closureNote !== null || erasedAt(snap, 'mitigation_versions', m.id, 'closureNote') !== null) {
       lines.push(`Closure note: ${textOf(snap, 'mitigation_versions', m.id, 'closureNote', m.closureNote)}`);
       sources.push({ sourceTable: 'mitigation_versions', sourceId: m.id, field: 'closureNote' });
@@ -405,7 +476,65 @@ function resolveMeta(source: Extract<FieldSource, { kind: 'meta' }>, snap: Docum
     for (const s of sealsOf(snap)) for (const d of s.decisions.values()) { const who = deciderText(d); if (who !== null) names.add(who); }
     return names.size === 0 ? part() : part({ text: [...names].join('; ') });
   }
-  throw new NotImplementedError('DOC-b');
+  if (source.item === 'review') return reviewLine(snap.chosen);
+  if (source.item === 'no_decision') return noDecisionList(snap);
+  return notApplicableList(snap);
+}
+
+/** MP-01: the stage, the review's name and its "Prepared for" note, which is omitted when empty (SRS 10.3.4). */
+function reviewLine(s: SealedStage): ResolvedPart {
+  const note = s.preparedFor === null || s.preparedFor.trim() === '' ? '' : ` Prepared for: ${s.preparedFor}`;
+  // The note is team text that an operator may erase, so its row is a source of this document (D13).
+  const sources: RowRef[] = note === '' ? [] : [{ sourceTable: 'stage_reviews', sourceId: s.seal.reviewId, field: 'preparedFor' }];
+  return part({ text: `Stage: ${s.stage}. ${s.seal.reviewName}.${note}`, sources, sealIds: [s.seal.sealId] });
+}
+
+/** MP-07: the chosen seal's questions that hold no decision, each with its stem from the running content. */
+function noDecisionList(snap: DocumentSnapshot): ResolvedPart {
+  const s = snap.chosen;
+  const ids = s.manifest.decisions.flatMap((d) => ('none' in d ? [d.question] : []));
+  const text = ids.length === 0 ? NONE : ids.map((q) => `${q}: ${runningQuestion(snap, q).text}`).join('\n');
+  return part({ text, sealIds: [s.seal.sealId] });
+}
+
+/** MP-08: the chosen seal's not applicable questions with the code's label and the reason, then those the scope answer made not applicable (SRS 7.5.6). */
+function notApplicableList(snap: DocumentSnapshot): ResolvedPart {
+  const s = snap.chosen;
+  const sources: RowRef[] = [];
+  const provenance: string[] = [];
+  const lines: string[] = [];
+  const decided = [...s.decisions.values()].filter((d) => d.row.status === 'not_applicable');
+  for (const d of decided) {
+    const content = snap.contents.get(d.row.contentVersionId);
+    if (content === undefined) throw new Error(`documents: content ${d.row.contentVersionId} is not in the snapshot`);
+    lines.push(`${d.row.questionId}: ${notApplicableLine(d, content)}`);
+    provenance.push(provenanceOf(d));
+    sources.push({ sourceTable: 'decision_versions', sourceId: d.row.id, field: 'reason' });
+  }
+  for (const [question, gate] of s.derived) {
+    const from = [...s.decisions.values()].find((x) => x.row.id === gate);
+    if (from === undefined) throw new Error(`documents: question ${question} is derived from decision version ${gate}, which the seal does not hold`);
+    lines.push(`${question}: ${GATE_DERIVED_NA}`);
+    provenance.push(`From ${from.row.questionId} v${from.row.versionNumber} (content ${from.content.semver}).`);
+  }
+  return part({
+    text: lines.length === 0 ? NONE : lines.join('\n'), provenance: provenance.join('\n'), sources, sealIds: [s.seal.sealId],
+    decisionIds: decided.map((d) => d.row.id),
+  });
+}
+
+/** MP-04: the controls the framework suggests for the risk area of each open finding, read from the content the seal was made on. */
+function mappedControls(snap: DocumentSnapshot): ResolvedPart {
+  const s = snap.chosen;
+  const c = loadContent(s.manifest.content.semver);
+  const sources: RowRef[] = [];
+  const blocks = s.findings.filter(({ finding }) => finding.state === 'open' && finding.riskArea !== null).map(({ finding }) => {
+    sources.push({ sourceTable: 'findings', sourceId: finding.id, field: 'title' });
+    const controls = controlsForArea(c, finding.riskArea as string).flatMap((g) => g.controls.map((x) => `${x.control.id} ${x.control.name}`));
+    return [findingTitle(finding, snap), `Risk area: ${areaText(snap, finding.riskArea)}`, `Controls: ${controls.length === 0 ? NONE : controls.join('; ')}`];
+  });
+  const text = blocks.length === 0 ? NONE : blocks.map((b, i) => [`${i + 1}. ${b[0]}`, ...b.slice(1)].join('\n')).join('\n\n');
+  return part({ text, sources, sealIds: [s.seal.sealId] });
 }
 
 export const SOURCE_RESOLVERS: { [K in FieldSource['kind']]: SourceResolver<K> } = {
@@ -420,7 +549,7 @@ export const SOURCE_RESOLVERS: { [K in FieldSource['kind']]: SourceResolver<K> }
   mitigations: (s, snap) => resolveMitigations(s, snap),
   accepted_risks: (s, snap) => resolveAcceptedRisks(s, snap),
   meta: (s, snap) => resolveMeta(s, snap),
-  mapping: () => { throw new NotImplementedError('DOC-b'); },
+  mapping: (_s, snap) => mappedControls(snap),
 };
 
 // resolveFields ------------------------------------------------------------------------------------------------
