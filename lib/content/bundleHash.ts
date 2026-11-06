@@ -16,7 +16,7 @@ const sha256Hex = (bytes: Uint8Array): string => createHash('sha256').update(byt
 /**
  * SHA-256 hex of the lines `<file>:<sha256 hex of read(file)>` joined by `\n`,
  * in `CONTENT_BUNDLE_FILES` order: the 4.0.0 formula of
- * lib/framework/bundleHash.ts with the bare file name as the label. Pure: it
+ * lib/framework/bundleHash.ts (removed in 0.6.0) with the bare file name as the label. Pure: it
  * reads no file, so a route can import it without putting a computed path
  * into the build trace.
  */

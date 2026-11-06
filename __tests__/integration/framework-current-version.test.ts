@@ -14,8 +14,8 @@ import questionBank from '../../data/questionBank.json';
  */
 
 describe('data/assessmentAreas.json and data/questionBank.json agree on meta.version', () => {
-  // If these ever diverge, "the 4.0.0 framework" stops having a single meaning. `data/projectConfig.json` and
-  // `data/scoringConfig.json` carry no `meta` field, so they are not part of this comparison.
+  // If these ever diverge, "the 4.0.0 framework" stops having a single meaning. `data/projectConfig.json` carries
+  // no `meta` field (and `data/scoringConfig.json` was removed in 0.6.0), so it is not part of this comparison.
   it('declare the same version', () => {
     expect(assessmentAreas.meta.version).toBe('4.0.0');
     expect(questionBank.meta.version).toBe('4.0.0');

@@ -116,8 +116,8 @@ export async function resetDb(): Promise<void> {
  *
  * This is the only way to make `resolveFramework(...).matches` /
  * `resolveCurrentFramework(...).matches` false for the CURRENT content
- * version: `RUNNING_BUNDLE_HASH` is computed once at module load from the
- * real `data/*.json` files (`lib/framework/bundleHash.ts`), so the row is the
+ * version: `RUNNING_BUNDLE_HASH` was computed once at module load from the
+ * real `data/*.json` files (`lib/framework/bundleHash.ts`, removed in 0.6.0), so the row was the
  * only side of the comparison a test can move. It reproduces the real drift
  * condition exactly -- someone edited the content files without bumping
  * `meta.version`, so the registry row's recorded hash no longer describes
