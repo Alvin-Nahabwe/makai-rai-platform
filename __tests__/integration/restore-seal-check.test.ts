@@ -17,13 +17,40 @@ import { addDecision, addProject, addStageReview, buildOrg, ctxFor, type OrgFixt
  * markers. Nothing here touches a production host.
  */
 
-const CONTAINER = process.env.E2E_DB_CONTAINER as string;
-const psql = (sql: string, env: Record<string, string> = {}): string =>
-  execFileSync(
-    'docker',
-    ['exec', '-i', ...Object.entries(env).flatMap(([k, v]) => ['-e', `${k}=${v}`]), CONTAINER, 'psql', '-U', 'makrai', '-d', 'makrai_test', '-X', '-q', '-At', '-v', 'ON_ERROR_STOP=1', '-f', '-'],
-    { input: sql },
-  ).toString();
+/**
+ * How psql reaches the test database. Locally the slot's env names its container (E2E_DB_CONTAINER) and psql
+ * runs inside it by `docker exec`. In CI the database is a service container reached over TCP, so psql runs on
+ * the runner against the URL the suite itself uses (DATABASE_URL, which vitest.config.ts takes from
+ * TEST_DATABASE_URL). With neither, the test throws: it never skips.
+ */
+const CONTAINER = process.env.E2E_DB_CONTAINER;
+const PSQL_FLAGS = ['-X', '-q', '-At', '-v', 'ON_ERROR_STOP=1'];
+
+/** The libpq environment of a postgresql:// URL, so that no password appears in an argument. */
+function pgEnvOf(url: string): Record<string, string> {
+  const u = new URL(url);
+  return {
+    PGHOST: u.hostname,
+    PGPORT: u.port || '5432',
+    PGUSER: decodeURIComponent(u.username),
+    PGPASSWORD: decodeURIComponent(u.password),
+    PGDATABASE: u.pathname.slice(1),
+  };
+}
+
+function runPsql(args: string[], input: string | undefined, env: Record<string, string>): string {
+  if (CONTAINER) {
+    // `-e` hands each variable to psql inside the container; the client there connects by its local socket.
+    return execFileSync('docker', ['exec', '-i', ...Object.entries(env).flatMap(([k, v]) => ['-e', `${k}=${v}`]), CONTAINER, 'psql', '-U', 'makrai', '-d', 'makrai_test', ...args], { input }).toString();
+  }
+  const url = process.env.DATABASE_URL;
+  if (!url) {
+    throw new Error('restore-seal-check: neither E2E_DB_CONTAINER nor DATABASE_URL is set, so psql has no database to reach');
+  }
+  return execFileSync('psql', args, { input, env: { ...process.env, ...pgEnvOf(url), ...env } }).toString();
+}
+
+const psql = (sql: string, env: Record<string, string> = {}): string => runPsql([...PSQL_FLAGS, '-f', '-'], sql, env);
 const seal = (mode: 'plan' | 'check', input: string) => spawnSync('node', ['ops/host/seal-check.mjs', mode], { input, encoding: 'utf8' });
 const exportRows = (env: Record<string, string> = {}): string =>
   psql(seal('plan', psql('SELECT DISTINCT "orgId" FROM seals ORDER BY 1;')).stdout, env);
@@ -72,6 +99,11 @@ beforeEach(async () => {
 });
 
 describe('ops/host/seal-check.mjs on the slot database', () => {
+  it('NFR-INT-07: the psql the test drives is version 16, which has \\bind', () => {
+    // \bind arrived in PostgreSQL 16: another client must fail here, loudly, and not in a later test.
+    expect(runPsql(['--version'], undefined, {})).toMatch(/\b16\.\d+/);
+  });
+
   it('NFR-INT-07: every intact seal checks valid', () => {
     const r = seal('check', exportRows());
     expect(r.status, r.stderr).toBe(0);
