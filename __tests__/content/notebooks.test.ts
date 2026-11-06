@@ -1,19 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { existsSync, readFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AreasFile, QuestionBankFile } from '@/types/content';
-import { isClaim } from '@/lib/claims/pattern';
+import { CLAIMS_CORE, isClaim } from '@/lib/claims/pattern';
 import { linkedContentMarkdown } from '../../notebooks/tools/linkedContent';
+import { writeLinkedContent } from '../../notebooks/tools/writeLinkedContent';
 
 /**
  * Checks on the ten technical notebooks (SRS 10.5) and their locked
  * environment. Every check reads files with `fs`; none starts a server or a
- * database (content unit, no slot). A test that reads `data/content/5.0.0`
- * names no question id literal (contract "Content bundle", gap G088).
+ * database (content unit, no slot). A test that reads the running content
+ * bundle names no question id literal (contract "Content bundle", gap G088).
+ * The when-to-use and claims tests here use lib/claims/pattern.ts: a unit that
+ * widens that list should run this file.
  */
 const ROOT = process.cwd();
 const LOCK = join(ROOT, 'notebooks', 'requirements.txt');
 const PINS = join(ROOT, 'notebooks', 'requirements.in');
+/** The running content version, read from the index (RE-3): no version is written in this file. */
+const RUNNING = (JSON.parse(readFileSync(join(ROOT, 'data', 'content', 'index.json'), 'utf8')) as { running: string }).running;
 
 /** Normalise a PyPI name the way pip does, so `scikit_learn` equals `scikit-learn`. */
 function normaliseName(name: string): string {
@@ -23,7 +29,7 @@ function normaliseName(name: string): string {
 describe('locked notebook environment', () => {
   it('FR-SUG-07: the lock is universal, so a team on Windows or macOS can install it', () => {
     const lock = readFileSync(LOCK, 'utf8');
-    expect(lock, 'the lock names no Windows-only package').toMatch(/^colorama==\S+ ; .*sys_platform == 'win32'/m);
+    expect(lock, 'the lock carries a win32-marked package, so it was compiled --universal').toMatch(/^colorama==\S+ ; .*sys_platform == 'win32'/m);
     expect(lock, 'the header does not say --universal').toContain('--universal');
   });
 
@@ -139,12 +145,27 @@ const codeCells = (nb: Notebook): Cell[] => nb.cells.filter((x) => x.cell_type =
 const runCode = (nb: Notebook): Cell[] => codeCells(nb).filter((x) => !isOptional(x));
 const cellsTagged = (nb: Notebook, tag: Tag): Cell[] => nb.cells.filter((x) => primaryTag(x) === tag);
 
-/** Python string literals of one source text ('...' or "...", one line each). */
+/** A line of Python without its `#` comment: the `#` counts only outside a quoted string. */
+function withoutComment(line: string): string {
+  let quote: string | null = null;
+  for (let k = 0; k < line.length; k++) {
+    const ch = line[k];
+    if (quote) {
+      if (ch === '\\') k++;
+      else if (ch === quote) quote = null;
+    } else if (ch === "'" || ch === '"') quote = ch;
+    else if (ch === '#') return line.slice(0, k);
+  }
+  return line;
+}
+
+/** Python string literals of one source text ('...' or "...", one line each), comments left out. */
 function stringLiterals(src: string): string[] {
   const out: string[] = [];
   const re = /(?<![A-Za-z0-9_])(?:[rbfRBF]{0,2})('([^'\\\n]|\\.)*'|"([^"\\\n]|\\.)*")/g;
+  const code = src.split('\n').map(withoutComment).join('\n');
   let m: RegExpExecArray | null;
-  while ((m = re.exec(src)) !== null) out.push(m[1].slice(1, -1));
+  while ((m = re.exec(code)) !== null) out.push(m[1].slice(1, -1));
   return out;
 }
 
@@ -153,7 +174,11 @@ describe('NB-AC-01: sources carry no outputs, execution counts or widget state',
     const nb = readNotebook(c);
     expect(nb.nbformat).toBe(4);
     expect(nb.metadata.widgets, 'notebook metadata.widgets').toBeUndefined();
+    // Nothing else rides along: no local path, user name, timestamp or attachment (N3, SO-4).
+    expect(Object.keys(nb.metadata).filter((k) => !['kernelspec', 'language_info'].includes(k)), 'notebook metadata keys').toEqual([]);
     for (const [i, cell] of nb.cells.entries()) {
+      expect(Object.keys(cell.metadata).filter((k) => k !== 'tags'), `cell ${i} metadata keys`).toEqual([]);
+      expect((cell as Cell & { attachments?: unknown }).attachments, `cell ${i} attachments`).toBeUndefined();
       expect(cell.metadata.widgets, `cell ${i} metadata.widgets`).toBeUndefined();
       if (cell.cell_type === 'code') {
         expect(cell.outputs, `cell ${i} outputs`).toEqual([]);
@@ -327,6 +352,11 @@ describe('NB-AC-03: every dataset fetch is https with a sha256 check, or seeded 
       expect(body, 'hash computed before use').toMatch(/hashlib\.sha256\(/);
       expect(body, 'a hash mismatch stops the notebook').toMatch(/!=[^\n]*:\s*\n\s*raise\s+\w*Error/);
       expect(body, 'cache folder').toContain("'.cache' / 'makrai-notebooks'");
+      // The bytes the notebook uses are the checked bytes (SF-7): they come from fetch_checked, and only it opens a connection.
+      expect(body, 'the data is read from fetch_checked').toMatch(/=\s*fetch_checked\(/);
+      const outside = body.replace(/def fetch_checked[\s\S]*?\n {4}return data\n/, '');
+      expect(outside, 'a connection opened outside fetch_checked').not.toMatch(/urlopen\(/);
+      expect(outside, 'a file read straight from an address').not.toMatch(/read_(csv|table|excel|json)\(\s*(\w*URL\w*|f?['"]https?:)/);
       // The cache file name is fixed in the notebook, never taken from the address.
       expect(body).not.toMatch(/urlparse|\.split\(\s*['"]\/['"]\s*\)\s*\[\s*-1\s*\]|basename\(\s*url/i);
     } else {
@@ -340,29 +370,70 @@ describe('NB-AC-03: every dataset fetch is https with a sha256 check, or seeded 
   });
 });
 
-describe('NB-AC-04 C-10: no literal key, the key never reaches the summary', () => {
-  it('C-10', () => {
-    const nb = readNotebook('C-10');
-    const code = runCode(nb);
-    const all = code.map(text).join('\n');
-    expect(all, 'key made at run time').toMatch(/secrets\.token_bytes\(\s*32\s*\)/);
-    // A literal of 32 or more hex or base64 characters would be a key written into the file;
-    // a SHA-256 constant of a dataset (DATA_SHA256) is a hash, not a key.
-    for (const cell of code) {
-      for (const line of text(cell).split('\n')) {
-        if (/SHA256/i.test(line)) continue;
-        for (const lit of stringLiterals(line)) {
-          expect(lit, `literal "${lit.slice(0, 12)}..." looks like a key`).not.toMatch(/^[0-9a-fA-F]{32,}$/);
-          expect(lit, `literal "${lit.slice(0, 12)}..." looks like a key`).not.toMatch(/^[A-Za-z0-9+/_-]{32,}={0,2}$/);
-        }
-      }
+/** Lines where a dataset hash is assigned; a hash is not a key (N5). The only lines the key scan skips. */
+const DATASET_HASH_LINE = /^\s*DATA_SHA256\w*\s*=/;
+
+/** Hex or base64 literals of 32 or more characters in the code, outside the dataset-hash assignments. */
+function keyLiterals(code: string): string[] {
+  const found: string[] = [];
+  for (const line of code.split('\n')) {
+    if (DATASET_HASH_LINE.test(line)) continue;
+    for (const lit of stringLiterals(line)) {
+      if (/^[0-9a-fA-F]{32,}$/.test(lit) || /^[A-Za-z0-9+/_-]{32,}={0,2}$/.test(lit)) found.push(lit);
     }
-    const summary = cellsTagged(nb, 'evidence-summary').map(text).join('\n');
-    expect(summary, 'the summary cell must not name the key variable').not.toMatch(/PSEUDONYM_KEY|token_bytes/);
+  }
+  return found;
+}
+
+/** What is wrong with how the code makes and uses its key: the key variable, and every hmac.new( key argument. */
+function keyUseProblems(code: string): string[] {
+  const problems: string[] = [];
+  const made = [...code.matchAll(/^\s*(\w+)\s*=\s*secrets\.token_bytes\(\s*32\s*\)/gm)].map((m) => m[1]);
+  if (made.length !== 1) problems.push(`expected one key made with secrets.token_bytes(32), found ${made.length}`);
+  const uses = [...code.matchAll(/hmac\.new\(\s*([^,)]*?)\s*,/g)].map((m) => m[1]);
+  if (uses.length === 0) problems.push('no hmac.new( call found');
+  for (const first of uses) {
+    if (made.length !== 1 || first !== made[0]) problems.push(`hmac.new( is given \`${first}\`, not the key made at run time`);
+  }
+  return problems;
+}
+
+/** Names the evidence summary must not mention: the key variable and anything that makes bytes at random. */
+function summaryNamesTheKey(code: string, summary: string): boolean {
+  const made = [...code.matchAll(/^\s*(\w+)\s*=\s*secrets\.token_bytes\(\s*32\s*\)/gm)].map((m) => m[1]);
+  return made.some((name) => new RegExp(`\\b${name}\\b`).test(summary)) || /token_bytes|PSEUDONYM_KEY/.test(summary);
+}
+
+describe('NB-AC-04 C-10: no literal key, the key never reaches the summary', () => {
+  const nb = readNotebook('C-10');
+  const code = runCode(nb).map(text).join('\n');
+  const summary = cellsTagged(nb, 'evidence-summary').map(text).join('\n');
+
+  it('C-10', () => {
+    expect(keyUseProblems(code), 'key made at run time and used in every hmac.new(').toEqual([]);
+    expect(keyLiterals(code), 'a literal of 32 or more hex or base64 characters would be a key written into the file').toEqual([]);
+    expect(summaryNamesTheKey(code, summary), 'the summary cell must not name the key variable').toBe(false);
+  });
+
+  it('C-10: the checks catch a key planted on the hmac line, a swapped argument and an alias in the summary', () => {
+    const hex = 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90';
+    const hmacLine = code.split('\n').find((l) => l.includes('hmac.new('));
+    expect(hmacLine, 'the notebook has an hmac.new( line').toBeDefined();
+    const planted = code.replace(hmacLine as string, (hmacLine as string).replace(/hmac\.new\(\s*\w+/, `hmac.new(bytes.fromhex('${hex}')`));
+    expect(keyLiterals(planted), 'hard-coded key on the hmac line').toContain(hex);
+    expect(keyUseProblems(planted).length, 'hmac.new( not given the run-time key').toBeGreaterThan(0);
+    const swapped = code.replace(/hmac\.new\(\s*\w+/, 'hmac.new(OTHER_KEY');
+    expect(keyUseProblems(swapped).length).toBeGreaterThan(0);
+    const alias = `${code}\nKEY_ALIAS = ${(code.match(/^\s*(\w+)\s*=\s*secrets\.token_bytes/m) as RegExpMatchArray)[1]}`;
+    expect(summaryNamesTheKey(alias, 'the key is {KEY_ALIAS}'), 'an alias is not caught by name alone').toBe(false);
+    const keyName = (code.match(/^\s*(\w+)\s*=\s*secrets\.token_bytes/m) as RegExpMatchArray)[1];
+    expect(summaryNamesTheKey(code, `print(${keyName}.hex())`), 'the key variable in the summary').toBe(true);
+    expect(keyLiterals(`DATA_SHA256 = '${hex}'`), 'a dataset hash assignment is not a key').toEqual([]);
+    expect(keyLiterals(`DATA_SHA256 = {('lug', 'train'): '${hex}'}`).length, 'only an assignment line of its own is skipped').toBe(0);
   });
 });
 
-/** The calls that follow the first `print(` of a source, up to its matching bracket. */
+/** Every `print(...)` call in a source, each up to its matching bracket. */
 function printCalls(src: string): string[] {
   const calls: string[] = [];
   let from = 0;
@@ -468,10 +539,11 @@ describe('NB-AC-06: the linked content', () => {
     expect(md).toContain('Questions: 0');
   });
 
-  it.each(CONTROLS)('NB-AC-06: the linked-content cell equals the generator output for content 5.0.0, %s', (c) => {
-    const dir = ['data', 'content', '5.0.0'];
+  it.each(CONTROLS)("NB-AC-06: each notebook's linked-content cell equals the generator's output for content 5.0.0, %s", (c) => {
+    const dir = ['data', 'content', RUNNING];
     const bank = readJson<QuestionBankFile>(...dir, 'questionBank.json');
     const areas = readJson<AreasFile>(...dir, 'assessmentAreas.json');
+    expect(areas.meta.version, 'the running version is the one the cells say they were generated from').toBe(RUNNING);
     const cells = cellsTagged(readNotebook(c), 'linked-content');
     expect(cells, `${c}: one linked-content cell`).toHaveLength(1);
     expect(text(cells[0])).toBe(linkedContentMarkdown(c, bank, areas));
@@ -479,34 +551,137 @@ describe('NB-AC-06: the linked content', () => {
 });
 
 // ---------------------------------------------------------------------------
-// The when-to-use cell may not drift from the running content (coordinator ruling, 5 Nov 2026)
+// No cell may name a question that is gone from the running content or that its control does not reach
+// (coordinator ruling, 5 Nov 2026; every cell, fix round 1)
 // ---------------------------------------------------------------------------
 
-describe('NB-AC-06: the when-to-use cell names real, linked questions', () => {
-  const dir = ['data', 'content', '5.0.0'];
-  /** The one question a cell may name although the framework does not link it (SRS line 4737), pinned by id. */
-  const NOT_LINKED_BUT_NAMED: Partial<Record<Control, string>> = { 'C-16': 'Q-PO-12' };
-  const ID = /Q-[A-Z]+-(?:EXTRA-)?\d+/g;
+/** A question id: Q, a stage, then one or more parts (Q-IP-24, Q-IP-EXTRA-01, Q-PP-GATE-SENSITIVE). */
+const QUESTION_ID = /\bQ-[A-Z]+(?:-[A-Z0-9]+)+\b/g;
+
+describe('NB-AC-06: every question a cell names is real and linked', () => {
+  const dir = ['data', 'content', RUNNING];
+  const bank = readJson<QuestionBankFile>(...dir, 'questionBank.json');
+  const areas = readJson<AreasFile>(...dir, 'assessmentAreas.json');
+  const exists = new Set(Object.values(bank.stages).flatMap((st) => st.modules.flatMap((m) => m.questions.map((q) => q.id))));
+
+  it('the id pattern matches every id of the running bank, whole', () => {
+    for (const id of exists) expect([...id.matchAll(QUESTION_ID)].map((m) => m[0]), id).toEqual([id]);
+  });
+
+  /** Each id named, with the line that names it. An id outside the control's linked list needs "does not link" on its own line. */
+  function problems(c: Control, cellText: string, where: string): string[] {
+    const linked = new Set(linkedContentMarkdown(c, bank, areas).match(QUESTION_ID) ?? []);
+    const out: string[] = [];
+    for (const line of cellText.split('\n')) {
+      for (const id of new Set(line.match(QUESTION_ID) ?? [])) {
+        if (!exists.has(id)) out.push(`${where}: ${id} is not in content ${RUNNING}`);
+        else if (!linked.has(id) && !/does not link/.test(line)) out.push(`${where}: ${id} is not linked to ${c}, and its line does not say "does not link"`);
+      }
+    }
+    return out;
+  }
 
   it.each(CONTROLS)('%s', (c) => {
-    const bank = readJson<QuestionBankFile>(...dir, 'questionBank.json');
-    const areas = readJson<AreasFile>(...dir, 'assessmentAreas.json');
-    const exists = new Set(Object.values(bank.stages).flatMap((s) => s.modules.flatMap((m) => m.questions.map((q) => q.id))));
-    const linked = new Set(linkedContentMarkdown(c, bank, areas).match(ID) ?? []);
-    const cells = cellsTagged(readNotebook(c), 'when-to-use');
-    expect(cells, `${c}: one when-to-use cell`).toHaveLength(1);
-    const body = text(cells[0]);
-    const named = [...new Set(body.match(ID) ?? [])];
-    expect(named.length, `${c}: names at least one question`).toBeGreaterThan(0);
-    const exception = NOT_LINKED_BUT_NAMED[c];
-    for (const id of named) {
-      expect(exists.has(id), `${c}: ${id} is not in content 5.0.0`).toBe(true);
-      if (id === exception) continue;
-      expect(linked.has(id), `${c}: ${id} is not in the generated linked-content list`).toBe(true);
+    const nb = readNotebook(c);
+    const found: string[] = [];
+    for (const [i, cell] of nb.cells.entries()) {
+      if (primaryTag(cell) === 'linked-content') continue; // generated from the same files
+      found.push(...problems(c, text(cell), `${c} cell ${i} (${primaryTag(cell)})`));
     }
-    if (exception) {
-      expect(body, `${c}: ${exception} must be marked as not linked`).toMatch(/does not link/);
+    expect(found).toEqual([]);
+    const when = cellsTagged(nb, 'when-to-use');
+    expect(when, `${c}: one when-to-use cell`).toHaveLength(1);
+    expect(text(when[0]).match(QUESTION_ID)?.length ?? 0, `${c}: the when-to-use cell names at least one question`).toBeGreaterThan(0);
+    expect(isClaim(text(when[0])), `${c}: the when-to-use cell makes a claim the platform may not make`).toBe(false);
+  });
+
+  it('a gone id, an unlinked id, and an unlinked id marked "does not link" are told apart', () => {
+    const linkedC13 = [...(linkedContentMarkdown('C-13', bank, areas).match(QUESTION_ID) ?? [])];
+    const unlinked = [...exists].find((id) => !linkedC13.includes(id)) as string;
+    expect(problems('C-13', 'see Q-ZZ-99 here', 'x').join()).toContain('is not in content');
+    expect(problems('C-13', `see ${unlinked} here`, 'x').join()).toContain('is not linked to C-13');
+    expect(problems('C-13', `${unlinked}, which the framework does not link`, 'x')).toEqual([]);
+    expect(problems('C-13', `${unlinked} here.\nThe framework does not link another.`, 'x').length, 'the phrase must be on the same line').toBe(1);
+    expect(problems('C-13', `${linkedC13[0]} is fine`, 'x')).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// No claim in the words of the notebook (CC-3)
+// ---------------------------------------------------------------------------
+
+describe('NB-AC-09: no non-code cell makes a claim the platform may not make', () => {
+  const areas = readJson<AreasFile>('data', 'content', RUNNING, 'assessmentAreas.json');
+  /** Control and area names are the framework's own and are allowed as whole names (a name may hold a word like "Audit"). */
+  const names = [...areas.areas.map((a) => a.name), ...areas.controls.map((k) => k.name)].sort((a, b) => b.length - a.length);
+  /**
+   * FR-PUB-01's core pattern, less its "score" alternatives. The platform shows no score of its own; these notebooks use
+   * "score" for what a model outputs, which is not the platform's. Every other core alternative stays.
+   */
+  const CORE_SOURCE = CLAIMS_CORE.source;
+  const WITHOUT_SCORE = new RegExp(CORE_SOURCE.replace('|\\bscores?\\b|\\bscored\\b', ''), 'i');
+
+  it('the pattern kept every alternative except the score words', () => {
+    expect(CORE_SOURCE).toContain('\\bscores?\\b|\\bscored\\b');
+    expect(WITHOUT_SCORE.source).not.toContain('scores?');
+    expect(WITHOUT_SCORE.test('this is audit-ready')).toBe(true);
+    expect(WITHOUT_SCORE.test('fully compliant')).toBe(true);
+    expect(WITHOUT_SCORE.test('a certified model')).toBe(true);
+    expect(WITHOUT_SCORE.test('the model score')).toBe(false);
+  });
+
+  it.each(CONTROLS)('%s', (c) => {
+    const hits: string[] = [];
+    for (const [i, cell] of readNotebook(c).cells.entries()) {
+      if (cell.cell_type === 'code') continue;
+      let body = text(cell);
+      for (const name of names) body = body.split(name).join(' ');
+      for (const line of body.split('\n')) if (WITHOUT_SCORE.test(line)) hits.push(`cell ${i}: ${line.trim().slice(0, 80)}`);
     }
-    expect(isClaim(body), `${c}: the when-to-use cell makes a claim the platform may not make`).toBe(false);
+    expect(hits).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The generator (SC-3, SF-10)
+// ---------------------------------------------------------------------------
+
+describe('the linked-content generator', () => {
+  const copyRoot = (): string => {
+    const tmp = mkdtempSync(join(tmpdir(), 'nb-linked-'));
+    cpSync(join(ROOT, 'data', 'content'), join(tmp, 'data', 'content'), { recursive: true });
+    cpSync(TECHNICAL, join(tmp, 'notebooks', 'technical'), { recursive: true });
+    return tmp;
+  };
+
+  it('rewrites only the linked-content cell and writes every other byte back as it was', () => {
+    const tmp = copyRoot();
+    try {
+      for (const c of CONTROLS) {
+        const path = join(tmp, 'notebooks', 'technical', FILES[c]);
+        const nb = JSON.parse(readFileSync(path, 'utf8')) as Notebook;
+        for (const cell of nb.cells) if (primaryTag(cell) === 'linked-content') cell.source = ['stale text'];
+        writeFileSync(path, `${JSON.stringify(nb, null, 1)}\n`);
+      }
+      writeLinkedContent(tmp);
+      for (const c of CONTROLS) {
+        expect(readFileSync(join(tmp, 'notebooks', 'technical', FILES[c]), 'utf8'), `${c} is byte-equal to the committed notebook`).toBe(
+          readFileSync(join(TECHNICAL, FILES[c]), 'utf8'),
+        );
+      }
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('takes the running version from the index and refuses a version that is not in it', () => {
+    const tmp = copyRoot();
+    try {
+      expect(() => writeLinkedContent(tmp, '../..')).toThrow(/not a content version/);
+      expect(() => writeLinkedContent(tmp, '9.9.9')).toThrow(/not in data\/content\/index.json/);
+      expect(() => writeLinkedContent(tmp, RUNNING)).not.toThrow();
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
   });
 });

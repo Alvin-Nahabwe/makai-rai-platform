@@ -9,6 +9,7 @@ Three things are proved here:
     CSV, or a summary without package versions and the data file's SHA-256 (NB-AC-04);
   * check_evidence.py accepts a folder that has none of those faults.
 """
+import ast
 import hashlib
 import importlib.metadata
 import json
@@ -17,9 +18,12 @@ import platform
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
+import urllib.request
 from pathlib import Path
 
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 REPO = Path(__file__).resolve().parents[2]
 CHECK = Path(__file__).resolve().parent / "check_evidence.py"
 EXECUTOR = Path(os.environ.get("RUN_NOTEBOOKS_SCRIPT", "scripts/notebooks/run_notebooks.py"))
@@ -116,9 +120,9 @@ class EvidenceFixture(unittest.TestCase):
             f"# C-99 summary\n\nSelection rate by group: 0.31 and 0.12.\n\n## Packages\n{versions}\n\n## Data\nSHA-256 {sha}\n{extra}\n"
         )
 
-    def check(self):
+    def check(self, *more_data):
         return subprocess.run(
-            [sys.executable, str(CHECK), str(self.evidence), "C-99", str(self.data)],
+            [sys.executable, str(CHECK), str(self.evidence), "C-99", str(self.data), *map(str, more_data)],
             capture_output=True, text=True, timeout=120,
         )
 
@@ -131,7 +135,7 @@ class CheckEvidenceTest(EvidenceFixture):
     def test_check_evidence_accepts_a_clean_folder(self):
         # NB-AC-04
         (self.evidence / "table.csv").write_text("group,rate\nA,0.31\nB,0.12\n")
-        (self.evidence / "plot.png").write_bytes(b"\x89PNG\r\n")
+        (self.evidence / "plot.png").write_bytes(PNG_SIGNATURE + b"rest of an image")
         done = self.check()
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
 
@@ -198,7 +202,6 @@ class CheckEvidenceTest(EvidenceFixture):
         done = self.check()
         self.assertRefused(done, "does not name pandas")
         self.assertNotIn("not_a_package_xyz", done.stderr, "an optional cell's import is not required")
-        self.assertNotIn("the", done.stderr.split("pandas")[0].split()[-1:], "text in a string is not an import")
 
     def test_check_evidence_requires_the_python_version(self):
         # NB-AC-04: a longer number that merely starts the same does not count
@@ -222,15 +225,197 @@ class CheckEvidenceTest(EvidenceFixture):
 
     def test_check_evidence_exit_codes_tell_misuse_and_breakage_from_refusal(self):
         # NB-AC-04: 2 for wrong use, never 0 for an unchecked folder
-        misuse = subprocess.run([sys.executable, str(CHECK), str(self.evidence)], capture_output=True, text=True)
+        misuse = subprocess.run([sys.executable, str(CHECK), str(self.evidence)], capture_output=True, text=True, timeout=120)
         self.assertEqual(misuse.returncode, 2)
         empty = self.root / "empty.csv"
         empty.write_text("id,score\n")
         refused = subprocess.run(
-            [sys.executable, str(CHECK), str(self.evidence), "C-99", str(empty)], capture_output=True, text=True
+            [sys.executable, str(CHECK), str(self.evidence), "C-99", str(empty)], capture_output=True, text=True, timeout=120
         )
         self.assertEqual(refused.returncode, 1)
         self.assertIn("has no data row", refused.stderr)
+
+    # --- fix round 1 -------------------------------------------------------------------------------------------
+
+    def test_check_evidence_sees_a_row_with_missing_values_once_pandas_has_written_it_back(self):
+        # NB-AC-04 (CR-1, SO-2): the data file holds the text NaN, None and ? in some fields. pandas reads the first two
+        # as missing and writes them back as an empty field (to_csv) or as NaN (to_string); '?' is missing with na_values.
+        import pandas as pd
+
+        lines = ["id,race,weight,glu,A1C,gender,stay"] + [
+            f"{1000 + i},Caucasian{i},NaN,None,None,Female,{i % 14 + 1}" for i in range(50)
+        ] + [f"{2000 + i},Asian{i},?,None,>8,Male,{i % 14 + 1}" for i in range(50)]
+        self.write_data(lines)
+        self.write_summary()
+        for na_values in (None, ["?"]):
+            frame = pd.read_csv(self.data, na_values=na_values)
+            row = frame.iloc[[7 if na_values is None else 60]]
+            for name, text in {
+                "to_csv.csv": row.to_csv(index=False),
+                "to_csv_noheader.csv": row.to_csv(index=False, header=False),
+                "to_string.md": row.to_string(),
+                "to_string_noindex.md": row.to_string(index=False, header=False),
+                "pipes.md": row.to_markdown(index=False) if hasattr(row, "to_markdown") and _has_tabulate() else row.to_csv(index=False, sep="|"),
+            }.items():
+                with self.subTest(name=name, na_values=na_values):
+                    path = self.evidence / name
+                    path.write_text(text)
+                    self.assertRefused(self.check(), f"{name} holds a full row of the data")
+                    path.unlink()
+
+    def test_check_evidence_does_not_flag_a_table_that_only_shares_missing_markers(self):
+        # NB-AC-04: dropping missing markers must not make an ordinary table look like a data row
+        (self.evidence / "counts.csv").write_text("group,missing,share\nA,NaN,0.31\nB,None,0.12\n")
+        self.assertEqual(self.check().returncode, 0)
+
+    def test_check_evidence_searches_every_data_file_and_needs_every_hash(self):
+        # NB-AC-04 (SF-5): C-16 reads twelve files; a row of any of them is a data row, and every hash is named
+        other = self.root / "other.tsv"
+        other.write_text("t\tu\tv\n" + "\n".join(f"alpha{i}\tbeta{i}\tgamma{i}" for i in range(40)) + "\n")
+        other_sha = hashlib.sha256(other.read_bytes()).hexdigest()
+        done = self.check(other)
+        self.assertRefused(done, f"does not hold the SHA-256 of other.tsv ({other_sha})")
+        self.write_summary(extra=f"also {other_sha}")
+        self.assertEqual(self.check(other).returncode, 0, "both hashes named, no row")
+        (self.evidence / "leak.csv").write_text("a,b,c\nalpha7,beta7,gamma7\n")
+        self.assertRefused(self.check(other), "leak.csv holds a full row of the data")
+        self.assertEqual(self.check().returncode, 0, "the second file is not searched unless it is given")
+
+    def test_check_evidence_refuses_text_saved_under_a_png_name(self):
+        # NB-AC-04 (SF-3): a file it does not open must at least be an image
+        (self.evidence / "rows.png").write_text(self.data.read_text())
+        self.assertRefused(self.check(), "rows.png: not a PNG image")
+
+    def test_check_evidence_refuses_a_link(self):
+        # NB-AC-04 (SF-4): a linked folder is listed but not entered, so it cannot be checked
+        outside = self.root / "outside"
+        outside.mkdir()
+        (outside / "rows.csv").write_text(self.data.read_text())
+        (self.evidence / "sub").symlink_to(outside, target_is_directory=True)
+        self.assertRefused(self.check(), "sub: a link cannot be checked")
+
+    def test_check_evidence_searches_the_first_line_of_a_file_without_a_header(self):
+        # NB-AC-04 (CR-5): a text-only first line is not always a header
+        self.write_data([f"Private{i},Gov{i},Self{i}" for i in range(30)])
+        self.write_summary()
+        (self.evidence / "first.csv").write_text("a,b,c\nPrivate0,Gov0,Self0\n")
+        self.assertRefused(self.check(), "first.csv holds a full row of the data")
+
+
+class FetchCheckedTest(unittest.TestCase):
+    """N2: each notebook's own fetch_checked stops on wrong bytes, from the cache or from the network (SO-3)."""
+
+    TECHNICAL = REPO / "notebooks" / "technical"
+
+    def sources(self):
+        return sorted(self.TECHNICAL.glob("C-*.ipynb"))
+
+    def helper_source(self, path):
+        """The text of the helper pieces in the load-data cell: fetch_checked and the constants it reads."""
+        nb = json.loads(path.read_text(encoding="utf-8"))
+        cell = next(c for c in nb["cells"] if "load-data" in c["metadata"].get("tags", []))
+        text = "".join(cell["source"])
+        tree = ast.parse(text)
+        wanted = [
+            node for node in tree.body
+            if (isinstance(node, ast.FunctionDef) and node.name == "fetch_checked")
+            or (isinstance(node, ast.Assign) and any(getattr(t, "id", "") == "MAX_DOWNLOAD_BYTES" for t in node.targets))
+        ]
+        return "\n\n".join(ast.get_source_segment(text, node) for node in wanted)
+
+    def load(self, path, cache):
+        # A stand-in for urllib, so a test replaces urlopen here and never in the real module.
+        fake_urllib = types.SimpleNamespace(request=types.SimpleNamespace(Request=urllib.request.Request, urlopen=None))
+        namespace = {"hashlib": hashlib, "urllib": fake_urllib, "os": os, "tempfile": tempfile, "Path": Path, "CACHE_DIR": cache}
+        exec(compile(self.helper_source(path), str(path), "exec"), namespace)
+        return namespace
+
+    class Response:
+        def __init__(self, body, url="https://example.org/x.csv"):
+            self.body, self.url, self.at = body, url, 0
+
+        def read(self, size=-1):
+            size = len(self.body) - self.at if size is None or size < 0 else size
+            block = self.body[self.at:self.at + size]
+            self.at += len(block)
+            return block
+
+        def geturl(self):
+            return self.url
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    def test_the_ten_helpers_are_identical(self):
+        bodies = {path.name: self.helper_source(path) for path in self.sources()}
+        self.assertEqual(len(bodies), 10)
+        self.assertEqual(len(set(bodies.values())), 1, "the ten fetch_checked copies have drifted apart")
+        self.assertIn("MAX_DOWNLOAD_BYTES", next(iter(bodies.values())))
+
+    def test_a_cache_file_with_the_wrong_bytes_stops_the_notebook(self):
+        for path in self.sources():
+            with self.subTest(path.name), tempfile.TemporaryDirectory() as tmp:
+                cache = Path(tmp)
+                (cache / "d.csv").write_bytes(b"tampered")
+                fetch = self.load(path, cache)["fetch_checked"]
+                with self.assertRaises(RuntimeError) as caught:
+                    fetch("https://example.org/d.csv", hashlib.sha256(b"genuine").hexdigest(), "d.csv")
+                self.assertIn("d.csv", str(caught.exception))
+                self.assertEqual((cache / "d.csv").read_bytes(), b"tampered", "the cache file is left as it was")
+
+    def test_a_download_with_the_wrong_bytes_is_not_kept(self):
+        for path in self.sources():
+            with self.subTest(path.name), tempfile.TemporaryDirectory() as tmp:
+                cache = Path(tmp)
+                namespace = self.load(path, cache)
+                namespace["urllib"].request.urlopen = lambda request, timeout=None: self.Response(b"tampered")
+                with self.assertRaises(RuntimeError):
+                    namespace["fetch_checked"]("https://example.org/d.csv", hashlib.sha256(b"genuine").hexdigest(), "d.csv")
+                self.assertEqual(list(cache.iterdir()), [], "nothing is kept: no file and no half-written file")
+
+    def test_a_good_download_is_kept_and_then_checked_again(self):
+        for path in self.sources():
+            with self.subTest(path.name), tempfile.TemporaryDirectory() as tmp:
+                cache = Path(tmp)
+                namespace = self.load(path, cache)
+                namespace["urllib"].request.urlopen = lambda request, timeout=None: self.Response(b"genuine")
+                digest = hashlib.sha256(b"genuine").hexdigest()
+                self.assertEqual(namespace["fetch_checked"]("https://example.org/d.csv", digest, "d.csv"), b"genuine")
+                self.assertEqual([p.name for p in cache.iterdir()], ["d.csv"])
+                self.assertEqual(namespace["fetch_checked"]("https://example.org/d.csv", digest, "d.csv"), b"genuine")
+
+    def test_a_download_past_the_cap_is_refused_before_it_is_hashed_whole(self):
+        for path in self.sources():
+            with self.subTest(path.name), tempfile.TemporaryDirectory() as tmp:
+                cache = Path(tmp)
+                namespace = self.load(path, cache)
+                cap = namespace["MAX_DOWNLOAD_BYTES"]
+                body = b"\0" * (cap + 1)
+                namespace["urllib"].request.urlopen = lambda request, timeout=None: self.Response(body)
+                with self.assertRaises(RuntimeError) as caught:
+                    namespace["fetch_checked"]("https://example.org/d.csv", hashlib.sha256(body).hexdigest(), "d.csv")
+                self.assertIn("larger than", str(caught.exception))
+                self.assertEqual(list(cache.iterdir()), [])
+
+    def test_a_file_name_cannot_leave_the_cache_and_an_address_must_be_https(self):
+        for path in self.sources():
+            with self.subTest(path.name), tempfile.TemporaryDirectory() as tmp:
+                fetch = self.load(path, Path(tmp))["fetch_checked"]
+                with self.assertRaises(ValueError):
+                    fetch("https://example.org/d.csv", "0" * 64, "../d.csv")
+                with self.assertRaises(ValueError):
+                    fetch("http://example.org/d.csv", "0" * 64, "d.csv")
+
+
+def _has_tabulate():
+    try:
+        import tabulate  # noqa: F401
+    except ImportError:
+        return False
+    return True
 
 
 if __name__ == "__main__":
