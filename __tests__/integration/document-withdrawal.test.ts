@@ -12,6 +12,9 @@ import { captureLogs, scanLines } from '../helpers/logCapture';
 import { markerFor } from '../helpers/markers';
 
 vi.setConfig({ testTimeout: 60_000 });
+// Two withdrawals are sent together below; the identity read of concurrent route calls runs one at a time (helpers/authSession.ts), the writes still overlap.
+vi.mock('@/lib/auth/identity', async (importOriginal) =>
+  (await import('../helpers/authSession')).queuedIdentity(await importOriginal<typeof import('@/lib/auth/identity')>()));
 
 const WITHDRAWAL = 'app/api/v1/orgs/[slug]/documents/[documentId]/withdrawal/route.ts';
 const ISSUE = 'app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/documents/route.ts';
@@ -101,6 +104,24 @@ describe('withdrawing an issued document (route 19)', () => {
       expect([role, r.status, (await r.json()).code]).toEqual([role, 403, 'forbidden']);
     }
     expect(await testDb.documentEvent.count()).toBe(0);
+  });
+
+  it('FR-DOC-06 NFR-INT-02: two withdrawals of one document under different request ids, sent together, write exactly one event; the other answers 409 already_withdrawn', async () => {
+    as('owner');
+    for (let round = 0; round < 3; round += 1) {
+      const target = round === 0 ? docId : (await issue(round === 1 ? 'data_card' : 'model_card')).id;
+      as('owner');
+      const before = await testDb.documentEvent.count();
+      const replies = await Promise.all([
+        post(target, { requestId: randomUUID(), reason: 'First hand.' }),
+        post(target, { requestId: randomUUID(), reason: 'Second hand.' }),
+      ]);
+      const outcomes = await Promise.all(replies.map(async (r) => [r.status, r.status === 409 ? (await r.json()).code : 'ok'] as const));
+      expect(outcomes.map(([status]) => status).sort(), `round ${round}`).toEqual([201, 409]);
+      expect(outcomes.find(([status]) => status === 409)?.[1]).toBe('already_withdrawn');
+      expect(await testDb.documentEvent.count(), `round ${round}`).toBe(before + 1);
+      expect(await testDb.documentEvent.count({ where: { documentId: target } })).toBe(1);
+    }
   });
 
   it('FR-PRJ-03 RF-4: withdrawing in an archived project answers 409 project_archived and writes nothing', async () => {

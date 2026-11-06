@@ -18,7 +18,7 @@ const documentUrl = (orgSlug: string, id: string, leaf: 'text' | 'withdrawal') =
 export const COPY_DONE = 'Copied.';
 export const COPY_LOST = 'Not copied: connection lost.';
 export const WITHDRAW_DONE = 'Withdrawn.';
-export const WITHDRAW_LOST = 'Not withdrawn: connection lost. Nothing was changed.';
+export const WITHDRAW_LOST = 'Not withdrawn yet: no reply from the server. It may have arrived. Retry is safe: it will not withdraw twice.';   // M-06 pattern; the route replays on the request id
 export const WITHDRAW_OTHER = 'Not withdrawn. Reload the page and try again.';
 export const WITHDRAW_SIGNED_OUT = MSG_SIGNED_OUT.replace('Not generated', 'Not withdrawn').replace(' Nothing was issued.', '');
 

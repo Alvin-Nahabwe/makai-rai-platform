@@ -4,7 +4,7 @@ import type { IssuedDocumentView } from '@/types/api';
 import { HOSTILE_STRINGS } from '../helpers/hostile';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh() {} }) }));
-const { DocumentActions, CopyFallback, WithdrawConfirm, withdrawText } = await import('@/components/documents/DocumentActions');
+const { DocumentActions, CopyFallback, WithdrawConfirm, withdrawText, WITHDRAW_LOST, WITHDRAW_OTHER, COPY_LOST } = await import('@/components/documents/DocumentActions');
 
 const doc = (over: Partial<IssuedDocumentView> = {}): IssuedDocumentView => ({
   id: 'd1', projectId: 'p', reviewId: 'r', documentType: 'data_card', sha256: 'ab'.repeat(32), byteSize: 1000,
@@ -71,5 +71,14 @@ describe('the copy fallback', () => {
     expect(html).not.toContain('<script>');
     expect(html).toContain('&lt;script&gt;');
     expect(html).toContain('Select all and copy');
+  });
+});
+
+describe('the failure lines', () => {
+  it('UX-27 M-06: a withdrawal that got no reply says it may have arrived and that Retry is safe, and does not say nothing was changed', () => {
+    expect(WITHDRAW_LOST).toBe('Not withdrawn yet: no reply from the server. It may have arrived. Retry is safe: it will not withdraw twice.');
+    expect(WITHDRAW_LOST).not.toContain('Nothing was changed');
+    expect(WITHDRAW_OTHER).toBe('Not withdrawn. Reload the page and try again.');
+    expect(COPY_LOST).toBe('Not copied: connection lost.');
   });
 });
