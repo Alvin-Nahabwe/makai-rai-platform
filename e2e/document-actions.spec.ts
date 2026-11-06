@@ -45,6 +45,18 @@ async function issuedCard(baseURL: string): Promise<{ projectId: string; reviewI
   return { projectId: p.id, reviewId: r.id, documentId: d.id };
 }
 
+/**
+ * One issued card for the cases that leave the document alone (they fulfil the replies themselves), so the whole file spends three document
+ * issues of the ten an hour per user: this one, the keyboard journey's, and the Retry case's.
+ */
+let shared: Promise<{ projectId: string; reviewId: string; documentId: string }> | undefined;
+const sharedCard = (baseURL: string) => (shared ??= issuedCard(baseURL));
+const s18Of = (c: { projectId: string; reviewId: string }) => `/orgs/${org.slug}/projects/${c.projectId}/reviews/${c.reviewId}/documents`;
+const LOST = 'Not withdrawn yet: no reply from the server. It may have arrived. Retry is safe: it will not withdraw twice.';
+const withdrawRoute = (documentId: string) => `**/api/v1/orgs/${org.slug}/documents/${documentId}/withdrawal`;
+const textRoute = (documentId: string) => `**/api/v1/orgs/${org.slug}/documents/${documentId}/text`;
+const body409 = { error: 'already_withdrawn', code: 'already_withdrawn' };
+
 test('FR-DOC-06 FR-DOC-07 UX-29 NFR-A11Y-02 NFR-A11Y-05: copy and withdraw a document with the keyboard alone', async ({ page, context, baseURL }) => {
   test.setTimeout(240_000);
   failOnDialog(page);
@@ -142,9 +154,100 @@ test('FR-DOC-06 FR-DOC-07 UX-29 NFR-A11Y-02 NFR-A11Y-05: copy and withdraw a doc
 test('UX-29 FR-AUTHZ-01: a reviewer sees Copy as text and no Withdraw control', async ({ page, baseURL }) => {
   test.setTimeout(120_000);
   failOnDialog(page);
-  const { projectId, reviewId } = await issuedCard(baseURL!);
+  const { projectId, reviewId } = await sharedCard(baseURL!);
   await signIn(page, 'reviewer');
   await page.goto(`/orgs/${org.slug}/projects/${projectId}/reviews/${reviewId}/documents`);
   await expect(page.getByRole('button', { name: 'Copy as text' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Withdraw document' })).toHaveCount(0);
+});
+
+test('UX-27 M-06 FR-DOC-06: a withdrawal whose reply is lost says it may have arrived, and Retry resends the same request id and withdraws once', async ({ page, baseURL }) => {
+  test.setTimeout(120_000);
+  failOnDialog(page);
+  const card = await issuedCard(baseURL!);
+  await signIn(page, 'owner');
+  await page.goto(s18Of(card));
+  const sent: Array<{ requestId: string; reason: string }> = [];
+  let abortNext = true;
+  await page.route(withdrawRoute(card.documentId), async (route) => {
+    sent.push(JSON.parse(route.request().postData() ?? '{}') as { requestId: string; reason: string });
+    if (abortNext) {
+      abortNext = false;
+      await route.abort('connectionfailed');
+    } else {
+      await route.continue();
+    }
+  });
+  await page.getByRole('button', { name: 'Withdraw document' }).click();
+  await page.getByLabel('Reason (required)').fill('Sent to the wrong committee.');
+  await page.getByRole('button', { name: 'Withdraw document' }).click();
+  const alert = page.getByRole('alert').filter({ hasText: 'Not withdrawn yet' });
+  await expect(alert).toContainText(LOST);
+  expect(await testDb.documentEvent.count({ where: { documentId: card.documentId } })).toBe(0);
+  await page.getByRole('button', { name: 'Retry' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Withdrawn.' })).toBeVisible();
+  expect(sent).toHaveLength(2);
+  expect(sent[1].requestId).toBe(sent[0].requestId);
+  expect(await testDb.documentEvent.count({ where: { documentId: card.documentId } })).toBe(1);
+  await expect(page.getByText(/^Withdrawn on .*: Sent to the wrong committee\.$/)).toBeVisible();
+});
+
+test('FR-DOC-06: a 409 already_withdrawn says someone else withdrew it first, and after a lost reply says the earlier request may have done it', async ({ page, baseURL }) => {
+  test.setTimeout(120_000);
+  failOnDialog(page);
+  const card = await sharedCard(baseURL!);
+  await signIn(page, 'owner');
+  await page.goto(s18Of(card));
+  await page.route(withdrawRoute(card.documentId), (route) => route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify(body409) }));
+  await page.getByRole('button', { name: 'Withdraw document' }).click();
+  await page.getByLabel('Reason (required)').fill('First try.');
+  await page.getByRole('button', { name: 'Withdraw document' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Not withdrawn by you: someone else withdrew it first. Their reason is shown.' })).toBeVisible();
+  expect(await testDb.documentEvent.count({ where: { documentId: card.documentId } })).toBe(0);
+
+  // The same box after a send with no reply: the 409 may be this person's own request.
+  await page.unroute(withdrawRoute(card.documentId));
+  let aborted = false;
+  await page.route(withdrawRoute(card.documentId), async (route) => {
+    if (!aborted) { aborted = true; await route.abort('connectionfailed'); } else await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify(body409) });
+  });
+  await page.getByRole('button', { name: 'Withdraw document' }).click();
+  await page.getByLabel('Reason (required)').fill('Second try.');
+  await page.getByRole('button', { name: 'Withdraw document' }).click();
+  const alert = page.getByRole('alert').filter({ hasText: 'Not withdrawn yet' });
+  await expect(alert).toContainText(LOST);
+  await page.getByRole('button', { name: 'Retry' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Withdrawn. Your earlier request may have done it; the reason shown is the one recorded.' })).toBeVisible();
+});
+
+test('FR-DOC-07 NFR-SEC-11: when the clipboard refuses, Copy as text shows the text in a read-only box to copy by hand', async ({ page, baseURL }) => {
+  test.setTimeout(120_000);
+  failOnDialog(page);
+  const card = await sharedCard(baseURL!);
+  await signIn(page, 'reviewer');
+  // A browser that refuses the write (a denied permission): headless Chromium lets a click write to the clipboard, so the refusal is stood in for.
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: () => Promise.reject(new DOMException('denied', 'NotAllowedError')) } });
+  });
+  await page.goto(s18Of(card));
+  await page.getByRole('button', { name: 'Copy as text' }).click();
+  const box = page.getByLabel('Select all and copy');
+  await expect(box).toBeVisible();
+  await expect(box).toHaveAttribute('readonly', '');
+  await expect(box).toBeFocused();
+  expect(await box.inputValue()).toMatch(/^Copy of the data card issued on .*; the PDF is the issued version\n\nData card/);
+  await expect(page.getByRole('status').filter({ hasText: 'Copied.' })).toHaveCount(0);
+});
+
+test('FR-DOC-07 FR-REV-08: a 410 on Copy as text says the text was erased and refreshes the list', async ({ page, baseURL }) => {
+  test.setTimeout(120_000);
+  failOnDialog(page);
+  const card = await sharedCard(baseURL!);
+  await signIn(page, 'reviewer');
+  await page.goto(s18Of(card));
+  await page.route(textRoute(card.documentId), (route) => route.fulfill({ status: 410, contentType: 'application/json', body: JSON.stringify({ error: 'erased', code: 'erased', erasedOn: '2026-11-04' }) }));
+  const refreshed = page.waitForRequest((r) => r.url().includes('/documents') && r.url().includes('_rsc='));
+  await page.getByRole('button', { name: 'Copy as text' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: "Not copied: this document's text was erased." })).toBeVisible();
+  await refreshed;
 });

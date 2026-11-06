@@ -44,17 +44,26 @@ export async function expectNoSeriousA11yViolations(page: Page, state: string): 
 /**
  * Call before an axe check that follows a click. The pointer rests where the click was, so a button that appears under it (a new list item) or
  * a control that reacts to hover starts a CSS transition, and axe reads the colours half way through it. The pointer goes to the corner and the
- * check waits for the CSS transitions that are running, at most `timeoutMs` (a transition that never ends is a defect the check should report,
- * not a hang), so axe sees the colours the controls settle on.
+ * check waits for the CSS transitions that are running, at most `timeoutMs`. When the limit wins, the transitions still running are named in a
+ * console warning (property and element) and the check goes on, so axe's own report, and this warning beside it, show what had not settled
+ * instead of the run hanging.
  */
 export async function settleHover(page: Page, timeoutMs = 2000): Promise<void> {
   await page.mouse.move(0, 0);
-  await page.evaluate(async (limit) => {
+  const unsettled = await page.evaluate(async (limit): Promise<string[]> => {
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    const running = document.getAnimations().filter((a) => a instanceof CSSTransition);
-    await Promise.race([
-      Promise.all(running.map((a) => a.finished.catch(() => undefined))),
-      new Promise((resolve) => setTimeout(resolve, limit)),
-    ]);
+    const running = document.getAnimations().filter((a): a is CSSTransition => a instanceof CSSTransition);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = new Promise<boolean>((resolve) => { timer = setTimeout(() => resolve(true), limit); });
+    const settled = Promise.all(running.map((a) => a.finished.catch(() => undefined))).then(() => false);
+    const lost = await Promise.race([settled, timedOut]);
+    clearTimeout(timer);
+    if (!lost) return [];
+    return running.filter((a) => a.playState === 'running').map((a) => {
+      const target = (a.effect as KeyframeEffect | null)?.target as Element | null | undefined;
+      const name = target === undefined || target === null ? 'unknown element' : `${target.tagName.toLowerCase()}${target.id ? `#${target.id}` : ''}${typeof target.className === 'string' && target.className ? `.${target.className.split(' ').join('.')}` : ''}`;
+      return `${a.transitionProperty} on ${name}`;
+    });
   }, timeoutMs);
+  if (unsettled.length > 0) console.warn(`settleHover: ${unsettled.length} transition(s) still running after ${timeoutMs} ms: ${unsettled.join('; ')}`);
 }
