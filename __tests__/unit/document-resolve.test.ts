@@ -78,7 +78,7 @@ function snapshot(decisions: Record<string, Spec>, over: { project?: Partial<Doc
   return {
     documentType: 'data_card', reviewStage, chosen: stages[reviewStage] as SealedStage, stages, contents: new Map([['cv1', content]]),
     project: { name: 'Project', description: null, ...over.project, metadata: over.project?.metadata ?? {} }, organisationName: 'Org', today: '2026-11-05',
-    erasures: { evidence: new Map(), findings: new Map(), mitigation_versions: new Map(), accepted_risks: new Map(), ...over.erasures },
+    erasures: { evidence: new Map(), findings: new Map(), mitigation_versions: new Map(), accepted_risks: new Map(), stage_reviews: new Map(), ...over.erasures },
   };
 }
 const snapWith = (decisions: Record<string, Spec>, project?: { metadata?: Record<string, string | null> }) => snapshot(decisions, { project });

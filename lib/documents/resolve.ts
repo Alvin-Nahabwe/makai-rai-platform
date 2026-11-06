@@ -56,7 +56,7 @@ export interface DocumentSnapshot {
   organisationName: string;
   today: CalendarDate;                                  // eatDate(now) at the read (MP-02, MP-03 "overdue", DOC-b)
   /** The tombstones of the rows the snapshot holds: table -> row id -> erased field (digest name) -> the UTC date of its erasure. */
-  erasures: Readonly<Record<'evidence' | 'findings' | 'mitigation_versions' | 'accepted_risks', ReadonlyMap<string, ReadonlyMap<string, CalendarDate>>>>;
+  erasures: Readonly<Record<'evidence' | 'findings' | 'mitigation_versions' | 'accepted_risks' | 'stage_reviews', ReadonlyMap<string, ReadonlyMap<string, CalendarDate>>>>;
 }
 
 // ─── Field resolution (FR-DOC-02, FR-DOC-03, FR-DOC-05; SRS 10.3.1 D1 to D9) ─────────────────────────────────
@@ -476,17 +476,21 @@ function resolveMeta(source: Extract<FieldSource, { kind: 'meta' }>, snap: Docum
     for (const s of sealsOf(snap)) for (const d of s.decisions.values()) { const who = deciderText(d); if (who !== null) names.add(who); }
     return names.size === 0 ? part() : part({ text: [...names].join('; ') });
   }
-  if (source.item === 'review') return reviewLine(snap.chosen);
+  if (source.item === 'review') return reviewLine(snap.chosen, snap);
   if (source.item === 'no_decision') return noDecisionList(snap);
   return notApplicableList(snap);
 }
 
-/** MP-01: the stage, the review's name and its "Prepared for" note, which is omitted when empty (SRS 10.3.4). */
-function reviewLine(s: SealedStage): ResolvedPart {
-  const note = s.preparedFor === null || s.preparedFor.trim() === '' ? '' : ` Prepared for: ${s.preparedFor}`;
+/**
+ * MP-01: the stage, the review's name and its "Prepared for" note, which is omitted when empty (SRS 10.3.4). A note the operator erased
+ * prints the SRS 7.5.6 erasure line in its place (the snapshot holds it as null with a tombstone on the review).
+ */
+function reviewLine(s: SealedStage, snap: DocumentSnapshot): ResolvedPart {
+  const erasedOn = erasedAt(snap, 'stage_reviews', s.seal.reviewId, 'preparedFor');
+  const note = s.preparedFor !== null && s.preparedFor.trim() !== '' ? s.preparedFor : erasedOn !== null ? textErasedLine(erasedOn) : null;
   // The note is team text that an operator may erase, so its row is a source of this document (D13).
-  const sources: RowRef[] = note === '' ? [] : [{ sourceTable: 'stage_reviews', sourceId: s.seal.reviewId, field: 'preparedFor' }];
-  return part({ text: `Stage: ${s.stage}. ${s.seal.reviewName}.${note}`, sources, sealIds: [s.seal.sealId] });
+  const sources: RowRef[] = note === null ? [] : [{ sourceTable: 'stage_reviews', sourceId: s.seal.reviewId, field: 'preparedFor' }];
+  return part({ text: `Stage: ${s.stage}. ${s.seal.reviewName}.${note === null ? '' : ` Prepared for: ${note}`}`, sources, sealIds: [s.seal.sealId] });
 }
 
 /** MP-07: the chosen seal's questions that hold no decision, each with its stem from the running content. */

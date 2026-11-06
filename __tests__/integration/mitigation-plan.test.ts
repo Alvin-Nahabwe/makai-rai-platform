@@ -160,6 +160,13 @@ describe('the mitigation plan renderer', () => {
     expect(text).toContain(squash(textErasedLine(new Date().toISOString().slice(0, 10))));
   });
 
+  it('FR-REV-08 (SRS 7.5.6): a Prepared-for note erased before issue prints the erasure line in MP-01', async () => {
+    await eraseText('stage_reviews', reviewId, 'preparedFor');
+    const text = squash(await runsOf((await issueMp()).id));
+    expect(text).toContain(squash(`Prepared for: ${textErasedLine(new Date().toISOString().slice(0, 10))}`));
+    expect(text).not.toContain('ethics submission');
+  });
+
   it('FR-PUB-01 FR-DOC-02 (SRS 7.5.3): the printed copy holds no claim word outside the framework names, and no form of "fail"', async () => {
     const value = await issueMp();
     const text = squash(await runsOf(value.id)).replaceAll(STATEMENT, '');

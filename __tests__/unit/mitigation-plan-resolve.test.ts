@@ -103,7 +103,7 @@ function snapshot(s: SnapSpec = {}): DocumentSnapshot {
   return {
     documentType: 'mitigation_plan', reviewStage: 'pre-processing' as Stage, chosen, stages, contents: new Map([['cv1', content]]),
     project: { name: 'Project', description: null, metadata: {} }, organisationName: 'Org', today: s.today ?? '2026-11-03',
-    erasures: { evidence: new Map(), findings: new Map(), mitigation_versions: new Map(), accepted_risks: new Map(), ...s.erasures },
+    erasures: { evidence: new Map(), findings: new Map(), mitigation_versions: new Map(), accepted_risks: new Map(), stage_reviews: new Map(), ...s.erasures },
   };
 }
 type Resolved = ReturnType<typeof resolveFields>;
@@ -238,6 +238,13 @@ describe('the mitigation plan records what it prints, so an erasure reaches it (
     });
     expect(text(r, 'MP-03')).toContain(textErasedLine('2026-11-04'));
     expect(text(r, 'MP-08')).toContain(`Reason: ${textErasedLine('2026-11-04')}`);
+  });
+
+  it('FR-REV-08 (SRS 7.5.6): a Prepared-for note erased before issue prints the erasure line, still as a source row, and an empty note still prints no line', () => {
+    const erased = resolve({ preparedFor: null, erasures: { stage_reviews: new Map([['review-pp', new Map([['preparedFor', '2026-11-04']])]]) } });
+    expect(text(erased, 'MP-01')).toBe(`Stage: pre-processing. Pre-processing review 1. Prepared for: ${textErasedLine('2026-11-04')}`);
+    expect(erased.sources).toContainEqual({ sourceTable: 'stage_reviews', sourceId: 'review-pp', field: 'preparedFor' });
+    expect(text(resolve({ preparedFor: null }), 'MP-01')).toBe('Stage: pre-processing. Pre-processing review 1.');
   });
 
   it('FR-REV-08: a finding text that is null with no tombstone is a broken row and throws', () => {

@@ -313,6 +313,7 @@ export async function readDocumentSnapshot(
     organisationName, today,
     erasures: {
       evidence: erasedEvidence, findings: erasedFindings,
+      stage_reviews: await erasureDates(tx, 'stage_reviews', all.map((r) => r.seal.stageReview.id)),
       mitigation_versions: await erasureDates(tx, 'mitigation_versions', all.flatMap((r) => r.mitigations.map((m) => m.id))),
       accepted_risks: await erasureDates(tx, 'accepted_risks', all.flatMap((r) => r.risks.map((x) => x.id))),
     },
