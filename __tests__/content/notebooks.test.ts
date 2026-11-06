@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { AreasFile, QuestionBankFile } from '@/types/content';
+import type { AreasFile, QuestionBankFile, ResourcesFile } from '@/types/content';
 import { CLAIMS_CORE, isClaim } from '@/lib/claims/pattern';
 import { linkedContentMarkdown } from '../../notebooks/tools/linkedContent';
 import { writeLinkedContent } from '../../notebooks/tools/writeLinkedContent';
@@ -733,5 +734,72 @@ describe('the linked-content generator', () => {
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Release (Task 17): the owner's pass is recorded, and only passed notebooks are served
+// ---------------------------------------------------------------------------
+
+describe('release of the reviewed notebooks', () => {
+  const resources = readJson<ResourcesFile>('data', 'resources.json');
+  const PUBLIC = join(ROOT, 'public', 'notebooks');
+  const sha256 = (buf: Buffer): string => createHash('sha256').update(buf).digest('hex');
+  const entryFor = (c: Control) => resources.notebooks.find((n) => n.controlId === c);
+  /** What a review record says about the domain review (Task 16 Step 2). */
+  function record(c: Control): { reviewer?: string; date?: string; outcome?: string; sha?: string; body: string } {
+    const body = readFileSync(join(ROOT, 'docs', 'content', 'notebooks-review', `${c}.md`), 'utf8');
+    return {
+      body,
+      reviewer: /^- Reviewer: (.+)$/m.exec(body)?.[1],
+      date: /^- Date: (\d{4}-\d{2}-\d{2})$/m.exec(body)?.[1],
+      outcome: /^- Outcome: (\w+)$/m.exec(body)?.[1],
+      sha: /^- SHA-256: `([0-9a-f]{64})`/m.exec(body)?.[1],
+    };
+  }
+
+  it('FR-SUG-04 FR-SUG-05: public/notebooks holds exactly the released notebooks, byte-equal to their sources', () => {
+    const released = resources.notebooks.filter((n) => n.released);
+    // A notebook whose review record says passed must be released; one that did not pass must not be.
+    for (const c of CONTROLS) {
+      const rec = record(c);
+      expect(rec.outcome, `${c}: the review record has a domain outcome`).toBeDefined();
+      expect(Boolean(entryFor(c)?.released), `${c}: released exactly when its review passed`).toBe(rec.outcome === 'passed');
+    }
+    const served = existsSync(PUBLIC) ? readdirSync(PUBLIC).filter((f) => f !== 'requirements.txt').sort() : [];
+    expect(served, 'public/notebooks holds exactly the released copies').toEqual(released.map((n) => n.file.replace('/notebooks/', '')).sort());
+    for (const n of released) {
+      const c = n.controlId as Control;
+      const name = FILES[c];
+      expect(n.file, `${c}: URL path`).toBe(`/notebooks/${name}`);
+      expect(n.requirementsFile).toBe('/notebooks/requirements.txt');
+      const copy = readFileSync(join(PUBLIC, name));
+      const source = readFileSync(join(TECHNICAL, name));
+      expect(copy.equals(source), `${c}: the served copy is byte-equal to its source`).toBe(true);
+      expect(n.bytes, `${c}: bytes`).toBe(source.length);
+      expect(n.sha256, `${c}: sha256`).toBe(sha256(source));
+      expect(n.sha256, `${c}: the hash the owner passed`).toBe(record(c).sha);
+    }
+    if (released.length > 0) {
+      expect(readFileSync(join(PUBLIC, 'requirements.txt')).equals(readFileSync(LOCK)), 'the served lock equals the lock').toBe(true);
+    } else {
+      expect(existsSync(join(PUBLIC, 'requirements.txt')), 'no lock is served while nothing is released').toBe(false);
+    }
+  });
+
+  it('NB-AC-10: a released notebook has outcome passed, and C-10\'s review is the privacy review', () => {
+    for (const n of resources.notebooks) {
+      const c = n.controlId as Control;
+      expect(CONTROLS, `${c} is one of the ten`).toContain(c);
+      if (n.released) expect(n.review.outcome, `${c}: released needs passed`).toBe('passed');
+      expect(n.review.reviewer.trim().length, `${c}: a named reviewer`).toBeGreaterThan(0);
+      expect(n.review.date, `${c}: a date`).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      const rec = record(c);
+      expect(n.review, `${c}: the entry matches its review record`).toEqual({ reviewer: rec.reviewer, date: rec.date, outcome: rec.outcome });
+    }
+    const c10 = entryFor('C-10');
+    expect(c10?.released, 'C-10 is released only with a passed privacy review').toBe(c10?.review.outcome === 'passed');
+    expect(record('C-10').body, 'the C-10 record names the privacy-competent reviewer').toMatch(/privacy-competent reviewer/);
+    expect(c10?.review.reviewer.trim().length ?? 0).toBeGreaterThan(0);
   });
 });
