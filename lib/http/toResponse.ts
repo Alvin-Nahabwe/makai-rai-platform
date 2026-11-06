@@ -32,7 +32,7 @@ function describeUnmappedError(e: unknown): UnmappedErrorInfo {
     const message = isObject(e) ? String(e.message ?? '') : '';
     const head = `${isObject(e) ? String(e.name) : ''}: ${message}`;
     const afterMessage = stack.startsWith(head) ? stack.slice(head.length).split('\n') : stack.split('\n').slice(message.split('\n').length);
-    info.frames = afterMessage.filter((l) => FRAME.test(l)).slice(0, 10).map((l) => redactEmails(l.trim()));
+    info.frames = afterMessage.filter((l) => FRAME.test(l)).slice(0, 10).map((l) => String(redactEmails(l.trim())));
     return info;
   } catch {
     // The values read here are the thrown object's own; one that throws on read still gets its answer and its line.
