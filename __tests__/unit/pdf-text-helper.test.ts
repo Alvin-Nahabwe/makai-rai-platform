@@ -36,11 +36,12 @@ describe('pdfText helper (stream ends)', () => {
   });
 
   it('NFR-A11Y-06 (helper): an uncompressed stream is read whole, and a stream that contains the word endstream inside its /Length is not cut', () => {
-    const body = Buffer.from('BT (Hello) Tj ET\n% endstream inside a comment\n', 'latin1');
+    const body = Buffer.from('BT (Hello) Tj ET\n% endstream inside a comment\nBT (World) Tj ET\n', 'latin1');
     const pdf = Buffer.concat([
       Buffer.from('%PDF-1.3\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /Contents 4 0 R /Resources << >> >>\nendobj\n', 'latin1'),
       Buffer.from(`4 0 obj\n<< /Length ${body.length} >>\nstream\n`, 'latin1'), body, Buffer.from('\nendstream\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n', 'latin1'),
     ]);
-    expect(pdfTextRuns(pdf)).toEqual(['Hello']);
+    // 'World' follows the inner endstream: a reader that stops there instead of at /Length would lose it.
+    expect(pdfTextRuns(pdf)).toEqual(['Hello', 'World']);
   });
 });
