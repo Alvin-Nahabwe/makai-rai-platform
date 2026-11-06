@@ -78,7 +78,12 @@ describe('release waivers', () => {
       owner_words: 'Ship placeholders',
       date: '2026-11-06',
       covers: ['data/legal/cross-border-consent/1.md', 'data/legal/organisation-agreement/1.md'],
+      register_row: 'D-292',
     });
-    expect(byCase['UX-03 help-contact-pending']).toMatchObject({ owner_words: 'Ship pending text', date: '2026-11-06', covers: ['data/help-contact.json'] });
+    expect(byCase['UX-03 help-contact-pending']).toMatchObject({
+      owner_words: 'Ship pending text', date: '2026-11-06', covers: ['data/help-contact.json'], register_row: 'D-293',
+    });
+    // Both entries are complete, so both read without throwing.
+    for (const c of WAIVABLE_CASES) expect(releaseWaiver(c)?.case).toBe(c);
   });
 });
