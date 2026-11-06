@@ -171,8 +171,9 @@ export async function seedPerfFixture(opts: { out: string; scale?: PerfScale }):
 
 /**
  * Refuses an --out whose directory is inside a git work tree: the manifest holds the run's one password, and a file
- * there is one `git add` from a commit. `git -C <dir> rev-parse --show-toplevel` exits 128 outside a repository, which
- * is the one answer that lets the run go on; any other failure (no git, no such directory) is thrown as it is.
+ * there is one `git add` from a commit. `git -C <dir> rev-parse --show-toplevel` exits 128 outside a repository, and
+ * also when <dir> does not exist; both let the run go on, and a missing directory is then refused by the open below
+ * (ENOENT, as a Refused 'cannot create'). Any other failure (no git binary) is thrown as it is.
  */
 function assertOutsideRepository(out: string): void {
   let top: string;
