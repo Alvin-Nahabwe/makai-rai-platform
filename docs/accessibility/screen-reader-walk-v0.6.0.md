@@ -29,8 +29,9 @@ Ended: (not yet walked)
   severity `critical`, so the release check below fails until it is walked.
 
 The release check (`RELEASE_CANDIDATE=1 npx vitest run __tests__/lint/screen-reader-walk.test.ts`)
-fails while `Tool:` or `Build:` is unfilled or any row ends `| serious | open |` or
-`| critical | open |`.
+fails while `Tool:` or `Build:` is unfilled, while any step row has no Status (one of `pass`, `fixed`,
+`accepted`, `open`) or, unless it passed, no Severity, and while any row of either table ends
+`| serious | open |` or `| critical | open |`. An unwalked step therefore fails it.
 
 ## Setting up
 

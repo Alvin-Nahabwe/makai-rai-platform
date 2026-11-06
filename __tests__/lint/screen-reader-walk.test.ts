@@ -5,13 +5,43 @@ import { readFileSync } from 'node:fs';
  * NFR-A11Y-07 (SRS 9.x; UX-32; call R-58): the owner walks J-05 and J-09 with a screen reader on the release
  * candidate and records the findings in docs/accessibility/screen-reader-walk-v0.6.0.md. This file checks the sheet
  * has a row for each journey step (SRS lines 368-378 and 401-405) and, at the release candidate, that the walk was
- * recorded and no serious or critical finding is open. The walk itself is the owner's; nothing here performs it.
+ * recorded: every step row has a Status, every row that did not pass has a Severity, and no row of any table is a
+ * serious or critical finding still open. The walk itself is the owner's; nothing here performs it.
  */
 const SHEET = 'docs/accessibility/screen-reader-walk-v0.6.0.md';
+const STATUSES = ['pass', 'fixed', 'accepted', 'open'];
+const SEVERITIES = ['critical', 'serious', 'moderate', 'minor'];
 
 /** The inclusive list of integers from a to b. */
 function range(a: number, b: number): number[] {
   return Array.from({ length: b - a + 1 }, (_, i) => a + i);
+}
+
+/** The cells of a markdown table row, trimmed, without the empty first and last pieces of the leading and trailing pipes. */
+function cells(row: string): string[] {
+  return row.split('|').slice(1, -1).map((c) => c.trim());
+}
+
+/** Body rows of every table in `text`: lines starting with a pipe, minus each table's header and its separator. */
+function tableBodyRows(text: string): string[] {
+  const lines = text.split('\n');
+  return lines.filter((l, i) => l.startsWith('| ') && !/^\|[\s|:-]+\|$/.test(l) && !/^\|[\s|:-]+\|$/.test(lines[i + 1] ?? ''));
+}
+
+/** Rows of any table that record a serious or critical finding still open. */
+export function openSeriousRows(text: string): string[] {
+  return tableBodyRows(text).filter((r) => /\|\s*(serious|critical)\s*\|\s*open\s*\|\s*$/i.test(r));
+}
+
+/** Journey-step rows whose Status is not one of STATUSES, or which did not pass and have no Severity from SEVERITIES. */
+export function unrecordedSteps(text: string): string[] {
+  return text.split('\n').filter((l) => /^\| J-0[59] step \d+ \|/.test(l)).filter((r) => {
+    const c = cells(r);
+    const status = c[c.length - 1].toLowerCase();
+    const severity = c[c.length - 2].toLowerCase();
+    if (!STATUSES.includes(status)) return true;
+    return status !== 'pass' && !SEVERITIES.includes(severity);
+  }).map((r) => cells(r)[0]);
 }
 
 describe('NFR-A11Y-07: the screen-reader walk sheet', () => {
@@ -20,10 +50,29 @@ describe('NFR-A11Y-07: the screen-reader walk sheet', () => {
     expect(rows.map((r) => r.split('|')[1].trim())).toEqual([...range(1, 11).map((n) => `J-05 step ${n}`), ...range(1, 5).map((n) => `J-09 step ${n}`)]);
   });
 
-  it.skipIf(process.env.RELEASE_CANDIDATE !== '1')('NFR-A11Y-07: at release no serious or critical finding is open, and the walk is recorded', () => {
+  it('NFR-A11Y-07: the release check finds an open serious row in any table, and a step that was not recorded', () => {
+    const sheet = [
+      '| Journey step | What to do | What should be announced | Result | Severity | Status |',
+      '|---|---|---|---|---|---|',
+      '| J-05 step 1 | a | b | read well | - | pass |',
+      '| J-05 step 2 | a | b | the heading was skipped | serious | open |',
+      '| J-05 step 3 | a | b | | | |',
+      '| J-05 step 4 | a | b | fixed in abc1234 | moderate | fixed |',
+      '| J-05 step 5 | a | b | no announcement | | open |',
+      '',
+      '| Where | What was announced | Severity | Status |',
+      '|---|---|---|---|',
+      '| S-12 | the live region repeats | Critical | open |',
+      '| S-18 | slow | minor | accepted |',
+    ].join('\n');
+    expect(openSeriousRows(sheet)).toEqual(['| J-05 step 2 | a | b | the heading was skipped | serious | open |', '| S-12 | the live region repeats | Critical | open |']);
+    expect(unrecordedSteps(sheet)).toEqual(['J-05 step 3', 'J-05 step 5']);
+  });
+
+  it.skipIf(process.env.RELEASE_CANDIDATE !== '1')('NFR-A11Y-07: at release the walk is recorded and no serious or critical finding is open', () => {
     const t = readFileSync(SHEET, 'utf8');
     expect(t).toMatch(/^Tool: (NVDA|VoiceOver) \S+/m); expect(t).toMatch(/^Build: [0-9a-f]{7,40}$/m);
-    const open = t.split('\n').filter((l) => /^\| J-0[59] step/.test(l)).filter((l) => /\| (serious|critical) \| open \|$/.test(l));
-    expect(open).toEqual([]);
+    expect(unrecordedSteps(t), 'steps with no Status, or not passed with no Severity').toEqual([]);
+    expect(openSeriousRows(t), 'serious or critical findings still open').toEqual([]);
   });
 });
