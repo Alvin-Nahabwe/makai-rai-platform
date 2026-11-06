@@ -240,10 +240,10 @@ describe('makrai_app can SELECT but not INSERT/UPDATE/DELETE on framework_versio
  * D-148 names `framework_versions`' exclusion from `resetDb()`'s TRUNCATE as
  * a conscious deferral (reference data, not fixture data -- ../helpers/db.ts
  * above), not a licence for rows to accumulate forever. They did anyway:
- * `evidence-upload.test.ts`'s own `fv_bogus_task6` was paired with an
- * `afterAll` cleanup from the start, but `report-provenance.test.ts`
- * (`fv_bogus_task9`, `fv_bogus_task9_samelen`) and `assessments.test.ts`
- * (`fv_bogus_assessments_patch`) inserted their own bogus rows via the same
+ * one test file's own `fv_bogus_task6` was paired with an
+ * `afterAll` cleanup from the start, but two others
+ * (`fv_bogus_task9`, `fv_bogus_task9_samelen`, and
+ * `fv_bogus_assessments_patch`; all since removed) inserted their own bogus rows via the same
  * idempotent `ON CONFLICT DO NOTHING` technique WITHOUT copying the cleanup
  * half -- idempotent insertion is not cleanup. Found live: `makrai_test`
  * carried three such rows (`fv_bogus_assessments_patch`,
@@ -266,8 +266,8 @@ describe('makrai_app can SELECT but not INSERT/UPDATE/DELETE on framework_versio
  * table contains exactly that set and nothing else. A new test file that
  * copies the `ON CONFLICT DO NOTHING` technique without its cleanup half
  * fails THIS test the next time `npx vitest run` reaches it (file order:
- * `framework-registry.test.ts` runs after `evidence-upload.test.ts` and
- * `assessments.test.ts` alphabetically, and `fileParallelism: false`
+ * `framework-registry.test.ts` runs after the files whose names sort before it,
+ * and `fileParallelism: false`
  * (vitest.config.ts) means every earlier file's own hooks have already run
  * to completion by then -- so a row surviving to this point is either
  * this run's own genuine leak or an earlier crash, not another file's
@@ -374,8 +374,9 @@ describe('framework_versions carries no residue beyond what a migration inserted
         'integration suites use) must also delete it -- assessments referencing it ' +
         'first, then the row itself (no onDelete: Cascade, by design). Find the culprit ' +
         'with: grep -rn \'INSERT INTO "framework_versions"\' __tests__/, add the ' +
-        'afterEach/afterAll cleanup that useFixtureContent (__tests__/helpers/content.ts) ' +
-        'already has, and delete the stray row from makrai_test directly.',
+        'afterEach/afterAll cleanup that __tests__/setup/content.ts:42-52 does for the rows ' +
+        'useFixtureContent publishes (records first, then the row), and delete the stray ' +
+        'row from makrai_test directly.',
     ).toEqual([...expectedIds].sort());
   });
 });
