@@ -1142,13 +1142,12 @@ failed row remains. Diagnose the cause on the rehearsal copy and fix it in a v0.
 writes since BACKUP are lost, which the rollback rule of 9.5 accepts before the first real v1
 record. The synthetic journey is handled as 9.5 says.
 
-**Step 8.** Environment. Estimate: about 10 minutes. Remove the two retired settings (FR-OPS-03) and
-check that they are gone:
+**Step 8.** Environment. Estimate: about 10 minutes. Remove the retired organisation limit (FR-OPS-03) and
+check that it is gone:
 
 ```bash
-unset_env ALLOW_OPEN_REGISTRATION
 unset_env ORG_LIMIT_PER_USER
-grep -cE '^(ALLOW_OPEN_REGISTRATION|ORG_LIMIT_PER_USER)=' ../.env
+grep -cE '^ORG_LIMIT_PER_USER=' ../.env
 ```
 
 The last line prints `0` (and exits 1, which is how `grep` reports no match). Check that the token

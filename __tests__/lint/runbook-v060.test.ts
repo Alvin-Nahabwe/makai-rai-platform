@@ -160,7 +160,7 @@ describe('deployment.md 8.5: the owner steps of the v0.6.0 deploy', () => {
       '$C config --images',
       '$C --env-file ../.env -f docker-compose.prod.yml up -d --no-deps nextjs',
       "grep -c '^REMINDER_JOB_TOKEN=[0-9a-f]\\{64\\}$' /srv/makrai/app/.env",
-      'unset_env ALLOW_OPEN_REGISTRATION',
+      'unset_env ORG_LIMIT_PER_USER',
       'set_env WEB_IMAGE x',
       'time $C up -d --no-deps --wait --wait-timeout 120 nextjs',
     ];
@@ -168,11 +168,10 @@ describe('deployment.md 8.5: the owner steps of the v0.6.0 deploy', () => {
     expect(allowed.filter(printsEnvironment), 'lines the denylist must allow').toEqual([]);
   });
 
-  it('NFR-SEC-14: 8.5 step 8 removes the two retired settings and checks they are gone', () => {
+  it('NFR-SEC-14: 8.5 step 8 removes the retired organisation limit and checks it is gone', () => {
     const code = fenced(s85()).map((l) => l.trim());
-    expect(code).toContain('unset_env ALLOW_OPEN_REGISTRATION');
     expect(code).toContain('unset_env ORG_LIMIT_PER_USER');
-    expect(code).toContain(`grep -cE '^(ALLOW_OPEN_REGISTRATION|ORG_LIMIT_PER_USER)=' ../.env`);
+    expect(code).toContain(`grep -cE '^ORG_LIMIT_PER_USER=' ../.env`);
   });
 
   it('FR-ORG-04 NFR-REL-07: the failed-migration recovery stays on v0.5.0 and resolves only the owner-check migration', () => {
@@ -292,10 +291,10 @@ describe('deployment.md 8.5: the lines that change the host are the lines that w
         envFile,
         [
           'POSTGRES_USER=makrai',
-          'ALLOW_OPEN_REGISTRATION=true',
-          'ALLOW_OPEN_REGISTRATION_EXTRA=keep',
-          '# ALLOW_OPEN_REGISTRATION=kept comment',
           'ORG_LIMIT_PER_USER=5',
+          'ORG_LIMIT_PER_USER_EXTRA=keep',
+          '# ORG_LIMIT_PER_USER=kept comment',
+          'SOME_OTHER_SETTING=true',
           'NEXTAUTH_SECRET=a=b=c',
           '',
         ].join('\n'),
@@ -303,9 +302,9 @@ describe('deployment.md 8.5: the lines that change the host are the lines that w
       chmodSync(envFile, 0o640);
       // The function names /srv/makrai/app/.env; the scratch copy stands in for it.
       const body = fn![0].split('/srv/makrai/app/.env').join(envFile);
-      bash(`${body}\nunset_env ALLOW_OPEN_REGISTRATION && unset_env ORG_LIMIT_PER_USER && unset_env NOT_THERE`, dir);
+      bash(`${body}\nunset_env ORG_LIMIT_PER_USER && unset_env SOME_OTHER_SETTING && unset_env NOT_THERE`, dir);
       expect(readFileSync(envFile, 'utf8')).toBe(
-        ['POSTGRES_USER=makrai', 'ALLOW_OPEN_REGISTRATION_EXTRA=keep', '# ALLOW_OPEN_REGISTRATION=kept comment', 'NEXTAUTH_SECRET=a=b=c', ''].join('\n'),
+        ['POSTGRES_USER=makrai', 'ORG_LIMIT_PER_USER_EXTRA=keep', '# ORG_LIMIT_PER_USER=kept comment', 'NEXTAUTH_SECRET=a=b=c', ''].join('\n'),
       );
       expect(statSync(envFile).mode & 0o777).toBe(0o640);
       expect(readdirSync(dir).sort(), 'no .env.new is left behind').toEqual(['.env']);

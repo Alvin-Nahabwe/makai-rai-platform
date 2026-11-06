@@ -75,7 +75,7 @@ exit 0`,
   // prisma is stubbed too; it records the database it was pointed at, without the password.
   stub('npx', `echo "npx $* -> $(echo "$DATABASE_URL" | sed -E 's#://[^@]*@#://#')" >> "${log}"; exit 0`);
   const envFile = join(dir, 'env');
-  if (opts.env === 'no-port') writeFileSync(envFile, 'AUTH_TRUST_HOST=true\nALLOW_OPEN_REGISTRATION=true\n');
+  if (opts.env === 'no-port') writeFileSync(envFile, 'AUTH_TRUST_HOST=true\nSOME_OTHER_SETTING=1\n');
   else if (opts.env !== 'absent') writeFileSync(envFile, `NEXTAUTH_URL="http://localhost:${opts.envPort ?? 3100 + opts.K}"\n`);
   const run = (args: string[]) => {
     const r = spawnSync('bash', [SCRIPT, ...args], {

@@ -370,8 +370,8 @@ test.describe('S-04 and S-05 in a browser', () => {
   });
 
   test('FR-ACC-01: POST /api/auth/register answers 404 and creates no user', async ({ request }) => {
-    // The server runs with ALLOW_OPEN_REGISTRATION=true, set in playwright.config.ts's webServer env for
-    // this check (CI's e2e job no longer sets it: nothing in the app reads it).
+    // FR-ACC-01: the open sign-up route is gone. The old switch no longer exists (FR-OPS-03), so no setting can
+    // bring it back; __tests__/integration/open-registration-removed.test.ts sets the old name and sees 404 too.
     const email = `open-reg-${Date.now()}@fixture.test`;
     const res = await request.post('/api/auth/register', { headers: { 'x-forwarded-for': nextClientIp() }, data: {
       name: 'Open Registration', email, orgName: 'Open Registration Org', password: 'SecurePass123!', termsAccepted: true,

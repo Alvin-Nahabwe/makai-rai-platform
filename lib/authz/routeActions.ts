@@ -40,6 +40,7 @@ export const ROUTE_ACTIONS: Record<string, Partial<Record<Method, Action>>> = {
   // unit/k0b and is in PENDING_ROUTES until its producer implements it.
   'app/api/v1/orgs/[slug]/projects/[id]/decisions/route.ts': { POST: 'decision:write' },
   'app/api/v1/orgs/[slug]/projects/[id]/questions/[questionId]/withdrawal/route.ts': { POST: 'decision:withdraw' },
+  'app/api/v1/orgs/[slug]/projects/[id]/questions/[questionId]/decision/route.ts': { GET: 'record:read' },
   'app/api/v1/orgs/[slug]/projects/[id]/evidence/route.ts': { POST: 'evidence:create' },
   'app/api/v1/orgs/[slug]/projects/[id]/findings/route.ts': { POST: 'finding:raise' },
   'app/api/v1/orgs/[slug]/projects/[id]/findings/[findingId]/mitigations/route.ts': { POST: 'mitigation:write' },
@@ -82,7 +83,6 @@ export const REMOVED_METHODS: Readonly<Record<string, readonly Method[]>> = {
 export const PENDING_ROUTES: readonly string[] = [
   'app/api/v1/orgs/[slug]/documents/[documentId]/text/route.ts',
   'app/api/v1/orgs/[slug]/documents/[documentId]/withdrawal/route.ts',
-  'app/api/internal/reminders/route.ts',
 ];
 
 /**
