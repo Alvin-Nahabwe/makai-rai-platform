@@ -1,15 +1,10 @@
 'use client';
 
-import { useState, useSyncExternalStore, type CSSProperties, type FormEvent } from 'react';
+import { useState, type CSSProperties, type FormEvent } from 'react';
 import { signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { PASSWORD_MIN_LENGTH } from '@/lib/validate';
-
-/** False in the server render and until React has hydrated, true after: a native submit before then must do nothing. */
-const noopSubscribe = (): (() => void) => () => {};
-function useHydrated(): boolean {
-  return useSyncExternalStore(noopSubscribe, () => true, () => false);
-}
+import { useHydrated } from '@/lib/client/useHydrated';
 
 const TARGET: CSSProperties = { minWidth: '24px', minHeight: '24px' };
 const FIELD_ERROR: CSSProperties = { margin: 'var(--space-1) 0 0', color: 'var(--color-risk-critical)', fontSize: 'var(--font-size-sm)' };

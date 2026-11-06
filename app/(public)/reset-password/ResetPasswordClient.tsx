@@ -5,12 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { PASSWORD_MIN_LENGTH } from '@/lib/validate';
 import { M22 } from '@/lib/http/messages';
-
-/** False in the server render and until React has hydrated, true after: a native submit before then must do nothing. */
-const noopSubscribe = (): (() => void) => () => {};
-function useHydrated(): boolean {
-  return useSyncExternalStore(noopSubscribe, () => true, () => false);
-}
+import { useHydrated } from '@/lib/client/useHydrated';
 
 const NOT_SET = 'Not set: the request did not reach the server. Your link still works; try again.';
 /** S-01's notice for the same moment (LoginClient.tsx), shown while the page moves there. */

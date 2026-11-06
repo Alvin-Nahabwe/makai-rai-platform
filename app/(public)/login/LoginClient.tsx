@@ -1,18 +1,13 @@
 'use client';
 
-import { useState, useSyncExternalStore, type CSSProperties, type FormEvent } from 'react';
+import { useState, type CSSProperties, type FormEvent } from 'react';
 import { getSession, signIn } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { safeCallbackUrl } from '@/lib/safe-callback-url';
 import { DRAFT_PREFIX, openDraftStore } from '@/lib/client/drafts';
 import { M20 } from '@/lib/http/messages';
-
-/** False in the server render and until React has hydrated, true after: a native submit before then must do nothing. */
-const noopSubscribe = (): (() => void) => () => {};
-function useHydrated(): boolean {
-  return useSyncExternalStore(noopSubscribe, () => true, () => false);
-}
+import { useHydrated } from '@/lib/client/useHydrated';
 
 /** Owner copy (C4 ruling SC-1): the admission's 503 `sign_in_busy` (lib/auth/signInAdmission.ts). */
 export const SIGN_IN_BUSY = 'Not signed in: the server is busy with other sign-ins. Nothing was changed. Try again in a minute.';

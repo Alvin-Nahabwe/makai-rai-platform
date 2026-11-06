@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { signIn, signOut } from 'next-auth/react';
 import type { OrgRole } from '@prisma/client';
@@ -9,12 +9,7 @@ import {
 } from '@/components/legal/AcceptancesForm';
 import { PASSWORD_MIN_LENGTH, validatePassword, validateString } from '@/lib/validate';
 import type { AcceptedKind, LegalTextVersion } from '@/types/legal';
-
-/** False in the server render and until React has hydrated, true after: a native submit before then must do nothing. */
-const noopSubscribe = (): (() => void) => () => {};
-function useHydrated(): boolean {
-  return useSyncExternalStore(noopSubscribe, () => true, () => false);
-}
+import { useHydrated } from '@/lib/client/useHydrated';
 
 interface Props {
   token: string;

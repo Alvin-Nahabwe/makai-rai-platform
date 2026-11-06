@@ -169,7 +169,7 @@ export function FindingActions(p: FindingActionsProps): ReactElement {
         {accept}
         {p.canReopen ? (
           open === 'reopen' ? (
-            <form onSubmit={(e) => { e.preventDefault(); void submit('reopen'); }} noValidate>
+            <form method="post" onSubmit={(e) => { e.preventDefault(); void submit('reopen'); }} noValidate>
               <h3>Reopen this finding</h3>
               {reasonField}
               <div className="form-actions">

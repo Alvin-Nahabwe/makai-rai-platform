@@ -8,6 +8,7 @@ import { CopyLinkFallback } from '@/components/invitations/CopyLinkFallback';
 import { InlineConfirm } from '@/components/ui/InlineConfirm';
 import { EMAIL_FAILED, ERROR_STYLE, Field, HINT_STYLE, invitationRefusal, resentWords } from '@/components/admin/CreateOrganisationForm';
 import { MAX_REQUEST_REFERENCE } from '@/lib/admin/limits';
+import { useHydrated } from '@/lib/client/useHydrated';
 import { formatDay } from '@/lib/format/dates';
 import type { InvitationView, InviteMemberResponse } from '@/types/api';
 import type { InvitationState } from '@/types/record';
@@ -25,6 +26,40 @@ const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type Write = (url: string, body: Record<string, unknown> | null) => Promise<SendOutcome<InviteMemberResponse | undefined>>;
 
+export type IssueInvitationFormViewProps = {
+  formId: string; draft: { email: string; requestReference: string; showLink: boolean };
+  errors: { email?: string; requestReference?: string }; busy: boolean;
+  /** False until React has hydrated; the submit button is disabled till then (default true for a static render). */
+  hydrated?: boolean;
+  onDraft: (patch: Partial<{ email: string; requestReference: string; showLink: boolean }>) => void;
+  onSubmit: () => void; onCancel: () => void;
+};
+
+/** The form that issues a new first-owner invitation (FR-ORG-01 recovery). */
+export function IssueInvitationFormView(p: IssueInvitationFormViewProps): ReactElement {
+  return (
+    <form method="post" noValidate onSubmit={(e) => { e.preventDefault(); p.onSubmit(); }}>
+      <Field id={`${p.formId}-email`} label="New first owner's email" error={p.errors.email}>
+        {(a) => <input id={a.id} name="email" type="email" required autoComplete="off" spellCheck={false} value={p.draft.email}
+          aria-describedby={a.describedBy} aria-invalid={a.invalid} onChange={(e) => p.onDraft({ email: e.target.value })} />}
+      </Field>
+      <Field id={`${p.formId}-requestReference`} label="Reference of the controller's written request" error={p.errors.requestReference}>
+        {(a) => <input id={a.id} name="requestReference" type="text" required maxLength={MAX_REQUEST_REFERENCE} autoComplete="off" value={p.draft.requestReference}
+          aria-describedby={a.describedBy} aria-invalid={a.invalid} onChange={(e) => p.onDraft({ requestReference: e.target.value })} />}
+      </Field>
+      <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', marginBottom: 'var(--space-5)' }}>
+        <input id={`${p.formId}-issue-show`} type="checkbox" checked={p.draft.showLink} onChange={(e) => p.onDraft({ showLink: e.target.checked })} />
+        <label htmlFor={`${p.formId}-issue-show`}>Show link</label>
+      </div>
+      <div className="form-actions">
+        <button type="submit" className="btn btn--primary" disabled={p.hydrated === false} aria-disabled={p.busy || undefined}>Issue invitation</button>
+        <button type="button" className="btn btn--secondary" onClick={p.onCancel}>Cancel</button>
+      </div>
+      {Object.keys(p.errors).length > 0 ? <p style={ERROR_STYLE}>Check the fields marked above.</p> : null}
+    </form>
+  );
+}
+
 /**
  * S-24's first-owner invitation box (FR-ORG-02, FR-ACC-10; W-10 note 3). Every first-owner invitation with its state;
  * Resend (a new link, the old one stops working) and Revoke for the pending one; "Issue a new first-owner invitation"
@@ -37,6 +72,7 @@ export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, archive
 }): ReactElement {
   const router = useRouter();
   const formId = useId();
+  const hydrated = useHydrated();
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
   const [issued, setIssued] = useState<InviteMemberResponse | null>(null);
@@ -164,25 +200,9 @@ export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, archive
         <button type="button" className="btn btn--primary" onClick={() => setIssuing(true)}>Issue a new first-owner invitation</button>
       ) : null}
       {mayIssue && issuing ? (
-        <form noValidate onSubmit={(e) => { e.preventDefault(); void issue(); }}>
-          <Field id={`${formId}-email`} label="New first owner's email" error={errors.email}>
-            {(a) => <input id={a.id} name="email" type="email" required autoComplete="off" spellCheck={false} value={draft.email}
-              aria-describedby={a.describedBy} aria-invalid={a.invalid} onChange={(e) => setDraft((d) => ({ ...d, email: e.target.value }))} />}
-          </Field>
-          <Field id={`${formId}-requestReference`} label="Reference of the controller's written request" error={errors.requestReference}>
-            {(a) => <input id={a.id} name="requestReference" type="text" required maxLength={MAX_REQUEST_REFERENCE} autoComplete="off" value={draft.requestReference}
-              aria-describedby={a.describedBy} aria-invalid={a.invalid} onChange={(e) => setDraft((d) => ({ ...d, requestReference: e.target.value }))} />}
-          </Field>
-          <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', marginBottom: 'var(--space-5)' }}>
-            <input id={`${formId}-issue-show`} type="checkbox" checked={draft.showLink} onChange={(e) => setDraft((d) => ({ ...d, showLink: e.target.checked }))} />
-            <label htmlFor={`${formId}-issue-show`}>Show link</label>
-          </div>
-          <div className="form-actions">
-            <button type="submit" className="btn btn--primary" aria-disabled={busy || undefined}>Issue invitation</button>
-            <button type="button" className="btn btn--secondary" onClick={() => { setIssuing(false); setErrors({}); }}>Cancel</button>
-          </div>
-          {Object.keys(errors).length > 0 ? <p style={ERROR_STYLE}>Check the fields marked above.</p> : null}
-        </form>
+        <IssueInvitationFormView formId={formId} draft={draft} errors={errors} busy={busy} hydrated={hydrated}
+          onDraft={(patch) => setDraft((d) => ({ ...d, ...patch }))} onSubmit={() => { void issue(); }}
+          onCancel={() => { setIssuing(false); setErrors({}); }} />
       ) : null}
     </section>
   );

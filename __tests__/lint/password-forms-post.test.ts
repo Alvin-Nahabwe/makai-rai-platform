@@ -5,17 +5,20 @@ import { expect, it } from 'vitest';
 /**
  * NFR-SEC password-in-URL (unit FIXPW). A `<form>` with no `method` submits as GET. If a person presses Sign in before
  * React has hydrated, the browser then sends `GET /login?email=...&password=...`, and the password reaches history,
- * the address bar, any later Referer and the nginx access log. Every form in a file that has a password input names
- * `method="post"`, so an early native submit sends a body to the page's own URL instead.
+ * the address bar, any later Referer and the nginx error log. Two rules: every `<form>` or `<Form>` under app and
+ * components names an explicit `method`, so GET is a visible choice (components/decision/StageQuestionList.tsx's search
+ * form is one); and every form in a file with a password input names `method="post"`, so an early native submit sends a
+ * body to the page's own URL instead.
  */
 
 const PASSWORD_INPUT = /type=["']password["']|['"]password['"]\s*\}|autoComplete=["'](?:current|new)-password["']/;
 const POST = /\smethod=["']post["']/i;
+const ANY_METHOD = /\smethod=/i;
 
 /** The opening tags `<form ...>` of a source text; a `>` that closes an arrow (`=>`) does not end the tag. */
 export function formOpeningTags(src: string): string[] {
   const tags: string[] = [];
-  for (const m of src.matchAll(/<form(?=[\s>])/g)) {
+  for (const m of src.matchAll(/<[Ff]orm(?=[\s>])/g)) {
     let i = (m.index ?? 0) + 5;
     let braces = 0;
     for (; i < src.length; i++) {
@@ -27,6 +30,13 @@ export function formOpeningTags(src: string): string[] {
     tags.push(src.slice(m.index, i + 1));
   }
   return tags;
+}
+
+/** The `<form` tags (any file) with no explicit `method`: `file: tag`. */
+export function formsWithoutMethod(files: Record<string, string>): string[] {
+  const bad: string[] = [];
+  for (const [file, src] of Object.entries(files)) for (const tag of formOpeningTags(src)) if (!ANY_METHOD.test(tag)) bad.push(`${file}: ${tag}`);
+  return bad.sort();
 }
 
 /** The `<form` tags that lack `method="post"`, in files that hold a password input: `file: tag`. */
@@ -54,6 +64,10 @@ it('NFR-SEC: every form in a file with a password input names method="post" (no 
   expect(passwordFormsWithoutPost(all)).toEqual([]);
 });
 
+it('NFR-SEC: every form under app and components names an explicit method', () => {
+  expect(formsWithoutMethod(sources(['app', 'components']))).toEqual([]);
+});
+
 it('NFR-SEC (harness): flags a bare form, a GET form and an arrow-handler form; accepts method="post"', () => {
   const pw = '<input type="password" />';
   expect(passwordFormsWithoutPost({ 'a.tsx': `<form onSubmit={v.onSubmit}>${pw}` })).toHaveLength(1);
@@ -62,4 +76,8 @@ it('NFR-SEC (harness): flags a bare form, a GET form and an arrow-handler form; 
   expect(passwordFormsWithoutPost({ 'a.tsx': `<form method="post" onSubmit={(e) => go(e)}>${pw}` })).toEqual([]);
   expect(passwordFormsWithoutPost({ 'a.tsx': `<form onSubmit={x}><input autoComplete="new-password" />` })).toHaveLength(1);
   expect(passwordFormsWithoutPost({ 'a.tsx': '<form onSubmit={x}><input type="text" />' })).toEqual([]);
+  expect(formsWithoutMethod({ 'a.tsx': '<form onSubmit={x}>' })).toHaveLength(1);
+  expect(formsWithoutMethod({ 'a.tsx': '<Form action="/x">' })).toHaveLength(1);
+  expect(formsWithoutMethod({ 'a.tsx': '<form method="get" aria-label="s">' })).toEqual([]);
+  expect(formsWithoutMethod({ 'a.tsx': '<FormField id="x" />' })).toEqual([]);
 });

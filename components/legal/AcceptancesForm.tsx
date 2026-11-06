@@ -187,7 +187,7 @@ export function AcceptancesFormView(p: AcceptancesFormViewProps) {
   const names = p.texts.map((t) => LEGAL_KIND_NAMES[acceptedKindOf(t)]);
   const legend = p.mode === 'offer' ? `A new version of the ${listOf(names)}` : 'Before you continue';
   return (
-    <form noValidate onSubmit={p.onSubmit} aria-describedby={p.errors.length > 0 ? 'acceptances-errors' : undefined}>
+    <form method="post" noValidate onSubmit={p.onSubmit} aria-describedby={p.errors.length > 0 ? 'acceptances-errors' : undefined}>
       {p.errors.length > 0 && (
         <div id="acceptances-errors" role="alert" className="auth-error">
           <ul style={{ margin: 0, paddingLeft: 'var(--space-4)' }}>

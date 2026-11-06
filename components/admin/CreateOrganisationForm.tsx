@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { requestIdFor, sendWrite, type RetryState, type SendOutcome } from '@/lib/client/retrySafeWrite';
 import { CopyLinkFallback } from '@/components/invitations/CopyLinkFallback';
 import { formatDay } from '@/lib/format/dates';
+import { useHydrated } from '@/lib/client/useHydrated';
 import type { AgreementInput, CreateOrganisationResponse, InviteMemberResponse } from '@/types/api';
 import type { CalendarDate, FieldError } from '@/types/record';
 
@@ -215,6 +216,8 @@ export function AgreementFields({ prefix, draft, errors, versions, onChange }: {
 export type CreateOrganisationFormViewProps = {
   draft: CreateDraft; errors: FieldErrors; versions: readonly AgreementVersionOption[];
   status: string; busy: boolean; result: CreateResult | null;
+  /** False until React has hydrated; the submit button is disabled till then (default true for a static render). */
+  hydrated?: boolean;
   onChange: (patch: Partial<CreateDraft>) => void; onSubmit: () => void; onRetry: () => void;
   /** Route 45 with Show link, offered by the link box when the email failed and no link was shown. */
   onResendWithLink?: () => void;
@@ -244,7 +247,7 @@ export function CreateOrganisationFormView(p: CreateOrganisationFormViewProps): 
           <p><Link href={`/admin/organisations/${encodeURIComponent(created.orgId)}`} prefetch={false}>Open the organisation</Link></p>
         </>
       ) : (
-        <form noValidate onSubmit={(e) => { e.preventDefault(); p.onSubmit(); }}>
+        <form method="post" noValidate onSubmit={(e) => { e.preventDefault(); p.onSubmit(); }}>
           <Field id={`${formId}-name`} label="Organisation name"
             hint="Create one organisation for each team whose members may read each other's records. An institution with several teams gets one organisation for each."
             error={p.errors.name}>
@@ -261,7 +264,7 @@ export function CreateOrganisationFormView(p: CreateOrganisationFormViewProps): 
             <label htmlFor={`${formId}-show`}>Show link (to send it yourself if the email does not arrive)</label>
           </div>
           <p>Creating the organisation also records the agreement and sends an invitation to the first owner. If any part does not go through, nothing is created.</p>
-          <button type="submit" className="btn btn--primary" aria-disabled={p.busy || undefined}>Create organisation and send invitation</button>
+          <button type="submit" className="btn btn--primary" disabled={p.hydrated === false} aria-disabled={p.busy || undefined}>Create organisation and send invitation</button>
         </form>
       )}
     </div>
@@ -284,6 +287,7 @@ export function CreateOrganisationForm({ versions, today, send, resend }: {
   const [errors, setErrors] = useState<FieldErrors>({});
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
+  const hydrated = useHydrated();
   const [result, setResult] = useState<CreateResult | null>(null);
   const lastBody = useRef<Record<string, unknown> | null>(null);
   const resendRetry = useRef(new Map<string, RetryState>());
@@ -347,7 +351,7 @@ export function CreateOrganisationForm({ versions, today, send, resend }: {
   }
 
   return (
-    <CreateOrganisationFormView draft={draft} errors={errors} versions={versions} status={status} busy={busy} result={result}
+    <CreateOrganisationFormView draft={draft} errors={errors} versions={versions} status={status} busy={busy} hydrated={hydrated} result={result}
       onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))} onSubmit={submit}
       onRetry={() => { if (!busy && lastBody.current !== null) void run(lastBody.current); }}
       onResendWithLink={() => { void resendWithLink(); }} />

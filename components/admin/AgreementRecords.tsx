@@ -91,7 +91,7 @@ export function AgreementRecords({ orgId, agreements, versions, today, send }: {
           {agreements.length === 0 ? 'Record its agreement' : 'Record a newer agreement version'}
         </button>
       ) : (
-        <form noValidate onSubmit={(e) => { e.preventDefault(); void submit(); }}>
+        <form method="post" noValidate onSubmit={(e) => { e.preventDefault(); void submit(); }}>
           <AgreementFields prefix={`${formId}-agreement`} draft={draft} errors={errors} versions={versions} onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))} />
           <div className="form-actions">
             <button type="submit" className="btn btn--primary" aria-disabled={busy || undefined}>Record agreement</button>

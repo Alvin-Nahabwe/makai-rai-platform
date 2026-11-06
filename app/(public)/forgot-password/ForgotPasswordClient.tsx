@@ -2,6 +2,7 @@
 
 import { useState, type CSSProperties, type FormEvent } from 'react';
 import { M21 } from '@/lib/http/messages';
+import { useHydrated } from '@/lib/client/useHydrated';
 
 const NOT_SENT = 'Not sent: the request did not reach the server. Check the connection and try again.';
 const SERVER_PROBLEM = 'Not sent: the server had a problem. Try again in a few minutes.';
@@ -31,6 +32,8 @@ export async function requestResetLink(fetchImpl: typeof fetch, email: string): 
 export interface ForgotPasswordViewProps {
   email: string;
   state: ForgotState;
+  /** False until React has hydrated; the submit button is disabled till then (default true for a static render). */
+  hydrated?: boolean;
   onEmail: (v: string) => void;
   onSubmit: (e: FormEvent<HTMLFormElement>) => void;
 }
@@ -41,11 +44,11 @@ export function ForgotPasswordView(v: ForgotPasswordViewProps) {
     <>
       {v.state.kind === 'sent' && <div className="auth-success" role="status">{M21}</div>}
       {v.state.kind === 'error' && <div className="auth-error" role="alert">{v.state.message}</div>}
-      <form onSubmit={v.onSubmit}>
+      <form method="post" onSubmit={v.onSubmit}>
         <label htmlFor="email">Email</label>
         <input id="email" name="email" type="email" required autoComplete="username" spellCheck={false}
           value={v.email} onChange={(e) => v.onEmail(e.currentTarget.value)} />
-        <button type="submit" className="btn-primary" disabled={v.state.kind === 'sending'} style={TARGET}>Send reset link</button>
+        <button type="submit" className="btn-primary" disabled={v.state.kind === 'sending' || v.hydrated === false} style={TARGET}>Send reset link</button>
       </form>
     </>
   );
@@ -55,10 +58,11 @@ export function ForgotPasswordView(v: ForgotPasswordViewProps) {
 export function ForgotPasswordClient() {
   const [email, setEmail] = useState('');
   const [state, setState] = useState<ForgotState>({ kind: 'idle' });
+  const hydrated = useHydrated();
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setState({ kind: 'sending' });
     setState(await requestResetLink(fetch, email));
   }
-  return <ForgotPasswordView email={email} state={state} onEmail={setEmail} onSubmit={onSubmit} />;
+  return <ForgotPasswordView email={email} state={state} hydrated={hydrated} onEmail={setEmail} onSubmit={onSubmit} />;
 }
