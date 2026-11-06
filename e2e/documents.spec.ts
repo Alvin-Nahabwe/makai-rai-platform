@@ -70,6 +70,19 @@ async function expectMainDoesNotScroll(page: Page): Promise<void> {
   expect(m.scroll, '.app-main scrollWidth').toBeLessThanOrEqual(m.client);
 }
 
+/**
+ * The pointer rests where the Issue button was, and the list item that Issue adds can appear under it. Its secondary buttons then run their
+ * 250 ms hover transition, and axe reads the colours half way through it. The pointer goes to the corner, and the check waits for every
+ * running transition to finish, so axe sees the colours the buttons settle on.
+ */
+async function settleHover(page: Page): Promise<void> {
+  await page.mouse.move(0, 0);
+  await page.evaluate(async () => {
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await Promise.all(document.getAnimations().map((a) => a.finished.catch(() => undefined)));
+  });
+}
+
 const issuedStatus = (page: Page) => page.getByRole('status').filter({ hasText: /^Issued\./ });
 
 test('FR-DOC-08 FR-DOC-04 FR-DOC-01 NFR-A11Y-02 NFR-A11Y-05 NFR-SEC-11: generate, preview and issue a data card with the keyboard alone', async ({ page, baseURL }) => {
@@ -124,6 +137,7 @@ test('FR-DOC-08 FR-DOC-04 FR-DOC-01 NFR-A11Y-02 NFR-A11Y-05 NFR-SEC-11: generate
   await expect(page.getByRole('heading', { name: "Uganda's AI protocol issues", level: 2 })).toBeVisible();
   await expect(page.locator('.uncst-table caption')).toBeVisible();
   await expect(page.locator('.uncst-table tbody tr')).toHaveCount(6);
+  await settleHover(page);
   await expectNoSeriousA11yViolations(page, 'S-18 issued');
 
   // The list after a reload: the SHA-256 shown is the one of the downloaded file (12.2 step 6).
@@ -155,6 +169,7 @@ test('FR-DOC-08 FR-DOC-04 FR-DOC-01 NFR-A11Y-02 NFR-A11Y-05 NFR-SEC-11: generate
         // One Issue per scheme: the issued state with a second document in the list, checked in this scheme and at this width.
         await page.getByRole('button', { name: 'Issue this document' }).click();
         await expect(issuedStatus(page)).toHaveText(/^Issued\./);
+        await settleHover(page);
         await expectNoSeriousA11yViolations(page, `S-18 issued, ${scheme}, ${width}`);
       }
     }
