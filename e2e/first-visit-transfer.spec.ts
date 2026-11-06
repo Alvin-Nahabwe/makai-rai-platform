@@ -23,11 +23,11 @@ import type { PerfManifest } from '../scripts/load/seed-perf-fixture';
  * bodies-only figure are printed beside it. A background request to a shell link whose page is not built yet
  * (e2e/helpers/pendingLinks.ts) is aborted by the spec, as every networkidle spec does.
  *
- * Budgets as the owner ruled them (owner-questions.md, 4 Nov 23:13, 5 Nov 03:29 and 6 Nov): 220000 for every public page
- * with the fixture's plain names; S-04 with an accented organisation name (set in DM Serif, which then fetches its
- * latin_rest file) and an inviter name that mixes a Latin-1 letter with a common latin-ext letter is an ACCEPTED-RISK at
- * 236662 bytes measured direct to next start, and has its own case below. S-05 is not a public page (it renders only for
- * a signed-in account missing an acceptance); it is held to the public budget as a stricter check this spec sets itself.
+ * Budgets as the owner ruled them (owner-questions.md, decision of 6 Nov, verbatim "Production + 1 KB (Recommended)",
+ * which supersedes the earlier figures): 220000 for every public page with the fixture's plain names; S-04 with an
+ * accented organisation name (set in DM Serif, which then fetches its latin_rest file) and S-05 are accepted risks with
+ * their own limits, below (LIMITS). S-05 is not a public page (it renders only for a signed-in account missing an
+ * acceptance), so no SRS budget binds it; the owner's limit does.
  *
  * Run on the production build (`npm run build`, then Playwright with CI=1, which serves `next start`); a dev build's
  * bundles are not what ships. Each case first checks the page it landed on, so a redirect to /login cannot pass a
@@ -47,10 +47,20 @@ const PUBLIC_OWNER_IP = '10.47.0.4';
 /** Where a sign-in lands: the dashboard, or the organisation picker for an account with no last organisation. */
 const SIGNED_IN = /^\/(orgs\/[^/]+\/dashboard)?$/;
 
-/** The owner-accepted figure for S-04 with an accented organisation name and inviter (owner-questions.md, 6 Nov, "Accept both"). */
-const ACCENTED_INVITATION_CEILING = 236_662;
-/** The owner-accepted figure for S-05, recorded, not asserted (owner-questions.md, 6 Nov). */
-const S05_ACCEPTED = 220_428;
+/**
+ * The accepted-risk limits (owner-questions.md, decision of 6 Nov 2026, verbatim "Production + 1 KB (Recommended)").
+ * The production limits are the owner's: through nginx on HTTP/2, S-04 with an accented organisation name up to 243700 B
+ * (measured 242652 B) and S-05 up to 227800 B (measured 226715 B), each the production figure plus 1 KB for run-to-run
+ * spread. The nginx run (playwright.perf-nginx.config.ts, project `perf-nginx`) asserts them. CI's direct run to next
+ * start cannot pass through nginx, so it holds the same pages to the direct figures plus 1 KB, 237700 B and 221500 B, as a
+ * regression guard (the controller's implementation of the same ruling); those are not the owner's limits.
+ */
+const LIMITS = {
+  nginx: { s04Accented: 243_700, s05: 227_800 },     // the owner's production limits, through nginx on HTTP/2 (6 Nov)
+  direct: { s04Accented: 237_700, s05: 221_500 },    // regression guard for the direct run, the direct figures plus 1 KB (6 Nov)
+} as const;
+/** The limits for the run in progress: the nginx config's project, or any other (the direct run). */
+const limits = () => (test.info().project.name === 'perf-nginx' ? LIMITS.nginx : LIMITS.direct);
 
 type Measured = {
   landed: string; status: number; protocol: string; total: number; sizes: number; bodies: number; failed: string[];
@@ -170,8 +180,17 @@ async function signInAndSave(browser: Browser, baseURL: string, account: { email
   try {
     const page = await context.newPage();
     await page.goto('/login');
-    await page.getByLabel('Email').fill(account.email);
-    await page.getByLabel('Password').fill(account.password);
+    // The form is React-controlled and has no method: a press before hydration submits it natively, as a GET to /login
+    // with the fields in the query string (seen on the first sign-in after nginx started). Wait until the page is idle
+    // and the typed values survive, as e2e/helpers/session.ts's signInOnLoginPage does.
+    await page.waitForLoadState('networkidle');
+    await expect(async () => {
+      await page.getByLabel('Email').fill(account.email);
+      await page.getByLabel('Password').fill(account.password);
+      await page.waitForTimeout(300);
+      await expect(page.getByLabel('Email')).toHaveValue(account.email, { timeout: 100 });
+      await expect(page.getByLabel('Password')).toHaveValue(account.password, { timeout: 100 });
+    }).toPass({ timeout: 20_000 });
     await page.getByRole('button', { name: 'Sign in' }).click();
     try {
       await page.waitForURL((u) => landsOn.test(u.pathname), { timeout: 15_000 });   // inside the hook's time, so the reason below is reported
@@ -288,24 +307,22 @@ test.describe('the public budget', () => {
     expect(over, 'public pages over 220000 bytes').toEqual([]);
   });
 
-  test('NFR-PERF-02 (recorded, not the requirement): S-05, signed in without a v1 acceptance, is measured against the public budget', async ({ browser }) => {
-    // NFR-PERF-02 binds S-11, S-12 and the public pages; S-05 is a signed-in page, so no SRS budget binds its transfer
-    // (NFR-PERF-01's 160 KB first-load JavaScript does, scripts/measure_first_load.mjs). This case records S-05 against
-    // the public budget, because it is the first page a pre-v1 account sees, and fails only if the page did not render:
-    // a figure over 220000 is reported in the annotation and the log line, not as a failure (queue item, PERF note).
+  test('NFR-PERF-02 (ACCEPTED-RISK): S-05, signed in without a v1 acceptance, stays within the owner\'s limit on first visit', async ({ browser }) => {
+    // NFR-PERF-02 binds S-11, S-12 and the public pages; S-05 is a signed-in page, so the SRS gives it no transfer budget
+    // (NFR-PERF-01's 160 KB first-load JavaScript does, scripts/measure_first_load.mjs). The owner's ruling of 6 Nov
+    // ("Production + 1 KB (Recommended)") gives it one: 227800 B through nginx on HTTP/2; 221500 B on the direct run (LIMITS).
     const baseURL = test.info().project.use.baseURL!;
     const path = pathFor(S05);
     const m = await measure(browser, baseURL, path, acceptancesState);
-    report(path, m, PUBLIC_BUDGET);
+    const limit = limits().s05;
+    report(path, m, limit);
     expectRendered(m, path, path, path);
-    test.info().annotations.push({ type: 'S-05 against the public budget (recorded)', description:
-      `${m.total} B; ${m.total <= PUBLIC_BUDGET ? 'within 220000 B' : `${m.total - PUBLIC_BUDGET} B over 220000 B`}; `
-      + `the owner accepted ${S05_ACCEPTED} B measured direct (${m.total <= S05_ACCEPTED ? 'within it' : `${m.total - S05_ACCEPTED} B above it`})` });
+    expect(m.total, `${path} first-visit bytes against the ${test.info().project.name === 'perf-nginx' ? 'production limit' : 'direct-run guard'}`).toBeLessThanOrEqual(limit);
   });
 });
 
 test.describe('S-04 with accented names, against the accepted risk', () => {
-  test('NFR-PERF-02 (ACCEPTED-RISK, 236662 B): S-04 with an accented organisation name and a Latin-1 plus latin-ext inviter name', async ({ browser }) => {
+  test('NFR-PERF-02 (ACCEPTED-RISK): S-04 with an accented organisation name and a Latin-1 plus latin-ext inviter name stays within the owner\'s limit', async ({ browser }) => {
     test.setTimeout(120_000);
     const baseURL = test.info().project.use.baseURL!;
     // The owner's ruling names "José Nnaŋŋa" (U+00E9 from Latin-1, U+014B from the common latin-ext face); the organisation
@@ -323,10 +340,13 @@ test.describe('S-04 with accented names, against the accepted risk', () => {
       await owner.close();
     }
     const m = await measure(browser, baseURL, path);
-    report('/invitations/[token] (accented names)', m, ACCENTED_INVITATION_CEILING);
+    // The owner's ruling of 6 Nov ("Production + 1 KB (Recommended)"): 243700 B through nginx on HTTP/2; 237700 B on the
+    // direct run as a regression guard (LIMITS).
+    const limit = limits().s04Accented;
+    report('/invitations/[token] (accented names)', m, limit);
     expectRendered(m, path, path, '/invitations/[token] (accented names)');
     const page = `measured ${m.total} B: ${m.total <= PUBLIC_BUDGET ? 'within the 220000 B budget' : `${m.total - PUBLIC_BUDGET} B over the 220000 B budget`}`;
     test.info().annotations.push({ type: 'NFR-PERF-02 accepted risk', description: page });
-    expect(m.total, `${page}; the owner accepted at most ${ACCENTED_INVITATION_CEILING} B`).toBeLessThanOrEqual(ACCENTED_INVITATION_CEILING);
+    expect(m.total, `${page}; the limit for this run is ${limit} B`).toBeLessThanOrEqual(limit);
   });
 });
