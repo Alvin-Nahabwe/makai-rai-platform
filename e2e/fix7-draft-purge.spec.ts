@@ -131,3 +131,20 @@ test('NFR-PRIV-06 SPEC-1 SO-2 SFH-3: the invitation page\'s M-24 sign-out remove
   await expect(page.getByRole('heading', { name: 'Create your account' })).toBeVisible();
   expect(await draftKeys(page, viewer.userId)).toEqual([]);
 });
+
+test('NFR-PRIV-06 SO-3: Sign out everywhere on S-21 removes this account\'s drafts from this browser', async ({ browser }) => {
+  test.setTimeout(120_000);
+  const fx = await buildOrg({ label: 'e2efix7soe' });
+  const viewer = fx.members.viewer;
+  const page = await newPage(browser);
+  await signIn(page, viewer);
+  await page.goto('/account');
+  const key = `makrai.draft.v1:${viewer.userId}:${fx.org.id}:p:q:Q-PP-01`;
+  await page.evaluate((k) => localStorage.setItem(k, '{"reason":"secret"}'), key);
+  expect(await draftKeys(page, viewer.userId)).toEqual([key]);
+  await Promise.all([
+    page.waitForURL((url) => url.pathname === '/login'),
+    page.getByRole('button', { name: 'Sign out everywhere' }).click(),
+  ]);
+  expect(await draftKeys(page, viewer.userId)).toEqual([]);
+});
