@@ -5,7 +5,7 @@ import type { DocumentType } from '@/types/record';
 import type { IssuedDocumentView } from '@/types/api';
 import {
   GenerateDocumentForm, GenerateStatus, TypedGroup, NEVER_SEALED_LINE, NO_DOCUMENTS_LINE, NeverSealed, PreviewPane, generateReducer, issuedMessage, olderSealLine,
-  submitIssue, type GenerateState,
+  fromRecordLine, submitIssue, type GenerateState,
 } from '@/components/documents/GenerateDocumentForm';
 import { IssuedDocumentsList } from '@/components/documents/IssuedDocumentsList';
 import { ReviewDocumentsList } from '@/components/documents/ReviewDocumentsList';
@@ -13,6 +13,7 @@ import { typedToSend } from '@/lib/documents/generate';
 import { SLOW_MS, type SendOutcome, type sendWrite } from '@/lib/client/retrySafeWrite';
 import { SEALED_NOTE, STATEMENT, TYPED_MARK } from '@/lib/documents/copy';
 import { formatFingerprint } from '@/lib/seal/format';
+import { loadFieldMap } from '@/lib/documents/fieldMaps';
 import { HOSTILE_STRINGS } from '../helpers/hostile';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh() {} }) }));
@@ -45,6 +46,22 @@ const doc = (over: Partial<{ sealNumber: number; byteSize: number }> = {}): Issu
   seals: [{ sealId: 's', sealNumber: over.sealNumber ?? 1, reviewId: 'r', reviewName: 'Pre-processing review 1', fingerprint: SHA }], withdrawn: null, erased: null,
 });
 const decodeEntities = (s: string) => s.replace(/&#x27;/g, "'").replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
+
+describe('S-18 summary line', () => {
+  it('UX-20: a document that takes questions says how many fields come from how many questions; one that takes none says only the fields (data card, model card, mitigation plan)', () => {
+    expect(fromRecordLine({ fields: 35, questions: 20, notRecorded: 12 })).toBe('35 fields from 20 questions . 12 fields will read "Not recorded"');   // data card
+    expect(fromRecordLine({ fields: 31, questions: 18, notRecorded: 4 })).toBe('31 fields from 18 questions . 4 fields will read "Not recorded"');     // model card
+    expect(fromRecordLine({ fields: 10, questions: 0, notRecorded: 1 })).toBe('10 fields . 1 fields will read "Not recorded"');                          // mitigation plan
+  });
+
+  it('UX-20: the real maps agree: only the mitigation plan has no question source', () => {
+    const questions = (type: 'data_card' | 'model_card' | 'mitigation_plan') =>
+      new Set(loadFieldMap(type).fields.flatMap((e) => e.sources.flatMap((s) => (s.kind === 'record' || s.kind === 'record_option' ? [s.questionId] : [])))).size;
+    expect(questions('data_card')).toBeGreaterThan(0);
+    expect(questions('model_card')).toBeGreaterThan(0);
+    expect(questions('mitigation_plan')).toBe(0);
+  });
+});
 
 describe('S-18 form', () => {
   it.each([null, 'UNCST protocol submission', 'NeurIPS datasets track', 'publication'])(
