@@ -1094,7 +1094,8 @@ later runs until it is resolved. Seen in the rehearsal of 6 Nov 2026, on a copy 
 project in the seeded organisation: the first run stopped with `Error: P3018` and the organisation message, and no
 `20261030` migration had finished; a second run refused with `Error: P3009`; once the organisation had an owner again
 (simulated by archiving it in the copy), the `migrate resolve` line below printed `Migration
-20261030000000_v060_00_owner_check marked as rolled back.` and the next run applied all 37. Do not run 8.3 step 5:
+20261030000000_v060_00_owner_check marked as rolled back.` and the next run applied the 15 v0.6.0 migrations (37
+recorded). Do not run 8.3 step 5:
 the v0.5.0 app keeps serving, and the correction is made on v0.5.0, where nothing of v0.6.0 has run:
 
 - For the organisation message, promote an existing member of that organisation, who is not the
