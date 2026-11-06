@@ -159,6 +159,7 @@ const SELFTEST_PAGES: Record<string, { status?: number; links?: string[]; redire
   [`${SELFTEST}/pending/not-built`]: { status: 404 },
   [`${SELFTEST}/pending-alive/`]: { links: [`${SELFTEST}/pending-alive/built`] },
   [`${SELFTEST}/pending-alive/built`]: {},
+  [`${SELFTEST}/late/`]: { links: [`${SELFTEST}/patterns/about`, ...questionLinks] },
   [`${SELFTEST}/redirect/home`]: { links: [1, 2, 3].map((i) => `${SELFTEST}/redirect/item/${i}`) },
   [`${SELFTEST}/redirect/item/1`]: { redirect: `${SELFTEST}/redirect/home` },
   [`${SELFTEST}/redirect/item/2`]: { links: [`${SELFTEST}/redirect/leaf`] },
@@ -236,13 +237,13 @@ test('FR-RM-01 (helper): a redirect from a pattern\'s first link does not hide t
 });
 
 test('FR-RM-01 (helper): the cap fails only for patterns the crawl has not seen', async ({ page }) => {
-  // 30 question links of one pattern and /patterns/about, max 3: the crawl visits the start page, q/1 and about; the 29 questions
-  // still queued are a pattern it has seen, so it does not throw.
+  // /late/ links to /patterns/about first and then 30 questions of one pattern, max 3: the crawl visits the start page, about and
+  // q/1 and reaches the cap while q/2..q/30 are still queued. They are a pattern it has seen, so it does not throw. (With the
+  // questions listed before about, the skip on dequeue would use them up before the cap and the old check would pass too.)
+  // The cap case that must throw is the one above: five distinct patterns, max 3.
   await serveSelftestPages(page);
-  expect(await sameOriginPages(page, `${SELFTEST}/patterns/`, { max: 3, label: 'selftest' })).toEqual([
-    `${SELFTEST}/patterns/`, `${SELFTEST}/patterns/q/1`, `${SELFTEST}/patterns/about`]);
-  // Five distinct patterns, max 3: still throws and names the first unvisited paths.
-  await expect(sameOriginPages(page, `${SELFTEST}/cap/`, { max: 3, label: 'selftest' })).rejects.toThrow(/page-c.*page-d.*page-e/);
+  expect(await sameOriginPages(page, `${SELFTEST}/late/`, { max: 3, label: 'selftest' })).toEqual([
+    `${SELFTEST}/late/`, `${SELFTEST}/patterns/about`, `${SELFTEST}/patterns/q/1`]);
 });
 
 test('FR-RM-01 (helper): unreached names the must-reach entries no crawled page matches, for a seat with a membership and for one without', () => {
