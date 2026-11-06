@@ -92,18 +92,25 @@ export function withUnavailableStamp(client: PrismaClient): PrismaClient {
 }
 
 /**
- * One `console.error` of `{ event: 'REQUEST_FAILED', reference, status, code, cause, at }`.
+ * One `console.error` of `{ event: 'REQUEST_FAILED', reference, status, code, cause, error, at }`.
  *
  * `cause` is written only when `status` is 503 and `code` is `database_unavailable`, so a pool exhaustion
  * (`TooManyConnections`) can be told from an outage (`ECONNREFUSED`), and only when it is one of the thirteen
  * names above; any other value is left out of the line rather than written. For any other status or code the
  * key is absent even when a caller passes one.
+ *
+ * `error` (the class name, a code and code locations of the thrown value, never its message) is written only for an
+ * unmapped 500, `status` 500 with `code` `internal_error`, so the bug stays visible in the one line that carries the
+ * reference (NFR-OBS-05, NFR-PRIV-03). For any other status or code the key is absent.
  */
-export function logRequestFailure(a: { reference: string; status: number; code: string; cause?: string }): void {
-  const line: Record<string, string | number> = { event: 'REQUEST_FAILED', reference: a.reference, status: a.status, code: a.code };
+export function logRequestFailure(
+  a: { reference: string; status: number; code: string; cause?: string; error?: { name: string; code?: string; frames: string[] } },
+): void {
+  const line: Record<string, unknown> = { event: 'REQUEST_FAILED', reference: a.reference, status: a.status, code: a.code };
   if (a.status === 503 && a.code === 'database_unavailable' && a.cause !== undefined && CAUSES.has(a.cause)) {
     line.cause = a.cause;
   }
+  if (a.status === 500 && a.code === 'internal_error' && a.error !== undefined) line.error = a.error;
   line.at = new Date().toISOString();
   console.error(JSON.stringify(line));
 }

@@ -13,22 +13,31 @@ const CLASS_NAME = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 const ERROR_CODE = /^(P\d{4}|[A-Z][A-Z0-9_]{1,40})$/;
 const FRAME = /^\s+at /;
 
+/** What the REQUEST_FAILED line of an unmapped 500 says about the error (lib/http/supportReference.ts). */
+type UnmappedErrorInfo = { name: string; code?: string; frames: string[] };
+
 /**
- * One `console.error` of `{ event: 'UNMAPPED_ERROR', reference, name, code?, frames, at }` for an error nothing
- * mapped. `name` is the constructor's name when it is a plain identifier, else `typeof e`; `code` only when it is
- * a Prisma or errno-shaped string; `frames` the first ten stack lines that start with `at`, through
- * `redactEmails`. Never the message, `String(e)` or the stack's first line.
+ * `name` is the constructor's name when it is a plain identifier, else `typeof e`; `code` only when it is a Prisma or
+ * errno-shaped string; `frames` the first ten stack lines that start with `at`, read only from the part of the stack
+ * after the message (a multi-line message can hold a line that starts with `at`), through `redactEmails`. Never the
+ * message, `String(e)` or the stack's first line. A logger must not throw from inside the failure it reports (the
+ * thrown value may be an object whose getters throw), so a failed read answers `{ name: typeof e, frames: [] }`.
  */
-function logUnmappedError(e: unknown, reference: string): void {
-  const ctorName = isObject(e) && typeof e.constructor?.name === 'string' ? e.constructor.name : '';
-  const line: Record<string, unknown> = {
-    event: 'UNMAPPED_ERROR', reference, name: CLASS_NAME.test(ctorName) ? ctorName : typeof e,
-  };
-  if (isObject(e) && typeof e.code === 'string' && ERROR_CODE.test(e.code)) line.code = e.code;
-  const stack = isObject(e) && typeof e.stack === 'string' ? e.stack : '';
-  line.frames = stack.split('\n').filter((l) => FRAME.test(l)).slice(0, 10).map((l) => redactEmails(l.trim()));
-  line.at = new Date().toISOString();
-  console.error(JSON.stringify(line));
+function describeUnmappedError(e: unknown): UnmappedErrorInfo {
+  try {
+    const ctorName = isObject(e) && typeof e.constructor?.name === 'string' ? e.constructor.name : '';
+    const info: UnmappedErrorInfo = { name: CLASS_NAME.test(ctorName) ? ctorName : typeof e, frames: [] };
+    if (isObject(e) && typeof e.code === 'string' && ERROR_CODE.test(e.code)) info.code = e.code;
+    const stack = isObject(e) && typeof e.stack === 'string' ? e.stack : '';
+    const message = isObject(e) ? String(e.message ?? '') : '';
+    const head = `${isObject(e) ? String(e.name) : ''}: ${message}`;
+    const afterMessage = stack.startsWith(head) ? stack.slice(head.length).split('\n') : stack.split('\n').slice(message.split('\n').length);
+    info.frames = afterMessage.filter((l) => FRAME.test(l)).slice(0, 10).map((l) => redactEmails(l.trim()));
+    return info;
+  } catch {
+    // The values read here are the thrown object's own; one that throws on read still gets its answer and its line.
+    return { name: typeof e, frames: [] };
+  }
 }
 
 function isObject(v: unknown): v is Record<string, unknown> {
@@ -67,10 +76,10 @@ function unavailableCause(e: unknown): string | undefined {
  * of these is NOT this function's to interpret, so it is never laundered into
  * a 4xx (AGENTS.md §2: investigate a failure, don't paper over it with a broad
  * catch). It is a bug, and it answers 500 `internal_error` with a support
- * reference. The error is printed with `console.error` first, as Next printed
- * it when this function rethrew it, so the bug stays visible; it is printed
- * before it is stamped with the reference, so the reference is in exactly one
- * log line (C4 round 1 item 14).
+ * reference. The bug stays visible in the same single REQUEST_FAILED line,
+ * which carries the error's class name, code and code locations, never its
+ * message (a Prisma message can carry argument values; NFR-PRIV-03), so the
+ * reference is in exactly one log line (NFR-OBS-05).
  *
  * `NotFoundError` carries no detail by construction (lib/data/tenant.ts) —
  * "unknown slug" and "not a member" are indistinguishable here on purpose
@@ -122,11 +131,10 @@ export function toResponse(e: unknown): NextResponse {
       { status: 503 },
     );
   }
-  // Neither mapped nor an outage: a bug. Log its class, code and code locations under the reference, never its
-  // message (a Prisma message can carry argument values), then answer with the reference.
+  // Neither mapped nor an outage: a bug. Its class, code and code locations go into the one log line under the
+  // reference, never its message (a Prisma message can carry argument values), then the answer carries the reference.
   const reference = stampReference(e);
-  logUnmappedError(e, reference);
-  logRequestFailure({ reference, status: 500, code: 'internal_error' });
+  logRequestFailure({ reference, status: 500, code: 'internal_error', error: describeUnmappedError(e) });
   const body: ApiErrorBody = { error: 'internal_error', code: 'internal_error', message: 'internal_error', reference };
   return NextResponse.json(body, { status: 500 });
 }

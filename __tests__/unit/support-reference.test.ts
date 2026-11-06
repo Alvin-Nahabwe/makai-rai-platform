@@ -201,25 +201,50 @@ it('NFR-OBS-05 (round 9c): the reference is put after the spread of extra, so no
   expect(await answer(new AppError(500, 'real', 'real message', { error: 'x', code: 'x' } as never))).toMatchObject({ body: { error: 'real message', code: 'real' } });
 });
 
-it('NFR-PRIV-03 NFR-OBS-01 FIX-8: a planted email in an unmapped error is not in the log', async () => {
+/** The one REQUEST_FAILED line an unmapped error writes, parsed; the reference is in this line and no other. */
+function failedLine(lines: string[], reference: unknown): { error: { name: string; code?: string; frames: string[] } } & Record<string, unknown> {
+  const hits = loggedFor(lines, reference);
+  expect(hits, 'the reference is in exactly one log line').toHaveLength(1);
+  return JSON.parse(hits[0]);
+}
+
+it('NFR-PRIV-03 NFR-OBS-01 NFR-OBS-05 SPEC-2 CR-2: a planted email in an unmapped error is not in the log, and the class and frames are in the one line', async () => {
   const { body, lines } = await answer(new Error('lookup failed for planted@b.org with reason secret reason text'));
   expect(scanLines(lines, { markers: true, emails: true })).toEqual([]);
   expect(lines.join('\n')).not.toContain('secret reason');
-  const hits = lines.filter((l) => l.includes('UNMAPPED_ERROR'));
-  expect(hits).toHaveLength(1);
-  const line = JSON.parse(hits[0]);
-  expect(line).toMatchObject({ event: 'UNMAPPED_ERROR', reference: body.reference, name: 'Error' });
-  expect(line.frames.length).toBeGreaterThan(0);
-  expect(line.frames.length).toBeLessThanOrEqual(10);
-  expect('code' in line).toBe(false);
+  expect(lines.some((l) => l.includes('UNMAPPED_ERROR'))).toBe(false);
+  const line = failedLine(lines, body.reference);
+  expect(line).toMatchObject({ event: 'REQUEST_FAILED', status: 500, code: 'internal_error', reference: body.reference, error: { name: 'Error' } });
+  expect(line.error.frames.length).toBeGreaterThan(0);
+  expect(line.error.frames.length).toBeLessThanOrEqual(10);
+  expect('code' in line.error).toBe(false);
 });
 
-it('NFR-PRIV-03 NFR-OBS-01 FIX-8: a Prisma-shaped unmapped error logs its code and not its address', async () => {
-  const { lines } = await answer(Object.assign(new Error('Unique constraint failed on x@y.org'), { code: 'P2002' }));
+it('NFR-PRIV-03 NFR-OBS-01 SPEC-2: a Prisma-shaped unmapped error logs its code and not its address', async () => {
+  const { body, lines } = await answer(Object.assign(new Error('Unique constraint failed on x@y.org'), { code: 'P2002' }));
   expect(scanLines(lines, { markers: true, emails: true })).toEqual([]);
-  const line = JSON.parse(lines.find((l) => l.includes('UNMAPPED_ERROR')) as string);
-  expect(line.code).toBe('P2002');
+  expect(failedLine(lines, body.reference).error.code).toBe('P2002');
   expect(lines.join('\n')).not.toContain('@y.org');
+});
+
+it('NFR-PRIV-03 CR-3 SFH-6: a second message line that starts with "at" is not read as a frame', async () => {
+  for (const message of ['lookup failed\n    at secret reason', 'first\nsecond\n    at secret reason of the third line']) {
+    const { body, lines } = await answer(new Error(message));
+    expect(lines.join('\n'), message).not.toContain('secret reason');
+    expect(failedLine(lines, body.reference).error.frames.length, message).toBeGreaterThan(0);
+  }
+});
+
+it('NFR-OBS-05 CR-4: a thrown object whose properties throw on read still answers 500 with a reference', async () => {
+  const hostile = {
+    get constructor(): never { throw new Error('constructor getter'); },
+    get code(): never { throw new Error('code getter'); },
+    get stack(): never { throw new Error('stack getter'); },
+  };
+  const { status, body, lines } = await answer(hostile);
+  expect(status).toBe(500);
+  expect(body).toMatchObject({ code: 'internal_error', reference: expect.stringMatching(REFERENCE) });
+  expect(failedLine(lines, body.reference).error).toEqual({ name: 'object', frames: [] });
 });
 
 it('NFR-OBS-05: a reference is eight lowercase hexadecimal characters, a new one each time', () => {
@@ -234,20 +259,16 @@ it('NFR-MNT-01 NFR-OBS-05: any other thrown value answers 500 internal_error wit
     expect(status, String(thrown)).toBe(500);
     expect(body, String(thrown)).toMatchObject({ code: 'internal_error', message: 'internal_error', error: 'internal_error', reference: expect.stringMatching(REFERENCE) });
     expect(Object.keys(body).sort(), String(thrown)).toEqual(['code', 'error', 'message', 'reference']);
-    // The reference is in two lines: the REQUEST_FAILED line and the UNMAPPED_ERROR line, one each, by event.
+    // The reference is in exactly one line (NFR-OBS-05): the REQUEST_FAILED line, which also carries the class and frames.
     const hits = loggedFor(lines, body.reference);
-    expect(hits, String(thrown)).toHaveLength(2);
-    const byEvent = (event: string) => hits.filter((l) => JSON.parse(l).event === event);
-    expect(byEvent('REQUEST_FAILED'), String(thrown)).toHaveLength(1);
-    expect(byEvent('UNMAPPED_ERROR'), String(thrown)).toHaveLength(1);
-    const failed = byEvent('REQUEST_FAILED')[0];
+    expect(hits, String(thrown)).toHaveLength(1);
+    const failed = hits[0];
     expect(JSON.parse(failed)).toMatchObject({ event: 'REQUEST_FAILED', status: 500, code: 'internal_error', reference: body.reference });
-    expect(Object.keys(JSON.parse(failed)).sort()).toEqual(['at', 'code', 'event', 'reference', 'status']); // no cause
-    expect(lines.length, String(thrown)).toBeGreaterThan(1); // the error's own line is there as well
+    expect(Object.keys(JSON.parse(failed)).sort()).toEqual(['at', 'code', 'error', 'event', 'reference', 'status']); // no cause
   }
   // The bug stays visible in the log by its class name and a frame, not by its message; the body has no message either.
   const { body, lines } = await answer(new Error('the bug: a record had no owner'));
-  const unmapped = JSON.parse(lines.find((l) => l.includes('UNMAPPED_ERROR')) as string);
+  const unmapped = failedLine(lines, body.reference).error;
   expect(unmapped.name).toBe('Error');
   expect(unmapped.frames.length).toBeGreaterThan(0);
   expect(lines.some((l) => l.includes('the bug: a record had no owner'))).toBe(false);
