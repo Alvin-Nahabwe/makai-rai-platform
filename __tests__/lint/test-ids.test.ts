@@ -101,7 +101,7 @@ function idsNamedByTests(roots: readonly string[]): Set<string> {
  * them (controller ruling on FIX-4, 7 Nov 2026). An entry without both fields, an id that is not MUST, or an id a test
  * title already names fails `the ids verified outside tests are each named with their proof`.
  */
-export const VERIFIED_OUTSIDE_TESTS: Readonly<Record<string, { verifiedBy: string; artefact: string }>> = {
+const VERIFIED_OUTSIDE_TESTS: Readonly<Record<string, { verifiedBy: string; artefact: string }>> = {
   'NFR-AVL-01': {
     verifiedBy: "the uptime monitor's monthly report, read by the owner.", // SRS line 3238
     artefact: 'the external uptime monitor\'s monthly report on /api/health and the sign-in page (docs/runbooks/deployment.md:509-517)',
@@ -143,8 +143,9 @@ it('NFR-MNT-03: the requirement list has 170 MUST ids (102 FR, 68 NFR) and 14 SH
 });
 
 it('NFR-MNT-03 FIX-4: the ids verified outside tests are each named with their proof', () => {
-  // The four MUST ids whose SRS "Verified by" is a report, a job or the owner (SRS lines 2987, 3131, 3238, 3366).
-  for (const id of ['NFR-AVL-01', 'NFR-OBS-03', 'NFR-REL-01', 'NFR-SEC-16']) expect(Object.keys(VERIFIED_OUTSIDE_TESTS)).toContain(id);
+  // Exactly the four MUST ids whose SRS "Verified by" is a report, a job or the owner (SRS lines 2987, 3131, 3238, 3366):
+  // a fifth cannot be added with a made-up "Verified by" line without changing this list, in review (SFH-2, SI-1).
+  expect(Object.keys(VERIFIED_OUTSIDE_TESTS).sort()).toEqual(['NFR-AVL-01', 'NFR-OBS-03', 'NFR-REL-01', 'NFR-SEC-16']);
   const named = idsNamedByTests(['__tests__', 'e2e']);
   for (const [id, e] of Object.entries(VERIFIED_OUTSIDE_TESTS)) {
     expect(IDS.must, `${id} is not a MUST id`).toContain(id);
