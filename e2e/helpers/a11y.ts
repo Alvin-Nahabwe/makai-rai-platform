@@ -40,3 +40,21 @@ export async function expectNoSeriousA11yViolations(page: Page, state: string): 
   const lines = blocking.map((b) => `- ${b.id} (${b.impact}): ${b.help}; at ${b.targets.slice(0, 5).join(' | ')}${b.targets.length > 5 ? ` and ${b.targets.length - 5} more` : ''}`);
   throw new Error(`${state}: ${blocking.length} serious or critical accessibility violation(s)\n${lines.join('\n')}`);
 }
+
+/**
+ * Call before an axe check that follows a click. The pointer rests where the click was, so a button that appears under it (a new list item) or
+ * a control that reacts to hover starts a CSS transition, and axe reads the colours half way through it. The pointer goes to the corner and the
+ * check waits for the CSS transitions that are running, at most `timeoutMs` (a transition that never ends is a defect the check should report,
+ * not a hang), so axe sees the colours the controls settle on.
+ */
+export async function settleHover(page: Page, timeoutMs = 2000): Promise<void> {
+  await page.mouse.move(0, 0);
+  await page.evaluate(async (limit) => {
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const running = document.getAnimations().filter((a) => a instanceof CSSTransition);
+    await Promise.race([
+      Promise.all(running.map((a) => a.finished.catch(() => undefined))),
+      new Promise((resolve) => setTimeout(resolve, limit)),
+    ]);
+  }, timeoutMs);
+}

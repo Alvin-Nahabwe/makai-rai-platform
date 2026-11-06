@@ -1,11 +1,12 @@
 import 'dotenv/config';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { expect, request as pwRequest, test, type Locator, type Page } from '@playwright/test';
+import { expect, request as pwRequest, test } from '@playwright/test';
 import type { OrgRole } from '@prisma/client';
 import { testDb } from '../__tests__/helpers/db';
-import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
-import { expectNoSeriousA11yViolations } from './helpers/a11y';
+import { expectNoSeriousA11yViolations, settleHover } from './helpers/a11y';
+import { expectMainDoesNotScroll, org, seat, signIn, tabTo } from './helpers/s18';
+import { formatUtcDay } from '../lib/documents/copy';
 import { failOnDialog } from './helpers/dialogs';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { expectNoHorizontalScroll } from './helpers/reflow';
@@ -15,21 +16,7 @@ import { expectNoHorizontalScroll } from './helpers/reflow';
  * alone. The fixture organisation of e2e/fixtures/manifest.ts; the data card is issued through the real route as the admin seat
  * (DOC-a's flow is `documents.spec.ts`), and the owner seat withdraws it on the screen.
  */
-const manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8')) as FixtureManifest;
-const org = manifest.orgs[0];
 const REASON = 'Sent to the wrong committee.';
-
-function seat(role: OrgRole) {
-  const s = manifest.users.find((u) => u.orgSlug === org.slug && u.role === role && u.index === 0);
-  if (!s) throw new Error(`the fixture manifest has no ${role} seat for ${org.slug}`);
-  return s;
-}
-
-async function signIn(page: Page, role: OrgRole): Promise<void> {
-  await page.context().clearCookies();
-  const state = JSON.parse(readFileSync(seat(role).storageStatePath, 'utf8')) as { cookies: Array<{ name: string; value: string; domain: string; path: string }> };
-  await page.context().addCookies(state.cookies);
-}
 
 async function api<T>(baseURL: string, role: OrgRole, path: string, data: Record<string, unknown>): Promise<T> {
   const ctx = await pwRequest.newContext({ baseURL, storageState: seat(role).storageStatePath });
@@ -58,25 +45,6 @@ async function issuedCard(baseURL: string): Promise<{ projectId: string; reviewI
   return { projectId: p.id, reviewId: r.id, documentId: d.id };
 }
 
-/** Presses Tab until `target` has focus (keyboard only, NFR-A11Y-02), failing after 120 presses. */
-async function tabTo(page: Page, target: Locator): Promise<void> {
-  for (let i = 0; i < 120; i++) {
-    if (await target.evaluate((el) => el === document.activeElement).catch(() => false)) return;
-    await page.keyboard.press('Tab');
-  }
-  throw new Error('tabTo: the target never took focus');
-}
-
-async function expectMainDoesNotScroll(page: Page): Promise<void> {
-  const m = await page.evaluate(() => { const el = document.querySelector('.app-main') as HTMLElement; return { scroll: el.scrollWidth, client: el.clientWidth }; });
-  expect(m.scroll, '.app-main scrollWidth').toBeLessThanOrEqual(m.client);
-}
-
-const printed = (iso: string) => {
-  const d = new Date(iso);
-  return `${d.getUTCDate()} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()]} ${d.getUTCFullYear()}`;
-};
-
 test('FR-DOC-06 FR-DOC-07 UX-29 NFR-A11Y-02 NFR-A11Y-05: copy and withdraw a document with the keyboard alone', async ({ page, context, baseURL }) => {
   test.setTimeout(240_000);
   failOnDialog(page);
@@ -94,7 +62,7 @@ test('FR-DOC-06 FR-DOC-07 UX-29 NFR-A11Y-02 NFR-A11Y-05: copy and withdraw a doc
   await page.keyboard.press('Enter');
   await expect(page.getByRole('status').filter({ hasText: 'Copied.' })).toBeVisible();
   const clip = await page.evaluate(() => navigator.clipboard.readText());
-  expect(clip.split('\n')[0]).toBe(`Copy of the data card issued on ${printed(row.issuedAt.toISOString())}; the PDF is the issued version`);
+  expect(clip.split('\n')[0]).toBe(`Copy of the data card issued on ${formatUtcDay(row.issuedAt.toISOString())}; the PDF is the issued version`);
   expect(clip).toContain('Data card');
 
   // Withdraw: the confirmation opens in place, takes focus, and reads M-36 for this data card and today's UTC day.
@@ -105,9 +73,9 @@ test('FR-DOC-06 FR-DOC-07 UX-29 NFR-A11Y-02 NFR-A11Y-05: copy and withdraw a doc
   const confirm = page.locator('[data-inline-confirm]');
   await expect(confirm.getByLabel('Reason (required)')).toBeFocused();
   await expectFocusVisibleAndUncovered(page);
-  const today = printed(new Date().toISOString());
+  const today = formatUtcDay(new Date().toISOString());
   await expect(confirm).toContainText(`Withdraw data card? It will show 'Withdrawn by the team on ${today}'. The document stays stored.`);
-  await expect(confirm).toContainText(`Data card issued ${printed(row.issuedAt.toISOString())}`);
+  await expect(confirm).toContainText(`Data card issued ${formatUtcDay(row.issuedAt.toISOString())}`);
   await expect(confirm.getByRole('button', { name: 'Withdraw document' })).toBeDisabled();
   expect(await testDb.documentEvent.count({ where: { documentId } })).toBe(0);
 
@@ -124,6 +92,7 @@ test('FR-DOC-06 FR-DOC-07 UX-29 NFR-A11Y-02 NFR-A11Y-05: copy and withdraw a doc
       await page.setViewportSize({ width, height: 800 });
       await page.goto(s18);
       await page.getByRole('button', { name: 'Withdraw document' }).click();
+      await settleHover(page);
       await expectNoSeriousA11yViolations(page, `S-18 confirm, ${scheme}, ${width}`);
     }
   }
