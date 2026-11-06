@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars -- stub bodies keep the contract's parameter names; the producers replace the file's bodies. */
 import type { OrgRole, Prisma } from '@prisma/client';
 import { createHash, randomBytes } from 'node:crypto';
 import { assertCan, NotFoundError, withOrg, type OrgContext, type TenantTx } from '@/lib/data/tenant';
@@ -27,7 +26,7 @@ import { eatDate, isOverdue } from '@/lib/followup/overdue';
 import { manifestIds } from '@/lib/seal/ids';
 import { stageReviewName } from '@/lib/seal/reviewName';
 import { SEAL_SOURCE_SQL, checkSealRows, trustedManifest, type SealSourceRows, type TombstoneRow } from '@/lib/integrity/sealCheck.mjs';
-import { ERASABLE_FIELDS, ETHICS_STATES, METADATA_KEYS, MSG_SEAL_CHECK_FAILED } from '@/lib/documents/copy';
+import { ERASABLE_FIELDS, ETHICS_STATES, METADATA_KEYS, MSG_SEAL_CHECK_FAILED, formatUtcDay } from '@/lib/documents/copy';
 import { readStageRows } from '@/lib/seal/manifest';
 import type { DocumentSnapshot, SealedDecision, SealedFinding, SealedStage } from '@/lib/documents/resolve';
 
@@ -845,7 +844,27 @@ export async function withdrawDocument(
   return out;
 }
 
-// CONTRACT_STUB: DOC-b
+const TYPE_WORDS: Readonly<Record<DocumentType, string>> = { data_card: 'data card', model_card: 'model card', mitigation_plan: 'mitigation plan' };
+
+/** FR-DOC-07's marking, the first line of every copy (SRS line 1055; the date as 7.5.8 prints it, in UTC). */
+export const textCopyMarking = (type: DocumentType, issuedAt: Date): string =>
+  `Copy of the ${TYPE_WORDS[type]} issued on ${formatUtcDay(issuedAt.toISOString())}; the PDF is the issued version`;
+
+/**
+ * Route 18 (FR-DOC-07): the plain-text copy of an issued document, as the marking, a blank line, and the text stored at issue (never
+ * regenerated). A missing or foreign document is not found; a copy the operator erased with the document's bytes answers 410 with the date.
+ */
 export async function readDocumentText(ctx: OrgContext, documentId: string): Promise<string> {
-  throw new NotImplementedError('DOC-b');
+  const found = await withOrg(ctx, async (tx) => {
+    const row = await tx.issuedDocument.findUnique({ where: { id: documentId }, select: { documentType: true, issuedAt: true, plainText: true } });
+    if (row === null) return null;
+    const erasedOn = row.plainText === null ? ((await documentViews(tx, [documentId])).get(documentId)?.erased?.erasedOn ?? null) : null;
+    return { row, erasedOn };
+  });
+  if (found === null) throw new NotFoundError();
+  if (found.row.plainText === null) {
+    if (found.erasedOn === null) throw new Error(`documents: document ${documentId} has no text and no tombstone`);
+    throw new ErasedError(found.erasedOn);
+  }
+  return `${textCopyMarking(found.row.documentType as DocumentType, found.row.issuedAt)}\n\n${found.row.plainText}`;
 }
