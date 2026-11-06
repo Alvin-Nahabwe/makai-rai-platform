@@ -94,10 +94,36 @@ function idsNamedByTests(roots: readonly string[]): Set<string> {
   return named;
 }
 
-/** The MUST ids that no test title in `__tests__` or `e2e` names. */
+/**
+ * MUST ids the SRS verifies outside any test: by a report, a nightly job or the owner, never by a test title. Each entry
+ * carries the requirement's own "Verified by" line, verbatim from the SRS, and the artefact that holds the proof. They
+ * are kept out of the gate below, by name, instead of being written into the title of a test that proves only part of
+ * them (controller ruling on FIX-4, 7 Nov 2026). An entry without both fields, an id that is not MUST, or an id a test
+ * title already names fails `the ids verified outside tests are each named with their proof`.
+ */
+export const VERIFIED_OUTSIDE_TESTS: Readonly<Record<string, { verifiedBy: string; artefact: string }>> = {
+  'NFR-AVL-01': {
+    verifiedBy: "the uptime monitor's monthly report, read by the owner.", // SRS line 3238
+    artefact: 'the external uptime monitor\'s monthly report on /api/health and the sign-in page (docs/runbooks/deployment.md:509-517)',
+  },
+  'NFR-OBS-03': {
+    verifiedBy: "owner's post-deploy check the next morning (13.8 step 13).", // SRS line 3366
+    artefact: "the owner's post-deploy check: each of the seven checks reported at its first scheduled time after the deploy",
+  },
+  'NFR-REL-01': {
+    verifiedBy: 'existing nightly jobs and their dead-man checks; the restore-test log line each morning.', // SRS line 3131
+    artefact: 'the nightly backup, off-site copy and restore-test jobs, their dead-man checks, and /srv/makrai/restore-test.log',
+  },
+  'NFR-SEC-16': {
+    verifiedBy: 'the review report, read by the controller (AGENTS.md §1 C6).', // SRS line 2987
+    artefact: "SEC's whole-branch security review report of the release candidate (records/plans/2026-10-29-v1-plan/run/sec-report.md)",
+  },
+};
+
+/** The MUST ids that no test title in `__tests__` or `e2e` names, other than those verified outside tests. */
 function mustIdsWithoutTest(): string[] {
   const named = idsNamedByTests(['__tests__', 'e2e']);
-  return IDS.must.filter((id) => !named.has(id));
+  return IDS.must.filter((id) => !named.has(id) && !(id in VERIFIED_OUTSIDE_TESTS));
 }
 
 // ---- the cases ---------------------------------------------------------------------------------------------
@@ -114,6 +140,19 @@ it('NFR-MNT-03: the requirement list has 170 MUST ids (102 FR, 68 NFR) and 14 SH
   }
   expect(IDS.must.filter((id) => IDS.should.includes(id))).toEqual([]);
   expect(IDS.must).toContain('NFR-PERF-04'); // its block holds a table before its priority line (SRS line 3220)
+});
+
+it('NFR-MNT-03 FIX-4: the ids verified outside tests are each named with their proof', () => {
+  // The four MUST ids whose SRS "Verified by" is a report, a job or the owner (SRS lines 2987, 3131, 3238, 3366).
+  for (const id of ['NFR-AVL-01', 'NFR-OBS-03', 'NFR-REL-01', 'NFR-SEC-16']) expect(Object.keys(VERIFIED_OUTSIDE_TESTS)).toContain(id);
+  const named = idsNamedByTests(['__tests__', 'e2e']);
+  for (const [id, e] of Object.entries(VERIFIED_OUTSIDE_TESTS)) {
+    expect(IDS.must, `${id} is not a MUST id`).toContain(id);
+    expect(e.verifiedBy.trim(), `${id} has no "Verified by" line`).not.toBe('');
+    expect(e.artefact.trim(), `${id} names no artefact`).not.toBe('');
+    // A test title that names the id claims test coverage; then it does not belong here.
+    expect(named.has(id), `${id} is named by a test title and also listed as verified outside tests`).toBe(false);
+  }
 });
 
 it('NFR-MNT-03: every MUST id is named by a test title in __tests__ or e2e', () => {
