@@ -59,6 +59,13 @@ function declarations(body: string): Record<string, string> {
   return out;
 }
 
+/** The `property: value` declarations of a rule body. */
+function declarationsOf(body: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const m of body.matchAll(/(^|;|\s)([a-z-]+)\s*:\s*([^;]+);/g)) out[m[2]] = m[3].trim();
+  return out;
+}
+
 const ROOT = declarations(ruleFor(css, ':root'));
 const DARK_MEDIA = declarations(ruleFor(css, ":root:not([data-theme='light'])"));
 const DARK_ATTR = declarations(ruleFor(css, ":root[data-theme='dark']"));
@@ -219,6 +226,17 @@ const evidenceProps: EvidenceAttachProps = {
   onUpload: () => {},
   onDelete: () => {},
 };
+
+describe('buttons', () => {
+  it('UX-33 NFR-A11Y-05: a hovered secondary button reads the page colour on the text colour, and that pair is at least 4.5:1 in every theme', () => {
+    const hover = declarationsOf(ruleFor(css, '.btn--secondary:hover'));
+    expect(hover['background-color']).toBe('var(--text-primary)');
+    expect(hover['color']).toBe('var(--surface-base)');
+    for (const theme of THEMES) {
+      expect(contrast(theme, 'surface-base', 'text-primary'), theme).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+});
 
 describe('component defects', () => {
   it('UX-33 NFR-A11Y-05 (D-6): the stale-list notice is moderate-tint text on its tint, never the yellow risk colour', () => {
