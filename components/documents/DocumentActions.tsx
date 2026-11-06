@@ -3,9 +3,9 @@
 import { useEffect, useId, useRef, useState, type ReactElement } from 'react';
 import { useRouter } from 'next/navigation';
 import { InlineConfirm } from '@/components/ui/InlineConfirm';
-import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafeWrite';
+import { requestIdFor, sendWrite, type RetryState, type SendOutcome } from '@/lib/client/retrySafeWrite';
 import { DOCUMENT_TITLES, formatUtcDay } from '@/lib/documents/copy';
-import { MSG_ARCHIVED, MSG_SIGNED_OUT } from '@/lib/documents/generate';
+import { MSG_ARCHIVED } from '@/lib/documents/generate';
 import type { IssuedDocumentView } from '@/types/api';
 import type { CalendarDate, DocumentType } from '@/types/record';
 
@@ -17,10 +17,75 @@ const documentUrl = (orgSlug: string, id: string, leaf: 'text' | 'withdrawal') =
 /** The lines of this slot. The withdrawal question is M-36 as owner question B2's default (no code, no checking sentence); the rest are queued for the owner. */
 export const COPY_DONE = 'Copied.';
 export const COPY_LOST = 'Not copied: connection lost.';
+export const COPY_SIGNED_OUT = 'Not copied: you are signed out. Sign in again, then come back.';
+export const COPY_ERASED = "Not copied: this document's text was erased.";
+export const COPY_TOO_MANY = 'Not copied: too many requests. Wait a minute, then try again.';
+export const COPY_OTHER = 'Not copied. Reload the page and try again.';
 export const WITHDRAW_DONE = 'Withdrawn.';
+export const WITHDRAW_TAKEN = 'Not withdrawn by you: someone else withdrew it first. Their reason is shown.';
 export const WITHDRAW_LOST = 'Not withdrawn yet: no reply from the server. It may have arrived. Retry is safe: it will not withdraw twice.';   // M-06 pattern; the route replays on the request id
 export const WITHDRAW_OTHER = 'Not withdrawn. Reload the page and try again.';
-export const WITHDRAW_SIGNED_OUT = MSG_SIGNED_OUT.replace('Not generated', 'Not withdrawn').replace(' Nothing was issued.', '');
+export const WITHDRAW_SIGNED_OUT = 'Not withdrawn: you are signed out. Sign in again, then come back.';
+export const WITHDRAW_FORBIDDEN = 'Not withdrawn: your role in this organisation no longer allows this. Ask an owner or admin.';
+
+export type WithdrawResult = { kind: 'done' } | { kind: 'taken' } | { kind: 'failed'; line: string; retry: boolean };
+
+/**
+ * What a withdrawal's reply means for the person. A reply that does not say the withdrawal failed (no reply, a gateway page, a 5xx) may have
+ * landed, so it gets the M-06 line and a Retry that resends the same request id; "Nothing was changed" is not said for any of them.
+ */
+function withdrawResult(outcome: SendOutcome<unknown>): WithdrawResult {
+  if (outcome.kind === 'saved') return { kind: 'done' };
+  if (outcome.kind === 'not_saved') return { kind: 'failed', line: WITHDRAW_LOST, retry: true };
+  const { status, body } = outcome;
+  if (status >= 500) return { kind: 'failed', line: WITHDRAW_LOST, retry: true };
+  if (status === 409 && body.code === 'already_withdrawn') return { kind: 'taken' };
+  if (status === 409 && body.code === 'project_archived') return { kind: 'failed', line: MSG_ARCHIVED, retry: false };
+  if (status === 401) return { kind: 'failed', line: WITHDRAW_SIGNED_OUT, retry: false };
+  if (status === 403) return { kind: 'failed', line: WITHDRAW_FORBIDDEN, retry: false };
+  if (status === 422 && body.fields !== undefined && body.fields.length > 0) return { kind: 'failed', line: body.fields[0].message, retry: false };
+  return { kind: 'failed', line: WITHDRAW_OTHER, retry: false };
+}
+
+/** Sends one withdrawal with the request id `retry` calls for (the same id for an unchanged reason). Returns what it means and the state to keep. */
+export async function withdrawSend(a: { orgSlug: string; documentId: string; reason: string; retry: RetryState; fetchImpl?: typeof fetch }): Promise<{ result: WithdrawResult; retry: RetryState }> {
+  const body = { reason: a.reason };
+  const id = requestIdFor(a.retry, body);
+  const outcome = await sendWrite<IssuedDocumentView>(documentUrl(a.orgSlug, a.documentId, 'withdrawal'), 'POST', { ...body, requestId: id.requestId }, { onSlow: () => {}, fetchImpl: a.fetchImpl });
+  return { result: withdrawResult(outcome), retry: id.state };
+}
+
+export type CopyResult = { kind: 'copied' } | { kind: 'fallback'; text: string } | { kind: 'failed'; line: string; erased: boolean };
+
+/** Fetches route 18 and writes the text to the clipboard. A refusal names its cause; a clipboard that is missing or refuses gives the text for copying by hand. */
+export async function copyDocumentText(a: { orgSlug: string; documentId: string; fetchImpl?: typeof fetch; clipboard?: { writeText(text: string): Promise<void> } }): Promise<CopyResult> {
+  let res: Response;
+  try {
+    res = await (a.fetchImpl ?? fetch)(documentUrl(a.orgSlug, a.documentId, 'text'));
+  } catch {
+    return { kind: 'failed', line: COPY_LOST, erased: false };
+  }
+  if (!res.ok) {
+    if (res.status === 401) return { kind: 'failed', line: COPY_SIGNED_OUT, erased: false };
+    if (res.status === 410) return { kind: 'failed', line: COPY_ERASED, erased: true };
+    if (res.status === 429) return { kind: 'failed', line: COPY_TOO_MANY, erased: false };
+    return { kind: 'failed', line: COPY_OTHER, erased: false };
+  }
+  let text: string;
+  try {
+    text = await res.text();
+  } catch {
+    return { kind: 'failed', line: COPY_LOST, erased: false };   // the body did not arrive
+  }
+  try {
+    if (a.clipboard === undefined) throw new Error('no clipboard');
+    await a.clipboard.writeText(text);
+    return { kind: 'copied' };
+  } catch {
+    // No clipboard on this page, or the browser refused: the text is shown for copying by hand.
+    return { kind: 'fallback', text };
+  }
+}
 
 /** M-36: what withdrawing says it will do. `today` is the UTC day of the withdrawal (documents print UTC, SRS 5.3 item 5). */
 export const withdrawText = (type: DocumentType, today: CalendarDate): string =>
@@ -50,7 +115,7 @@ export function CopyFallback({ text }: { text: string }): ReactElement {
  * The reason is sent once per unchanged text, with one request id (a Retry resends it, UX-27).
  */
 export function WithdrawConfirm(p: {
-  orgSlug: string; document: IssuedDocumentView; reason?: string; today: CalendarDate; onDone: () => void; onCancel: () => void;
+  orgSlug: string; document: IssuedDocumentView; reason?: string; today: CalendarDate; onDone: (how: 'done' | 'taken') => void; onCancel: () => void;
 }): ReactElement {
   const [reason, setReason] = useState(p.reason ?? '');
   const [busy, setBusy] = useState(false);
@@ -61,22 +126,13 @@ export function WithdrawConfirm(p: {
   useEffect(() => { box.current?.focus(); }, []);
 
   async function send(): Promise<void> {
-    const body = { reason };
-    const id = requestIdFor(retry, body);
-    setRetry(id.state);
     setBusy(true);
     setFailure('');
-    const outcome = await sendWrite<IssuedDocumentView>(documentUrl(p.orgSlug, p.document.id, 'withdrawal'), 'POST', { ...body, requestId: id.requestId }, { onSlow: () => {} });
+    const out = await withdrawSend({ orgSlug: p.orgSlug, documentId: p.document.id, reason, retry });
     setBusy(false);
-    if (outcome.kind === 'saved') { p.onDone(); return; }
-    if (outcome.kind === 'not_saved') { setFailure(WITHDRAW_LOST); setCanRetry(true); return; }
-    const { status, body: error } = outcome;
-    setCanRetry(status >= 500);
-    if (status === 409 && error.code === 'already_withdrawn') { p.onDone(); return; }   // someone else withdrew it first; the list shows their reason
-    if (status === 409 && error.code === 'project_archived') setFailure(MSG_ARCHIVED);
-    else if (status === 401) setFailure(WITHDRAW_SIGNED_OUT);
-    else if (status === 422 && error.fields !== undefined && error.fields.length > 0) setFailure(error.fields[0].message);
-    else setFailure(WITHDRAW_OTHER);
+    setRetry(out.retry);
+    if (out.result.kind === 'failed') { setFailure(out.result.line); setCanRetry(out.result.retry); return; }
+    p.onDone(out.result.kind);
   }
 
   return (
@@ -113,6 +169,7 @@ export function DocumentActions(p: DocumentActionsProps): ReactElement {
   const [status, setStatus] = useState('');
   const [alert, setAlert] = useState('');
   const [fallback, setFallback] = useState<string | null>(null);
+  const [copying, setCopying] = useState(false);
   const [open, setOpen] = useState(false);
   const [today, setToday] = useState<CalendarDate>('');
   const trigger = useRef<HTMLButtonElement | null>(null);
@@ -129,21 +186,14 @@ export function DocumentActions(p: DocumentActionsProps): ReactElement {
     setStatus('');
     setAlert('');
     setFallback(null);
-    let text: string;
-    try {
-      const res = await fetch(documentUrl(p.orgSlug, p.document.id, 'text'));
-      if (!res.ok) throw new Error(`text route answered ${res.status}`);
-      text = await res.text();
-    } catch {
-      setAlert(COPY_LOST);
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(text);
-      setStatus(COPY_DONE);
-    } catch {
-      // No clipboard on this page, or the browser refused: the text is shown for copying by hand.
-      setFallback(text);
+    setCopying(true);
+    const out = await copyDocumentText({ orgSlug: p.orgSlug, documentId: p.document.id, clipboard: typeof navigator === 'undefined' ? undefined : navigator.clipboard });
+    setCopying(false);
+    if (out.kind === 'copied') setStatus(COPY_DONE);
+    else if (out.kind === 'fallback') setFallback(out.text);
+    else {
+      setAlert(out.line);
+      if (out.erased) router.refresh();   // the list then shows the document as erased and drops this button
     }
   }
 
@@ -153,12 +203,12 @@ export function DocumentActions(p: DocumentActionsProps): ReactElement {
       {open ? (
         <WithdrawConfirm
           orgSlug={p.orgSlug} document={p.document} today={today}
-          onDone={() => { done.current = true; setOpen(false); setStatus(WITHDRAW_DONE); router.refresh(); }}
+          onDone={(how) => { done.current = true; setOpen(false); setStatus(how === 'done' ? WITHDRAW_DONE : WITHDRAW_TAKEN); router.refresh(); }}
           onCancel={() => setOpen(false)}
         />
       ) : (
         <div className="form-actions">
-          {p.document.erased === null ? <button type="button" ref={copyButton} className="btn btn--secondary" onClick={() => { void copy(); }}>Copy as text</button> : null}
+          {p.document.erased === null ? <button type="button" ref={copyButton} className="btn btn--secondary" disabled={copying} onClick={() => { void copy(); }}>Copy as text</button> : null}
           {canWithdraw ? <button type="button" ref={trigger} className="btn btn--secondary" onClick={() => { setToday(new Date().toISOString().slice(0, 10)); setStatus(''); setOpen(true); }}>Withdraw document</button> : null}
         </div>
       )}
