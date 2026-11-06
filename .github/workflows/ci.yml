@@ -433,8 +433,8 @@ jobs:
     # v0.6.0 the job's normal run is about 26.5 min (run 42181650736), and
     # run 42184836682 was cancelled at 30 min in its last step with every
     # test step passing, after a 2-minute browser install; the install step
-    # may now retry for up to 17 min.
-    timeout-minutes: 50
+    # may now retry for up to 35 min.
+    timeout-minutes: 65
 
     # Mirrors `verify`'s env block above (job-level env is not inherited
     # across jobs in GitHub Actions, so this cannot simply reference it) plus
@@ -613,11 +613,25 @@ jobs:
         run: node scripts/check-standalone.mjs test-results/build.log
 
       - name: Install Playwright browsers
-        # This step has hung a job for 30 minutes on the runner's network: each attempt is bounded, three are made (the step cap sits above the whole loop), and the
-        # final check fails the step if Playwright's own Chromium (the browser every CI project uses) is not on disk.
-        timeout-minutes: 17
+        # Every CI project is Desktop Chrome (playwright.config.ts), so only Chromium and its OS packages are installed.
+        # This step has hung a job for 30 minutes on the runner's network, so each attempt is bounded and three are made.
+        # The OS packages go first, with timeout itself run as root: Playwright's own installer starts apt-get as root,
+        # which a timeout run as the runner user cannot stop (run 42184836682: the cut-off apt-get kept the dpkg lock and
+        # both retries failed on it). Before a retry the step waits for the lock and repairs a half-done install. The
+        # browser download needs no root. The final check fails the step if Playwright's Chromium is not on disk; the step
+        # cap sits above the whole loop.
+        timeout-minutes: 35
         run: |
-          for i in 1 2 3; do timeout 300 npx playwright install --with-deps && break; echo "retry $i"; sleep 10; done
+          deps=no
+          for i in 1 2 3; do
+            sudo env "PATH=$PATH" timeout -k 15 420 ./node_modules/.bin/playwright install-deps chromium && { deps=yes; break; }
+            echo "retry deps $i"
+            for j in $(seq 1 24); do sudo fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock >/dev/null 2>&1 || break; sleep 5; done
+            sudo dpkg --configure -a || true
+            sleep 10
+          done
+          if [ "$deps" != yes ]; then echo "Chromium OS packages not installed after 3 attempts"; exit 1; fi
+          for i in 1 2 3; do timeout 240 npx playwright install chromium && break; echo "retry browser $i"; sleep 10; done
           node -e "const p = require('@playwright/test').chromium.executablePath(); if (!require('fs').existsSync(p)) { console.error('Playwright Chromium missing: ' + p); process.exit(1); }"
 
       - name: Build e2e fixture (Playwright 'setup' project)
