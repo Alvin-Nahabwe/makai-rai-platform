@@ -11,7 +11,8 @@
 --     project, A-6);
 --   - consent rows at version 1.0 with an IP address, 192.0.2.10 (a documentation address), for both new accounts, the
 --     rows v0.6.0's makrai_clear_consent_ip_addresses() clears (deployment.md 9.5);
---   - one expired invitation to the synthetic organisation.
+--   - one invitation to the synthetic organisation that has expired, held as v0.5.0 holds it: status 'pending' with an
+--     expiry in the past (v0.5.0 never writes 'expired'; v0.6.0's data migration does, which this row exercises).
 -- password_hash is the bcrypt hash of a password the run generates and keeps out of every file; the two new accounts
 -- share it, so the rehearsal can sign them in. It refuses to run twice: the synthetic organisation's slug is unique.
 -- It prints the counts of each part, then the totals, as its check.
@@ -42,7 +43,7 @@ from users u, (values ('terms_of_service'), ('privacy_policy')) t(kind)
 where u.email in ('synthetic-owner@example.test', 'seeded-assessor@example.test');
 
 insert into invitations (id, "orgId", email, role, status, "invitedById", "expiresAt", "tokenHash")
-select gen_random_uuid()::text, o.id, 'expired-invitee@example.test', 'viewer', 'expired', u.id, now() - interval '30 days',
+select gen_random_uuid()::text, o.id, 'expired-invitee@example.test', 'viewer', 'pending', u.id, now() - interval '30 days',
        encode(sha256(gen_random_uuid()::text::bytea), 'hex')
 from organizations o, users u where o.slug = :'synthetic_slug' and u.email = 'synthetic-owner@example.test';
 
@@ -57,6 +58,6 @@ select 'seeded_org_owners=' || count(*) from memberships m join users a on a.id 
 select 'seeded_org_assessors=' || count(*) from memberships m join users u on u.id = m."userId"
   where u.email = 'seeded-assessor@example.test' and m.role = 'assessor';
 select 'consent_with_ip=' || count(*) from consent_records where "ipAddress" = '192.0.2.10';
-select 'expired_invitations=' || count(*) from invitations where status = 'expired';
+select 'pending_past_expiry=' || count(*) from invitations where status = 'pending' and "expiresAt" < now();
 select 'projects=' || count(*) from projects;
 select 'non_example_test_emails=' || count(*) from users where email not like '%@example.test';
