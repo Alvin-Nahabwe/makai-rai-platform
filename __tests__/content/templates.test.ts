@@ -14,6 +14,7 @@
  * same rule runs over the real files and over hostile fixtures (the last
  * describe in this file): a rule that cannot fail would pass every template.
  */
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -565,5 +566,47 @@ describe('review findings, SRS 10.4.2', () => {
   it('TC-4: C-19 and C-17 sections follow the data card and model card maps', () => {
     expect(norm(h2s(templateHtml('C-19')))).toEqual(mapSections('data_card'));
     expect(norm(h2s(templateHtml('C-17')))).toEqual(mapSections('model_card'));
+  });
+});
+
+describe('review records, FR-SUG-06', () => {
+  type Entry = { controlId: string; file: string; kind: string; bytes: number; sha256: string;
+    review: { reviewer: string; date: string; outcome: string } };
+  const entries = (JSON.parse(readFileSync(path.join(ROOT, 'data/resources.json'), 'utf8')) as { templates: Entry[] }).templates;
+  const onDisk = (e: Entry) => path.join(ROOT, 'public', e.file);
+
+  it('FR-SUG-06 TC-7: every file in the templates folder has a passed entry, and C-11 is absent until reviewed', () => {
+    const files = readdirSync(SERVED_DIR).sort();
+    const passed = entries.filter((e) => e.review.outcome === 'passed').map((e) => e.file.replace('/templates/', '')).sort();
+    expect(files).toEqual(passed);
+    if (!entries.some((e) => e.controlId === 'C-11' && e.review.outcome === 'passed')) {
+      expect(existsSync(path.join(SERVED_DIR, 'C-11_informed-consent.html'))).toBe(false);
+      expect(existsSync(path.join(HELD_DIR, 'C-11_informed-consent.html'))).toBe(true);
+    }
+  });
+
+  it("FR-SUG-06 TC-7: each template entry's bytes and sha256 equal the file", () => {
+    for (const e of entries) {
+      const b = readFileSync(onDisk(e));
+      expect(e.bytes, e.file).toBe(b.length);
+      expect(e.sha256, e.file).toBe(createHash('sha256').update(b).digest('hex'));
+    }
+  });
+
+  it('FR-CNT-05: template entries name a control, kind web page, and a /templates/ path', () => {
+    for (const e of entries) {
+      expect(e.controlId, e.file).toMatch(/^C-\d{2}$/);
+      expect(e.kind, e.file).toBe('web page');
+      expect(e.file).toMatch(/^\/templates\/[A-Za-z0-9._-]+\.html$/);
+      expect(e.sha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(e.review.reviewer).toBe('Product owner, MAK-AI');
+    }
+  });
+
+  it('FR-SUG-06: no control links a template that is not served', () => {
+    const areas = readFileSync(path.join(ROOT, 'data/assessmentAreas.json'), 'utf8');
+    const served = new Set(entries.filter((e) => e.review.outcome === 'passed').map((e) => e.file));
+    for (const m of areas.matchAll(/"template":\s*"([^"]+)"/g)) expect(served.has(m[1]), m[1]).toBe(true);
+    expect(areas).not.toContain('C-11_informed-consent');
   });
 });
