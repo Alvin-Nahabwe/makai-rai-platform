@@ -13,7 +13,10 @@ export const test = base.extend<{ loopbackRefusals: void }, { loopbackGuard: voi
     async ({ playwright }, use) => {
       const restore = await installLoopbackGuard(playwright.request);
       await use();
+      // A refusal in an afterAll hook or in worker teardown has no test left to fail: report it here, after restoring.
+      const left = takeRefusals();
       restore();
+      if (left.length > 0) throw new Error(`Node-side requests were refused after the last test:\n${left.join('\n')}`);
     },
     { scope: 'worker', auto: true },
   ],
