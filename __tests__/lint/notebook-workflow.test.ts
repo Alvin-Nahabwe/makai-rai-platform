@@ -16,17 +16,21 @@ const SCRIPT = 'scripts/notebooks/run_notebooks.py';
 const roots: string[] = [];
 afterAll(() => { for (const r of roots) rmSync(r, { recursive: true, force: true }); });
 
-function tempRoot(o: { released: Array<{ file: string; bytes: string }> }): string {
+function tempRoot(o: { released: Array<{ file: string; bytes: string; source?: string | false }>; releasedFlag?: unknown }): string {
   const root = mkdtempSync(join(tmpdir(), 'nbjob-'));
   roots.push(root);
   const notebooks = o.released.map((n) => {
     const path = join(root, 'public', n.file);
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, n.bytes);
+    if (n.source !== false) {
+      mkdirSync(join(root, 'notebooks/technical'), { recursive: true });
+      writeFileSync(join(root, 'notebooks/technical', n.file.split('/').pop()!), n.source ?? n.bytes);
+    }
     return {
       controlId: 'C-13', file: n.file, requirementsFile: '/notebooks/requirements.txt', bytes: n.bytes.length,
       sha256: createHash('sha256').update(n.bytes).digest('hex'),
-      review: { reviewer: 'r', date: '2026-10-31', outcome: 'passed' }, released: true,
+      review: { reviewer: 'r', date: '2026-10-31', outcome: 'passed' }, released: o.releasedFlag ?? true,
     };
   });
   mkdirSync(join(root, 'data'), { recursive: true });
@@ -74,6 +78,43 @@ describe('notebook workflow and executor', () => {
     expect(r.stdout + r.stderr).toContain('/notebooks/C-13_x.ipynb');
   });
 
+  it('FR-SUG-07: a released notebook with no source, or with a source that differs, fails and names the file', () => {
+    const none = run(tempRoot({ released: [{ file: '/notebooks/C-13_x.ipynb', bytes: '{"cells":[]}', source: false }] }));
+    expect(none.status).toBe(1);
+    expect(none.stdout + none.stderr).toContain('/notebooks/C-13_x.ipynb');
+    expect(none.stdout + none.stderr).toContain('no source');
+    const differs = run(tempRoot({ released: [{ file: '/notebooks/C-13_x.ipynb', bytes: '{"cells":[]}', source: '{"cells":[1]}' }] }));
+    expect(differs.status).toBe(1);
+    expect(differs.stdout + differs.stderr).toContain('differs from the released copy');
+  });
+
+  it('FR-SUG-07 NFR-SEC-11: a released flag that is not true or false, or a file outside the notebook pattern, fails', () => {
+    const flag = run(tempRoot({ released: [{ file: '/notebooks/C-13_x.ipynb', bytes: '{}' }], releasedFlag: 'true' }));
+    expect(flag.status).toBe(1);
+    expect(flag.stderr).toContain('released is not true or false');
+    const odd = run(tempRoot({ released: [{ file: '/notebooks/sub/C-13_x.ipynb', bytes: '{}' }] }));
+    expect(odd.status).toBe(1);
+    expect(odd.stderr).toContain('no usable file');
+  });
+
+  it('FR-SUG-07 NB-AC-08: a source with a skip-execution or raises-exception cell, or with only optional cells, is refused before nbclient', () => {
+    const cell = (tags: string[], cell_type = 'code') => ({ cell_type, metadata: { tags }, source: 'pass' });
+    for (const [label, cells, message] of [
+      ['skip-execution', [cell(['skip-execution'])], 'skip-execution'],
+      ['raises-exception', [cell([]), cell(['raises-exception'])], 'raises-exception'],
+      ['only optional', [cell(['optional']), cell([], 'markdown')], 'no code cell left'],
+    ] as const) {
+      const root = tempRoot({ released: [] });
+      mkdirSync(join(root, 'notebooks/technical'), { recursive: true });
+      writeFileSync(join(root, 'notebooks/technical/C-13_x.ipynb'), JSON.stringify({ cells }));
+      const r = py(['--root', root]);
+      expect(r.status, label).toBe(1);
+      expect(r.stderr, label).toContain(message);
+      expect(r.stderr, label).toContain('C-13_x.ipynb');
+      expect(r.stderr, label).not.toContain('ModuleNotFoundError');   // nbclient is not imported yet
+    }
+  });
+
   it('FR-SUG-07: with no released notebook and no source the job passes and says so', () => {
     const r = py(['--root', tempRoot({ released: [] })]);
     expect(r.status).toBe(0);
@@ -87,6 +128,10 @@ describe('notebook workflow and executor', () => {
       expect(a.status, name).toBe(1);
       expect(a.stdout + a.stderr, name).toContain(name);
     }
+    // A trailing newline matches a `$` pattern; only a full match is a file name.
+    const nl = py(['--root', root, '--only', 'C-13_x.ipynb\n']);
+    expect(nl.status).toBe(1);
+    expect(nl.stderr).toContain('is not a notebook file name');
     const b = py(['--root', root, '--out', join(root, 'notebooks/technical')]);
     expect(b.status).toBe(1);
   });

@@ -19,8 +19,12 @@ import re
 import sys
 from pathlib import Path
 
-ONLY_NAME = re.compile(r"^[A-Za-z0-9._-]+\.ipynb$")
+ONLY_NAME = re.compile(r"[A-Za-z0-9._-]+\.ipynb")
+RELEASED_FILE = re.compile(r"/notebooks/[A-Za-z0-9._-]+\.ipynb")
 CELL_TIMEOUT_SECONDS = 600
+# nbclient skips a cell tagged skip-execution and lets one tagged raises-exception fail without stopping. Only `optional`
+# may be left out (NB-AC-08), so a notebook that uses either tag is refused instead of reported as passed.
+REFUSED_TAGS = ("skip-execution", "raises-exception")
 
 
 def fail(message: str) -> "None":
@@ -42,11 +46,16 @@ def check_released(root: Path) -> int:
         entries = resources["notebooks"]
     except (ValueError, KeyError, TypeError) as err:
         fail(f"{resources_path} is not a resources file: {err!r}")
-    released = [n for n in entries if n.get("released") is True]
+    released = []
+    for n in entries:
+        if not isinstance(n.get("released"), bool):
+            fail(f"a notebook entry's released is not true or false: {n!r}")
+        if n["released"]:
+            released.append(n)
     for n in released:
         file = n.get("file")
         expected = n.get("sha256")
-        if not isinstance(file, str) or not file.startswith("/notebooks/") or not isinstance(expected, str):
+        if not isinstance(file, str) or not RELEASED_FILE.fullmatch(file) or not isinstance(expected, str):
             fail(f"a released entry has no usable file or sha256: {n!r}")
         served = root / "public" / file.lstrip("/")
         if not served.is_file():
@@ -54,20 +63,49 @@ def check_released(root: Path) -> int:
         actual = sha256_of(served)
         if actual != expected:
             fail(f"{file} sha256 is {actual}, the resources file says {expected}")
-        print(f"{file} sha256={actual} matches")
+        # The job runs the sources, so a released copy only counts as run when its source is the same bytes (FR-SUG-07).
+        source = root / "notebooks" / "technical" / Path(file).name
+        if not source.is_file():
+            fail(f"{file} is released but has no source {source}, so no run covers it")
+        if sha256_of(source) != expected:
+            fail(f"{file} is released but its source {source} differs from the released copy")
+        print(f"{file} sha256={actual} matches its source")
     return len(released)
 
 
+def preflight(source: Path) -> int:
+    """Refuses a source nbclient would let through unrun; returns how many `optional` cells are left out of the run."""
+    try:
+        cells = json.loads(source.read_text(encoding="utf8"))["cells"]
+    except (ValueError, KeyError, TypeError) as err:
+        fail(f"{source.name} is not a notebook: {err!r}")
+    optional = 0
+    code_cells = 0
+    for cell in cells:
+        tags = cell.get("metadata", {}).get("tags", [])
+        for tag in REFUSED_TAGS:
+            if tag in tags:
+                fail(f"{source.name} has a cell tagged {tag}, which the job would not run or would let fail")
+        if "optional" in tags:
+            optional += 1
+        elif cell.get("cell_type") == "code":
+            code_cells += 1
+    if code_cells == 0:
+        fail(f"{source.name} has no code cell left to run after the {optional} optional cells are left out")
+    return optional
+
+
 def execute(source: Path, out_dir: "Path | None") -> None:
+    optional = preflight(source)   # refusals that need no kernel come before nbclient is imported
     import nbformat  # noqa: PLC0415 - only the execute path needs the locked environment
     from nbclient import NotebookClient  # noqa: PLC0415
     from nbclient.exceptions import CellExecutionError  # noqa: PLC0415
 
-    print(f"{source.name} sha256={sha256_of(source)}")
+    print(f"{source.name} sha256={sha256_of(source)} optional cells left out: {optional}")
     nb = nbformat.read(str(source), as_version=4)
     nb.cells = [c for c in nb.cells if "optional" not in c.get("metadata", {}).get("tags", [])]
     client = NotebookClient(
-        nb, timeout=CELL_TIMEOUT_SECONDS, kernel_name="python3",
+        nb, timeout=CELL_TIMEOUT_SECONDS, kernel_name="python3", allow_errors=False, force_raise_errors=True,
         resources={"metadata": {"path": str(source.parent)}},
     )
     try:
@@ -92,7 +130,7 @@ def main() -> None:
 
     # Refusals first, before any file is read or nbclient imported.
     if args.only is not None:
-        if not ONLY_NAME.match(args.only):
+        if not ONLY_NAME.fullmatch(args.only):
             fail(f"--only {args.only!r} is not a notebook file name")
         if not (technical / args.only).is_file():
             fail(f"--only {args.only!r}: {technical / args.only} does not exist")
