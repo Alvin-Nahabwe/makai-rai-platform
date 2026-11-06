@@ -81,8 +81,18 @@ describe('S-12 shell', () => {
     for (const id of labelled) expect(html, id).toMatch(new RegExp(`<h[23] id="${id}">[^<]+</h[23]>`));
     expect(html).toMatch(/<section[^>]*data-region="suggestions"[^>]*id="suggestions"|<section[^>]*id="suggestions"[^>]*data-region="suggestions"/);
     expect(html.match(/id="suggestions"/g)).toHaveLength(1);
-    // The region's heading carries the count the QuestionContent link gets (the helper test below pins that prop: 3 controls for Q-PP-01), and the aria-labelledby points at it.
-    expect(html).toContain('<h2 id="s12-suggestions">Ways teams address this (3)</h2>');
+    // SRS line 1836: the heading has no count (the "(8)" there is a note marker); the slot's line under it gives it.
+    expect(html).toContain('<h2 id="s12-suggestions">Ways teams address this</h2>');
+  });
+
+  it('FR-SUG-02 UX-08: for the gate question (nothing to suggest) the page renders no Ways teams address this section and no link to it', async () => {
+    const gate = { ...QUESTION, id: 'Q-PP-GATE-SENSITIVE', type: 'gate' } as LoadedQuestion;
+    const html = renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, question: gate, runningQuestion: gate } }));
+    expect(html).not.toContain('Ways teams address this');
+    expect(html).not.toContain('s12-suggestions');
+    expect(html).not.toContain('data-region="suggestions"');
+    expect(propsSeen.QuestionContent).toEqual({ question: gate, suggestionCount: 0 });
+    expect(html.match(/<section[^>]*aria-labelledby=/g)).toHaveLength(6);
   });
 
   it('UX-31 FR-PRJ-03: an archived project shows the archived banner on S-12', async () => {

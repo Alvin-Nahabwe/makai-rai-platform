@@ -248,6 +248,21 @@ describe('S-15 the finding page and the S-14 raise form (FR-FND-02, FR-FND-03, F
     expect(await renderPage('finding', { slug: fx.org.slug, id: f.projectId, findingId: f.id })).toContain('Mitigations');
   });
 
+  it('FR-SUG-03 UX-08 (screen): S-15 shows one Ways teams address this heading with the count line and Show details, and no section without controls', async () => {
+    const p = await addProject(fx);
+    const withArea = await addFinding(fx, p.id, { stage: 'pre-processing', source: 'team', by: 'reviewer', riskArea: 'IP-05' });
+    const html = await renderFinding({ ...withArea, projectId: p.id });
+    expect(html.match(/Ways teams address this/g)).toHaveLength(1);
+    expect(html).toContain('3 controls for this question&#x27;s risk area');
+    expect(html).toContain('<summary>Show details</summary>');
+    for (const riskArea of [null, 'XX-99']) {
+      const f = await addFinding(fx, p.id, { stage: 'pre-processing', source: 'team', by: 'reviewer', riskArea });
+      const none = await renderFinding({ ...f, projectId: p.id });
+      expect(none, String(riskArea)).not.toContain('Ways teams address this');
+      expect(none, String(riskArea)).not.toContain('f-ways');
+    }
+  });
+
   it('FR-FND-03 (screen): a finding with no mitigation shows the 7.4.2 S-15 empty line', async () => {
     expect(await renderFinding(await team())).toContain('No mitigations yet. Add one, or an owner or admin can accept the risk.');
   });

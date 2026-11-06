@@ -6,7 +6,7 @@ import { AcceptRiskForm } from '@/components/findings/AcceptRiskForm';
 import { LocalTime } from '@/components/findings/LocalTime';
 import { MitigationFormToggle, MitigationStatusWord } from '@/components/findings/MitigationForm';
 import { VersionEvidenceList } from '@/components/evidence/VersionEvidenceList';
-import { FindingSuggestions } from '@/components/suggestions/FindingSuggestions';
+import { FindingSuggestions, findingSuggestionCount } from '@/components/suggestions/FindingSuggestions';
 import { SealMarker } from '@/components/review/SealMarker';
 import { ListLink } from '@/components/ui/ListLink';
 import { onlyRolesCanText } from '@/lib/findings/messages';
@@ -139,7 +139,7 @@ export function FindingPageView({ data }: { data: FindingPageData }): ReactEleme
         )}
         {d.canMitigate && f.state === 'open' ? <MitigationFormToggle label="Add a mitigation" {...formProps(d)} base={null} /> : null}
       </section>
-      {f.riskArea === null ? null : (
+      {findingSuggestionCount({ contentSemver: d.contentSemver, riskArea: f.riskArea }) === 0 ? null : (
         <section aria-labelledby="f-ways">
           <h2 id="f-ways">Ways teams address this</h2>
           <FindingSuggestions contentSemver={d.contentSemver} riskArea={f.riskArea} />

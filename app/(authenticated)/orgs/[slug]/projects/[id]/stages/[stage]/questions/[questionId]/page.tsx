@@ -18,7 +18,7 @@ import { isReworded } from '@/lib/question/reworded';
 import { STAGE_TITLE } from '@/lib/question/stageList';
 import { canWithdrawVersion, questionHref } from '@/lib/question/draft';
 
-/** n in "Ways teams address this (n)": SUG's `suggestionCount`, the one number the heading, the in-page link and the slot share. */
+/** n in the in-page link "Ways teams address this (n)": SUG's `suggestionCount`. At 0 (the gate) there is no link and no section. */
 function countFor(data: QuestionPanelData): number {
   return suggestionCount({ contentSemver: data.contentSemver, questionId: data.question.id, tickedOptions: data.current?.optionsInPlace ?? [] });
 }
@@ -107,14 +107,16 @@ export function QuestionPanelRegions({ data }: { data: QuestionPanelData }) {
               canRaise={data.canRaiseFinding}
             />
           </section>
-          <section data-region="suggestions" id="suggestions" aria-labelledby="s12-suggestions">
-            <h2 id="s12-suggestions">{count > 0 ? `Ways teams address this (${count})` : 'Ways teams address this'}</h2>
-            <SuggestedControls
-              contentSemver={data.contentSemver}
-              questionId={question.id}
-              tickedOptions={data.current?.optionsInPlace ?? []}
-            />
-          </section>
+          {count > 0 ? (
+            <section data-region="suggestions" id="suggestions" aria-labelledby="s12-suggestions">
+              <h2 id="s12-suggestions">Ways teams address this</h2>
+              <SuggestedControls
+                contentSemver={data.contentSemver}
+                questionId={question.id}
+                tickedOptions={data.current?.optionsInPlace ?? []}
+              />
+            </section>
+          ) : null}
         </div>
       </div>
     </div>

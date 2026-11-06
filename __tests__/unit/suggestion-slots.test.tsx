@@ -1,21 +1,14 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { FindingSuggestions } from '@/components/suggestions/FindingSuggestions';
-import { SuggestedControls, suggestionCount } from '@/components/suggestions/SuggestedControls';
+import { FindingSuggestions, findingSuggestionCount } from '@/components/suggestions/FindingSuggestions';
+import { SuggestedControls, controlCountLine, suggestionCount } from '@/components/suggestions/SuggestedControls';
 
 vi.mock('@/lib/content/resources', async () => {
   const { RES } = await import('../helpers/suggestionsFixture');
   return { loadResources: () => RES };
 });
-// public/notebooks/requirements.txt is C-NB's file and does not exist yet: only that one stat is answered here.
-vi.mock('node:fs', async (importOriginal) => {
-  const real = await importOriginal<typeof import('node:fs')>();
-  return {
-    ...real,
-    statSync: ((p: string, ...rest: unknown[]) =>
-      String(p).endsWith('/public/notebooks/requirements.txt') ? { size: 2048 } : (real.statSync as (...a: unknown[]) => unknown)(p, ...rest)) as typeof real.statSync,
-  };
-});
+// The requirements file is C-NB's and does not exist yet (see the helper): only its stat is answered.
+vi.mock('node:fs', async (importOriginal) => (await import('../helpers/requirementsStat')).withRequirementsStat(await importOriginal<typeof import('node:fs')>()));
 
 const V = '0.0.1-fixture';
 const s12 = async (questionId: string, tickedOptions: string[] = []) =>
@@ -26,7 +19,8 @@ describe('suggestion slots', () => {
     const html = await s12('Q-PP-01');
     for (const n of ['Alternatives Analysis', 'Cost-Benefit', 'Multi-stakeholder']) expect(html).toContain(n);
     expect(html.match(/data-control=/g)).toHaveLength(3);
-    expect(html).not.toContain('Ways teams address this');   // the S-12 shell's h2 carries the words and the count
+    expect(html).not.toContain('Ways teams address this');   // the S-12 shell's h2 carries the words
+    expect(html).toContain('<p class="suggested-controls__count">3 controls for this question&#x27;s risk area</p>');   // SRS line 1837
     expect(html).not.toContain('<details');
     expect(html).toContain('Shown before you answer. Use any, none, or your own approach.');
     expect(html).toMatch(/<h3[^>]*>Risk area PP-01 /);
@@ -61,12 +55,33 @@ describe('suggestion slots', () => {
     expect(html).toContain('Usually applied in Post-processing');
   });
 
-  it('FR-SUG-03: S-15 lists the controls of the finding area IP-05; none without an area', async () => {
-    const html = renderToStaticMarkup(await FindingSuggestions({ contentSemver: V, riskArea: 'IP-05' }) ?? <></>);
-    expect(html.match(/<h4/g)).toHaveLength(3);
-    expect(html).toContain('Ways teams address this (3)');
-    expect(await FindingSuggestions({ contentSemver: V, riskArea: null })).toBeNull();
-    expect(await FindingSuggestions({ contentSemver: V, riskArea: 'XX-99' })).toBeNull();
+  it('FR-SUG-03: S-15 collapses the controls of the finding area IP-05 to their names, with the cards under a closed Show details; none without an area', () => {
+    const html = renderToStaticMarkup(FindingSuggestions({ contentSemver: V, riskArea: 'IP-05' }) ?? <></>);
+    expect(html).not.toContain('Ways teams address this');   // FND-b's section h2 carries the words: no second heading
+    expect(html).not.toMatch(/<h3/);
+    expect(html).toContain('3 controls for this question&#x27;s risk area');
+    const names = html.slice(0, html.indexOf('<details'));
+    expect(names).toMatch(/<p[^>]*class="suggested-controls__names"[^>]*>[^<]+<\/p>/);
+    for (const n of ['C-13 ', 'C-15 ', 'C-18 ']) expect(names).toContain(n);
+    expect(names).not.toContain('<article');
+    expect(html).toContain('<summary>Show details</summary>');
+    expect(html).not.toMatch(/<details[^>]*\bopen\b/);
+    const inside = html.slice(html.indexOf('<details'));
+    expect(inside.match(/<article/g)).toHaveLength(3);
+    expect(inside.match(/<h4/g)).toHaveLength(3);
+    expect(FindingSuggestions({ contentSemver: V, riskArea: null })).toBeNull();
+    expect(FindingSuggestions({ contentSemver: V, riskArea: 'XX-99' })).toBeNull();
+  });
+
+  it('FR-SUG-03 UX-08: findingSuggestionCount is the number of cards, and 0 for no area or an unknown one (the page then shows no section)', () => {
+    expect(findingSuggestionCount({ contentSemver: V, riskArea: 'IP-05' })).toBe(3);
+    expect(findingSuggestionCount({ contentSemver: V, riskArea: null })).toBe(0);
+    expect(findingSuggestionCount({ contentSemver: V, riskArea: 'XX-99' })).toBe(0);
+  });
+
+  it('UX-08: the count line says "1 control" for one and "n controls" otherwise', () => {
+    expect(controlCountLine(1)).toBe("1 control for this question's risk area");
+    expect(controlCountLine(3)).toBe("3 controls for this question's risk area");
   });
 
   it('UX-08 FR-SUG-01: the count is the number of distinct cards shown, a control reached through two areas once', () => {
