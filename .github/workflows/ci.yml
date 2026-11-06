@@ -69,7 +69,10 @@ jobs:
     # 15 to 30 on 2026-11-04: by v0.6.0 the job (lint, audit, typecheck,
     # migrate, ~4,400 tests, build) took 14 min 53 s, and run 41859063898 was
     # cancelled at 15 min mid-build with every step until then passing.
-    timeout-minutes: 30
+    # Raised from 30 to 45 on 2026-11-06: the poppler install step may now
+    # retry for up to 17 min on a slow runner network, on top of the job's
+    # normal run.
+    timeout-minutes: 45
 
     # Single source of truth for the three Postgres primitives, referenced
     # below by BOTH the service container definition and the provisioning
