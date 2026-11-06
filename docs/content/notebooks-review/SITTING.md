@@ -1,6 +1,6 @@
 # Sitting: the ten technical notebooks
 
-For the product owner. Prepared by C-NB on branch `unit/c-nb-2`, cut from release 0.6.0 at `46e49ddb`. Nothing here has been approved. Your pass is tied to the exact files whose hashes are at the end. The Notebooks workflow passed on that commit: https://github.com/Alvin-Nahabwe/makai-rai-platform/actions/runs/42226926754
+Prepared for the sitting of 6 November 2026; the answers are recorded at the end. It was written by C-NB on branch `unit/c-nb-2`, cut from release 0.6.0 at `46e49ddb`, and nothing in it was approved in advance. The owner's pass is tied to the exact files whose hashes are at the end. The Notebooks workflow passed on that commit: https://github.com/Alvin-Nahabwe/makai-rai-platform/actions/runs/42226926754
 
 ## How to answer
 
@@ -17,19 +17,19 @@ C-13, C-14, C-21, C-18, C-03, C-04, C-15, C-05, C-16 (SRS line 4800). Then C-10 
 
 Each notebook has the source file, the executed copy as a web page (open it in a browser), the two run logs, the evidence summary the notebook wrote, the technical review by an independent reviewer who wrote none of it, and a line on what changed after that review. The runs used two CPU cores and no GPU. The limit (NB-AC-02) is 10 minutes and 4 GB. Every run below finished without error, and the evidence check passed.
 
-Web pages, logs and evidence are outside the repository, in `/home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/<C>/`.
+Web pages, logs and evidence are kept outside the repository, in the controller's reports folder, in `notebooks-html/<C>/`.
 
 ### C-13 Subgroup Fairness Metrics
 
 | | |
 |---|---|
 | Data | UCI Adult (1994 US census extract) |
-| Source | `notebooks/technical/C-13_subgroup-fairness.ipynb`, `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-C-NB/notebooks/technical/C-13_subgroup-fairness.ipynb` |
-| Executed copy (web page) | `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-13/C-13_subgroup-fairness.html` |
-| Clean run | 1:21.24, 268,224 kB (log: `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-13/run1.log`) |
-| Offline run (no network, from the cached data) | 1:10.07, 268,104 kB (log: `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-13/run2.log`) |
-| Evidence summary it wrote | `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-13/evidence/C-13_summary.md` |
-| Technical review | `docs/content/notebooks-review/C-13.md`, `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-C-NB/docs/content/notebooks-review/C-13.md` |
+| Source | `notebooks/technical/C-13_subgroup-fairness.ipynb` |
+| Executed copy (web page) | `notebooks-html/C-13/C-13_subgroup-fairness.html`, kept outside the repository, in the controller's reports folder |
+| Clean run | 1:21.24, 268,224 kB (log: `notebooks-html/C-13/run1.log`) |
+| Offline run (no network, from the cached data) | 1:10.07, 268,104 kB (log: `notebooks-html/C-13/run2.log`) |
+| Evidence summary it wrote | `notebooks-html/C-13/evidence/C-13_summary.md` |
+| Technical review | `docs/content/notebooks-review/C-13.md` |
 | Changed after the review | The statement that the fairness numbers cannot all be zero together was wrong and is now correct. Step 5 now says each gap is highest minus lowest, so it is never below zero. The Brier score is no longer presented as a calibration measure. Stop-and-decide question 3 is now balanced. A boosted-model option (PRACTICE_MODEL) was added. A paragraph on how to choose groups that matter locally was added. |
 | Source SHA-256 | `a7aa2b5456ff9f994a3ecc4ddb98be23136e086d01e1116e507f44799c31c98b` |
 | Notebooks CI | run 42226926754: passed |
@@ -39,12 +39,12 @@ Web pages, logs and evidence are outside the repository, in `/home/alvin/Downloa
 | | |
 |---|---|
 | Data | UCI Diabetes 130-US Hospitals |
-| Source | `notebooks/technical/C-14_disaggregated-performance.ipynb`, `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-C-NB/notebooks/technical/C-14_disaggregated-performance.ipynb` |
-| Executed copy (web page) | `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-14/C-14_disaggregated-performance.html` |
-| Clean run | 0:48.27, 402,772 kB (log: `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-14/run1.log`) |
-| Offline run (no network, from the cached data) | 0:47.14, 402,624 kB (log: `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-14/run2.log`) |
-| Evidence summary it wrote | `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-14/evidence/C-14_summary.md` |
-| Technical review | `docs/content/notebooks-review/C-14.md`, `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-C-NB/docs/content/notebooks-review/C-14.md` |
+| Source | `notebooks/technical/C-14_disaggregated-performance.ipynb` |
+| Executed copy (web page) | `notebooks-html/C-14/C-14_disaggregated-performance.html`, kept outside the repository, in the controller's reports folder |
+| Clean run | 0:48.27, 402,772 kB (log: `notebooks-html/C-14/run1.log`) |
+| Offline run (no network, from the cached data) | 0:47.14, 402,624 kB (log: `notebooks-html/C-14/run2.log`) |
+| Evidence summary it wrote | `notebooks-html/C-14/evidence/C-14_summary.md` |
+| Technical review | `docs/content/notebooks-review/C-14.md` |
 | Changed after the review | The per-group flagged share, size and false positive rate now really come from Fairlearn MetricFrame, as the text said. The Simpson check now ignores groups with too few cases. The text on groups below overall now says that with 30 groups, one or two can fall outside by chance. Flagged share is now explained. The caveat now says the data has real missing values. A question on false alarms was added. |
 | Source SHA-256 | `6c28b2673aca6a44ed70d22d300896a41ed7fd62c8b29dc20a414a684ecf48ea` |
 | Notebooks CI | run 42226926754: passed |
@@ -54,12 +54,12 @@ Web pages, logs and evidence are outside the repository, in `/home/alvin/Downloa
 | | |
 |---|---|
 | Data | UCI Bike Sharing |
-| Source | `notebooks/technical/C-21_monitoring-drift.ipynb`, `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-C-NB/notebooks/technical/C-21_monitoring-drift.ipynb` |
-| Executed copy (web page) | `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-21/C-21_monitoring-drift.html` |
-| Clean run | 0:04.74, 233,620 kB (log: `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-21/run1.log`) |
-| Offline run (no network, from the cached data) | 0:04.69, 233,076 kB (log: `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-21/run2.log`) |
-| Evidence summary it wrote | `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-21/evidence/C-21_summary.md` |
-| Technical review | `docs/content/notebooks-review/C-21.md`, `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-C-NB/docs/content/notebooks-review/C-21.md` |
+| Source | `notebooks/technical/C-21_monitoring-drift.ipynb` |
+| Executed copy (web page) | `notebooks-html/C-21/C-21_monitoring-drift.html`, kept outside the repository, in the controller's reports folder |
+| Clean run | 0:04.74, 233,620 kB (log: `notebooks-html/C-21/run1.log`) |
+| Offline run (no network, from the cached data) | 0:04.69, 233,076 kB (log: `notebooks-html/C-21/run2.log`) |
+| Evidence summary it wrote | `notebooks-html/C-21/evidence/C-21_summary.md` |
+| Technical review | `docs/content/notebooks-review/C-21.md` |
 | Changed after the review | The explanation of PSI now covers category columns. A pointer to the next cell was fixed. The notebook now says its reference error is optimistic, so error ratios read a little high. Where to go next now names real resources. Demand roughly doubled became grew by about two-thirds. The when-to-use list is now faithful to the question texts. |
 | Source SHA-256 | `c938055f5331d2395e7f0b144970d8a9d947de6704dcbe951ee55739fd4ea0cc` |
 | Notebooks CI | run 42226926754: passed |
@@ -69,12 +69,12 @@ Web pages, logs and evidence are outside the repository, in `/home/alvin/Downloa
 | | |
 |---|---|
 | Data | UCI Statlog German Credit |
-| Source | `notebooks/technical/C-18_explainability-analysis.ipynb`, `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-C-NB/notebooks/technical/C-18_explainability-analysis.ipynb` |
-| Executed copy (web page) | `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-18/C-18_explainability-analysis.html` |
-| Clean run | 0:15.03, 260,356 kB (log: `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-18/run1.log`) |
-| Offline run (no network, from the cached data) | 0:14.21, 260,492 kB (log: `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-18/run2.log`) |
-| Evidence summary it wrote | `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-18/evidence/C-18_summary.md` |
-| Technical review | `docs/content/notebooks-review/C-18.md`, `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-C-NB/docs/content/notebooks-review/C-18.md` |
+| Source | `notebooks/technical/C-18_explainability-analysis.ipynb` |
+| Executed copy (web page) | `notebooks-html/C-18/C-18_explainability-analysis.html`, kept outside the repository, in the controller's reports folder |
+| Clean run | 0:15.03, 260,356 kB (log: `notebooks-html/C-18/run1.log`) |
+| Offline run (no network, from the cached data) | 0:14.21, 260,492 kB (log: `notebooks-html/C-18/run2.log`) |
+| Evidence summary it wrote | `notebooks-html/C-18/evidence/C-18_summary.md` |
+| Technical review | `docs/content/notebooks-review/C-18.md` |
 | Changed after the review | SHAP numbers are now said to add up to the gap from the average score, not to the score. The waterfall scale is explained. Partial dependence now says it covers the 5th to 95th percentile. The planted-leak step number was corrected. A DECISION_THRESHOLD line was added to the adapt cell. A limit on whole-number columns in the small-change test was added. The Step 9 sentence for a person now names the values of that person. Q-IP-22 and Q-IP-01 were added, with limits stated. |
 | Source SHA-256 | `454452565c34b2a51db9d3a4a24bc6a1f87d8df91ad3a09f9260dc12e21b8fba` |
 | Notebooks CI | run 42226926754: passed |
@@ -84,12 +84,12 @@ Web pages, logs and evidence are outside the repository, in `/home/alvin/Downloa
 | | |
 |---|---|
 | Data | UCI Diabetes 130-US Hospitals and a stored World Bank reference |
-| Source | `notebooks/technical/C-03_data-quality-audit.ipynb`, `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-C-NB/notebooks/technical/C-03_data-quality-audit.ipynb` |
-| Executed copy (web page) | `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-03/C-03_data-quality-audit.html` |
-| Clean run | 0:06.27, 300,788 kB (log: `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-03/run1.log`) |
-| Offline run (no network, from the cached data) | 0:05.59, 301,508 kB (log: `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-03/run2.log`) |
-| Evidence summary it wrote | `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-03/evidence/C-03_summary.md` |
-| Technical review | `docs/content/notebooks-review/C-03.md`, `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-C-NB/docs/content/notebooks-review/C-03.md` |
+| Source | `notebooks/technical/C-03_data-quality-audit.ipynb` |
+| Executed copy (web page) | `notebooks-html/C-03/C-03_data-quality-audit.html`, kept outside the repository, in the controller's reports folder |
+| Clean run | 0:06.27, 300,788 kB (log: `notebooks-html/C-03/run1.log`) |
+| Offline run (no network, from the cached data) | 0:05.59, 301,508 kB (log: `notebooks-html/C-03/run2.log`) |
+| Evidence summary it wrote | `notebooks-html/C-03/evidence/C-03_summary.md` |
+| Technical review | `docs/content/notebooks-review/C-03.md` |
 | Changed after the review | Wording now matches what the code runs for missing values, duplicates (four counts, two named as near duplicates) and outliers. A sixth stop-and-decide question asks the team to set the thresholds. A limit was added: it checks one file once, not a pipeline. The summary heading What was audited became What was checked. The question list was narrowed to what the notebook runs. |
 | Source SHA-256 | `a478bc653ebb0afe7687683a9400453be53404620947199c65c3bc39c297bca1` |
 | Notebooks CI | run 42226926754: passed |
@@ -99,12 +99,12 @@ Web pages, logs and evidence are outside the repository, in `/home/alvin/Downloa
 | | |
 |---|---|
 | Data | UCI Adult and a synthetic annotator table |
-| Source | `notebooks/technical/C-04_bias-detection.ipynb`, `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-C-NB/notebooks/technical/C-04_bias-detection.ipynb` |
-| Executed copy (web page) | `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-04/C-04_bias-detection.html` |
-| Clean run | 0:07.45, 284,628 kB (log: `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-04/run1.log`) |
-| Offline run (no network, from the cached data) | 0:07.35, 284,472 kB (log: `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-04/run2.log`) |
-| Evidence summary it wrote | `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-04/evidence/C-04_summary.md` |
-| Technical review | `docs/content/notebooks-review/C-04.md`, `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-C-NB/docs/content/notebooks-review/C-04.md` |
+| Source | `notebooks/technical/C-04_bias-detection.ipynb` |
+| Executed copy (web page) | `notebooks-html/C-04/C-04_bias-detection.html`, kept outside the repository, in the controller's reports folder |
+| Clean run | 0:07.45, 284,628 kB (log: `notebooks-html/C-04/run1.log`) |
+| Offline run (no network, from the cached data) | 0:07.35, 284,472 kB (log: `notebooks-html/C-04/run2.log`) |
+| Evidence summary it wrote | `notebooks-html/C-04/evidence/C-04_summary.md` |
+| Technical review | `docs/content/notebooks-review/C-04.md` |
 | Changed after the review | The reason for using Cramer's V was corrected. The proxy test now says which columns it reads and that guessing gets 0.5 for two groups and 0.2 for five. The labelling step now explains its second table. Stop-and-decide asks the team to set two thresholds. The caveat now teaches how to choose groups that matter locally. |
 | Source SHA-256 | `4b7423006c177a7426c7df7c86bb611ac483a5e081c915f53ac75f9c19f3341a` |
 | Notebooks CI | run 42226926754: passed |
@@ -114,12 +114,12 @@ Web pages, logs and evidence are outside the repository, in `/home/alvin/Downloa
 | | |
 |---|---|
 | Data | UCI Adult |
-| Source | `notebooks/technical/C-15_bias-mitigation.ipynb`, `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-C-NB/notebooks/technical/C-15_bias-mitigation.ipynb` |
-| Executed copy (web page) | `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-15/C-15_bias-mitigation.html` |
-| Clean run | 0:16.10, 315,584 kB (log: `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-15/run1.log`) |
-| Offline run (no network, from the cached data) | 0:16.65, 315,012 kB (log: `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-15/run2.log`) |
-| Evidence summary it wrote | `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-15/evidence/C-15_summary.md` |
-| Technical review | `docs/content/notebooks-review/C-15.md`, `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-C-NB/docs/content/notebooks-review/C-15.md` |
+| Source | `notebooks/technical/C-15_bias-mitigation.ipynb` |
+| Executed copy (web page) | `notebooks-html/C-15/C-15_bias-mitigation.html`, kept outside the repository, in the controller's reports folder |
+| Clean run | 0:16.10, 315,584 kB (log: `notebooks-html/C-15/run1.log`) |
+| Offline run (no network, from the cached data) | 0:16.65, 315,012 kB (log: `notebooks-html/C-15/run2.log`) |
+| Evidence summary it wrote | `notebooks-html/C-15/evidence/C-15_summary.md` |
+| Technical review | `docs/content/notebooks-review/C-15.md` |
 | Changed after the review | The selection rate wording was fixed (the share the model predicts favourable). The description of the in-training method was corrected, and its tolerance is now called a target, not a guarantee. A limit was added: only one group column is mitigated at a time. Q-IP-15 was restored to the when-to-use list and the summary. A paragraph on choosing the group was added. |
 | Source SHA-256 | `267249dce3a37818fb60e771913b1a700cd47d9244d5446384be94f31f36abbd` |
 | Notebooks CI | run 42226926754: passed |
@@ -129,12 +129,12 @@ Web pages, logs and evidence are outside the repository, in `/home/alvin/Downloa
 | | |
 |---|---|
 | Data | UCI Statlog German Credit |
-| Source | `notebooks/technical/C-05_data-distribution.ipynb`, `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-C-NB/notebooks/technical/C-05_data-distribution.ipynb` |
-| Executed copy (web page) | `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-05/C-05_data-distribution.html` |
-| Clean run | 0:04.03, 202,108 kB (log: `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-05/run1.log`) |
-| Offline run (no network, from the cached data) | 0:04.09, 201,784 kB (log: `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-05/run2.log`) |
-| Evidence summary it wrote | `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-05/evidence/C-05_summary.md` |
-| Technical review | `docs/content/notebooks-review/C-05.md`, `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-C-NB/docs/content/notebooks-review/C-05.md` |
+| Source | `notebooks/technical/C-05_data-distribution.ipynb` |
+| Executed copy (web page) | `notebooks-html/C-05/C-05_data-distribution.html`, kept outside the repository, in the controller's reports folder |
+| Clean run | 0:04.03, 202,108 kB (log: `notebooks-html/C-05/run1.log`) |
+| Offline run (no network, from the cached data) | 0:04.09, 201,784 kB (log: `notebooks-html/C-05/run2.log`) |
+| Evidence summary it wrote | `notebooks-html/C-05/evidence/C-05_summary.md` |
+| Technical review | `docs/content/notebooks-review/C-05.md` |
 | Changed after the review | The intersections step now says empty combinations are not counted. The reference step now says people in groups you did not name are left out. The summary no longer calls the default group size accepted, and the comments say 30 and 20 are examples. One word (score) was replaced. |
 | Source SHA-256 | `8bd325cce56c08ccfde3cb5da20f932042f40fb7ef79356bcbbb3621241a3e48` |
 | Notebooks CI | run 42226926754: passed |
@@ -144,12 +144,12 @@ Web pages, logs and evidence are outside the repository, in `/home/alvin/Downloa
 | | |
 |---|---|
 | Data | MasakhaNEWS (four languages) |
-| Source | `notebooks/technical/C-16_stratified-evaluation.ipynb`, `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-C-NB/notebooks/technical/C-16_stratified-evaluation.ipynb` |
-| Executed copy (web page) | `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-16/C-16_stratified-evaluation.html` |
-| Clean run | 0:46.48, 397,016 kB (log: `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-16/run1.log`) |
-| Offline run (no network, from the cached data) | 0:47.39, 400,516 kB (log: `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-16/run2.log`) |
-| Evidence summary it wrote | `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-16/evidence/C-16_summary.md` |
-| Technical review | `docs/content/notebooks-review/C-16.md`, `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-C-NB/docs/content/notebooks-review/C-16.md` |
+| Source | `notebooks/technical/C-16_stratified-evaluation.ipynb` |
+| Executed copy (web page) | `notebooks-html/C-16/C-16_stratified-evaluation.html`, kept outside the repository, in the controller's reports folder |
+| Clean run | 0:46.48, 397,016 kB (log: `notebooks-html/C-16/run1.log`) |
+| Offline run (no network, from the cached data) | 0:47.39, 400,516 kB (log: `notebooks-html/C-16/run2.log`) |
+| Evidence summary it wrote | `notebooks-html/C-16/evidence/C-16_summary.md` |
+| Technical review | `docs/content/notebooks-review/C-16.md` |
 | Changed after the review | The decision table now reads the paired difference between the two designs, not two overlapping ranges. The leakage step now says that without shared keys the two scores differ only by chance. A limit was added: macro F1 is not comparable across languages. The data statement now says seven topic labels, not five. |
 | Source SHA-256 | `9827ce699cc329e9c223d51f064f295503b98d09e07adf2e309db08f1ee9367c` |
 | Notebooks CI | run 42226926754: passed |
@@ -159,12 +159,12 @@ Web pages, logs and evidence are outside the repository, in `/home/alvin/Downloa
 | | |
 |---|---|
 | Data | UCI Adult and synthetic names and phone numbers |
-| Source | `notebooks/technical/C-10_privacy-anonymization.ipynb`, `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-C-NB/notebooks/technical/C-10_privacy-anonymization.ipynb` |
-| Executed copy (web page) | `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-10/C-10_privacy-anonymization.html` |
-| Clean run | 0:05.06, 192,576 kB (log: `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-10/run1.log`) |
-| Offline run (no network, from the cached data) | 0:05.22, 192,940 kB (log: `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-10/run2.log`) |
-| Evidence summary it wrote | `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-reports/notebooks-html/C-10/evidence/C-10_summary.md` |
-| Technical review | `docs/content/notebooks-review/C-10.md`, `file:///home/alvin/Downloads/MAK_RAI/.worktrees/v060-C-NB/docs/content/notebooks-review/C-10.md` |
+| Source | `notebooks/technical/C-10_privacy-anonymization.ipynb` |
+| Executed copy (web page) | `notebooks-html/C-10/C-10_privacy-anonymization.html`, kept outside the repository, in the controller's reports folder |
+| Clean run | 0:05.06, 192,576 kB (log: `notebooks-html/C-10/run1.log`) |
+| Offline run (no network, from the cached data) | 0:05.22, 192,940 kB (log: `notebooks-html/C-10/run2.log`) |
+| Evidence summary it wrote | `notebooks-html/C-10/evidence/C-10_summary.md` |
+| Technical review | `docs/content/notebooks-review/C-10.md` |
 | Changed after the review | Adult's income column had four values (the test rows end in a full stop), so l-diversity was overstated. This is fixed. The residual-risk sentence was repaired. A limit was added: l = 2 can still give the value away. Q-IP-11 was restored with narrow wording, and the word appropriate was restored in Q-PP-14. |
 | Source SHA-256 | `46df30a6b7c5506491967a3944878ce1626592be852fc9121936e9d2be0d8159` |
 | Notebooks CI | run 42226926754: passed |
@@ -218,5 +218,5 @@ SHA-256 of each notebook source at `46e49ddb`, so your pass is for these exact b
 
 ## Answers recorded on 6 November 2026
 
-The owner passed all ten notebooks on the hashes above ("C-13: pass, C-14: pass, C-21: pass, C-18: pass, C-03: pass, C-04: pass, C-15: pass, C-05: pass, C-16: pass, C-10: pass") and answered "Questions as proposed". The reviewer is "Product owner, MAK-AI" for all ten, and for C-10 as the privacy-competent reviewer (OD-03). The answers are recorded in each notebook's review file under "Domain review", and verbatim in records/plans/2026-10-29-v1-plan/reviews/owner-questions.md. C-16 item 8 is settled: the Q-PO-12 paragraph stays.
+The owner passed all ten notebooks on the hashes above ("C-13: pass, C-14: pass, C-21: pass, C-18: pass, C-03: pass, C-04: pass, C-15: pass, C-05: pass, C-16: pass, C-10: pass") and answered "Questions as proposed". The reviewer is "Product owner, MAK-AI" for all ten, and for C-10 as the privacy-competent reviewer (OD-03). The answers are recorded in each notebook's review file under "Domain review", and verbatim in the sitting record. C-16 item 8 is settled: the Q-PO-12 paragraph stays.
 
