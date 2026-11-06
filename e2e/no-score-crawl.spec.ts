@@ -93,8 +93,10 @@ async function gotoOk(page: Page, url: string, who: string, pending: readonly Pe
  * Pages reachable from `start` by `a[href]` links, breadth first, same origin only: one page per route
  * pattern (a path with its ids replaced by [id] is visited once), at most `max` patterns. Each entry is
  * `pathname + search` of the page the browser ended on (after any redirect). A page that answers 400 or
- * more fails the crawl. If `max` patterns have been visited and others are still queued, the crawl fails
- * and names the first of them, so a cap can never hide pages.
+ * more fails the crawl. A link is queued once per exact path; the route pattern is marked seen only for
+ * the page the browser ended on, so a link that redirects to a page of a pattern already seen leaves its
+ * own pattern open for the next link. If `max` patterns have been visited and a queued entry still has a
+ * pattern the crawl has not seen, the crawl fails and names the first such entries, so a cap can never hide pages.
  */
 async function sameOriginPages(
   page: Page,
@@ -103,33 +105,40 @@ async function sameOriginPages(
 ): Promise<string[]> {
   const visited: string[] = [];
   const seen = new Set<string>();
-  const queuedPatterns = new Set<string>([routePattern(start)]);
+  const queuedPaths = new Set<string>([start]);
   const queue = [start];
   let origin = '';
   while (queue.length > 0 && visited.length < max) {
-    await gotoOk(page, queue.shift()!, label, pending);
+    const entry = queue.shift()!;
+    if (seen.has(routePattern(entry))) continue;     // its pattern was visited since it was queued: no navigation
+    await gotoOk(page, entry, label, pending);
     await page.waitForLoadState('networkidle');      // links that client components render after load are links too
     const here = new URL(page.url());
     origin ||= here.origin;
     const key = here.pathname + here.search;
-    const pattern = routePattern(key);
+    const pattern = routePattern(key);               // the pattern of the page the browser ended on, not of the entry
     if (here.origin !== origin || seen.has(pattern)) continue;
     seen.add(pattern);
-    queuedPatterns.add(pattern);
     visited.push(key);
     const hrefs = await page.locator('a[href]').evaluateAll((anchors) => anchors.map((a) => (a as HTMLAnchorElement).href));
     for (const href of hrefs) {
       const link = new URL(href);                    // an href that is not a URL throws: a broken link fails the crawl, it is not skipped
       const next = link.pathname + link.search;
-      if (link.origin !== origin || NOT_FOLLOWED.test(link.pathname) || queuedPatterns.has(routePattern(next))) continue;
-      queuedPatterns.add(routePattern(next));
+      if (link.origin !== origin || NOT_FOLLOWED.test(link.pathname) || queuedPaths.has(next)) continue;
+      queuedPaths.add(next);
       queue.push(next);
     }
   }
-  if (queue.length > 0) {
-    throw new Error(`${label}: the crawl stopped at ${max} route patterns with ${queue.length} left unvisited, first: ${queue.slice(0, 5).join(', ')}`);
+  const left = queue.filter((p) => !seen.has(routePattern(p)));
+  if (left.length > 0) {
+    throw new Error(`${label}: the crawl stopped at ${max} route patterns with ${left.length} left unvisited, first: ${left.slice(0, 5).join(', ')}`);
   }
   return visited;
+}
+
+/** The entries of `seat.mustReach` that no page in `pages` matches, in the order of `seat.mustReach`. */
+function unreached(seat: Seat, pages: readonly string[]): Array<string | RegExp> {
+  return seat.mustReach.filter((must) => !pages.some((p) => (typeof must === 'string' ? p === must : must.test(p))));
 }
 
 /**
@@ -138,7 +147,7 @@ async function sameOriginPages(
  */
 const SELFTEST = '/__crawl-selftest';
 const questionLinks = Array.from({ length: 30 }, (_, i) => `${SELFTEST}/patterns/q/${i + 1}`);
-const SELFTEST_PAGES: Record<string, { status?: number; links?: string[] }> = {
+const SELFTEST_PAGES: Record<string, { status?: number; links?: string[]; redirect?: string }> = {
   [`${SELFTEST}/patterns/`]: { links: [...questionLinks, `${SELFTEST}/patterns/about`] },
   [`${SELFTEST}/patterns/about`]: {},
   ...Object.fromEntries(questionLinks.map((q) => [q, {}])),
@@ -150,11 +159,22 @@ const SELFTEST_PAGES: Record<string, { status?: number; links?: string[] }> = {
   [`${SELFTEST}/pending/not-built`]: { status: 404 },
   [`${SELFTEST}/pending-alive/`]: { links: [`${SELFTEST}/pending-alive/built`] },
   [`${SELFTEST}/pending-alive/built`]: {},
+  [`${SELFTEST}/redirect/home`]: { links: [1, 2, 3].map((i) => `${SELFTEST}/redirect/item/${i}`) },
+  [`${SELFTEST}/redirect/item/1`]: { redirect: `${SELFTEST}/redirect/home` },
+  [`${SELFTEST}/redirect/item/2`]: { links: [`${SELFTEST}/redirect/leaf`] },
+  [`${SELFTEST}/redirect/item/3`]: {},
+  [`${SELFTEST}/redirect/leaf`]: {},
 };
 
 async function serveSelftestPages(page: Page): Promise<void> {
   await page.route(`**${SELFTEST}/**`, async (route) => {
     const def = SELFTEST_PAGES[new URL(route.request().url()).pathname];
+    if (def?.redirect) {
+      // A fulfilled 302 is not followed through `page.route` (the target is not routed and reaches the real server, which answers 404 for
+      // this path: ASSUMPTION A-R1 was false), so the redirect is a client-side one: a 200 page that replaces its own location.
+      await route.fulfill({ status: 200, contentType: 'text/html', body: `<script>location.replace('${def.redirect}')</script>` });
+      return;
+    }
     const links = (def?.links ?? []).map((l) => `<a href="${l}">${l}</a>`).join(' ');
     await route.fulfill({ status: def ? (def.status ?? 200) : 404, contentType: 'text/html', body: `<main>${links}</main>` });
   });
@@ -208,6 +228,33 @@ test('FR-RM-01 (helper): a background request to a pending target is aborted, a 
   expect(aborted).toEqual(['SELFTEST']);
 });
 
+test('FR-RM-01 (helper): a redirect from a pattern\'s first link does not hide the pattern\'s other links', async ({ page }) => {
+  // item/1 answers a redirect to /redirect/home (a page already visited); item/2 is a 200 page linking to /redirect/leaf; item/3 is a 200 page
+  await serveSelftestPages(page);
+  const pages = await sameOriginPages(page, `${SELFTEST}/redirect/home`, { max: 10, label: 'selftest' });
+  expect(pages).toEqual([`${SELFTEST}/redirect/home`, `${SELFTEST}/redirect/item/2`, `${SELFTEST}/redirect/leaf`]);   // item/3 has the pattern item/2 already marked seen: not visited again
+});
+
+test('FR-RM-01 (helper): the cap fails only for patterns the crawl has not seen', async ({ page }) => {
+  // 30 question links of one pattern and /patterns/about, max 3: the crawl visits the start page, q/1 and about; the 29 questions
+  // still queued are a pattern it has seen, so it does not throw.
+  await serveSelftestPages(page);
+  expect(await sameOriginPages(page, `${SELFTEST}/patterns/`, { max: 3, label: 'selftest' })).toEqual([
+    `${SELFTEST}/patterns/`, `${SELFTEST}/patterns/q/1`, `${SELFTEST}/patterns/about`]);
+  // Five distinct patterns, max 3: still throws and names the first unvisited paths.
+  await expect(sameOriginPages(page, `${SELFTEST}/cap/`, { max: 3, label: 'selftest' })).rejects.toThrow(/page-c.*page-d.*page-e/);
+});
+
+test('FR-RM-01 (helper): unreached names the must-reach entries no crawled page matches, for a seat with a membership and for one without', () => {
+  const admin: Seat = { label: 'platform administrator', storageStatePath: '', mustReach: ['/admin/users'] };   // a seat with no organisation: its own list, not the dashboard's
+  expect(unreached(admin, ['/', '/admin/users'])).toEqual([]);
+  expect(unreached(admin, ['/', '/orgs/a/dashboard'])).toEqual(['/admin/users']);
+  const owner = oneSeatPerRole()[0];
+  expect(unreached(owner, ['/'])).toEqual(owner.mustReach);                                  // nothing reached: every entry is named
+  expect(unreached(owner, owner.mustReach.map((m) => (typeof m === 'string' ? m : '/orgs/a/projects/00000000-0000-0000-0000-000000000000')))).toEqual([]);
+  expect(unreached({ ...admin, mustReach: [] }, ['/'])).toEqual([]);
+});
+
 test('FR-RM-01 (helper): every seat carries its own must-reach list', () => {
   const seats = oneSeatPerRole();
   expect(seats.map((s) => s.label.split('/').pop())).toEqual([...FIXTURE_ROLES]);
@@ -249,10 +296,7 @@ test('FR-RM-01 FR-RM-04: no page a crawled seat can reach shows a score shape', 
     console.log(`[no-score-crawl] ${seat.label}: ${pages.length} pages: ${pages.join(' ')}`);
 
     // A crawl that stopped at the landing page would pass for having found nothing.
-    for (const must of mustReach) {
-      const reached = typeof must === 'string' ? pages.includes(must) : pages.some((p) => must.test(p));
-      expect(reached, `${seat.label} reached ${must}`).toBe(true);
-    }
+    expect(unreached({ ...seat, mustReach }, pages), `${seat.label} did not reach`).toEqual([]);
     expect(pages.filter((p) => REMOVED_PAGE.test(p)), `${seat.label}: links to pages unit RM removed (FR-RM-03)`).toEqual([]);
 
     for (const url of pages) {
