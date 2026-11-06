@@ -415,7 +415,7 @@ describe('NB-AC-04 C-10: no literal key, the key never reaches the summary', () 
     expect(summaryNamesTheKey(code, summary), 'the summary cell must not name the key variable').toBe(false);
   });
 
-  it('C-10: the checks catch a key planted on the hmac line, a swapped argument and an alias in the summary', () => {
+  it('C-10: the checks catch a key planted on the hmac line, a swapped argument and a key variable in the summary; a renamed alias in the summary is a known limit', () => {
     const hex = 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90';
     const hmacLine = code.split('\n').find((l) => l.includes('hmac.new('));
     expect(hmacLine, 'the notebook has an hmac.new( line').toBeDefined();
@@ -430,6 +430,23 @@ describe('NB-AC-04 C-10: no literal key, the key never reaches the summary', () 
     expect(summaryNamesTheKey(code, `print(${keyName}.hex())`), 'the key variable in the summary').toBe(true);
     expect(keyLiterals(`DATA_SHA256 = '${hex}'`), 'a dataset hash assignment is not a key').toEqual([]);
     expect(keyLiterals(`DATA_SHA256 = {('lug', 'train'): '${hex}'}`).length, 'only an assignment line of its own is skipped').toBe(0);
+  });
+
+  it('C-10: the key check also catches a second call, a second assignment, a key built from a hash name, hmac.digest and hmac.HMAC', () => {
+    const keyName = (code.match(/^\s*(\w+)\s*=\s*secrets\.token_bytes/m) as RegExpMatchArray)[1];
+    const hex = 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90';
+    const probes: Record<string, string> = {
+      'a second hmac.new( whose first argument holds a bracket': `${code}\nweak = hmac.new(bytes(32), b'x', hashlib.sha256)`,
+      'a second assignment to the key variable': `${code}\n${keyName} = b'this is my fixed key, see it here'`,
+      'a key built from a name that starts with DATA_SHA256': `${code}\nDATA_SHA256_K = '${hex}'\n${keyName} = bytes.fromhex(DATA_SHA256_K)`,
+      'hmac.digest with another key': `${code}\nd = hmac.digest(b'weak', b'x', 'sha256')`,
+      'hmac.HMAC with another key': `${code}\nh = hmac.HMAC(OTHER, b'x', 'sha256')`,
+      'a call the parser cannot close': `${code}\nbroken = hmac.new((bytes(32), b'x'`,
+    };
+    for (const [what, planted] of Object.entries(probes)) {
+      expect(keyUseProblems(planted).length, what).toBeGreaterThan(0);
+    }
+    expect(keyUseProblems(code), 'the real notebook is clean').toEqual([]);
   });
 });
 
@@ -539,7 +556,7 @@ describe('NB-AC-06: the linked content', () => {
     expect(md).toContain('Questions: 0');
   });
 
-  it.each(CONTROLS)("NB-AC-06: each notebook's linked-content cell equals the generator's output for content 5.0.0, %s", (c) => {
+  it.each(CONTROLS)("NB-AC-06: each notebook's linked-content cell equals the generator's output for the running content, %s", (c) => {
     const dir = ['data', 'content', RUNNING];
     const bank = readJson<QuestionBankFile>(...dir, 'questionBank.json');
     const areas = readJson<AreasFile>(...dir, 'assessmentAreas.json');
