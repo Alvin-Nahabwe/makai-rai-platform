@@ -709,13 +709,11 @@ bridge, the journey's output under `--log-driver none`, and a read-only root. If
 challenges the host, the run fails every hour; the answer is the rollback below, never a WAF allow
 rule or a rate-limit bypass for the synthetic account.
 
-The failed step ends its line with `reason=<code>`: `no_response`, `unexpected_status`, `not_json` (an answer
-that is not JSON, such as a Cloudflare challenge page), `no_csrf_token`, `signin_error`, `no_session_cookie`,
+The failed step ends its line with `reason=<code>`: `no_response`, `unexpected_status`, `not_json` (a 200 or 201
+whose body is not a JSON object, such as an HTML page from a proxy in the way), `no_csrf_token`, `signin_error`, `no_session_cookie`,
 `no_current_decision` (the question holds no decision: check `SYNTHETIC_QUESTION_ID` and the project),
 `not_saveable` (the current decision is withdrawn or has lost its reason, decider or date),
 `version_not_advanced`, `readback_differs`, `replay_not_recognised`.
-
-Troubleshooting: status=500 from the reminder trigger: check EMAIL_FROM_ADDRESS and RESEND_API_KEY in the server .env (runbook section 4).
 
 **The alert drill.** It proves the alarm against the host, the only sender: set
 `SYNTHETIC_QUESTION_ID` to an id of the same shape that does not exist, with
@@ -783,6 +781,10 @@ direction (an API change it does not know turns into `/fail`), but a new check a
 repository's journey does not reach the host until it is reinstalled. The script is coupled to
 the container name `docker-nextjs-1`, which comes from the Compose project name `docker`; a
 rename turns every run into `/fail`.
+
+### Reminder trigger
+
+Troubleshooting: status=500 from the reminder trigger: check `EMAIL_FROM_ADDRESS` and `RESEND_API_KEY` in the server `.env` (runbook section 4).
 
 ## Rotating the production secrets (Task 24)
 

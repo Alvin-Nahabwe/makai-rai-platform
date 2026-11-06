@@ -56,7 +56,7 @@ describe('route 40, POST /api/internal/reminders', () => {
   it('FR-OPS-02: a well-formed header answers 401 while the setting is malformed (the setting is checked, not only the header)', async () => {
     // The header is valid. These settings also differ from the token, so the digest comparison refuses them too: this case
     // pins the answer, it does not prove the form check on its own (a digest that matched would imply a 64-hex setting).
-    // The form check is contract row 40's rule, and the REMINDER_TOKEN_UNSET_OR_MALFORMED case below sees it act.
+    // The form check is contract row 40's rule; the case below whose first refusal is a malformed setting is the one that sees it act.
     for (const setting of [TOKEN + '\n', ' ' + TOKEN, `"${TOKEN}"`, TOKEN + 'a']) {
       process.env.REMINDER_JOB_TOKEN = setting;
       expect({ setting, status: (await callRoute('Bearer ' + TOKEN)).status }).toEqual({ setting, status: 401 });
@@ -122,6 +122,28 @@ describe('route 40, POST /api/internal/reminders', () => {
     process.env.REMINDER_JOB_TOKEN = TOKEN;
     const ordinary = await captureLogs(() => call('Bearer ' + 'b'.repeat(64)));
     expect(ordinary.lines.filter((l) => l.includes('REMINDER_TOKEN_UNSET_OR_MALFORMED'))).toEqual([]);
+    expect(runReminders).not.toHaveBeenCalled();
+  });
+
+  it.each([[TOKEN + '\n'], ['']])('FR-OPS-02 NFR-OBS-01: a process whose first refusal finds the malformed setting %j writes exactly one event, with the wrong-token body', async (setting) => {
+    // The event is the only thing that tells a malformed setting from a wrong token, so this is the case that fails when the
+    // form check (TOKEN_FORM) is removed from the route: the header is valid, the digests are never compared, and a missing check
+    // would let the request go on to the comparison without the event.
+    vi.resetModules();
+    const fresh = (await import('@/app/api/internal/reminders/route')).POST;
+    const call = (authorization: string) => fresh(new NextRequest('http://localhost/api/internal/reminders', { method: 'POST', headers: { authorization } }));
+    process.env.REMINDER_JOB_TOKEN = setting;
+    const first = await captureLogs(async () => {
+      const res = await call('Bearer ' + TOKEN);
+      return [res.status, await res.json()] as const;
+    });
+    const events = first.lines.filter((l) => l.includes('REMINDER_TOKEN_UNSET_OR_MALFORMED'));
+    expect(events).toHaveLength(1);
+    expect(JSON.parse(events[0])).toMatchObject({ level: 'error', event: 'REMINDER_TOKEN_UNSET_OR_MALFORMED' });
+    process.env.REMINDER_JOB_TOKEN = TOKEN;
+    const wrong = await call('Bearer ' + 'b'.repeat(64));
+    expect(first.result).toEqual([401, await wrong.json()]);
+    expect(first.lines.join('\n')).not.toContain(TOKEN);
     expect(runReminders).not.toHaveBeenCalled();
   });
 

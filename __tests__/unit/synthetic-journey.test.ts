@@ -307,11 +307,11 @@ describe('runJourney', () => {
   });
 
   it('FR-OPS-01: a gate question\'s current decision has status null and a scope answer, and is saved again with status null', async () => {
-    const fake = makeFake({ current: { ...CURRENT_V3, status: null, scopeAnswer: 'no', optionsInPlace: [] } });
+    const fake = makeFake({ current: { ...CURRENT_V3, status: null, scopeAnswer: 'no', optionsInPlace: [], reasonCode: null } });
     const r = await runJourney(journeyArgs(fake.fetchImpl));
     expect(r).toEqual({ ok: true, steps: OK_STEPS });
     const save = JSON.parse(fake.log.find((q) => q.method === 'POST' && q.path === SAVE_PATH)!.body);
-    expect(save).toMatchObject({ status: null, scopeAnswer: 'no', baseVersionNumber: 3 });
+    expect(save).toMatchObject({ status: null, scopeAnswer: 'no', optionsInPlace: [], reasonCode: null, baseVersionNumber: 3 });
   });
 
   it('FR-OPS-01: a question with no current decision fails with no_current_decision and sends no save', async () => {

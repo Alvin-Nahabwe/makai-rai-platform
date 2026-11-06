@@ -1,4 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { shText } from '../helpers/spawnText';
 import { load as loadYaml } from 'js-yaml';
 import { describe, expect, it } from 'vitest';
@@ -14,10 +16,35 @@ type Compose = { services: Record<string, { environment?: Record<string, unknown
 // A new line there that names a removed setting fails.
 const RUNBOOK_LINES = ['unset_env ' + ['ORG', 'LIMIT', 'PER', 'USER'].join('_'), `grep -cE '^${['ORG', 'LIMIT', 'PER', 'USER'].join('_')}=' ../.env`];
 
+// A value for the token in a shell assignment (quoted or not), a YAML or JSON mapping, or a pasted bearer header (POSIX ERE, as git grep -E reads it).
+const shQuote = (v: string) => `'${v.replace(/'/g, `'\\''`)}'`;
+const TOKEN_VALUE = `REMINDER_JOB_TOKEN["']?[[:space:]]*[=:][[:space:]]*["']?[0-9a-f]{64}|Bearer [0-9a-f]{64}`;
+
 // Built from parts, so this file holds neither name.
 const NAMES = [['ALLOW', 'OPEN', 'REGISTRATION'].join('_'), ['ORG', 'LIMIT', 'PER', 'USER'].join('_')];
 
 describe('the production settings', () => {
+  it('NFR-SEC-14: the token-value scan catches the plain, quoted, YAML and bearer shapes, and not an empty value', () => {
+    const hex = 'ab12'.repeat(16);
+    const dir = mkdtempSync(join(tmpdir(), 'token-scan-'));
+    try {
+      const planted: Record<string, string> = {
+        'plain.env': `REMINDER_JOB_TOKEN=${hex}`,
+        'quoted.sh': `export REMINDER_JOB_TOKEN="${hex}"`,
+        'single.sh': `REMINDER_JOB_TOKEN='${hex}'`,
+        'mapping.yml': `    REMINDER_JOB_TOKEN: ${hex}`,
+        'json.json': `{ "REMINDER_JOB_TOKEN": "${hex}" }`,
+        'bearer.md': `curl -H "Authorization: Bearer ${hex}"`,
+      };
+      for (const [name, text] of Object.entries(planted)) writeFileSync(join(dir, name), text + '\n');
+      writeFileSync(join(dir, 'empty.env'), 'REMINDER_JOB_TOKEN=\nREMINDER_JOB_TOKEN: ${REMINDER_JOB_TOKEN:-}\n');
+      const hits = shText(`cd '${dir}' && git grep --no-index -l -E ${shQuote(TOKEN_VALUE)} -- . || true`).split('\n').filter(Boolean).map((f) => f.replace(/^\.\//, '')).sort();
+      expect(hits).toEqual(Object.keys(planted).sort());
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('FR-OPS-03: neither removed setting name appears outside migrations', () => {
     // The names may stay where something must name them to prove them gone or to tell the owner to remove them:
     // a test or e2e file that carries FR-ACC-01, FR-OPS-03 or FR-ORG-04 (the requirements that retire them: they set the
@@ -46,7 +73,7 @@ describe('the production settings', () => {
     // No tracked or untracked-not-ignored file anywhere holds a value for it. A test fixture with an obvious dummy value would be
     // listed here by exact path; none is needed today, because the route test builds its dummy with repeat().
     const DUMMY_VALUE_FILES: string[] = [];
-    const found = shText(`git grep -n --untracked -E "REMINDER_JOB_TOKEN=[0-9a-f]{64}" || true`).split('\n').filter(Boolean)
+    const found = shText(`git grep -n --untracked -E ${shQuote(TOKEN_VALUE)} || true`).split('\n').filter(Boolean)
       .filter((l) => !DUMMY_VALUE_FILES.includes(l.split(':')[0]));
     expect(found).toEqual([]);
     const example = readFileSync('.env.example', 'utf8');
