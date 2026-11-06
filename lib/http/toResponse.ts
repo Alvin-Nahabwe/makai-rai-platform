@@ -4,9 +4,32 @@ import { UnauthenticatedError, PasswordChangeRequiredError } from '@/lib/auth/id
 import { AppError } from '@/lib/http/errors';
 import type { ApiErrorBody } from '@/types/api';
 import { isDatabaseUnavailable } from '@/lib/data/pgErrors';
+import { redactEmails } from '@/lib/redact';
 import {
   UNAVAILABLE_ADAPTER_KINDS, UNAVAILABLE_ERRNO_CODES, UNAVAILABLE_PRISMA_CODES, logRequestFailure, stampReference,
 } from '@/lib/http/supportReference';
+
+const CLASS_NAME = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
+const ERROR_CODE = /^(P\d{4}|[A-Z][A-Z0-9_]{1,40})$/;
+const FRAME = /^\s+at /;
+
+/**
+ * One `console.error` of `{ event: 'UNMAPPED_ERROR', reference, name, code?, frames, at }` for an error nothing
+ * mapped. `name` is the constructor's name when it is a plain identifier, else `typeof e`; `code` only when it is
+ * a Prisma or errno-shaped string; `frames` the first ten stack lines that start with `at`, through
+ * `redactEmails`. Never the message, `String(e)` or the stack's first line.
+ */
+function logUnmappedError(e: unknown, reference: string): void {
+  const ctorName = isObject(e) && typeof e.constructor?.name === 'string' ? e.constructor.name : '';
+  const line: Record<string, unknown> = {
+    event: 'UNMAPPED_ERROR', reference, name: CLASS_NAME.test(ctorName) ? ctorName : typeof e,
+  };
+  if (isObject(e) && typeof e.code === 'string' && ERROR_CODE.test(e.code)) line.code = e.code;
+  const stack = isObject(e) && typeof e.stack === 'string' ? e.stack : '';
+  line.frames = stack.split('\n').filter((l) => FRAME.test(l)).slice(0, 10).map((l) => redactEmails(l.trim()));
+  line.at = new Date().toISOString();
+  console.error(JSON.stringify(line));
+}
 
 function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null;
@@ -99,9 +122,10 @@ export function toResponse(e: unknown): NextResponse {
       { status: 503 },
     );
   }
-  // Neither mapped nor an outage: a bug. Print it as Next did when it was rethrown, then answer with a reference.
-  console.error(e);
+  // Neither mapped nor an outage: a bug. Log its class, code and code locations under the reference, never its
+  // message (a Prisma message can carry argument values), then answer with the reference.
   const reference = stampReference(e);
+  logUnmappedError(e, reference);
   logRequestFailure({ reference, status: 500, code: 'internal_error' });
   const body: ApiErrorBody = { error: 'internal_error', code: 'internal_error', message: 'internal_error', reference };
   return NextResponse.json(body, { status: 500 });

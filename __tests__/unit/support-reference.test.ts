@@ -201,6 +201,27 @@ it('NFR-OBS-05 (round 9c): the reference is put after the spread of extra, so no
   expect(await answer(new AppError(500, 'real', 'real message', { error: 'x', code: 'x' } as never))).toMatchObject({ body: { error: 'real message', code: 'real' } });
 });
 
+it('NFR-PRIV-03 NFR-OBS-01 FIX-8: a planted email in an unmapped error is not in the log', async () => {
+  const { body, lines } = await answer(new Error('lookup failed for planted@b.org with reason secret reason text'));
+  expect(scanLines(lines, { markers: true, emails: true })).toEqual([]);
+  expect(lines.join('\n')).not.toContain('secret reason');
+  const hits = lines.filter((l) => l.includes('UNMAPPED_ERROR'));
+  expect(hits).toHaveLength(1);
+  const line = JSON.parse(hits[0]);
+  expect(line).toMatchObject({ event: 'UNMAPPED_ERROR', reference: body.reference, name: 'Error' });
+  expect(line.frames.length).toBeGreaterThan(0);
+  expect(line.frames.length).toBeLessThanOrEqual(10);
+  expect('code' in line).toBe(false);
+});
+
+it('NFR-PRIV-03 NFR-OBS-01 FIX-8: a Prisma-shaped unmapped error logs its code and not its address', async () => {
+  const { lines } = await answer(Object.assign(new Error('Unique constraint failed on x@y.org'), { code: 'P2002' }));
+  expect(scanLines(lines, { markers: true, emails: true })).toEqual([]);
+  const line = JSON.parse(lines.find((l) => l.includes('UNMAPPED_ERROR')) as string);
+  expect(line.code).toBe('P2002');
+  expect(lines.join('\n')).not.toContain('@y.org');
+});
+
 it('NFR-OBS-05: a reference is eight lowercase hexadecimal characters, a new one each time', () => {
   const seen = new Set(Array.from({ length: 50 }, () => newSupportReference()));
   expect(seen.size).toBe(50);
@@ -213,16 +234,23 @@ it('NFR-MNT-01 NFR-OBS-05: any other thrown value answers 500 internal_error wit
     expect(status, String(thrown)).toBe(500);
     expect(body, String(thrown)).toMatchObject({ code: 'internal_error', message: 'internal_error', error: 'internal_error', reference: expect.stringMatching(REFERENCE) });
     expect(Object.keys(body).sort(), String(thrown)).toEqual(['code', 'error', 'message', 'reference']);
-    // The reference is in exactly one line: the REQUEST_FAILED line. The error itself was printed before it was stamped.
+    // The reference is in two lines: the REQUEST_FAILED line and the UNMAPPED_ERROR line, one each, by event.
     const hits = loggedFor(lines, body.reference);
-    expect(hits, String(thrown)).toHaveLength(1);
-    expect(JSON.parse(hits[0])).toMatchObject({ event: 'REQUEST_FAILED', status: 500, code: 'internal_error', reference: body.reference });
-    expect(Object.keys(JSON.parse(hits[0])).sort()).toEqual(['at', 'code', 'event', 'reference', 'status']); // no cause
-    expect(lines.length, String(thrown)).toBeGreaterThan(1); // the error's own print is there as well
+    expect(hits, String(thrown)).toHaveLength(2);
+    const byEvent = (event: string) => hits.filter((l) => JSON.parse(l).event === event);
+    expect(byEvent('REQUEST_FAILED'), String(thrown)).toHaveLength(1);
+    expect(byEvent('UNMAPPED_ERROR'), String(thrown)).toHaveLength(1);
+    const failed = byEvent('REQUEST_FAILED')[0];
+    expect(JSON.parse(failed)).toMatchObject({ event: 'REQUEST_FAILED', status: 500, code: 'internal_error', reference: body.reference });
+    expect(Object.keys(JSON.parse(failed)).sort()).toEqual(['at', 'code', 'event', 'reference', 'status']); // no cause
+    expect(lines.length, String(thrown)).toBeGreaterThan(1); // the error's own line is there as well
   }
-  // What Next printed when the error was rethrown is printed now: the message is in the log, and not in the body.
+  // The bug stays visible in the log by its class name and a frame, not by its message; the body has no message either.
   const { body, lines } = await answer(new Error('the bug: a record had no owner'));
-  expect(lines.some((l) => l.includes('the bug: a record had no owner'))).toBe(true);
+  const unmapped = JSON.parse(lines.find((l) => l.includes('UNMAPPED_ERROR')) as string);
+  expect(unmapped.name).toBe('Error');
+  expect(unmapped.frames.length).toBeGreaterThan(0);
+  expect(lines.some((l) => l.includes('the bug: a record had no owner'))).toBe(false);
   expect(JSON.stringify(body)).not.toContain('record had no owner');
   // The error carries the reference it was answered with.
   const e = new Error('carries it');
