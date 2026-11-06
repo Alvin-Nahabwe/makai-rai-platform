@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { AreasFile, QuestionBankFile } from '@/types/content';
+import type { AreasFile, QuestionBankFile, ResourcesFile } from '@/types/content';
 import { CLAIMS_CORE, isClaim } from '@/lib/claims/pattern';
 import { linkedContentMarkdown } from '../../notebooks/tools/linkedContent';
 import { writeLinkedContent } from '../../notebooks/tools/writeLinkedContent';
@@ -733,5 +734,100 @@ describe('the linked-content generator', () => {
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Release (Task 17): the owner's pass is recorded, and only passed notebooks are served
+// ---------------------------------------------------------------------------
+
+describe('release of the reviewed notebooks', () => {
+  const resources = readJson<ResourcesFile>('data', 'resources.json');
+  const PUBLIC = join(ROOT, 'public', 'notebooks');
+  const sha256 = (buf: Buffer): string => createHash('sha256').update(buf).digest('hex');
+  const entryFor = (c: Control) => resources.notebooks.find((n) => n.controlId === c);
+  /** What a review record says about the domain review (Task 16 Step 2). `reviewed` is false without that section. */
+  function record(c: Control): { reviewed: boolean; reviewer?: string; qualifier?: string; date?: string; outcome?: string; sha?: string; body: string } {
+    const whole = readFileSync(join(ROOT, 'docs', 'content', 'notebooks-review', `${c}.md`), 'utf8');
+    const at = whole.lastIndexOf('## Domain review');
+    const body = at === -1 ? '' : whole.slice(at);
+    const line = /^- Reviewer: (.+)$/m.exec(body)?.[1];
+    // The Reviewer line is the name, and may end in a note in brackets (C-10: as the privacy-competent reviewer, OD-03).
+    const note = /\s*\(([^)]*)\)\s*$/.exec(line ?? '');
+    return {
+      reviewed: at !== -1,
+      body,
+      reviewer: line === undefined ? undefined : line.replace(/\s*\([^)]*\)\s*$/, ''),
+      qualifier: note?.[1],
+      date: /^- Date: (\d{4}-\d{2}-\d{2})$/m.exec(body)?.[1],
+      outcome: /^- Outcome: (\w+)$/m.exec(body)?.[1],
+      sha: /^- SHA-256: `([0-9a-f]{64})`/m.exec(body)?.[1],
+    };
+  }
+
+  it('FR-SUG-04 FR-SUG-05: public/notebooks holds exactly the released notebooks, byte-equal to their sources', () => {
+    const released = resources.notebooks.filter((n) => n.released);
+    for (const c of CONTROLS) {
+      const rec = record(c);
+      const entry = entryFor(c);
+      if (!rec.reviewed) {
+        expect(entry, `${c}: no domain review, so no entry`).toBeUndefined();
+        continue;
+      }
+      expect(rec.outcome, `${c}: the review record has a domain outcome`).toBeDefined();
+      // A notebook is released only if its review passed. A passed one may be held back (a failed CI run on its hash).
+      if (entry?.released) expect(rec.outcome, `${c}: released needs a passed review`).toBe('passed');
+    }
+    // Every entry carries the hash its review passed, released or not.
+    for (const n of resources.notebooks) {
+      expect(n.sha256, `${n.controlId}: the entry holds the hash the owner passed`).toBe(record(n.controlId as Control).sha);
+    }
+    const served = existsSync(PUBLIC) ? readdirSync(PUBLIC).filter((f) => f !== 'requirements.txt').sort() : [];
+    expect(served, 'public/notebooks holds exactly the released copies').toEqual(released.map((n) => n.file.replace('/notebooks/', '')).sort());
+    for (const n of released) {
+      const c = n.controlId as Control;
+      const name = FILES[c];
+      expect(n.file, `${c}: URL path`).toBe(`/notebooks/${name}`);
+      expect(n.requirementsFile).toBe('/notebooks/requirements.txt');
+      const copy = readFileSync(join(PUBLIC, name));
+      const source = readFileSync(join(TECHNICAL, name));
+      expect(copy.equals(source), `${c}: the served copy is byte-equal to its source`).toBe(true);
+      expect(n.bytes, `${c}: bytes`).toBe(source.length);
+      expect(n.sha256, `${c}: sha256`).toBe(sha256(source));
+    }
+    if (released.length > 0) {
+      expect(readFileSync(join(PUBLIC, 'requirements.txt')).equals(readFileSync(LOCK)), 'the served lock equals the lock').toBe(true);
+    } else {
+      expect(existsSync(join(PUBLIC, 'requirements.txt')), 'no lock is served while nothing is released').toBe(false);
+    }
+  });
+
+  it('FR-SUG-04: no notebook file is served from anywhere in public/ but public/notebooks', () => {
+    const found: string[] = [];
+    const walk = (dir: string): void => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) walk(path);
+        else if (/\.ipynb$/i.test(entry.name) && !path.startsWith(`${PUBLIC}/`)) found.push(path.slice(ROOT.length + 1));
+      }
+    };
+    walk(join(ROOT, 'public'));
+    expect(found, 'a notebook outside public/notebooks').toEqual([]);
+  });
+
+  it('NB-AC-10: a released notebook has outcome passed, and C-10\'s review is the privacy review', () => {
+    for (const n of resources.notebooks) {
+      const c = n.controlId as Control;
+      expect(CONTROLS, `${c} is one of the ten`).toContain(c);
+      if (n.released) expect(n.review.outcome, `${c}: released needs passed`).toBe('passed');
+      expect(n.review.reviewer.trim().length, `${c}: a named reviewer`).toBeGreaterThan(0);
+      expect(n.review.date, `${c}: a date`).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      const rec = record(c);
+      expect(rec.reviewed, `${c}: an entry needs a domain review record`).toBe(true);
+      expect(n.review.reviewer, `${c}: the entry's reviewer is the record's Reviewer line without its note`).toBe(rec.reviewer);
+      expect({ date: n.review.date, outcome: n.review.outcome }, `${c}: the entry matches its review record`).toEqual({ date: rec.date, outcome: rec.outcome });
+    }
+    // The privacy review of C-10 is stated on the Reviewer line itself, not anywhere in the record.
+    expect(record('C-10').qualifier, 'the C-10 Reviewer line names the privacy-competent reviewer').toMatch(/privacy-competent reviewer/);
   });
 });

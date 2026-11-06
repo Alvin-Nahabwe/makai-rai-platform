@@ -97,5 +97,136 @@
       }
     }
   ],
-  "notebooks": []
+  "notebooks": [
+    {
+      "controlId": "C-03",
+      "file": "/notebooks/C-03_data-quality-audit.ipynb",
+      "requirementsFile": "/notebooks/requirements.txt",
+      "sha256": "a478bc653ebb0afe7687683a9400453be53404620947199c65c3bc39c297bca1",
+      "bytes": 38905,
+      "review": {
+        "reviewer": "Product owner, MAK-AI",
+        "date": "2026-11-06",
+        "outcome": "passed"
+      },
+      "released": true
+    },
+    {
+      "controlId": "C-04",
+      "file": "/notebooks/C-04_bias-detection.ipynb",
+      "requirementsFile": "/notebooks/requirements.txt",
+      "sha256": "4b7423006c177a7426c7df7c86bb611ac483a5e081c915f53ac75f9c19f3341a",
+      "bytes": 32252,
+      "review": {
+        "reviewer": "Product owner, MAK-AI",
+        "date": "2026-11-06",
+        "outcome": "passed"
+      },
+      "released": true
+    },
+    {
+      "controlId": "C-05",
+      "file": "/notebooks/C-05_data-distribution.ipynb",
+      "requirementsFile": "/notebooks/requirements.txt",
+      "sha256": "8bd325cce56c08ccfde3cb5da20f932042f40fb7ef79356bcbbb3621241a3e48",
+      "bytes": 28543,
+      "review": {
+        "reviewer": "Product owner, MAK-AI",
+        "date": "2026-11-06",
+        "outcome": "passed"
+      },
+      "released": true
+    },
+    {
+      "controlId": "C-10",
+      "file": "/notebooks/C-10_privacy-anonymization.ipynb",
+      "requirementsFile": "/notebooks/requirements.txt",
+      "sha256": "46df30a6b7c5506491967a3944878ce1626592be852fc9121936e9d2be0d8159",
+      "bytes": 36514,
+      "review": {
+        "reviewer": "Product owner, MAK-AI",
+        "date": "2026-11-06",
+        "outcome": "passed"
+      },
+      "released": true
+    },
+    {
+      "controlId": "C-13",
+      "file": "/notebooks/C-13_subgroup-fairness.ipynb",
+      "requirementsFile": "/notebooks/requirements.txt",
+      "sha256": "a7aa2b5456ff9f994a3ecc4ddb98be23136e086d01e1116e507f44799c31c98b",
+      "bytes": 35878,
+      "review": {
+        "reviewer": "Product owner, MAK-AI",
+        "date": "2026-11-06",
+        "outcome": "passed"
+      },
+      "released": true
+    },
+    {
+      "controlId": "C-14",
+      "file": "/notebooks/C-14_disaggregated-performance.ipynb",
+      "requirementsFile": "/notebooks/requirements.txt",
+      "sha256": "6c28b2673aca6a44ed70d22d300896a41ed7fd62c8b29dc20a414a684ecf48ea",
+      "bytes": 37531,
+      "review": {
+        "reviewer": "Product owner, MAK-AI",
+        "date": "2026-11-06",
+        "outcome": "passed"
+      },
+      "released": true
+    },
+    {
+      "controlId": "C-15",
+      "file": "/notebooks/C-15_bias-mitigation.ipynb",
+      "requirementsFile": "/notebooks/requirements.txt",
+      "sha256": "267249dce3a37818fb60e771913b1a700cd47d9244d5446384be94f31f36abbd",
+      "bytes": 29804,
+      "review": {
+        "reviewer": "Product owner, MAK-AI",
+        "date": "2026-11-06",
+        "outcome": "passed"
+      },
+      "released": true
+    },
+    {
+      "controlId": "C-16",
+      "file": "/notebooks/C-16_stratified-evaluation.ipynb",
+      "requirementsFile": "/notebooks/requirements.txt",
+      "sha256": "9827ce699cc329e9c223d51f064f295503b98d09e07adf2e309db08f1ee9367c",
+      "bytes": 35242,
+      "review": {
+        "reviewer": "Product owner, MAK-AI",
+        "date": "2026-11-06",
+        "outcome": "passed"
+      },
+      "released": true
+    },
+    {
+      "controlId": "C-18",
+      "file": "/notebooks/C-18_explainability-analysis.ipynb",
+      "requirementsFile": "/notebooks/requirements.txt",
+      "sha256": "454452565c34b2a51db9d3a4a24bc6a1f87d8df91ad3a09f9260dc12e21b8fba",
+      "bytes": 41861,
+      "review": {
+        "reviewer": "Product owner, MAK-AI",
+        "date": "2026-11-06",
+        "outcome": "passed"
+      },
+      "released": true
+    },
+    {
+      "controlId": "C-21",
+      "file": "/notebooks/C-21_monitoring-drift.ipynb",
+      "requirementsFile": "/notebooks/requirements.txt",
+      "sha256": "c938055f5331d2395e7f0b144970d8a9d947de6704dcbe951ee55739fd4ea0cc",
+      "bytes": 33853,
+      "review": {
+        "reviewer": "Product owner, MAK-AI",
+        "date": "2026-11-06",
+        "outcome": "passed"
+      },
+      "released": true
+    }
+  ]
 }
