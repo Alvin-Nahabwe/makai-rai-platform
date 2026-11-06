@@ -1,10 +1,10 @@
 import 'dotenv/config';
 import { randomUUID } from 'node:crypto';
-import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { expect, request, test, type APIRequestContext, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { testDb } from '../__tests__/helpers/db';
 import { buildOrg, type FixtureMember, type OrgFixture } from '../__tests__/helpers/recordFixture';
 import { failOnDialog } from './helpers/dialogs';
-import { fillValid, saveAlert, waitForQuestionPage } from './helpers/session';
+import { fillValid, saveAlert, signInWith, waitForQuestionPage } from './helpers/session';
 
 /**
  * Review Focus RF-4 (FR-PRJ-03, FR-MEM-03): a write refused on a page that was already open is refused on the server too,
@@ -54,11 +54,7 @@ async function signIn(browser: Browser, m: FixtureMember, clientIp: string): Pro
   try {
     const page = await context.newPage();
     await page.goto('/login');
-    await page.waitForLoadState('networkidle');
-    await page.fill('#email', m.email);
-    await page.fill('#password', m.password);
-    await page.locator('button[type="submit"]').click();
-    await page.waitForURL((url) => url.pathname !== '/login', { timeout: 30_000 });
+    await signInWith(page, m.email, m.password);
     return JSON.stringify(await context.storageState());
   } finally {
     await context.close();
@@ -80,7 +76,7 @@ test.beforeAll(async ({ browser }) => {
   fx = await buildOrg({ label: 'rf4' });
   sessions.owner = await signIn(browser, fx.members.owner, '10.47.2.1');
   sessions.admin = await signIn(browser, fx.members.admin, '10.47.2.2');
-  ownerApi = await (await import('@playwright/test')).request.newContext({ baseURL, storageState: JSON.parse(sessions.owner) });
+  ownerApi = await request.newContext({ baseURL, storageState: JSON.parse(sessions.owner) });
   const base = `/api/v1/orgs/${fx.org.slug}/projects`;
   projectId = (await ok(await ownerApi.post(base, { data: { requestId: randomUUID(), name: 'RF-4 project', aiSystemType: 'classification' } }), 'route 23')).id;
   // A Partly decision on Q-PP-01 raises a shortfall finding (FR-FND-01).
