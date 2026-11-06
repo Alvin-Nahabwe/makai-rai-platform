@@ -28,7 +28,7 @@ export const WITHDRAW_OTHER = 'Not withdrawn. Reload the page and try again.';
 export const WITHDRAW_SIGNED_OUT = 'Not withdrawn: you are signed out. Sign in again, then come back.';
 export const WITHDRAW_FORBIDDEN = 'Not withdrawn: your role in this organisation no longer allows this. Ask an owner or admin.';
 
-export type WithdrawResult = { kind: 'done' } | { kind: 'taken' } | { kind: 'failed'; line: string; retry: boolean };
+export type WithdrawResult = { kind: 'done' } | { kind: 'taken' } | { kind: 'refused'; line: string; retry: boolean };
 
 /**
  * What a withdrawal's reply means for the person. A reply that does not say the withdrawal failed (no reply, a gateway page, a 5xx) may have
@@ -36,15 +36,15 @@ export type WithdrawResult = { kind: 'done' } | { kind: 'taken' } | { kind: 'fai
  */
 function withdrawResult(outcome: SendOutcome<unknown>): WithdrawResult {
   if (outcome.kind === 'saved') return { kind: 'done' };
-  if (outcome.kind === 'not_saved') return { kind: 'failed', line: WITHDRAW_LOST, retry: true };
+  if (outcome.kind === 'not_saved') return { kind: 'refused', line: WITHDRAW_LOST, retry: true };
   const { status, body } = outcome;
-  if (status >= 500) return { kind: 'failed', line: WITHDRAW_LOST, retry: true };
+  if (status >= 500) return { kind: 'refused', line: WITHDRAW_LOST, retry: true };
   if (status === 409 && body.code === 'already_withdrawn') return { kind: 'taken' };
-  if (status === 409 && body.code === 'project_archived') return { kind: 'failed', line: MSG_ARCHIVED, retry: false };
-  if (status === 401) return { kind: 'failed', line: WITHDRAW_SIGNED_OUT, retry: false };
-  if (status === 403) return { kind: 'failed', line: WITHDRAW_FORBIDDEN, retry: false };
-  if (status === 422 && body.fields !== undefined && body.fields.length > 0) return { kind: 'failed', line: body.fields[0].message, retry: false };
-  return { kind: 'failed', line: WITHDRAW_OTHER, retry: false };
+  if (status === 409 && body.code === 'project_archived') return { kind: 'refused', line: MSG_ARCHIVED, retry: false };
+  if (status === 401) return { kind: 'refused', line: WITHDRAW_SIGNED_OUT, retry: false };
+  if (status === 403) return { kind: 'refused', line: WITHDRAW_FORBIDDEN, retry: false };
+  if (status === 422 && body.fields !== undefined && body.fields.length > 0) return { kind: 'refused', line: body.fields[0].message, retry: false };
+  return { kind: 'refused', line: WITHDRAW_OTHER, retry: false };
 }
 
 /** Sends one withdrawal with the request id `retry` calls for (the same id for an unchanged reason). Returns what it means and the state to keep. */
@@ -55,7 +55,7 @@ export async function withdrawSend(a: { orgSlug: string; documentId: string; rea
   return { result: withdrawResult(outcome), retry: id.state };
 }
 
-export type CopyResult = { kind: 'copied' } | { kind: 'fallback'; text: string } | { kind: 'failed'; line: string; erased: boolean };
+export type CopyResult = { kind: 'copied' } | { kind: 'fallback'; text: string } | { kind: 'refused'; line: string; erased: boolean };
 
 /** Fetches route 18 and writes the text to the clipboard. A refusal names its cause; a clipboard that is missing or refuses gives the text for copying by hand. */
 export async function copyDocumentText(a: { orgSlug: string; documentId: string; fetchImpl?: typeof fetch; clipboard?: { writeText(text: string): Promise<void> } }): Promise<CopyResult> {
@@ -63,19 +63,19 @@ export async function copyDocumentText(a: { orgSlug: string; documentId: string;
   try {
     res = await (a.fetchImpl ?? fetch)(documentUrl(a.orgSlug, a.documentId, 'text'));
   } catch {
-    return { kind: 'failed', line: COPY_LOST, erased: false };
+    return { kind: 'refused', line: COPY_LOST, erased: false };
   }
   if (!res.ok) {
-    if (res.status === 401) return { kind: 'failed', line: COPY_SIGNED_OUT, erased: false };
-    if (res.status === 410) return { kind: 'failed', line: COPY_ERASED, erased: true };
-    if (res.status === 429) return { kind: 'failed', line: COPY_TOO_MANY, erased: false };
-    return { kind: 'failed', line: COPY_OTHER, erased: false };
+    if (res.status === 401) return { kind: 'refused', line: COPY_SIGNED_OUT, erased: false };
+    if (res.status === 410) return { kind: 'refused', line: COPY_ERASED, erased: true };
+    if (res.status === 429) return { kind: 'refused', line: COPY_TOO_MANY, erased: false };
+    return { kind: 'refused', line: COPY_OTHER, erased: false };
   }
   let text: string;
   try {
     text = await res.text();
   } catch {
-    return { kind: 'failed', line: COPY_LOST, erased: false };   // the body did not arrive
+    return { kind: 'refused', line: COPY_LOST, erased: false };   // the body did not arrive
   }
   try {
     if (a.clipboard === undefined) throw new Error('no clipboard');
@@ -131,7 +131,7 @@ export function WithdrawConfirm(p: {
     const out = await withdrawSend({ orgSlug: p.orgSlug, documentId: p.document.id, reason, retry });
     setBusy(false);
     setRetry(out.retry);
-    if (out.result.kind === 'failed') { setFailure(out.result.line); setCanRetry(out.result.retry); return; }
+    if (out.result.kind === 'refused') { setFailure(out.result.line); setCanRetry(out.result.retry); return; }
     p.onDone(out.result.kind);
   }
 
