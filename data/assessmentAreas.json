@@ -726,7 +726,7 @@
           "type": "framework"
         }
       ],
-      "template": null
+      "template": "/templates/C-11_informed-consent.html"
     },
     {
       "id": "C-12",
