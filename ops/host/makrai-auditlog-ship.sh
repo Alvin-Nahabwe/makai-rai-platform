@@ -75,6 +75,9 @@ umask 077
 readonly STATE=${MAKRAI_STATE_DIR:-/var/lib/makrai}
 readonly SPOOL=$STATE/auditlog-spool
 readonly CURSOR=$STATE/auditlog.cursor
+# The seal export's own cursor (NFR-INT-08): the SEAL_CREATED lines of the web container, a second
+# journalctl call because --grep applies to every term of one call.
+readonly SEAL_CURSOR=$STATE/auditlog-seal.cursor
 # Root's copy of auditlog.mjs, never the operator's checkout (T22-3).
 readonly OPS=/usr/local/lib/makrai
 readonly MAX_DELETE=60
@@ -220,7 +223,8 @@ fi
 name="auditlog-$(date -u -d "@$stamp_s" +%Y-%m-%dT%H%M%SZ).journal.gz"
 part="$SPOOL/.$name.part"
 next="$CURSOR.next"
-PARTIAL=("$part" "$next")
+seal_next="$SEAL_CURSOR.next"
+PARTIAL=("$part" "$next" "$seal_next")
 since=()
 if [ -s "$CURSOR" ]; then
   cp -- "$CURSOR" "$next"
@@ -228,8 +232,26 @@ else
   rm -f -- "$next"
   since=(--since=-26h)
 fi
+seal_since=()
+if [ -s "$SEAL_CURSOR" ]; then
+  cp -- "$SEAL_CURSOR" "$seal_next"
+else
+  rm -f -- "$seal_next"
+  seal_since=(--since=-26h)
+fi
 # `+` ORs the terms. journalctl writes the cursor of the last entry it showed into $next, and
 # leaves the file alone when nothing is new.
+#
+# Then, into the same file, the web container's SEAL_CREATED lines (NFR-INT-08): the container's tag
+# (docker-compose.prod.yml `tag: 'makrai/{{.Name}}'`) and the event name, nothing else of that
+# container. Two more guards. _SYSTEMD_UNIT=docker.service is a trusted field (journald takes it from
+# the sender's cgroup), so a local account that writes CONTAINER_TAG=... to the journal itself is not
+# shipped as a seal; matches of two different fields are ANDed. And --grep is anchored to the shape
+# logSecurityEvent writes (lib/security-logger.ts:77-84), so a line that merely contains the event
+# name, such as an error message or an echoed URL, is not. Two journal exports end in a blank line, so their concatenation is one valid export. The
+# two calls are joined by && inside the group: a failure of either fails the pipeline, and `set -e`
+# does not reach inside a pipeline whose status is tested with `||`.
+{
 journalctl --no-pager --cursor-file="$next" "${since[@]}" -o export \
   _COMM=sshd + _COMM=sshd-session + _COMM=sudo + _COMM=sudoedit + _COMM=su \
   + _EXE=/usr/bin/sudo + _EXE=/usr/bin/su + _EXE=/usr/bin/pkexec \
@@ -237,10 +259,15 @@ journalctl --no-pager --cursor-file="$next" "${since[@]}" -o export \
   + SYSLOG_FACILITY=10 \
   + _COMM=login + _COMM=passwd + _COMM=chpasswd \
   + SYSLOG_IDENTIFIER=makrai-break-glass \
+  && journalctl --no-pager --cursor-file="$seal_next" "${seal_since[@]}" -o export \
+  CONTAINER_TAG=makrai/docker-nextjs-1 _SYSTEMD_UNIT=docker.service \
+  --grep='^\{"timestamp":"[0-9TZ:.-]+","level":"info","event":"SEAL_CREATED",'
+} \
   | gzip -9 >"$part" \
   || fail "the journal export failed"
 mv -- "$part" "$SPOOL/$name"
 [ ! -e "$next" ] || mv -f -- "$next" "$CURSOR"
+[ ! -e "$seal_next" ] || mv -f -- "$seal_next" "$SEAL_CURSOR"
 PARTIAL=()
 
 # --- 2. Copy the spool, then empty it ----------------------------------------------------

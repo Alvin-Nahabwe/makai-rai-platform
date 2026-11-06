@@ -38,6 +38,11 @@ secret or host-specific is read from the server `.env` (see "Rules").
 | `ops/host/makrai-synthetic.sh` | `/usr/local/sbin/makrai-synthetic.sh` | root:root | 0755 | `install -m 0755`, from the stage (Task 20b) |
 | `scripts/synthetic-journey.mjs` | `/usr/local/lib/makrai/synthetic-journey.mjs`, mounted read-only into a throwaway container of the web image | root:root | 0644 | `install -m 0644`, from the stage (Task 20b) |
 | `ops/host/makrai-rotate-secrets.sh` | `/usr/local/sbin/makrai-rotate-secrets.sh` | root:root | 0755 | `install -m 0755`, from the stage, only after `sha256sum -c --strict` (Task 24; section below) |
+| `ops/host/makrai-reminders.sh` | `/usr/local/bin/makrai-reminders.sh` | root:root | 0755 | `install -m 0755`, from the stage (v0.6.0; section below) |
+| `ops/host/seal-check.mjs` | `/usr/local/lib/makrai/seal-check.mjs`, mounted read-only into a throwaway container of the web image | root:root | 0644 | `install -m 0644`, from the stage (v0.6.0) |
+| `lib/integrity/canonical.mjs` | `/usr/local/lib/makrai/integrity/canonical.mjs`, the file the application runs (ADR-C3), mounted read-only | root:root | 0644 | `install -d -m 0755` the directory, then `install -m 0644`, from the stage (v0.6.0) |
+| `lib/integrity/sealCheck.mjs` | `/usr/local/lib/makrai/integrity/sealCheck.mjs`, the file the application runs (ADR-C3), mounted read-only | root:root | 0644 | `install -m 0644`, from the stage (v0.6.0) |
+| `lib/findings/state.mjs` | `/usr/local/lib/makrai/findings/state.mjs`, the one module `sealCheck.mjs` imports from outside `lib/integrity/`, mounted read-only | root:root | 0644 | `install -d -m 0755` the directory, then `install -m 0644`, from the stage (v0.6.0) |
 
 Owner and mode are what the command in the last column produces. They are not read
 back from the host.
@@ -782,9 +787,127 @@ repository's journey does not reach the host until it is reinstalled. The script
 the container name `docker-nextjs-1`, which comes from the Compose project name `docker`; a
 rename turns every run into `/fail`.
 
+## Hourly reminder job (v0.6.0)
+
+The follow-up reminder job (NFR-OBS-02) is route 40, `POST /api/internal/reminders`, called from
+inside the web container by `makrai-reminders.sh`, from the operator's crontab at 20 past every
+hour (`ops/host/crontab.operator`). The wrapper runs one `docker exec docker-nextjs-1 node -e`
+under `timeout 900`; the node program reads `REMINDER_JOB_TOKEN` from the container's own
+environment, so the token is on no host command line and the wrapper never reads it from `.env`.
+Everything goes to `/srv/makrai/reminders.log` (mode 600), whose last line is
+`result=pass|fail at=<UTC time>`, and before it the job's own line
+`status=<code> attempted=<n> sent=<n> failed=<n> opted_out=<n> skipped_locked=<0|1>`, made of
+numbers only. Exit status 0 means the route answered 200 and every send succeeded; `skipped_locked=1`
+(another run held the job's lock) is a pass. Anything else, including a refused token
+(`status=401`), is non-zero and pings the check's `/fail`.
+
+**The check.** In the monitoring service, in your own browser, create the check `makrai-reminders`
+with period 1 hour and grace 2 hours, so that a missed run alerts within 3 hours. This is
+deployment.md 8.5 step 4a. Put its ping URL in the server `.env` as `HC_REMINDER_PING_URL` with
+`setenv_secret HC_REMINDER_PING_URL` (never as an argument, and never in this file or a commit).
+
+**Install** (deployment.md 8.5 step 12), by the staged-hash procedure above:
+
+1. Stage the wrapper and compare its sha256 with the reviewed commit's, then install it:
+   `printf '%s  %s\n' '<sha256>' /root/makrai-stage/makrai-reminders.sh | sha256sum -c --strict && install -m 0755 /root/makrai-stage/makrai-reminders.sh /usr/local/bin/makrai-reminders.sh`.
+   Expect `/root/makrai-stage/makrai-reminders.sh: OK`.
+2. Install the operator crontab the same way as before (`crontab -u <operator> ops/host/crontab.operator`
+   from the staged copy). Expect `crontab -u <operator> -l` to show the line
+   `20 * * * * /usr/local/bin/makrai-reminders.sh` among the four older ones.
+3. Run the wrapper once by hand: `sudo -u <operator> /usr/local/bin/makrai-reminders.sh; echo "exit=$?"`.
+   Expect `exit=0` and, as the last line of `/srv/makrai/reminders.log`, `result=pass at=...`. The
+   check turns green within a minute.
+
+**Rollback.** Pause the cron line, with the same comment-out and count pair the synthetic journey
+uses (deployment.md 8.5 step 6). As root, from the staged directory:
+
+```bash
+test -s /root/makrai-stage/crontab.operator.v060-pause || { crontab -u <operator> -l > /root/makrai-stage/crontab.operator.v060-pause.tmp && mv /root/makrai-stage/crontab.operator.v060-pause.tmp /root/makrai-stage/crontab.operator.v060-pause; }
+sed 's|^20 \* \* \* \* /usr/local/bin/makrai-reminders.sh|#v060-pause 20 * * * * /usr/local/bin/makrai-reminders.sh|' /root/makrai-stage/crontab.operator.v060-pause > /root/makrai-stage/crontab.operator.v060-paused
+[ "$(grep -c '^#v060-pause ' /root/makrai-stage/crontab.operator.v060-paused)" = 1 ] && crontab -u <operator> /root/makrai-stage/crontab.operator.v060-paused
+crontab -u <operator> -l | grep -c '^#v060-pause '
+```
+
+The last line prints `1`. Anything else: stop and find the cause before going on. Then pause the
+`makrai-reminders` check, and write down that it is paused: a paused check never alerts. To resume,
+put the saved copy back (`crontab -u <operator> /root/makrai-stage/crontab.operator.v060-pause`,
+which restores the line exactly), check that the same count command prints `0`, resume the check,
+and remove the two staged files. Reinstall the previous staged copy of the wrapper if one was
+replaced. deployment.md 9.5 says when to do this while v0.5.0 serves.
+
 ### Reminder trigger
 
 Troubleshooting: status=500 from the reminder trigger: check `EMAIL_FROM_ADDRESS` and `RESEND_API_KEY` in the server `.env` (runbook section 4).
+
+## Seal check in the restore test (v0.6.0)
+
+The nightly restore test (01:00 UTC) now checks every seal in the restored copy (NFR-INT-07). The
+check is the application's own code, run offline: `docker run --rm -i --pull never --network none
+--read-only --cap-drop ALL` of the image the live web container runs, with root's installed
+copies mounted read-only and never the operator's checkout:
+
+| Installed file | Mounted at |
+| --- | --- |
+| `/usr/local/lib/makrai/seal-check.mjs` | `/ops/ops/host/seal-check.mjs` |
+| `/usr/local/lib/makrai/integrity/` (`canonical.mjs`, `sealCheck.mjs`) | `/ops/lib/integrity` |
+| `/usr/local/lib/makrai/findings/` (`state.mjs`) | `/ops/lib/findings` |
+
+The log of the run then also holds `db_bytes=<n> unattached_bytes=<n>` and, per organisation id,
+`org=<id> held_bytes=<n> unattached_bytes=<n>`, the figures the database size alert is planned
+from. A failed seal makes the run end `Restore test FAILED: seals` and prints `RESTORE MISMATCH
+seals`; the log names the seal id and the field path of the first difference, never a value.
+
+**Install** (deployment.md 8.5 step 12; install the three files before the script, because the
+script mounts them with `--mount type=bind`, which fails the run when a source is not there yet
+and creates nothing in its place):
+
+1. `install -d -m 0755 /usr/local/lib/makrai/integrity /usr/local/lib/makrai/findings`.
+2. For each of `ops/host/seal-check.mjs`, `lib/integrity/canonical.mjs`, `lib/integrity/sealCheck.mjs`
+   and `lib/findings/state.mjs`: stage it, then
+   `printf '%s  %s\n' '<sha256>' /root/makrai-stage/<name> | sha256sum -c --strict && install -m 0644 /root/makrai-stage/<name> <host path from the install map>`.
+   Expect `OK` for each.
+3. Install `makrai-restore-test.sh` the same way (`install -m 0755`).
+4. The next 01:00 UTC log holds a `seals=<n> valid=<n> mismatched=0 ...` line and ends
+   `Restore test PASSED` (deployment.md 8.5 step 14). A pass without the `seals=` line ran the
+   earlier script.
+
+**Drift.** The host copies are the application's own code, so they must match the image. Re-run
+this install-map step on every deploy, whether or not the four files changed, so that the host
+copies of `lib/integrity/` and `lib/findings/state.mjs` never drift from the image; the next
+01:00 `seals=` line is the check. A stale copy checks seals written by newer code and reports
+`mismatched` for seals that are intact.
+
+**Rollback.** Reinstall the previous staged copy of `makrai-restore-test.sh`. The three installed
+files are inert without it. While v0.5.0 serves, the schema has no seals table, so the updated
+script fails at `seals`; deployment.md 9.5 says what to expect and what to roll back.
+
+## Seal lines in the audit ship (v0.6.0)
+
+`makrai-auditlog-ship.sh` now also exports, into the same hourly file, the web container's
+`SEAL_CREATED` lines (NFR-INT-08): a second `journalctl` for the container's tag
+`makrai/docker-nextjs-1` and the event name, with its own cursor
+`/var/lib/makrai/auditlog-seal.cursor`. Nothing else of that container is exported. The reconcile
+reads the lines as records (`records=` rises by one per seal); no other count changes.
+
+**Install** (deployment.md 8.5 step 12, "if FR-REV-07 is kept"): stage the script, then
+`printf '%s  %s\n' '<sha256>' /root/makrai-stage/makrai-auditlog-ship.sh | sha256sum -c --strict && install -m 0755 /root/makrai-stage/makrai-auditlog-ship.sh /usr/local/sbin/makrai-auditlog-ship.sh`.
+Expect `OK`. The first run has no seal cursor and starts 26 hours back, so a seal from the last day
+ships once.
+
+**Check, after the first real seal.** Within 65 minutes the off-site store holds an
+`auditlog-*.journal.gz` that contains a `SEAL_CREATED` entry:
+`zcat <file> | grep -c SEAL_CREATED` on a file fetched from the box prints `1` or more. This is
+the production check of NFR-INT-08; the workstation tests use stand-ins and cannot show it. The export
+also matches `_SYSTEMD_UNIT=docker.service`, a field journald sets from the sender's cgroup, so a
+local account cannot forge a seal line by writing the tag itself. Check on the host, once, that
+Docker's journald driver sets it:
+`journalctl -o verbose -n 1 CONTAINER_TAG=makrai/docker-nextjs-1 | grep _SYSTEMD_UNIT` prints
+`_SYSTEMD_UNIT=docker.service`. If it prints another unit, stop: the match would select nothing and
+no seal line would ship. It assumes the host's `journalctl` supports `--grep` (it needs PCRE2: `journalctl --version` prints
+`+PCRE2`) and that Docker's journald driver sets `CONTAINER_TAG` to the compose tag.
+
+**Rollback.** Reinstall the previous staged copy of the ship. The seal cursor file is harmless and
+can stay.
 
 ## Rotating the production secrets (Task 24)
 
