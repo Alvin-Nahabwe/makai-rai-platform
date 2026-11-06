@@ -150,16 +150,54 @@ describe('restore roles (SEC-1, backup-restore.md 4.2a and 4.5a, makrai-restore-
     const r = runLoop('### 4.2a');
     expect(r.code, r.stderr).toBe(0);
     const created: Record<string, string> = {};
+    // One psql call per role the migrations create, and none for a role twice: a role seen with both LOGIN and NOLOGIN
+    // would be created by the first call and left by the second, because of IF NOT EXISTS (SFH-8).
+    expect(r.calls, 'one psql call per migration role').toHaveLength(Object.keys(MIGRATION_ROLES).length);
     for (const call of r.calls) {
       const sql = call.argv[call.argv.indexOf('-c') + 1] ?? '';
       const m = /\bCREATE ROLE (\S+) (\S+)/.exec(sql);
       expect(m, `a psql call creates no role:\n${sql}`).not.toBeNull();
+      expect(created[m![1]], `${m![1]} is created by two psql calls`).toBeUndefined();
       created[m![1]] = m![2];
       // NOBYPASSRLS above all: a role that bypasses row-level security defeats every tenant boundary.
       expect(sql).toMatch(/\bNOSUPERUSER\b/);
       expect(sql).toMatch(/\bNOBYPASSRLS\b/);
     }
     expect(created, 'no stray role such as `defaults`, and NOLOGIN kept').toEqual(MIGRATION_ROLES);
+  });
+
+  it('NFR-SEC-04 SFH-8: 4.2a checks, before its loop, for a role the migrations write both LOGIN and NOLOGIN, and says to stop', () => {
+    const text = section(RUNBOOK, '### 4.2a');
+    const check = fences(text).find((f) => /\buniq -d\b/.test(f));
+    expect(check, '4.2a has no check line for a role with both forms').toBeDefined();
+    expect(text.indexOf(check!), 'the check comes before the role loop').toBeLessThan(text.indexOf(roleLoop('### 4.2a')));
+    expect(text).toMatch(/If it prints anything, stop and read the migrations/);
+    // Its `cd /srv/makrai/app` is the server's, as in runLoop: checked, then left out, and the cwd passed in instead.
+    expect(check).toMatch(/^cd \/srv\/makrai\/app && /);
+    const body = check!.replace(/^cd \/srv\/makrai\/app && /, '');
+    const run = (cwd: string) => spawnSync('bash', ['-c', `set -euo pipefail\n${body}`], { cwd, encoding: 'utf8', timeout: 30_000 });
+    // Today's migrations: it prints nothing.
+    const today = run(process.cwd());
+    expect(today.status, today.stderr).toBe(0);
+    expect(today.stdout).toBe('');
+    // A fixture with one role written both ways (a comment such as `-- was: CREATE ROLE makrai_definer LOGIN`): it prints the role.
+    const dir = mkdtempSync(path.join(tmpdir(), 'restore-roles-check-'));
+    try {
+      mkdirSync(path.join(dir, 'prisma', 'migrations', '0001_a'), { recursive: true });
+      writeFileSync(path.join(dir, 'prisma', 'migrations', '0001_a', 'migration.sql'),
+        '-- was: CREATE ROLE makrai_definer LOGIN\nCREATE ROLE makrai_definer NOLOGIN NOSUPERUSER;\nCREATE ROLE makrai_app LOGIN NOSUPERUSER;\n');
+      const both = run(dir);
+      expect(both.status, both.stderr).toBe(0);
+      expect(both.stdout.trim().split('\n')).toEqual(['makrai_definer']);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('RE-1 NFR-SEC-04: the restore test\'s `logins` failure has a remedy in §6: ALTER ROLE ... NOLOGIN PASSWORD NULL on the live database, then run the test again', () => {
+    const six = section(RUNBOOK, '## 6');
+    expect(six).toMatch(/`logins`[^\n]*\n?[^\n]*ALTER ROLE <role> NOLOGIN PASSWORD NULL/);
+    expect(six).toMatch(/for each role the log names/);
   });
 
   it('NFR-SEC-04 FIX-1: 4.5a sets a password only for the LOGIN roles and skips the function owners', () => {

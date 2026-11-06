@@ -445,7 +445,7 @@ function runRestore(o: RestoreOpts = {}) {
     // those, in its own copies, so the script that runs is the committed one with a different root.
     const app = path.join(dir, 'app');
     mkdirSync(path.join(app, 'prisma', 'migrations', '0001_init'), { recursive: true });
-    writeFileSync(path.join(app, 'prisma', 'migrations', '0001_init', 'migration.sql'), 'CREATE ROLE makrai_app;\n');
+    writeFileSync(path.join(app, 'prisma', 'migrations', '0001_init', 'migration.sql'), 'CREATE ROLE makrai_app LOGIN NOSUPERUSER;\n');
     // A function-owner role as the v0.6.0 migrations write it (SEC-1): the live NOLOGIN check needs one.
     mkdirSync(path.join(app, 'prisma', 'migrations', '0002_fn'), { recursive: true });
     writeFileSync(

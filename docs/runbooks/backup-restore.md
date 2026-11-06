@@ -322,7 +322,17 @@ The roles are not listed here. They are whatever the migrations create, read fro
 test uses (§6), so a role that a later migration adds is created too. The grep
 reads each role's name together with the `LOGIN` or `NOLOGIN` its migration writes
 after it, so a comment that mentions `CREATE ROLE` is not read as a role, and each
-role is created with its own migration's `LOGIN` or `NOLOGIN`:
+role is created with its own migration's `LOGIN` or `NOLOGIN`.
+
+First check that no role is written both ways, as a comment such as
+`-- was: CREATE ROLE makrai_definer LOGIN` would be. The loop would create such a role
+`LOGIN` and leave it that way. This prints each such role. If it prints anything, stop and read the migrations:
+
+```bash
+cd /srv/makrai/app && grep -hoE 'CREATE ROLE [a-z_]+ (NO)?LOGIN' prisma/migrations/*/migration.sql | awk '{print $3 ":" $4}' | sort -u | cut -d: -f1 | uniq -d
+```
+
+Then the loop:
 
 ```bash
 cd /srv/makrai/app
@@ -575,7 +585,8 @@ Storage Box**, so the copy that would be used in a disaster is the copy tested.
    `pg_policies` and the `_prisma_migrations` count must be equal, and `users` and
    `organizations` must each be above 0 in the restored copy (a schema-only dump
    passes the first two). On the live database, no role a migration creates
-   `NOLOGIN` may be able to log in (`logins`; see §4.2a).
+   `NOLOGIN` may be able to log in (`logins`; see §4.2a). On `logins`, run
+   `ALTER ROLE <role> NOLOGIN PASSWORD NULL` on the live database for each role the log names, then run the restore test again.
 6. Pings `HC_RESTORE_PING_URL`, or sends `/fail` and a content-free mail. Only a
    run that reached its last statement can pass: a signal (SIGTERM at a host
    shutdown, SIGHUP when an SSH session drops, SIGINT) or an early exit ends as
