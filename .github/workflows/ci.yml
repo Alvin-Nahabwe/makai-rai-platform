@@ -426,8 +426,12 @@ jobs:
     # suite" steps below for why Playwright is still invoked twice even
     # though those logins now happen only once). 30 min is a backstop for a
     # genuine hang, not a tight budget to tune, same rationale as `verify`'s
-    # own timeout comment above.
-    timeout-minutes: 30
+    # own timeout comment above. Raised from 30 to 50 on 2026-11-06: by
+    # v0.6.0 the job's normal run is about 26.5 min (run 42181650736), and
+    # run 42184836682 was cancelled at 30 min in its last step with every
+    # test step passing, after a 2-minute browser install; the install step
+    # may now retry for up to 17 min.
+    timeout-minutes: 50
 
     # Mirrors `verify`'s env block above (job-level env is not inherited
     # across jobs in GitHub Actions, so this cannot simply reference it) plus
