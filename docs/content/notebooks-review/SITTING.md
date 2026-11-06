@@ -215,3 +215,8 @@ SHA-256 of each notebook source at `46e49ddb`, so your pass is for these exact b
 | C-05 | `8bd325cce56c08ccfde3cb5da20f932042f40fb7ef79356bcbbb3621241a3e48` |
 | C-16 | `9827ce699cc329e9c223d51f064f295503b98d09e07adf2e309db08f1ee9367c` |
 | C-10 | `46df30a6b7c5506491967a3944878ce1626592be852fc9121936e9d2be0d8159` |
+
+## Answers recorded on 6 November 2026
+
+The owner passed all ten notebooks on the hashes above ("C-13: pass, C-14: pass, C-21: pass, C-18: pass, C-03: pass, C-04: pass, C-15: pass, C-05: pass, C-16: pass, C-10: pass") and answered "Questions as proposed". The reviewer is "Product owner, MAK-AI" for all ten, and for C-10 as the privacy-competent reviewer (OD-03). The answers are recorded in each notebook's review file under "Domain review", and verbatim in records/plans/2026-10-29-v1-plan/reviews/owner-questions.md. C-16 item 8 is settled: the Q-PO-12 paragraph stays.
+
