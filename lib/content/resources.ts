@@ -90,7 +90,17 @@ export function parseResources(raw: unknown): ResourcesFile {
   const bytes = (v: unknown, where: string): number =>
     typeof v === 'number' && Number.isSafeInteger(v) && v > 0 ? v : refuse(where, 'must be a positive whole number');
 
-  return {
+  // A card links one template and one notebook per control (it takes the first passed or released entry), so a second entry of a kind
+  // would be served and linked nowhere (G3). Checked after the field rules, so a bad field is still named first.
+  const onePerControl = (list: Json[], key: string): void => {
+    const seen = new Set<unknown>();
+    list.forEach((e, i) => {
+      if (seen.has(e.controlId)) refuse(`${key}[${i}].controlId`, `${String(e.controlId)} already has a ${key.slice(0, -1)} entry`);
+      seen.add(e.controlId);
+    });
+  };
+
+  const result = {
     templates: templates.map((t, i): Template => {
       const at = `templates[${i}]`;
       onlyKeys(t, TEMPLATE_KEYS, at);
@@ -120,6 +130,9 @@ export function parseResources(raw: unknown): ResourcesFile {
       return { ...checked, released: n.released };
     }),
   };
+  onePerControl(templates, 'templates');
+  onePerControl(notebooks, 'notebooks');
+  return result;
 }
 
 let cached: ResourcesFile | undefined;
