@@ -23,9 +23,10 @@ import type { PerfManifest } from '../scripts/load/seed-perf-fixture';
  * bodies-only figure are printed beside it. A background request to a shell link whose page is not built yet
  * (e2e/helpers/pendingLinks.ts) is aborted by the spec, as every networkidle spec does.
  *
- * Budgets as the owner ruled them (owner-questions.md, 4 Nov 23:13 and 5 Nov 03:29): 220000 for every public page with
- * the fixture's plain names; S-04 with an inviter name that mixes a Latin-1 letter with a common latin-ext letter is an
- * ACCEPTED-RISK at PERF's measured 228495 bytes, and has its own case below. S-05 is not a public page (it renders only for
+ * Budgets as the owner ruled them (owner-questions.md, 4 Nov 23:13, 5 Nov 03:29 and 6 Nov): 220000 for every public page
+ * with the fixture's plain names; S-04 with an accented organisation name (set in DM Serif, which then fetches its
+ * latin_rest file) and an inviter name that mixes a Latin-1 letter with a common latin-ext letter is an ACCEPTED-RISK at
+ * 236662 bytes measured direct to next start, and has its own case below. S-05 is not a public page (it renders only for
  * a signed-in account missing an acceptance); it is held to the public budget as a stricter check this spec sets itself.
  *
  * Run on the production build (`npm run build`, then Playwright with CI=1, which serves `next start`); a dev build's
@@ -46,8 +47,10 @@ const PUBLIC_OWNER_IP = '10.47.0.4';
 /** Where a sign-in lands: the dashboard, or the organisation picker for an account with no last organisation. */
 const SIGNED_IN = /^\/(orgs\/[^/]+\/dashboard)?$/;
 
-/** The owner-accepted ceiling for S-04 with a Latin-1 plus latin-ext inviter name (owner-questions.md, 5 Nov 03:29). */
-const ACCENTED_INVITATION_CEILING = 228_495;
+/** The owner-accepted figure for S-04 with an accented organisation name and inviter (owner-questions.md, 6 Nov, "Accept both"). */
+const ACCENTED_INVITATION_CEILING = 236_662;
+/** The owner-accepted figure for S-05, recorded, not asserted (owner-questions.md, 6 Nov). */
+const S05_ACCEPTED = 220_428;
 
 type Measured = {
   landed: string; status: number; protocol: string; total: number; sizes: number; bodies: number; failed: string[];
@@ -296,12 +299,13 @@ test.describe('the public budget', () => {
     report(path, m, PUBLIC_BUDGET);
     expectRendered(m, path, path, path);
     test.info().annotations.push({ type: 'S-05 against the public budget (recorded)', description:
-      m.total <= PUBLIC_BUDGET ? `${m.total} B, within 220000 B` : `${m.total} B, ${m.total - PUBLIC_BUDGET} B over 220000 B` });
+      `${m.total} B; ${m.total <= PUBLIC_BUDGET ? 'within 220000 B' : `${m.total - PUBLIC_BUDGET} B over 220000 B`}; `
+      + `the owner accepted ${S05_ACCEPTED} B measured direct (${m.total <= S05_ACCEPTED ? 'within it' : `${m.total - S05_ACCEPTED} B above it`})` });
   });
 });
 
 test.describe('S-04 with accented names, against the accepted risk', () => {
-  test('NFR-PERF-02 (ACCEPTED-RISK, 228495 B): S-04 with an accented organisation name and a Latin-1 plus latin-ext inviter name', async ({ browser }) => {
+  test('NFR-PERF-02 (ACCEPTED-RISK, 236662 B): S-04 with an accented organisation name and a Latin-1 plus latin-ext inviter name', async ({ browser }) => {
     test.setTimeout(120_000);
     const baseURL = test.info().project.use.baseURL!;
     // The owner's ruling names "José Nnaŋŋa" (U+00E9 from Latin-1, U+014B from the common latin-ext face); the organisation
