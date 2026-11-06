@@ -20,7 +20,10 @@ vi.mock('@/components/review/SealNote', () => ({ SealNote: slot('SealNote') }));
 vi.mock('next/navigation', async (original) => ({ ...(await original<typeof import('next/navigation')>()), useRouter: () => ({ refresh() {} }), usePathname: () => '/x' }));
 vi.mock('@/components/evidence/EvidenceBlock', () => ({ EvidenceBlock: slot('EvidenceBlock') }));
 vi.mock('@/components/findings/QuestionFindingLink', () => ({ QuestionFindingLink: slot('QuestionFindingLink') }));
-vi.mock('@/components/suggestions/SuggestedControls', () => ({ SuggestedControls: slot('SuggestedControls') }));
+vi.mock('@/components/suggestions/SuggestedControls', async (original) => ({
+  ...(await original<typeof import('@/components/suggestions/SuggestedControls')>()),   // suggestionCount is the real one: the page and the slot share it
+  SuggestedControls: slot('SuggestedControls'),
+}));
 
 const requireIdentity = vi.fn();
 const requireOrgContextFor = vi.fn();
@@ -78,6 +81,8 @@ describe('S-12 shell', () => {
     for (const id of labelled) expect(html, id).toMatch(new RegExp(`<h[23] id="${id}">[^<]+</h[23]>`));
     expect(html).toMatch(/<section[^>]*data-region="suggestions"[^>]*id="suggestions"|<section[^>]*id="suggestions"[^>]*data-region="suggestions"/);
     expect(html.match(/id="suggestions"/g)).toHaveLength(1);
+    // The region's heading carries the count the QuestionContent link gets (the helper test below pins that prop: 3 controls for Q-PP-01), and the aria-labelledby points at it.
+    expect(html).toContain('<h2 id="s12-suggestions">Ways teams address this (3)</h2>');
   });
 
   it('UX-31 FR-PRJ-03: an archived project shows the archived banner on S-12', async () => {
@@ -90,7 +95,7 @@ describe('S-12 shell', () => {
 
   it('FR-DEC-01 (helper): each region\'s component gets the props its contract row names, from the panel data', async () => {
     renderToStaticMarkup(await QuestionPanelRegions({ data: PANEL }));
-    expect(propsSeen.QuestionContent).toEqual({ question: QUESTION, suggestionCount: 0 });
+    expect(propsSeen.QuestionContent).toEqual({ question: QUESTION, suggestionCount: 3 });
     expect(propsSeen.CurrentDecision).toEqual({
       current: CURRENT, historyCount: 2, seals: PANEL.seals,
       historyHref: '/orgs/acme-health/projects/p1/stages/pre-processing/questions/Q-PP-01/history',

@@ -30,23 +30,32 @@ function Groups({ groups, c, resources }: { groups: ControlGroup[]; c: LoadedCon
   );
 }
 
-const countOf = (groups: ControlGroup[]): number => groups.reduce((n, g) => n + g.controls.length, 0);
+/** Distinct control cards in the groups: a control reached through two risk areas is shown once (SRS line 1910). */
+const countOf = (...lists: ControlGroup[][]): number =>
+  new Set(lists.flatMap((groups) => groups.flatMap((g) => g.controls.map((x) => x.control.id)))).size;
+
+/**
+ * The number n of "Ways teams address this (n)": the cards `SuggestedControls` shows for these props. The S-12 page calls it for
+ * both its region heading and its in-page link, so they and the slot cannot disagree.
+ */
+export function suggestionCount({ contentSemver, questionId, tickedOptions }: SuggestedControlsProps): number {
+  const { first, rest } = controlsForQuestion(loadContent(contentSemver), questionId, tickedOptions);
+  return countOf(first, rest);
+}
 
 /**
  * "Ways teams address this" on S-12 (UX-08, UX-13): the controls mapped to the question, shown before any answer. A
  * slot of its screen (contract "Screens and slots"): the screen's owner renders it, SUG fills it. A server component
- * with no script. The gate shows none (FR-SUG-02). The shell names its region with its own heading, so the count here
- * is a line, not a second heading with the same words.
+ * with no script. The gate shows none (FR-SUG-02). The shell names its region with its own heading, which carries the
+ * count (`suggestionCount`), so the slot repeats neither.
  */
 export function SuggestedControls({ contentSemver, questionId, tickedOptions }: SuggestedControlsProps): ReactElement | null {
   const c = loadContent(contentSemver);
   const { first, rest } = controlsForQuestion(c, questionId, tickedOptions);
-  const total = countOf(first) + countOf(rest);
-  if (total === 0) return null;
+  if (countOf(first, rest) === 0) return null;
   const resources = loadResources();
   return (
     <div className="suggested-controls">
-      <p className="suggested-controls__count">{`Ways teams address this (${total})`}</p>
       <p>Shown before you answer. Use any, none, or your own approach.</p>
       <Groups groups={first} c={c} resources={resources} />
       {rest.length > 0 && (

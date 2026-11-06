@@ -13,17 +13,14 @@ import { DecisionForm } from '@/components/decision/DecisionForm';
 import { FocusOnArrival } from '@/components/decision/FocusOnArrival';
 import { WithdrawDecision } from '@/components/decision/WithdrawDecision';
 import { QuestionFindingLink } from '@/components/findings/QuestionFindingLink';
-import { SuggestedControls } from '@/components/suggestions/SuggestedControls';
-import { controlsForQuestion } from '@/lib/content/suggestions';
-import { loadContent } from '@/lib/content/loader';
+import { SuggestedControls, suggestionCount } from '@/components/suggestions/SuggestedControls';
 import { isReworded } from '@/lib/question/reworded';
 import { STAGE_TITLE } from '@/lib/question/stageList';
 import { canWithdrawVersion, questionHref } from '@/lib/question/draft';
 
-/** The total of SUG's `controlsForQuestion` for the "Ways teams address this (n)" link (gap G074). */
-function suggestionCount(data: QuestionPanelData): number {
-  const c = controlsForQuestion(loadContent(data.contentSemver), data.question.id, data.current?.optionsInPlace ?? []);
-  return c.first.length + c.rest.length;
+/** n in "Ways teams address this (n)": SUG's `suggestionCount`, the one number the heading, the in-page link and the slot share. */
+function countFor(data: QuestionPanelData): number {
+  return suggestionCount({ contentSemver: data.contentSemver, questionId: data.question.id, tickedOptions: data.current?.optionsInPlace ?? [] });
 }
 
 /**
@@ -39,6 +36,7 @@ function suggestionCount(data: QuestionPanelData): number {
  */
 export function QuestionPanelRegions({ data }: { data: QuestionPanelData }) {
   const question = data.question;
+  const count = countFor(data);
   const base = `/orgs/${data.orgSlug}/projects/${data.projectId}`;
   const reworded = data.current !== null && data.current.status !== 'withdrawn' && isReworded(question, data.runningQuestion);
   const { index, total, previousId, nextId } = data.position;
@@ -59,7 +57,7 @@ export function QuestionPanelRegions({ data }: { data: QuestionPanelData }) {
             <h2 id="s12-question">Question</h2>
             {/* FR-CNT-08, ruling on SPEC-1: the region shows the running wording, the one a new save re-confirms against; the
                 disclosure below holds the wording the current decision was answered against (FR-CNT-07). */}
-            <QuestionContent question={data.runningQuestion} suggestionCount={suggestionCount(data)} />
+            <QuestionContent question={data.runningQuestion} suggestionCount={count} />
             {reworded ? (
               <div data-reworded>
                 <p>{`Wording updated in content version ${data.contentSemver}.`}</p>
@@ -110,7 +108,7 @@ export function QuestionPanelRegions({ data }: { data: QuestionPanelData }) {
             />
           </section>
           <section data-region="suggestions" id="suggestions" aria-labelledby="s12-suggestions">
-            <h2 id="s12-suggestions">Ways teams address this</h2>
+            <h2 id="s12-suggestions">{count > 0 ? `Ways teams address this (${count})` : 'Ways teams address this'}</h2>
             <SuggestedControls
               contentSemver={data.contentSemver}
               questionId={question.id}
