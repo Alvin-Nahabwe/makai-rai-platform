@@ -11,7 +11,7 @@ import { NotFoundError, withOrg } from '@/lib/data/tenant';
 import { questionApplies, questionsInStage, runningContent } from '@/lib/content/loader';
 import { currentDecisionRows } from '@/lib/data/decisions';
 import { listFindings } from '@/lib/data/findings';
-import { myMitigations, openMitigationsByStage, ownerCannotAct, stageFollowUpCounts } from '@/lib/data/followup';
+import { myMitigations, projectFollowUp, stageFollowUpCounts } from '@/lib/data/followup';
 
 /** Projects, archive, stage view and dashboard (FR-PRJ). */
 
@@ -38,7 +38,8 @@ async function documentsIssuedByStage(tx: TenantTx, projectId: string): Promise<
  * S-08, S-10 and S-11 share.
  */
 export async function stageView(
-  ctx: OrgContext, projectId: string, today: CalendarDate, opts: { open?: Record<Stage, FollowUpItem[]> } = {},
+  ctx: OrgContext, projectId: string, today: CalendarDate,
+  opts: { followUp?: { open: Record<Stage, FollowUpItem[]>; counts: Record<Stage, { openFindings: number; overdueMitigations: number }> } } = {},
 ): Promise<Record<Stage, StageCounts>> {
   const content = runningContent();
   const { decisions, documents } = await withOrg(ctx, async (tx) => {
@@ -52,7 +53,11 @@ export async function stageView(
   }) as { decisions: Record<Stage, Awaited<ReturnType<typeof currentDecisionRows>>>; documents: Record<Stage, number> };
   // S-10 shows the open and overdue mitigations of an archived project too; reminders and S-08 do not (FR-PRJ-03).
   const kept = { includeArchived: true };
-  const open = opts.open ?? await openMitigationsByStage(ctx, projectId, today, kept);
+  // One read each for the three stages, not one per stage (NFR-PERF-04, FIX-12): the follow-up rows, and the findings.
+  const [{ open, counts: followUp }, allFindings] = await Promise.all([
+    opts.followUp ?? projectFollowUp(ctx, projectId, today, kept), listFindings(ctx, projectId, undefined, today),
+  ]);
+  const findingsByStage = Map.groupBy(allFindings, (f) => f.stage);
 
   const out = {} as Record<Stage, StageCounts>;
   for (const stage of STAGES) {
@@ -82,10 +87,8 @@ export async function stageView(
       if (row === undefined || row.status === 'withdrawn' || row.status === null) noDecision += 1;
     }
 
-    const [counts, findings] = await Promise.all([
-      stageFollowUpCounts(ctx, projectId, stage, today, kept),
-      listFindings(ctx, projectId, stage, today),
-    ]);
+    const counts = followUp[stage];
+    const findings = findingsByStage.get(stage) ?? [];
     out[stage] = {
       questions: questions.length, noDecision, byStatus,
       doneWithoutEvidence: counted.filter((r) => r.status === 'done' && r.evidenceIds.length === 0).length,
@@ -220,14 +223,16 @@ export async function loadProjectOverview(
   }));
   if (found.project === null) return null;
   const kept = { includeArchived: true };   // S-10 follows up an archived project's open mitigations too (FR-PRJ-03)
-  const byStage = await openMitigationsByStage(ctx, opts.projectId, opts.today, kept);
-  const [counts, cannotAct, reviews] = await Promise.all([
-    stageView(ctx, opts.projectId, opts.today, { open: byStage }),
-    ownerCannotAct(ctx, opts.projectId, kept),
+  const projectFollowUps = await projectFollowUp(ctx, opts.projectId, opts.today, kept);
+  const byStage = projectFollowUps.open;
+  const [counts, reviews] = await Promise.all([
+    stageView(ctx, opts.projectId, opts.today, { followUp: projectFollowUps }),
     listStageReviews(ctx, opts.projectId),
   ]);
+  // `openMitigationsByStage` holds the cannot-act items too, with `ownerCanAct: false`, in the same order, so they are
+  // `ownerCannotAct`'s list without a second read of the same rows (NFR-PERF-04, FIX-12).
   const followUp = Object.fromEntries(STAGES.map((s) => [s, {
-    items: byStage[s].filter((i) => i.ownerCanAct), cannotAct: cannotAct.filter((i) => i.stage === s),
+    items: byStage[s].filter((i) => i.ownerCanAct), cannotAct: byStage[s].filter((i) => !i.ownerCanAct),
   }])) as StageFollowUps;
   const reviewsByStage = Object.fromEntries(STAGES.map((s) => [s, reviews.filter((r) => r.stage === s)])) as Record<Stage, StageReviewView[]>;
   const archived = found.project.archivedAt !== null;

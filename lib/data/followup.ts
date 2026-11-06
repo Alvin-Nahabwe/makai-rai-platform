@@ -105,11 +105,41 @@ export async function ownerCannotAct(ctx: OrgContext, projectId: string, o: Foll
 export async function stageFollowUpCounts(
   ctx: OrgContext, projectId: string, stage: Stage, today: CalendarDate, o: FollowUpOptions = {},
 ): Promise<{ openFindings: number; overdueMitigations: number }> {
+  return (await projectFollowUpCounts(ctx, projectId, today, o))[stage];
+}
+
+type StageFollowUpCounts = Record<Stage, { openFindings: number; overdueMitigations: number }>;
+
+/** Findings whose state is open, and overdue mitigations, by stage, from the project's follow-up rows. */
+function countsOf(rows: FollowUpSourceRows, today: CalendarDate): StageFollowUpCounts {
+  const states = findingStates(rows);
+  const overdue = selectOpenMitigations(rows, () => true, today).filter((m) => m.overdue);
+  return Object.fromEntries(STAGES.map((stage) => [stage, {
+    openFindings: rows.findings.filter((f) => f.stage === stage && states.get(f.id) === 'open').length,
+    overdueMitigations: overdue.filter((m) => m.stage === stage).length,
+  }])) as StageFollowUpCounts;
+}
+
+/** `stageFollowUpCounts` of every stage of the project from one read of its follow-up rows. */
+export async function projectFollowUpCounts(
+  ctx: OrgContext, projectId: string, today: CalendarDate, o: FollowUpOptions = {},
+): Promise<StageFollowUpCounts> {
+  return withOrg(ctx, async (tx) => countsOf(withArchivedKept(await loadFollowUpSourceRows(tx, { projectId }), o), today));
+}
+
+/**
+ * S-10's follow-up (FR-FUP-01, FR-FUP-05, FR-PRJ-02) from one read of the project's follow-up rows (NFR-PERF-04,
+ * FIX-12): `openMitigationsByStage`'s lists and `projectFollowUpCounts`' counts, each as those functions give it.
+ */
+export async function projectFollowUp(
+  ctx: OrgContext, projectId: string, today: CalendarDate, o: FollowUpOptions = {},
+): Promise<{ open: Record<Stage, FollowUpItem[]>; counts: StageFollowUpCounts }> {
   return withOrg(ctx, async (tx) => {
     const rows = withArchivedKept(await loadFollowUpSourceRows(tx, { projectId }), o);
-    const states = findingStates(rows);
-    const openFindings = rows.findings.filter((f) => f.stage === stage && states.get(f.id) === 'open').length;
-    const overdueMitigations = selectOpenMitigations(rows, () => true, today).filter((m) => m.stage === stage && m.overdue).length;
-    return { openFindings, overdueMitigations };
+    const actable = await actableOwners(tx, rows.currentMitigations.map((m) => m.ownerUserId));
+    const items = await toItems(tx, selectOpenMitigations(rows, actable, today));
+    const open = Object.fromEntries(STAGES.map((s) => [s, [] as FollowUpItem[]])) as Record<Stage, FollowUpItem[]>;
+    for (const i of items) open[i.stage].push(i);
+    return { open, counts: countsOf(rows, today) };
   });
 }
