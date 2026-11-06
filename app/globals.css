@@ -1595,7 +1595,7 @@ input:focus-visible {
   border: 2px solid transparent;
   border-radius: 0;
   cursor: pointer;
-  transition: all var(--transition-base);
+  transition: background-color var(--transition-base), border-color var(--transition-base), color var(--transition-base), box-shadow var(--transition-base), transform var(--transition-base);
   background-color: var(--color-primary);
   color: var(--color-white);
   border-color: var(--color-primary);
