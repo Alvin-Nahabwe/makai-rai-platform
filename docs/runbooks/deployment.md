@@ -1043,7 +1043,9 @@ before the evening window.
 
 **Step 5.** Run the pre-check, 8.2, including the block for a release that adds a migration (this
 one does): write down the PREV lines, check that the last restore test did not fail, take the
-backup, and write down BACKUP. Estimate: about 10 minutes.
+backup, and write down BACKUP. Estimate: about 10 minutes. Rehearsed on a local copy on 6 Nov 2026 with the
+release images: the commands and the backup of a small database ran in under 1 minute; the estimate stays for
+reading and writing down.
 
 **Step 6.** Pause the hourly synthetic journey, whose old steps fail against v0.6.0, without
 editing the committed crontab: save root's crontab, comment out the 7-past line in the live one,
@@ -1077,7 +1079,10 @@ time $C up -d --no-deps --wait --wait-timeout 120 nextjs
 
 Write down the `real` time. nginx's configuration changes in this release (NFR-SEC-06, NFR-SEC-13,
 NFR-OBS-01), so step 7 applies: 7a if the nginx image digest changed, 7b if only the file did, each
-after its own `nginx -t`. Estimate: about 25 minutes for the step.
+after its own `nginx -t`. Estimate: about 25 minutes for the step. Rehearsed on a local copy on 6 Nov 2026, from
+the previous candidate's images to the release's, through nginx with a probe of `/api/health` every second: the
+migrator applied 7 migrations in 1 second, the timed swap printed `real 0m5.819s` with no failed probe, and 7b's
+nginx restart cost one failed probe (1 second); the step's commands took 16 seconds (NFR-AVL-02's 300 seconds).
 
 If the migrator stops on the owner check, it ends with an error and nothing of v0.6.0 is applied.
 The check has two messages, both beginning `v0.6.0 step 0:`. One names an organisation that has no
@@ -1142,7 +1147,8 @@ failed row remains. Diagnose the cause on the rehearsal copy and fix it in a v0.
 writes since BACKUP are lost, which the rollback rule of 9.5 accepts before the first real v1
 record. The synthetic journey is handled as 9.5 says.
 
-**Step 8.** Environment. Estimate: about 10 minutes. Remove the retired organisation limit (FR-OPS-03) and
+**Step 8.** Environment. Estimate: about 10 minutes (rehearsed 6 Nov 2026 without the hidden-prompt address: the
+commands ran in 1 second). Remove the retired organisation limit (FR-OPS-03) and
 check that it is gone:
 
 ```bash
@@ -1175,7 +1181,8 @@ Two optional storage-cap settings exist (NFR-REL-09): `MAKRAI_ORG_STORAGE_CAP_BY
 the defaults.
 
 **Step 9.** Run the post-check, 8.4: the sign-in page answers 200, every service is up, the error
-count is 0, and the image and version match (`SAME` twice). Estimate: about 10 minutes.
+count is 0, and the image and version match (`SAME` twice). Estimate: about 10 minutes (rehearsed 6 Nov 2026: under 1
+minute; the second `SAME` needs the version label that `release.yml` adds, which a locally built image lacks).
 
 **Step 10.** Sign in as the platform administrator and accept the three texts (FR-ACC-04). Then,
 on S-23 and S-24, record the agreement version for the existing organisations (FR-ORG-06). Estimate:
