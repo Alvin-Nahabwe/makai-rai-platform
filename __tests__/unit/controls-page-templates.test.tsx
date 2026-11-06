@@ -26,9 +26,29 @@ describe('controls page template links', () => {
     expect(html).not.toContain('C-11_informed-consent');
   });
 
-  it('FR-SUG-06: the data still holds a link to a template with no passed entry, so the guard is what hides it', () => {
+  it('FR-SUG-06: no link in the data that lacks a passed entry reaches the page', () => {
     const unserved = assessmentAreas.controls.map((c) => c.template).filter((f): f is string => !!f && !SERVED.has(f));
-    // While this list is not empty the page test above proves the guard works; when it is empty the guard is moot.
-    expect(unserved.every((f) => !hrefs(renderToStaticMarkup(<ControlsLibraryPage />)).includes(f))).toBe(true);
+    const linked = hrefs(renderToStaticMarkup(<ControlsLibraryPage />));
+    for (const f of unserved) expect(linked, f).not.toContain(f);
+  });
+
+  it('FR-SUG-06: whatever the data holds, a control whose template has no passed entry shows no link (C-01 removed from the resources)', async () => {
+    // Independent of the live data: C-01 stays in assessmentAreas.json, but its entry is taken out of the resources.
+    vi.resetModules();
+    vi.doMock('@/data/resources.json', () => ({
+      default: { ...resources, templates: resources.templates.filter((t) => t.controlId !== 'C-01') },
+    }));
+    try {
+      const { renderToStaticMarkup: render } = await import('react-dom/server');
+      const { default: Page } = await import('@/app/(authenticated)/explore/controls/page');
+      const html = render(<Page />);
+      const c01 = assessmentAreas.controls.find((c) => c.id === 'C-01')?.template;
+      expect(c01, 'C-01 still has a template link in the data').toBeTruthy();
+      expect(hrefs(html)).not.toContain(c01);
+      expect(hrefs(html).length).toBe(SERVED.size - 1);
+    } finally {
+      vi.doUnmock('@/data/resources.json');
+      vi.resetModules();
+    }
   });
 });

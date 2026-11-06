@@ -114,7 +114,7 @@ function decodeEntities(s: string): string {
 const TAG_BODY = '(?:[^>"\']|"[^"]*"|\'[^\']*\')*';
 
 /** Tags that stay inside a line of text; every other tag ends a word. */
-const INLINE_TAGS = 'a|abbr|b|cite|code|em|i|mark|q|s|small|span|strong|sub|sup|u';
+const INLINE_TAGS = 'a|abbr|b|cite|code|em|i|mark|q|s|small|span|strong|sub|sup|u|wbr';
 
 /** What a reader meets in a fragment: tags removed, entities decoded, invisible characters dropped. */
 function textOf(fragment: string): string {
@@ -266,7 +266,10 @@ const REMOTE = /^\s*([a-z][a-z0-9+.-]*:|\/\/)/i;
 const URL_ATTRIBUTES = ['src', 'srcset', 'poster', 'data', 'background', 'ping', 'cite', 'action', 'manifest', 'longdesc', 'codebase', 'archive'];
 
 function cssUnescape(s: string): string {
-  return s.replace(/\\([0-9a-f]{1,6})\s?/gi, (_m, hex: string) => String.fromCodePoint(parseInt(hex, 16)));
+  // `\75 rl(` (hex) and `u\rl(` (an escaped non-hex character) both spell the same token as `url(`.
+  return s.replace(/\\(?:([0-9a-f]{1,6})\s?|([^\r\n]))/gi, (_m, hex: string | undefined, ch: string | undefined) =>
+    hex !== undefined ? String.fromCodePoint(parseInt(hex, 16)) : (ch as string),
+  );
 }
 
 /** A URL attribute as the browser reads it: entities decoded, tab and line breaks dropped, a backslash read as a slash. */
@@ -317,28 +320,65 @@ function noticeProblems(html: string): string[] {
   return problems;
 }
 
-/** What the notice and the credit line must never be: hidden, collapsed or invisible by a style rule, print included. */
+/** The only rules of a template that may hide anything: print leaves out the hint, and a screen-reader-only class. */
+const MAY_HIDE = new Set(['.print-note', '.sr-only']);
+
+/** True for a declaration that hides, collapses, clips, scales away or moves its box off the page. */
+function hidesBox(declaration: string): boolean {
+  const m = /^\s*([a-z-]+)\s*:\s*([\s\S]*?)\s*$/i.exec(declaration.replace(/!\s*important/gi, ''));
+  if (!m) return false;
+  const prop = m[1].toLowerCase();
+  const value = m[2].toLowerCase();
+  const zero = /^0*\.?0*(?:px|rem|em|ex|ch|vh|vw|vmin|vmax|%|pt|cm|mm|in)?$/;
+  switch (prop) {
+    case 'display':
+      return value === 'none';
+    case 'visibility':
+      return value === 'hidden' || value === 'collapse';
+    case 'opacity':
+      return zero.test(value);
+    case 'width': case 'height': case 'max-width': case 'max-height': case 'inline-size': case 'block-size':
+    case 'max-inline-size': case 'max-block-size': case 'font-size': case 'line-height':
+      return zero.test(value);
+    case 'clip': case 'clip-path':
+      return value !== 'auto' && value !== 'none';
+    case 'text-indent':
+      return value.startsWith('-');
+    case 'color':
+      return value === 'transparent';
+    case 'transform': case 'scale':
+      return /scale[xy]?\(\s*0*\.?0*\s*\)|^0*\.?0*$/.test(value);
+    case 'left': case 'right': case 'top': case 'bottom': case 'inset': case 'inset-inline-start': case 'inset-block-start':
+    case 'margin-left': case 'margin-top': case 'margin-inline-start':
+      return /^-\s*\d{3,}|^-\s*[1-9]\d*\.?\d*(?:%|vw|vh)\b/.test(value) && Number.parseFloat(value.replace(/[^\d.-]/g, '')) <= -100;
+    default:
+      return false;
+  }
+}
+
+/**
+ * A rule that hides, collapses or moves away any element other than `.print-note` and `.sr-only`, print rules included.
+ * The notice and the credit line cannot be hidden by a selector the rule names or by a broad one (`p`, `h2 + p`).
+ */
 function hiddenByCss(html: string): string[] {
   const css = [...html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]).join('\n');
   const bad: string[] = [];
   for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-    if (!/\.(notice|credit)\b/.test(m[1])) continue;
-    const hit = find(
-      m[2],
-      /display\s*:\s*none|visibility\s*:\s*(hidden|collapse)|opacity\s*:\s*0(?![.\d])|(?:^|[;\s])(?:width|height|max-height|max-width|font-size|line-height)\s*:\s*0(?:px|rem|em|%)?\s*(?:;|$)|(?:^|[;\s])(?:clip|clip-path)\s*:|(?:^|[;\s])text-indent\s*:\s*-|(?:^|[;\s])color\s*:\s*transparent/i,
-    );
-    if (hit) bad.push(`${m[1].trim()} { ${hit} }`);
+    const selectors = m[1].split(',').map((x) => x.trim()).filter(Boolean);
+    if (selectors.length > 0 && selectors.every((x) => MAY_HIDE.has(x))) continue;
+    for (const d of m[2].split(';')) if (hidesBox(d)) bad.push(`${m[1].trim()} { ${d.trim()} }`);
   }
   return bad;
 }
 
 /** The credit paragraph: its text outside the link, the link target and the link text. */
-function creditParts(html: string): { text: string; href?: string; link: string } | undefined {
+function creditParts(html: string): { attrs: string; text: string; href?: string; link: string } | undefined {
   const m = new RegExp(`<p\\b(${TAG_BODY})>([\\s\\S]*?)</p>`, 'gi');
   for (const p of html.matchAll(m)) {
     if (attributes(p[1]).class !== 'credit') continue;
     const anchor = new RegExp(`<a\\b(${TAG_BODY})>([\\s\\S]*?)</a>`, 'i').exec(p[2]);
     return {
+      attrs: p[1].trim(),
       text: textOf(p[2].replace(/<a\b[\s\S]*?<\/a>/gi, ' ')),
       href: anchor ? attributes(anchor[1]).href : undefined,
       link: anchor ? textOf(anchor[2]) : '',
@@ -367,77 +407,112 @@ function claimStrings(html: string): string[] {
   return [...blocks, ...attrs, ...generated].filter(Boolean);
 }
 
-/** The strings of a template that the shared claims list flags, in order, without repeats. */
+/** The strings of a template that the shared claims list flags, in order, one entry per occurrence. */
 function flaggedStrings(html: string): string[] {
-  return [...new Set(claimStrings(html).filter((x) => isClaim(x)))];
+  return claimStrings(html).filter((x) => isClaim(x));
 }
 
-/** The strings of a template flagged by the shared list that no exemption covers. */
+/** The occurrences of flagged strings that no exemption covers; each exemption covers one occurrence. */
 function unexemptedClaims(html: string, exempt: readonly string[]): string[] {
-  return flaggedStrings(html).filter((x) => x !== NOTICE && !exempt.includes(x));
+  const left = [...exempt];
+  return flaggedStrings(html).filter((x) => {
+    if (x === NOTICE) return false;
+    const at = left.indexOf(x);
+    if (at < 0) return true;
+    left.splice(at, 1);
+    return false;
+  });
 }
 
-/** Exemptions that no longer match a flagged string of the template: they must be removed. */
+/** Exemptions that no longer match an occurrence of a flagged string: they must be removed. */
 function staleExemptions(html: string, exempt: readonly string[]): string[] {
-  const flagged = flaggedStrings(html);
-  return exempt.filter((x) => !flagged.includes(x));
+  const left = [...exempt];
+  for (const x of flaggedStrings(html)) {
+    const at = left.indexOf(x);
+    if (at >= 0) left.splice(at, 1);
+  }
+  return left;
 }
 
 /**
  * REACH-1: the files of public/templates are held to the shared claims list (lib/claims/pattern.ts). A string it flags
- * is exempt only by its exact text, with the reason that the owner passed those bytes. The TC-2 notice is exempt in
+ * is exempt only by its exact text, once per listed occurrence, and only while the file has the sha256 the owner passed (CW-05, 6 Nov). The TC-2 notice is exempt in
  * every file (the SRS mandates it, SRS 10.4.1 TC-2). A new flagged string fails; an exemption that no longer matches
  * a flagged string fails. These are ordinary words of the templates' own guidance ("failure modes", "percentage",
  * "Completed by" as a signature label), not claims the platform makes.
  */
-const EXEMPT_CLAIMS: Record<string, string[]> = {
-  // owner-passed at CW-05, 6 Nov, sha256 4f029a26f4048f501103b51b70c0648d2b8bb4bc94b5d56dc3e275552ccbddd4
-  'C-01_alternatives-analysis.html': [
-    "Completed by",
-    "e.g., Reduce diagnostic turnaround time by 40%, sensitivity of at least 90%...",
-    "Consider: is the accuracy gain worth the added complexity? Could a simpler method achieve 80% of the benefit at 20% of the cost?",
-  ],
-  // owner-passed at CW-05, 6 Nov, sha256 05db63996ed71078e0a9dd4a76aceb3568c946f7156db289e605f03853aaf086
-  'C-02_cost-benefit-impact.html': [
-    "Could system failures deny access to essential services?",
-    "Local context: In low- and middle-income settings, consider: infrastructure dependencies (power/connectivity for system operation), digital divide effects (who is excluded by digital-only interfaces), and whether system failures disproportionately affect populations with fewer alternatives.",
-    "Completed by",
-  ],
-  // owner-passed at CW-05, 6 Nov, sha256 2ab7e2c7995237ca055c34b960d3dd88ac84202c9e35c6e0716b13c9a8c438e4
-  'C-07_stakeholder-impact-mapping.html': [
-    "Completed by",
-  ],
-  // owner-passed at CW-05, 6 Nov, sha256 ca930c6327239d01aeb7f48abfbe579ef5e4f74be170eeab0610bf9cd32e8f26
-  'C-17_model-card.html': [
-    "Known limitations and failure modes",
-    "Completed by",
-    "Under what conditions does the model fail? What are its boundaries?",
-  ],
-  // owner-passed at CW-05, 6 Nov, sha256 b078ab38addaada17d28700df05e92c6dfb2c116a13b46087c8b69ba6c6f1d7f
-  'C-19_datasheet.html': [
-    "Approved",
-    "Completed by",
-    "What percentage of data is missing? Are there systematic patterns in missingness?",
-    "approved",
-  ],
-  // owner-passed at CW-05, 6 Nov, sha256 7341a13b53f02478f35517abf52749e0faeed028234be5140d83283f267980eb
-  'C-25_feedback-redress.html': [
-    "How are complaints classified? (severity levels)",
-    "Completed by",
-    "e.g., Agricultural credit scoring system, rural Uganda",
-  ],
-  // owner-passed at CW-05, 6 Nov, sha256 abb2157415de818e07dd54436e378df8c853d0c16689f9e4fdd50e53bcfc06b9
-  'C-26_governance-raci.html': [
-    "Completed by",
-  ],
-  // owner-passed at CW-05, 6 Nov, sha256 277ebffe57fb39305e1f05abdf89baae8bb93ce9bf5b454adf8de3b11cb437f3
-  'C-28_codebook-deployment.html': [
-    "Known failure modes",
-    "Completed by",
-    "In what situations does the system fail or give poor results? How would a user notice?",
-    "What happens if the system fails? How do you revert to a previous version?",
-    "Which tests must pass before a new version is deployed? Who runs them?",
-  ],
+const EXEMPT_CLAIMS: Record<string, { sha256: string; strings: string[] }> = {
+  // owner-passed at CW-05, 6 Nov
+  'C-01_alternatives-analysis.html': {
+    sha256: '4f029a26f4048f501103b51b70c0648d2b8bb4bc94b5d56dc3e275552ccbddd4',
+    strings: [
+      "Completed by",
+      "e.g., Reduce diagnostic turnaround time by 40%, sensitivity of at least 90%...",
+      "Consider: is the accuracy gain worth the added complexity? Could a simpler method achieve 80% of the benefit at 20% of the cost?",
+    ],
+  },
+  // owner-passed at CW-05, 6 Nov
+  'C-02_cost-benefit-impact.html': {
+    sha256: '05db63996ed71078e0a9dd4a76aceb3568c946f7156db289e605f03853aaf086',
+    strings: [
+      "Could system failures deny access to essential services?",
+      "Local context: In low- and middle-income settings, consider: infrastructure dependencies (power/connectivity for system operation), digital divide effects (who is excluded by digital-only interfaces), and whether system failures disproportionately affect populations with fewer alternatives.",
+      "Completed by",
+    ],
+  },
+  // owner-passed at CW-05, 6 Nov
+  'C-07_stakeholder-impact-mapping.html': {
+    sha256: '2ab7e2c7995237ca055c34b960d3dd88ac84202c9e35c6e0716b13c9a8c438e4',
+    strings: [
+      "Completed by",
+    ],
+  },
+  // owner-passed at CW-05, 6 Nov
+  'C-17_model-card.html': {
+    sha256: 'ca930c6327239d01aeb7f48abfbe579ef5e4f74be170eeab0610bf9cd32e8f26',
+    strings: [
+      "Known limitations and failure modes",
+      "Completed by",
+      "Under what conditions does the model fail? What are its boundaries?",
+    ],
+  },
+  // owner-passed at CW-05, 6 Nov
+  'C-19_datasheet.html': {
+    sha256: 'b078ab38addaada17d28700df05e92c6dfb2c116a13b46087c8b69ba6c6f1d7f',
+    strings: [
+      "Approved",
+      "Completed by",
+      "What percentage of data is missing? Are there systematic patterns in missingness?",
+      "approved",
+    ],
+  },
+  // owner-passed at CW-05, 6 Nov
+  'C-25_feedback-redress.html': {
+    sha256: '7341a13b53f02478f35517abf52749e0faeed028234be5140d83283f267980eb',
+    strings: [
+      "How are complaints classified? (severity levels)",
+      "Completed by",
+      "e.g., Agricultural credit scoring system, rural Uganda",
+    ],
+  },
+  // owner-passed at CW-05, 6 Nov
+  'C-26_governance-raci.html': {
+    sha256: 'abb2157415de818e07dd54436e378df8c853d0c16689f9e4fdd50e53bcfc06b9',
+    strings: [
+      "Completed by",
+    ],
+  },
+  // owner-passed at CW-05, 6 Nov
+  'C-28_codebook-deployment.html': {
+    sha256: '277ebffe57fb39305e1f05abdf89baae8bb93ce9bf5b454adf8de3b11cb437f3',
+    strings: [
+      "Known failure modes",
+      "Completed by",
+      "In what situations does the system fail or give poor results? How would a user notice?",
+      "What happens if the system fails? How do you revert to a previous version?",
+      "Which tests must pass before a new version is deployed? Who runs them?",
+    ],
+  },
 };
 
 /** The template with this control id, as visible text, attribute text and generated text. */
@@ -468,15 +543,22 @@ describe.each(TEMPLATES)('$file', ({ file, html, served }) => {
     expect(find(everything, /Review\s*&\s*(Approval|Sign-off)|Approval\s+status/i)).toBeUndefined();
     if (served) {
       // REACH-1: the shared list of lib/claims/pattern.ts. A string is exempt only by its exact text (EXEMPT_CLAIMS).
-      expect(unexemptedClaims(html, EXEMPT_CLAIMS[file] ?? [])).toEqual([]);
+      const exempt = EXEMPT_CLAIMS[file];
+      expect(exempt, `${file} has exemptions bound to its sha256`).toBeDefined();
+      expect(createHash('sha256').update(html).digest('hex'), `${file} changed since the owner passed it: its exemptions are void`).toBe(exempt?.sha256);
+      expect(unexemptedClaims(html, exempt?.strings ?? [])).toEqual([]);
     } else {
       // A held-back file is not served yet; the shared list is applied when it is released (unit/c-tpl-2).
       expect(find(everything, CLAIMS_CORE)).toBeUndefined();
     }
   });
 
+  it('TC-2 FR-PUB-01: every exemption key names a served template', () => {
+    expect(Object.keys(EXEMPT_CLAIMS).filter((f) => !TEMPLATES.some((x) => x.served && x.file === f))).toEqual([]);
+  });
+
   it('TC-2 FR-PUB-01: every exemption still matches a flagged string of the file', () => {
-    expect(staleExemptions(html, EXEMPT_CLAIMS[file] ?? [])).toEqual([]);
+    expect(staleExemptions(html, EXEMPT_CLAIMS[file]?.strings ?? [])).toEqual([]);
     if (!served) expect(EXEMPT_CLAIMS[file]).toBeUndefined();
   });
 
@@ -511,6 +593,7 @@ describe.each(TEMPLATES)('$file', ({ file, html, served }) => {
     const credit = readCreditLine();
     const parts = creditParts(html);
     expect(parts, 'a <p class="credit"> paragraph').toBeDefined();
+    expect(parts?.attrs, 'nothing on the paragraph can hide it').toBe('class="credit"');
     expect(parts?.text).toBe(credit.text);
     expect(parts?.text).toContain(credit.licence);
     expect(parts?.href).toBe(credit.href);
@@ -560,6 +643,8 @@ describe('the rules reject what they guard against', () => {
       '<p style="background:url(https://x.test/a.png)">x</p>',
       '<style>.a { background: image-set("https://x.test/a.png" 1x); }</style>',
       '<style>.a { background: \\75rl(https://x.test/a.png); }</style>',
+      '<style>.a { background: u\\rl(https://x.test/a.png); }</style>',
+      '<style>.a { background: \\u\\r\\l(https://x.test/a.png); }</style>',
       '<style>@import "https://x.test/a.css";</style>',
       '<a href="http://x.test/">x</a>',
       '<a href="https://x.test/" target="_blank">x</a>',
@@ -609,10 +694,45 @@ describe('the rules reject what they guard against', () => {
       '.credit { color: transparent; }',
       '.notice { text-indent: -999px; }',
       '.notice { clip: rect(0 0 0 0); }',
+      'p { display:none }',
+      'h2 + p { display:none }',
+      '[class=notice] { display:none }',
+      '.notice { height:0 !important; overflow:hidden }',
+      '.notice { block-size:0; overflow:hidden }',
+      '.notice { inline-size: 0px }',
+      '.notice { opacity:0.0 }',
+      '.credit { opacity: 0 !important }',
+      '.notice { transform:scale(0) }',
+      '.notice { position:absolute; left:-9999px }',
+      '.credit { margin-left: -100vw }',
+      '.credit { inset: -500px }',
+      '.print-note, .credit { display:none }',
     ]) {
       expect(hiddenByCss(css(bad)), bad).not.toEqual([]);
     }
     expect(hiddenByCss(css('.print-note { display: none; } .notice { font-size: 0.85rem; margin: 0.5rem 0 1rem; } .credit { opacity: 0.9; }'))).toEqual([]);
+    expect(hiddenByCss(css('.sr-only { clip-path: inset(50%); position: absolute; width: 1px; height: 1px; } .print-note, .sr-only { display: none; }'))).toEqual([]);
+    expect(hiddenByCss(css('.notice { border-left: 3px solid #4a5fbd; margin: 0; padding: 0.6rem 1rem; transform: scale(1); left: -4px; }'))).toEqual([]);
+  });
+
+  it('TC-6: a credit paragraph that carries any attribute besides its class is found', () => {
+    expect(creditParts('<p class="credit">x</p>')?.attrs).toBe('class="credit"');
+    expect(creditParts('<p class="credit" hidden>x</p>')?.attrs).not.toBe('class="credit"');
+    expect(creditParts('<p class="credit" style="display:none">x</p>')?.attrs).not.toBe('class="credit"');
+    expect(creditParts('<p class="credit" aria-hidden="true">x</p>')?.attrs).not.toBe('class="credit"');
+  });
+
+  it('TC-2 FR-PUB-01 REACH-1: an exemption covers one occurrence of its string, and only while it is listed once per occurrence', () => {
+    // the probe of the re-review: a second bare status label of the same text must not ride on the first one's exemption
+    expect(unexemptedClaims('<p>Approved</p><p>Completed by</p>', ['Approved', 'Completed by'])).toEqual([]);
+    expect(unexemptedClaims('<p>Approved</p><p>Completed by</p><p>Approved</p>', ['Approved', 'Completed by'])).toEqual(['Approved']);
+    expect(unexemptedClaims('<p>Approved</p><p>Approved</p>', ['Approved', 'Approved'])).toEqual([]);
+    expect(staleExemptions('<p>Approved</p>', ['Approved', 'Approved'])).toEqual(['Approved']);
+    expect(staleExemptions('<p>Approved</p><p>Approved</p>', ['Approved', 'Approved'])).toEqual([]);
+  });
+
+  it('TC-2 FR-PUB-01: a word split by an inline break is still found', () => {
+    expect(flaggedStrings('<p>com<wbr>pliance</p>')).not.toEqual([]);
   });
 
   it('TC-5 NFR-PRIV-04: a ">" inside a quoted attribute value does not hide the attributes after it', () => {
