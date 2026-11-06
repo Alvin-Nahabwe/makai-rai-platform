@@ -8,7 +8,7 @@ import type { ContentRef } from '@/types/api';
  * makrai_app holds SELECT on it, so both run inside the caller's `withOrg` transaction. The 4.0.0 resolvers that
  * pinned an assessment to the files at data/ (getPinnedVersion, readCurrentContentVersion, resolvePublishedVersion,
  * resolveCurrentFramework, resolveFramework) are gone: RM removed every route that called them, and nothing here
- * reads lib/framework/bundleHash.ts any more, so RM's second pull request can delete it.
+ * reads the 4.0.0 bundle hash any more: lib/framework/bundleHash.ts was removed in 0.6.0.
  */
 
 /**

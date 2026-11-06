@@ -532,7 +532,7 @@ describe('NFR-PERF-02: the preloaded font files hold printable ASCII and the pag
     // content and the citations report pages show (components/report/ReferencesList.tsx renders ref.citation).
     const sheets = gitFiles('app', 'components', 'lib', 'data').filter((f) => /\.(tsx?|css|json|md)$/.test(f) && !f.includes('__tests__'));
     expect(sheets.length).toBeGreaterThan(50);
-    expect(sheets).toEqual(expect.arrayContaining(['data/scoringConfig.json', 'lib/http/messages.ts']));
+    expect(sheets).toEqual(expect.arrayContaining(['data/credit.json', 'lib/http/messages.ts']));
     for (const f of Object.keys(LIB_NOT_COPY)) expect(existsSync(f), `${f} (LIB_NOT_COPY) exists`).toBe(true);
     const { core } = callsOf('sourceSans');
     expect(sheets).toEqual(expect.arrayContaining(Object.keys(LIB_NOT_COPY)));

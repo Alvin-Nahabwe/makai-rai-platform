@@ -12,11 +12,6 @@ import path from 'node:path';
 const PATTERN =
   /overallScore|reportData|scoringVersion|engineState|maturityBand|calculateAreaScores|generateReportData|crossStageWeights/;
 
-// Task R6 (unit/rm-2), after CNT and ACC-a: the 4.0.0 bundle hash reads the
-// scoring configuration, and lib/data/framework.ts still names a retired
-// identifier in a comment until CNT has moved its call.
-const NOT_YET = ['lib/data/framework.ts', 'lib/framework/bundleHash.ts', 'data/scoringConfig.json'];
-
 /** Every text file under `roots`, as a repo-relative path with '/' separators. */
 function textFiles(roots: string[]): string[] {
   const out: string[] = [];
@@ -39,13 +34,10 @@ function grepFiles(roots: string[], pattern: RegExp): string[] {
 
 describe('FR-RM-02: no score code', () => {
   it('FR-RM-02 NFR-MNT-04: no score identifier outside the migrations', () => {
-    const hits = grepFiles(['app', 'components', 'lib', 'data', 'types'], PATTERN).filter(
-      (f) => !NOT_YET.includes(f),
-    );
-    expect(hits).toEqual([]);
+    expect(grepFiles(['app', 'components', 'lib', 'data', 'types'], PATTERN)).toEqual([]);
   });
 
-  it('FR-RM-02: the engine, the band library, the charts and the stage picker do not exist', () => {
+  it('FR-RM-02: the engine, the band library, the charts, the stage picker, the scoring configuration and the 4.0.0 hash do not exist', () => {
     for (const f of [
       'lib/engine/AssessmentEngine.js',
       'lib/engine/AssessmentEngine.d.ts',
@@ -56,6 +48,8 @@ describe('FR-RM-02: no score code', () => {
       'components/dashboard/TrendChart.tsx',
       'components/assessment/StageSelector.tsx',
       'lib/pdf/ReportPdf.tsx',
+      'data/scoringConfig.json',
+      'lib/framework/bundleHash.ts',
     ])
       expect(existsSync(f), f).toBe(false);
   });

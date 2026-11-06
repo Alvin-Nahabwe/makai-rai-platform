@@ -12,7 +12,7 @@
 #
 # This was found, not assumed: a real secret (RESEND_API_KEY in this repo's
 # local .env) reached `.next/standalone/.env` via a Turbopack build-tracing
-# fallback triggered by lib/framework/bundleHash.ts, and docker/Dockerfile
+# fallback triggered by lib/framework/bundleHash.ts (removed in 0.6.0), and docker/Dockerfile
 # copies .next/standalone wholesale into the shipped image. See that file's
 # comment and register row D-149 (docs/DEFERRED_REGISTER.md) for the full
 # investigation.
