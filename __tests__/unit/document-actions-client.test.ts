@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh() {} }) }));
+import type { RetryState } from '@/lib/client/retrySafeWrite';
 const A = await import('@/components/documents/DocumentActions');
 const { withdrawSend, copyDocumentText } = A;
 
@@ -23,7 +24,7 @@ const fakeFetch = (...replies: Array<Response | Error>) => {
   }) as unknown as typeof fetch;
   return { impl, calls };
 };
-const NO_RETRY = { requestId: null, sentBody: null };
+const NO_RETRY: RetryState = { requestId: null, sentBody: null };
 const send = (f: ReturnType<typeof fakeFetch>, retry = NO_RETRY, reason = 'Wrong committee.') =>
   withdrawSend({ orgSlug: 'org-a', documentId: 'doc-1', reason, retry, fetchImpl: f.impl });
 const sentBody = (f: ReturnType<typeof fakeFetch>, i: number) => JSON.parse(String(f.calls[i].init?.body)) as { requestId: string; reason: string };
