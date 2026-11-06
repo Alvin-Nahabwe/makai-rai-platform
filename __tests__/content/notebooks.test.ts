@@ -748,7 +748,9 @@ describe('release of the reviewed notebooks', () => {
   const entryFor = (c: Control) => resources.notebooks.find((n) => n.controlId === c);
   /** What a review record says about the domain review (Task 16 Step 2). */
   function record(c: Control): { reviewer?: string; date?: string; outcome?: string; sha?: string; body: string } {
-    const body = readFileSync(join(ROOT, 'docs', 'content', 'notebooks-review', `${c}.md`), 'utf8');
+    const whole = readFileSync(join(ROOT, 'docs', 'content', 'notebooks-review', `${c}.md`), 'utf8');
+    const at = whole.lastIndexOf('## Domain review');
+    const body = at === -1 ? '' : whole.slice(at);
     return {
       body,
       reviewer: /^- Reviewer: (.+)$/m.exec(body)?.[1],
@@ -795,11 +797,13 @@ describe('release of the reviewed notebooks', () => {
       expect(n.review.reviewer.trim().length, `${c}: a named reviewer`).toBeGreaterThan(0);
       expect(n.review.date, `${c}: a date`).toMatch(/^\d{4}-\d{2}-\d{2}$/);
       const rec = record(c);
-      expect(n.review, `${c}: the entry matches its review record`).toEqual({ reviewer: rec.reviewer, date: rec.date, outcome: rec.outcome });
+      // The record may add a note to the reviewer's name (C-10: as the privacy-competent reviewer); the entry holds the name.
+      expect(rec.reviewer?.startsWith(n.review.reviewer), `${c}: the entry's reviewer is the record's reviewer`).toBe(true);
+      expect({ date: n.review.date, outcome: n.review.outcome }, `${c}: the entry matches its review record`).toEqual({ date: rec.date, outcome: rec.outcome });
     }
     const c10 = entryFor('C-10');
     expect(c10?.released, 'C-10 is released only with a passed privacy review').toBe(c10?.review.outcome === 'passed');
-    expect(record('C-10').body, 'the C-10 record names the privacy-competent reviewer').toMatch(/privacy-competent reviewer/);
+    expect(record('C-10').body, 'the C-10 domain review names the privacy-competent reviewer').toMatch(/privacy-competent reviewer/);
     expect(c10?.review.reviewer.trim().length ?? 0).toBeGreaterThan(0);
   });
 });
