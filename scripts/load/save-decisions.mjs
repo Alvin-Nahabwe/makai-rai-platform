@@ -26,6 +26,11 @@
 // export's 429 are counted as `expected409=<k>` and `expected429=<k>` instead, and are not errors. A timeout enters the p95 as 60000 ms.
 // The export is limited to 3 an hour per organisation (route 20), so it is timed twice per run at most.
 //
+// `--only <op>[,<op>]` runs the named operations alone (names as in the table above), so one budget can be measured
+// without the others sharing the server: `--only render-s10-s11` sends no save, review, seal, document or export. Each
+// operation not named prints `op=<name> skipped` and neither fails the run nor counts as pending. The release run names
+// no `--only`: NFR-PERF-04's budgets are met with the five operations running together.
+//
 // Exit 0: every operation is measured and within budget, or pending with --allow-pending. Exit 1: an operation is
 // over budget, or has any error (a 5xx, a timeout, a 403, a 422, a 409 with another code), or measured nothing. Exit 2: refused or
 // mis-used before the run: the base is not localhost or 127.0.0.1 (NFR-SEC-17, K-10), an option is out of range,
@@ -163,11 +168,11 @@ function wholeNumber(name, text, min, max) {
 
 /**
  * @param {readonly string[]} argv
- * @returns {{ base: string, connectTo: string | null, users: number, seconds: number, manifest: string, org: string | null, project: string | null, questions: string[], allowPending: boolean }}
+ * @returns {{ base: string, connectTo: string | null, users: number, seconds: number, manifest: string, org: string | null, project: string | null, questions: string[], allowPending: boolean, only: string[] | null }}
  */
 export function parseArgs(argv) {
-  const out = { base: '', connectTo: null, users: 10, seconds: 60, manifest: DEFAULT_MANIFEST, org: null, project: null, questions: [], allowPending: false };
-  const known = new Set(['--base', '--connect-to', '--users', '--seconds', '--manifest', '--org', '--project', '--questions', '--allow-pending']);
+  const out = { base: '', connectTo: null, users: 10, seconds: 60, manifest: DEFAULT_MANIFEST, org: null, project: null, questions: [], allowPending: false, only: null };
+  const known = new Set(['--base', '--connect-to', '--users', '--seconds', '--manifest', '--org', '--project', '--questions', '--allow-pending', '--only']);
   for (let i = 0; i < argv.length; i += 2) {
     const flag = argv[i];
     if (flag === '--allow-pending') {
@@ -186,10 +191,19 @@ export function parseArgs(argv) {
     if (flag === '--org') out.org = value;
     if (flag === '--project') out.project = value;
     if (flag === '--questions') out.questions = value.split(',').filter(Boolean);
+    if (flag === '--only') out.only = onlyOperations(value);
   }
-  if (out.base === '') throw new Refused('usage: node scripts/load/save-decisions.mjs --base <url> [--connect-to <loopback-ip>:<port>] [--users 10] [--seconds 60] [--org <slug>] [--project <id>] [--questions Q-PP-01,Q-PP-02] [--allow-pending]');
+  if (out.base === '') throw new Refused('usage: node scripts/load/save-decisions.mjs --base <url> [--connect-to <loopback-ip>:<port>] [--users 10] [--seconds 60] [--org <slug>] [--project <id>] [--questions Q-PP-01,Q-PP-02] [--only render-s10-s11] [--allow-pending]');
   if (out.questions.length === 0) out.questions = Array.from({ length: 10 }, (_, i) => `Q-PP-${String(i + 1).padStart(2, '0')}`);
   return out;
+}
+
+/** The operation names of `--only`, each one of BUDGETS_MS's keys; anything else, or none, is a refusal naming them. */
+function onlyOperations(text) {
+  const names = text.split(',').filter(Boolean);
+  const valid = Object.keys(BUDGETS_MS);
+  if (names.length === 0 || names.some((n) => !valid.includes(n))) throw new Refused(`--only takes one or more of ${valid.join(',')}`);
+  return [...new Set(names)];
 }
 
 // ---- the run ---------------------------------------------------------------------------------------------
@@ -379,14 +393,18 @@ export function record(s, key, status, ms, answer = {}) {
  * The report lines (stdout), the notes (stderr) and the exit code of a run; pure, so the cases of
  * __tests__/unit/load-script.test.ts can feed it answers.
  * @param {ReturnType<typeof newStats>} s
- * @param {{ allowPending?: boolean }} [options]
+ * @param {{ allowPending?: boolean, only?: string[] | null }} [options] `only`: the operations of `--only`; the others print `skipped`
  * @returns {{ lines: string[], notes: string[], code: number }}
  */
-export function renderReport(s, { allowPending = false } = {}) {
+export function renderReport(s, { allowPending = false, only = null } = {}) {
   const lines = [];
   const pending = [];
   let failed = false;
   for (const [op, budget] of Object.entries(BUDGETS_MS)) {
+    if (only !== null && !only.includes(op)) {
+      lines.push(`op=${op} skipped`);
+      continue;
+    }
     const parts = KEYS_OF[op].map(([key, label]) => ({ label, o: s[key] }));
     const measured = parts.filter((p) => p.o.samples.length > 0);
     const sum = (field) => parts.reduce((total, p) => total + p.o[field], 0);
@@ -503,17 +521,19 @@ export const SEAT_LIMITS = Object.freeze({ 'seal-stage': 20, 'generate-document'
 /**
  * Which operations a virtual user asks for in this iteration, as stats keys. An operation is skipped when it is pending
  * only (nothing is there to measure), when it needs a review the user does not have, when the seat has sent its limit of
- * it (`SEAT_LIMITS`: a seat at its cap skips it for the rest of the window), or, for the export, when none is left.
- * @param {{ sent: Record<string, number>, hasReview: boolean, exportsLeft: number, pendingOnly: ReadonlySet<string> }} state
+ * it (`SEAT_LIMITS`: a seat at its cap skips it for the rest of the window), for the export when none is left, and
+ * when `only` (the operations of `--only`) does not name its operation.
+ * @param {{ sent: Record<string, number>, hasReview: boolean, exportsLeft: number, pendingOnly: ReadonlySet<string>, only?: string[] | null }} state
  * @returns {string[]}
  */
-export function operationsToAsk({ sent, hasReview, exportsLeft, pendingOnly }) {
+export function operationsToAsk({ sent, hasReview, exportsLeft, pendingOnly, only = null }) {
   const under = (key) => (sent[key] ?? 0) < SEAT_LIMITS[key];
   const ops = ['save-decision', 'render-s10', 'render-s11'];
   if (hasReview && under('seal-stage')) ops.push('seal-stage');
   if (hasReview && under('generate-document')) ops.push('generate-document');
   if (exportsLeft > 0) ops.push('team-export');
-  return ops.filter((key) => !pendingOnly.has(key));
+  const named = (key) => only === null || only.some((op) => KEYS_OF[op].some(([k]) => k === key));
+  return ops.filter((key) => !pendingOnly.has(key) && named(key));
 }
 
 /**
@@ -543,7 +563,7 @@ async function timed(call, { drain = true } = {}) {
 const json = (body) => ({ headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
 async function virtualUser(i, ctx, s, deadline) {
-  const { c, userId, slug, projectId, question } = ctx;
+  const { c, userId, slug, projectId, question, only } = ctx;
   const base = `/api/v1/orgs/${slug}/projects/${projectId}`;
   const stage = 'pre-processing';
   let baseVersion = null;
@@ -555,17 +575,20 @@ async function virtualUser(i, ctx, s, deadline) {
   let saves = 0;
 
   // Opening a review is setup, not a measured operation; if the route is not there, neither is the seal or the document.
-  await pacer.wait(`${base}/reviews`, deadline);
-  const open = await timed(() => c.send(`${base}/reviews`, { method: 'POST', ...json({ requestId: randomUUID(), stage, preparedFor: null }) }));
-  if (open.status >= 200 && open.status < 300) reviewId = open.body?.id ?? null;
-  else if (open.status === 501 || (open.status === 404 && !open.answer.apiJson)) {
-    record(s, 'seal-stage', open.status, open.ms, open.answer);
-    record(s, 'generate-document', open.status, open.ms, open.answer);
+  // With --only naming neither, no review is opened.
+  if (only === null || only.includes('seal-stage') || only.includes('generate-document')) {
+    await pacer.wait(`${base}/reviews`, deadline);
+    const open = await timed(() => c.send(`${base}/reviews`, { method: 'POST', ...json({ requestId: randomUUID(), stage, preparedFor: null }) }));
+    if (open.status >= 200 && open.status < 300) reviewId = open.body?.id ?? null;
+    else if (open.status === 501 || (open.status === 404 && !open.answer.apiJson)) {
+      record(s, 'seal-stage', open.status, open.ms, open.answer);
+      record(s, 'generate-document', open.status, open.ms, open.answer);
+    }
   }
 
   while (performance.now() < deadline) {
     const pendingOnly = new Set([...Object.keys(s).filter((key) => isPendingOnly(s[key])), ...spent]);
-    const ops = operationsToAsk({ sent, hasReview: reviewId !== null, exportsLeft, pendingOnly });
+    const ops = operationsToAsk({ sent, hasReview: reviewId !== null, exportsLeft, pendingOnly, only });
     if (ops.length === 0) break; // every operation is pending: nothing changes by asking again
     let sealId = null;
     for (const op of ops) {
@@ -689,10 +712,10 @@ async function main(argv) {
   const deadline = performance.now() + opts.seconds * 1000;
   await Promise.all(
     Array.from({ length: opts.users }, (_, i) =>
-      virtualUser(i, { c: sessions[i], userId: seats[i].userId, slug, projectId, question: opts.questions[i % opts.questions.length] }, s, deadline),
+      virtualUser(i, { c: sessions[i], userId: seats[i].userId, slug, projectId, question: opts.questions[i % opts.questions.length], only: opts.only }, s, deadline),
     ),
   );
-  const { lines, notes, code } = renderReport(s, { allowPending: opts.allowPending });
+  const { lines, notes, code } = renderReport(s, { allowPending: opts.allowPending, only: opts.only });
   process.stdout.write(`${lines.join('\n')}\n`);
   for (const note of notes) process.stderr.write(`${note}\n`);
   process.exit(code);
