@@ -1,0 +1,23 @@
+{
+  "$comment": "The owner's waivers of release-check cases. Read by __tests__/helpers/releaseWaivers.ts; only its WAIVABLE_CASES consult this file, and an entry passes its case only when it is complete. Each entry: the case id, the files it covers, the owner's verbatim words, the date of the decision, and the register row (D-<n>) that tracks the debt. A register row is numbered by the controller; until it is, the entry fails its case.",
+  "waivers": [
+    {
+      "case": "FR-ACC-02 legal-placeholder",
+      "test": "__tests__/unit/legal-texts.test.ts",
+      "covers": ["data/legal/cross-border-consent/1.md", "data/legal/organisation-agreement/1.md"],
+      "decision": "A4, legal texts version 1: the cross-border consent and organisation agreement texts ship as the one-line placeholders, with a register row (SRS 13.8 step 3).",
+      "owner_words": "Ship placeholders",
+      "date": "2026-11-06",
+      "register_row": null
+    },
+    {
+      "case": "UX-03 help-contact-pending",
+      "test": "__tests__/unit/about-page.test.tsx",
+      "covers": ["data/help-contact.json"],
+      "decision": "UX-03, the Help and contact address (deployment.md step 4d): the About page ships with its pending text, with a register row.",
+      "owner_words": "Ship pending text",
+      "date": "2026-11-06",
+      "register_row": null
+    }
+  ]
+}
