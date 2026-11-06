@@ -1401,6 +1401,20 @@ line, by commenting it out in the crontab that step 12 installed it in (the inst
 `ops/host/README.md` names it), and the `makrai-reminders` check, while v0.5.0 serves: the job calls
 an internal route that v0.5.0 does not have. Write down that these are paused too.
 
+Then, once v0.5.0 serves, take DELETE on `memberships` from the application role, as the owner role:
+
+```bash
+$C exec -T postgres psql -U "$PGU" -d makrai -Atc 'REVOKE DELETE ON "memberships" FROM makrai_app'
+```
+
+Why: v0.5.0's account deletion removes the person's memberships first, one organisation at a time, each in a transaction
+of its own, and only then deletes their consent rows, which v0.6.0 no longer lets it do. Without this line, a person who
+deletes their account while v0.5.0 serves loses every membership and keeps an active account (seen in the rehearsal of
+6 Nov 2026: one membership to none, a 500, the account still active). With it, the first membership delete is refused,
+so nothing is removed. While v0.5.0 serves, deleting an account and removing a member both fail with a server error;
+the rule above already limits v0.5.0 to signing in and reading. This applies to the application rollback only: after a
+database restore, v0.5.0 runs on its own schema and grants.
+
 **Restoring the database (before the first real v1 record only).** Do 9.2 first, then 9.3 with
 BACKUP, the file 8.2 wrote down. After a restore, v0.5.0 runs against the schema it was built for.
 If 8.5 step 11 has not run, the journey still installed is the old one and works again: put the
@@ -1416,6 +1430,17 @@ stop the return deploy at 8.2's first line of the migration block, so on that de
 result that failed only in its seal step, read in your own terminal, counts as 8.2's line passing for
 this one deploy; any other failed field is a stop. 8.5 step 14's check runs the morning after the
 return.
+
+**Before the swap back to v0.6.x, after an application rollback.** Give the application role its DELETE on
+`memberships` back, exactly as v0.6.0 had it, before 8.3 step 5, and check it:
+
+```bash
+$C exec -T postgres psql -U "$PGU" -d makrai -Atc 'GRANT DELETE ON "memberships" TO makrai_app'
+$C exec -T postgres psql -U "$PGU" -d makrai -c '\dp memberships'
+```
+
+The access privileges of the second line must include `makrai_app=rwd/makrai`. If the GRANT is forgotten, v0.6.0's
+member removal and account deletion answer 500 (permission denied, 42501) and remove nothing: run the GRANT then.
 
 **After returning to v0.6.x.** v0.5.0's code writes the `ipAddress` column of consent rows, which
 v0.6.0 clears and stops writing. Clear what v0.5.0 wrote during the rollback, as the owner role. No

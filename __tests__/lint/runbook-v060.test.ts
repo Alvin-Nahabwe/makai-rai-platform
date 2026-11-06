@@ -271,6 +271,24 @@ describe('deployment.md 8.5: the owner steps of the v0.6.0 deploy', () => {
     expect(t).toContain('expect the 01:00 restore test\'s seal step to fail against the restored v0.5.0 schema');
     expect(t).toContain('resume the `makrai-reminders` check too');
   });
+
+  // Ruling of 6 Nov 2026 (V-prog rollback finding): v0.5.0's account deletion removes memberships as makrai_app, then fails on
+  // consent_records, so 9.5 takes DELETE on memberships from makrai_app while v0.5.0 serves and gives it back before the swap back.
+  it('NFR-REL-07: 9.5 revokes DELETE on memberships from makrai_app after an application rollback, and grants it back before the return', () => {
+    const s = s95();
+    const revoke = `$C exec -T postgres psql -U "$PGU" -d makrai -Atc 'REVOKE DELETE ON "memberships" FROM makrai_app'`;
+    const grant = `$C exec -T postgres psql -U "$PGU" -d makrai -Atc 'GRANT DELETE ON "memberships" TO makrai_app'`;
+    const check = `$C exec -T postgres psql -U "$PGU" -d makrai -c '\\dp memberships'`;
+    const rollingBack = s.slice(s.indexOf('**Rolling back the application.**'), s.indexOf('**Restoring the database'));
+    const beforeReturn = s.slice(s.indexOf('**Before the swap back to v0.6.x'), s.indexOf('**After returning to v0.6.x.**'));
+    expect(fenced(rollingBack).map((l) => l.trim()), 'the REVOKE sits in the application rollback').toContain(revoke);
+    expect(beforeReturn.length, 'the return section exists, before "After returning to v0.6.x."').toBeGreaterThan(0);
+    expect(fenced(beforeReturn).map((l) => l.trim()), 'the GRANT sits in the return section').toContain(grant);
+    expect(fenced(beforeReturn).map((l) => l.trim()), 'the return checks the privilege').toContain(check);
+    expect(flat(beforeReturn)).toContain('`makrai_app=rwd/makrai`');
+    expect(fenced(s).filter((l) => l.includes('REVOKE')), 'one REVOKE in 9.5').toHaveLength(1);
+    expect(flat(rollingBack)).toContain('loses every membership and keeps an active account');
+  });
 });
 
 describe('deployment.md 8.5: the lines that change the host are the lines that were run here', () => {
