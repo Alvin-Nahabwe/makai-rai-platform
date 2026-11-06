@@ -26,33 +26,41 @@ export const WITHDRAW_TAKEN = 'Not withdrawn by you: someone else withdrew it fi
 export const WITHDRAW_LOST = 'Not withdrawn yet: no reply from the server. It may have arrived. Retry is safe: it will not withdraw twice.';   // M-06 pattern; the route replays on the request id
 export const WITHDRAW_OTHER = 'Not withdrawn. Reload the page and try again.';
 export const WITHDRAW_SIGNED_OUT = 'Not withdrawn: you are signed out. Sign in again, then come back.';
+export const WITHDRAW_EARLIER = 'Withdrawn. Your earlier request may have done it; the reason shown is the one recorded.';
+export const WITHDRAW_UNCONFIRMED = 'Not confirmed: it may already have been withdrawn. Reload the page to see.';
 export const WITHDRAW_FORBIDDEN = 'Not withdrawn: your role in this organisation no longer allows this. Ask an owner or admin.';
 
-export type WithdrawResult = { kind: 'done' } | { kind: 'taken' } | { kind: 'refused'; line: string; retry: boolean };
+export type WithdrawResult = { kind: 'done' } | { kind: 'taken' } | { kind: 'earlier' } | { kind: 'refused'; line: string; retry: boolean };
 
 /**
  * What a withdrawal's reply means for the person. A reply that does not say the withdrawal failed (no reply, a gateway page, a 5xx) may have
  * landed, so it gets the M-06 line and a Retry that resends the same request id; "Nothing was changed" is not said for any of them.
+ * `unknown` is true when the person's last send ended that way: until a definite answer comes, a 409 already_withdrawn may be their own
+ * earlier request (not "someone else"), and a 401 or 403 does not show that nothing happened.
  */
-function withdrawResult(outcome: SendOutcome<unknown>): WithdrawResult {
+function withdrawResult(outcome: SendOutcome<unknown>, unknown: boolean): WithdrawResult {
   if (outcome.kind === 'saved') return { kind: 'done' };
   if (outcome.kind === 'not_saved') return { kind: 'refused', line: WITHDRAW_LOST, retry: true };
   const { status, body } = outcome;
   if (status >= 500) return { kind: 'refused', line: WITHDRAW_LOST, retry: true };
-  if (status === 409 && body.code === 'already_withdrawn') return { kind: 'taken' };
+  if (status === 409 && body.code === 'already_withdrawn') return { kind: unknown ? 'earlier' : 'taken' };
+  if (unknown && (status === 401 || status === 403)) return { kind: 'refused', line: WITHDRAW_UNCONFIRMED, retry: false };
   if (status === 409 && body.code === 'project_archived') return { kind: 'refused', line: MSG_ARCHIVED, retry: false };
   if (status === 401) return { kind: 'refused', line: WITHDRAW_SIGNED_OUT, retry: false };
-  if (status === 403) return { kind: 'refused', line: WITHDRAW_FORBIDDEN, retry: false };
+  if (status === 403 && body.code === 'forbidden') return { kind: 'refused', line: WITHDRAW_FORBIDDEN, retry: false };
   if (status === 422 && body.fields !== undefined && body.fields.length > 0) return { kind: 'refused', line: body.fields[0].message, retry: false };
   return { kind: 'refused', line: WITHDRAW_OTHER, retry: false };
 }
 
+/** True when the outcome leaves it unknown whether the withdrawal landed. */
+const isUnknown = (outcome: SendOutcome<unknown>): boolean => outcome.kind === 'not_saved' || (outcome.kind === 'rejected' && outcome.status >= 500);
+
 /** Sends one withdrawal with the request id `retry` calls for (the same id for an unchanged reason). Returns what it means and the state to keep. */
-export async function withdrawSend(a: { orgSlug: string; documentId: string; reason: string; retry: RetryState; fetchImpl?: typeof fetch }): Promise<{ result: WithdrawResult; retry: RetryState }> {
+export async function withdrawSend(a: { orgSlug: string; documentId: string; reason: string; retry: RetryState; unknown?: boolean; fetchImpl?: typeof fetch }): Promise<{ result: WithdrawResult; retry: RetryState; unknown: boolean }> {
   const body = { reason: a.reason };
   const id = requestIdFor(a.retry, body);
   const outcome = await sendWrite<IssuedDocumentView>(documentUrl(a.orgSlug, a.documentId, 'withdrawal'), 'POST', { ...body, requestId: id.requestId }, { onSlow: () => {}, fetchImpl: a.fetchImpl });
-  return { result: withdrawResult(outcome), retry: id.state };
+  return { result: withdrawResult(outcome, a.unknown ?? false), retry: id.state, unknown: isUnknown(outcome) };
 }
 
 export type CopyResult = { kind: 'copied' } | { kind: 'fallback'; text: string } | { kind: 'refused'; line: string; erased: boolean };
@@ -115,22 +123,24 @@ export function CopyFallback({ text }: { text: string }): ReactElement {
  * The reason is sent once per unchanged text, with one request id (a Retry resends it, UX-27).
  */
 export function WithdrawConfirm(p: {
-  orgSlug: string; document: IssuedDocumentView; reason?: string; today: CalendarDate; onDone: (how: 'done' | 'taken') => void; onCancel: () => void;
+  orgSlug: string; document: IssuedDocumentView; reason?: string; today: CalendarDate; onDone: (how: 'done' | 'taken' | 'earlier') => void; onCancel: () => void;
 }): ReactElement {
   const [reason, setReason] = useState(p.reason ?? '');
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState('');
   const [canRetry, setCanRetry] = useState(false);
   const [retry, setRetry] = useState<RetryState>(NO_RETRY);
+  const [unknown, setUnknown] = useState(false);
   const box = useRef<HTMLTextAreaElement | null>(null);
   useEffect(() => { box.current?.focus(); }, []);
 
   async function send(): Promise<void> {
     setBusy(true);
     setFailure('');
-    const out = await withdrawSend({ orgSlug: p.orgSlug, documentId: p.document.id, reason, retry });
+    const out = await withdrawSend({ orgSlug: p.orgSlug, documentId: p.document.id, reason, retry, unknown });
     setBusy(false);
     setRetry(out.retry);
+    setUnknown(out.unknown);
     if (out.result.kind === 'refused') { setFailure(out.result.line); setCanRetry(out.result.retry); return; }
     p.onDone(out.result.kind);
   }
@@ -203,7 +213,7 @@ export function DocumentActions(p: DocumentActionsProps): ReactElement {
       {open ? (
         <WithdrawConfirm
           orgSlug={p.orgSlug} document={p.document} today={today}
-          onDone={(how) => { done.current = true; setOpen(false); setStatus(how === 'done' ? WITHDRAW_DONE : WITHDRAW_TAKEN); router.refresh(); }}
+          onDone={(how) => { done.current = true; setOpen(false); setStatus(how === 'done' ? WITHDRAW_DONE : how === 'earlier' ? WITHDRAW_EARLIER : WITHDRAW_TAKEN); router.refresh(); }}
           onCancel={() => setOpen(false)}
         />
       ) : (

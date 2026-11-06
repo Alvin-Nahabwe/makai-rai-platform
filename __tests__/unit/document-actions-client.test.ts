@@ -25,8 +25,8 @@ const fakeFetch = (...replies: Array<Response | Error>) => {
   return { impl, calls };
 };
 const NO_RETRY: RetryState = { requestId: null, sentBody: null };
-const send = (f: ReturnType<typeof fakeFetch>, retry = NO_RETRY, reason = 'Wrong committee.') =>
-  withdrawSend({ orgSlug: 'org-a', documentId: 'doc-1', reason, retry, fetchImpl: f.impl });
+const send = (f: ReturnType<typeof fakeFetch>, retry = NO_RETRY, reason = 'Wrong committee.', unknown = false) =>
+  withdrawSend({ orgSlug: 'org-a', documentId: 'doc-1', reason, retry, unknown, fetchImpl: f.impl });
 const sentBody = (f: ReturnType<typeof fakeFetch>, i: number) => JSON.parse(String(f.calls[i].init?.body)) as { requestId: string; reason: string };
 
 describe('WithdrawConfirm.send outcomes', () => {
@@ -80,6 +80,36 @@ describe('WithdrawConfirm.send outcomes', () => {
     expect(first.result).toEqual({ kind: 'refused', line: A.WITHDRAW_LOST, retry: true });
     await send(f, first.retry);
     expect(sentBody(f, 1).requestId).toBe(sentBody(f, 0).requestId);
+  });
+
+  it('FR-AUTHZ-01: a 403 that is not code forbidden gives the reload line, not the role line', async () => {
+    expect((await send(fakeFetch(json(403, errorBody('csrf'))))).result).toEqual({ kind: 'refused', line: A.WITHDRAW_OTHER, retry: false });
+  });
+
+  it('UX-27 (N1): after a send whose outcome is unknown, a 409 already_withdrawn may be this person\'s own request, and says so', async () => {
+    for (const first of [new TypeError('network down'), json(503, errorBody('database_unavailable'))]) {
+      const f = fakeFetch(first, json(409, errorBody('already_withdrawn')));
+      const a = await send(f);
+      expect(a.unknown).toBe(true);
+      const b = await send(f, a.retry, 'Wrong committee.', a.unknown);
+      expect(b.result).toEqual({ kind: 'earlier' });
+      expect(A.WITHDRAW_EARLIER).toBe('Withdrawn. Your earlier request may have done it; the reason shown is the one recorded.');
+    }
+  });
+
+  it('UX-27 (N1): after an unknown outcome, a 401 or 403 says it is not confirmed and that the page should be reloaded', async () => {
+    for (const reply of [json(401, errorBody('unauthenticated')), json(403, errorBody('forbidden'))]) {
+      const r = await send(fakeFetch(reply), NO_RETRY, 'Wrong committee.', true);
+      expect(r.result).toEqual({ kind: 'refused', line: 'Not confirmed: it may already have been withdrawn. Reload the page to see.', retry: false });
+    }
+  });
+
+  it('UX-27 (N1): any definite answer clears the unknown flag, so the next 409 is someone else\'s', async () => {
+    const f = fakeFetch(json(422, errorBody('validation', { fields: [{ field: 'reason', message: 'Write a reason.' }] })));
+    const a = await send(f, NO_RETRY, 'x', true);
+    expect(a.unknown).toBe(false);
+    expect((await send(fakeFetch(json(409, errorBody('already_withdrawn'))), a.retry, 'x', a.unknown)).result).toEqual({ kind: 'taken' });
+    expect((await send(fakeFetch(json(201, { id: 'doc-1' })), NO_RETRY, 'x', true)).unknown).toBe(false);
   });
 
   it('FR-DOC-06: 404 and request_id_reused give the reload line, with no Retry', async () => {
