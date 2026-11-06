@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, statSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { compare } from 'bcryptjs';
@@ -52,6 +52,7 @@ it('NFR-PERF-04 NFR-SEC-17: the seeder refuses a database that is not on a loopb
     expect(r.status).toBe(2);
     expect(r.stderr).toMatch(/--database-url must name a loopback host/);     // R17-8: the CLI names the flag, not DATABASE_URL
     expect(r.stderr).not.toContain('s3cret');
+    expect(r.stderr, 'the refusal names no part of the url').not.toMatch(/db\.example\.org|makrai:|5432/);
     expect(existsSync(out)).toBe(false);
   }
   // A malformed call must not echo the url either: the --flag=value form, and a url in place of a flag.
@@ -78,9 +79,30 @@ it('NFR-PERF-04 NFR-SEC-17: the seeder checks the app and identity urls too, and
     process.env.IDENTITY_DATABASE_URL = other.toString();
     await expect(seedPerfFixture({ out, scale: PERF_REDUCED })).rejects.toThrow(/the three database urls must name one database/);
   } finally {
-    process.env.APP_DATABASE_URL = saved.APP_DATABASE_URL; process.env.IDENTITY_DATABASE_URL = saved.IDENTITY_DATABASE_URL;
+    // Assigning undefined to process.env stores the string "undefined", so an unset variable is deleted instead.
+    for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
   }
   expect(existsSync(out)).toBe(false);
+});
+
+it('NFR-PERF-04 NFR-SEC-17: an existing --out is refused and left as it was, and nothing is written', async () => {
+  await resetDb(); await useFixtureContent('0.0.1-fixture');
+  const out = outFile();
+  writeFileSync(out, 'kept as it was\n', { mode: 0o644 });
+  chmodSync(out, 0o644);
+  await expect(seedPerfFixture({ out, scale: PERF_REDUCED })).rejects.toThrow(/refused: .* exists/);
+  expect(readFileSync(out, 'utf8')).toBe('kept as it was\n');
+  expect(statSync(out).mode & 0o777).toBe(0o644);
+  expect(await count(`select count(*) n from organizations`)).toBe(0);
+});
+
+it('NFR-PERF-04 NFR-SEC-17: an --out inside a git repository is refused, because the manifest holds the run\'s password', async () => {
+  await resetDb(); await useFixtureContent('0.0.1-fixture');
+  const out = join(process.cwd(), 'test-results', `perf-manifest-${process.pid}.json`);
+  mkdirSync(dirname(out), { recursive: true });
+  await expect(seedPerfFixture({ out, scale: PERF_REDUCED })).rejects.toThrow(/inside the git repository/);
+  expect(existsSync(out)).toBe(false);
+  expect(await count(`select count(*) n from organizations`)).toBe(0);
 });
 
 it('NFR-PERF-04 NFR-SEC-17: a failure after the manifest is created removes it and writes nothing', async () => {

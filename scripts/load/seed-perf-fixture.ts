@@ -34,7 +34,8 @@
  */
 import { closeSync, openSync, unlinkSync, writeFileSync } from 'node:fs';
 import { randomBytes, createHash, randomUUID } from 'node:crypto';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { hash } from 'bcryptjs';
 import type { Stage } from '../../types/record';
@@ -68,9 +69,9 @@ export function assertLoopbackDatabaseUrl(url: string, name?: string): void {
     throw new Refused(`refused: ${what} must name a loopback host, and its query string must not set host or hostaddr`);
   }
   if (!LOOPBACK.has(u.hostname)) {
-    // The host is named, unless an unencoded '/', '?' or '#' in the password shifted the parse so the "host" is the user.
-    const shown = !u.hostname ? 'an empty host' : u.hostname === decodeURIComponent(u.username) ? 'that host' : u.hostname;
-    throw new Refused(`refused: ${what} must name a loopback host (localhost, 127.0.0.1 or ::1), not ${shown}`);
+    // No part of the url is named: a password holding an unencoded '/', '?' or '#' shifts the parse, so what reads as the
+    // host can be the user or a piece of the password.
+    throw new Refused(`refused: ${what} must name a loopback host (localhost, 127.0.0.1 or ::1), and it does not`);
   }
 }
 
@@ -136,7 +137,9 @@ export async function seedPerfFixture(opts: { out: string; scale?: PerfScale }):
     throw new Refused(`refused: this database already holds the perf fixture (${existing[0].slug}); recreate the database to seed it again`);
   }
 
-  // 3. The manifest file: created here, mode 600, never an existing file; removed if a later step fails.
+  // 3. The manifest file: outside every git repository (it holds the run's password), created here, mode 600, never an
+  //    existing file; removed if a later step fails.
+  assertOutsideRepository(opts.out);
   let fd: number;
   try {
     fd = openSync(opts.out, 'wx', 0o600);
@@ -166,8 +169,24 @@ export async function seedPerfFixture(opts: { out: string; scale?: PerfScale }):
   }
 }
 
+/**
+ * Refuses an --out whose directory is inside a git work tree: the manifest holds the run's one password, and a file
+ * there is one `git add` from a commit. `git -C <dir> rev-parse --show-toplevel` exits 128 outside a repository, which
+ * is the one answer that lets the run go on; any other failure (no git, no such directory) is thrown as it is.
+ */
+function assertOutsideRepository(out: string): void {
+  let top: string;
+  try {
+    top = execFileSync('git', ['-C', dirname(resolve(out)), 'rev-parse', '--show-toplevel'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch (e) {
+    if ((e as { status?: unknown }).status === 128) return;
+    throw e;
+  }
+  throw new Refused(`refused: --out is inside the git repository ${top}; the manifest holds the run's password, so write it outside every repository`);
+}
+
 /** What can be printed of an error: its name, a string `code` (ENOENT, P2002, ...), and the message only of the seeder's own errors. */
-export function safeDetail(e: unknown): string {
+function safeDetail(e: unknown): string {
   if (!(e instanceof Error)) return typeof e;
   const parts = [e.name];
   const code = (e as { code?: unknown }).code;
