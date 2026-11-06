@@ -2,10 +2,11 @@ import 'dotenv/config';
 import { existsSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { test, expect, type Browser, type BrowserContext } from '@playwright/test';
+import { test, expect, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { testDb } from '../__tests__/helpers/db';
 import { addProject, buildOrg } from '../__tests__/helpers/recordFixture';
 import { abortIfPendingBackground } from './helpers/pendingLinks';
+import { signInWith } from './helpers/session';
 import type { PerfManifest } from '../scripts/load/seed-perf-fixture';
 
 /**
@@ -59,12 +60,21 @@ const LIMITS = {
   nginx: { s04Accented: 243_700, s05: 227_800 },     // the owner's production limits, through nginx on HTTP/2 (6 Nov)
   direct: { s04Accented: 237_700, s05: 221_500 },    // regression guard for the direct run, the direct figures plus 1 KB (6 Nov)
 } as const;
+/** S-04 rendered the invitation: its heading, not the "Invitation" page of an unusable link (app/(public)/invitations/[token]/page.tsx). */
+async function invitedHeading(page: Page): Promise<void> {
+  await expect(page.getByRole('heading', { level: 1, name: /^You are invited to / })).toBeVisible();
+}
+
+/**
+ * A failure of the S-04 accented or S-05 case against these limits is a page-weight change, which goes to the owner; it is
+ * not a flake to retry or a limit to raise (the ruling above).
+ */
 /** The limits for the run in progress: the nginx config's project, or any other (the direct run). */
 const limits = () => (test.info().project.name === 'perf-nginx' ? LIMITS.nginx : LIMITS.direct);
 
 type Measured = {
   landed: string; status: number; protocol: string; total: number; sizes: number; bodies: number; failed: string[];
-  abandonedPrefetches: number; fonts: string[];
+  abandonedPrefetches: number; fonts: string[]; redirectHops: number;
 };
 
 /**
@@ -113,7 +123,8 @@ function isAbandonedPrefetch(url: string, headers: Record<string, string>, error
  * Opens `path` in a fresh context and counts every byte it received until the network was idle. A request that failed,
  * other than a pending-link request this function aborted or a prefetch the browser abandoned, is returned in `failed`.
  */
-async function measure(browser: Browser, baseURL: string, path: string, storageState?: string): Promise<Measured> {
+async function measure(browser: Browser, baseURL: string, path: string, storageState?: string,
+  check?: (page: Page) => Promise<void>): Promise<Measured> {
   const context = await browser.newContext({ baseURL, ignoreHTTPSErrors: true, storageState });
   try {
     const aborted = new Set<string>();
@@ -129,7 +140,12 @@ async function measure(browser: Browser, baseURL: string, path: string, storageS
     /** Bytes received so far by each request that has not finished: response headers, then each body chunk. */
     const received = new Map<string, number>();
     let total = 0;
-    cdp.on('Network.requestWillBeSent', (e) => { urls.set(e.requestId, e.request.url); });
+    let redirectHops = 0;
+    cdp.on('Network.requestWillBeSent', (e) => {
+      urls.set(e.requestId, e.request.url);
+      // A redirect's own response is reported here, and loadingFinished then covers only the final hop.
+      if (e.redirectResponse) { total += e.redirectResponse.encodedDataLength; redirectHops++; }
+    });
     cdp.on('Network.responseReceived', (e) => {
       received.set(e.requestId, (received.get(e.requestId) ?? 0) + e.response.encodedDataLength);
       if (e.type === 'Document') protocol = e.response.protocol ?? 'unknown';   // the last document: a redirect's target, where there is one
@@ -151,10 +167,12 @@ async function measure(browser: Browser, baseURL: string, path: string, storageS
     const res = await page.goto(path, { waitUntil: 'networkidle' });
     if (!res) throw new Error(`${path}: the navigation returned no response`);
     const landed = new URL(page.url()).pathname;
+    if (check) await check(page);
     const each = await Promise.all(sizes);
     const bodies = each.reduce((a, b) => a + b.body, 0);
     const fonts = [...urls.values()].filter((u) => u.endsWith('.woff2')).map((u) => u.split('/').pop()!);
-    return { landed, status: res.status(), protocol, total, sizes: bodies + each.reduce((a, b) => a + b.headers, 0), bodies, failed, abandonedPrefetches, fonts };
+    return { landed, status: res.status(), protocol, total, sizes: bodies + each.reduce((a, b) => a + b.headers, 0), bodies, failed,
+      abandonedPrefetches, fonts, redirectHops };
   } finally {
     await context.close();
   }
@@ -165,12 +183,16 @@ function expectRendered(m: Measured, path: string, expected: string, shown: stri
   expect(m.landed, `${shown}: landed on the measured page, not /login`).toBe(expected);
   expect(m.status, `${shown}: the document status (a not-found or error page renders at the same address)`).toBe(200);
   expect(m.failed, `${shown}: requests that failed`).toEqual([]);
+  expect(m.total, `${shown}: CDP counted bytes`).toBeGreaterThan(0);
+  expect(m.total, `${shown}: CDP counted at least the bodies Playwright saw`).toBeGreaterThanOrEqual(m.bodies);
+  // The nginx run measures what production serves, which is HTTP/2 (default.conf, `http2 on`).
+  if (test.info().project.name === 'perf-nginx') expect(m.protocol, `${shown}: the protocol through nginx`).toBe('h2');
 }
 
 /** `shown` is the route template where the address holds a token, so the log carries no live invitation token. */
 function report(shown: string, m: Measured, budget: number): void {
   console.log(`route=${shown} bytes=${m.total} budget=${budget} status=${m.status} protocol=${m.protocol} playwright_sizes=${m.sizes} bodies_only=${m.bodies}`
-    + ` abandoned_prefetches=${m.abandonedPrefetches} fonts=${m.fonts.join(',')}`);
+    + ` abandoned_prefetches=${m.abandonedPrefetches} redirect_hops=${m.redirectHops} fonts=${m.fonts.join(',')}`);
 }
 
 /** Signs `account` in on the form in a context of its own and saves its storage state at `path`. */
@@ -180,18 +202,9 @@ async function signInAndSave(browser: Browser, baseURL: string, account: { email
   try {
     const page = await context.newPage();
     await page.goto('/login');
-    // The form is React-controlled and has no method: a press before hydration submits it natively, as a GET to /login
-    // with the fields in the query string (seen on the first sign-in after nginx started). Wait until the page is idle
-    // and the typed values survive, as e2e/helpers/session.ts's signInOnLoginPage does.
-    await page.waitForLoadState('networkidle');
-    await expect(async () => {
-      await page.getByLabel('Email').fill(account.email);
-      await page.getByLabel('Password').fill(account.password);
-      await page.waitForTimeout(300);
-      await expect(page.getByLabel('Email')).toHaveValue(account.email, { timeout: 100 });
-      await expect(page.getByLabel('Password')).toHaveValue(account.password, { timeout: 100 });
-    }).toPass({ timeout: 20_000 });
-    await page.getByRole('button', { name: 'Sign in' }).click();
+    // A press before hydration posts the form natively and leaves the page on /login (seen on the first sign-in after nginx
+    // started), so session.ts's signInWith waits until the typed values survive hydration before it presses Sign in.
+    await signInWith(page, account.email, account.password);
     try {
       await page.waitForURL((u) => landsOn.test(u.pathname), { timeout: 15_000 });   // inside the hook's time, so the reason below is reported
     } catch (e) {
@@ -299,7 +312,9 @@ test.describe('the public budget', () => {
     for (const file of publicPages()) {
       const path = pathFor(file);
       const shown = path.includes(token) ? path.replace(token, '[token]') : path;
-      const m = await measure(browser, baseURL, path);
+      // S-04 must be the invitation itself, not its "Invitation" error page, which renders at the same address.
+      const check = path.startsWith('/invitations/') ? invitedHeading : undefined;
+      const m = await measure(browser, baseURL, path, undefined, check);
       report(shown, m, PUBLIC_BUDGET);
       expectRendered(m, path, REDIRECTS_TO[path] ?? path, shown);
       if (m.total > PUBLIC_BUDGET) over.push(`${shown} ${m.total}`);
@@ -339,12 +354,14 @@ test.describe('S-04 with accented names, against the accepted risk', () => {
     } finally {
       await owner.close();
     }
-    const m = await measure(browser, baseURL, path);
+    const m = await measure(browser, baseURL, path, undefined, invitedHeading);
     // The owner's ruling of 6 Nov ("Production + 1 KB (Recommended)"): 243700 B through nginx on HTTP/2; 237700 B on the
     // direct run as a regression guard (LIMITS).
     const limit = limits().s04Accented;
     report('/invitations/[token] (accented names)', m, limit);
     expectRendered(m, path, path, '/invitations/[token] (accented names)');
+    // The reason this case exists: the accented organisation name, set in DM Serif, fetches that face's latin_rest file.
+    expect(m.fonts.some((f) => /^dm_serif_display_latin_rest/.test(f)), `fonts: ${m.fonts.join(',')}`).toBe(true);
     const page = `measured ${m.total} B: ${m.total <= PUBLIC_BUDGET ? 'within the 220000 B budget' : `${m.total - PUBLIC_BUDGET} B over the 220000 B budget`}`;
     test.info().annotations.push({ type: 'NFR-PERF-02 accepted risk', description: page });
     expect(m.total, `${page}; the limit for this run is ${limit} B`).toBeLessThanOrEqual(limit);
