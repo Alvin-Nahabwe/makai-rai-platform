@@ -16,7 +16,10 @@ const OK = {
   owner_words: 'Ship pending text',
   date: '2026-11-06',
   register_row: 'D-999',
+  release: '0.6.0',
 };
+/** The version the fixtures are read as, so the cases do not move when package.json does. */
+const V = '0.6.0';
 
 let dir: string | undefined;
 afterEach(() => {
@@ -38,20 +41,20 @@ describe('release waivers', () => {
   });
 
   it('FR-ACC-02 UX-03 FIX-3: a complete entry waives its case', () => {
-    expect(releaseWaiver('UX-03 help-contact-pending', file({ waivers: [OK] }))).toEqual(OK);
+    expect(releaseWaiver('UX-03 help-contact-pending', file({ waivers: [OK] }), V)).toEqual(OK);
   });
 
   it('FR-ACC-02 UX-03 FIX-3: a missing entry waives nothing', () => {
-    expect(releaseWaiver('FR-ACC-02 legal-placeholder', file({ waivers: [OK] }))).toBeUndefined();
-    expect(releaseWaiver('UX-03 help-contact-pending', file({ waivers: [] }))).toBeUndefined();
+    expect(releaseWaiver('FR-ACC-02 legal-placeholder', file({ waivers: [OK] }), V)).toBeUndefined();
+    expect(releaseWaiver('UX-03 help-contact-pending', file({ waivers: [] }), V)).toBeUndefined();
   });
 
   it('FR-ACC-02 UX-03 FIX-3: an entry for a case nobody can waive fails the read', () => {
-    expect(() => releaseWaiver('UX-03 help-contact-pending', file({ waivers: [OK, { ...OK, case: 'NFR-MNT-03 must-ids' }] }))).toThrow(
+    expect(() => releaseWaiver('UX-03 help-contact-pending', file({ waivers: [OK, { ...OK, case: 'NFR-MNT-03 must-ids' }] }), V)).toThrow(
       /NFR-MNT-03 must-ids.*not a waivable case/,
     );
     // Asking for one is a programming error too.
-    expect(() => releaseWaiver('NFR-MNT-03 must-ids', file({ waivers: [] }))).toThrow(/not a waivable case/);
+    expect(() => releaseWaiver('NFR-MNT-03 must-ids', file({ waivers: [] }), V)).toThrow(/not a waivable case/);
   });
 
   it.each([
@@ -60,14 +63,30 @@ describe('release waivers', () => {
     ['no register row', { register_row: null }],
     ['a register row that is not D-<n>', { register_row: 'pending' }],
     ['nothing covered', { covers: [] }],
+    ['no release', { release: undefined }],
+    ['a release that is not a version', { release: 'next' }],
   ])('FR-ACC-02 UX-03 FIX-3: an entry with %s fails the read', (_label, change) => {
-    expect(() => releaseWaiver('UX-03 help-contact-pending', file({ waivers: [{ ...OK, ...change }] }))).toThrow(/release-waivers/);
+    expect(() => releaseWaiver('UX-03 help-contact-pending', file({ waivers: [{ ...OK, ...change }] }), V)).toThrow(/release-waivers/);
   });
 
   it('FR-ACC-02 UX-03 FIX-3: two entries for one case, or a file that is not the shape, fail the read', () => {
-    expect(() => releaseWaiver('UX-03 help-contact-pending', file({ waivers: [OK, OK] }))).toThrow(/twice/);
-    expect(() => releaseWaiver('UX-03 help-contact-pending', file('{"waivers": {}}'))).toThrow(/release-waivers/);
-    expect(() => releaseWaiver('UX-03 help-contact-pending', file('not json'))).toThrow();
+    expect(() => releaseWaiver('UX-03 help-contact-pending', file({ waivers: [OK, OK] }), V)).toThrow(/twice/);
+    expect(() => releaseWaiver('UX-03 help-contact-pending', file('{"waivers": {}}'), V)).toThrow(/release-waivers/);
+    expect(() => releaseWaiver('UX-03 help-contact-pending', file('not json'), V)).toThrow();
+  });
+
+  it('FR-ACC-02 UX-03 SFH-11: an entry written for another release waives nothing, so its case fails again in the next release', () => {
+    expect(releaseWaiver('UX-03 help-contact-pending', file({ waivers: [OK] }), '0.7.0')).toBeUndefined();
+    // Two releases may each hold one entry for a case; only the running release's counts.
+    const next = { ...OK, release: '0.7.0', register_row: 'D-1000' };
+    expect(releaseWaiver('UX-03 help-contact-pending', file({ waivers: [OK, next] }), '0.7.0')).toEqual(next);
+  });
+
+  it('CR-5 SFH-11: an incomplete entry for another case fails the read of this one', () => {
+    const broken = { ...OK, case: 'FR-ACC-02 legal-placeholder', register_row: undefined };
+    expect(() => releaseWaiver('UX-03 help-contact-pending', file({ waivers: [OK, broken] }), V)).toThrow(/FR-ACC-02 legal-placeholder.*register row/);
+    // The same holds for an entry of another release: it is validated, then ignored.
+    expect(() => releaseWaiver('UX-03 help-contact-pending', file({ waivers: [OK, { ...broken, release: '0.5.0' }] }), V)).toThrow(/register row/);
   });
 
   it("FR-ACC-02 UX-03 FIX-3: the committed file holds the owner's two decisions, word for word", () => {
@@ -78,11 +97,13 @@ describe('release waivers', () => {
       owner_words: 'Ship placeholders',
       date: '2026-11-06',
       covers: ['data/legal/cross-border-consent/1.md', 'data/legal/organisation-agreement/1.md'],
-      register_row: 'D-292',
+      register_row: 'D-293', release: '0.6.0',
     });
     expect(byCase['UX-03 help-contact-pending']).toMatchObject({
-      owner_words: 'Ship pending text', date: '2026-11-06', covers: ['data/help-contact.json'], register_row: 'D-293',
+      owner_words: 'Ship pending text', date: '2026-11-06', covers: ['data/help-contact.json'], register_row: 'D-294', release: '0.6.0',
     });
+    // An entry's release is the version of package.json, or it waives nothing (SFH-11).
+    expect(JSON.parse(readFileSync('package.json', 'utf8')).version).toBe('0.6.0');
     // Both entries are complete, so both read without throwing.
     for (const c of WAIVABLE_CASES) expect(releaseWaiver(c)?.case).toBe(c);
   });
