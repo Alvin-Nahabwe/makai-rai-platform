@@ -82,7 +82,6 @@ export const REMOVED_METHODS: Readonly<Record<string, readonly Method[]>> = {
  */
 export const PENDING_ROUTES: readonly string[] = [
   'app/api/v1/orgs/[slug]/documents/[documentId]/text/route.ts',
-  'app/api/v1/orgs/[slug]/documents/[documentId]/withdrawal/route.ts',
 ];
 
 /**
