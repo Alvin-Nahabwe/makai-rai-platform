@@ -2,6 +2,7 @@
 
 import { useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import { signOut } from 'next-auth/react';
+import { openDraftStore } from '@/lib/client/drafts';
 import { useRouter } from 'next/navigation';
 import { LEGAL_KIND_NAMES, acceptanceError, type AcceptancePair } from '@/lib/legal/kinds';
 import { formatDay } from '@/lib/format/dates';
@@ -23,6 +24,8 @@ export interface AcceptancesFormProps {
   /** Sends the accepted kinds and shows its own outcome; it should not reject. */
   onAccepted: (kinds: AcceptedKind[]) => Promise<void>;
   busy?: boolean;
+  /** The signed-in account, whose drafts the **sign out** link clears from this device (NFR-PRIV-06); S-05 passes it. */
+  userId?: string;
 }
 
 /** The sentence each box carries as its label (W-11 note 2). */
@@ -238,7 +241,7 @@ export function AcceptancesFormView(p: AcceptancesFormViewProps) {
       {p.mode === 'required' && (
         <p style={{ marginTop: 'var(--space-4)' }}>
           If you do not want to accept, you can <a href="/account" style={{ display: 'inline-block', minHeight: '24px' }}>delete your account</a> or{' '}
-          <button type="button" style={LINK_AS_BUTTON} onClick={() => signOut({ callbackUrl: '/login' })}>sign out</button>.
+          <button type="button" style={LINK_AS_BUTTON} onClick={() => { if (p.userId !== undefined) openDraftStore()?.purgeAccount(p.userId); void signOut({ callbackUrl: '/login' }); }}>sign out</button>.
         </p>
       )}
       {p.mode === 'invitation' && (
@@ -294,7 +297,7 @@ export function AcceptancesForm(p: AcceptancesFormProps) {
  * created, with **Try again**, which re-sends the same body; any other refusal is acted on by
  * `failureOutcome` (sign in and back here, S-29, M-39 with a reload, the wait, or its words).
  */
-export function RecordAcceptances({ texts, mode }: { texts: LegalTextVersion[]; mode: 'required' | 'offer' }) {
+export function RecordAcceptances({ texts, mode, userId }: { texts: LegalTextVersion[]; mode: 'required' | 'offer'; userId: string }) {
   const router = useRouter();
   const [send, setSend] = useState<SendState>({ state: 'idle' });
   const sent = useRef<string | null>(null);
@@ -322,7 +325,7 @@ export function RecordAcceptances({ texts, mode }: { texts: LegalTextVersion[]; 
 
   return (
     <>
-      <AcceptancesForm key={textsKey(texts)} texts={texts} mode={mode} submitLabel="Accept and continue" busy={send.state === 'sending'}
+      <AcceptancesForm key={textsKey(texts)} texts={texts} mode={mode} userId={userId} submitLabel="Accept and continue" busy={send.state === 'sending'}
         onAccepted={(kinds) => record(JSON.stringify({ acceptances: acceptancePairs(texts, kinds) }))} />
       <SendStatus send={send} sendingText="Saving..." onRetry={() => { if (sent.current !== null) void record(sent.current); }} />
     </>

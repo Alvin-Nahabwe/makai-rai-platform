@@ -50,7 +50,7 @@ describe('S-21 PersonalExportAndDeletion', () => {
   });
 
   it('FR-EXP-02: S-21 offers Export my data with what it does and does not include', () => {
-    const html = renderToStaticMarkup(<PersonalExportAndDeletionForm lastActiveOwnerOf={[]} />);
+    const html = renderToStaticMarkup(<PersonalExportAndDeletionForm userId="u1" lastActiveOwnerOf={[]} />);
     expect(html).toMatch(/<a[^>]*href="\/api\/users\/me\/export"[^>]*>Export my data<\/a>/);
     expect(html).toContain('A JSON file with your account, memberships, acceptances, reminder setting and a list of the records you entered or were named in. It does not include your teams&#x27; record text, which belongs to each organisation.');
     expect(html).toMatch(/<h2[^>]*>My data<\/h2>/);
@@ -60,7 +60,7 @@ describe('S-21 PersonalExportAndDeletion', () => {
   });
 
   it('UX-29 FR-EXP-03: Delete my account confirms inline with a password and the typed phrase, both pasteable, and a button that repeats the action', () => {
-    const html = renderToStaticMarkup(<DeleteConfirm onCancel={() => {}} />);
+    const html = renderToStaticMarkup(<DeleteConfirm userId="u1" onCancel={() => {}} />);
     expect(html).toMatch(/<input[^>]*type="password"[^>]*autoComplete="current-password"|<input[^>]*autoComplete="current-password"[^>]*type="password"/i);
     expect(html).not.toMatch(/onpaste|readonly/i);
     expect(html).toContain('Type DELETE MY ACCOUNT to confirm');
@@ -71,15 +71,15 @@ describe('S-21 PersonalExportAndDeletion', () => {
   });
 
   it('M-38 FR-EXP-03: for a last owner the delete button is replaced by the message naming the organisation', () => {
-    const html = renderToStaticMarkup(<PersonalExportAndDeletionForm lastActiveOwnerOf={['Makerere CAI Lab']} />);
+    const html = renderToStaticMarkup(<PersonalExportAndDeletionForm userId="u1" lastActiveOwnerOf={['Makerere CAI Lab']} />);
     expect(html).toContain(M38);
     expect(html).not.toMatch(/>Delete my account\.\.\.</);
     expect(html).toMatch(/>Export my data<\/a>/); // the export stays offered
   });
 
   it('M-38 FR-EXP-03: the server slot renders the form with its contract props', () => {
-    expect(renderToStaticMarkup(<PersonalExportAndDeletion lastActiveOwnerOf={['Makerere CAI Lab']} />)).toContain(M38);
-    expect(renderToStaticMarkup(<PersonalExportAndDeletion lastActiveOwnerOf={[]} />)).toMatch(/>Delete my account\.\.\.<\/button>/);
+    expect(renderToStaticMarkup(<PersonalExportAndDeletion userId="u1" lastActiveOwnerOf={['Makerere CAI Lab']} />)).toContain(M38);
+    expect(renderToStaticMarkup(<PersonalExportAndDeletion userId="u1" lastActiveOwnerOf={[]} />)).toMatch(/>Delete my account\.\.\.<\/button>/);
   });
 
   it('FR-EXP-03 UX-29: each answer of route 39 maps to what S-21 shows', () => {
