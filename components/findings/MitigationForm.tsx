@@ -241,7 +241,7 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
   }
 
   return (
-    <form onSubmit={(e) => { e.preventDefault(); save(); }} noValidate aria-labelledby={id('h')}>
+    <form method="post" onSubmit={(e) => { e.preventDefault(); save(); }} noValidate aria-labelledby={id('h')}>
       <h3 id={id('h')}>{base === null ? 'Add a mitigation' : 'Update this mitigation'}</h3>
       <ErrorSummary summary={formSummary('mitigation', errors.length, kept)} errors={errors} focusKey={attempt} prefix={`${idBase}-`} />
       <fieldset>

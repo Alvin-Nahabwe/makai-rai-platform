@@ -49,7 +49,7 @@ export function RaiseFindingForm({ orgSlug, projectId, data }: RaiseFindingFormP
   const set = (patch: Partial<RaiseFormValue>) => { setV((x) => ({ ...x, ...patch })); setErrors([]); };
 
   return (
-    <form id="raise" onSubmit={(e) => { e.preventDefault(); void submit(); }} noValidate aria-labelledby={`${id}-h`}>
+    <form method="post" id="raise" onSubmit={(e) => { e.preventDefault(); void submit(); }} noValidate aria-labelledby={`${id}-h`}>
       <h2 id={`${id}-h`}>Raise a finding</h2>
       <ErrorSummary summary={all.length === 1 ? 'There is a problem with this finding. What you typed is kept.' : `There are ${all.length} problems with this finding. What you typed is kept.`} errors={all} focusKey={attempt} />
       {linked ? <p>About question <bdi>{prefill.questionId}</bdi>{prefill.versionNumber === null ? '' : ` (version ${prefill.versionNumber})`}</p> : null}

@@ -236,7 +236,7 @@ export function GenerateDocumentForm(props: GenerateDocumentFormProps): ReactEle
   }
 
   return (
-    <form onSubmit={(e: FormEvent<HTMLFormElement>) => { e.preventDefault(); void generate(); }} noValidate>
+    <form method="post" onSubmit={(e: FormEvent<HTMLFormElement>) => { e.preventDefault(); void generate(); }} noValidate>
       <fieldset>
         <legend>Documents</legend>
         {props.documents.map((d) => (

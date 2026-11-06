@@ -361,7 +361,7 @@ function InviteForm({ roles, busy, onInvite }: {
   }
 
   return (
-    <form className="card" onSubmit={(e) => { void submit(e); }} noValidate>
+    <form method="post" className="card" onSubmit={(e) => { void submit(e); }} noValidate>
       <h2>Invite someone</h2>
       <div className="form-group">
         <label htmlFor={ids.email}>Email</label>

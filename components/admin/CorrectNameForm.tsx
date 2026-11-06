@@ -64,7 +64,7 @@ export function CorrectNameForm({ orgId, name, send }: { orgId: string; name: st
       {!open ? (
         <button type="button" className="btn btn--secondary" onClick={() => setOpen(true)}>Correct the name</button>
       ) : (
-        <form noValidate onSubmit={(e) => { e.preventDefault(); void submit(); }}>
+        <form method="post" noValidate onSubmit={(e) => { e.preventDefault(); void submit(); }}>
           <Field id={`${formId}-name`} label="Organisation name" error={error}>
             {(a) => <input id={a.id} name="name" type="text" required maxLength={MAX_ORG_NAME} autoComplete="off" value={value}
               aria-describedby={a.describedBy} aria-invalid={a.invalid} onChange={(e) => setValue(e.target.value)} />}

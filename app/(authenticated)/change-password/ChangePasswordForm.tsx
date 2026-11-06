@@ -4,6 +4,7 @@ import { useState, type CSSProperties, type FormEvent } from 'react';
 import { signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { PASSWORD_MIN_LENGTH } from '@/lib/validate';
+import { useHydrated } from '@/lib/client/useHydrated';
 
 const TARGET: CSSProperties = { minWidth: '24px', minHeight: '24px' };
 const FIELD_ERROR: CSSProperties = { margin: 'var(--space-1) 0 0', color: 'var(--color-risk-critical)', fontSize: 'var(--font-size-sm)' };
@@ -36,6 +37,8 @@ export interface ChangePasswordViewProps {
   newPassword: string;
   show: boolean;
   state: ChangeState;
+  /** False until React has hydrated; the submit button is disabled till then (default true for a static render). */
+  hydrated?: boolean;
   onCurrent: (v: string) => void;
   onNew: (v: string) => void;
   onToggleShow: () => void;
@@ -49,7 +52,7 @@ export function ChangePasswordView(v: ChangePasswordViewProps) {
   return (
     <>
       {v.state.kind === 'error' && <div className="auth-error" role="alert">{v.state.message}</div>}
-      <form onSubmit={v.onSubmit} noValidate>
+      <form method="post" onSubmit={v.onSubmit} noValidate>
         <label htmlFor="currentPassword">Current password</label>
         <input id="currentPassword" name="currentPassword" type={type} required autoComplete="current-password"
           value={v.currentPassword} onChange={(e) => v.onCurrent(e.currentTarget.value)} />
@@ -63,7 +66,7 @@ export function ChangePasswordView(v: ChangePasswordViewProps) {
           <button type="button" aria-controls="currentPassword newPassword" aria-pressed={v.show} onClick={v.onToggleShow}
             style={{ ...TARGET, padding: '0 var(--space-2)' }}>Show passwords</button>
         </p>
-        <button type="submit" className="btn-primary" disabled={v.state.kind === 'sending'} style={TARGET}>
+        <button type="submit" className="btn-primary" disabled={v.state.kind === 'sending' || v.hydrated === false} style={TARGET}>
           {v.state.kind === 'sending' ? 'Saving...' : 'Change password'}
         </button>
       </form>
@@ -78,6 +81,7 @@ export function ChangePasswordForm() {
   const [newPassword, setNewPassword] = useState('');
   const [show, setShow] = useState(false);
   const [state, setState] = useState<ChangeState>({ kind: 'idle' });
+  const hydrated = useHydrated();
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -106,7 +110,7 @@ export function ChangePasswordForm() {
   }
 
   return (
-    <ChangePasswordView currentPassword={currentPassword} newPassword={newPassword} show={show} state={state}
+    <ChangePasswordView currentPassword={currentPassword} newPassword={newPassword} show={show} state={state} hydrated={hydrated}
       onCurrent={setCurrentPassword} onNew={setNewPassword} onToggleShow={() => setShow((s) => !s)} onSubmit={onSubmit} />
   );
 }

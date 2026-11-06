@@ -9,6 +9,7 @@ import {
 } from '@/components/legal/AcceptancesForm';
 import { PASSWORD_MIN_LENGTH, validatePassword, validateString } from '@/lib/validate';
 import type { AcceptedKind, LegalTextVersion } from '@/types/legal';
+import { useHydrated } from '@/lib/client/useHydrated';
 
 interface Props {
   token: string;
@@ -203,6 +204,8 @@ export interface NewAccountViewProps extends Props {
   showPassword: boolean;
   errors: FieldErrors;
   send: SendState;
+  /** False until React has hydrated; the Continue button is disabled till then (default true for a static render). */
+  hydrated?: boolean;
   onName: (v: string) => void;
   onPassword: (v: string) => void;
   onToggleShow: () => void;
@@ -222,7 +225,7 @@ export function NewAccountView(v: NewAccountViewProps) {
   return (
     <div>
       {v.step === 'details' ? (
-        <form noValidate onSubmit={v.onContinue}>
+        <form method="post" noValidate onSubmit={v.onContinue}>
           <h2>Create your account</h2>
           <label htmlFor="email">Email <span style={{ fontWeight: 'var(--font-weight-regular)' }}>(from the invitation; cannot be changed)</span></label>
           <input type="email" id="email" name="email" autoComplete="username" spellCheck={false} readOnly value={v.invitedEmail} />
@@ -243,7 +246,7 @@ export function NewAccountView(v: NewAccountViewProps) {
           </div>
           <p id="password-hint" style={HINT}>{`At least ${PASSWORD_MIN_LENGTH} characters.`}</p>
           {v.errors.password && <p id="password-error" style={FIELD_ERROR}>{v.errors.password}</p>}
-          <button type="submit" className="btn-primary" style={TARGET}>Continue</button>
+          <button type="submit" className="btn-primary" disabled={v.hydrated === false} style={TARGET}>Continue</button>
         </form>
       ) : (
         <div id="acceptances-step" tabIndex={-1} ref={(el) => v.acceptancesStep?.(el)}>
@@ -274,6 +277,7 @@ function NewAccount(p: Props) {
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [send, setSend] = useState<SendState>({ state: 'idle' });
+  const hydrated = useHydrated();
   const lastBody = useRef<string | null>(null);
   const nameEl = useRef<HTMLInputElement | null>(null);
   const passwordEl = useRef<HTMLInputElement | null>(null);
@@ -327,7 +331,7 @@ function NewAccount(p: Props) {
   }
 
   return (
-    <NewAccountView {...p} step={step} name={name} password={password} showPassword={showPassword} errors={errors} send={send}
+    <NewAccountView {...p} step={step} name={name} password={password} showPassword={showPassword} errors={errors} send={send} hydrated={hydrated}
       onName={setName} onPassword={setPassword} onToggleShow={() => setShowPassword((s) => !s)} onContinue={onContinue}
       onAccepted={(kinds) => post(JSON.stringify({ name, password, acceptances: acceptancePairs(p.texts, kinds) }))}
       onRetry={() => { if (lastBody.current !== null) void post(lastBody.current); }}

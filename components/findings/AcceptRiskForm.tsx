@@ -74,7 +74,7 @@ export function AcceptRiskForm(p: AcceptRiskFormProps): ReactElement {
 
   if (!open) return <button type="button" className="btn btn--secondary" onClick={() => setOpen(true)}>Looked at again: keep accepted</button>;
   return (
-    <form onSubmit={(e) => { e.preventDefault(); void submit(); }} noValidate aria-labelledby={`${id}-h`}>
+    <form method="post" onSubmit={(e) => { e.preventDefault(); void submit(); }} noValidate aria-labelledby={`${id}-h`}>
       <h3 id={`${id}-h`}>{keep ? 'Looked at again' : 'Accept the risk'}</h3>
       <p>Accepting a risk closes this finding without a mitigation. It records who accepted the risk and why. It can be reopened later.</p>
       <ErrorSummary summary={all.length === 1 ? 'There is a problem with this acceptance. What you typed is kept.' : `There are ${all.length} problems with this acceptance. What you typed is kept.`} errors={all} focusKey={attempt} prefix={`${id}-`} />

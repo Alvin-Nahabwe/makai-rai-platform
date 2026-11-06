@@ -99,7 +99,7 @@ export function OpenReviewForm(props: OpenReviewFormProps): ReactElement {
 
   const noteDescribedBy = ['open-review-help', 'open-review-count', fieldError?.field === 'preparedFor' ? 'open-review-note-error' : null].filter(Boolean).join(' ');
   return (
-    <form onSubmit={(e) => { void submit(e); }} noValidate>
+    <form method="post" onSubmit={(e) => { void submit(e); }} noValidate>
       <p>Name: <strong>{stageReviewName(stage, props.nextNumbers[stage])}</strong></p>
       {props.fixedStage === null ? (
         <div className="form-field">

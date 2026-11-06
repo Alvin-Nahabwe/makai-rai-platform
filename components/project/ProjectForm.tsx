@@ -151,7 +151,7 @@ export default function NewProjectForm(p: Mode) {
         {error && <div className="form-error" role="alert">{error}</div>}
         {summary && <ErrorSummary summary={summary.text} errors={summary.errors} focusKey={attempt} />}
 
-        <form onSubmit={handleSubmit}>
+        <form method="post" onSubmit={handleSubmit}>
           <div className="form-group">
             <label htmlFor="name">Project name <span className="required">*</span></label>
             <input
