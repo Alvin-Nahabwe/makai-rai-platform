@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { HOSTILE_STRINGS } from '../helpers/hostile';
 import { RES, handBuiltContent } from '../helpers/suggestionsFixture';
 import { ControlCard } from '@/components/suggestions/ControlCard';
+import { parseResources } from '@/lib/content/resources';
 
 // public/notebooks/requirements.txt is C-NB's file and does not exist yet: only that one stat is answered here.
 vi.mock('node:fs', async (importOriginal) => {
@@ -86,5 +87,9 @@ describe('ControlCard', () => {
     const html = renderToStaticMarkup(<ControlCard control={c.controls.get('C-01')!} resources={RES} headingLevel={4} />);
     expect(html).toContain('<h4 class="ctl-card__title">Alternatives Analysis</h4>');
     expect(html).toContain('data-control="C-01"');
+  });
+
+  it('FR-SUG-04 FR-CNT-05: CNT\'s parseResources accepts the card test resources unchanged', () => {
+    expect(parseResources(RES)).toEqual(RES);
   });
 });
