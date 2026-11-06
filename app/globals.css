@@ -358,7 +358,7 @@ h5 { font-size: var(--font-size-lg); }
 
 .btn--secondary:hover {
   background-color: var(--text-primary);
-  color: var(--color-white);
+  color: var(--surface-base);   /* the page colour on the text colour: --color-white is not light-on-dark in the dark theme */
 }
 
 .btn--green {

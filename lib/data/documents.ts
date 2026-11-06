@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars -- stub bodies keep the contract's parameter names; the producers replace the file's bodies. */
 import type { OrgRole, Prisma } from '@prisma/client';
 import { createHash, randomBytes } from 'node:crypto';
 import { assertCan, NotFoundError, withOrg, type OrgContext, type TenantTx } from '@/lib/data/tenant';
@@ -11,7 +10,8 @@ import type {
 import type { FieldMap } from '@/types/documents';
 import type { SealManifestV1 } from '@/types/seal';
 import type { LoadedContent } from '@/types/content';
-import { AppError, ErasedError, NotImplementedError, ValidationFailed } from '@/lib/http/errors';
+import { AppError, ConflictError, ErasedError, NotImplementedError, ValidationFailed } from '@/lib/http/errors';
+import { FINDING_MESSAGES, NOT_STORABLE, textLength } from '@/lib/findings/validate';
 import { idempotentWrite, isRequestId } from '@/lib/data/idempotency';
 import { assertProjectWritable } from '@/lib/data/projectGuard';
 import { isSerializationFailure, isUniqueViolation, uniqueViolationIndex } from '@/lib/data/pgErrors';
@@ -26,7 +26,7 @@ import { eatDate, isOverdue } from '@/lib/followup/overdue';
 import { manifestIds } from '@/lib/seal/ids';
 import { stageReviewName } from '@/lib/seal/reviewName';
 import { SEAL_SOURCE_SQL, checkSealRows, trustedManifest, type SealSourceRows, type TombstoneRow } from '@/lib/integrity/sealCheck.mjs';
-import { ERASABLE_FIELDS, ETHICS_STATES, METADATA_KEYS, MSG_SEAL_CHECK_FAILED } from '@/lib/documents/copy';
+import { ERASABLE_FIELDS, ETHICS_STATES, METADATA_KEYS, MSG_SEAL_CHECK_FAILED, DOCUMENT_TITLES, formatUtcDay } from '@/lib/documents/copy';
 import { readStageRows } from '@/lib/seal/manifest';
 import type { DocumentSnapshot, SealedDecision, SealedFinding, SealedStage } from '@/lib/documents/resolve';
 
@@ -313,6 +313,7 @@ export async function readDocumentSnapshot(
     organisationName, today,
     erasures: {
       evidence: erasedEvidence, findings: erasedFindings,
+      stage_reviews: await erasureDates(tx, 'stage_reviews', all.map((r) => r.seal.stageReview.id)),
       mitigation_versions: await erasureDates(tx, 'mitigation_versions', all.flatMap((r) => r.mitigations.map((m) => m.id))),
       accepted_risks: await erasureDates(tx, 'accepted_risks', all.flatMap((r) => r.risks.map((x) => x.id))),
     },
@@ -782,16 +783,87 @@ export async function readDocumentPdf(ctx: OrgContext, documentId: string): Prom
   return { bytes, fileName: `${FILE_PREFIX[found.row.documentType as DocumentType]}-${day(found.row.issuedAt)}-${documentId.slice(0, 8)}.pdf` };
 }
 
-/** Withdraw and plain text of issued documents (DOC-b). Typed stubs until it merges. */
+// ─── Withdrawal and the plain-text copy (FR-DOC-06, FR-DOC-07) ─────────────────────────────────────
 
-// CONTRACT_STUB: DOC-b
+/** The reason of a withdrawal is 1 to 1,000 characters after trimming (FR-DOC-06). */
+const WITHDRAWAL_REASON_MAX = 1000;
+
+/** The body of route 19: `{ requestId, reason }` and nothing else. The reason is trimmed and NFC-normalised, 1 to 1,000 characters, and storable. */
+export function parseWithdrawDocumentRequest(body: unknown): WithdrawDocumentRequest {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+    throw new ValidationFailed([{ field: 'body', message: FINDING_MESSAGES.body }]);
+  }
+  const extra = Object.keys(body).filter((k) => k !== 'requestId' && k !== 'reason');
+  if (extra.length > 0) throw new ValidationFailed(extra.map((field) => ({ field, message: 'This field cannot be sent.' })));
+  const { requestId, reason } = body as Record<string, unknown>;
+  const errors: FieldError[] = [];
+  if (!isRequestId(requestId)) errors.push({ field: 'requestId', message: FINDING_MESSAGES.requestId });
+  if (typeof reason !== 'string' || textLength(reason) === 0) errors.push({ field: 'reason', message: FINDING_MESSAGES.eventReason });
+  else if (textLength(reason) > WITHDRAWAL_REASON_MAX) errors.push({ field: 'reason', message: FINDING_MESSAGES.tooLong(textLength(reason), WITHDRAWAL_REASON_MAX) });
+  else if (NOT_STORABLE.test(reason)) errors.push({ field: 'reason', message: FINDING_MESSAGES.notStorable });
+  if (errors.length > 0) throw new ValidationFailed(errors);
+  return { requestId: requestId as string, reason: (reason as string).trim().normalize('NFC') };
+}
+
+/**
+ * Route 19 (FR-DOC-06): withdraws an issued document with a reason. Only a `document_events` row is written; the document, its bytes and its
+ * SHA-256 are untouched (NFR-INT-06). A document of another organisation or none is not found; a withdrawn one cannot be withdrawn again
+ * (409 `already_withdrawn`, the first reason stays); an archived project refuses (409 `project_archived`). The check for an earlier event
+ * and the insert are serialised per document by an advisory lock, because the append-only tables cannot be row-locked by the application role.
+ */
 export async function withdrawDocument(
   ctx: OrgContext, actor: Actor, a: WithdrawDocumentRequest & { documentId: string }, digest: string,
 ): Promise<WriteOutcome<IssuedDocumentView>> {
-  throw new NotImplementedError('DOC-b');
+  assertCan(ctx, 'document:withdraw');
+  const req = parseWithdrawDocumentRequest({ requestId: a.requestId, reason: a.reason });
+  const viewOf = async (tx: TenantTx, documentId: string): Promise<IssuedDocumentView> => {
+    const view = (await documentViews(tx, [documentId])).get(documentId);
+    if (view === undefined) throw new Error(`documents: document ${documentId} has no view`);
+    return view;
+  };
+  const out = await idempotentWrite<IssuedDocumentView>(ctx, {
+    table: 'document_events', requestId: req.requestId, digest, actorUserId: actor.userId,
+    // The request columns of document_events say which document the request was for; a replay answers that one, never the path's.
+    replay: async (tx, rowId) => {
+      const event = await tx.documentEvent.findUniqueOrThrow({ where: { id: rowId }, select: { documentId: true } });
+      return viewOf(tx, event.documentId);
+    },
+    write: async (tx) => {
+      const doc = await tx.issuedDocument.findUnique({ where: { id: a.documentId }, select: { id: true, projectId: true } });
+      if (doc === null) throw new NotFoundError();
+      await assertProjectWritable(tx, doc.projectId);
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended('makrai.document-withdrawal:' || ${doc.id}::text, 0))`;
+      const earlier = await tx.documentEvent.count({ where: { documentId: doc.id, kind: 'withdrawn' } });
+      if (earlier > 0) throw new ConflictError('already_withdrawn');
+      await tx.documentEvent.create({
+        data: { orgId: ctx.orgId, documentId: doc.id, kind: 'withdrawn', reason: req.reason, byId: actor.userId, requestId: req.requestId, requestDigest: digest },
+      });
+      return viewOf(tx, doc.id);
+    },
+  });
+  if (!out.replayed) logSecurityEvent('DOCUMENT_WITHDRAWN', 'info', { details: { orgId: ctx.orgId, documentId: a.documentId } });
+  return out;
 }
 
-// CONTRACT_STUB: DOC-b
+/** FR-DOC-07's marking, the first line of every copy (SRS line 1055; the date as 7.5.8 prints it, in UTC). */
+const textCopyMarking = (type: DocumentType, issuedAt: Date): string =>
+  `Copy of the ${DOCUMENT_TITLES[type].toLowerCase()} issued on ${formatUtcDay(issuedAt.toISOString())}; the PDF is the issued version`;
+
+/**
+ * Route 18 (FR-DOC-07): the plain-text copy of an issued document, as the marking, a blank line, and the text stored at issue (never
+ * regenerated). A missing or foreign document is not found; a copy the operator erased with the document's bytes answers 410 with the date.
+ */
 export async function readDocumentText(ctx: OrgContext, documentId: string): Promise<string> {
-  throw new NotImplementedError('DOC-b');
+  const found = await withOrg(ctx, async (tx) => {
+    const row = await tx.issuedDocument.findUnique({ where: { id: documentId }, select: { documentType: true, issuedAt: true, plainText: true } });
+    if (row === null) return null;
+    const erasedOn = row.plainText === null ? ((await documentViews(tx, [documentId])).get(documentId)?.erased?.erasedOn ?? null) : null;
+    return { row, erasedOn };
+  });
+  if (found === null) throw new NotFoundError();
+  if (found.row.plainText === null) {
+    if (found.erasedOn === null) throw new Error(`documents: document ${documentId} has no text and no tombstone`);
+    throw new ErasedError(found.erasedOn);
+  }
+  return `${textCopyMarking(found.row.documentType as DocumentType, found.row.issuedAt)}\n\n${found.row.plainText}`;
 }

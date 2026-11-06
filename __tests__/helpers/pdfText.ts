@@ -141,10 +141,19 @@ function readObjects(pdf: Buffer): Map<number, PdfObject> {
     const kw = /^\s*stream(\r\n|\n|\r)/.exec(rest);
     if (kw !== null && isDict(value)) {
       const start = lex.pos + kw[0].length;
-      const end = s.indexOf('endstream', start);
-      let raw = pdf.subarray(start, end);
-      if (raw.length >= 2 && raw[raw.length - 1] === 0x0a) raw = raw.subarray(0, raw.length - (raw[raw.length - 2] === 0x0d ? 2 : 1));
-      else if (raw.length >= 1 && raw[raw.length - 1] === 0x0d) raw = raw.subarray(0, raw.length - 1);
+      // A direct /Length says exactly how many bytes the stream holds, whatever they are (deflate data may end in 0x0a or 0x0d). Only an
+      // indirect /Length falls back to the first "endstream", and then exactly one line feed before it is framing.
+      const length = typeof value.Length === 'number' && Number.isInteger(value.Length) && value.Length >= 0 ? value.Length : null;
+      let end: number;
+      let raw: Buffer;
+      if (length !== null) {
+        end = start + length;
+        raw = pdf.subarray(start, end);
+      } else {
+        end = s.indexOf('endstream', start);
+        raw = pdf.subarray(start, end);
+        if (raw.length >= 1 && raw[raw.length - 1] === 0x0a) raw = raw.subarray(0, raw.length - 1);
+      }
       const filter = value.Filter;
       const filters = Array.isArray(filter) ? filter : filter === undefined ? [] : [filter];
       stream = filters.some((f) => isName(f) && f.name === 'FlateDecode') ? inflateSync(raw) : Buffer.from(raw);

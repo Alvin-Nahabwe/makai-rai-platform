@@ -78,7 +78,7 @@ function snapshot(decisions: Record<string, Spec>, over: { project?: Partial<Doc
   return {
     documentType: 'data_card', reviewStage, chosen: stages[reviewStage] as SealedStage, stages, contents: new Map([['cv1', content]]),
     project: { name: 'Project', description: null, ...over.project, metadata: over.project?.metadata ?? {} }, organisationName: 'Org', today: '2026-11-05',
-    erasures: { evidence: new Map(), findings: new Map(), mitigation_versions: new Map(), accepted_risks: new Map(), ...over.erasures },
+    erasures: { evidence: new Map(), findings: new Map(), mitigation_versions: new Map(), accepted_risks: new Map(), stage_reviews: new Map(), ...over.erasures },
   };
 }
 const snapWith = (decisions: Record<string, Spec>, project?: { metadata?: Record<string, string | null> }) => snapshot(decisions, { project });
@@ -545,16 +545,6 @@ describe('boundaries', () => {
     expect(src).toMatch(/import\s*\{[^}]*\bPERSONAL_DATA_WORDS\b[^}]*\}\s*from\s*'[^']*project\/labels'/);
     expect(src).not.toMatch(/Under 1,000|Over 1 million|1,000 to 100,000/);
     expect(existsSync('lib/project/labels.ts')).toBe(true);
-  });
-
-  it('DOC-b boundary: the mitigation-plan-only sources throw NotImplementedError(DOC-b)', () => {
-    const snap = snapWith({});
-    expect(() => part('meta', { kind: 'meta', item: 'no_decision' }, snap)).toThrow(/Not implemented/);
-    expect(() => part('meta', { kind: 'meta', item: 'review' }, snap)).toThrow();
-    expect(() => part('mapping', { kind: 'mapping' }, snap)).toThrow();
-    expect(() => part('findings', { kind: 'findings', stage: 'review', filter: 'open' }, snap)).toThrow();
-    expect(() => part('mitigations', { kind: 'mitigations', stage: 'review', filter: 'counts' }, snap)).toThrow();
-    try { part('meta', { kind: 'meta', item: 'no_decision' }, snap); } catch (e) { expect((e as { extra?: { unit?: string } }).extra?.unit).toBe('DOC-b'); }
   });
 
   it('FR-PUB-01 FR-DOC-02 (SRS 7.5.3): nothing the resolver prints for a decided data card holds a claim word, or a form of "fail"', () => {

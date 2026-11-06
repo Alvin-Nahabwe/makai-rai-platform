@@ -109,12 +109,18 @@ describe('S-18', () => {
     }
   });
 
-  it('FR-DOC-01 (C4 CR-4): the mitigation plan is not offered while no renderer is registered, and the other two are', async () => {
-    const html = await render(reviewOfA);
-    expect(html).not.toContain('>Mitigation plan<');
-    expect(html).not.toContain('value="mitigation_plan"');
-    expect(html.indexOf('>Data card<')).toBeGreaterThan(0);
-    expect(html.indexOf('>Model card<')).toBeGreaterThan(html.indexOf('>Data card<'));
+  it('FR-DOC-01 UX-20 (S-18): the mitigation plan is offered, after the data card and the model card, to every role that may generate', async () => {
+    for (const role of ['owner', 'admin', 'reviewer'] as const) {
+      sessionFor(fxA.members[role].userId);
+      const html = await render(reviewOfA);
+      expect([role, html.includes('value="mitigation_plan"')]).toEqual([role, true]);
+      const at = ['>Data card<', '>Model card<', '>Mitigation plan<'].map((t) => html.indexOf(t));
+      expect([role, at.every((x) => x > 0), [...at].sort((a, b) => a - b)]).toEqual([role, true, at]);
+    }
+    for (const role of ['assessor', 'viewer'] as const) {
+      sessionFor(fxA.members[role].userId);
+      expect([role, (await render(reviewOfA)).includes('value="mitigation_plan"')]).toEqual([role, false]);
+    }
   });
 
   it('NFR-INT-05 (C4 CR-6): a seal failure while the summaries are read does not take S-18 down: the failed-check line stands where the form was, and the issued list and its download stay', async () => {

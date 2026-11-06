@@ -80,10 +80,7 @@ export const REMOVED_METHODS: Readonly<Record<string, readonly Method[]>> = {
  * deletes its file from the list in the commit that implements it; the release lint
  * (__tests__/lint/no-contract-stubs.test.ts, with RELEASE_CANDIDATE=1) fails while the list is not empty.
  */
-export const PENDING_ROUTES: readonly string[] = [
-  'app/api/v1/orgs/[slug]/documents/[documentId]/text/route.ts',
-  'app/api/v1/orgs/[slug]/documents/[documentId]/withdrawal/route.ts',
-];
+export const PENDING_ROUTES: readonly string[] = [];
 
 /**
  * Every non-GET method of `ROUTE_ACTIONS` is in exactly one of `RETRY_KEYED_WRITES` and `UNKEYED_WRITES`

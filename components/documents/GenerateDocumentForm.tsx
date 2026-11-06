@@ -270,11 +270,20 @@ export function GenerateDocumentForm(props: GenerateDocumentFormProps): ReactEle
       ))}
 
       {doc.fromRecord === null ? null : (
-        <p>{`${doc.fromRecord.fields} fields from ${doc.fromRecord.questions} questions . ${doc.fromRecord.notRecorded} fields will read "${NOT_RECORDED}"`}</p>
+        <p>{fromRecordLine(doc.fromRecord)}</p>
       )}
       <button type="submit" ref={generateRef} className="btn btn--primary" aria-disabled={busy || chosen === undefined || !chosen.bytesMatch || undefined}>Generate document</button>
       <p role="status">{busy ? state.message : ''}</p>
       <GenerateStatus state={state} onRetry={onRetry} />
     </form>
   );
+}
+
+/**
+ * The summary line under the form: how many fields, how many questions they come from, and how many will read "Not recorded". A document
+ * whose fields take no question (the mitigation plan reads findings and mitigations) says "<n> fields" and leaves the questions out.
+ */
+export function fromRecordLine(r: { fields: number; questions: number; notRecorded: number }): string {
+  const from = r.questions === 0 ? `${r.fields} fields` : `${r.fields} fields from ${r.questions} questions`;
+  return `${from} . ${r.notRecorded} fields will read "${NOT_RECORDED}"`;
 }

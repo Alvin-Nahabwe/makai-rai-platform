@@ -258,12 +258,6 @@ describe('preview and issue', () => {
     spy.mockRestore();
   });
 
-  it('DOC-b boundary: preview and issue of a mitigation plan throw not_implemented until DOC-b registers it', async () => {
-    await expect(preview({ documentType: 'mitigation_plan' })).rejects.toMatchObject({ status: 501 });
-    await expect(issue({ documentType: 'mitigation_plan' })).rejects.toMatchObject({ status: 501 });
-    expect(await count('issued_documents')).toBe(0);
-  });
-
   it('FR-DOC-01: an unknown document type is refused on documentType', async () => {
     await expect(preview({ documentType: 'poster' as DocumentType })).rejects.toMatchObject({ status: 422, code: 'validation' });
   });

@@ -187,10 +187,6 @@ describe('document renderers', () => {
     expect(readFileSync('next.config.ts', 'utf8')).toMatch(/outputFileTracingIncludes[\s\S]*'data\/fonts\/\*\*'/);
   });
 
-  it('DOC-b boundary: RENDERERS.mitigation_plan is null until DOC-b registers it', () => {
-    expect(RENDERERS.mitigation_plan).toBeNull();
-  });
-
   it('FR-PUB-01 FR-DOC-02 (SRS 7.5.3): the printed copy holds no claim word outside the allowed statement, and no form of "fail"', async () => {
     for (const type of ['data_card', 'model_card'] as const) {
       const { pdf, plainText } = await RENDERERS[type]!(input(type, { fields: 40 }));

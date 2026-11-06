@@ -1,11 +1,11 @@
 import 'dotenv/config';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { expect, request as pwRequest, test, type Locator, type Page } from '@playwright/test';
+import { expect, request as pwRequest, test, type Page } from '@playwright/test';
 import type { OrgRole } from '@prisma/client';
 import { testDb } from '../__tests__/helpers/db';
-import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
-import { expectNoSeriousA11yViolations } from './helpers/a11y';
+import { expectNoSeriousA11yViolations, settleHover } from './helpers/a11y';
+import { expectMainDoesNotScroll, org, seat, signIn, tabTo } from './helpers/s18';
 import { failOnDialog } from './helpers/dialogs';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { expectNoHorizontalScroll } from './helpers/reflow';
@@ -15,21 +15,7 @@ import { expectNoHorizontalScroll } from './helpers/reflow';
  * fixture organisation of e2e/fixtures/manifest.ts; the decisions, the review and the seal are made through the real routes with
  * each seat's own session, so the seal is REV-a's and the document DOC-a's.
  */
-const manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8')) as FixtureManifest;
-const org = manifest.orgs[0];
 const HOSTILE = '<script>alert(1)</script>';
-
-function seat(role: OrgRole) {
-  const s = manifest.users.find((u) => u.orgSlug === org.slug && u.role === role && u.index === 0);
-  if (!s) throw new Error(`the fixture manifest has no ${role} seat for ${org.slug}`);
-  return s;
-}
-
-async function signIn(page: Page, role: OrgRole): Promise<void> {
-  await page.context().clearCookies();
-  const state = JSON.parse(readFileSync(seat(role).storageStatePath, 'utf8')) as { cookies: Array<{ name: string; value: string; domain: string; path: string }> };
-  await page.context().addCookies(state.cookies);
-}
 
 async function api<T>(baseURL: string, role: OrgRole, path: string, data: Record<string, unknown>): Promise<T> {
   const ctx = await pwRequest.newContext({ baseURL, storageState: seat(role).storageStatePath });
@@ -53,21 +39,6 @@ async function sealedReview(baseURL: string): Promise<{ projectId: string; revie
   const r = await api<{ id: string }>(baseURL, 'admin', `/api/v1/orgs/${org.slug}/projects/${p.id}/reviews`, { requestId: randomUUID(), stage: 'pre-processing', preparedFor: null });
   const s = await api<{ id: string }>(baseURL, 'reviewer', `/api/v1/orgs/${org.slug}/projects/${p.id}/reviews/${r.id}/seals`, { requestId: randomUUID() });
   return { projectId: p.id, reviewId: r.id, sealId: s.id };
-}
-
-/** Presses Tab until `target` has focus (keyboard only, NFR-A11Y-02), failing after 120 presses. */
-async function tabTo(page: Page, target: Locator): Promise<void> {
-  for (let i = 0; i < 120; i++) {
-    if (await target.evaluate((el) => el === document.activeElement).catch(() => false)) return;
-    await page.keyboard.press('Tab');
-  }
-  throw new Error('tabTo: the target never took focus');
-}
-
-/** .app-main is a scroll container (overflow-y auto makes overflow-x auto too), so overflow inside it never reaches the root that expectNoHorizontalScroll reads (C4 m4). */
-async function expectMainDoesNotScroll(page: Page): Promise<void> {
-  const m = await page.evaluate(() => { const el = document.querySelector('.app-main') as HTMLElement; return { scroll: el.scrollWidth, client: el.clientWidth }; });
-  expect(m.scroll, '.app-main scrollWidth').toBeLessThanOrEqual(m.client);
 }
 
 const issuedStatus = (page: Page) => page.getByRole('status').filter({ hasText: /^Issued\./ });
@@ -100,6 +71,7 @@ test('FR-DOC-08 FR-DOC-04 FR-DOC-01 NFR-A11Y-02 NFR-A11Y-05 NFR-SEC-11: generate
   await expect(allowed).toHaveCount(1);
   expect(await allowed.getAttribute('data-claims-allowed')).toMatch(/^AL-1\b/);
   expect(await testDb.issuedDocument.count({ where: { stageReviewId: reviewId } })).toBe(0);   // FR-DOC-08: nothing stored yet
+  await settleHover(page);
   await expectNoSeriousA11yViolations(page, 'S-18 preview');
 
   await tabTo(page, page.getByRole('button', { name: 'Back to edit' }));
@@ -124,6 +96,7 @@ test('FR-DOC-08 FR-DOC-04 FR-DOC-01 NFR-A11Y-02 NFR-A11Y-05 NFR-SEC-11: generate
   await expect(page.getByRole('heading', { name: "Uganda's AI protocol issues", level: 2 })).toBeVisible();
   await expect(page.locator('.uncst-table caption')).toBeVisible();
   await expect(page.locator('.uncst-table tbody tr')).toHaveCount(6);
+  await settleHover(page);
   await expectNoSeriousA11yViolations(page, 'S-18 issued');
 
   // The list after a reload: the SHA-256 shown is the one of the downloaded file (12.2 step 6).
@@ -150,11 +123,13 @@ test('FR-DOC-08 FR-DOC-04 FR-DOC-01 NFR-A11Y-02 NFR-A11Y-05 NFR-SEC-11: generate
       // The form with the issued list is the page above; the preview is the state a Generate leaves. (C4 SC-1)
       await page.getByRole('button', { name: 'Generate document' }).click();
       await expect(page.getByRole('heading', { name: /^Preview: Data card/ })).toBeFocused();
+      await settleHover(page);
       await expectNoSeriousA11yViolations(page, `S-18 preview, ${scheme}, ${width}`);
       if (width === 360) {
         // One Issue per scheme: the issued state with a second document in the list, checked in this scheme and at this width.
         await page.getByRole('button', { name: 'Issue this document' }).click();
         await expect(issuedStatus(page)).toHaveText(/^Issued\./);
+        await settleHover(page);
         await expectNoSeriousA11yViolations(page, `S-18 issued, ${scheme}, ${width}`);
       }
     }
@@ -169,6 +144,7 @@ test('FR-DOC-08 FR-DOC-04 FR-DOC-01 NFR-A11Y-02 NFR-A11Y-05 NFR-SEC-11: generate
   await expect(page.getByRole('heading', { name: /^Preview: Data card/ })).toBeFocused();
   await expectNoHorizontalScroll(page);
   await expectMainDoesNotScroll(page);
+  await settleHover(page);
   await expectNoSeriousA11yViolations(page, 'S-18 preview, 320');
 });
 
@@ -218,6 +194,7 @@ test('UX-20 (accessibility audit): a refused typed value is marked aria-invalid,
   await expect(field).toBeFocused();
   await expect(field).toHaveAttribute('aria-invalid', 'true');
   await expect(field).toHaveAttribute('aria-describedby', /typed-error-DC-25/);
+  await settleHover(page);
   await expectNoSeriousA11yViolations(page, 'S-18 refused field');
   expect(await testDb.issuedDocument.count({ where: { stageReviewId: reviewId } })).toBe(0);
 });
