@@ -16,6 +16,7 @@ import {
 } from '../helpers/recordFixture';
 import { sealFixture } from '../helpers/sealFixture';
 import { pdfPageRuns, pdfTextRuns } from '../helpers/pdfText';
+import { callRoute, sessionAs } from '../helpers/routeDriver';
 import { HOSTILE_STRINGS, hostileText } from '../helpers/hostile';
 import { claimsOutsideNames, readFrameworkNames } from '../helpers/frameworkNames';
 
@@ -30,6 +31,7 @@ let sealId: string;
 let findingId: string;
 let mitigationId: string;
 const titles: string[] = [];
+const PDF_ROUTE = 'app/api/v1/orgs/[slug]/documents/[documentId]/pdf/route.ts';
 
 const ctx = () => ctxFor(fx, 'admin');
 const admin = () => ({ userId: fx.members.admin.userId, role: 'admin' as const });
@@ -148,7 +150,9 @@ describe('the mitigation plan renderer', () => {
     await eraseText('mitigation_versions', mv.sourceId, 'what');
     const view = (await withOrg(ctx(), (tx) => documentViews(tx, [value.id]))).get(value.id) as IssuedDocumentView;
     expect(view.erased).not.toBeNull();
-    await expect(readDocumentPdf(ctx(), value.id)).rejects.toMatchObject({ status: 410 });
+    sessionAs(fx.members.viewer.userId);
+    const download = await callRoute(PDF_ROUTE, 'GET', { slug: fx.org.slug, params: { documentId: value.id } });
+    expect([download.status, (await download.json()).code]).toEqual([410, 'erased']);
   });
 
   it('FR-REV-08 (SRS 7.5.6): a mitigation text erased before issue prints the erasure line', async () => {

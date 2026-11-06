@@ -132,9 +132,9 @@ describe('withdrawing an issued document (route 19)', () => {
     expect(await testDb.documentEvent.count()).toBe(0);
   });
 
-  it('FR-DOC-06: a missing, blank or 1001-character reason answers 422 on reason, and a reason of 1000 is kept', async () => {
+  it('FR-DOC-06: a missing, blank, 1001-character or unstorable (NUL, lone surrogate) reason answers 422 on reason, and a reason of 1000 is kept', async () => {
     as('owner');
-    for (const reason of [undefined, '', '   ', 'x'.repeat(1001)]) {
+    for (const reason of [undefined, '', '   ', 'x'.repeat(1001), 'has a NUL \u0000 in it', 'lone surrogate \uD800']) {
       const r = await post(docId, { requestId: randomUUID(), ...(reason === undefined ? {} : { reason }) });
       const json = await r.json();
       expect([reason?.length, r.status, json.fields[0].field]).toEqual([reason?.length, 422, 'reason']);

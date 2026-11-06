@@ -10,7 +10,7 @@ import { loadFieldMap } from '@/lib/documents/fieldMaps';
 import {
   GATE_DERIVED_NA, textErasedLine, NOT_RECORDED_AT_ISSUE,
 } from '@/lib/documents/copy';
-import { resolveFields, type DocumentSnapshot, type SealedDecision, type SealedFinding, type SealedStage } from '@/lib/documents/resolve';
+import { SOURCE_RESOLVERS, resolveFields, type DocumentSnapshot, type SealedDecision, type SealedFinding, type SealedStage } from '@/lib/documents/resolve';
 
 /**
  * Field resolution of the mitigation plan (FR-DOC-01, FR-DOC-02, FR-DOC-07; SRS 10.3.4). Snapshots are built by hand
@@ -58,6 +58,7 @@ function sealedFinding(f: FindingSpec): SealedFinding {
 }
 
 interface SnapSpec {
+  contentSemver?: string;
   preparedFor?: string | null; findings?: FindingSpec[]; none?: string[]; notApplicable?: Record<string, [code: string, reason: string | null]>;
   gate?: { derived: string[]; answer: 'no' | 'yes'; gateQuestion?: string }; reasonErased?: Record<string, string>;
   erasures?: Partial<DocumentSnapshot['erasures']>; today?: string;
@@ -84,7 +85,7 @@ function snapshot(s: SnapSpec = {}): DocumentSnapshot {
     derived = new Map(s.gate.derived.map((q) => [q, `dv-${gq}-1`]));
   }
   const manifest = {
-    format: 'makrai.seal/1', content: { semver: '0.0.1-fixture', contentHash: 'h' },
+    format: 'makrai.seal/1', content: { semver: s.contentSemver ?? '0.0.1-fixture', contentHash: 'h' },
     decisions: [
       ...(s.none ?? []).map((question) => ({ question, none: true as const, withdrawal: null })),
       ...[...decisions.keys()].map((question) => ({ question })),
@@ -190,6 +191,14 @@ describe('the mitigation plan resolvers', () => {
     expect(text(r, 'MP-08')).toMatch(/Q-PP-18[\s\S]*Not applicable \(No personal data is involved\)\. Reason: 'Whole register used\.'/);
     expect(text(r, 'MP-08')).toContain(`Q-PP-13: ${GATE_DERIVED_NA}`);
     expect(provenance(r, 'MP-08')).toContain('Q-PP-GATE-SENSITIVE');
+  });
+
+  it('FR-DOC-01 (MP-07, MP-04): the stem of an undecided question is read from the content the seal was made on, so a seal on content that is not installed fails loudly', () => {
+    expect(text(resolve({ none: ['Q-PP-03'] }), 'MP-07')).toBe(`Q-PP-03: ${(content.questions.get('Q-PP-03') as { text: string }).text}`);
+    // The MP-07 resolver alone (MP-04 also loads the seal's content, so the field-level call would throw for it).
+    const meta = (snap: DocumentSnapshot) => SOURCE_RESOLVERS.meta({ kind: 'meta', item: 'no_decision' }, snap, {}, mpMap.fields[0], new Map());
+    expect(meta(snapshot({ none: ['Q-PP-03'] })).text).toContain('Q-PP-03');
+    expect(() => meta(snapshot({ none: ['Q-PP-03'], contentSemver: '9.9.9-not-installed' }))).toThrow();
   });
 
   it('FR-DOC-01: an empty list prints None', () => {

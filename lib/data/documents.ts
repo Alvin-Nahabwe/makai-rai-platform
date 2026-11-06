@@ -786,7 +786,7 @@ export async function readDocumentPdf(ctx: OrgContext, documentId: string): Prom
 // ─── Withdrawal and the plain-text copy (FR-DOC-06, FR-DOC-07) ─────────────────────────────────────
 
 /** The reason of a withdrawal is 1 to 1,000 characters after trimming (FR-DOC-06). */
-export const WITHDRAWAL_REASON_MAX = 1000;
+const WITHDRAWAL_REASON_MAX = 1000;
 
 /** The body of route 19: `{ requestId, reason }` and nothing else. The reason is trimmed and NFC-normalised, 1 to 1,000 characters, and storable. */
 export function parseWithdrawDocumentRequest(body: unknown): WithdrawDocumentRequest {
@@ -846,7 +846,7 @@ export async function withdrawDocument(
 }
 
 /** FR-DOC-07's marking, the first line of every copy (SRS line 1055; the date as 7.5.8 prints it, in UTC). */
-export const textCopyMarking = (type: DocumentType, issuedAt: Date): string =>
+const textCopyMarking = (type: DocumentType, issuedAt: Date): string =>
   `Copy of the ${DOCUMENT_TITLES[type].toLowerCase()} issued on ${formatUtcDay(issuedAt.toISOString())}; the PDF is the issued version`;
 
 /**

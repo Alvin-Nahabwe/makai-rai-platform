@@ -493,12 +493,17 @@ function reviewLine(s: SealedStage, snap: DocumentSnapshot): ResolvedPart {
   return part({ text: `Stage: ${s.stage}. ${s.seal.reviewName}.${note === null ? '' : ` Prepared for: ${note}`}`, sources, sealIds: [s.seal.sealId] });
 }
 
-/** MP-07: the chosen seal's questions that hold no decision, each with its stem from the running content. */
+/** MP-07: the chosen seal's questions that hold no decision, each with its stem from the content the seal was made on (as MP-04 reads it). */
 function noDecisionList(snap: DocumentSnapshot): ResolvedPart {
   const s = snap.chosen;
   const ids = s.manifest.decisions.flatMap((d) => ('none' in d ? [d.question] : []));
-  const text = ids.length === 0 ? NONE : ids.map((q) => `${q}: ${runningQuestion(snap, q).text}`).join('\n');
-  return part({ text, sealIds: [s.seal.sealId] });
+  const content = ids.length === 0 ? null : loadContent(s.manifest.content.semver);
+  const stem = (q: string): string => {
+    const text = (content as LoadedContent).questions.get(q)?.text;
+    if (text === undefined) throw new Error(`documents: question ${q} is not in content ${s.manifest.content.semver}`);
+    return text;
+  };
+  return part({ text: ids.length === 0 ? NONE : ids.map((q) => `${q}: ${stem(q)}`).join('\n'), sealIds: [s.seal.sealId] });
 }
 
 /** MP-08: the chosen seal's not applicable questions with the code's label and the reason, then those the scope answer made not applicable (SRS 7.5.6). */
