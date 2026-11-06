@@ -3,7 +3,6 @@ import { loadContent } from '@/lib/content/loader';
 import { loadResources } from '@/lib/content/resources';
 import { controlsForArea } from '@/lib/content/suggestions';
 import { ControlCard } from './ControlCard';
-import { controlCountLine } from './SuggestedControls';
 
 export type FindingSuggestionsProps = { contentSemver: string; riskArea: string | null };
 
@@ -22,8 +21,9 @@ export function findingSuggestionCount(p: FindingSuggestionsProps): number {
 
 /**
  * The controls suggested for a finding's risk area (FR-SUG-03). A slot of its screen (contract "Screens and slots"): the
- * screen's owner renders it under its own "Ways teams address this" heading, so the slot has none. SRS W-5 note 5: the controls
- * are collapsed to their names on one line, with the full cards in a closed "Show details".
+ * screen's owner renders it under its own heading, "Ways teams address this (for risk area <id>)", so the slot has no heading and
+ * no count line (SRS W-5, line 1996). SRS W-5 note 5: the controls are collapsed to their names on one line, with the full cards
+ * in a closed "Show details".
  */
 export function FindingSuggestions(p: FindingSuggestionsProps): ReactElement | null {
   const controls = controlsOf(p);
@@ -31,7 +31,6 @@ export function FindingSuggestions(p: FindingSuggestionsProps): ReactElement | n
   const resources = loadResources();
   return (
     <div className="suggested-controls">
-      <p className="suggested-controls__count">{controlCountLine(controls.length)}</p>
       <p className="suggested-controls__names">{controls.map((x) => `${x.control.id} ${x.control.name}`).join(' \u00b7 ')}</p>
       <details>
         <summary>Show details</summary>

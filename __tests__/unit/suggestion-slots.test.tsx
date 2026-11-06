@@ -59,7 +59,7 @@ describe('suggestion slots', () => {
     const html = renderToStaticMarkup(FindingSuggestions({ contentSemver: V, riskArea: 'IP-05' }) ?? <></>);
     expect(html).not.toContain('Ways teams address this');   // FND-b's section h2 carries the words: no second heading
     expect(html).not.toMatch(/<h3/);
-    expect(html).toContain('3 controls for this question&#x27;s risk area');
+    expect(html).not.toMatch(/controls? for this question/);   // W-5 has no count line: the section heading names the risk area
     const names = html.slice(0, html.indexOf('<details'));
     expect(names).toMatch(/<p[^>]*class="suggested-controls__names"[^>]*>[^<]+<\/p>/);
     for (const n of ['C-13 ', 'C-15 ', 'C-18 ']) expect(names).toContain(n);

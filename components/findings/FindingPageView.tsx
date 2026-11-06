@@ -141,7 +141,7 @@ export function FindingPageView({ data }: { data: FindingPageData }): ReactEleme
       </section>
       {findingSuggestionCount({ contentSemver: d.contentSemver, riskArea: f.riskArea }) === 0 ? null : (
         <section aria-labelledby="f-ways">
-          <h2 id="f-ways">Ways teams address this</h2>
+          <h2 id="f-ways">{f.riskArea === null ? 'Ways teams address this' : `Ways teams address this (for risk area ${f.riskArea})`}</h2>
           <FindingSuggestions contentSemver={d.contentSemver} riskArea={f.riskArea} />
         </section>
       )}

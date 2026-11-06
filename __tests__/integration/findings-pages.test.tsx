@@ -248,12 +248,13 @@ describe('S-15 the finding page and the S-14 raise form (FR-FND-02, FR-FND-03, F
     expect(await renderPage('finding', { slug: fx.org.slug, id: f.projectId, findingId: f.id })).toContain('Mitigations');
   });
 
-  it('FR-SUG-03 UX-08 (screen): S-15 shows one Ways teams address this heading with the count line and Show details, and no section without controls', async () => {
+  it('FR-SUG-03 UX-08 (screen): S-15 shows one Ways teams address this heading naming the risk area, the names and Show details, and no section without controls', async () => {
     const p = await addProject(fx);
     const withArea = await addFinding(fx, p.id, { stage: 'pre-processing', source: 'team', by: 'reviewer', riskArea: 'IP-05' });
     const html = await renderFinding({ ...withArea, projectId: p.id });
     expect(html.match(/Ways teams address this/g)).toHaveLength(1);
-    expect(html).toContain('3 controls for this question&#x27;s risk area');
+    expect(html).toContain('<h2 id="f-ways">Ways teams address this (for risk area IP-05)</h2>');   // SRS W-5, line 1996
+    expect(html).not.toMatch(/controls? for this question/);
     expect(html).toContain('<summary>Show details</summary>');
     for (const riskArea of [null, 'XX-99']) {
       const f = await addFinding(fx, p.id, { stage: 'pre-processing', source: 'team', by: 'reviewer', riskArea });
