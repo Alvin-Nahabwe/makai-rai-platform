@@ -1,25 +1,31 @@
 #!/usr/bin/env python3
 """Check the evidence a notebook wrote before a team attaches it (NB-AC-04).
 
-    python notebooks/tools/check_evidence.py <evidence-dir> <control-id> <data-file>
+    python notebooks/tools/check_evidence.py <evidence-dir> <control-id> <data-file> [<data-file> ...]
 
-Exits 0 when the folder is fit to attach, 1 when it is not (every problem is printed to
-standard error, one per line), 2 when the command is used wrongly, 3 when the checker itself
-failed (never read 3 as "fit"). A problem is:
+Exit codes. 0: the folder is fit to attach. 1: it is not (every problem is printed to standard error, one per
+line). 2: the command was used wrongly (wrong arguments, a folder or file that is not there, a bad control id):
+nothing was checked. 3: the checker itself failed: the folder was NOT checked. The codes 2 and 3 are extra to the
+brief's "exits 1 unless fit" so that a broken checker can be told from a refused folder; none of them is 0, so none
+can be read as "fit". A problem is:
 
   * `<control-id>_summary.md` is missing or empty;
-  * the summary does not hold the SHA-256 of <data-file>;
+  * the summary does not hold the SHA-256 of every <data-file> (C-16 reads twelve files);
   * the summary does not name the Python version, or every package the notebook
     `<control-id>_*.ipynb` (beside the evidence folder) imports outside the standard
     library, optional cells excepted, each with its installed version;
   * a file in the evidence folder is not .md, .csv or .png, because a compressed or
     structured file cannot be searched for rows;
-  * a file holds a full row of <data-file>. Every data row is searched. Rows and files are
+  * a file holds a full row of any <data-file>. Every data row is searched. Rows and files are
     both cut into tokens (split on spaces, commas, semicolons, tabs and pipes, quotes
-    removed, numbers compared as numbers, a trailing full stop ignored), so a row matches
-    however the delimiter, the quoting or the number format changed. A row of three or more
-    tokens matches anywhere in a line; a shorter row matches only a whole line;
-  * <data-file> yields no row to search for;
+    removed, numbers compared as numbers, a trailing full stop ignored, and the words pandas
+    reads as missing values - empty, NaN, None, NA, <NA>, null and ? - dropped), so a row matches
+    however the delimiter, the quoting, the number format or the missing-value text changed.
+    A row of three or more tokens matches anywhere in a line; a shorter row matches only a
+    whole line. A first line is searched only as a whole line (it may be a header or a row);
+  * a <data-file> yields no row to search for;
+  * a file named .png does not begin with the PNG signature, or a link is in the folder
+    (a linked folder is not entered, so it cannot be searched);
   * a .csv holds more than 200 data rows.
 
 Nothing here is caught and ignored: a file that cannot be read is a problem, not a skip.
@@ -37,6 +43,9 @@ MAX_CSV_ROWS = 200
 MIN_TOKENS_FOR_ANYWHERE = 3
 ALLOWED_SUFFIXES = {".md", ".csv", ".png"}
 TOKEN = re.compile(r"[^\s,;|\"']+")
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+# What pandas reads as missing (or writes back as missing). Dropped on both sides, so a row with a hole still matches.
+MISSING = {"", "nan", "none", "na", "<na>", "null", "?"}
 NUMBER = re.compile(r"[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?")
 
 
@@ -55,7 +64,7 @@ def normal_token(token):
 
 
 def tokens(line):
-    return tuple(normal_token(t) for t in TOKEN.findall(line))
+    return tuple(normal_token(t) for t in TOKEN.findall(line) if t.lower() not in MISSING)
 
 
 def looks_like_header(line):
@@ -64,16 +73,21 @@ def looks_like_header(line):
 
 
 def data_rows(path):
-    """Token tuples of every data row, as (windowed rows, whole-line-only rows)."""
-    windowed, whole = set(), set()
+    """Token tuples of every data row, as (windowed rows, whole-line-only rows, how many data rows)."""
+    windowed, whole, rows = set(), set(), 0
     with path.open("r", encoding="utf-8", newline="") as handle:
         for number, line in enumerate(handle):
-            if not line.strip() or (number == 0 and looks_like_header(line)):
+            if not line.strip():
                 continue
             row = tokens(line)
-            if row:
+            if not row:
+                continue
+            if number == 0 and looks_like_header(line):
+                whole.add(row)  # a header or a row of text: only the whole line is looked for
+            else:
+                rows += 1
                 (windowed if len(row) >= MIN_TOKENS_FOR_ANYWHERE else whole).add(row)
-    return windowed, whole
+    return windowed, whole, rows
 
 
 def line_holds_a_row(line, windowed, whole):
@@ -122,7 +136,7 @@ def version_is_named(summary, name, version):
     return re.search(pattern, summary) is not None
 
 
-def check(evidence_dir, control, data_file):
+def check(evidence_dir, control, data_files):
     problems = []
     summary_path = evidence_dir / f"{control}_summary.md"
     summary = ""
@@ -135,9 +149,10 @@ def check(evidence_dir, control, data_file):
             problems.append(f"{summary_path.name} cannot be read: {error}")
 
     if summary:
-        data_sha = sha256_of(data_file)
-        if data_sha not in summary:
-            problems.append(f"{summary_path.name} does not hold the SHA-256 of {data_file.name} ({data_sha})")
+        for data_file in data_files:
+            data_sha = sha256_of(data_file)
+            if data_sha not in summary:
+                problems.append(f"{summary_path.name} does not hold the SHA-256 of {data_file.name} ({data_sha})")
         if not version_is_named(summary, "Python", platform.python_version()):
             problems.append(f"{summary_path.name} does not name Python {platform.python_version()}")
         notebooks = sorted(evidence_dir.parent.glob(f"{control}_*.ipynb"))
@@ -154,22 +169,38 @@ def check(evidence_dir, control, data_file):
                 if not version_is_named(summary, distribution, version):
                     problems.append(f"{summary_path.name} does not name {distribution} {version}")
 
-    try:
-        windowed, whole = data_rows(data_file)
-    except (OSError, UnicodeDecodeError) as error:
-        problems.append(f"{data_file.name} cannot be read, so the evidence was not searched for rows: {error}")
-        windowed, whole = set(), set()
-    else:
-        if not windowed and not whole:
+    windowed, whole = set(), set()
+    for data_file in data_files:
+        try:
+            more_windowed, more_whole, row_count = data_rows(data_file)
+        except (OSError, UnicodeDecodeError) as error:
+            problems.append(f"{data_file.name} cannot be read, so the evidence was not searched for rows: {error}")
+            continue
+        if row_count == 0:
             problems.append(f"{data_file.name} has no data row, so the evidence was not searched for rows")
+        windowed |= more_windowed
+        whole |= more_whole
 
-    for path in sorted(p for p in evidence_dir.rglob("*") if p.is_file()):
+    for path in sorted(evidence_dir.rglob("*")):
         relative = path.relative_to(evidence_dir)
+        if path.is_symlink():
+            problems.append(f"{relative}: a link cannot be checked; copy the file in instead")
+            continue
+        if not path.is_file():
+            continue
         suffix = "".join(path.suffixes).lower()
         if suffix not in ALLOWED_SUFFIXES:
             problems.append(f"{relative}: a {suffix or 'no-suffix'} file cannot be searched for rows; remove it")
             continue
         if suffix == ".png":
+            try:
+                with path.open("rb") as handle:
+                    signature = handle.read(len(PNG_SIGNATURE))
+            except OSError as error:
+                problems.append(f"{relative} cannot be read: {error}")
+                continue
+            if signature != PNG_SIGNATURE:
+                problems.append(f"{relative}: not a PNG image, so it cannot be left unsearched")
             continue
         try:
             lines = path.read_text(encoding="utf-8").splitlines()
@@ -189,21 +220,22 @@ def check(evidence_dir, control, data_file):
 
 
 def main(argv):
-    if len(argv) != 4:
+    if len(argv) < 4:
         print(__doc__.split("\n\n")[0], file=sys.stderr)
         return 2
-    evidence_dir, control, data_file = Path(argv[1]), argv[2], Path(argv[3])
+    evidence_dir, control, data_files = Path(argv[1]), argv[2], [Path(a) for a in argv[3:]]
     if not evidence_dir.is_dir():
         print(f"{evidence_dir} is not a folder", file=sys.stderr)
         return 2
-    if not data_file.is_file():
-        print(f"{data_file} is not a file", file=sys.stderr)
-        return 2
+    for data_file in data_files:
+        if not data_file.is_file():
+            print(f"{data_file} is not a file", file=sys.stderr)
+            return 2
     if not re.fullmatch(r"C-\d{2}", control):
         print(f"{control} is not a control id such as C-13", file=sys.stderr)
         return 2
     try:
-        problems = check(evidence_dir, control, data_file)
+        problems = check(evidence_dir, control, data_files)
     except Exception as error:  # the checker is broken: say so loudly and never report "fit"
         print(f"check_evidence.py failed itself ({type(error).__name__}: {error}); the folder was NOT checked", file=sys.stderr)
         return 3

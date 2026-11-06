@@ -55,3 +55,9 @@ jobs:
           else
             echo "notebooks/requirements.txt does not exist yet and there is no notebook source to run"
           fi
+
+      # The tests of the evidence checker, the dataset helper in each notebook and the executor (C-NB fix round 1).
+      # They run in the locked environment the previous step built, so they need no network and no dataset.
+      - name: Test the notebook tools
+        if: ${{ hashFiles('notebooks/requirements.txt') != '' }}
+        run: .nb/bin/python -m unittest notebooks/tools/test_tools.py
