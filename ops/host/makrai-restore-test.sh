@@ -154,9 +154,14 @@ docker exec "$NAME" pg_isready -q -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES
 
 # --- 3. Roles: cluster-level, so the dump has the GRANTs and not the CREATE ROLE ---
 # Derived from the migrations at run time, so a role added later is created here
-# without anyone remembering to edit this script.
+# without anyone remembering to edit this script. The grep is 4.2a's of
+# backup-restore.md: a name followed by its LOGIN or NOLOGIN, so a comment that
+# mentions CREATE ROLE is not read as a role. Every role is NOLOGIN here; the NOLOGIN
+# set is kept for the live check in step 5.
 STAGE=roles
-ROLES=$(grep -hoE 'CREATE ROLE [a-z_]+' /srv/makrai/app/prisma/migrations/*/migration.sql | awk '{print $3}' | sort -u)
+ROLES=$(grep -hoE 'CREATE ROLE [a-z_]+ (NO)?LOGIN' /srv/makrai/app/prisma/migrations/*/migration.sql | awk '{print $3}' | sort -u)
+NOLOGIN_ROLES=$(grep -hoE 'CREATE ROLE [a-z_]+ (NO)?LOGIN' /srv/makrai/app/prisma/migrations/*/migration.sql | awk '$4 == "NOLOGIN" {print $3}' | sort -u)
+[ -n "$NOLOGIN_ROLES" ] || fail roles "no NOLOGIN role found in the migrations"
 for role in $ROLES; do
   docker exec "$NAME" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c "CREATE ROLE ${role} NOLOGIN" >>"$LOG" 2>&1
 done
@@ -185,6 +190,14 @@ rest_users=$(docker exec "$NAME" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc
 [[ $rest_users =~ ^[0-9]+$ ]] && [ "$rest_users" -gt 0 ] || fail users "restored=${rest_users}"
 rest_orgs=$(docker exec "$NAME" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT count(*) FROM organizations" 2>>"$LOG")
 [[ $rest_orgs =~ ^[0-9]+$ ]] && [ "$rest_orgs" -gt 0 ] || fail organizations "restored=${rest_orgs}"
+
+# The roles a migration creates NOLOGIN own the SECURITY DEFINER functions and are reached only
+# through them (SRS 9.5). On the live cluster none may be able to log in: a fresh-cluster restore
+# that created them LOGIN would have left them so, and migrate deploy does not reset them. The names
+# come from the grep above ([a-z_]+ only).
+nologin_in=$(printf "'%s'," $NOLOGIN_ROLES); nologin_in=${nologin_in%,}
+live_logins=$(docker exec docker-postgres-1 psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT count(*) FROM pg_roles WHERE rolcanlogin AND rolname IN (${nologin_in})" 2>>"$LOG")
+[[ $live_logins =~ ^[0-9]+$ ]] && [ "$live_logins" = 0 ] || fail logins "live=${live_logins}"
 
 # --- 6. Every seal, checked on the restored copy (NFR-INT-07) ---
 # The check is the application's own code: lib/integrity/sealCheck.mjs and canonical.mjs, installed
