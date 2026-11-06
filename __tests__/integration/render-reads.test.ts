@@ -221,6 +221,22 @@ describe('S-10 and S-11 give the same data (FIX-12)', () => {
   });
 });
 
+describe('the narrowed reads stay in the organisation (FIX-12)', () => {
+  it('NFR-SEC-02 NFR-PERF-04 FIX-12: another organisation reads none of the project\'s plan rows, reviews or seal comparisons', async () => {
+    const other = ctxFor(await buildOrg(), 'owner');
+    const reads = await import('@/lib/seal/reads') as Record<string, unknown>;
+    const readStagePlanRows = reads.readStagePlanRows as typeof readStageRows;
+    for (const stage of STAGES) {
+      const rows = await withOrg(other, (tx) => readStagePlanRows(tx, p.id, stage));
+      expect(Object.values(rows).every((t) => Array.isArray(t) && t.length === 0)).toBe(true);
+    }
+    expect(await listStageReviews(other, p.id)).toEqual([]);
+    await expect(changedSinceSeal(other, reviews.changedTwice.id)).rejects.toThrow(/not found/);
+    // The same reads in the project's own organisation do find them, so the empty answers above are the boundary.
+    expect((await listStageReviews(ctx(), p.id)).length).toBe(5);
+  });
+});
+
 describe('S-10 and S-11 read less (FIX-12)', () => {
   it('NFR-PERF-04 FIX-12: S-10 issues no more statements with three more sealed and changed reviews (no read per review)', async () => {
     const before = await statementsOf(s10);

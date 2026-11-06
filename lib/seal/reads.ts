@@ -1,6 +1,7 @@
 import type { TenantTx } from '@/lib/data/tenant';
 import type { Stage } from '@/types/record';
 import type { SealSourceRows, SealSourceTable } from '../integrity/sealCheck.mjs';
+import type { StagePlanRows } from './manifest';
 
 /**
  * The rows a seal of one stage is built from (SRS 5.4), in the `row_to_json` form of the contract's
@@ -80,9 +81,9 @@ const agg = (columns: readonly string[], from: string) =>
  * SRS line 993). The same rows as `STAGE_SOURCE_SQL` names, with only the columns `stagePlan` and `stageIdsNow` read
  * (ids, `stage`, `questionId`, `versionNumber`, `status`, `scopeAnswer`, `findingId`, `mitigationId`, `findingSeq` and
  * the link columns), so no free text, no timestamp and no digest is read, sent or parsed. One statement: each table is
- * one `json_agg` value, parsed once, not row by row (NFR-PERF-04; FIX-12). `evidence`, `stage_reviews`,
- * `framework_versions` and `seals` are empty: the plan does not read them, and a seal is never built from these rows
- * (the builder reads `readStageRows`).
+ * one `json_agg` value, parsed once, not row by row (NFR-PERF-04; FIX-12). Its type holds only the tables the plan
+ * reads, so nothing that reads evidence, reviews or seals (the seal builder, the seal check, documents) can be given
+ * these rows: those read `readStageRows`.
  */
 const PLAN_SQL = `SELECT
   ${agg(['id', 'stage', 'questionId', 'versionNumber', 'status', 'scopeAnswer'], `decision_versions t WHERE t."orgId" = $1 AND t."projectId" = $2 AND t."stage" = $3`)} AS "decision_versions",
@@ -93,9 +94,7 @@ const PLAN_SQL = `SELECT
   ${agg(['versionId', 'evidenceId'], `mitigation_evidence t WHERE t."orgId" = $1 AND t."versionId" IN (${OF_STAGE_MITIGATIONS})`)} AS "mitigation_evidence",
   ${agg(['id', 'findingId', 'findingSeq'], `accepted_risks t WHERE t."orgId" = $1 AND t."findingId" IN (${OF_STAGE_FINDINGS})`)} AS "accepted_risks"`;
 
-type PlanRows = Record<'decision_versions' | 'decision_evidence' | 'findings' | 'finding_events' | 'mitigation_versions' | 'mitigation_evidence' | 'accepted_risks', Record<string, unknown>[]>;
-
-export async function readStagePlanRows(tx: TenantTx, projectId: string, stage: Stage): Promise<SealSourceRows> {
-  const [rows] = await tx.$queryRawUnsafe<PlanRows[]>(PLAN_SQL, await currentOrg(tx), projectId, stage);
-  return { ...rows, evidence: [], stage_reviews: [], framework_versions: [], seals: [] };
+export async function readStagePlanRows(tx: TenantTx, projectId: string, stage: Stage): Promise<StagePlanRows> {
+  const [rows] = await tx.$queryRawUnsafe<StagePlanRows[]>(PLAN_SQL, await currentOrg(tx), projectId, stage);
+  return rows;
 }
