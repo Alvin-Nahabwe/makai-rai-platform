@@ -20,6 +20,8 @@ interface Props {
   inviterName: string;
   /** The signed-in visitor's email, fresh from the database (the page's module doc); null when signed out. */
   viewerEmail: string | null;
+  /** The signed-in visitor's id, so the sign-out on the acceptances step clears this account's drafts (NFR-PRIV-06); null when signed out. */
+  viewerUserId: string | null;
   /** The invitation's expiry day, `YYYY-MM-DD`. */
   expiresOn: string;
   /** The current version of each of the three texts (their words stay on the server; the form links S-06). */
@@ -104,7 +106,7 @@ const HINT: CSSProperties = { margin: 'var(--space-1) 0 0', fontSize: 'var(--fon
  */
 export default function AcceptInvitationClient(p: Props) {
   if (p.viewerEmail !== null && p.viewerEmail.toLowerCase() === p.invitedEmail.toLowerCase()) {
-    return <AcceptAsSignedIn token={p.token} texts={p.texts} />;
+    return <AcceptAsSignedIn token={p.token} texts={p.texts} userId={p.viewerUserId} />;
   }
   const returnTo = `/invitations/${p.token}`;
   if (p.viewerEmail !== null) {
@@ -124,7 +126,7 @@ export default function AcceptInvitationClient(p: Props) {
 }
 
 /** Signed in as the invited email: route 32; a 403 acceptances_required shows the missing texts first. */
-function AcceptAsSignedIn({ token, texts }: { token: string; texts: LegalTextVersion[] }) {
+function AcceptAsSignedIn({ token, texts, userId }: { token: string; texts: LegalTextVersion[]; userId: string | null }) {
   const router = useRouter();
   const [missing, setMissing] = useState<AcceptedKind[] | null>(null);
   const [send, setSend] = useState<SendState>({ state: 'idle' });
@@ -184,7 +186,7 @@ function AcceptAsSignedIn({ token, texts }: { token: string; texts: LegalTextVer
         </button>
       ) : (
         <div id="acceptances-step" tabIndex={-1} ref={formStep}>
-          <AcceptancesForm key={textsKey(texts)} texts={texts.filter((t) => missing.includes(t.kind as AcceptedKind))} mode="required"
+          <AcceptancesForm key={textsKey(texts)} texts={texts.filter((t) => missing.includes(t.kind as AcceptedKind))} mode="required" userId={userId ?? undefined}
             submitLabel="Accept and continue" busy={send.state === 'sending'}
             onAccepted={(kinds) => acceptThenJoin(JSON.stringify({ acceptances: acceptancePairs(texts, kinds) }))} />
         </div>
@@ -197,7 +199,7 @@ function AcceptAsSignedIn({ token, texts }: { token: string; texts: LegalTextVer
   );
 }
 
-export interface NewAccountViewProps extends Props {
+export interface NewAccountViewProps extends Omit<Props, 'viewerUserId'> {
   step: 'details' | 'acceptances';
   name: string;
   password: string;

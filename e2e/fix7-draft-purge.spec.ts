@@ -66,3 +66,37 @@ test('NFR-PRIV-06 FIX-7: signing out from the acceptances page removes the accou
   ]);
   expect(await draftKeys(page, viewer.userId)).toEqual([]);
 });
+
+test('NFR-PRIV-06 FIX-7: the invitation page\'s sign-out removes this account\'s drafts from this browser', async ({ browser }) => {
+  test.setTimeout(120_000);
+  // The viewer is missing the acceptances; the invitation to them is from another organisation, issued over route 25.
+  const own = await buildOrg({ label: 'e2efix7invv', acceptances: 'none' });
+  const viewer = own.members.viewer;
+  const other = await buildOrg({ label: 'e2efix7invo' });
+  const inviterPage = await newPage(browser);
+  await signIn(inviterPage, other.members.owner);
+  const res = await inviterPage.request.post(`/api/v1/orgs/${other.org.slug}/members`, {
+    data: { requestId: crypto.randomUUID(), email: viewer.email, role: 'viewer', showLink: true },
+  });
+  expect(res.status(), await res.text()).toBe(201);
+  const { acceptUrl } = (await res.json()) as { acceptUrl: string };
+  const found = /^\/invitations\/([^/]+)$/.exec(new URL(acceptUrl, 'http://x').pathname);
+  expect(found, 'acceptUrl is /invitations/<token>').not.toBeNull();
+
+  const page = await newPage(browser);
+  await signIn(page, viewer);
+  await expect(page).toHaveURL(/\/acceptances/);
+  await page.goto(`/invitations/${found![1]}`);
+  await page.getByRole('button', { name: 'Accept invitation' }).click();
+  // The route answers acceptances_required, so the form of the missing texts shows, with its sign-out.
+  const signOutButton = page.locator('form').getByRole('button', { name: 'sign out', exact: true });
+  await expect(signOutButton).toBeVisible();
+  const key = `makrai.draft.v1:${viewer.userId}:${own.org.id}:p:q:Q-PP-01`;
+  await page.evaluate((k) => localStorage.setItem(k, '{"reason":"secret"}'), key);
+  expect(await draftKeys(page, viewer.userId)).toEqual([key]);
+  await Promise.all([
+    page.waitForURL((url) => url.pathname === '/login'),
+    signOutButton.click(),
+  ]);
+  expect(await draftKeys(page, viewer.userId)).toEqual([]);
+});

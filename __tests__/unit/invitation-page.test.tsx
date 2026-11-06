@@ -145,19 +145,19 @@ describe('S-04, the invitation page (FR-ACC-01)', () => {
   });
 
   it('M-24: a different signed-in account sees both emails', () => {
-    const markup = html(<AcceptInvitationClient {...props} viewerEmail="b@x.test" />);
+    const markup = html(<AcceptInvitationClient {...props} viewerEmail="b@x.test" viewerUserId={null} />);
     expect(text(markup.match(/<p[^>]*role="alert"[^>]*>.*?<\/p>/)?.[0] ?? '')).toBe('You are signed in as b@x.test, but this invitation is for a@x.test. Sign out, then open the link again.');
     expect(markup).toMatch(/<button[^>]*>Sign out<\/button>/);
   });
 
   it('FR-ACC-01: the invited account, signed in, gets one Accept invitation button', () => {
-    const markup = html(<AcceptInvitationClient {...props} viewerEmail="A@x.test" />);
+    const markup = html(<AcceptInvitationClient {...props} viewerEmail="A@x.test" viewerUserId={null} />);
     expect(markup).toMatch(/<button[^>]*type="button"[^>]*>Accept invitation<\/button>/);
     expect(markup).not.toContain('type="password"');
   });
 
   it('NFR-A11Y-04 FR-ACC-01: the new-account form takes a pasted password and offers the email to password managers', () => {
-    const markup = html(<AcceptInvitationClient {...props} viewerEmail={null} />);
+    const markup = html(<AcceptInvitationClient {...props} viewerEmail={null} viewerUserId={null} />);
     const email = tagOf(markup, 'email');
     expect(email).toMatch(/autocomplete="username"/i);   // react-dom writes the attribute as autoComplete; HTML ignores case
     expect(email).toMatch(/readOnly=""|readonly=""/);
