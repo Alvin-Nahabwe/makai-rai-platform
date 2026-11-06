@@ -7,9 +7,6 @@ vi.mock('@/lib/content/resources', async () => {
   const { RES } = await import('../helpers/suggestionsFixture');
   return { loadResources: () => RES };
 });
-// The requirements file is C-NB's and does not exist yet (see the helper): only its stat is answered.
-vi.mock('node:fs', async (importOriginal) => (await import('../helpers/requirementsStat')).withRequirementsStat(await importOriginal<typeof import('node:fs')>()));
-
 const V = '0.0.1-fixture';
 const s12 = async (questionId: string, tickedOptions: string[] = []) =>
   renderToStaticMarkup(await SuggestedControls({ contentSemver: V, questionId, tickedOptions }) ?? <></>);

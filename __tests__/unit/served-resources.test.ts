@@ -8,9 +8,8 @@ const r = loadResources();
 const sha = (p: string) => createHash('sha256').update(readFileSync(p)).digest('hex');
 
 /**
- * G4's content half (a released notebook's served bytes equal the reviewed ones) is armed but not yet exercised: data/resources.json
- * releases no notebook until unit/c-nb-2, so the loop below has nothing to check today. The executor half is exercised by
- * __tests__/lint/notebook-workflow.test.ts on temporary roots.
+ * G4's content half (a released notebook's served bytes equal the reviewed ones): data/resources.json releases ten notebooks, and the
+ * loop below checks each of them. The executor half is exercised by __tests__/lint/notebook-workflow.test.ts on temporary roots.
  */
 describe('served templates and notebooks', () => {
   it('FR-SUG-05: every released notebook file matches its SHA-256 and size, with a requirements file and a passed review', () => {
