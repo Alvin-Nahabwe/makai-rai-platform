@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 import { statSync } from 'node:fs';
 import { join } from 'node:path';
 import { DownloadLink } from '@/components/ui/DownloadLink';
+import { formatDay } from '@/lib/format/dates';
 import type { ContentArea, ContentControl, ResourceLink, ResourcesFile } from '@/types/content';
 import type { Stage } from '@/types/record';
 import './ControlCard.css';
@@ -11,15 +12,6 @@ const STAGE_WORDS: Record<Stage, string> = {
   'pre-processing': 'Pre-processing', 'in-processing': 'In-processing', 'post-processing': 'Post-processing',
 };
 const RESOURCE_TYPE_WORDS: Record<string, string> = { framework: 'Framework', tool: 'Tool', paper: 'Paper', guidance: 'Guidance' };
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-/** "2026-11-02" as "2 Nov 2026". Spelled out here, not by Intl, because ICU versions differ on "Sep" and "Sept". */
-function reviewDate(iso: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
-  if (!m) throw new RangeError(`a review date must start YYYY-MM-DD, got ${iso}`);
-  return `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]} ${m[1]}`;
-}
-
 /** A resource is a link only when its address is https (G1); anything else, or an address that does not parse, is text. */
 function isHttps(url: string): boolean {
   try {
@@ -29,18 +21,34 @@ function isHttps(url: string): boolean {
   }
 }
 
+/** Sizes of served files by URL path: the files ship with the release and do not change under a running server. A missing file still throws. */
+const servedSizes = new Map<string, number>();
 function sizeOfServedFile(urlPath: string): number {
-  return statSync(join(process.cwd(), 'public', urlPath)).size;
+  let size = servedSizes.get(urlPath);
+  if (size === undefined) {
+    size = statSync(join(process.cwd(), 'public', urlPath)).size;
+    servedSizes.set(urlPath, size);
+  }
+  return size;
 }
 
 function Resource({ r }: { r: ResourceLink }): ReactElement {
-  const word = (r.type && RESOURCE_TYPE_WORDS[r.type]) || 'Resource';
+  const word = r.type === undefined ? undefined : RESOURCE_TYPE_WORDS[r.type];
+  // The release check refuses any other type; a bare "Resource" would hide that the type is missing (UX-13 wants it in words).
+  if (word === undefined) throw new RangeError(`resource ${r.title} has type ${String(r.type)}, which the card has no word for`);
   if (!isHttps(r.url)) return <li>{`${r.title} (${word})`}</li>;
   return (
     <li>
       <a href={r.url} rel="noopener noreferrer">{`${r.title} (${word}, opens another site)`}</a>
     </li>
   );
+}
+
+/** The control's type in words. A type with none is a content error (the release check refuses it), not text to print. */
+function typeWord(control: ContentControl): string {
+  const word = TYPE_WORDS[control.type];
+  if (word === undefined) throw new RangeError(`control ${control.id} has type ${control.type}, which the card has no word for`);
+  return word;
 }
 
 export type ControlCardProps = {
@@ -63,7 +71,7 @@ export function ControlCard({ control, resources, alsoAddresses = [], usuallyApp
   return (
     <article className="ctl-card" data-control={control.id}>
       <Heading className="ctl-card__title">{control.name}</Heading>
-      <p className="ctl-card__type">{TYPE_WORDS[control.type] ?? control.type}</p>
+      <p className="ctl-card__type">{typeWord(control)}</p>
       <p className="ctl-card__desc">{control.description}</p>
       {alsoAddresses.length > 0 && (
         <p className="ctl-card__note">{`Also addresses: ${alsoAddresses.map((a) => `${a.id} ${a.name}`).join(', ')}`}</p>
@@ -87,7 +95,7 @@ export function ControlCard({ control, resources, alsoAddresses = [], usuallyApp
             </li>
           </ul>
           <p className="ctl-card__note">Runs on your own computer or notebook service. The platform never runs it.</p>
-          <p className="ctl-card__note">{`Reviewed by ${notebook.review.reviewer} on ${reviewDate(notebook.review.date)}.`}</p>
+          <p className="ctl-card__note">{`Reviewed by ${notebook.review.reviewer} on ${formatDay(notebook.review.date)}.`}</p>
         </div>
       )}
       {free.length > 0 && (

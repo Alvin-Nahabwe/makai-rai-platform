@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { expect, test } from '@playwright/test';
 import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
@@ -36,4 +37,24 @@ test('FR-SUG-06: every passed template link answers 200', async ({ page, request
   const hrefs = await page.locator('a[href^="/templates/"]').evaluateAll((as) => as.map((a) => a.getAttribute('href')!));
   expect(hrefs.length).toBeGreaterThan(0);
   for (const href of hrefs) expect((await request.get(href)).status(), href).toBe(200);
+});
+
+/** The released notebooks of the release resources file (FR-SUG-05), read as JSON here, a second root beside the page's loader. */
+const releasedNotebooks: Array<{ file: string; requirementsFile: string; sha256: string }> =
+  JSON.parse(fs.readFileSync('data/resources.json', 'utf-8')).notebooks.filter((n: { released: boolean }) => n.released);
+
+test('FR-SUG-05: every notebook link answers 200 with the reviewed bytes, and the requirements file answers 200 (skipped while no notebook is released)', async ({ page, request }) => {
+  test.skip(releasedNotebooks.length === 0, 'no notebook is released in data/resources.json yet; unit/c-nb-2 releases the first');
+  await page.goto('/explore/controls');
+  const hrefs = await page.locator('a[href^="/notebooks/"]').evaluateAll((as) => as.map((a) => a.getAttribute('href')!));
+  for (const n of releasedNotebooks) {
+    expect(hrefs, n.file).toContain(n.file);
+    expect(hrefs, n.requirementsFile).toContain(n.requirementsFile);
+  }
+  for (const href of new Set(hrefs)) {
+    const response = await request.get(href);
+    expect(response.status(), href).toBe(200);
+    const entry = releasedNotebooks.find((n) => n.file === href);
+    if (entry) expect(createHash('sha256').update(await response.body()).digest('hex'), href).toBe(entry.sha256);
+  }
 });

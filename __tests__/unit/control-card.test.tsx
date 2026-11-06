@@ -5,15 +5,8 @@ import { RES, handBuiltContent } from '../helpers/suggestionsFixture';
 import { ControlCard } from '@/components/suggestions/ControlCard';
 import { parseResources } from '@/lib/content/resources';
 
-// public/notebooks/requirements.txt is C-NB's file and does not exist yet: only that one stat is answered here.
-vi.mock('node:fs', async (importOriginal) => {
-  const real = await importOriginal<typeof import('node:fs')>();
-  return {
-    ...real,
-    statSync: ((p: string, ...rest: unknown[]) =>
-      String(p).endsWith('/public/notebooks/requirements.txt') ? { size: 2048 } : (real.statSync as (...a: unknown[]) => unknown)(p, ...rest)) as typeof real.statSync,
-  };
-});
+// The requirements file is C-NB's and does not exist yet (see the helper): only its stat is answered.
+vi.mock('node:fs', async (importOriginal) => (await import('../helpers/requirementsStat')).withRequirementsStat(await importOriginal<typeof import('node:fs')>()));
 
 const c = handBuiltContent('__tests__/fixtures/content/0.0.1-fixture');
 const card = (id: string, extra = {}) =>
@@ -98,5 +91,15 @@ describe('ControlCard', () => {
     expect(html).toContain('Template: Alternatives Analysis');
     expect(html).toMatch(/Free resources \(\d+\):/);
     expect(html).not.toMatch(/<button|aria-label=|aria-expanded/);
+  });
+
+  it('FR-SUG-04: a control type the card has no word for is an error, as on S-27, not a raw string on the page', () => {
+    const odd = { ...c.controls.get('C-01')!, type: 'strategic' };
+    expect(() => renderToStaticMarkup(<ControlCard control={odd} resources={RES} headingLevel={3} />)).toThrow(/C-01.*strategic/);
+  });
+
+  it('UX-13: a resource type the card has no word for is an error, not a bare "Resource"', () => {
+    const odd = { ...c.controls.get('C-01')!, resources: [{ title: 'A post', url: 'https://example.org/p', type: 'blog' }] };
+    expect(() => renderToStaticMarkup(<ControlCard control={odd} resources={RES} headingLevel={3} />)).toThrow(/A post.*blog/);
   });
 });

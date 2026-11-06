@@ -1,4 +1,7 @@
-import { execSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import ControlsPage from '@/app/(authenticated)/explore/controls/page';
@@ -8,15 +11,8 @@ vi.mock('@/lib/content/resources', async () => {
   const { RES } = await import('../helpers/suggestionsFixture');
   return { loadResources: () => RES };
 });
-// public/notebooks/requirements.txt is C-NB's file and does not exist yet: only that one stat is answered here.
-vi.mock('node:fs', async (importOriginal) => {
-  const real = await importOriginal<typeof import('node:fs')>();
-  return {
-    ...real,
-    statSync: ((p: string, ...rest: unknown[]) =>
-      String(p).endsWith('/public/notebooks/requirements.txt') ? { size: 2048 } : (real.statSync as (...a: unknown[]) => unknown)(p, ...rest)) as typeof real.statSync,
-  };
-});
+// The requirements file is C-NB's and does not exist yet (see the helper): only its stat is answered.
+vi.mock('node:fs', async (importOriginal) => (await import('../helpers/requirementsStat')).withRequirementsStat(await importOriginal<typeof import('node:fs')>()));
 
 describe('S-27, the controls page', () => {
   it('FR-SUG-04 FR-SUG-05 FR-SUG-06: S-27 lists every control with only released notebooks and passed templates', () => {
@@ -46,7 +42,26 @@ describe('S-27, the controls page', () => {
   });
 
   it('FR-SUG-04: no file under app, components or lib links a template or notebook path except through the resources file', () => {
-    // A quote before /templates/ keeps the e-mail templates (@/lib/email/templates/...) out of the match: they are not a served file.
-    expect(execSync(`grep -rln "[\\"']/templates/\\|notebooks/technical\\|NOTEBOOK_BASE_URL" app components lib --include=*.ts --include=*.tsx | grep -v '^lib/content/resources.ts$' || true`).toString().trim()).toBe('');
+    // A quote or backtick before /templates/ or /notebooks/ keeps the e-mail templates (@/lib/email/templates/...) out of the match:
+    // they are not a served file. grep exits 0 for a match and 1 for none; anything else (2) is a failed search, not a clean tree.
+    const r = spawnSync('grep', ['-rln', '-e', '["\'`]/templates/', '-e', '["\'`]/notebooks/', '-e', 'notebooks/technical', '-e', 'NOTEBOOK_BASE_URL',
+      'app', 'components', 'lib', '--include=*.ts', '--include=*.tsx'], { encoding: 'utf8' });
+    expect([0, 1], r.stderr).toContain(r.status);
+    expect(r.stdout.split('\n').filter((f) => f !== '' && f !== 'lib/content/resources.ts')).toEqual([]);
+  });
+
+  it('FR-SUG-04: the guard catches a hard-coded link in each quoting style (checked on scratch files)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'guard-'));
+    try {
+      mkdirSync(join(dir, 'components'));
+      writeFileSync(join(dir, 'components/A.tsx'), 'const a = `/templates/${id}.html`;');
+      writeFileSync(join(dir, 'components/B.tsx'), 'const b = "/notebooks/C-13_x.ipynb";');
+      writeFileSync(join(dir, 'components/C.tsx'), "const c = '/templates/C-01.html';");
+      writeFileSync(join(dir, 'components/D.tsx'), "import x from '@/lib/email/templates/accountCreated';");
+      const r = spawnSync('grep', ['-rln', '-e', '["\'`]/templates/', '-e', '["\'`]/notebooks/', 'components'], { cwd: dir, encoding: 'utf8' });
+      expect(r.stdout.split('\n').filter(Boolean).sort()).toEqual(['components/A.tsx', 'components/B.tsx', 'components/C.tsx']);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
