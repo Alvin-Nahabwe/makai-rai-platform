@@ -26,7 +26,7 @@ import { eatDate, isOverdue } from '@/lib/followup/overdue';
 import { manifestIds } from '@/lib/seal/ids';
 import { stageReviewName } from '@/lib/seal/reviewName';
 import { SEAL_SOURCE_SQL, checkSealRows, trustedManifest, type SealSourceRows, type TombstoneRow } from '@/lib/integrity/sealCheck.mjs';
-import { ERASABLE_FIELDS, ETHICS_STATES, METADATA_KEYS, MSG_SEAL_CHECK_FAILED, formatUtcDay } from '@/lib/documents/copy';
+import { ERASABLE_FIELDS, ETHICS_STATES, METADATA_KEYS, MSG_SEAL_CHECK_FAILED, DOCUMENT_TITLES, formatUtcDay } from '@/lib/documents/copy';
 import { readStageRows } from '@/lib/seal/manifest';
 import type { DocumentSnapshot, SealedDecision, SealedFinding, SealedStage } from '@/lib/documents/resolve';
 
@@ -844,11 +844,9 @@ export async function withdrawDocument(
   return out;
 }
 
-const TYPE_WORDS: Readonly<Record<DocumentType, string>> = { data_card: 'data card', model_card: 'model card', mitigation_plan: 'mitigation plan' };
-
 /** FR-DOC-07's marking, the first line of every copy (SRS line 1055; the date as 7.5.8 prints it, in UTC). */
 export const textCopyMarking = (type: DocumentType, issuedAt: Date): string =>
-  `Copy of the ${TYPE_WORDS[type]} issued on ${formatUtcDay(issuedAt.toISOString())}; the PDF is the issued version`;
+  `Copy of the ${DOCUMENT_TITLES[type].toLowerCase()} issued on ${formatUtcDay(issuedAt.toISOString())}; the PDF is the issued version`;
 
 /**
  * Route 18 (FR-DOC-07): the plain-text copy of an issued document, as the marking, a blank line, and the text stored at issue (never

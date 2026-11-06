@@ -187,7 +187,7 @@ describe('the mitigation plan resolvers', () => {
     });
     expect(text(r, 'MP-07')).toContain('Q-PP-03');
     expect(text(r, 'MP-07')).toContain('Q-PP-05');
-    expect(text(r, 'MP-08')).toMatch(/Q-PP-18.*Not applicable \(No personal data is involved\)\. Reason: 'Whole register used\.'/s);
+    expect(text(r, 'MP-08')).toMatch(/Q-PP-18[\s\S]*Not applicable \(No personal data is involved\)\. Reason: 'Whole register used\.'/);
     expect(text(r, 'MP-08')).toContain(`Q-PP-13: ${GATE_DERIVED_NA}`);
     expect(provenance(r, 'MP-08')).toContain('Q-PP-GATE-SENSITIVE');
   });
