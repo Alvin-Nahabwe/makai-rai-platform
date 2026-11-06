@@ -92,4 +92,11 @@ describe('ControlCard', () => {
   it('FR-SUG-04 FR-CNT-05: CNT\'s parseResources accepts the card test resources unchanged', () => {
     expect(parseResources(RES)).toEqual(RES);
   });
+
+  it('FR-SUG-01 UX-33 (D-11, moved from the ControlResourcesList case): a template and the free resources show together, with no control to open first', () => {
+    const html = card('C-01');
+    expect(html).toContain('Template: Alternatives Analysis');
+    expect(html).toMatch(/Free resources \(\d+\):/);
+    expect(html).not.toMatch(/<button|aria-label=|aria-expanded/);
+  });
 });

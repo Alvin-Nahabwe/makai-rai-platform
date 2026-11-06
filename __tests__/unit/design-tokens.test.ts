@@ -3,7 +3,6 @@ import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { EvidenceAttach, type EvidenceAttachProps } from '@/components/evidence/EvidenceAttach';
-import ControlResourcesList from '@/components/report/ControlResourcesList';
 
 /**
  * UX-33 / NFR-A11Y-05 (SRS 7.6.3 D-1 to D-7, D-11). Each token pair the SRS
@@ -229,19 +228,5 @@ describe('component defects', () => {
     expect(notice).toContain('color:var(--tint-moderate-fg)');
     expect(notice).toContain('var(--tint-moderate-bg)');
     expect(notice).not.toContain('--color-risk-moderate');
-  });
-
-  it('UX-33 (D-11): resources show beside a template, and the toggle is named by its visible words', () => {
-    const html = renderToStaticMarkup(
-      createElement(ControlResourcesList, {
-        template: '/templates/model-card.ipynb',
-        resources: [{ type: 'paper', url: 'https://example.org/p', title: 'A paper' }],
-      }),
-    );
-    expect(html).toContain('Template');
-    expect(html).toMatch(/<button[^>]*>[\s\S]*View resources/);
-    expect(html).not.toMatch(/<button[^>]*aria-label=/);
-    // The glyph inside the button would otherwise be read out before the words.
-    expect(html).toMatch(/<span[^>]*ctrl-resources__chevron[^>]*aria-hidden="true"/);
   });
 });
