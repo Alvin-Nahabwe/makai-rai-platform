@@ -25,8 +25,9 @@ test.describe('Sign-in form before hydration', () => {
     // Both ways a person submits: the button, and Enter in the password field.
     await button.click({ force: true });
     await page.locator('#password').press('Enter');
-    // Nothing is sent: give a wrongly enabled form time to navigate, then read what went out.
-    await expect.poll(async () => { await page.waitForTimeout(100); return urls.length; }, { timeout: 1500, intervals: [100] }).toBe(before);
+    // Nothing is sent: give a wrongly enabled form time to navigate, then the request count must be unchanged.
+    await page.waitForTimeout(500);
+    expect(urls.length).toBe(before);
 
     expect(urls.filter((u) => /password=/i.test(u) || /email=/i.test(u))).toEqual([]);
     expect(new URL(page.url()).search).toBe('');

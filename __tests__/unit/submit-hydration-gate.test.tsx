@@ -18,11 +18,11 @@ vi.mock('next/navigation', async (orig) => ({
 vi.mock('next-auth/react', () => ({ signIn: vi.fn(), getSession: vi.fn(), signOut: vi.fn() }));
 
 const { LoginView } = await import('@/app/(public)/login/LoginClient');
-const { ForgotPasswordView } = await import('@/app/(public)/forgot-password/ForgotPasswordClient');
+const { ForgotPasswordView, ForgotPasswordClient } = await import('@/app/(public)/forgot-password/ForgotPasswordClient');
 const { ResetPasswordView } = await import('@/app/(public)/reset-password/ResetPasswordClient');
-const { ChangePasswordView } = await import('@/app/(authenticated)/change-password/ChangePasswordForm');
-const { NewAccountView } = await import('@/app/(public)/invitations/[token]/AcceptInvitationClient');
-const { CreateOrganisationFormView, EMPTY_AGREEMENT } = await import('@/components/admin/CreateOrganisationForm');
+const { ChangePasswordView, ChangePasswordForm } = await import('@/app/(authenticated)/change-password/ChangePasswordForm');
+const { NewAccountView, default: AcceptInvitationClient } = await import('@/app/(public)/invitations/[token]/AcceptInvitationClient');
+const { CreateOrganisationFormView, CreateOrganisationForm, EMPTY_AGREEMENT } = await import('@/components/admin/CreateOrganisationForm');
 const { IssueInvitationFormView } = await import('@/components/admin/OwnerInvitationBox');
 
 const noop = () => {};
@@ -58,6 +58,25 @@ describe('submit buttons wait for hydration (NFR-SEC)', () => {
       expect(formTag(early)).toMatch(/\smethod="post"/);
       expect(submitTag(early)).toMatch(/\sdisabled(=""|\s|>)/);
       for (const over of [{ hydrated: true }, {}]) expect(submitTag(renderToStaticMarkup(render(over)))).not.toMatch(/\sdisabled(=""|\s|>)/);
+    });
+  }
+});
+
+/**
+ * The containers own the hook: a view test cannot see `hydrated={hydrated}` dropped from the container. A server render
+ * is the pre-hydration state, so each container, rendered whole, must show a disabled submit button.
+ */
+describe('containers pass the hydration state to their view (NFR-SEC)', () => {
+  const containers: Array<[string, () => React.ReactElement]> = [
+    ['S-02 ForgotPasswordClient', () => <ForgotPasswordClient />],
+    ['S-29 ChangePasswordForm', () => <ChangePasswordForm />],
+    ['S-04 AcceptInvitationClient (signed out)', () => <AcceptInvitationClient token={'t'.repeat(64)} invitedEmail="a@x.test" orgName="Lab" role="assessor"
+      inviterName="Amina N." viewerEmail={null} expiresOn="2026-11-09" texts={STUB_LEGAL_TEXTS.slice()} />],
+    ['S-24 CreateOrganisationForm', () => <CreateOrganisationForm versions={VERSIONS} today="2026-11-02" />],
+  ];
+  for (const [name, element] of containers) {
+    it(`NFR-SEC: ${name}: rendered whole, its submit button is disabled`, () => {
+      expect(submitTag(renderToStaticMarkup(element()))).toMatch(/\sdisabled(=""|\s|>)/);
     });
   }
 });

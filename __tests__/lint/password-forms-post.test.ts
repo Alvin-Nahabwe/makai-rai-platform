@@ -13,7 +13,7 @@ import { expect, it } from 'vitest';
 
 const PASSWORD_INPUT = /type=["']password["']|['"]password['"]\s*\}|autoComplete=["'](?:current|new)-password["']/;
 const POST = /\smethod=["']post["']/i;
-const ANY_METHOD = /\smethod=/i;
+const ANY_METHOD = /\smethod=["'](?:get|post)["']/i;
 
 /** The opening tags `<form ...>` of a source text; a `>` that closes an arrow (`=>`) does not end the tag. */
 export function formOpeningTags(src: string): string[] {
@@ -80,4 +80,6 @@ it('NFR-SEC (harness): flags a bare form, a GET form and an arrow-handler form; 
   expect(formsWithoutMethod({ 'a.tsx': '<Form action="/x">' })).toHaveLength(1);
   expect(formsWithoutMethod({ 'a.tsx': '<form method="get" aria-label="s">' })).toEqual([]);
   expect(formsWithoutMethod({ 'a.tsx': '<FormField id="x" />' })).toEqual([]);
+  // A method that is not a literal (a variable or an expression) is not an explicit choice.
+  expect(formsWithoutMethod({ 'a.tsx': '<form method={m} onSubmit={x}>' })).toHaveLength(1);
 });
