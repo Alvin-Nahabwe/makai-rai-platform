@@ -385,16 +385,49 @@ function keyLiterals(code: string): string[] {
   return found;
 }
 
-/** What is wrong with how the code makes and uses its key: the key variable, and every hmac.new( key argument. */
+/** The text of the first argument of the call that opens at `open` (the index just after the bracket), or null if it never closes. */
+function firstArgument(src: string, open: number): string | null {
+  let depth = 0;
+  let quote: string | null = null;
+  for (let k = open; k < src.length; k++) {
+    const ch = src[k];
+    if (quote) {
+      if (ch === '\\') k++;
+      else if (ch === quote) quote = null;
+    } else if (ch === "'" || ch === '"') quote = ch;
+    else if (ch === '(' || ch === '[' || ch === '{') depth++;
+    else if (ch === ')' || ch === ']' || ch === '}') {
+      if (depth === 0) return src.slice(open, k).trim();
+      depth--;
+    } else if (ch === ',' && depth === 0) return src.slice(open, k).trim();
+  }
+  return null;
+}
+
+/** The key calls: hmac.new(, hmac.digest( and hmac.HMAC(. */
+const KEY_CALLS = /\bhmac\s*\.\s*(new|digest|HMAC)\s*\(/g;
+
+/**
+ * What is wrong with how the code makes and uses its key: one key made with secrets.token_bytes(32) and never
+ * assigned again, and every key call (hmac.new, hmac.digest, hmac.HMAC) given exactly that variable as its first
+ * argument, read with brackets and quotes. A call whose argument cannot be read is a problem, not a skip.
+ */
 function keyUseProblems(code: string): string[] {
   const problems: string[] = [];
   const made = [...code.matchAll(/^\s*(\w+)\s*=\s*secrets\.token_bytes\(\s*32\s*\)/gm)].map((m) => m[1]);
   if (made.length !== 1) problems.push(`expected one key made with secrets.token_bytes(32), found ${made.length}`);
-  const uses = [...code.matchAll(/hmac\.new\(\s*([^,)]*?)\s*,/g)].map((m) => m[1]);
-  if (uses.length === 0) problems.push('no hmac.new( call found');
-  for (const first of uses) {
-    if (made.length !== 1 || first !== made[0]) problems.push(`hmac.new( is given \`${first}\`, not the key made at run time`);
+  if (made.length === 1) {
+    const assigned = [...code.matchAll(new RegExp(`^\\s*${made[0]}\\s*(?::[^=\\n]*)?(?:[-+*|&^%@]|//|<<|>>)?=(?!=)`, 'gm'))].length;
+    if (assigned !== 1) problems.push(`the key variable ${made[0]} is assigned ${assigned} times; it must be assigned once, from secrets.token_bytes(32)`);
   }
+  const calls = [...code.matchAll(KEY_CALLS)];
+  const readable = calls.map((m) => firstArgument(code, (m.index as number) + m[0].length));
+  if (!calls.some((m) => m[1] === 'new')) problems.push('no hmac.new( call found');
+  calls.forEach((m, i) => {
+    const first = readable[i];
+    if (first === null) problems.push(`hmac.${m[1]}( has an argument list that cannot be read`);
+    else if (made.length !== 1 || first !== made[0]) problems.push(`hmac.${m[1]}( is given \`${first}\`, not the key made at run time`);
+  });
   return problems;
 }
 

@@ -338,6 +338,114 @@ class CheckEvidenceTest(EvidenceFixture):
         self.assertRefused(self.check(), "row.csv holds a full row of the data")
 
 
+class FetchCheckedTest(unittest.TestCase):
+    """N2: each notebook's own fetch_checked stops on wrong bytes, from the cache or from the network (SO-3)."""
+
+    TECHNICAL = REPO / "notebooks" / "technical"
+
+    def sources(self):
+        return sorted(self.TECHNICAL.glob("C-*.ipynb"))
+
+    def helper_source(self, path):
+        """The text of the helper pieces in the load-data cell: fetch_checked and the constants it reads."""
+        nb = json.loads(path.read_text(encoding="utf-8"))
+        cell = next(c for c in nb["cells"] if "load-data" in c["metadata"].get("tags", []))
+        text = "".join(cell["source"])
+        tree = ast.parse(text)
+        wanted = [
+            node for node in tree.body
+            if (isinstance(node, ast.FunctionDef) and node.name == "fetch_checked")
+            or (isinstance(node, ast.Assign) and any(getattr(t, "id", "") == "MAX_DOWNLOAD_BYTES" for t in node.targets))
+        ]
+        return "\n\n".join(ast.get_source_segment(text, node) for node in wanted)
+
+    def load(self, path, cache):
+        # A stand-in for urllib, so a test replaces urlopen here and never in the real module.
+        fake_urllib = types.SimpleNamespace(request=types.SimpleNamespace(Request=urllib.request.Request, urlopen=None))
+        namespace = {"hashlib": hashlib, "urllib": fake_urllib, "os": os, "tempfile": tempfile, "Path": Path, "CACHE_DIR": cache}
+        exec(compile(self.helper_source(path), str(path), "exec"), namespace)
+        return namespace
+
+    class Response:
+        def __init__(self, body, url="https://example.org/x.csv"):
+            self.body, self.url, self.at = body, url, 0
+
+        def read(self, size=-1):
+            size = len(self.body) - self.at if size is None or size < 0 else size
+            block = self.body[self.at:self.at + size]
+            self.at += len(block)
+            return block
+
+        def geturl(self):
+            return self.url
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    def test_the_ten_helpers_are_identical(self):
+        bodies = {path.name: self.helper_source(path) for path in self.sources()}
+        self.assertEqual(len(bodies), 10)
+        self.assertEqual(len(set(bodies.values())), 1, "the ten fetch_checked copies have drifted apart")
+        self.assertIn("MAX_DOWNLOAD_BYTES", next(iter(bodies.values())))
+
+    def test_a_cache_file_with_the_wrong_bytes_stops_the_notebook(self):
+        for path in self.sources():
+            with self.subTest(path.name), tempfile.TemporaryDirectory() as tmp:
+                cache = Path(tmp)
+                (cache / "d.csv").write_bytes(b"tampered")
+                fetch = self.load(path, cache)["fetch_checked"]
+                with self.assertRaises(RuntimeError) as caught:
+                    fetch("https://example.org/d.csv", hashlib.sha256(b"genuine").hexdigest(), "d.csv")
+                self.assertIn("d.csv", str(caught.exception))
+                self.assertEqual((cache / "d.csv").read_bytes(), b"tampered", "the cache file is left as it was")
+
+    def test_a_download_with_the_wrong_bytes_is_not_kept(self):
+        for path in self.sources():
+            with self.subTest(path.name), tempfile.TemporaryDirectory() as tmp:
+                cache = Path(tmp)
+                namespace = self.load(path, cache)
+                namespace["urllib"].request.urlopen = lambda request, timeout=None: self.Response(b"tampered")
+                with self.assertRaises(RuntimeError):
+                    namespace["fetch_checked"]("https://example.org/d.csv", hashlib.sha256(b"genuine").hexdigest(), "d.csv")
+                self.assertEqual(list(cache.iterdir()), [], "nothing is kept: no file and no half-written file")
+
+    def test_a_good_download_is_kept_and_then_checked_again(self):
+        for path in self.sources():
+            with self.subTest(path.name), tempfile.TemporaryDirectory() as tmp:
+                cache = Path(tmp)
+                namespace = self.load(path, cache)
+                namespace["urllib"].request.urlopen = lambda request, timeout=None: self.Response(b"genuine")
+                digest = hashlib.sha256(b"genuine").hexdigest()
+                self.assertEqual(namespace["fetch_checked"]("https://example.org/d.csv", digest, "d.csv"), b"genuine")
+                self.assertEqual([p.name for p in cache.iterdir()], ["d.csv"])
+                self.assertEqual(namespace["fetch_checked"]("https://example.org/d.csv", digest, "d.csv"), b"genuine")
+
+    def test_a_download_past_the_cap_is_refused_before_it_is_hashed_whole(self):
+        for path in self.sources():
+            with self.subTest(path.name), tempfile.TemporaryDirectory() as tmp:
+                cache = Path(tmp)
+                namespace = self.load(path, cache)
+                cap = namespace["MAX_DOWNLOAD_BYTES"]
+                body = b"\0" * (cap + 1)
+                namespace["urllib"].request.urlopen = lambda request, timeout=None: self.Response(body)
+                with self.assertRaises(RuntimeError) as caught:
+                    namespace["fetch_checked"]("https://example.org/d.csv", hashlib.sha256(body).hexdigest(), "d.csv")
+                self.assertIn("larger than", str(caught.exception))
+                self.assertEqual(list(cache.iterdir()), [])
+
+    def test_a_file_name_cannot_leave_the_cache_and_an_address_must_be_https(self):
+        for path in self.sources():
+            with self.subTest(path.name), tempfile.TemporaryDirectory() as tmp:
+                fetch = self.load(path, Path(tmp))["fetch_checked"]
+                with self.assertRaises(ValueError):
+                    fetch("https://example.org/d.csv", "0" * 64, "../d.csv")
+                with self.assertRaises(ValueError):
+                    fetch("http://example.org/d.csv", "0" * 64, "d.csv")
+
+
 def _has_tabulate():
     try:
         import tabulate  # noqa: F401

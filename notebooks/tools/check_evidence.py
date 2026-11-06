@@ -19,10 +19,13 @@ can be read as "fit". A problem is:
   * a file holds a full row of any <data-file>. Every data row is searched. Rows and files are
     both cut into tokens (split on spaces, commas, semicolons, tabs and pipes, quotes
     removed, numbers compared as numbers, a trailing full stop ignored, and the words pandas
-    reads as missing values - empty, NaN, None, NA, <NA>, null and ? - dropped), so a row matches
+    reads as missing values, or writes for them - empty, NaN, None, NA, n/a, <NA>, null, ? and
+    a lone dash - dropped), so a row matches
     however the delimiter, the quoting, the number format or the missing-value text changed.
     A row of three or more tokens matches anywhere in a line; a shorter row matches only a
-    whole line. A first line is searched only as a whole line (it may be a header or a row);
+    whole line. The first line of a data file is taken for a header when it holds no number, and is
+    not searched for: a table that carries the dataset's column names is not a data row. (So the first
+    row of a headerless file made only of text is not searched; this is a registered risk);
   * a <data-file> yields no row to search for;
   * a file named .png does not begin with the PNG signature, or a link is in the folder
     (a linked folder is not entered, so it cannot be searched);
@@ -45,7 +48,7 @@ ALLOWED_SUFFIXES = {".md", ".csv", ".png"}
 TOKEN = re.compile(r"[^\s,;|\"']+")
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 # What pandas reads as missing (or writes back as missing). Dropped on both sides, so a row with a hole still matches.
-MISSING = {"", "nan", "none", "na", "<na>", "null", "?"}
+MISSING = {"", "nan", "none", "na", "n/a", "<na>", "null", "?", "-"}
 NUMBER = re.compile(r"[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?")
 
 
@@ -83,7 +86,7 @@ def data_rows(path):
             if not row:
                 continue
             if number == 0 and looks_like_header(line):
-                whole.add(row)  # a header or a row of text: only the whole line is looked for
+                continue  # the header line names columns: it is not a data row, and a table that carries it is not refused
             else:
                 rows += 1
                 (windowed if len(row) >= MIN_TOKENS_FOR_ANYWHERE else whole).add(row)
