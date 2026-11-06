@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>C-11: Informed Consent Framework (MAK-AI RAI Toolkit)</title>
+  <style>
+    :root { --copper: #A05010; --navy: #1B2A4A; --warm-bg: #FFF8F0; --border: #E5D5C5; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; background: var(--warm-bg); color: #333; line-height: 1.6; padding: 2rem; max-width: 900px; margin: 0 auto; }
+    h1 { font-family: 'DM Serif Display', Georgia, serif; color: var(--navy); font-size: 1.8rem; margin-bottom: 0.25rem; }
+    .subtitle { color: var(--copper); font-weight: 600; font-size: 0.9rem; margin-bottom: 1.5rem; }
+    .grounding { background: #F0F4FF; border-left: 3px solid #4A5FBD; padding: 0.75rem 1rem; font-size: 0.82rem; color: #555; margin-bottom: 2rem; border-radius: 0 6px 6px 0; }
+    .grounding strong { color: #4A5FBD; }
+    .section { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }
+    .section h2 { font-size: 1.1rem; color: var(--navy); margin-bottom: 0.25rem; border-bottom: 2px solid var(--copper); padding-bottom: 0.4rem; }
+    .section .guidance { font-size: 0.8rem; color: #666; font-style: italic; margin-bottom: 1rem; }
+    label { display: block; font-weight: 600; font-size: 0.85rem; color: var(--navy); margin: 0.75rem 0 0.25rem; }
+    textarea, input[type="text"], input[type="date"], select { width: 100%; padding: 0.6rem; border: 1px solid var(--border); border-radius: 6px; font-size: 1rem; font-family: inherit; background: #FEFCFA; }
+    textarea:focus-visible, input:focus-visible, select:focus-visible, .table-scroll:focus-visible { outline: 3px solid var(--copper); outline-offset: 2px; }
+    textarea:focus, input:focus, select:focus { border-color: var(--copper); }
+    textarea { min-height: 70px; resize: vertical; field-sizing: content; min-inline-size: 6rem; max-inline-size: 100%; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    fieldset { border: none; min-inline-size: 0; }
+    legend { font-weight: 600; font-size: 0.85rem; color: var(--navy); padding: 0; margin: 0.75rem 0 0.25rem; }
+    .checklist { margin: 0.5rem 0; }
+    .checklist label { display: flex; align-items: flex-start; gap: 0.5rem; font-weight: 400; font-size: 0.82rem; cursor: pointer; margin: 0.3rem 0; }
+    .checklist input[type="checkbox"] { width: auto; margin-top: 3px; accent-color: var(--copper); }
+    .lmic-note { background: #FFF9E6; border-left: 3px solid #D4A520; padding: 0.6rem 1rem; font-size: 0.78rem; color: #6B5900; margin-top: 0.5rem; border-radius: 0 6px 6px 0; }
+    .warning { background: #FFF0F0; border-left: 3px solid #C03030; padding: 0.6rem 1rem; font-size: 0.78rem; color: #800; margin-top: 0.5rem; border-radius: 0 6px 6px 0; }
+    ::placeholder { color: #666; opacity: 1; }
+    .notice { background: #F0F4FF; border-left: 3px solid #4A5FBD; padding: 0.6rem 1rem; font-size: 0.85rem; color: #333; margin: 0.5rem 0 1rem; border-radius: 0 6px 6px 0; }
+    .print-note { font-size: 0.85rem; color: #555; margin-top: 1.5rem; }
+    .credit { font-size: 0.85rem; color: #555; margin-top: 1rem; }
+    .table-scroll { overflow-x: auto; }
+    .table-scroll table { min-width: 40rem; }
+    @media (max-width: 40rem) { body { padding: 1rem; } .row, .row-3, .impact-grid { grid-template-columns: 1fr; } }
+    @media print { body { padding: 0; background: white; } .print-note { display: none; } .table-scroll { overflow: visible; } .section { break-inside: avoid; } }
+  </style>
+</head>
+<body>
+  <h1>C-11: Informed Consent Framework</h1>
+  <p class="subtitle">Procedural Control in the MAK-AI Responsible AI Toolkit</p>
+
+  <div class="grounding">
+    <strong>Grounding:</strong> Draws on the information requirements of <a href="https://gdpr-info.eu/art-13-gdpr/" target="_blank" rel="noopener noreferrer">GDPR Articles 13 and 14</a>, as one example of a data protection law. It also draws on the WHO guidance <a href="https://www.who.int/publications/i/item/9789240029200" target="_blank" rel="noopener noreferrer">Ethics and governance of artificial intelligence for health (2021)</a> and on dynamic consent models. This template addresses AI-specific consent challenges that standard research ethics forms do not cover.
+  </div>
+
+  <div class="section">
+    <h2>1. Purpose & Data Practices</h2>
+    <p class="guidance">Say clearly what data you collect, why, and how it will be used. Use plain language that non-experts can follow.</p>
+    <label for="purpose">What is the purpose of this data collection? (plain language)</label>
+    <textarea id="purpose" placeholder="Explain in simple terms what you are building and why you need this data..."></textarea>
+    <label for="data-types">What specific data will you collect?</label>
+    <textarea id="data-types" placeholder="List all data types: personal information, health data, images, behavioral data, etc."></textarea>
+    <label for="processing">How will the data be processed?</label>
+    <textarea id="processing" placeholder="Will the data be used to train AI models? Will it be combined with other datasets? Will automated decisions be made?"></textarea>
+    <label for="retention">How long will data be retained?</label>
+    <textarea id="retention" placeholder="Specify retention periods and what happens after expiry..."></textarea>
+    <label for="storage">Where will the data be stored?</label>
+    <textarea id="storage" placeholder="Which country, and which server or service? Some national research rules ask for data to stay in the country..."></textarea>
+    <label for="ownership">Who owns the data, and how will participants or their communities benefit from its use?</label>
+    <textarea id="ownership" placeholder="Name the institution, community or individuals who hold rights over the data, and what they gain from its use..."></textarea>
+    <label for="national-steps">Which national or institutional steps apply before you submit this protocol for ethics review?</label>
+    <p class="guidance" id="national-steps-hint">For example, Uganda's National Guidelines for Research Involving Humans as Research Participants (UNCST, 2025) cover AI in section 16.6. They list consent to use data, algorithmic fairness, data privacy and data ownership among the issues an AI protocol must address. They also require data-protection clearance, from the national body for information systems and data protection, before ethics submission. Name the steps that apply to you.</p>
+    <textarea id="national-steps" aria-describedby="national-steps-hint" placeholder="List the steps and the body responsible for each..."></textarea>
+  </div>
+
+  <div class="section">
+    <h2>2. AI-Specific Disclosures</h2>
+    <p class="guidance">These disclosures go beyond standard consent forms to address AI/ML-specific concerns. Participants should understand how AI will use their data.</p>
+    <label for="ai-use">Will the data be used to train, validate, or test AI/ML models?</label>
+    <select id="ai-use">
+      <option value="">Select</option>
+      <option value="training">Yes, for model training</option>
+      <option value="validation">Yes, for validation or testing only</option>
+      <option value="both">Yes, for both training and evaluation</option>
+      <option value="no">No, the data is not used for AI/ML</option>
+    </select>
+    <label for="model-reuse">Could the trained model be reused for purposes beyond the original scope?</label>
+    <textarea id="model-reuse" placeholder="Be honest about potential future uses. Can the model be fine-tuned for other tasks? Could it be shared with other organizations?"></textarea>
+    <label for="automated-decisions">Will automated decisions be made based on this data?</label>
+    <textarea id="automated-decisions" placeholder="If yes: what type of decisions? What is the impact? Can they be contested?"></textarea>
+    <div class="warning">
+      <strong>Important:</strong> If the data will train models that make decisions about individuals (for example credit scoring or clinical diagnosis), say so clearly. Participants should be able to contest such decisions, because otherwise they cannot correct an error that affects them.
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>3. Participant Rights</h2>
+    <p class="guidance">List the rights your participants have under the law that applies to you (for example Uganda's Data Protection and Privacy Act 2019) and under your ethics approval.</p>
+    <label for="rights-list">Rights your participants have, and what gives them each right</label>
+    <textarea id="rights-list" placeholder="Name each right and the law or ethics approval that gives it..."></textarea>
+    <fieldset class="checklist">
+      <legend>Rights to check against your law and ethics approval (tick only those that apply to your participants)</legend>
+      <label><input type="checkbox"> <strong>Withdraw:</strong> withdraw consent at any time without penalty</label>
+      <label><input type="checkbox"> <strong>Access:</strong> ask for a copy of their data</label>
+      <label><input type="checkbox"> <strong>Erasure:</strong> ask for their data to be deleted</label>
+      <label><input type="checkbox"> <strong>Explanation:</strong> ask for an explanation of an automated decision, where the law gives this</label>
+      <label><input type="checkbox"> <strong>Contest:</strong> challenge a decision made about them</label>
+      <label><input type="checkbox"> <strong>Object:</strong> object to a type of processing</label>
+    </fieldset>
+    <label for="withdrawal-process">How can participants exercise these rights? (process description)</label>
+    <textarea id="withdrawal-process" placeholder="Provide specific contact information, expected response time, and process steps..."></textarea>
+    <label for="withdrawal-impact">What happens to data already used in model training if consent is withdrawn?</label>
+    <textarea id="withdrawal-impact" placeholder="Be transparent: can data be removed from a trained model? What are the limitations?"></textarea>
+  </div>
+
+  <div class="section">
+    <h2>4. Consent Verification</h2>
+    <p class="guidance">Consent should be meaningful, not only a signature on a form, because a signature does not show that the person understood.</p>
+    <label for="consent-mode">Consent modality</label>
+    <select id="consent-mode">
+      <option value="">Select</option>
+      <option value="written">Written consent (signed form)</option>
+      <option value="oral">Oral consent with witness documentation</option>
+      <option value="digital">Digital consent (electronic signature)</option>
+      <option value="community">Community consent and individual consent</option>
+      <option value="tiered">Tiered consent (different levels for different uses)</option>
+    </select>
+    <label for="comprehension">How will you verify that participants understand what they are consenting to?</label>
+    <textarea id="comprehension" placeholder="e.g., teach-back method, comprehension questions, explanation in local language..."></textarea>
+    <label for="coercion-safeguards">What safeguards exist against coerced consent?</label>
+    <textarea id="coercion-safeguards" placeholder="How do you ensure participation is truly voluntary? What if refusing affects access to services?"></textarea>
+    <div class="lmic-note">
+      <strong>Local context:</strong> Consider literacy barriers (support oral consent protocols), power imbalances (especially in healthcare/humanitarian contexts), community consent models, and language accessibility (provide consent materials in local languages).
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>5. Dynamic Consent & Updates</h2>
+    <p class="guidance">Consent works best as an ongoing process rather than a one-time event, because purposes and uses can change.</p>
+    <label for="re-consent">Under what circumstances will you seek re-consent?</label>
+    <textarea id="re-consent" placeholder="e.g., if purpose changes, if data is shared with new parties, if model is deployed in new context..."></textarea>
+    <label for="notification">How will participants be notified of changes?</label>
+    <textarea id="notification" placeholder="Communication channels, frequency, accessibility..."></textarea>
+  </div>
+
+  <div class="section">
+    <h2>6. Team sign-off</h2>
+    <p class="notice">This is your team's own record. It is not an approval by MAK-AI or anyone else, and it is not legal advice.</p>
+    <div class="row">
+      <div><label for="author">Completed by</label><input type="text" id="author" placeholder="Name and role"></div>
+      <div><label for="date">Date</label><input type="date" id="date"></div>
+    </div>
+    <div class="row">
+      <div><label for="ethics-status">Ethics review status</label>
+        <select id="ethics-status"><option value="">Select</option><option value="approved">Approved</option><option value="submitted">Submitted, awaiting decision</option><option value="not-required">Not required</option></select>
+      </div>
+      <div><label for="ethics-board">Ethics committee and reference number</label><input type="text" id="ethics-board" placeholder="Committee name, reference number and date. If not required, say why and who decided."></div>
+    </div>
+    <div class="row">
+      <div><label for="reassess">Reassessment date</label><input type="date" id="reassess"></div>
+    </div>
+  </div>
+
+  <p class="print-note">To print this page or save it as a PDF, use your browser's print command.</p>
+  <p class="credit">This platform draws on Responsible AI Assessments, Parts A to C, by GIZ (FAIR Forward), licensed under CC BY-SA 4.0. Changes were made. <a href="https://creativecommons.org/licenses/by-sa/4.0/">Licence terms</a></p>
+</body>
+</html>

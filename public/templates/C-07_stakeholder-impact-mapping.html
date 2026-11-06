@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>C-07: Stakeholder Impact Mapping — MAK-AI RAI Toolkit</title>
+  <title>C-07: Stakeholder Impact Mapping (MAK-AI RAI Toolkit)</title>
   <style>
-    :root { --copper: #C06014; --navy: #1B2A4A; --warm-bg: #FFF8F0; --border: #E5D5C5; }
+    :root { --copper: #A05010; --navy: #1B2A4A; --warm-bg: #FFF8F0; --border: #E5D5C5; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; background: var(--warm-bg); color: #333; line-height: 1.6; padding: 2rem; max-width: 900px; margin: 0 auto; }
     h1 { font-family: 'DM Serif Display', Georgia, serif; color: var(--navy); font-size: 1.8rem; margin-bottom: 0.25rem; }
@@ -14,33 +14,37 @@
     .grounding strong { color: #4A5FBD; }
     .section { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }
     .section h2 { font-size: 1.1rem; color: var(--navy); margin-bottom: 0.25rem; border-bottom: 2px solid var(--copper); padding-bottom: 0.4rem; }
-    .section .guidance { font-size: 0.8rem; color: #888; font-style: italic; margin-bottom: 1rem; }
+    .section .guidance { font-size: 0.8rem; color: #666; font-style: italic; margin-bottom: 1rem; }
     label { display: block; font-weight: 600; font-size: 0.85rem; color: var(--navy); margin: 0.75rem 0 0.25rem; }
-    textarea, input[type="text"], input[type="date"], select { width: 100%; padding: 0.6rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; font-family: inherit; background: #FEFCFA; transition: border-color 0.2s; }
-    textarea:focus, input:focus, select:focus { outline: none; border-color: var(--copper); box-shadow: 0 0 0 2px rgba(192,96,20,0.1); }
-    textarea { min-height: 70px; resize: vertical; }
+    textarea, input[type="text"], input[type="date"], select { width: 100%; padding: 0.6rem; border: 1px solid var(--border); border-radius: 6px; font-size: 1rem; font-family: inherit; background: #FEFCFA; transition: border-color 0.2s; }
+    textarea:focus-visible, input:focus-visible, select:focus-visible, .table-scroll:focus-visible { outline: 3px solid var(--copper); outline-offset: 2px; }
+    textarea:focus, input:focus, select:focus { border-color: var(--copper); }
+    textarea { min-height: 70px; resize: vertical; field-sizing: content; min-inline-size: 6rem; max-inline-size: 100%; }
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
     .stk-table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
     .stk-table th, .stk-table td { border: 1px solid var(--border); padding: 0.5rem; font-size: 0.82rem; text-align: left; vertical-align: top; }
     .stk-table th { background: #F5EBE0; color: var(--navy); font-weight: 600; }
     .stk-table textarea { min-height: 45px; border: none; background: transparent; width: 100%; }
-    .stk-table select { border: none; background: transparent; }
-    .btn-row { display: flex; gap: 0.75rem; margin-top: 1.5rem; justify-content: flex-end; }
-    .btn { padding: 0.6rem 1.5rem; border: none; border-radius: 6px; font-weight: 600; font-size: 0.85rem; cursor: pointer; }
-    .btn-secondary { background: white; color: var(--navy); border: 1.5px solid var(--navy); }
-    .btn-secondary:hover { background: var(--navy); color: white; }
+    .stk-table select { border: none; background: transparent; font-size: 0.82rem; padding: 0.3rem 0; min-inline-size: 4.5rem; }
     .lmic-note { background: #FFF9E6; border-left: 3px solid #D4A520; padding: 0.6rem 1rem; font-size: 0.78rem; color: #6B5900; margin-top: 0.5rem; border-radius: 0 6px 6px 0; }
     .onion-desc { font-size: 0.82rem; color: #666; margin-bottom: 1rem; }
     .onion-desc strong { color: var(--navy); }
-    @media print { body { padding: 0; background: white; } .btn-row { display: none; } .section { break-inside: avoid; } }
+    ::placeholder { color: #666; opacity: 1; }
+    .notice { background: #F0F4FF; border-left: 3px solid #4A5FBD; padding: 0.6rem 1rem; font-size: 0.85rem; color: #333; margin: 0.5rem 0 1rem; border-radius: 0 6px 6px 0; }
+    .print-note { font-size: 0.85rem; color: #555; margin-top: 1.5rem; }
+    .credit { font-size: 0.85rem; color: #555; margin-top: 1rem; }
+    .table-scroll { overflow-x: auto; }
+    .table-scroll table { min-width: 40rem; }
+    @media (max-width: 40rem) { body { padding: 1rem; } .row, .row-3, .impact-grid { grid-template-columns: 1fr; } }
+    @media print { body { padding: 0; background: white; } .print-note { display: none; } .table-scroll { overflow: visible; } .section { break-inside: avoid; } }
   </style>
 </head>
 <body>
   <h1>C-07: Stakeholder Impact Mapping</h1>
-  <p class="subtitle">Procedural Control — MAK-AI Responsible AI Toolkit</p>
+  <p class="subtitle">Procedural Control in the MAK-AI Responsible AI Toolkit</p>
 
   <div class="grounding">
-    <strong>Grounding:</strong> This template uses the <strong>Onion Model</strong> of stakeholder analysis (direct users → affected individuals → broader society) combined with the <strong>Power-Interest Matrix</strong> and the <a href="https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook" target="_blank">NIST AI RMF MAP function</a> stakeholder identification requirements.
+    <strong>Grounding:</strong> This template uses the <strong>Onion Model</strong> of stakeholder analysis: direct users, then affected individuals, then broader society. It adds the <strong>Power-Interest Matrix</strong> and the guidance on identifying stakeholders in the <a href="https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook" target="_blank" rel="noopener noreferrer">NIST AI RMF MAP function</a>.
   </div>
 
   <div class="section">
@@ -52,62 +56,64 @@
   </div>
 
   <div class="section">
-    <h2>2. Stakeholder Identification — Onion Model</h2>
+    <h2>2. Stakeholder Identification: Onion Model</h2>
     <p class="onion-desc">Identify stakeholders in concentric rings of proximity to the system. <strong>Layer 1:</strong> Direct users who interact with the system. <strong>Layer 2:</strong> People directly affected by system outputs but who don't use it themselves. <strong>Layer 3:</strong> Broader community or society affected indirectly.</p>
 
+    <div class="table-scroll" role="region" tabindex="0" aria-label="Stakeholder table, scrolls sideways on a narrow screen">
     <table class="stk-table">
       <thead>
         <tr>
-          <th style="width:10%">Layer</th>
-          <th style="width:18%">Stakeholder Group</th>
-          <th style="width:18%">Positive Impacts</th>
-          <th style="width:18%">Negative Impacts</th>
-          <th style="width:12%">Power Level</th>
-          <th style="width:12%">Interest Level</th>
-          <th style="width:12%">Engagement Strategy</th>
+          <th id="stk-c1" style="width:10%">Layer</th>
+          <th id="stk-c2" style="width:18%">Stakeholder Group</th>
+          <th id="stk-c3" style="width:18%">Positive Impacts</th>
+          <th id="stk-c4" style="width:18%">Negative Impacts</th>
+          <th id="stk-c5" style="width:12%">Power Level</th>
+          <th id="stk-c6" style="width:12%">Interest Level</th>
+          <th id="stk-c7" style="width:12%">Engagement Strategy</th>
         </tr>
       </thead>
       <tbody>
         <tr>
-          <td><strong>1 — Direct Users</strong></td>
-          <td><textarea placeholder="e.g., Agricultural extension workers"></textarea></td>
-          <td><textarea placeholder="Faster disease diagnosis, better advice"></textarea></td>
-          <td><textarea placeholder="Over-reliance on AI, deskilling"></textarea></td>
-          <td><select><option value="">—</option><option>High</option><option>Medium</option><option>Low</option></select></td>
-          <td><select><option value="">—</option><option>High</option><option>Medium</option><option>Low</option></select></td>
-          <td><select><option value="">—</option><option>Co-design</option><option>Consult</option><option>Inform</option></select></td>
+          <td id="stk-r1"><strong>1. Direct Users</strong></td>
+          <td><textarea aria-labelledby="stk-r1 stk-c2" placeholder="e.g., Agricultural extension workers"></textarea></td>
+          <td><textarea aria-labelledby="stk-r1 stk-c3" placeholder="Faster disease diagnosis, better advice"></textarea></td>
+          <td><textarea aria-labelledby="stk-r1 stk-c4" placeholder="Over-reliance on AI, deskilling"></textarea></td>
+          <td><select aria-labelledby="stk-r1 stk-c5"><option value="">Select</option><option>High</option><option>Medium</option><option>Low</option></select></td>
+          <td><select aria-labelledby="stk-r1 stk-c6"><option value="">Select</option><option>High</option><option>Medium</option><option>Low</option></select></td>
+          <td><select aria-labelledby="stk-r1 stk-c7"><option value="">Select</option><option>Co-design</option><option>Consult</option><option>Inform</option></select></td>
         </tr>
         <tr>
-          <td><strong>2 — Affected</strong></td>
-          <td><textarea placeholder="e.g., Smallholder farmers receiving advice"></textarea></td>
-          <td><textarea placeholder="Better crop yields, reduced losses"></textarea></td>
-          <td><textarea placeholder="Wrong advice → crop loss, trust erosion"></textarea></td>
-          <td><select><option value="">—</option><option>High</option><option>Medium</option><option>Low</option></select></td>
-          <td><select><option value="">—</option><option>High</option><option>Medium</option><option>Low</option></select></td>
-          <td><select><option value="">—</option><option>Co-design</option><option>Consult</option><option>Inform</option></select></td>
+          <td id="stk-r2"><strong>2. Affected</strong></td>
+          <td><textarea aria-labelledby="stk-r2 stk-c2" placeholder="e.g., Smallholder farmers receiving advice"></textarea></td>
+          <td><textarea aria-labelledby="stk-r2 stk-c3" placeholder="Better crop yields, reduced losses"></textarea></td>
+          <td><textarea aria-labelledby="stk-r2 stk-c4" placeholder="Wrong advice leading to crop loss and lost trust"></textarea></td>
+          <td><select aria-labelledby="stk-r2 stk-c5"><option value="">Select</option><option>High</option><option>Medium</option><option>Low</option></select></td>
+          <td><select aria-labelledby="stk-r2 stk-c6"><option value="">Select</option><option>High</option><option>Medium</option><option>Low</option></select></td>
+          <td><select aria-labelledby="stk-r2 stk-c7"><option value="">Select</option><option>Co-design</option><option>Consult</option><option>Inform</option></select></td>
         </tr>
         <tr>
-          <td><strong>2 — Affected</strong></td>
-          <td><textarea placeholder="e.g., Another affected group..."></textarea></td>
-          <td><textarea></textarea></td>
-          <td><textarea></textarea></td>
-          <td><select><option value="">—</option><option>High</option><option>Medium</option><option>Low</option></select></td>
-          <td><select><option value="">—</option><option>High</option><option>Medium</option><option>Low</option></select></td>
-          <td><select><option value="">—</option><option>Co-design</option><option>Consult</option><option>Inform</option></select></td>
+          <td id="stk-r3"><strong>2. Affected, second group</strong></td>
+          <td><textarea aria-labelledby="stk-r3 stk-c2" placeholder="e.g., Another affected group..."></textarea></td>
+          <td><textarea aria-labelledby="stk-r3 stk-c3"></textarea></td>
+          <td><textarea aria-labelledby="stk-r3 stk-c4"></textarea></td>
+          <td><select aria-labelledby="stk-r3 stk-c5"><option value="">Select</option><option>High</option><option>Medium</option><option>Low</option></select></td>
+          <td><select aria-labelledby="stk-r3 stk-c6"><option value="">Select</option><option>High</option><option>Medium</option><option>Low</option></select></td>
+          <td><select aria-labelledby="stk-r3 stk-c7"><option value="">Select</option><option>Co-design</option><option>Consult</option><option>Inform</option></select></td>
         </tr>
         <tr>
-          <td><strong>3 — Society</strong></td>
-          <td><textarea placeholder="e.g., Local markets, food supply chain"></textarea></td>
-          <td><textarea></textarea></td>
-          <td><textarea></textarea></td>
-          <td><select><option value="">—</option><option>High</option><option>Medium</option><option>Low</option></select></td>
-          <td><select><option value="">—</option><option>High</option><option>Medium</option><option>Low</option></select></td>
-          <td><select><option value="">—</option><option>Co-design</option><option>Consult</option><option>Inform</option></select></td>
+          <td id="stk-r4"><strong>3. Society</strong></td>
+          <td><textarea aria-labelledby="stk-r4 stk-c2" placeholder="e.g., Local markets, food supply chain"></textarea></td>
+          <td><textarea aria-labelledby="stk-r4 stk-c3"></textarea></td>
+          <td><textarea aria-labelledby="stk-r4 stk-c4"></textarea></td>
+          <td><select aria-labelledby="stk-r4 stk-c5"><option value="">Select</option><option>High</option><option>Medium</option><option>Low</option></select></td>
+          <td><select aria-labelledby="stk-r4 stk-c6"><option value="">Select</option><option>High</option><option>Medium</option><option>Low</option></select></td>
+          <td><select aria-labelledby="stk-r4 stk-c7"><option value="">Select</option><option>Co-design</option><option>Consult</option><option>Inform</option></select></td>
         </tr>
       </tbody>
     </table>
+    </div>
     <div class="lmic-note">
-      🌍 <strong>Global South consideration:</strong> Include community governance structures (village councils, cooperative boards) as stakeholders. Consider groups who may be excluded by digital-only systems. In communitarian societies, community-level impacts may be as important as individual impacts.
+      <strong>Local context:</strong> Include community governance structures (village councils, cooperative boards) as stakeholders. Consider groups who may be excluded by digital-only systems. In communitarian societies, community-level impacts may be as important as individual impacts.
     </div>
   </div>
 
@@ -123,15 +129,15 @@
   </div>
 
   <div class="section">
-    <h2>4. Review & Approval</h2>
+    <h2>4. Team sign-off</h2>
+    <p class="notice">This is your team's own record. It is not an approval by MAK-AI or anyone else, and it is not legal advice.</p>
     <div class="row">
       <div><label for="author">Completed by</label><input type="text" id="author" placeholder="Name and role"></div>
       <div><label for="date">Date</label><input type="date" id="date"></div>
     </div>
   </div>
 
-  <div class="btn-row">
-    <button class="btn btn-secondary" onclick="window.print()">Print / Save PDF</button>
-  </div>
+  <p class="print-note">To print this page or save it as a PDF, use your browser's print command.</p>
+  <p class="credit">This platform draws on Responsible AI Assessments, Parts A to C, by GIZ (FAIR Forward), licensed under CC BY-SA 4.0. Changes were made. <a href="https://creativecommons.org/licenses/by-sa/4.0/">Licence terms</a></p>
 </body>
 </html>

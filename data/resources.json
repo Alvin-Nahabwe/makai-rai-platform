@@ -1,4 +1,101 @@
 {
-  "templates": [],
+  "templates": [
+    {
+      "controlId": "C-01",
+      "file": "/templates/C-01_alternatives-analysis.html",
+      "kind": "web page",
+      "bytes": 11160,
+      "sha256": "4f029a26f4048f501103b51b70c0648d2b8bb4bc94b5d56dc3e275552ccbddd4",
+      "review": {
+        "reviewer": "Product owner, MAK-AI",
+        "date": "2026-11-06",
+        "outcome": "passed"
+      }
+    },
+    {
+      "controlId": "C-02",
+      "file": "/templates/C-02_cost-benefit-impact.html",
+      "kind": "web page",
+      "bytes": 10818,
+      "sha256": "05db63996ed71078e0a9dd4a76aceb3568c946f7156db289e605f03853aaf086",
+      "review": {
+        "reviewer": "Product owner, MAK-AI",
+        "date": "2026-11-06",
+        "outcome": "passed"
+      }
+    },
+    {
+      "controlId": "C-07",
+      "file": "/templates/C-07_stakeholder-impact-mapping.html",
+      "kind": "web page",
+      "bytes": 11560,
+      "sha256": "2ab7e2c7995237ca055c34b960d3dd88ac84202c9e35c6e0716b13c9a8c438e4",
+      "review": {
+        "reviewer": "Product owner, MAK-AI",
+        "date": "2026-11-06",
+        "outcome": "passed"
+      }
+    },
+    {
+      "controlId": "C-17",
+      "file": "/templates/C-17_model-card.html",
+      "kind": "web page",
+      "bytes": 15304,
+      "sha256": "ca930c6327239d01aeb7f48abfbe579ef5e4f74be170eeab0610bf9cd32e8f26",
+      "review": {
+        "reviewer": "Product owner, MAK-AI",
+        "date": "2026-11-06",
+        "outcome": "passed"
+      }
+    },
+    {
+      "controlId": "C-19",
+      "file": "/templates/C-19_datasheet.html",
+      "kind": "web page",
+      "bytes": 13232,
+      "sha256": "b078ab38addaada17d28700df05e92c6dfb2c116a13b46087c8b69ba6c6f1d7f",
+      "review": {
+        "reviewer": "Product owner, MAK-AI",
+        "date": "2026-11-06",
+        "outcome": "passed"
+      }
+    },
+    {
+      "controlId": "C-25",
+      "file": "/templates/C-25_feedback-redress.html",
+      "kind": "web page",
+      "bytes": 11447,
+      "sha256": "7341a13b53f02478f35517abf52749e0faeed028234be5140d83283f267980eb",
+      "review": {
+        "reviewer": "Product owner, MAK-AI",
+        "date": "2026-11-06",
+        "outcome": "passed"
+      }
+    },
+    {
+      "controlId": "C-26",
+      "file": "/templates/C-26_governance-raci.html",
+      "kind": "web page",
+      "bytes": 20579,
+      "sha256": "abb2157415de818e07dd54436e378df8c853d0c16689f9e4fdd50e53bcfc06b9",
+      "review": {
+        "reviewer": "Product owner, MAK-AI",
+        "date": "2026-11-06",
+        "outcome": "passed"
+      }
+    },
+    {
+      "controlId": "C-28",
+      "file": "/templates/C-28_codebook-deployment.html",
+      "kind": "web page",
+      "bytes": 14722,
+      "sha256": "277ebffe57fb39305e1f05abdf89baae8bb93ce9bf5b454adf8de3b11cb437f3",
+      "review": {
+        "reviewer": "Product owner, MAK-AI",
+        "date": "2026-11-06",
+        "outcome": "passed"
+      }
+    }
+  ],
   "notebooks": []
 }

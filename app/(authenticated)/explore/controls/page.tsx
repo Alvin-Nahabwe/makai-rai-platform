@@ -4,8 +4,12 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import assessmentAreas from '@/data/assessmentAreas.json';
+import resources from '@/data/resources.json';
 import ControlResourcesList from '@/components/report/ControlResourcesList';
 import './ControlsLibraryPage.css';
+
+// FR-SUG-06: a template is linked only when its review passed; a held-back file would answer 404.
+const PASSED_TEMPLATES = new Set(resources.templates.filter((t) => t.review.outcome === 'passed').map((t) => t.file));
 
 const NOTEBOOK_BASE_URL = 'https://github.com/Alvin-Nahabwe/mak-responsible-ai-toolkit/blob/master';
 
@@ -145,7 +149,7 @@ export default function ControlsLibraryPage() {
                   {/* Resources & Template — driven from data */}
                   <ControlResourcesList
                     resources={c.resources}
-                    template={c.template ?? undefined}
+                    template={c.template && PASSED_TEMPLATES.has(c.template) ? c.template : undefined}
                   />
 
                   {/* Linked Areas Toggle */}
