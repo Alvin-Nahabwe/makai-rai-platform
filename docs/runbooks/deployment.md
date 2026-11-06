@@ -1043,7 +1043,9 @@ before the evening window.
 
 **Step 5.** Run the pre-check, 8.2, including the block for a release that adds a migration (this
 one does): write down the PREV lines, check that the last restore test did not fail, take the
-backup, and write down BACKUP. Estimate: about 10 minutes.
+backup, and write down BACKUP. Estimate: about 10 minutes. Rehearsed on 6 Nov 2026 on a local copy, from the v0.5.0
+images on a v0.5.0-shaped database (`scripts/live-run/v050-shape.sql`): the commands and the backup ran in under 1
+minute of machine time; the estimate stays for reading and writing down.
 
 **Step 6.** Pause the hourly synthetic journey, whose old steps fail against v0.6.0, without
 editing the committed crontab: save root's crontab, comment out the 7-past line in the live one,
@@ -1077,14 +1079,23 @@ time $C up -d --no-deps --wait --wait-timeout 120 nextjs
 
 Write down the `real` time. nginx's configuration changes in this release (NFR-SEC-06, NFR-SEC-13,
 NFR-OBS-01), so step 7 applies: 7a if the nginx image digest changed, 7b if only the file did, each
-after its own `nginx -t`. Estimate: about 25 minutes for the step.
+after its own `nginx -t`. Estimate: about 25 minutes for the step. Rehearsed on 6 Nov 2026 on a local copy, from
+the v0.5.0 images to the release's, through nginx with a probe of `/api/health` every second: the migrator applied the
+15 migrations of v0.6.0, the owner check first (it removed the platform administrator's membership and archived the
+seeded organisation), in 2 seconds; the timed swap printed `real 0m5.844s`, with one failed probe (a 502, 1 second)
+while the container was replaced; 7b's nginx restart cost none; the step's commands took 9 seconds (NFR-AVL-02's 300
+seconds).
 
 If the migrator stops on the owner check, it ends with an error and nothing of v0.6.0 is applied.
 The check has two messages, both beginning `v0.6.0 step 0:`. One names an organisation that has no
 owner once the platform administrator's membership is removed, and has a project. The other says
 `N accounts hold the platform role admin`. Prisma then records that migration as failed and refuses
-later runs until it is resolved. This is stated from Prisma's documentation and has not been run
-here: an ASSUMPTION that the rehearsal runs and replaces with what it saw. Do not run 8.3 step 5:
+later runs until it is resolved. Seen in the rehearsal of 6 Nov 2026, on a copy of the v0.5.0-shaped database with a
+project in the seeded organisation: the first run stopped with `Error: P3018` and the organisation message, and no
+`20261030` migration had finished; a second run refused with `Error: P3009`; once the organisation had an owner again
+(simulated by archiving it in the copy), the `migrate resolve` line below printed `Migration
+20261030000000_v060_00_owner_check marked as rolled back.` and the next run applied the 15 v0.6.0 migrations (37
+recorded). Do not run 8.3 step 5:
 the v0.5.0 app keeps serving, and the correction is made on v0.5.0, where nothing of v0.6.0 has run:
 
 - For the organisation message, promote an existing member of that organisation, who is not the
@@ -1142,7 +1153,8 @@ failed row remains. Diagnose the cause on the rehearsal copy and fix it in a v0.
 writes since BACKUP are lost, which the rollback rule of 9.5 accepts before the first real v1
 record. The synthetic journey is handled as 9.5 says.
 
-**Step 8.** Environment. Estimate: about 10 minutes. Remove the retired organisation limit (FR-OPS-03) and
+**Step 8.** Environment. Estimate: about 10 minutes (rehearsed 6 Nov 2026 from v0.5.0, without the hidden-prompt
+address: the commands ran in 1 second). Remove the retired organisation limit (FR-OPS-03) and
 check that it is gone:
 
 ```bash
@@ -1175,7 +1187,9 @@ Two optional storage-cap settings exist (NFR-REL-09): `MAKRAI_ORG_STORAGE_CAP_BY
 the defaults.
 
 **Step 9.** Run the post-check, 8.4: the sign-in page answers 200, every service is up, the error
-count is 0, and the image and version match (`SAME` twice). Estimate: about 10 minutes.
+count is 0, and the image and version match (`SAME` twice). Estimate: about 10 minutes (rehearsed 6 Nov 2026 from
+v0.5.0: under 1 minute; the second `SAME` needs the version label that `release.yml` adds, which a locally built image
+lacks).
 
 **Step 10.** Sign in as the platform administrator and accept the three texts (FR-ACC-04). Then,
 on S-23 and S-24, record the agreement version for the existing organisations (FR-ORG-06). Estimate:
@@ -1344,6 +1358,20 @@ taken is lost for good**. Do 9.2 first, so that the checkout and `.env` are PREV
 
 4. Follow backup-restore.md section 4 in order, naming BACKUP in 4.3. Its 4.4 then
    runs PREV's migrator against the restored database.
+5. After **any** restore, whichever backup it was, check the application role's DELETE on
+   `memberships` before the application takes traffic (backup-restore.md 4.4a is the same check). A
+   backup taken during an application rollback (9.5) carries the REVOKE, and restoring it brings
+   that back:
+
+   ```bash
+   $C exec -T postgres psql -U "$PGU" -d makrai -c '\dp memberships'
+   ```
+
+   The access privileges must include `makrai_app=rwd/makrai`. If they do not, give it back:
+
+   ```bash
+   $C exec -T postgres psql -U "$PGU" -d makrai -Atc 'GRANT DELETE ON "memberships" TO makrai_app'
+   ```
 
 Migrations in this project are additive unless their pull request says otherwise, so
 the previous release's code normally runs against the newer schema, and 9.2 alone is
@@ -1377,7 +1405,25 @@ test are in the synthetic organisation.
 A migrator that stopped on the owner check is not a rollback: nothing of v0.6.0 was applied, and
 8.5 step 7 says what to do.
 
-**Rolling back the application.** Run 9.2 with the PREV lines written down in 8.2, then the
+**Rolling back the application.** First, while v0.6.0 still serves, take DELETE on `memberships`
+from the application role, as the owner role:
+
+```bash
+$C exec -T postgres psql -U "$PGU" -d makrai -Atc 'REVOKE DELETE ON "memberships" FROM makrai_app'
+```
+
+During the seconds from this line to the swap, and again from the swap back to the GRANT below,
+0.6.0 refuses member removal and account deletion with 500 (42501), and removes nothing.
+
+Why: v0.5.0's account deletion removes the person's memberships first, one organisation at a time, each in a transaction
+of its own, and only then deletes their consent rows, which v0.6.0 no longer lets it do. Without this line, a person who
+deletes their account while v0.5.0 serves loses every membership and keeps an active account (seen in the rehearsal of
+6 Nov 2026: one membership to none, a 500, the account still active). With it, the first membership delete is refused,
+so nothing is removed. While v0.5.0 serves, deleting an account, removing a member and leaving an organisation all fail
+with a server error; the rule above already limits v0.5.0 to signing in and reading. Taking it before the swap means no
+moment in which v0.5.0 serves with the privilege: every window fails loudly in 0.6.0, never silently in v0.5.0.
+
+Then run 9.2 with the PREV lines written down in 8.2, then the
 post-check of 9.4. The hourly synthetic journey must be paused while v0.5.0 serves, because the
 journey installed in step 11 uses v0.6.0 routes that v0.5.0 does not have. If step 11 has not run,
 step 6 still holds it paused. If step 11 has run, pause it again with the lines of 8.5 step 6 (they
@@ -1387,8 +1433,9 @@ line, by commenting it out in the crontab that step 12 installed it in (the inst
 `ops/host/README.md` names it), and the `makrai-reminders` check, while v0.5.0 serves: the job calls
 an internal route that v0.5.0 does not have. Write down that these are paused too.
 
-**Restoring the database (before the first real v1 record only).** Do 9.2 first, then 9.3 with
-BACKUP, the file 8.2 wrote down. After a restore, v0.5.0 runs against the schema it was built for.
+**Restoring the database (before the first real v1 record only).** Run the REVOKE above first,
+then 9.2, then 9.3 with BACKUP, the file 8.2 wrote down; 9.3's last step checks the privilege on the
+restored database and gives it back if it is missing. After a restore, v0.5.0 runs against the schema it was built for.
 If 8.5 step 11 has not run, the journey still installed is the old one and works again: put the
 crontab saved in 8.5 step 6 back with the restore block of step 7's undo (it restores, then removes
 both files only after the restore has worked, and counts the pause lines, which must print `0`;
@@ -1402,6 +1449,20 @@ stop the return deploy at 8.2's first line of the migration block, so on that de
 result that failed only in its seal step, read in your own terminal, counts as 8.2's line passing for
 this one deploy; any other failed field is a stop. 8.5 step 14's check runs the morning after the
 return.
+
+**Right after the swap back to v0.6.x.** The moment 8.3 step 5 of the return deploy has swapped the
+container, give the application role its DELETE on `memberships` back, exactly as v0.6.0 had it, and
+check it:
+
+```bash
+$C exec -T postgres psql -U "$PGU" -d makrai -Atc 'GRANT DELETE ON "memberships" TO makrai_app'
+$C exec -T postgres psql -U "$PGU" -d makrai -c '\dp memberships'
+```
+
+The access privileges of the second line must include `makrai_app=rwd/makrai`; if they do not, run the
+GRANT again. Until it runs, v0.6.0's member removal and account deletion answer 500 (permission denied,
+42501) and remove nothing. After a database restore the privilege is already back, and the two lines
+only confirm it.
 
 **After returning to v0.6.x.** v0.5.0's code writes the `ipAddress` column of consent rows, which
 v0.6.0 clears and stops writing. Clear what v0.5.0 wrote during the rollback, as the owner role. No

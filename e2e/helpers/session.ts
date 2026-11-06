@@ -32,23 +32,31 @@ export function fixtureOrgId(): string {
   return manifest().orgs[0].id;
 }
 
-/** Fills and sends the sign-in form already open on this page, keeping its `callbackUrl`, and waits until it has left `/login`. */
-export async function signInOnLoginPage(page: Page, role: OrgRole): Promise<void> {
-  const seat = seatOf(role);
+/**
+ * Fills and sends the sign-in form already open on this page with `email` and `password`, keeping its `callbackUrl`, and
+ * waits until it has left `/login`. Any account, not only a fixture seat: V-prog's specs sign in accounts of their own.
+ */
+export async function signInWith(page: Page, email: string, password: string): Promise<void> {
   await expect(page).toHaveURL(/\/login(\?|$)/);
   // The form's inputs are React-controlled: a value typed before hydration is reset by it (seen on a cold `next dev`
-  // compile of /login, where Email came back empty and the native `required` check stopped the submit). Fill until the
-  // values survive a short settle.
+  // compile of /login, where Email came back empty and the native `required` check stopped the submit), and a press
+  // before hydration submits the form natively (seen through nginx). Fill until the values survive a short settle.
   await page.waitForLoadState('networkidle');
   await expect(async () => {
-    await page.fill('#email', seat.email);
-    await page.fill('#password', seat.password);
+    await page.fill('#email', email);
+    await page.fill('#password', password);
     await page.waitForTimeout(300);
-    await expect(page.locator('#email')).toHaveValue(seat.email, { timeout: 100 });
-    await expect(page.locator('#password')).toHaveValue(seat.password, { timeout: 100 });
+    await expect(page.locator('#email')).toHaveValue(email, { timeout: 100 });
+    await expect(page.locator('#password')).toHaveValue(password, { timeout: 100 });
   }).toPass({ timeout: 20_000 });
   await page.locator('button[type="submit"]').click();
   await page.waitForURL((url) => url.pathname !== '/login', { timeout: 30_000 });
+}
+
+/** Fills and sends the sign-in form already open on this page as the role's seat (signInWith). */
+export async function signInOnLoginPage(page: Page, role: OrgRole): Promise<void> {
+  const seat = seatOf(role);
+  await signInWith(page, seat.email, seat.password);
 }
 
 /**

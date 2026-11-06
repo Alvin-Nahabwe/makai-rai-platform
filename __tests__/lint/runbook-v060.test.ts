@@ -271,6 +271,40 @@ describe('deployment.md 8.5: the owner steps of the v0.6.0 deploy', () => {
     expect(t).toContain('expect the 01:00 restore test\'s seal step to fail against the restored v0.5.0 schema');
     expect(t).toContain('resume the `makrai-reminders` check too');
   });
+
+  // Ruling of 6 Nov 2026, amended by round 7 (V-prog rollback finding): v0.5.0's account deletion removes memberships as makrai_app,
+  // then fails on consent_records. 9.5 takes DELETE on memberships from makrai_app before the swap to v0.5.0 and gives it back right
+  // after the swap back, so every window in between fails loudly in 0.6.0, never silently in v0.5.0; every restore checks it.
+  it('NFR-REL-07: 9.5 revokes DELETE on memberships before the swap to v0.5.0, grants it right after the swap back, and every restore checks it', () => {
+    const s = s95();
+    const revoke = `$C exec -T postgres psql -U "$PGU" -d makrai -Atc 'REVOKE DELETE ON "memberships" FROM makrai_app'`;
+    const grant = `$C exec -T postgres psql -U "$PGU" -d makrai -Atc 'GRANT DELETE ON "memberships" TO makrai_app'`;
+    const check = `$C exec -T postgres psql -U "$PGU" -d makrai -c '\\dp memberships'`;
+    const rollingBack = s.slice(s.indexOf('**Rolling back the application.**'), s.indexOf('**Restoring the database'));
+    const afterSwapBack = s.slice(s.indexOf('**Right after the swap back to v0.6.x'), s.indexOf('**After returning to v0.6.x.**'));
+    // The REVOKE runs while v0.6.0 still serves: its fenced line comes before the sentence that runs 9.2's swap.
+    const code = fenced(rollingBack).map((l) => l.trim());
+    expect(code, 'the REVOKE sits in the application rollback').toContain(revoke);
+    expect(rollingBack.indexOf(revoke), 'the REVOKE comes before 9.2').toBeLessThan(rollingBack.indexOf('Then run 9.2'));
+    expect(rollingBack.indexOf('Then run 9.2'), 'the rollback then runs 9.2').toBeGreaterThan(-1);
+    expect(fenced(s).filter((l) => l.includes('REVOKE')), 'one REVOKE in 9.5').toHaveLength(1);
+    // The GRANT and its check come right after the swap back, in the part before 'After returning to v0.6.x.'.
+    expect(afterSwapBack.length, 'the part right after the swap back exists').toBeGreaterThan(0);
+    const back = fenced(afterSwapBack).map((l) => l.trim());
+    expect(back.indexOf(grant), 'the GRANT sits right after the swap back').toBeGreaterThan(-1);
+    expect(back.indexOf(check), 'the privilege check follows the GRANT').toBe(back.indexOf(grant) + 1);
+    expect(flat(afterSwapBack)).toContain('`makrai_app=rwd/makrai`');
+    const t = flat(rollingBack);
+    expect(t).toContain('loses every membership and keeps an active account');
+    expect(t).toContain('deleting an account, removing a member and leaving an organisation');
+    expect(t).toContain('0.6.0 refuses member removal and account deletion with 500 (42501), and removes nothing');
+    // After any restore the privilege is checked and, if missing, granted: 9.3 and backup-restore.md.
+    expect(flat(section('### 9.3'))).toContain('`makrai_app=rwd/makrai`');
+    expect(fenced(section('### 9.3')).map((l) => l.trim())).toContain(check);
+    const restore = readFileSync('docs/runbooks/backup-restore.md', 'utf8');
+    expect(restore).toContain(`docker exec docker-postgres-1 psql -U "\${POSTGRES_USER}" -d "\${POSTGRES_DB}" -c '\\dp memberships'`);
+    expect(flat(restore)).toContain('`makrai_app=rwd/makrai`');
+  });
 });
 
 describe('deployment.md 8.5: the lines that change the host are the lines that were run here', () => {

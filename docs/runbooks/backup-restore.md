@@ -387,6 +387,25 @@ cd /srv/makrai/app/docker
 docker compose --env-file ../.env -f docker-compose.prod.yml --profile tools run --rm --no-deps migrator
 ```
 
+### 4.4a Check the application role's DELETE on memberships
+
+After **any** restore. A backup taken while `deployment.md` section 9.5's application rollback was
+in force carries its `REVOKE DELETE ON "memberships" FROM makrai_app`, and restoring it brings the
+REVOKE back; v0.6.0 then refuses member removal and account deletion with 500 (42501):
+
+```bash
+cd /srv/makrai/app
+set -a; . ./.env; set +a
+docker exec docker-postgres-1 psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -c '\dp memberships'
+```
+
+The access privileges must include `makrai_app=rwd/makrai`. If they do not, give it back and run the
+check again:
+
+```bash
+docker exec docker-postgres-1 psql -v ON_ERROR_STOP=1 -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -c 'GRANT DELETE ON "memberships" TO makrai_app'
+```
+
 ### 4.5a On a fresh cluster — give each role its password
 
 The roles created in 4.2a can log in and have no password, so the application
