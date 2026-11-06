@@ -6,6 +6,12 @@ import { useRouter } from 'next/navigation';
 import { PASSWORD_MIN_LENGTH } from '@/lib/validate';
 import { M22 } from '@/lib/http/messages';
 
+/** False in the server render and until React has hydrated, true after: a native submit before then must do nothing. */
+const noopSubscribe = (): (() => void) => () => {};
+function useHydrated(): boolean {
+  return useSyncExternalStore(noopSubscribe, () => true, () => false);
+}
+
 const NOT_SET = 'Not set: the request did not reach the server. Your link still works; try again.';
 /** S-01's notice for the same moment (LoginClient.tsx), shown while the page moves there. */
 const PASSWORD_CHANGED = 'Password changed. Please sign in with your new password.';
@@ -62,6 +68,8 @@ export interface ResetPasswordViewProps {
   password: string;
   showPassword: boolean;
   state: ResetState;
+  /** False until React has hydrated; the submit button is disabled till then (default true for a static render). */
+  hydrated?: boolean;
   onPassword: (v: string) => void;
   onToggleShow: () => void;
   onSubmit: (e: FormEvent<HTMLFormElement>) => void;
@@ -85,7 +93,7 @@ export function ResetPasswordView(v: ResetPasswordViewProps) {
   return (
     <>
       {v.state.kind === 'error' && <div className="auth-error" role="alert">{v.state.message}</div>}
-      <form onSubmit={v.onSubmit} noValidate>
+      <form method="post" onSubmit={v.onSubmit} noValidate>
         <label htmlFor="new-password">New password</label>
         <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
           <input id="new-password" name="new-password" type={v.showPassword ? 'text' : 'password'} required autoComplete="new-password"
@@ -96,7 +104,7 @@ export function ResetPasswordView(v: ResetPasswordViewProps) {
         </div>
         <p id="new-password-hint" style={HINT}>{`At least ${PASSWORD_MIN_LENGTH} characters.`}</p>
         {invalid && <p id="new-password-error" style={FIELD_ERROR}>{invalid}</p>}
-        <button type="submit" className="btn-primary" disabled={v.state.kind === 'sending'} style={TARGET}>Set password</button>
+        <button type="submit" className="btn-primary" disabled={v.state.kind === 'sending' || v.hydrated === false} style={TARGET}>Set password</button>
       </form>
     </>
   );
@@ -132,6 +140,7 @@ export function ResetPasswordClient() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [state, setState] = useState<ResetState>({ kind: 'idle' });
+  const hydrated = useHydrated();
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -146,7 +155,7 @@ export function ResetPasswordClient() {
 
   if (token === undefined) return <p>Loading...</p>;
   return (
-    <ResetPasswordView token={token} password={password} showPassword={showPassword} state={state}
+    <ResetPasswordView token={token} password={password} showPassword={showPassword} state={state} hydrated={hydrated}
       onPassword={setPassword} onToggleShow={() => setShowPassword((s) => !s)} onSubmit={onSubmit} />
   );
 }

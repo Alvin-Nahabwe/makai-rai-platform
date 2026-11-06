@@ -1,12 +1,18 @@
 'use client';
 
-import { useState, type CSSProperties, type FormEvent } from 'react';
+import { useState, useSyncExternalStore, type CSSProperties, type FormEvent } from 'react';
 import { getSession, signIn } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { safeCallbackUrl } from '@/lib/safe-callback-url';
 import { DRAFT_PREFIX, openDraftStore } from '@/lib/client/drafts';
 import { M20 } from '@/lib/http/messages';
+
+/** False in the server render and until React has hydrated, true after: a native submit before then must do nothing. */
+const noopSubscribe = (): (() => void) => () => {};
+function useHydrated(): boolean {
+  return useSyncExternalStore(noopSubscribe, () => true, () => false);
+}
 
 /** Owner copy (C4 ruling SC-1): the admission's 503 `sign_in_busy` (lib/auth/signInAdmission.ts). */
 export const SIGN_IN_BUSY = 'Not signed in: the server is busy with other sign-ins. Nothing was changed. Try again in a minute.';
@@ -115,6 +121,8 @@ export interface LoginViewProps {
   error: string;
   notice: string | null;
   loading: boolean;
+  /** False until React has hydrated; the submit button is disabled till then (default true for a static render). */
+  hydrated?: boolean;
   onEmail: (v: string) => void;
   onPassword: (v: string) => void;
   onToggleShow: () => void;
@@ -128,7 +136,7 @@ export function LoginView(v: LoginViewProps) {
       <h1>Sign In</h1>
       {v.notice && <div className="auth-success" role="status">{v.notice}</div>}
       {v.error && <div className="auth-error" role="alert">{v.error}</div>}
-      <form onSubmit={v.onSubmit}>
+      <form method="post" onSubmit={v.onSubmit}>
         <label htmlFor="email">Email</label>
         <input id="email" name="email" type="email" required autoComplete="username" spellCheck={false}
           value={v.email} onChange={(e) => v.onEmail(e.currentTarget.value)} />
@@ -139,7 +147,7 @@ export function LoginView(v: LoginViewProps) {
           <button type="button" aria-controls="password" aria-pressed={v.showPassword} onClick={v.onToggleShow}
             style={{ ...TARGET, padding: '0 var(--space-2)' }}>Show</button>
         </div>
-        <button type="submit" className="btn-primary" disabled={v.loading} style={TARGET}>
+        <button type="submit" className="btn-primary" disabled={v.loading || v.hydrated === false} style={TARGET}>
           {v.loading ? 'Signing in...' : 'Sign In'}
         </button>
       </form>
@@ -162,6 +170,7 @@ export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const hydrated = useHydrated();
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -179,7 +188,7 @@ export function LoginForm() {
   }
 
   return (
-    <LoginView email={email} password={password} showPassword={showPassword} error={error} notice={notice} loading={loading}
+    <LoginView email={email} password={password} showPassword={showPassword} error={error} notice={notice} loading={loading} hydrated={hydrated}
       onEmail={setEmail} onPassword={setPassword} onToggleShow={() => setShowPassword((s) => !s)} onSubmit={onSubmit} />
   );
 }
