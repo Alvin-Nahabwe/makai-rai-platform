@@ -58,17 +58,19 @@ describe('suggestion slots', () => {
   it('FR-SUG-03: S-15 collapses the controls of the finding area IP-05 to their names, with the cards under a closed Show details; none without an area', () => {
     const html = renderToStaticMarkup(FindingSuggestions({ contentSemver: V, riskArea: 'IP-05' }) ?? <></>);
     expect(html).not.toContain('Ways teams address this');   // FND-b's section h2 carries the words: no second heading
-    expect(html).not.toMatch(/<h3/);
     expect(html).not.toMatch(/controls? for this question/);   // W-5 has no count line: the section heading names the risk area
     const names = html.slice(0, html.indexOf('<details'));
-    expect(names).toMatch(/<p[^>]*class="suggested-controls__names"[^>]*>[^<]+<\/p>/);
+    expect(names).toMatch(/<p class="suggested-controls__names">/);
     for (const n of ['C-13 ', 'C-15 ', 'C-18 ']) expect(names).toContain(n);
     expect(names).not.toContain('<article');
+    expect(names).not.toMatch(/<h[1-6]/);   // no heading before the details: the cards' h3 sit directly under FND-b's h2
+    expect(names.match(/<span aria-hidden="true"> \u00b7 <\/span>/g)).toHaveLength(2);   // the separator is drawn, not read
     expect(html).toContain('<summary>Show details</summary>');
     expect(html).not.toMatch(/<details[^>]*\bopen\b/);
     const inside = html.slice(html.indexOf('<details'));
     expect(inside.match(/<article/g)).toHaveLength(3);
-    expect(inside.match(/<h4/g)).toHaveLength(3);
+    expect(inside.match(/<h3/g)).toHaveLength(3);
+    expect(inside).not.toMatch(/<h4/);   // h2 > h3, no skipped level
     expect(FindingSuggestions({ contentSemver: V, riskArea: null })).toBeNull();
     expect(FindingSuggestions({ contentSemver: V, riskArea: 'XX-99' })).toBeNull();
   });

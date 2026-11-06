@@ -12,9 +12,8 @@ import type { StageFilter } from '@/lib/question/stageList';
 import { HOSTILE_STRINGS } from '../helpers/hostile';
 
 /**
- * S-11, S-12 and S-13 rendered from real panel data on the fixture bundle (contract "Content bundle"). SUG's
- * the router is the only part
- * of next/navigation a static render cannot provide.
+ * S-11, S-12 and S-13 rendered from real panel data on the fixture bundle (contract "Content bundle"). The router is the
+ * only part of next/navigation a static render cannot provide.
  */
 vi.mock('@/lib/data/reviews', () => ({ listStageReviews: vi.fn(async () => []), changedSinceSeal: vi.fn(async () => null) }));
 vi.mock('next/navigation', async (original) => ({ ...(await original<typeof import('next/navigation')>()), useRouter: () => ({ refresh() {} }), usePathname: () => '/x' }));

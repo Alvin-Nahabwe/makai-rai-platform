@@ -94,6 +94,8 @@ export function FindingPageView({ data }: { data: FindingPageData }): ReactEleme
   const f = d.detail;
   const base = `/orgs/${d.orgSlug}/projects/${d.projectId}`;
   const controlName = (id: string) => d.controls.find((c) => c.id === id)?.name ?? '';
+  // The suggestions section exists only for a risk area that has controls (S-12 does the same for its gate question).
+  const waysArea = f.riskArea !== null && findingSuggestionCount({ contentSemver: d.contentSemver, riskArea: f.riskArea }) > 0 ? f.riskArea : null;
   const closed = f.state === 'closed_mitigation' || f.state === 'closed_accepted_risk';
   const closing = d.closeByDecision;
   const acceptedLine = f.state === 'closed_accepted_risk' && f.acceptedRisk !== null
@@ -139,10 +141,10 @@ export function FindingPageView({ data }: { data: FindingPageData }): ReactEleme
         )}
         {d.canMitigate && f.state === 'open' ? <MitigationFormToggle label="Add a mitigation" {...formProps(d)} base={null} /> : null}
       </section>
-      {findingSuggestionCount({ contentSemver: d.contentSemver, riskArea: f.riskArea }) === 0 ? null : (
+      {waysArea === null ? null : (
         <section aria-labelledby="f-ways">
-          <h2 id="f-ways">{f.riskArea === null ? 'Ways teams address this' : `Ways teams address this (for risk area ${f.riskArea})`}</h2>
-          <FindingSuggestions contentSemver={d.contentSemver} riskArea={f.riskArea} />
+          <h2 id="f-ways">{`Ways teams address this (for risk area ${waysArea})`}</h2>
+          <FindingSuggestions contentSemver={d.contentSemver} riskArea={waysArea} />
         </section>
       )}
       <section aria-labelledby="f-close">

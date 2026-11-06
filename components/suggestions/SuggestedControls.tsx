@@ -37,7 +37,7 @@ function Groups({ groups, c, resources }: { groups: ControlGroup[]; c: LoadedCon
 const countOf = (...lists: ControlGroup[][]): number =>
   new Set(lists.flatMap((groups) => groups.flatMap((g) => g.controls.map((x) => x.control.id)))).size;
 
-/** SRS W-3 line 1837, under the heading: "3 controls for this question's risk area", "1 control ..." for one. S-15 shows the same line. */
+/** SRS W-3 line 1837, under the heading: "3 controls for this question's risk area", "1 control ..." for one. */
 export const controlCountLine = (n: number): string => `${n} ${n === 1 ? 'control' : 'controls'} for this question's risk area`;
 
 /**

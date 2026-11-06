@@ -47,7 +47,6 @@ describe('content bundle structure', () => {
   });
 });
 
-/** A copy of H0's fixture bundle with one file edited, checked as the release check checks a version (SUG fix round 1). */
 /** A parsed content file, edited by path. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test-only JSON
 type Json = any;
@@ -56,6 +55,7 @@ describe('content check: a mapping key and a resource type the pages would drop 
   const FIXTURE = '__tests__/fixtures/content/0.0.1-fixture';
   const roots: string[] = [];
   afterAll(() => { for (const r of roots) rmSync(r, { recursive: true, force: true }); });
+  /** A copy of H0's fixture bundle with one file edited, checked as the release check checks a version. */
   function problemsAfter(file: 'questionBank.json' | 'assessmentAreas.json', edit: (j: Json) => void): string[] {
     const root = mkdtempSync(join(tmpdir(), 'content-key-')); roots.push(root);
     const dir = join(root, '0.0.1-fixture');   // the directory name is the version

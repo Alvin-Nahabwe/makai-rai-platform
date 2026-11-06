@@ -14,6 +14,9 @@ vi.mock('@/lib/content/resources', async () => {
 // The requirements file is C-NB's and does not exist yet (see the helper): only its stat is answered.
 vi.mock('node:fs', async (importOriginal) => (await import('../helpers/requirementsStat')).withRequirementsStat(await importOriginal<typeof import('node:fs')>()));
 
+/** The guard's grep patterns, one list for the real tree and for the scratch files that prove it catches each quoting style. */
+const GUARD_PATTERNS = ['-e', '["\'`]/templates/', '-e', '["\'`]/notebooks/', '-e', 'notebooks/technical', '-e', 'NOTEBOOK_BASE_URL'];
+
 describe('S-27, the controls page', () => {
   it('FR-SUG-04 FR-SUG-05 FR-SUG-06: S-27 lists every control with only released notebooks and passed templates', () => {
     const html = renderToStaticMarkup(<ControlsPage />);
@@ -44,8 +47,7 @@ describe('S-27, the controls page', () => {
   it('FR-SUG-04: no file under app, components or lib links a template or notebook path except through the resources file', () => {
     // A quote or backtick before /templates/ or /notebooks/ keeps the e-mail templates (@/lib/email/templates/...) out of the match:
     // they are not a served file. grep exits 0 for a match and 1 for none; anything else (2) is a failed search, not a clean tree.
-    const r = spawnSync('grep', ['-rln', '-e', '["\'`]/templates/', '-e', '["\'`]/notebooks/', '-e', 'notebooks/technical', '-e', 'NOTEBOOK_BASE_URL',
-      'app', 'components', 'lib', '--include=*.ts', '--include=*.tsx'], { encoding: 'utf8' });
+    const r = spawnSync('grep', ['-rln', ...GUARD_PATTERNS, 'app', 'components', 'lib', '--include=*.ts', '--include=*.tsx'], { encoding: 'utf8' });
     expect([0, 1], r.stderr).toContain(r.status);
     expect(r.stdout.split('\n').filter((f) => f !== '' && f !== 'lib/content/resources.ts')).toEqual([]);
   });
@@ -58,7 +60,7 @@ describe('S-27, the controls page', () => {
       writeFileSync(join(dir, 'components/B.tsx'), 'const b = "/notebooks/C-13_x.ipynb";');
       writeFileSync(join(dir, 'components/C.tsx'), "const c = '/templates/C-01.html';");
       writeFileSync(join(dir, 'components/D.tsx'), "import x from '@/lib/email/templates/accountCreated';");
-      const r = spawnSync('grep', ['-rln', '-e', '["\'`]/templates/', '-e', '["\'`]/notebooks/', 'components'], { cwd: dir, encoding: 'utf8' });
+      const r = spawnSync('grep', ['-rln', ...GUARD_PATTERNS, 'components'], { cwd: dir, encoding: 'utf8' });
       expect(r.stdout.split('\n').filter(Boolean).sort()).toEqual(['components/A.tsx', 'components/B.tsx', 'components/C.tsx']);
     } finally {
       rmSync(dir, { recursive: true, force: true });

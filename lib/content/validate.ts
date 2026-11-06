@@ -300,9 +300,9 @@ const listOf = (v: unknown, item: (x: unknown) => boolean): boolean => Array.isA
  * record's link, not a request's address: __tests__/unit/redirect-origin.test.ts allows this file exactly one `.url` read.
  */
 const linkUrl = (r: Json): unknown => r.url;
-/** The words the control card has for a resource's type (components/suggestions/ControlCard.tsx); any other type would be shown as a bare "Resource". */
-/** The control types S-27 has a section for and the card has a word for. */
+/** The control types S-27 has a section for and the card has a word for; the card throws for any other. */
 const CONTROL_TYPES = ['technical', 'procedural', 'informational'];
+/** The words the control card has for a resource's type (components/suggestions/ControlCard.tsx); the card throws for any other. */
 const RESOURCE_TYPES = ['framework', 'tool', 'paper', 'guidance'];
 const isText = (x: unknown): boolean => typeof x === 'string';
 const isFilled = (x: unknown): boolean => typeof x === 'string' && x.trim() !== '';

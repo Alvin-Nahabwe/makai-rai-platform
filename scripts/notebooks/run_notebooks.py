@@ -3,10 +3,14 @@
 
     python3 scripts/notebooks/run_notebooks.py [--root DIR] [--check-only] [--only NAME] [--out DIR]
 
-1. Reads <root>/data/resources.json. For each notebook entry with released: true, in file order, compares the SHA-256 of
-   <root>/public + file with the entry's sha256 and exits 1, naming the file, on a mismatch or a missing file.
-2. Unless --check-only, runs every <root>/notebooks/technical/*.ipynb in name order (only NAME with --only): cells tagged
-   `optional` are removed, the rest run with nbclient with a 600 second timeout per cell. Any failure exits 1.
+1. Reads <root>/data/resources.json. Every notebook entry must have released true or false. For each with released: true, in
+   file order, the file must match /notebooks/<name>.ipynb and its SHA-256 under <root>/public must equal the entry's sha256,
+   and <root>/notebooks/technical/<name> must exist with the same SHA-256, so a source covers every released copy. Otherwise
+   it exits 1, naming the file.
+2. Unless --check-only, runs every <root>/notebooks/technical/*.ipynb in name order (only NAME with --only). A source with a
+   cell tagged skip-execution or raises-exception, or with no code cell left, exits 1 before nbclient is imported. Cells tagged
+   `optional` are removed, the rest run with nbclient with a 600 second timeout per cell and errors never allowed. Any failure
+   exits 1.
    --out DIR writes each executed copy to DIR/<file>; it never writes over notebooks/technical.
 
 Standard library only until the execute path: nbclient and nbformat are imported there. The platform never runs this

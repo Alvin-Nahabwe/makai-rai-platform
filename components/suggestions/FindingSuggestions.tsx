@@ -31,10 +31,17 @@ export function FindingSuggestions(p: FindingSuggestionsProps): ReactElement | n
   const resources = loadResources();
   return (
     <div className="suggested-controls">
-      <p className="suggested-controls__names">{controls.map((x) => `${x.control.id} ${x.control.name}`).join(' \u00b7 ')}</p>
+      <p className="suggested-controls__names">
+        {controls.map((x, i) => (
+          <span key={x.control.id}>
+            {i > 0 ? <span aria-hidden="true"> {'\u00b7'} </span> : null}
+            {`${x.control.id} ${x.control.name}`}
+          </span>
+        ))}
+      </p>
       <details>
         <summary>Show details</summary>
-        {controls.map((x) => <ControlCard key={x.control.id} control={x.control} resources={resources} headingLevel={4} />)}
+        {controls.map((x) => <ControlCard key={x.control.id} control={x.control} resources={resources} headingLevel={3} />)}
       </details>
     </div>
   );
