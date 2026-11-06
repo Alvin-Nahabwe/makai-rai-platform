@@ -15,10 +15,14 @@
  * describe in this file): a rule that cannot fail would pass every template.
  */
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { readCreditLine } from '../../lib/credit';
+import { CLAIMS_CORE, isClaim } from '../../lib/claims/pattern';
+import type { ResourcesFile } from '@/types/content';
+import type { FieldMap } from '@/types/documents';
 
 const ROOT = path.resolve(__dirname, '../..');
 const SERVED_DIR = path.join(ROOT, 'public/templates');
@@ -30,21 +34,18 @@ const TEMPLATE_IDS = ['C-01', 'C-02', 'C-07', 'C-11', 'C-17', 'C-19', 'C-25', 'C
 const NOTICE =
   "This is your team's own record. It is not an approval by MAK-AI or anyone else, and it is not legal advice.";
 
-/** FR-PUB-01's phrase pattern, SRS line 1103, verbatim. */
-const FR_PUB_01 =
-  /\bcomplian(ce|t)\b|\baudit(-ready| ready|ed)\b|aligned (to|with)\b|\bcertif(y|ied|ication)\b|\baccredit|\bscores?\b|cannot see your records/i;
-
 interface Template {
   /** File name, for example `C-01_alternatives-analysis.html`. */
   file: string;
   /** Control id, for example `C-01`. */
   id: string;
   html: string;
+  /** True for a file in public/templates (served); false for one held back in docs/content/templates-review. */
+  served: boolean;
 }
 
 function listHtml(dir: string): string[] {
-  // A folder that does not exist holds no templates: C-11 is not in the held-back folder until the
-  // review has to hold it back. The "all nine exist" test fails if a template is in neither folder.
+  // A folder that does not exist holds no templates. The "all nine exist" test fails if a template is in neither folder.
   return existsSync(dir)
     ? readdirSync(dir)
         .filter((f) => f.endsWith('.html'))
@@ -57,7 +58,14 @@ const TEMPLATES: Template[] = [...listHtml(SERVED_DIR), ...listHtml(HELD_DIR)].m
   file: path.basename(p),
   id: path.basename(p).slice(0, 4),
   html: readFileSync(p, 'utf8'),
+  served: path.dirname(p) === SERVED_DIR,
 }));
+
+function templateById(id: string): Template {
+  const found = TEMPLATES.find((x) => x.id === id);
+  if (!found) throw new Error(`template ${id} not found in public/templates or docs/content/templates-review`);
+  return found;
+}
 
 // ---------------------------------------------------------------- reading the markup
 
@@ -82,6 +90,11 @@ const NAMED_ENTITIES: Record<string, string> = {
   rarr: '\u2192',
   ge: '\u2265',
   le: '\u2264',
+  colon: ':',
+  sol: '/',
+  bsol: '\\',
+  tab: '\t',
+  newline: '\n',
 };
 
 /** Decodes the entities the templates may use; an entity it does not know is an error, not text. */
@@ -97,6 +110,9 @@ function decodeEntities(s: string): string {
   });
 }
 
+/** The inside of a tag after its name: a `>` in a quoted attribute value does not end it. */
+const TAG_BODY = '(?:[^>"\']|"[^"]*"|\'[^\']*\')*';
+
 /** Tags that stay inside a line of text; every other tag ends a word. */
 const INLINE_TAGS = 'a|abbr|b|cite|code|em|i|mark|q|s|small|span|strong|sub|sup|u';
 
@@ -104,8 +120,8 @@ const INLINE_TAGS = 'a|abbr|b|cite|code|em|i|mark|q|s|small|span|strong|sub|sup|
 function textOf(fragment: string): string {
   const spaced = fragment
     .replace(/<!--[\s\S]*?-->/g, ' ')
-    .replace(new RegExp(`</?(?!(?:${INLINE_TAGS})\\b)[a-z][^>]*>`, 'gi'), ' ');
-  return decodeEntities(spaced.replace(/<[^>]+>/g, ''))
+    .replace(new RegExp(`</?(?!(?:${INLINE_TAGS})\\b)[a-z]${TAG_BODY}>`, 'gi'), ' ');
+  return decodeEntities(spaced.replace(new RegExp(`</?[a-z]${TAG_BODY}>`, 'gi'), ''))
     .replace(/[\u00ad\u200b-\u200d\ufeff]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
@@ -130,7 +146,7 @@ function attributes(attrs: string): Record<string, string> {
 
 /** Every start tag as its lower-cased name and attribute text. */
 function startTags(html: string): Array<{ name: string; attrs: string; index: number }> {
-  return [...html.matchAll(/<([a-z][a-z0-9]*)\b([^>]*)>/gi)].map((m) => ({
+  return [...html.matchAll(new RegExp(`<([a-z][a-z0-9]*)\\b(${TAG_BODY})>`, 'gi'))].map((m) => ({
     name: m[1].toLowerCase(),
     attrs: m[2],
     index: m.index ?? 0,
@@ -253,11 +269,17 @@ function cssUnescape(s: string): string {
   return s.replace(/\\([0-9a-f]{1,6})\s?/gi, (_m, hex: string) => String.fromCodePoint(parseInt(hex, 16)));
 }
 
+/** A URL attribute as the browser reads it: entities decoded, tab and line breaks dropped, a backslash read as a slash. */
+function urlValue(raw: string): string {
+  return decodeEntities(raw).replace(/[\t\r\n]/g, '').replace(/\\/g, '/');
+}
+
 /** NFR-PRIV-04: nothing loads from another host; outbound links are https only and never keep a handle to the page. */
 function remoteLoads(html: string): string[] {
   const bad: string[] = [];
   for (const tag of startTags(html)) {
-    const attrs = attributes(tag.attrs);
+    const attrs: Record<string, string> = {};
+    for (const [name, value] of Object.entries(attributes(tag.attrs))) attrs[name] = name === 'rel' || name === 'target' ? value : urlValue(value);
     for (const name of URL_ATTRIBUTES) {
       if (!(name in attrs)) continue;
       const candidates = name === 'srcset' ? attrs[name].split(',').map((c) => c.trim().split(/\s+/)[0]) : [attrs[name]];
@@ -269,7 +291,7 @@ function remoteLoads(html: string): string[] {
       if (attrs.target?.toLowerCase() === '_blank' && !/noopener/i.test(attrs.rel ?? '')) bad.push(`${tag.name} target=_blank without rel=noopener`);
     }
   }
-  const css = cssUnescape(html);
+  const css = cssUnescape(decodeEntities(html));
   for (const re of [/@import/i, /url\(\s*["']?\s*([a-z][a-z0-9+.-]*:|\/\/)/i, /image-set\(\s*["']?\s*([a-z][a-z0-9+.-]*:|\/\/)/i]) {
     const hit = find(css, re);
     if (hit) bad.push(`css ${hit}`);
@@ -295,11 +317,132 @@ function noticeProblems(html: string): string[] {
   return problems;
 }
 
+/** What the notice and the credit line must never be: hidden, collapsed or invisible by a style rule, print included. */
+function hiddenByCss(html: string): string[] {
+  const css = [...html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]).join('\n');
+  const bad: string[] = [];
+  for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (!/\.(notice|credit)\b/.test(m[1])) continue;
+    const hit = find(
+      m[2],
+      /display\s*:\s*none|visibility\s*:\s*(hidden|collapse)|opacity\s*:\s*0(?![.\d])|(?:^|[;\s])(?:width|height|max-height|max-width|font-size|line-height)\s*:\s*0(?:px|rem|em|%)?\s*(?:;|$)|(?:^|[;\s])(?:clip|clip-path)\s*:|(?:^|[;\s])text-indent\s*:\s*-|(?:^|[;\s])color\s*:\s*transparent/i,
+    );
+    if (hit) bad.push(`${m[1].trim()} { ${hit} }`);
+  }
+  return bad;
+}
+
+/** The credit paragraph: its text outside the link, the link target and the link text. */
+function creditParts(html: string): { text: string; href?: string; link: string } | undefined {
+  const m = new RegExp(`<p\\b(${TAG_BODY})>([\\s\\S]*?)</p>`, 'gi');
+  for (const p of html.matchAll(m)) {
+    if (attributes(p[1]).class !== 'credit') continue;
+    const anchor = new RegExp(`<a\\b(${TAG_BODY})>([\\s\\S]*?)</a>`, 'i').exec(p[2]);
+    return {
+      text: textOf(p[2].replace(/<a\b[\s\S]*?<\/a>/gi, ' ')),
+      href: anchor ? attributes(anchor[1]).href : undefined,
+      link: anchor ? textOf(anchor[2]) : '',
+    };
+  }
+  return undefined;
+}
+
+/**
+ * The strings a reader or a screen reader meets, one per block of text, attribute value or generated-text string, so a
+ * word of the shared claims list (lib/claims/pattern.ts) can be exempted by the exact string that holds it.
+ */
+function claimStrings(html: string): string[] {
+  const noStyle = html.replace(/<style\b[\s\S]*?<\/style>/gi, ' ').replace(/<!--[\s\S]*?-->/g, ' ');
+  const blocks = noStyle
+    .replace(new RegExp(`</?(?!(?:${INLINE_TAGS})\\b)[a-z]${TAG_BODY}>`, 'gi'), '\n')
+    .split('\n')
+    .map((b) => textOf(b))
+    .filter(Boolean);
+  const attrs: string[] = [];
+  for (const tag of startTags(html)) {
+    const a = attributes(tag.attrs);
+    for (const name of TEXT_ATTRIBUTES) if (name in a) attrs.push(decodeEntities(a[name]).replace(/\s+/g, ' ').trim());
+  }
+  const generated = [...html.matchAll(/content\s*:\s*(?:"([^"]*)"|'([^']*)')/gi)].map((m) => m[1] ?? m[2]);
+  return [...blocks, ...attrs, ...generated].filter(Boolean);
+}
+
+/** The strings of a template that the shared claims list flags, in order, without repeats. */
+function flaggedStrings(html: string): string[] {
+  return [...new Set(claimStrings(html).filter((x) => isClaim(x)))];
+}
+
+/** The strings of a template flagged by the shared list that no exemption covers. */
+function unexemptedClaims(html: string, exempt: readonly string[]): string[] {
+  return flaggedStrings(html).filter((x) => x !== NOTICE && !exempt.includes(x));
+}
+
+/** Exemptions that no longer match a flagged string of the template: they must be removed. */
+function staleExemptions(html: string, exempt: readonly string[]): string[] {
+  const flagged = flaggedStrings(html);
+  return exempt.filter((x) => !flagged.includes(x));
+}
+
+/**
+ * REACH-1: the files of public/templates are held to the shared claims list (lib/claims/pattern.ts). A string it flags
+ * is exempt only by its exact text, with the reason that the owner passed those bytes. The TC-2 notice is exempt in
+ * every file (the SRS mandates it, SRS 10.4.1 TC-2). A new flagged string fails; an exemption that no longer matches
+ * a flagged string fails. These are ordinary words of the templates' own guidance ("failure modes", "percentage",
+ * "Completed by" as a signature label), not claims the platform makes.
+ */
+const EXEMPT_CLAIMS: Record<string, string[]> = {
+  // owner-passed at CW-05, 6 Nov, sha256 4f029a26f4048f501103b51b70c0648d2b8bb4bc94b5d56dc3e275552ccbddd4
+  'C-01_alternatives-analysis.html': [
+    "Completed by",
+    "e.g., Reduce diagnostic turnaround time by 40%, sensitivity of at least 90%...",
+    "Consider: is the accuracy gain worth the added complexity? Could a simpler method achieve 80% of the benefit at 20% of the cost?",
+  ],
+  // owner-passed at CW-05, 6 Nov, sha256 05db63996ed71078e0a9dd4a76aceb3568c946f7156db289e605f03853aaf086
+  'C-02_cost-benefit-impact.html': [
+    "Could system failures deny access to essential services?",
+    "Local context: In low- and middle-income settings, consider: infrastructure dependencies (power/connectivity for system operation), digital divide effects (who is excluded by digital-only interfaces), and whether system failures disproportionately affect populations with fewer alternatives.",
+    "Completed by",
+  ],
+  // owner-passed at CW-05, 6 Nov, sha256 2ab7e2c7995237ca055c34b960d3dd88ac84202c9e35c6e0716b13c9a8c438e4
+  'C-07_stakeholder-impact-mapping.html': [
+    "Completed by",
+  ],
+  // owner-passed at CW-05, 6 Nov, sha256 ca930c6327239d01aeb7f48abfbe579ef5e4f74be170eeab0610bf9cd32e8f26
+  'C-17_model-card.html': [
+    "Known limitations and failure modes",
+    "Completed by",
+    "Under what conditions does the model fail? What are its boundaries?",
+  ],
+  // owner-passed at CW-05, 6 Nov, sha256 b078ab38addaada17d28700df05e92c6dfb2c116a13b46087c8b69ba6c6f1d7f
+  'C-19_datasheet.html': [
+    "Approved",
+    "Completed by",
+    "What percentage of data is missing? Are there systematic patterns in missingness?",
+    "approved",
+  ],
+  // owner-passed at CW-05, 6 Nov, sha256 7341a13b53f02478f35517abf52749e0faeed028234be5140d83283f267980eb
+  'C-25_feedback-redress.html': [
+    "How are complaints classified? (severity levels)",
+    "Completed by",
+    "e.g., Agricultural credit scoring system, rural Uganda",
+  ],
+  // owner-passed at CW-05, 6 Nov, sha256 abb2157415de818e07dd54436e378df8c853d0c16689f9e4fdd50e53bcfc06b9
+  'C-26_governance-raci.html': [
+    "Completed by",
+  ],
+  // owner-passed at CW-05, 6 Nov, sha256 277ebffe57fb39305e1f05abdf89baae8bb93ce9bf5b454adf8de3b11cb437f3
+  'C-28_codebook-deployment.html': [
+    "Known failure modes",
+    "Completed by",
+    "In what situations does the system fail or give poor results? How would a user notice?",
+    "What happens if the system fails? How do you revert to a previous version?",
+    "Which tests must pass before a new version is deployed? Who runs them?",
+  ],
+};
+
 /** The template with this control id, as visible text, attribute text and generated text. */
 function t(id: string): string {
-  const found = TEMPLATES.find((x) => x.id === id);
-  if (!found) throw new Error(`template ${id} not found in public/templates or docs/content/templates-review`);
-  return allText(found.html);
+  return allText(templateById(id).html);
 }
 
 // ---------------------------------------------------------------- tests
@@ -315,7 +458,7 @@ describe('templates present', () => {
   });
 });
 
-describe.each(TEMPLATES)('$file', ({ html }) => {
+describe.each(TEMPLATES)('$file', ({ file, html, served }) => {
   const text = visibleText(html);
   const everything = allText(html);
 
@@ -323,11 +466,23 @@ describe.each(TEMPLATES)('$file', ({ html }) => {
     expect(text.includes(NOTICE), 'the team-record notice is in the text').toBe(true);
     expect(h2s(html)).toContain('Team sign-off');
     expect(find(everything, /Review\s*&\s*(Approval|Sign-off)|Approval\s+status/i)).toBeUndefined();
-    expect(find(everything, FR_PUB_01)).toBeUndefined();
+    if (served) {
+      // REACH-1: the shared list of lib/claims/pattern.ts. A string is exempt only by its exact text (EXEMPT_CLAIMS).
+      expect(unexemptedClaims(html, EXEMPT_CLAIMS[file] ?? [])).toEqual([]);
+    } else {
+      // A held-back file is not served yet; the shared list is applied when it is released (unit/c-tpl-2).
+      expect(find(everything, CLAIMS_CORE)).toBeUndefined();
+    }
+  });
+
+  it('TC-2 FR-PUB-01: every exemption still matches a flagged string of the file', () => {
+    expect(staleExemptions(html, EXEMPT_CLAIMS[file] ?? [])).toEqual([]);
+    if (!served) expect(EXEMPT_CLAIMS[file]).toBeUndefined();
   });
 
   it('TC-2: the notice sits directly under the Team sign-off heading and is shown', () => {
     expect(noticeProblems(html)).toEqual([]);
+    expect(hiddenByCss(html)).toEqual([]);
   });
 
   it('TC-5: no emoji, no dash, no curly quote, Local context label', () => {
@@ -351,11 +506,15 @@ describe.each(TEMPLATES)('$file', ({ html }) => {
     expect(remoteLoads(html)).toEqual([]);
   });
 
-  it('TC-6 FR-PUB-02: licence and credit line equal the platform credit', () => {
+  it('TC-6 FR-PUB-02: the credit line equals data/credit.json, shown, with a link to the licence', () => {
+    // A change of data/credit.json fails this test until the templates are edited and the owner passes them again.
     const credit = readCreditLine();
-    expect(text).toContain(credit.text);
-    expect(text).toContain(credit.licence);
-    expect(html).toContain(`href="${credit.href}"`);
+    const parts = creditParts(html);
+    expect(parts, 'a <p class="credit"> paragraph').toBeDefined();
+    expect(parts?.text).toBe(credit.text);
+    expect(parts?.text).toContain(credit.licence);
+    expect(parts?.href).toBe(credit.href);
+    expect(parts?.link).toBe('Licence terms');
   });
 });
 
@@ -417,12 +576,70 @@ describe('the rules reject what they guard against', () => {
     expect(bannedCharacters(allText('<p>Team&#8212;owned</p>'))).not.toEqual([]);
     expect(bannedCharacters(allText('<style>p::before { content: "\u2014"; }</style><p>x</p>'))).not.toEqual([]);
     expect(bannedCharacters(allText('<p>\u{1F1FA}\u{1F1EC}</p>'))).not.toEqual([]);
-    expect(find(allText('<p>com&shy;pliance</p>'), FR_PUB_01)).toBeDefined();
-    expect(find(allText('<dl><dt>Score</dt><dd>3</dd></dl>'), FR_PUB_01)).toBeDefined();
-    expect(find(allText("<input placeholder='Compliance notes'>"), FR_PUB_01)).toBeDefined();
-    expect(find(allText('<input placeholder=Compliance>'), FR_PUB_01)).toBeDefined();
-    expect(find(allText('<option label="Audited">x</option>'), FR_PUB_01)).toBeDefined();
+    expect(flaggedStrings('<p>com&shy;pliance</p>')).not.toEqual([]);
+    expect(flaggedStrings('<dl><dt>Score</dt><dd>3</dd></dl>')).not.toEqual([]);
+    expect(flaggedStrings("<input placeholder='Compliance notes'>")).not.toEqual([]);
+    expect(flaggedStrings('<input placeholder=Compliance>')).not.toEqual([]);
+    expect(flaggedStrings('<option label="Audited">x</option>')).not.toEqual([]);
     expect(bannedCharacters(allText('<p>Plain words, a colon: and a full stop.</p>'))).toEqual([]);
+  });
+
+  it('TC-2 FR-PUB-01 REACH-1: a word of the shared claims list is found by its exact string; an exemption is exact and cannot go stale', () => {
+    const html = '<p>This is your rating</p><p>Completed by</p><p>Plain words</p>';
+    expect(flaggedStrings(html)).toEqual(['This is your rating', 'Completed by']);
+    expect(unexemptedClaims(html, ['Completed by'])).toEqual(['This is your rating']);
+    // an exemption covers its exact string only, not a longer sentence that holds it
+    expect(unexemptedClaims('<p>Completed by the platform</p>', ['Completed by'])).toEqual(['Completed by the platform']);
+    expect(staleExemptions(html, ['Completed by', 'Gone string'])).toEqual(['Gone string']);
+    expect(unexemptedClaims(`<p>${NOTICE}</p>`, [])).toEqual([]);
+    expect(flaggedStrings(`<p>${NOTICE}</p>`)).toEqual([NOTICE]);
+    expect(flaggedStrings('<input placeholder="Pass or fail?">')).not.toEqual([]);
+    expect(flaggedStrings('<style>p::before { content: "Audited"; }</style><p>x</p>')).toEqual(['Audited']);
+  });
+
+  it('TC-2: a style rule that hides or collapses the notice or the credit line is found, print rules included', () => {
+    const css = (rule: string) => `<style>${rule}</style><p class="notice">x</p>`;
+    for (const bad of [
+      '.notice { display: none; }',
+      '.credit { visibility: hidden; }',
+      '@media print { .notice { display:none } }',
+      '@media print { .print-note { display: none; } .credit { height: 0; } }',
+      'p.notice { font-size: 0px; }',
+      '.notice, .other { opacity: 0; }',
+      '.credit { color: transparent; }',
+      '.notice { text-indent: -999px; }',
+      '.notice { clip: rect(0 0 0 0); }',
+    ]) {
+      expect(hiddenByCss(css(bad)), bad).not.toEqual([]);
+    }
+    expect(hiddenByCss(css('.print-note { display: none; } .notice { font-size: 0.85rem; margin: 0.5rem 0 1rem; } .credit { opacity: 0.9; }'))).toEqual([]);
+  });
+
+  it('TC-5 NFR-PRIV-04: a ">" inside a quoted attribute value does not hide the attributes after it', () => {
+    expect(remoteLoads('<img alt=">" src="https://x.test/a.png">')).not.toEqual([]);
+    expect(remoteLoads("<img alt='>' src='https://x.test/a.png'>")).not.toEqual([]);
+    expect(unnamedControls('<input title=">" type="text">')).toHaveLength(1);
+    expect(attributeText('<input title=">" placeholder="Audited">')).toContain('Audited');
+    expect(textOf('<p title=">">shown</p>')).toBe('shown');
+  });
+
+  it('TC-5 NFR-PRIV-04: entity-encoded, backslash and line-broken remote URLs are found', () => {
+    for (const bad of [
+      '<img src="https&#58;//x.test/a.png">',
+      '<img src="https&colon;//x.test/a.png">',
+      '<img src="&#104;ttps://x.test/a.png">',
+      '<img src="&#x2F;&#x2F;x.test/a.png">',
+      '<img src="\\\\x.test/a.png">',
+      '<img src="/\\x.test/a.png">',
+      '<img src="ht\ntps://x.test/a.png">',
+      '<link rel="stylesheet" href="&#47;/x.test/a.css">',
+      '<p style="background:url(&quot;https://x.test/a.png&quot;)">x</p>',
+      '<p style="background:url(&#104;ttps://x.test/a.png)">x</p>',
+      '<a href="&#104;ttp://x.test/">x</a>',
+    ]) {
+      expect(remoteLoads(bad), bad).not.toEqual([]);
+    }
+    expect(remoteLoads('<a href="https&#58;//x.test/" rel="noopener">x</a>')).toEqual([]);
   });
 
   it('TC-2: a hidden or altered notice is a problem', () => {
@@ -550,65 +767,99 @@ describe('review findings, SRS 10.4.2', () => {
   // equals the section order of the data card and model card field maps.
   const norm = (names: string[]) => names.map((n) => n.toLowerCase().replace(/\s*&\s*/g, ' and ').replace(/\s+/g, ' ').trim());
   const mapSections = (type: 'data_card' | 'model_card'): string[] => {
-    const map = JSON.parse(readFileSync(path.join(ROOT, 'data', 'fieldmaps', `${type}.json`), 'utf8')) as {
-      fields: Array<{ section: string }>;
-    };
+    const map = JSON.parse(readFileSync(path.join(ROOT, 'data', 'fieldmaps', `${type}.json`), 'utf8')) as FieldMap;
     const seen: string[] = [];
     for (const f of map.fields) if (!seen.includes(f.section)) seen.push(f.section);
     return norm(seen).map((n) => (n === 'record and sign-off' ? 'team sign-off' : n));
   };
-  const templateHtml = (id: string): string => {
-    const found = TEMPLATES.find((x) => x.id === id);
-    if (!found) throw new Error(`template ${id} not found`);
-    return found.html;
-  };
 
   it('TC-4: C-19 and C-17 sections follow the data card and model card maps', () => {
-    expect(norm(h2s(templateHtml('C-19')))).toEqual(mapSections('data_card'));
-    expect(norm(h2s(templateHtml('C-17')))).toEqual(mapSections('model_card'));
+    expect(norm(h2s(templateById('C-19').html))).toEqual(mapSections('data_card'));
+    expect(norm(h2s(templateById('C-17').html))).toEqual(mapSections('model_card'));
   });
 });
 
+type Entry = ResourcesFile['templates'][number];
+const ENTRY_FILE = /^\/templates\/[A-Za-z0-9._-]+\.html$/;
+
+/**
+ * What is wrong with the template entries of data/resources.json, read against the two folders. The path pattern is
+ * checked before any file is read (a bad entry is reported, not opened); a passed entry is read from the served folder,
+ * a failed one from the held-back folder; an entry's control id is the C-xx prefix of its file name, once.
+ */
+function entryProblems(entries: readonly Entry[], servedDir: string, heldDir: string): string[] {
+  const problems: string[] = [];
+  const seen = new Set<string>();
+  for (const e of entries) {
+    if (!ENTRY_FILE.test(e.file)) {
+      problems.push(`${e.file}: not a /templates/<name>.html path`);
+      continue;
+    }
+    const name = e.file.slice('/templates/'.length);
+    if (!/^C-\d{2}$/.test(e.controlId)) problems.push(`${e.file}: controlId ${e.controlId}`);
+    if (name.slice(0, 4) !== e.controlId) problems.push(`${e.file}: controlId ${e.controlId} is not the file name prefix`);
+    if (seen.has(e.controlId)) problems.push(`${e.file}: duplicate controlId ${e.controlId}`);
+    seen.add(e.controlId);
+    if (e.kind !== 'web page') problems.push(`${e.file}: kind ${e.kind}`);
+    if (!/^[0-9a-f]{64}$/.test(e.sha256)) problems.push(`${e.file}: sha256 is not 64 lowercase hex`);
+    const dir = e.review.outcome === 'passed' ? servedDir : heldDir;
+    const onDisk = path.join(dir, name);
+    if (!existsSync(onDisk)) {
+      problems.push(`${e.file}: ${e.review.outcome} entry, but ${path.basename(dir)}/${name} does not exist`);
+      continue;
+    }
+    const b = readFileSync(onDisk);
+    if (e.bytes !== b.length) problems.push(`${e.file}: bytes ${e.bytes}, file ${b.length}`);
+    if (e.sha256 !== createHash('sha256').update(b).digest('hex')) problems.push(`${e.file}: sha256 differs from the file`);
+  }
+  return problems;
+}
+
 describe('review records, FR-SUG-06', () => {
-  type Entry = { controlId: string; file: string; kind: string; bytes: number; sha256: string;
-    review: { reviewer: string; date: string; outcome: string } };
-  const entries = (JSON.parse(readFileSync(path.join(ROOT, 'data/resources.json'), 'utf8')) as { templates: Entry[] }).templates;
-  const onDisk = (e: Entry) => path.join(ROOT, 'public', e.file);
+  const entries = (JSON.parse(readFileSync(path.join(ROOT, 'data/resources.json'), 'utf8')) as ResourcesFile).templates;
+  const passedFiles = entries.filter((e) => e.review.outcome === 'passed').map((e) => e.file.replace('/templates/', '')).sort();
 
   it('FR-SUG-06 TC-7: every file in the templates folder has a passed entry, and C-11 is absent until reviewed', () => {
-    const files = readdirSync(SERVED_DIR).sort();
-    const passed = entries.filter((e) => e.review.outcome === 'passed').map((e) => e.file.replace('/templates/', '')).sort();
-    expect(files).toEqual(passed);
+    expect(readdirSync(SERVED_DIR).sort()).toEqual(passedFiles);
     if (!entries.some((e) => e.controlId === 'C-11' && e.review.outcome === 'passed')) {
       expect(existsSync(path.join(SERVED_DIR, 'C-11_informed-consent.html'))).toBe(false);
       expect(existsSync(path.join(HELD_DIR, 'C-11_informed-consent.html'))).toBe(true);
     }
   });
 
-  it("FR-SUG-06 TC-7: each template entry's bytes and sha256 equal the file", () => {
-    for (const e of entries) {
-      const b = readFileSync(onDisk(e));
-      expect(e.bytes, e.file).toBe(b.length);
-      expect(e.sha256, e.file).toBe(createHash('sha256').update(b).digest('hex'));
-    }
+  it("FR-SUG-06 TC-7 FR-CNT-05: each entry's path, control id, kind, bytes and sha256 equal its file; a passed one is served", () => {
+    expect(entryProblems(entries, SERVED_DIR, HELD_DIR)).toEqual([]);
+    expect(entries.length).toBeGreaterThan(0);
+    for (const e of entries) expect(e.review.reviewer, e.file).toBe('Product owner, MAK-AI');
   });
 
-  it('FR-CNT-05: template entries name a control, kind web page, and a /templates/ path', () => {
-    for (const e of entries) {
-      expect(e.controlId, e.file).toMatch(/^C-\d{2}$/);
-      expect(e.kind, e.file).toBe('web page');
-      expect(e.file).toMatch(/^\/templates\/[A-Za-z0-9._-]+\.html$/);
-      expect(e.sha256).toMatch(/^[0-9a-f]{64}$/);
-      expect(e.review.reviewer).toBe('Product owner, MAK-AI');
+  it('FR-SUG-06 TC-7: the entry checks refuse a bad path, a mismatched id, a duplicate and a failed entry with no held file', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'tpl-entries-'));
+    try {
+      const served = path.join(dir, 'served');
+      const held = path.join(dir, 'held');
+      mkdirSync(served);
+      mkdirSync(held);
+      const body = Buffer.from('<p>x</p>');
+      writeFileSync(path.join(served, 'C-01_a.html'), body);
+      writeFileSync(path.join(held, 'C-02_b.html'), body);
+      const base = { kind: 'web page', bytes: body.length, sha256: createHash('sha256').update(body).digest('hex') };
+      const passed: Entry = { ...base, controlId: 'C-01', file: '/templates/C-01_a.html', review: { reviewer: 'r', date: '2026-11-06', outcome: 'passed' } };
+      const failed: Entry = { ...base, controlId: 'C-02', file: '/templates/C-02_b.html', review: { reviewer: 'r', date: '2026-11-06', outcome: 'failed' } };
+      expect(entryProblems([passed, failed], served, held)).toEqual([]);
+      // a failed entry is read from the held folder, not from the served one
+      expect(entryProblems([{ ...failed, file: '/templates/C-03_c.html', controlId: 'C-03' }], served, held)).toHaveLength(1);
+      // the path is checked before anything is read
+      expect(entryProblems([{ ...passed, file: '/templates/../../.env' }], served, held)).toEqual(['/templates/../../.env: not a /templates/<name>.html path']);
+      expect(entryProblems([{ ...passed, file: 'https://x.test/a.html' }], served, held)).toHaveLength(1);
+      // the control id is the file name prefix, once
+      expect(entryProblems([{ ...passed, controlId: 'C-09' }], served, held)).toHaveLength(1);
+      expect(entryProblems([passed, passed], served, held)).toHaveLength(1);
+      // a changed file no longer matches its entry
+      expect(entryProblems([{ ...passed, sha256: 'a'.repeat(64) }], served, held)).toHaveLength(1);
+      expect(entryProblems([{ ...passed, bytes: 1 }], served, held)).toHaveLength(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
-  });
-
-  it('FR-SUG-06: the only template link in the 4.0.0 bundle that is not served is C-11 (known gap)', () => {
-    // data/assessmentAreas.json is part of the 4.0.0 bundle hash (framework-hash.test.ts, O-13), so it cannot change
-    // here; the C-11 link goes when CNT moves the template fields into data/resources.json and SUG links passed entries only.
-    const areas = readFileSync(path.join(ROOT, 'data/assessmentAreas.json'), 'utf8');
-    const served = new Set(entries.filter((e) => e.review.outcome === 'passed').map((e) => e.file));
-    const unserved = [...areas.matchAll(/"template":\s*"([^"]+)"/g)].map((m) => m[1]).filter((f) => !served.has(f));
-    expect(unserved).toEqual(['/templates/C-11_informed-consent.html']);
   });
 });

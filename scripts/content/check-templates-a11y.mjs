@@ -84,10 +84,13 @@ async function clippedSelects(page) {
     for (const select of document.querySelectorAll('select')) {
       const style = getComputedStyle(select);
       canvas.font = style.font;
+      // A select with no option has selectedIndex -1 and shows nothing that could be cut off.
+      if (select.selectedIndex < 0) continue;
       const text = select.options[select.selectedIndex].text;
       const room = select.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - 16;
       if (canvas.measureText(text).width > room) {
-        clipped.push(`select[aria-labelledby="${select.getAttribute('aria-labelledby')}"] shows "${text}" in ${Math.round(room)} px`);
+        const name = select.id ? `#${select.id}` : `[aria-labelledby="${select.getAttribute('aria-labelledby')}"]`;
+        clipped.push(`select${name} shows "${text}" in ${Math.round(room)} px`);
       }
     }
     return clipped;
