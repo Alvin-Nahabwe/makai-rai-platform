@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { Pool } from 'pg';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { AppError, NotImplementedError } from '@/lib/http/errors';
 import { logRequestFailure, newSupportReference, stampReference, stampUnavailableOperation, withUnavailableStamp } from '@/lib/http/supportReference';
 import { toResponse } from '@/lib/http/toResponse';
@@ -398,6 +398,22 @@ describe('the lane clients\' hook', () => {
     expect(helper.match(/as unknown as PrismaClient/g)).toHaveLength(1);
     expect(helper).toMatch(/\$extends\(\{ query: \{ \$allOperations: stampUnavailableOperation \} \}\)/);
   });
+});
+
+it('NFR-PRIV-03 FIX-8: a message shortened after its stack was read leaves no message line in the log', async () => {
+  const { toResponse } = await import('@/lib/http/toResponse');
+  const e = new Error('lookup failed\n    at secret reason text');
+  void e.stack; // V8 fixes the stack's header at the first read
+  e.message = 'lookup failed';
+  const lines: string[] = [];
+  const spy = vi.spyOn(console, 'error').mockImplementation((...a: unknown[]) => { lines.push(a.map(String).join(' ')); });
+  try {
+    expect(toResponse(e).status).toBe(500);
+  } finally {
+    spy.mockRestore();
+  }
+  expect(lines.join('\n')).not.toContain('secret reason');
+  expect(lines).toHaveLength(1);
 });
 
 it('NFR-OBS-05: the body and the REQUEST_FAILED line carry the reference the error carries, so the page and the log agree', async () => {

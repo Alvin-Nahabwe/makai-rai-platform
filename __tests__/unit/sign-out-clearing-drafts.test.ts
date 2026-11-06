@@ -38,4 +38,38 @@ describe('NFR-PRIV-06 CR-1 SFH-4: signOutClearingDrafts', () => {
     await signOutClearingDrafts('u-1', '/login');
     expect(signOut).toHaveBeenCalledWith({ callbackUrl: '/login' });
   });
+
+  it('NFR-PRIV-06 FIX-7: when the store cannot load, this account\'s drafts are still removed, and only this account\'s', async () => {
+    // No later sign-in is sure to purge them: the same account's next sign-in keeps its own drafts (purgeOtherAccounts),
+    // and the invitation page's sign-in purges nothing (silent-failure hunt F1, F2).
+    const keys = new Map<string, string>([
+      ['makrai.draft.v1:u-1:o:p:q:Q-PP-01', '{}'], ['makrai.draft.v1:u-1:o:p:m:f:new', '{}'],
+      ['makrai.draft.v1:u-2:o:p:q:Q-PP-01', '{}'], ['other', 'kept'],
+    ]);
+    const storage = {
+      get length() { return keys.size; },
+      key: (i: number) => [...keys.keys()][i] ?? null,
+      removeItem: (k: string) => { keys.delete(k); },
+    };
+    vi.stubGlobal('localStorage', storage);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.doMock('@/lib/client/drafts', () => { throw new Error('ChunkLoadError'); });
+    try {
+      const { signOutClearingDrafts } = await import('@/lib/client/signOutClearingDrafts');
+      await signOutClearingDrafts('u-1', '/login');
+      expect([...keys.keys()].sort()).toEqual(['makrai.draft.v1:u-2:o:p:q:Q-PP-01', 'other']);
+      expect(signOut).toHaveBeenCalledWith({ callbackUrl: '/login' });
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0][0])).not.toMatch(/u-1/); // a fixed text, no account id
+    } finally {
+      warn.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('NFR-PRIV-06 FIX-7: the prefix this file sweeps is the draft store\'s own', async () => {
+    const { DRAFT_PREFIX } = await vi.importActual<typeof import('@/lib/client/drafts')>('@/lib/client/drafts');
+    const { DRAFT_KEY_PREFIX } = await import('@/lib/client/signOutClearingDrafts');
+    expect(DRAFT_KEY_PREFIX).toBe(DRAFT_PREFIX);
+  });
 });

@@ -11,7 +11,9 @@ import {
 
 const CLASS_NAME = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 const ERROR_CODE = /^(P\d{4}|[A-Z][A-Z0-9_]{1,40})$/;
-const FRAME = /^\s+at /;
+// A V8 stack frame: `at` and a location that ends in `:line:column`, either bare or in parentheses after a function
+// name. A line of a message that merely starts with `at` does not end so, and is never taken as a frame.
+const FRAME = /^\s+at (?:.+ \()?[^\s()]+:\d+:\d+\)?$/;
 
 /** What the REQUEST_FAILED line of an unmapped 500 says about the error (lib/http/supportReference.ts). */
 type UnmappedErrorInfo = { name: string; code?: string; frames: string[] };
