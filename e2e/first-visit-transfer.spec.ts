@@ -2,7 +2,9 @@ import 'dotenv/config';
 import { existsSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { test, expect, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import type { Browser, BrowserContext, Page } from '@playwright/test';
+// The loopback guard: an image config runs this file, and a Node-side request there would reach the public makrai.org.
+import { test, expect } from './helpers/loopbackOnly';
 import { testDb } from '../__tests__/helpers/db';
 import { addProject, buildOrg } from '../__tests__/helpers/recordFixture';
 import { abortIfPendingBackground } from './helpers/pendingLinks';
