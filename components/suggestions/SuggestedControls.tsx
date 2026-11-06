@@ -38,7 +38,7 @@ const countOf = (groups: ControlGroup[]): number => groups.reduce((n, g) => n + 
  * with no script. The gate shows none (FR-SUG-02). The shell names its region with its own heading, so the count here
  * is a line, not a second heading with the same words.
  */
-export async function SuggestedControls({ contentSemver, questionId, tickedOptions }: SuggestedControlsProps): Promise<ReactElement | null> {
+export function SuggestedControls({ contentSemver, questionId, tickedOptions }: SuggestedControlsProps): ReactElement | null {
   const c = loadContent(contentSemver);
   const { first, rest } = controlsForQuestion(c, questionId, tickedOptions);
   const total = countOf(first) + countOf(rest);
