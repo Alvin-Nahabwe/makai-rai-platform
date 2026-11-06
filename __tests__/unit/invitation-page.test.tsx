@@ -145,13 +145,13 @@ describe('S-04, the invitation page (FR-ACC-01)', () => {
   });
 
   it('M-24: a different signed-in account sees both emails', () => {
-    const markup = html(<AcceptInvitationClient {...props} viewerEmail="b@x.test" viewerUserId={null} />);
+    const markup = html(<AcceptInvitationClient {...props} viewerEmail="b@x.test" viewerUserId="u-b" />);
     expect(text(markup.match(/<p[^>]*role="alert"[^>]*>.*?<\/p>/)?.[0] ?? '')).toBe('You are signed in as b@x.test, but this invitation is for a@x.test. Sign out, then open the link again.');
     expect(markup).toMatch(/<button[^>]*>Sign out<\/button>/);
   });
 
   it('FR-ACC-01: the invited account, signed in, gets one Accept invitation button', () => {
-    const markup = html(<AcceptInvitationClient {...props} viewerEmail="A@x.test" viewerUserId={null} />);
+    const markup = html(<AcceptInvitationClient {...props} viewerEmail="A@x.test" viewerUserId="u-a" />);
     expect(markup).toMatch(/<button[^>]*type="button"[^>]*>Accept invitation<\/button>/);
     expect(markup).not.toContain('type="password"');
   });

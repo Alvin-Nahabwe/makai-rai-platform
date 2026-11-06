@@ -1,21 +1,11 @@
 'use client';
 
 import { useRef, useState, type CSSProperties, type FormEvent } from 'react';
-import { signOut } from 'next-auth/react';
+import { signOutClearingDrafts } from '@/lib/client/signOutClearingDrafts';
 import { useRouter } from 'next/navigation';
 import { LEGAL_KIND_NAMES, acceptanceError, type AcceptancePair } from '@/lib/legal/kinds';
 import { formatDay } from '@/lib/format/dates';
 import { ACCEPTED_KINDS, type AcceptedKind, type LegalTextVersion } from '@/types/legal';
-
-/**
- * The **sign out** of the required form (S-05, and S-04 for a signed-in visitor): this account's drafts leave this device
- * first (NFR-PRIV-06), as the sidebar's sign-out does. The draft store is loaded only on this click: imported statically
- * it put about 10 KB of source into S-04's first visit, over the owner's NFR-PERF-02 limit for that page.
- */
-async function signOutClearingDrafts(userId: string | undefined): Promise<void> {
-  if (userId !== undefined) (await import('@/lib/client/drafts')).openDraftStore()?.purgeAccount(userId);
-  await signOut({ callbackUrl: '/login' });
-}
 
 /**
  * S-05's form (FR-ACC-03, UX-22; W-11 notes 2 and 3, SRS lines 2229-2250): one unticked box per
@@ -26,16 +16,23 @@ async function signOutClearingDrafts(userId: string | undefined): Promise<void> 
  * second step (mode `invitation`).
  */
 
-export interface AcceptancesFormProps {
+interface AcceptancesFormBase {
   texts: LegalTextVersion[];
-  mode: 'required' | 'offer' | 'invitation';
   submitLabel: string;
   /** Sends the accepted kinds and shows its own outcome; it should not reject. */
   onAccepted: (kinds: AcceptedKind[]) => Promise<void>;
   busy?: boolean;
-  /** The signed-in account, whose drafts the **sign out** link clears from this device (NFR-PRIV-06); S-05 passes it. */
-  userId?: string;
 }
+
+/**
+ * The signed-in account's id is what the **sign out** link of mode `required` clears from this device (NFR-PRIV-06), so
+ * that mode cannot be rendered without it; the other modes show no sign out.
+ */
+type AcceptancesFormMode =
+  | { mode: 'required'; userId: string }
+  | { mode: 'offer' | 'invitation'; userId?: string };
+
+export type AcceptancesFormProps = AcceptancesFormBase & AcceptancesFormMode;
 
 /** The sentence each box carries as its label (W-11 note 2). */
 const ACCEPT_LABEL: Record<AcceptedKind, string> = {
@@ -186,13 +183,13 @@ export function SendStatus({ send, sendingText, onRetry }: { send: SendState; se
   );
 }
 
-export interface AcceptancesFormViewProps extends Omit<AcceptancesFormProps, 'onAccepted'> {
+export type AcceptancesFormViewProps = Omit<AcceptancesFormBase, 'onAccepted'> & AcceptancesFormMode & {
   ticked: ReadonlySet<AcceptedKind>;
   errors: readonly AcceptedKind[];
   onToggle: (kind: AcceptedKind, checked: boolean) => void;
   onSubmit: (e: FormEvent<HTMLFormElement>) => void;
   boxRef?: (kind: AcceptedKind, el: HTMLInputElement | null) => void;
-}
+};
 
 /** The markup of the form for a given state; `AcceptancesForm` holds the state. */
 export function AcceptancesFormView(p: AcceptancesFormViewProps) {
@@ -250,7 +247,7 @@ export function AcceptancesFormView(p: AcceptancesFormViewProps) {
       {p.mode === 'required' && (
         <p style={{ marginTop: 'var(--space-4)' }}>
           If you do not want to accept, you can <a href="/account" style={{ display: 'inline-block', minHeight: '24px' }}>delete your account</a> or{' '}
-          <button type="button" style={LINK_AS_BUTTON} onClick={() => void signOutClearingDrafts(p.userId)}>sign out</button>.
+          <button type="button" style={LINK_AS_BUTTON} onClick={() => void signOutClearingDrafts(p.userId, '/login')}>sign out</button>.
         </p>
       )}
       {p.mode === 'invitation' && (

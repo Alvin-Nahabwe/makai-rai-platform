@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { signIn, signOut } from 'next-auth/react';
+import { signIn } from 'next-auth/react';
+import { signOutClearingDrafts } from '@/lib/client/signOutClearingDrafts';
 import type { OrgRole } from '@prisma/client';
 import {
   AcceptancesForm, SendStatus, acceptancePairs, failureOutcome, handleFailure, recordOutcome, textsKey, type SendFailure, type SendState,
@@ -105,18 +106,20 @@ const HINT: CSSProperties = { margin: 'var(--space-1) 0 0', fontSize: 'var(--fon
  * signed out (create the account in two steps: details, then the three acceptances).
  */
 export default function AcceptInvitationClient(p: Props) {
-  if (p.viewerEmail !== null && p.viewerEmail.toLowerCase() === p.invitedEmail.toLowerCase()) {
-    return <AcceptAsSignedIn token={p.token} texts={p.texts} userId={p.viewerUserId} />;
+  // The page resolves both from one identity, so they are null together.
+  const viewer = p.viewerEmail !== null && p.viewerUserId !== null ? { email: p.viewerEmail, userId: p.viewerUserId } : null;
+  if (viewer !== null && viewer.email.toLowerCase() === p.invitedEmail.toLowerCase()) {
+    return <AcceptAsSignedIn token={p.token} texts={p.texts} userId={viewer.userId} />;
   }
   const returnTo = `/invitations/${p.token}`;
-  if (p.viewerEmail !== null) {
+  if (viewer !== null) {
     return (
       <div>
         <p className="auth-error" role="alert">
-          You are signed in as {p.viewerEmail}, but this invitation is for {p.invitedEmail}. Sign out, then open the link again.
+          You are signed in as {viewer.email}, but this invitation is for {p.invitedEmail}. Sign out, then open the link again.
         </p>
         <button type="button" className="btn-primary" style={TARGET}
-          onClick={() => signOut({ callbackUrl: returnTo })}>
+          onClick={() => void signOutClearingDrafts(viewer.userId, returnTo)}>
           Sign out
         </button>
       </div>
@@ -126,7 +129,7 @@ export default function AcceptInvitationClient(p: Props) {
 }
 
 /** Signed in as the invited email: route 32; a 403 acceptances_required shows the missing texts first. */
-function AcceptAsSignedIn({ token, texts, userId }: { token: string; texts: LegalTextVersion[]; userId: string | null }) {
+function AcceptAsSignedIn({ token, texts, userId }: { token: string; texts: LegalTextVersion[]; userId: string }) {
   const router = useRouter();
   const [missing, setMissing] = useState<AcceptedKind[] | null>(null);
   const [send, setSend] = useState<SendState>({ state: 'idle' });
@@ -186,7 +189,7 @@ function AcceptAsSignedIn({ token, texts, userId }: { token: string; texts: Lega
         </button>
       ) : (
         <div id="acceptances-step" tabIndex={-1} ref={formStep}>
-          <AcceptancesForm key={textsKey(texts)} texts={texts.filter((t) => missing.includes(t.kind as AcceptedKind))} mode="required" userId={userId ?? undefined}
+          <AcceptancesForm key={textsKey(texts)} texts={texts.filter((t) => missing.includes(t.kind as AcceptedKind))} mode="required" userId={userId}
             submitLabel="Accept and continue" busy={send.state === 'sending'}
             onAccepted={(kinds) => acceptThenJoin(JSON.stringify({ acceptances: acceptancePairs(texts, kinds) }))} />
         </div>

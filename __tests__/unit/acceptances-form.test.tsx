@@ -20,9 +20,11 @@ const { AcceptancesForm, AcceptancesFormView, untickedKinds, acceptanceError, ac
 
 const TEXTS: LegalTextVersion[] = STUB_LEGAL_TEXTS.slice();
 const html = (el: React.ReactElement) => renderToStaticMarkup(el);
-const view = (over: Partial<Parameters<typeof AcceptancesFormView>[0]> = {}) => html(
-  <AcceptancesFormView texts={TEXTS} mode="required" submitLabel="Accept and continue" ticked={new Set()} errors={[]}
-    onToggle={vi.fn()} onSubmit={vi.fn()} {...over} />);
+type ViewProps = Parameters<typeof AcceptancesFormView>[0];
+// Mode `required` needs the signed-in account's id (SFH-10), so the default carries one.
+const view = (over: Partial<ViewProps> = {}) => html(
+  <AcceptancesFormView {...({ texts: TEXTS, mode: 'required', userId: 'u-1', submitLabel: 'Accept and continue', ticked: new Set(), errors: [],
+    onToggle: vi.fn(), onSubmit: vi.fn(), ...over } as ViewProps)} />);
 /** The opening tag of the element with this id. */
 const tagOf = (markup: string, id: string) => markup.match(new RegExp(`<[a-z]+[^>]*\\bid="${id}"[^>]*>`))?.[0] ?? '';
 
@@ -70,7 +72,7 @@ describe('S-05 acceptances form (UX-22, FR-ACC-03)', () => {
   });
 
   it('UX-22 FR-ACC-03: three separate unticked boxes, each with version, date and a new-tab link that says so', () => {
-    const markup = html(<AcceptancesForm texts={TEXTS} mode="required" submitLabel="Accept and continue" onAccepted={vi.fn()} />);
+    const markup = html(<AcceptancesForm texts={TEXTS} mode="required" userId="u-1" submitLabel="Accept and continue" onAccepted={vi.fn()} />);
     const boxes = markup.match(/<input[^>]*type="checkbox"[^>]*>/g) ?? [];
     expect(boxes).toHaveLength(3);
     expect(boxes.filter((b) => /\bchecked\b/.test(b))).toEqual([]);

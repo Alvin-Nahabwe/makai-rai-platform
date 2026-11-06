@@ -100,3 +100,34 @@ test('NFR-PRIV-06 FIX-7: the invitation page\'s sign-out removes this account\'s
   ]);
   expect(await draftKeys(page, viewer.userId)).toEqual([]);
 });
+
+test('NFR-PRIV-06 SPEC-1 SO-2 SFH-3: the invitation page\'s M-24 sign-out removes the signed-in account\'s drafts from this browser', async ({ browser }) => {
+  test.setTimeout(120_000);
+  // Account B is signed in; the invitation, issued over route 25 by another organisation, is addressed to account A.
+  const a = await buildOrg({ label: 'e2efix7m24a' });
+  const b = await buildOrg({ label: 'e2efix7m24b' });
+  const issuer = await buildOrg({ label: 'e2efix7m24i' });
+  const inviterPage = await newPage(browser);
+  await signIn(inviterPage, issuer.members.owner);
+  const res = await inviterPage.request.post(`/api/v1/orgs/${issuer.org.slug}/members`, {
+    data: { requestId: crypto.randomUUID(), email: a.members.viewer.email, role: 'viewer', showLink: true },
+  });
+  expect(res.status(), await res.text()).toBe(201);
+  const { acceptUrl } = (await res.json()) as { acceptUrl: string };
+  const found = /^\/invitations\/([^/]+)$/.exec(new URL(acceptUrl, 'http://x').pathname);
+  expect(found, 'acceptUrl is /invitations/<token>').not.toBeNull();
+
+  const viewer = b.members.viewer;
+  const page = await newPage(browser);
+  await signIn(page, viewer);
+  await page.goto(`/invitations/${found![1]}`);
+  await expect(page.getByRole('alert').filter({ hasText: 'this invitation is for' })).toBeVisible();
+  const key = `makrai.draft.v1:${viewer.userId}:${b.org.id}:p:q:Q-PP-01`;
+  await page.evaluate((k) => localStorage.setItem(k, '{"reason":"secret"}'), key);
+  expect(await draftKeys(page, viewer.userId)).toEqual([key]);
+  // The sign-out returns to this same page, now signed out, so M-24 and its button are gone once it has finished.
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'this invitation is for' })).toBeHidden();
+  await expect(page.getByRole('heading', { name: 'Create your account' })).toBeVisible();
+  expect(await draftKeys(page, viewer.userId)).toEqual([]);
+});
