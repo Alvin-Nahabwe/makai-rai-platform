@@ -229,6 +229,11 @@ jobs:
   verify:
     name: lint, typecheck, test, build
     needs: [unit]
+    # `always()` so this job runs, and ends red, when a unit shard fails. A job skipped
+    # because a `needs` job failed counts as passing for a required status check, which
+    # would let a red test shard through the check branch protection requires. The first
+    # step below fails the job in that case, before anything else runs.
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     # A genuine hang (a stuck test, a psql invocation waiting on a TTY
     # prompt it will never get) should fail loudly, not run until GitHub's
@@ -251,6 +256,17 @@ jobs:
       DATABASE_URL: postgresql://makrai:makrai_dev_password@localhost:5432/makrai_test
 
     steps:
+      - name: Require every unit shard to have passed
+        # The build and the other steps never run on red tests. The failure path of the
+        # dead-man ping at the end of this job (`if: always()`) still fires after this step.
+        env:
+          UNIT_RESULT: ${{ needs.unit.result }}
+        run: |
+          if [ "$UNIT_RESULT" != "success" ]; then
+            echo "::error::the unit test shards did not all pass (result: $UNIT_RESULT)"
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
