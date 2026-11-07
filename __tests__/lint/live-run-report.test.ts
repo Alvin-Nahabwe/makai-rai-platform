@@ -40,12 +40,17 @@ describe('the v0.6.0 live-run report', () => {
     expect(heads).toEqual(range(1, 15));
     const commits = new Set([...t.matchAll(/^Candidate: ([0-9a-f]{40})$/gm)].map((m) => m[1]));
     expect(commits.size).toBe(1);
-    for (const n of range(1, 15)) expect(section(t, n), `step ${n}`).toMatch(/^Verdict: (pass|fail|not verified: .+)$/m);
+    for (const n of range(1, 15)) {
+      expect(section(t, n), `step ${n}`).toMatch(/^Verdict: (pass|fail|not verified: .+)$/m);
+      expect(section(t, n).match(/^Verdict: /gm), `step ${n}: exactly one Verdict line`).toHaveLength(1);   // a second line could satisfy a 'fails step n' check
+    }
     for (const id of ['NFR-A11Y-07', 'NFR-AVL-02', 'NFR-PERF-02', 'NFR-REL-02']) expect(t).toContain(id);
     expect(t).not.toMatch(/^Source: V-prog round/m);   // a round's row is never the evidence (V-S5)
   });
 
-  it('12.2 FR-PUB-01: every data-claims-allowed marker in app/, components/ and lib/ is listed in the report with its AL id (or FR id, for about-model-scores), and one with none fails step 5', () => {
+  // The marker rows name file:line at this release, so the check runs only for the release candidate: a later edit that
+  // moves a marker must not redden every builder's suite (C4 RE-1). Under RELEASE_CANDIDATE=1 it runs and fails if wrong.
+  it.skipIf(process.env.RELEASE_CANDIDATE !== '1')('12.2 FR-PUB-01: every data-claims-allowed marker in app/, components/ and lib/ is listed in the report with its AL id (or FR id, for about-model-scores), and one with none fails step 5', () => {
     const found = claimMarkers();
     expect(found.length, 'not vacuous').toBeGreaterThan(0);
     const s = section(readFileSync(REPORT, 'utf8'), 5);
