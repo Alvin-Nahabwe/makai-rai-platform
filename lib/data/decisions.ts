@@ -10,7 +10,7 @@ import type {
 import { ConflictError, ValidationFailed } from '@/lib/http/errors';
 import { assertProjectWritable } from '@/lib/data/projectGuard';
 import { assertEvidenceAttachable } from '@/lib/data/evidenceGuard';
-import { erasedFields, evidenceViews, memberHistory, userRefs } from '@/lib/data/views';
+import { erasedFields, evidenceViews, memberHistory, userRefs, userRefsFrom } from '@/lib/data/views';
 import { lookupUserNames } from '@/lib/data/identity';
 import { contentRefById, resolveRunningContentVersion } from '@/lib/data/framework';
 import { idempotentWrite } from '@/lib/data/idempotency';
@@ -134,9 +134,10 @@ async function toView(tx: TenantTx, rows: readonly DecisionVersionRow[]): Promis
 /**
  * The view of a version this transaction has just inserted, from what the save already holds: its row as the insert
  * returned it, the content version it resolved and stores, and the member history it read for the decider check
- * (`memberHistory`, the one former-member rule). Equal to `toView` of the same row (save-statements.test.ts), without
- * its second reads: no erasure mark can name a row created in this transaction (a tombstone names a committed row), and
- * the content version is the one just resolved. A person the history does not cover is read here, as `userRefs` would.
+ * (`memberHistory`; `userRefsFrom` sets the former-member mark from it, as `userRefs` does). Equal to `toView` of the
+ * same row (save-statements.test.ts), without its second reads: no erasure mark can name a row created in this
+ * transaction (a tombstone names a committed row), and the content version is the one just resolved. A person the
+ * history does not cover is read here, as `userRefs` would.
  */
 async function savedView(
   tx: TenantTx, row: DecisionVersionRow, content: ContentRef, history: ReadonlyMap<string, 'member' | 'former' | 'never'>,
@@ -144,12 +145,7 @@ async function savedView(
   const people = [...new Set(row.decidedByUserId ? [row.enteredById, row.decidedByUserId] : [row.enteredById])];
   const known = people.every((id) => history.has(id)) ? history : await memberHistory(tx, people);
   const [names, evidence] = await Promise.all([lookupUserNames(people), evidenceViews(tx, row.evidenceIds)]);
-  const refs = new Map<string, UserRef>();
-  for (const id of people) {
-    const n = names.get(id);
-    if (n) refs.set(id, { userId: id, name: n.name, formerMember: known.get(id) === 'former' });
-  }
-  return assembleView(row, { refs, evidence, erased: undefined, content });
+  return assembleView(row, { refs: userRefsFrom(people, known, names), evidence, erased: undefined, content });
 }
 
 /** The one view of one version, from what `toView` or `savedView` read for it. */

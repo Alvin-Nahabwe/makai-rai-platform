@@ -113,6 +113,20 @@ describe('NFR-PERF-04 FIX-14: a save answers the view a read gives', () => {
     expect(out.value.decidedBy).toMatchObject({ kind: 'member', user: { userId: former, formerMember: true } });
   });
 
+  it('NFR-PERF-04 FIX-14 FR-DEC-01: the entering account is the decider', async () => {
+    const out = await save('owner', body());
+    expect(out.value).toEqual(await readBack(out.value));
+    expect(out.value.enteredBy).toEqual((out.value.decidedBy as { user: unknown }).user);
+  });
+
+  it('NFR-PERF-04 FIX-14 FR-DEC-01 FR-EXP-03: a scrubbed former member as decider keeps the scrubbed name and the former-member mark', async () => {
+    const former = await removeMember('reviewer');
+    await testDb.user.update({ where: { id: former }, data: { name: 'Deleted user', isActive: false } });
+    const out = await save('owner', body({ decidedBy: { kind: 'member', userId: former } }));
+    expect(out.value).toEqual(await readBack(out.value));
+    expect(out.value.decidedBy).toEqual({ kind: 'member', user: { userId: former, name: 'Deleted user', formerMember: true } });
+  });
+
   it('NFR-PERF-04 FIX-14 FR-DEC-01: an outside-role decider', async () => {
     const out = await save('owner', body({ decidedBy: { kind: 'outside_role', role: 'ethics_committee' } }));
     expect(out.value).toEqual(await readBack(out.value));

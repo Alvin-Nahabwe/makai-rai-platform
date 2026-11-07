@@ -42,8 +42,19 @@ export async function userRefs(tx: TenantTx, userIds: readonly string[]): Promis
   const ids = [...new Set(userIds)];
   if (ids.length === 0) return new Map();
   const [history, names] = await Promise.all([memberHistory(tx, ids), lookupUserNames(ids)]);
+  return userRefsFrom(ids, history, names);
+}
+
+/**
+ * `UserRef` for each id with a name, from a `memberHistory` result and a `lookupUserNames` result the caller already
+ * holds: the one place the former-member mark is set from the history. `userRefs` reads both and calls it; the decision
+ * save (lib/data/decisions.ts, savedView) calls it with the history its decider check read.
+ */
+export function userRefsFrom(
+  ids: readonly string[], history: ReadonlyMap<string, 'member' | 'former' | 'never'>, names: ReadonlyMap<string, { name: string }>,
+): Map<string, UserRef> {
   const out = new Map<string, UserRef>();
-  for (const id of ids) {
+  for (const id of new Set(ids)) {
     const n = names.get(id);
     if (n) out.set(id, { userId: id, name: n.name, formerMember: history.get(id) === 'former' });
   }
