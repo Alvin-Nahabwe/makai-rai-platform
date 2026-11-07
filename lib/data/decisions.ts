@@ -1,14 +1,17 @@
 import type { Prisma } from '@prisma/client';
 import { assertCan, ForbiddenError, withOrg, type OrgContext, type TenantTx } from '@/lib/data/tenant';
 import type {
-  Actor, DecisionVersionRow, DeclaredDate, DeclaredPrecision, FieldError, OutsideRole, ReasonCode, ScopeAnswer, Stage,
+  Actor, CalendarDate, DecisionVersionRow, DeclaredDate, DeclaredPrecision, FieldError, OutsideRole, ReasonCode, ScopeAnswer, Stage,
   StoredDecisionStatus, WithdrawalCode, WriteOutcome,
 } from '@/types/record';
-import type { ContentRef, DecisionVersionView, SaveDecisionRequest, WithdrawDecisionRequest } from '@/types/api';
+import type {
+  ContentRef, DecisionVersionView, EvidenceItemView, SaveDecisionRequest, UserRef, WithdrawDecisionRequest,
+} from '@/types/api';
 import { ConflictError, ValidationFailed } from '@/lib/http/errors';
 import { assertProjectWritable } from '@/lib/data/projectGuard';
 import { assertEvidenceAttachable } from '@/lib/data/evidenceGuard';
 import { erasedFields, evidenceViews, memberHistory, userRefs } from '@/lib/data/views';
+import { lookupUserNames } from '@/lib/data/identity';
 import { contentRefById, resolveRunningContentVersion } from '@/lib/data/framework';
 import { idempotentWrite } from '@/lib/data/idempotency';
 import { isUniqueViolation, uniqueViolationIndex } from '@/lib/data/pgErrors';
@@ -36,24 +39,33 @@ const byField = (a: FieldError, b: FieldError) => FIELD_ORDER.indexOf(a.field) -
 
 // ─── Rows and views ──────────────────────────────────────────────────────────────────────────────
 
-const ROW_SELECT = {
+/** The version's own columns: what an insert returns (its database-set received time and salt included). */
+const COLUMN_SELECT = {
   id: true, orgId: true, projectId: true, stage: true, questionId: true, contentVersionId: true, versionNumber: true,
   baseVersionNumber: true, status: true, scopeAnswer: true, optionsInPlace: true, reasonCode: true, reason: true, reasonSalt: true,
   decidedByUserId: true, decidedByRole: true, declaredOn: true, declaredPrecision: true, withdrawalCode: true, enteredById: true,
-  enteredByRole: true, receivedAt: true, requestId: true, requestDigest: true, evidence: { select: { evidenceId: true } },
+  enteredByRole: true, receivedAt: true, requestId: true, requestDigest: true,
 } satisfies Prisma.DecisionVersionSelect;
 
+const ROW_SELECT = { ...COLUMN_SELECT, evidence: { select: { evidenceId: true } } } satisfies Prisma.DecisionVersionSelect;
+
 type SelectedRow = Prisma.DecisionVersionGetPayload<{ select: typeof ROW_SELECT }>;
+type SelectedColumns = Prisma.DecisionVersionGetPayload<{ select: typeof COLUMN_SELECT }>;
+/** A version's own columns, typed as a row: everything but its evidence. */
+type VersionColumns = Omit<DecisionVersionRow, 'evidenceIds'>;
+
+function toColumns(r: SelectedColumns): VersionColumns {
+  return {
+    ...r,
+    stage: r.stage as Stage, status: r.status as StoredDecisionStatus | null, scopeAnswer: r.scopeAnswer as ScopeAnswer | null,
+    decidedByRole: r.decidedByRole as OutsideRole | null, declaredPrecision: r.declaredPrecision as DeclaredPrecision | null,
+    withdrawalCode: r.withdrawalCode as WithdrawalCode | null,
+  };
+}
 
 function toRow(r: SelectedRow): DecisionVersionRow {
   const { evidence, ...rest } = r;
-  return {
-    ...rest,
-    stage: rest.stage as Stage, status: rest.status as StoredDecisionStatus | null, scopeAnswer: rest.scopeAnswer as ScopeAnswer | null,
-    decidedByRole: rest.decidedByRole as OutsideRole | null, declaredPrecision: rest.declaredPrecision as DeclaredPrecision | null,
-    withdrawalCode: rest.withdrawalCode as WithdrawalCode | null,
-    evidenceIds: evidence.map((e) => e.evidenceId).sort(),
-  };
+  return { ...toColumns(rest), evidenceIds: evidence.map((e) => e.evidenceId).sort() };
 }
 
 async function rowsWhere(tx: TenantTx, where: { id?: { in: string[] }; projectId?: string; questionId?: string }, newestFirst = false): Promise<DecisionVersionRow[]> {
@@ -62,6 +74,21 @@ async function rowsWhere(tx: TenantTx, where: { id?: { in: string[] }; projectId
     orderBy: newestFirst ? [{ versionNumber: 'desc' }] : [{ questionId: 'asc' }, { versionNumber: 'asc' }],
   });
   return rows.map(toRow);
+}
+
+/**
+ * The highest version's own columns, without its evidence, or null when it has none: what a save needs to judge its base
+ * and, unless every other field repeats, whether it repeats the version (`withEvidence` completes it when it must).
+ */
+async function currentColumns(tx: TenantTx, projectId: string, questionId: string): Promise<VersionColumns | null> {
+  const row = await tx.decisionVersion.findFirst({ where: { projectId, questionId }, select: COLUMN_SELECT, orderBy: { versionNumber: 'desc' } });
+  return row === null ? null : toColumns(row);
+}
+
+/** The full row of `columns`: its evidence read in the same transaction. */
+async function withEvidence(tx: TenantTx, columns: VersionColumns): Promise<DecisionVersionRow> {
+  const evidence = await tx.decisionEvidence.findMany({ where: { versionId: columns.id }, select: { evidenceId: true } });
+  return { ...columns, evidenceIds: evidence.map((e) => e.evidenceId).sort() };
 }
 
 /** The highest version of (project, question), or null when it has none (5.3 item 2). */
@@ -101,34 +128,61 @@ async function toView(tx: TenantTx, rows: readonly DecisionVersionRow[]): Promis
     Promise.all(contentIds.map(async (id) => [id, await contentRefById(tx, id)] as const)),
   ]);
   const content = new Map<string, ContentRef>(contents);
+  return rows.map((r) => assembleView(r, { refs, evidence, erased: erased.get(r.id), content: content.get(r.contentVersionId) as ContentRef }));
+}
+
+/**
+ * The view of a version this transaction has just inserted, from what the save already holds: its row as the insert
+ * returned it, the content version it resolved and stores, and the member history it read for the decider check
+ * (`memberHistory`, the one former-member rule). Equal to `toView` of the same row (save-statements.test.ts), without
+ * its second reads: no erasure mark can name a row created in this transaction (a tombstone names a committed row), and
+ * the content version is the one just resolved. A person the history does not cover is read here, as `userRefs` would.
+ */
+async function savedView(
+  tx: TenantTx, row: DecisionVersionRow, content: ContentRef, history: ReadonlyMap<string, 'member' | 'former' | 'never'>,
+): Promise<DecisionVersionView> {
+  const people = [...new Set(row.decidedByUserId ? [row.enteredById, row.decidedByUserId] : [row.enteredById])];
+  const known = people.every((id) => history.has(id)) ? history : await memberHistory(tx, people);
+  const [names, evidence] = await Promise.all([lookupUserNames(people), evidenceViews(tx, row.evidenceIds)]);
+  const refs = new Map<string, UserRef>();
+  for (const id of people) {
+    const n = names.get(id);
+    if (n) refs.set(id, { userId: id, name: n.name, formerMember: known.get(id) === 'former' });
+  }
+  return assembleView(row, { refs, evidence, erased: undefined, content });
+}
+
+/** The one view of one version, from what `toView` or `savedView` read for it. */
+function assembleView(r: DecisionVersionRow, parts: {
+  refs: ReadonlyMap<string, UserRef>; evidence: ReadonlyMap<string, EvidenceItemView>;
+  erased: { fields: string[]; erasedOn: CalendarDate } | undefined; content: ContentRef;
+}): DecisionVersionView {
+  const { refs, evidence, erased: e, content } = parts;
   // Integrity faults, never a user's: ids only in the message (NFR-PRIV-03), so the row can be found.
-  const person = (r: DecisionVersionRow, id: string) => {
+  const person = (id: string) => {
     const ref = refs.get(id);
     // Accounts are scrubbed, never deleted (FR-EXP-03), so a record never names an id with no account row.
     if (ref === undefined) throw new Error(`decision view: version ${r.id} names user ${id}, which has no account row`);
     return ref;
   };
-  const item = (r: DecisionVersionRow, id: string) => {
+  const item = (id: string) => {
     const v = evidence.get(id);
     // decision_evidence holds a foreign key to evidence, whose rows are never deleted (5.3 item 8).
     if (v === undefined) throw new Error(`decision view: version ${r.id} attaches evidence ${id}, which has no evidence row`);
     return v;
   };
-  return rows.map((r): DecisionVersionView => {
-    const e = erased.get(r.id);
-    return {
-      id: r.id, projectId: r.projectId, stage: r.stage, questionId: r.questionId, versionNumber: r.versionNumber,
-      baseVersionNumber: r.baseVersionNumber, content: content.get(r.contentVersionId) as ContentRef, status: r.status,
-      scopeAnswer: r.scopeAnswer, optionsInPlace: [...r.optionsInPlace], reasonCode: r.reasonCode as ReasonCode | null, reason: r.reason,
-      reasonErased: e !== undefined && e.fields.includes('reason') ? { erasedOn: e.erasedOn } : null,
-      decidedBy: r.decidedByUserId !== null ? { kind: 'member', user: person(r, r.decidedByUserId) }
-        : r.decidedByRole !== null ? { kind: 'outside_role', role: r.decidedByRole } : null,
-      declaredDate: declaredDateOf(r.declaredOn, r.declaredPrecision), declaredPrecision: r.declaredPrecision,
-      withdrawalCode: r.withdrawalCode, enteredBy: person(r, r.enteredById), enteredByRole: r.enteredByRole,
-      receivedAt: r.receivedAt.toISOString(),
-      evidence: r.evidenceIds.map((id) => item(r, id)).sort((x, y) => x.uploadedAt.localeCompare(y.uploadedAt) || x.id.localeCompare(y.id)),
-    };
-  });
+  return {
+    id: r.id, projectId: r.projectId, stage: r.stage, questionId: r.questionId, versionNumber: r.versionNumber,
+    baseVersionNumber: r.baseVersionNumber, content, status: r.status,
+    scopeAnswer: r.scopeAnswer, optionsInPlace: [...r.optionsInPlace], reasonCode: r.reasonCode as ReasonCode | null, reason: r.reason,
+    reasonErased: e !== undefined && e.fields.includes('reason') ? { erasedOn: e.erasedOn } : null,
+    decidedBy: r.decidedByUserId !== null ? { kind: 'member', user: person(r.decidedByUserId) }
+      : r.decidedByRole !== null ? { kind: 'outside_role', role: r.decidedByRole } : null,
+    declaredDate: declaredDateOf(r.declaredOn, r.declaredPrecision), declaredPrecision: r.declaredPrecision,
+    withdrawalCode: r.withdrawalCode, enteredBy: person(r.enteredById), enteredByRole: r.enteredByRole,
+    receivedAt: r.receivedAt.toISOString(),
+    evidence: r.evidenceIds.map((id) => item(id)).sort((x, y) => x.uploadedAt.localeCompare(y.uploadedAt) || x.id.localeCompare(y.id)),
+  };
 }
 
 /** The one element of a result that must hold exactly one: a row just inserted or found in the same transaction. */
@@ -162,7 +216,9 @@ async function dbNow(tx: TenantTx): Promise<Date> {
  * administrator and members of other organisations included); the evidence ids are distinct and evidence of
  * this project. Every problem found is thrown together in one `ValidationFailed`, in field order.
  */
-async function checkSave(tx: TenantTx, a: SaveDecisionRequest & { projectId: string }): Promise<ContentRef> {
+async function checkSave(
+  tx: TenantTx, a: SaveDecisionRequest & { projectId: string }, actorUserId: string,
+): Promise<{ content: ContentRef; history: ReadonlyMap<string, 'member' | 'former' | 'never'> }> {
   const content = await resolveRunningContentVersion(tx);
   const loaded = loadContent(content.semver);
   const question = loaded.questions.get(a.questionId);
@@ -181,8 +237,10 @@ async function checkSave(tx: TenantTx, a: SaveDecisionRequest & { projectId: str
       decidedBy: a.decidedBy, declaredDate: a.declaredDate,
     }, utcPlus14Date(await dbNow(tx))));
   }
+  // The entering account's history is read with the decider's, so the saved version's view needs no second read.
+  let history: ReadonlyMap<string, 'member' | 'former' | 'never'> = new Map();
   if (a.decidedBy.kind === 'member' && !errors.some((e) => e.field === 'decidedBy')) {
-    const history = await memberHistory(tx, [a.decidedBy.userId]);
+    history = await memberHistory(tx, [a.decidedBy.userId, actorUserId]);
     if (history.get(a.decidedBy.userId) === 'never') errors.push({ field: 'decidedBy', message: M11.decidedBy });
   }
   if (new Set(a.evidenceIds).size !== a.evidenceIds.length) {
@@ -199,19 +257,23 @@ async function checkSave(tx: TenantTx, a: SaveDecisionRequest & { projectId: str
     }
   }
   if (errors.length > 0) throw new ValidationFailed(errors.sort(byField));
-  return content;
+  return { content, history };
 }
 
 const sameSet = (x: readonly string[], y: readonly string[]) => x.length === y.length && [...x].sort().join('\u0000') === [...y].sort().join('\u0000');
 
-/** FR-DEC-01: the save repeats version `cur` in every field, the declared date and the content version included. */
-function repeats(cur: DecisionVersionRow, a: SaveDecisionRequest, contentVersionId: string): boolean {
+/**
+ * FR-DEC-01: the save repeats version `cur` in every field, the declared date and the content version included. The
+ * evidence is compared last, and read only then: a save that differs in any other field never needs it.
+ */
+async function repeats(tx: TenantTx, cur: VersionColumns, a: SaveDecisionRequest, contentVersionId: string): Promise<boolean> {
   const decider = a.decidedBy.kind === 'member' ? { user: a.decidedBy.userId, role: null } : { user: null, role: a.decidedBy.role };
-  return cur.status === a.status && cur.scopeAnswer === a.scopeAnswer && sameSet(cur.optionsInPlace, a.optionsInPlace)
+  const othersRepeat = cur.status === a.status && cur.scopeAnswer === a.scopeAnswer && sameSet(cur.optionsInPlace, a.optionsInPlace)
     && cur.reasonCode === a.reasonCode && cur.reason === a.reason
     && cur.decidedByUserId === decider.user && cur.decidedByRole === decider.role
     && declaredDateOf(cur.declaredOn, cur.declaredPrecision) === a.declaredDate
-    && sameSet(cur.evidenceIds, a.evidenceIds) && cur.contentVersionId === contentVersionId;
+    && cur.contentVersionId === contentVersionId;
+  return othersRepeat && sameSet((await withEvidence(tx, cur)).evidenceIds, a.evidenceIds);
 }
 
 /**
@@ -233,16 +295,16 @@ export async function saveDecision(
     requestId: a.requestId, digest, actorUserId: actor.userId,
     write: async (tx) => {
       await assertProjectWritable(tx, a.projectId);
-      const content = await checkSave(tx, a);
-      const current = await currentRow(tx, a.projectId, a.questionId);
+      const { content, history } = await checkSave(tx, a, actor.userId);
+      const current = await currentColumns(tx, a.projectId, a.questionId);
       // No version yet: a named base is a hand-made or stale request, refused on its field as the withdrawal does.
       if (current === null && a.baseVersionNumber !== null) {
         throw new ValidationFailed([{ field: 'baseVersionNumber', message: REQUEST_MESSAGES.baseVersionNumber }]);
       }
       if (current !== null && a.baseVersionNumber !== current.versionNumber) {
-        throw new ConflictError('base_version_moved', await viewOf(tx, current));
+        throw new ConflictError('base_version_moved', await viewOf(tx, await withEvidence(tx, current)));
       }
-      if (current !== null && current.status !== 'withdrawn' && repeats(current, a, content.contentVersionId)) {
+      if (current !== null && current.status !== 'withdrawn' && await repeats(tx, current, a, content.contentVersionId)) {
         throw new ValidationFailed([{ field: 'form', message: M11.unchanged(current.versionNumber) }]);
       }
       const created = await tx.decisionVersion.create({
@@ -256,16 +318,18 @@ export async function saveDecision(
           ...declaredColumns(a.declaredDate),
           enteredById: actor.userId, enteredByRole: actor.role, requestId: a.requestId, requestDigest: digest,
         },
-        select: { id: true },
+        select: COLUMN_SELECT,
       });
       if (a.evidenceIds.length > 0) {
         await tx.decisionEvidence.createMany({ data: a.evidenceIds.map((evidenceId) => ({ orgId: ctx.orgId, versionId: created.id, evidenceId })) });
       }
-      const row = one(await rowsWhere(tx, { id: { in: [created.id] } }), `decision version ${created.id}`);
+      // The row as the insert returned it (the received time and salt the database set included), with the evidence
+      // just attached: what reading it back would give, without the read.
+      const row = toRow({ ...created, evidence: a.evidenceIds.map((evidenceId) => ({ evidenceId })) });
       finding = await onShortfallSaved(tx, ctx, {
         id: row.id, projectId: row.projectId, stage: row.stage, questionId: row.questionId, status: row.status, enteredById: row.enteredById,
       }, { requestId: a.requestId, digest });
-      return one(await toView(tx, [row]), `view of decision version ${row.id}`);
+      return savedView(tx, row, content, history);
     },
   });
   if (!outcome.replayed) {
