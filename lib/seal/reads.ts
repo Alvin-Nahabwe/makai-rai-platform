@@ -56,7 +56,7 @@ async function readTables(tx: TenantTx, tables: readonly (keyof typeof STAGE_SOU
 }
 
 /** The organisation of the transaction, as `withOrg` set it; the queries name it, row-level security enforces it. */
-async function currentOrg(tx: TenantTx): Promise<string> {
+export async function currentOrg(tx: TenantTx): Promise<string> {
   const [{ org }] = await tx.$queryRaw<{ org: string | null }[]>`SELECT NULLIF(current_setting('app.current_org_id', true), '') AS org`;
   if (org === null) throw new Error('lib/seal/reads: no organisation is set on this transaction (call inside withOrg)');
   return org;

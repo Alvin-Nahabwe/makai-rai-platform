@@ -163,24 +163,27 @@ function idSetDiff(sealed: IdSet, now: IdSet): IdDiff | null {
   return ID_KEYS.every((k) => d[k].length === 0) ? null : d;
 }
 
+type IdChange = { changedQuestions: string[]; changedFindings: string[] };
+
 /**
- * The question ids of the decision versions each difference names, and the finding ids whose own id, events, current
- * mitigation versions or accepted risk differ, each sorted (FR-REV-05). The rows are append-only, so every id a seal or
- * the stage names still has its row; the rows of all the differences are read together, four statements in all.
+ * For each review's difference, keyed by review id, the question ids of the decision versions it names, and the finding
+ * ids whose own id, events, current mitigation versions or accepted risk differ, each sorted (FR-REV-05). The rows are
+ * append-only, so every id a seal or the stage names still has its row; the rows of all the differences are read
+ * together, four statements in all. The answer is keyed as the question is, so no review is paired with another's.
  */
-async function idSetChanges(tx: TenantTx, diffs: readonly IdDiff[]): Promise<{ changedQuestions: string[]; changedFindings: string[] }[]> {
-  if (diffs.length === 0) return [];
-  const all = (k: keyof IdDiff) => [...new Set(diffs.flatMap((d) => d[k]))];
+async function idSetChanges(tx: TenantTx, diffs: ReadonlyMap<string, IdDiff>): Promise<Map<string, IdChange>> {
+  if (diffs.size === 0) return new Map();
+  const all = (k: keyof IdDiff) => [...new Set([...diffs.values()].flatMap((d) => d[k]))];
   const questions = new Map((await tx.decisionVersion.findMany({ where: { id: { in: all('decisionVersions') } }, select: { id: true, questionId: true } })).map((r) => [r.id, r.questionId]));
   const events = new Map((await tx.findingEvent.findMany({ where: { id: { in: all('findingEvents') } }, select: { id: true, findingId: true } })).map((r) => [r.id, r.findingId]));
   const mitigations = new Map((await tx.mitigationVersion.findMany({ where: { id: { in: all('mitigationVersions') } }, select: { id: true, findingId: true } })).map((r) => [r.id, r.findingId]));
   const risks = new Map((await tx.acceptedRisk.findMany({ where: { id: { in: all('acceptedRisks') } }, select: { id: true, findingId: true } })).map((r) => [r.id, r.findingId]));
   const sorted = (xs: Iterable<string>) => [...new Set(xs)].sort();
   const of = (ids: readonly string[], m: Map<string, string>) => ids.flatMap((id) => m.get(id) ?? []);
-  return diffs.map((d) => ({
+  return new Map([...diffs].map(([reviewId, d]) => [reviewId, {
     changedQuestions: sorted(of(d.decisionVersions, questions)),
     changedFindings: sorted([...d.findings, ...of(d.findingEvents, events), ...of(d.mitigationVersions, mitigations), ...of(d.acceptedRisks, risks)]),
-  }));
+  }]));
 }
 
 /**
@@ -236,10 +239,9 @@ async function reviewStates(tx: TenantTx, reviews: readonly { id: string; projec
     }
     compared.push({ reviewId: r.id, seal, diff: idSetDiff(manifestIds(gate.manifest), now.ids), cut: now.cut });
   }
-  const changes = await idSetChanges(tx, compared.flatMap((c) => (c.diff === null ? [] : [c.diff])));
-  let next = 0;
+  const changes = await idSetChanges(tx, new Map(compared.flatMap((c) => (c.diff === null ? [] : [[c.reviewId, c.diff] as const]))));
   for (const c of compared) {
-    const change = c.diff === null ? null : changes[next++];
+    const change = changes.get(c.reviewId) ?? null;
     if (change === null && c.cut.length === 0) {
       out.set(c.reviewId, { seal: c.seal, changed: null, unreadable: false });
       continue;

@@ -691,7 +691,7 @@ it('NFR-PERF-04: a one-owner manifest with the default 10 users exits 2 at seat 
 
 // ---- FIX-12: an operation filter, so one budget can be measured alone ---------------------------------------------
 
-it('NFR-PERF-04: --only names the operations to run, any other name is refused before any request, and the default is all five', () => {
+it('NFR-PERF-04 FIX-12: --only names the operations to run, any other name is refused before any request, and the default is all five', () => {
   expect(parseArgs(['--base', 'http://localhost:3105'])).toMatchObject({ only: null });
   expect(parseArgs(['--base', 'http://localhost:3105', '--only', 'render-s10-s11'])).toMatchObject({ only: ['render-s10-s11'] });
   expect(parseArgs(['--base', 'http://localhost:3105', '--only', 'render-s10-s11,save-decision'])).toMatchObject({ only: ['render-s10-s11', 'save-decision'] });
@@ -701,7 +701,7 @@ it('NFR-PERF-04: --only names the operations to run, any other name is refused b
   expect(runScript(['--base', 'http://localhost:3105', '--only', '']).status).toBe(2);
 });
 
-it('NFR-PERF-04: with --only, a virtual user asks for the named operations alone', () => {
+it('NFR-PERF-04 FIX-12: with --only, a virtual user asks for the named operations alone', () => {
   const none = new Set<string>();
   const ask = (only: string[] | null) =>
     operationsToAsk({ sent: {}, hasReview: true, exportsLeft: 2, pendingOnly: none, only }) as string[];
@@ -710,7 +710,7 @@ it('NFR-PERF-04: with --only, a virtual user asks for the named operations alone
   expect(ask(['save-decision', 'team-export'])).toEqual(['save-decision', 'team-export']);
 });
 
-it('NFR-PERF-04: with --only, an operation not named prints `skipped` and neither fails the run nor counts as pending', () => {
+it('NFR-PERF-04 FIX-12: with --only, an operation not named prints `skipped` and neither fails the run nor counts as pending', () => {
   const s = newStats();
   for (const ms of [100, 200, 300]) {
     record(s, 'render-s10', 200, ms);
@@ -732,7 +732,7 @@ it('NFR-PERF-04: with --only, an operation not named prints `skipped` and neithe
   expect(renderReport(newStats(), { only: ['render-s10-s11'] }).code).toBe(1);
 });
 
-it('NFR-PERF-04: a run with --only render-s10-s11 sends no save, review, seal, document or export request', async () => {
+it('NFR-PERF-04 FIX-12: a run with --only render-s10-s11 sends no save, review, seal, document or export request', async () => {
   const stub = await stubServer((req, res) => {
     if (/\/orgs\/acme\/projects\//.test(req.url ?? '')) return (res.writeHead(200, { 'content-type': 'text/html' }), res.end('<html>page</html>'), true);
     return false;

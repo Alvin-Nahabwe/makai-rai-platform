@@ -15,6 +15,7 @@ import { logSecurityEvent } from '@/lib/security-logger';
 import { canonicalManifestBytes, fingerprintHex } from '@/lib/integrity/canonical.mjs';
 import { SEAL_SOURCE_SQL, checkSealRows, manifestFromRows, manifestIds, trustedManifest, type SealSourceRows, type TombstoneRow } from '@/lib/integrity/sealCheck.mjs';
 import { readStageRows, stagePlan } from '@/lib/seal/manifest';
+import { currentOrg } from '@/lib/seal/reads';
 import { stageReviewName } from '@/lib/seal/reviewName';
 import type { Stage } from '@/types/record';
 
@@ -192,9 +193,12 @@ export async function listSeals(ctx: OrgContext, reviewId: string): Promise<Seal
 export async function latestSealRows(tx: TenantTx, reviewIds: readonly string[]): Promise<Map<string, SealViewRow>> {
   const ids = [...new Set(reviewIds)];
   if (ids.length === 0) return new Map();
+  // The organisation as withOrg set it, read with a check that throws when none is set, so a transaction without one
+  // is an error, never "no review has a seal" (C4 SFH-5).
+  const orgId = await currentOrg(tx);
   const latest = await tx.$queryRaw<{ id: string }[]>`
     SELECT DISTINCT ON ("stageReviewId") "id" FROM "seals"
-    WHERE "orgId" = NULLIF(current_setting('app.current_org_id', true), '') AND "stageReviewId" = ANY (${ids}::text[])
+    WHERE "orgId" = ${orgId} AND "stageReviewId" = ANY (${ids}::text[])
     ORDER BY "stageReviewId", "sealNumber" DESC`;
   if (latest.length === 0) return new Map();
   const rows = await tx.seal.findMany({ where: { id: { in: latest.map((r) => r.id) } }, select: SEAL_VIEW_SELECT });

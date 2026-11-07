@@ -11,7 +11,7 @@ import { NotFoundError, withOrg } from '@/lib/data/tenant';
 import { questionApplies, questionsInStage, runningContent } from '@/lib/content/loader';
 import { currentDecisionRows } from '@/lib/data/decisions';
 import { listFindings } from '@/lib/data/findings';
-import { myMitigations, projectFollowUp, stageFollowUpCounts } from '@/lib/data/followup';
+import { myMitigations, projectFollowUp, projectFollowUpCounts, type StageFollowUpCounts } from '@/lib/data/followup';
 
 /** Projects, archive, stage view and dashboard (FR-PRJ). */
 
@@ -36,10 +36,14 @@ async function documentsIssuedByStage(tx: TenantTx, projectId: string): Promise<
  * scope answer that makes it not apply counts in `notApplicableByGate`, not in `noDecision`; a gate that carries a scope
  * answer is itself decided. `openFindings` and `overdueMitigations` come from the follow-up service, the one source
  * S-08, S-10 and S-11 share.
+ *
+ * `opts.followUp` lets S-10 pass the follow-up it has already read, so the rows are read once (NFR-PERF-04, FIX-12). It
+ * must be `projectFollowUp` of this project read with `{ includeArchived: true }` and the same `today`, as stageView reads
+ * it itself when none is given: rows read without it leave an archived project's mitigations out of these counts.
  */
 export async function stageView(
   ctx: OrgContext, projectId: string, today: CalendarDate,
-  opts: { followUp?: { open: Record<Stage, FollowUpItem[]>; counts: Record<Stage, { openFindings: number; overdueMitigations: number }> } } = {},
+  opts: { followUp?: { open: Record<Stage, FollowUpItem[]>; counts: StageFollowUpCounts } } = {},
 ): Promise<Record<Stage, StageCounts>> {
   const content = runningContent();
   const { decisions, documents } = await withOrg(ctx, async (tx) => {
@@ -199,10 +203,8 @@ export async function loadDashboard(
     withOrg(ctx, (tx) => tx.organization.findUniqueOrThrow({ where: { id: ctx.orgId }, select: { name: true } })),
     myMitigations(ctx, identity.userId, opts.today),
   ]);
-  const projects = await Promise.all(active.map(async (project) => {
-    const perStage = await Promise.all(STAGES.map(async (s) => [s, await stageFollowUpCounts(ctx, project.id, s, opts.today)] as const));
-    return { project, counts: Object.fromEntries(perStage) as Record<Stage, { openFindings: number; overdueMitigations: number }> };
-  }));
+  // Every stage's counts of a project from one read of its follow-up rows, not one read per stage (C4 SI-3).
+  const projects = await Promise.all(active.map(async (project) => ({ project, counts: await projectFollowUpCounts(ctx, project.id, opts.today) })));
   return {
     orgSlug: opts.orgSlug, orgName: org.name, role: ctx.role, welcome: opts.welcome, canCreate: can(ctx.role, 'project:create'),
     projects, mine, projectNames: new Map([...active, ...archived].map((p) => [p.id, p.name])), archivedCount: archived.length,
