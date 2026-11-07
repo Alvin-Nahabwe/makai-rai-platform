@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { requireIdentity } from '@/lib/auth/identity';
 import { missingAcceptances, offeredAcceptances } from '@/lib/data/acceptances';
 import { currentLegalText } from '@/lib/legal/registry';
-import { RecordAcceptances } from '@/components/legal/AcceptancesForm';
+import { RecordAcceptances } from '@/components/legal/RecordAcceptances';
 
 export const metadata: Metadata = { title: 'Acceptances - MAK-AI RAI Platform' };
 

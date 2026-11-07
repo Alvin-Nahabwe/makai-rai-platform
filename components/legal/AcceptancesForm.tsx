@@ -2,7 +2,6 @@
 
 import { useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import { signOutClearingDrafts } from '@/lib/client/signOutClearingDrafts';
-import { useRouter } from 'next/navigation';
 import { LEGAL_KIND_NAMES, acceptanceError, type AcceptancePair } from '@/lib/legal/kinds';
 import { formatDay } from '@/lib/format/dates';
 import { ACCEPTED_KINDS, type AcceptedKind, type LegalTextVersion } from '@/types/legal';
@@ -293,47 +292,5 @@ export function AcceptancesForm(p: AcceptancesFormProps) {
   return (
     <AcceptancesFormView {...p} ticked={ticked} errors={errors} onToggle={onToggle} onSubmit={onSubmit}
       boxRef={(kind, el) => { if (el === null) boxes.current.delete(kind); else boxes.current.set(kind, el); }} />
-  );
-}
-
-/**
- * S-05's body: posts the ticked kinds, each with the version shown, to route 30
- * (`/api/acceptances`) and, on 204, opens the home page (S-07), whose gate now lets the account
- * through. A send with no reply (fetch rejects) and a server fault each say that nothing was
- * created, with **Try again**, which re-sends the same body; any other refusal is acted on by
- * `failureOutcome` (sign in and back here, S-29, M-39 with a reload, the wait, or its words).
- */
-export function RecordAcceptances({ texts, mode, userId }: { texts: LegalTextVersion[]; mode: 'required' | 'offer'; userId: string }) {
-  const router = useRouter();
-  const [send, setSend] = useState<SendState>({ state: 'idle' });
-  const sent = useRef<string | null>(null);
-
-  async function record(body: string): Promise<void> {
-    sent.current = body;
-    setSend({ state: 'sending' });
-    let res: Response;
-    try {
-      res = await fetch('/api/acceptances', { method: 'POST', headers: { 'content-type': 'application/json' }, body });
-    } catch {
-      // fetch rejects only when no reply arrived: the person is told and can send again.
-      setSend({ state: 'lost' });
-      return;
-    }
-    const outcome = recordOutcome(res.status, await res.json().catch(() => null));
-    if (outcome.kind === 'recorded') {
-      router.push('/');
-      // Offer mode: the shared (authenticated) layout, which renders the M-39 notice, does not re-render on a client-side
-      // navigation, so it would keep the offer just accepted. A refresh re-reads it. Required mode has no notice to clear.
-      if (mode === 'offer') router.refresh();
-    }
-    else handleFailure(outcome, { push: (h) => router.push(h), refresh: () => router.refresh(), setSend, signInReturn: '/acceptances' });
-  }
-
-  return (
-    <>
-      <AcceptancesForm key={textsKey(texts)} texts={texts} mode={mode} userId={userId} submitLabel="Accept and continue" busy={send.state === 'sending'}
-        onAccepted={(kinds) => record(JSON.stringify({ acceptances: acceptancePairs(texts, kinds) }))} />
-      <SendStatus send={send} sendingText="Saving..." onRetry={() => { if (sent.current !== null) void record(sent.current); }} />
-    </>
   );
 }
