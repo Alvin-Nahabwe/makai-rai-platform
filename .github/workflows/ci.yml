@@ -59,19 +59,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
-    name: lint, typecheck, test, build
+  # The unit and integration tests, split by the matrix below (three shards; the total passed to
+  # vitest is strategy.job-total, so changing the matrix cannot drop a slice of the tests) so the check meets NFR-MNT-02 (the verify
+  # job within 15 minutes). `verify` needs this job, so its success still means every test passed.
+  # Each shard has its own Postgres service; the steps are the ones `verify` ran before the split.
+  unit:
+    name: unit (shard ${{ matrix.shard }}/${{ strategy.job-total }})
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     runs-on: ubuntu-latest
     # A genuine hang (a stuck test, a psql invocation waiting on a TTY
     # prompt it will never get) should fail loudly, not run until GitHub's
     # own 360-minute default cap. Generous relative to the actual expected
-    # runtime so this is a backstop, not a tight budget to tune. Raised from
-    # 15 to 30 on 2026-11-04: by v0.6.0 the job (lint, audit, typecheck,
-    # migrate, ~4,400 tests, build) took 14 min 53 s, and run 41859063898 was
-    # cancelled at 15 min mid-build with every step until then passing.
-    # Raised from 30 to 45 on 2026-11-06: the poppler install step may now
-    # retry for up to 17 min on a slow runner network, on top of the job's
-    # normal run.
+    # runtime so this is a backstop, not a tight budget to tune. The 45 minutes
+    # date from when one job ran lint, audit, typecheck, migrate, the tests and
+    # the build (raised from 15 to 30 on 2026-11-04, after run 41859063898 was
+    # cancelled at 15 min mid-build, and from 30 to 45 on 2026-11-06 for the
+    # poppler install, which may retry for up to 17 min on a slow runner
+    # network). Each shard now runs migrate, one third of the tests and that
+    # install. The value is left as it was, so a hang still fails.
     timeout-minutes: 45
 
     # Single source of truth for the three Postgres primitives, referenced
@@ -166,52 +174,6 @@ jobs:
         # explicitly in deploy pipelines for exactly this reason.
         run: npx prisma generate
 
-      # Lint and typecheck need no database, only the generated client above
-      # -- so they run before the two Postgres-dependent steps below and
-      # fail fast and cheaply on the far more common class of failure
-      # (a syntax/type error) before this job pays for 14 migrations and a
-      # role-provisioning step. Verified, not assumed: eslint.config.mjs
-      # only pulls in eslint-config-next's non-type-checked configs plus
-      # this repo's own syntactic rules, so Lint touches no database either.
-      - name: Lint
-        run: npm run lint
-
-      # Dependency-vulnerability surveillance. Until 2026-08-18 nothing here,
-      # in the decision register, or in any bot watched for advisories, so a
-      # critical chain in @auth/core -- the library the whole authentication
-      # system rests on -- sat unnoticed for four weeks after its fix shipped.
-      #
-      # --omit=dev because the question is "does the DEPLOYED artifact carry a
-      # known vulnerability", and dev tooling is not deployed.
-      #
-      # Threshold is `critical`, not `high`, and the reason is measured rather
-      # than cautious. At `high` this gate fails today on exactly four
-      # advisories -- prisma, @prisma/config, deepmerge-ts, fast-uri -- every
-      # one of them in Prisma's local dev tooling, which reaches an --omit=dev
-      # audit only because the production @prisma/client depends on prisma.
-      # None is in the shipped bundle: after a build, none appears under
-      # .next/standalone/node_modules, which is what the Docker image copies.
-      # A gate that is red on the day it is added gets switched off, and one
-      # that blocks on code that never deploys is measuring the wrong thing.
-      # `critical` would still have caught the @auth/core chain that motivated
-      # this step.
-      #
-      # Raise this to `high` once Prisma's dependency chain clears, and treat
-      # that as the goal rather than the status quo.
-      #
-      # NOT a silent tolerance: when this fails, read the advisory and decide.
-      # The two ways past it are upgrading, or recording a register row with
-      # the reason and a pick-up trigger.
-      #
-      # Runs on the daily schedule as well as on every push (see `on:` above),
-      # and a red scheduled run is reported through the dead-man ping that ends
-      # this job.
-      - name: Audit production dependencies
-        run: npm audit --omit=dev --audit-level=critical
-
-      - name: Typecheck
-        run: npm run typecheck
-
       - name: Apply migrations (as superuser)
         # Four migrations run CREATE ROLE / CREATE EVENT TRIGGER / ALTER
         # DEFAULT PRIVILEGES and are superuser-only with no GRANTable
@@ -262,7 +224,113 @@ jobs:
         # TEST_DATABASE_URL/TEST_APP_DATABASE_URL (not
         # DATABASE_URL/APP_DATABASE_URL directly), falling back to
         # identical literals when those are unset.
-        run: npm test
+        run: npx vitest run --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+
+
+  verify:
+    name: lint, typecheck, test, build
+    needs: [unit]
+    # `always()` so this job runs, and ends red, when a unit shard fails. A job skipped
+    # because a `needs` job failed counts as passing for a required status check, which
+    # would let a red test shard through the check branch protection requires. The first
+    # step below fails the job in that case, before anything else runs.
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    # A genuine hang (a stuck test, a psql invocation waiting on a TTY
+    # prompt it will never get) should fail loudly, not run until GitHub's
+    # own 360-minute default cap. Generous relative to the actual expected
+    # runtime so this is a backstop, not a tight budget to tune. The 45 minutes
+    # date from when this job also ran the migrations, the tests and the poppler
+    # install (see `unit`'s timeout comment); it now runs lint, audit, typecheck
+    # and the build. The value is left as it was, so a hang still fails.
+    timeout-minutes: 45
+
+    steps:
+      - name: Require every unit shard to have passed
+        # The build and the other steps never run on red tests. The failure path of the
+        # dead-man ping at the end of this job (`if: always()`) still fires after this step.
+        env:
+          UNIT_RESULT: ${{ needs.unit.result }}
+        run: |
+          if [ "$UNIT_RESULT" != "success" ]; then
+            echo "::error::the unit test shards did not all pass (result: $UNIT_RESULT)"
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          # Reads .nvmrc rather than restating it, so this cannot drift
+          # from local dev or the Dockerfile's FROM tag (D-192).
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        # Not optional, and not named in the original task order: verified
+        # directly against the installed packages
+        # (node_modules/prisma/package.json,
+        # node_modules/@prisma/client/package.json) that neither carries a
+        # `postinstall` hook in this Prisma 7 install -- older Prisma
+        # versions generated the client automatically as an `npm install`
+        # side effect; this one does not. Without this step, `tsc --noEmit`,
+        # `vitest run` and `next build` all fail: every one of them imports
+        # from the generated `@prisma/client`, and `prisma migrate deploy`
+        # deliberately does not generate as a side effect (unlike
+        # `migrate dev`) -- Prisma's own docs recommend calling `generate`
+        # explicitly in deploy pipelines for exactly this reason.
+        run: npx prisma generate
+
+      # Lint and typecheck need no database, only the generated client above
+      # -- so they run first and fail fast and cheaply on the far more common
+      # class of failure (a syntax/type error) before the build. This job
+      # starts no Postgres at all: the tests and their database run in `unit`.
+      # Verified, not assumed: eslint.config.mjs
+      # only pulls in eslint-config-next's non-type-checked configs plus
+      # this repo's own syntactic rules, so Lint touches no database either.
+      - name: Lint
+        run: npm run lint
+
+      # Dependency-vulnerability surveillance. Until 2026-08-18 nothing here,
+      # in the decision register, or in any bot watched for advisories, so a
+      # critical chain in @auth/core -- the library the whole authentication
+      # system rests on -- sat unnoticed for four weeks after its fix shipped.
+      #
+      # --omit=dev because the question is "does the DEPLOYED artifact carry a
+      # known vulnerability", and dev tooling is not deployed.
+      #
+      # Threshold is `critical`, not `high`, and the reason is measured rather
+      # than cautious. At `high` this gate fails today on exactly four
+      # advisories -- prisma, @prisma/config, deepmerge-ts, fast-uri -- every
+      # one of them in Prisma's local dev tooling, which reaches an --omit=dev
+      # audit only because the production @prisma/client depends on prisma.
+      # None is in the shipped bundle: after a build, none appears under
+      # .next/standalone/node_modules, which is what the Docker image copies.
+      # A gate that is red on the day it is added gets switched off, and one
+      # that blocks on code that never deploys is measuring the wrong thing.
+      # `critical` would still have caught the @auth/core chain that motivated
+      # this step.
+      #
+      # Raise this to `high` once Prisma's dependency chain clears, and treat
+      # that as the goal rather than the status quo.
+      #
+      # NOT a silent tolerance: when this fails, read the advisory and decide.
+      # The two ways past it are upgrading, or recording a register row with
+      # the reason and a pick-up trigger.
+      #
+      # Runs on the daily schedule as well as on every push (see `on:` above),
+      # and a red scheduled run is reported through the dead-man ping that ends
+      # this job.
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=critical
+
+      - name: Typecheck
+        run: npm run typecheck
 
       - name: Build
         run: mkdir -p test-results && set -o pipefail && npm run build 2>&1 | tee test-results/build.log
@@ -270,8 +338,7 @@ jobs:
         # next step; `tee` keeps it in the Actions log too, and pipefail keeps a
         # failed build failing this step.
         #
-        # No DATABASE_URL override needed here even though the job-level
-        # value above is still in scope: Plan 1c's lazy-init fix
+        # No DATABASE_URL is set in this job (it starts no database): Plan 1c's lazy-init fix
         # (lib/data/connection.ts's hmrSingleton) means `next build` no
         # longer opens a database connection at import/page-data-collection
         # time, so this step does not depend on DATABASE_URL pointing
@@ -428,7 +495,7 @@ jobs:
     # credentials provider once (see the "Build e2e fixture" and "Run e2e
     # suite" steps below for why Playwright is still invoked twice even
     # though those logins now happen only once). 30 min is a backstop for a
-    # genuine hang, not a tight budget to tune, same rationale as `verify`'s
+    # genuine hang, not a tight budget to tune, same rationale as `unit`'s
     # own timeout comment above. Raised from 30 to 50 on 2026-11-06: by
     # v0.6.0 the job's normal run is about 26.5 min (run 42181650736), and
     # run 42184836682 was cancelled at 30 min in its last step with every
@@ -436,7 +503,7 @@ jobs:
     # may now retry for up to 35 min.
     timeout-minutes: 65
 
-    # Mirrors `verify`'s env block above (job-level env is not inherited
+    # Mirrors `unit`'s env block above (job-level env is not inherited
     # across jobs in GitHub Actions, so this cannot simply reference it) plus
     # the additional values this job's app process needs to actually boot
     # and serve requests, each cited against where it throws if unset.
@@ -516,7 +583,7 @@ jobs:
 
     services:
       postgres:
-        # Same image/health-check shape as `verify`'s service above; see
+        # Same image/health-check shape as `unit`'s service above; see
         # that block's comments for the superuser/CREATE EVENT TRIGGER
         # rationale (D-079), which applies identically here.
         image: postgres:16-alpine
@@ -546,12 +613,12 @@ jobs:
         run: npm ci
 
       - name: Generate Prisma Client
-        # Same reason as `verify`'s identical step above: this Prisma 7
+        # Same reason as `unit`'s identical step above: this Prisma 7
         # install has no `postinstall` client-generation hook.
         run: npx prisma generate
 
       - name: Apply migrations (as superuser)
-        # Same command as `verify`. Also the writer for the `fv_3_0_0`
+        # Same command as `unit`. Also the writer for the `fv_3_0_0`
         # FrameworkVersion row that every `assessments.frameworkVersionId`
         # foreign key depends on -- inserted by
         # prisma/migrations/20260807102031_framework_registry_and_pin/migration.sql,
@@ -559,7 +626,7 @@ jobs:
         run: npx prisma migrate deploy
 
       - name: Provision the makrai_app and makrai_identity role passwords
-        # Same command/env shape as `verify`'s identical step; see that
+        # Same command/env shape as `unit`'s identical step; see that
         # step's comment for why PSQL_CMD/PGPASSWORD are overridden this way
         # in CI (no local `docker-postgres-1` container to exec into), why
         # the password variables are left unset, and why the flag is needed.
