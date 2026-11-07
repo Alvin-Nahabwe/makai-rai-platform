@@ -21,7 +21,7 @@ export default async function AcceptancesPage() {
   const mode = missing.length > 0 ? 'required' : 'offer';
   return (
     <div style={{ maxWidth: '40rem' }}>
-      <RecordAcceptances texts={texts} mode={mode} />
+      <RecordAcceptances texts={texts} mode={mode} userId={identity.userId} />
     </div>
   );
 }

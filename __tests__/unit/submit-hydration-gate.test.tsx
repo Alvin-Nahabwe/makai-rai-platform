@@ -71,7 +71,7 @@ describe('containers pass the hydration state to their view (NFR-SEC)', () => {
     ['S-02 ForgotPasswordClient', () => <ForgotPasswordClient />],
     ['S-29 ChangePasswordForm', () => <ChangePasswordForm />],
     ['S-04 AcceptInvitationClient (signed out)', () => <AcceptInvitationClient token={'t'.repeat(64)} invitedEmail="a@x.test" orgName="Lab" role="assessor"
-      inviterName="Amina N." viewerEmail={null} expiresOn="2026-11-09" texts={STUB_LEGAL_TEXTS.slice()} />],
+      inviterName="Amina N." viewerEmail={null} viewerUserId={null} expiresOn="2026-11-09" texts={STUB_LEGAL_TEXTS.slice()} />],
     ['S-24 CreateOrganisationForm', () => <CreateOrganisationForm versions={VERSIONS} today="2026-11-02" />],
   ];
   for (const [name, element] of containers) {

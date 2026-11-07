@@ -1,5 +1,6 @@
 import { closeSync, fchmodSync, openSync, readFileSync, writeFileSync } from 'node:fs';
-import { test as setup } from '@playwright/test';
+// The loopback guard: V's image config runs this file, and a Node-side request there would reach the public makrai.org.
+import { test as setup } from '../helpers/loopbackOnly';
 import type { PerfManifest } from '../../scripts/load/seed-perf-fixture';
 import { signInWith } from '../helpers/session';
 

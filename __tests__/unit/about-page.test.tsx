@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { readCreditLine } from '@/lib/credit';
 import { isClaim } from '@/lib/claims/pattern';
+import { releaseWaiver } from '../helpers/releaseWaivers';
 
 /**
  * The page and the credit line read their files with `readFileSync`. The mock
@@ -268,7 +269,10 @@ describe('S-28 About page', () => {
   // Shown as skipped, not passed, when RELEASE_CANDIDATE is not 1. The pending sentence promises an address
   // "before the platform opens to teams" (13.8 step 4d).
   it.runIf(process.env.RELEASE_CANDIDATE === '1')('UX-03: with RELEASE_CANDIDATE=1 the Help and contact address is named, not pending', () => {
-    expect(helpContact().email).not.toBeNull();
+    // The owner shipped the pending text (UX-03, "Ship pending text"): a complete waiver covering data/help-contact.json
+    // passes this case (docs/releases/release-waivers.json); without one the address must be named.
+    const waived = releaseWaiver('UX-03 help-contact-pending')?.covers.includes('data/help-contact.json') === true;
+    expect(helpContact().email !== null || waived, 'the address is pending and no owner waiver covers it').toBe(true);
   });
 
   it('UX-03 WCAG 2.4.2: the page title says which page it is', () => {

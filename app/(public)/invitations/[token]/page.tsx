@@ -80,6 +80,7 @@ export default async function InvitationPage({
           role={invitation.role}
           inviterName={invitation.invitedBy.name}
           viewerEmail={identity?.email ?? null}
+          viewerUserId={identity?.userId ?? null}
           expiresOn={expiresOn}
           texts={texts}
         />

@@ -39,11 +39,11 @@ export function AccountRegions({ identity, reminderEmails, lastActiveOwnerOf }: 
         <p><Link href="/change-password" style={TARGET}>Change password</Link></p>
       </section>
       <section aria-labelledby="account-sessions-heading"><h2 id="account-sessions-heading">Sessions</h2>
-        <div><SignOutEverywhere /></div>
+        <div><SignOutEverywhere userId={identity.userId} /></div>
       </section>
       <MyAcceptances userId={identity.userId} />
       <ReminderEmailsSetting enabled={reminderEmails} />
-      <PersonalExportAndDeletion lastActiveOwnerOf={lastActiveOwnerOf} />
+      <PersonalExportAndDeletion userId={identity.userId} lastActiveOwnerOf={lastActiveOwnerOf} />
       <DraftsOnThisDevice userId={identity.userId} />
     </div>
   );

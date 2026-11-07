@@ -33,7 +33,7 @@ const noop = () => {};
 describe('S-21 My account', () => {
   it('M-38 FR-EXP-03 (S-21): the page passes the organisations where the account is the only active owner', () => {
     html(<AccountRegions identity={id} reminderEmails lastActiveOwnerOf={['Lab One']} />);
-    expect(vi.mocked(PersonalExportAndDeletion)).toHaveBeenLastCalledWith({ lastActiveOwnerOf: ['Lab One'] }, undefined);
+    expect(vi.mocked(PersonalExportAndDeletion)).toHaveBeenLastCalledWith({ userId: 'u1', lastActiveOwnerOf: ['Lab One'] }, undefined);
   });
 
   it('FR-ACC-07 FR-ACC-08: S-21 offers sign out everywhere and change password, and renders every slot with its props', () => {
@@ -44,7 +44,7 @@ describe('S-21 My account', () => {
     expect(vi.mocked(MyAcceptances)).toHaveBeenLastCalledWith({ userId: id.userId }, undefined);
     expect(vi.mocked(ReminderEmailsSetting)).toHaveBeenLastCalledWith({ enabled: false }, undefined);
     expect(vi.mocked(DraftsOnThisDevice)).toHaveBeenLastCalledWith({ userId: id.userId }, undefined);
-    expect(vi.mocked(PersonalExportAndDeletion)).toHaveBeenLastCalledWith({ lastActiveOwnerOf: [] }, undefined);
+    expect(vi.mocked(PersonalExportAndDeletion)).toHaveBeenLastCalledWith({ userId: 'u1', lastActiveOwnerOf: [] }, undefined);
   });
 
   it('FR-ACC-04 (S-21, W-12): the regions come in W-12 order, each a labelled section', () => {

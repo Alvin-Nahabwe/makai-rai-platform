@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { Pool } from 'pg';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { AppError, NotImplementedError } from '@/lib/http/errors';
 import { logRequestFailure, newSupportReference, stampReference, stampUnavailableOperation, withUnavailableStamp } from '@/lib/http/supportReference';
 import { toResponse } from '@/lib/http/toResponse';
@@ -201,6 +201,52 @@ it('NFR-OBS-05 (round 9c): the reference is put after the spread of extra, so no
   expect(await answer(new AppError(500, 'real', 'real message', { error: 'x', code: 'x' } as never))).toMatchObject({ body: { error: 'real message', code: 'real' } });
 });
 
+/** The one REQUEST_FAILED line an unmapped error writes, parsed; the reference is in this line and no other. */
+function failedLine(lines: string[], reference: unknown): { error: { name: string; code?: string; frames: string[] } } & Record<string, unknown> {
+  const hits = loggedFor(lines, reference);
+  expect(hits, 'the reference is in exactly one log line').toHaveLength(1);
+  return JSON.parse(hits[0]);
+}
+
+it('NFR-PRIV-03 NFR-OBS-01 NFR-OBS-05 SPEC-2 CR-2: a planted email in an unmapped error is not in the log, and the class and frames are in the one line', async () => {
+  const { body, lines } = await answer(new Error('lookup failed for planted@b.org with reason secret reason text'));
+  expect(scanLines(lines, { markers: true, emails: true })).toEqual([]);
+  expect(lines.join('\n')).not.toContain('secret reason');
+  expect(lines.some((l) => l.includes('UNMAPPED_ERROR'))).toBe(false);
+  const line = failedLine(lines, body.reference);
+  expect(line).toMatchObject({ event: 'REQUEST_FAILED', status: 500, code: 'internal_error', reference: body.reference, error: { name: 'Error' } });
+  expect(line.error.frames.length).toBeGreaterThan(0);
+  expect(line.error.frames.length).toBeLessThanOrEqual(10);
+  expect('code' in line.error).toBe(false);
+});
+
+it('NFR-PRIV-03 NFR-OBS-01 SPEC-2: a Prisma-shaped unmapped error logs its code and not its address', async () => {
+  const { body, lines } = await answer(Object.assign(new Error('Unique constraint failed on x@y.org'), { code: 'P2002' }));
+  expect(scanLines(lines, { markers: true, emails: true })).toEqual([]);
+  expect(failedLine(lines, body.reference).error.code).toBe('P2002');
+  expect(lines.join('\n')).not.toContain('@y.org');
+});
+
+it('NFR-PRIV-03 CR-3 SFH-6: a second message line that starts with "at" is not read as a frame', async () => {
+  for (const message of ['lookup failed\n    at secret reason', 'first\nsecond\n    at secret reason of the third line']) {
+    const { body, lines } = await answer(new Error(message));
+    expect(lines.join('\n'), message).not.toContain('secret reason');
+    expect(failedLine(lines, body.reference).error.frames.length, message).toBeGreaterThan(0);
+  }
+});
+
+it('NFR-OBS-05 CR-4: a thrown object whose properties throw on read still answers 500 with a reference', async () => {
+  const hostile = {
+    get constructor(): never { throw new Error('constructor getter'); },
+    get code(): never { throw new Error('code getter'); },
+    get stack(): never { throw new Error('stack getter'); },
+  };
+  const { status, body, lines } = await answer(hostile);
+  expect(status).toBe(500);
+  expect(body).toMatchObject({ code: 'internal_error', reference: expect.stringMatching(REFERENCE) });
+  expect(failedLine(lines, body.reference).error).toEqual({ name: 'object', frames: [] });
+});
+
 it('NFR-OBS-05: a reference is eight lowercase hexadecimal characters, a new one each time', () => {
   const seen = new Set(Array.from({ length: 50 }, () => newSupportReference()));
   expect(seen.size).toBe(50);
@@ -213,16 +259,19 @@ it('NFR-MNT-01 NFR-OBS-05: any other thrown value answers 500 internal_error wit
     expect(status, String(thrown)).toBe(500);
     expect(body, String(thrown)).toMatchObject({ code: 'internal_error', message: 'internal_error', error: 'internal_error', reference: expect.stringMatching(REFERENCE) });
     expect(Object.keys(body).sort(), String(thrown)).toEqual(['code', 'error', 'message', 'reference']);
-    // The reference is in exactly one line: the REQUEST_FAILED line. The error itself was printed before it was stamped.
+    // The reference is in exactly one line (NFR-OBS-05): the REQUEST_FAILED line, which also carries the class and frames.
     const hits = loggedFor(lines, body.reference);
     expect(hits, String(thrown)).toHaveLength(1);
-    expect(JSON.parse(hits[0])).toMatchObject({ event: 'REQUEST_FAILED', status: 500, code: 'internal_error', reference: body.reference });
-    expect(Object.keys(JSON.parse(hits[0])).sort()).toEqual(['at', 'code', 'event', 'reference', 'status']); // no cause
-    expect(lines.length, String(thrown)).toBeGreaterThan(1); // the error's own print is there as well
+    const failed = hits[0];
+    expect(JSON.parse(failed)).toMatchObject({ event: 'REQUEST_FAILED', status: 500, code: 'internal_error', reference: body.reference });
+    expect(Object.keys(JSON.parse(failed)).sort()).toEqual(['at', 'code', 'error', 'event', 'reference', 'status']); // no cause
   }
-  // What Next printed when the error was rethrown is printed now: the message is in the log, and not in the body.
+  // The bug stays visible in the log by its class name and a frame, not by its message; the body has no message either.
   const { body, lines } = await answer(new Error('the bug: a record had no owner'));
-  expect(lines.some((l) => l.includes('the bug: a record had no owner'))).toBe(true);
+  const unmapped = failedLine(lines, body.reference).error;
+  expect(unmapped.name).toBe('Error');
+  expect(unmapped.frames.length).toBeGreaterThan(0);
+  expect(lines.some((l) => l.includes('the bug: a record had no owner'))).toBe(false);
   expect(JSON.stringify(body)).not.toContain('record had no owner');
   // The error carries the reference it was answered with.
   const e = new Error('carries it');
@@ -349,6 +398,22 @@ describe('the lane clients\' hook', () => {
     expect(helper.match(/as unknown as PrismaClient/g)).toHaveLength(1);
     expect(helper).toMatch(/\$extends\(\{ query: \{ \$allOperations: stampUnavailableOperation \} \}\)/);
   });
+});
+
+it('NFR-PRIV-03 FIX-8: a message shortened after its stack was read leaves no message line in the log', async () => {
+  const { toResponse } = await import('@/lib/http/toResponse');
+  const e = new Error('lookup failed\n    at secret reason text');
+  void e.stack; // V8 fixes the stack's header at the first read
+  e.message = 'lookup failed';
+  const lines: string[] = [];
+  const spy = vi.spyOn(console, 'error').mockImplementation((...a: unknown[]) => { lines.push(a.map(String).join(' ')); });
+  try {
+    expect(toResponse(e).status).toBe(500);
+  } finally {
+    spy.mockRestore();
+  }
+  expect(lines.join('\n')).not.toContain('secret reason');
+  expect(lines).toHaveLength(1);
 });
 
 it('NFR-OBS-05: the body and the REQUEST_FAILED line carry the reference the error carries, so the page and the log agree', async () => {

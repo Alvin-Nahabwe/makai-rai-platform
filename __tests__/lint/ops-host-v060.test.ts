@@ -390,6 +390,7 @@ case "$1" in
     case "$all" in
       *pg_isready*) ;;
       *rolbypassrls*) echo "\${STUB_ROLE-t}" ;;
+      *rolcanlogin*) echo "\${STUB_LOGINS-0}" ;;
       *'count(*) FROM seals'*) echo "\${STUB_SEAL_COUNT-0}" ;;
       *'FROM seals'*) printf '%s' "\${STUB_ORG_IDS-}"; [ -z "\${STUB_ORG_IDS-}" ] || echo ;;
       *'-f -'*) cp "$REC/exec-stdin-$$" "$REC/rows-plan-stdin" 2>/dev/null; printf '%s\\n' "\${STUB_ROWS-ROWS-FROM-RESTORED-COPY}"; [ "\${STUB_ROWS_RC:-0}" = 0 ] || exit "$STUB_ROWS_RC" ;;
@@ -434,6 +435,7 @@ type RestoreOpts = {
   hang?: 'plan' | 'check';
   role?: string;
   sealCount?: string;
+  logins?: string;
 };
 
 function runRestore(o: RestoreOpts = {}) {
@@ -443,7 +445,13 @@ function runRestore(o: RestoreOpts = {}) {
     // those, in its own copies, so the script that runs is the committed one with a different root.
     const app = path.join(dir, 'app');
     mkdirSync(path.join(app, 'prisma', 'migrations', '0001_init'), { recursive: true });
-    writeFileSync(path.join(app, 'prisma', 'migrations', '0001_init', 'migration.sql'), 'CREATE ROLE makrai_app;\n');
+    writeFileSync(path.join(app, 'prisma', 'migrations', '0001_init', 'migration.sql'), 'CREATE ROLE makrai_app LOGIN NOSUPERUSER;\n');
+    // A function-owner role as the v0.6.0 migrations write it (SEC-1): the live NOLOGIN check needs one.
+    mkdirSync(path.join(app, 'prisma', 'migrations', '0002_fn'), { recursive: true });
+    writeFileSync(
+      path.join(app, 'prisma', 'migrations', '0002_fn', 'migration.sql'),
+      '-- CREATE ROLE defaults to NOINHERIT? a comment, not a role\n    CREATE ROLE makrai_definer NOLOGIN NOSUPERUSER;\n',
+    );
     writeFileSync(
       path.join(app, '.env'),
       [
@@ -486,6 +494,7 @@ function runRestore(o: RestoreOpts = {}) {
         STUB_SEAL_COUNT: o.sealCount ?? /^seals=(\d+)/.exec(o.sealCheck?.stdout ?? 'seals=0')?.[1] ?? '0',
         ...(o.hang ? { STUB_SEAL_HANG: o.hang } : {}),
         ...(o.role !== undefined ? { STUB_ROLE: o.role } : {}),
+        ...(o.logins !== undefined ? { STUB_LOGINS: o.logins } : {}),
         STUB_ROWS_RC: String(o.rowsRc ?? 0),
         STUB_DB_BYTES: sizes.db ?? '1048576',
         STUB_UNATTACHED: sizes.unattached ?? '0',
@@ -515,6 +524,27 @@ function runRestore(o: RestoreOpts = {}) {
 
 describe('makrai-restore-test.sh seal check and sizes (Task 2)', () => {
   const OK_SEALS = 'seals=3 valid=3 mismatched=0 erased_fields=1 erased_files=0';
+
+  it('NFR-SEC-04 FIX-1: a NOLOGIN role that can log in on the live cluster fails the run with field logins', () => {
+    const r = runRestore({ sealCheck: { code: 0, stdout: OK_SEALS }, logins: '1' });
+    expect(r.code).toBe(1);
+    expect(r.stdout).toBe('RESTORE MISMATCH logins\n');
+    expect(r.log).toMatch(/Restore test FAILED: logins$/m);
+    expect(r.log).toContain('logins: live=1');
+    expect(r.pings).toEqual([`${PING}/fail`]);
+    // The count is asked of the live cluster, for the migrations' NOLOGIN roles only; the comment is no role.
+    const asked = r.calls.filter((c) => c.join(' ').includes('rolcanlogin'));
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).toContain('docker-postgres-1');
+    expect(asked[0].join(' ')).toContain("rolname IN ('makrai_definer')");
+    expect(r.calls.some((c) => c.join(' ').includes('CREATE ROLE defaults'))).toBe(false);
+  });
+
+  it('NFR-SEC-04 FIX-1: with every NOLOGIN role unable to log in on the live cluster the run passes', () => {
+    const r = runRestore({ sealCheck: { code: 0, stdout: OK_SEALS }, logins: '0' });
+    expect(r.code, r.log).toBe(0);
+    expect(r.stdout).toBe('RESTORE MATCH\n');
+  });
 
   it('NFR-INT-07: one tampered seal makes the restore test fail with field seals', () => {
     const r = runRestore({

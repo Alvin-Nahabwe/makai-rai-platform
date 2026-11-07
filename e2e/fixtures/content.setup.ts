@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { execFileSync } from 'node:child_process';
-import { test as setup } from '@playwright/test';
+// The loopback guard: playwright.perf-nginx.config.ts (baseURL https://makrai.org) runs this file too.
+import { test as setup } from '../helpers/loopbackOnly';
 
 /**
  * The `content` project (playwright.config.ts) runs before `setup`. The web server Playwright starts serves the

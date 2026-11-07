@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { signOut } from 'next-auth/react';
+import { openDraftStore } from '@/lib/client/drafts';
 import type { CSSProperties, ReactElement } from 'react';
 import { InlineConfirm } from '@/components/ui/InlineConfirm';
 import { PreparingDownload } from '@/components/export/PreparingDownload';
@@ -54,7 +55,7 @@ export function deletionOutcome(status: number, body: unknown): DeletionOutcome 
 }
 
 /** The inline confirmation of Delete my account (UX-29): password, typed phrase, and a button that repeats the action. */
-export function DeleteConfirm({ onCancel }: { onCancel: () => void }): ReactElement {
+export function DeleteConfirm({ userId, onCancel }: { userId: string; onCancel: () => void }): ReactElement {
   const id = useId();
   const [password, setPassword] = useState('');
   const [phrase, setPhrase] = useState('');
@@ -83,6 +84,8 @@ export function DeleteConfirm({ onCancel }: { onCancel: () => void }): ReactElem
     }
     if (next.kind === 'deleted') {
       // Every session already ended on the server (sessionEpoch); this clears this browser's cookie and shows S-01.
+      // The account's drafts (its reason text) leave this device first (NFR-PRIV-06).
+      openDraftStore()?.purgeAccount(userId);
       try {
         await signOut({ callbackUrl: '/login' });
       } catch {
@@ -119,7 +122,7 @@ export function DeleteConfirm({ onCancel }: { onCancel: () => void }): ReactElem
   );
 }
 
-export function PersonalExportAndDeletionForm({ lastActiveOwnerOf }: { lastActiveOwnerOf: string[] }): ReactElement {
+export function PersonalExportAndDeletionForm({ userId, lastActiveOwnerOf }: { userId: string; lastActiveOwnerOf: string[] }): ReactElement {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const closedOnce = useRef(false);
@@ -140,7 +143,7 @@ export function PersonalExportAndDeletionForm({ lastActiveOwnerOf }: { lastActiv
         {lastActiveOwnerOf.length > 0
           ? lastActiveOwnerOf.map((org) => <p key={org} role="note">{m38(org)}</p>)
           : open
-            ? <DeleteConfirm onCancel={() => { closedOnce.current = true; setOpen(false); }} />
+            ? <DeleteConfirm userId={userId} onCancel={() => { closedOnce.current = true; setOpen(false); }} />
             : <button ref={triggerRef} type="button" className="btn btn--secondary" onClick={() => setOpen(true)}>Delete my account...</button>}
       </section>
     </>

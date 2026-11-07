@@ -1,12 +1,9 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { HOSTILE_STRINGS } from '../helpers/hostile';
 import { RES, handBuiltContent } from '../helpers/suggestionsFixture';
 import { ControlCard } from '@/components/suggestions/ControlCard';
 import { parseResources } from '@/lib/content/resources';
-
-// The requirements file is C-NB's and does not exist yet (see the helper): only its stat is answered.
-vi.mock('node:fs', async (importOriginal) => (await import('../helpers/requirementsStat')).withRequirementsStat(await importOriginal<typeof import('node:fs')>()));
 
 const c = handBuiltContent('__tests__/fixtures/content/0.0.1-fixture');
 const card = (id: string, extra = {}) =>

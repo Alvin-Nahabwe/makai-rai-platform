@@ -79,6 +79,10 @@ test('NFR-REL-05: a refusal is never retried by itself when the browser comes ba
 test('UX-27 FR-DEC-07 M-04: a reply lost after the server saved; Retry unchanged reuses the id and shows Already saved', async ({ page, baseURL }) => {
   const ids = captureDecisionRequestIds(page);
   await openQuestion(page, 'assessor', Q, baseURL!); await fillValid(page);
+  // WARNING: route.fetch() sends from Playwright's Node side, which ignores --host-resolver-rules. Under an image config
+  // (baseURL https://makrai.org) it goes to the public site; copied into an image run it sent one POST there. Here the
+  // baseURL is loopback. For an image run, fail the reply inside Chromium (CDP Fetch at the Response stage) and take
+  // `test` from helpers/loopbackOnly, which refuses this call (__tests__/lint/e2e-loopback-guard.test.ts).
   await page.route('**/decisions', async (r) => { await r.fetch(); await r.abort('failed'); }, { times: 1 });   // the server commits, the page sees a failure
   await page.getByRole('button', { name: 'Save decision' }).click();
   await expect(saveAlert(page)).toContainText('Not saved: connection lost.');

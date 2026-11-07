@@ -98,6 +98,9 @@ export function ChangePasswordForm() {
       next = { kind: 'error', message: NOT_CHANGED };
     }
     if (next.kind === 'done') {
+      // This browser is signed out after a change, and the person signs straight back in as the same account (R-53).
+      // The drafts belong to that account, so they are kept here, unlike the other person-started sign-outs. If another
+      // account signs in next on this device, `purgeOtherAccounts` clears them (NFR-PRIV-06; controller ruling, 7 Nov 2026).
       try {
         await signOut({ callbackUrl: '/login?passwordChanged=1' });
       } catch {

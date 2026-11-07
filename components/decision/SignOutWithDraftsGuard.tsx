@@ -16,8 +16,10 @@ export const m41 = (n: number): string =>
  * (S-21's drafts list) and **Delete them and sign out**, which deletes this account's drafts and then signs out. With
  * no draft, or no storage, the press goes through to the button unchanged.
  *
- * This is the only place drafts are deleted at sign-out. An idle sign-out runs no client code, so it keeps them
- * (R-53, SRS line 5907), and the next account's sign-in removes them (ACC-b's `purgeOtherAccounts`).
+ * The sign-outs a person starts purge this account's drafts: this guard, account deletion, sign out everywhere, the S-05
+ * sign out and the S-04 sign outs (NFR-PRIV-06). Change password keeps them, as the session continues. An idle sign-out
+ * runs no client code, so it keeps them (R-53, SRS line 5907), and the next account's sign-in removes them (ACC-b's
+ * `purgeOtherAccounts`).
  */
 export function SignOutWithDraftsGuard({ userId, children }: SignOutWithDraftsGuardProps): ReactElement {
   const [count, setCount] = useState<number | null>(null);

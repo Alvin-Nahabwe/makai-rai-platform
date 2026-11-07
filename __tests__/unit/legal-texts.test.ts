@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { claimMatches } from '@/lib/claims/pattern';
+import { releaseWaiver } from '../helpers/releaseWaivers';
 
 /**
  * The words of the version-1 legal texts as shipped (FR-ACC-02; ACC-a Task 13). The actual registry
@@ -72,6 +73,9 @@ describe('the version-1 terms and privacy texts (FR-ACC-02)', () => {
     const placeholder = 'supplied by legal before the deploy day';
     const holding = LEGAL_KINDS.flatMap((k) => readdirSync(`data/legal/${k}`).filter((f) => f.endsWith('.md')).map((f) => `data/legal/${k}/${f}`))
       .filter((f) => readFileSync(f, 'utf8').includes(placeholder));
-    expect(holding, 'version files still holding the placeholder').toEqual([]);
+    // The owner shipped two of them as placeholders (A4, "Ship placeholders"): a complete waiver covers exactly those
+    // files (docs/releases/release-waivers.json); any other file holding the placeholder still fails.
+    const waiver = releaseWaiver('FR-ACC-02 legal-placeholder');
+    expect(holding.filter((f) => !waiver?.covers.includes(f)), 'version files still holding the placeholder, with no owner waiver').toEqual([]);
   });
 });
