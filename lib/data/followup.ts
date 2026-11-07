@@ -111,10 +111,11 @@ export async function ownerCannotAct(ctx: OrgContext, projectId: string, o: Foll
 export async function stageFollowUpCounts(
   ctx: OrgContext, projectId: string, stage: Stage, today: CalendarDate, o: FollowUpOptions = {},
 ): Promise<{ openFindings: number; overdueMitigations: number }> {
-  const counts = (await projectFollowUpCounts(ctx, projectId, today, o))[stage];
-  // A stage outside STAGES has no entry; every caller passes a checked Stage, so one that does not is a defect.
-  if (counts === undefined) throw new Error(`stageFollowUpCounts: unknown stage ${String(stage)}`);
-  return counts;
+  const all = await projectFollowUpCounts(ctx, projectId, today, o);
+  // A stage outside STAGES has no entry (an own property only, so 'constructor' is not one); every caller passes a
+  // checked Stage, so one that does not is a defect.
+  if (!Object.hasOwn(all, stage)) throw new Error(`stageFollowUpCounts: unknown stage ${String(stage)}`);
+  return all[stage];
 }
 
 /** Findings whose state is open, and overdue mitigations, of each stage. */

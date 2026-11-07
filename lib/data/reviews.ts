@@ -241,7 +241,9 @@ async function reviewStates(tx: TenantTx, reviews: readonly { id: string; projec
   }
   const changes = await idSetChanges(tx, new Map(compared.flatMap((c) => (c.diff === null ? [] : [[c.reviewId, c.diff] as const]))));
   for (const c of compared) {
-    const change = changes.get(c.reviewId) ?? null;
+    const change = c.diff === null ? null : changes.get(c.reviewId);
+    // idSetChanges answers every review it is asked about; a missing answer would read as "unchanged", so it throws.
+    if (change === undefined) throw new Error(`reviews: no change list for review ${c.reviewId}`);
     if (change === null && c.cut.length === 0) {
       out.set(c.reviewId, { seal: c.seal, changed: null, unreadable: false });
       continue;
