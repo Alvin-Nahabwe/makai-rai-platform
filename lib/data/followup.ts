@@ -73,22 +73,28 @@ export type FollowUpOptions = { includeArchived?: boolean };
 const withArchivedKept = (rows: FollowUpSourceRows, o: FollowUpOptions): FollowUpSourceRows =>
   o.includeArchived === true ? { ...rows, archivedProjectIds: [] } : rows;
 
+/** The open items of `rows` that `keep` keeps, in the rules' order, with each one's text and owner. */
+async function itemsOf(tx: TenantTx, rows: FollowUpSourceRows, today: CalendarDate, keep: (c: FollowUpCore) => boolean = () => true): Promise<FollowUpItem[]> {
+  const actable = await actableOwners(tx, rows.currentMitigations.map((m) => m.ownerUserId));
+  return toItems(tx, selectOpenMitigations(rows, actable, today).filter(keep));
+}
+
+/** Items by the stage of their finding, each stage's in the order given. */
+function byStageOf(items: readonly FollowUpItem[]): Record<Stage, FollowUpItem[]> {
+  const out = Object.fromEntries(STAGES.map((s) => [s, [] as FollowUpItem[]])) as Record<Stage, FollowUpItem[]>;
+  for (const i of items) out[i.stage].push(i);
+  return out;
+}
+
 async function loadItems(ctx: OrgContext, filter: { projectId?: string }, today: CalendarDate, keep: (c: FollowUpCore) => boolean = () => true, o: FollowUpOptions = {}): Promise<FollowUpItem[]> {
-  return withOrg(ctx, async (tx) => {
-    const rows = withArchivedKept(await loadFollowUpSourceRows(tx, filter), o);
-    const actable = await actableOwners(tx, rows.currentMitigations.map((m) => m.ownerUserId));
-    return toItems(tx, selectOpenMitigations(rows, actable, today).filter(keep));
-  });
+  return withOrg(ctx, async (tx) => itemsOf(tx, withArchivedKept(await loadFollowUpSourceRows(tx, filter), o), today, keep));
 }
 
 /** FR-FUP-01: every open item of the project by stage, cannot-act ones included with `ownerCanAct: false`. */
 export async function openMitigationsByStage(
   ctx: OrgContext, projectId: string, today: CalendarDate, o: FollowUpOptions = {},
 ): Promise<Record<Stage, FollowUpItem[]>> {
-  const items = await loadItems(ctx, { projectId }, today, () => true, o);
-  const out = Object.fromEntries(STAGES.map((s) => [s, [] as FollowUpItem[]])) as Record<Stage, FollowUpItem[]>;
-  for (const i of items) out[i.stage].push(i);
-  return out;
+  return byStageOf(await loadItems(ctx, { projectId }, today, () => true, o));
 }
 
 /** FR-FUP-01: the open items `userId` owns in the context organisation, in every active project. */
@@ -105,11 +111,42 @@ export async function ownerCannotAct(ctx: OrgContext, projectId: string, o: Foll
 export async function stageFollowUpCounts(
   ctx: OrgContext, projectId: string, stage: Stage, today: CalendarDate, o: FollowUpOptions = {},
 ): Promise<{ openFindings: number; overdueMitigations: number }> {
+  const all = await projectFollowUpCounts(ctx, projectId, today, o);
+  // A stage outside STAGES has no entry (an own property only, so 'constructor' is not one); every caller passes a
+  // checked Stage, so one that does not is a defect.
+  if (!Object.hasOwn(all, stage)) throw new Error(`stageFollowUpCounts: unknown stage ${String(stage)}`);
+  return all[stage];
+}
+
+/** Findings whose state is open, and overdue mitigations, of each stage. */
+export type StageFollowUpCounts = Record<Stage, { openFindings: number; overdueMitigations: number }>;
+
+/** Findings whose state is open, and overdue mitigations, by stage, from the project's follow-up rows. */
+function countsOf(rows: FollowUpSourceRows, today: CalendarDate): StageFollowUpCounts {
+  const states = findingStates(rows);
+  const overdue = selectOpenMitigations(rows, () => true, today).filter((m) => m.overdue);
+  return Object.fromEntries(STAGES.map((stage) => [stage, {
+    openFindings: rows.findings.filter((f) => f.stage === stage && states.get(f.id) === 'open').length,
+    overdueMitigations: overdue.filter((m) => m.stage === stage).length,
+  }])) as StageFollowUpCounts;
+}
+
+/** `stageFollowUpCounts` of every stage of the project from one read of its follow-up rows. */
+export async function projectFollowUpCounts(
+  ctx: OrgContext, projectId: string, today: CalendarDate, o: FollowUpOptions = {},
+): Promise<StageFollowUpCounts> {
+  return withOrg(ctx, async (tx) => countsOf(withArchivedKept(await loadFollowUpSourceRows(tx, { projectId }), o), today));
+}
+
+/**
+ * S-10's follow-up (FR-FUP-01, FR-FUP-05, FR-PRJ-02) from one read of the project's follow-up rows (NFR-PERF-04,
+ * FIX-12): `openMitigationsByStage`'s lists and `projectFollowUpCounts`' counts, each as those functions give it.
+ */
+export async function projectFollowUp(
+  ctx: OrgContext, projectId: string, today: CalendarDate, o: FollowUpOptions = {},
+): Promise<{ open: Record<Stage, FollowUpItem[]>; counts: StageFollowUpCounts }> {
   return withOrg(ctx, async (tx) => {
     const rows = withArchivedKept(await loadFollowUpSourceRows(tx, { projectId }), o);
-    const states = findingStates(rows);
-    const openFindings = rows.findings.filter((f) => f.stage === stage && states.get(f.id) === 'open').length;
-    const overdueMitigations = selectOpenMitigations(rows, () => true, today).filter((m) => m.stage === stage && m.overdue).length;
-    return { openFindings, overdueMitigations };
+    return { open: byStageOf(await itemsOf(tx, rows, today)), counts: countsOf(rows, today) };
   });
 }

@@ -688,3 +688,60 @@ it('NFR-PERF-04: a one-owner manifest with the default 10 users exits 2 at seat 
   expect(r.stderr).toMatch(/--users 10[\s\S]*owner or admin seats[\s\S]*1/);
   expect(stub.hits).toEqual([]);
 }, 20_000);
+
+// ---- FIX-12: an operation filter, so one budget can be measured alone ---------------------------------------------
+
+it('NFR-PERF-04 FIX-12: --only names the operations to run, any other name is refused before any request, and the default is all five', () => {
+  expect(parseArgs(['--base', 'http://localhost:3105'])).toMatchObject({ only: null });
+  expect(parseArgs(['--base', 'http://localhost:3105', '--only', 'render-s10-s11'])).toMatchObject({ only: ['render-s10-s11'] });
+  expect(parseArgs(['--base', 'http://localhost:3105', '--only', 'render-s10-s11,save-decision'])).toMatchObject({ only: ['render-s10-s11', 'save-decision'] });
+  const bogus = runScript(['--base', 'http://localhost:3105', '--only', 'render-s10']);
+  expect(bogus.status).toBe(2);
+  expect(bogus.stderr).toMatch(/--only[\s\S]*render-s10-s11/);
+  expect(runScript(['--base', 'http://localhost:3105', '--only', '']).status).toBe(2);
+});
+
+it('NFR-PERF-04 FIX-12: with --only, a virtual user asks for the named operations alone', () => {
+  const none = new Set<string>();
+  const ask = (only: string[] | null) =>
+    operationsToAsk({ sent: {}, hasReview: true, exportsLeft: 2, pendingOnly: none, only }) as string[];
+  expect(ask(null)).toEqual(['save-decision', 'render-s10', 'render-s11', 'seal-stage', 'generate-document', 'team-export']);
+  expect(ask(['render-s10-s11'])).toEqual(['render-s10', 'render-s11']);
+  expect(ask(['save-decision', 'team-export'])).toEqual(['save-decision', 'team-export']);
+});
+
+it('NFR-PERF-04 FIX-12: with --only, an operation not named prints `skipped` and neither fails the run nor counts as pending', () => {
+  const s = newStats();
+  for (const ms of [100, 200, 300]) {
+    record(s, 'render-s10', 200, ms);
+    record(s, 'render-s11', 200, ms);
+  }
+  const only = renderReport(s, { only: ['render-s10-s11'] });
+  expect(only.lines).toEqual([
+    'op=save-decision skipped',
+    'op=render-s10-s11 p95ms=300 budgetms=800 n=6',
+    'op=seal-stage skipped',
+    'op=generate-document skipped',
+    'op=team-export skipped',
+  ]);
+  expect(only.code).toBe(0);
+  expect(only.notes).toEqual([]);
+  // Without --only the same answers leave four operations unmeasured, which fails the run.
+  expect(renderReport(s).code).toBe(1);
+  // A named operation that measured nothing still fails.
+  expect(renderReport(newStats(), { only: ['render-s10-s11'] }).code).toBe(1);
+});
+
+it('NFR-PERF-04 FIX-12: a run with --only render-s10-s11 sends no save, review, seal, document or export request', async () => {
+  const stub = await stubServer((req, res) => {
+    if (/\/orgs\/acme\/projects\//.test(req.url ?? '')) return (res.writeHead(200, { 'content-type': 'text/html' }), res.end('<html>page</html>'), true);
+    return false;
+  });
+  const r = await runAsync(['--base', stub.base, '--manifest', manifestFile(2), '--project', 'p1', '--users', '2', '--seconds', '1', '--only', 'render-s10-s11']);
+  expect(r.status, r.stderr).toBe(0);
+  expect(r.stdout).toMatch(/^op=render-s10-s11 p95ms=\d+ budgetms=800 n=\d+$/m);
+  expect(r.stdout).toMatch(/^op=save-decision skipped$/m);
+  const measured = stub.hits.filter((h) => !h.path.startsWith('/api/auth/'));
+  expect(measured.length).toBeGreaterThan(0);
+  expect(measured.every((h) => h.method === 'GET' && /^\/orgs\/acme\/projects\/p1(\/stages\/pre-processing)?$/.test(h.path))).toBe(true);
+}, 20_000);

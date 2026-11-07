@@ -1,6 +1,7 @@
 import type { TenantTx } from '@/lib/data/tenant';
 import type { Stage } from '@/types/record';
 import type { SealSourceRows, SealSourceTable } from '../integrity/sealCheck.mjs';
+import type { StagePlanRows } from './manifest';
 
 /**
  * The rows a seal of one stage is built from (SRS 5.4), in the `row_to_json` form of the contract's
@@ -55,7 +56,7 @@ async function readTables(tx: TenantTx, tables: readonly (keyof typeof STAGE_SOU
 }
 
 /** The organisation of the transaction, as `withOrg` set it; the queries name it, row-level security enforces it. */
-async function currentOrg(tx: TenantTx): Promise<string> {
+export async function currentOrg(tx: TenantTx): Promise<string> {
   const [{ org }] = await tx.$queryRaw<{ org: string | null }[]>`SELECT NULLIF(current_setting('app.current_org_id', true), '') AS org`;
   if (org === null) throw new Error('lib/seal/reads: no organisation is set on this transaction (call inside withOrg)');
   return org;
@@ -69,4 +70,31 @@ export async function readStageDecisionRows(tx: TenantTx, projectId: string, sta
 /** The finding side of a stage: its findings, their events, mitigation versions and links, and accepted risks. */
 export async function readStageFindingRows(tx: TenantTx, projectId: string, stage: Stage): Promise<Partial<SealSourceRows>> {
   return readTables(tx, FINDING_TABLES, await currentOrg(tx), projectId, stage);
+}
+
+/** `json_agg` of `columns` of `from`, or `[]` when it has no row. */
+const agg = (columns: readonly string[], from: string) =>
+  `(SELECT coalesce(json_agg(json_build_object(${columns.map((c) => `'${c}', t."${c}"`).join(', ')})), '[]'::json) FROM ${from})`;
+
+/**
+ * The rows `stagePlan` reads, and no other column: what "changed since seal" plans the stage's ids from now (FR-REV-05,
+ * SRS line 993). The same rows as `STAGE_SOURCE_SQL` names, with only the columns `stagePlan` and `stageIdsNow` read
+ * (ids, `stage`, `questionId`, `versionNumber`, `status`, `scopeAnswer`, `findingId`, `mitigationId`, `findingSeq` and
+ * the link columns), so no free text, no timestamp and no digest is read, sent or parsed. One statement: each table is
+ * one `json_agg` value, parsed once, not row by row (NFR-PERF-04; FIX-12). Its type holds only the tables the plan
+ * reads, so nothing that reads evidence, reviews or seals (the seal builder, the seal check, documents) can be given
+ * these rows: those read `readStageRows`.
+ */
+const PLAN_SQL = `SELECT
+  ${agg(['id', 'stage', 'questionId', 'versionNumber', 'status', 'scopeAnswer'], `decision_versions t WHERE t."orgId" = $1 AND t."projectId" = $2 AND t."stage" = $3`)} AS "decision_versions",
+  ${agg(['versionId', 'evidenceId'], `decision_evidence t WHERE t."orgId" = $1 AND t."versionId" IN (${OF_STAGE_DECISIONS})`)} AS "decision_evidence",
+  ${agg(['id', 'stage'], `findings t WHERE t."orgId" = $1 AND t."projectId" = $2 AND t."stage" = $3`)} AS "findings",
+  ${agg(['id', 'findingId'], `finding_events t WHERE t."orgId" = $1 AND t."findingId" IN (${OF_STAGE_FINDINGS})`)} AS "finding_events",
+  ${agg(['id', 'findingId', 'mitigationId', 'versionNumber'], `mitigation_versions t WHERE t."orgId" = $1 AND t."findingId" IN (${OF_STAGE_FINDINGS})`)} AS "mitigation_versions",
+  ${agg(['versionId', 'evidenceId'], `mitigation_evidence t WHERE t."orgId" = $1 AND t."versionId" IN (${OF_STAGE_MITIGATIONS})`)} AS "mitigation_evidence",
+  ${agg(['id', 'findingId', 'findingSeq'], `accepted_risks t WHERE t."orgId" = $1 AND t."findingId" IN (${OF_STAGE_FINDINGS})`)} AS "accepted_risks"`;
+
+export async function readStagePlanRows(tx: TenantTx, projectId: string, stage: Stage): Promise<StagePlanRows> {
+  const [rows] = await tx.$queryRawUnsafe<StagePlanRows[]>(PLAN_SQL, await currentOrg(tx), projectId, stage);
+  return rows;
 }

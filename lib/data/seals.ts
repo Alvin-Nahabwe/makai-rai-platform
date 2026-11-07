@@ -15,6 +15,7 @@ import { logSecurityEvent } from '@/lib/security-logger';
 import { canonicalManifestBytes, fingerprintHex } from '@/lib/integrity/canonical.mjs';
 import { SEAL_SOURCE_SQL, checkSealRows, manifestFromRows, manifestIds, trustedManifest, type SealSourceRows, type TombstoneRow } from '@/lib/integrity/sealCheck.mjs';
 import { readStageRows, stagePlan } from '@/lib/seal/manifest';
+import { currentOrg } from '@/lib/seal/reads';
 import { stageReviewName } from '@/lib/seal/reviewName';
 import type { Stage } from '@/types/record';
 
@@ -29,11 +30,14 @@ const SEAL_VIEW_SELECT = {
   manifest: true, contentVersion: { select: { semver: true } },
 } satisfies Prisma.SealSelect;
 
-/** `SealView` of seal rows, `bytesMatch` checked against the stored bytes on every read (NFR-INT-05, gap G015). */
-async function sealViews(tx: TenantTx, rows: Array<{
+/** A seal row as `SEAL_VIEW_SELECT` reads it: what a `SealView` is made of, the stored bytes included. */
+export type SealViewRow = {
   id: string; stageReviewId: string; sealNumber: number; fingerprint: string; sealedById: string; sealedByRole: SealView['sealedByRole'];
   sealedAt: Date; manifest: Uint8Array; contentVersion: { semver: string };
-}>): Promise<SealView[]> {
+};
+
+/** `SealView` of seal rows, `bytesMatch` checked against the stored bytes on every read (NFR-INT-05, gap G015). */
+export async function sealViews(tx: TenantTx, rows: SealViewRow[]): Promise<SealView[]> {
   const refs = await userRefs(tx, rows.map((r) => r.sealedById));
   return rows.map((r) => {
     const sealedBy = refs.get(r.sealedById);
@@ -178,6 +182,27 @@ export async function listSeals(ctx: OrgContext, reviewId: string): Promise<Seal
   return withOrg(ctx, async (tx) => sealViews(tx, await tx.seal.findMany({
     where: { stageReviewId: reviewId }, orderBy: { sealNumber: 'desc' }, select: SEAL_VIEW_SELECT,
   })));
+}
+
+/**
+ * The latest seal of each review (the one `listSeals` gives first, the highest `sealNumber`), as stored, keyed by review
+ * id; a review with no seal has no entry. Two statements whatever the number of reviews or seals (NFR-PERF-04, FIX-12):
+ * the latest seal ids, then those rows, so no other seal's bytes are read. Inside the caller's transaction, so row-level
+ * security scopes it to the organisation.
+ */
+export async function latestSealRows(tx: TenantTx, reviewIds: readonly string[]): Promise<Map<string, SealViewRow>> {
+  const ids = [...new Set(reviewIds)];
+  if (ids.length === 0) return new Map();
+  // The organisation as withOrg set it, read with a check that throws when none is set, so a transaction without one
+  // is an error, never "no review has a seal" (C4 SFH-5).
+  const orgId = await currentOrg(tx);
+  const latest = await tx.$queryRaw<{ id: string }[]>`
+    SELECT DISTINCT ON ("stageReviewId") "id" FROM "seals"
+    WHERE "orgId" = ${orgId} AND "stageReviewId" = ANY (${ids}::text[])
+    ORDER BY "stageReviewId", "sealNumber" DESC`;
+  if (latest.length === 0) return new Map();
+  const rows = await tx.seal.findMany({ where: { id: { in: latest.map((r) => r.id) } }, select: SEAL_VIEW_SELECT });
+  return new Map(rows.map((r) => [r.stageReviewId, r]));
 }
 
 /**

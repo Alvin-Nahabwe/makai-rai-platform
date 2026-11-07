@@ -2,6 +2,7 @@ import type { OrgRole } from '@prisma/client';
 import { assertCan, NotFoundError, withOrg, type OrgContext, type TenantTx } from '@/lib/data/tenant';
 import { STAGES, type Actor, type DecisionStatus, type DecisionVersionRow, type ScopeAnswer, type Stage, type WriteOutcome } from '@/types/record';
 import type { ChangedSinceSeal, OpenReviewRequest, StageReviewView } from '@/types/api';
+import type { LoadedContent } from '@/types/content';
 import { ConflictError, ValidationFailed } from '@/lib/http/errors';
 import { idempotentWrite } from '@/lib/data/idempotency';
 import { assertProjectWritable } from '@/lib/data/projectGuard';
@@ -12,8 +13,9 @@ import { listFindings } from '@/lib/data/findings';
 import { contentRefById, resolveRunningContentVersion } from '@/lib/data/framework';
 import { loadContent, questionApplies, questionsInStage } from '@/lib/content/loader';
 import { manifestIds, stageSnapshotIds } from '@/lib/seal/ids';
-import { readStageRows, stagePlan } from '@/lib/seal/manifest';
-import { listSeals } from '@/lib/data/seals';
+import { stagePlan } from '@/lib/seal/manifest';
+import { readStagePlanRows } from '@/lib/seal/reads';
+import { latestSealRows, sealViews, type SealViewRow } from '@/lib/data/seals';
 import { trustedManifest } from '@/lib/integrity/sealCheck.mjs';
 import { stageReviewName } from '@/lib/seal/reviewName';
 // A NUL or a lone surrogate cannot be stored as sent; the one rule, shared with findings text (C4 SI-1).
@@ -115,64 +117,84 @@ export async function openStageReview(
 
 /**
  * The project's reviews, of one stage when given, in `STAGES` order and then by number (W-1, W-7), each with its
- * latest seal (`listSeals`, newest first) and what changed since it (`changedSinceSeal`).
+ * latest seal (`listSeals`' first) and what changed since it (`changedSinceSeal`'s answer).
+ *
+ * One REPEATABLE READ snapshot, and a fixed number of statements whatever the number of reviews and seals (NFR-PERF-04,
+ * FIX-12; S-10 and S-11 render this on every view): the reviews, their openers, the latest seal of each
+ * (`latestSealRows`), the stage as it is now once per stage that has a sealed review (`readStagePlanRows`), and the rows
+ * the differences name, once for all the reviews (`reviewStates`).
  */
 export async function listStageReviews(ctx: OrgContext, projectId: string, stage?: Stage): Promise<StageReviewView[]> {
-  const views = await withOrg(ctx, async (tx) => {
+  return withOrg(ctx, async (tx) => {
     const rows = await tx.stageReview.findMany({
       where: stage === undefined ? { projectId } : { projectId, stage }, select: REVIEW_SELECT,
     });
     const order = (r: ReviewRow) => STAGES.indexOf(r.stage as Stage);
-    return reviewViews(tx, [...rows].sort((x, y) => order(x) - order(y) || x.numberInStage - y.numberInStage));
-  });
-  const out: StageReviewView[] = [];
-  for (const v of views) {
-    const latestSeal = (await listSeals(ctx, v.id))[0] ?? null;
-    const state = latestSeal === null ? null : await withOrg(ctx, (tx) => sealState(tx, v.id), { isolationLevel: 'RepeatableRead' });
-    const changed = state?.changed ?? null;
-    out.push({ ...v, latestSeal, changed, changedSinceLatestSeal: changed !== null, latestSealUnreadable: state?.unreadable ?? false });
-  }
-  return out;
+    const sorted = [...rows].sort((x, y) => order(x) - order(y) || x.numberInStage - y.numberInStage);
+    const views = await reviewViews(tx, sorted);
+    const states = await reviewStates(tx, sorted);
+    const seals = await sealViews(tx, sorted.flatMap((r) => states.get(r.id)?.seal ?? []));
+    const sealOf = new Map(seals.map((v) => [v.reviewId, v]));
+    return views.map((v) => {
+      const state = states.get(v.id);
+      const changed = state?.changed ?? null;
+      return { ...v, latestSeal: sealOf.get(v.id) ?? null, changed, changedSinceLatestSeal: changed !== null, latestSealUnreadable: state?.unreadable ?? false };
+    });
+  }, { isolationLevel: 'RepeatableRead' });
 }
 
 type IdSet = Awaited<ReturnType<typeof stageSnapshotIds>>;
+const ID_KEYS = ['decisionVersions', 'evidence', 'findings', 'findingEvents', 'mitigationVersions', 'acceptedRisks'] as const;
+type IdDiff = Record<(typeof ID_KEYS)[number], string[]>;
 
 /**
- * What differs between two id sets (FR-REV-05, SRS line 993: row ids, never times): the question ids of the decision
- * versions in one set and not the other, and the finding ids whose own id, events, current mitigation versions or
- * accepted risk differ, each sorted. The rows are append-only, so every id a seal or the stage names still has its row.
+ * What differs between two id sets (FR-REV-05, SRS line 993: row ids, never times), key by key: the ids in one set and
+ * not the other. Null when nothing differs. Evidence cannot differ alone: a seal names evidence only through the
+ * decision and mitigation versions that link it, and those links are append-only, so a changed evidence set always
+ * comes with a changed version (C4 CR-8).
  */
-async function idSetChange(tx: TenantTx, sealed: IdSet, now: IdSet): Promise<{ changedQuestions: string[]; changedFindings: string[] } | null> {
+function idSetDiff(sealed: IdSet, now: IdSet): IdDiff | null {
   const diff = (a: readonly string[], b: readonly string[]) => {
     const inA = new Set(a);
     const inB = new Set(b);
     return [...a.filter((x) => !inB.has(x)), ...b.filter((x) => !inA.has(x))];
   };
-  const keys = ['decisionVersions', 'evidence', 'findings', 'findingEvents', 'mitigationVersions', 'acceptedRisks'] as const;
-  const d = Object.fromEntries(keys.map((k) => [k, diff(sealed[k], now[k])])) as Record<(typeof keys)[number], string[]>;
-  // Evidence cannot differ alone: a seal names evidence only through the decision and mitigation versions that link it,
-  // and those links are append-only, so a changed evidence set always comes with a changed version (C4 CR-8).
-  if (keys.every((k) => d[k].length === 0)) return null;
+  const d = Object.fromEntries(ID_KEYS.map((k) => [k, diff(sealed[k], now[k])])) as IdDiff;
+  return ID_KEYS.every((k) => d[k].length === 0) ? null : d;
+}
+
+type IdChange = { changedQuestions: string[]; changedFindings: string[] };
+
+/**
+ * For each review's difference, keyed by review id, the question ids of the decision versions it names, and the finding
+ * ids whose own id, events, current mitigation versions or accepted risk differ, each sorted (FR-REV-05). The rows are
+ * append-only, so every id a seal or the stage names still has its row; the rows of all the differences are read
+ * together, four statements in all. The answer is keyed as the question is, so no review is paired with another's.
+ */
+async function idSetChanges(tx: TenantTx, diffs: ReadonlyMap<string, IdDiff>): Promise<Map<string, IdChange>> {
+  if (diffs.size === 0) return new Map();
+  const all = (k: keyof IdDiff) => [...new Set([...diffs.values()].flatMap((d) => d[k]))];
+  const questions = new Map((await tx.decisionVersion.findMany({ where: { id: { in: all('decisionVersions') } }, select: { id: true, questionId: true } })).map((r) => [r.id, r.questionId]));
+  const events = new Map((await tx.findingEvent.findMany({ where: { id: { in: all('findingEvents') } }, select: { id: true, findingId: true } })).map((r) => [r.id, r.findingId]));
+  const mitigations = new Map((await tx.mitigationVersion.findMany({ where: { id: { in: all('mitigationVersions') } }, select: { id: true, findingId: true } })).map((r) => [r.id, r.findingId]));
+  const risks = new Map((await tx.acceptedRisk.findMany({ where: { id: { in: all('acceptedRisks') } }, select: { id: true, findingId: true } })).map((r) => [r.id, r.findingId]));
   const sorted = (xs: Iterable<string>) => [...new Set(xs)].sort();
-  const questions = await tx.decisionVersion.findMany({ where: { id: { in: d.decisionVersions } }, select: { questionId: true } });
-  const events = await tx.findingEvent.findMany({ where: { id: { in: d.findingEvents } }, select: { findingId: true } });
-  const mitigations = await tx.mitigationVersion.findMany({ where: { id: { in: d.mitigationVersions } }, select: { findingId: true } });
-  const risks = await tx.acceptedRisk.findMany({ where: { id: { in: d.acceptedRisks } }, select: { findingId: true } });
-  return {
-    changedQuestions: sorted(questions.map((q) => q.questionId)),
-    changedFindings: sorted([...d.findings, ...events.map((e) => e.findingId), ...mitigations.map((m) => m.findingId), ...risks.map((x) => x.findingId)]),
-  };
+  const of = (ids: readonly string[], m: Map<string, string>) => ids.flatMap((id) => m.get(id) ?? []);
+  return new Map([...diffs].map(([reviewId, d]) => [reviewId, {
+    changedQuestions: sorted(of(d.decisionVersions, questions)),
+    changedFindings: sorted([...d.findings, ...of(d.findingEvents, events), ...of(d.mitigationVersions, mitigations), ...of(d.acceptedRisks, risks)]),
+  }]));
 }
 
 /**
  * The ids a seal of the stage taken now would name, planned on the running content (`stageSnapshotIds`'s plan, SRS
- * line 993), and the questions with a current decision that the running content no longer holds. Those questions are
- * set aside before planning, because REV-a's planner refuses them (lib/seal/manifest.ts:67, R-45 open); the caller
- * reports them as changed (C4 CR-2 ruling: a defined state, never a 500). Every other refusal still throws.
+ * line 993, on `readStagePlanRows`, the columns the plan reads), and the questions with a current decision that the
+ * running content no longer holds. Those questions are set aside before planning, because REV-a's planner refuses them
+ * (lib/seal/manifest.ts:67, R-45 open); the caller reports them as changed (C4 CR-2 ruling: a defined state, never a
+ * 500). Every other refusal still throws.
  */
-async function stageIdsNow(tx: TenantTx, projectId: string, stage: Stage): Promise<{ ids: IdSet; cut: string[] }> {
-  const content = loadContent((await resolveRunningContentVersion(tx)).semver);
-  const rows = await readStageRows(tx, projectId, stage);
+async function stageIdsNow(tx: TenantTx, content: LoadedContent, projectId: string, stage: Stage): Promise<{ ids: IdSet; cut: string[] }> {
+  const rows = await readStagePlanRows(tx, projectId, stage);
   const known = new Set(questionsInStage(content, stage).map((q) => q.id));
   const cut = new Set<string>();
   for (const r of rows.decision_versions) {
@@ -183,21 +205,53 @@ async function stageIdsNow(tx: TenantTx, projectId: string, stage: Stage): Promi
   return { ids: stagePlan(kept, { stage, content }).ids, cut: [...cut].sort() };
 }
 
-/** The review's highest seal, compared with the stage now: null when never sealed; `unreadable` when its bytes are no readable manifest of it. */
-async function sealState(tx: TenantTx, reviewId: string): Promise<{ changed: ChangedSinceSeal | null; unreadable: boolean } | null> {
-  const review = await tx.stageReview.findFirst({ where: { id: reviewId }, select: { projectId: true, stage: true } });
-  if (review === null) throw new NotFoundError();
-  const seal = await tx.seal.findFirst({
-    where: { stageReviewId: reviewId }, orderBy: { sealNumber: 'desc' }, select: { id: true, sealNumber: true, manifest: true, fingerprint: true },
-  });
-  if (seal === null) return null;
-  const gate = trustedManifest({ sealId: seal.id, manifestBytes: seal.manifest, fingerprint: seal.fingerprint });
-  if (gate.kind !== 'trusted') return { changed: null, unreadable: true };
-  const now = await stageIdsNow(tx, review.projectId, review.stage as Stage);
-  const change = await idSetChange(tx, manifestIds(gate.manifest), now.ids);
-  if (change === null && now.cut.length === 0) return { changed: null, unreadable: false };
-  const changedQuestions = [...new Set([...(change?.changedQuestions ?? []), ...now.cut])].sort();
-  return { changed: { sealNumber: seal.sealNumber, changedQuestions, changedFindings: change?.changedFindings ?? [] }, unreadable: false };
+/** A review's latest seal as stored, and what changed since it: `unreadable` when its bytes are no readable manifest of it (it then compares nothing). */
+type ReviewState = { seal: SealViewRow | null; changed: ChangedSinceSeal | null; unreadable: boolean };
+
+/**
+ * The state of each review in the caller's snapshot: its highest seal (`latestSealRows`) compared with its stage now.
+ * The stage now is read once per (project, stage), the running content once, and the rows the differences name once for
+ * all, so the statements do not grow with the reviews (NFR-PERF-04, FIX-12).
+ */
+async function reviewStates(tx: TenantTx, reviews: readonly { id: string; projectId: string; stage: string }[]): Promise<Map<string, ReviewState>> {
+  const out = new Map<string, ReviewState>();
+  const latest = await latestSealRows(tx, reviews.map((r) => r.id));
+  let content: LoadedContent | undefined;
+  const nowOf = new Map<string, { ids: IdSet; cut: string[] }>();
+  const compared: { reviewId: string; seal: SealViewRow; diff: IdDiff | null; cut: string[] }[] = [];
+  for (const r of reviews) {
+    const seal = latest.get(r.id) ?? null;
+    if (seal === null) {
+      out.set(r.id, { seal: null, changed: null, unreadable: false });
+      continue;
+    }
+    const gate = trustedManifest({ sealId: seal.id, manifestBytes: seal.manifest, fingerprint: seal.fingerprint });
+    if (gate.kind !== 'trusted') {
+      out.set(r.id, { seal, changed: null, unreadable: true });
+      continue;
+    }
+    const key = `${r.projectId}\u0000${r.stage}`;
+    let now = nowOf.get(key);
+    if (now === undefined) {
+      content ??= loadContent((await resolveRunningContentVersion(tx)).semver);
+      now = await stageIdsNow(tx, content, r.projectId, r.stage as Stage);
+      nowOf.set(key, now);
+    }
+    compared.push({ reviewId: r.id, seal, diff: idSetDiff(manifestIds(gate.manifest), now.ids), cut: now.cut });
+  }
+  const changes = await idSetChanges(tx, new Map(compared.flatMap((c) => (c.diff === null ? [] : [[c.reviewId, c.diff] as const]))));
+  for (const c of compared) {
+    const change = c.diff === null ? null : changes.get(c.reviewId);
+    // idSetChanges answers every review it is asked about; a missing answer would read as "unchanged", so it throws.
+    if (change === undefined) throw new Error(`reviews: no change list for review ${c.reviewId}`);
+    if (change === null && c.cut.length === 0) {
+      out.set(c.reviewId, { seal: c.seal, changed: null, unreadable: false });
+      continue;
+    }
+    const changedQuestions = [...new Set([...(change?.changedQuestions ?? []), ...c.cut])].sort();
+    out.set(c.reviewId, { seal: c.seal, changed: { sealNumber: c.seal.sealNumber, changedQuestions, changedFindings: change?.changedFindings ?? [] }, unreadable: false });
+  }
+  return out;
 }
 
 /**
@@ -207,10 +261,14 @@ async function sealState(tx: TenantTx, reviewId: string): Promise<{ changed: Cha
  * current decision that the running content no longer holds is listed as changed (S-16 says it is no longer in the
  * question set). A latest seal whose bytes are no readable manifest of it (`trustedManifest`; its fingerprint may still
  * match, so `SealView.bytesMatch` can be true) compares nothing and reads null here; `listStageReviews` flags it as
- * `latestSealUnreadable`, and the seal check reports it.
+ * `latestSealUnreadable`, and the seal check reports it. A review the organisation does not hold is not found.
  */
 export async function changedSinceSeal(ctx: OrgContext, reviewId: string): Promise<ChangedSinceSeal | null> {
-  return withOrg(ctx, async (tx) => (await sealState(tx, reviewId))?.changed ?? null, { isolationLevel: 'RepeatableRead' });
+  return withOrg(ctx, async (tx) => {
+    const review = await tx.stageReview.findFirst({ where: { id: reviewId }, select: { id: true, projectId: true, stage: true } });
+    if (review === null) throw new NotFoundError();
+    return (await reviewStates(tx, [review])).get(reviewId)?.changed ?? null;
+  }, { isolationLevel: 'RepeatableRead' });
 }
 
 /** The statuses a current decision can count under on S-17, in the order UX-18 lists them. */

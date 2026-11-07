@@ -7,6 +7,10 @@ import { readStageDecisionRows, readStageFindingRows } from './reads';
 
 type Row = Readonly<Record<string, unknown>>;
 
+/** The tables `stagePlan` reads: every other table of `SealSourceRows` is not looked at by the plan. */
+export type StagePlanRows = Pick<SealSourceRows,
+  'decision_versions' | 'decision_evidence' | 'findings' | 'finding_events' | 'mitigation_versions' | 'mitigation_evidence' | 'accepted_risks'>;
+
 /**
  * Every row a seal of the stage is built from, every table key present and `seals` empty (the builder appends
  * its own header). The decision side is read before the finding side, through the module's own exports, so a
@@ -58,7 +62,7 @@ function latestBy(rows: readonly Row[], group: (r: Row) => string, key: string):
  * Each id array is deduplicated and sorted by code unit, never left in database order. A current decision for a
  * question the content does not hold throws: whether it enters the manifest is a format decision (R-45).
  */
-export function stagePlan(rows: SealSourceRows, a: { stage: Stage; content: LoadedContent }): Omit<ManifestPlan, 'sealId'> {
+export function stagePlan(rows: StagePlanRows, a: { stage: Stage; content: LoadedContent }): Omit<ManifestPlan, 'sealId'> {
   const versions = rows.decision_versions.filter((r) => str(r, 'stage') === a.stage);
   const current = latestBy(versions, (r) => str(r, 'questionId'), 'versionNumber');
   const inStage = questionsInStage(a.content, a.stage);
