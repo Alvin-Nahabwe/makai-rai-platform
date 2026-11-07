@@ -59,11 +59,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # The unit and integration tests, split in three so the check meets NFR-MNT-02 (the verify
+  # The unit and integration tests, split by the matrix below (three shards; the total passed to
+  # vitest is strategy.job-total, so changing the matrix cannot drop a slice of the tests) so the check meets NFR-MNT-02 (the verify
   # job within 15 minutes). `verify` needs this job, so its success still means every test passed.
   # Each shard has its own Postgres service; the steps are the ones `verify` ran before the split.
   unit:
-    name: unit (shard ${{ matrix.shard }}/3)
+    name: unit (shard ${{ matrix.shard }}/${{ strategy.job-total }})
     strategy:
       fail-fast: false
       matrix:
@@ -72,13 +73,13 @@ jobs:
     # A genuine hang (a stuck test, a psql invocation waiting on a TTY
     # prompt it will never get) should fail loudly, not run until GitHub's
     # own 360-minute default cap. Generous relative to the actual expected
-    # runtime so this is a backstop, not a tight budget to tune. Raised from
-    # 15 to 30 on 2026-11-04: by v0.6.0 the job (lint, audit, typecheck,
-    # migrate, ~4,400 tests, build) took 14 min 53 s, and run 41859063898 was
-    # cancelled at 15 min mid-build with every step until then passing.
-    # Raised from 30 to 45 on 2026-11-06: the poppler install step may now
-    # retry for up to 17 min on a slow runner network, on top of the job's
-    # normal run.
+    # runtime so this is a backstop, not a tight budget to tune. The 45 minutes
+    # date from when one job ran lint, audit, typecheck, migrate, the tests and
+    # the build (raised from 15 to 30 on 2026-11-04, after run 41859063898 was
+    # cancelled at 15 min mid-build, and from 30 to 45 on 2026-11-06 for the
+    # poppler install, which may retry for up to 17 min on a slow runner
+    # network). Each shard now runs migrate, one third of the tests and that
+    # install. The value is left as it was, so a hang still fails.
     timeout-minutes: 45
 
     # Single source of truth for the three Postgres primitives, referenced
@@ -223,7 +224,7 @@ jobs:
         # TEST_DATABASE_URL/TEST_APP_DATABASE_URL (not
         # DATABASE_URL/APP_DATABASE_URL directly), falling back to
         # identical literals when those are unset.
-        run: npx vitest run --shard=${{ matrix.shard }}/3
+        run: npx vitest run --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
 
   verify:
@@ -238,22 +239,11 @@ jobs:
     # A genuine hang (a stuck test, a psql invocation waiting on a TTY
     # prompt it will never get) should fail loudly, not run until GitHub's
     # own 360-minute default cap. Generous relative to the actual expected
-    # runtime so this is a backstop, not a tight budget to tune. Raised from
-    # 15 to 30 on 2026-11-04: by v0.6.0 the job (lint, audit, typecheck,
-    # migrate, ~4,400 tests, build) took 14 min 53 s, and run 41859063898 was
-    # cancelled at 15 min mid-build with every step until then passing.
-    # Raised from 30 to 45 on 2026-11-06: the poppler install step may now
-    # retry for up to 17 min on a slow runner network, on top of the job's
-    # normal run.
+    # runtime so this is a backstop, not a tight budget to tune. The 45 minutes
+    # date from when this job also ran the migrations, the tests and the poppler
+    # install (see `unit`'s timeout comment); it now runs lint, audit, typecheck
+    # and the build. The value is left as it was, so a hang still fails.
     timeout-minutes: 45
-
-    # Kept from before the tests moved to the `unit` job; this job starts no Postgres
-    # (the build opens no connection, see the Build step), so these values are unused here.
-    env:
-      POSTGRES_USER: makrai
-      POSTGRES_PASSWORD: makrai_dev_password
-      POSTGRES_DB: makrai_test
-      DATABASE_URL: postgresql://makrai:makrai_dev_password@localhost:5432/makrai_test
 
     steps:
       - name: Require every unit shard to have passed
@@ -297,10 +287,10 @@ jobs:
         run: npx prisma generate
 
       # Lint and typecheck need no database, only the generated client above
-      # -- so they run before the two Postgres-dependent steps below and
-      # fail fast and cheaply on the far more common class of failure
-      # (a syntax/type error) before this job pays for 14 migrations and a
-      # role-provisioning step. Verified, not assumed: eslint.config.mjs
+      # -- so they run first and fail fast and cheaply on the far more common
+      # class of failure (a syntax/type error) before the build. This job
+      # starts no Postgres at all: the tests and their database run in `unit`.
+      # Verified, not assumed: eslint.config.mjs
       # only pulls in eslint-config-next's non-type-checked configs plus
       # this repo's own syntactic rules, so Lint touches no database either.
       - name: Lint
@@ -348,8 +338,7 @@ jobs:
         # next step; `tee` keeps it in the Actions log too, and pipefail keeps a
         # failed build failing this step.
         #
-        # No DATABASE_URL override needed here even though the job-level
-        # value above is still in scope: Plan 1c's lazy-init fix
+        # No DATABASE_URL is set in this job (it starts no database): Plan 1c's lazy-init fix
         # (lib/data/connection.ts's hmrSingleton) means `next build` no
         # longer opens a database connection at import/page-data-collection
         # time, so this step does not depend on DATABASE_URL pointing
@@ -506,7 +495,7 @@ jobs:
     # credentials provider once (see the "Build e2e fixture" and "Run e2e
     # suite" steps below for why Playwright is still invoked twice even
     # though those logins now happen only once). 30 min is a backstop for a
-    # genuine hang, not a tight budget to tune, same rationale as `verify`'s
+    # genuine hang, not a tight budget to tune, same rationale as `unit`'s
     # own timeout comment above. Raised from 30 to 50 on 2026-11-06: by
     # v0.6.0 the job's normal run is about 26.5 min (run 42181650736), and
     # run 42184836682 was cancelled at 30 min in its last step with every
@@ -514,7 +503,7 @@ jobs:
     # may now retry for up to 35 min.
     timeout-minutes: 65
 
-    # Mirrors `verify`'s env block above (job-level env is not inherited
+    # Mirrors `unit`'s env block above (job-level env is not inherited
     # across jobs in GitHub Actions, so this cannot simply reference it) plus
     # the additional values this job's app process needs to actually boot
     # and serve requests, each cited against where it throws if unset.
@@ -594,7 +583,7 @@ jobs:
 
     services:
       postgres:
-        # Same image/health-check shape as `verify`'s service above; see
+        # Same image/health-check shape as `unit`'s service above; see
         # that block's comments for the superuser/CREATE EVENT TRIGGER
         # rationale (D-079), which applies identically here.
         image: postgres:16-alpine
@@ -624,12 +613,12 @@ jobs:
         run: npm ci
 
       - name: Generate Prisma Client
-        # Same reason as `verify`'s identical step above: this Prisma 7
+        # Same reason as `unit`'s identical step above: this Prisma 7
         # install has no `postinstall` client-generation hook.
         run: npx prisma generate
 
       - name: Apply migrations (as superuser)
-        # Same command as `verify`. Also the writer for the `fv_3_0_0`
+        # Same command as `unit`. Also the writer for the `fv_3_0_0`
         # FrameworkVersion row that every `assessments.frameworkVersionId`
         # foreign key depends on -- inserted by
         # prisma/migrations/20260807102031_framework_registry_and_pin/migration.sql,
@@ -637,7 +626,7 @@ jobs:
         run: npx prisma migrate deploy
 
       - name: Provision the makrai_app and makrai_identity role passwords
-        # Same command/env shape as `verify`'s identical step; see that
+        # Same command/env shape as `unit`'s identical step; see that
         # step's comment for why PSQL_CMD/PGPASSWORD are overridden this way
         # in CI (no local `docker-postgres-1` container to exec into), why
         # the password variables are left unset, and why the flag is needed.
