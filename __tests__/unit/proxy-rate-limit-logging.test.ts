@@ -113,7 +113,7 @@ describe('proxy emits RATE_LIMIT_EXCEEDED when it returns a 429', () => {
     }
     const events = logged.filter((e) => e.event === 'RATE_LIMIT_EXCEEDED');
     expect(events).toHaveLength(2);
-    expect(events.map((e) => e.ctx?.userId)).toEqual([undefined, undefined]);
+    for (const e of events) expect(e.ctx).not.toHaveProperty('ip');
   });
 
   it('records the path that was refused and no client address (NFR-OBS-01, NFR-PRIV-03)', async () => {

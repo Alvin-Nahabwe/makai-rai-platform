@@ -200,8 +200,7 @@ export async function proxy(request: NextRequest) {
     // `RATE_LIMIT_EXCEEDED` is the one line that tells an operator a limit was breached: during a flood the
     // structured log must not be silent. A log line holds ids only (NFR-OBS-01, NFR-PRIV-03), so this one
     // names the user when there is one, the masked path, the method and the limit, and not the client address.
-    // The address is `x-forwarded-for` here, which the client can set (a known limitation of this choke point,
-    // D-124), and nginx's access log already holds the address and the time of every request, so that is where
+    // nginx's access log already holds the address and the time of every request, so that is where
     // to correlate a flood with its source. The path is masked as nginx masks it (`redactPathForLog`): an
     // invitation link carries a bearer token in the path, and a log line may not hold a secret.
     //

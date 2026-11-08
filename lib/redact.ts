@@ -104,8 +104,9 @@ export function redactEmails(value: unknown): unknown {
  * An invitation link carries a bearer token in the path: `/invitations/<token>` and
  * `/api/v1/invitations/<token>[/...]`. Nothing in a log line may be a secret (NFR-OBS-01, NFR-PRIV-03),
  * so a logged path names the route and not the token. This is nginx's rule for its access log, the `$log_uri`
- * map in docker/nginx/default.conf, and `__tests__/unit/redact-path-for-log.test.ts` holds the two to the same
- * pattern. Anchored at the start, so the ids in `/api/v1/orgs/<slug>/invitations/<id>/resend` stay as they are.
+ * map in docker/nginx/default.conf. `__tests__/unit/redact-path-for-log.test.ts` parses that rule out of the conf
+ * and checks both give the same output over a corpus of paths, so a change to either that alters one of them
+ * fails there; a path outside the corpus is not covered. Anchored at the start, so the ids in `/api/v1/orgs/<slug>/invitations/<id>/resend` stay as they are.
  */
 const INVITATION_TOKEN_PATH = /^(\/(?:api\/v1\/)?invitations\/)[^/]+(.*)$/;
 
