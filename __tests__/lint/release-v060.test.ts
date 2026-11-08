@@ -17,7 +17,8 @@ describe('the v0.6.0 release', () => {
   it('NFR-SEC-14 NFR-SEC-17 NFR-PRIV-05 FR-OPS-03: the v0.6.0 release notes carry the release facts and no value', () => {
     const t = readFileSync('docs/releases/v0.6.0.md', 'utf8');
     expect(JSON.parse(readFileSync('package.json', 'utf8')).version).toBe('0.6.0');
-    expect(t).toMatch(/^Commit to tag: [0-9a-f]{40}$/m);
+    expect(t).toMatch(/^Checked release commit: [0-9a-f]{40}$/m);
+    expect(t).toContain('The owner tags the merge commit of this pull request into main, not the checked release commit.');
     expect(t).toMatch(/^Live run: docs\/releases\/v0\.6\.0-live-run\.md \(candidate [0-9a-f]{40}\)$/m);
     for (const k of ['REMINDER_JOB_TOKEN', 'HC_REMINDER_PING_URL', 'SYNTHETIC_PROJECT_ID', 'SYNTHETIC_STAGE', 'SYNTHETIC_QUESTION_ID']) expect(t).toContain(`\`${k}\``);
     for (const k of ['ALLOW_OPEN_REGISTRATION', 'ORG_LIMIT_PER_USER', 'SYNTHETIC_ASSESSMENT_ID']) expect(t).toContain(`\`${k}\``);
