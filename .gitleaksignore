@@ -1,0 +1,23 @@
+5da322ef842ab451eb8b1cfa10872ad470d37336:__tests__/integration/internal-reminders-route.test.ts:generic-api-key:18
+984f9f6b229e75d578ae702b9e6c05a86cf9a7ce:__tests__/lint/helpers/rotate-sandbox.ts:generic-api-key:91
+25c49bbdbceb35e0079e130c33458dc4c632f218:__tests__/unit/redact-path-for-log.test.ts:generic-api-key:42
+# Image scan of makrai-web (mounted at /scan): run/sec-report.md, "Controller triage: the image scan's six findings", rows 4 to 9
+/scan/app/.next/prerender-manifest.json:generic-api-key:37
+/scan/app/.next/prerender-manifest.json:generic-api-key:38
+/scan/app/.next/server/server-reference-manifest.json:generic-api-key:4
+/scan/app/.next/server/preview-props.json:generic-api-key:3
+/scan/app/.next/server/preview-props.json:generic-api-key:4
+/scan/usr/local/include/node/v8-internal.h:generic-api-key:130
+# Image scan of makrai-migrator (mounted at /scan): run/sec-report.md, "Controller triage: the migrator image scan", rows 10 to 22
+/scan/app/.next/cache/.rscinfo:generic-api-key:1
+/scan/app/.next/cache/.previewinfo:generic-api-key:1
+/scan/app/.next/standalone/.next/prerender-manifest.json:generic-api-key:37
+/scan/app/.next/standalone/.next/prerender-manifest.json:generic-api-key:38
+/scan/app/.next/standalone/.next/server/preview-props.json:generic-api-key:3
+/scan/app/.next/standalone/.next/server/preview-props.json:generic-api-key:4
+/scan/app/.next/standalone/.next/server/server-reference-manifest.json:generic-api-key:4
+/scan/app/__tests__/integration/internal-reminders-route.test.ts:generic-api-key:18
+/scan/app/__tests__/lint/helpers/rotate-sandbox.ts:generic-api-key:95
+/scan/app/__tests__/unit/email-send.test.ts:generic-api-key:35
+/scan/app/__tests__/unit/redact-path-for-log.test.ts:generic-api-key:42
+/scan/app/ops/host/auditlog.mjs:generic-api-key:745

@@ -244,7 +244,7 @@
   {"table":"request_receipts","column":"createdAt","maps":"no personal data"},
   {"table":"request_receipts","column":"id","maps":"no personal data"},
   {"table":"request_receipts","column":"orgId","maps":"no personal data"},
-  {"table":"request_receipts","column":"requestDigest","maps":"no personal data"},
+  {"table":"request_receipts","column":"requestDigest","maps":"Accounts"},
   {"table":"request_receipts","column":"requestId","maps":"no personal data"},
   {"table":"request_receipts","column":"result","maps":"no personal data"},
   {"table":"request_receipts","column":"route","maps":"no personal data"},
