@@ -18,11 +18,14 @@ import { resetRateLimitStore, RATE_LIMITS } from '../../lib/rate-limit';
  * to return null -- an unauthenticated request keys on IP, which is what
  * these probes want, and it avoids needing a real session cookie.
  */
-vi.mock('next-auth/jwt', () => ({ getToken: () => Promise.resolve(null) }));
+const getTokenMock = vi.hoisted(() => vi.fn((): Promise<unknown> => Promise.resolve(null)));
+vi.mock('next-auth/jwt', () => ({ getToken: getTokenMock }));
 
+const loggerState = vi.hoisted(() => ({ throws: false }));
 const logged: Array<{ event: string; severity: string; ctx?: Record<string, unknown> }> = [];
 vi.mock('../../lib/security-logger', () => ({
   logSecurityEvent: (event: string, severity: string, ctx?: Record<string, unknown>) => {
+    if (loggerState.throws) throw new Error('logger down');
     logged.push({ event, severity, ctx });
   },
 }));
@@ -44,6 +47,8 @@ function req(ip: string) {
 beforeEach(() => {
   resetRateLimitStore();
   logged.length = 0;
+  getTokenMock.mockReset();
+  getTokenMock.mockImplementation(() => Promise.resolve(null));
   process.env.NEXTAUTH_SECRET ??= 'test-secret-for-proxy-rate-limit-logging';
 });
 
@@ -108,16 +113,68 @@ describe('proxy emits RATE_LIMIT_EXCEEDED when it returns a 429', () => {
     }
     const events = logged.filter((e) => e.event === 'RATE_LIMIT_EXCEEDED');
     expect(events).toHaveLength(2);
-    expect(events.map((e) => e.ctx?.ip)).toEqual(['10.0.0.5', '10.0.0.6']);
+    expect(events.map((e) => e.ctx?.userId)).toEqual([undefined, undefined]);
   });
 
-  it('records the client IP and the path that was refused, so a flood is attributable', async () => {
+  it('records the path that was refused and no client address (NFR-OBS-01, NFR-PRIV-03)', async () => {
     const max = RATE_LIMITS[`DELETE:${LIMITED_PATH}$`].max;
     for (let i = 0; i < max; i++) await proxy(req('10.0.0.3'));
     await proxy(req('10.0.0.3'));
 
     const [event] = logged.filter((e) => e.event === 'RATE_LIMIT_EXCEEDED');
-    expect(event.ctx).toMatchObject({ ip: '10.0.0.3' });
+    expect(event.ctx).not.toHaveProperty('ip');
     expect(event.ctx?.details).toMatchObject({ pathname: LIMITED_PATH, method: 'DELETE' });
+  });
+});
+
+/**
+ * NFR-OBS-01, NFR-PRIV-03 (FIX-16): an invitation link carries a bearer token in the path, and a log line holds
+ * ids only. nginx masks the same segment in its access log (docker/nginx/default.conf `$log_uri`).
+ */
+describe('proxy masks the invitation token and logs no address (NFR-OBS-01, NFR-PRIV-03)', () => {
+  const TOKEN = 'PROBETOKENabc123XYZ';
+  const INVITE_PATH = `/api/v1/invitations/${TOKEN}`;
+  const inviteReq = (ip: string) =>
+    new NextRequest(`http://localhost${INVITE_PATH}`, { method: 'GET', headers: { 'x-forwarded-for': ip } });
+
+  it('RATE_LIMIT_EXCEEDED for an invitation read holds the masked path, no token and no ip', async () => {
+    const max = RATE_LIMITS.default.max;
+    for (let i = 0; i < max; i++) {
+      const res = await proxy(inviteReq('10.0.1.1'));
+      expect(res.status).not.toBe(429);
+    }
+    const refused = await proxy(inviteReq('10.0.1.1'));
+
+    expect(refused.status).toBe(429);
+    const events = logged.filter((e) => e.event === 'RATE_LIMIT_EXCEEDED');
+    expect(events).toHaveLength(1);
+    expect((events[0].ctx?.details as Record<string, unknown>).pathname).toBe('/api/v1/invitations/[token]');
+    expect(JSON.stringify(events[0].ctx)).not.toContain(TOKEN);
+    expect(events[0].ctx).not.toHaveProperty('ip');
+  });
+
+  it('AUTH_TOKEN_DECODE_FAILURE for an invitation read holds the masked path (NFR-OBS-01)', async () => {
+    getTokenMock.mockImplementation(() => Promise.reject(new Error('decode failed')));
+    await proxy(inviteReq('10.0.1.2'));
+
+    const events = logged.filter((e) => e.event === 'AUTH_TOKEN_DECODE_FAILURE');
+    expect(events).toHaveLength(1);
+    expect((events[0].ctx?.details as Record<string, unknown>).pathname).toBe('/api/v1/invitations/[token]');
+    expect(JSON.stringify(events[0].ctx)).not.toContain(TOKEN);
+  });
+
+  it('the console fallback masks the path when the security logger itself throws (NFR-OBS-01)', async () => {
+    getTokenMock.mockImplementation(() => Promise.reject(new Error('decode failed')));
+    loggerState.throws = true;
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await proxy(inviteReq('10.0.1.3'));
+      const printed = JSON.stringify(spy.mock.calls);
+      expect(printed).toContain('/api/v1/invitations/[token]');
+      expect(printed).not.toContain(TOKEN);
+    } finally {
+      spy.mockRestore();
+      loggerState.throws = false;
+    }
   });
 });

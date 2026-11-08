@@ -100,6 +100,20 @@ export function redactEmails(value: unknown): unknown {
   return copy(value, new WeakSet(), 0);
 }
 
+/**
+ * An invitation link carries a bearer token in the path: `/invitations/<token>` and
+ * `/api/v1/invitations/<token>[/...]`. Nothing in a log line may be a secret (NFR-OBS-01, NFR-PRIV-03),
+ * so a logged path names the route and not the token. This is nginx's rule for its access log, the `$log_uri`
+ * map in docker/nginx/default.conf, and `__tests__/unit/redact-path-for-log.test.ts` holds the two to the same
+ * pattern. Anchored at the start, so the ids in `/api/v1/orgs/<slug>/invitations/<id>/resend` stay as they are.
+ */
+const INVITATION_TOKEN_PATH = /^(\/(?:api\/v1\/)?invitations\/)[^/]+(.*)$/;
+
+/** `pathname` with an invitation token replaced by `[token]`; every other path unchanged. */
+export function redactPathForLog(pathname: string): string {
+  return pathname.replace(INVITATION_TOKEN_PATH, '$1[token]$2');
+}
+
 const WRAPPED = Symbol.for('makrai.consoleRedaction');
 
 /**

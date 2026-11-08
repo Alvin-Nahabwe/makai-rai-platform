@@ -13,6 +13,7 @@ import { usesSecureCookies } from '@/lib/auth/secureCookie';
  */
 const UNKNOWN_CLIENT_IP = 'unknown-no-forwarded-for';
 import { logSecurityEvent } from '@/lib/security-logger';
+import { redactPathForLog } from '@/lib/redact';
 
 /**
  * Task 6 (active org as a URL segment): deliberately UNCHANGED here. The
@@ -185,10 +186,10 @@ export async function proxy(request: NextRequest) {
     // even where it is not currently reachable.
     try {
       logSecurityEvent('AUTH_TOKEN_DECODE_FAILURE', 'error', {
-        details: { pathname, message: e instanceof Error ? e.message : String(e) },
+        details: { pathname: redactPathForLog(pathname), message: e instanceof Error ? e.message : String(e) },
       });
     } catch {
-      console.error('proxy: getToken failed AND logging that failure also failed', pathname);
+      console.error('proxy: getToken failed AND logging that failure also failed', redactPathForLog(pathname));
     }
   }
 
@@ -196,36 +197,21 @@ export async function proxy(request: NextRequest) {
   const result = checkRateLimit(method, sessionRead ? SESSION_READ_PATH : pathname, ip, userId);
 
   if (!result.success) {
-    // C6 whole-branch review, orphan sweep. `RATE_LIMIT_EXCEEDED` was
-    // declared in `lib/security-logger.ts`'s `SecurityEvent` union and
-    // emitted nowhere: this block built the 429 and returned it silently,
-    // in a file that already imports `logSecurityEvent` and uses it two
-    // blocks up. That left the structured log quiet during exactly the
-    // traffic the limiter exists to blunt — an operator watching the one
-    // stream every other security event lands in would see a flood as an
-    // absence.
+    // `RATE_LIMIT_EXCEEDED` is the one line that tells an operator a limit was breached: during a flood the
+    // structured log must not be silent. A log line holds ids only (NFR-OBS-01, NFR-PRIV-03), so this one
+    // names the user when there is one, the masked path, the method and the limit, and not the client address.
+    // The address is `x-forwarded-for` here, which the client can set (a known limitation of this choke point,
+    // D-124), and nginx's access log already holds the address and the time of every request, so that is where
+    // to correlate a flood with its source. The path is masked as nginx masks it (`redactPathForLog`): an
+    // invitation link carries a bearer token in the path, and a log line may not hold a secret.
     //
-    // `userId` may be null (unauthenticated, or the fail-open path above);
-    // `ip` is the client-controlled `x-forwarded-for` when present, which
-    // is a known limitation of this whole choke point (D-124), not a new
-    // one introduced here — it is logged for attribution, never trusted as
-    // identity. `warn`, matching every other refusal-shaped event in this
-    // codebase (`INPUT_VALIDATION_FAILURE`), not `error`: a refused request
-    // is the control working.
-    //
-    // Gated on `firstRefusal` (lib/rate-limit.ts) after a `code-review`
-    // finding on the first draft of this fix, which logged EVERY refused
-    // request: that makes log volume track ATTACK volume 1:1, with an
-    // attacker-controlled `x-forwarded-for` and pathname in every line, so
-    // a fix for a silent control would have handed over a log-amplification
-    // vector instead. One line per (bucket, window) carries the same
-    // information — the limit was breached, by which identifier, on what
-    // path, and when it resets — and cannot be inflated by sending more.
+    // `warn`, matching every other refusal-shaped event (`INPUT_VALIDATION_FAILURE`): a refused request is
+    // the control working. Gated on `firstRefusal` (lib/rate-limit.ts): one line per (bucket, window) carries
+    // the whole signal, and log volume cannot be inflated by sending more requests.
     if (result.firstRefusal) {
       logSecurityEvent('RATE_LIMIT_EXCEEDED', 'warn', {
         ...(userId ? { userId } : {}),
-        ip,
-        details: { pathname, method, limit: result.limit },
+        details: { pathname: redactPathForLog(pathname), method, limit: result.limit },
       });
     }
     // The one key whose refusal a browser navigation can meet: the team export is a plain link on S-20, so a
