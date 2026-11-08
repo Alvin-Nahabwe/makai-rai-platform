@@ -40,7 +40,9 @@ describe('the v0.6.0 release', () => {
     expect(t).toContain('`REMINDER_JOB_TOKEN`: a new host secret, 64 lowercase hex characters the owner makes on the host with `openssl rand -hex 32` (8.5 step 4b)');
     expect(t).toContain("`HC_REMINDER_PING_URL`: the reminder job's dead-man check, created by the owner (8.5 step 4a), and the owner writes it into the server `.env` in step 8");
     expect(t).not.toMatch(/\b[A-Z][A-Z0-9_]{3,}=\S/); // no KEY=value anywhere
-    expect(t).not.toMatch(new RegExp(`\\b(${KEYS.join('|')})\\b["']?\\s*[=:]\\s*["']?[^\\s\`"']`, 'i')); // nor any of the five keys with a value after = or :
+    // nor any of the five keys with a value after = or :, bare, quoted or inside backticks (`KEY`: value). Words of prose are shorter than a value.
+    expect(t).not.toMatch(new RegExp(`\\b(${KEYS.join('|')})\\b[\`"']?\\s*[=:]\\s*[\`"']?[A-Za-z0-9+/_-]{20,}`, 'i'));
+    expect('`REMINDER_JOB_TOKEN`: abcdefghijklmnopqrstuvwxyz').toMatch(new RegExp(`\\b(${KEYS.join('|')})\\b[\`"']?\\s*[=:]\\s*[\`"']?[A-Za-z0-9+/_-]{20,}`, 'i')); // the check catches the backticked shape
     expect(t).not.toMatch(/hc-ping\.com\/|\b[0-9a-f]{64}\b/); // no ping address and no 64-hex token
     expect(t).toContain("Every production step is the owner's; no step runs in an AI session on the production host (deployment.md 8.5, 12.2).");
     expect(t).toMatch(/^Secret scan, repository: no leaks found\. gitleaks v8\.30\.1 over `v0\.5\.0\.\.[0-9a-f]{40}` \(\d+ commits\)/m);
@@ -57,6 +59,27 @@ describe('the v0.6.0 release', () => {
     for (const step of ['1', '2', '3', '4', '4a', '4b', '4c', '4d']) expect(t, `8.5 step ${step} before the deploy day`).toMatch(new RegExp(`8\\.5 step ${step}\\b`));
     expect(t).toContain('a count above zero stops the deploy');
     expect(t).toContain('Trivy step reports CRITICAL-rated secrets only');
+    expect(t).toContain('any output other than `0|0|0` then `1`');
+    // Runbook 8.5's order: the read-only counts (step 2, the go or no-go gate) come before the merge and the tag (step 4f, deploy day by 14:00).
+    const gate = t.indexOf('8.5 step 2:');
+    expect(gate, 'the step 2 line').toBeGreaterThan(-1);
+    expect(t.indexOf('8.5 step 4f')).toBeGreaterThan(gate);
+    expect(t).toContain('by 14:00');
+    expect(t.indexOf('merges it with Create a merge commit')).toBeGreaterThan(gate);
+    expect(t.indexOf('tags the merge commit `v0.6.0`')).toBeGreaterThan(gate);
+  });
+
+  it('NFR-SEC-17 NFR-MNT-02: the notes cite the run records by full path, say the migrator result rests on both fingerprint sets, and list what is queued for 0.6.1', () => {
+    const t = readFileSync('docs/releases/v0.6.0.md', 'utf8');
+    expect(t).toContain("the controller's run records, kept on the build machine (not in this repository)");
+    expect(t).toContain('records/plans/2026-10-29-v1-plan/run/sec-report.md');
+    expect(t).toContain('records/plans/2026-10-29-v1-plan/run/fix3-security-review.md');
+    expect(t).not.toMatch(/in the records repository/);
+    expect(t).toMatch(/nineteen findings: thirteen triaged for the migrator, and six/);
+    const known = t.slice(t.indexOf('## Known for 0.6.1'));
+    expect(known).toMatch(/Trivy/);
+    expect(known).toMatch(/migrator image/);
+    expect(t).not.toMatch(/30-minute limit/);
   });
 
   it('NFR-MNT-02: the notes record CI times within their limits', () => {
