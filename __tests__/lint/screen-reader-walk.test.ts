@@ -52,11 +52,11 @@ export const WALK_CASE = 'NFR-A11Y-07 screen-reader-walk';
 
 /**
  * What the release check holds against the walk sheet: the problems with the record of the walk and the open serious
- * findings, or none when `waiver` is the owner's complete waiver of WALK_CASE for this release. A waiver skips only
+ * findings, or none when `waiver` is the owner's complete waiver of WALK_CASE for this release that covers SHEET. Any other waiver counts for nothing. A waiver skips only
  * those two assertions; the sheet's rows (the first case) are checked whatever the owner decided.
  */
 export function walkReleaseProblems(text: string, waiver: ReleaseWaiver | undefined): string[] {
-  if (waiver) return [];
+  if (waiver?.case === WALK_CASE && waiver.covers.includes(SHEET)) return [];
   const problems: string[] = [];
   if (!/^Tool: (NVDA|VoiceOver) \S+/m.test(text)) problems.push('no Tool line');
   if (!/^Build: [0-9a-f]{7,40}$/m.test(text)) problems.push('no Build line');
@@ -91,15 +91,21 @@ describe('NFR-A11Y-07: the screen-reader walk sheet', () => {
 
   it('NFR-A11Y-07: an unwalked sheet fails the release check unless the owner waived the walk for this release', () => {
     const unwalked = ['Tool: ', '| J-05 step 1 | a | b | | | |', '| S-12 | x | critical | open |'].join('\n');
+    const all = ['no Tool line', 'no Build line', 'J-05 step 1 not recorded', 'open: | S-12 | x | critical | open |'];
     const dir = mkdtempSync(path.join(tmpdir(), 'walk-waiver-'));
     try {
       const entry = { case: WALK_CASE, covers: [SHEET], owner_words: 'postpone it', date: '2026-11-08', register_row: 'D-999', release: '0.6.0' };
       const f = path.join(dir, 'w.json');
-      writeFileSync(f, JSON.stringify({ waivers: [entry] }));
-      expect(walkReleaseProblems(unwalked, releaseWaiver(WALK_CASE, f, '0.6.0')), 'waived for 0.6.0').toEqual([]);
-      expect(walkReleaseProblems(unwalked, releaseWaiver(WALK_CASE, f, '0.7.0')).length, 'an entry of another release waives nothing').toBeGreaterThan(0);
-      writeFileSync(f, JSON.stringify({ waivers: [] }));
-      expect(walkReleaseProblems(unwalked, releaseWaiver(WALK_CASE, f, '0.6.0')), 'no entry').toEqual(['no Tool line', 'no Build line', 'J-05 step 1 not recorded', 'open: | S-12 | x | critical | open |']);
+      const read = (waivers: unknown[], release = '0.6.0') => {
+        writeFileSync(f, JSON.stringify({ waivers }));
+        return releaseWaiver(WALK_CASE, f, release);
+      };
+      expect(walkReleaseProblems(unwalked, read([entry])), 'waived for 0.6.0').toEqual([]);
+      expect(walkReleaseProblems(unwalked, read([entry], '0.7.0')), 'an entry of another release waives nothing').toEqual(all);
+      expect(walkReleaseProblems(unwalked, read([])), 'no entry').toEqual(all);
+      expect(walkReleaseProblems(unwalked, read([{ ...entry, covers: ['data/help-contact.json'] }])), 'an entry covering another file waives nothing').toEqual(all);
+      expect(walkReleaseProblems(unwalked, { ...entry, case: 'UX-03 help-contact-pending' } as ReleaseWaiver), 'a waiver of another case waives nothing').toEqual(all);
+      expect(() => read([{ ...entry, register_row: undefined }]), 'a malformed entry fails the read').toThrow(/release-waivers.*register row/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
