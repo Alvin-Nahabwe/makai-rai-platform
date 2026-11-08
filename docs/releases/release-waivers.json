@@ -1,0 +1,35 @@
+{
+  "$comment": "The owner's waivers of release-check cases. Read by __tests__/helpers/releaseWaivers.ts; only its WAIVABLE_CASES consult this file, and an entry passes its case only when it is complete. Each entry: the case id, the files it covers, the owner's verbatim words, the date of the decision, the register row (D-<n>) that tracks the debt, and the release (package.json's version) it was decided for: an entry of another release waives nothing.",
+  "waivers": [
+    {
+      "case": "FR-ACC-02 legal-placeholder",
+      "test": "__tests__/unit/legal-texts.test.ts",
+      "covers": ["data/legal/cross-border-consent/1.md", "data/legal/organisation-agreement/1.md"],
+      "decision": "A4, legal texts version 1: the cross-border consent and organisation agreement texts ship as the one-line placeholders, with a register row (SRS 13.8 step 3).",
+      "owner_words": "Ship placeholders",
+      "date": "2026-11-06",
+      "register_row": "D-293",
+      "release": "0.6.0"
+    },
+    {
+      "case": "UX-03 help-contact-pending",
+      "test": "__tests__/unit/about-page.test.tsx",
+      "covers": ["data/help-contact.json"],
+      "decision": "UX-03, the Help and contact address (deployment.md step 4d): the About page ships with its pending text, with a register row.",
+      "owner_words": "Ship pending text",
+      "date": "2026-11-06",
+      "register_row": "D-294",
+      "release": "0.6.0"
+    },
+    {
+      "case": "NFR-A11Y-07 screen-reader-walk",
+      "test": "__tests__/lint/screen-reader-walk.test.ts",
+      "covers": ["docs/accessibility/screen-reader-walk-v0.6.0.md"],
+      "decision": "NFR-A11Y-07, the screen-reader walk of J-05 and J-09: deferred to a later release. The walk sheet stays unwalked; the release check skips only its walk-recorded and open-finding assertions.",
+      "owner_words": "postpone the screen reader accessibility check for later versions/releases. It is not a priority right now and should not block the release.",
+      "date": "2026-11-08",
+      "register_row": "D-301",
+      "release": "0.6.0"
+    }
+  ]
+}

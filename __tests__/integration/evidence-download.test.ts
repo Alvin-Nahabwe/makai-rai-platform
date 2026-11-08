@@ -1,586 +1,197 @@
-import { createHash } from 'node:crypto';
-import { describe, it, expect, beforeAll, vi } from 'vitest';
+import { createHash, randomUUID } from 'node:crypto';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
-import { Pool } from 'pg';
-import { testDb, resetDb, SEEDED_FRAMEWORK_VERSION_ID } from '../helpers/db';
-import { buildTwoOrgFixture, type TwoOrgFixture, type FixtureOrg } from '../helpers/fixture';
-import { logSecurityEvent } from '../../lib/security-logger';
-import { GET, DELETE, buildContentDisposition } from '../../app/api/v1/orgs/[slug]/evidence/[evidenceId]/route';
+import type { OrgRole } from '@prisma/client';
+import { GET, DELETE, buildContentDisposition } from '@/app/api/v1/orgs/[slug]/evidence/[evidenceId]/route';
+import { resetDb, testDb } from '../helpers/db';
+import { clearSession, sessionFor } from '../helpers/authSession';
+import { captureLogs } from '../helpers/logCapture';
+import { addEvidence, addProject, buildOrg, type OrgFixture } from '../helpers/recordFixture';
 
-// silent-failure-hunter findings (task-7-report.md): logSecurityEvent is a
-// side channel that must never be able to invert an already-decided
-// response. Wrapped (not vi.mock'd as a bare stub) so every OTHER call in
-// this file still logs for real -- only the one test that explicitly
-// configures mockImplementationOnce sees a throwing call.
-vi.mock('../../lib/security-logger', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../lib/security-logger')>();
-  return { ...actual, logSecurityEvent: vi.fn(actual.logSecurityEvent) };
+/**
+ * The download route (contract route row 4). Rows are written through testDb (the schema owner), which is also
+ * the only way to make a row the app would never write: a stored hash that is not the bytes' hash, or no blob at
+ * all. The DELETE method answers 404 since v0.6.0 (FR-AUTHZ-02).
+ */
+
+// NFR-AVL-04 case: the next call of withOrg rejects once, as an unreachable database does.
+const outage = vi.hoisted(() => ({ armed: false }));
+vi.mock('@/lib/data/tenant', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/lib/data/tenant')>();
+  return {
+    ...real,
+    withOrg: ((...args: Parameters<typeof real.withOrg>) => {
+      if (outage.armed) {
+        outage.armed = false;
+        return Promise.reject(Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:5432'), { code: 'ECONNREFUSED' }));
+      }
+      return real.withOrg(...args);
+    }) as typeof real.withOrg,
+  };
 });
 
-/**
- * Task 7 -- the download and delete route. Covers the brief's Step 1 list
- * (O-8 x3, O-9, O-24 delete half) PLUS fresh findings from this task's own
- * C1 senior-security pass (task-7-report.md), derived fresh rather than
- * reused from Task 6's upload threat table (AGENTS.md §7.1): Content-Length
- * must come from the bytes actually served, not the separately-stored
- * byteSize column; a missing blob row is a distinct fail-closed case from a
- * hash mismatch; the completed-assessment refusal races a concurrent
- * `completeAssessment` transaction unless the read takes a real row lock;
- * and the integrity-failure response body must not leak the hash values it
- * is refusing to serve over.
- *
- * FIXTURES: evidence/evidence_blobs rows are written DIRECTLY via testDb
- * (bypassing the real upload route and its inspect() gate), matching the
- * established convention for domain fixture data in this suite
- * (evidence-schema.test.ts, permission-matrix.test.ts's buildOrgResources,
- * evidence-upload.test.ts's own assessments) -- what this file tests is the
- * DOWNLOAD/DELETE path, not upload validation, and testDb is the schema
- * owner (BYPASSRLS), so it can also directly corrupt/omit a blob row to
- * simulate corruption -- something the app role's grants (SELECT, INSERT,
- * DELETE only, no UPDATE) cannot do to itself, which is exactly why O-9's
- * "the only ways to get there are corruption or tampering" framing holds.
- *
- * SESSION MOCKING: identical seam and shape to evidence-upload.test.ts and
- * permission-matrix.test.ts.
- */
+const PDF_BYTES = Buffer.from('%PDF-1.4\ndownload fixture\n%%EOF');
+const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex');
 
-let currentSession: { user: { id: string }; sessionEpoch: number; sessionIssuedAt: number } | null = null;
+let fx: OrgFixture;
+let fxB: OrgFixture;
+let p: { id: string };
 
-vi.mock('../../lib/auth', () => ({
-  auth: () => Promise.resolve(currentSession),
-}));
+beforeEach(async () => {
+  await resetDb();
+  outage.armed = false;
+  fx = await buildOrg();
+  fxB = await buildOrg({ label: 'b' });
+  p = await addProject(fx);
+  clearSession();
+});
 
-function sessionFor(userId: string): void {
-  currentSession = { user: { id: userId }, sessionEpoch: 0, sessionIssuedAt: Math.floor(Date.now() / 1000) };
+function download(role: OrgRole | null, evidenceId: string): Promise<Response> {
+  if (role) sessionFor(fx.members[role].userId); else clearSession();
+  return GET(new NextRequest('http://localhost/probe', { method: 'GET' }), { params: Promise.resolve({ slug: fx.org.slug, evidenceId }) });
+}
+function callDelete(role: OrgRole, evidenceId: string): Promise<Response> {
+  sessionFor(fx.members[role].userId);
+  return DELETE(new NextRequest('http://localhost/probe', { method: 'DELETE' }), { params: Promise.resolve({ slug: fx.org.slug, evidenceId }) });
 }
 
-function downloadEvidence(slug: string, evidenceId: string): Promise<Response> {
-  const req = new NextRequest('http://localhost/probe', { method: 'GET' });
-  return GET(req, { params: Promise.resolve({ slug, evidenceId }) });
+/** A file row whose stored hash is that of other bytes than its blob holds. */
+async function insertEvidenceWithWrongHash(bytes: Buffer): Promise<string> {
+  const row = await testDb.evidence.create({ data: {
+    orgId: fx.org.id, projectId: p.id, kind: 'file', filename: 'bad.pdf', mimeType: 'application/pdf', byteSize: bytes.byteLength,
+    sha256: sha(Buffer.from('other bytes')), uploadedById: fx.members.assessor.userId, requestId: randomUUID(), requestDigest: 'd',
+  } });
+  await testDb.evidenceBlob.create({ data: { evidenceId: row.id, orgId: fx.org.id, content: new Uint8Array(bytes) } });
+  return row.id;
 }
-
-function deleteEvidence(slug: string, evidenceId: string): Promise<Response> {
-  const req = new NextRequest('http://localhost/probe', { method: 'DELETE' });
-  return DELETE(req, { params: Promise.resolve({ slug, evidenceId }) });
+async function insertEvidenceWithoutBlob(): Promise<string> {
+  const bytes = Buffer.from('gone');
+  return (await testDb.evidence.create({ data: {
+    orgId: fx.org.id, projectId: p.id, kind: 'file', filename: 'gone.pdf', mimeType: 'application/pdf', byteSize: bytes.byteLength,
+    sha256: sha(bytes), uploadedById: fx.members.assessor.userId, requestId: randomUUID(), requestDigest: 'd',
+  } })).id;
 }
+const todayUtc = () => new Date().toISOString().slice(0, 10);
 
-/**
- * Direct-write fixture helper -- mirrors createEvidence's shape (lib/data/evidence.ts)
- * but exposes every field that helper deliberately does not let a caller
- * override (sha256, byteSize, whether a blob exists at all), because THIS
- * file's whole point is to exercise the routes against rows that are
- * internally inconsistent in exactly the ways createEvidence can never
- * produce.
- */
-async function insertEvidence(opts: {
-  id: string;
-  orgId: string;
-  assessmentId: string;
-  filename: string;
-  mimeType?: string;
-  content: Buffer;
-  sha256?: string;
-  byteSize?: number;
-  withBlob?: boolean;
-}): Promise<void> {
-  await testDb.evidence.create({
-    data: {
-      id: opts.id,
-      orgId: opts.orgId,
-      assessmentId: opts.assessmentId,
-      frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID,
-      questionId: `Q-${opts.id}`,
-      filename: opts.filename,
-      mimeType: opts.mimeType ?? 'application/pdf',
-      byteSize: opts.byteSize ?? opts.content.byteLength,
-      sha256: opts.sha256 ?? createHash('sha256').update(opts.content).digest('hex'),
-    },
-  });
-  if (opts.withBlob ?? true) {
-    await testDb.evidenceBlob.create({
-      data: { evidenceId: opts.id, orgId: opts.orgId, content: new Uint8Array(opts.content) },
-    });
-  }
-}
-
-const NORMAL_FILENAME = 'annual-report.pdf';
-const NORMAL_CONTENT = Buffer.from('normal-evidence-bytes');
-
-// Header-injection payload. Computed and cross-checked against Node's real
-// encodeURIComponent (not hand-arithmetic alone) before being hardcoded here:
-// ascii = 'evil__Set-Cookie: hacked=1' (CR, LF -> '_'); encoded =
-// 'evil%0D%0ASet-Cookie%3A%20hacked%3D1'.
-const CRLF_FILENAME = 'evil\r\nSet-Cookie: hacked=1';
-const CRLF_CONTENT = Buffer.from('crlf-evidence-bytes');
-
-// Quoted-string breakout payload, carrying BOTH a double quote and a
-// backslash. ascii = 'evil_.txt_, x=_pwned' ("/\\ -> '_'); encoded =
-// 'evil%5C.txt%22%2C%20x%3D%22pwned'.
-const QUOTE_BACKSLASH_FILENAME = 'evil\\.txt", x="pwned';
-const QUOTE_BACKSLASH_CONTENT = Buffer.from('quote-evidence-bytes');
-
-const HASH_MISMATCH_ORIGINAL = Buffer.from('original-content-for-hash');
-const HASH_MISMATCH_CORRUPTED = Buffer.from('CORRUPTED-content-for-hash-of-a-different-length');
-
-const WRONG_BYTE_SIZE_CONTENT = Buffer.from('wrongsize-evidence-bytes-0123456789');
-const WRONG_STORED_BYTE_SIZE = 3; // deliberately not WRONG_BYTE_SIZE_CONTENT.byteLength
-
-const FOR_DELETE_CONTENT = Buffer.from('to-be-deleted-bytes');
-const ON_COMPLETED_CONTENT = Buffer.from('frozen-bytes');
-const ORG_B_CONTENT = Buffer.from('org-b-bytes');
-const RACE_CONTENT = Buffer.from('race-bytes');
-
-describe('evidence download and delete route', () => {
-  let fixture: TwoOrgFixture;
-  let orgA: FixtureOrg;
-  let orgB: FixtureOrg;
-  let ownerA: string;
-
-  let assessmentInProgressId: string;
-  let assessmentCompletedId: string;
-  let assessmentRaceId: string;
-  let assessmentRaceCommitId: string;
-  let orgBAssessmentId: string;
-
-  let evidenceNormalId: string;
-  let evidenceCrlfId: string;
-  let evidenceQuoteBackslashId: string;
-  let evidenceHashMismatchId: string;
-  let evidenceMissingBlobId: string;
-  let evidenceWrongByteSizeId: string;
-  let evidenceOnCompletedId: string;
-  let evidenceForDeleteId: string;
-  let evidenceRaceId: string;
-  let evidenceRaceCommitId: string;
-  let evidenceForLogFailureId: string;
-  let orgBEvidenceId: string;
-
-  beforeAll(async () => {
-    await resetDb();
-    fixture = await buildTwoOrgFixture();
-    [orgA, orgB] = fixture.orgs;
-    const owner = fixture.users.find((u) => u.orgSlug === orgA.slug && u.role === 'owner' && u.index === 0);
-    if (!owner) throw new Error('fixture must carry a bootstrap owner for org A');
-    ownerA = owner.userId;
-    const ownerB = fixture.users.find((u) => u.orgSlug === orgB.slug && u.role === 'owner' && u.index === 0);
-    if (!ownerB) throw new Error('fixture must carry a bootstrap owner for org B');
-
-    const projectA = await testDb.project.create({
-      data: { orgId: orgA.id, name: 'Evidence download probe project A', createdById: ownerA },
-    });
-    const projectB = await testDb.project.create({
-      data: { orgId: orgB.id, name: 'Evidence download probe project B', createdById: ownerB.userId },
-    });
-
-    const [inProgress, completed, race, raceCommit, orgBAssessment] = await Promise.all([
-      testDb.assessment.create({
-        data: {
-          orgId: orgA.id, projectId: projectA.id, userId: ownerA,
-          frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID, engineState: {},
-        },
-      }),
-      testDb.assessment.create({
-        data: {
-          orgId: orgA.id, projectId: projectA.id, userId: ownerA,
-          frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID, engineState: {},
-          status: 'completed', completedAt: new Date(),
-        },
-      }),
-      testDb.assessment.create({
-        data: {
-          orgId: orgA.id, projectId: projectA.id, userId: ownerA,
-          frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID, engineState: {},
-        },
-      }),
-      // Dedicated to the COMMIT-direction race test -- must not share
-      // assessmentRaceId above, whose own test depends on staying
-      // in_progress for its ROLLBACK-direction premise.
-      testDb.assessment.create({
-        data: {
-          orgId: orgA.id, projectId: projectA.id, userId: ownerA,
-          frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID, engineState: {},
-        },
-      }),
-      testDb.assessment.create({
-        data: {
-          orgId: orgB.id, projectId: projectB.id, userId: ownerB.userId,
-          frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID, engineState: {},
-        },
-      }),
-    ]);
-    assessmentInProgressId = inProgress.id;
-    assessmentCompletedId = completed.id;
-    assessmentRaceId = race.id;
-    assessmentRaceCommitId = raceCommit.id;
-    orgBAssessmentId = orgBAssessment.id;
-
-    evidenceNormalId = 'ev-dl-normal';
-    evidenceCrlfId = 'ev-dl-crlf';
-    evidenceQuoteBackslashId = 'ev-dl-quote-backslash';
-    evidenceHashMismatchId = 'ev-dl-hash-mismatch';
-    evidenceMissingBlobId = 'ev-dl-missing-blob';
-    evidenceWrongByteSizeId = 'ev-dl-wrong-byte-size';
-    evidenceOnCompletedId = 'ev-dl-on-completed';
-    evidenceForDeleteId = 'ev-dl-for-delete';
-    evidenceRaceId = 'ev-dl-race';
-    evidenceRaceCommitId = 'ev-dl-race-commit';
-    evidenceForLogFailureId = 'ev-dl-log-failure';
-    orgBEvidenceId = 'ev-dl-org-b';
-
-    await Promise.all([
-      // Deliberately 'text/html' -- the sharpest possible proof that O-8
-      // never trusts the stored mimeType: if Content-Type ever leaked
-      // through, this is the fixture that would render/execute in a
-      // browser instead of downloading.
-      insertEvidence({
-        id: evidenceNormalId, orgId: orgA.id, assessmentId: assessmentInProgressId,
-        filename: NORMAL_FILENAME, mimeType: 'text/html', content: NORMAL_CONTENT,
-      }),
-      insertEvidence({
-        id: evidenceCrlfId, orgId: orgA.id, assessmentId: assessmentInProgressId,
-        filename: CRLF_FILENAME, content: CRLF_CONTENT,
-      }),
-      insertEvidence({
-        id: evidenceQuoteBackslashId, orgId: orgA.id, assessmentId: assessmentInProgressId,
-        filename: QUOTE_BACKSLASH_FILENAME, content: QUOTE_BACKSLASH_CONTENT,
-      }),
-      insertEvidence({
-        id: evidenceMissingBlobId, orgId: orgA.id, assessmentId: assessmentInProgressId,
-        filename: 'no-blob.pdf', content: Buffer.from('irrelevant'), withBlob: false,
-      }),
-      insertEvidence({
-        id: evidenceWrongByteSizeId, orgId: orgA.id, assessmentId: assessmentInProgressId,
-        filename: 'wrong-byte-size.pdf', content: WRONG_BYTE_SIZE_CONTENT, byteSize: WRONG_STORED_BYTE_SIZE,
-      }),
-      insertEvidence({
-        id: evidenceOnCompletedId, orgId: orgA.id, assessmentId: assessmentCompletedId,
-        filename: 'frozen.pdf', content: ON_COMPLETED_CONTENT,
-      }),
-      insertEvidence({
-        id: evidenceForDeleteId, orgId: orgA.id, assessmentId: assessmentInProgressId,
-        filename: 'for-delete.pdf', content: FOR_DELETE_CONTENT,
-      }),
-      insertEvidence({
-        id: evidenceRaceId, orgId: orgA.id, assessmentId: assessmentRaceId,
-        filename: 'race.pdf', content: RACE_CONTENT,
-      }),
-      insertEvidence({
-        id: evidenceRaceCommitId, orgId: orgA.id, assessmentId: assessmentRaceCommitId,
-        filename: 'race-commit.pdf', content: Buffer.from('race-commit-bytes'),
-      }),
-      insertEvidence({
-        id: evidenceForLogFailureId, orgId: orgA.id, assessmentId: assessmentInProgressId,
-        filename: 'log-failure.pdf', content: Buffer.from('log-failure-bytes'),
-      }),
-      insertEvidence({
-        id: orgBEvidenceId, orgId: orgB.id, assessmentId: orgBAssessmentId,
-        filename: 'org-b.pdf', content: ORG_B_CONTENT,
-      }),
-    ]);
-
-    // Hash-mismatch fixture: stored sha256 is correct for the ORIGINAL
-    // content at write time; the blob's actual bytes are then corrupted
-    // in place, exactly the "corruption or tampering after the fact" shape
-    // O-9 exists to catch -- not a row that was simply inserted wrong.
-    await insertEvidence({
-      id: evidenceHashMismatchId, orgId: orgA.id, assessmentId: assessmentInProgressId,
-      filename: 'hash-mismatch.pdf', content: HASH_MISMATCH_ORIGINAL,
-    });
-    await testDb.evidenceBlob.update({
-      where: { evidenceId: evidenceHashMismatchId },
-      data: { content: new Uint8Array(HASH_MISMATCH_CORRUPTED) },
-    });
-  });
-
-  // ---- O-8: hostile-safe response shape --------------------------------
-
-  it('serves octet-stream as an attachment, discarding the stored mimeType', async () => {
-    sessionFor(ownerA);
-    const res = await downloadEvidence(orgA.slug, evidenceNormalId);
+describe('evidence download route', () => {
+  it('NFR-SEC-10 FR-EVD-02: download is an octet-stream attachment and CRLF in a name cannot inject a header', async () => {
+    const ev = await addEvidence(fx, p.id, { kind: 'file', fileName: 'a\r\nSet-Cookie: x=1.pdf', bytes: PDF_BYTES });
+    const res = await download('assessor', ev.id);
     expect(res.status).toBe(200);
-    expect(res.headers.get('content-type')).toBe('application/octet-stream'); // NOT 'text/html'
-    // The nosniff header is nginx's alone (docker/nginx/default.conf, guarded by
-    // __tests__/lint/security-headers.test.ts). A copy from the app would
-    // reach the browser twice, so its absence here is the property.
-    expect(res.headers.get('x-content-type-options')).toBeNull();
-    expect(res.headers.get('content-disposition')).toBe(
-      `attachment; filename="${NORMAL_FILENAME}"; filename*=UTF-8''${NORMAL_FILENAME}`,
-    );
-    const body = Buffer.from(await res.arrayBuffer());
-    expect(body.equals(NORMAL_CONTENT)).toBe(true);
-  });
-
-  it('cannot be header-injected by a filename containing CRLF', async () => {
-    sessionFor(ownerA);
-    const res = await downloadEvidence(orgA.slug, evidenceCrlfId);
-    expect(res.status).toBe(200);
-    const cd = res.headers.get('content-disposition');
-    // Exact value, not merely "response is 200" -- a test that only checks
-    // status would pass with no escaping at all.
-    expect(cd).toBe(
-      `attachment; filename="evil__Set-Cookie: hacked=1"; filename*=UTF-8''evil%0D%0ASet-Cookie%3A%20hacked%3D1`,
-    );
-    expect(cd).not.toMatch(/[\r\n]/);
-    // The sharpest available proof of "no injection occurred": no SECOND
-    // header actually landed as a result of the payload's own text.
-    expect(res.headers.get('x-injected')).toBeNull();
+    expect(res.headers.get('content-type')).toBe('application/octet-stream');
+    expect(res.headers.get('content-disposition')).toMatch(/^attachment; /);
+    expect(res.headers.get('content-disposition')).not.toMatch(/[\r\n]/);
     expect(res.headers.get('set-cookie')).toBeNull();
+    expect(res.headers.get('x-content-type-options')).toBeNull();   // nginx's alone (docker/nginx/default.conf)
+    expect(Buffer.from(await res.arrayBuffer())).toEqual(PDF_BYTES);
   });
 
-  it('encodes a filename containing a double quote and a backslash per RFC 6266', async () => {
-    sessionFor(ownerA);
-    const res = await downloadEvidence(orgA.slug, evidenceQuoteBackslashId);
+  it('NFR-SEC-10: a quote and a backslash in a name are encoded per RFC 6266', async () => {
+    const ev = await addEvidence(fx, p.id, { kind: 'file', fileName: 'evil\\.txt", x="pwned', bytes: PDF_BYTES });
+    const cd = (await download('assessor', ev.id)).headers.get('content-disposition');
+    expect(cd).toBe(`attachment; filename="evil_.txt_, x=_pwned"; filename*=UTF-8''evil%5C.txt%22%2C%20x%3D%22pwned`);
+  });
+
+  it('NFR-SEC-10: the stored mimeType never reaches Content-Type, and Content-Length is the served bytes, not the stored byteSize', async () => {
+    const bytes = Buffer.from('%PDF-1.4\nwrong size\n');
+    const row = await testDb.evidence.create({ data: {
+      orgId: fx.org.id, projectId: p.id, kind: 'file', filename: 'w.pdf', mimeType: 'text/html', byteSize: 3,
+      sha256: sha(bytes), uploadedById: fx.members.assessor.userId, requestId: randomUUID(), requestDigest: 'd',
+    } });
+    await testDb.evidenceBlob.create({ data: { evidenceId: row.id, orgId: fx.org.id, content: new Uint8Array(bytes) } });
+    const res = await download('assessor', row.id);
+    expect(res.headers.get('content-type')).toBe('application/octet-stream');
+    expect(res.headers.get('content-length')).toBe(String(bytes.byteLength));
+  });
+
+  it('NFR-INT-06: a hash mismatch answers 500 integrity_failure, logs once with the downloader and serves no byte', async () => {
+    const id = await insertEvidenceWithWrongHash(PDF_BYTES);   // uploaded by the assessor
+    const { result, lines } = await captureLogs(() => download('owner', id));   // downloaded by the owner
+    expect(result.status).toBe(500);
+    const body = await result.json();
+    expect(body).toMatchObject({ code: 'integrity_failure' });
+    expect(JSON.stringify(body)).not.toMatch(/[0-9a-f]{64}/);
+    const logged = lines.filter((l) => l.includes('EVIDENCE_INTEGRITY_FAILURE'));
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toContain(fx.members.owner.userId);          // who was downloading when the corruption was found
+    expect(logged[0]).not.toContain(fx.members.assessor.userId);   // not the uploader
+    expect(logged[0]).toContain(fx.org.id);
+  });
+
+  it('NFR-INT-06: an evidence row without a blob and without a tombstone answers 500 integrity_failure', async () => {
+    const { result, lines } = await captureLogs(async () => download('assessor', await insertEvidenceWithoutBlob()));
+    expect(await result.json()).toMatchObject({ code: 'integrity_failure' });
+    expect(lines.filter((l) => l.includes('EVIDENCE_INTEGRITY_FAILURE') && l.includes('missing_blob'))).toHaveLength(1);
+  });
+
+  it('FR-EVD-05: after the operator erases the bytes, the row and hash stay and the download answers 410 with the date', async () => {
+    const ev = await addEvidence(fx, p.id, { kind: 'file', bytes: PDF_BYTES });
+    await testDb.$executeRaw`SELECT erase_evidence_bytes(${fx.org.id}, ${ev.id}, 'ER-1', 'INSTR-1')`;
+    expect(await testDb.evidenceBlob.count({ where: { evidenceId: ev.id } })).toBe(0);
+    expect((await testDb.evidence.findUnique({ where: { id: ev.id } }))!.sha256).toBe(ev.sha256);
+    const res = await download('assessor', ev.id);
+    expect(res.status).toBe(410);
+    expect(await res.json()).toMatchObject({ code: 'erased', erasedOn: todayUtc() });
+  });
+
+  it("NFR-SEC-02: downloading organisation B's evidence and a missing id answer the same coded 404", async () => {
+    const projectB = await addProject(fxB);
+    const evidenceOfB = await addEvidence(fxB, projectB.id, { kind: 'file', bytes: PDF_BYTES });
+    const foreign = await download('owner', evidenceOfB.id);
+    const missing = await download('owner', randomUUID());
+    expect([foreign.status, missing.status]).toEqual([404, 404]);
+    const [a, b] = [await foreign.json(), await missing.json()];
+    expect(a).toMatchObject({ code: 'not_found' });
+    expect(b).toEqual(a);
+  });
+
+  it("FR-EVD-06: an unattached file stays readable by id to every member of the organisation, as the Why of FR-EVD-06 says", async () => {
+    const ev = await addEvidence(fx, p.id, { kind: 'file', bytes: PDF_BYTES }, 'assessor');
+    for (const role of ['assessor', 'owner', 'admin', 'reviewer', 'viewer'] as const) {
+      const res = await download(role, ev.id);
+      expect([role, res.status]).toEqual([role, 200]);
+      expect(Buffer.from(await res.arrayBuffer())).toEqual(PDF_BYTES);
+    }
+  });
+
+  it('FR-EVD-01: a link item has nothing to download and answers 404', async () => {
+    expect((await download('assessor', (await addEvidence(fx, p.id, { kind: 'link', url: 'https://e.org/x' })).id)).status).toBe(404);
+  });
+
+  it('FR-EVD-02 NFR-SEC-11: a name an operator erased downloads as evidence-<id>', async () => {
+    const ev = await addEvidence(fx, p.id, { kind: 'file', bytes: PDF_BYTES });
+    await testDb.$executeRaw`SELECT erase_text_field(${fx.org.id}, 'evidence', ${ev.id}, 'fileName', 'ER-2', 'INSTR-2')`;
+    const res = await download('assessor', ev.id);
     expect(res.status).toBe(200);
-    const cd = res.headers.get('content-disposition');
-    expect(cd).toBe(
-      `attachment; filename="evil_.txt_, x=_pwned"; filename*=UTF-8''evil%5C.txt%22%2C%20x%3D%22pwned`,
-    );
-    // Breakout proof: the quoted-string portion contains no unescaped `"`
-    // beyond the two characters that wrap it.
-    const quoted = /filename="([^]*?)";/.exec(cd ?? '')?.[1] ?? '';
-    expect(quoted.includes('"')).toBe(false);
-    expect(quoted.includes('\\')).toBe(false);
+    expect(res.headers.get('content-disposition')).toContain(`evidence-${ev.id}`);
   });
 
-  it('derives Content-Length from the bytes actually served, not the stored byteSize column', async () => {
-    sessionFor(ownerA);
-    const res = await downloadEvidence(orgA.slug, evidenceWrongByteSizeId);
-    // The hash still matches (only byteSize is wrong), so this must succeed.
-    expect(res.status).toBe(200);
-    expect(res.headers.get('content-length')).toBe(String(WRONG_BYTE_SIZE_CONTENT.byteLength));
-    expect(res.headers.get('content-length')).not.toBe(String(WRONG_STORED_BYTE_SIZE));
-    const body = Buffer.from(await res.arrayBuffer());
-    expect(body.equals(WRONG_BYTE_SIZE_CONTENT)).toBe(true);
-  });
-
-  // ---- O-9: integrity verified before responding ------------------------
-
-  it('rejects the download if the stored bytes do not match the recorded sha256, without leaking hash values', async () => {
-    sessionFor(ownerA);
-    const res = await downloadEvidence(orgA.slug, evidenceHashMismatchId);
-    expect(res.status).toBe(500);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe('Internal server error');
-    const raw = JSON.stringify(body);
-    const storedHash = createHash('sha256').update(HASH_MISMATCH_ORIGINAL).digest('hex');
-    const computedHash = createHash('sha256').update(HASH_MISMATCH_CORRUPTED).digest('hex');
-    expect(raw).not.toContain(storedHash);
-    expect(raw).not.toContain(computedHash);
-  });
-
-  it('fails closed when the evidence row has no blob row, rather than crashing (data-integrity anomaly distinct from a hash mismatch)', async () => {
-    sessionFor(ownerA);
-    const res = await downloadEvidence(orgA.slug, evidenceMissingBlobId);
-    expect(res.status).toBe(500);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe('Internal server error');
-  });
-
-  // Unit-level, not integration: a lone (unpaired) UTF-16 surrogate makes
-  // encodeURIComponent throw a URIError, but Postgres's UTF8 encoding
-  // cannot represent one at all, and Node's own string-to-UTF8 boundary
-  // silently substitutes U+FFFD for it before a write ever reaches the
-  // database (verified live, task-7-report.md: a fixture inserted with
-  // '\uD800' in its filename came back from a real create-then-read round
-  // trip already containing U+FFFD, never the original surrogate) -- so a
-  // test going through the real GET route and a real stored row could
-  // never actually exercise encodeURIComponent's throw path; it would pass
-  // whether or not the guard existed. Calling buildContentDisposition
-  // directly with a raw in-memory string is what makes this non-vacuous.
-  it('buildContentDisposition does not throw on a filename containing a lone UTF-16 surrogate', () => {
-    const withSurrogate = 'evil\uD800filename.pdf';
-    expect(() => buildContentDisposition(withSurrogate)).not.toThrow();
-    const result = buildContentDisposition(withSurrogate);
-    expect(result).toContain('filename*=UTF-8');
+  it('NFR-SEC-10: buildContentDisposition does not throw on a name with a lone UTF-16 surrogate', () => {
+    const result = buildContentDisposition('evil\uD800filename.pdf');
     expect(result).toMatch(/^attachment; filename="[^]*"; filename\*=UTF-8''.*$/);
   });
 
-  // ---- Fresh finding: a logging-only failure must never invert an
-  // already-decided response (task-7-report.md, silent-failure-hunter) -----
-
-  it('still reports success if the audit log call itself throws (logging is a side channel, not the decision path)', async () => {
-    sessionFor(ownerA);
-    vi.mocked(logSecurityEvent).mockImplementationOnce(() => {
-      throw new Error('simulated logging failure');
-    });
-    const res = await deleteEvidence(orgA.slug, evidenceForLogFailureId);
-    expect(res.status).toBe(200);
-    // The delete itself must have actually gone through -- this is not just
-    // "the response looks fine", the underlying action truly succeeded.
-    const row = await testDb.evidence.findUnique({ where: { id: evidenceForLogFailureId } });
-    expect(row).toBeNull();
+  it('FR-AUTHZ-01: an unauthenticated download answers 401', async () => {
+    const ev = await addEvidence(fx, p.id, { kind: 'file', bytes: PDF_BYTES });
+    expect((await download(null, ev.id)).status).toBe(401);
   });
 
-  // ---- Identity and not-found shape, matching every sibling route -------
-
-  it('rejects an unauthenticated GET (401)', async () => {
-    currentSession = null;
-    const res = await downloadEvidence(orgA.slug, evidenceNormalId);
-    expect(res.status).toBe(401);
+  it('NFR-AVL-04 NFR-OBS-05: with the database unreachable, the download answers 503 database_unavailable with a reference and writes one REQUEST_FAILED line', async () => {
+    const ev = await addEvidence(fx, p.id, { kind: 'file', bytes: PDF_BYTES });
+    const { result, lines } = await captureLogs(() => { outage.armed = true; return download('assessor', ev.id); });
+    const body = await result.json();
+    expect([result.status, body]).toEqual([503, { error: 'Service unavailable', code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) }]);
+    expect(lines.filter((l) => l.includes('REQUEST_FAILED') && l.includes(body.reference))).toHaveLength(1);
+    expect(JSON.stringify(body)).not.toMatch(/ECONNREFUSED|127\.0\.0\.1/);
   });
 
-  it('rejects an unauthenticated DELETE (401)', async () => {
-    currentSession = null;
-    const res = await deleteEvidence(orgA.slug, evidenceForDeleteId);
-    expect(res.status).toBe(401);
-  });
-
-  it('GET returns 404 for an evidenceId that does not exist', async () => {
-    sessionFor(ownerA);
-    const res = await downloadEvidence(orgA.slug, 'evidence-id-does-not-exist');
-    expect(res.status).toBe(404);
-  });
-
-  it('DELETE returns 404 for an evidenceId that does not exist', async () => {
-    sessionFor(ownerA);
-    const res = await deleteEvidence(orgA.slug, 'evidence-id-does-not-exist');
-    expect(res.status).toBe(404);
-  });
-
-  it('GET returns 404 for evidence belonging to a different org (O-1)', async () => {
-    sessionFor(ownerA);
-    const res = await downloadEvidence(orgA.slug, orgBEvidenceId);
-    expect(res.status).toBe(404);
-  });
-
-  it('DELETE returns 404 for evidence belonging to a different org (O-1), and does not delete it', async () => {
-    sessionFor(ownerA);
-    const res = await deleteEvidence(orgA.slug, orgBEvidenceId);
-    expect(res.status).toBe(404);
-    const stillThere = await testDb.evidence.findUnique({ where: { id: orgBEvidenceId } });
-    expect(stillThere).not.toBeNull();
-  });
-
-  // ---- O-24 (delete half): immutable once the assessment is completed ---
-
-  it('refuses to delete evidence attached to a completed assessment (O-24, 409)', async () => {
-    sessionFor(ownerA);
-    const res = await deleteEvidence(orgA.slug, evidenceOnCompletedId);
-    expect(res.status).toBe(409);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe('Evidence on a completed assessment cannot be deleted');
-    const stillThere = await testDb.evidence.findUnique({ where: { id: evidenceOnCompletedId } });
-    expect(stillThere).not.toBeNull();
-  });
-
-  it('deletes evidence attached to an in-progress assessment, and its blob with it', async () => {
-    sessionFor(ownerA);
-    const res = await deleteEvidence(orgA.slug, evidenceForDeleteId);
-    expect(res.status).toBe(200);
-    const row = await testDb.evidence.findUnique({ where: { id: evidenceForDeleteId } });
-    expect(row).toBeNull();
-    const blob = await testDb.evidenceBlob.findUnique({ where: { evidenceId: evidenceForDeleteId } });
-    expect(blob).toBeNull(); // ON DELETE CASCADE, proven live rather than assumed from the schema comment
-  });
-
-  // ---- Fresh finding: TOCTOU between DELETE's status check and a
-  // concurrent completeAssessment transaction (task-7-report.md) ----------
-  //
-  // Coordinator fix round 1: the ORIGINAL single test here only ever
-  // exercised the ROLLBACK direction (the competing completion aborts) and
-  // was titled as if it proved both. The two directions are not symmetric
-  // in stakes. Rollback-then-proceed is the "nothing happened" case: if the
-  // lock were somehow absent, the worst outcome is the SAME 200 a race-free
-  // run would also produce, just with worse timing. Commit-then-refuse is
-  // the direction where a wrong implementation is dangerous: if a blocked
-  // FOR UPDATE did NOT re-read the post-commit row version once unblocked,
-  // this delete would see the STALE pre-transaction 'in_progress' snapshot,
-  // proceed, and evidence would silently vanish from what is now a
-  // completed assessment -- the exact D-130 shape this file's module doc
-  // cites as precedent, and the one an auditor relying on O-24 could never
-  // detect after the fact. Both tests below share the same shape (a second
-  // connection holds the assessments row lock open while the real DELETE
-  // handler blocks on it) and diverge only in whether that second
-  // connection commits or rolls back -- deliberately kept as two small,
-  // independent, fully-spelled-out tests rather than one parameterised
-  // helper, matching this file's own preference for an explicit boundary
-  // over cleverness at exactly the place concurrency makes mistakes easy to
-  // hide.
-
-  it('proceeds with the delete once a blocked, in-flight completion ROLLS BACK, leaving the assessment in_progress', async () => {
-    sessionFor(ownerA);
-    const appUrl = process.env.APP_DATABASE_URL;
-    if (!appUrl) throw new Error('APP_DATABASE_URL must be set for this test');
-    const pool = new Pool({ connectionString: appUrl });
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      await client.query(`SELECT set_config($1, $2, true)`, ['app.current_org_id', orgA.id]);
-      // Simulate "completion is in-flight, not yet committed" -- holds the
-      // assessments row lock open on a SEPARATE connection from the one
-      // withOrg's pool will use for the real DELETE handler below.
-      await client.query(`UPDATE assessments SET status = 'completed' WHERE id = $1`, [assessmentRaceId]);
-
-      let deleteResolved = false;
-      const deletePromise = deleteEvidence(orgA.slug, evidenceRaceId).then((r) => {
-        deleteResolved = true;
-        return r;
-      });
-
-      await new Promise((r) => setTimeout(r, 300));
-      // If the DELETE route read status with a plain, unlocked SELECT, it
-      // would already have observed 'in_progress' (the pre-transaction
-      // value) and resolved by now. It must still be blocked, waiting on
-      // the row lock this test's own connection holds.
-      expect(deleteResolved).toBe(false);
-
-      // The in-flight completion never actually committed (e.g. it lost a
-      // narrower race, or the request failed for an unrelated reason) --
-      // rolling back must let the real answer be "still in progress".
-      await client.query('ROLLBACK');
-
-      const res = await deletePromise;
-      expect(deleteResolved).toBe(true);
-      expect(res.status).toBe(200);
-      const row = await testDb.evidence.findUnique({ where: { id: evidenceRaceId } });
-      expect(row).toBeNull();
-    } finally {
-      client.release();
-      await pool.end();
+  it('FR-AUTHZ-02: DELETE .../evidence/<id> answers 404 and leaves the row and its blob, whatever the evidence is', async () => {
+    const ev = await addEvidence(fx, p.id, { kind: 'file', bytes: PDF_BYTES });
+    for (const id of [ev.id, randomUUID()]) {
+      const res = await callDelete('owner', id);
+      expect([id, res.status, await res.json()]).toEqual([id, 404, { error: 'Not found', code: 'not_found' }]);
     }
-  });
-
-  it('refuses the delete WITHOUT losing the evidence once a blocked, in-flight completion COMMITS (the direction where a wrong FOR UPDATE would let evidence silently vanish)', async () => {
-    sessionFor(ownerA);
-    const appUrl = process.env.APP_DATABASE_URL;
-    if (!appUrl) throw new Error('APP_DATABASE_URL must be set for this test');
-    const pool = new Pool({ connectionString: appUrl });
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      await client.query(`SELECT set_config($1, $2, true)`, ['app.current_org_id', orgA.id]);
-      await client.query(`UPDATE assessments SET status = 'completed' WHERE id = $1`, [assessmentRaceCommitId]);
-
-      let deleteResolved = false;
-      const deletePromise = deleteEvidence(orgA.slug, evidenceRaceCommitId).then((r) => {
-        deleteResolved = true;
-        return r;
-      });
-
-      await new Promise((r) => setTimeout(r, 300));
-      expect(deleteResolved).toBe(false);
-
-      // This time the in-flight completion actually lands for real.
-      await client.query('COMMIT');
-
-      const res = await deletePromise;
-      expect(deleteResolved).toBe(true);
-      // The DELETE's FOR UPDATE must re-read the POST-COMMIT row version
-      // ('completed') once unblocked, not the pre-transaction snapshot it
-      // would have seen had it not been forced to wait on the lock at all
-      // -- verified independently at the raw-Postgres level before this
-      // test was written (task-7-report.md).
-      expect(res.status).toBe(409);
-      // The sharpest assertion in this pair: evidence must still exist.
-      // A wrong implementation here does not merely return the wrong
-      // status code -- it silently deletes evidence out from under a
-      // completed assessment, which is the failure O-24 exists to prevent
-      // and the one an auditor has no way to detect after the fact.
-      const row = await testDb.evidence.findUnique({ where: { id: evidenceRaceCommitId } });
-      expect(row).not.toBeNull();
-    } finally {
-      client.release();
-      await pool.end();
-    }
+    expect(await testDb.evidence.count({ where: { id: ev.id } })).toBe(1);
+    expect(await testDb.evidenceBlob.count({ where: { evidenceId: ev.id } })).toBe(1);
   });
 });

@@ -319,20 +319,41 @@ can read nothing. And this only surfaces at all because of the
 
 The roles are not listed here. They are whatever the migrations create, read from
 `prisma/migrations` when you run this, with the same command the nightly restore
-test uses (§6), so a role that a later migration adds is created too:
+test uses (§6), so a role that a later migration adds is created too. The grep
+reads each role's name together with the `LOGIN` or `NOLOGIN` its migration writes
+after it, so a comment that mentions `CREATE ROLE` is not read as a role, and each
+role is created with its own migration's `LOGIN` or `NOLOGIN`.
+
+First check that no role is written both ways, as a comment such as
+`-- was: CREATE ROLE makrai_definer LOGIN` would be. The loop would create such a role
+`LOGIN` and leave it that way. This prints each such role. If it prints anything, stop and read the migrations:
+
+```bash
+cd /srv/makrai/app && grep -hoE 'CREATE ROLE [a-z_]+ (NO)?LOGIN' prisma/migrations/*/migration.sql | awk '{print $3 ":" $4}' | sort -u | cut -d: -f1 | uniq -d
+```
+
+Then the loop:
 
 ```bash
 cd /srv/makrai/app
 set -a; . ./.env; set +a
-for role in $(grep -hoE 'CREATE ROLE [a-z_]+' prisma/migrations/*/migration.sql | awk '{print $3}' | sort -u); do
+for pair in $(grep -hoE 'CREATE ROLE [a-z_]+ (NO)?LOGIN' prisma/migrations/*/migration.sql | awk '{print $3 ":" $4}' | sort -u); do
+  role=${pair%%:*}; login=${pair#*:}
   docker exec -i docker-postgres-1 psql -v ON_ERROR_STOP=1 -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -c \
     "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='${role}') THEN
-       CREATE ROLE ${role} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+       CREATE ROLE ${role} ${login} NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
      END IF; END \$\$;"
 done
 ```
 
-The attributes are the ones the first migration gives its role
+`NOLOGIN` matters: `makrai_definer` and `makrai_operator_fn` own the functions that
+read every account and erase record text (SRS 9.5), and they are reached only
+through those functions. Created `LOGIN`, they could be given a password, and
+`migrate deploy` (4.4) would not take it back, because the dump already records
+their migration as applied. The nightly restore test (§6) fails with `logins` if
+either can log in on the live database.
+
+The other attributes are the ones the first migration gives its role
 (`NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS`; `NOBYPASSRLS` above all, since
 a role that can bypass row-level security would silently defeat every tenant
 boundary in the restored data). A dump does not carry a role's attributes, so
@@ -387,11 +408,32 @@ cd /srv/makrai/app/docker
 docker compose --env-file ../.env -f docker-compose.prod.yml --profile tools run --rm --no-deps migrator
 ```
 
+### 4.4a Check the application role's DELETE on memberships
+
+After **any** restore. A backup taken while `deployment.md` section 9.5's application rollback was
+in force carries its `REVOKE DELETE ON "memberships" FROM makrai_app`, and restoring it brings the
+REVOKE back; v0.6.0 then refuses member removal and account deletion with 500 (42501):
+
+```bash
+cd /srv/makrai/app
+set -a; . ./.env; set +a
+docker exec docker-postgres-1 psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -c '\dp memberships'
+```
+
+The access privileges must include `makrai_app=rwd/makrai`. If they do not, give it back and run the
+check again:
+
+```bash
+docker exec docker-postgres-1 psql -v ON_ERROR_STOP=1 -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -c 'GRANT DELETE ON "memberships" TO makrai_app'
+```
+
 ### 4.5a On a fresh cluster — give each role its password
 
-The roles created in 4.2a can log in and have no password, so the application
-still cannot authenticate. This is the same step as `deployment.md` §6.4, done for
-every role in the same derived list rather than for one named role. Each value comes
+The `LOGIN` roles created in 4.2a have no password, so the application still
+cannot authenticate. This is the same step as `deployment.md` §6.4, done for every
+`LOGIN` role in the same derived list rather than for one named role. The `NOLOGIN`
+roles (`makrai_definer`, `makrai_operator_fn`) are skipped: they never get a
+password. Each value comes
 from the connection URL in `.env` whose user is that role, so it cannot drift from
 what the app presents, and goes to psql on stdin, never as an argument (the quoting
 is the one `scripts/provision-app-db-role.sh` uses):
@@ -399,7 +441,7 @@ is the one `scripts/provision-app-db-role.sh` uses):
 ```bash
 cd /srv/makrai/app
 set -a; . ./.env; set +a
-for role in $(grep -hoE 'CREATE ROLE [a-z_]+' prisma/migrations/*/migration.sql | awk '{print $3}' | sort -u); do
+for role in $(grep -hoE 'CREATE ROLE [a-z_]+ (NO)?LOGIN' prisma/migrations/*/migration.sql | awk '$4 == "LOGIN" {print $3}' | sort -u); do
   pw=$(env | sed -n "s#^[A-Z_]*_DATABASE_URL=[a-z]*://${role}:\([^@]*\)@.*#\1#p" | head -n 1)
   if [ -z "$pw" ]; then echo "no connection URL for ${role} in .env: set its password by hand"; continue; fi
   esc=${pw//\\/\\\\}; esc=${esc//\'/\\\'}
@@ -409,7 +451,7 @@ for role in $(grep -hoE 'CREATE ROLE [a-z_]+' prisma/migrations/*/migration.sql 
 done
 ```
 
-A role it names with no connection URL has no password until you set one.
+A `LOGIN` role it names with no connection URL has no password until you set one.
 
 ---
 
@@ -535,13 +577,16 @@ Storage Box**, so the copy that would be used in a disaster is the copy tested.
    backup's owner (the dump carries `ALTER ... OWNER TO`), a random password.
 3. Creates, `NOLOGIN`, every role a migration creates. A dump holds the `GRANT`s
    but not the `CREATE ROLE` (§4.2a), and the list is read from
-   `prisma/migrations` at run time so a new role needs no edit here.
+   `prisma/migrations` at run time, with 4.2a's grep, so a new role needs no edit
+   here.
 4. Decrypts with the passphrase on file descriptor 3, and loads with
    `ON_ERROR_STOP=1`.
 5. Compares with live, using counts only: the number of `public` rows in
    `pg_policies` and the `_prisma_migrations` count must be equal, and `users` and
    `organizations` must each be above 0 in the restored copy (a schema-only dump
-   passes the first two).
+   passes the first two). On the live database, no role a migration creates
+   `NOLOGIN` may be able to log in (`logins`; see §4.2a). On `logins`, run
+   `ALTER ROLE <role> NOLOGIN PASSWORD NULL` on the live database for each role the log names, then run the restore test again.
 6. Pings `HC_RESTORE_PING_URL`, or sends `/fail` and a content-free mail. Only a
    run that reached its last statement can pass: a signal (SIGTERM at a host
    shutdown, SIGHUP when an SSH session drops, SIGINT) or an early exit ends as
@@ -556,13 +601,15 @@ The live database is only read, with a `SELECT` that returns one count.
 | | |
 | --- | --- |
 | stdout | Exactly one line: `RESTORE MATCH` or `RESTORE MISMATCH <field>`. Never a row. |
-| `/srv/makrai/restore-test.log` | Mode 600. Everything else, including every error, because psql's errors can quote the row that failed to load. A failed comparison also logs the two counts, `live=<n> restored=<n>` (`restored=<n>` alone for `users` and `organizations`). |
+| `/srv/makrai/restore-test.log` | Mode 600. Everything else, including every error, because psql's errors can quote the row that failed to load. A failed comparison also logs the two counts, `live=<n> restored=<n>` (`restored=<n>` alone for `users` and `organizations`, `live=<n>` alone for `logins`). |
 | the evidence line | `fetched=<name> age_min=<n>`, logged before the last line. This is what shows that the fresh off-site file was the one tested. |
 | the last log line | `Restore test PASSED` or `Restore test FAILED: <field>`. |
 
-`<field>` is `policies`, `migrations`, `users`, `organizations` or `age` for a
+`<field>` is `policies`, `migrations`, `users`, `organizations`, `logins` or `age` for a
 failed check, `interrupted` for a run that was stopped, and otherwise the step that
-failed: `setup`, `fetch`, `cluster`, `roles`, `restore` or `compare`.
+failed: `setup`, `fetch`, `cluster`, `roles`, `restore`, `compare`, `seals` (the seal
+check: one seal did not match, or a step of it failed or timed out) or `sizes` (a size
+query returned something that is not a number).
 
 `Ctrl-C` does not reach the steps wrapped in `timeout`, which runs its command in a
 process group of its own. A run stopped by hand therefore finishes the step it is

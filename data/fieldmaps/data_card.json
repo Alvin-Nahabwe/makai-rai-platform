@@ -1,0 +1,338 @@
+{
+  "documentType": "data_card",
+  "homeStage": "pre-processing",
+  "templateVersion": "5.0.0",
+  "fields": [
+    {
+      "fieldId": "DC-01",
+      "label": "Purpose: why was this dataset created?",
+      "section": "Motivation",
+      "sources": [
+        {"kind": "record", "questionId": "Q-PP-08", "parts": ["reason"]}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "DC-02",
+      "label": "Creators",
+      "section": "Motivation",
+      "sources": [
+        {"kind": "typed"},
+        {"kind": "project", "field": "institution"},
+        {"kind": "project", "field": "department"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "DC-03",
+      "label": "Funding source",
+      "section": "Motivation",
+      "sources": [
+        {"kind": "project", "field": "fundingSource"}
+      ],
+      "typedAddition": true
+    },
+    {
+      "fieldId": "DC-04",
+      "label": "What do the instances represent?",
+      "section": "Composition",
+      "sources": [
+        {"kind": "project", "field": "datasetDescription"}
+      ],
+      "typedAddition": true
+    },
+    {
+      "fieldId": "DC-05",
+      "label": "Total instance count",
+      "section": "Composition",
+      "sources": [
+        {"kind": "typed"},
+        {"kind": "project", "field": "datasetSize"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "DC-06",
+      "label": "Data types included",
+      "section": "Composition",
+      "sources": [
+        {"kind": "project", "field": "datasetType"}
+      ],
+      "typedAddition": true
+    },
+    {
+      "fieldId": "DC-07",
+      "label": "Is this a sample or complete collection? How was sampling done?",
+      "section": "Composition",
+      "sources": [
+        {"kind": "record", "questionId": "Q-PP-18", "parts": ["status", "reason"]}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "DC-08",
+      "label": "Target variable / labels",
+      "section": "Composition",
+      "sources": [
+        {"kind": "typed"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "DC-09",
+      "label": "Missing data: extent and patterns",
+      "section": "Composition",
+      "sources": [
+        {"kind": "record_option", "questionId": "Q-PP-16", "option": "Missing data analysis"}
+      ],
+      "typedAddition": true
+    },
+    {
+      "fieldId": "DC-10",
+      "label": "Predefined splits (train/validation/test)",
+      "section": "Composition",
+      "sources": [
+        {"kind": "typed"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "DC-11",
+      "label": "How was the data collected?",
+      "section": "Collection process",
+      "sources": [
+        {"kind": "record", "questionId": "Q-PP-08", "parts": ["reason", "evidence"]}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "DC-12",
+      "label": "Who collected the data?",
+      "section": "Collection process",
+      "sources": [
+        {"kind": "typed"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "DC-13",
+      "label": "Time period",
+      "section": "Collection process",
+      "sources": [
+        {"kind": "typed"},
+        {"kind": "record", "questionId": "Q-PP-20", "parts": ["status", "reason"]}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "DC-14",
+      "label": "Geographic coverage",
+      "section": "Collection process",
+      "sources": [
+        {"kind": "project", "field": "country"}
+      ],
+      "typedAddition": true
+    },
+    {
+      "fieldId": "DC-15",
+      "label": "Ethics review",
+      "section": "Collection process",
+      "sources": [
+        {"kind": "typed", "structured": "ethics_approval"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "DC-16",
+      "label": "Informed consent: was consent obtained? How?",
+      "section": "Collection process",
+      "sources": [
+        {"kind": "record", "questionId": "Q-PP-GATE-SENSITIVE", "parts": ["scope"]},
+        {"kind": "record", "questionId": "Q-PP-13", "parts": ["status", "reason", "evidence"]}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "DC-35",
+      "label": "Personal or sensitive data, and de-identification",
+      "section": "Collection process",
+      "sources": [
+        {"kind": "record", "questionId": "Q-PP-GATE-SENSITIVE", "parts": ["scope"]},
+        {"kind": "project", "field": "processesPersonalData"},
+        {"kind": "record", "questionId": "Q-PP-14", "parts": ["status", "reason"]}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "DC-17",
+      "label": "What preprocessing or cleaning was applied?",
+      "section": "Preprocessing and labelling",
+      "sources": [
+        {"kind": "typed"},
+        {"kind": "record", "questionId": "Q-PP-14", "parts": ["status", "reason"]},
+        {"kind": "record", "questionId": "Q-PP-16", "parts": ["options"]}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "DC-18",
+      "label": "Is the raw (unprocessed) data available?",
+      "section": "Preprocessing and labelling",
+      "sources": [
+        {"kind": "typed"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "DC-19",
+      "label": "How were labels assigned? By whom?",
+      "section": "Preprocessing and labelling",
+      "sources": [
+        {"kind": "record", "questionId": "Q-PP-12", "parts": ["reason"]},
+        {"kind": "record", "questionId": "Q-PP-23", "parts": ["status", "reason"]}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "DC-20",
+      "label": "What quality checks were applied to labels?",
+      "section": "Preprocessing and labelling",
+      "sources": [
+        {"kind": "record", "questionId": "Q-PP-12", "parts": ["status", "evidence"]},
+        {"kind": "record_option", "questionId": "Q-PP-17", "option": "Labeling bias"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "DC-21",
+      "label": "Intended uses",
+      "section": "Uses and restrictions",
+      "sources": [
+        {"kind": "record", "questionId": "Q-PP-02", "parts": ["reason"]}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "DC-22",
+      "label": "Inappropriate uses",
+      "section": "Uses and restrictions",
+      "sources": [
+        {"kind": "typed"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "DC-23",
+      "label": "Could the dataset composition negatively affect future uses? Which bias checks were run, and their results",
+      "section": "Uses and restrictions",
+      "sources": [
+        {"kind": "record", "questionId": "Q-PP-09", "parts": ["status", "reason"]},
+        {"kind": "record", "questionId": "Q-PP-19", "parts": ["status", "reason"]},
+        {"kind": "record", "questionId": "Q-PP-22", "parts": ["status", "reason"]},
+        {"kind": "record", "questionId": "Q-PP-17", "parts": ["options"]},
+        {"kind": "findings", "stage": "pre-processing", "filter": "all", "areas": ["PP-02", "PP-03", "PP-04", "PP-05", "PP-07"]}
+      ],
+      "typedAddition": true
+    },
+    {
+      "fieldId": "DC-24",
+      "label": "Distribution method",
+      "section": "Distribution and maintenance",
+      "sources": [
+        {"kind": "typed"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "DC-25",
+      "label": "Licence",
+      "section": "Distribution and maintenance",
+      "sources": [
+        {"kind": "typed"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "DC-26",
+      "label": "Access controls and geographic restrictions",
+      "section": "Distribution and maintenance",
+      "sources": [
+        {"kind": "record", "questionId": "Q-PP-21", "parts": ["status", "reason", "evidence"]}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "DC-27",
+      "label": "Maintainer",
+      "section": "Distribution and maintenance",
+      "sources": [
+        {"kind": "typed"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "DC-28",
+      "label": "Update frequency",
+      "section": "Distribution and maintenance",
+      "sources": [
+        {"kind": "typed"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "DC-29",
+      "label": "Retention policy and versioning",
+      "section": "Distribution and maintenance",
+      "sources": [
+        {"kind": "record", "questionId": "Q-PP-21", "parts": ["reason"]},
+        {"kind": "record_option", "questionId": "Q-PP-16", "option": "Data lineage/provenance tracking"}
+      ],
+      "typedAddition": true
+    },
+    {
+      "fieldId": "DC-30",
+      "label": "Data ownership and benefit-sharing",
+      "section": "Distribution and maintenance",
+      "sources": [
+        {"kind": "typed"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "DC-31",
+      "label": "Datasheet held by the team",
+      "section": "Record and sign-off",
+      "sources": [
+        {"kind": "typed"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "DC-32",
+      "label": "Decisions above were made by",
+      "section": "Record and sign-off",
+      "sources": [
+        {"kind": "meta", "item": "deciders"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "DC-33",
+      "label": "Sealed by, seal number and date",
+      "section": "Record and sign-off",
+      "sources": [
+        {"kind": "meta", "item": "seals"}
+      ],
+      "typedAddition": false
+    },
+    {
+      "fieldId": "DC-34",
+      "label": "Next review date",
+      "section": "Record and sign-off",
+      "sources": [
+        {"kind": "typed"}
+      ],
+      "typedAddition": false
+    }
+  ]
+}

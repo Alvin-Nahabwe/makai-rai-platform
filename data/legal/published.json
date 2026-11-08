@@ -1,0 +1,22 @@
+[
+  {
+    "kind": "cross-border-consent",
+    "version": "1",
+    "sha256": "a03cbce37e5b8f994cf3327ab818b6fa71f3da3730307e20ea249b4b214b71e7"
+  },
+  {
+    "kind": "organisation-agreement",
+    "version": "1",
+    "sha256": "b5a0feb770a0b44a7b441bb4df415b879485852db51d7db16ab2a65e0ce874e7"
+  },
+  {
+    "kind": "privacy",
+    "version": "1",
+    "sha256": "07d02d12ab75a7a938e4019a2801411c544b95804efa0c712347829a7e4da390"
+  },
+  {
+    "kind": "terms",
+    "version": "1",
+    "sha256": "e5e6b389563e62e4336998c21f85846251e558d17bc8d62e2f7139bada7707cc"
+  }
+]

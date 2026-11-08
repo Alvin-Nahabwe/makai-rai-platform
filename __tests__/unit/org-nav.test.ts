@@ -22,15 +22,15 @@ describe('currentOrgSlug', () => {
 
   it('returns undefined outside org scope', () => {
     expect(currentOrgSlug('/explore/framework')).toBeUndefined();
-    expect(currentOrgSlug('/admin/users')).toBeUndefined();
+    expect(currentOrgSlug('/admin/accounts')).toBeUndefined();
     expect(currentOrgSlug('/change-password')).toBeUndefined();
     expect(currentOrgSlug('/')).toBeUndefined();
   });
 
-  it('does not treat "orgs/new" as a slug-bearing path humans would confuse with a real org', () => {
-    // Not a security boundary (the layout/requireOrgContext gate that), but
-    // the sidebar must not silently compute '/orgs/new/dashboard' as a
-    // destination href.
+  it('FR-ORG-04: treats "new" as a slug like any other, since the /orgs/new page is gone', () => {
+    // No page answers /orgs/new any more (organisations are created by the
+    // administrator only), so "new" is an ordinary slug; the organisation
+    // layout's requireOrgContext answers 404 for it as for any unknown slug.
     expect(currentOrgSlug('/orgs/new')).toBe('new');
   });
 });
@@ -60,6 +60,6 @@ describe('isNavActive', () => {
 
   it('never treats the "/" fallback href as active, even though every pathname starts with "/"', () => {
     expect(isNavActive('/explore/framework', '/')).toBe(false);
-    expect(isNavActive('/admin/users', '/')).toBe(false);
+    expect(isNavActive('/admin/accounts', '/')).toBe(false);
   });
 });

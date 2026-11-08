@@ -1,12 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { hash } from 'bcryptjs';
-import { resetDb } from '../helpers/db';
-import { bootstrapOrgWithOwner } from '../../lib/data/preauth';
+import { resetDb, testDb } from '../helpers/db';
+import { buildOrg } from '../helpers/recordFixture';
 import { identityDb } from '../../lib/data/identity';
 import { FIXTURE_PASSWORD } from '../helpers/fixture';
-import { authorizeCredentials } from '../../lib/auth/credentials';
+import { authorizeCredentials as authorizeWithRequest } from '../../lib/auth/credentials';
 import { logSecurityEvent } from '../../lib/security-logger';
+
+// `cookies()` needs a Next request scope; the success path sets the known-device cookie through it (FR-ACC-05), which
+// sign-in-limits.test.ts reads back. Here it is only a sink.
+vi.mock('next/headers', () => ({ cookies: async () => ({ set: () => {} }) }));
+
+/** The credentials POST as NextAuth rebuilds it for `authorize`, with no known-device cookie. */
+function authorizeCredentials(credentials: Parameters<typeof authorizeWithRequest>[0]) {
+  return authorizeWithRequest(credentials, new Request('http://localhost/api/auth/callback/credentials', { method: 'POST' }));
+}
 
 // The real logger, wrapped so the test can also see what it was HANDED. The logger redacts
 // whatever it is given, so output alone cannot tell "the call site names no email" from "the
@@ -24,7 +33,8 @@ vi.mock('../../lib/security-logger', async (importOriginal) => {
  * through a brute force (P2: `userId` and `attempts` stay) and is not personal data.
  *
  * `authorizeCredentials` is the body of the Credentials provider's `authorize`, moved out
- * of `lib/auth.ts` so it can be called here without NextAuth, a cookie jar or a request.
+ * of `lib/auth.ts` so it can be called here without NextAuth or a cookie jar. The counting
+ * itself (atomic, per account and per known device) is sign-in-limits.test.ts's.
  */
 
 const EMAIL = 'lockout-probe@example.test';
@@ -51,15 +61,12 @@ afterEach(() => {
 const output = (): string[] => METHODS.flatMap((m) => spies[m].mock.calls.map((c) => c.map(String).join(' ')));
 const events = (): Record<string, unknown>[] => output().map((l) => JSON.parse(l) as Record<string, unknown>);
 
+/** An organisation's owner (K0a's buildOrg) with EMAIL and PASSWORD. */
 async function makeUser(): Promise<string> {
-  const { userId } = await bootstrapOrgWithOwner({
-    email: EMAIL,
-    name: 'Lockout Probe',
-    // Cost 4: the hash is only here to be compared against. The cost is stored in it.
-    passwordHash: await hash(PASSWORD, 4),
-    orgName: 'Probe Org',
-    ipAddress: '127.0.0.1',
-  });
+  const fx = await buildOrg();
+  const userId = fx.members.owner.userId;
+  // Cost 4: the hash is only here to be compared against. The cost is stored in it.
+  await testDb.user.update({ where: { id: userId }, data: { email: EMAIL, name: 'Lockout Probe', passwordHash: await hash(PASSWORD, 4) } });
   return userId;
 }
 

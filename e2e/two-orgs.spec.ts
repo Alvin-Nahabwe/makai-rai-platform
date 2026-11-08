@@ -9,15 +9,11 @@ import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from '.
  * Task 12 Step 2.
  *
  * TWO ORGS, INDEPENDENTLY CREATED — NOT ONE ORG WITH TWO MEMBERS. The
- * fixture's two orgs (`__tests__/helpers/fixture.ts#buildOrg`) are each
- * bootstrapped by their OWN owner through `bootstrapOrgWithOwner` — "the
- * same function `/api/auth/register` calls" (that module's own doc) — with
- * every other seat added afterwards by invitation. That is structurally
- * the thing this gate requires: two disjoint orgs, not one org holding
- * every role. The literal browser `/register` form submission for this
- * exact path is already covered live by `e2e/org-routing.spec.ts`
- * ("/ shows the org picker...", "a member of org A gets 404 on org B") —
- * not duplicated here. What THIS file adds is the part that spec does not
+ * fixture's two orgs (`__tests__/helpers/fixture.ts`, each built by K0a's
+ * `buildOrg`) share no member. That is structurally the thing this gate
+ * requires: two disjoint orgs, not one org holding every role.
+ * `e2e/org-routing.spec.ts` covers "a member of org A gets 404 on org B"
+ * for one pair. What THIS file adds is the part that spec does not
  * cover: isolation proven for EVERY role, in BOTH directions, not just an
  * owner-vs-owner pair — the exact gap the brief calls out ("at any role,
  * including owner").
@@ -88,78 +84,51 @@ test.describe('an invitation moves a third person into an org, at the invited ro
     await ownerPage.fill('#invite-email', thirdEmail);
     await ownerPage.selectOption('#invite-role', 'assessor');
 
-    // D-188 / O-2. Two assertions, because two different short-circuits
-    // produce an identical-looking 201 + copy-link: EMAIL_FROM_ADDRESS
-    // unset makes members/route.ts:105-108 throw BEFORE sendEmail is ever
-    // called, while RESEND_API_KEY empty (this spec's actual fixture, via
-    // playwright.config.ts's webServer.env) makes lib/email/send.ts:32-37
-    // throw INSIDE sendEmail. Asserting the rendered reason names
-    // RESEND_API_KEY, not just that emailSent is false, is what proves
-    // THIS task's short-circuit fired rather than the other one -- and it
-    // is the only assertion below that fails if a warm reused dev server
-    // still holds a real key and calls Resend for real, since
-    // MembersManager renders the identical `<a href={acceptUrl}>` anchor
-    // on both the emailSent and !emailSent branches
-    // (MembersManager.tsx:215-228).
+    // The e2e server has no email key (playwright.config.ts's webServer.env), so the send fails locally: emailSent false
+    // proves only that, and the accept link is the way to pass the invitation on. It is read from CopyLinkFallback's
+    // read-only field (UX-23), shown because Show link is ticked.
     const invitePost = ownerPage.waitForResponse(
       (r) => r.url().includes('/members') && r.request().method() === 'POST',
     );
+    await ownerPage.getByRole('checkbox', { name: 'Show link', exact: true }).check();
     await ownerPage.getByRole('button', { name: 'Invite' }).click();
     const body = await (await invitePost).json();
     expect(body.emailSent, 'the email leg must fail locally, not succeed remotely').toBe(false);
-    expect(body.emailError, 'must be the RESEND_API_KEY short-circuit, not EMAIL_FROM_ADDRESS')
-      .toMatch(/RESEND_API_KEY/);
 
-    const acceptLink = ownerPage.locator('a[href*="/invitations/"]').first();
+    // The link sits in a read-only text field (CopyLinkFallback, UX-23), not in an anchor.
+    const acceptLink = ownerPage.getByRole('textbox', { name: /invitation link/i });
     await expect(acceptLink).toBeVisible();
-    const acceptUrl = await acceptLink.getAttribute('href');
+    const acceptUrl = await acceptLink.inputValue();
     expect(acceptUrl).toBeTruthy();
     await ownerContext.close();
 
     // --- Step B: an entirely anonymous browser context (no storageState —
     // this person has never touched the app before) follows the one-time
-    // link, registers, logs in, and accepts — the real
-    // AcceptInvitationClient three-branch flow, anonymous branch.
+    // link and creates the account on S-04: name and password, then the
+    // three acceptances, then Create account, which signs the person in and
+    // lands on org A's dashboard with the welcome (FR-ACC-01, FR-ACC-03).
     const thirdContext = await browser.newContext();
     const thirdPage = await thirdContext.newPage();
 
     await thirdPage.goto(acceptUrl!);
-    await expect(thirdPage.locator('h1')).toHaveText("You're invited");
-    await expect(thirdPage.locator('body')).toContainText(thirdEmail);
-    await expect(thirdPage.locator('body')).toContainText('assessor');
+    await expect(thirdPage.locator('h1')).toHaveText(/^You are invited to \S/);
+    await expect(thirdPage.getByLabel(/^Email/)).toHaveValue(thirdEmail);
+    await expect(thirdPage.locator('body')).toContainText('invited you as an assessor');
 
-    await thirdPage.getByRole('button', { name: `Create an account as ${thirdEmail}` }).click();
-    await thirdPage.fill('#inv-name', 'Two Orgs Third Person');
-    await thirdPage.fill('#inv-password', thirdPassword);
-    await thirdPage.fill('#inv-confirmPassword', thirdPassword);
-    await thirdPage.locator('input[type="checkbox"]').first().check();
-    await thirdPage.getByRole('button', { name: 'Create Account' }).click();
-
-    await thirdPage.waitForURL('**/login?registered=true**');
-    await thirdPage.fill('#email', thirdEmail);
-    await thirdPage.fill('#password', thirdPassword);
-    await thirdPage.locator('button[type="submit"]').click();
-
-    // callbackUrl carries them back to the invitation page, now signed in.
-    await thirdPage.waitForURL(`**/invitations/**`);
-    await thirdPage.getByRole('button', { name: 'Accept invitation' }).click();
-    await thirdPage.waitForURL('**/');
+    await thirdPage.getByLabel('Your name').fill('Two Orgs Third Person');
+    await thirdPage.getByLabel('Password', { exact: true }).fill(thirdPassword);
+    await thirdPage.getByRole('button', { name: 'Continue' }).click();
+    for (const box of await thirdPage.getByRole('checkbox').all()) await box.check();
+    await thirdPage.getByRole('button', { name: 'Create account' }).click();
 
     // --- Step C: land in org A, at the role that was actually granted —
     // checked two ways: (1) org A is reachable and org B is not (this
     // person was never invited to B), (2) the role-appropriate UI renders
-    // — `assessor` has `project:create`, so "Start New Assessment" is
+    // — `assessor` has `project:create`, so "New project" is
     // visible, tying this back to the same O-13 control this suite checks
     // elsewhere and proving the GRANTED role, not just membership.
-    await expect(thirdPage.locator('h1')).toHaveText('Choose an organization');
-    const orgALink = thirdPage.locator(`a[href="/orgs/${orgA.slug}/dashboard"]`);
-    await expect(orgALink).toBeVisible();
-    const orgBLink = thirdPage.locator(`a[href="/orgs/${orgB.slug}/dashboard"]`);
-    await expect(orgBLink).toHaveCount(0);
-
-    await orgALink.click();
-    await thirdPage.waitForURL(`**/orgs/${orgA.slug}/dashboard`);
-    const startLink = thirdPage.getByRole('link', { name: 'Start New Assessment' });
+    await thirdPage.waitForURL(`**/orgs/${orgA.slug}/dashboard?welcome=1`);
+    const startLink = thirdPage.getByRole('link', { name: 'New project' });
     if (can('assessor', 'project:create')) {
       await expect(startLink).toBeVisible();
     } else {

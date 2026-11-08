@@ -2,7 +2,7 @@ name: Synthetic journey
 
 # A manual, off-host smoke test: `gh workflow run synthetic.yml`. It answers one
 # question during an incident: is it the host or the world? It signs in to
-# https://makrai.org as a synthetic account, saves an assessment and reads it back
+# https://makrai.org as a synthetic account, saves a decision and reads it back
 # (scripts/synthetic-journey.mjs; RL 2.3), from a GitHub runner, which is not the
 # host. The same journey runs every hour from the host (ops/host/makrai-synthetic.sh,
 # in root's crontab; ops/host/README.md, "Hourly synthetic journey (Task 20b)"). If
@@ -11,14 +11,14 @@ name: Synthetic journey
 #
 # This workflow never pings anything and has no schedule. The hourly run and its
 # dead-man check belong to the host, and the alert drill (a bad
-# SYNTHETIC_ASSESSMENT_ID, a failing hourly run, a check that goes down and comes
+# SYNTHETIC_QUESTION_ID, a failing hourly run, a check that goes down and comes
 # back) runs against the host. A run here that pinged would keep a check green while
 # the host was dead.
 #
 # The account belongs to an organisation made for this ("zz Synthetic monitoring
-# (not a team)"), and the assessment in it is started and never completed. The
-# four SYNTHETIC_* secrets name them. A completed assessment cannot be saved, so
-# completing it would turn the save into a 409 and the journey red.
+# (not a team)"), and one question of a project in it holds a decision that can be saved
+# again. The six SYNTHETIC_* secrets name them. A withdrawn decision cannot be saved
+# again, so withdrawing it would turn the journey red (reason=not_saveable).
 #
 # The script prints `step=<name> status=<code>` and nothing else: no body, no
 # cookie, no password. A failing journey fails the step and so the run, and the run
@@ -69,12 +69,14 @@ jobs:
       # the run red instead of passing. The step has its own limit, shorter
       # than the job's: a step that times out is a failed step with its own
       # name in the log, where a job that times out is cancelled as a whole.
-      - name: Sign in, save and read back
+      - name: Sign in, save a decision and read it back
         timeout-minutes: 3
         env:
           BASE_URL: https://makrai.org
           SYNTHETIC_EMAIL: ${{ secrets.SYNTHETIC_EMAIL }}
           SYNTHETIC_PASSWORD: ${{ secrets.SYNTHETIC_PASSWORD }}
           SYNTHETIC_ORG_SLUG: ${{ secrets.SYNTHETIC_ORG_SLUG }}
-          SYNTHETIC_ASSESSMENT_ID: ${{ secrets.SYNTHETIC_ASSESSMENT_ID }}
+          SYNTHETIC_PROJECT_ID: ${{ secrets.SYNTHETIC_PROJECT_ID }}
+          SYNTHETIC_STAGE: ${{ secrets.SYNTHETIC_STAGE }}
+          SYNTHETIC_QUESTION_ID: ${{ secrets.SYNTHETIC_QUESTION_ID }}
         run: node scripts/synthetic-journey.mjs

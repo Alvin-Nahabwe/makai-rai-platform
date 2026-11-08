@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { execSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
+import { PENDING_ROUTES } from '../../lib/authz/routeActions';
 
 /**
  * The phase-exit review of this branch (2026-08-05) found two security
@@ -106,6 +107,9 @@ describe('hmrSingleton keys are unique across call sites', () => {
       'appClient',
       'identityBaseClient',
       'identityDb',
+      // v0.6.0 (lib/data/identityClient.ts): the identity lane for the definer wrappers,
+      // the reminder reads and ORG's administrator reads, importable from three files only.
+      'identityLaneClient',
       'preauthClient',
     ]);
   });
@@ -135,6 +139,7 @@ describe('hmrSingleton keys are unique across call sites', () => {
       appClient: ['APP_DATABASE_URL'],
       identityBaseClient: ['IDENTITY_DATABASE_URL'],
       identityDb: [],
+      identityLaneClient: ['IDENTITY_DATABASE_URL'],
       preauthClient: ['IDENTITY_DATABASE_URL'],
     });
   });
@@ -172,6 +177,60 @@ describe('mustChangePassword has a production trigger', () => {
   });
 });
 
+describe('the acceptance gate has its production triggers (FR-ACC-04, SRS 7.1.2 gate 3)', () => {
+  /** The body of `export async function <name>(` in lib/auth/identity.ts, up to the closing brace at column 0. */
+  function bodyOf(name: string): string {
+    const src = readFileSync('lib/auth/identity.ts', 'utf8');
+    const start = src.indexOf(`export async function ${name}(`);
+    expect(start, name).toBeGreaterThanOrEqual(0);
+    return src.slice(start, src.indexOf('\n}\n', start));
+  }
+
+  it('NFR-MNT-01 FR-ACC-04: missingAcceptances is read and branched on in both gates', () => {
+    // As for mustChangePassword above: a read whose result is carried and never branched on is the
+    // defect shape, so each gate must both call it for the resolved identity and act on a non-empty set.
+    const page = bodyOf('requireIdentity');
+    const api = bodyOf('requireIdentityForApi');
+    // The rows behind missingAcceptances are read once per request (React cache() over rowsOf, lib/data/acceptances.ts).
+    expect(readFileSync('lib/data/acceptances.ts', 'utf8')).toMatch(/const rowsOf = cache\(/);
+    for (const body of [page, api]) {
+      expect(body).toMatch(/const missing = await missingAcceptances\(identity\.userId\);/);
+      expect(body).toMatch(/if \(missing\.length > 0/);
+    }
+    expect(page).toMatch(/redirect\(ACCEPTANCES_PATH\)/);
+    expect(api).toMatch(/throw new AcceptancesRequiredError\(missing\)/);
+  });
+
+  it('FR-ACC-04 NFR-MNT-01: allowMissingAcceptances is named in code only by the S-05 and S-21 routes', () => {
+    // The child gets NO_COLOR=1 and no FORCE_COLOR, and escape sequences are stripped (the rule above).
+    const { FORCE_COLOR: _force, ...plainEnv } = process.env;
+    // Every file that names the option, then only those that name it outside comments (K0b's stub
+    // comments name it in prose): a call split over lines or options passed through a variable count.
+    const named = execSync(`git grep -l -F allowMissingAcceptances -- app lib components || true`, { env: { ...plainEnv, NO_COLOR: '1' } })
+      .toString().replace(/\u001b\[[0-9;]*[A-Za-z]/g, '').trim().split('\n').filter(Boolean);
+    const files = named.filter((f) => f !== 'lib/auth/identity.ts' && namesOptionInCode(readFileSync(f, 'utf8'))).sort();
+    // Route 37 (app/api/users/me/preferences/route.ts) joined this list when FUP filled it (contract
+    // routes 35 to 39, gap G028).
+    expect(files).toEqual(['app/api/acceptances/route.ts',
+      'app/api/users/me/export/route.ts', 'app/api/users/me/password/route.ts',
+      'app/api/users/me/preferences/route.ts', 'app/api/users/me/route.ts', 'app/api/users/me/sessions/route.ts']);
+  });
+
+  it('FR-ACC-04 NFR-MNT-01 (lint self-test): a call over several lines or a variable of options is found; a comment is not', () => {
+    expect(namesOptionInCode('const identity = await requireIdentityForApi({\n  allowMissingAcceptances: true,\n});')).toBe(true);
+    expect(namesOptionInCode('const opts = { allowMissingAcceptances: true };\nawait requireIdentityForApi(opts);')).toBe(true);
+    expect(namesOptionInCode("const url = 'http://x'; requireIdentityForApi({ allowMissingAcceptances: true })")).toBe(true);
+    expect(namesOptionInCode('// allowMissingAcceptances is passed by route 37 once FUP fills it\nthrow new NotImplementedError();')).toBe(false);
+    expect(namesOptionInCode('/**\n * allowMissingAcceptances: true, per contract row 37\n */\nexport const GET = stub;')).toBe(false);
+  });
+});
+
+/** Whether a source names allowMissingAcceptances outside its block and line comments (strings are code here). */
+function namesOptionInCode(source: string): boolean {
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:\\])\/\/.*$/gm, '$1');
+  return code.includes('allowMissingAcceptances');
+}
+
 /**
  * Task 11 (O-11), Plan 1c's own backstop task. The six describe blocks below
  * follow from the SAME failure this file's header names — a control fully
@@ -188,8 +247,8 @@ describe('mustChangePassword has a production trigger', () => {
  * confirmed red, restored, confirmed green.
  */
 
-describe('evidence:read / evidence:create / evidence:delete have production enforcement points (O-10, O-17)', () => {
-  // `lib/authz/policy.ts` DECLARES these three actions (the `Action` union
+describe('record:read and evidence:create have production enforcement points (O-10, O-17)', () => {
+  // `lib/authz/policy.ts` DECLARES these two actions (the `Action` union
   // and `GRANTS`) and `lib/authz/routeActions.ts` MAPS each route to one of
   // them — both are already exhaustively tested elsewhere
   // (`__tests__/authz/policy.test.ts`'s full role x action matrix;
@@ -217,11 +276,16 @@ describe('evidence:read / evidence:create / evidence:delete have production enfo
   // `npx vitest run` over the WHOLE suite, not just this file, after O-12 was
   // implemented — exactly the reason this file's tests get re-run against the
   // full tree rather than trusted from when they were first written.
+  // The child gets NO_COLOR=1 and no FORCE_COLOR, and escape sequences are stripped, so a colour setting in
+  // the environment cannot change the file names compared below (round 13, R13-2).
+  const { FORCE_COLOR: _forceColour, ...plainEnv } = process.env;
   function callers(action: string): string[] {
     return execSync(
       `grep -rnE "(requireOrgContext|requireOrgContextWithIdentity)\\(slug, '${action}'\\)" app lib --include=*.ts || true`,
+      { env: { ...plainEnv, NO_COLOR: '1' } },
     )
       .toString()
+      .replace(/\u001b\[[0-9;]*[A-Za-z]/g, '')
       .trim()
       .split('\n')
       .filter(Boolean)
@@ -229,298 +293,43 @@ describe('evidence:read / evidence:create / evidence:delete have production enfo
       .sort();
   }
 
-  it('evidence:read is consulted by both the list route and the single-item route', () => {
-    expect(callers('evidence:read')).toEqual([
-      'app/api/v1/orgs/[slug]/assessments/[id]/evidence/route.ts',
-      'app/api/v1/orgs/[slug]/evidence/[evidenceId]/route.ts',
-    ]);
+  // v0.6.0: FR-AUTHZ-02 deleted `evidence:read` (replaced by `record:read`) and `evidence:delete` (the DELETE
+  // method is a 404 handler, REMOVED_METHODS), so neither is an Action any more and the type checker refuses a
+  // gate that names one; __tests__/authz/dead-actions.test.ts holds every source file to that. `evidence:create`
+  // stays, consulted by the project upload route (EVD fills it).
+  it('NFR-MNT-01 FR-EVD-01: evidence:create is consulted by exactly the project upload route', () => {
+    expect(callers('evidence:create')).toEqual(['app/api/v1/orgs/[slug]/projects/[id]/evidence/route.ts']);
   });
 
-  it('evidence:create is consulted by exactly the upload route', () => {
-    expect(callers('evidence:create')).toEqual([
-      'app/api/v1/orgs/[slug]/assessments/[id]/evidence/route.ts',
-    ]);
-  });
-
-  it('evidence:delete is consulted by exactly the single-item DELETE route', () => {
-    expect(callers('evidence:delete')).toEqual([
-      'app/api/v1/orgs/[slug]/evidence/[evidenceId]/route.ts',
-    ]);
+  it('record:read is consulted by the single-item evidence route', () => {
+    expect(callers('record:read')).toContain('app/api/v1/orgs/[slug]/evidence/[evidenceId]/route.ts');
   });
 });
 
-describe('O-14 drift check (resolveFramework(...).matches) has its production triggers', () => {
-  /**
-   * `completeAssessment` shipped WITHOUT this check in fix round 1 (D-165,
-   * task-9-report.md) — a Critical, coordinator-found gap caught only by a
-   * human re-review of a diff, not by any mechanical check; the original
-   * scoping enumerated `respondToAssessment` alone and missed its sibling
-   * write path entirely. This is that mechanical check: it enumerates, from
-   * disk, every production site that reads `resolveFramework(...).matches`
-   * AND branches on it, and pins the exact set — so a refactor that silently
-   * drops the check from any ONE of the three (e.g. consolidating
-   * `respondToAssessment`/`completeAssessment` and keeping only one copy)
-   * fails a test instead of reproducing exactly the gap fix round 2 closed.
-   *
-   * `if (!resolution.matches)` is deliberately narrower than a bare
-   * `resolveFramework(` grep, which would also match
-   * `assessments/[id]/route.ts`'s GET handler — that call reads `.matches`
-   * only to DISPLAY it in the report's provenance line, never to reject a
-   * write, and counting it here would hide a regression in one of the four
-   * real guards behind a call that never guarded anything (the same "read
-   * vs. read-AND-branched-on" distinction the `mustChangePassword` test
-   * above already draws for an unrelated flag).
-   *
-   * C6 whole-branch review, F5 — THE FOURTH SITE, and the reason this
-   * comment's own reasoning was not enough. Every entry here was derived
-   * from one lens: "which functions WRITE to an existing assessment?"
-   * `POST .../assessments` writes the assessment INTO existence, so it was
-   * outside that lens and outside this pin — and it duly shipped without a
-   * drift check, resolving a version to pin by semver string alone. This
-   * is exactly AGENTS.md §3's decomposition rule (generate the list again
-   * from a different property; vary the ROOT, not only the predicate): the
-   * second property is "which routes cause an assessment row to carry a
-   * `frameworkVersionId`", and it reaches the create route that the first
-   * one structurally could not. `resolveCurrentFramework` was given the
-   * same `FrameworkResolution` return shape as `resolveFramework`
-   * specifically so the new site would be visible to this grep rather than
-   * needing a second, separately-maintained one.
-   *
-   * NOTE, found by this very fix: the grep is over SOURCE TEXT, so a
-   * COMMENT quoting the guard line verbatim counts as a hit. Two doc
-   * comments written alongside the fourth site did exactly that and turned
-   * this expectation into six entries. Deliberately NOT "solved" by
-   * teaching the grep to skip comment lines -- that is a second thing to
-   * maintain, and this failure mode is loud, immediate and self-explaining
-   * (the actual-vs-expected diff names the offending file). If you need to
-   * quote the idiom in prose, write it without the `if (` prefix.
-   */
-  it('gates respondToAssessment, completeAssessment, the evidence upload route, and assessment creation — and no others', () => {
-    const hits = execSync(`grep -rn "if (!resolution.matches)" app lib --include=*.ts || true`)
-      .toString()
-      .trim()
-      .split('\n')
-      .filter(Boolean)
-      .sort();
+describe('assertSameOrigin has a production caller in every write route (NFR-SEC-08)', () => {
+  // The cross-origin check is a guard no handler is forced to call: a write route that forgets it still
+  // type-checks and answers. Enumerated from disk: every route file still in PENDING_ROUTES that exports a
+  // write handler must call it (a producer keeps the call when it fills the body), and at least one
+  // production file calls it at all.
+  // The child gets NO_COLOR=1 and no FORCE_COLOR, and escape sequences are stripped, so a colour setting in the
+  // environment cannot change the file names compared below.
+  const { FORCE_COLOR: _force, ...plainEnv } = process.env;
+  const callingFiles = execSync(`grep -rlE "assertSameOrigin\\(" app --include=*.ts || true`, { env: { ...plainEnv, NO_COLOR: '1' } })
+    .toString().replace(/\u001b\[[0-9;]*[A-Za-z]/g, '').trim().split('\n').filter(Boolean);
 
-    expect(hits.map((h) => h.split(':')[0])).toEqual([
-      'app/api/v1/orgs/[slug]/assessments/[id]/evidence/route.ts',
-      'app/api/v1/orgs/[slug]/assessments/route.ts',
-      'lib/data/assessments.ts',
-      'lib/data/assessments.ts',
-    ]);
-  });
-});
-
-describe('hasWellFormedStages has its production triggers', () => {
-  /**
-   * AGENTS.md §3: "When you add a guard or a gating column, add it there."
-   * This is that entry for `hasWellFormedStages`
-   * (lib/engine/AssessmentEngine.js), added 2026-08-26 with the fix for a
-   * malformed-but-truthy `engineState.stages`.
-   *
-   * The defect it guards against is exactly this file's founding one. The
-   * guard is exported, typed in the `.d.ts`, and unit-tested through
-   * `canGenerateReport` — so a refactor that drops the CALL at the PATCH
-   * ingress would leave every one of those green while re-opening the hole,
-   * because the guard's logic and the guard's wiring are different facts.
-   * The two triggers are not interchangeable and neither is redundant: the
-   * ingress call stops a malformed state being STORED, the
-   * `completeAssessment` call stops one already stored from reaching the
-   * engine. Losing either one silently restores half the bug.
-   *
-   * `if (!hasWellFormedStages(` and not a bare name grep, for the reason
-   * the O-14 test below this one records: the narrow idiom counts sites
-   * that BRANCH on the guard, where a bare grep would also match the
-   * `.d.ts` declaration and any doc comment naming the function — and this
-   * change wrote several of those.
-   *
-   * The search root is `app lib components`, DELIBERATELY wider than the
-   * `app lib` every other block in this file uses. The completeness review
-   * of that fix (2026-08-26) found the engine's other unguarded
-   * stage-indexing functions have ZERO server callers and live entirely
-   * under `components/` and `app/(authenticated)/` — a root none of this
-   * file's greps searched, which is AGENTS.md §3's "vary the ROOT, not only
-   * the predicate" as a live defect rather than a principle. Including
-   * `components` here means that when the client-side guard lands (D-220)
-   * this expectation fails and forces the new site to be declared rather
-   * than added silently. Narrowing this root back to `app lib` would
-   * quietly restore the blind spot.
-   */
-  it('gates the PATCH ingress and completeAssessment — and no others', () => {
-    const hits = execSync(
-      `grep -rn "if (!hasWellFormedStages(" app lib components --include=*.ts --include=*.tsx || true`,
-    )
-      .toString()
-      .trim()
-      .split('\n')
-      .filter(Boolean)
-      .sort();
-
-    expect(hits.map((h) => h.split(':')[0])).toEqual([
-      'app/api/v1/orgs/[slug]/assessments/[id]/route.ts',
-      'lib/data/assessments.ts',
-    ]);
-  });
-});
-
-describe('driftBannerText scope literals are true of the surface that passes them (C6 F3)', () => {
-  /**
-   * Altitude finding on the C6 fix wave, closed here rather than left as a
-   * doc comment. F3 fixed a banner that made ONE claim for TWO surfaces when
-   * only one could support it, by parameterising `driftBannerText(scope)`.
-   * That moved the risk rather than removing it: nothing checked that the
-   * literal each call site passes stays TRUE of what that component
-   * actually renders. If `ReportPdf` ever gained a live-recomputed field,
-   * its `'cached-only'` claim ("nothing in it is recalculated when viewed")
-   * would silently become false again — the same failure class F3 exists to
-   * fix, one layer in, and invisible to every test that only checks the
-   * component agrees with itself.
-   *
-   * This is the mechanical form AGENTS.md §3 asks for ("generate it rather
-   * than writing it"), in this file's own established idiom: read the file
-   * from disk and enumerate, rather than trusting a comment that asserts
-   * the same thing in prose.
-   */
-  it("ReportPdf imports no framework content — the structural fact its 'cached-only' claim rests on", () => {
-    const source = readFileSync('lib/pdf/ReportPdf.tsx', 'utf8');
-
-    // Non-vacuity: this test is watching a file that must actually HAVE
-    // imports, or "imports no framework content" is trivially true of an
-    // empty or renamed file.
-    expect(source).toMatch(/^import /m);
-    expect(source).toContain('driftBannerText');
-
-    for (const contentModule of ['questionBank', 'assessmentAreas', 'scoringConfig']) {
-      expect(source).not.toContain(`data/${contentModule}`);
-    }
-    // The engine is the other route to deployed content: it statically
-    // imports all three files itself.
-    expect(source).not.toContain('AssessmentEngine');
+  it('some production route calls assertSameOrigin', () => {
+    expect(callingFiles.length).toBeGreaterThan(0);
   });
 
-  it('the two surfaces pass DIFFERENT scopes — a single shared literal is how the pre-fix defect looked', () => {
-    const pdf = readFileSync('lib/pdf/ReportPdf.tsx', 'utf8');
-    const html = readFileSync('components/report/ReportSummary.tsx', 'utf8');
-    expect(pdf).toContain("driftBannerText('cached-only')");
-    expect(html).toContain("driftBannerText('live-findings')");
-    expect(pdf).not.toContain("driftBannerText('live-findings')");
-    expect(html).not.toContain("driftBannerText('cached-only')");
-  });
-});
-
-describe('assessments.frameworkVersionId application-level write-once backstop (O-3)', () => {
-  /**
-   * The DATABASE half of O-3 —
-   * `trg_assessments_framework_version_write_once`
-   * (prisma/migrations/20260807102031_framework_registry_and_pin/migration.sql:63-77)
-   * — already has its own live, non-vacuous, fires-when-broken-proven test
-   * (`framework-registry.test.ts`'s "trg_assessments_framework_version_write_once
-   * (O-3)" describe block, added task-review fix round 3: the trigger was
-   * dropped and the test was confirmed to go red, then restored). That test
-   * IS this guard's "production trigger" proof in the sense every other
-   * entry in this file uses the phrase — a DATABASE TRIGGER has no
-   * application-level caller to lose; it fires unconditionally on any UPDATE
-   * that touches the column, so a grep for "who calls it" would be vacuous
-   * by construction (nothing ever calls a trigger; Postgres does).
-   *
-   * What CAN silently regress is the OTHER half: today nothing ever
-   * attempts to update `frameworkVersionId` at all. `respondToAssessment`
-   * and `completeAssessment` (lib/data/assessments.ts) are the only two
-   * functions anywhere in the app with a `tx.assessment.update(` call, and
-   * both write only `engineState`/`status`/`reportData`/`overallScore`/
-   * `completedAt`. If a future change ever added `frameworkVersionId` to one
-   * of those `data:` objects, the DB trigger would still reject it — but
-   * only as an unhandled 500 at request time. This test catches the attempt
-   * at the SOURCE, before it ships: the same "catch it earlier, in a source
-   * grep rather than a runtime error" relationship every other backstop in
-   * this file has to the failure it targets.
-   */
-  it('lib/data/assessments.ts — home of every tx.assessment.update( call — never references frameworkVersionId', () => {
-    const updateSites = execSync(`grep -n "\\.assessment\\.update(" lib/data/assessments.ts || true`)
-      .toString()
-      .trim()
-      .split('\n')
-      .filter(Boolean);
-    // Non-vacuity: this test is watching a file that must actually HAVE
-    // update call sites, or "never references frameworkVersionId" would be
-    // trivially true of an empty or irrelevant file.
-    //
-    // Task 1 (2026-08-26, maturity-band-reanchor) deleted the quick-mode
-    // scoring branch of `completeAssessment`, which held its own
-    // `tx.assessment.update(` call -- dropping the count from 3 to 2:
-    // `respondToAssessment`'s write plus `completeAssessment`'s one
-    // remaining (full-mode) write, matching this file's own doc comment
-    // above, which already described the count as "the only two functions
-    // ... with a `tx.assessment.update(` call", not three call sites.
-    expect(updateSites.length).toBe(2);
-
-    const mentions = execSync(`grep -n "frameworkVersionId" lib/data/assessments.ts || true`)
-      .toString()
-      .trim()
-      .split('\n')
-      .filter(Boolean);
-    expect(mentions).toEqual([]);
-  });
-});
-
-describe('withDerivedEvidenceLevel has its documented four production call sites (O-20)', () => {
-  /**
-   * `lib/data/evidence.ts`'s own doc comment on this function asserts
-   * "Every one of the four JSON-API routes that serialize a RemediationItem
-   * ... routes through this" — a prose claim of exactly the shape AGENTS.md
-   * §3 warns is a latent defect once nothing regenerates it. Pinned here
-   * mechanically instead of trusted: a future route added under D-164's own
-   * warning (a FIFTH direct RemediationItem query, wired to
-   * `EVIDENCE_COUNT_INCLUDE` but never plumbed through this function) would
-   * ship a RemediationItem whose `evidenceLevel` silently exposes the raw
-   * `_count` shape instead of the derived enum, or omits the field entirely —
-   * exactly the "same item, different evidenceLevel depending on which
-   * endpoint served it" defect O-20 exists to close.
-   */
-  it('is called from remediation GET, remediation PATCH, assessment-detail GET, and project-detail GET — and nowhere else', () => {
-    const hits = execSync(
-      `grep -rn "withDerivedEvidenceLevel" app lib --include=*.ts --include=*.tsx || true`,
-    )
-      .toString()
-      .trim()
-      .split('\n')
-      .filter(Boolean);
-
-    const parsed = hits.map((line) => {
-      const m = /^([^:]+):(\d+):(.*)$/.exec(line);
-      if (!m) throw new Error(`grep -n output did not parse as file:line:content -- "${line}"`);
-      return { file: m[1], content: m[3] };
-    });
-
-    // The definition file names itself in its own export line and its own
-    // doc comment; import statements name it without invoking it. A real
-    // call site is what remains — either a direct call or a bare reference
-    // passed to `.map(...)`.
-    const callSites = parsed.filter(({ file, content }) => {
-      const trimmed = content.trim();
-      if (file === 'lib/data/evidence.ts') return false;
-      if (trimmed.startsWith('//') || trimmed.startsWith('*')) return false;
-      if (trimmed.startsWith('import')) return false;
-      return true;
-    });
-
-    // Non-vacuity: the filter must actually discriminate SOMETHING (the
-    // three import lines and the definition file's own two self-mentions),
-    // not merely echo its input back unfiltered.
-    expect(parsed.length).toBeGreaterThan(callSites.length);
-
-    expect(callSites.map((c) => c.file).sort()).toEqual([
-      'app/api/v1/orgs/[slug]/assessments/[id]/remediation/route.ts',
-      'app/api/v1/orgs/[slug]/assessments/[id]/remediation/route.ts',
-      'app/api/v1/orgs/[slug]/assessments/[id]/route.ts',
-      'app/api/v1/orgs/[slug]/projects/[id]/route.ts',
-    ]);
+  it('every pending route with a write handler calls it', () => {
+    const missing = PENDING_ROUTES.filter((f) =>
+      /export async function (POST|PATCH|DELETE|PUT)\b/.test(readFileSync(f, 'utf8')) && !callingFiles.includes(f));
+    expect(missing).toEqual([]);
   });
 });
 
 describe('the evidence byte inspector (O-7) and its pre-buffer size gate have production callers', () => {
-  it('inspect() is called from exactly the upload route', () => {
+  it('NFR-MNT-01 FR-EVD-02: inspect() has exactly one production caller, createFileEvidence', () => {
     const hits = execSync(`grep -rn "inspect(" app lib --include=*.ts || true`)
       .toString()
       .trim()
@@ -534,9 +343,7 @@ describe('the evidence byte inspector (O-7) and its pre-buffer size gate have pr
         return file !== 'lib/evidence/inspect.ts' && !trimmed.startsWith('//') && !trimmed.startsWith('*');
       });
 
-    expect(hits.map((h) => h.split(':')[0])).toEqual([
-      'app/api/v1/orgs/[slug]/assessments/[id]/evidence/route.ts',
-    ]);
+    expect(hits.map((h) => h.split(':')[0])).toEqual(['lib/data/evidence.ts']);
   });
 
   /**
@@ -551,7 +358,7 @@ describe('the evidence byte inspector (O-7) and its pre-buffer size gate have pr
    * avoiding the allocation in the first place) fails HERE rather than
    * nowhere.
    */
-  it("MAX_BYTES gates the upload route's pre-buffer Content-Length check", () => {
+  it('NFR-MNT-01 FR-EVD-02: the pre-buffer Content-Length gate on MAX_BYTES is in exactly the project upload route', () => {
     const hits = execSync(`grep -rn "> MAX_BYTES" app lib --include=*.ts || true`)
       .toString()
       .trim()
@@ -565,173 +372,118 @@ describe('the evidence byte inspector (O-7) and its pre-buffer size gate have pr
         return file !== 'lib/evidence/inspect.ts' && !trimmed.startsWith('//') && !trimmed.startsWith('*');
       });
 
-    expect(hits.map((h) => h.split(':')[0])).toEqual([
-      'app/api/v1/orgs/[slug]/assessments/[id]/evidence/route.ts',
-    ]);
+    expect(hits.map((h) => h.split(':')[0])).toEqual(['app/api/v1/orgs/[slug]/projects/[id]/evidence/route.ts']);
   });
 });
 
-describe('questionExistsInBank (O-22) has a production caller', () => {
-  /**
-   * Own addition beyond task-11-brief.md's five-item starting list
-   * (task-11-report.md explains why): structurally identical to `inspect()`
-   * above — a pure, exported, single-call-site guard whose removal would be
-   * SILENT rather than loud. O-2's database CHECK proves exactly one attach
-   * target is ever stored; it says nothing about whether a `questionId`
-   * target actually exists in the pinned framework's bank. Losing this call
-   * would not break a single existing upload — it would just stop rejecting
-   * a garbage `questionId`, exactly the "still looks like it works" shape
-   * every other entry in this file targets.
-   */
-  it('is called from exactly the upload route, gating the questionId attach target', () => {
-    const hits = execSync(`grep -rn "questionExistsInBank(" app lib --include=*.ts || true`)
-      .toString()
-      .trim()
-      .split('\n')
-      .filter(Boolean)
-      .filter((line) => !line.startsWith('lib/data/evidence.ts:'));
-
-    expect(hits.map((h) => h.split(':')[0])).toEqual([
-      'app/api/v1/orgs/[slug]/assessments/[id]/evidence/route.ts',
-    ]);
-  });
-});
-
-/**
- * Whole-branch security review of `maturity-band-reanchor` (2026-08-27),
- * LOW severity. `labelIsShowable(scoringVersion)` (lib/report/maturityBands.ts)
- * decides whether a report may display a verdict band AT ALL, and this
- * file's own `hasWellFormedStages` block above -- added the same day, by
- * the same branch -- quotes AGENTS.md §3's trigger-enumeration rule
- * immediately before the next guard shipped without an entry here.
- *
- * `__tests__/unit/withheld-verdict.test.tsx` cannot catch a dropped call:
- * every component it exercises (`ReportSummary`, `AreaCard`,
- * `PrincipleScorecard`) takes the decision as a plain `labelIsShowable:
- * boolean` PROP and never calls the predicate itself. A page that stopped
- * calling `labelIsShowable(...)` and passed a literal `true` instead would
- * leave every one of those component tests green -- each still behaves
- * correctly for the prop it was handed, which is exactly the "guard's logic
- * and guard's wiring are different facts" shape the `hasWellFormedStages`
- * comment above names for a different guard.
- *
- * Two blocks below, generated from two DIFFERENT properties, over the SAME
- * root (AGENTS.md §3: vary the root, not only the predicate -- checked here
- * by re-running both greps over the WHOLE repo rather than `app lib
- * components`; nothing outside that root matched either pattern, so the
- * root is not artificially narrow):
- *
- *  1. `labelIsShowable(` (the call shape) pins the exact five files that
- *     turn a raw `scoringVersion` into the boolean. This is what regresses
- *     if a future edit deletes one of those calls -- the literal scenario
- *     this finding describes.
- *  2. A DIFFERENT question -- "which files render a band colour or label AT
- *     ALL" (`levelColors[` / `levelLabels[`) -- pins a wider seven-file set
- *     that includes the three leaf components block 1 structurally cannot
- *     see (they never call the predicate; they branch on the prop it
- *     produced) and checks each is at least CONNECTED to `labelIsShowable`
- *     somewhere. This is the check block 1 cannot do: block 1 searches
- *     OUTWARD from the guard's name, so it can only ever prove something
- *     about a site that already mentions the guard. It cannot prove there
- *     is no NEW render surface that never calls the guard in the first
- *     place -- by construction, a surface with zero wiring produces zero
- *     hits for "labelIsShowable(" and is invisible to that grep, exactly
- *     the "renders a verdict without importing it" gap this fix was asked
- *     to check for. Block 2 searches from the RENDER side instead, so an
- *     unwired new surface shows up in `renderers` and fails the subset
- *     check by name.
- *
- *     Known limit, left honest rather than "solved" (the same source-text-
- *     not-AST caveat the `resolveFramework(...).matches` block above
- *     documents): block 2's "connected" check accepts a bare comment
- *     mentioning `labelIsShowable`, so it proves a file was not left with
- *     ZERO reference to the guard -- not that whatever reference exists
- *     actually gates the render. `lib/report/verdictColor.ts` is connected
- *     today only through its own doc comment, by design: it is a pure
- *     combinator that receives an ALREADY-derived boolean from its caller
- *     and is documented never to re-derive it (see that file's header).
- */
-describe('labelIsShowable has its production trigger call sites (maturity-band-reanchor)', () => {
-  it('is called from exactly the three page-level computations, the dashboard heatmap, and the PDF renderer', () => {
-    const hits = execSync(
-      `grep -rn "labelIsShowable(" app lib components --include=*.ts --include=*.tsx || true`,
-    )
+describe('the storage cap has its production caller (NFR-REL-09)', () => {
+  it('NFR-MNT-01 NFR-REL-09: assertStorageAvailable is called by exactly lib/data/evidence.ts, so no document issue path can refuse for storage', () => {
+    const hits = execSync(`grep -rn "assertStorageAvailable(" app lib --include=*.ts || true`)
       .toString()
       .trim()
       .split('\n')
       .filter(Boolean)
       .filter((line) => {
         const m = /^([^:]+):(\d+):(.*)$/.exec(line);
-        if (!m) throw new Error(`grep -n output did not parse as file:line:content -- "${line}"`);
+        if (!m) throw new Error(`grep -n output did not parse -- "${line}"`);
         const [, file, , content] = m;
         const trimmed = content.trim();
-        // Excludes lib/report/maturityBands.ts -- the definition's own
-        // `export function labelIsShowable(` line, not a caller -- and
-        // comment lines, which include lib/pdf/ReportPdf.tsx:168's doc
-        // comment quoting this exact call shape in prose (the same
-        // "source text, not AST" caveat the O-14 block above documents;
-        // that file's REAL call, three lines below the comment, still
-        // counts).
-        return file !== 'lib/report/maturityBands.ts' && !trimmed.startsWith('//') && !trimmed.startsWith('*');
+        return file !== 'lib/evidence/storageCap.ts' && !trimmed.startsWith('//') && !trimmed.startsWith('*');
       });
+    expect(hits.map((h) => h.split(':')[0])).toEqual(['lib/data/evidence.ts']);
+  });
+});
 
-    // Non-vacuity: the filter must actually find real call sites, or the
-    // exact-set assertion below would trivially pass against an empty list.
-    expect(hits.length).toBeGreaterThan(0);
+describe('the findings service has its production triggers (FR-FND-01, NFR-MNT-01)', () => {
+  // Read from disk with fs, no child process, so no colour setting can change what is compared.
+  const files = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const p = `${dir}/${e.name}`;
+    return e.isDirectory() ? files(p) : /\.(ts|tsx)$/.test(e.name) ? [p] : [];
+  });
+  const FINDINGS = 'lib/data/findings.ts';
+  const src = readFileSync(FINDINGS, 'utf8');
 
-    expect(hits.map((h) => h.split(':')[0]).sort()).toEqual([
-      'app/(authenticated)/orgs/[slug]/assessment/[id]/report/page.tsx',
-      'app/(authenticated)/orgs/[slug]/projects/[id]/page.tsx',
-      'app/(authenticated)/orgs/[slug]/projects/page.tsx',
-      'components/dashboard/GapHeatmap.tsx',
-      'lib/pdf/ReportPdf.tsx',
-    ]);
+  /** Every top-level function of lib/data/findings.ts with its body (up to the closing brace at column 0). */
+  const bodies = new Map<string, string>(
+    [...src.matchAll(/^(?:export )?(?:async )?function (\w+)[\s\S]*?\n\}\n/gm)].map((m) => [m[1], m[0]]),
+  );
+  /** True when the function, or a function of the same file it calls, takes the per-finding lock. */
+  function locks(name: string, seen = new Set<string>()): boolean {
+    if (seen.has(name)) return false;
+    seen.add(name);
+    const body = bodies.get(name) ?? '';
+    if (/\blockFinding\(/.test(body.replace(/^.*\n/, ''))) return true;
+    return [...body.matchAll(/\b(\w+)\(/g)].some(([, called]) => called !== name && bodies.has(called) && locks(called, seen));
+  }
+
+  it('NFR-MNT-01 FR-FND-01: onShortfallSaved has exactly one production caller, lib/data/decisions.ts', () => {
+    const callers = [...files('app'), ...files('lib')].filter((f) => f !== FINDINGS && /\bonShortfallSaved\(/.test(readFileSync(f, 'utf8')));
+    expect(callers).toEqual(['lib/data/decisions.ts']);
   });
 
-  it('every production surface that renders a band-derived colour or label is at least connected to labelIsShowable', () => {
-    const renderers = execSync(
-      `grep -rlE "levelColors\\[|levelLabels\\[" app lib components --include=*.ts --include=*.tsx || true`,
-    )
-      .toString()
-      .trim()
-      .split('\n')
-      .filter(Boolean)
-      .sort();
+  it('NFR-MNT-01 SRS 5.3 item 11: every exported write of lib/data/findings.ts takes the per-finding lock', () => {
+    const writes = ['onShortfallSaved', 'addMitigation', 'updateMitigation', 'acceptRisk', 'reopenFinding', 'withdrawFinding', 'closeByDecision'];
+    // The list is the file's exported functions that insert, read from the file itself, so a new write cannot be missed.
+    const exportedInserting = [...bodies.entries()]
+      .filter(([, body]) => body.startsWith('export ') && /\.create(Many)?\(/.test([...body.matchAll(/\b(\w+)\(/g)].map(([, c]) => bodies.get(c) ?? '').join('\n') + body))
+      .map(([name]) => name).sort();
+    expect(exportedInserting).toEqual([...writes].sort());
+    expect(writes.filter((w) => !locks(w))).toEqual([]);
+  });
 
-    // Non-vacuity: this property must actually find rendering surfaces, or
-    // the subset check below would trivially pass against an empty list.
-    expect(renderers.length).toBeGreaterThan(0);
+  it('NFR-MNT-01 (lint self-test): a write that skips the lock is found', () => {
+    bodies.set('probeWrite', 'export async function probeWrite() {\n  await tx.finding.create({});\n}\n');
+    try { expect(locks('probeWrite')).toBe(false); } finally { bodies.delete('probeWrite'); }
+  });
+});
 
-    // Pinned to the exact set, not merely "non-empty", so a NEW rendering
-    // surface (e.g. a fourth leaf component, or a second PDF layout) is a
-    // conscious decision that updates this test -- the moment to ask
-    // whether it received an already-gated boolean or needs to call
-    // `labelIsShowable` itself.
-    expect(renderers).toEqual([
-      'app/(authenticated)/orgs/[slug]/assessment/[id]/report/page.tsx',
-      'components/dashboard/GapHeatmap.tsx',
-      'components/report/AreaCard.tsx',
-      'components/report/PrincipleScorecard.tsx',
-      'components/report/ReportSummary.tsx',
-      'lib/pdf/ReportPdf.tsx',
-      'lib/report/verdictColor.ts',
-    ]);
+describe('archivedAt has its production triggers (FR-PRJ-03, Review Focus 4)', () => {
+  const code = (f: string) => readFileSync(f, 'utf8').split('\n').filter((l) => {
+    const t = l.trim();
+    return !(t.startsWith('//') || t.startsWith('*') || t.startsWith('/*'));
+  }).join('\n');
+  const count = (f: string, re: RegExp) => (code(f).match(re) ?? []).length;
+  // idempotentWrite( and the generic form idempotentWrite<View>( that seals.ts and reviews.ts write (REV-a RE-3).
+  const WRITE_CALL = /\bidempotentWrite\s*(<[^>(]*>)?\(/g;
+  const GATE_CALL = /\bassertProjectWritable\(/g;
+  const RECEIPT_WRITE = /table: 'request_receipts'/g;
+  const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const p = `${dir}/${e.name}`;
+    return e.isDirectory() ? walk(p) : /\.(ts|tsx)$/.test(e.name) ? [p] : [];
+  });
+  const allFiles = () => [...walk('app'), ...walk('lib')];
 
-    const referencers = new Set(
-      execSync(`grep -rl "labelIsShowable" app lib components --include=*.ts --include=*.tsx || true`)
-        .toString()
-        .trim()
-        .split('\n')
-        .filter(Boolean)
-        .filter((f) => f !== 'lib/report/maturityBands.ts'),
-    );
+  it('FR-PRJ-03 RF-4: every idempotent write path reads the archived gate', () => {
+    const writers = allFiles().filter((f) => f !== 'lib/data/idempotency.ts' && count(f, WRITE_CALL) > 0);
+    expect(writers.length).toBeGreaterThan(0);
+    // Receipt-mode calls (routes 21 to 29, owner answer A1) create, change or remove a project or a membership, not a
+    // record of a project, so the record gate does not apply to them; the project edit route is pinned by the next case.
+    for (const f of writers) {
+      expect({ f, gated: count(f, GATE_CALL) >= count(f, WRITE_CALL) - count(f, RECEIPT_WRITE) }).toEqual({ f, gated: true });
+    }
+  });
 
-    // The relation the two independently-generated lists above are checked
-    // for (AGENTS.md §3: "state what connects the items, not only what
-    // they are") -- every renderer must be reachable from the guard by
-    // SOME textual thread, or a page could render a band verdict that
-    // never traces back to `labelIsShowable` at all.
-    const unwired = renderers.filter((f) => !referencers.has(f));
-    expect(unwired).toEqual([]);
+  it('FR-PRJ-03 RF-4: only the project routes and the member service write in receipt mode, so a new receipt-mode writer must say whether it writes a record', () => {
+    // A receipt-mode call is not counted against the gate (it creates or changes a project or a membership). A file that
+    // joins the list must be added here on purpose: if it writes a record of a project it has to call the gate instead.
+    const RECEIPT_MODE = [
+      'app/api/v1/orgs/[slug]/projects/[id]/archive/route.ts', 'app/api/v1/orgs/[slug]/projects/[id]/route.ts',
+      'app/api/v1/orgs/[slug]/projects/[id]/unarchive/route.ts', 'app/api/v1/orgs/[slug]/projects/route.ts', 'lib/data/members.ts',
+    ];
+    expect(allFiles().filter((f) => f !== 'lib/data/idempotency.ts' && count(f, WRITE_CALL) > 0 && count(f, RECEIPT_WRITE) > 0).sort()).toEqual([...RECEIPT_MODE].sort());
+  });
+
+  it('FR-PRJ-03 RF-4: the seal writer, the review writer and the project edit route are among the gate callers', () => {
+    const callers = allFiles().filter((f) => count(f, GATE_CALL) > 0 && f !== 'lib/data/projectGuard.ts');
+    expect(callers).toEqual(expect.arrayContaining([
+      'lib/data/seals.ts', 'lib/data/reviews.ts', 'lib/data/decisions.ts', 'lib/data/evidence.ts', 'lib/data/findings.ts',
+      'lib/data/teamFindings.ts', 'app/api/v1/orgs/[slug]/projects/[id]/route.ts',
+    ]));
+  });
+
+  it('FR-PRJ-03 RF-4 (lint self-test): a writer file with an unguarded record write is found', () => {
+    const probe = "await idempotentWrite<View>(ctx, { table: 'findings' });";
+    expect((probe.match(WRITE_CALL) ?? []).length).toBe(1);
+    expect((probe.match(GATE_CALL) ?? []).length).toBe(0);
   });
 });

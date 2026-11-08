@@ -70,8 +70,8 @@ describe('T1 — every tenant table has RLS enabled AND forced', () => {
    * `FOR SELECT` only, or scoped `TO` a role that is not the app role, or whose
    * predicate is simply wrong, was equally invisible.
    *
-   * So assert the predicate itself. All seven policies are byte-identical today
-   * apart from the keyed column (`"orgId"` on the six tenant tables, `id` on
+   * So assert the predicate itself. Every org_isolation policy is byte-identical
+   * apart from the keyed column (`"orgId"` on the tenant tables, `id` on
    * `organizations`, which IS the tenant), which makes this cheap and exact.
    */
   it('requires every org_isolation policy to actually isolate, not merely exist', async () => {
@@ -89,8 +89,11 @@ describe('T1 — every tenant table has RLS enabled AND forced', () => {
     // "evidence_blobs" (prisma/migrations/20260808140048_evidence_tables) —
     // updated here because this count is a deliberate hardcoded tripwire
     // (see the test below), not a generated one; leaving it at 7 would have
-    // silently stopped checking either new policy's predicate.
-    expect(policies).toHaveLength(9);
+    // silently stopped checking either new policy's predicate. v0.6.0 steps 2 and 3
+    // (migrations 20261030000200_v060_02_identity: organization_agreements;
+    // 20261030000300_v060_03_tenant: 18 tables) add one org_isolation each: 28
+    // (00-contract.md revocation table, round 12, R12-6).
+    expect(policies).toHaveLength(28);
     const guc = `NULLIF(current_setting('app.current_org_id'::text, true), ''::text)`;
     for (const p of policies) {
       const column = p.tablename === 'organizations' ? 'id' : '"orgId"';
@@ -102,7 +105,7 @@ describe('T1 — every tenant table has RLS enabled AND forced', () => {
     }
   });
 
-  it('protects exactly the eight orgId-bearing tables, so T1 cannot pass vacuously', async () => {
+  it('NFR-SEC-01: protects exactly the 27 orgId-bearing tables, so T1 cannot pass vacuously', async () => {
     const rows = await testDb.$queryRaw<{ relname: string }[]>`
       SELECT c.relname
       FROM pg_class c
@@ -116,16 +119,36 @@ describe('T1 — every tenant table has RLS enabled AND forced', () => {
     // (prisma/migrations/20260808140048_evidence_tables) — a hand-updated
     // snapshot on purpose (see the class comment above this describe block),
     // not something to make dynamic: its whole job is to force whoever adds
-    // the next orgId-bearing table to touch this line consciously.
+    // the next orgId-bearing table to touch this line consciously. The v0.6.0
+    // tables (steps 2 and 3, 00-contract.md revocation table, R12-6) make 27.
     expect(rows.map((r) => r.relname)).toEqual([
+      'accepted_risks',
       'assessments',
+      'decision_evidence',
+      'decision_versions',
+      'document_draft_fields',
+      'document_events',
       'evidence',
       'evidence_blobs',
+      'finding_events',
+      'findings',
       'invitations',
+      'issued_document_seals',
+      'issued_document_sources',
+      'issued_documents',
       'memberships',
+      'mitigation_evidence',
+      'mitigation_versions',
+      'organisation_events',
+      'organization_agreements',
       'project_metadata',
       'projects',
       'remediation_items',
+      'reminder_log',
+      'request_receipts',
+      'seals',
+      'stage_reviews',
+      'tombstones',
     ]);
   });
 
@@ -161,9 +184,12 @@ describe('T1 — every tenant table has RLS enabled AND forced', () => {
    * ADR-0009's trade-off, held exactly: `identity_lane` is `USING (true) WITH CHECK
    * (true)` — the shape the adversarial review above used to break isolation — and is
    * safe only because it is scoped TO makrai_identity, on the three tables that role's
-   * pre-organisation lookups need. Any other role, table or predicate fails here.
+   * pre-organisation lookups need. v0.6.0 adds a fourth, organization_agreements, for
+   * SELECT only (no WITH CHECK): the definers write it, the identity lane only reads it
+   * (00-contract.md, OrganisationAgreement row and revocation table, R12-6). Any other
+   * role, table, command or predicate fails here.
    */
-  it('scopes identity_lane to makrai_identity on organizations, memberships and invitations only', async () => {
+  it('NFR-SEC-01: scopes identity_lane to makrai_identity on organizations, memberships and invitations, and on organization_agreements for SELECT only', async () => {
     const rows = await testDb.$queryRaw<
       { tablename: string; cmd: string; roles: string; qual: string; with_check: string; permissive: string }[]
     >`
@@ -171,9 +197,13 @@ describe('T1 — every tenant table has RLS enabled AND forced', () => {
              coalesce(qual, 'NULL') AS qual, coalesce(with_check, 'NULL') AS with_check
       FROM pg_policies WHERE schemaname = 'public' AND policyname = 'identity_lane'
       ORDER BY tablename`;
-    expect(rows).toEqual(['invitations', 'memberships', 'organizations'].map((tablename) => ({
-      tablename, cmd: 'ALL', roles: '{makrai_identity}', permissive: 'PERMISSIVE', qual: 'true', with_check: 'true',
-    })));
+    const all = { cmd: 'ALL', roles: '{makrai_identity}', permissive: 'PERMISSIVE', qual: 'true', with_check: 'true' };
+    expect(rows).toEqual([
+      { tablename: 'invitations', ...all },
+      { tablename: 'memberships', ...all },
+      { tablename: 'organization_agreements', ...all, cmd: 'SELECT', with_check: 'NULL' },
+      { tablename: 'organizations', ...all },
+    ]);
   });
 
   /**

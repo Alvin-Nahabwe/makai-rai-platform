@@ -1,0 +1,63 @@
+# The notebook job (FR-SUG-07): checks each released notebook against the SHA-256 in data/resources.json and runs every
+# notebook source in a locked environment. Separate from ci.yml so its minutes (RK-24) are spent only when a notebook input
+# changes. Read-only token, and it runs on a GitHub-hosted runner only.
+name: Notebooks
+
+on:
+  push:
+    paths:
+      - 'notebooks/**'
+      - 'public/notebooks/**'
+      - 'data/resources.json'
+      - 'scripts/notebooks/**'
+      - '.github/workflows/notebooks.yml'
+  pull_request:
+    paths:
+      - 'notebooks/**'
+      - 'public/notebooks/**'
+      - 'data/resources.json'
+      - 'scripts/notebooks/**'
+      - '.github/workflows/notebooks.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  run-notebooks:
+    name: check released copies, run sources
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Ubuntu 24.04's python3 is 3.12; the image's own interpreter is used, so this fails loudly if the image changes.
+      - name: Python is 3.12
+        run: python3 -c 'import sys; assert sys.version_info[:2] == (3, 12), sys.version'
+
+      - name: Released copies match their SHA-256
+        run: python3 scripts/notebooks/run_notebooks.py --check-only
+
+      - name: Run every notebook source
+        run: |
+          if [ -f notebooks/requirements.txt ]; then
+            python3 -m venv .nb
+            .nb/bin/pip install --require-hashes --no-deps -r notebooks/requirements.txt
+            .nb/bin/python scripts/notebooks/run_notebooks.py
+          elif ls notebooks/technical/*.ipynb >/dev/null 2>&1; then
+            echo "notebooks/requirements.txt is missing but notebook sources exist" >&2
+            exit 1
+          else
+            echo "notebooks/requirements.txt does not exist yet and there is no notebook source to run"
+          fi
+
+      # The tests of the evidence checker, the dataset helper in each notebook and the executor (C-NB fix round 1).
+      # They run in the locked environment the previous step built, so they need no network and no dataset.
+      - name: Test the notebook tools
+        if: ${{ hashFiles('notebooks/requirements.txt') != '' }}
+        run: .nb/bin/python -m unittest notebooks/tools/test_tools.py

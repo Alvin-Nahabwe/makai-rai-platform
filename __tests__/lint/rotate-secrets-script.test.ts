@@ -420,7 +420,7 @@ describe('makrai-rotate-secrets.sh: what it may do', () => {
 
   it('waits for every job the crontabs run, and the package upgrades that could replace docker', () => {
     const re = /readonly JOBS_RE='([^']+)'/.exec(SRC)?.[1] ?? '';
-    expect(re).toBe('[m]akrai-(backup|offsite-copy|restore-test|synthetic|auditlog|email-scan|prefix-export)');
+    expect(re).toBe('[m]akrai-(backup|offsite-copy|restore-test|synthetic|reminders|auditlog|email-scan|prefix-export)');
     const jobs = new RegExp(re.replace(/\[m\]/, 'm'));
     const cron = ['crontab.root', 'crontab.operator'].flatMap((f) => readFileSync(path.join('ops/host', f), 'utf8').split('\n'))
       .filter((l) => /^[\d*]/.test(l.trim()))
@@ -937,7 +937,7 @@ describe('makrai-rotate-secrets.sh: the timing gate', () => {
     const box = newBox();
     box.run(['gate']);
     const asks = box.argv().filter((l) => l.startsWith('pgrep '));
-    expect(asks).toContain('pgrep -fc [m]akrai-(backup|offsite-copy|restore-test|synthetic|auditlog|email-scan|prefix-export)');
+    expect(asks).toContain('pgrep -fc [m]akrai-(backup|offsite-copy|restore-test|synthetic|reminders|auditlog|email-scan|prefix-export)');
     expect(asks.some((l) => l.includes('unattended-upgrade'))).toBe(true);
   });
   it.each(['stage-a', 'stage-b', 'backup-chain', 'rollback-b', 'admin-password'])('%s changes nothing when the gate is closed', (sub) => {

@@ -152,6 +152,24 @@ on a walked-away-from browser the realistic exposure, not token theft in transit
 > design scrutiny does not touch that layer. Compare `@auth/core/lib/utils/assert.js:117`, which
 > eliminated database sessions from this same ADR — also found by reading the library, not by
 > reasoning about it.
+>
+> **Correction, 2026-10-30: what moves the cookie's expiry.** Two sentences above are wrong for this
+> application: "NextAuth refreshes on activity, so this behaves as an idle timeout", and, in what it
+> implies for the cookie, the 2026-08-04 note's "a re-encode happens on every `auth()` call". A probe
+> on a development server measured: the cookie's expiry is set at sign-in and moved only by sign-in
+> and by `GET /api/auth/session`; it did not move after an organisation dashboard,
+> `/explore/framework`, `/api/health` or the projects list. The reason is in the library: `auth()`
+> with no arguments does run the session action and re-sign the token, but
+> `node_modules/next-auth/lib/index.js:58-63` returns only the body and drops the Set-Cookie, this
+> application calls `auth()` only in that form, and `proxy.ts` only calls `getToken`. So `maxAge`
+> (12 hours) counts from sign-in or from the last read of the session endpoint, not from the last
+> request; `sessionIssuedAt` is still written once at sign-in and the 7-day cap is unchanged; and the
+> envelope `iat` is still the wrong clock for that cap, because a read of the session endpoint sets a
+> new one. The decision is unchanged (12 hours, 7 days absolute, enforced at the one choke point);
+> only the account of what refreshes the cookie was wrong. The idle warning (UX-43) follows the
+> cookie's own expiry for this reason, `lib/auth/idleDeadline.ts` is the one file under `app/**` and
+> `lib/**` that reads the cookie's claims, and `__tests__/lint/no-raw-session-token.test.ts` holds
+> that line.
 
 **Where the check lives is the load-bearing half of this decision, and prose will not hold
 it.** D-092 records five guards on Plan 1a that each closed the bypass shapes their author

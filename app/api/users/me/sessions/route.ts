@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireIdentityForApi, bumpSessionEpoch } from '@/lib/auth/identity';
 import { toResponse } from '@/lib/http/toResponse';
+import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { logSecurityEvent } from '@/lib/security-logger';
 
 /**
@@ -19,16 +20,18 @@ import { logSecurityEvent } from '@/lib/security-logger';
  * exactly one code path to audit for "does this actually invalidate
  * sessions".
  *
- * Gated by `requireIdentityForApi()` with its DEFAULT options (no
- * `allowMustChangePassword`): a caller mid-forced-password-change is not
- * blocked from anything harmful by logging out everywhere, but there is
- * also no reason to special-case it — `signOut()` client-side already works
- * for ending the CURRENT browser's session regardless of this route.
+ * Gated by `requireIdentityForApi({ allowMissingAcceptances: true })`: route
+ * 36 is S-21's, usable before the three acceptances (FR-ACC-04). It does not
+ * pass `allowMustChangePassword`: a caller mid-forced-password-change is not
+ * blocked from anything harmful by logging out everywhere, but there is also
+ * no reason to special-case it — `signOut()` client-side already works for
+ * ending the CURRENT browser's session regardless of this route.
  */
-export async function DELETE() {
+export async function DELETE(req: Request) {
   let identity;
   try {
-    identity = await requireIdentityForApi();
+    assertSameOrigin(req);
+    identity = await requireIdentityForApi({ allowMissingAcceptances: true });
   } catch (e) {
     return toResponse(e);
   }

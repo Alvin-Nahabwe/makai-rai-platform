@@ -59,15 +59,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
-    name: lint, typecheck, test, build
+  # The unit and integration tests, split by the matrix below (three shards; the total passed to
+  # vitest is strategy.job-total, so changing the matrix cannot drop a slice of the tests) so the check meets NFR-MNT-02 (the verify
+  # job within 15 minutes). `verify` needs this job, so its success still means every test passed.
+  # Each shard has its own Postgres service; the steps are the ones `verify` ran before the split.
+  unit:
+    name: unit (shard ${{ matrix.shard }}/${{ strategy.job-total }})
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     runs-on: ubuntu-latest
     # A genuine hang (a stuck test, a psql invocation waiting on a TTY
     # prompt it will never get) should fail loudly, not run until GitHub's
     # own 360-minute default cap. Generous relative to the actual expected
-    # runtime (vitest.config.ts's own comment: the suite runs in ~2s) so
-    # this is a backstop, not a tight budget to tune.
-    timeout-minutes: 15
+    # runtime so this is a backstop, not a tight budget to tune. The 45 minutes
+    # date from when one job ran lint, audit, typecheck, migrate, the tests and
+    # the build (raised from 15 to 30 on 2026-11-04, after run 41859063898 was
+    # cancelled at 15 min mid-build, and from 30 to 45 on 2026-11-06 for the
+    # poppler install, which may retry for up to 17 min on a slow runner
+    # network). Each shard now runs migrate, one third of the tests and that
+    # install. The value is left as it was, so a hang still fails.
+    timeout-minutes: 45
 
     # Single source of truth for the three Postgres primitives, referenced
     # below by BOTH the service container definition and the provisioning
@@ -161,11 +174,123 @@ jobs:
         # explicitly in deploy pipelines for exactly this reason.
         run: npx prisma generate
 
+      - name: Apply migrations (as superuser)
+        # Four migrations run CREATE ROLE / CREATE EVENT TRIGGER / ALTER
+        # DEFAULT PRIVILEGES and are superuser-only with no GRANTable
+        # alternative (D-079) -- DATABASE_URL above already connects as
+        # "makrai", the role the postgres image made a superuser at
+        # startup.
+        run: npx prisma migrate deploy
+
+      - name: Provision the makrai_app and makrai_identity role passwords
+        # scripts/provision-app-db-role.sh, once per role (ADR-0009). Its
+        # SQL is never built by string interpolation -- the password goes
+        # to psql on stdin as a variable; see the script's own comment.
+        # Only HOW it reaches psql is overridable, and this is the one place
+        # that override is used: the script's default assumes a local
+        # `docker-postgres-1` container to `docker exec` into, which does
+        # not exist here -- this is a service container reached over TCP,
+        # which needs a password (see the script's own PSQL_CMD comment for
+        # why trust-auth doesn't cover this path). PGPASSWORD's value is the
+        # same well-known, already-public local-dev value as
+        # POSTGRES_PASSWORD above, not a real secret.
+        run: |
+          scripts/provision-app-db-role.sh makrai_test makrai_app
+          scripts/provision-app-db-role.sh makrai_test makrai_identity
+        env:
+          PSQL_CMD: psql -h localhost -p 5432 -U ${{ env.POSTGRES_USER }}
+          PGPASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          # APP_DB_PASSWORD and IDENTITY_DB_PASSWORD deliberately left
+          # UNSET: the script's dev defaults ('app_dev_password',
+          # 'identity_dev_password') are exactly what vitest.config.ts's
+          # TEST_APP_DATABASE_URL / TEST_IDENTITY_DATABASE_URL defaults
+          # expect. The script refuses them without this flag, whatever
+          # NODE_ENV says (D-076), so a CI database has to ask for them.
+          ALLOW_DEV_DB_PASSWORD: '1'
+
+      - name: Install poppler-utils
+        # __tests__/unit/document-render.test.ts reads the rendered PDF back with pdftotext (C4 M2); in CI that test fails, not skips, without it.
+        # This step has hung a job for 30 minutes on the runner's network: each attempt is bounded, three are made (the step cap sits above the whole loop), and the
+        # final `command -v pdftotext` fails the step if none of them installed it.
+        timeout-minutes: 17
+        run: |
+          for i in 1 2 3; do timeout 150 sudo apt-get update && timeout 150 sudo apt-get install -y poppler-utils && break; echo "retry $i"; sleep 10; done; command -v pdftotext
+
+      - name: Unit + integration tests
+        # DATABASE_URL (job-level, above) matches vitest.config.ts's own
+        # TEST_DATABASE_URL default exactly
+        # (postgresql://makrai:makrai_dev_password@localhost:5432/makrai_test),
+        # so no override is needed here: that config only reads
+        # TEST_DATABASE_URL/TEST_APP_DATABASE_URL (not
+        # DATABASE_URL/APP_DATABASE_URL directly), falling back to
+        # identical literals when those are unset.
+        run: npx vitest run --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+
+
+  verify:
+    name: lint, typecheck, test, build
+    needs: [unit]
+    # `always()` so this job runs, and ends red, when a unit shard fails. A job skipped
+    # because a `needs` job failed counts as passing for a required status check, which
+    # would let a red test shard through the check branch protection requires. The first
+    # step below fails the job in that case, before anything else runs.
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    # A genuine hang (a stuck test, a psql invocation waiting on a TTY
+    # prompt it will never get) should fail loudly, not run until GitHub's
+    # own 360-minute default cap. Generous relative to the actual expected
+    # runtime so this is a backstop, not a tight budget to tune. The 45 minutes
+    # date from when this job also ran the migrations, the tests and the poppler
+    # install (see `unit`'s timeout comment); it now runs lint, audit, typecheck
+    # and the build. The value is left as it was, so a hang still fails.
+    timeout-minutes: 45
+
+    steps:
+      - name: Require every unit shard to have passed
+        # The build and the other steps never run on red tests. The failure path of the
+        # dead-man ping at the end of this job (`if: always()`) still fires after this step.
+        env:
+          UNIT_RESULT: ${{ needs.unit.result }}
+        run: |
+          if [ "$UNIT_RESULT" != "success" ]; then
+            echo "::error::the unit test shards did not all pass (result: $UNIT_RESULT)"
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          # Reads .nvmrc rather than restating it, so this cannot drift
+          # from local dev or the Dockerfile's FROM tag (D-192).
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        # Not optional, and not named in the original task order: verified
+        # directly against the installed packages
+        # (node_modules/prisma/package.json,
+        # node_modules/@prisma/client/package.json) that neither carries a
+        # `postinstall` hook in this Prisma 7 install -- older Prisma
+        # versions generated the client automatically as an `npm install`
+        # side effect; this one does not. Without this step, `tsc --noEmit`,
+        # `vitest run` and `next build` all fail: every one of them imports
+        # from the generated `@prisma/client`, and `prisma migrate deploy`
+        # deliberately does not generate as a side effect (unlike
+        # `migrate dev`) -- Prisma's own docs recommend calling `generate`
+        # explicitly in deploy pipelines for exactly this reason.
+        run: npx prisma generate
+
       # Lint and typecheck need no database, only the generated client above
-      # -- so they run before the two Postgres-dependent steps below and
-      # fail fast and cheaply on the far more common class of failure
-      # (a syntax/type error) before this job pays for 14 migrations and a
-      # role-provisioning step. Verified, not assumed: eslint.config.mjs
+      # -- so they run first and fail fast and cheaply on the far more common
+      # class of failure (a syntax/type error) before the build. This job
+      # starts no Postgres at all: the tests and their database run in `unit`.
+      # Verified, not assumed: eslint.config.mjs
       # only pulls in eslint-config-next's non-type-checked configs plus
       # this repo's own syntactic rules, so Lint touches no database either.
       - name: Lint
@@ -207,54 +332,13 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Apply migrations (as superuser)
-        # Four migrations run CREATE ROLE / CREATE EVENT TRIGGER / ALTER
-        # DEFAULT PRIVILEGES and are superuser-only with no GRANTable
-        # alternative (D-079) -- DATABASE_URL above already connects as
-        # "makrai", the role the postgres image made a superuser at
-        # startup.
-        run: npx prisma migrate deploy
-
-      - name: Provision the makrai_app and makrai_identity role passwords
-        # scripts/provision-app-db-role.sh, once per role (ADR-0009). Its
-        # SQL is never built by string interpolation -- the password goes
-        # to psql on stdin as a variable; see the script's own comment.
-        # Only HOW it reaches psql is overridable, and this is the one place
-        # that override is used: the script's default assumes a local
-        # `docker-postgres-1` container to `docker exec` into, which does
-        # not exist here -- this is a service container reached over TCP,
-        # which needs a password (see the script's own PSQL_CMD comment for
-        # why trust-auth doesn't cover this path). PGPASSWORD's value is the
-        # same well-known, already-public local-dev value as
-        # POSTGRES_PASSWORD above, not a real secret.
-        run: |
-          scripts/provision-app-db-role.sh makrai_test makrai_app
-          scripts/provision-app-db-role.sh makrai_test makrai_identity
-        env:
-          PSQL_CMD: psql -h localhost -p 5432 -U ${{ env.POSTGRES_USER }}
-          PGPASSWORD: ${{ env.POSTGRES_PASSWORD }}
-          # APP_DB_PASSWORD and IDENTITY_DB_PASSWORD deliberately left
-          # UNSET: the script's dev defaults ('app_dev_password',
-          # 'identity_dev_password') are exactly what vitest.config.ts's
-          # TEST_APP_DATABASE_URL / TEST_IDENTITY_DATABASE_URL defaults
-          # expect. The script refuses them without this flag, whatever
-          # NODE_ENV says (D-076), so a CI database has to ask for them.
-          ALLOW_DEV_DB_PASSWORD: '1'
-
-      - name: Unit + integration tests
-        # DATABASE_URL (job-level, above) matches vitest.config.ts's own
-        # TEST_DATABASE_URL default exactly
-        # (postgresql://makrai:makrai_dev_password@localhost:5432/makrai_test),
-        # so no override is needed here: that config only reads
-        # TEST_DATABASE_URL/TEST_APP_DATABASE_URL (not
-        # DATABASE_URL/APP_DATABASE_URL directly), falling back to
-        # identical literals when those are unset.
-        run: npm test
-
       - name: Build
-        run: npm run build
-        # No DATABASE_URL override needed here even though the job-level
-        # value above is still in scope: Plan 1c's lazy-init fix
+        run: mkdir -p test-results && set -o pipefail && npm run build 2>&1 | tee test-results/build.log
+        # The log is kept in test-results/ (gitignored, never uploaded) for the
+        # next step; `tee` keeps it in the Actions log too, and pipefail keeps a
+        # failed build failing this step.
+        #
+        # No DATABASE_URL is set in this job (it starts no database): Plan 1c's lazy-init fix
         # (lib/data/connection.ts's hmrSingleton) means `next build` no
         # longer opens a database connection at import/page-data-collection
         # time, so this step does not depend on DATABASE_URL pointing
@@ -273,6 +357,24 @@ jobs:
         # only type-check from the actual shipped-image build to save a few
         # seconds of CI time -- a worse trade than the duplication it would
         # remove.
+
+      # A content read through a computed path makes the build trace the whole
+      # project, which would put .env files, tests and source into
+      # .next/standalone and from there into the production image (contract
+      # "Static read paths", finding SEC-01). This fails the job when the build
+      # log says so, or when the standalone tree holds a test path, an .env*
+      # file or a .ts or .tsx file under app/, lib/ or components/.
+      - name: Check the standalone output
+        run: node scripts/check-standalone.mjs test-results/build.log
+
+      # NFR-PERF-01: first-load JavaScript is at most 160 KB gzip for a public
+      # page and 190 KB for a signed-in one. This measures every route of the
+      # build just made and fails above the budget. It stays after the check
+      # above, which must follow "Build" directly (check-standalone.test.ts).
+      # scripts/first-load-exceptions.json lists the routes allowed over their
+      # budget; the release candidate's run refuses any entry.
+      - name: Measure first-load JavaScript
+        run: node scripts/measure_first_load.mjs .next
 
       # Dead-man check for the daily audit. The check expects a ping at least
       # once a day: a success ping while the job is green, a `/fail` ping when
@@ -393,11 +495,15 @@ jobs:
     # credentials provider once (see the "Build e2e fixture" and "Run e2e
     # suite" steps below for why Playwright is still invoked twice even
     # though those logins now happen only once). 30 min is a backstop for a
-    # genuine hang, not a tight budget to tune, same rationale as `verify`'s
-    # own timeout comment above.
-    timeout-minutes: 30
+    # genuine hang, not a tight budget to tune, same rationale as `unit`'s
+    # own timeout comment above. Raised from 30 to 50 on 2026-11-06: by
+    # v0.6.0 the job's normal run is about 26.5 min (run 42181650736), and
+    # run 42184836682 was cancelled at 30 min in its last step with every
+    # test step passing, after a 2-minute browser install; the install step
+    # may now retry for up to 35 min.
+    timeout-minutes: 65
 
-    # Mirrors `verify`'s env block above (job-level env is not inherited
+    # Mirrors `unit`'s env block above (job-level env is not inherited
     # across jobs in GitHub Actions, so this cannot simply reference it) plus
     # the additional values this job's app process needs to actually boot
     # and serve requests, each cited against where it throws if unset.
@@ -433,32 +539,6 @@ jobs:
       # RESEND_API_KEY and lib/email/send.ts:32-37 throws locally before any
       # network call.
       EMAIL_FROM_ADDRESS: ci@example.test
-      # app/(public)/register/page.tsx:23 and app/api/auth/register/route.ts:25
-      # both gate on lib/auth/openRegistration.ts, which reads this variable and
-      # defaults to CLOSED. Production runs closed on purpose (PLAN.md:217 keeps
-      # registration invite-gated until T3), and this job must not change that --
-      # it sets the variable for the CI server only.
-      #
-      # Without it the `e2e` job is red on main. Not hypothetically: runs
-      # 33367539265 and 33368764357 both failed here, across auth.spec.ts,
-      # org-routing.spec.ts, project.spec.ts, security.spec.ts and three more --
-      # every spec that drives the /register PAGE. With the flag unset that page
-      # renders "Registration is by invitation" and no form at all, so
-      # `page.fill('#email', ...)` has nothing to fill.
-      #
-      # The `setup` project kept passing throughout, which is why this hid: the
-      # 20-seat fixture (__tests__/helpers/fixture.ts:22-28) calls
-      # `bootstrapOrgWithOwner` -- the FUNCTION `/api/auth/register` calls -- not
-      # the HTTP route, so it never crosses the gate.
-      #
-      # Coverage of the CLOSED posture is not lost by setting this: it lives in
-      # __tests__/unit/open-registration-gate.test.ts, which runs in the `verify`
-      # job and does not read this variable from here.
-      #
-      # Reaches the Next server: playwright.config.ts:40-41 records that Playwright
-      # merges `...process.env` into webServer.env, and its own `env` key overrides
-      # RESEND_API_KEY only.
-      ALLOW_OPEN_REGISTRATION: 'true'
       # NOT part of the brief's own read/write table -- found empirically
       # while confirming this job's server can complete a login at all, not
       # assumed from reading source alone. `npm run start` runs `next
@@ -503,7 +583,7 @@ jobs:
 
     services:
       postgres:
-        # Same image/health-check shape as `verify`'s service above; see
+        # Same image/health-check shape as `unit`'s service above; see
         # that block's comments for the superuser/CREATE EVENT TRIGGER
         # rationale (D-079), which applies identically here.
         image: postgres:16-alpine
@@ -533,12 +613,12 @@ jobs:
         run: npm ci
 
       - name: Generate Prisma Client
-        # Same reason as `verify`'s identical step above: this Prisma 7
+        # Same reason as `unit`'s identical step above: this Prisma 7
         # install has no `postinstall` client-generation hook.
         run: npx prisma generate
 
       - name: Apply migrations (as superuser)
-        # Same command as `verify`. Also the writer for the `fv_3_0_0`
+        # Same command as `unit`. Also the writer for the `fv_3_0_0`
         # FrameworkVersion row that every `assessments.frameworkVersionId`
         # foreign key depends on -- inserted by
         # prisma/migrations/20260807102031_framework_registry_and_pin/migration.sql,
@@ -546,7 +626,7 @@ jobs:
         run: npx prisma migrate deploy
 
       - name: Provision the makrai_app and makrai_identity role passwords
-        # Same command/env shape as `verify`'s identical step; see that
+        # Same command/env shape as `unit`'s identical step; see that
         # step's comment for why PSQL_CMD/PGPASSWORD are overridden this way
         # in CI (no local `docker-postgres-1` container to exec into), why
         # the password variables are left unset, and why the flag is needed.
@@ -570,7 +650,7 @@ jobs:
       # `$GITHUB_ENV` makes it visible to every later step in this job, so the
       # build, the fixture step and the server Playwright starts all see the
       # same value (Playwright merges `...process.env` into webServer.env,
-      # playwright.config.ts:40-41). It must therefore come before the first of
+      # playwright.config.ts, the comment on `webServer.env`). It must therefore come before the first of
       # them. The job-level `env:` above cannot hold it: that block is static
       # text, and a random value has to be computed.
       #
@@ -588,16 +668,41 @@ jobs:
         # Task 1) and, in CI, spawns it with `npm run start` -- which needs
         # this build to already exist. This job must NOT start its own
         # server: `reuseExistingServer` is `false` in CI
-        # (playwright.config.ts:19), so a server already occupying port 3000
+        # (playwright.config.ts, `reuseExistingServer`, `false` in `webServer`), so a server already occupying port 3000
         # makes Playwright's own port check throw
         # (node_modules/playwright/lib/runner/index.js:821-827).
-        run: npm run build
+        run: mkdir -p test-results && set -o pipefail && npm run build 2>&1 | tee test-results/build.log
+        # The log is kept in test-results/ for the next step, as in the verify job. Playwright empties
+        # test-results/ only when it starts the server, later in this job.
+
+      # The same check as the verify job's, on the build this job tests (NFR-SEC-17).
+      - name: Check the standalone output
+        run: node scripts/check-standalone.mjs test-results/build.log
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps
+        # Every CI project is Desktop Chrome (playwright.config.ts), so only Chromium and its OS packages are installed.
+        # This step has hung a job for 30 minutes on the runner's network, so each attempt is bounded and three are made.
+        # The OS packages go first, with timeout itself run as root: Playwright's own installer starts apt-get as root,
+        # which a timeout run as the runner user cannot stop (run 42184836682: the cut-off apt-get kept the dpkg lock and
+        # both retries failed on it). Before a retry the step waits for the lock and repairs a half-done install. The
+        # browser download needs no root. The final check fails the step if Playwright's Chromium is not on disk; the step
+        # cap sits above the whole loop.
+        timeout-minutes: 35
+        run: |
+          deps=no
+          for i in 1 2 3; do
+            sudo env "PATH=$PATH" timeout -k 15 420 ./node_modules/.bin/playwright install-deps chromium && { deps=yes; break; }
+            echo "retry deps $i"
+            for j in $(seq 1 24); do sudo fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock >/dev/null 2>&1 || break; sleep 5; done
+            sudo dpkg --configure -a || true
+            sleep 10
+          done
+          if [ "$deps" != yes ]; then echo "Chromium OS packages not installed after 3 attempts"; exit 1; fi
+          for i in 1 2 3; do timeout 240 npx playwright install chromium && break; echo "retry browser $i"; sleep 10; done
+          node -e "const p = require('@playwright/test').chromium.executablePath(); if (!require('fs').existsSync(p)) { console.error('Playwright Chromium missing: ' + p); process.exit(1); }"
 
       - name: Build e2e fixture (Playwright 'setup' project)
-        # Task 10's `setup` project (playwright.config.ts:53) builds the
+        # Task 10's `setup` project (playwright.config.ts, the `projects` list) builds the
         # shared 2-org x 5-role x 2-member fixture and saves 20
         # `storageState` files under the gitignored e2e/fixtures/.auth/.
         # Several specs read e2e/fixtures/manifest.json at MODULE SCOPE, so
@@ -614,7 +719,7 @@ jobs:
         # dies with ENOENT before any test runs without it having gone
         # first (see that step's own comment). --project=chromium --no-deps
         # skips re-running `setup` here: `dependencies: ['setup']`
-        # (playwright.config.ts:58) would otherwise make Playwright
+        # (playwright.config.ts, the `chromium` project's `dependencies`) would otherwise make Playwright
         # re-execute it before `chromium` -- ~20 avoidable logins -- but
         # --no-deps (node_modules/playwright/lib/program.js:189, "Do not
         # run project dependencies") is safe because the previous step
@@ -626,18 +731,58 @@ jobs:
         # --fail-on-flaky-tests (present in this installed version:
         # node_modules/playwright/lib/program.js:177, enforced at
         # node_modules/playwright/lib/runner/index.js:5823) is required, not
-        # optional: without it, `retries: 2` (playwright.config.ts:6) means
+        # optional: without it, `retries: 2` (playwright.config.ts, `retries`) means
         # a test that only passes on a retry still reports the RUN as
         # green, measured elsewhere at 96.3% green with a flake fully alive.
         # "Green" here means zero retries consumed.
         run: npx playwright test --project=chromium --no-deps --fail-on-flaky-tests
 
+      # NFR-AVL-04's fault harness: stops the Postgres service container, checks
+      # that pages and writes answer with a support reference and that the log
+      # holds one line for each, starts it again and checks the data survived
+      # (e2e/db-outage.spec.ts). It runs alone, after the suite, because it takes
+      # the database away from every other test; --no-deps reuses the fixture the
+      # "Build e2e fixture" step left on disk, as the suite's step above does.
+      - name: Run the database outage test
+        run: E2E_DB_CONTAINER=$(docker ps -q --filter ancestor=postgres:16-alpine) npx playwright test --project=outage --no-deps --fail-on-flaky-tests
+        # An empty E2E_DB_CONTAINER here (the filter matched no container) makes the spec throw, not skip, so this step
+        # cannot go green without stopping the database; --fail-on-flaky-tests keeps `retries: 2` from hiding a flake.
+
+      # Review Focus RF-3 (e2e/decision-idle-signout.spec.ts, FR-DEC-06, UX-43): a draft survives an idle sign-out and comes
+      # back after Sign in again. It needs the 180-second idle limit (the floor of lib/auth/idle.ts) in the environment of
+      # the server Playwright starts for this command, so it runs in a command of its own; the suite's step above leaves
+      # the 12-hour limit, under which the spec skips. It follows the outage test, which must come straight after the suite
+      # (__tests__/unit/e2e-port.test.ts) and starts its database again before it ends. About four minutes: the spec waits
+      # for the session cookie to expire.
+      - name: Run the idle sign-out test (RF-3)
+        run: MAKRAI_TEST_IDLE_SECONDS=180 npx playwright test --project=chromium --no-deps --fail-on-flaky-tests e2e/decision-idle-signout.spec.ts
+
+      # SRS NFR-SEC-06 is verified with the production nginx configuration in front of the production build: 61
+      # accounts sign in from one address within a minute, the three refusals are byte-identical, the session cookie's
+      # flags, and no reset token in nginx's log (e2e/sign-in-nginx.spec.ts), plus the two J-15 cases of
+      # e2e/account.spec.ts, which need the local mail catcher. playwright.nginx.config.ts starts the catcher, the app
+      # (next start, from the build above) and nginx (scripts/nginx-test/up.sh 0, which uses the image pulled here by
+      # digest and --pull=never) and stops all three; this step starts no server of its own. No secret is added: the
+      # app is given RESEND_API_KEY=re_test_local and talks to the catcher only.
+      - name: Pull the nginx image the nginx-in-front run pins
+        run: docker pull nginx:1.31-alpine@sha256:df221db836e1754089190208cee7eeda94f233197056426eda74a43ab1abeac2
+
+      - name: Run the sign-in specs with nginx in front
+        run: E2E_NGINX_URL=https://127.0.0.1:8440 npx playwright test -c playwright.nginx.config.ts --fail-on-flaky-tests
+
+      # The web server's output goes to test-results/server.log and no longer
+      # reaches this log (playwright.config.ts, the comment on
+      # `webServer.command`), so a red run would lose it. The file is the
+      # server output of the last Playwright invocation of this job, because
+      # each invocation deletes test-results/ before it starts the server.
       - name: Upload Playwright report
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: playwright-report
-          path: playwright-report/
+          path: |
+            playwright-report/
+            test-results/server.log
           retention-days: 7
 
 # THIS JOB IS A REQUIRED STATUS CHECK on `main`, as of 2026-08-12 (D-203).

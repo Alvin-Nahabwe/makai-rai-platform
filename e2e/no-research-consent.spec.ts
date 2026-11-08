@@ -1,0 +1,160 @@
+import 'dotenv/config';
+import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import { expect, test, type Browser, type BrowserContext } from '@playwright/test';
+import { MANIFEST_PATH, adminSeat, type FixtureManifest, type FixtureManifestUser } from './fixtures/manifest';
+import { abortPendingBackgroundRequests } from './helpers/pendingLinks';
+import { testDb } from '../__tests__/helpers/db';
+import { buildOrg } from '../__tests__/helpers/recordFixture';
+
+/**
+ * FR-RES-01: no page offers a research-consent control. The pages half of the guard (the source
+ * half is __tests__/lint/no-research-consent.test.ts, the database half is
+ * __tests__/integration/research-ready.test.ts).
+ *
+ * The route list is asked of git, not written here, so a page a later unit adds is crawled as soon
+ * as it is committed. Route groups `(name)` are not part of a URL. A page with a dynamic segment
+ * other than `[slug]` has no URL this spec can know, so it is left to the live crawl on the
+ * candidate build.
+ *
+ * Each route is opened signed out and as a fixture owner. A control that only a signed-in user is
+ * shown is found by the second pass; a page that sends a signed-out visitor to /login is checked
+ * through the page it lands on.
+ */
+const routes = execFileSync('git', ['ls-files', 'app/*page.tsx'], { encoding: 'utf8' })
+  .trim()
+  .split('\n')
+  // The glob also lists files such as `landingpage.tsx`; only a file named exactly page.tsx is a page.
+  .filter((f) => /(^|\/)page\.tsx$/.test(f))
+  .map(
+    (f) =>
+      '/' +
+      f
+        .replace(/^app\//, '')
+        .replace(/\/?page\.tsx$/, '')
+        .split('/')
+        .filter((s) => !/^\(.*\)$/.test(s))
+        .join('/'),
+  )
+  .filter((r) => !/\[(?!slug\])/.test(r));
+
+// A crawl of no routes would pass every test it does not have, so an empty or short list stops the
+// run here instead (17 routes at the time of writing).
+const MIN_ROUTES = 10;
+if (routes.length < MIN_ROUTES) {
+  throw new Error(`no-research-consent: found ${routes.length} page routes, expected at least ${MIN_ROUTES}`);
+}
+
+/** Read when a test runs, not when the file loads: the `setup` project writes the manifest first. */
+function owner(): FixtureManifestUser {
+  const manifest: FixtureManifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf-8'));
+  const found = manifest.users.find((u) => u.role === 'owner');
+  if (!found) throw new Error('no-research-consent: the fixture manifest holds no owner');
+  return found;
+}
+
+/**
+ * Where the owner pass is expected to end up. A route not named here ends on itself. The home
+ * route is the org dispatcher (app/page.tsx), which sends a signed-in user to an org dashboard.
+ */
+const OWNER_LANDING: Record<string, string> = {
+  '/': '/orgs/[slug]/dashboard',
+  // The old text pages redirect permanently to S-06 (ACC-a Task 13), whose page is checked where it lands.
+  '/terms': '/legal/terms',
+  '/privacy': '/legal/privacy',
+};
+
+/**
+ * Where the administrator pass ends: `/` sends the platform administrator to S-23 (UX-01 gate 4), and so does S-05,
+ * which the administrator, holding every acceptance, is sent on from; the old text pages redirect as for the owner.
+ */
+const ADMIN_LANDING: Record<string, string> = {
+  '/': '/admin/organisations',
+  '/acceptances': '/admin/organisations',
+  '/terms': '/legal/terms',
+  '/privacy': '/legal/privacy',
+};
+
+/**
+ * Routes an org owner cannot render: the server sends the owner elsewhere. Their owner pass is
+ * declared with test.fixme so the reporter lists it as not run, instead of passing on the page the
+ * owner was sent to. None today: the administrator pages (S-23, S-25) answer a non-administrator with
+ * their refusal line at their own address, so the owner pass checks that page.
+ */
+const NOT_RENDERED_FOR_OWNER: Record<string, string> = {};
+
+/**
+ * Routes whose signed-in pass needs an owner other than the fixture's, signed in through the form
+ * from its own client address. S-05 renders only for an account missing an acceptance (FR-ACC-04):
+ * the fixture owner holds all three and is sent on to `/`, so its pass is an owner who holds only
+ * pre-v1 rows, as e2e/csp.spec.ts builds one.
+ */
+const OWNER_FOR: Record<string, { label: string; clientIp: string }> = {
+  '/acceptances': { label: 'resfive', clientIp: '10.45.0.1' },
+};
+
+/** A context signed in as a fresh owner holding only pre-v1 acceptance rows. */
+async function preV1Owner(browser: Browser, a: { label: string; clientIp: string }): Promise<BrowserContext> {
+  const account = (await buildOrg({ label: a.label, acceptances: 'pre-v1' })).members.owner;
+  const ctx = await browser.newContext({ extraHTTPHeaders: { 'x-forwarded-for': a.clientIp } });
+  const login = await ctx.newPage();
+  await login.goto('/login');
+  await login.fill('#email', account.email);
+  await login.fill('#password', account.password);
+  await login.locator('button[type="submit"]').click();
+  await login.waitForURL((url) => url.pathname !== '/login');
+  await login.close();
+  return ctx;
+}
+
+test.afterAll(async () => {
+  await testDb.$disconnect();
+});
+
+// Signed out, as a fixture owner, and as the platform administrator (units/ORG.md Task 8b, R11-31), whose pass is
+// the one that renders the administrator pages; an organisation page answers the administrator 404 (FR-ORG-03).
+for (const who of ['signed out', 'owner', 'administrator'] as const) {
+  const signedIn = who !== 'signed out';
+  for (const route of routes) {
+    const title = `FR-RES-01: no page offers a research-consent control: ${route} ${who}`;
+    const check = async ({ browser }: { browser: Browser }) => {
+      const seat = owner();
+      const other = who === 'owner' ? OWNER_FOR[route] : undefined;
+      const ctx = other !== undefined ? await preV1Owner(browser, other)
+        : await browser.newContext(who === 'signed out' ? {} : { storageState: (who === 'owner' ? seat.storageStatePath : adminSeat().storageStatePath) });
+      // The shell links pages other units have not built yet; a prefetch of one never settles in a production build and the
+      // `networkidle` wait below would never end (e2e/helpers/pendingLinks.ts). The page itself is still opened and checked.
+      await abortPendingBackgroundRequests(ctx);
+      try {
+        const page = await ctx.newPage();
+        const res = await page.goto(route.replace('[slug]', seat.orgSlug));
+        // A 404 or 500 page has no checkbox either; an error page must not count as a clean page. The one 404 expected
+        // is the administrator's on an organisation's page (FR-ORG-03: S-31, which holds no control).
+        const orgPage = route.startsWith('/orgs/');
+        if (who === 'administrator' && orgPage) expect(res?.status(), route).toBe(404);
+        else expect(res?.ok(), route).toBe(true);
+        // A control drawn after the first client render (a fetch, a redirect on mount) is not there at
+        // `load`; counting zero at once would pass before it appears.
+        await page.waitForLoadState('networkidle');
+        if (signedIn) {
+          // Without this an expired or empty session would be sent to /login, the control check
+          // below would run on the login page, and the owner pass would pass for the wrong page.
+          const landing = who === 'administrator' ? ADMIN_LANDING[route] : OWNER_LANDING[route];
+          const expected = (landing ?? route).replace('[slug]', seat.orgSlug);
+          expect(new URL(page.url()).pathname, `the ${who} pass of ${route} must end on ${expected}`).toBe(expected);
+        }
+        for (const role of ['checkbox', 'radio', 'switch'] as const) {
+          await expect(page.getByRole(role, { name: /research/i })).toHaveCount(0);
+        }
+      } finally {
+        // Also when an assertion above fails, so a failing page does not leave its context open.
+        await ctx.close();
+      }
+    };
+    if (signedIn && Object.hasOwn(NOT_RENDERED_FOR_OWNER, route)) {
+      test.fixme(title, { annotation: { type: 'fixme', description: NOT_RENDERED_FOR_OWNER[route] } }, check);
+    } else {
+      test(title, check);
+    }
+  }
+}

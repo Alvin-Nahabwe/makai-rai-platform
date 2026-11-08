@@ -20,7 +20,7 @@ organization's data is isolated at the database level, not by application filter
 The intended primary adopter is a **team improving its own practice**, ahead of institutional
 assurance and the cross-institutional research corpus (`docs/VISION_AND_PLAN.md` §3.1). The
 durable goal is that RAI evidence accumulates in one place and the governance artifacts a team
-needs are generated from it, rather than a score being self-attested once and filed away. This
+needs are generated from it, rather than a claim being self-attested once and filed away. This
 repository is not the product currently in public use: that is a static, anonymous,
 single-browser SPA at `makrai.netlify.app` (`docs/VISION_AND_PLAN.md` §1), still live and not
 yet superseded.
@@ -150,7 +150,7 @@ npm run dev                   # http://localhost:3000
 | Tenant isolation | Postgres RLS. Tenant reads and writes go through `withOrg` — one interactive transaction that sets a transaction-scoped GUC and runs as `makrai_app` (`NOSUPERUSER`, `NOBYPASSRLS`). Identity, consent and the pre-organisation lookups use the identity lane, `makrai_identity` (no superuser, no tenant record table); global reference data is a third lane. | [ADR-0001](docs/adr/0001-data-access-architecture.md), [ADR-0003](docs/adr/0003-framework-version-registry-third-lane.md), [ADR-0009](docs/adr/0009-identity-lane-role.md) |
 | Authorization | Application-side, and deliberately *not* the isolation mechanism: `can(role, action)` over 23 actions × 5 roles (`lib/authz/policy.ts:3-11,86`), each route declaring the action it consults (`lib/authz/routeActions.ts:22`). | [ADR-0001](docs/adr/0001-data-access-architecture.md) |
 | Identity and sessions | NextAuth v5, credentials provider only. The session token asserts identity and nothing else — no role or permission claims travel in it. | [ADR-0002](docs/adr/0002-identity-and-account-linking.md) — status *Proposed*, though load-bearing |
-| Framework content | Four JSON files hashed as raw bytes into a version registry; each assessment pins the version it was answered against, and content drift is refused rather than silently absorbed (`lib/framework/bundleHash.ts:18-23`). | [ADR-0003](docs/adr/0003-framework-version-registry-third-lane.md) |
+| Framework content | Versioned content bundles hashed as raw bytes into a version registry; each decision pins the content version it was made against, and content drift is refused rather than silently absorbed (hash: `lib/content/bundleHash.ts`; refusal: `resolveRunningContentVersion` in `lib/data/framework.ts`). | [ADR-0003](docs/adr/0003-framework-version-registry-third-lane.md) |
 | Evidence | File bytes stored in Postgres under RLS with composite foreign keys and no `UPDATE` grant, making rows write-once at the database level (`prisma/schema.prisma:340-407`). | — |
 
 Roles, descending in capability: `owner`, `admin`, `assessor`, `reviewer`, `viewer`
@@ -166,7 +166,7 @@ NextAuth v5 beta, `@react-pdf/renderer` for report export, Recharts, Resend for 
 | Command | Runs | Needs |
 | --- | --- | --- |
 | `npm test` | Vitest — 53 files across unit, integration, engine, authz and lint-rule suites | A migrated and provisioned `makrai_test`. Connection strings default at `vitest.config.ts:18-29`; override with `TEST_DATABASE_URL` / `TEST_APP_DATABASE_URL` / `TEST_IDENTITY_DATABASE_URL` |
-| `npm run test:e2e` | Playwright — 8 specs, including a 20-user role matrix and a two-organization isolation walk | Browsers installed (`npx playwright install`). Playwright starts and owns the server (`playwright.config.ts:22-28`); do not start one first |
+| `E2E_PORT=<port> npm run test:e2e` | Playwright — 8 specs, including a 20-user role matrix and a two-organization isolation walk | Browsers installed (`npx playwright install`). Outside CI, `E2E_PORT` must be set to a free port; an unset value stops the run with a message. Playwright starts and owns the server (`playwright.config.ts`); do not start one first |
 | `npm run test:security` | `scripts/pen-test.mjs`, an HTTP probe suite | An app already serving on `http://localhost:3000` (override with `TEST_URL`) |
 | `npm run typecheck` | `tsc --noEmit` | — |
 | `npm run lint` | ESLint, including this project's own import-boundary rules | — |

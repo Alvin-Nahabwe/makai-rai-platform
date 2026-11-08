@@ -1,7 +1,7 @@
 {
   "name": "toolkit-platform",
-  "version": "0.5.1",
-  "description": "Multi-tenant Responsible AI governance platform: assess AI systems against a research-grounded framework, attach evidence, and generate audit-ready reports. Aligned to ISO/IEC 42001 and the African Union Continental AI Strategy.",
+  "version": "0.6.0",
+  "description": "Multi-tenant Responsible AI platform: a team records its decisions, findings and mitigations for an AI system across three stages, attaches evidence, seals a stage review, and issues documents built from that record.",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -40,12 +40,12 @@
     "@prisma/client": "^7.10.1",
     "@react-pdf/renderer": "^4.9.0",
     "bcryptjs": "^3.0.3",
+    "fflate": "0.8.3",
     "next": "16.4.2",
     "next-auth": "5.0.0-beta.32",
     "pg": "^8.23.1",
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "recharts": "^3.10.1",
     "resend": "^6.34.1"
   },
   "devDependencies": {
@@ -55,6 +55,8 @@
     "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "ajv": "6.15.0",
+    "axe-core": "4.12.1",
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
     "js-yaml": "4.3.2",

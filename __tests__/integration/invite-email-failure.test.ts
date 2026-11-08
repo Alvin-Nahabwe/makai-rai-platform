@@ -1,6 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { testDb, resetDb } from '../helpers/db';
+import { stubAcceptanceRows } from '../helpers/legalStub';
 import { sessionFor, clearSession } from '../helpers/authSession';
 
 /**
@@ -55,6 +57,7 @@ describe('POST .../members -- 201 with acceptUrl when the email leg fails (D-188
     const owner = await testDb.user.create({
       data: { email: `${slug}-owner@fixture.test`, name: 'Owner', passwordHash: 'x' },
     });
+    await testDb.consentRecord.createMany({ data: stubAcceptanceRows(owner.id) });
     const org = await testDb.organization.create({ data: { name: slug, slug } });
     await testDb.membership.create({ data: { orgId: org.id, userId: owner.id, role: 'owner' } });
     sessionFor(owner.id);
@@ -69,11 +72,15 @@ describe('POST .../members -- 201 with acceptUrl when the email leg fails (D-188
     // 500 would otherwise surface only as a confusing e2e failure three
     // files away.
     const { org } = await seedOrgWithOwner('inv-fail-a');
-    const res = await invitePost(org.slug, { email: 'someone@example.test', role: 'assessor' });
+    const requestId = randomUUID();
+    const res = await invitePost(org.slug, { requestId, email: 'someone@example.test', role: 'assessor', showLink: true });
     expect(res.status).toBe(201);
     const body = await res.json();
     expect(body.acceptUrl).toMatch(/\/invitations\/[A-Za-z0-9_-]+$/);
     expect(body.emailSent).toBe(false);
-    expect(body.emailError).toMatch(/RESEND_API_KEY/);
+    // the failed send did not undo the invitation, nor its receipt
+    expect(await testDb.invitation.count({ where: { orgId: org.id, email: 'someone@example.test', status: 'pending' } })).toBe(1);
+    expect(await testDb.requestReceipt.findMany({ where: { orgId: org.id } }))
+      .toEqual([expect.objectContaining({ requestId, route: 'app/api/v1/orgs/[slug]/members/route.ts::POST' })]);
   });
 });

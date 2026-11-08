@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { NextRequest } from 'next/server';
 import { testDb, resetDb } from '../helpers/db';
+import { stubAcceptanceRows } from '../helpers/legalStub';
 import { sessionFor, clearSession } from '../helpers/authSession';
 
 /**
@@ -24,7 +25,7 @@ async function patchProject(slug: string, id: string, body: unknown): Promise<Re
   const mod = await import('../../app/api/v1/orgs/[slug]/projects/[id]/route');
   const req = new NextRequest('http://localhost/probe', {
     method: 'PATCH',
-    body: JSON.stringify(body),
+    body: JSON.stringify({ requestId: crypto.randomUUID(), ...(body as object) }),
     headers: { 'content-type': 'application/json' },
   });
   return mod.PATCH(req, { params: Promise.resolve({ slug, id }) });
@@ -40,6 +41,7 @@ describe('PATCH .../projects/[id] — validation symmetry with POST', () => {
     const owner = await testDb.user.create({
       data: { email: 'proj-patch-owner@fixture.test', name: 'Owner', passwordHash: 'x' },
     });
+    await testDb.consentRecord.createMany({ data: stubAcceptanceRows(owner.id) });
     const org = await testDb.organization.create({ data: { name: 'proj-patch-org', slug: 'proj-patch-org' } });
     await testDb.membership.create({ data: { orgId: org.id, userId: owner.id, role: 'owner' } });
     const project = await testDb.project.create({
@@ -49,25 +51,25 @@ describe('PATCH .../projects/[id] — validation symmetry with POST', () => {
     return { owner, org, project };
   }
 
-  it('rejects a name over 200 characters with 400, same as POST would', async () => {
+  it('rejects a name over 200 characters with 422 on its field, same as POST would', async () => {
     const { org, project } = await seed();
     const res = await patchProject(org.slug, project.id, { name: 'x'.repeat(201) });
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(422);
 
     const stored = await testDb.project.findUniqueOrThrow({ where: { id: project.id } });
     expect(stored.name).toBe('Original name'); // rejected write never lands
   });
 
-  it('rejects a description over 2000 characters with 400', async () => {
+  it('rejects a description over 2000 characters with 422', async () => {
     const { org, project } = await seed();
     const res = await patchProject(org.slug, project.id, { description: 'x'.repeat(2001) });
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(422);
   });
 
-  it('400s on an unknown body key instead of a Prisma 500', async () => {
+  it('422s on an unknown body key instead of a Prisma 500', async () => {
     const { org, project } = await seed();
     const res = await patchProject(org.slug, project.id, { notARealField: 'whatever' });
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(422);
   });
 
   it('accepts a PATCH that sets aiSystemType — a real ProjectMetadata column POST also accepts', async () => {

@@ -47,6 +47,14 @@ const JUSTIFIED_ABSENCES: Record<string, string> = {
   // one value and a way for them to drift, which is the failure this list
   // exists to prevent for AUTH_SECRET directly above.
   AUTH_URL: 'alternative next-auth name for NEXTAUTH_URL, which IS passed',
+  // The content root's test seam (lib/content/root.ts). With both set, a live
+  // test server reads the fixture bundle under __tests__/fixtures/content
+  // instead of data/content. Passing either to the production container would
+  // be the one way a real server could serve other content, so the container
+  // must never be given them: __tests__/lint/test-seams.test.ts also checks
+  // that no image, compose, env template, runbook or deploy file names them.
+  MAKRAI_TEST_SEAMS: 'test seam; must never reach the production container',
+  MAKRAI_CONTENT_ROOT: 'test seam; must never reach the production container',
 };
 
 /**
@@ -65,7 +73,7 @@ function productionSources(): string[] {
   // NEW file introduces a NEW variable. Demonstrated 2026-08-30 --
   // `lib/auth/openRegistration.ts` was created, the full suite was run and
   // passed, and only after the commit did this test notice that
-  // `ALLOW_OPEN_REGISTRATION` never reached the container. The check ran, the
+  // its new setting never reached the container. The check ran, the
   // suite was green, and the variable was invisible.
   //
   // `--others --exclude-standard` adds untracked files while still honouring
@@ -171,6 +179,16 @@ describe('the production container is given every variable the code reads', () =
     expect(Object.entries(env).filter(([, v]) => v.includes('POSTGRES_PASSWORD'))).toEqual([]);
     expect(nextjsService()).not.toMatch(/^\s{4}env_file:/m);
     expect(env.IDENTITY_DATABASE_URL).toBe('${IDENTITY_DATABASE_URL}');
+  });
+
+  /**
+   * NFR-OBS-04: the sign-in alert (lib/auth/signInAlerts.ts) mails ADMIN_EMAIL, so the web container now reads it. It is
+   * the owner's address, not a credential: the seed's ADMIN_PASSWORD stays with the migrator alone.
+   */
+  it('NFR-OBS-04: gives the web container ADMIN_EMAIL for the sign-in alert, and no other ADMIN_ value', () => {
+    const env = composeEnv();
+    expect(env.ADMIN_EMAIL).toBe('${ADMIN_EMAIL}');
+    expect(Object.keys(env).filter((k) => k.startsWith('ADMIN_'))).toEqual(['ADMIN_EMAIL']);
   });
 
   it('finds no computed process.env read it cannot resolve', () => {

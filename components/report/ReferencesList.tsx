@@ -1,6 +1,3 @@
-'use client';
-
-import { useState } from 'react';
 import './ReferencesList.css';
 
 interface Reference {
@@ -11,7 +8,7 @@ interface Reference {
 }
 
 interface ReferencesListProps {
-  references?: Reference[];
+  references?: readonly Reference[];
 }
 
 /**
@@ -24,83 +21,50 @@ function getRefUrl(ref: Reference): string | null {
   return null;
 }
 
+/**
+ * The research sources of a risk area (S-26). A native `<details>`: collapsed by default, opened by its summary with
+ * the keyboard or a click and with no script, and every source is in the page's HTML before anything runs (UX-36).
+ * A server component, so it ships no client code. Colours are theme tokens (ReferencesList.css), and no emoji is
+ * drawn (SRS 7.5.1).
+ */
 export default function ReferencesList({ references }: ReferencesListProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
-
   if (!references || references.length === 0) return null;
 
   return (
-    <div className="references-list">
-      <button
-        className="references-list__toggle"
-        onClick={() => setIsExpanded(!isExpanded)}
-        aria-expanded={isExpanded}
-        aria-label={isExpanded ? 'Hide research sources' : 'Show research sources'}
-      >
-        <span className={`references-list__toggle-icon ${isExpanded ? 'references-list__toggle-icon--open' : ''}`}>
-          ▼
-        </span>
-        {isExpanded ? 'Hide sources' : 'Research sources'}
-        <span>({references.length})</span>
-      </button>
-      {isExpanded && (
-        <ul className="references-list__items">
-          {references.map((ref, i) => {
-            const url = getRefUrl(ref);
-            const hasDoiId = ref.doi && ref.doi.startsWith('10.');
+    <details className="references-list">
+      <summary className="references-list__toggle">{`Research sources (${references.length})`}</summary>
+      <ul className="references-list__items">
+        {references.map((ref, i) => {
+          const url = getRefUrl(ref);
+          const hasDoiId = ref.doi && ref.doi.startsWith('10.');
 
-            return (
-              <li key={i} className="references-list__item">
-                <span className="references-list__icon">📄</span>
-                <div className="references-list__content">
-                  {/* Full citation as the primary text */}
-                  {url ? (
-                    <a
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="references-list__link"
-                    >
-                      {ref.citation}
-                    </a>
-                  ) : (
-                    <span className="references-list__link references-list__link--no-url">
-                      {ref.citation}
-                    </span>
-                  )}
+          return (
+            <li key={i} className="references-list__item">
+              {/* Full citation as the primary text */}
+              {url ? (
+                <a href={url} target="_blank" rel="noopener noreferrer" className="references-list__link">
+                  {ref.citation}
+                </a>
+              ) : (
+                <span className="references-list__link references-list__link--no-url">{ref.citation}</span>
+              )}
 
-                  {/* Metadata line: DOI badge + relevance */}
-                  <span className="references-list__meta">
-                    {hasDoiId && (
-                      <a
-                        href={`https://doi.org/${ref.doi}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="references-list__doi-badge"
-                      >
-                        DOI
-                      </a>
-                    )}
-                    {ref.doi && ref.doi.startsWith('arXiv') && (
-                      <span className="references-list__doi-badge references-list__doi-badge--arxiv">
-                        arXiv
-                      </span>
-                    )}
-                    {ref.doi && ref.doi.startsWith('ISBN') && (
-                      <span className="references-list__doi-badge references-list__doi-badge--book">
-                        Book
-                      </span>
-                    )}
-                    {ref.relevance && (
-                      <span className="references-list__relevance">{ref.relevance}</span>
-                    )}
-                  </span>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
+              {/* Metadata line: DOI badge + relevance. data-source-note: a cited figure is not a percentage of the
+                  team's items (SRS 7.5.3), so e2e/helpers/noScore.ts skips percentages here, and only percentages. */}
+              <span className="references-list__meta">
+                {hasDoiId && (
+                  <a href={`https://doi.org/${ref.doi}`} target="_blank" rel="noopener noreferrer" className="references-list__doi-badge">
+                    DOI
+                  </a>
+                )}
+                {ref.doi && ref.doi.startsWith('arXiv') && <span className="references-list__doi-badge">arXiv</span>}
+                {ref.doi && ref.doi.startsWith('ISBN') && <span className="references-list__doi-badge">Book</span>}
+                {ref.relevance && <span className="references-list__relevance" data-source-note="">{ref.relevance}</span>}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </details>
   );
 }

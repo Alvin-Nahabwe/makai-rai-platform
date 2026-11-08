@@ -1,5 +1,7 @@
 import { redirect } from 'next/navigation';
 import { identityDb } from '../data/identity';
+import { missingAcceptances } from '../data/acceptances';
+import { AcceptancesRequiredError } from '../http/errors';
 
 /**
  * The one choke point for "who is this?" (ADR-0002). The token asserts
@@ -31,20 +33,20 @@ const ABSOLUTE_MAX_AGE_S = 7 * 24 * 60 * 60;
  * `JWT` type: this function must stay callable with a hand-built object in
  * tests, without a request, a cookie, or NextAuth in the loop at all.
  *
- * `sessionIssuedAt`, not the JWT envelope's own `iat`: verified live
- * (`@auth/core/jwt` encode/decode round-tripped through a 1.2s delay) that
- * `encode()` calls jose's `.setIssuedAt()` with no argument on EVERY
- * re-encode — i.e. on every `auth()` call under this session strategy,
- * because `@auth/core`'s JWT `session` action unconditionally decodes,
- * re-encodes, and re-sets the cookie on every hit (see
- * `node_modules/@auth/core/lib/actions/session.js`). That resets the
- * envelope `iat` to "now" every single request, so a token read every few
- * hours by an active-but-forgotten browser NEVER accumulates 7 days of
- * measured age and the absolute cap is silently a no-op — exactly the
- * "walked-away-from shared lab machine" exposure ADR-0002 names as the
- * reason this cap exists. `sessionIssuedAt` is a claim ONLY the sign-in
- * branch of `jwt()` in `lib/auth.ts` sets, and no other code path in this
- * module ever refreshes it, so it survives every re-encode intact.
+ * `sessionIssuedAt`, not the JWT envelope's own `iat`: `encode()` calls
+ * jose's `.setIssuedAt()` with no argument on EVERY re-encode. The session
+ * action re-encodes and re-sets the cookie only when it runs through the
+ * session endpoint, that is at sign-in and on `GET` or `POST
+ * /api/auth/session` (probe of 2026-10-30, `reviews/fix-r11.md` R11-1);
+ * `auth()` with no arguments runs the same action but drops its Set-Cookie
+ * (`node_modules/next-auth/lib/index.js:58-63`), so a page load or an API
+ * call moves neither the cookie's expiry nor the envelope `iat`. A browser
+ * that keeps calling the session endpoint (UI's Stay signed in) resets the
+ * envelope `iat` each time, so an absolute cap measured from it would never
+ * reach 7 days: the walked-away-from shared lab machine ADR-0002 names.
+ * `sessionIssuedAt` is a claim ONLY the sign-in branch of `jwt()` in
+ * `lib/auth.ts` sets, and no other code path in this module ever refreshes
+ * it, so it survives every re-encode intact.
  */
 type RawToken = {
   id?: unknown;
@@ -149,12 +151,37 @@ export class PasswordChangeRequiredError extends Error {}
  * `requireIdentity`'s comment. */
 const CHANGE_PASSWORD_PATH = '/change-password';
 
+/** S-05, where gate 3 sends an account that lacks a first acceptance (SRS 7.1.2). */
+const ACCEPTANCES_PATH = '/acceptances';
+
+/**
+ * The pages gate 3 lets through (UX-01): S-05 itself, S-21 (My account: export and deletion,
+ * FR-ACC-04) and S-29's page, which S-21's Change password opens (route 35, the page's action, is
+ * usable before the acceptances, contract row 35; ACC-b, C4 ruling RE-5). Compared by exact
+ * equality with the proxy-set `x-pathname`, never by prefix, so `/accountx` or `/acceptances/x` is
+ * not exempt. S-06 (`/legal/...`) needs no entry: it is public and calls no `requireIdentity`.
+ */
+export const ACCEPTANCE_EXEMPT_PATHS = ['/acceptances', '/account', '/change-password'] as const;
+
+function isAcceptanceExempt(pathname: string | null): boolean {
+  return (ACCEPTANCE_EXEMPT_PATHS as readonly string[]).includes(pathname ?? '');
+}
+
+/** The page request's own path, as `proxy.ts` sets it on every page request. */
+async function requestPathname(): Promise<string | null> {
+  const { headers } = await import('next/headers');
+  return (await headers()).get('x-pathname');
+}
+
 /** Shared options for `requireIdentity`/`requireIdentityForApi`. Only the
  * password-change page/route may pass `allowMustChangePassword: true` —
  * everything else must leave it unset, or a flagged account can never reach
- * the one action that clears the flag. */
+ * the one action that clears the flag. Only the routes of S-05 and S-21
+ * (contract routes 30 and 35 to 39) pass `allowMissingAcceptances: true`;
+ * `trigger-enumeration.test.ts` lists them. */
 export type RequireIdentityOptions = {
   allowMustChangePassword?: boolean;
+  allowMissingAcceptances?: boolean;
 };
 
 /**
@@ -233,11 +260,20 @@ export async function requireIdentity(): Promise<Identity> {
   }
 
   if (identity.mustChangePassword) {
-    const { headers } = await import('next/headers');
-    const pathname = (await headers()).get('x-pathname');
-    if (pathname !== CHANGE_PASSWORD_PATH) {
+    if ((await requestPathname()) !== CHANGE_PASSWORD_PATH) {
       redirect(CHANGE_PASSWORD_PATH);
     }
+    // Gate 2 settles a flagged account: it reaches S-29 and nothing else,
+    // S-05 included, until the password is changed (SRS 7.1.2 order).
+    return identity;
+  }
+
+  // THIRD gate (FR-ACC-04, SRS 7.1.2 gate 3): an account without a first
+  // acceptance of each of the three texts reaches only S-05 and S-21. A
+  // database error propagates, never as "nothing missing".
+  const missing = await missingAcceptances(identity.userId);
+  if (missing.length > 0 && !isAcceptanceExempt(await requestPathname())) {
+    redirect(ACCEPTANCES_PATH);
   }
 
   return identity;
@@ -283,6 +319,13 @@ export async function requireIdentityForApi(
 
   if (identity.mustChangePassword && !options.allowMustChangePassword) {
     throw new PasswordChangeRequiredError();
+  }
+
+  // THIRD gate (FR-ACC-04): 403 `acceptances_required` naming the kinds,
+  // unless the route is one of S-05's or S-21's (`allowMissingAcceptances`).
+  if (!options.allowMissingAcceptances) {
+    const missing = await missingAcceptances(identity.userId);
+    if (missing.length > 0) throw new AcceptancesRequiredError(missing);
   }
 
   return identity;

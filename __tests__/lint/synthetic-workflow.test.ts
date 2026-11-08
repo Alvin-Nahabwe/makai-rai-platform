@@ -138,10 +138,12 @@ describe('synthetic.yml', () => {
       SYNTHETIC_EMAIL: '${{ secrets.SYNTHETIC_EMAIL }}',
       SYNTHETIC_PASSWORD: '${{ secrets.SYNTHETIC_PASSWORD }}',
       SYNTHETIC_ORG_SLUG: '${{ secrets.SYNTHETIC_ORG_SLUG }}',
-      SYNTHETIC_ASSESSMENT_ID: '${{ secrets.SYNTHETIC_ASSESSMENT_ID }}',
+      SYNTHETIC_PROJECT_ID: '${{ secrets.SYNTHETIC_PROJECT_ID }}',
+      SYNTHETIC_STAGE: '${{ secrets.SYNTHETIC_STAGE }}',
+      SYNTHETIC_QUESTION_ID: '${{ secrets.SYNTHETIC_QUESTION_ID }}',
     });
-    const FOUR = ['SYNTHETIC_ASSESSMENT_ID', 'SYNTHETIC_EMAIL', 'SYNTHETIC_ORG_SLUG', 'SYNTHETIC_PASSWORD'];
-    expect(secretsIn(journey)).toEqual(FOUR);
+    const SIX = ['SYNTHETIC_EMAIL', 'SYNTHETIC_ORG_SLUG', 'SYNTHETIC_PASSWORD', 'SYNTHETIC_PROJECT_ID', 'SYNTHETIC_QUESTION_ID', 'SYNTHETIC_STAGE'];
+    expect(secretsIn(journey)).toEqual(SIX);
 
     // No level above the step carries any of them: a workflow-level or job-level `env:` would hand the
     // production password to every step, including the third-party actions.
@@ -154,15 +156,15 @@ describe('synthetic.yml', () => {
     }
 
     // And nowhere else in the parsed file: not in a step's `with:`, a `defaults:` block, a container or a
-    // service. Exactly four references to SYNTHETIC_* secrets exist, the four above, in any spelling of case, and
+    // service. Exactly six references to SYNTHETIC_* secrets exist, the six above, in any spelling of case, and
     // they are the only secrets the file reads at all. Reading the whole secrets context would sidestep that
     // count, so any `secrets` that is not followed by `.name` is refused, anywhere in the file: `toJson(secrets)`,
     // `secrets['NAME']`, `secrets.*`, `format('{0}', secrets)`, `secrets: inherit`.
     const text = JSON.stringify(doc);
-    expect(text.match(/secrets\.SYNTHETIC_[A-Z0-9_]+/gi) ?? [], 'every reference to a SYNTHETIC_* secret').toHaveLength(4);
+    expect(text.match(/secrets\.SYNTHETIC_[A-Z0-9_]+/gi) ?? [], 'every reference to a SYNTHETIC_* secret').toHaveLength(6);
     expect(
       (text.match(/secrets\.[A-Za-z0-9_]+/gi) ?? []).filter((m) => !/^secrets\.SYNTHETIC_/i.test(m)),
-      'a secret other than the four',
+      'a secret other than the six',
     ).toEqual([]);
     expect(text.match(/\bsecrets\b(?!\.[A-Za-z0-9_])/gi) ?? [], 'a read of the whole secrets context').toEqual([]);
   });

@@ -58,6 +58,18 @@ export const SEEDED_FRAMEWORK_VERSION_ID = 'fv_4_0_0';
  * conscious deferral belongs in the register, not only in a comment
  * (AGENTS.md §6), so this comment states the fact and D-148 carries the
  * full reasoning and pick-up trigger.
+ *
+ * v0.6.0 (NFR-INT-01, obligation S15): every append-only table carries
+ * refusal triggers on `record_refuse_change()` that refuse TRUNCATE for every
+ * role, the owner included, and fire in replica mode. So the reset finds those
+ * triggers in pg_catalog (on every truncated table, not from a hand list),
+ * disables them, truncates, and re-enables them `ENABLE ALWAYS`, all in ONE
+ * transaction as the test owner role: if the TRUNCATE fails, the disables roll
+ * back with it and every refusal trigger is still in mode `A`
+ * (`__tests__/integration/v060-reset-db.test.ts` pins both). No setting, GUC or
+ * function skips a refusal trigger; this helper exists only under `__tests__`.
+ * `lock_timeout` bounds the wait behind another session's lock, so a held lock
+ * fails the reset instead of hanging the suite.
  */
 export async function resetDb(): Promise<void> {
   const [{ current_database: db }] =
@@ -70,52 +82,30 @@ export async function resetDb(): Promise<void> {
     WHERE schemaname = 'public'
       AND tablename NOT IN ('_prisma_migrations', 'framework_versions', 'integrity_log')`;
   if (tables.length === 0) return;
-  const list = tables.map((t) => `"${t.tablename}"`).join(', ');
-  await testDb.$executeRawUnsafe(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE`);
-}
-
-/**
- * Runs `fn` with the seeded `framework_versions` row's `contentHash` set to a
- * value that is NOT the running bundle's, then restores it.
- *
- * This is the only way to make `resolveFramework(...).matches` /
- * `resolveCurrentFramework(...).matches` false for the CURRENT content
- * version: `RUNNING_BUNDLE_HASH` is computed once at module load from the
- * real `data/*.json` files (`lib/framework/bundleHash.ts`), so the row is the
- * only side of the comparison a test can move. It reproduces the real drift
- * condition exactly -- someone edited the content files without bumping
- * `meta.version`, so the registry row's recorded hash no longer describes
- * what is deployed.
- *
- * Distinct from the `fv_bogus*` rows several suites insert: those give an
- * assessment a MISPINNED version to read back, which is the right fixture for
- * a guard on an EXISTING assessment. This one moves the version the deployed
- * content itself resolves to, which is the only fixture that can reach a
- * CREATION-time guard, since creation has no assessment to mispin yet.
- *
- * Extracted here (C6 fix wave) after the identical mutate-run-restore block
- * was written twice, in `__tests__/integration/assessments.test.ts` and
- * `__tests__/integration/framework-current-version.test.ts`.
- *
- * The `finally` is load-bearing, not defensive: `resetDb()` deliberately does
- * NOT truncate `framework_versions` (see its own comment above), so a
- * mutation left behind here corrupts every later test in the same run.
- */
-export async function withDriftedFrameworkContent<T>(fn: () => Promise<T>): Promise<T> {
-  const before = await testDb.frameworkVersion.findUniqueOrThrow({
-    where: { id: SEEDED_FRAMEWORK_VERSION_ID },
-    select: { contentHash: true },
-  });
-  await testDb.frameworkVersion.update({
-    where: { id: SEEDED_FRAMEWORK_VERSION_ID },
-    data: { contentHash: 'f'.repeat(64) },
-  });
-  try {
-    return await fn();
-  } finally {
-    await testDb.frameworkVersion.update({
-      where: { id: SEEDED_FRAMEWORK_VERSION_ID },
-      data: { contentHash: before.contentHash },
-    });
+  const names = tables.map((t) => t.tablename);
+  const refusal = await testDb.$queryRaw<{ table: string; trigger: string; mode: string }[]>`
+    SELECT c.relname::text AS "table", t.tgname::text AS "trigger", t.tgenabled::text AS "mode"
+    FROM pg_trigger t
+    JOIN pg_class c ON c.oid = t.tgrelid
+    JOIN pg_proc p ON p.oid = t.tgfoid
+    WHERE c.relnamespace = 'public'::regnamespace AND NOT t.tgisinternal
+      AND p.proname = 'record_refuse_change'
+      AND c.relname = ANY (${names}::text[])
+    ORDER BY 1, 2`;
+  // Every refusal trigger is ENABLE ALWAYS by migration; the reset restores exactly that, so it
+  // refuses to run over one in another mode instead of silently setting it back to A.
+  const notAlways = refusal.filter((r) => r.mode !== 'A');
+  if (notAlways.length > 0) {
+    throw new Error(`resetDb: refusal trigger(s) not ENABLE ALWAYS: ${notAlways.map((r) => `${r.table}.${r.trigger} (mode ${r.mode})`).join(', ')}`);
   }
+  const list = names.map((t) => `"${t}"`).join(', ');
+  await testDb.$transaction(
+    async (tx) => {
+      await tx.$executeRawUnsafe(`SET LOCAL lock_timeout = '5s'`);
+      for (const r of refusal) await tx.$executeRawUnsafe(`ALTER TABLE "${r.table}" DISABLE TRIGGER "${r.trigger}"`);
+      await tx.$executeRawUnsafe(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE`);
+      for (const r of refusal) await tx.$executeRawUnsafe(`ALTER TABLE "${r.table}" ENABLE ALWAYS TRIGGER "${r.trigger}"`);
+    },
+    { timeout: 60_000 },
+  );
 }

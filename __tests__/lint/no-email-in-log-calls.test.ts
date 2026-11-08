@@ -133,8 +133,11 @@ describe('logSecurityEvent call sites', () => {
     }
 
     // Non-vacuous: the walk found the call sites it is meant to be checking. The floor is
-    // the number of calls on 2026-10-08; it may rise and must never silently fall to nothing.
-    expect(calls, 'found almost no call sites, so this would pass over an empty set').toBeGreaterThanOrEqual(25);
+    // the number of calls now; it may rise and must never silently fall to nothing. It was 25
+    // (the count on 2026-10-08). The score removal took ten calls out with the assessment
+    // routes and the v0.6.0 evidence route two (36 to 24 with this walker), and neither
+    // change alone went below 25.
+    expect(calls, 'found almost no call sites, so this would pass over an empty set').toBeGreaterThanOrEqual(24);
     expect([...files], 'the sign-in path logs through logSecurityEvent').toContain('lib/auth/credentials.ts');
     expect([...files]).toContain('proxy.ts');
     expect([...files]).toContain('app/api/v1/orgs/[slug]/members/route.ts');

@@ -3,7 +3,6 @@
    Branding derived from air.ug (Makerere Centre for AI)
    ================================================================= */
 
-
 /* ── Design Tokens ── */
 :root {
   /* Primary palette (from MAK-AI / air.ug) */
@@ -36,12 +35,6 @@
   --color-risk-low: #22C55E;
   --color-info: #3B82F6;
 
-  /* A verdict that cannot honestly be stated, as opposed to one that does not
-     apply. Deliberately NOT --color-risk-* and deliberately not levelColors'
-     notAssessed grey (#6B7280), which means "no maturity question exists here"
-     -- a different claim. See lib/report/maturityBands.ts#labelIsShowable. */
-  --color-verdict-withheld: #52525B;
-
   /* Lifecycle stage colors (MAK-AI brand-derived) */
   --color-pre-processing: #C06014;
   --color-in-processing: #8B4513;
@@ -49,8 +42,8 @@
   --color-cross-cutting: #D4792E;
 
   /* Typography */
-  --font-family: var(--font-source-sans, 'Source Sans 3'), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-display: var(--font-dm-serif, 'DM Serif Display'), Georgia, 'Times New Roman', serif;
+  --font-family: var(--font-source-sans, system-ui), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-display: var(--font-dm-serif, Georgia), Georgia, 'Times New Roman', serif;
   --font-size-xs: 0.75rem;
   --font-size-sm: 0.875rem;
   --font-size-base: 1rem;
@@ -62,12 +55,14 @@
   --font-size-5xl: 3rem;
   --font-size-6xl: 3.75rem;
 
-  --font-weight-light: 300;
+  /* Only 400, 600 and 700 of Source Sans 3 are loaded (app/layout.tsx, UX-38).
+     The medium and extrabold names stay because stylesheets beside this one
+     still read them; they now mean the nearest loaded weight. */
   --font-weight-regular: 400;
-  --font-weight-medium: 500;
+  --font-weight-medium: 600;
   --font-weight-semibold: 600;
   --font-weight-bold: 700;
-  --font-weight-extrabold: 800;
+  --font-weight-extrabold: 700;
 
   --line-height-tight: 1.2;
   --line-height-normal: 1.5;
@@ -131,6 +126,15 @@
   --tint-accent-bg: #EDE9FE;    --tint-accent-fg: #6D28D9;
   --tint-brand-bg: #FFF5EB;     --tint-brand-fg: var(--color-primary);
 
+  /* Interaction colours (UX-33, SRS 7.6.3). The dark theme redefines the first
+     three; the stage pair follows --tint-brand-*, which both themes define.
+     Each pair is held to its WCAG minimum by __tests__/unit/design-tokens.test.ts. */
+  --form-field-border: #767C88;           /* 4.19:1 on --surface-card (D-1, needs 3:1) */
+  --link: var(--color-primary);           /* text links, 5.59:1 or better (D-3, needs 4.5:1) */
+  --focus-ring: var(--color-primary);     /* the 3-pixel ring (D-3, needs 3:1) */
+  --stage-fg: var(--tint-brand-fg);       /* stage labels (D-5, needs 4.5:1) */
+  --stage-bg: var(--tint-brand-bg);
+
   color-scheme: light;
 }
 
@@ -163,7 +167,13 @@
     --tint-low-bg: #14321F;       --tint-low-fg: #86EFAC;
     --tint-info-bg: #172554;      --tint-info-fg: #93C5FD;
     --tint-accent-bg: #241B45;    --tint-accent-fg: #C4B5FD;
-  --tint-brand-bg: #2A1C0E;     --tint-brand-fg: #E8935A;
+    --tint-brand-bg: #2A1C0E;     --tint-brand-fg: #E8935A;
+
+    /* --color-primary (#9A4D10) is 2.69:1 on dark cards (D-3); the light brand
+       orange is 6.84:1. Field borders are 4.31:1 instead of 1.66:1 (D-1). */
+    --form-field-border: #7A8396;
+    --link: var(--color-primary-light);
+    --focus-ring: var(--color-primary-light);
 
     color-scheme: dark;
   }
@@ -192,6 +202,10 @@
   --tint-info-bg: #172554;      --tint-info-fg: #93C5FD;
   --tint-accent-bg: #241B45;    --tint-accent-fg: #C4B5FD;
   --tint-brand-bg: #2A1C0E;     --tint-brand-fg: #E8935A;
+
+  --form-field-border: #7A8396;
+  --link: var(--color-primary-light);
+  --focus-ring: var(--color-primary-light);
 
   color-scheme: dark;
 }
@@ -228,13 +242,22 @@ img, svg {
 }
 
 a {
-  color: var(--color-primary);
-  text-decoration: none;
+  color: var(--link);
   transition: color var(--transition-fast);
 }
 
 a:hover {
-  color: var(--color-primary);
+  color: var(--link);
+}
+
+/* Links in running text are underlined, because the link colour and the body
+   text differ by only 1.69:1 (WCAG 1.4.1, D-4). Navigation, buttons and cards
+   are the exception and say so on their own classes. */
+p a,
+li a,
+td a {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -268,26 +291,6 @@ h5 { font-size: var(--font-size-lg); }
 
 .section {
   padding: var(--space-20) 0;
-}
-
-.section--dark {
-  background-color: var(--text-primary);
-  color: var(--color-white);
-}
-
-.section--dark h1,
-.section--dark h2,
-.section--dark h3,
-.section--dark h4 {
-  color: var(--color-white);
-}
-
-.text-accent {
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--color-primary);
 }
 
 .text-muted {
@@ -334,19 +337,7 @@ h5 { font-size: var(--font-size-lg); }
 
 .btn--secondary:hover {
   background-color: var(--text-primary);
-  color: var(--color-white);
-}
-
-.btn--green {
-  background-color: var(--color-primary);
-  color: var(--color-white);
-  border-color: var(--color-primary);
-}
-
-.btn--green:hover {
-  background-color: var(--color-primary-dark);
-  border-color: var(--color-primary-dark);
-  color: var(--color-white);
+  color: var(--surface-base);   /* the page colour on the text colour: --color-white is not light-on-dark in the dark theme */
 }
 
 .btn--large {
@@ -370,6 +361,7 @@ h5 { font-size: var(--font-size-lg); }
   padding: var(--space-8);
   box-shadow: var(--shadow-sm);
   border: 1px solid transparent;
+  text-decoration: none; /* a card that is a link is navigation, not running text (D-4) */
   transition: transform var(--transition-spring), box-shadow var(--transition-base), border-color var(--transition-base);
 }
 
@@ -377,10 +369,6 @@ h5 { font-size: var(--font-size-lg); }
   box-shadow: var(--shadow-lg), var(--shadow-glow);
   transform: translateY(-4px);
   border-color: rgba(192, 96, 20, 0.12);
-}
-
-.card--bordered {
-  border: 1px solid var(--color-gray-300);
 }
 
 /* ── Risk level badges ── */
@@ -396,40 +384,15 @@ h5 { font-size: var(--font-size-lg); }
   letter-spacing: 0.05em;
 }
 
-.badge--critical {
-  background-color: var(--tint-critical-bg);
-  color: var(--tint-critical-fg);
-}
-
-.badge--high {
-  background-color: var(--tint-high-bg);
-  color: var(--tint-high-fg);
-}
-
 .badge--moderate {
   background-color: var(--tint-moderate-bg);
   color: var(--tint-moderate-fg);
 }
 
-.badge--low {
-  background-color: var(--tint-low-bg);
-  color: var(--tint-low-fg);
-}
-
-.badge--coming-soon {
-  background-color: var(--color-gray-200);
-  color: var(--text-muted);
-}
-
-.badge--clickable {
-  cursor: pointer;
-  text-decoration: none;
-  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
-}
-
-.badge--clickable:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
+/* The warning tint of UX-06: "Overdue", "Owner cannot act" and "No agreement recorded" only (the label word, never the phrase). */
+.status-label--warning {
+  background-color: var(--tint-moderate-bg);
+  color: var(--tint-moderate-fg);
 }
 
 /* ── Stage indicators ── */
@@ -439,71 +402,21 @@ h5 { font-size: var(--font-size-lg); }
   gap: var(--space-2);
   padding: var(--space-1) var(--space-3);
   border-radius: var(--border-radius-full);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  text-decoration: none;
 }
 
-.stage-indicator--pre {
-  background-color: var(--tint-brand-bg);
-  color: var(--color-pre-processing);
-}
-
-.stage-indicator--in {
-  background-color: var(--tint-brand-bg);
-  color: var(--color-in-processing);
-}
-
-.stage-indicator--post {
-  background-color: var(--tint-brand-bg);
-  color: var(--color-post-processing);
-}
-
+/* One pair for every stage: the label's words name the stage, and the four
+   per-stage browns measured 2.33:1 to 3.96:1 (D-5). */
+.stage-indicator--pre,
+.stage-indicator--in,
+.stage-indicator--post,
 .stage-indicator--cross {
-  background-color: var(--tint-brand-bg);
-  color: var(--color-cross-cutting);
-}
-
-/* ── Progress bar ── */
-.progress-bar {
-  width: 100%;
-  height: 8px;
-  background-color: var(--color-gray-300);
-  border-radius: var(--border-radius-full);
-  overflow: hidden;
-}
-
-.progress-bar__fill {
-  height: 100%;
-  border-radius: var(--border-radius-full);
-  transition: width var(--transition-slow);
-}
-
-.progress-bar__fill--critical { background-color: var(--color-risk-critical); }
-.progress-bar__fill--high { background-color: var(--color-risk-high); }
-.progress-bar__fill--moderate { background-color: var(--color-risk-moderate); }
-.progress-bar__fill--low { background-color: var(--color-risk-low); }
-
-/* ── Score display ── */
-.score-display {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.score-display__value {
-  font-size: var(--font-size-4xl);
-  font-weight: var(--font-weight-extrabold);
-  line-height: 1;
-}
-
-.score-display__label {
-  font-size: var(--font-size-sm);
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  background-color: var(--stage-bg);
+  color: var(--stage-fg);
 }
 
 /* ── Responsive ── */
@@ -526,10 +439,6 @@ h5 { font-size: var(--font-size-lg); }
   }
 }
 
-@media (max-width: 480px) {
-  html { font-size: 14px; }
-}
-
 /* ── Accessibility: Reduced Motion ── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -542,7 +451,7 @@ h5 { font-size: var(--font-size-lg); }
 
 /* ── Accessibility: Focus Visible ── */
 *:focus-visible {
-  outline: 3px solid var(--color-primary);
+  outline: 3px solid var(--focus-ring);
   outline-offset: 2px;
   border-radius: 2px;
 }
@@ -550,7 +459,7 @@ h5 { font-size: var(--font-size-lg); }
 button:focus-visible,
 a:focus-visible,
 input:focus-visible {
-  outline: 3px solid var(--color-primary);
+  outline: 3px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -592,14 +501,15 @@ input:focus-visible {
 .back-link {
   display: inline-block;
   font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-semibold);
   color: var(--text-muted);
   margin-bottom: var(--space-2);
+  text-decoration: none;
   transition: color var(--transition-fast);
 }
 
 .back-link:hover {
-  color: var(--color-primary);
+  color: var(--link);
 }
 
 /* ── Projects Grid ── */
@@ -616,13 +526,6 @@ input:focus-visible {
   text-decoration: none;
   color: inherit;
   cursor: pointer;
-}
-
-.project-card__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: var(--space-3);
 }
 
 .project-card__name {
@@ -642,62 +545,6 @@ input:focus-visible {
   overflow: hidden;
 }
 
-.project-card__stats {
-  display: flex;
-  gap: var(--space-6);
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--color-gray-300);
-}
-
-.project-card__stat {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.project-card__stat-value {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-bold);
-  color: var(--text-primary);
-}
-
-.project-card__stat-label {
-  font-size: var(--font-size-xs);
-  color: var(--color-gray-500);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.project-card__footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: auto;
-}
-
-/* ── Empty State ── */
-.empty-state {
-  text-align: center;
-  padding: var(--space-16) var(--space-8);
-  background: var(--surface-card);
-  border-radius: var(--border-radius-lg);
-  border: 2px dashed var(--color-gray-300);
-}
-
-.empty-state__icon {
-  font-size: 3rem;
-  margin-bottom: var(--space-4);
-}
-
-.empty-state h3 {
-  margin-bottom: var(--space-2);
-}
-
-.empty-state p {
-  max-width: 420px;
-  margin: 0 auto var(--space-6);
-}
-
 /* ── Form Styles (authenticated pages) ── */
 .form-container {
   background: var(--surface-card);
@@ -709,11 +556,12 @@ input:focus-visible {
 
 .form-error {
   background-color: var(--tint-critical-bg);
-  color: var(--color-risk-critical);
+  /* The foreground paired with --tint-critical-bg in both themes: 5.30:1 light, 8.38:1 dark (risk-critical gave 3.95 and 3.29). */
+  color: var(--tint-critical-fg);
   padding: var(--space-3) var(--space-4);
   border-radius: var(--border-radius-md);
   font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-semibold);
   margin-bottom: var(--space-6);
 }
 
@@ -738,7 +586,7 @@ input:focus-visible {
 .form-group select,
 .form-group textarea {
   padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-gray-400);
+  border: 1px solid var(--form-field-border);
   border-radius: var(--border-radius-md);
   font-family: var(--font-family);
   font-size: var(--font-size-base);
@@ -750,9 +598,8 @@ input:focus-visible {
 .form-group input:focus,
 .form-group select:focus,
 .form-group textarea:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(192, 96, 20, 0.12);
+  /* The 3-pixel ring of *:focus-visible stays (D-2); only the border follows it. */
+  border-color: var(--focus-ring);
 }
 
 .form-group textarea {
@@ -789,7 +636,7 @@ input:focus-visible {
   font-family: var(--font-family);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
-  color: var(--color-primary);
+  color: var(--link);
   cursor: pointer;
   padding: 0;
   transition: color var(--transition-fast);
@@ -866,13 +713,7 @@ input:focus-visible {
   }
 
   /* Hide non-essential UI */
-  .navbar, .footer, .skip-link,
-  .assessment-nav, .report-actions,
-  .validation-banner,
-  .page-hero__bg, .page-hero__grid-overlay,
-  .page-hero__accent-line, .hero__bg,
-  .hero__grid-overlay, .hero__accent-line,
-  .hero__visual, .hero__diagram {
+  .footer, .skip-link, .page-hero__bg, .page-hero__grid-overlay, .page-hero__accent-line {
     display: none !important;
   }
 
@@ -887,32 +728,12 @@ input:focus-visible {
     color: white !important;
   }
 
-  /* Force-expand all scorecards */
-  .scorecard-card__toggle { display: none !important; }
-  .scorecard-card__details { display: block !important; }
-
-  /* Force-expand gap evidence */
-  .gap-card__evidence,
-  .gap-card__mitigations { display: block !important; }
-
   /* Cards: remove shadows, ensure borders */
-  .card, .scorecard-card, .gap-card, .control-card {
+  .card {
     box-shadow: none !important;
     border: 1px solid #ddd !important;
     break-inside: avoid;
     page-break-inside: avoid;
-  }
-
-  /* Progress bars: ensure visible */
-  .progress-bar {
-    background: #eee !important;
-    border: 1px solid #ccc !important;
-    print-color-adjust: exact;
-    -webkit-print-color-adjust: exact;
-  }
-  .progress-bar__fill {
-    print-color-adjust: exact;
-    -webkit-print-color-adjust: exact;
   }
 
   /* Badges */
@@ -920,18 +741,6 @@ input:focus-visible {
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
     border: 1px solid currentColor !important;
-  }
-
-  /* Score ring */
-  .score-ring {
-    print-color-adjust: exact;
-    -webkit-print-color-adjust: exact;
-  }
-
-  /* Maturity legend */
-  .maturity-legend__dot {
-    print-color-adjust: exact;
-    -webkit-print-color-adjust: exact;
   }
 
   /* Links */
@@ -969,30 +778,6 @@ input:focus-visible {
   animation: fadeInUp 0.6s ease-out forwards;
 }
 
-.reveal--delay-1 { animation-delay: 0.1s; }
-.reveal--delay-2 { animation-delay: 0.2s; }
-.reveal--delay-3 { animation-delay: 0.3s; }
-.reveal--delay-4 { animation-delay: 0.4s; }
-.reveal--delay-5 { animation-delay: 0.5s; }
-.reveal--delay-6 { animation-delay: 0.6s; }
-
-.reveal--scale {
-  opacity: 0;
-  animation: fadeInScale 0.5s ease-out forwards;
-}
-
-/* ── Subtle grain texture ── */
-.section--textured::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  opacity: 0.03;
-  pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-}
-
-.section--textured { position: relative; }
-
 /* ── Dashboard ── */
 .dashboard-section {
   margin-bottom: var(--space-10);
@@ -1000,86 +785,6 @@ input:focus-visible {
 
 .dashboard-section h2 {
   margin-bottom: var(--space-6);
-}
-
-/* Score gauge */
-.score-gauge {
-  flex-shrink: 0;
-}
-
-/* System-type badge */
-.badge--system-type {
-  background-color: var(--tint-brand-bg);
-  color: var(--tint-brand-fg);
-}
-
-.project-card__meta {
-  display: flex;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
-.project-card__link-text {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-primary);
-  transition: color var(--transition-fast);
-}
-
-.project-card:hover .project-card__link-text {
-  color: var(--color-primary-dark);
-}
-
-/* Activity list */
-.activity-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.activity-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--space-4) var(--space-6);
-  text-decoration: none;
-  color: inherit;
-}
-
-.activity-item__info {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.activity-item__project {
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-}
-
-.activity-item__date {
-  font-size: var(--font-size-sm);
-  color: var(--color-gray-500);
-}
-
-.activity-item__score {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-1);
-}
-
-.activity-item__score-value {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-primary);
-}
-
-.activity-item__score-label {
-  font-size: var(--font-size-xs);
-  color: var(--color-gray-500);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
 }
 
 /* =================================================================
@@ -1121,16 +826,6 @@ input:focus-visible {
   background: var(--color-off-white);
 }
 
-.admin-table__sortable {
-  cursor: pointer;
-  user-select: none;
-  transition: color var(--transition-fast);
-}
-
-.admin-table__sortable:hover {
-  color: var(--color-primary);
-}
-
 .admin-table__name {
   font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
@@ -1140,180 +835,10 @@ input:focus-visible {
   color: var(--text-muted);
 }
 
-.admin-table__date {
-  color: var(--color-gray-500);
-  white-space: nowrap;
-}
-
-.admin-table__count {
-  text-align: center;
-  font-weight: var(--font-weight-semibold);
-}
-
 .admin-table__actions {
   display: flex;
   gap: var(--space-2);
   align-items: center;
-}
-
-.admin-table__empty {
-  text-align: center;
-  padding: var(--space-12) var(--space-4) !important;
-  color: var(--color-gray-500);
-  font-style: italic;
-}
-
-.admin-table__user-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.admin-table__user-name {
-  font-weight: var(--font-weight-medium);
-  color: var(--text-primary);
-}
-
-.admin-table__user-email {
-  font-size: var(--font-size-xs);
-  color: var(--color-gray-500);
-}
-
-/* ── Admin role & status badges ── */
-.badge--admin {
-  background-color: var(--tint-accent-bg);
-  color: var(--tint-accent-fg);
-}
-
-.badge--assessor {
-  background-color: var(--tint-info-bg);
-  color: var(--tint-info-fg);
-}
-
-.badge--completed {
-  background-color: var(--tint-low-bg);
-  color: var(--tint-low-fg);
-}
-
-.badge--in-progress {
-  background-color: var(--tint-moderate-bg);
-  color: var(--tint-moderate-fg);
-}
-
-.badge--full {
-  background-color: var(--tint-info-bg);
-  color: var(--tint-info-fg);
-}
-
-/* ── Admin stat cards row ── */
-.admin-stats-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: var(--space-4);
-  margin-bottom: var(--space-8);
-}
-
-.admin-stat-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-6) var(--space-4);
-  text-align: center;
-}
-
-.admin-stat-card__value {
-  font-size: var(--font-size-3xl);
-  font-weight: var(--font-weight-bold);
-  color: var(--text-primary);
-  line-height: var(--line-height-tight);
-}
-
-.admin-stat-card__value--completed {
-  color: var(--tint-low-fg);
-}
-
-.admin-stat-card__value--progress {
-  color: var(--tint-moderate-fg);
-}
-
-.admin-stat-card__label {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-/* ── Completion breakdown bar ── */
-.admin-completion-breakdown {
-  padding: var(--space-6);
-}
-
-.admin-completion-breakdown h3 {
-  margin-bottom: var(--space-4);
-  font-size: var(--font-size-lg);
-}
-
-.admin-completion-bar {
-  height: 12px;
-  border-radius: var(--border-radius-full);
-  background: var(--color-gray-200);
-  overflow: hidden;
-  margin-bottom: var(--space-4);
-}
-
-.admin-completion-bar__fill {
-  height: 100%;
-  border-radius: var(--border-radius-full);
-  background: linear-gradient(90deg, #22C55E, #16A34A);
-  transition: width 0.6s ease;
-  min-width: 0;
-}
-
-.admin-completion-legend {
-  display: flex;
-  gap: var(--space-6);
-  font-size: var(--font-size-sm);
-  color: var(--text-muted);
-}
-
-.admin-completion-legend__item {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.admin-completion-legend__dot {
-  width: 10px;
-  height: 10px;
-  border-radius: var(--border-radius-full);
-}
-
-.admin-completion-legend__dot--completed {
-  background: var(--color-risk-low);
-}
-
-.admin-completion-legend__dot--progress {
-  background: var(--color-gray-400);
-}
-
-/* ── Placeholder card ── */
-.admin-placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-12) var(--space-8);
-  text-align: center;
-}
-
-.admin-placeholder__icon {
-  font-size: var(--font-size-4xl);
-}
-
-.admin-placeholder h3 {
-  color: var(--text-primary);
 }
 
 /* ── Small buttons for admin actions ── */
@@ -1328,13 +853,13 @@ input:focus-visible {
   color: var(--color-gray-700);
   cursor: pointer;
   border-radius: var(--border-radius-sm);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-semibold);
   transition: all var(--transition-fast);
 }
 
 .btn--outline:hover {
   border-color: var(--color-primary);
-  color: var(--color-primary);
+  color: var(--link);
 }
 
 .btn--danger-outline {
@@ -1343,7 +868,7 @@ input:focus-visible {
   color: var(--color-gray-700);
   cursor: pointer;
   border-radius: var(--border-radius-sm);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-semibold);
   transition: all var(--transition-fast);
 }
 
@@ -1399,7 +924,7 @@ input:focus-visible {
 
 .sidebar-title {
   font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-extrabold);
+  font-weight: var(--font-weight-bold);
   letter-spacing: -0.02em;
   color: var(--color-white);
 }
@@ -1418,7 +943,7 @@ input:focus-visible {
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
   font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-semibold);
   color: rgba(255, 255, 255, 0.7);
   text-decoration: none;
   border-radius: var(--border-radius-md);
@@ -1434,13 +959,6 @@ input:focus-visible {
   color: var(--color-white);
   background-color: var(--color-primary);
   font-weight: var(--font-weight-semibold);
-}
-
-.sidebar-icon {
-  font-size: var(--font-size-base);
-  width: 24px;
-  text-align: center;
-  flex-shrink: 0;
 }
 
 .sidebar-divider {
@@ -1480,7 +998,6 @@ input:focus-visible {
 .sidebar-user-role {
   font-size: var(--font-size-xs);
   color: rgba(255, 255, 255, 0.5);
-  text-transform: capitalize;
 }
 
 .sidebar-signout {
@@ -1536,12 +1053,8 @@ input:focus-visible {
   background: rgba(255, 255, 255, 0.06);
 }
 
-/* Toggle used outside the dark sidebar (e.g. public auth pages) */
-.theme-toggle--floating {
-  position: fixed;
-  top: var(--space-4);
-  right: var(--space-4);
-  z-index: 50;
+/* Toggle used on a light surface, outside the dark sidebar (the signed-out header) */
+.theme-toggle--on-light {
   width: 40px;
   height: 40px;
   color: var(--text-body);
@@ -1550,7 +1063,7 @@ input:focus-visible {
   box-shadow: var(--shadow-sm);
 }
 
-.theme-toggle--floating:hover {
+.theme-toggle--on-light:hover {
   border-color: var(--border-strong);
   background: var(--surface-raised);
 }
@@ -1622,7 +1135,7 @@ input:focus-visible {
   font-size: var(--font-size-base);
   color: var(--text-body);
   background: var(--surface-card);
-  border: 1px solid var(--color-gray-400);
+  border: 1px solid var(--form-field-border);
   border-radius: var(--border-radius-sm);
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
@@ -1630,9 +1143,8 @@ input:focus-visible {
 .auth-card input[type="text"]:focus,
 .auth-card input[type="email"]:focus,
 .auth-card input[type="password"]:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(192, 96, 20, 0.12);
+  /* The 3-pixel ring of *:focus-visible stays (D-2); only the border follows it. */
+  border-color: var(--focus-ring);
 }
 
 .auth-card button[type="submit"] {
@@ -1645,7 +1157,7 @@ input:focus-visible {
   color: var(--color-risk-critical);
   border-radius: var(--border-radius-sm);
   font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-semibold);
   margin-bottom: var(--space-4);
 }
 
@@ -1655,7 +1167,7 @@ input:focus-visible {
   color: var(--tint-low-fg);
   border-radius: var(--border-radius-sm);
   font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-semibold);
   margin-bottom: var(--space-4);
 }
 
@@ -1667,7 +1179,7 @@ input:focus-visible {
 }
 
 .auth-footer a {
-  color: var(--color-primary);
+  color: var(--link);
   font-weight: var(--font-weight-semibold);
 }
 
@@ -1704,6 +1216,7 @@ input:focus-visible {
 
 /* ── btn-primary alias (auth pages use non-BEM class name) ── */
 .btn-primary {
+  text-decoration: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1718,7 +1231,7 @@ input:focus-visible {
   border: 2px solid transparent;
   border-radius: 0;
   cursor: pointer;
-  transition: all var(--transition-base);
+  transition: background-color var(--transition-base), border-color var(--transition-base), color var(--transition-base), box-shadow var(--transition-base), transform var(--transition-base);
   background-color: var(--color-primary);
   color: var(--color-white);
   border-color: var(--color-primary);
@@ -1806,4 +1319,151 @@ input:focus-visible {
     padding: var(--space-4);
     padding-top: calc(var(--space-4) + 48px);
   }
+}
+
+/* ── Shell components (unit UI) ──────────────────────────────────────────
+   Offline banner (M-40). Plain flow content on purpose: nothing fixed or
+   sticky, so it can never cover a focused control (WCAG 2.4.11). */
+.offline-banner {
+  padding: var(--space-3) var(--space-4);
+  background: var(--tint-moderate-bg);
+  color: var(--tint-moderate-fg);
+  border-bottom: 1px solid var(--border-strong);
+  font-size: var(--font-size-sm);
+}
+
+.offline-banner__text {
+  max-width: var(--max-width);
+  margin: 0 auto;
+}
+
+/* On narrow screens the fixed menu button sits over the top-left corner, so the text starts clear of it (as .idle-ended). */
+@media (max-width: 768px) {
+  .offline-banner {
+    padding-left: calc(var(--space-4) + 48px);
+  }
+}
+
+/* Footer (UX-03) and the signed-out header (SRS 7.1.1). Plain flow content, nothing fixed, so neither can cover a
+   focused control. Links are underlined (SC 1.4.1) and at least 24px tall (SC 2.5.8). */
+.site-footer {
+  padding: var(--space-6) var(--space-4);
+  border-top: 1px solid var(--border);
+  background: var(--surface-card);
+  color: var(--text-body);
+  font-size: var(--font-size-sm);
+}
+
+.site-footer__credit {
+  max-width: var(--max-width);
+  margin: 0 auto var(--space-3);
+}
+
+.site-footer__nav,
+.public-header__nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-6);
+}
+
+.site-footer__nav {
+  max-width: var(--max-width);
+  margin: 0 auto;
+}
+
+.site-footer__nav a,
+.public-header a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  text-underline-offset: 0.15em;
+}
+
+.site-footer__nav a {
+  text-decoration: underline;
+}
+
+.public-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-6);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-card);
+}
+
+.public-header__name {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-bold);
+  text-decoration: none;
+}
+
+/* Idle-sign-out warning (UX-43): a native modal <dialog>, so the browser supplies the
+   inert page, focus containment and Esc. The two overscroll rules stop scrolling over the
+   backdrop from moving the page behind it. */
+.idle-warning {
+  /* The page's reset sets every margin to 0, which removes the `margin: auto` the browser gives a
+     modal dialog to centre it; without this line the dialog sits in the top-left corner. */
+  margin: auto;
+  max-width: min(32rem, calc(100vw - var(--space-8)));
+  padding: var(--space-6);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--border-radius-lg);
+  background: var(--surface-card);
+  color: var(--text-body);
+  box-shadow: var(--shadow-xl);
+}
+
+.idle-warning p {
+  margin: 0 0 var(--space-4);
+}
+
+/* The signed-out notice that replaces the dialog once a "Stay signed in" finds the session over.
+   Plain flow content at the top of the page, like the offline banner: nothing fixed or sticky, so
+   it can never cover a focused control, and nothing inert, so the page behind it can be read and
+   copied. On narrow screens the fixed menu button sits over the top-left corner, so the text
+   starts clear of it. */
+.idle-ended {
+  padding: var(--space-3) var(--space-4);
+  background: var(--tint-moderate-bg);
+  color: var(--tint-moderate-fg);
+  border-bottom: 1px solid var(--border-strong);
+  font-size: var(--font-size-sm);
+}
+
+.idle-ended__text {
+  max-width: var(--max-width);
+  margin: 0 auto;
+}
+
+.idle-ended a {
+  color: inherit;
+  font-weight: var(--font-weight-semibold);
+  text-decoration: underline;
+}
+
+@media (max-width: 768px) {
+  .idle-ended {
+    padding-left: calc(var(--space-4) + 48px);
+  }
+}
+
+.idle-warning p[role='alert'] {
+  color: var(--tint-critical-fg);
+  background: var(--tint-critical-bg);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--border-radius-sm);
+}
+
+dialog:modal {
+  overscroll-behavior: contain;
+}
+
+dialog::backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background: rgba(15, 19, 28, 0.6);
 }

@@ -53,24 +53,8 @@ services:
       # would still build every callback URL from a request header.
       # __tests__/lint/prod-env-completeness.test.ts enforces the pair.
       AUTH_TRUST_HOST: 'true'
-      # Self-service registration. PLAN.md D9 rules it invite-gated until T3,
-      # and lib/auth/openRegistration.ts opens only on the exact string 'true',
-      # so leaving this empty keeps it shut. Passed explicitly rather than
-      # omitted so that reopening at T3 is a .env edit, and so an operator
-      # reading this file can see the control exists -- the previous comment
-      # here asserted the gate while no gate existed (D-253).
-      ALLOW_OPEN_REGISTRATION: ${ALLOW_OPEN_REGISTRATION:-}
-      # How many organizations one account may own (D-107). Empty uses the
-      # code's default of 5, which is generous for a researcher affiliated with
-      # several institutions and useless for bulk slug squatting. Raising it for
-      # a genuine case is a .env edit, not a release.
-      ORG_LIMIT_PER_USER: ${ORG_LIMIT_PER_USER:-}
-      # Invitation email. This comment used to assert "Registration is
-      # invite-gated (D9)" as though it were implemented. It was not: until
-      # 2026-08-29 `app/api/auth/register/route.ts` accepted any well-formed
-      # POST from anyone on the internet, and the claim described a different
-      # route. It is now true, enforced by ALLOW_OPEN_REGISTRATION below --
-      # which is absent here on purpose, because absent means closed.
+      # Accounts are created only from an invitation (v0.6.0, FR-ACC-01): the
+      # open sign-up route and its switch are gone.
       #
       # Invitation email. Registration is invite-gated (PLAN.md D9), so without these
       # an invite still returns 201 with a working acceptUrl and logs
@@ -80,6 +64,20 @@ services:
       # email leg never costs the inviter the link that already exists.
       RESEND_API_KEY: ${RESEND_API_KEY}
       EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS}
+      # Evidence storage caps (NFR-REL-09): bytes of stored evidence files and issued documents per
+      # organisation, and bytes one account may upload in 24 hours within an organisation. Not secrets.
+      MAKRAI_ORG_STORAGE_CAP_BYTES: ${MAKRAI_ORG_STORAGE_CAP_BYTES:-1073741824}
+      MAKRAI_ACCOUNT_UPLOAD_BYTES_PER_DAY: ${MAKRAI_ACCOUNT_UPLOAD_BYTES_PER_DAY:-209715200}
+      # Where the sign-in alert goes (NFR-OBS-04, lib/auth/signInAlerts.ts): the
+      # owner's address, the same one the host's own alerts mail
+      # (ops/host/makrai-lib.sh). An address, not a secret. Unset, the alert is
+      # still logged, at error, as not mailed.
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      # The reminder job's trigger (FR-OPS-02, ADR-C5): route 40 runs the job only for a caller that sends this
+      # value as `Authorization: Bearer <value>`. A secret: exactly 64 lowercase hex characters, generated on the
+      # host with `openssl rand -hex 32` (13.8 step 4b), passed to this container only. Empty is allowed so the
+      # container swap of 13.8 step 7 can start before step 8 adds the value; empty, the route refuses every call.
+      REMINDER_JOB_TOKEN: ${REMINDER_JOB_TOKEN:-}
     # Asks the app itself, from inside the container on loopback, so nginx, Cloudflare and
     # the firewall are not part of the answer. /api/health is 200 only while the database
     # answers (app/api/health/route.ts); a 503, a refused connection and a timeout all
@@ -213,7 +211,6 @@ services:
       IDENTITY_DATABASE_URL: ${IDENTITY_DATABASE_URL}
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_NAME: ${ADMIN_NAME}
-      ADMIN_ORG_NAME: ${ADMIN_ORG_NAME}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
     depends_on:
       postgres:

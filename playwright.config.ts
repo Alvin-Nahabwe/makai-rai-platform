@@ -1,4 +1,28 @@
+import path from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
+import { e2eBaseURL, e2ePort } from './e2e/helpers/port';
+
+// Outside CI an unset E2E_PORT throws here, at config load, so a run can never
+// attach to a server that belongs to another builder (00-master.md E2). With
+// CI set it is 3000, as before.
+const port = e2ePort(process.env);
+const baseURL = e2eBaseURL(process.env);
+
+// E2E_BROWSER_CHANNEL=chrome runs the system Chrome, because Playwright's own
+// Chromium build is not in the local cache (00-master.md E2). Unset, as in CI,
+// no channel is added and every project uses Playwright's own build as before.
+// It sits in the top-level `use` once, so every project takes it from there,
+// `setup` included (it signs the fixture's users in through a browser), and no
+// project repeats it and drifts from the others.
+const channel = process.env.E2E_BROWSER_CHANNEL
+  ? { channel: process.env.E2E_BROWSER_CHANNEL }
+  : {};
+
+// The content bundle a live server serves: the fixture bundle, never data/content
+// (contract "Content bundle", Live servers, finding F11). lib/content/root.ts
+// accepts it only because MAKRAI_TEST_SEAMS is exactly 1 and the real path is
+// inside this directory.
+const FIXTURE_CONTENT_ROOT = path.join(process.cwd(), '__tests__', 'fixtures', 'content');
 
 export default defineConfig({
   testDir: './e2e',
@@ -16,17 +40,31 @@ export default defineConfig({
   // claim (`ci.yml`'s test-e2e job comment) true of the CI log itself.
   reporter: [['list'], ['html']],
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL,
     trace: 'on-first-retry',
+    ...channel,
   },
   webServer: {
     // CI serves the production build; local development keeps the dev server.
     // Playwright OWNS this process in both cases -- the CI job must never
     // start its own, or Playwright's own port check throws (verified at
     // node_modules/playwright/lib/runner/index.js:821-827).
-    command: process.env.CI ? 'npm run start' : 'npm run dev',
-    url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
+    //
+    // The server's output goes to test-results/server.log, which the server
+    // log checks read. Playwright's `stdout` option only takes 'pipe' or
+    // 'ignore' (node_modules/playwright/types/test.d.ts), so the redirect is
+    // done by the shell. Playwright deletes test-results/ before it starts the
+    // server, so the shell creates it first; `exec` replaces the shell with npm,
+    // so no idle `sh` stays between Playwright and the server. One `>`, not
+    // `>>`: the file holds this server's lines and no earlier run's, so a log
+    // scan cannot be failed or passed by a line from another run.
+    command: `sh -c 'mkdir -p test-results && exec npm run ${process.env.CI ? 'start' : 'dev'} -- -p ${port} > test-results/server.log 2>&1'`,
+    url: baseURL,
+    // Never attach to a server that is already listening. Playwright would
+    // otherwise skip `command` for any server answering on the URL, and the run
+    // would test that server's code and database, and write no server.log. A
+    // taken port now fails with "... is already used" (00-master.md E2).
+    reuseExistingServer: false,
     // D-188 (docs/DEFERRED_REGISTER.md). The invite POST this server handles
     // (e2e/two-orgs.spec.ts) used to make a LIVE call to Resend, whose
     // sandbox mode rejects the fixture's synthetic recipient -- 2 of 6
@@ -44,7 +82,12 @@ export default defineConfig({
     // when the key is `typeof undefined` in the environment it captured at
     // startup, so this empty string counts as already-defined and the real
     // key in `.env` never overwrites it.
-    env: { RESEND_API_KEY: '' },
+    //
+    // The two seam variables point the server at the fixture content bundle
+    // (G-17). They are set here, in the process Playwright starts, and nowhere
+    // that builds or deploys the image (__tests__/lint/test-seams.test.ts).
+    //
+    env: { RESEND_API_KEY: '', MAKRAI_TEST_SEAMS: '1', MAKRAI_CONTENT_ROOT: FIXTURE_CONTENT_ROOT },
   },
   /**
    * Task 10: `setup` builds the shared 20-user fixture and saves one
@@ -60,12 +103,27 @@ export default defineConfig({
    * `test.use({ storageState })`.
    */
   projects: [
-    { name: 'setup', testMatch: /auth\.setup\.ts/ },
+    // `content` publishes the two fixture framework_versions rows into the
+    // database the server uses, so a live save does not answer 503
+    // content_not_published (K-2). `setup` waits for it.
+    { name: 'content', testMatch: /content\.setup\.ts/ },
+    { name: 'setup', testMatch: /auth\.setup\.ts/, dependencies: ['content'] },
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
-      testIgnore: /auth\.setup\.ts/,
+      testIgnore: /(auth|content)\.setup\.ts|db-outage\.spec\.ts/,
       dependencies: ['setup'],
+    },
+    // The database outage test stops and starts the Postgres container (E2E_DB_CONTAINER), so no other project
+    // collects it and it must not overlap another: it waits for `chromium` as well as `setup`, because projects
+    // with no dependency between them run at the same time. CI runs it after the suite as its own step, where the
+    // fixture and the suite are already done: `npx playwright test --project=outage --no-deps`. Locally,
+    // `--project=outage` alone runs the browser project first; add --no-deps once the fixture is on disk.
+    {
+      name: 'outage',
+      use: { ...devices['Desktop Chrome'] },
+      testMatch: /db-outage\.spec\.ts/,
+      dependencies: ['setup', 'chromium'],
     },
   ],
 });

@@ -1,0 +1,155 @@
+import { readFileSync } from 'node:fs';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import FrameworkPage from '@/app/(authenticated)/explore/framework/page';
+import { questionsInStage, runningContent } from '@/lib/content/loader';
+import { principleSlugMap, stageLabels } from '@/data/constants';
+import { STAGES } from '@/types/record';
+import { HOSTILE_STRINGS } from '../helpers/hostile';
+import { claimMatches, isClaim } from '@/lib/claims/pattern';
+
+/**
+ * S-26, the framework reference page (FR-CNT-01, UX-36; contract Screens row S-26): a server component that lists
+ * every stage, module, risk area and control of the running content in its HTML, before any script runs. It runs on
+ * H0's fixture bundle (the running content of every vitest file).
+ */
+
+/** React's text escaping of `&`, `<`, `>`, `"` and `'`. */
+const escape = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
+const PAGE = 'app/(authenticated)/explore/framework/page.tsx';
+
+afterEach(() => {
+  vi.doUnmock('@/lib/content/loader');
+  vi.resetModules();
+});
+
+describe('S-26 framework page', () => {
+  // framework-page.test.tsx (fixture content)
+  const html = renderToStaticMarkup(<FrameworkPage />);
+
+  it('FR-CNT-01 UX-36: S-26 lists every stage, module, risk area and control in the server HTML', () => {
+    const c = runningContent();
+    for (const s of STAGES) expect(html).toContain(stageLabels[s].label);
+    for (const a of c.areas.values()) { expect(html).toContain(`id="area-card-${a.id}"`); expect(html).toContain(escape(a.name)); }
+    for (const k of c.controls.values()) expect(html).toContain(`href="/explore/controls#${k.id}"`);
+    expect(html).toContain('3 stages, 6 modules, 21 risk areas, 28 controls');
+  });
+
+  it('FR-CNT-01 FR-PUB-01 (7.5.1, 7.5.3): S-26\'s own copy says none of the never-said words, and has no emoji, curly quote or dash', async () => {
+    // The page's own words only: every content text (names, descriptions, contexts, principles, module titles, sources)
+    // is replaced by a neutral one, because the wording of the content is C-TXT's (its QC-03) and is reported, not
+    // tested, here. What remains is the page's headings, labels, counts and scope text.
+    vi.resetModules();
+    vi.doMock('@/lib/content/loader', async (orig) => {
+      const m = await orig<typeof import('@/lib/content/loader')>(); const c = m.runningContent();
+      const t = 'Content text';
+      const areas = new Map([...c.areas].map(([id, a]) => [id, { ...a, name: t, principle: t, description: t, context: t,
+        references: (a.references ?? []).map((r) => ({ ...r, citation: t, relevance: t })) }] as const));
+      const controls = new Map([...c.controls].map(([id, k]) => [id, { ...k, name: t }] as const));
+      const questions = new Map([...c.questions].map(([id, q]) => [id, { ...q, moduleTitle: t }] as const));
+      return { ...m, runningContent: () => ({ ...c, areas, controls, questions }) };
+    });
+    const { default: Page } = await import('@/app/(authenticated)/explore/framework/page');
+    const text = renderToStaticMarkup(<Page />).replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&amp;/g, '&');
+    expect(text).toContain('Content text');
+    // SRS 7.5.3 (line 2472): PUB's one pattern of the words that never appear (lib/claims/pattern.ts).
+    expect(claimMatches(text)).toEqual([]);
+    expect(isClaim(text)).toBe(false);
+    // 7.5.1: no emoji, no curly quotes, no em or en dashes.
+    expect(text).not.toMatch(/\p{Extended_Pictographic}|[‘’“”–—]/u);
+  });
+
+  it('FR-CNT-01 NFR-SEC-11: S-26 escapes hostile content text', async () => {
+    vi.resetModules();
+    vi.doMock('@/lib/content/loader', async (orig) => {
+      const m = await orig<typeof import('@/lib/content/loader')>(); const c = m.runningContent();
+      const [first, ...rest] = [...c.areas.values()];
+      return { ...m, runningContent: () => ({ ...c, areas: new Map([[first.id, { ...first, name: HOSTILE_STRINGS[0], context: HOSTILE_STRINGS[1] }], ...rest.map((a) => [a.id, a] as const)]) }) };
+    });
+    const { default: Page } = await import('@/app/(authenticated)/explore/framework/page');
+    const out = renderToStaticMarkup(<Page />);
+    expect(out).not.toContain('<script>'); expect(out).not.toContain('<img'); expect(out).toContain('&lt;script&gt;');
+  });
+
+  it('FR-CNT-01 (R-62): each module is listed under its stage with its number of questions, read from the content', () => {
+    const c = runningContent();
+    for (const s of STAGES) {
+      const section = html.slice(html.indexOf(`id="stage-${s}"`), STAGES.indexOf(s) < 2 ? html.indexOf(`id="stage-${STAGES[STAGES.indexOf(s) + 1]}"`) : undefined);
+      const byModule = new Map<string, { title: string; n: number }>();
+      for (const q of questionsInStage(c, s)) byModule.set(q.moduleId, { title: q.moduleTitle, n: (byModule.get(q.moduleId)?.n ?? 0) + 1 });
+      expect(byModule.size).toBeGreaterThan(0);
+      for (const { title, n } of byModule.values()) expect(section, `${s} ${title}`).toContain(`${escape(title)}, ${n} questions`);
+      for (const a of c.areas.values()) if (a.stage === s) expect(section).toContain(`id="area-card-${a.id}"`);
+    }
+  });
+
+  it('FR-CNT-01 NFR-A11Y-02: one h1 "Framework", an h2 per stage, and every area card names its principle as text with its controls as links', () => {
+    expect(html.match(/<h1\b/g)).toHaveLength(1);
+    expect(html).toMatch(/<h1[^>]*>Framework<\/h1>/);
+    for (const s of STAGES) expect(html).toMatch(new RegExp(`<h2[^>]*id="stage-${s}"[^>]*>${stageLabels[s].label}</h2>`));
+    const c = runningContent();
+    const area = [...c.areas.values()][0];
+    const card = html.slice(html.indexOf(`id="area-card-${area.id}"`));
+    expect(card).toContain(`Principle: ${escape(area.principle)}`);
+    for (const id of area.controls ?? []) expect(card).toContain(`href="/explore/controls#${id}">${escape(c.controls.get(id)!.name)}</a>`);
+  });
+
+  it('UX-03 FR-PUB-02 FR-CNT-01: every area card links its principle to its section of the About page', () => {
+    const c = runningContent();
+    for (const a of c.areas.values()) {
+      const slug = principleSlugMap[a.principle];
+      expect(slug, `${a.id} ${a.principle} has a section of /about`).toBeDefined();
+      const card = html.slice(html.indexOf(`id="area-card-${a.id}"`));
+      expect(card).toMatch(new RegExp(`^[^]*?<a [^>]*href="/about#principle-${slug}"[^>]*>Principle: ${escape(a.principle).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}</a>`));
+    }
+  });
+
+  it('UX-36 FR-CNT-01: every research source of every area is in the server HTML, in a native disclosure', () => {
+    const c = runningContent();
+    for (const a of c.areas.values()) {
+      const card = html.slice(html.indexOf(`id="area-card-${a.id}"`), html.indexOf('</li>', html.indexOf('references-list__items', html.indexOf(`id="area-card-${a.id}"`))));
+      for (const r of a.references ?? []) expect(html, `${a.id} ${r.citation}`).toContain(escape(r.citation));
+      if ((a.references ?? []).length > 0) expect(card).toMatch(new RegExp(`<details class="references-list"><summary class="references-list__toggle">Research sources \\(${a.references!.length}\\)</summary>`));
+    }
+  });
+
+  it('NFR-A11Y-05 FR-CNT-01 (7.5.1): the shared references list is a server component with theme colours and no emoji', () => {
+    const tsx = readFileSync('components/report/ReferencesList.tsx', 'utf8');
+    const css = readFileSync('components/report/ReferencesList.css', 'utf8');
+    expect(tsx).not.toMatch(/['"]use client['"]|useState|\p{Extended_Pictographic}/u);
+    // Every colour is a theme token of app/globals.css, which both themes redefine: no fixed brand, grey or hex colour.
+    expect(css).not.toMatch(/--color-primary|--color-gray-|rgba\(|#[0-9A-Fa-f]{3,8}\b/);
+    expect(readFileSync('app/(authenticated)/explore/framework/FrameworkMapPage.css', 'utf8')).not.toMatch(/references-list/);
+  });
+
+  it('FR-CNT-01 (owner, "make it subtler"): no S-26 rule draws a thick one-side accent border; the marker triangle is the one exception', () => {
+    const rules = (file: string) => [...readFileSync(file, 'utf8').replace(/\/\*[^]*?\*\//g, '').matchAll(/([^{}]+)\{([^}]*)\}/g)].map((m) => ({ file, selector: m[1].trim(), body: m[2] }));
+    const all = [...rules('components/report/ReferencesList.css'), ...rules('app/(authenticated)/explore/framework/FrameworkMapPage.css')];
+    const oneSide = /border-(left|right|top|bottom|inline-start|inline-end|block-start|block-end)(-width)?\s*:\s*([^;]*)/g;
+    const thick = all.flatMap((r) => [...r.body.matchAll(oneSide)]
+      .filter((m) => /\b([2-9]|\d{2,})(\.\d+)?px\b|\b(medium|thick)\b/.test(m[3]))
+      .map((m) => `${r.file} ${r.selector}: ${m[0].trim()}`))
+      // The open/closed marker is a triangle drawn from borders (review r1 M-5), not an accent; the stage heading's rule
+      // underlines a heading across the full width.
+      .filter((x) => !/\.references-list__toggle::before: border-inline-start/.test(x) && !/\.framework-stage__title: border-bottom/.test(x));
+    expect(thick).toEqual([]);
+  });
+
+  it('FR-CNT-01 (review r1 M-5): the sources summary draws an open/closed marker, with no emoji or glyph', () => {
+    const css = readFileSync('components/report/ReferencesList.css', 'utf8');
+    // The inline-flex summary loses the native disclosure triangle in Chromium, so the list draws its own from borders.
+    const closed = /\.references-list__toggle::before\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(closed, 'a ::before marker on the summary').toMatch(/content:\s*'';/);
+    expect(closed).toMatch(/border-inline-start:[^;]*currentColor/);
+    expect(css).toMatch(/\.references-list\[open\]\s*>\s*\.references-list__toggle::before\s*\{[^}]*transform:\s*rotate\(90deg\)/);
+    expect(css).toMatch(/prefers-reduced-motion:\s*reduce/);
+  });
+
+  it('UX-36 FR-CNT-01: S-26 is a server component that reads content only through the loader', () => {
+    const src = readFileSync(PAGE, 'utf8');
+    expect(src).not.toMatch(/['"]use client['"]|dangerouslySetInnerHTML|useState|useEffect/);
+    expect(src).toMatch(/import \{[^}]*\brunningContent\b[^}]*\} from '@\/lib\/content\/loader'/);
+    expect(src).not.toMatch(/data\/assessmentAreas\.json|data\/questionBank\.json|data\/content/);
+    expect(html).not.toMatch(/<button[^>]*lifecycle-node/);   // no stage buttons: nothing waits for a click
+  });
+});

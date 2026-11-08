@@ -45,4 +45,17 @@ export async function register(): Promise<void> {
     console.error('Refusing to start: the database role check failed.', e);
     process.exit(1);
   }
+
+  // FR-ACC-02, SRS 6.7: every page and route behind the acceptance gate needs the current text
+  // of each kind, so a registry that cannot load (a malformed or missing file) stops the start
+  // here, by exiting as above, rather than serving a gate built on a text nobody can show. The
+  // import is inside the try for the same reason as the role check's. No words of any text are
+  // read here.
+  try {
+    const { LEGAL_KINDS, currentLegalText } = await import('./lib/legal/registry');
+    for (const kind of LEGAL_KINDS) currentLegalText(kind);
+  } catch (e) {
+    console.error('Refusing to start: the legal texts could not be loaded.', e);
+    process.exit(1);
+  }
 }

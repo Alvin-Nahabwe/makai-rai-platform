@@ -1,98 +1,30 @@
-'use client';
+import type { ReactElement } from 'react';
+import type { Stage } from '@/types/record';
+import { STAGES } from '@/types/record';
+import { ListLink } from '@/components/ui/ListLink';
+import { STAGE_NAME, plural } from '@/components/project/StageColumn';
 
-import Link from 'next/link';
-import ScoreGauge from './ScoreGauge';
-
-interface Assessment {
-  id: string;
-  status: string;
-  overallScore: number | null;
-  completedAt: Date | string | null;
-}
-
-interface ProjectMetadata {
-  aiSystemType: string | null;
-  aiSystemTypeOther: string | null;
-}
-
-interface ProjectCardProps {
-  project: {
-    id: string;
-    name: string;
-    description?: string | null;
-    metadata: ProjectMetadata | null;
-    assessments: Assessment[];
-  };
+type StageCountsLine = Record<Stage, { openFindings: number; overdueMitigations: number }>;
+export interface ProjectCardProps {
   orgSlug: string;
+  project: { id: string; name: string; descriptiveLine: string };
+  counts: StageCountsLine;
 }
 
-function getSystemTypeLabel(metadata: ProjectMetadata | null): string | null {
-  if (!metadata?.aiSystemType) return null;
-  if (metadata.aiSystemType === 'other') return metadata.aiSystemTypeOther || 'Other';
-  return metadata.aiSystemType
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-}
 
-export default function ProjectCard({ project, orgSlug }: ProjectCardProps) {
-  const completedAssessments = project.assessments.filter(
-    (a) => a.status === 'completed' && a.overallScore !== null
-  );
-
-  const latestCompleted = completedAssessments.length > 0
-    ? completedAssessments.reduce((latest, a) => {
-        const aDate = a.completedAt ? new Date(a.completedAt).getTime() : 0;
-        const lDate = latest.completedAt ? new Date(latest.completedAt).getTime() : 0;
-        return aDate > lDate ? a : latest;
-      })
-    : null;
-
-  const systemType = getSystemTypeLabel(project.metadata);
-
+/** One active project on S-08 (FR-PRJ-04): its name, the descriptive line and, per stage, the open findings and overdue mitigations. No score (FR-RM-01). */
+export function ProjectCard({ orgSlug, project, counts }: ProjectCardProps): ReactElement {
   return (
-    <Link href={`/orgs/${orgSlug}/projects/${project.id}`} className="card project-card">
-      <div className="project-card__header">
-        <div>
-          <h3 className="project-card__name">{project.name}</h3>
-          {project.description && (
-            <p className="project-card__desc">{project.description}</p>
-          )}
-        </div>
-        {latestCompleted && (
-          <ScoreGauge score={latestCompleted.overallScore!} size={64} />
-        )}
-      </div>
-
-      <div className="project-card__meta">
-        {systemType && <span className="badge badge--system-type">{systemType}</span>}
-      </div>
-
-      <div className="project-card__stats">
-        <div className="project-card__stat">
-          <span className="project-card__stat-value">{project.assessments.length}</span>
-          <span className="project-card__stat-label">
-            {project.assessments.length === 1 ? 'Assessment' : 'Assessments'}
-          </span>
-        </div>
-        <div className="project-card__stat">
-          <span className="project-card__stat-value">{completedAssessments.length}</span>
-          <span className="project-card__stat-label">Completed</span>
-        </div>
-        {latestCompleted && (
-          <div className="project-card__stat">
-            <span className="project-card__stat-value">{latestCompleted.overallScore}</span>
-            {/* Final whole-branch review, F4: was "Latest Score" --
-                `overallScore` holds only the assessed-maturity reading
-                post-split; "Score" reads as a combined figure that no
-                longer exists. */}
-            <span className="project-card__stat-label">Latest Maturity</span>
-          </div>
-        )}
-      </div>
-
-      <div className="project-card__footer">
-        <span className="project-card__link-text">View Project →</span>
-      </div>
-    </Link>
+    <article className="card project-card">
+      <h3 className="project-card__name"><ListLink href={`/orgs/${orgSlug}/projects/${project.id}`}>{project.name}</ListLink></h3>
+      {project.descriptiveLine !== '' ? <p className="project-card__desc">{project.descriptiveLine}</p> : null}
+      <ul>
+        {STAGES.map((s) => (
+          <li key={s}>{`${STAGE_NAME[s]}: ${plural(counts[s].openFindings, 'open finding', 'open findings')}, ${plural(counts[s].overdueMitigations, 'overdue mitigation', 'overdue mitigations')}`}</li>
+        ))}
+      </ul>
+    </article>
   );
 }
+
+export default ProjectCard;

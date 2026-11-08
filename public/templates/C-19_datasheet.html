@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>C-19: Datasheet for Dataset — MAK-AI RAI Toolkit</title>
+  <title>C-19: Datasheet for Dataset (MAK-AI RAI Toolkit)</title>
   <style>
-    :root { --copper: #C06014; --navy: #1B2A4A; --warm-bg: #FFF8F0; --border: #E5D5C5; }
+    :root { --copper: #A05010; --navy: #1B2A4A; --warm-bg: #FFF8F0; --border: #E5D5C5; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; background: var(--warm-bg); color: #333; line-height: 1.6; padding: 2rem; max-width: 900px; margin: 0 auto; }
     h1 { font-family: 'DM Serif Display', Georgia, serif; color: var(--navy); font-size: 1.8rem; margin-bottom: 0.25rem; }
@@ -14,127 +14,149 @@
     .grounding strong { color: #4A5FBD; }
     .section { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }
     .section h2 { font-size: 1.1rem; color: var(--navy); margin-bottom: 0.25rem; border-bottom: 2px solid var(--copper); padding-bottom: 0.4rem; }
-    .section .guidance { font-size: 0.8rem; color: #888; font-style: italic; margin-bottom: 1rem; }
+    .section .guidance { font-size: 0.8rem; color: #666; font-style: italic; margin-bottom: 1rem; }
     label { display: block; font-weight: 600; font-size: 0.85rem; color: var(--navy); margin: 0.75rem 0 0.25rem; }
-    textarea, input[type="text"], input[type="date"], select { width: 100%; padding: 0.6rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; font-family: inherit; background: #FEFCFA; }
-    textarea:focus, input:focus, select:focus { outline: none; border-color: var(--copper); box-shadow: 0 0 0 2px rgba(192,96,20,0.1); }
-    textarea { min-height: 70px; resize: vertical; }
+    textarea, input[type="text"], input[type="date"], select { width: 100%; padding: 0.6rem; border: 1px solid var(--border); border-radius: 6px; font-size: 1rem; font-family: inherit; background: #FEFCFA; }
+    textarea:focus-visible, input:focus-visible, select:focus-visible, .table-scroll:focus-visible { outline: 3px solid var(--copper); outline-offset: 2px; }
+    textarea:focus, input:focus, select:focus { border-color: var(--copper); }
+    textarea { min-height: 70px; resize: vertical; field-sizing: content; min-inline-size: 6rem; max-inline-size: 100%; }
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-    .btn-row { display: flex; gap: 0.75rem; margin-top: 1.5rem; justify-content: flex-end; }
-    .btn { padding: 0.6rem 1.5rem; border: none; border-radius: 6px; font-weight: 600; font-size: 0.85rem; cursor: pointer; }
-    .btn-secondary { background: white; color: var(--navy); border: 1.5px solid var(--navy); }
-    .btn-secondary:hover { background: var(--navy); color: white; }
     .lmic-note { background: #FFF9E6; border-left: 3px solid #D4A520; padding: 0.6rem 1rem; font-size: 0.78rem; color: #6B5900; margin-top: 0.5rem; border-radius: 0 6px 6px 0; }
-    @media print { body { padding: 0; background: white; } .btn-row { display: none; } .section { break-inside: avoid; } }
+    ::placeholder { color: #666; opacity: 1; }
+    .notice { background: #F0F4FF; border-left: 3px solid #4A5FBD; padding: 0.6rem 1rem; font-size: 0.85rem; color: #333; margin: 0.5rem 0 1rem; border-radius: 0 6px 6px 0; }
+    .print-note { font-size: 0.85rem; color: #555; margin-top: 1.5rem; }
+    .credit { font-size: 0.85rem; color: #555; margin-top: 1rem; }
+    .table-scroll { overflow-x: auto; }
+    .table-scroll table { min-width: 40rem; }
+    @media (max-width: 40rem) { body { padding: 1rem; } .row, .row-3, .impact-grid { grid-template-columns: 1fr; } }
+    @media print { body { padding: 0; background: white; } .print-note { display: none; } .table-scroll { overflow: visible; } .section { break-inside: avoid; } }
   </style>
 </head>
 <body>
   <h1>C-19: Datasheet for Dataset</h1>
-  <p class="subtitle">Procedural Control — MAK-AI Responsible AI Toolkit</p>
+  <p class="subtitle">Procedural Control in the MAK-AI Responsible AI Toolkit</p>
 
   <div class="grounding">
-    <strong>Grounding:</strong> Adapted from <a href="https://arxiv.org/abs/1803.09010" target="_blank">Gebru et al. (2021) — Datasheets for Datasets</a> and the <a href="https://huggingface.co/docs/hub/datasets-cards" target="_blank">Hugging Face Dataset Card specification</a>. Extended with representativeness and consent prompts relevant to LMIC data collection contexts.
+    <strong>Grounding:</strong> Adapted from "Datasheets for Datasets" by <a href="https://arxiv.org/abs/1803.09010" target="_blank" rel="noopener noreferrer">Gebru et al. (2021); first circulated 2018</a>. Also draws on the <a href="https://huggingface.co/docs/hub/datasets-cards" target="_blank" rel="noopener noreferrer">Hugging Face Dataset Card specification</a>. Extended with prompts on representativeness, consent, data ownership and where data is stored, for data collection in African research settings. The MAK-AI platform's generated data card fills many of these fields from the decisions your team records there. Use this template to draft those answers, or use it on its own if your team does not use the platform.
   </div>
 
   <div class="section">
     <h2>1. Motivation</h2>
-    <label>Purpose — why was this dataset created?</label>
-    <textarea placeholder="What specific task or research question motivated the creation of this dataset?"></textarea>
+    <label for="purpose">Purpose: why was this dataset created?</label>
+    <textarea id="purpose" placeholder="What specific task or research question motivated the creation of this dataset?"></textarea>
     <div class="row">
-      <div><label>Creators</label><input type="text" placeholder="Who created it? On behalf of which organization?"></div>
-      <div><label>Funding source</label><input type="text" placeholder="Who funded the data collection?"></div>
+      <div><label for="creators">Creators</label><input type="text" id="creators" placeholder="Who created it? On behalf of which organisation?"></div>
+      <div><label for="funding">Funding source</label><input type="text" id="funding" placeholder="Who funded the data collection?"></div>
     </div>
   </div>
 
   <div class="section">
     <h2>2. Composition</h2>
-    <label>What do the instances represent?</label>
-    <textarea placeholder="e.g., patients, clinical encounters, satellite images, text documents..."></textarea>
+    <label for="instances">What do the instances represent?</label>
+    <textarea id="instances" placeholder="e.g., patients, clinical encounters, satellite images, text documents..."></textarea>
     <div class="row">
-      <div><label>Total instance count</label><input type="text" placeholder="e.g., 12,450 records"></div>
-      <div><label>Data types included</label><input type="text" placeholder="e.g., tabular, images, text, time series"></div>
+      <div><label for="instance-count">Total instance count</label><input type="text" id="instance-count" placeholder="e.g., 12,450 records"></div>
+      <div><label for="data-types">Data types included</label><input type="text" id="data-types" placeholder="e.g., tabular, images, text, time series"></div>
     </div>
-    <label>Is this a sample or complete collection? How was sampling done?</label>
-    <textarea placeholder="Describe sampling strategy, inclusion/exclusion criteria..."></textarea>
-    <label>Target variable / labels</label>
-    <textarea placeholder="What is being predicted or classified? How were labels defined and assigned?"></textarea>
-    <label>Missing data — extent and patterns</label>
-    <textarea placeholder="What percentage of data is missing? Are there systematic patterns in missingness?"></textarea>
-    <label>Predefined splits (train/validation/test)</label>
-    <textarea placeholder="How are splits defined? What is the split ratio? Is stratification applied?"></textarea>
+    <label for="sampling">Is this a sample or complete collection? How was sampling done?</label>
+    <textarea id="sampling" placeholder="Describe sampling strategy, inclusion and exclusion criteria..."></textarea>
+    <label for="target">Target variable / labels</label>
+    <textarea id="target" placeholder="What is being predicted or classified? How were labels defined and assigned?"></textarea>
+    <label for="missing">Missing data: extent and patterns</label>
+    <textarea id="missing" placeholder="What percentage of data is missing? Are there systematic patterns in missingness?"></textarea>
+    <label for="splits">Predefined splits (train/validation/test)</label>
+    <textarea id="splits" placeholder="How are splits defined? What is the split ratio? Is stratification applied?"></textarea>
+    <label for="relationships">Relationships between instances</label>
+    <textarea id="relationships" placeholder="Are some instances linked, for example several visits by the same patient?"></textarea>
+    <label for="errors">Known errors</label>
+    <textarea id="errors" placeholder="Are there known errors, noise or duplicate records?"></textarea>
     <div class="lmic-note">
-      🌍 <strong>Global South consideration:</strong> Document whether the dataset reflects the populations where the model will be deployed. Data collected in one LMIC context may not generalize to another. Note any geographic, linguistic, or socioeconomic biases in sampling.
+      <strong>Local context:</strong> Document whether the dataset reflects the populations where the model will be deployed. Data collected in one setting may not generalise to another. Note any geographic, linguistic or socioeconomic biases in sampling.
     </div>
   </div>
 
   <div class="section">
-    <h2>3. Collection Process</h2>
-    <label>How was the data collected?</label>
-    <textarea placeholder="Collection mechanisms: surveys, sensors, medical records, APIs, web scraping, crowd-sourcing..."></textarea>
-    <label>Who collected the data?</label>
-    <textarea placeholder="Describe collectors' qualifications, training, and potential biases..."></textarea>
+    <h2>3. Collection process</h2>
+    <label for="collection">How was the data collected?</label>
+    <textarea id="collection" placeholder="Collection mechanisms: surveys, sensors, medical records, APIs, web scraping, crowd-sourcing..."></textarea>
+    <label for="collectors">Who collected the data?</label>
+    <textarea id="collectors" placeholder="Describe collectors' qualifications, training, and potential biases..."></textarea>
     <div class="row">
-      <div><label>Time period</label><input type="text" placeholder="e.g., Jan 2023 — Dec 2024"></div>
-      <div><label>Geographic coverage</label><input type="text" placeholder="e.g., Central Uganda, 5 districts"></div>
+      <div><label for="time-period">Time period</label><input type="text" id="time-period" placeholder="e.g., Jan 2023 to Dec 2024"></div>
+      <div><label for="geography">Geographic coverage</label><input type="text" id="geography" placeholder="e.g., Central Uganda, 5 districts"></div>
     </div>
-    <label>Ethics review — was this approved by an ethics committee or IRB?</label>
-    <textarea placeholder="Reference number, committee name, approval date. If not applicable, explain why."></textarea>
-    <label>Informed consent — was consent obtained? How?</label>
-    <textarea placeholder="Describe consent process. Reference C-11 Informed Consent Framework if applicable."></textarea>
+    <div class="row">
+      <div><label for="ethics-status">Ethics review status</label>
+        <select id="ethics-status"><option value="">Select</option><option value="approved">Approved</option><option value="submitted">Submitted, awaiting decision</option><option value="not-required">Not required</option></select>
+      </div>
+      <div><label for="ethics-details">Ethics committee and reference number</label><input type="text" id="ethics-details" placeholder="Committee name, reference number and date. If not required, say why and who decided."></div>
+    </div>
+    <label for="consent">Informed consent: was consent obtained? How?</label>
+    <textarea id="consent" placeholder="Describe the consent process. See C-11 Informed Consent Framework if it applies."></textarea>
+    <label for="sensitive">Personal or sensitive data, and de-identification</label>
+    <textarea id="sensitive" placeholder="Does the data include personal or sensitive information? How were people made unidentifiable, for example by removing names and exact locations?"></textarea>
+    <label for="notification">Notification of data subjects</label>
+    <textarea id="notification" placeholder="Were the people in the data told that it was being collected? How?"></textarea>
   </div>
 
   <div class="section">
-    <h2>4. Preprocessing & Labeling</h2>
-    <label>What preprocessing or cleaning was applied?</label>
-    <textarea placeholder="Normalization, deduplication, outlier removal, imputation methods used..."></textarea>
-    <label>Is the raw (unprocessed) data available?</label>
-    <textarea placeholder="Where? Under what access conditions?"></textarea>
-    <label>How were labels assigned? By whom?</label>
-    <textarea placeholder="Manual annotation, automated labeling, clinical diagnosis? How many annotators? What guidelines?"></textarea>
-    <label>What quality checks were applied to labels?</label>
-    <textarea placeholder="Inter-rater reliability scores, adjudication process, reference to C-12 Labeling QA..."></textarea>
+    <h2>4. Preprocessing and labelling</h2>
+    <label for="preprocessing">What preprocessing or cleaning was applied?</label>
+    <textarea id="preprocessing" placeholder="Normalisation, deduplication, outlier removal, imputation methods used..."></textarea>
+    <label for="raw-data">Is the raw (unprocessed) data available?</label>
+    <textarea id="raw-data" placeholder="Where? Under what access conditions?"></textarea>
+    <label for="labelling">How were labels assigned? By whom?</label>
+    <textarea id="labelling" placeholder="Manual annotation, automated labelling, clinical diagnosis? How many annotators? What guidelines?"></textarea>
+    <label for="label-quality">What quality checks were applied to labels?</label>
+    <textarea id="label-quality" placeholder="Agreement between annotators and how disagreements were settled. See the labelling-agreement part of the C-04 notebook and the resources for C-12."></textarea>
   </div>
 
   <div class="section">
-    <h2>5. Uses & Restrictions</h2>
-    <label>Intended uses — what is this dataset meant for?</label>
-    <textarea placeholder="Specific tasks, research questions, application domains..."></textarea>
-    <label>Inappropriate uses — what should this dataset NOT be used for?</label>
-    <textarea placeholder="Describe misuse scenarios, populations where the data should not be applied, etc."></textarea>
-    <label>Could the dataset composition negatively impact future uses?</label>
-    <textarea placeholder="Consider: underrepresentation leading to biased models, outdated data, sensitive content..."></textarea>
+    <h2>5. Uses and restrictions</h2>
+    <label for="intended-uses">Intended uses</label>
+    <textarea id="intended-uses" placeholder="Specific tasks, research questions, application domains..."></textarea>
+    <label for="inappropriate-uses">Inappropriate uses</label>
+    <textarea id="inappropriate-uses" placeholder="Describe misuse scenarios, populations where the data should not be applied, etc."></textarea>
+    <label for="future-impact">Could the dataset composition negatively affect future uses? Which bias checks were run, and what were the results?</label>
+    <textarea id="future-impact" placeholder="Consider: underrepresentation leading to biased models, outdated data, sensitive content. Type the results of any bias checks here..."></textarea>
   </div>
 
   <div class="section">
-    <h2>6. Distribution & Maintenance</h2>
+    <h2>6. Distribution and maintenance</h2>
     <div class="row">
-      <div><label>Distribution method</label><input type="text" placeholder="API, download, on request"></div>
-      <div><label>License</label><input type="text" placeholder="e.g., CC-BY-4.0, restricted"></div>
+      <div><label for="distribution">Distribution method</label><input type="text" id="distribution" placeholder="API, download, on request"></div>
+      <div><label for="licence">Licence</label><input type="text" id="licence" placeholder="e.g., CC-BY-4.0, restricted"></div>
     </div>
-    <label>Access controls and geographic restrictions</label>
-    <textarea placeholder="Who can access it? Are there data sovereignty or export restrictions?"></textarea>
+    <label for="access">Access controls and geographic restrictions</label>
+    <textarea id="access" placeholder="Who can access it? Are there data sovereignty or export restrictions?"></textarea>
+    <label for="storage">Where the data is stored</label>
+    <textarea id="storage" placeholder="Which country, and which server or service? Some national research rules ask for research data to stay in the country (for example, Uganda's 2025 national guidelines ask for an in-country server)."></textarea>
     <div class="row">
-      <div><label>Maintainer</label><input type="text" placeholder="Name and contact"></div>
-      <div><label>Update frequency</label><input type="text" placeholder="e.g., quarterly, annually, one-time"></div>
+      <div><label for="maintainer">Maintainer</label><input type="text" id="maintainer" placeholder="Name and role"></div>
+      <div><label for="contact">Contact</label><input type="text" id="contact" placeholder="How can the maintainer be reached?"></div>
     </div>
-    <label>Retention policy and versioning</label>
-    <textarea placeholder="How long retained? How are versions tracked? Are older versions available?"></textarea>
+    <label for="update-frequency">Update frequency</label>
+    <input type="text" id="update-frequency" placeholder="e.g., quarterly, annually, one-time">
+    <label for="retention">Retention policy and versioning</label>
+    <textarea id="retention" placeholder="How long is the data retained? How are versions tracked? Are older versions available?"></textarea>
+    <label for="ownership">Data ownership and benefit-sharing</label>
+    <textarea id="ownership" placeholder="Who owns the data? Which institution, community or participants hold rights over it, and what do they gain from its use?"></textarea>
   </div>
 
   <div class="section">
-    <h2>7. Review & Sign-off</h2>
+    <h2>7. Team sign-off</h2>
+    <p class="notice">This is your team's own record. It is not an approval by MAK-AI or anyone else, and it is not legal advice.</p>
     <div class="row">
-      <div><label>Completed by</label><input type="text" placeholder="Name and role"></div>
-      <div><label>Date</label><input type="date"></div>
+      <div><label for="author">Completed by</label><input type="text" id="author" placeholder="Name and role"></div>
+      <div><label for="date">Date</label><input type="date" id="date"></div>
     </div>
     <div class="row">
-      <div><label>Reviewed by</label><input type="text" placeholder="Name and role"></div>
-      <div><label>Next review date</label><input type="date"></div>
+      <div><label for="reviewer">Reviewed by</label><input type="text" id="reviewer" placeholder="Name and role"></div>
+      <div><label for="next-review">Next review date</label><input type="date" id="next-review"></div>
     </div>
   </div>
 
-  <div class="btn-row">
-    <button class="btn btn-secondary" onclick="window.print()">Print / Save PDF</button>
-  </div>
+  <p class="print-note">To print this page or save it as a PDF, use your browser's print command.</p>
+  <p class="credit">This platform draws on Responsible AI Assessments, Parts A to C, by GIZ (FAIR Forward), licensed under CC BY-SA 4.0. Changes were made. <a href="https://creativecommons.org/licenses/by-sa/4.0/">Licence terms</a></p>
 </body>
 </html>

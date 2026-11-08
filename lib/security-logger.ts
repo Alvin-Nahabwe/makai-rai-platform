@@ -30,7 +30,26 @@ export type SecurityEvent =
   | 'EVIDENCE_DELETED'
   | 'EVIDENCE_INTEGRITY_FAILURE'
   | 'ACCOUNT_DEACTIVATED'
-  | 'ORG_MEMBER_ACTION';
+  | 'ORG_MEMBER_ACTION'
+  // v0.6.0 (contract, "Security event names"). Ids and counts only: NFR-OBS-01, NFR-PRIV-03.
+  | 'DECISION_SAVED'
+  | 'DECISION_WITHDRAWN'
+  | 'FINDING_RAISED'
+  | 'FINDING_CLOSED'
+  | 'RISK_ACCEPTED'
+  | 'SEAL_CREATED'
+  | 'SEAL_CHECK_FAILED'
+  | 'DOCUMENT_ISSUED'
+  | 'DOCUMENT_WITHDRAWN'
+  | 'DOCUMENT_INTEGRITY_FAILURE'
+  | 'DOCUMENT_ISSUE_BUSY'
+  | 'EXPORT_MADE'
+  | 'ACCOUNT_DELETED'
+  | 'REMINDER_RUN'
+  | 'REMINDER_TOKEN_UNSET_OR_MALFORMED'
+  | 'PASSWORD_RESET_REQUESTED'
+  | 'PASSWORD_RESET_COMPLETED'
+  | 'SIGN_IN_ALERT';
 
 export type SecuritySeverity = 'info' | 'warn' | 'error' | 'critical';
 

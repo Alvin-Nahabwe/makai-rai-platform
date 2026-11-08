@@ -1,8 +1,10 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
+import { randomUUID } from 'node:crypto';
 import { hash } from 'bcryptjs';
-import { resetDb } from '../helpers/db';
-import { bootstrapOrgWithOwner } from '../../lib/data/preauth';
+import { resetDb, testDb } from '../helpers/db';
+import { stubAcceptanceRows } from '../helpers/legalStub';
+import { buildOrg } from '../helpers/recordFixture';
 import { identityDb } from '../../lib/data/identity';
 import { resolveIdentity } from '../../lib/auth/identity';
 
@@ -30,19 +32,19 @@ vi.mock('../../lib/auth', () => ({
   auth: () => Promise.resolve(currentSession),
 }));
 
+// Route 35 sends E-02 in `after()` (FR-ACC-09), which throws outside a Next request scope; here it runs nothing.
+// The notice itself is __tests__/integration/password-change.test.ts's.
+vi.mock('next/server', async (orig) => ({ ...(await orig<typeof import('next/server')>()), after: () => {} }));
+
 function sessionFor(userId: string, sessionEpoch: number): void {
   currentSession = { user: { id: userId }, sessionEpoch, sessionIssuedAt: Math.floor(Date.now() / 1000) };
 }
 
+/** An organisation's owner (K0a's buildOrg, with the three acceptances) under this email and password. */
 async function makeUser(email: string, plaintextPassword: string): Promise<string> {
   const passwordHash = await hash(plaintextPassword, 12);
-  const { userId } = await bootstrapOrgWithOwner({
-    email,
-    name: 'Test User',
-    passwordHash,
-    orgName: `Org for ${email}`,
-    ipAddress: '127.0.0.1',
-  });
+  const userId = (await buildOrg()).members.owner.userId;
+  await testDb.user.update({ where: { id: userId }, data: { email, name: 'Test User', passwordHash } });
   return userId;
 }
 
@@ -138,14 +140,18 @@ describe('requireIdentityForApi 403s a mustChangePassword-flagged caller on ever
 
 describe('administrative deactivation revokes sessions by bumping sessionEpoch (Finding 2)', () => {
   it('bumps the target sessionEpoch in the same statement as isActive — driven through the real route', async () => {
-    const adminId = await makeUser('admin-deactivator@uni.ac.ug', 'AdminPassw0rd!');
-    await identityDb.user.update({ where: { id: adminId }, data: { role: 'admin' } });
+    // The administrator holds no organisation: v0.6.0 refuses a platform administrator who holds a membership (NFR-SEC-04 (d)).
+    const { id: adminId } = await testDb.user.create({
+      data: { email: 'admin-deactivator@uni.ac.ug', name: 'Admin', passwordHash: await hash('AdminPassw0rd!', 12), role: 'admin' },
+    });
+    await testDb.consentRecord.createMany({ data: stubAcceptanceRows(adminId) });
     const targetId = await makeUser('deactivation-target@uni.ac.ug', 'TargetPassw0rd!');
     sessionFor(targetId, 0); // the target's own still-live token, captured before deactivation
 
     sessionFor(adminId, 0);
     const { POST } = await import('../../app/api/admin/users/[id]/role/route');
-    const form = new URLSearchParams({ action: 'deactivate' });
+    // The target is its organisation's only active owner (makeUser), so FR-ORG-07 needs the controller's request reference.
+    const form = new URLSearchParams({ active: 'false', requestId: randomUUID(), requestReference: 'CTRL-1' });
     const req = new NextRequest(`http://localhost/api/admin/users/${targetId}/role`, {
       method: 'POST',
       body: form.toString(),

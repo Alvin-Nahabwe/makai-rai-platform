@@ -104,7 +104,7 @@ readonly SITE=https://makrai.org
 readonly PG=docker-postgres-1
 readonly WEB=docker-nextjs-1
 readonly NIGHTLY='^makrai-[0-9]{8}-[0-9]{6}\.sql\.gz\.gpg$'
-readonly JOBS_RE='[m]akrai-(backup|offsite-copy|restore-test|synthetic|auditlog|email-scan|prefix-export)'
+readonly JOBS_RE='[m]akrai-(backup|offsite-copy|restore-test|synthetic|reminders|auditlog|email-scan|prefix-export)'
 readonly UPGRADE_RE='[b]in/unattended-upgrade( |$)|[a]pt\.systemd\.daily'
 readonly NODE_CHECK="const {Client}=require('pg');(async()=>{for(const n of ['APP_DATABASE_URL','IDENTITY_DATABASE_URL']){try{const c=new Client({connectionString:process.env[n],connectionTimeoutMillis:10000});await c.connect();const {rows:[r]}=await c.query('SELECT current_user, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user');console.log(n,r.current_user,r.rolsuper,r.rolbypassrls);await c.end()}catch(e){console.log(n,'ERROR',String(e&&(e.code||e.name)).replace(/[^A-Za-z0-9_]/g,''))}}})()"
 readonly PG_SETTINGS_WANT='log_min_duration_sample=-1 log_min_duration_statement=-1 log_min_error_statement=error log_statement=none log_transaction_sample_rate=0 logging_collector=off password_encryption=scram-sha-256 shared_preload_libraries='

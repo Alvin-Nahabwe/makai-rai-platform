@@ -6,17 +6,14 @@ const ROLES: OrgRole[] = ['owner', 'admin', 'assessor', 'reviewer', 'viewer'];
 
 // The full intended matrix, written out. A generated expectation that mirrors
 // the implementation would assert nothing.
-const MATRIX: Record<Action, OrgRole[]> = {
+// Partial: the v1 actions (record:read, decision:write, ...) are written out in v060-grants.test.ts, and
+// every action in GRANTS against the SRS matrix in matrix-v060.test.ts. The assessment, remediation,
+// org:update, org:delete, evidence:read and evidence:delete rows went with those actions (FR-AUTHZ-02).
+const MATRIX: Partial<Record<Action, OrgRole[]>> = {
   'project:read':      ['owner', 'admin', 'assessor', 'reviewer', 'viewer'],
   'project:create':    ['owner', 'admin', 'assessor'],
   'project:update':    ['owner', 'admin', 'assessor'],
   'project:delete':    ['owner', 'admin'],
-  'assessment:read':   ['owner', 'admin', 'assessor', 'reviewer', 'viewer'],
-  'assessment:create': ['owner', 'admin', 'assessor'],
-  'assessment:update': ['owner', 'admin', 'assessor'],
-  'assessment:delete': ['owner', 'admin'],
-  'assessment:respond':  ['owner', 'admin', 'assessor'],
-  'assessment:complete': ['owner', 'admin', 'assessor'],
   'member:read':       ['owner', 'admin', 'assessor', 'reviewer', 'viewer'],
   'member:invite':     ['owner', 'admin'],
   'member:remove':     ['owner', 'admin'],
@@ -24,12 +21,7 @@ const MATRIX: Record<Action, OrgRole[]> = {
   'member:leave':      ['owner', 'admin', 'assessor', 'reviewer', 'viewer'],
   'member:revoke_owner': ['owner'],
   'org:read':          ['owner', 'admin', 'assessor', 'reviewer', 'viewer'],
-  'org:update':        ['owner', 'admin'],
-  'org:delete':        ['owner'],
-  'remediation:update': ['owner', 'admin', 'assessor'],
-  'evidence:read':      ['owner', 'admin', 'assessor', 'reviewer', 'viewer'],
   'evidence:create':    ['owner', 'admin', 'assessor'],
-  'evidence:delete':    ['owner', 'admin', 'assessor'],
 };
 
 describe('can(role, action)', () => {
@@ -116,8 +108,8 @@ describe('can(role, action)', () => {
   // string at all, not enumerating the ways a non-string can misbehave.
   it('denies rather than grants when role is an object whose toString() resolves to a real role', () => {
     const disguisedOwner = { toString: () => 'owner' } as unknown as OrgRole;
-    expect(() => can(disguisedOwner, 'org:delete')).not.toThrow();
-    expect(can(disguisedOwner, 'org:delete')).toBe(false);
+    expect(() => can(disguisedOwner, 'project:delete')).not.toThrow();
+    expect(can(disguisedOwner, 'project:delete')).toBe(false);
   });
 
   it('denies rather than throwing when role has no prototype (and so no toString)', () => {

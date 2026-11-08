@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
-import { checkRateLimit } from '@/lib/rate-limit';
+import { checkRateLimit, isSignInPath, SESSION_READ_PATH } from '@/lib/rate-limit';
+import { exportRefusalLocation } from '@/lib/http/exportRefusal';
+import { publicOrigin } from '@/lib/publicOrigin';
 import { requireAuthSecret } from '@/lib/auth/secret';
 import { usesSecureCookies } from '@/lib/auth/secureCookie';
 
@@ -11,6 +13,7 @@ import { usesSecureCookies } from '@/lib/auth/secureCookie';
  */
 const UNKNOWN_CLIENT_IP = 'unknown-no-forwarded-for';
 import { logSecurityEvent } from '@/lib/security-logger';
+import { redactPathForLog } from '@/lib/redact';
 
 /**
  * Task 6 (active org as a URL segment): deliberately UNCHANGED here. The
@@ -68,6 +71,18 @@ export async function proxy(request: NextRequest) {
   if (!pathname.startsWith('/api/')) {
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set('x-pathname', pathname);
+    return NextResponse.next({ request: { headers: requestHeaders } });
+  }
+
+  // Sign-in is never limited by the client address (SRS FR-ACC-05, NFR-SEC-06, ruling 10): many people sign in from one
+  // institutional address. NextAuth's routes are limited per account and by the process-wide admission instead
+  // (lib/auth/credentials.ts, lib/auth/signInAdmission.ts). The session reads are the exception and go on below
+  // (ruling RE-2). The handler still gets no client-sent `x-pathname`. (The liveness probe has its own key, 600 a minute
+  // per address, in lib/rate-limit.ts.)
+  const sessionRead = pathname.replace(/\/+$/, '') === SESSION_READ_PATH;
+  if (isSignInPath(pathname) && !sessionRead) {
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.delete('x-pathname');
     return NextResponse.next({ request: { headers: requestHeaders } });
   }
 
@@ -171,51 +186,61 @@ export async function proxy(request: NextRequest) {
     // even where it is not currently reachable.
     try {
       logSecurityEvent('AUTH_TOKEN_DECODE_FAILURE', 'error', {
-        details: { pathname, message: e instanceof Error ? e.message : String(e) },
+        details: { pathname: redactPathForLog(pathname), message: e instanceof Error ? e.message : String(e) },
       });
     } catch {
-      console.error('proxy: getToken failed AND logging that failure also failed', pathname);
+      console.error('proxy: getToken failed AND logging that failure also failed', redactPathForLog(pathname));
     }
   }
 
-  const result = checkRateLimit(method, pathname, ip, userId);
+  // A session read is counted under its one key whatever trailing slash it came with (RE-2).
+  const result = checkRateLimit(method, sessionRead ? SESSION_READ_PATH : pathname, ip, userId);
 
   if (!result.success) {
-    // C6 whole-branch review, orphan sweep. `RATE_LIMIT_EXCEEDED` was
-    // declared in `lib/security-logger.ts`'s `SecurityEvent` union and
-    // emitted nowhere: this block built the 429 and returned it silently,
-    // in a file that already imports `logSecurityEvent` and uses it two
-    // blocks up. That left the structured log quiet during exactly the
-    // traffic the limiter exists to blunt — an operator watching the one
-    // stream every other security event lands in would see a flood as an
-    // absence.
+    // `RATE_LIMIT_EXCEEDED` is the one line that tells an operator a limit was breached: during a flood the
+    // structured log must not be silent. A log line holds ids only (NFR-OBS-01, NFR-PRIV-03), so this one
+    // names the user when there is one, the masked path, the method and the limit, and not the client address.
+    // nginx's access log already holds the address and the time of every request, so that is where
+    // to correlate a flood with its source. The path is masked as nginx masks it (`redactPathForLog`): an
+    // invitation link carries a bearer token in the path, and a log line may not hold a secret.
     //
-    // `userId` may be null (unauthenticated, or the fail-open path above);
-    // `ip` is the client-controlled `x-forwarded-for` when present, which
-    // is a known limitation of this whole choke point (D-124), not a new
-    // one introduced here — it is logged for attribution, never trusted as
-    // identity. `warn`, matching every other refusal-shaped event in this
-    // codebase (`INPUT_VALIDATION_FAILURE`), not `error`: a refused request
-    // is the control working.
-    //
-    // Gated on `firstRefusal` (lib/rate-limit.ts) after a `code-review`
-    // finding on the first draft of this fix, which logged EVERY refused
-    // request: that makes log volume track ATTACK volume 1:1, with an
-    // attacker-controlled `x-forwarded-for` and pathname in every line, so
-    // a fix for a silent control would have handed over a log-amplification
-    // vector instead. One line per (bucket, window) carries the same
-    // information — the limit was breached, by which identifier, on what
-    // path, and when it resets — and cannot be inflated by sending more.
+    // `warn`, matching every other refusal-shaped event (`INPUT_VALIDATION_FAILURE`): a refused request is
+    // the control working. Gated on `firstRefusal` (lib/rate-limit.ts): one line per (bucket, window) carries
+    // the whole signal, and log volume cannot be inflated by sending more requests.
     if (result.firstRefusal) {
       logSecurityEvent('RATE_LIMIT_EXCEEDED', 'warn', {
         ...(userId ? { userId } : {}),
-        ip,
-        details: { pathname, method, limit: result.limit },
+        details: { pathname: redactPathForLog(pathname), method, limit: result.limit },
       });
     }
-    const retryAfter = Math.ceil((result.resetAt.getTime() - Date.now()) / 1000);
+    // The one key whose refusal a browser navigation can meet: the team export is a plain link on S-20, so a
+    // JSON body would be shown raw. A navigation to it goes back to S-20 of the same scope instead
+    // (contract Routes row 20, owner question B4). The slug and project id are checked by
+    // `exportRefusalLocation`; when it answers null the JSON 429 below stands.
+    const exportPath = method === 'GET' ? /^\/api\/v1\/orgs\/([^/]+)\/export$/.exec(pathname) : null;
+    if (exportPath && request.headers.get('sec-fetch-mode') === 'navigate') {
+      const location = exportRefusalLocation(exportPath[1], request.nextUrl.searchParams.get('projectId'), 'rate_limited');
+      // Absolute, on the public origin: this layer parses a response `Location` with `new URL` and a relative
+      // one is an ERR_INVALID_URL, a 500 (verified live), and the request's own origin is the container's
+      // behind nginx (lib/publicOrigin.ts says why it is never used).
+      if (location) {
+        try {
+          return NextResponse.redirect(new URL(location, publicOrigin()), 303);
+        } catch {
+          // publicOrigin() throws without NEXTAUTH_URL or AUTH_URL. The refusal is logged above, once per window, so
+          // the redirect, a convenience, is dropped and the JSON 429 below stands.
+        }
+      }
+    }
+    // At least one second: the window can end between the limiter's answer and this line, and a wait of
+    // 0 seconds is no wait (RateLimitedError refuses it for the same reason).
+    const retryAfter = Math.max(1, Math.ceil((result.resetAt.getTime() - Date.now()) / 1000));
     return new NextResponse(
-      JSON.stringify({ error: 'Too many requests. Please try again later.' }),
+      JSON.stringify({
+        error: 'Too many requests. Please try again later.',
+        code: 'rate_limited',
+        retryAfterSeconds: retryAfter,
+      }),
       {
         status: 429,
         headers: {
@@ -229,7 +254,12 @@ export async function proxy(request: NextRequest) {
     );
   }
 
-  const response = NextResponse.next();
+  // `x-pathname` is the page branch's header (above); an /api/* handler is never given the client's. It is removed
+  // here so that nothing a handler reads from it, now or in a later gate on the API side, can be a forged value.
+  // Every other request header is passed on as it came.
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.delete('x-pathname');
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set('X-RateLimit-Limit', String(result.limit));
   response.headers.set('X-RateLimit-Remaining', String(result.remaining));
   response.headers.set('X-RateLimit-Reset', result.resetAt.toISOString());
@@ -237,7 +267,15 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // API routes (rate limiting) plus all pages except Next internals and static
-  // assets (forced-password-change enforcement).
-  matcher: ['/api/:path*', '/((?!_next/static|_next/image|.*\\.(?:png|jpg|jpeg|svg|ico|webp)$).*)'],
+  // API routes (rate limiting) plus every other path except Next's own `_next/static` and `_next/image`. No path is
+  // skipped for what it ends in: on a path the proxy does not run on, `x-pathname` is whatever the client sent, and
+  // `requireIdentity()` (lib/auth/identity.ts) decides its must-change-password gate from that header. A path that a
+  // dynamic segment takes can end in `.png` or `.svg` and still reach a page layout (`/orgs/<slug>/projects/missing.png`
+  // runs `(authenticated)/layout.tsx`, and with it requireIdentity(), before the page answers not-found), so the header
+  // must always be the proxy's own value. A path no route matches gets the root not-found page, which has no identity
+  // gate. For /api/* the proxy removes a client's `x-pathname` and sets none. The lookahead for `_next/static` and
+  // `_next/image` is safe only while no route has a root-level dynamic or catch-all segment (`app/[x]`):
+  // `__tests__/unit/proxy-matcher.test.ts` fails if one appears. Files under `public/` are served as before; the proxy
+  // only adds `x-pathname` to their request headers.
+  matcher: ['/api/:path*', '/((?!_next/static|_next/image).*)'],
 };

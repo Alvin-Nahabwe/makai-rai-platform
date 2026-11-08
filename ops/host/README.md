@@ -38,6 +38,11 @@ secret or host-specific is read from the server `.env` (see "Rules").
 | `ops/host/makrai-synthetic.sh` | `/usr/local/sbin/makrai-synthetic.sh` | root:root | 0755 | `install -m 0755`, from the stage (Task 20b) |
 | `scripts/synthetic-journey.mjs` | `/usr/local/lib/makrai/synthetic-journey.mjs`, mounted read-only into a throwaway container of the web image | root:root | 0644 | `install -m 0644`, from the stage (Task 20b) |
 | `ops/host/makrai-rotate-secrets.sh` | `/usr/local/sbin/makrai-rotate-secrets.sh` | root:root | 0755 | `install -m 0755`, from the stage, only after `sha256sum -c --strict` (Task 24; section below) |
+| `ops/host/makrai-reminders.sh` | `/usr/local/bin/makrai-reminders.sh` | root:root | 0755 | `install -m 0755`, from the stage (v0.6.0; section below) |
+| `ops/host/seal-check.mjs` | `/usr/local/lib/makrai/seal-check.mjs`, mounted read-only into a throwaway container of the web image | root:root | 0644 | `install -m 0644`, from the stage (v0.6.0) |
+| `lib/integrity/canonical.mjs` | `/usr/local/lib/makrai/integrity/canonical.mjs`, the file the application runs (ADR-C3), mounted read-only | root:root | 0644 | `install -d -m 0755` the directory, then `install -m 0644`, from the stage (v0.6.0) |
+| `lib/integrity/sealCheck.mjs` | `/usr/local/lib/makrai/integrity/sealCheck.mjs`, the file the application runs (ADR-C3), mounted read-only | root:root | 0644 | `install -m 0644`, from the stage (v0.6.0) |
+| `lib/findings/state.mjs` | `/usr/local/lib/makrai/findings/state.mjs`, the one module `sealCheck.mjs` imports from outside `lib/integrity/`, mounted read-only | root:root | 0644 | `install -d -m 0755` the directory, then `install -m 0644`, from the stage (v0.6.0) |
 
 Owner and mode are what the command in the last column produces. They are not read
 back from the host.
@@ -558,7 +563,7 @@ the key `makrai_auditlog`, and the sub-account's host key in `known_hosts`; and 
 
 The hourly synthetic journey (Task 20b) also needs `docker`, `flock` and `timeout`, as root; in the
 server `.env`: `SYNTHETIC_EMAIL`, `SYNTHETIC_PASSWORD`, `SYNTHETIC_ORG_SLUG`,
-`SYNTHETIC_ASSESSMENT_ID` and `HC_SYNTHETIC_PING_URL`; and in `/usr/local/lib/makrai`,
+`SYNTHETIC_PROJECT_ID`, `SYNTHETIC_STAGE`, `SYNTHETIC_QUESTION_ID` and `HC_SYNTHETIC_PING_URL`; and in `/usr/local/lib/makrai`,
 `synthetic-journey.mjs`, installed from the stage. `BASE_URL` is not a key: it is a literal in the
 script. `SYNTHETIC_PASSWORD` is letters and digits only, and at least 8 of them (see Rules).
 
@@ -572,7 +577,7 @@ GitHub's `schedule` runs this repository's workflows hours late or not at all, a
 publishes `"syntheticJourneyInterval": "PT1H"` (`public/service-parameters.json`). So root's
 crontab runs the journey, at 7 past every hour: `makrai-synthetic.sh --ping`, appending both
 streams to `/var/log/makrai/synthetic.log`. The journey signs in to `https://makrai.org` as the
-synthetic account, saves that account's in-progress assessment and reads it back
+synthetic account, reads the current decision of one fixed question, saves its next version, reads it back and replays the save
 (`scripts/synthetic-journey.mjs`, root's copy in `/usr/local/lib/makrai`), in a throwaway
 container built from the image the live web container `docker-nextjs-1` is running. The request
 leaves the host and comes back through public DNS, Cloudflare, nginx, Next.js and Postgres, like
@@ -656,23 +661,23 @@ URL of the host's check, `makrai-synthetic` (until the owner's rename, `makrai-s
 URL does not change):
 
 ```bash
-for k in SYNTHETIC_EMAIL SYNTHETIC_PASSWORD SYNTHETIC_ORG_SLUG SYNTHETIC_ASSESSMENT_ID HC_SYNTHETIC_PING_URL; do setenv_secret "$k"; done
+for k in SYNTHETIC_EMAIL SYNTHETIC_PASSWORD SYNTHETIC_ORG_SLUG SYNTHETIC_PROJECT_ID SYNTHETIC_STAGE SYNTHETIC_QUESTION_ID HC_SYNTHETIC_PING_URL; do setenv_secret "$k"; done
 ```
 
 Pre-check B, counts and status only:
 
 ```bash
-grep -cE '^(SYNTHETIC_EMAIL|SYNTHETIC_PASSWORD|SYNTHETIC_ORG_SLUG|SYNTHETIC_ASSESSMENT_ID|HC_SYNTHETIC_PING_URL)=.' /srv/makrai/app/.env
+grep -cE '^(SYNTHETIC_EMAIL|SYNTHETIC_PASSWORD|SYNTHETIC_ORG_SLUG|SYNTHETIC_PROJECT_ID|SYNTHETIC_STAGE|SYNTHETIC_QUESTION_ID|HC_SYNTHETIC_PING_URL)=.' /srv/makrai/app/.env
 grep -cE '^SYNTHETIC_PASSWORD=[A-Za-z0-9]{8,}$' /srv/makrai/app/.env
 grep -cE '^HC_SYNTHETIC_PING_URL=https://hc-ping\.com/[0-9a-f-]{36}$' /srv/makrai/app/.env
 sudo -u <operator> bash -c '. /usr/local/bin/makrai-lib.sh; load_env; echo ok'
 ```
 
-Expect `5`, `1`, `1` and `ok`. The second line enforces the password format; the third accepts the
+Expect `7`, `1`, `1` and `ok`. The second line enforces the password format; the third accepts the
 UUID form of the ping URL, which a rename of the check does not change; the last proves that the
 new lines cannot break the operator's backup jobs, which source the file under `set -u`. Anything
 else: stop. Correct the value with `setenv_secret <KEY>` and run Pre-check B again, or abandon the
-install: remove the five keys with the strip command under Rollback, then
+install: remove the seven keys with the strip command under Rollback, then
 `rm -f /root/makrai-stage/crontab.root.prev`, before leaving the window. Do not run the chain.
 
 Then one chain, by the rule in **Installing from the checkout**: stage, compare strictly, install
@@ -701,8 +706,7 @@ crontab -l | grep -c 'makrai-synthetic.sh --ping'
 docker ps -a --filter name=makrai-synthetic -q | wc -l
 ```
 
-Expect `rc=0`; in the tail `step=csrf status=200`, `step=signin status=302`, then `read`, `save` and
-`readback` at `200`, and `result=pass`; `755 root:root`, `644 root:root` and `600 root:root`; `1`;
+Expect `rc=0`; in the tail `step=csrf status=200`, `step=signin status=302`, then `read` at `200`, `save` at `201`, `readback` and `replay` at `200`, and `result=pass`; `755 root:root`, `644 root:root` and `600 root:root`; `1`;
 and `0` (no container left behind). After the next :07, the host's check shows a
 ping. Report only the `rc`, the `step=` and `status=` lines and the counts. This one run also
 settles what a test cannot: how Cloudflare treats the host's address, IPv4 from the default
@@ -710,11 +714,17 @@ bridge, the journey's output under `--log-driver none`, and a read-only root. If
 challenges the host, the run fails every hour; the answer is the rollback below, never a WAF allow
 rule or a rate-limit bypass for the synthetic account.
 
+The failed step ends its line with `reason=<code>`: `no_response`, `unexpected_status`, `not_json` (a 200 or 201
+whose body is not a JSON object, such as an HTML page from a proxy in the way), `no_csrf_token`, `signin_error`, `no_session_cookie`,
+`no_current_decision` (the question holds no decision: check `SYNTHETIC_QUESTION_ID` and the project),
+`not_saveable` (the current decision is withdrawn or has lost its reason, decider or date),
+`version_not_advanced`, `readback_differs`, `replay_not_recognised`.
+
 **The alert drill.** It proves the alarm against the host, the only sender: set
-`SYNTHETIC_ASSESSMENT_ID` to an id of the same shape that does not exist, with
-`V=<that id> setenv_put SYNTHETIC_ASSESSMENT_ID`; the next :07 must give `result=fail`, the check
+`SYNTHETIC_QUESTION_ID` to an id of the same shape that does not exist, with
+`V=<that id> setenv_put SYNTHETIC_QUESTION_ID`; the next :07 must give `result=fail`, the check
 must go down and an email must arrive. Restore the real id with
-`setenv_secret SYNTHETIC_ASSESSMENT_ID`; the next :07 must bring the check back up.
+`setenv_secret SYNTHETIC_QUESTION_ID`; the next :07 must bring the check back up.
 
 **Rollback**, in a window. The host job goes first, so the host stops pinging before anything else
 changes:
@@ -730,10 +740,10 @@ Expect `0`: no line of root's crontab names the script any more. Right after
 dashboard (`makrai-synthetic`, or `makrai-synthetic-host` until the rename), so that it does not
 alert on pings it no longer gets.
 
-The five keys may stay in `.env`, where nothing reads them. To remove them, keep the file's owner:
+The seven keys may stay in `.env`, where nothing reads them. To remove them, keep the file's owner:
 
 ```bash
-f=/srv/makrai/app/.env; ( umask 077; grep -vE '^(SYNTHETIC_(EMAIL|PASSWORD|ORG_SLUG|ASSESSMENT_ID)|HC_SYNTHETIC_PING_URL)=' "$f" > "$f.new" ) && cat "$f.new" > "$f" && shred -u "$f.new"
+f=/srv/makrai/app/.env; ( umask 077; grep -vE '^(SYNTHETIC_(EMAIL|PASSWORD|ORG_SLUG|PROJECT_ID|STAGE|QUESTION_ID|ASSESSMENT_ID)|HC_SYNTHETIC_PING_URL)=' "$f" > "$f.new" ) && cat "$f.new" > "$f" && shred -u "$f.new"
 ```
 
 Never `sed -i` as root: it replaces the file and makes root its owner, which breaks the
@@ -777,7 +787,138 @@ repository's journey does not reach the host until it is reinstalled. The script
 the container name `docker-nextjs-1`, which comes from the Compose project name `docker`; a
 rename turns every run into `/fail`.
 
+## Hourly reminder job (v0.6.0)
+
+The follow-up reminder job (NFR-OBS-02) is route 40, `POST /api/internal/reminders`, called from
+inside the web container by `makrai-reminders.sh`, from the operator's crontab at 20 past every
+hour (`ops/host/crontab.operator`). The wrapper runs one `docker exec docker-nextjs-1 node -e`
+under `timeout 900`; the node program reads `REMINDER_JOB_TOKEN` from the container's own
+environment, so the token is on no host command line and the wrapper never reads it from `.env`.
+Everything goes to `/srv/makrai/reminders.log` (mode 600), whose last line is
+`result=pass|fail at=<UTC time>`, and before it the job's own line
+`status=<code> attempted=<n> sent=<n> failed=<n> opted_out=<n> skipped_locked=<0|1>`, made of
+numbers only. Exit status 0 means the route answered 200 and every send succeeded; `skipped_locked=1`
+(another run held the job's lock) is a pass. Anything else, including a refused token
+(`status=401`), is non-zero and pings the check's `/fail`.
+
+**The check.** In the monitoring service, in your own browser, create the check `makrai-reminders`
+with period 1 hour and grace 2 hours, so that a missed run alerts within 3 hours. This is
+deployment.md 8.5 step 4a. Put its ping URL in the server `.env` as `HC_REMINDER_PING_URL` with
+`setenv_secret HC_REMINDER_PING_URL` (never as an argument, and never in this file or a commit).
+
+**Install** (deployment.md 8.5 step 12), by the staged-hash procedure above:
+
+1. Stage the wrapper and compare its sha256 with the reviewed commit's, then install it:
+   `printf '%s  %s\n' '<sha256>' /root/makrai-stage/makrai-reminders.sh | sha256sum -c --strict && install -m 0755 /root/makrai-stage/makrai-reminders.sh /usr/local/bin/makrai-reminders.sh`.
+   Expect `/root/makrai-stage/makrai-reminders.sh: OK`.
+2. Install the operator crontab the same way as before (`crontab -u <operator> ops/host/crontab.operator`
+   from the staged copy). Expect `crontab -u <operator> -l` to show the line
+   `20 * * * * /usr/local/bin/makrai-reminders.sh` among the four older ones.
+3. Run the wrapper once by hand: `sudo -u <operator> /usr/local/bin/makrai-reminders.sh; echo "exit=$?"`.
+   Expect `exit=0` and, as the last line of `/srv/makrai/reminders.log`, `result=pass at=...`. The
+   check turns green within a minute.
+
+**Rollback.** Pause the cron line, with the same comment-out and count pair the synthetic journey
+uses (deployment.md 8.5 step 6). As root, from the staged directory:
+
+```bash
+test -s /root/makrai-stage/crontab.operator.v060-pause || { crontab -u <operator> -l > /root/makrai-stage/crontab.operator.v060-pause.tmp && mv /root/makrai-stage/crontab.operator.v060-pause.tmp /root/makrai-stage/crontab.operator.v060-pause; }
+sed 's|^20 \* \* \* \* /usr/local/bin/makrai-reminders.sh|#v060-pause 20 * * * * /usr/local/bin/makrai-reminders.sh|' /root/makrai-stage/crontab.operator.v060-pause > /root/makrai-stage/crontab.operator.v060-paused
+[ "$(grep -c '^#v060-pause ' /root/makrai-stage/crontab.operator.v060-paused)" = 1 ] && crontab -u <operator> /root/makrai-stage/crontab.operator.v060-paused
+crontab -u <operator> -l | grep -c '^#v060-pause '
+```
+
+The last line prints `1`. Anything else: stop and find the cause before going on. Then pause the
+`makrai-reminders` check, and write down that it is paused: a paused check never alerts. To resume,
+put the saved copy back (`crontab -u <operator> /root/makrai-stage/crontab.operator.v060-pause`,
+which restores the line exactly), check that the same count command prints `0`, resume the check,
+and remove the two staged files. Reinstall the previous staged copy of the wrapper if one was
+replaced. deployment.md 9.5 says when to do this while v0.5.0 serves.
+
+### Reminder trigger
+
+Troubleshooting: status=500 from the reminder trigger: check `EMAIL_FROM_ADDRESS` and `RESEND_API_KEY` in the server `.env` (runbook section 4).
+
+## Seal check in the restore test (v0.6.0)
+
+The nightly restore test (01:00 UTC) now checks every seal in the restored copy (NFR-INT-07). The
+check is the application's own code, run offline: `docker run --rm -i --pull never --network none
+--read-only --cap-drop ALL` of the image the live web container runs, with root's installed
+copies mounted read-only and never the operator's checkout:
+
+| Installed file | Mounted at |
+| --- | --- |
+| `/usr/local/lib/makrai/seal-check.mjs` | `/ops/ops/host/seal-check.mjs` |
+| `/usr/local/lib/makrai/integrity/` (`canonical.mjs`, `sealCheck.mjs`) | `/ops/lib/integrity` |
+| `/usr/local/lib/makrai/findings/` (`state.mjs`) | `/ops/lib/findings` |
+
+The log of the run then also holds `db_bytes=<n> unattached_bytes=<n>` and, per organisation id,
+`org=<id> held_bytes=<n> unattached_bytes=<n>`, the figures the database size alert is planned
+from. A failed seal makes the run end `Restore test FAILED: seals` and prints `RESTORE MISMATCH
+seals`; the log names the seal id and the field path of the first difference, never a value.
+
+**Install** (deployment.md 8.5 step 12; install the three files before the script, because the
+script mounts them with `--mount type=bind`, which fails the run when a source is not there yet
+and creates nothing in its place):
+
+1. `install -d -m 0755 /usr/local/lib/makrai/integrity /usr/local/lib/makrai/findings`.
+2. For each of `ops/host/seal-check.mjs`, `lib/integrity/canonical.mjs`, `lib/integrity/sealCheck.mjs`
+   and `lib/findings/state.mjs`: stage it, then
+   `printf '%s  %s\n' '<sha256>' /root/makrai-stage/<name> | sha256sum -c --strict && install -m 0644 /root/makrai-stage/<name> <host path from the install map>`.
+   Expect `OK` for each.
+3. Install `makrai-restore-test.sh` the same way (`install -m 0755`).
+4. The next 01:00 UTC log holds a `seals=<n> valid=<n> mismatched=0 ...` line and ends
+   `Restore test PASSED` (deployment.md 8.5 step 14). A pass without the `seals=` line ran the
+   earlier script.
+
+**Drift.** The host copies are the application's own code, so they must match the image. Re-run
+this install-map step on every deploy, whether or not the four files changed, so that the host
+copies of `lib/integrity/` and `lib/findings/state.mjs` never drift from the image; the next
+01:00 `seals=` line is the check. A stale copy checks seals written by newer code and reports
+`mismatched` for seals that are intact.
+
+**Rollback.** Reinstall the previous staged copy of `makrai-restore-test.sh`. The three installed
+files are inert without it. While v0.5.0 serves, the schema has no seals table, so the updated
+script fails at `seals`; deployment.md 9.5 says what to expect and what to roll back.
+
+## Seal lines in the audit ship (v0.6.0)
+
+`makrai-auditlog-ship.sh` now also exports, into the same hourly file, the web container's
+`SEAL_CREATED` lines (NFR-INT-08): a second `journalctl` for the container's tag
+`makrai/docker-nextjs-1` and the event name, with its own cursor
+`/var/lib/makrai/auditlog-seal.cursor`. Nothing else of that container is exported. The reconcile
+reads the lines as records (`records=` rises by one per seal); no other count changes.
+
+**Install** (deployment.md 8.5 step 12, "if FR-REV-07 is kept"): stage the script, then
+`printf '%s  %s\n' '<sha256>' /root/makrai-stage/makrai-auditlog-ship.sh | sha256sum -c --strict && install -m 0755 /root/makrai-stage/makrai-auditlog-ship.sh /usr/local/sbin/makrai-auditlog-ship.sh`.
+Expect `OK`. The first run has no seal cursor and starts 26 hours back, so a seal from the last day
+ships once.
+
+**Check, after the first real seal.** Within 65 minutes the off-site store holds an
+`auditlog-*.journal.gz` that contains a `SEAL_CREATED` entry:
+`zcat <file> | grep -c SEAL_CREATED` on a file fetched from the box prints `1` or more. This is
+the production check of NFR-INT-08; the workstation tests use stand-ins and cannot show it. The export
+also matches `_SYSTEMD_UNIT=docker.service`, a field journald sets from the sender's cgroup, so a
+local account cannot forge a seal line by writing the tag itself. Check on the host, once, that
+Docker's journald driver sets it:
+`journalctl -o verbose -n 1 CONTAINER_TAG=makrai/docker-nextjs-1 | grep _SYSTEMD_UNIT` prints
+`_SYSTEMD_UNIT=docker.service`. If it prints another unit, stop: the match would select nothing and
+no seal line would ship. It assumes the host's `journalctl` supports `--grep` (it needs PCRE2: `journalctl --version` prints
+`+PCRE2`) and that Docker's journald driver sets `CONTAINER_TAG` to the compose tag.
+
+**Rollback.** Reinstall the previous staged copy of the ship. The seal cursor file is harmless and
+can stay.
+
 ## Rotating the production secrets (Task 24)
+
+> **From v0.6.0 the rotation itself, from "Before the day" on, is not to be run until it is
+> rewritten for the owner alone.** "Installing it", which deployment.md 8.5 step 11a runs, is not
+> affected. No AI session reaches the host (deployment.md 12.2, NFR-SEC-17). Where the text below
+> gives W1 to W4, the read-only commands or the "Report to the agent" lines to an agent, they are
+> the owner's: the owner runs the reads, reads the `ok`, `info` and `FAIL` lines, and gives nothing
+> a command printed to an AI session. The owner also writes the rotation record, the key inventory
+> entry, the ledger row and the execution log, from the markers the script printed. The rewrite of
+> this section and of `makrai-rotate-secrets.sh` is open; its trigger is the first rotation.
 
 `makrai-rotate-secrets.sh` rotates the production values that an AI-run process once held, stage by
 stage, in place of a runbook pasted into a root session. It rotates:
@@ -1284,9 +1425,22 @@ Checked by `__tests__/lint/ops-host-scripts.test.ts`,
 `__tests__/lint/rotate-secrets-script.test.ts`,
 `__tests__/lint/dead-man-switches.test.ts`,
 `__tests__/lint/backup-glob-agreement.test.ts`, `__tests__/lint/email-scan.test.ts`,
-`__tests__/lint/auditlog-scripts.test.ts`, `__tests__/unit/auditlog.test.ts`
+`__tests__/lint/auditlog-scripts.test.ts`, `__tests__/unit/auditlog.test.ts`,
+`__tests__/lint/runbook-v060.test.ts` (the first rule below)
 and, for the config files, `__tests__/lint/host-config-mirror.test.ts`:
 
+- From v0.6.0 no agent connects to the host (deployment.md 12.2, NFR-SEC-17). Where this file
+  says "approval window", read the owner's own session (deployment.md 12.1). Where it says the
+  agent runs a read (W1 to W4 of the rotation, the read-only commands), the owner runs it and
+  reads the `ok`, `info` and `FAIL` lines; nothing a command prints on the host is pasted into an
+  AI session. The sha256 values that a staged install compares (see "Installing from the checkout")
+  are computed by the owner, on their own clone of the repository, with the one line
+  `git show <commit>:<path> | sha256sum`; wherever this file says an agent supplies or hands over
+  such a value, a value an agent offers is a cross-check only and is never the one pasted into
+  root's chain. Wherever this file says to report, show or hand over what a host command printed,
+  the owner notes it and it stays with the owner. A line the script prints that says "tell the
+  agent" or "Report to the agent" means "note it": the markers stay with the owner, who writes the
+  rotation record from them.
 - Every script starts with `set -Eeuo pipefail`, except the console break-glass hook
   `makrai-break-glass-session`, which must never fail a login: it runs every step under
   `timeout`, logs what failed and always exits 0 (ADR-0010).

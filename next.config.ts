@@ -3,27 +3,31 @@ import type { NextConfig } from 'next';
 const nextConfig: NextConfig = {
   output: 'standalone', // For Docker deployment
   /**
-   * Without this, `lib/framework/bundleHash.ts`'s `computeBundleHash()` can
-   * throw ENOENT in the deployed Docker image: `docker/Dockerfile:31-35`
-   * copies only `.next/standalone` into the runner stage, never `data/`
-   * directly, so only files Turbopack's tracer placed inside
-   * `.next/standalone` exist at runtime. `computeBundleHash` reads its 4
-   * files with all-string-literal `readFileSync(join(root, 'data/x.json'))`
-   * calls (see that file's own comment for why -- an EARLIER, loop-based
-   * form was not reliably traceable and is not what ships), which the
-   * tracer resolves correctly on its own; this directive is kept as an
-   * explicit, documented guarantee rather than relying solely on that
-   * incidental (if currently correct) static-analysis behaviour. Verified
-   * live by building and listing `.next/standalone/data/` -- see
+   * Without this, code that reads `data/*.json` at runtime can throw ENOENT
+   * in the deployed Docker image: `docker/Dockerfile:31-35` copies only
+   * `.next/standalone` into the runner stage, never `data/` directly, so
+   * only files Turbopack's tracer placed inside `.next/standalone` exist at
+   * runtime. The 4.0.0 bundle hash that first needed this
+   * (`lib/framework/bundleHash.ts`) was removed in 0.6.0; the directive is
+   * kept as an explicit, documented guarantee for the content readers that
+   * remain. Verified live by building and listing `.next/standalone/data/` -- see
    * node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/output.md:80-96
    * for the option itself.
+   *
+   * `data/legal/**` holds the legal texts (`lib/legal/registry.ts`), read at
+   * runtime by the acceptance gate, so the image must carry them; they are
+   * Markdown, which the JSON glob does not reach.
+   *
+   * `lib/auth/passwordHashWorker.js` is started by path as a worker thread (`lib/auth/passwordHash.ts`), and it
+   * `require`s bcryptjs at run time, so neither is reached by the import trace; the image needs both (FR-ACC-05).
+   * `scripts/check-standalone.mjs` fails the build check when either is missing.
    */
   outputFileTracingIncludes: {
-    '/*': ['data/**/*.json'],
+    '/*': ['data/**/*.json', 'data/legal/**/*.md', 'data/fonts/**', 'lib/auth/passwordHashWorker.js', 'node_modules/bcryptjs/package.json', 'node_modules/bcryptjs/umd/**'],
   },
   /**
-   * NOT effective against the `.env` leak documented in
-   * `lib/framework/bundleHash.ts` -- kept only as a general defence against
+   * NOT effective against the `.env` leak that the 4.0.0 bundle hash
+   * (`lib/framework/bundleHash.ts`, removed in 0.6.0) once caused -- kept only as a general defence against
    * ordinary over-inclusion (a route accidentally pulling in an unrelated
    * file through the normal static trace-list path, which this DOES govern).
    * Verified live, twice, under two different `bundleHash.ts`
@@ -53,6 +57,14 @@ const nextConfig: NextConfig = {
    * The one header Next adds by itself is the framework-name banner, off below.
    */
   poweredByHeader: false,
+  /**
+   * The About page moved from `/explore/about` (signed-in only) to `/about`
+   * (public, S-28). The sidebar and bookmarks still point at the old address.
+   * `redirects()` only; `headers()` stays out of this file on purpose, see above.
+   */
+  async redirects() {
+    return [{ source: '/explore/about', destination: '/about', permanent: true }];
+  },
 };
 
 export default nextConfig;

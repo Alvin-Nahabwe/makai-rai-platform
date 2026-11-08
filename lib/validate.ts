@@ -36,13 +36,21 @@ export function validateEmail(email: unknown): ValidationError | null {
   return null;
 }
 
+/**
+ * The shortest password `validatePassword` accepts, and the number S-03, S-04, S-21 and S-29 state
+ * ("At least <n> characters."), so the forms and the check cannot drift (contract gap G029). 12, for
+ * new and changed passwords (NFR-SEC-18): sign-in never calls this, so an existing shorter password
+ * keeps working until its next change.
+ */
+export const PASSWORD_MIN_LENGTH = 12;
+
 /** Validate password strength. */
 export function validatePassword(password: unknown): ValidationError | null {
   if (typeof password !== 'string' || password.length === 0) {
     return { field: 'password', message: 'Password is required' };
   }
-  if (password.length < 8) {
-    return { field: 'password', message: 'Password must be at least 8 characters' };
+  if (password.length < PASSWORD_MIN_LENGTH) {
+    return { field: 'password', message: `Password must be at least ${PASSWORD_MIN_LENGTH} characters` };
   }
   if (password.length > 128) {
     return { field: 'password', message: 'Password must be 128 characters or fewer' };

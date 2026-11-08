@@ -46,3 +46,29 @@ export function sessionFor(userId: string): void {
 export function clearSession(): void {
   currentSession = null;
 }
+
+/**
+ * For a test that calls route handlers concurrently. `requireIdentityForApi` imports the mocked `lib/auth` dynamically,
+ * and vitest resolves only one of several overlapping dynamic imports of a factory-mocked module to the mock; the others
+ * load the real module, which cannot load outside Next ("this will not work if user does Promise.all(import(), import())",
+ * node_modules/vitest/dist/chunks/startVitestModuleRunner.DB-7oCpn.js:398, vitest 4.1.12). This returns the real
+ * identity module with `requireIdentityForApi` run one call at a time, unchanged otherwise: each caller gets its own
+ * answer or rejection, and a rejection does not stall the queue. The writes behind it still overlap in the database.
+ * The mocked `auth()` answers with the one session `sessionFor` set when the queued call runs, so concurrent calls in
+ * a file share one role. Use it from a test file as:
+ *
+ *   vi.mock('@/lib/auth/identity', async (importOriginal) =>
+ *     (await import('../helpers/authSession')).queuedIdentity(await importOriginal<typeof import('@/lib/auth/identity')>()));
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- any parameter list: the wrapper forwards whatever the real function takes
+export function queuedIdentity<T extends { requireIdentityForApi: (...args: any[]) => Promise<unknown> }>(real: T): T {
+  let queue: Promise<unknown> = Promise.resolve();
+  return {
+    ...real,
+    requireIdentityForApi: (...args: Parameters<T['requireIdentityForApi']>) => {
+      const next = queue.then(() => real.requireIdentityForApi(...args));
+      queue = next.then(() => undefined, () => undefined);
+      return next;
+    },
+  };
+}

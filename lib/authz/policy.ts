@@ -1,55 +1,65 @@
 import type { OrgRole } from '@prisma/client';
 
 export type Action =
-  | 'org:read' | 'org:update' | 'org:delete'
+  | 'org:read'
   | 'project:read' | 'project:create' | 'project:update' | 'project:delete'
-  | 'assessment:read' | 'assessment:create' | 'assessment:update' | 'assessment:delete'
-  | 'assessment:respond' | 'assessment:complete'
-  | 'remediation:update'
-  | 'evidence:read' | 'evidence:create' | 'evidence:delete'
+  | 'evidence:create'
   | 'member:read' | 'member:invite' | 'member:remove' | 'member:leave'
-  | 'member:grant_owner' | 'member:revoke_owner';
+  | 'member:grant_owner' | 'member:revoke_owner'
+  // v0.6.0 (FR-AUTHZ-01, SRS lines 631-646).
+  | 'record:read'
+  | 'decision:write' | 'decision:withdraw'
+  | 'finding:raise' | 'finding:reopen' | 'finding:withdraw'
+  | 'mitigation:write' | 'risk:accept'
+  | 'review:open' | 'review:seal'
+  | 'document:generate' | 'document:withdraw'
+  | 'team:export' | 'project:archive' | 'member:role';
 
 /**
- * Capability grants per role. Authorization only — this module performs no
- * tenant filtering, because RLS owns that (ADR-0001).
+ * Capability grants per role: FR-AUTHZ-01's matrix, SRS lines 629-646, for every action, the legacy rows
+ * included. Authorization only: this module performs no tenant filtering, because RLS owns that (ADR-0001).
  *
- * `reviewer` intentionally ships with viewer-equivalent capabilities; its
- * distinguishing powers belong to the review/sign-off workflow (register D-002,
- * D-004). Inventing them here would be speculative.
+ * The reviewer raises and withdraws findings, seals and generates documents, and records no decision.
+ * `project:delete` is not in the matrix; it keeps the owner and admin grants it had in v0.5.0 (00-contract.md,
+ * Policy, owner question 3). FR-AUTHZ-02 deleted the actions nothing checked once RM removed the score routes:
+ * `org:update`, `org:delete`, the six `assessment:*` actions, `remediation:update`, `evidence:read` (replaced by
+ * `record:read`) and `evidence:delete` (evidence is append-only). `__tests__/authz/dead-actions.test.ts` holds
+ * every action here to a route entry or a gate call, and `__tests__/authz/matrix-v060.test.ts` holds every row
+ * to the SRS matrix.
  *
- * `evidence:read` mirrors `assessment:read` — evidence is part of what a
- * reader reads. `evidence:create` and `evidence:delete` mirror
- * `assessment:respond` — uploading and removing evidence are part of
- * answering, and deletion is confined to in-progress assessments (O-24), so
- * it is not the destructive power it would otherwise be.
+ * Exported for those tests only; production code asks `can()`. Frozen, the object and each role's list, so no
+ * importer can widen a role at run time: `can()` reads this same object.
  */
-const GRANTS: Record<OrgRole, readonly Action[]> = {
-  owner: ['org:read','org:update','org:delete',
+const freezeRows = (rows: Record<OrgRole, readonly Action[]>): Readonly<Record<OrgRole, readonly Action[]>> =>
+  Object.freeze(Object.fromEntries(Object.entries(rows).map(([role, actions]) => [role, Object.freeze([...actions])])) as Record<OrgRole, readonly Action[]>);
+
+export const GRANTS: Readonly<Record<OrgRole, readonly Action[]>> = freezeRows({
+  owner: ['org:read',
           'project:read','project:create','project:update','project:delete',
-          'assessment:read','assessment:create','assessment:update','assessment:delete',
-          'assessment:respond','assessment:complete',
-          'remediation:update',
-          'evidence:read','evidence:create','evidence:delete',
+          'evidence:create',
           'member:read','member:invite','member:remove','member:leave',
-          'member:grant_owner','member:revoke_owner'],
-  admin: ['org:read','org:update',
+          'member:grant_owner','member:revoke_owner',
+          'record:read','decision:write','decision:withdraw','finding:raise','finding:reopen','finding:withdraw',
+          'mitigation:write','risk:accept','review:open','review:seal','document:generate','document:withdraw',
+          'team:export','project:archive','member:role'],
+  admin: ['org:read',
           'project:read','project:create','project:update','project:delete',
-          'assessment:read','assessment:create','assessment:update','assessment:delete',
-          'assessment:respond','assessment:complete',
-          'remediation:update',
-          'evidence:read','evidence:create','evidence:delete',
-          'member:read','member:invite','member:remove','member:leave'],
+          'evidence:create',
+          'member:read','member:invite','member:remove','member:leave',
+          'record:read','decision:write','decision:withdraw','finding:raise','finding:reopen','finding:withdraw',
+          'mitigation:write','risk:accept','review:open','review:seal','document:generate','document:withdraw',
+          'team:export','project:archive','member:role'],
   assessor: ['org:read',
              'project:read','project:create','project:update',
-             'assessment:read','assessment:create','assessment:update',
-             'assessment:respond','assessment:complete',
-             'remediation:update',
-             'evidence:read','evidence:create','evidence:delete',
-             'member:read','member:leave'],
-  reviewer: ['org:read','project:read','assessment:read','evidence:read','member:read','member:leave'],
-  viewer:   ['org:read','project:read','assessment:read','evidence:read','member:read','member:leave'],
-};
+             'evidence:create',
+             'member:read','member:leave',
+             'record:read','decision:write','decision:withdraw','finding:raise','finding:reopen','finding:withdraw',
+             'mitigation:write','review:open'],
+  reviewer: ['org:read','project:read','member:read','member:leave',
+             'record:read','finding:raise','finding:withdraw','review:seal','document:generate'],
+  viewer:   ['org:read','project:read','member:read','member:leave',
+             'record:read'],
+});
 
 /**
  * Answers "may this role perform this action?" — nothing else. `role` is

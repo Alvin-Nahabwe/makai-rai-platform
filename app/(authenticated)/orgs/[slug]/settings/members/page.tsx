@@ -1,60 +1,41 @@
 import { requireIdentity } from '@/lib/auth/identity';
 import { requireOrgContextFor } from '@/lib/auth/context';
-import { withOrg } from '@/lib/data/tenant';
-import { lookupUserNames } from '@/lib/data/identity';
+import { can } from '@/lib/authz/policy';
+import { listInvitations, listMembers } from '@/lib/data/members';
+import { LIST_PAGE_SIZE, pageOf } from '@/lib/ui/showMore';
+import { ShowMoreLink } from '@/components/ui/ShowMoreLink';
 import MembersManager from './MembersManager';
 
 /**
- * The member-management UI D-118 named as Task 8's deliverable: the
- * `members`/`members/[userId]`/`members/leave` API surface has been live
- * since Task 7/8, but nothing rendered or called it. Team-wide, not
- * "members I invited" — every active membership in the org, matching the
- * GET route's own `where: { status: 'active' }` (no further filter; RLS via
- * `withOrg` is the only scoping).
- *
- * No `user` relation `include` here either, for the identical reason
- * `GET .../members` documents: `makrai_app` has no grant on `users`, so
- * names are fetched separately via `lookupUserNames` (name only, never
- * email — that helper's own module doc explains why) and merged
- * client-side of this function (still server-side overall, just after the
- * two queries).
+ * S-22, Members (FR-MEM-01 to FR-MEM-05; UX-37, UX-40). Members are a long list: the first 50 show, and
+ * "Show more" is a plain link to the same page with a larger `shown` (no prefetching link). Only roles that hold
+ * `member:invite` are given the pending invitations, whose addresses other members must not see (obligation M10).
  */
 export default async function MembersSettingsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ shown?: string }>;
 }) {
   const { slug } = await params;
+  const shown = (await searchParams).shown ?? null;
   const identity = await requireIdentity();
   const ctx = await requireOrgContextFor(identity.userId, slug, 'member:read');
 
-  const members = await withOrg(ctx, (tx) =>
-    tx.membership.findMany({
-      where: { status: 'active' },
-      orderBy: { createdAt: 'asc' },
-    }),
-  );
-  const names = await lookupUserNames(members.map((m) => m.userId));
-  const rows = members.map((m) => ({
-    userId: m.userId,
-    role: m.role,
-    name: names.get(m.userId)?.name ?? 'Unknown',
-  }));
+  const members = pageOf(await listMembers(ctx), shown, LIST_PAGE_SIZE);
+  const invitations = can(ctx.role, 'member:invite') ? await listInvitations(ctx, new Date()) : [];
 
   return (
     <div className="page-content">
       <div className="page-header">
         <div>
           <h1>Members</h1>
-          <p className="text-muted">Manage who belongs to this organization and at what role.</p>
+          <p className="text-muted">Manage who belongs to this organisation and at what role.</p>
         </div>
       </div>
-      <MembersManager
-        slug={slug}
-        currentUserId={identity.userId}
-        currentRole={ctx.role}
-        initialMembers={rows}
-      />
+      <MembersManager slug={slug} currentUserId={identity.userId} currentRole={ctx.role} members={members.items} invitations={invitations} />
+      {members.hasMore && <ShowMoreLink href={'?shown=' + members.nextShown} label="Show more" />}
     </div>
   );
 }

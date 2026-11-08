@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-
+import { e2eBaseURL } from '../../e2e/helpers/port';
 
 /**
  * Every environment variable the app THROWS without must be one the CI `e2e`
@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
  * production container. This one exists because the gap re-opened in CI, twice,
  * from two unrelated changes:
  *
- *   1. Closing open registration (D9) added a gate on ALLOW_OPEN_REGISTRATION.
+ *   1. Closing open registration (D9) added a gate on a new setting.
  *      `/register` then rendered "Registration is by invitation" and no form,
  *      and 8 specs that drive that page went red.
  *   2. Fixing the dead invitation links added `lib/publicOrigin.ts`, which
@@ -100,15 +100,6 @@ describe('the CI e2e job supplies what the app refuses to run without', () => {
     ).toBe(true);
   });
 
-  it('sets ALLOW_OPEN_REGISTRATION, which 8 specs need to reach a registration form', () => {
-    // Production runs invite-gated (PLAN.md:217) and the CLOSED posture keeps
-    // its own coverage in __tests__/unit/open-registration-gate.test.ts, which
-    // does not read this file. Setting it here is about the CI server only.
-    const required = envReadsIn('lib/auth/openRegistration.ts');
-    for (const v of required) {
-      expect(e2eEnvKeys().has(v), `the e2e job must set ${v}`).toBe(true);
-    }
-  });
 
   it('points the public origin at the server Playwright actually drives', () => {
     // A syntactically valid but WRONG origin would let publicOrigin() succeed
@@ -116,9 +107,11 @@ describe('the CI e2e job supplies what the app refuses to run without', () => {
     // green suite, dead links, which is the defect publicOrigin exists to fix.
     const env = assertParsed(e2eEnv());
     const origin = env.AUTH_URL ?? env.NEXTAUTH_URL;
-    const config = readFileSync('playwright.config.ts', 'utf-8');
-    const baseURL = config.match(/baseURL:\s*'([^']+)'/)?.[1];
-    expect(baseURL, 'playwright.config.ts should still declare a baseURL').toBeTruthy();
-    expect(new URL(origin).origin).toBe(new URL(baseURL!).origin);
+    // The base URL the CI job drives is the one the config computes from the
+    // job's own environment with CI set (port 3000 unless the job sets
+    // E2E_PORT), not a literal the config no longer holds. The assertion is
+    // needed because ProcessEnv requires NODE_ENV here.
+    const ciEnv: Record<string, string> = { ...env, CI: 'true' };
+    expect(new URL(origin).origin).toBe(new URL(e2eBaseURL(ciEnv as NodeJS.ProcessEnv)).origin);
   });
 });

@@ -162,6 +162,21 @@ describe('cron-run scripts', () => {
     expect(root.find((l) => l.command.endsWith('makrai-synthetic.sh'))?.rest).toMatch(/^--ping\b/);
   });
 
+  it("schedules the operator's jobs from crontab.operator: the nightly backup chain, the backup check and the hourly reminders", () => {
+    // OPS-HOST (NFR-OBS-02): the reminder job runs at 20 past, off the synthetic journey's 7 past and the
+    // ship's 5 past, and its own check (HC_REMINDER_PING_URL) is the only one the wrapper pings.
+    const operator = cronLines(readFileSync(path.join(HOST_DIR, 'crontab.operator'), 'utf8'));
+    expect(operator.map((l) => `${l.schedule} ${path.basename(l.command)}`)).toEqual([
+      '0 0 * * * makrai-backup.sh',
+      '30 0 * * * makrai-offsite-copy.sh',
+      '0 1 * * * makrai-restore-test.sh',
+      '0 6 * * * makrai-backup-check.sh',
+      '20 * * * * makrai-reminders.sh',
+    ]);
+    const vars = cronJobs().find((j) => j.script === 'makrai-reminders.sh')?.vars;
+    expect(vars, 'the reminder wrapper pings exactly one check').toEqual(['HC_REMINDER_PING_URL']);
+  });
+
   it("calls every script by absolute path, because cron's own PATH has no /usr/local/sbin", () => {
     // F-23. cron runs jobs with PATH=/usr/bin:/bin, so a bare `makrai-email-scan.sh` is
     // "command not found", which cron reports only by mail, which nobody reads (F-15).

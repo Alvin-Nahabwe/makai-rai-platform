@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { Client } from 'pg';
 import type { OrgContext } from '../../lib/data/tenant';
 import { withOrg } from '../../lib/data/tenant';
 import { testDb, resetDb, SEEDED_FRAMEWORK_VERSION_ID } from '../helpers/db';
-import { adrGrants, type LaneRole } from '../helpers/adr-grants';
+import { adrColumnGrants, adrFunctionOwnerGrants, adrGrants, type FunctionOwnerRole, type LaneRole } from '../helpers/adr-grants';
 
 /**
  * The two application roles hold exactly what ADR-0009 tables, and nothing that would
@@ -22,6 +22,19 @@ import { adrGrants, type LaneRole } from '../helpers/adr-grants';
  */
 
 const ROLES: LaneRole[] = ['makrai_identity', 'makrai_app'];
+
+/** The nine definer functions makrai_identity may execute (v0.6.0 step 5, and EXP's personal_platform_rows), as regprocedure text. */
+const DEFINER_FUNCTIONS = [
+  { fn: 'accept_invitation(text,text,text)', returns: 'record' },
+  { fn: 'admin_correct_org_name(text,text,text)', returns: 'text' },
+  { fn: 'admin_create_organisation(text,text,text,text,text,text,date,text,text,text,text,timestamp with time zone,boolean,uuid,text)', returns: 'record' },
+  { fn: 'admin_issue_owner_invitation(text,text,text,text,timestamp with time zone,text,boolean)', returns: 'text' },
+  { fn: 'admin_record_agreement(text,text,text,text,date,text,text,uuid,text)', returns: 'record' },
+  { fn: 'admin_resend_invitation(text,text,text,text,timestamp with time zone,boolean,uuid,text)', returns: 'record' },
+  { fn: 'admin_revoke_invitation(text,text,text)', returns: 'void' },
+  { fn: 'admin_set_account_active(text,text,boolean,text,text[])', returns: 'text[]' },
+  { fn: 'personal_platform_rows(text,text[])', returns: 'record' },
+];
 const TABLE_PRIVILEGES = ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER'];
 
 type Row = { relname: string; privilege: string };
@@ -55,11 +68,36 @@ async function effectiveGrants(role: LaneRole): Promise<Record<string, string[]>
 }
 
 describe('database role grants (ADR-0009)', () => {
-  it('reads the five identity tables the brief names, so the comparisons below are not vacuous', () => {
+  it('C4 CON-1: the function-owner roles hold exactly the grants of ADR-0009\'s "Function-owner grants" table', async () => {
+    for (const role of ['makrai_definer', 'makrai_operator_fn'] as FunctionOwnerRole[]) {
+      const rows = await testDb.$queryRaw<{ relname: string; col: string; privilege: string }[]>`
+        WITH r AS (SELECT oid FROM pg_roles WHERE rolname = ${role})
+        SELECT c.relname::text AS relname, '*' AS col, x.privilege_type::text AS privilege
+        FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace CROSS JOIN LATERAL aclexplode(c.relacl) x
+        WHERE n.nspname = 'public' AND x.grantee = (SELECT oid FROM r)
+        UNION ALL
+        SELECT c.relname::text, a.attname::text, x.privilege_type::text
+        FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid JOIN pg_namespace n ON n.oid = c.relnamespace
+        CROSS JOIN LATERAL aclexplode(a.attacl) x
+        WHERE n.nspname = 'public' AND a.attacl IS NOT NULL AND x.grantee = (SELECT oid FROM r)`;
+      const live: Record<string, Record<string, string[]>> = {};
+      for (const g of rows) ((live[g.relname] ??= {})[g.col] ??= []).push(g.privilege);
+      for (const t of Object.values(live)) for (const c of Object.keys(t)) t[c].sort();
+      const adr = adrFunctionOwnerGrants(role);
+      expect(Object.keys(adr).length).toBeGreaterThan(5);   // the ADR table is read, so the comparison is not vacuous
+      expect({ role, grants: live }).toEqual({ role, grants: adr });
+    }
+  });
+
+  it('reads the identity tables of ADR-0009 (the five of v0.5.0 and the three of v0.6.0), so the comparisons below are not vacuous', () => {
     expect(Object.keys(adrGrants('makrai_identity')).sort()).toEqual(
-      ['consent_records', 'invitations', 'memberships', 'organizations', 'users'],
+      ['consent_records', 'invitations', 'known_devices', 'memberships', 'organization_agreements', 'organizations',
+        'password_reset_tokens', 'users'],
     );
     expect(Object.keys(adrGrants('makrai_app')).length).toBeGreaterThan(5);
+    // The column grants table is read too (contract executed claim E-10).
+    expect(adrColumnGrants('makrai_app')).toEqual({ invitations: { status: ['UPDATE'] } });
+    expect(adrColumnGrants('makrai_identity')).toEqual({ password_reset_tokens: { usedAt: ['UPDATE'], voidedAt: ['UPDATE'] } });
   });
 
   it('grants equal ADR-0009 for both roles', async () => {
@@ -68,16 +106,20 @@ describe('database role grants (ADR-0009)', () => {
       expect({ role, grants: await explicitGrants(role) }).toEqual({ role, grants: expected });
       expect({ role, grants: await effectiveGrants(role) }).toEqual({ role, grants: expected });
 
-      // No column-level grant can reopen a table the table-level grant closes.
-      const columnGrants = await testDb.$queryRaw<{ relname: string; attname: string }[]>`
-        SELECT c.relname::text AS relname, a.attname::text AS attname
+      // Column-level grants are exactly ADR-0009's "Column grants" table: no other column
+      // grant can reopen a table the table-level grant closes.
+      const columnRows = await testDb.$queryRaw<{ relname: string; attname: string; privilege: string }[]>`
+        SELECT c.relname::text AS relname, a.attname::text AS attname, x.privilege_type::text AS privilege
         FROM pg_attribute a
         JOIN pg_class c ON c.oid = a.attrelid
         JOIN pg_namespace n ON n.oid = c.relnamespace
         CROSS JOIN LATERAL aclexplode(a.attacl) x
         WHERE n.nspname = 'public' AND a.attacl IS NOT NULL
           AND x.grantee IN (0, (SELECT oid FROM pg_roles WHERE rolname = ${role}))`;
-      expect({ role, columnGrants }).toEqual({ role, columnGrants: [] });
+      const columnGrants: Record<string, Record<string, string[]>> = {};
+      for (const r of columnRows) ((columnGrants[r.relname] ??= {})[r.attname] ??= []).push(r.privilege);
+      for (const t of Object.values(columnGrants)) for (const c of Object.keys(t)) t[c].sort();
+      expect({ role, columnGrants }).toEqual({ role, columnGrants: adrColumnGrants(role) });
 
       // Sequences are relations too, and USAGE on one is a grant the table check skips.
       // CASE, not AND: SQL fixes no evaluation order, and has_sequence_privilege raises
@@ -91,16 +133,20 @@ describe('database role grants (ADR-0009)', () => {
                    ELSE false END`;
       expect({ role, sequences }).toEqual({ role, sequences: [] });
 
-      // Every function in public is a trigger or event-trigger function. PUBLIC's default
-      // EXECUTE on those is inert: Postgres refuses to call them outside a trigger. A
-      // callable function a role could execute is a grant ADR-0009 does not record.
+      // Every other function in public is a trigger or event-trigger function, or one
+      // executable by no application role (the operator functions, integrity_append).
+      // PUBLIC's default EXECUTE on a trigger function is inert: Postgres refuses to call it
+      // outside a trigger. The only callable functions are the eight SECURITY DEFINER
+      // functions of 20261030000500_v060_05_functions, for makrai_identity alone (SRS 9.5
+      // line 3673; ADR-0009 "Definer functions").
       const callable = await testDb.$queryRaw<{ fn: string; returns: string }[]>`
         SELECT p.oid::regprocedure::text AS fn, p.prorettype::regtype::text AS returns
         FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
         WHERE n.nspname = 'public'
           AND has_function_privilege(${role}::text, p.oid, 'EXECUTE')
-          AND p.prorettype::regtype::text NOT IN ('trigger', 'event_trigger')`;
-      expect({ role, callable }).toEqual({ role, callable: [] });
+          AND p.prorettype::regtype::text NOT IN ('trigger', 'event_trigger')
+        ORDER BY 1`;
+      expect({ role, callable }).toEqual({ role, callable: role === 'makrai_identity' ? DEFINER_FUNCTIONS : [] });
 
       // No default privilege may grant this role (or PUBLIC) rights on relations nobody
       // has reviewed yet: the view fail-open of 20260803140500 came in exactly that way.
@@ -172,6 +218,18 @@ describe('the role migration resets a pre-existing makrai_identity', () => {
       'REVOKE SELECT ON "projects" FROM makrai_identity',
       `DO $$ BEGIN EXECUTE format('REVOKE CREATE ON DATABASE %I FROM makrai_identity', current_database()); END $$`,
     ];
+    // v0.6.0 setup change (K0a): the re-run below grants back only the five v0.5.0 tables, with
+    // DELETE on consent_records, and revokes every later grant, so the whole case runs in one
+    // transaction that is rolled back (no later file sees a widened or stripped role), and the
+    // makrai_identity GRANT and REVOKE statements of every later migration are replayed after
+    // the re-run, so the comparison is still against ADR-0009 as it stands.
+    const LATER_IDENTITY_GRANTS = readdirSync('prisma/migrations', { withFileTypes: true })
+      .filter((d) => d.isDirectory() && d.name > '20261008000100_identity_lane_role')
+      .map((d) => d.name).sort()
+      .flatMap((name) => readFileSync(`prisma/migrations/${name}/migration.sql`, 'utf8')
+        .replace(/--[^\n]*/g, ' ').split(';').map((s) => s.trim())
+        .filter((s) => /^(GRANT|REVOKE)\b/i.test(s) && /\bmakrai_identity\b/.test(s)));
+    await su.query('BEGIN');
     try {
       await su.query(`
         ALTER ROLE makrai_identity REPLICATION;
@@ -210,8 +268,11 @@ describe('the role migration resets a pre-existing makrai_identity', () => {
         replication: false, schema_create: false, db_create: false, sequence: false,
         function: false, projects_select: false, memberof: [],
       });
+      expect(LATER_IDENTITY_GRANTS.length).toBeGreaterThan(0);
+      for (const statement of LATER_IDENTITY_GRANTS) await su.query(statement);
       expect(await explicitGrants('makrai_identity')).toEqual(adrGrants('makrai_identity'));
     } finally {
+      await su.query('ROLLBACK');
       for (const q of cleanup) await su.query(q);
       await su.end();
     }

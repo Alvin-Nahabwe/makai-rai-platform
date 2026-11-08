@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import {
   test,
@@ -9,12 +10,11 @@ import {
   type Browser,
   type BrowserContext,
 } from '@playwright/test';
-import type { OrgRole, UserRole } from '@prisma/client';
-import { createAssessment, setResponse, completeStage } from '../lib/engine/AssessmentEngine.js';
+import type { OrgRole } from '@prisma/client';
 import { testDb } from '../__tests__/helpers/db';
-import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from './fixtures/manifest';
-import type { QuestionBank } from '../types/domain';
-import questionBankRaw from '../data/questionBank.json';
+import { buildOrg, type FixtureAccount } from '../__tests__/helpers/recordFixture';
+import { MANIFEST_PATH, adminSeat, type FixtureManifest, type FixtureManifestUser } from './fixtures/manifest';
+import { abortIfPendingBackground, assertNoStalePendingTargets } from './helpers/pendingLinks';
 
 /**
  * P5: every page route loads and hydrates under the PRODUCTION Content-Security-Policy
@@ -35,23 +35,23 @@ import questionBankRaw from '../data/questionBank.json';
  * then one same-origin link is followed so the navigation, including the client router's own
  * fetches under `connect-src`, runs under the policy as well. `window.__csp` must be empty.
  *
- * The dynamic routes need ids the shared fixture does not carry (a project, two
- * assessments, an invitation token), so this spec makes them over the app's own API in
+ * The dynamic routes need ids the shared fixture does not carry (a project, an
+ * invitation token), so this spec makes them over the app's own API in
  * `beforeAll`, the way `role-matrix.spec.ts` does. It touches nothing in the shared setup.
- * The two `/admin/*` pages redirect anyone who is not a platform admin, so one otherwise
- * unused fixture user is promoted for the run (one DB write) and restored afterwards.
+ * The `/admin/*` pages render only for the platform administrator, so they are visited with the e2e run's one
+ * administrator seat (`adminSeat()`, written by the setup project; units/ORG.md Task 8b): the database keeps a single
+ * administrator (NFR-SEC-19), so the spec builds none of its own.
  */
 
 // Runs against `next start`; locally `next dev` serves different (eval-using) code and
 // a database is needed. CI is where this has a server and a database.
 test.skip(!process.env.CI, 'needs npm run start');
 
-const BASE_URL = 'http://localhost:3000';
-const questionBank = questionBankRaw as unknown as QuestionBank;
-
-/** The platform admin's login is rate limited per client address, so it gets its own,
+/** The sign-in check's login is rate limited per client address, so it gets its own,
  * the same way `auth.setup.ts` gives each seat one. */
 const ADMIN_CLIENT_IP = '10.43.0.1';
+/** The same, for the account that signs in to reach S-05 (below). */
+const UNACCEPTED_CLIENT_IP = '10.43.0.2';
 
 /** The one policy header nginx sets, read from the file nginx serves. */
 function productionCsp(): string {
@@ -90,15 +90,59 @@ function pageFileCount(): number {
  */
 const NO_LINK_TO_FOLLOW: Record<string, string> = {};
 
-type Who = 'anonymous' | 'owner' | 'admin';
+/**
+ * Pages whose data loader is still a typed stub that throws, so the page answers 500 by design until its
+ * producer fills the loader (the K0b shell of S-12). While the stub's `// CONTRACT_STUB: <producer>` marker sits
+ * directly above its export (the check `__tests__/lint/no-contract-stubs.test.ts` uses), the sweep expects exactly
+ * a 500 from the page and skips the CSP and hydration checks for that page only. The producer deletes the marker
+ * in the commit that fills the stub, and the page then goes through every check like any other, so this entry
+ * removes itself and a page listed here that answers anything else while the marker is present fails.
+ */
+const PENDING_PAGES: Record<string, { producer: string; stubFile: string; stubFn: string }> = {
+  '/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]': {
+    producer: 'DEC-b',
+    stubFile: 'lib/question/panel.ts',
+    stubFn: 'loadQuestionPanel',
+  },
+};
+
+/** True while `fn` is exported directly below its own `// CONTRACT_STUB: <producer>` marker in `source`. */
+function stubMarkerPresent(source: string, producer: string, fn: string): boolean {
+  const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`// CONTRACT_STUB: ${escape(producer)}\\s*\\n\\s*export (async )?(function|const) ${escape(fn)}\\b`).test(source);
+}
+
+/** The text a pending page is recorded under, or null when the page goes through every check. */
+function pendingFor(template: string): string | null {
+  const entry = PENDING_PAGES[template];
+  if (!entry) return null;
+  return stubMarkerPresent(fs.readFileSync(entry.stubFile, 'utf8'), entry.producer, entry.stubFn)
+    ? `pending: ${entry.producer} fills ${entry.stubFn}`
+    : null;
+}
+
+/** `unaccepted`: an account holding only pre-v1 acceptance rows, the one kind of account S-05 renders
+ * for (FR-ACC-04: an account with the three acceptances is sent on to `/`). */
+type Who = 'anonymous' | 'owner' | 'admin' | 'unaccepted';
 type Route = { file: string; template: string; path: string; who: Who };
+
+/**
+ * Where a context's sweep may follow a link to. An account missing an acceptance is sent back to
+ * S-05 from every gated page (FR-ACC-04), so a followed sidebar link would never leave S-05; it
+ * follows only a link the gate lets through (S-21, `/account`) or a public page.
+ */
+const FOLLOW_ONLY: Partial<Record<Who, string>> = { unaccepted: '^/(account|legal/)' };
 
 type DynamicValues = {
   slug?: string;
   /** Keyed by the page file's route (route groups removed), so `[id]` can mean a project
-   * in one place and an assessment in another. */
+   * in one place and a different record in another. */
   ids: Record<string, string | undefined>;
   token?: string;
+  /** A stage review of the project (route 12), for S-16 and S-17's `[reviewId]`. */
+  reviewId?: string;
+  /** S-15 only: a finding of the sweep's project (route 5 raises one). */
+  findingId?: string;
 };
 
 /** A dynamic segment's value, or a failure that names the segment. Without this a missing
@@ -123,9 +167,13 @@ function routeTemplate(file: string): string {
 function whoFor(file: string): Who {
   if (file.startsWith('app/(public)/')) return 'anonymous';
   if (file.startsWith('app/(authenticated)/admin/')) return 'admin';
+  if (file === 'app/(authenticated)/acceptances/page.tsx') return 'unaccepted';
   if (file === 'app/page.tsx' || file.startsWith('app/(authenticated)/')) return 'owner';
   throw new Error(`${file}: not under a route group this spec knows how to sign in for`);
 }
+
+/** Page files that only redirect permanently (ACC-a Task 13): the sweep follows them and checks S-06 where they land. */
+const REDIRECTS_TO: Record<string, string> = { '/terms': '/legal/terms', '/privacy': '/legal/privacy' };
 
 function buildRoutes(values: DynamicValues): Route[] {
   return pageFiles().map((file) => {
@@ -133,7 +181,17 @@ function buildRoutes(values: DynamicValues): Route[] {
     const path = template.replace(/\[([^\]]+)\]/g, (_whole, name: string) => {
       if (name === 'slug') return required(values.slug, '[slug]');
       if (name === 'token') return required(values.token, '[token]');
+      if (name === 'findingId') return required(values.findingId, '[findingId]');
       if (name === 'id') return required(values.ids[template], `[id] (${template})`);
+      if (name === 'reviewId') return required(values.reviewId, '[reviewId]');
+      // S-11, S-12 and S-13: the first stage, and a question that exists in the content the server reads (the fixture bundle).
+      if (name === 'stage') return 'pre-processing';
+      if (name === 'questionId') return 'Q-PP-01';
+      // S-06 only: privacy version 1, a file the server's registry reads (data/legal/privacy/1.md). Any other
+      // page with a [kind] or [version] segment still fails below; if the file went, the visit answers 404.
+      const legalPage = template === '/legal/[kind]' || template === '/legal/[kind]/[version]';
+      if (legalPage && name === 'kind') return 'privacy';
+      if (legalPage && name === 'version') return '1';
       throw new Error(`${file}: dynamic segment [${name}] has no value in this spec`);
     });
     return { file, template, path, who: whoFor(file) };
@@ -146,29 +204,18 @@ function seat(manifest: FixtureManifest, orgSlug: string, role: OrgRole, index: 
   return found;
 }
 
-/**
- * One stage answered and completed, so the report page has something to render. Every
- * question that does not depend on another answer gets a fixed low-signal value, and
- * `skipValidation` lets the stage complete without chasing the conditional ones: this
- * spec needs a completed assessment, not a meaningful score.
- */
-function completedState() {
-  let state = createAssessment();
-  for (const mod of questionBank.stages['pre-processing'].modules) {
-    for (const q of mod.questions) {
-      if (q.condition || q.crossStageCondition) continue;
-      const value =
-        q.type === 'gate' ? (q.options?.[0] ?? 'Yes') : q.type === 'checklist' ? [q.options?.[0] ?? ''] : 2;
-      state = setResponse(state, 'pre-processing', q.id, value);
-    }
-  }
-  return completeStage(state, 'pre-processing', { skipValidation: true });
-}
-
 async function ok(res: APIResponse, what: string) {
   if (!res.ok()) throw new Error(`csp setup: ${what} failed with ${res.status()}`);
   return res.json();
 }
+
+/**
+ * Background requests this run aborted because they went to a shell link whose page does not exist yet
+ * (e2e/helpers/pendingLinks.ts), by producer. In a production build Next 16.4.2 never settles a Link prefetch of an
+ * address that answers 404, so one such request keeps `networkidle` from being reached on every page that links it. A
+ * navigation to the address is not aborted, and an entry whose page now exists fails the sweep (see the test below).
+ */
+const abortedPendingRequests = new Map<string, number>();
 
 /** A context that serves every response with the production policy, and records every
  * `securitypolicyviolation` into `window.__csp` before any page script runs. */
@@ -187,11 +234,18 @@ async function policedContext(
   context.setDefaultTimeout(10_000);
   context.setDefaultNavigationTimeout(30_000);
   await context.route('**/*', async (route) => {
+    const pending = await abortIfPendingBackground(route);
+    if (pending) {
+      abortedPendingRequests.set(pending.producer, (abortedPendingRequests.get(pending.producer) ?? 0) + 1);
+      return;
+    }
     // maxRedirects 0: hand 3xx responses to the browser, which follows them itself,
     // so cookies and `Location` behave exactly as they do without interception.
+    // connection: close, because Node's server destroys an idle keep-alive socket 6 s after its last response, and Playwright's
+    // pooled socket has no idle timer: a request sent just then, while the server is busy, is reset (read ECONNRESET).
     const response = await route.fetch({
       maxRedirects: 0,
-      headers: { ...route.request().headers(), ...extraHeaders },
+      headers: { ...route.request().headers(), ...extraHeaders, connection: 'close' },
     });
     await route.fulfill({ response, headers: { ...response.headers(), 'content-security-policy': csp } });
   });
@@ -212,6 +266,8 @@ type Visit = {
   completed: boolean;
   /** The link that was followed, or null if the page had none. */
   followed: string | null;
+  /** Why the page was only checked for its 500 (see PENDING_PAGES), or null. */
+  pending: string | null;
 };
 
 /** Loads one route, checks it hydrated, then follows one same-origin link. */
@@ -219,6 +275,7 @@ async function visit(context: BrowserContext, route: Route): Promise<Visit> {
   const problems: string[] = [];
   let completed = false;
   let followed: string | null = null;
+  const pending = pendingFor(route.template);
   const page = await context.newPage();
   const consoleCsp: string[] = [];
   page.on('console', (m) => {
@@ -227,6 +284,14 @@ async function visit(context: BrowserContext, route: Route): Promise<Visit> {
 
   try {
     const response = await page.goto(route.path, { waitUntil: 'networkidle' });
+    if (pending !== null) {
+      // The stub throws, so exactly 500 is the expected answer; the CSP and hydration checks below do not apply.
+      if (response?.status() !== 500) {
+        problems.push(`${route.path}: ${pending} but the page answered ${response?.status()}, not 500: remove it from PENDING_PAGES or fill the stub`);
+      }
+      completed = true;
+      return { problems, completed, followed, pending };
+    }
     if (!response || response.status() >= 400) {
       problems.push(`${route.path}: HTTP ${response?.status()}`);
     }
@@ -234,7 +299,7 @@ async function visit(context: BrowserContext, route: Route): Promise<Visit> {
     // `/` sends a signed-in user on to their organisation; everything else must stay put,
     // or it is the redirect page being tested rather than this one (the admin pages
     // redirect a non-admin to `/`).
-    if (landed !== route.path && !(route.path === '/' && landed.startsWith('/orgs/'))) {
+    if (landed !== route.path && REDIRECTS_TO[route.path] !== landed && !(route.path === '/' && landed.startsWith('/orgs/'))) {
       problems.push(`${route.path}: landed on ${landed}`);
     }
 
@@ -260,13 +325,14 @@ async function visit(context: BrowserContext, route: Route): Promise<Visit> {
     // router's own fetches, which `connect-src` governs) runs under the policy too. A page
     // with no such link is recorded, and must be listed in NO_LINK_TO_FOLLOW.
     const href = await page.locator('a[href^="/"]').evaluateAll(
-      (links, here) =>
+      (links, { here, only }) =>
         links
           .map((a) => a as HTMLAnchorElement)
           .filter((a) => !a.hasAttribute('download') && !a.target)
           .filter((a) => new URL(a.href).pathname !== here && !new URL(a.href).pathname.startsWith('/api/'))
+          .filter((a) => only === null || new RegExp(only).test(new URL(a.href).pathname))
           .map((a) => a.getAttribute('href'))[0] ?? null,
-      landed,
+      { here: landed, only: FOLLOW_ONLY[route.who] ?? null },
     );
     if (href !== null) {
       followed = href;
@@ -286,80 +352,81 @@ async function visit(context: BrowserContext, route: Route): Promise<Visit> {
   } finally {
     await page.close();
   }
-  return { problems, completed, followed };
+  return { problems, completed, followed, pending: null };
 }
 
 let manifest: FixtureManifest;
 let values: DynamicValues;
-let adminUser: FixtureManifestUser;
-let adminOriginalRole: UserRole;
+let unacceptedUser: FixtureAccount;
 
 test.beforeAll(async () => {
   manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf-8'));
   const org = manifest.orgs[0];
   const owner = seat(manifest, org.slug, 'owner', 0);
 
-  const api = await pwRequest.newContext({ baseURL: BASE_URL, storageState: owner.storageStatePath });
+  const api = await pwRequest.newContext({ baseURL: test.info().project.use.baseURL, storageState: owner.storageStatePath });
   try {
     const project = await ok(
       await api.post(`/api/v1/orgs/${org.slug}/projects`, {
-        data: { name: `CSP route sweep (${org.slug})`, aiSystemType: 'classification' },
+        data: { requestId: randomUUID(), name: `CSP route sweep (${org.slug})`, aiSystemType: 'classification' },
       }),
       'project create',
     );
 
-    // One assessment left in progress (the assessment page), one taken to completion
-    // (the report page redirects away from anything not completed).
-    const inProgress = await ok(
-      await api.post(`/api/v1/orgs/${org.slug}/assessments`, { data: { projectId: project.id } }),
-      'assessment create',
-    );
-    const completed = await ok(
-      await api.post(`/api/v1/orgs/${org.slug}/assessments`, { data: { projectId: project.id } }),
-      'second assessment create',
-    );
-    await ok(
-      await api.patch(`/api/v1/orgs/${org.slug}/assessments/${completed.id}`, {
-        data: { engineState: completedState() },
-      }),
-      'engineState patch',
-    );
-    await ok(await api.post(`/api/v1/orgs/${org.slug}/assessments/${completed.id}/complete`), 'complete');
-
-    // The raw token is only ever returned here, in the create response.
+    // The raw token is only ever returned here, in the create response, as the last segment of `acceptUrl` (with `showLink`).
     const invitation = await ok(
       await api.post(`/api/v1/orgs/${org.slug}/members`, {
-        data: { email: `csp-sweep-${Date.now()}@fixture.test`, role: 'viewer' },
+        data: { requestId: randomUUID(), email: `csp-sweep-${Date.now()}@fixture.test`, role: 'viewer', showLink: true },
       }),
       'invitation create',
     );
 
+    // S-16 and S-17 need a review of the project: opened through route 12, as a team opens one.
+    const review = await ok(
+      await api.post(`/api/v1/orgs/${org.slug}/projects/${project.id}/reviews`, {
+        data: { requestId: randomUUID(), stage: 'pre-processing', preparedFor: null },
+      }),
+      'stage review open',
+    );
+
+    // S-15 needs a finding to open: a team finding raised through route 5 (the same origin as the page).
+    const finding = await ok(
+      await api.post(`/api/v1/orgs/${org.slug}/projects/${project.id}/findings`, {
+        headers: { origin: String(test.info().project.use.baseURL) },
+        data: { requestId: crypto.randomUUID(), stage: 'pre-processing', title: 'CSP sweep finding', description: 'Raised by the CSP sweep.', riskArea: null, questionId: null, decisionVersionId: null },
+      }),
+      'finding raise',
+    );
+
     values = {
       slug: org.slug,
-      token: invitation.token,
+      token: String(invitation.acceptUrl).split('/').pop(),
+      reviewId: review.id,
+      findingId: finding.id,
       ids: {
+        '/orgs/[slug]/projects/[id]/findings': project.id,
+        '/orgs/[slug]/projects/[id]/findings/[findingId]': project.id,
         '/orgs/[slug]/projects/[id]': project.id,
-        '/orgs/[slug]/projects/[id]/compare': project.id,
-        '/orgs/[slug]/assessment/[id]': inProgress.id,
-        '/orgs/[slug]/assessment/[id]/report': completed.id,
+        '/orgs/[slug]/projects/[id]/export': project.id,   // S-20 for one project (EXP)
+        '/orgs/[slug]/projects/[id]/stages/[stage]': project.id,
+        '/orgs/[slug]/projects/[id]/edit': project.id,
+        '/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]': project.id,
+        '/orgs/[slug]/projects/[id]/reviews/new': project.id,
+        '/orgs/[slug]/projects/[id]/reviews/[reviewId]': project.id,
+        '/orgs/[slug]/projects/[id]/reviews/[reviewId]/seal': project.id,
+        '/orgs/[slug]/projects/[id]/reviews/[reviewId]/documents': project.id,   // S-18 (DOC-a)
+        '/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]/history': project.id,
+        '/admin/organisations/[id]': org.id,   // S-24 detail of a fixture organisation (ORG)
       },
     };
   } finally {
     await api.dispose();
   }
 
-  // `/admin/*` redirects anyone whose platform role is not `admin`. Seat 1 of org A's
-  // viewers is used by no other spec, so promoting it cannot change what they see.
-  adminUser = seat(manifest, org.slug, 'viewer', 1);
-  const before = await testDb.user.findUniqueOrThrow({ where: { id: adminUser.userId }, select: { role: true } });
-  adminOriginalRole = before.role;
-  await testDb.user.update({ where: { id: adminUser.userId }, data: { role: 'admin' } });
+  unacceptedUser = (await buildOrg({ label: 'cspaccept', acceptances: 'pre-v1' })).members.viewer;
 });
 
 test.afterAll(async () => {
-  if (adminUser) {
-    await testDb.user.update({ where: { id: adminUser.userId }, data: { role: adminOriginalRole } });
-  }
   await testDb.$disconnect();
 });
 
@@ -367,6 +434,8 @@ test('every page route hydrates under the production CSP', async ({ browser }) =
   // A passing run takes about 20 seconds. A failing one waits out every broken page, and
   // must still reach the assertion that lists them all, so the budget is generous.
   test.setTimeout(600_000);
+  assertNoStalePendingTargets();                     // a page that now exists must not stay on the abort list
+  abortedPendingRequests.clear();
   const csp = productionCsp();
   const routes = buildRoutes(values);
   // Counted a different way from the route list, and before any visit, so the final
@@ -378,36 +447,43 @@ test('every page route hydrates under the production CSP', async ({ browser }) =
   const contexts: Record<Who, BrowserContext> = {
     anonymous: await policedContext(browser, csp),
     owner: await policedContext(browser, csp, { storageState: owner.storageStatePath }),
-    admin: await policedContext(browser, csp, { clientIp: ADMIN_CLIENT_IP }),
+    admin: await policedContext(browser, csp, { storageState: adminSeat().storageStatePath }),
+    unaccepted: await policedContext(browser, csp, { clientIp: UNACCEPTED_CLIENT_IP }),
   };
 
   const problems: string[] = [];
   const visited: string[] = [];
   const withoutLink: string[] = [];
+  const pendingPages: string[] = [];
   try {
-    // The platform admin signs in through the real form, under the same policy, so the
-    // sign-in flow is covered too. If it fails, the `/admin/*` pages are reported as
-    // redirected below; the rest of the sweep still runs.
-    const login = await contexts.admin.newPage();
-    try {
-      await login.goto('/login');
-      await login.fill('#email', adminUser.email);
-      await login.fill('#password', adminUser.password);
-      await login.locator('button[type="submit"]').click();
-      await login.waitForURL((url) => url.pathname !== '/login');
-      const loginViolations = await login.evaluate(() => (window as unknown as { __csp: string[] }).__csp);
-      if (loginViolations.length > 0) problems.push(`/login (submit): CSP violations ${JSON.stringify(loginViolations)}`);
-    } catch (e) {
-      problems.push(`/login (submit): ${e instanceof Error ? e.message.split('\n')[0] : String(e)}`);
-    } finally {
-      await login.close();
+    // The sign-in form is submitted under the same policy, so the sign-in flow is covered too: by the owner seat 0
+    // (the administrator's password is not in the manifest, units/ORG.md Task 8b) in a context of its own, and by the
+    // account that reaches S-05. If one fails it is reported; the rest of the sweep still runs.
+    const signIn = await policedContext(browser, csp, { clientIp: ADMIN_CLIENT_IP });
+    for (const [who, account, context] of [['owner seat 0', owner, signIn], ['unaccepted', unacceptedUser, contexts.unaccepted]] as const) {
+      const login = await context.newPage();
+      try {
+        await login.goto('/login');
+        await login.fill('#email', account.email);
+        await login.fill('#password', account.password);
+        await login.locator('button[type="submit"]').click();
+        await login.waitForURL((url) => url.pathname !== '/login');
+        const loginViolations = await login.evaluate(() => (window as unknown as { __csp: string[] }).__csp);
+        if (loginViolations.length > 0) problems.push(`/login (submit, ${who}): CSP violations ${JSON.stringify(loginViolations)}`);
+      } catch (e) {
+        problems.push(`/login (submit, ${who}): ${e instanceof Error ? e.message.split('\n')[0] : String(e)}`);
+      } finally {
+        await login.close();
+      }
     }
+    await signIn.close();
 
     for (const route of routes) {
       const result = await visit(contexts[route.who], route);
       problems.push(...result.problems);
       if (result.completed) visited.push(route.template);
-      if (result.completed && result.followed === null) withoutLink.push(route.template);
+      if (result.pending !== null) pendingPages.push(`${route.template} (${result.pending})`);
+      else if (result.completed && result.followed === null) withoutLink.push(route.template);
     }
   } finally {
     for (const context of Object.values(contexts)) {
@@ -419,7 +495,10 @@ test('every page route hydrates under the production CSP', async ({ browser }) =
 
   console.log(
     `csp sweep: ${visited.length} of ${expectedCount} page files visited; ` +
-      `link followed on ${visited.length - withoutLink.length}, none to follow on ${withoutLink.length}`,
+      `link followed on ${visited.length - withoutLink.length - pendingPages.length}, none to follow on ${withoutLink.length}, ` +
+      `pending on ${pendingPages.length}${pendingPages.map((p) => `\n  ${p}`).join('')}\n` +
+      `  background requests aborted for shell links whose page does not exist yet: ${[...abortedPendingRequests.values()].reduce((a, b) => a + b, 0)}` +
+      `${[...abortedPendingRequests].map(([producer, n]) => ` (${producer}: ${n})`).join('')}`,
   );
   test.info().annotations.push({
     type: 'routes visited',
@@ -437,4 +516,14 @@ test('every page route hydrates under the production CSP', async ({ browser }) =
     withoutLink.sort(),
     'pages with no same-origin link must match NO_LINK_TO_FOLLOW exactly',
   ).toEqual(Object.keys(NO_LINK_TO_FOLLOW).sort());
+});
+
+test('the pending-page gate follows the stub marker: present gives pending, absent gives the full checks', () => {
+  const entry = PENDING_PAGES['/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]'];
+  const stub = 'export async function loadQuestionPanel(\n  ctx: OrgContext,\n): Promise<QuestionPanelData> {\n  throw new Error();\n}\n';
+  expect(stubMarkerPresent(`// CONTRACT_STUB: ${entry.producer}\n${stub}`, entry.producer, entry.stubFn), 'marker present').toBe(true);
+  expect(stubMarkerPresent(stub, entry.producer, entry.stubFn), 'marker deleted by the producer').toBe(false);
+  // another producer's marker, or the marker above another export, does not make this page pending
+  expect(stubMarkerPresent(`// CONTRACT_STUB: DEC-a\n${stub}`, entry.producer, entry.stubFn), 'another producer').toBe(false);
+  expect(stubMarkerPresent(`// CONTRACT_STUB: ${entry.producer}\n${stub.replace('loadQuestionPanel', 'somethingElse')}`, entry.producer, entry.stubFn), 'another export').toBe(false);
 });

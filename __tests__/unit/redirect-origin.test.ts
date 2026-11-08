@@ -24,6 +24,8 @@ import type * as TS from 'typescript';
 const requireIdentityForApi = vi.fn();
 const findUnique = vi.fn();
 const update = vi.fn();
+const adminSetAccountActive = vi.fn();
+const accountHasMembership = vi.fn();
 
 vi.mock('@/lib/auth/identity', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/auth/identity')>()),
@@ -33,6 +35,8 @@ vi.mock('@/lib/data/identity', () => ({
   identityDb: { user: { findUnique: (...a: unknown[]) => findUnique(...a), update: (...a: unknown[]) => update(...a) } },
 }));
 vi.mock('@/lib/security-logger', () => ({ logSecurityEvent: vi.fn() }));
+vi.mock('@/lib/data/definer', () => ({ adminSetAccountActive: (...a: unknown[]) => adminSetAccountActive(...a) }));
+vi.mock('@/lib/data/admin', () => ({ accountHasMembership: (...a: unknown[]) => accountHasMembership(...a) }));
 
 /** vitest.config.ts sets NEXTAUTH_URL; this is what publicOrigin() must produce. */
 const PUBLIC = 'https://vitest.example.invalid';
@@ -41,6 +45,8 @@ const PUBLIC = 'https://vitest.example.invalid';
 const BIND_HOSTS = ['https://0.0.0.0:3000', 'http://1038b2a33d91:3000'];
 
 const ADMIN = { userId: 'admin-1', platformRole: 'admin' };
+/** S-25's Deactivate button: the state it names and its form's request id. */
+const DEACTIVATE = { active: 'false', requestId: '00000000-0000-4000-8000-000000000047' };
 
 function formPost(base: string, fields: Record<string, string>): NextRequest {
   return new NextRequest(`${base}/api/admin/users/target-1/role`, {
@@ -50,7 +56,7 @@ function formPost(base: string, fields: Record<string, string>): NextRequest {
   });
 }
 
-async function post(base: string, fields: Record<string, string> = { action: 'deactivate' }): Promise<Response> {
+async function post(base: string, fields: Record<string, string> = DEACTIVATE): Promise<Response> {
   const { POST } = await import('../../app/api/admin/users/[id]/role/route');
   return POST(formPost(base, fields), { params: Promise.resolve({ id: 'target-1' }) });
 }
@@ -63,9 +69,13 @@ beforeEach(() => {
   requireIdentityForApi.mockReset();
   findUnique.mockReset();
   update.mockReset();
+  adminSetAccountActive.mockReset();
+  accountHasMembership.mockReset();
   requireIdentityForApi.mockResolvedValue(ADMIN);
   findUnique.mockResolvedValue({ id: 'target-1', role: 'assessor', isActive: true });
   update.mockResolvedValue({});
+  adminSetAccountActive.mockResolvedValue({ affectedOrgIds: [] });
+  accountHasMembership.mockResolvedValue(false);
 });
 
 describe('POST /api/admin/users/[id]/role redirects to the public origin', () => {
@@ -74,12 +84,13 @@ describe('POST /api/admin/users/[id]/role redirects to the public origin', () =>
 
     // [label, arrange, fields, expected path]
     const cases: [string, () => void, Record<string, string>, string][] = [
-      ['unauthenticated', () => requireIdentityForApi.mockRejectedValue(new UnauthenticatedError()), { action: 'deactivate' }, '/login'],
-      ['not an admin', () => requireIdentityForApi.mockResolvedValue({ userId: 'u', platformRole: 'assessor' }), { action: 'deactivate' }, '/'],
-      ['unknown target', () => findUnique.mockResolvedValue(null), { action: 'deactivate' }, '/admin/users'],
-      ['own account', () => findUnique.mockResolvedValue({ id: ADMIN.userId, role: 'admin', isActive: true }), { action: 'deactivate' }, '/admin/users?error=self'],
-      ['role changed', () => undefined, { role: 'admin' }, '/admin/users'],
-      ['deactivated', () => undefined, { action: 'deactivate' }, '/admin/users'],
+      ['unauthenticated', () => requireIdentityForApi.mockRejectedValue(new UnauthenticatedError()), DEACTIVATE, '/login'],
+      ['not an admin', () => requireIdentityForApi.mockResolvedValue({ userId: 'u', platformRole: 'assessor' }), DEACTIVATE, '/'],
+      ['unknown target', () => findUnique.mockResolvedValue(null), DEACTIVATE, '/admin/accounts'],
+      ['own account', () => findUnique.mockResolvedValue({ id: ADMIN.userId, role: 'admin', isActive: true }), DEACTIVATE, '/admin/accounts?error=self'],
+      ['role changed', () => undefined, { role: 'assessor' }, '/admin/accounts'],
+      ['second administrator refused', () => undefined, { role: 'admin' }, '/admin/accounts?error=single_admin'],
+      ['deactivated', () => undefined, DEACTIVATE, '/admin/accounts'],
     ];
 
     for (const [label, arrange, fields, path] of cases) {
@@ -107,14 +118,15 @@ describe('POST /api/admin/users/[id]/role redirects to the public origin', () =>
   // publicOrigin() throws when it is unset, so the route has to ask for it before it touches
   // the database.
   it.each([
-    ['a role change', { role: 'admin' }],
-    ['a deactivation', { action: 'deactivate' }],
+    ['a role change', { role: 'assessor' }],
+    ['a deactivation', DEACTIVATE],
   ])('writes nothing when NEXTAUTH_URL is missing: %s', async (_name, fields) => {
     vi.stubEnv('NEXTAUTH_URL', '');
 
     await expect(post('https://0.0.0.0:3000', fields)).rejects.toThrow(/NEXTAUTH_URL/);
 
     expect(update).not.toHaveBeenCalled();
+    expect(adminSetAccountActive).not.toHaveBeenCalled();
     expect(findUnique).not.toHaveBeenCalled();
     expect(requireIdentityForApi).not.toHaveBeenCalled();
   });
@@ -199,13 +211,26 @@ function addressReads(file: string, src: string): string[] {
  * Allowed by count, per file and per label, so an exception cannot widen: a second Host read
  * in the same file, or an X-Forwarded-Host read there, is a new hit.
  *
- * - The role route's CSRF check compares the Origin header's host with the Host header nginx
- *   forwards (`proxy_set_header Host $host`), which is the public name. It builds no URL.
- * - The assessments route reads `new URL(req.url)` for `searchParams` alone and uses no host.
+ * - The shared CSRF check (`lib/http/sameOrigin.ts`) compares the Origin header's host with the
+ *   Host header nginx forwards (`proxy_set_header Host $host`), which is the public name, and
+ *   builds no URL. The role route's own copy of that check is gone: it calls the shared one.
+ * - The content check (`lib/content/validate.ts`) reads a content record's link field, a control's
+ *   resource `url`, not a request; it handles no request (scripts and tests only).
+ * - The evidence modules read the address of a link evidence item (`body.url`, `a.url`, the stored link): data a
+ *   member typed, which the platform stores and never requests (FR-EVD-03; __tests__/lint/evidence-never-fetches.test.ts
+ *   holds that). The browser module's `a.url` is the path of its own upload endpoint, not a request URL.
+ * - The session-read guard (`lib/auth/sessionEndpoint.ts`, ACC-b) reads only the pathname of the request's URL to decide
+ *   whether it is `/api/auth/session`; it builds no URL and redirects nowhere. It takes a plain `Request`, which has no
+ *   `nextUrl`.
  */
 const ALLOWED: Record<string, Record<string, number>> = {
-  'app/api/admin/users/[id]/role/route.ts': { [L.host]: 1 },
-  'app/api/v1/orgs/[slug]/assessments/route.ts': { [L.url]: 1 },
+  'lib/http/sameOrigin.ts': { [L.host]: 1 },
+  'lib/content/validate.ts': { [L.url]: 1 },
+  'lib/evidence/link.ts': { [L.url]: 4 },
+  'lib/data/evidence.ts': { [L.url]: 1 },
+  'lib/client/evidenceUpload.ts': { [L.url]: 2 },
+  'app/api/v1/orgs/[slug]/projects/[id]/evidence/route.ts': { [L.url]: 1 },
+  'lib/auth/sessionEndpoint.ts': { [L.url]: 1 },
 };
 
 /** The labels in `file` that its allowance does not cover. */
@@ -216,7 +241,7 @@ function scan(file: string, src: string): string[] {
 }
 
 describe('no server file builds an absolute URL from the request', () => {
-  const ROLE = 'app/api/admin/users/[id]/role/route.ts';
+  const SHARED_CHECK = 'lib/http/sameOrigin.ts';
   const idioms: [string, string, string][] = [
     ['the nextUrl.clone() idiom', 'lib/x.ts', "const u = request.nextUrl.clone(); u.pathname = '/login'; return NextResponse.redirect(u);"],
     ['a request under another name (r.url)', 'lib/x.ts', "return new URL('/login', r.url);"],
@@ -225,7 +250,7 @@ describe('no server file builds an absolute URL from the request', () => {
     ['a destructured url with no base to give it away', 'lib/x.ts', 'const { url } = request; return new URL(url).origin;'],
     ['code after // inside a string', 'lib/x.ts', "const s = 'a //b'; return new URL('/login', req.url);"],
     ['the Origin of a URL made from the request', 'lib/x.ts', 'return new URL(request.url).origin;'],
-    ['an X-Forwarded-Host read in the one file allowed a Host read', ROLE, "return request.headers.get('x-forwarded-host');"],
+    ['an X-Forwarded-Host read in the one file allowed a Host read', SHARED_CHECK, "return request.headers.get('x-forwarded-host');"],
   ];
 
   it.each(idioms)('catches %s', (_name, file, src) => {
@@ -257,14 +282,10 @@ describe('no server file builds an absolute URL from the request', () => {
   });
 
   it('keeps an exception to its count and its label', () => {
-    // The role route may read Host once. A second read, or X-Forwarded-Host, is a new hit.
-    expect(scan(ROLE, "a.get('host');")).toEqual([]);
-    expect(scan(ROLE, "a.get('host'); b.get('host');")).toEqual([L.host]);
-    expect(scan(ROLE, "a.get('host'); b.get('x-forwarded-host');")).toEqual([L.forwardedHost]);
-    // The assessments route may read one .url, and nothing else about the request.
-    const ASSESSMENTS = 'app/api/v1/orgs/[slug]/assessments/route.ts';
-    expect(scan(ASSESSMENTS, 'new URL(req.url);')).toEqual([]);
-    expect(scan(ASSESSMENTS, 'new URL(req.url); new URL(p, req.url);')).toEqual([L.url, L.base]);
+    // The shared check may read Host once. A second read, or X-Forwarded-Host, is a new hit.
+    expect(scan(SHARED_CHECK, "a.get('host');")).toEqual([]);
+    expect(scan(SHARED_CHECK, "a.get('host'); b.get('host');")).toEqual([L.host]);
+    expect(scan(SHARED_CHECK, "a.get('host'); b.get('x-forwarded-host');")).toEqual([L.forwardedHost]);
   });
 
   it('finds every one in app/ and lib/ accounted for', () => {
