@@ -1,4 +1,3 @@
-import { execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
@@ -6,9 +5,17 @@ import { describe, expect, it } from 'vitest';
  * The v0.6.0 release paperwork: the personal-data map entry that register row D-264 names, and (Task 4) the release notes.
  */
 
-// The last release (v0.5.1, commit d13be0c; the repository has no local tag for it). The retired names are built from parts, so this
+// The ADR files at the last release, read with `git ls-tree -r --name-only d13be0c docs/adr` (d13be0c is the v0.5.1 release merge; there is
+// no v0.5.1 tag). A constant, so the test needs no git history (CI clones at depth 1). The retired names are built from parts, so this
 // file names neither (removed-settings.test.ts holds the rule).
-const LAST_RELEASE = 'd13be0c';
+const ADRS_AT_LAST_RELEASE = new Set([
+  '0001-data-access-architecture.md',
+  '0002-identity-and-account-linking.md',
+  '0003-framework-version-registry-third-lane.md',
+  '0004-eight-principles-from-unesco-ten.md',
+  '0009-identity-lane-role.md',
+  '0010-break-glass-and-integrity-log.md',
+]);
 const RETIRED = [['ALLOW', 'OPEN', 'REGISTRATION'].join('_'), ['ORG', 'LIMIT', 'PER', 'USER'].join('_')];
 const KEYS = ['REMINDER_JOB_TOKEN', 'HC_REMINDER_PING_URL', 'SYNTHETIC_PROJECT_ID', 'SYNTHETIC_STAGE', 'SYNTHETIC_QUESTION_ID'];
 
@@ -60,8 +67,7 @@ describe('the v0.6.0 release', () => {
 
   it('NFR-MNT-06: the notes list every ADR this release adds, and the register rows', () => {
     const t = readFileSync('docs/releases/v0.6.0.md', 'utf8');
-    const before = new Set(execFileSync('git', ['ls-tree', '-r', '--name-only', LAST_RELEASE, 'docs/adr'], { encoding: 'utf8' }).split('\n'));
-    const added = readdirSync('docs/adr').filter((f) => /^\d{4}-.*\.md$/.test(f) && !before.has(`docs/adr/${f}`));
+    const added = readdirSync('docs/adr').filter((f) => /^\d{4}-.*\.md$/.test(f) && !ADRS_AT_LAST_RELEASE.has(f));
     expect(added.length, 'the release adds ADRs 0011 to 0021').toBeGreaterThanOrEqual(11);
     for (const f of added) expect(t, f).toMatch(new RegExp(`\\]\\(\\.\\./adr/${f.slice(0, 5)}`));
     expect(t).toMatch(/^Register rows: (None|D-\d{3}(, D-\d{3})*)$/m);
