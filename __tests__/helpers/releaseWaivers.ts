@@ -15,8 +15,11 @@ import { readFileSync } from 'node:fs';
 
 export const RELEASE_WAIVERS_FILE = 'docs/releases/release-waivers.json';
 
-/** The release cases a waiver may cover: the owner's decisions of 6 Nov 2026 on A4 and UX-03. */
-export const WAIVABLE_CASES = ['FR-ACC-02 legal-placeholder', 'UX-03 help-contact-pending'] as const;
+/**
+ * The release cases a waiver may cover: the owner's decisions of 6 Nov 2026 on A4 and UX-03, and of 8 Nov 2026 to defer
+ * the screen-reader walk (NFR-A11Y-07, register row D-301).
+ */
+export const WAIVABLE_CASES = ['FR-ACC-02 legal-placeholder', 'UX-03 help-contact-pending', 'NFR-A11Y-07 screen-reader-walk'] as const;
 export type WaivableCase = (typeof WAIVABLE_CASES)[number];
 
 export type ReleaseWaiver = {

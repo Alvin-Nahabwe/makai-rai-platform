@@ -35,8 +35,8 @@ function file(body: unknown): string {
 }
 
 describe('release waivers', () => {
-  it('FR-ACC-02 UX-03 FIX-3: the two waivable cases are exactly the owner\'s two decisions', () => {
-    expect([...WAIVABLE_CASES].sort()).toEqual(['FR-ACC-02 legal-placeholder', 'UX-03 help-contact-pending']);
+  it('FR-ACC-02 UX-03 NFR-A11Y-07 FIX-3: the waivable cases are exactly the owner\'s three decisions', () => {
+    expect([...WAIVABLE_CASES].sort()).toEqual(['FR-ACC-02 legal-placeholder', 'NFR-A11Y-07 screen-reader-walk', 'UX-03 help-contact-pending']);
     expect(RELEASE_WAIVERS_FILE).toBe('docs/releases/release-waivers.json');
   });
 
@@ -89,7 +89,7 @@ describe('release waivers', () => {
     expect(() => releaseWaiver('UX-03 help-contact-pending', file({ waivers: [OK, { ...broken, release: '0.5.0' }] }), V)).toThrow(/register row/);
   });
 
-  it("FR-ACC-02 UX-03 FIX-3: the committed file holds the owner's two decisions, word for word", () => {
+  it("FR-ACC-02 UX-03 FIX-3: the committed file holds the owner's three decisions, word for word", () => {
     const raw = JSON.parse(readFileSync(RELEASE_WAIVERS_FILE, 'utf8')) as { waivers: Array<Record<string, unknown>> };
     const byCase = Object.fromEntries(raw.waivers.map((w) => [w.case, w]));
     expect(Object.keys(byCase).sort()).toEqual([...WAIVABLE_CASES].sort());
@@ -102,9 +102,13 @@ describe('release waivers', () => {
     expect(byCase['UX-03 help-contact-pending']).toMatchObject({
       owner_words: 'Ship pending text', date: '2026-11-06', covers: ['data/help-contact.json'], register_row: 'D-294', release: '0.6.0',
     });
+    expect(byCase['NFR-A11Y-07 screen-reader-walk']).toMatchObject({
+      owner_words: 'postpone the screen reader accessibility check for later versions/releases. It is not a priority right now and should not block the release.',
+      date: '2026-11-08', covers: ['docs/accessibility/screen-reader-walk-v0.6.0.md'], register_row: 'D-301', release: '0.6.0',
+    });
     // An entry's release is the version of package.json, or it waives nothing (SFH-11).
     expect(JSON.parse(readFileSync('package.json', 'utf8')).version).toBe('0.6.0');
-    // Both entries are complete, so both read without throwing.
+    // Every entry is complete, so each reads without throwing.
     for (const c of WAIVABLE_CASES) expect(releaseWaiver(c)?.case).toBe(c);
   });
 });

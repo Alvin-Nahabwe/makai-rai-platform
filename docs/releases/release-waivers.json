@@ -20,6 +20,16 @@
       "date": "2026-11-06",
       "register_row": "D-294",
       "release": "0.6.0"
+    },
+    {
+      "case": "NFR-A11Y-07 screen-reader-walk",
+      "test": "__tests__/lint/screen-reader-walk.test.ts",
+      "covers": ["docs/accessibility/screen-reader-walk-v0.6.0.md"],
+      "decision": "NFR-A11Y-07, the screen-reader walk of J-05 and J-09: deferred to a later release. The walk sheet stays unwalked; the release check skips only its walk-recorded and open-finding assertions.",
+      "owner_words": "postpone the screen reader accessibility check for later versions/releases. It is not a priority right now and should not block the release.",
+      "date": "2026-11-08",
+      "register_row": "D-301",
+      "release": "0.6.0"
     }
   ]
 }
