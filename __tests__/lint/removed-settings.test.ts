@@ -23,6 +23,13 @@ const TOKEN_VALUE = `REMINDER_JOB_TOKEN["']?[[:space:]]*[=:][[:space:]]*["']?[0-
 // Built from parts, so this file holds neither name.
 const NAMES = [['ALLOW', 'OPEN', 'REGISTRATION'].join('_'), ['ORG', 'LIMIT', 'PER', 'USER'].join('_')];
 
+// The two lines of the v0.6.0 release notes that tell the owner to remove each retired key from the server .env, by exact text
+// (the notes must name them, FR-OPS-03). Any other line of that file, or of any other docs file, that names one fails.
+const NOTES_LINES = [
+  `- \`${NAMES[1]}\`: retired; the owner removes it from the server \`.env\` (8.5 step 8)`,
+  `- \`${NAMES[0]}\`: retired; the owner removes it from the server \`.env\` if it is there`,
+];
+
 describe('the production settings', () => {
   it('NFR-SEC-14: the token-value scan catches the plain, quoted, YAML and bearer shapes, and not an empty value', () => {
     const hex = 'ab12'.repeat(16);
@@ -56,7 +63,9 @@ describe('the production settings', () => {
     const unexplained = hits.filter((h) => {
       const [file, , ...rest] = h.split(':');
       const text = rest.join(':');
-      return file === 'docs/runbooks/deployment.md' ? !allowedLine(text) : !allowedFile(file);
+      if (file === 'docs/runbooks/deployment.md') return !allowedLine(text);
+      if (file === 'docs/releases/v0.6.0.md') return !NOTES_LINES.includes(text);
+      return !allowedFile(file);
     });
     expect(unexplained).toEqual([]);
     expect(hits.some((h) => h.startsWith('docs/runbooks/deployment.md:')), 'the runbook lines are still there, so the exemption is not stale').toBe(true);
