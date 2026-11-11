@@ -34,7 +34,7 @@ vi.mock('@/lib/legal/registry', async (importOriginal) => {
 afterEach(() => {
   privacyHistory.versions = [...privacyHistory.fixture];
 });
-const { LEGAL_KINDS, currentLegalText, legalTextHistory } = await import('@/lib/legal/registry');
+const { LEGAL_KINDS, currentLegalText, legalTextHistory, legalTextVersion } = await import('@/lib/legal/registry');
 const actualRegistry = await vi.importActual<typeof import('@/lib/legal/registry')>('@/lib/legal/registry');
 
 const KindModule = await import('@/app/(public)/legal/[kind]/page');
@@ -117,8 +117,14 @@ describe('S-06 /legal/[kind] and /legal/[kind]/[version]', () => {
     for (const version of ['..%2Fterms%2F1', '../terms/1', '9', '01', 'constructor', '__proto__', '']) {
       await expect(versionPage('privacy', version), version).rejects.toThrow(NOT_FOUND);
     }
-    // A version another kind has is not a version of this kind: privacy has a version 2 in the fixture, terms has none.
-    await expect(versionPage('terms', '2')).rejects.toThrow(NOT_FOUND);
+    // A version another kind has is not a version of this kind. Privacy is given a version far past any real one, so
+    // terms lacks it however many versions terms is later published with; the premise is asserted, not assumed.
+    const ahead = '9999';
+    privacyHistory.versions = [...privacyHistory.fixture, { ...privacyHistory.fixture[1], version: ahead }];
+    expect(legalTextVersion('privacy', ahead), 'privacy has the version').not.toBeNull();
+    expect(legalTextVersion('terms', ahead), 'terms lacks it').toBeNull();
+    await expect(versionPage('privacy', ahead)).resolves.toContain(`Version ${ahead}`);
+    await expect(versionPage('terms', ahead)).rejects.toThrow(NOT_FOUND);
     // A version past the newest one of the kind is not a version of it; the newest is the registry's, so a published
     // terms version 2 moves this case to 3 without an edit.
     await expect(versionPage('terms', String(Number(currentLegalText('terms').version) + 1))).rejects.toThrow(NOT_FOUND);
