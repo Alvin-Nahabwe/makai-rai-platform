@@ -63,14 +63,14 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
       </div>
       {refusal !== null ? <div className="form-error" role="alert" id="accounts-refusal">{refusal}</div> : null}
       <div className="admin-table-wrapper card" tabIndex={0} role="region" aria-labelledby="accounts-caption">
-        <table className="admin-table admin-table--stack">
+        <table className="admin-table admin-table--stack" role="table">
           <caption id="accounts-caption">Every account on the platform, oldest first</caption>
-          <thead>
-            <tr>
-              {ACCOUNT_COLUMNS.map((c) => <th key={c} scope="col">{c}</th>)}
+          <thead role="rowgroup">
+            <tr role="row">
+              {ACCOUNT_COLUMNS.map((c) => <th key={c} scope="col" role="columnheader">{c}</th>)}
             </tr>
           </thead>
-          <tbody>
+          <tbody role="rowgroup">
             {page.items.map((a) => {
               const isSelf = a.userId === identity.userId;
               const needsReference = a.isActive && a.onlyActiveOwnerOf.length > 0;
@@ -79,16 +79,16 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
               const invalid = missingReferenceFor === a.userId;
               const verb = a.isActive ? 'Deactivate' : 'Reactivate';
               return (
-                <tr key={a.userId}>
-                  <td className="admin-table__name" data-label={ACCOUNT_COLUMNS[0]}>
+                <tr role="row" key={a.userId}>
+                  <td role="cell" className="admin-table__name" data-label={ACCOUNT_COLUMNS[0]}>
                     {a.name}
                     {isSelf ? <span className="text-muted"> (you)</span> : null}
                   </td>
-                  <td className="admin-table__email" data-label={ACCOUNT_COLUMNS[1]}>{a.email}</td>
-                  <td data-label={ACCOUNT_COLUMNS[2]}>{a.platformRole === 'admin' ? 'MAK-AI administrator' : 'Assessor'}</td>
-                  <td data-label={ACCOUNT_COLUMNS[3]}>{a.isActive ? 'Active' : 'Deactivated'}</td>
-                  <td data-label={ACCOUNT_COLUMNS[4]}>{formatDay(a.createdAt, 'Africa/Kampala')}</td>
-                  <td className="admin-table__actions">
+                  <td role="cell" className="admin-table__email" data-label={ACCOUNT_COLUMNS[1]}>{a.email}</td>
+                  <td role="cell" data-label={ACCOUNT_COLUMNS[2]}>{a.platformRole === 'admin' ? 'MAK-AI administrator' : 'Assessor'}</td>
+                  <td role="cell" data-label={ACCOUNT_COLUMNS[3]}>{a.isActive ? 'Active' : 'Deactivated'}</td>
+                  <td role="cell" data-label={ACCOUNT_COLUMNS[4]}>{formatDay(a.createdAt, 'Africa/Kampala')}</td>
+                  <td role="cell" className="admin-table__actions">
                     {isSelf ? null : (
                       <form action={`/api/admin/users/${encodeURIComponent(a.userId)}/role`} method="POST">
                         <input type="hidden" name="active" value={String(!a.isActive)} />

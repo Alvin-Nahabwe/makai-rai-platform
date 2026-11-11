@@ -206,19 +206,19 @@ export default function MembersManager({ slug, currentUserId, currentRole, membe
       )}
 
       <div className="admin-table-wrapper card" style={{ marginBottom: 'var(--space-4)' }}>
-        <table className="admin-table admin-table--stack">
+        <table className="admin-table admin-table--stack" role="table">
           <caption>Members</caption>
-          <thead>
-            <tr>{MEMBER_COLUMNS.map((c) => <th key={c} scope="col">{c}</th>)}</tr>
+          <thead role="rowgroup">
+            <tr role="row">{MEMBER_COLUMNS.map((c) => <th key={c} scope="col" role="columnheader">{c}</th>)}</tr>
           </thead>
-          <tbody>
+          <tbody role="rowgroup">
             {members.map((m) => (
-              <tr key={m.userId}>
-                <td data-label={MEMBER_COLUMNS[0]}>
+              <tr role="row" key={m.userId}>
+                <td role="cell" data-label={MEMBER_COLUMNS[0]}>
                   {m.name}{m.userId === currentUserId ? ' (you)' : ''}
                   {m.createdFromShownLink && <span className="text-muted"> account created from a copied link</span>}
                 </td>
-                <td data-label={MEMBER_COLUMNS[1]}>
+                <td role="cell" data-label={MEMBER_COLUMNS[1]}>
                   {mayChangeRole(m) ? (
                     <select
                       aria-label={`Role for ${m.name}`}
@@ -232,7 +232,7 @@ export default function MembersManager({ slug, currentUserId, currentRole, membe
                     <span className="badge">{m.role}</span>
                   )}
                 </td>
-                <td>
+                <td role="cell">
                   <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
                     {mayChangeRole(m) && (roleDraft[m.userId] ?? m.role) !== m.role && (
                       <button type="button" className="btn btn--secondary" aria-disabled={busy || undefined} aria-label={`Change role for ${m.name}`}
@@ -282,19 +282,19 @@ export default function MembersManager({ slug, currentUserId, currentRole, membe
       {canInvite && (
         <>
           <div className="admin-table-wrapper card" style={{ marginBottom: 'var(--space-4)' }}>
-            <table className="admin-table admin-table--stack">
+            <table className="admin-table admin-table--stack" role="table">
               <caption>Pending invitations</caption>
-              <thead>
-                <tr>{INVITATION_COLUMNS.map((c) => <th key={c} scope="col">{c}</th>)}</tr>
+              <thead role="rowgroup">
+                <tr role="row">{INVITATION_COLUMNS.map((c) => <th key={c} scope="col" role="columnheader">{c}</th>)}</tr>
               </thead>
-              <tbody>
-                {invitations.length === 0 && <tr><td colSpan={4}>No pending invitations.</td></tr>}
+              <tbody role="rowgroup">
+                {invitations.length === 0 && <tr role="row"><td role="cell" colSpan={4}>No pending invitations.</td></tr>}
                 {invitations.map((inv) => (
-                  <tr key={inv.id}>
-                    <td data-label={INVITATION_COLUMNS[0]}>{inv.email}</td>
-                    <td data-label={INVITATION_COLUMNS[1]}><span className="badge">{inv.role}</span></td>
-                    <td data-label={INVITATION_COLUMNS[2]}>{formatDay(inv.expiresAt)}</td>
-                    <td>
+                  <tr role="row" key={inv.id}>
+                    <td role="cell" data-label={INVITATION_COLUMNS[0]}>{inv.email}</td>
+                    <td role="cell" data-label={INVITATION_COLUMNS[1]}><span className="badge">{inv.role}</span></td>
+                    <td role="cell" data-label={INVITATION_COLUMNS[2]}>{formatDay(inv.expiresAt)}</td>
+                    <td role="cell">
                       <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', alignItems: 'center' }}>
                         {(inv.role !== 'owner' || can(currentRole, 'member:grant_owner')) && (
                           <>
