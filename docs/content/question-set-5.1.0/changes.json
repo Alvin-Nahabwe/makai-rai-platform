@@ -1,0 +1,1062 @@
+[
+  {
+    "row": "C-Q2",
+    "id": "Q-PP-01",
+    "file": "questionBank.json",
+    "field": "text",
+    "from": "Have you evaluated whether AI/ML is the most appropriate approach, compared to simpler alternatives (e.g., statistical models, rule-based systems, manual processes)?",
+    "to": "Have you checked whether AI is the best approach, compared with simpler options such as a statistical model, a set of rules or a manual process?",
+    "decision": "pending",
+    "final": "Have you checked whether AI is the best approach, compared with simpler options such as a statistical model, a set of rules or a manual process?"
+  },
+  {
+    "row": "C-Q11",
+    "id": "Q-PP-04",
+    "file": "questionBank.json",
+    "field": "text",
+    "from": "Have you assessed how the AI system might affect protected or vulnerable groups (e.g., by gender, age, ethnicity, disability, socioeconomic status)?",
+    "to": "Have you assessed how the AI system might affect protected or vulnerable groups, for example by gender, age, ethnicity, disability or income?",
+    "decision": "pending",
+    "final": "Have you assessed how the AI system might affect protected or vulnerable groups, for example by gender, age, ethnicity, disability or income?"
+  },
+  {
+    "row": "C-Q20",
+    "id": "Q-PP-07",
+    "file": "questionBank.json",
+    "field": "text",
+    "from": "Have you assessed the environmental sustainability impact (e.g., energy consumption, carbon footprint) of the proposed AI solution?",
+    "to": "Have you estimated the energy use and carbon cost of the proposed AI system?",
+    "decision": "pending",
+    "final": "Have you estimated the energy use and carbon cost of the proposed AI system?"
+  },
+  {
+    "row": "C-Q30",
+    "id": "Q-PP-11",
+    "file": "questionBank.json",
+    "field": "text",
+    "from": "Have you identified and addressed potential proxy variables for protected attributes?",
+    "to": "Have you checked whether any input could stand in for a sensitive attribute (for example, village standing in for ethnicity), and decided what to do about it?",
+    "decision": "pending",
+    "final": "Have you checked whether any input could stand in for a sensitive attribute (for example, village standing in for ethnicity), and decided what to do about it?"
+  },
+  {
+    "row": "C-Q33",
+    "id": "Q-PP-12",
+    "file": "questionBank.json",
+    "field": "text",
+    "from": "Have you ensured the quality and consistency of data labels/annotations?",
+    "to": "Have you checked that the data labels are correct and consistent?",
+    "decision": "pending",
+    "final": "Have you checked that the data labels are correct and consistent?"
+  },
+  {
+    "row": "C-Q36",
+    "id": "Q-PP-GATE-SENSITIVE",
+    "file": "questionBank.json",
+    "field": "text",
+    "from": "Does your dataset contain sensitive or personally identifiable information (PII)?",
+    "to": "Does your data contain information that could identify a person, or other sensitive personal information?",
+    "decision": "pending",
+    "final": "Does your data contain information that could identify a person, or other sensitive personal information?"
+  },
+  {
+    "row": "C-Q42",
+    "id": "Q-PP-14",
+    "file": "questionBank.json",
+    "field": "text",
+    "from": "Have you applied appropriate anonymization or pseudonymization techniques to protect personal data?",
+    "to": "Have you removed or replaced the details in your data that could identify a person (anonymisation or pseudonymisation)?",
+    "decision": "pending",
+    "final": "Have you removed or replaced the details in your data that could identify a person (anonymisation or pseudonymisation)?"
+  },
+  {
+    "row": "C-Q59",
+    "id": "Q-PP-20",
+    "file": "questionBank.json",
+    "field": "text",
+    "from": "Have you assessed the temporal relevance of your training data?",
+    "to": "Have you checked whether your training data is recent enough for the time the system will be used?",
+    "decision": "pending",
+    "final": "Have you checked whether your training data is recent enough for the time the system will be used?"
+  },
+  {
+    "row": "C-Q65",
+    "id": "Q-PP-22",
+    "file": "questionBank.json",
+    "field": "text",
+    "from": "Have you evaluated whether your data adequately represents edge cases and rare conditions?",
+    "to": "Have you checked whether your data has enough examples of rare cases and conditions?",
+    "decision": "pending",
+    "final": "Have you checked whether your data has enough examples of rare cases and conditions?"
+  },
+  {
+    "row": "C-Q72",
+    "id": "Q-IP-01",
+    "file": "questionBank.json",
+    "field": "text",
+    "from": "Have you justified the choice of model architecture relative to the problem complexity and data availability?",
+    "to": "Have you written down why you chose this type of model for your problem and your data?",
+    "decision": "pending",
+    "final": "Have you written down why you chose this type of model for your problem and your data?"
+  },
+  {
+    "row": "C-Q78",
+    "id": "Q-IP-03",
+    "file": "questionBank.json",
+    "field": "text",
+    "from": "Have you evaluated model performance using a confusion matrix and derived metrics (precision, recall, F1, specificity)?",
+    "to": "Have you measured the different kinds of error your model makes, for example with a confusion matrix, precision, recall, specificity and F1?",
+    "decision": "pending",
+    "final": "Have you measured the different kinds of error your model makes, for example with a confusion matrix, precision, recall, specificity and F1?"
+  },
+  {
+    "row": "C-Q91",
+    "id": "Q-IP-08",
+    "file": "questionBank.json",
+    "field": "text",
+    "from": "Have you tested the model's robustness to distribution shifts, noise, and edge cases?",
+    "to": "Have you tested the model on data that differs from its training data, such as noisy, incomplete or unusual inputs?",
+    "decision": "pending",
+    "final": "Have you tested the model on data that differs from its training data, such as noisy, incomplete or unusual inputs?"
+  },
+  {
+    "row": "C-Q97",
+    "id": "Q-IP-17",
+    "file": "questionBank.json",
+    "field": "text",
+    "from": "Have you assessed whether the model relies on spurious correlations rather than meaningful features?",
+    "to": "Have you checked whether the model relies on shortcuts in the data that will not hold in real use?",
+    "decision": "pending",
+    "final": "Have you checked whether the model relies on shortcuts in the data that will not hold in real use?"
+  },
+  {
+    "row": "C-Q100",
+    "id": "Q-IP-18",
+    "file": "questionBank.json",
+    "field": "text",
+    "from": "Have you evaluated model uncertainty and calibration quality?",
+    "to": "Have you checked whether the model's confidence matches how often it is right?",
+    "decision": "pending",
+    "final": "Have you checked whether the model's confidence matches how often it is right?"
+  },
+  {
+    "row": "C-Q104",
+    "id": "Q-IP-09",
+    "file": "questionBank.json",
+    "field": "text",
+    "from": "Have you applied the parsimony principle, seeking the simplest model that achieves acceptable performance?",
+    "to": "Have you chosen the simplest model that performs well enough?",
+    "decision": "pending",
+    "final": "Have you chosen the simplest model that performs well enough?"
+  },
+  {
+    "row": "C-Q107",
+    "id": "Q-IP-10",
+    "file": "questionBank.json",
+    "field": "text",
+    "from": "Have you documented all hyperparameters, random seeds, and training configurations for reproducibility?",
+    "to": "Have you recorded everything needed to train the same model again: settings (hyperparameters), random seeds, code and software versions?",
+    "decision": "pending",
+    "final": "Have you recorded everything needed to train the same model again: settings (hyperparameters), random seeds, code and software versions?"
+  },
+  {
+    "row": "C-Q110",
+    "id": "Q-IP-11",
+    "file": "questionBank.json",
+    "field": "text",
+    "from": "Have you validated data integrity through your processing pipeline (ETL checks, validation rules)?",
+    "to": "Have you checked that records are not lost or changed as your data is moved and processed?",
+    "decision": "pending",
+    "final": "Have you checked that records are not lost or changed as your data is moved and processed?"
+  },
+  {
+    "row": "C-Q123",
+    "id": "Q-IP-15",
+    "file": "questionBank.json",
+    "field": "text",
+    "from": "Have you identified and mitigated any bias introduced during hyperparameter tuning?",
+    "to": "When you tuned the model's settings (for example the decision threshold), did you check that results did not get worse for some groups?",
+    "decision": "pending",
+    "final": "When you tuned the model's settings (for example the decision threshold), did you check that results did not get worse for some groups?"
+  },
+  {
+    "row": "C-Q132",
+    "id": "Q-IP-21",
+    "file": "questionBank.json",
+    "field": "text",
+    "from": "Have you used version control for your model code, data processing pipelines, and trained model artifacts?",
+    "to": "Have you used version control for your code, data processing and trained models?",
+    "decision": "pending",
+    "final": "Have you used version control for your code, data processing and trained models?"
+  },
+  {
+    "row": "C-Q135",
+    "id": "Q-IP-22",
+    "file": "questionBank.json",
+    "field": "text",
+    "from": "Have you assessed the model for potential adversarial vulnerabilities or manipulation?",
+    "to": "Have you checked whether someone could trick or manipulate the model?",
+    "decision": "pending",
+    "final": "Have you checked whether someone could trick or manipulate the model?"
+  },
+  {
+    "row": "C-Q138",
+    "id": "Q-IP-24",
+    "file": "questionBank.json",
+    "field": "text",
+    "from": "Have you tested the model's performance on data from different time periods to assess temporal stability?",
+    "to": "Have you tested the model on data from a later time than its training data?",
+    "decision": "pending",
+    "final": "Have you tested the model on data from a later time than its training data?"
+  },
+  {
+    "row": "C-Q142",
+    "id": "Q-PO-01",
+    "file": "questionBank.json",
+    "field": "text",
+    "from": "Have you established continuous monitoring for model performance degradation and data drift?",
+    "to": "Do you regularly check, once the system is in use, whether its performance or its input data have changed?",
+    "decision": "pending",
+    "final": "Do you regularly check, once the system is in use, whether its performance or its input data have changed?"
+  },
+  {
+    "row": "C-Q148",
+    "id": "Q-PO-03",
+    "file": "questionBank.json",
+    "field": "text",
+    "from": "Is there a human-in-the-loop mechanism for reviewing and overriding AI decisions?",
+    "to": "Can a person review and overrule the system's outputs before they are acted on?",
+    "decision": "pending",
+    "final": "Can a person review and overrule the system's outputs before they are acted on?"
+  },
+  {
+    "row": "C-Q161",
+    "id": "Q-PO-07",
+    "file": "questionBank.json",
+    "field": "expectedPractice",
+    "from": "The system shows users each output with how confident it is and the main limits that apply, in words they understand, and the team checked that users read them correctly. In proportion to the risk, where an output is about a person, the user can see the main reasons for it. Telling stakeholders the limits in general is Q-PO-15.",
+    "to": "The system shows users each output with how confident it is and the main limits that apply, in words they understand, and the team checked that users read them correctly. In proportion to the risk, where an output is about a person, the user can see the main reasons for it. Telling stakeholders the limits in general is a separate question.",
+    "decision": "pending",
+    "final": "The system shows users each output with how confident it is and the main limits that apply, in words they understand, and the team checked that users read them correctly. In proportion to the risk, where an output is about a person, the user can see the main reasons for it. Telling stakeholders the limits in general is a separate question."
+  },
+  {
+    "row": "C-Q163",
+    "id": "Q-PO-16",
+    "file": "questionBank.json",
+    "field": "text",
+    "from": "Have you implemented A/B testing or staged rollout procedures for model deployment?",
+    "to": "Have you introduced the system in stages, for example at one site first, before using it everywhere?",
+    "decision": "pending",
+    "final": "Have you introduced the system in stages, for example at one site first, before using it everywhere?"
+  },
+  {
+    "row": "C-Q166",
+    "id": "Q-PO-17",
+    "file": "questionBank.json",
+    "field": "text",
+    "from": "Have you established monitoring for fairness metrics in production, not just accuracy?",
+    "to": "Once the system is in use, do you check results for each group as well as overall accuracy?",
+    "decision": "pending",
+    "final": "Once the system is in use, do you check results for each group as well as overall accuracy?"
+  },
+  {
+    "row": "C-Q189",
+    "id": "Q-PO-13",
+    "file": "questionBank.json",
+    "field": "text",
+    "from": "Have you planned for the eventual decommissioning or replacement of the AI system?",
+    "to": "Have you planned when and how the AI system will be retired or replaced?",
+    "decision": "pending",
+    "final": "Have you planned when and how the AI system will be retired or replaced?"
+  },
+  {
+    "row": "C-Q192",
+    "id": "Q-PO-14",
+    "file": "questionBank.json",
+    "field": "text",
+    "from": "Is the system designed to gracefully degrade or fail safely when it encounters out-of-distribution inputs?",
+    "to": "Does the system handle unusual inputs safely, for example by flagging them for a person instead of giving a confident answer?",
+    "decision": "pending",
+    "final": "Does the system handle unusual inputs safely, for example by flagging them for a person instead of giving a confident answer?"
+  },
+  {
+    "row": "C-Q196",
+    "id": "Q-PO-15",
+    "file": "questionBank.json",
+    "field": "expectedPractice",
+    "from": "The team told the people who decide on, run or rely on the system what it is for, where it may not be used and its main limits. It did so in writing and in their language, and keeps a record of who was told, by role. How each output is shown to users is Q-PO-07.",
+    "to": "The team told the people who decide on, run or rely on the system what it is for, where it may not be used and its main limits. It did so in writing and in their language, and keeps a record of who was told, by role. How each output is shown to users is a separate question.",
+    "decision": "pending",
+    "final": "The team told the people who decide on, run or rely on the system what it is for, where it may not be used and its main limits. It did so in writing and in their language, and keeps a record of who was told, by role. How each output is shown to users is a separate question."
+  },
+  {
+    "row": "C-Q205",
+    "id": "Q-PO-22",
+    "file": "questionBank.json",
+    "field": "expectedPractice",
+    "from": "The team identified which data-protection, research-ethics and sector rules apply where the system is built and where it is used. Examples are Uganda's Data Protection and Privacy Act 2019 and the national research guidelines. It obtained the approvals and registrations they require, and keeps a record of each with its reference and date.",
+    "to": "The team identified which data-protection, research-ethics and sector rules apply where the system is built and where it is used. Examples are the national data protection law and the national research ethics guidelines of each country where the system is built and used. It obtained the approvals and registrations they require, and keeps a record of each with its reference and date.",
+    "decision": "pending",
+    "final": "The team identified which data-protection, research-ethics and sector rules apply where the system is built and where it is used. Examples are the national data protection law and the national research ethics guidelines of each country where the system is built and used. It obtained the approvals and registrations they require, and keeps a record of each with its reference and date."
+  },
+  {
+    "row": "C-RC2",
+    "id": "na_no_personal_data",
+    "file": "reasonCodes.json",
+    "field": "useWhen",
+    "from": "The project holds no information that could identify a person. Set by the platform on Q-PP-13 and Q-PP-14 when the gate is \"no\".",
+    "to": "The project holds no information that could identify a person. The platform chooses this for you when you answer \"no\" to the question on personal data.",
+    "decision": "pending",
+    "final": "The project holds no information that could identify a person. The platform chooses this for you when you answer \"no\" to the question on personal data."
+  },
+  {
+    "row": "C-RC8",
+    "id": "na_no_deployment",
+    "file": "reasonCodes.json",
+    "field": "useWhen",
+    "from": "Post-processing practices for a model that will never be deployed.",
+    "to": "Practices for using and monitoring a model that will never be deployed.",
+    "decision": "pending",
+    "final": "Practices for using and monitoring a model that will never be deployed."
+  },
+  {
+    "row": "C-DH1",
+    "id": "data_card",
+    "file": "documentHelp.json",
+    "field": "text",
+    "from": "Teams use this as the description of the data in a data transfer agreement, or as dataset documentation for a conference or repository. Check what your requester asks for.",
+    "to": "Teams use this as the description of the data in a data transfer agreement, or as dataset documentation for a conference or repository. Check what the person asking for it needs.",
+    "decision": "pending",
+    "final": "Teams use this as the description of the data in a data transfer agreement, or as dataset documentation for a conference or repository. Check what the person asking for it needs."
+  },
+  {
+    "row": "C-DH2",
+    "id": "model_card",
+    "file": "documentHelp.json",
+    "field": "text",
+    "from": "Teams paste this into a model card on a repository such as Hugging Face, or use it to answer a venue's checklist. It informs, but does not replace, a regulator's technical file.",
+    "to": "Teams paste this into a model card on a repository such as Hugging Face, or use it to answer a conference or journal checklist. It can help with a regulator's technical file, but it is not one.",
+    "decision": "pending",
+    "final": "Teams paste this into a model card on a repository such as Hugging Face, or use it to answer a conference or journal checklist. It can help with a regulator's technical file, but it is not one."
+  },
+  {
+    "row": "C-DH3",
+    "id": "mitigation_plan",
+    "file": "documentHelp.json",
+    "field": "text",
+    "from": "Teams use this where a protocol, a data protection impact assessment or a funder asks for the risks and the measures against them. A plan from a later seal can go with an annual renewal or an amendment. The platform does not estimate likelihood or impact: if your template asks for them, add them outside the platform.",
+    "to": "Teams use this where a protocol, a data protection impact assessment or a funder asks for the risks and the measures against them. If you seal the stage again later, the new plan can go with an annual renewal or an amendment. The platform does not estimate likelihood or impact: if your template asks for them, add them outside the platform.",
+    "decision": "pending",
+    "final": "Teams use this where a protocol, a data protection impact assessment or a funder asks for the risks and the measures against them. If you seal the stage again later, the new plan can go with an annual renewal or an amendment. The platform does not estimate likelihood or impact: if your template asks for them, add them outside the platform."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PP-01",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "An AI model that a rule or a manual process could match still costs money, power and upkeep, and its errors fall on the people it serves. Risk area: Techno-solutionist Bias.",
+    "to": "An AI model that a rule or a manual process could match still costs money, power and upkeep, and its errors fall on the people it serves.",
+    "decision": "accept",
+    "final": "An AI model that a rule or a manual process could match still costs money, power and upkeep, and its errors fall on the people it serves."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PP-02",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Without a written problem statement nobody can tell later whether the system helped, and the work drifts towards whatever the data happens to allow. Risk area: Techno-solutionist Bias.",
+    "to": "Without a written problem statement nobody can tell later whether the system helped, and the work drifts towards whatever the data happens to allow.",
+    "decision": "accept",
+    "final": "Without a written problem statement nobody can tell later whether the system helped, and the work drifts towards whatever the data happens to allow."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PP-03",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Groups left off the stakeholder list are the ones whose harms nobody plans for, and the later questions on groups, consent and consultation all build on it. Risk area: Population Bias.",
+    "to": "Groups left off the stakeholder list are the ones whose harms nobody plans for, and the later questions on groups, consent and consultation all build on it.",
+    "decision": "accept",
+    "final": "Groups left off the stakeholder list are the ones whose harms nobody plans for, and the later questions on groups, consent and consultation all build on it."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PP-04",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Harms from AI systems fall most often on groups already disadvantaged and least present in the data, and which groups those are depends on the setting. Risk areas: Historical & Societal Bias and Population Bias.",
+    "to": "Harms from AI systems fall most often on groups already disadvantaged and least present in the data, and which groups those are depends on the setting.",
+    "decision": "accept",
+    "final": "Harms from AI systems fall most often on groups already disadvantaged and least present in the data, and which groups those are depends on the setting."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PP-05",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Some harms fall on everyone the system touches, such as a lost chance to appeal or a withheld service; this question asks about those rights, Q-PP-04 about particular groups. Risk areas: Historical & Societal Bias and Population Bias.",
+    "to": "Some harms fall on everyone the system touches, such as a lost chance to appeal or a withheld service; this question asks about those rights, Q-PP-04 about particular groups.",
+    "decision": "accept",
+    "final": "Some harms fall on everyone the system touches, such as a lost chance to appeal or a withheld service; this question asks about those rights, Q-PP-04 about particular groups."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PP-24",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "A team whose members share one background misses the same things, so it needs to know which perspectives are missing and bring them in, for example through C-20 Multi-stakeholder Consultation. Risk areas: Historical & Societal Bias and Population Bias.",
+    "to": "A team whose members share one background misses the same things, so it needs to know which perspectives are missing and bring them in, for example through C-20 Multi-stakeholder Consultation.",
+    "decision": "accept",
+    "final": "A team whose members share one background misses the same things, so it needs to know which perspectives are missing and bring them in, for example through C-20 Multi-stakeholder Consultation."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PP-07",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Large models use energy and money that small projects and unreliable grids can ill afford, and an early estimate leaves time to choose a lighter method. Risk area: Environmental Impact.",
+    "to": "Large models use energy and money that small projects and unreliable grids can ill afford, and an early estimate leaves time to choose a lighter method.",
+    "decision": "accept",
+    "final": "Large models use energy and money that small projects and unreliable grids can ill afford, and an early estimate leaves time to choose a lighter method."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PP-08",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Without a record of how the data was gathered, nobody can judge whether it fits a use, repeat the work or see the limits of the data. Risk area: Documentation Deficit.",
+    "to": "Without a record of how the data was gathered, nobody can judge whether it fits a use, repeat the work or see the limits of the data.",
+    "decision": "accept",
+    "final": "Without a record of how the data was gathered, nobody can judge whether it fits a use, repeat the work or see the limits of the data."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PP-09",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "A model learns the population in its data, not the one it will serve, so thin groups get worse results that nobody notices unless someone compares. Risk areas: Data Scarcity & Availability Bias, Population Bias and Sampling & Generalization Bias.",
+    "to": "A model learns the population in its data, not the one it will serve, so thin groups get worse results that nobody notices unless someone compares.",
+    "decision": "accept",
+    "final": "A model learns the population in its data, not the one it will serve, so thin groups get worse results that nobody notices unless someone compares."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PP-11",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Removing a sensitive attribute does not stop a model using it when another variable, such as place, language or name, carries the same information. Risk area: Historical & Societal Bias.",
+    "to": "Removing a sensitive attribute does not stop a model using it when another variable, such as place, language or name, carries the same information.",
+    "decision": "accept",
+    "final": "Removing a sensitive attribute does not stop a model using it when another variable, such as place, language or name, carries the same information."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PP-12",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "A model is no better than its labels, and when one site or language is labelled differently, the errors fall on the people from it. Risk area: Labeling Bias.",
+    "to": "A model is no better than its labels, and when one site or language is labelled differently, the errors fall on the people from it.",
+    "decision": "accept",
+    "final": "A model is no better than its labels, and when one site or language is labelled differently, the errors fall on the people from it."
+  },
+  {
+    "row": "C-Q38+WA-tail",
+    "id": "Q-PP-GATE-SENSITIVE",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Personal data brings duties of consent and protection, and data can identify a person through a combination, such as a village, an age and a rare condition. Risk area: none of its own; the next two questions cover Privacy & Consent Violations.",
+    "to": "Personal data brings duties of consent and protection, and data can identify a person through a combination, such as a village, an age and a rare condition.",
+    "decision": "accept",
+    "final": "Personal data brings duties of consent and protection, and data can identify a person through a combination, such as a village, an age and a rare condition."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PP-13",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Consent for one purpose does not automatically cover training a model, and uses beyond it can stop the work and lose the trust of those who shared the data. Risk area: Privacy & Consent Violations.",
+    "to": "Consent for one purpose does not automatically cover training a model, and uses beyond it can stop the work and lose the trust of those who shared the data.",
+    "decision": "accept",
+    "final": "Consent for one purpose does not automatically cover training a model, and uses beyond it can stop the work and lose the trust of those who shared the data."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PP-14",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Removing names is not enough when a few details together point to one person, and if de-identified data leaks or is shared, the people in it should not be recognisable. Risk area: Privacy & Consent Violations.",
+    "to": "Removing names is not enough when a few details together point to one person, and if de-identified data leaks or is shared, the people in it should not be recognisable.",
+    "decision": "accept",
+    "final": "Removing names is not enough when a few details together point to one person, and if de-identified data leaks or is shared, the people in it should not be recognisable."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PP-16",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Quality problems found after training are far harder to trace; most common are records missing for some places or periods. Risk areas: Data Scarcity & Availability Bias, Historical & Societal Bias, Population Bias, Sampling & Generalization Bias, Data Integrity Compromise and Documentation Deficit.",
+    "to": "Quality problems found after training are far harder to trace; most common are records missing for some places or periods.",
+    "decision": "accept",
+    "final": "Quality problems found after training are far harder to trace; most common are records missing for some places or periods."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PP-17",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Each bias type enters data in its own way, so each needs its own check. Risk areas: Data Scarcity & Availability Bias, Historical & Societal Bias, Population Bias, Sampling & Generalization Bias and Labeling Bias.",
+    "to": "Each bias type enters data in its own way, so each needs its own check.",
+    "decision": "accept",
+    "final": "Each bias type enters data in its own way, so each needs its own check."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PP-18",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Data gathered only from people who are easy to reach leaves out the rest, so the model works least well for those already hardest to serve. Risk areas: Data Scarcity & Availability Bias and Sampling & Generalization Bias.",
+    "to": "Data gathered only from people who are easy to reach leaves out the rest, so the model works least well for those already hardest to serve.",
+    "decision": "accept",
+    "final": "Data gathered only from people who are easy to reach leaves out the rest, so the model works least well for those already hardest to serve."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PP-19",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "A model trained on past decisions learns to repeat them, including unfair ones, and records of who received a service often show access, not need. Risk area: Historical & Societal Bias.",
+    "to": "A model trained on past decisions learns to repeat them, including unfair ones, and records of who received a service often show access, not need.",
+    "decision": "accept",
+    "final": "A model trained on past decisions learns to repeat them, including unfair ones, and records of who received a service often show access, not need."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PP-20",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Data describes the time it was collected, so a model built on old data may serve a situation that no longer exists. Risk areas: Data Scarcity & Availability Bias and Deployment Drift.",
+    "to": "Data describes the time it was collected, so a model built on old data may serve a situation that no longer exists.",
+    "decision": "accept",
+    "final": "Data describes the time it was collected, so a model built on old data may serve a situation that no longer exists."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PP-21",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Data that nobody governs drifts into copies on laptops and shared drives, outside the protections the people in it were promised and the project's agreements. Risk areas: Privacy & Consent Violations and Accountability Gap.",
+    "to": "Data that nobody governs drifts into copies on laptops and shared drives, outside the protections the people in it were promised and the project's agreements.",
+    "decision": "accept",
+    "final": "Data that nobody governs drifts into copies on laptops and shared drives, outside the protections the people in it were promised and the project's agreements."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PP-22",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Rare cases, such as a severe illness or an unusual pest, often have the most at stake, and a model that has seen too few of them handles them badly. Risk areas: Data Scarcity & Availability Bias and Population Bias.",
+    "to": "Rare cases, such as a severe illness or an unusual pest, often have the most at stake, and a model that has seen too few of them handles them badly.",
+    "decision": "accept",
+    "final": "Rare cases, such as a severe illness or an unusual pest, often have the most at stake, and a model that has seen too few of them handles them badly."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PP-23",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Domain experts notice errors that checks by code miss, such as a diagnosis code used differently at one clinic, and their review is often the cheapest way to find them. Risk areas: Labeling Bias and Aggregation Bias.",
+    "to": "Domain experts notice errors that checks by code miss, such as a diagnosis code used differently at one clinic, and their review is often the cheapest way to find them.",
+    "decision": "accept",
+    "final": "Domain experts notice errors that checks by code miss, such as a diagnosis code used differently at one clinic, and their review is often the cheapest way to find them."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-IP-01",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "A model chosen by habit may be harder to explain and keep running than the problem needs, and a written choice shows later users what it was built to do. Risk areas: Opacity & Unexplainability and Metric Selection Bias.",
+    "to": "A model chosen by habit may be harder to explain and keep running than the problem needs, and a written choice shows later users what it was built to do.",
+    "decision": "accept",
+    "final": "A model chosen by habit may be harder to explain and keep running than the problem needs, and a written choice shows later users what it was built to do."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-IP-02",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "When test data overlaps with training data, or comes from a different population, the reported performance is wrong in ways nobody sees until the system is used. Risk areas: Algorithmic Discrimination and Aggregation Bias.",
+    "to": "When test data overlaps with training data, or comes from a different population, the reported performance is wrong in ways nobody sees until the system is used.",
+    "decision": "accept",
+    "final": "When test data overlaps with training data, or comes from a different population, the reported performance is wrong in ways nobody sees until the system is used."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-IP-03",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Accuracy alone can hide a model that misses most of the cases that matter, and which error is worse, a missed case or a false alarm, depends on the use. Risk area: Metric Selection Bias.",
+    "to": "Accuracy alone can hide a model that misses most of the cases that matter, and which error is worse, a missed case or a false alarm, depends on the use.",
+    "decision": "accept",
+    "final": "Accuracy alone can hide a model that misses most of the cases that matter, and which error is worse, a missed case or a false alarm, depends on the use."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-IP-04",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "A model can look good on average and still work badly for one group, and the people in that group carry the cost of its errors. Risk areas: Algorithmic Discrimination, Aggregation Bias and Metric Selection Bias.",
+    "to": "A model can look good on average and still work badly for one group, and the people in that group carry the cost of its errors.",
+    "decision": "accept",
+    "final": "A model can look good on average and still work badly for one group, and the people in that group carry the cost of its errors."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-IP-06",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Fairness measures answer different questions and cannot all be met at once, so a result means something only if the measures fit the use and the team says why. Risk areas: Algorithmic Discrimination and Aggregation Bias.",
+    "to": "Fairness measures answer different questions and cannot all be met at once, so a result means something only if the measures fit the use and the team says why.",
+    "decision": "accept",
+    "final": "Fairness measures answer different questions and cannot all be met at once, so a result means something only if the measures fit the use and the team says why."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-IP-07",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Explanations show whether a model relies on what it should, and a driver that makes no sense to a domain expert is often the first sign of a data problem. Risk area: Opacity & Unexplainability.",
+    "to": "Explanations show whether a model relies on what it should, and a driver that makes no sense to a domain expert is often the first sign of a data problem.",
+    "decision": "accept",
+    "final": "Explanations show whether a model relies on what it should, and a driver that makes no sense to a domain expert is often the first sign of a data problem."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-IP-08",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Field data is noisier than the data a model is built on, so a model never tested on worse inputs can lose much of its accuracy in use without warning. Risk areas: Opacity & Unexplainability, Model Robustness Failure and Reproducibility Failure.",
+    "to": "Field data is noisier than the data a model is built on, so a model never tested on worse inputs can lose much of its accuracy in use without warning.",
+    "decision": "accept",
+    "final": "Field data is noisier than the data a model is built on, so a model never tested on worse inputs can lose much of its accuracy in use without warning."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-IP-16",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "A complex model that barely beats a simple rule costs more to run and explain for little benefit, and the baseline shows whether the reported numbers mean anything. Risk area: Metric Selection Bias.",
+    "to": "A complex model that barely beats a simple rule costs more to run and explain for little benefit, and the baseline shows whether the reported numbers mean anything.",
+    "decision": "accept",
+    "final": "A complex model that barely beats a simple rule costs more to run and explain for little benefit, and the baseline shows whether the reported numbers mean anything."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-IP-17",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "A model can do well in testing because of a shortcut in the data that will not hold in use, and the shortcut stays invisible until someone looks for it. Risk areas: Opacity & Unexplainability and Model Robustness Failure.",
+    "to": "A model can do well in testing because of a shortcut in the data that will not hold in use, and the shortcut stays invisible until someone looks for it.",
+    "decision": "accept",
+    "final": "A model can do well in testing because of a shortcut in the data that will not hold in use, and the shortcut stays invisible until someone looks for it."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-IP-18",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Users act on a model's stated confidence, so a model that is confident and wrong is more dangerous than one that says it is unsure. Risk area: Model Robustness Failure.",
+    "to": "Users act on a model's stated confidence, so a model that is confident and wrong is more dangerous than one that says it is unsure.",
+    "decision": "accept",
+    "final": "Users act on a model's stated confidence, so a model that is confident and wrong is more dangerous than one that says it is unsure."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-IP-09",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Simpler models are easier to explain, check and keep running, which matters most where people must understand decisions about them, so a small accuracy gain may not be worth it. Risk area: Opacity & Unexplainability.",
+    "to": "Simpler models are easier to explain, check and keep running, which matters most where people must understand decisions about them, so a small accuracy gain may not be worth it.",
+    "decision": "accept",
+    "final": "Simpler models are easier to explain, check and keep running, which matters most where people must understand decisions about them, so a small accuracy gain may not be worth it."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-IP-10",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Small changes in settings or software can change how a model behaves, so without these records nobody, including the team a year later, can repeat or check a result. Risk area: Reproducibility Failure.",
+    "to": "Small changes in settings or software can change how a model behaves, so without these records nobody, including the team a year later, can repeat or check a result.",
+    "decision": "accept",
+    "final": "Small changes in settings or software can change how a model behaves, so without these records nobody, including the team a year later, can repeat or check a result."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-IP-11",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Errors made while data is moved and transformed are silent and can bias a model, and checks at each step catch them where they are cheap to fix. Risk area: Data Integrity Compromise.",
+    "to": "Errors made while data is moved and transformed are silent and can bias a model, and checks at each step catch them where they are cheap to fix.",
+    "decision": "accept",
+    "final": "Errors made while data is moved and transformed are silent and can bias a model, and checks at each step catch them where they are cheap to fix."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-IP-12",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "A model card tells those who deploy or rely on a model what it can and cannot do, and without one its limits are lost when the team moves on. Risk areas: Reproducibility Failure and Documentation Deficit.",
+    "to": "A model card tells those who deploy or rely on a model what it can and cannot do, and without one its limits are lost when the team moves on.",
+    "decision": "accept",
+    "final": "A model card tells those who deploy or rely on a model what it can and cannot do, and without one its limits are lost when the team moves on."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-IP-13",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "One test split gives one estimate, which may be lucky, while several methods together show how stable the results are and where the model is weak. Risk areas: Algorithmic Discrimination, Aggregation Bias, Metric Selection Bias and Model Robustness Failure.",
+    "to": "One test split gives one estimate, which may be lucky, while several methods together show how stable the results are and where the model is weak.",
+    "decision": "accept",
+    "final": "One test split gives one estimate, which may be lucky, while several methods together show how stable the results are and where the model is weak."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-IP-14",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Pooling data can hide a group for which the model works badly, or even reverse a trend, and knowing this decides whether one model can serve everyone. Risk area: Aggregation Bias.",
+    "to": "Pooling data can hide a group for which the model works badly, or even reverse a trend, and knowing this decides whether one model can serve everyone.",
+    "decision": "accept",
+    "final": "Pooling data can hide a group for which the model works badly, or even reverse a trend, and knowing this decides whether one model can serve everyone."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-IP-15",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Tuning for the best overall result often favours the largest group, and a threshold chosen on the whole population can leave a smaller group with far more missed cases. Risk areas: Algorithmic Discrimination and Metric Selection Bias.",
+    "to": "Tuning for the best overall result often favours the largest group, and a threshold chosen on the whole population can leave a smaller group with far more missed cases.",
+    "decision": "accept",
+    "final": "Tuning for the best overall result often favours the largest group, and a threshold chosen on the whole population can leave a smaller group with far more missed cases."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-IP-19",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "The same error rate can mean very different harm for different groups, and knowing who bears the errors shows where safeguards are needed. Risk areas: Algorithmic Discrimination and Aggregation Bias.",
+    "to": "The same error rate can mean very different harm for different groups, and knowing who bears the errors shows where safeguards are needed.",
+    "decision": "accept",
+    "final": "The same error rate can mean very different harm for different groups, and knowing who bears the errors shows where safeguards are needed."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-IP-20",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "People who deploy a model later often use it outside its setting, and written limits stop a model built in one district or language being used untested in another. Risk areas: Opacity & Unexplainability and Documentation Deficit.",
+    "to": "People who deploy a model later often use it outside its setting, and written limits stop a model built in one district or language being used untested in another.",
+    "decision": "accept",
+    "final": "People who deploy a model later often use it outside its setting, and written limits stop a model built in one district or language being used untested in another."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-IP-21",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Without versions nobody can tell which code and data produced the model in use, and when something goes wrong that link is what lets the team find the cause. Risk area: Reproducibility Failure.",
+    "to": "Without versions nobody can tell which code and data produced the model in use, and when something goes wrong that link is what lets the team find the cause.",
+    "decision": "accept",
+    "final": "Without versions nobody can tell which code and data produced the model in use, and when something goes wrong that link is what lets the team find the cause."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-IP-22",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "A model whose outputs bring a benefit or a penalty invites people to game it, and small changes to an input can flip a prediction. Risk areas: Model Robustness Failure and Data Integrity Compromise.",
+    "to": "A model whose outputs bring a benefit or a penalty invites people to game it, and small changes to an input can flip a prediction.",
+    "decision": "accept",
+    "final": "A model whose outputs bring a benefit or a penalty invites people to game it, and small changes to an input can flip a prediction."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-IP-24",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Seasons, policies and behaviour change, and a model's results can slip as they do; a test on later data shows how fast. Risk areas: Model Robustness Failure and Deployment Drift.",
+    "to": "Seasons, policies and behaviour change, and a model's results can slip as they do; a test on later data shows how fast.",
+    "decision": "accept",
+    "final": "Seasons, policies and behaviour change, and a model's results can slip as they do; a test on later data shows how fast."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PO-01",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Data changes with seasons, new clinics, new phones and new policies, and a model nobody watches gets worse unnoticed, often until it harms the people it serves. Risk area: Deployment Drift.",
+    "to": "Data changes with seasons, new clinics, new phones and new policies, and a model nobody watches gets worse unnoticed, often until it harms the people it serves.",
+    "decision": "accept",
+    "final": "Data changes with seasons, new clinics, new phones and new policies, and a model nobody watches gets worse unnoticed, often until it harms the people it serves."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PO-02",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Without agreed triggers and written steps, a model keeps running after it stops working well, or is retrained and put in use without checks. Risk area: Deployment Drift.",
+    "to": "Without agreed triggers and written steps, a model keeps running after it stops working well, or is retrained and put in use without checks.",
+    "decision": "accept",
+    "final": "Without agreed triggers and written steps, a model keeps running after it stops working well, or is retrained and put in use without checks."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PO-03",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "A person who can check and override the system catches errors before they harm someone, but only if the way to override is clear and people use it. Risk area: Lack of Human Oversight.",
+    "to": "A person who can check and override the system catches errors before they harm someone, but only if the way to override is clear and people use it.",
+    "decision": "accept",
+    "final": "A person who can check and override the system catches errors before they harm someone, but only if the way to override is clear and people use it."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PO-04",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "When several organisations share a system, harms can go unaddressed because each thinks another is responsible, and named roles make clear who acts. Risk area: Accountability Gap.",
+    "to": "When several organisations share a system, harms can go unaddressed because each thinks another is responsible, and named roles make clear who acts.",
+    "decision": "accept",
+    "final": "When several organisations share a system, harms can go unaddressed because each thinks another is responsible, and named roles make clear who acts."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PO-05",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Harm from a system in use needs a fast response, which planning in the moment cannot give, and a written plan shows the people affected that problems are taken seriously. Risk areas: Lack of Human Oversight and Accountability Gap.",
+    "to": "Harm from a system in use needs a fast response, which planning in the moment cannot give, and a written plan shows the people affected that problems are taken seriously.",
+    "decision": "accept",
+    "final": "Harm from a system in use needs a fast response, which planning in the moment cannot give, and a written plan shows the people affected that problems are taken seriously."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PO-06",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Users who do not understand a system either trust it too much or ignore it, and short, practical training is often the cheapest safeguard. Risk area: User Literacy Deficit.",
+    "to": "Users who do not understand a system either trust it too much or ignore it, and short, practical training is often the cheapest safeguard.",
+    "decision": "accept",
+    "final": "Users who do not understand a system either trust it too much or ignore it, and short, practical training is often the cheapest safeguard."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PO-07",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "An output that users misread is as harmful as a wrong one, and seeing the confidence and the reasons lets a user decide when to question the system. Risk areas: Lack of Human Oversight and User Literacy Deficit.",
+    "to": "An output that users misread is as harmful as a wrong one, and seeing the confidence and the reasons lets a user decide when to question the system.",
+    "decision": "accept",
+    "final": "An output that users misread is as harmful as a wrong one, and seeing the confidence and the reasons lets a user decide when to question the system."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PO-16",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Problems that testing missed show up in real use, and starting small limits who is affected while they are found. Risk area: Deployment Drift.",
+    "to": "Problems that testing missed show up in real use, and starting small limits who is affected while they are found.",
+    "decision": "accept",
+    "final": "Problems that testing missed show up in real use, and starting small limits who is affected while they are found."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PO-17",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Fairness can get worse in use even when overall accuracy holds, because the people served change, and only results per group show it. Risk areas: Deployment Drift and Feedback Loop Absence.",
+    "to": "Fairness can get worse in use even when overall accuracy holds, because the people served change, and only results per group show it.",
+    "decision": "accept",
+    "final": "Fairness can get worse in use even when overall accuracy holds, because the people served change, and only results per group show it."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PO-18",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "A system that keeps running after it has degraded can harm many people before anyone acts, and a set threshold makes the decision quick and clear. Risk areas: Deployment Drift and Lack of Human Oversight.",
+    "to": "A system that keeps running after it has degraded can harm many people before anyone acts, and a set threshold makes the decision quick and clear.",
+    "decision": "accept",
+    "final": "A system that keeps running after it has degraded can harm many people before anyone acts, and a set threshold makes the decision quick and clear."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PO-08",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "People affected by a system often see its problems first, and a channel they can use, with visible action on what they say, keeps the system honest. Risk area: Feedback Loop Absence.",
+    "to": "People affected by a system often see its problems first, and a channel they can use, with visible action on what they say, keeps the system honest.",
+    "decision": "accept",
+    "final": "People affected by a system often see its problems first, and a channel they can use, with visible action on what they say, keeps the system honest."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PO-09",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "A person who cannot challenge a decision about them has no remedy for an error, and review by a person catches what the system got wrong. Risk area: Feedback Loop Absence.",
+    "to": "A person who cannot challenge a decision about them has no remedy for an error, and review by a person catches what the system got wrong.",
+    "decision": "accept",
+    "final": "A person who cannot challenge a decision about them has no remedy for an error, and review by a person catches what the system got wrong."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PO-10",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "When the person who built a system leaves, the documentation keeps it running safely, and systems in low-resource settings often stop because a dependency was never written down. Risk area: Documentation Deficit.",
+    "to": "When the person who built a system leaves, the documentation keeps it running safely, and systems in low-resource settings often stop because a dependency was never written down.",
+    "decision": "accept",
+    "final": "When the person who built a system leaves, the documentation keeps it running safely, and systems in low-resource settings often stop because a dependency was never written down."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PO-11",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Governance measures keep a system's use responsible after the build team moves on, and which ones fit depends on the risk and the setting. Risk areas: Privacy & Consent Violations, Reproducibility Failure, Accountability Gap, Feedback Loop Absence and Documentation Deficit.",
+    "to": "Governance measures keep a system's use responsible after the build team moves on, and which ones fit depends on the risk and the setting.",
+    "decision": "accept",
+    "final": "Governance measures keep a system's use responsible after the build team moves on, and which ones fit depends on the risk and the setting."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PO-12",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "A system tested in one place or language often works worse in another, and users there carry the cost unless someone checks. Risk area: Deployment Drift.",
+    "to": "A system tested in one place or language often works worse in another, and users there carry the cost unless someone checks.",
+    "decision": "accept",
+    "final": "A system tested in one place or language often works worse in another, and users there carry the cost unless someone checks."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PO-13",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Systems left running after their purpose ends keep using money and power, and drift without oversight, so planning the end at the start means someone decides when to stop. Risk area: Environmental Impact.",
+    "to": "Systems left running after their purpose ends keep using money and power, and drift without oversight, so planning the end at the start means someone decides when to stop.",
+    "decision": "accept",
+    "final": "Systems left running after their purpose ends keep using money and power, and drift without oversight, so planning the end at the start means someone decides when to stop."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PO-14",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Every system meets inputs it was not built for, and a safe one flags them for a person to decide instead of giving a confident wrong answer. Risk areas: Deployment Drift, Lack of Human Oversight and Accountability Gap.",
+    "to": "Every system meets inputs it was not built for, and a safe one flags them for a person to decide instead of giving a confident wrong answer.",
+    "decision": "accept",
+    "final": "Every system meets inputs it was not built for, and a safe one flags them for a person to decide instead of giving a confident wrong answer."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PO-15",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Limits that only the build team knows protect nobody, so decision-makers and partners need them in writing before they rely on the system. Risk areas: User Literacy Deficit and Documentation Deficit.",
+    "to": "Limits that only the build team knows protect nobody, so decision-makers and partners need them in writing before they rely on the system.",
+    "decision": "accept",
+    "final": "Limits that only the build team knows protect nobody, so decision-makers and partners need them in writing before they rely on the system."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PO-20",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Communities know what will work and what will harm them in ways a project team cannot, and their review is an outside check on the team's blind spots. Risk areas: Lack of Human Oversight and Feedback Loop Absence.",
+    "to": "Communities know what will work and what will harm them in ways a project team cannot, and their review is an outside check on the team's blind spots.",
+    "decision": "accept",
+    "final": "Communities know what will work and what will harm them in ways a project team cannot, and their review is an outside check on the team's blind spots."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PO-21",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "A system that adds work or confusion gets used badly or not at all, and staff may start to rely on it in ways nobody planned. Risk areas: Lack of Human Oversight and User Literacy Deficit.",
+    "to": "A system that adds work or confusion gets used badly or not at all, and staff may start to rely on it in ways nobody planned.",
+    "decision": "accept",
+    "final": "A system that adds work or confusion gets used badly or not at all, and staff may start to rely on it in ways nobody planned."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PO-22",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Approvals are easy to lose track of when research moves into use, and a missing one can stop a deployment and expose the people whose data is used. Risk area: Accountability Gap.",
+    "to": "Approvals are easy to lose track of when research moves into use, and a missing one can stop a deployment and expose the people whose data is used.",
+    "decision": "accept",
+    "final": "Approvals are easy to lose track of when research moves into use, and a missing one can stop a deployment and expose the people whose data is used."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PO-23",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "Monitoring watches the numbers, but only a review on a set date asks whether the system should still be used as it is. Risk areas: Deployment Drift and Accountability Gap.",
+    "to": "Monitoring watches the numbers, but only a review on a set date asks whether the system should still be used as it is.",
+    "decision": "accept",
+    "final": "Monitoring watches the numbers, but only a review on a set date asks whether the system should still be used as it is."
+  },
+  {
+    "row": "WA-tail",
+    "id": "Q-PO-24",
+    "file": "questionBank.json",
+    "field": "whyAsked",
+    "from": "A service delivered through an AI system can leave out the people who most need it, and checking access shows who is left behind. Risk area: User Literacy Deficit.",
+    "to": "A service delivered through an AI system can leave out the people who most need it, and checking access shows who is left behind.",
+    "decision": "accept",
+    "final": "A service delivered through an AI system can leave out the people who most need it, and checking access shows who is left behind."
+  },
+  {
+    "row": "VOC-1",
+    "id": "meta",
+    "file": "assessmentAreas.json",
+    "field": "framework",
+    "from": "MAK-AI Responsible AI Toolkit",
+    "to": "MAK-AI RAI Platform",
+    "decision": "accept",
+    "final": "MAK-AI RAI Platform"
+  },
+  {
+    "row": "VOC-2",
+    "id": "projectConfig",
+    "file": "projectConfig.json",
+    "field": "projectName",
+    "from": "MAK-AI Responsible AI Toolkit",
+    "to": "MAK-AI RAI Platform",
+    "decision": "accept",
+    "final": "MAK-AI RAI Platform"
+  },
+  {
+    "row": "VOC-3",
+    "id": "PO-03",
+    "file": "assessmentAreas.json",
+    "field": "context",
+    "from": "Unclear responsibility when AI-assisted decisions lead to adverse outcomes. No accountability framework for systems shared across multiple organizations.",
+    "to": "Unclear responsibility when AI-assisted decisions lead to adverse outcomes. No accountability framework for systems shared across multiple organisations.",
+    "decision": "accept",
+    "final": "Unclear responsibility when AI-assisted decisions lead to adverse outcomes. No accountability framework for systems shared across multiple organisations."
+  },
+  {
+    "row": "VOC-4",
+    "id": "PP-02",
+    "file": "assessmentAreas.json",
+    "field": "references[0].relevance",
+    "from": "CHI Best Paper. 53 practitioner interviews documenting why data scarcity happens — organizational incentives, resource allocation, prestige bias.",
+    "to": "CHI Best Paper. 53 practitioner interviews documenting why data scarcity happens — organisational incentives, resource allocation, prestige bias.",
+    "decision": "accept",
+    "final": "CHI Best Paper. 53 practitioner interviews documenting why data scarcity happens — organisational incentives, resource allocation, prestige bias."
+  }
+]
