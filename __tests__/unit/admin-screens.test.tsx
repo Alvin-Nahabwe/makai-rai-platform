@@ -374,7 +374,7 @@ describe('S-24, creating and recovering an organisation', () => {
     expect(html).not.toMatch(/agreement|Controller|Data-protection|Read this version|<select|<legend/i);
   });
 
-  it('FR-ORG-01: the client limit for the legal name is the route\'s (a 200-character name passes the parser, 201 does not)', async () => {
+  it('FR-ORG-01: the parser behind the route accepts a legal name of MAX_LEGAL_NAME characters and refuses one more', async () => {
     const { parseCorrectOrganisation } = await vi.importActual<typeof import('@/lib/data/admin')>('@/lib/data/admin');
     expect(parseCorrectOrganisation({ legalName: 'x'.repeat(MAX_LEGAL_NAME) })).toEqual({ legalName: 'x'.repeat(MAX_LEGAL_NAME) });
     expect(() => parseCorrectOrganisation({ legalName: 'x'.repeat(MAX_LEGAL_NAME + 1) })).toThrow();

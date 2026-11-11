@@ -42,8 +42,8 @@ export const ACCEPT_LABEL: Record<AcceptedKind, string> = {
 
 function acceptedKindOf(text: LegalTextVersion): AcceptedKind {
   const kind = ACCEPTED_KINDS.find((k) => k === text.kind);
-  // A programming error, not a state a person can reach: the organisation agreement is recorded by
-  // the administrator (FR-ORG-05) and is never offered here.
+  // A programming error, not a state a person can reach: the organisation agreement is retired
+  // and is not one of the accepted texts, so it is never offered here.
   if (kind === undefined) throw new TypeError(`not an accepted kind: ${text.kind}`);
   return kind;
 }

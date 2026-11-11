@@ -150,7 +150,7 @@ describe('FR-PUB-01 FR-ACC-02: the texts a person is asked to accept now (curren
     expect(found, 'a claim of legal authorship or review in the current version of an accepted legal text').toEqual([]);
   });
 
-  it.skipIf(process.env.RELEASE_CANDIDATE !== '1')('NFR-PRIV-10 FR-ACC-02 (release): the current privacy notice names every recipient of data/privacy-recipients.json, with what it receives and where', () => {
+  it('NFR-PRIV-10 FR-ACC-02: the current privacy notice names every recipient of data/privacy-recipients.json, with what it receives and where', () => {
     const recipients: Array<{ name: string; receives: string; where: string }> = JSON.parse(readFileSync('data/privacy-recipients.json', 'utf8'));
     expect(recipients.length).toBeGreaterThan(0);
     const { text } = currentLegalText('privacy');

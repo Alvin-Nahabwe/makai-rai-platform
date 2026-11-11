@@ -10,7 +10,7 @@ import { identityLaneClient } from './identityClient';
 import { invitationState } from './invitationState';
 import { NotFoundError } from './tenant';
 import { isRequestId } from './idempotency';
-import { MAX_ORG_NAME, MAX_REQUEST_REFERENCE } from '../admin/limits';
+import { MAX_LEGAL_NAME, MAX_ORG_NAME, MAX_REQUEST_REFERENCE } from '../admin/limits';
 
 /**
  * The MAK-AI administrator's reads for S-23, S-24 and S-25 (FR-ORG-03, 05, 06, 07; 00-contract.md,
@@ -185,7 +185,6 @@ export async function accountHasMembership(userId: string): Promise<boolean> {
 
 /** The longest organisation name (as the removed signed-in route, app/api/v1/orgs/route.ts:41) and request reference. */
 export { MAX_ORG_NAME, MAX_REQUEST_REFERENCE };
-const MAX_LEGAL_NAME = 200;
 
 const asObject = (raw: unknown): Record<string, unknown> =>
   typeof raw === 'object' && raw !== null && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
