@@ -6,6 +6,8 @@ import { testDb } from '../__tests__/helpers/db';
 import { buildOrg, type FixtureAccount, type OrgFixture } from '../__tests__/helpers/recordFixture';
 import { claimMatches } from '../lib/claims/pattern';
 import { currentLegalText } from '../lib/legal/registry';
+import { acceptanceError } from '../lib/legal/kinds';
+import { ACCEPT_LABEL } from '../components/legal/AcceptancesForm';
 import { ACCEPTED_KINDS, CONSENT_TYPE_FOR } from '../types/legal';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
@@ -98,18 +100,18 @@ test.describe('S-04 and S-05 in a browser', () => {
     await expect(page.getByRole('link', { name: /\(opens in a new tab\)$/ })).toHaveCount(3);
 
     // Two ticks: M-25 names the third, focus moves to it, and nothing is sent.
-    await page.getByLabel('I accept the terms of service.').check();
-    await page.getByLabel('I have read the privacy notice.').check();
+    await page.getByLabel(ACCEPT_LABEL.terms, { exact: true }).check();
+    await page.getByLabel(ACCEPT_LABEL.privacy, { exact: true }).check();
     await page.getByRole('button', { name: 'Create account' }).click();
     const summary = page.locator('#acceptances-errors');   // Next's own route announcer is also role=alert
     await expect(summary).toHaveAttribute('role', 'alert');
-    await expect(summary).toHaveText('To continue, accept the cross-border storage consent.');
-    await expect(page.getByLabel(/cross-border storage consent describes/)).toBeFocused();
-    await expect(page.getByLabel(/cross-border storage consent describes/)).toHaveAttribute('aria-invalid', 'true');
+    await expect(summary).toHaveText(acceptanceError('cross-border-consent'));
+    await expect(page.getByLabel(ACCEPT_LABEL['cross-border-consent'], { exact: true })).toBeFocused();
+    await expect(page.getByLabel(ACCEPT_LABEL['cross-border-consent'], { exact: true })).toHaveAttribute('aria-invalid', 'true');
     expect(posts).toEqual([]);
     expect(await userCount(email)).toBe(0);
 
-    await page.getByLabel(/cross-border storage consent describes/).check();
+    await page.getByLabel(ACCEPT_LABEL['cross-border-consent'], { exact: true }).check();
     await page.getByRole('button', { name: 'Create account' }).click();
     await page.waitForURL(`**/orgs/${fx.org.slug}/dashboard?welcome=1`);
     expect(new URL(page.url()).search).toBe('?welcome=1');
@@ -166,17 +168,17 @@ test.describe('S-04 and S-05 in a browser', () => {
     await page.goto('/acceptances');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Before you continue');
     await expect(page.getByRole('link', { name: /\(opens in a new tab\)$/ })).toHaveCount(3);
-    await page.getByLabel('I accept the terms of service.').check();
+    await page.getByLabel(ACCEPT_LABEL.terms, { exact: true }).check();
     await page.getByRole('button', { name: 'Accept and continue' }).click();
     const summary = page.locator('#acceptances-errors');
     await expect(summary).toHaveAttribute('role', 'alert');
-    await expect(summary).toContainText('To continue, accept the privacy notice.');
-    await expect(summary).toContainText('To continue, accept the cross-border storage consent.');
-    await expect(page.getByLabel('I have read the privacy notice.')).toBeFocused();
+    await expect(summary).toContainText(acceptanceError('privacy'));
+    await expect(summary).toContainText(acceptanceError('cross-border-consent'));
+    await expect(page.getByLabel(ACCEPT_LABEL.privacy, { exact: true })).toBeFocused();
     expect(posts).toEqual([]);
 
-    await page.getByLabel('I have read the privacy notice.').check();
-    await page.getByLabel(/cross-border storage consent describes/).check();
+    await page.getByLabel(ACCEPT_LABEL.privacy, { exact: true }).check();
+    await page.getByLabel(ACCEPT_LABEL['cross-border-consent'], { exact: true }).check();
     await page.getByRole('button', { name: 'Accept and continue' }).click();
     await page.waitForURL((url) => url.pathname !== '/acceptances');
     expect(posts).toHaveLength(1);

@@ -1,7 +1,9 @@
+import type { CSSProperties } from 'react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { LegalTextKind } from '@/types/legal';
+import { RETIRED_NOTE, isRetiredKind } from '@/lib/legal/kinds';
 import { LEGAL_KINDS, currentLegalText, legalKindFrom, legalTextHistory } from '@/lib/legal/registry';
 import { LEGAL_LINK_STYLE, LEGAL_PAGE_STYLE, LegalTextView, legalTextHeading, versionLine } from '@/components/legal/LegalTextView';
 
@@ -14,6 +16,14 @@ import { LEGAL_LINK_STYLE, LEGAL_PAGE_STYLE, LegalTextView, legalTextHeading, ve
  */
 
 export const dynamicParams = false;
+
+/** The tinted band of S-06's notes (the same look as the earlier-version note of the version page). */
+const NOTE_STYLE: CSSProperties = {
+  padding: 'var(--space-3) var(--space-4)',
+  background: 'var(--tint-moderate-bg)',
+  color: 'var(--tint-moderate-fg)',
+  borderRadius: 'var(--border-radius-sm)',
+};
 
 export function generateStaticParams(): Array<{ kind: LegalTextKind }> {
   return LEGAL_KINDS.map((kind) => ({ kind }));
@@ -38,6 +48,11 @@ export default async function LegalKindPage({ params }: { params: Params }) {
   const past = legalTextHistory(kind).slice(0, -1).reverse();
   return (
     <div style={LEGAL_PAGE_STYLE}>
+      {isRetiredKind(kind) && (
+        <p role="note" style={{ ...NOTE_STYLE, marginBottom: 'var(--space-6)' }}>
+          {RETIRED_NOTE[kind]}
+        </p>
+      )}
       <LegalTextView text={current} />
       <p style={{ marginTop: 'var(--space-6)' }}>
         <Link href={`/legal/${kind}/${current.version}`} style={LEGAL_LINK_STYLE}>

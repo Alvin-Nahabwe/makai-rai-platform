@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -11,6 +12,7 @@ import {
   legalTextHistory,
   legalTextVersion,
 } from '@/lib/legal/registry';
+import { RETIRED_NOTE, isRetiredKind } from '@/lib/legal/kinds';
 import { LEGAL_LINK_STYLE, LEGAL_PAGE_STYLE, LegalTextView, legalTextHeading } from '@/components/legal/LegalTextView';
 
 /**
@@ -22,6 +24,14 @@ import { LEGAL_LINK_STYLE, LEGAL_PAGE_STYLE, LegalTextView, legalTextHeading } f
  */
 
 export const dynamicParams = false;
+
+/** The tinted band of S-06's notes (the same look as the earlier-version note of the version page). */
+const NOTE_STYLE: CSSProperties = {
+  padding: 'var(--space-3) var(--space-4)',
+  background: 'var(--tint-moderate-bg)',
+  color: 'var(--tint-moderate-fg)',
+  borderRadius: 'var(--border-radius-sm)',
+};
 
 export function generateStaticParams(): Array<{ kind: LegalTextKind; version: string }> {
   return LEGAL_KINDS.flatMap((kind) => legalTextHistory(kind).map((text) => ({ kind, version: text.version })));
@@ -47,19 +57,17 @@ export default async function LegalVersionPage({ params }: { params: Params }) {
   const current = currentLegalText(text.kind);
   return (
     <div style={LEGAL_PAGE_STYLE}>
-      {current.version !== text.version && (
-        <p
-          role="note"
-          style={{
-            marginBottom: 'var(--space-6)',
-            padding: 'var(--space-3) var(--space-4)',
-            background: 'var(--tint-moderate-bg)',
-            color: 'var(--tint-moderate-fg)',
-            borderRadius: 'var(--border-radius-sm)',
-          }}
-        >
-          {`This is an earlier version. The current one is version ${current.version}, published ${formatDay(current.publishedOn)}.`}
+      {isRetiredKind(text.kind) ? (
+        // The retired note says what matters about every version of the agreement, so it stands in for the earlier-version note.
+        <p role="note" style={{ ...NOTE_STYLE, marginBottom: 'var(--space-6)' }}>
+          {RETIRED_NOTE[text.kind]}
         </p>
+      ) : (
+        current.version !== text.version && (
+          <p role="note" style={{ ...NOTE_STYLE, marginBottom: 'var(--space-6)' }}>
+            {`This is an earlier version. The current one is version ${current.version}, published ${formatDay(current.publishedOn)}.`}
+          </p>
+        )
       )}
       <LegalTextView text={text} />
       <p style={{ marginTop: 'var(--space-6)' }}>
