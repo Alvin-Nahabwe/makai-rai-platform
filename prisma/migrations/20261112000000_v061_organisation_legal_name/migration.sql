@@ -18,8 +18,9 @@ ALTER TABLE "organizations" ADD CONSTRAINT "organizations_legalName_chk"
 
 -- The backfill: each organisation takes the controller legal name of its newest agreement record. Copies only, fills
 -- empty values only (so it is safe to repeat after a rollback of the image), and an organisation with no agreement
--- keeps NULL.
-UPDATE "organizations" o SET "legalName" = a."controllerLegalName" FROM (SELECT DISTINCT ON ("orgId") "orgId", "controllerLegalName" FROM "organization_agreements" ORDER BY "orgId", "recordedAt" DESC) a WHERE o."id" = a."orgId" AND o."legalName" IS NULL;
+-- keeps NULL. Records with the same recordedAt go to the larger id, the order the administrator read shows them in
+-- (newestAgreementFirst in lib/data/admin.ts).
+UPDATE "organizations" o SET "legalName" = a."controllerLegalName" FROM (SELECT DISTINCT ON ("orgId") "orgId", "controllerLegalName" FROM "organization_agreements" ORDER BY "orgId", "recordedAt" DESC, "id" DESC) a WHERE o."id" = a."orgId" AND o."legalName" IS NULL;
 
 -- Only the definer functions write the column, beside its existing UPDATE ("name"). No application role gains UPDATE.
 GRANT UPDATE ("legalName") ON "organizations" TO makrai_definer;

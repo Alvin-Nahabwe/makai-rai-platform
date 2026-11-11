@@ -42,6 +42,25 @@ const in7days = () => new Date(Date.now() + 7 * 86_400_000);
 const keyed = () => ({ requestId: randomUUID(), digest: randomUUID() });
 const fieldsOf = async (r: Response) => ((await r.json()).fields ?? []) as Array<{ field: string; message: string }>;
 
+/**
+ * An agreement record with the `recordedAt` the test names. A BEFORE INSERT trigger (`organization_agreements_db_time`)
+ * overwrites that column with the database clock, so the trigger is switched off for the insert, in one transaction
+ * as the table owner, the way `resetDb` handles the append-only triggers.
+ */
+async function insertAgreement(a: { id: string; orgId: string; recordedById: string; controllerLegalName: string; recordedAt: Date }): Promise<void> {
+  await su.query('BEGIN');
+  try {
+    await su.query('ALTER TABLE organization_agreements DISABLE TRIGGER organization_agreements_db_time');
+    await su.query(`INSERT INTO organization_agreements (id, "orgId", "agreementVersion", "textHash", "acceptedOn", "controllerLegalName", "dpContactEmail", "recordedById", "recordedAt")
+      VALUES ($1, $2, '1', $3, '2026-10-30', $4, 'dpo@fixture.test', $5, $6)`, [a.id, a.orgId, hex(a.id), a.controllerLegalName, a.recordedById, a.recordedAt]);
+    await su.query('ALTER TABLE organization_agreements ENABLE ALWAYS TRIGGER organization_agreements_db_time');
+    await su.query('COMMIT');
+  } catch (e) {
+    await su.query('ROLLBACK');
+    throw e;
+  }
+}
+
 /** A client of one lane (`makrai_app` or `makrai_identity`), with the organisation context a request would set. */
 async function asLane<T>(url: string | undefined, orgId: string | null, run: (c: Client) => Promise<T>): Promise<T> {
   const c = new Client({ connectionString: url });
@@ -249,12 +268,12 @@ describe('the database: the column, its grants, its policy and the expand-only o
       const org = await buildOrg({ label, withAgreement: false });
       await testDb.organization.update({ where: { id: org.org.id }, data: { legalName } });
       for (const [recordedAt, controllerLegalName] of names) {
-        await testDb.organisationAgreement.create({ data: { orgId: org.org.id, agreementVersion: '1', textHash: hex(randomUUID()), acceptedOn: new Date('2026-10-30T00:00:00Z'),
-          controllerLegalName, dpContactEmail: 'dpo@fixture.test', recordedById: org.members.owner.userId, recordedAt: new Date(recordedAt) } });
+        await insertAgreement({ id: randomUUID(), orgId: org.org.id, recordedById: org.members.owner.userId, controllerLegalName, recordedAt: new Date(recordedAt) });
       }
       return org.org.id;
     };
-    const two = await mk('bf-two', [['2026-10-01T00:00:00Z', 'Older Name'], ['2026-11-01T00:00:00Z', 'Newer Name']]);
+    // The newer record is inserted first, so insertion order is not what the backfill reads.
+    const two = await mk('bf-two', [['2026-11-01T00:00:00Z', 'Newer Name'], ['2026-10-01T00:00:00Z', 'Older Name']]);
     const none = await mk('bf-none', []);
     const set = await mk('bf-set', [['2026-10-01T00:00:00Z', 'Agreement Name']], 'Already Set');
     const agreementsBefore = await testDb.organisationAgreement.count();
@@ -264,6 +283,24 @@ describe('the database: the column, its grants, its policy and the expand-only o
     await su.query(backfill!);   // safe to repeat
     expect(await legal(two)).toBe('Newer Name');
     expect(await testDb.organisationAgreement.count()).toBe(agreementsBefore);   // it copies only
+  });
+
+  it('the backfill breaks a tie in recordedAt as the admin read does: the larger id first, whichever row was inserted first', async () => {
+    const sql = readFileSync(MIGRATION, 'utf8');
+    const backfill = /UPDATE "organizations" o SET "legalName"[\s\S]*?;/.exec(sql)![0];
+    const recordedAt = new Date('2026-11-01T00:00:00Z');
+    const rows: Array<[string, string]> = [['aaaaaaaa-0000-4000-8000-000000000001', 'Smaller Id Name'], ['ffffffff-0000-4000-8000-000000000002', 'Larger Id Name']];
+    // Two organisations, the tied rows inserted in opposite orders, so a backfill that leaves the tie to the planner takes the wrong one in one of them.
+    for (const [label, order] of [['bf-tie-a', rows], ['bf-tie-b', [...rows].reverse()]] as const) {
+      const org = await buildOrg({ label, withAgreement: false });
+      for (const [id, controllerLegalName] of order) {
+        await insertAgreement({ id: `${id[0]}${hex(label).slice(0, 7)}${id.slice(8)}`, orgId: org.org.id, recordedById: org.members.owner.userId, controllerLegalName, recordedAt });
+      }
+      const shownFirst = (await organisationForAdmin(org.org.id)).agreements[0].controllerLegalName;
+      expect({ label, shownFirst }).toEqual({ label, shownFirst: 'Larger Id Name' });
+      await su.query(backfill);
+      expect({ label, legalName: (await testDb.organization.findUniqueOrThrow({ where: { id: org.org.id } })).legalName }).toEqual({ label, legalName: shownFirst });
+    }
   });
 
   it('FR-ORG-06: an organisation with no agreement record keeps a null legal name and keeps working (owner invitation, members, projects)', async () => {

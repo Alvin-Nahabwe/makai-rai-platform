@@ -24,15 +24,23 @@ const V050_WRITTEN = ['users', 'consent_records', 'organizations', 'memberships'
   'project_metadata', 'assessments', 'remediation_items', 'evidence', 'evidence_blobs'];
 
 /** The reading of NFR-REL-07 recorded in the contract (Data model, "NFR-REL-07 against 9.5"; owner question 6). */
+const T03 = '20261030000300_v060_03_tenant';
+const V061 = '20261112000000_v061_organisation_legal_name';
+/**
+ * An entry allows one constraint of one table in one migration file: the match is on all three, so the same name in
+ * another file (a later migration adding a stricter CHECK of that name) is a finding.
+ */
 const ALLOWED = [
-  { table: 'evidence', constraint: 'evidence_kind_check', why: "kind defaults to 'file', which every v0.5.0 write gets" },
-  { table: 'invitations', constraint: 'invitations_kind_check', why: "kind defaults to 'member'" },
-  { table: 'evidence', constraint: 'evidence_attach_target_check', why: 'replaced by a wider CHECK every v0.5.0 row and write meets' },
-  { table: 'evidence', constraint: 'evidence_dedup_key', why: 'replaced by the same unique index WHERE assessmentId IS NOT NULL' },
-  // v0.6.1 (20261112000000_v061_organisation_legal_name): both keep every v0.5.0 and v0.6.0 write valid.
-  { table: 'organisation_events', constraint: 'organisation_events_action_check', why: 'dropped and added back with one more action; every earlier action stays allowed' },
-  { table: 'organizations', constraint: 'organizations_legalName_chk', why: 'on a new nullable column: no old write sets it, and NULL passes' },
+  { table: 'evidence', constraint: 'evidence_kind_check', file: T03, why: "kind defaults to 'file', which every v0.5.0 write gets" },
+  { table: 'invitations', constraint: 'invitations_kind_check', file: '20261030000200_v060_02_identity', why: "kind defaults to 'member'" },
+  { table: 'evidence', constraint: 'evidence_attach_target_check', file: T03, why: 'replaced by a wider CHECK every v0.5.0 row and write meets' },
+  { table: 'evidence', constraint: 'evidence_dedup_key', file: T03, why: 'replaced by the same unique index WHERE assessmentId IS NOT NULL' },
+  // v0.6.1 (V061): both keep every v0.5.0 and v0.6.0 write valid.
+  { table: 'organisation_events', constraint: 'organisation_events_action_check', file: V061, why: 'dropped and added back with one more action; every earlier action stays allowed' },
+  { table: 'organizations', constraint: 'organizations_legalName_chk', file: V061, why: 'on a new nullable column: no old write sets it, and NULL passes' },
 ];
+const isAllowed = (f: { file: string; table?: string; name: string }) =>
+  ALLOWED.some((a) => a.constraint === f.name && a.table === f.table && a.file === f.file);
 
 type MigrationFile = { name: string; sql: string };
 type Finding = { file: string; table?: string; name: string; statement: string };
@@ -86,7 +94,7 @@ function dropsAndRenames(files: MigrationFile[]): Finding[] {
     for (const stmt of statements(f.sql)) {
       // DROP <kind> [IF EXISTS] <name>: a standalone DROP statement, or inside ALTER TABLE.
       const dropRe = new RegExp(String.raw`\bDROP (?:TABLE|COLUMN|TYPE|VIEW|MATERIALIZED VIEW|INDEX|CONSTRAINT|POLICY|TRIGGER|FUNCTION|SEQUENCE|SCHEMA|DOMAIN) (?:CONCURRENTLY )?(?:IF EXISTS )?${IDENT}`, 'gi');
-      for (const m of stmt.matchAll(dropRe)) out.push({ file: f.name, name: unquote(m[2] ?? m[1]), statement: stmt });
+      for (const m of stmt.matchAll(dropRe)) out.push({ file: f.name, table: alteredTable(stmt) ?? undefined, name: unquote(m[2] ?? m[1]), statement: stmt });
       // ALTER TABLE t DROP <column> (the COLUMN keyword is optional in PostgreSQL).
       if (alteredTable(stmt)) {
         for (const a of actions(stmt.replace(/^ALTER TABLE (?:IF EXISTS )?(?:ONLY )?\S+(?:\s*\.\s*\S+)? /i, ''))) {
@@ -141,7 +149,7 @@ function addedChecks(files: MigrationFile[], tables: readonly string[]): Finding
 
 describe('NFR-REL-07 migration lint (expand only)', () => {
   it('NFR-REL-07: v0.6.0 migrations contain no DROP or RENAME of anything except the allow-listed constraints', () => {
-    expect(dropsAndRenames(v060MigrationSql()).filter((d) => !ALLOWED.some((a) => a.constraint === d.name))).toEqual([]);
+    expect(dropsAndRenames(v060MigrationSql()).filter((d) => !isAllowed(d))).toEqual([]);
   });
 
   it('NFR-REL-07: no NOT NULL without DEFAULT added to a table v0.5.0 writes', () => {
@@ -149,11 +157,30 @@ describe('NFR-REL-07 migration lint (expand only)', () => {
   });
 
   it('NFR-REL-07: no new CHECK constraint on a table v0.5.0 writes except the allow-list', () => {
-    expect(addedChecks(v060MigrationSql(), V050_WRITTEN).filter((c) => !ALLOWED.some((a) => a.constraint === c.name))).toEqual([]);
+    expect(addedChecks(v060MigrationSql(), V050_WRITTEN).filter((c) => !isAllowed(c))).toEqual([]);
   });
 
   it('NFR-REL-07: the lint sees the v0.6.0 files (not vacuous)', () => {
     expect(v060MigrationSql().length).toBeGreaterThanOrEqual(7);
+  });
+
+  it('NFR-REL-07 (lint self-test): an allow-list entry allows its own table, constraint and file only', () => {
+    const sql = (e: (typeof ALLOWED)[number]) => stripComments(`
+      ALTER TABLE "${e.table}" DROP CONSTRAINT "${e.constraint}";
+      ALTER TABLE "${e.table}" ADD CONSTRAINT "${e.constraint}" CHECK ("x" IS NOT NULL);`);
+    const found = (files: MigrationFile[]) => [...dropsAndRenames(files), ...addedChecks(files, [...V050_WRITTEN, 'organisation_events'])];
+    for (const e of ALLOWED) {
+      // The real file, table and name: allowed.
+      expect(found([{ name: e.file, sql: sql(e) }]).filter((f) => !isAllowed(f)), `${e.constraint} in its own file`).toEqual([]);
+      // The same constraint name in another migration file: not allowed (a later stricter CHECK of that name).
+      expect(found([{ name: '20269999000000_later', sql: sql(e) }]).filter((f) => !isAllowed(f)).length, `${e.constraint} in another file`).toBe(2);
+      // The same name and file on another table: not allowed.
+      const other = sql(e).replaceAll(`"${e.table}"`, '"projects"');
+      expect(found([{ name: e.file, sql: other }]).filter((f) => !isAllowed(f)).length, `${e.constraint} on another table`).toBe(2);
+    }
+    // The case the review named: a stricter CHECK of the v0.6.1 name in a later migration is refused.
+    const stricter = stripComments(`ALTER TABLE "organizations" ADD CONSTRAINT "organizations_legalName_chk" CHECK ("legalName" IS NOT NULL);`);
+    expect(addedChecks([{ name: '20270101000000_later', sql: stricter }], V050_WRITTEN).filter((c) => !isAllowed(c)).map((c) => c.name)).toEqual(['organizations_legalName_chk']);
   });
 
   it('NFR-REL-07 (lint self-test): each parser catches the shape it exists to refuse', () => {

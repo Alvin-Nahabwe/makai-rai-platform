@@ -6,7 +6,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 import { AppError } from '../../lib/http/errors';
 import {
-  acceptInvitationViaDefiner, adminCorrectOrgName, adminCreateOrganisation, adminIssueOwnerInvitation,
+  acceptInvitationViaDefiner, adminCorrectOrgLegalName, adminCorrectOrgName, adminCreateOrganisation, adminIssueOwnerInvitation,
   adminResendInvitation, adminRevokeInvitation, adminSetAccountActive,
 } from '../../lib/data/definer';
 import { resetDb, testDb } from '../helpers/db';
@@ -31,6 +31,22 @@ let admin: { id: string };
 let assessor: { id: string; email: string };
 
 const q = async (sql: string, params: unknown[] = []) => (await su.query(sql, params)).rows;
+/**
+ * The old 15-argument `admin_create_organisation` (the wrapper binds the 11-argument overload; the old one stays
+ * executable by makrai_identity for the old image): called in SQL, its non-administrator refusal mapped as above.
+ */
+async function createOrganisationOldSql(actorUserId: string): Promise<unknown> {
+  const slug = `old-${randomUUID().slice(0, 6)}`;
+  try {
+    return await q(`SELECT org_id FROM admin_create_organisation($1::text, $2::text, 'Never Old'::text, $3::text, '1'::text, $4::text, '2026-10-30'::date, 'Old Controller'::text,
+      'dpo@fixture.test'::text, 'never-old@fixture.test'::text, $5::text, now() + interval '7 days', false, $6::uuid, $7::text)`,
+    [actorUserId, randomUUID(), slug, hex('agreement'), hex(randomUUID()), randomUUID(), hex(randomUUID())]);
+  } catch (e) {
+    if ((e as Error).message === 'makrai:not_platform_admin') throw new AppError(403, 'not_platform_admin');
+    throw e;
+  }
+}
+
 /**
  * The old `admin_record_agreement` (route 43 is gone, and so is its wrapper; the function stays until the contract
  * migration, for the old image): called in SQL, its non-administrator refusal mapped as callDefiner maps it.
@@ -121,6 +137,8 @@ describe('definer functions and their wrappers', () => {
     const calls: Array<[string, (actorUserId: string) => Promise<unknown>]> = [
       ['admin_create_organisation', (actorUserId) => adminCreateOrganisation({ ...keyed(), actorUserId, name: 'Never', slug: `never-${randomUUID().slice(0, 6)}`, legalName: LEGAL_NAME,
         ownerEmail: 'never@fixture.test', tokenHash: hex(randomUUID()), expiresAt: in7days(), linkShown: false })],
+      ['admin_create_organisation (15 arguments)', (actorUserId) => createOrganisationOldSql(actorUserId)],
+      ['admin_correct_org_legal_name', (actorUserId) => adminCorrectOrgLegalName({ actorUserId, orgId, legalName: 'Never Corrected' })],
       ['admin_record_agreement', (actorUserId) => recordAgreementSql(actorUserId, orgId, '9')],
       ['admin_correct_org_name', (actorUserId) => adminCorrectOrgName({ actorUserId, orgId, name: 'Never Renamed' })],
       ['admin_issue_owner_invitation', (actorUserId) => adminIssueOwnerInvitation({ actorUserId, orgId, email: 'n@fixture.test', tokenHash: hex(randomUUID()),

@@ -17,8 +17,9 @@ import type { CreateOrganisationResponse } from '@/types/api';
 
 /**
  * Contract route row 41, S-24 (FR-ORG-01): the MAK-AI administrator creates an organisation, records its
- * institution's legal name on it and invites its first owner (no agreement record is written), in one definer transaction (`admin_create_organisation`, which writes the
- * `organisation_created` row): if any part fails, nothing is created. The slug is derived from the name and never
+ * institution's legal name on it and invites its first owner (no agreement record is written), in one definer
+ * transaction (`admin_create_organisation`, which writes the `organisation_created` row): if any part fails,
+ * nothing is created. The slug is derived from the name and never
  * chosen; a name with no Latin letters or digits gets `org-<random>` (register D-112). The invitation token is 32
  * random bytes, stored only as its hash, and expires seven days later (FR-ORG-02's test). E-01 is sent after the
  * transaction has committed (MEM's `deliverInvitation`): a failed send still answers 201 with `emailSent: false`.
