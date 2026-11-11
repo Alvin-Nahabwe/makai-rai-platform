@@ -4,18 +4,26 @@ import { useId, useRef, useState } from 'react';
 import type { ReactElement, RefObject } from 'react';
 import { useRouter } from 'next/navigation';
 import { sendWrite, type SendOutcome } from '@/lib/client/retrySafeWrite';
-import { Field, MAX_LEGAL_NAME } from '@/components/admin/CreateOrganisationForm';
+import { Field } from '@/components/admin/CreateOrganisationForm';
+import { MAX_LEGAL_NAME } from '@/lib/admin/limits';
 
 type Send = (body: Record<string, unknown>) => Promise<SendOutcome<{ previousLegalName: string | null }>>;
 
 const FIELD_MARKED = 'Not saved: check the field marked below.';
+/** Said when the value is already the legal name: refused before sending, or answered 200 by the route (nothing written). */
+export const UNCHANGED_LEGAL_NAME = "This is already the institution's legal name.";
+
+/** The form after Cancel: closed, and neither the value, the field error nor the status sentence that pointed at the field is kept. */
+export function cancelledForm(legalName: string | null): { open: false; error: undefined; value: string; status: '' } {
+  return { open: false, error: undefined, value: legalName ?? '', status: '' };
+}
 
 /** The field error for a corrected legal name, or undefined when it may be sent (an unchanged value is not sent, as for the name). */
 export function correctLegalNameError(value: string, current: string | null): string | undefined {
   const next = value.trim();
   if (next === '') return 'Enter the institution\'s legal name.';
   if (next.length > MAX_LEGAL_NAME) return `Use ${MAX_LEGAL_NAME} characters or fewer.`;
-  if (next === current) return 'This is already the institution\'s legal name.';
+  if (next === current) return UNCHANGED_LEGAL_NAME;
   return undefined;
 }
 
@@ -26,12 +34,14 @@ export function correctLegalNameError(value: string, current: string | null): st
  */
 export async function correctLegalName(
   value: string, current: string | null, send: Send,
-): Promise<{ kind: 'invalid'; error: string } | { kind: 'done'; status: string; saved: boolean }> {
+): Promise<{ kind: 'invalid'; error: string } | { kind: 'done'; status: string; saved: boolean; unchanged?: true }> {
   const error = correctLegalNameError(value, current);
   if (error !== undefined) return { kind: 'invalid', error };
   const next = value.trim();
   const out = await send({ legalName: next });
   if (out.kind === 'saved') {
+    // The route answers 200 and writes nothing for a value the organisation already has (the page was stale).
+    if (out.body.previousLegalName === next) return { kind: 'done', saved: false, unchanged: true, status: UNCHANGED_LEGAL_NAME };
     const was = out.body.previousLegalName === null ? 'none was recorded before' : `it was ${out.body.previousLegalName}`;
     return { kind: 'done', saved: true, status: `Saved. The legal name is now ${next}; ${was}.` };
   }
@@ -103,7 +113,7 @@ export function CorrectLegalNameForm({ orgId, legalName, send }: { orgId: string
       if (r.kind === 'invalid') { refused(r.error); return; }
       setError(undefined);
       setStatus(r.status);
-      if (r.saved) {
+      if (r.saved || r.unchanged) {
         setOpen(false);
         router.refresh();
       }
@@ -116,6 +126,6 @@ export function CorrectLegalNameForm({ orgId, legalName, send }: { orgId: string
   return (
     <CorrectLegalNameView formId={formId} open={open} value={value} error={error} status={status} busy={busy} statusRef={statusRef}
       onOpen={() => setOpen(true)} onValue={setValue} onSubmit={() => { void submit(); }}
-      onCancel={() => { setOpen(false); setError(undefined); setValue(legalName ?? ''); }} />
+      onCancel={() => { const c = cancelledForm(legalName); setOpen(c.open); setError(c.error); setValue(c.value); setStatus(c.status); }} />
   );
 }

@@ -6,15 +6,9 @@ import Link from 'next/link';
 import { requestIdFor, sendWrite, type RetryState, type SendOutcome } from '@/lib/client/retrySafeWrite';
 import { CopyLinkFallback } from '@/components/invitations/CopyLinkFallback';
 import { useHydrated } from '@/lib/client/useHydrated';
-import { MAX_ORG_NAME } from '@/lib/admin/limits';
+import { MAX_LEGAL_NAME, MAX_ORG_NAME } from '@/lib/admin/limits';
 import type { CreateOrganisationResponse, InviteMemberResponse } from '@/types/api';
 import type { FieldError } from '@/types/record';
-
-/**
- * The longest institution legal name. The route's own limit is `MAX_LEGAL_NAME` in `lib/data/admin.ts`, a server
- * module a client component cannot import; admin-screens.test.tsx holds the two equal.
- */
-export const MAX_LEGAL_NAME = 200;
 
 export type CreateDraft = { name: string; legalName: string; ownerEmail: string; showLink: boolean };
 export type FieldErrors = Partial<Record<keyof CreateDraft, string>>;
@@ -176,7 +170,7 @@ export function CreateOrganisationFormView(p: CreateOrganisationFormViewProps): 
           <Field id={`${formId}-name`} label="Organisation name"
             hint="Create one organisation for each team whose members may read each other's records. An institution with several teams gets one organisation for each."
             error={p.errors.name}>
-            {(a) => <input id={a.id} name="name" type="text" required maxLength={100} autoComplete="off" value={d.name}
+            {(a) => <input id={a.id} name="name" type="text" required maxLength={MAX_ORG_NAME} autoComplete="off" value={d.name}
               aria-describedby={a.describedBy} aria-invalid={a.invalid} onChange={(e) => p.onChange({ name: e.target.value })} />}
           </Field>
           <Field id={`${formId}-legal-name`} label="Institution's legal name"

@@ -11,8 +11,8 @@ import { ALL_ORG_EVENT_ACTIONS, OrganisationEventsList, actionWords } from '../.
 import type { OrgEventView } from '../../types/api';
 
 /**
- * S-30's two reads and its two slots (FR-ORG-09, FR-ORG-05; SRS lines 333, 577): the organisation's own
- * administrator and membership rows, shown to owners and admins only, and its current agreement.
+ * S-30's read and its slot (FR-ORG-09; SRS lines 333, 577): the organisation's own administrator and membership
+ * rows, shown to owners and admins only.
  */
 
 const hex = (s: string) => createHash('sha256').update(s).digest('hex');

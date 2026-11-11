@@ -40,10 +40,11 @@ const { default: AccountsPage } = await import('@/app/(authenticated)/admin/acco
 const { default: Sidebar } = await import('@/components/layout/Sidebar');
 const { default: NewOrganisationPage } = await import('@/app/(authenticated)/admin/organisations/new/page');
 const { default: OrganisationPage } = await import('@/app/(authenticated)/admin/organisations/[id]/page');
-const { CreateOrganisationFormView, createErrors, createFields, createResult, resentResult, EMAIL_FAILED, ALREADY_RESENT, ALREADY_CREATED, MAX_LEGAL_NAME } = await import('@/components/admin/CreateOrganisationForm');
+const { CreateOrganisationFormView, createErrors, createFields, createResult, resentResult, EMAIL_FAILED, ALREADY_RESENT, ALREADY_CREATED } = await import('@/components/admin/CreateOrganisationForm');
+const { MAX_LEGAL_NAME, MAX_ORG_NAME } = await import('@/lib/admin/limits');
 const { OwnerInvitationBox, resendWords } = await import('@/components/admin/OwnerInvitationBox');
 const { correctNameError } = await import('@/components/admin/CorrectNameForm');
-const { CorrectLegalNameView, correctLegalName, correctLegalNameError } = await import('@/components/admin/CorrectLegalNameForm');
+const { CorrectLegalNameView, correctLegalName, correctLegalNameError, cancelledForm, UNCHANGED_LEGAL_NAME } = await import('@/components/admin/CorrectLegalNameForm');
 const { AgreementRecords } = await import('@/components/admin/AgreementRecords');
 const { NotFoundError } = await import('@/lib/data/tenant');
 
@@ -350,6 +351,8 @@ describe('S-24, creating and recovering an organisation', () => {
     }
     expect(createErrors({ ...filled, legalName: 'x'.repeat(MAX_LEGAL_NAME + 1) }).legalName).toBe(`Use ${MAX_LEGAL_NAME} characters or fewer.`);
     expect(createErrors(filled)).toEqual({});
+    expect(new RegExp(`<input[^>]*name="name"[^>]*maxLength="${MAX_ORG_NAME}"`).test(html) || html.includes(`maxLength="${MAX_ORG_NAME}"`)).toBe(true);
+    expect(new RegExp(`<input[^>]*name="legalName"[^>]*maxLength="${MAX_LEGAL_NAME}"`).test(html) || html.includes(`maxLength="${MAX_LEGAL_NAME}"`)).toBe(true);
     expect(html).toContain('Create one organisation for each team whose members may read each other&#x27;s records. An institution with several teams gets one organisation for each.');
     expect(html).toContain('Creating the organisation also sends an invitation to the first owner. If either part does not go through, nothing is created.');
     expect(html).toMatch(/<button type="submit"[^>]*>Create organisation and send invitation<\/button>/);
@@ -445,11 +448,12 @@ describe('S-24, creating and recovering an organisation', () => {
       body: { error: 'x', code: 'validation', fields: [{ field: 'legalName', message: 'Use 200 characters or fewer.' }] } }));
     expect(fieldError).toEqual({ kind: 'invalid', error: 'Use 200 characters or fewer.' });
     // The view: label, hint tied by aria-describedby, announced status region, and the error beside the input it belongs to.
-    const html = renderToStaticMarkup(<CorrectLegalNameView formId="f" open value="Old" error="Enter the institution&#x27;s legal name." status="" busy={false}
+    const html = renderToStaticMarkup(<CorrectLegalNameView formId="f" open value="Old" error="Enter the institution's legal name." status="" busy={false}
       onOpen={vi.fn()} onValue={vi.fn()} onSubmit={vi.fn()} onCancel={vi.fn()} />);
     expect(html).toMatch(/<label for="f-legal-name">Institution&#x27;s legal name<\/label>/);
     expect(html).toMatch(/<input[^>]*id="f-legal-name"[^>]*aria-describedby="f-legal-name-hint f-legal-name-error"/);
     expect(html).toContain('The registered name of the university, hospital or institute the team belongs to.');
+    expect(html).toMatch(/<p id="f-legal-name-error"[^>]*>Enter the institution&#x27;s legal name\.<\/p>/);   // the error paragraph the input points at
     expect(html).toMatch(/<div role="status"/);
     expect(renderToStaticMarkup(<CorrectLegalNameView formId="f" open={false} value="" error={undefined} status="" busy={false}
       onOpen={vi.fn()} onValue={vi.fn()} onSubmit={vi.fn()} onCancel={vi.fn()} />)).toContain('>Correct the legal name</button>');
@@ -459,6 +463,18 @@ describe('S-24, creating and recovering an organisation', () => {
     const page = renderToStaticMarkup(await OrganisationPage({ params: Promise.resolve({ id: 'org-1' }) }));
     expect(page).toContain('>Correct the name</button>');
     expect(page).toContain('>Correct the legal name</button>');
+  });
+
+  it('FR-ORG-10: a legal name already corrected elsewhere (the route answers 200 with the same value) says it is already the name, not that it was saved', async () => {
+    const stale = await correctLegalName(' Makerere University ', 'Old University', async () => ({ kind: 'saved' as const, status: 200, body: { previousLegalName: 'Makerere University' } }));
+    expect(stale).toEqual({ kind: 'done', saved: false, unchanged: true, status: UNCHANGED_LEGAL_NAME });
+    expect(UNCHANGED_LEGAL_NAME).toBe(correctLegalNameError('Makerere University', 'Makerere University'));   // the sentence the client's own refusal uses
+    expect(stale.kind === 'done' && stale.status).not.toMatch(/Saved|it was/);
+  });
+
+  it('FR-ORG-10: Cancel on the legal-name form clears the value, the field error and the status sentence that pointed at the field', () => {
+    expect(cancelledForm('Makerere University')).toEqual({ open: false, error: undefined, value: 'Makerere University', status: '' });
+    expect(cancelledForm(null)).toEqual({ open: false, error: undefined, value: '', status: '' });
   });
 
   it('FR-ORG-03: the S-24 pages give a non-administrator only the refusal line, and an unknown organisation S-31', async () => {
