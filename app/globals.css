@@ -132,6 +132,7 @@
   --form-field-border: #767C88;           /* 4.19:1 on --surface-card (D-1, needs 3:1) */
   --link: var(--color-primary);           /* text links, 5.59:1 or better (D-3, needs 4.5:1) */
   --focus-ring: var(--color-primary);     /* the 3-pixel ring (D-3, needs 3:1) */
+  --sidebar-toggle-bar: var(--color-white); /* the phone menu button's bars, on --color-navy in both themes (needs 3:1) */
   --stage-fg: var(--tint-brand-fg);       /* stage labels (D-5, needs 4.5:1) */
   --stage-bg: var(--tint-brand-bg);
 
@@ -1301,7 +1302,7 @@ input:focus-visible {
     display: block;
     width: 100%;
     height: 2px;
-    background: var(--surface-card);
+    background: var(--sidebar-toggle-bar);
     border-radius: 1px;
     transition: all var(--transition-fast);
   }
