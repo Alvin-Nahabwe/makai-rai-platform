@@ -351,8 +351,9 @@ describe('S-24, creating and recovering an organisation', () => {
     }
     expect(createErrors({ ...filled, legalName: 'x'.repeat(MAX_LEGAL_NAME + 1) }).legalName).toBe(`Use ${MAX_LEGAL_NAME} characters or fewer.`);
     expect(createErrors(filled)).toEqual({});
-    expect(new RegExp(`<input[^>]*name="name"[^>]*maxLength="${MAX_ORG_NAME}"`).test(html) || html.includes(`maxLength="${MAX_ORG_NAME}"`)).toBe(true);
-    expect(new RegExp(`<input[^>]*name="legalName"[^>]*maxLength="${MAX_LEGAL_NAME}"`).test(html) || html.includes(`maxLength="${MAX_LEGAL_NAME}"`)).toBe(true);
+    const inputNamed = (name: string) => new RegExp(`<input[^>]*name="${name}"[^>]*>`).exec(html)?.[0] ?? '';
+    expect(inputNamed('name')).toContain(`maxLength="${MAX_ORG_NAME}"`);
+    expect(inputNamed('legalName')).toContain(`maxLength="${MAX_LEGAL_NAME}"`);
     expect(html).toContain('Create one organisation for each team whose members may read each other&#x27;s records. An institution with several teams gets one organisation for each.');
     expect(html).toContain('Creating the organisation also sends an invitation to the first owner. If either part does not go through, nothing is created.');
     expect(html).toMatch(/<button type="submit"[^>]*>Create organisation and send invitation<\/button>/);
