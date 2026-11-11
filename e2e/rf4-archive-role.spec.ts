@@ -146,7 +146,8 @@ async function pressAll(p: OpenPages, text: { save: string; seal: string; issue:
   await mit.getByRole('button', { name: 'Save mitigation' }).click();
   // The failed upload holds the save for a choice (MitigationForm's gate); saving without it is the press that reaches the server.
   await mit.getByRole('button', { name: 'Save without it' }).click();
-  await expect(mit.locator('form').getByRole('alert').filter({ hasText: text.save })).toBeVisible();
+  // The refused upload keeps its own alert with the same sentence; this is the save's refusal, the form's own paragraph.
+  await expect(mit.locator('form > p[role="alert"]')).toHaveText(text.save);
 
   await p.s17.getByRole('button', { name: 'Seal as seal 2' }).click();
   await expect(p.s17.locator('main').getByRole('alert')).toContainText(text.seal);   // Next's route announcer is a second alert, outside <main>
