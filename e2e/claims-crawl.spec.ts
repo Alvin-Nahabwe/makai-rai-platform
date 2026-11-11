@@ -513,15 +513,21 @@ test('FR-PUB-01 (helper): the word reader and the claim pattern flag a claim and
   expect(claims.some((c) => /certified/i.test(c)), 'a button value is read').toBe(true);
 });
 
+// Shaped like S-06: a title and an <article> holding an <h1>, the marked block, and a sibling paragraph, each with a claim word.
+// The title and the heading carry different words, so a finding names which of them it came from.
 // The span inside the block holds a spoken attribute: a marker exempts body text, never what a screen reader adds.
-const LEGAL_PAGE_HTML = '<!doctype html><title>t</title><main><div data-legal-text><p>We certify this.</p><span aria-label="Certified badge">x</span></div><p>Certified by us.</p></main>';
+const LEGAL_PAGE_HTML = '<!doctype html><title>Compliance notice - MAK-AI</title><main><article><h1>Score notice</h1>'
+  + '<div data-legal-text><p>We certify this.</p><span aria-label="Certified badge">x</span></div><p>Certified by us.</p></article></main>';
 
 test('FR-PUB-01: a claim word outside the legal-text block of a legal page still fails', async ({ page }) => {
   await page.setContent(LEGAL_PAGE_HTML);
   for (const pathname of ['/legal/terms', '/legal/privacy/2']) {
     const claims = claimsIn(await readWords(page, 'self-test', pathname));
-    // Two findings, as read: the sibling paragraph and the aria-label inside the block. "certify" in the block's body is skipped.
-    expect(claims.length, `${pathname}: ${claims.join('; ')}`).toBe(2);
+    // Four findings, as read: the document title, the heading of the enclosing article, the sibling paragraph and the
+    // aria-label inside the block. "certify" in the block's body is skipped.
+    expect(claims.length, `${pathname}: ${claims.join('; ')}`).toBe(4);
+    expect(claims.filter((c) => c.startsWith('"Compliance"')), `${pathname}: the document title`).toHaveLength(1);
+    expect(claims.filter((c) => c.startsWith('"Score"')), `${pathname}: the heading of the enclosing article`).toHaveLength(1);
     expect(claims.some((c) => /Certified by us/.test(c)), `${pathname}: the sibling`).toBe(true);
     expect(claims.some((c) => /Certified badge/.test(c)), `${pathname}: the spoken attribute inside the block`).toBe(true);
     expect(claims.some((c) => /We certify this/.test(c)), `${pathname}: the block's body is skipped`).toBe(false);
@@ -530,9 +536,12 @@ test('FR-PUB-01: a claim word outside the legal-text block of a legal page still
 
 test('FR-PUB-01: data-legal-text on a non-legal route exempts nothing', async ({ page }) => {
   await page.setContent(LEGAL_PAGE_HTML);
-  for (const pathname of ['/about', '/', '/legal', '/legal/terms/2/extra', '/orgs/acme/legal/terms', '/explore/legal/terms', '']) {
+  // One, two, three and four segments: a route list widened to a template of any of those lengths would exempt one of these.
+  for (const pathname of ['/about', '/', '/legal', '/explore/framework', '/orgs/acme', '/legal/terms/2/extra', '/orgs/acme/legal/terms', '/explore/legal/terms', '']) {
     const claims = claimsIn(await readWords(page, 'self-test', pathname));
-    expect(claims.length, `${pathname}: ${claims.join('; ')}`).toBe(3);   // the block's body, the sibling, the attribute
+    expect(claims.length, `${pathname}: ${claims.join('; ')}`).toBe(5);   // the title, the heading, the block's body, the sibling, the attribute
+    expect(claims.filter((c) => c.startsWith('"Compliance"')), `${pathname}: the document title`).toHaveLength(1);
+    expect(claims.filter((c) => c.startsWith('"Score"')), `${pathname}: the heading`).toHaveLength(1);
     expect(claims.some((c) => /We certify this/.test(c)), `${pathname}: the block's body is read`).toBe(true);
   }
 });

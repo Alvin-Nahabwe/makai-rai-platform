@@ -189,12 +189,12 @@ function claimsAllowedMarkers(roots: string[]): Array<{ file: string; reason: st
 /**
  * Every place under `roots` that names `data-legal-text`: a JSX attribute, any string, template or identifier that spells it
  * (a spread object, `createElement`, a computed prop), or `legalText` as a `dataset` property (`el.dataset.legalText`). Reads
- * .ts, .tsx, .js, .jsx and .mjs. A name assembled from string pieces cannot be caught by a scan. Comments are not counted.
+ * .ts, .tsx, .js, .jsx, .mjs and .cjs. A name assembled from string pieces cannot be caught by a scan. Comments are not counted.
  */
 function legalTextMarkers(roots: string[]): string[] {
   const out: string[] = [];
   for (const root of roots) {
-    for (const file of sourceFiles(root, /\.(ts|tsx|js|jsx|mjs)$/)) {
+    for (const file of sourceFiles(root, /\.(ts|tsx|js|jsx|mjs|cjs)$/)) {
       const sf = ts.createSourceFile(
         file,
         readFileSync(file, 'utf8'),
@@ -681,7 +681,10 @@ describe('no product claims', () => {
   it('FR-PUB-01: data-legal-text appears in exactly one source file, components/legal/LegalTextView.tsx, once', () => {
     // The attribute exempts words from the claim-word crawl and unit check (owner ruling R1), so it is fenced like
     // data-claims-allowed: a second place would let a claim through on a screen that is not a legal text.
-    expect(legalTextMarkers(['app', 'components', 'lib'])).toEqual(['components/legal/LegalTextView.tsx']);
+    expect(
+      legalTextMarkers(['app', 'components', 'lib']),
+      'data-legal-text exempts the words inside it from the claim-word check, so only components/legal/LegalTextView.tsx may name it; any other file listed here lets claim words through on a screen that is not a legal text',
+    ).toEqual(['components/legal/LegalTextView.tsx']);
   });
 
   it('FR-PUB-01 FR-RM-01: data-source-note sits only on ReferencesList\'s relevance note, and only S-26 renders ReferencesList', () => {
