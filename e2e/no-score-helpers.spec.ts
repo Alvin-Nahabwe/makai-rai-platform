@@ -161,5 +161,7 @@ test('UX-07 (helper): a findings list grouped by stage with a count per group an
 test('FR-RM-01: the no-score check still reads a legal page\'s text', async ({ page }) => {
   // data-legal-text exempts claim words only (owner ruling R1); the no-score check skips data-claims-allowed and nothing else.
   await page.setContent('<main><p>Version 2.</p><div data-legal-text><p>Score: 85%</p></div></main>');
+  // Both paths: the score-word check and the percentage check read inside the block.
   await expect(expectNoScoreShapes(page, 'legal page')).rejects.toThrow(/score word "Score:"/);
+  await expect(expectNoScoreShapes(page, 'legal page')).rejects.toThrow(/percentage "85%"/);
 });

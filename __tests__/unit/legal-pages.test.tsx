@@ -218,6 +218,9 @@ describe('S-06 /legal/[kind] and /legal/[kind]/[version]', () => {
     expect(marked.startsWith('<div ')).toBe(true);
     expect(marked).toContain('We certify the words of this stub.');
     expect(marked).toContain('<h2>Our promise</h2>');
+    // Nothing but the stub's blocks, in order: interface copy added inside the block, before or after them, fails here.
+    const inner = marked.slice(marked.indexOf('>') + 1, marked.length - '</div>'.length);
+    expect(inner).toBe('<h2>Our promise</h2><p>We certify the words of this stub.</p><p>A second paragraph.</p>');
     // The page's heading, the version line and the fingerprint are interface copy: they stay outside.
     for (const part of ['<h1', 'Version 3, published 5 Jan 2027', groupsOfFour('ab'.repeat(32)), 'SHA-256']) {
       expect(marked, part).not.toContain(part);

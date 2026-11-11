@@ -44,12 +44,12 @@ function matchIn(where: string, text: string, pattern: { test(s: string): boolea
 
 type UserString = { where: string; text: string; insideClaimsAllowed: boolean };
 
-function sourceFiles(dir: string): string[] {
+function sourceFiles(dir: string, extensions: RegExp = /\.(ts|tsx)$/): string[] {
   if (!existsSync(dir)) return [];
   return readdirSync(dir).flatMap((name) => {
     const path = join(dir, name);
-    if (statSync(path).isDirectory()) return name === 'node_modules' ? [] : sourceFiles(path);
-    return /\.(ts|tsx)$/.test(name) && !name.endsWith('.d.ts') ? [path] : [];
+    if (statSync(path).isDirectory()) return name === 'node_modules' ? [] : sourceFiles(path, extensions);
+    return extensions.test(name) && !name.endsWith('.d.ts') ? [path] : [];
   });
 }
 
@@ -187,26 +187,29 @@ function claimsAllowedMarkers(roots: string[]): Array<{ file: string; reason: st
 }
 
 /**
- * Every place under `roots` that names `data-legal-text`: a JSX attribute, or any string, template or identifier that
- * spells it (a spread object, `createElement`, a computed prop). Comments are not code and are not counted.
+ * Every place under `roots` that names `data-legal-text`: a JSX attribute, any string, template or identifier that spells it
+ * (a spread object, `createElement`, a computed prop), or `legalText` as a `dataset` property (`el.dataset.legalText`). Reads
+ * .ts, .tsx, .js, .jsx and .mjs. A name assembled from string pieces cannot be caught by a scan. Comments are not counted.
  */
 function legalTextMarkers(roots: string[]): string[] {
   const out: string[] = [];
   for (const root of roots) {
-    for (const file of sourceFiles(root)) {
+    for (const file of sourceFiles(root, /\.(ts|tsx|js|jsx|mjs)$/)) {
       const sf = ts.createSourceFile(
         file,
         readFileSync(file, 'utf8'),
         ts.ScriptTarget.Latest,
         true,
-        file.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+        /\.(tsx|jsx)$/.test(file) ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
       );
       const visit = (n: ts.Node): void => {
         // A JSX attribute's name is an identifier node, so the JSX case needs no branch of its own.
         const spelled =
           ts.isStringLiteralLike(n) || ts.isIdentifier(n) || ts.isTemplateHead(n) || ts.isTemplateMiddle(n) || ts.isTemplateTail(n) ? n.text :
           '';
-        if (spelled.includes('data-legal-text')) out.push(relative(process.cwd(), file));
+        if (spelled.includes('data-legal-text') || (ts.isIdentifier(n) && spelled === 'legalText') || (ts.isStringLiteralLike(n) && spelled === 'legalText')) {
+          out.push(relative(process.cwd(), file));
+        }
         ts.forEachChild(n, visit);
       };
       visit(sf);
