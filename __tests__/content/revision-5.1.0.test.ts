@@ -16,7 +16,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 import { claimMatches } from '@/lib/claims/pattern';
-import { validateContentVersion } from '@/lib/content/validate';
+import { sentenceCount, validateContentVersion } from '@/lib/content/validate';
 
 import { withApprovedCopy } from './helpers/draft-proposal';
 
@@ -106,11 +106,12 @@ describe('content 5.1.0, the draft for the owner', () => {
   });
 
   it('the risk-area cut: 67 whyAsked rows, every one ending its text without the "Risk area" sentence', () => {
-    const cut = changes.filter((c) => c.row === 'WA-tail' || c.row.endsWith('+WA-tail'));
+    const cut = changes.filter((c) => c.row.includes('WA-tail'));
     expect(cut).toHaveLength(67);
     for (const c of cut) {
       expect(c.field).toBe('whyAsked');
-      expect(c.decision, c.id).toBe('accept');
+      // The owner accepted the cut; for Q-PP-05 and Q-PP-24 he also edited the cut text (row WA-tail+owner-edit), and `to` still shows the cut as drafted.
+      expect(c.decision, c.id).toBe(c.row.endsWith('owner-edit') ? 'edit' : 'accept');
       // The cut removes exactly the final "Risk area(s): ..." sentence and the space before it, nothing else.
       const m = /^(.*) (Risk areas?: [^.]*\.)$/.exec(c.from);
       expect(m, c.id).not.toBeNull();
@@ -129,16 +130,31 @@ describe('content 5.1.0, the draft for the owner', () => {
     expect(qs).toHaveLength(67);
   });
 
-  it("the committed proposal says 'checked': the owner has approved nothing yet", () => {
-    // The sign-off task changes this to 'approved' after the owner's sitting. Until then the file must not claim it.
-    expect((JSON.parse(readFileSync(PROPOSAL_FILE, 'utf8')) as { status: string }).status).toBe('checked');
+  it('the owner answered every row (11 Nov 2026, 19:43 EAT): none is pending, two are edited, and the committed proposal says approved', () => {
+    expect(changes.filter((c) => c.decision === 'pending').map((c) => c.row)).toEqual([]);
+    expect(changes.filter((c) => c.decision === 'edit').map((c) => `${c.row} ${c.id}`)).toEqual(['WA-tail+owner-edit Q-PP-05', 'WA-tail+owner-edit Q-PP-24']);
+    expect(changes.filter((c) => c.decision === 'decline')).toEqual([]);
+    expect((JSON.parse(readFileSync(PROPOSAL_FILE, 'utf8')) as { status: string }).status).toBe('approved');
+  });
+
+  it("the two edited texts end as the owner chose, and pass the length and claim checks", () => {
+    const edited = new Map(changes.filter((c) => c.decision === 'edit').map((c) => [c.id, c.final]));
+    expect(edited.get('Q-PP-05')?.endsWith('this question asks about those rights, and a separate question asks about particular groups.')).toBe(true);
+    expect(edited.get('Q-PP-24')?.endsWith('for example through multi-stakeholder consultation.')).toBe(true);
+    for (const t of edited.values()) {
+      expect(claimMatches(t)).toEqual([]);
+      // whyAsked: 1 to 300 characters and at most two sentences (lib/content/validate.ts:577, QC-01).
+      expect(t.length).toBeGreaterThanOrEqual(1);
+      expect(t.length).toBeLessThanOrEqual(300);
+      expect(sentenceCount(t)).toBeLessThanOrEqual(2);
+    }
   });
 
   /** The validator reads a proposal only when its status is 'approved' (lib/content/validate.ts:173-177), so these cases check an approved copy. */
   const validate = (completeness: boolean): string[] =>
     withApprovedCopy(PROPOSAL_FILE, (file) => validateContentVersion(NEW, { baselineDir: 'data', proposalFile: file, completeness }));
 
-  it("validateContentVersion('data/content/5.1.0') against the 4.0.0 baseline and the proposal (approved copy) returns no problem", () => {
+  it("validateContentVersion('data/content/5.1.0') against the 4.0.0 baseline and the proposal (approved copy, kept for any future draft) returns no problem", () => {
     expect(validate(false)).toEqual([]);
   });
 
