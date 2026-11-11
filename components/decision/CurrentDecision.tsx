@@ -3,6 +3,7 @@ import type { ReactElement } from 'react';
 import { SealMarker } from '@/components/review/SealMarker';
 import { VersionEvidenceList } from '@/components/evidence/VersionEvidenceList';
 import { WITHDRAWAL_CODE_LABELS, deciderLabel } from '@/lib/decision/copy';
+import { textErasedLine } from '@/lib/documents/copy';
 import { statusText } from '@/lib/question/stageList';
 import { formatDay, formatDeclaredDate, formatTime } from '@/lib/format/dates';
 import type { DecisionVersionView } from '@/types/api';
@@ -44,7 +45,7 @@ export function CurrentDecision({ orgSlug, current, historyCount, historyHref, s
       <p>{decided === null ? entered : <>{decided} {entered}</>}</p>
       <dl>
         <dt>Reason</dt>
-        <dd>{current.reasonErased !== null ? `Text erased on ${formatDay(current.reasonErased.erasedOn)} on the organisation's instruction.` : (current.reason ?? '')}</dd>
+        <dd>{current.reasonErased !== null ? textErasedLine(current.reasonErased.erasedOn) : (current.reason ?? '')}</dd>
         <dt>Evidence</dt>
         <dd>{current.evidence.length === 0 ? 'None' : <VersionEvidenceList orgSlug={orgSlug} items={current.evidence} />}</dd>
       </dl>

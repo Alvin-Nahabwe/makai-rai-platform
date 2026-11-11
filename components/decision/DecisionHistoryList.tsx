@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 import { SealMarker } from '@/components/review/SealMarker';
 import { VersionEvidenceList } from '@/components/evidence/VersionEvidenceList';
 import { WITHDRAWAL_CODE_LABELS, deciderLabel } from '@/lib/decision/copy';
+import { textErasedLine } from '@/lib/documents/copy';
 import { formatDay, formatDeclaredDate, formatTime } from '@/lib/format/dates';
 import { statusText } from '@/lib/question/stageList';
 import type { DecisionVersionView } from '@/types/api';
@@ -34,7 +35,7 @@ export function DecisionHistoryList({ orgSlug, entries }: { orgSlug: string; ent
               {v.status === 'withdrawn' ? `Withdrawn: ${v.withdrawalCode === null ? '' : WITHDRAWAL_CODE_LABELS[v.withdrawalCode]}` : statusText(v)}
             </span></dd>
             <dt>Reason</dt>
-            <dd>{v.reasonErased !== null ? `Text erased on ${formatDay(v.reasonErased.erasedOn)} on the organisation's instruction.` : (v.reason ?? '')}</dd>
+            <dd>{v.reasonErased !== null ? textErasedLine(v.reasonErased.erasedOn) : (v.reason ?? '')}</dd>
             {v.decidedBy !== null ? (<><dt>Decided by</dt><dd>{`${deciderLabel(v.decidedBy, '', 'record')}${v.declaredDate === null ? '' : `, ${formatDeclaredDate(v.declaredDate)}`}`}</dd></>) : null}
             <dt>Entered by</dt>
             <dd>
