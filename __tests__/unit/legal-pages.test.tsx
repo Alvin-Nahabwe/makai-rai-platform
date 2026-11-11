@@ -34,6 +34,7 @@ vi.mock('@/lib/legal/registry', async (importOriginal) => {
 afterEach(() => {
   privacyHistory.versions = [...privacyHistory.fixture];
 });
+const { LEGAL_KINDS, currentLegalText, legalTextHistory } = await import('@/lib/legal/registry');
 const actualRegistry = await vi.importActual<typeof import('@/lib/legal/registry')>('@/lib/legal/registry');
 
 const KindModule = await import('@/app/(public)/legal/[kind]/page');
@@ -116,8 +117,9 @@ describe('S-06 /legal/[kind] and /legal/[kind]/[version]', () => {
     for (const version of ['..%2Fterms%2F1', '../terms/1', '9', '01', 'constructor', '__proto__', '']) {
       await expect(versionPage('privacy', version), version).rejects.toThrow(NOT_FOUND);
     }
-    // A version another kind has is not a version of this kind.
-    await expect(versionPage('terms', '2')).rejects.toThrow(NOT_FOUND);
+    // A version past the newest one of the kind is not a version of it; the newest is the registry's, so a published
+    // terms version 2 moves this case to 3 without an edit.
+    await expect(versionPage('terms', String(Number(currentLegalText('terms').version) + 1))).rejects.toThrow(NOT_FOUND);
     for (const kind of ['x', 'Privacy', 'terms ', 'constructor', '__proto__', 'hasOwnProperty', '..']) {
       await expect(kindPage(kind), kind).rejects.toThrow(NOT_FOUND);
       await expect(versionPage(kind, '1'), kind).rejects.toThrow(NOT_FOUND);
@@ -130,13 +132,10 @@ describe('S-06 /legal/[kind] and /legal/[kind]/[version]', () => {
     expect(await KindModule.generateStaticParams()).toEqual([
       { kind: 'terms' }, { kind: 'privacy' }, { kind: 'cross-border-consent' }, { kind: 'organisation-agreement' },
     ]);
-    expect(await VersionModule.generateStaticParams()).toEqual([
-      { kind: 'terms', version: '1' },
-      { kind: 'privacy', version: '1' },
-      { kind: 'privacy', version: '2' },
-      { kind: 'cross-border-consent', version: '1' },
-      { kind: 'organisation-agreement', version: '1' },
-    ]);
+    // Generated from the registry's history, oldest first: a published version joins the list without an edit here.
+    expect(await VersionModule.generateStaticParams()).toEqual(
+      LEGAL_KINDS.flatMap((kind) => legalTextHistory(kind).map((t) => ({ kind, version: t.version }))),
+    );
   });
 
   it('FR-ACC-02: past versions are listed newest first, without the current one', async () => {

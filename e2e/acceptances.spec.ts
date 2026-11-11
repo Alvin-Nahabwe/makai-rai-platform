@@ -5,6 +5,8 @@ import { test, expect, type Browser, type Page } from '@playwright/test';
 import { testDb } from '../__tests__/helpers/db';
 import { buildOrg, type FixtureAccount, type OrgFixture } from '../__tests__/helpers/recordFixture';
 import { claimMatches } from '../lib/claims/pattern';
+import { currentLegalText } from '../lib/legal/registry';
+import { ACCEPTED_KINDS } from '../types/legal';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { expectNoHorizontalScroll } from './helpers/reflow';
@@ -232,7 +234,7 @@ test.describe('S-04 and S-05 in a browser', () => {
     await page.waitForURL((url) => url.pathname !== '/acceptances');
     expect(bodies).toHaveLength(2);
     expect(bodies[1]).toBe(bodies[0]);
-    expect(await testDb.consentRecord.count({ where: { userId: fx.members.assessor.userId, version: '1' } })).toBe(3);
+    expect(await testDb.consentRecord.count({ where: { userId: fx.members.assessor.userId, version: { in: ACCEPTED_KINDS.map((k) => currentLegalText(k).version) } } })).toBe(3);
     await page.context().close();
   });
 
@@ -386,10 +388,11 @@ test.describe('S-04 and S-05 in a browser', () => {
 
   test('FR-ACC-02: /legal/privacy and /legal/privacy/1 answer 200 without signing in and show the hash of the file', async ({ browser }) => {
     const page = await newPage(browser);
-    const hash = createHash('sha256').update(readFileSync('data/legal/privacy/1.md')).digest('hex').replace(/(.{4})(?!$)/g, '$1 ');
-    for (const path of ['/legal/privacy', '/legal/privacy/1']) {
+    const hashOf = (file: string) => createHash('sha256').update(readFileSync(file)).digest('hex').replace(/(.{4})(?!$)/g, '$1 ');
+    const currentFile = `data/legal/privacy/${currentLegalText('privacy').version}.md`;
+    for (const [path, file] of [['/legal/privacy', currentFile], ['/legal/privacy/1', 'data/legal/privacy/1.md']] as const) {
       expect((await page.goto(path))?.status(), path).toBe(200);
-      await expect(page.locator('code')).toHaveText(hash);
+      await expect(page.locator('code')).toHaveText(hashOf(file));
     }
     await page.context().close();
   });
