@@ -3,6 +3,7 @@ import { requireOrgContextWithIdentity } from '@/lib/auth/context';
 import { openTeamExport, releaseTeamExport, writeTeamExport } from '@/lib/data/export';
 import { AppError } from '@/lib/http/errors';
 import { exportRefusalLocation } from '@/lib/http/exportRefusal';
+import { navigationRefusal } from '@/lib/http/navigationRefusal';
 import { toResponse } from '@/lib/http/toResponse';
 import { publicOrigin } from '@/lib/publicOrigin';
 
@@ -132,6 +133,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
       const redirect = refusalRedirect(slug, projectId);
       if (redirect !== null) return redirect;
     }
-    return toResponse(e);
+    return navigationRefusal(req, e) ?? toResponse(e);
   }
 }

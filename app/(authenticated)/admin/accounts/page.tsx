@@ -12,6 +12,7 @@ const REFUSALS: Readonly<Record<string, string>> = {
   self: 'You cannot change your own role or deactivate your own account.',
   request_reference_required: 'Enter the reference of the controller\'s written request to deactivate the only active owner.',
   has_membership: 'This account belongs to an organisation, so it cannot be a MAK-AI administrator.',
+  invalid_request: 'That change could not be made. Reload the page and try again.',
   single_admin: 'The platform keeps one MAK-AI administrator. This account stays an assessor.',
 };
 

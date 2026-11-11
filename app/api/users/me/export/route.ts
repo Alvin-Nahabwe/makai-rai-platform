@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireIdentityForApi } from '@/lib/auth/identity';
 import { personalExport } from '@/lib/data/export';
+import { navigationRefusal } from '@/lib/http/navigationRefusal';
 import { toResponse } from '@/lib/http/toResponse';
 
 /**
@@ -13,7 +14,7 @@ import { toResponse } from '@/lib/http/toResponse';
  * Gated with `allowMissingAcceptances: true` (G028): a person who has not accepted the current legal
  * texts can still take their data (FR-ACC-04, SRS line 491). The proxy limits it to 3 an hour.
  */
-export async function GET() {
+export async function GET(req?: Request) {
   try {
     const identity = await requireIdentityForApi({ allowMissingAcceptances: true });
     const body = await personalExport(identity.userId);
@@ -22,6 +23,6 @@ export async function GET() {
       headers: { 'Content-Disposition': `attachment; filename="makrai-export-${body.exportedAt.slice(0, 10)}.json"`, 'Cache-Control': 'no-store' },
     });
   } catch (e) {
-    return toResponse(e);
+    return navigationRefusal(req, e) ?? toResponse(e);
   }
 }

@@ -9,6 +9,7 @@ import { AppError } from '@/lib/http/errors';
 import { adminSetAccountActive } from '@/lib/data/definer';
 import { accountHasMembership } from '@/lib/data/admin';
 import { MAX_REQUEST_REFERENCE } from '@/lib/admin/limits';
+import { isNavigation } from '@/lib/http/navigationRefusal';
 import { isRequestId } from '@/lib/data/idempotency';
 
 /**
@@ -58,6 +59,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // written, not after it has committed and only the redirect is left to build.
   const accountsUrl = publicUrl('/admin/accounts');
   const refused = (query: string) => NextResponse.redirect(publicUrl(`/admin/accounts?${query}`), 303);
+  // The page's own forms never send these three bad requests. A form posted by the browser from elsewhere would show
+  // the JSON as the page, so a navigation goes back to S-25 with one line; any other caller keeps the 400 JSON.
+  const badRequest = (error: string) => (isNavigation(request) ? refused('error=invalid_request') : NextResponse.json({ error }, { status: 400 }));
 
   let identity;
   try {
@@ -91,7 +95,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // the request id of the page's form; a form that names neither, or names the old `action` toggle, is refused.
     const changesState = active !== null || form.has('action');
     if (changesState && ((active !== 'true' && active !== 'false') || !isRequestId(field(form, 'requestId')))) {
-      return NextResponse.json({ error: 'Name the state, true or false, and the request id' }, { status: 400 });
+      return badRequest('Name the state, true or false, and the request id');
     }
 
     const target = await identityDb.user.findUnique({
@@ -119,7 +123,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // S-25 limits the field to the same length (maxLength); a longer one is refused, never cut.
       const reference = field(form, 'requestReference')?.trim() ?? '';
       if (reference.length > MAX_REQUEST_REFERENCE) {
-        return NextResponse.json({ error: `A request reference is at most ${MAX_REQUEST_REFERENCE} characters` }, { status: 400 });
+        return badRequest(`A request reference is at most ${MAX_REQUEST_REFERENCE} characters`);
       }
       let affectedOrgIds: string[];
       try {
@@ -156,7 +160,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         });
       }
     } else {
-      return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+      return badRequest('Invalid action');
     }
   } catch (e) {
     return toResponse(e);

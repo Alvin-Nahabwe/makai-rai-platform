@@ -1,7 +1,9 @@
 import 'dotenv/config';
+import fs from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
+import { MANIFEST_PATH, adminSeat, type FixtureManifest } from './fixtures/manifest';
 import { buildOrg } from '../__tests__/helpers/recordFixture';
-import { actAsSeat, fixtureOrgSlug, newProject, questionPath, seatRequest, stageOf } from './helpers/session';
+import { actAsSeat, fixtureOrgSlug, newProject, questionPath, seatOf, seatRequest, stageOf } from './helpers/session';
 
 /**
  * v0.6.1 U12 rows (a), (b), (d) and (e): four defects that were broken for people on v0.6.0, each checked at the
@@ -93,3 +95,59 @@ test('U12 (d): a viewer sees the current decision\'s reason and evidence names o
   await expect(page.getByRole('button', { name: /save/i })).toHaveCount(0);
 });
 
+test.describe('U12 (e): a refused download address does not leave raw JSON on the screen', () => {
+  const m = (): FixtureManifest => JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf8')) as FixtureManifest;
+
+  test('a signed-out request to each download address ends on the sign-in page, and an API client still gets the JSON 401', async ({ browser }) => {
+    // The proxy counts exports per client address (3 an hour), so this run uses an address of its own.
+    const ip = `10.${50 + Math.floor(Math.random() * 100)}.${Math.floor(Math.random() * 250)}.${1 + Math.floor(Math.random() * 250)}`;
+    const context = await browser.newContext({ extraHTTPHeaders: { 'x-forwarded-for': ip } });
+    const page = await context.newPage();
+    const request = context.request;
+    const org = m().orgs[0].slug;
+    const projectId = '3f2b8f0e-1c11-4d6e-9a55-0a1b2c3d4e5f';
+    // The last address is opened as a page only: with the team export's page and API checks it would be a fourth export request.
+    const addresses: Array<[string, boolean]> = [
+      [`/api/v1/orgs/${org}/documents/${projectId}/pdf`, true],
+      ['/api/users/me/export', true],
+      [`/api/v1/orgs/${org}/export`, true],
+      [`/api/v1/orgs/${org}/export?projectId=${projectId}`, false],
+    ];
+    for (const [address, alsoAsApiClient] of addresses) {
+      await page.context().clearCookies();
+      await page.goto(address);
+      expect(new URL(page.url()).pathname, address).toBe('/login');
+      await expect(page.getByRole('heading', { level: 1 }), address).toBeVisible();
+      await expect(page.getByRole('status').filter({ hasText: 'You are signed out. Sign in, then start the download again.' }), address).toBeVisible();
+      // An API client (no browser navigation header) is unchanged: the JSON 401.
+      if (!alsoAsApiClient) continue;
+      const res = await request.get(address);
+      expect(res.status(), address).toBe(401);
+      expect(await res.json(), address).toEqual({ error: 'Unauthorized', code: 'unauthenticated' });
+    }
+    await context.close();
+  });
+
+  test('a form post that the accounts route cannot read goes back to the accounts page with one line', async ({ browser, baseURL }) => {
+    const ctx = await browser.newContext({ baseURL, storageState: adminSeat().storageStatePath });
+    const page = await ctx.newPage();
+    try {
+      await page.goto('/admin/accounts');
+      const targetId = seatOf('owner').userId;
+      await page.evaluate((id) => {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `/api/admin/users/${id}/role`;
+        const f = document.createElement('input');
+        f.name = 'unknown'; f.value = 'x';
+        form.append(f);
+        document.body.append(form);
+        form.submit();
+      }, targetId);
+      await page.waitForURL((u) => u.pathname === '/admin/accounts' && u.searchParams.has('error'));
+      await expect(page.locator('#accounts-refusal')).toHaveText('That change could not be made. Reload the page and try again.');
+    } finally {
+      await ctx.close();
+    }
+  });
+});
