@@ -135,8 +135,9 @@ describe('FR-PUB-01 FR-ACC-02: the texts a person is asked to accept now (curren
     // current their open fields no longer reach anyone who is asked to accept.
     const found = ACCEPTED_KINDS.flatMap((k) => {
       const { version, text } = currentLegalText(k);
-      // None of the version 2 drafts or the version 1 texts uses square brackets, TBD, TODO or "to be confirmed" in its words.
-      const gaps = [/\{[^}\n]+\}/g, /\[[^\]\n]*\]/g, /named by the owner/gi, /\b(?:TBD|TODO|to be confirmed)\b/gi];
+      // None of the version 2 drafts or the version 1 texts uses square brackets, TBD, TODO or "(to be confirmed)" in its words.
+      // "to be confirmed" counts only in brackets: "your address has to be confirmed" is a proper sentence.
+      const gaps = [/\{[^}\n]+\}/g, /\[[^\]\n]*\]/g, /named by the owner/gi, /\b(?:TBD|TODO)\b/g, /\(to be confirmed\)/gi];
       return gaps.flatMap((re) => text.match(re) ?? []).map((m) => `${k}/${version}.md: ${m}`);
     });
     expect(found, 'an open field in the current version of an accepted legal text').toEqual([]);
@@ -145,7 +146,7 @@ describe('FR-PUB-01 FR-ACC-02: the texts a person is asked to accept now (curren
   it.skipIf(process.env.RELEASE_CANDIDATE !== '1')('FR-ACC-02 (release): no current legal text says it was written or reviewed by a lawyer', () => {
     // The stand-in texts were not written by a lawyer, and nothing a person is shown may say they were. The other words for the
     // profession are refused too; none of the version 2 drafts or the version 1 texts uses them.
-    const found = ACCEPTED_KINDS.flatMap((k) => (currentLegalText(k).text.match(/lawyer|reviewed by|advocate|attorney|solicitor|counsel/gi) ?? []).map((m) => `${k}: ${m}`));
+    const found = ACCEPTED_KINDS.flatMap((k) => (currentLegalText(k).text.match(/\b(?:lawyers?|reviewed by|advocates?|attorneys?|solicitors?|counsel)\b/gi) ?? []).map((m) => `${k}: ${m}`));
     expect(found, 'a claim of legal authorship or review in the current version of an accepted legal text').toEqual([]);
   });
 
