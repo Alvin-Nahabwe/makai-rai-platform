@@ -193,6 +193,7 @@ keep the receipt themselves (below).
 | `makrai_definer` | `organisation_events` | * | INSERT, SELECT |
 | `makrai_definer` | `organization_agreements` | * | INSERT |
 | `makrai_definer` | `organizations` | * | INSERT, SELECT |
+| `makrai_definer` | `organizations` | `legalName` | UPDATE |
 | `makrai_definer` | `organizations` | `name` | UPDATE |
 | `makrai_definer` | `password_reset_tokens` | `usedAt` | SELECT |
 | `makrai_definer` | `password_reset_tokens` | `userId` | SELECT |
@@ -265,7 +266,7 @@ keep the receipt themselves (below).
 
 ### Definer functions
 
-`makrai_identity` may execute exactly nine functions, all SECURITY DEFINER and owned by the
+`makrai_identity` may execute exactly nine functions (v0.6.1 adds `admin_correct_org_legal_name` and a second `admin_create_organisation` overload that takes the legal name and writes no agreement record, migration `20261112000000_v061_organisation_legal_name`), all SECURITY DEFINER and owned by the
 NOLOGIN role `makrai_definer` (migration `20261030000500_v060_05_functions`; SRS 9.5 line 3673):
 `accept_invitation`, `admin_create_organisation`, `admin_record_agreement`,
 `admin_issue_owner_invitation`, `admin_resend_invitation`, `admin_revoke_invitation`,

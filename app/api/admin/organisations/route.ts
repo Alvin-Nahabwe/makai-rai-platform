@@ -13,12 +13,11 @@ import { INVITATION_TTL_MS, deliverInvitation } from '@/lib/data/members';
 import { newOwnerInvitationView, organisationSlugForAdmin, ownerInvitationViewOf, parseCreateOrganisation } from '@/lib/data/admin';
 import { requestDigest } from '@/lib/data/idempotency';
 import { invitationAcceptUrl } from '@/lib/publicOrigin';
-import { eatDate } from '@/lib/followup/overdue';
 import type { CreateOrganisationResponse } from '@/types/api';
 
 /**
  * Contract route row 41, S-24 (FR-ORG-01): the MAK-AI administrator creates an organisation, records its
- * agreement and invites its first owner, in one definer transaction (`admin_create_organisation`, which writes the
+ * institution's legal name on it and invites its first owner (no agreement record is written), in one definer transaction (`admin_create_organisation`, which writes the
  * `organisation_created` row): if any part fails, nothing is created. The slug is derived from the name and never
  * chosen; a name with no Latin letters or digits gets `org-<random>` (register D-112). The invitation token is 32
  * random bytes, stored only as its hash, and expires seven days later (FR-ORG-02's test). E-01 is sent after the
@@ -34,14 +33,14 @@ export async function POST(req: NextRequest) {
     const identity = await requireIdentityForApi();
     if (identity.platformRole !== 'admin') throw new AppError(403, 'not_platform_admin');
     const now = new Date();
-    const body = parseCreateOrganisation(await readJsonBody(req), eatDate(now));
+    const body = parseCreateOrganisation(await readJsonBody(req));
     const rawToken = randomBytes(32).toString('hex');
     invitationAcceptUrl(rawToken);   // throws now, before any write, when the public origin is not configured
     const slug = deriveSlug(body.name) || `org-${randomBytes(4).toString('hex')}`;
     const expiresAt = new Date(now.getTime() + INVITATION_TTL_MS);
     const digest = requestDigest({ path: {}, body });
     const { orgId, invitationId, replayed } = await adminCreateOrganisation({
-      actorUserId: identity.userId, name: body.name, slug, agreement: body.agreement, ownerEmail: body.ownerEmail,
+      actorUserId: identity.userId, name: body.name, slug, legalName: body.legalName, ownerEmail: body.ownerEmail,
       tokenHash: hashInvitationToken(rawToken), expiresAt, linkShown: body.showLink, requestId: body.requestId, digest,
     });
     if (replayed) {

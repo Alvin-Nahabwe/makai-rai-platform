@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { OrgRole, Prisma } from '@prisma/client';
 import { AppError } from '../http/errors';
-import type { AgreementInput } from '../../types/api';
 import { identityLaneClient } from './identityClient';
 
 /**
@@ -83,37 +82,21 @@ export function organisationIdFor(actorUserId: string, requestId: string): strin
 }
 
 /**
- * FR-ORG-01: organisation, agreement record and first-owner invitation, in one transaction, retry-safe by request id
- * (NFR-INT-02): the organisation's id is derived from the actor and the request id, the function keeps a receipt, and
- * a repeat with the same digest answers the first organisation and invitation (`replayed`); another digest, or an
- * id already taken without a matching receipt, 409 `request_id_reused`.
+ * FR-ORG-01: organisation (with its legal name) and first-owner invitation, in one transaction, retry-safe by request
+ * id (NFR-INT-02): the organisation's id is derived from the actor and the request id, the function keeps a receipt,
+ * and a repeat with the same digest answers the first organisation and invitation (`replayed`); another digest, or an
+ * id already taken without a matching receipt, 409 `request_id_reused`. No agreement record is written.
  */
 export async function adminCreateOrganisation(a: {
-  actorUserId: string; name: string; slug: string; agreement: AgreementInput; ownerEmail: string;
+  actorUserId: string; name: string; slug: string; legalName: string; ownerEmail: string;
   tokenHash: string; expiresAt: Date; linkShown: boolean; requestId: string; digest: string;
 }): Promise<{ orgId: string; invitationId: string; replayed: boolean }> {
   const orgId = organisationIdFor(a.actorUserId, a.requestId);
   const [row] = await callDefiner(() => identityLaneClient.$queryRaw<{ org_id: string; invitation_id: string; replayed: boolean }[]>`
     SELECT org_id, invitation_id, replayed FROM admin_create_organisation(${a.actorUserId}::text, ${orgId}::text, ${a.name}::text,
-      ${a.slug}::text, ${a.agreement.agreementVersion}::text, ${a.agreement.textHash}::text, ${a.agreement.acceptedOn}::date,
-      ${a.agreement.controllerLegalName}::text, ${a.agreement.dpContactEmail}::text, ${a.ownerEmail}::text,
+      ${a.slug}::text, ${a.legalName}::text, ${a.ownerEmail}::text,
       ${a.tokenHash}::text, ${a.expiresAt}::timestamptz, ${a.linkShown}::boolean, ${a.requestId}::uuid, ${a.digest}::text)`);
   return { orgId: row.org_id, invitationId: row.invitation_id, replayed: row.replayed };
-}
-
-/**
- * FR-ORG-05, 06, 10: a newer agreement record for an organisation, retry-safe by request id (NFR-INT-02): the
- * function keeps a receipt in the same transaction, and a repeat with the same digest answers the first record
- * (`replayed`), a repeat with another digest 409 `request_id_reused`.
- */
-export async function adminRecordAgreement(a: {
-  actorUserId: string; orgId: string; agreement: AgreementInput; requestId: string; digest: string;
-}): Promise<{ agreementId: string; replayed: boolean }> {
-  const [row] = await callDefiner(() => identityLaneClient.$queryRaw<{ agreement_id: string; replayed: boolean }[]>`
-    SELECT agreement_id, replayed FROM admin_record_agreement(${a.actorUserId}::text, ${a.orgId}::text,
-      ${a.agreement.agreementVersion}::text, ${a.agreement.textHash}::text, ${a.agreement.acceptedOn}::date,
-      ${a.agreement.controllerLegalName}::text, ${a.agreement.dpContactEmail}::text, ${a.requestId}::uuid, ${a.digest}::text)`);
-  return { agreementId: row.agreement_id, replayed: row.replayed };
 }
 
 /** FR-ORG-02: a new first-owner invitation while the organisation has no active owner and none pending. */
@@ -222,6 +205,15 @@ export async function adminCorrectOrgName(a: {
   const [row] = await callDefiner(() => identityLaneClient.$queryRaw<{ previous: string }[]>`
     SELECT admin_correct_org_name(${a.actorUserId}::text, ${a.orgId}::text, ${a.name}::text) AS previous`);
   return { previousName: row.previous };
+}
+
+/** FR-ORG-10: correct an organisation's legal name; the earlier one (null when none was recorded) is kept in the change's row. */
+export async function adminCorrectOrgLegalName(a: {
+  actorUserId: string; orgId: string; legalName: string;
+}): Promise<{ previousLegalName: string | null }> {
+  const [row] = await callDefiner(() => identityLaneClient.$queryRaw<{ previous: string | null }[]>`
+    SELECT admin_correct_org_legal_name(${a.actorUserId}::text, ${a.orgId}::text, ${a.legalName}::text) AS previous`);
+  return { previousLegalName: row.previous };
 }
 
 /**

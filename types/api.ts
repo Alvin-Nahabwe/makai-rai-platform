@@ -157,18 +157,19 @@ export interface ChangeRoleRequest { requestId: string; role: OrgRole }
 /** The body of a write that carries nothing else (rows 21, 22, 24 DELETE, 26 DELETE, 27, 29; owner answer A1). */
 export interface RequestIdBody { requestId: string }
 
-export interface AgreementInput {
-  agreementVersion: string; textHash: string; acceptedOn: CalendarDate; controllerLegalName: string; dpContactEmail: string;
+/** An organisation agreement record, kept for history (no route records a new one). */
+export interface AgreementView {
+  id: string; agreementVersion: string; textHash: string; acceptedOn: CalendarDate; controllerLegalName: string; dpContactEmail: string;
+  recordedAt: UtcInstant;
 }
-export interface AgreementView extends AgreementInput { id: string; recordedAt: UtcInstant }
 export interface OrgEventView {
   id: string; actorName: string; actorRole: ActorRole; action: OrgEventAction; targetName: string | null;
   reason: string | null; requestReference: string | null; previousValue: string | null; at: UtcInstant;
 }
-export interface CreateOrganisationRequest { requestId: string; name: string; agreement: AgreementInput; ownerEmail: string; showLink: boolean }
+export interface CreateOrganisationRequest { requestId: string; name: string; legalName: string; ownerEmail: string; showLink: boolean }
 export interface CreateOrganisationResponse { orgId: string; slug: string; invitation: InvitationView; acceptUrl: string | null; emailSent: boolean }
 export interface IssueOwnerInvitationRequest { email: string; requestReference: string; showLink: boolean }
-export interface CorrectOrgNameRequest { name: string }
+export type CorrectOrganisationRequest = { name: string } | { legalName: string };
 /**
  * Route 47 stays a form POST (finding F10): the fields `request.formData()` carries. `active` is the state the
  * pressed button names (Deactivate sends false, Reactivate true), never a toggle, so a repeated submit is a no-op;
@@ -176,7 +177,7 @@ export interface CorrectOrgNameRequest { name: string }
  */
 export interface AdminUserForm { active: boolean | null; requestId: string | null; role: 'admin' | 'assessor' | null; requestReference: string | null }
 export interface AdminOrganisationRow {
-  orgId: string; name: string; createdAt: UtcInstant; currentAgreementVersion: string | null;
+  orgId: string; name: string; createdAt: UtcInstant; legalName: string | null;
   memberCount: number; ownerInvitationState: InvitationState | null; hasActiveOwner: boolean; archived: boolean;
 }
 

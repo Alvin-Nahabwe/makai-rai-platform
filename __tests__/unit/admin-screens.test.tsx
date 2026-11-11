@@ -53,7 +53,7 @@ const assessorIdentity = identity('assessor');
 const noOrgIdentity = identity('assessor', 'no-org-1');
 
 const row = (over: Partial<AdminOrganisationRow> = {}): AdminOrganisationRow => ({
-  orgId: 'org-1', name: 'Makerere CAI Lab', createdAt: '2026-10-30T09:00:00.000Z', currentAgreementVersion: '1',
+  orgId: 'org-1', name: 'Makerere CAI Lab', createdAt: '2026-10-30T09:00:00.000Z', legalName: 'Makerere University',
   memberCount: 5, ownerInvitationState: 'accepted', hasActiveOwner: true, archived: false, ...over,
 });
 const acct = (over: Partial<AdminAccountRow> = {}): AdminAccountRow => ({
@@ -121,12 +121,12 @@ describe('S-07, the landing page', () => {
 
 describe('S-23, organisations', () => {
   it('FR-ORG-06 FR-ORG-07: S-23 flags a missing agreement and a missing active owner, in words', async () => {
-    const html = await renderS23([row({ orgId: 'o-a', name: 'No Agreement Lab', currentAgreementVersion: null }), row({ orgId: 'o-b', name: 'No Owner Lab', hasActiveOwner: false, ownerInvitationState: 'expired' })]);
-    expect(html).toContain('No agreement recorded');
+    const html = await renderS23([row({ orgId: 'o-a', name: 'No Agreement Lab', legalName: null }), row({ orgId: 'o-b', name: 'No Owner Lab', hasActiveOwner: false, ownerInvitationState: 'expired' })]);
+    expect(html).toContain('Not recorded');
     expect(html).toContain('No active owner');
     expect(html).toContain('Expired');
     expect(html).toContain('<caption');
-    for (const col of ['Organisation', 'Created', 'Current agreement', 'Members', 'First-owner invitation'])
+    for (const col of ['Organisation', 'Created', 'Legal name', 'Members', 'First-owner invitation'])
       expect(html).toMatch(new RegExp(`<th scope="col"[^>]*>${col}</th>`));
     expect(html).toContain('href="/admin/organisations/o-a"');
     expect(html).toContain('30 Oct 2026');

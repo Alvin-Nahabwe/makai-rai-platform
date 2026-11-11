@@ -29,6 +29,9 @@ const ALLOWED = [
   { table: 'invitations', constraint: 'invitations_kind_check', why: "kind defaults to 'member'" },
   { table: 'evidence', constraint: 'evidence_attach_target_check', why: 'replaced by a wider CHECK every v0.5.0 row and write meets' },
   { table: 'evidence', constraint: 'evidence_dedup_key', why: 'replaced by the same unique index WHERE assessmentId IS NOT NULL' },
+  // v0.6.1 (20261112000000_v061_organisation_legal_name): both keep every v0.5.0 and v0.6.0 write valid.
+  { table: 'organisation_events', constraint: 'organisation_events_action_check', why: 'dropped and added back with one more action; every earlier action stays allowed' },
+  { table: 'organizations', constraint: 'organizations_legalName_chk', why: 'on a new nullable column: no old write sets it, and NULL passes' },
 ];
 
 type MigrationFile = { name: string; sql: string };

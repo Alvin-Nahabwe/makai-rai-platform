@@ -57,7 +57,7 @@ export default async function OrganisationsPage({ searchParams }: { searchParams
               <tr>
                 <th scope="col">Organisation</th>
                 <th scope="col">Created</th>
-                <th scope="col">Current agreement</th>
+                <th scope="col">Legal name</th>
                 <th scope="col">Members</th>
                 <th scope="col">First-owner invitation</th>
               </tr>
@@ -71,7 +71,7 @@ export default async function OrganisationsPage({ searchParams }: { searchParams
                     {r.hasActiveOwner ? null : <><br /><strong>No active owner</strong></>}
                   </td>
                   <td>{formatDay(r.createdAt, 'Africa/Kampala')}</td>
-                  <td>{r.currentAgreementVersion === null ? <strong>No agreement recorded</strong> : `Version ${r.currentAgreementVersion}`}</td>
+                  <td>{r.legalName === null ? <strong>Not recorded</strong> : r.legalName}</td>
                   <td>{r.memberCount}</td>
                   <td>{r.ownerInvitationState === null ? 'None' : STATE_WORDS[r.ownerInvitationState]}</td>
                 </tr>

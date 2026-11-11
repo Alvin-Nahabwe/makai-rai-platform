@@ -4,11 +4,10 @@ import { Client } from 'pg';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
-import type { AgreementInput } from '../../types/api';
 import { AppError } from '../../lib/http/errors';
 import {
   acceptInvitationViaDefiner, adminCorrectOrgName, adminCreateOrganisation, adminIssueOwnerInvitation,
-  adminRecordAgreement, adminResendInvitation, adminRevokeInvitation, adminSetAccountActive,
+  adminResendInvitation, adminRevokeInvitation, adminSetAccountActive,
 } from '../../lib/data/definer';
 import { resetDb, testDb } from '../helpers/db';
 
@@ -24,10 +23,7 @@ const keyed = () => ({ requestId: randomUUID(), digest: randomUUID() });
  */
 
 const hex = (seed: string) => createHash('sha256').update(seed).digest('hex');
-const AGREEMENT: AgreementInput = {
-  agreementVersion: '1', textHash: hex('agreement'), acceptedOn: '2026-10-30',
-  controllerLegalName: 'Fixture Controller Ltd', dpContactEmail: 'dpo@fixture.test',
-};
+const LEGAL_NAME = 'Fixture Controller Ltd';
 const in7days = () => new Date(Date.now() + 7 * 86400000);
 
 let su: Client;
@@ -35,6 +31,20 @@ let admin: { id: string };
 let assessor: { id: string; email: string };
 
 const q = async (sql: string, params: unknown[] = []) => (await su.query(sql, params)).rows;
+/**
+ * The old `admin_record_agreement` (route 43 is gone, and so is its wrapper; the function stays until the contract
+ * migration, for the old image): called in SQL, its non-administrator refusal mapped as callDefiner maps it.
+ */
+async function recordAgreementSql(actorUserId: string, orgId: string, version: string, acceptedOn = '2026-10-30'): Promise<{ agreementId: string }> {
+  try {
+    const rows = await q(`SELECT agreement_id FROM admin_record_agreement($1::text, $2::text, $3::text, $4::text, $5::date, 'Fixture Controller Ltd'::text, 'dpo@fixture.test'::text, $6::uuid, $7::text)`,
+      [actorUserId, orgId, version, hex('agreement'), acceptedOn, randomUUID(), randomUUID()]);
+    return { agreementId: rows[0].agreement_id };
+  } catch (e) {
+    if ((e as Error).message === 'makrai:not_platform_admin') throw new AppError(403, 'not_platform_admin');
+    throw e;
+  }
+}
 async function makeUser(over: { role?: 'admin' | 'assessor'; isActive?: boolean; email?: string } = {}) {
   return testDb.user.create({
     data: { email: over.email ?? `def-${randomUUID()}@fixture.test`, name: 'Fixture', passwordHash: 'x', role: over.role ?? 'assessor', isActive: over.isActive ?? true },
@@ -50,7 +60,7 @@ async function orgWithMember(role: 'owner' | 'assessor' = 'owner'): Promise<{ or
   const member = await makeUser();
   const slug = `def-${randomUUID().slice(0, 8)}`;
   const token = hex(randomUUID());
-  const { orgId, invitationId } = await adminCreateOrganisation({ ...keyed(), actorUserId: admin.id, name: `Org ${slug}`, slug, agreement: AGREEMENT,
+  const { orgId, invitationId } = await adminCreateOrganisation({ ...keyed(), actorUserId: admin.id, name: `Org ${slug}`, slug, legalName: LEGAL_NAME,
     ownerEmail: member.email, tokenHash: token, expiresAt: in7days(), linkShown: false });
   if (role !== 'owner') await q(`UPDATE invitations SET role = $1 WHERE id = $2`, [role, invitationId]);
   await acceptInvitationViaDefiner({ tokenHash: token, userId: member.id });
@@ -69,10 +79,10 @@ beforeEach(async () => {
 afterAll(async () => { await su.end(); });
 
 describe('definer functions and their wrappers', () => {
-  it('FR-ORG-01 FR-ORG-09: create writes organisation, agreement, pending owner invitation and one event, or nothing', async () => {
-    const args = { actorUserId: admin.id, name: 'Lab A', slug: 'lab-a', agreement: AGREEMENT, ownerEmail: 'o@fixture.test', tokenHash: hex('h'), expiresAt: in7days(), linkShown: true };
+  it('FR-ORG-01 FR-ORG-09: create writes organisation with its legal name, pending owner invitation and one event, and no agreement, or nothing', async () => {
+    const args = { actorUserId: admin.id, name: 'Lab A', slug: 'lab-a', legalName: LEGAL_NAME, ownerEmail: 'o@fixture.test', tokenHash: hex('h'), expiresAt: in7days(), linkShown: true };
     const r = await adminCreateOrganisation({ ...keyed(), ...args });
-    expect(await counts(r.orgId)).toEqual({ organizations: 1, organization_agreements: 1, invitations: 1, organisation_events: 1 });
+    expect(await counts(r.orgId)).toEqual({ organizations: 1, organization_agreements: 0, invitations: 1, organisation_events: 1 });
     expect(await q(`SELECT kind, role, status, email, "linkShownAt" IS NOT NULL AS shown, "invitedById" FROM invitations WHERE id = $1`, [r.invitationId]))
       .toEqual([{ kind: 'first_owner', role: 'owner', status: 'pending', email: 'o@fixture.test', shown: true, invitedById: admin.id }]);
     expect(await q(`SELECT "actorId", "actorRole", action, "targetInvitationId" FROM organisation_events WHERE "orgId" = $1`, [r.orgId]))
@@ -84,10 +94,10 @@ describe('definer functions and their wrappers', () => {
 
   it('FR-ORG-01 NFR-SEC-12: admin functions refuse a non-administrator actor', async () => {
     const { orgId } = await orgWithMember();
-    await expect(adminRecordAgreement({ ...keyed(), actorUserId: assessor.id, orgId, agreement: AGREEMENT })).rejects.toMatchObject({ status: 403, code: 'not_platform_admin' });
+    await expect(recordAgreementSql(assessor.id, orgId, '1')).rejects.toMatchObject({ status: 403, code: 'not_platform_admin' });
     const inactiveAdmin = await testDb.user.update({ where: { id: admin.id }, data: { isActive: false } });
     await expect(adminCorrectOrgName({ actorUserId: inactiveAdmin.id, orgId, name: 'x' })).rejects.toMatchObject({ code: 'not_platform_admin' });
-    await expect(adminCreateOrganisation({ ...keyed(), actorUserId: randomUUID(), name: 'n', slug: 'n', agreement: AGREEMENT, ownerEmail: 'n@fixture.test', tokenHash: hex('n'), expiresAt: in7days(), linkShown: false }))
+    await expect(adminCreateOrganisation({ ...keyed(), actorUserId: randomUUID(), name: 'n', slug: 'n', legalName: LEGAL_NAME, ownerEmail: 'n@fixture.test', tokenHash: hex('n'), expiresAt: in7days(), linkShown: false }))
       .rejects.toMatchObject({ code: 'not_platform_admin' });
   });
 
@@ -95,7 +105,7 @@ describe('definer functions and their wrappers', () => {
     // An organisation with no owner and a pending first-owner invitation, and an account in no
     // organisation: each call below would succeed, or fail on its own rule, for the administrator.
     const slug = `def-${randomUUID().slice(0, 8)}`;
-    const { orgId, invitationId } = await adminCreateOrganisation({ ...keyed(), actorUserId: admin.id, name: `Org ${slug}`, slug, agreement: AGREEMENT,
+    const { orgId, invitationId } = await adminCreateOrganisation({ ...keyed(), actorUserId: admin.id, name: `Org ${slug}`, slug, legalName: LEGAL_NAME,
       ownerEmail: 'first@fixture.test', tokenHash: hex(randomUUID()), expiresAt: in7days(), linkShown: false });
     const loner = await makeUser();
     // The one administrator, deactivated: the database keeps a single account with the platform role (NFR-SEC-19,
@@ -109,9 +119,9 @@ describe('definer functions and their wrappers', () => {
       (SELECT count(*)::int FROM platform_events) AS platform_events,
       (SELECT string_agg(id || ':' || "isActive" || ':' || "sessionEpoch", ',' ORDER BY id) FROM users) AS users`))[0];
     const calls: Array<[string, (actorUserId: string) => Promise<unknown>]> = [
-      ['admin_create_organisation', (actorUserId) => adminCreateOrganisation({ ...keyed(), actorUserId, name: 'Never', slug: `never-${randomUUID().slice(0, 6)}`, agreement: AGREEMENT,
+      ['admin_create_organisation', (actorUserId) => adminCreateOrganisation({ ...keyed(), actorUserId, name: 'Never', slug: `never-${randomUUID().slice(0, 6)}`, legalName: LEGAL_NAME,
         ownerEmail: 'never@fixture.test', tokenHash: hex(randomUUID()), expiresAt: in7days(), linkShown: false })],
-      ['admin_record_agreement', (actorUserId) => adminRecordAgreement({ ...keyed(), actorUserId, orgId, agreement: { ...AGREEMENT, agreementVersion: '9' } })],
+      ['admin_record_agreement', (actorUserId) => recordAgreementSql(actorUserId, orgId, '9')],
       ['admin_correct_org_name', (actorUserId) => adminCorrectOrgName({ actorUserId, orgId, name: 'Never Renamed' })],
       ['admin_issue_owner_invitation', (actorUserId) => adminIssueOwnerInvitation({ actorUserId, orgId, email: 'n@fixture.test', tokenHash: hex(randomUUID()),
         expiresAt: in7days(), requestReference: 'REF-N', linkShown: false })],
@@ -131,7 +141,7 @@ describe('definer functions and their wrappers', () => {
 
   it('FR-ORG-05 FR-ORG-10: record an agreement and correct the name, each with its row; the earlier name is kept in previousValue', async () => {
     const { orgId } = await orgWithMember();
-    const { agreementId } = await adminRecordAgreement({ ...keyed(), actorUserId: admin.id, orgId, agreement: { ...AGREEMENT, agreementVersion: '2' } });
+    const { agreementId } = await recordAgreementSql(admin.id, orgId, '2');
     expect(await q(`SELECT "agreementVersion", "recordedById" FROM organization_agreements WHERE id = $1`, [agreementId])).toEqual([{ agreementVersion: '2', recordedById: admin.id }]);
     const [{ name: before }] = await q(`SELECT name FROM organizations WHERE id = $1`, [orgId]);
     expect(await adminCorrectOrgName({ actorUserId: admin.id, orgId, name: 'Corrected Name' })).toEqual({ previousName: before });
@@ -222,7 +232,7 @@ describe('definer functions and their wrappers', () => {
   it('FR-ACC-01 FR-ORG-09: acceptInvitationViaDefiner writes the membership and its member_joined row, and refuses a mismatched email and a used token', async () => {
     const u = await makeUser();
     const token = hex(randomUUID());
-    const { orgId, invitationId } = await adminCreateOrganisation({ ...keyed(), actorUserId: admin.id, name: 'Acc', slug: `acc-${randomUUID().slice(0, 6)}`, agreement: AGREEMENT,
+    const { orgId, invitationId } = await adminCreateOrganisation({ ...keyed(), actorUserId: admin.id, name: 'Acc', slug: `acc-${randomUUID().slice(0, 6)}`, legalName: LEGAL_NAME,
       ownerEmail: u.email.toUpperCase(), tokenHash: token, expiresAt: in7days(), linkShown: false });
     const other = await makeUser();
     await expect(acceptInvitationViaDefiner({ tokenHash: token, userId: other.id })).rejects.toMatchObject({ status: 410, code: 'invitation_unusable' });
@@ -234,7 +244,7 @@ describe('definer functions and their wrappers', () => {
     await expect(acceptInvitationViaDefiner({ tokenHash: hex('unknown'), userId: u.id })).rejects.toMatchObject({ code: 'invitation_unusable' });
     const expiredToken = hex(randomUUID());
     const late = await makeUser();
-    const exp = await adminCreateOrganisation({ ...keyed(), actorUserId: admin.id, name: 'Late', slug: `late-${randomUUID().slice(0, 6)}`, agreement: AGREEMENT,
+    const exp = await adminCreateOrganisation({ ...keyed(), actorUserId: admin.id, name: 'Late', slug: `late-${randomUUID().slice(0, 6)}`, legalName: LEGAL_NAME,
       ownerEmail: late.email, tokenHash: expiredToken, expiresAt: new Date(Date.now() - 1000), linkShown: false });
     expect(exp.orgId).toBeTruthy();
     await expect(acceptInvitationViaDefiner({ tokenHash: expiredToken, userId: late.id })).rejects.toMatchObject({ code: 'invitation_unusable' });
@@ -244,7 +254,7 @@ describe('definer functions and their wrappers', () => {
     const member = await makeUser();
     const slug = `def-${randomUUID().slice(0, 8)}`;
     const token = hex(randomUUID());
-    await adminCreateOrganisation({ ...keyed(), actorUserId: admin.id, name: `Org ${slug}`, slug, agreement: AGREEMENT,
+    await adminCreateOrganisation({ ...keyed(), actorUserId: admin.id, name: `Org ${slug}`, slug, legalName: LEGAL_NAME,
       ownerEmail: member.email, tokenHash: token, expiresAt: in7days(), linkShown: false });
     // The promotion must be the only grant of the platform role: the database keeps a single administrator (NFR-SEC-19).
     await testDb.user.update({ where: { id: admin.id }, data: { role: 'assessor' } });
@@ -271,22 +281,22 @@ describe('definer functions and their wrappers', () => {
 
   it('NFR-SEC-04: a platform administrator cannot accept an invitation', async () => {
     const token = hex(randomUUID());
-    await adminCreateOrganisation({ ...keyed(), actorUserId: admin.id, name: 'Adm', slug: `adm-${randomUUID().slice(0, 6)}`, agreement: AGREEMENT,
+    await adminCreateOrganisation({ ...keyed(), actorUserId: admin.id, name: 'Adm', slug: `adm-${randomUUID().slice(0, 6)}`, legalName: LEGAL_NAME,
       ownerEmail: (await testDb.user.findUniqueOrThrow({ where: { id: admin.id } })).email, tokenHash: token, expiresAt: in7days(), linkShown: false });
     await expect(acceptInvitationViaDefiner({ tokenHash: token, userId: admin.id })).rejects.toMatchObject({ code: 'invitation_unusable' });
     expect((await q(`SELECT count(*)::int n FROM memberships WHERE "userId" = $1`, [admin.id]))[0].n).toBe(0);
   });
 
-  it('NFR-SEC-12: makrai_identity may execute exactly the nine definer functions, makrai_app none', async () => {
+  it('NFR-SEC-12: makrai_identity may execute exactly the definer functions (ten names, one overloaded), makrai_app none', async () => {
     const executableFunctions = async (role: string) => (await q(`SELECT p.proname AS fn FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
       WHERE n.nspname = 'public' AND has_function_privilege($1::text, p.oid, 'EXECUTE')
         AND p.prorettype::regtype::text NOT IN ('trigger', 'event_trigger') ORDER BY 1`, [role])).map((r) => r.fn);
-    expect(await executableFunctions('makrai_identity')).toEqual(['accept_invitation', 'admin_correct_org_name',
-      'admin_create_organisation', 'admin_issue_owner_invitation', 'admin_record_agreement', 'admin_resend_invitation',
+    expect(await executableFunctions('makrai_identity')).toEqual(['accept_invitation', 'admin_correct_org_legal_name', 'admin_correct_org_name',
+      'admin_create_organisation', 'admin_create_organisation', 'admin_issue_owner_invitation', 'admin_record_agreement', 'admin_resend_invitation',
       'admin_revoke_invitation', 'admin_set_account_active', 'personal_platform_rows']);
     expect(await executableFunctions('makrai_app')).toEqual([]);
     expect(await q(`SELECT DISTINCT r.rolname AS owner, p.prosecdef AS definer, p.proconfig AS config FROM pg_proc p JOIN pg_roles r ON r.oid = p.proowner
-      WHERE p.proname IN ('accept_invitation', 'admin_correct_org_name', 'admin_create_organisation', 'admin_issue_owner_invitation',
+      WHERE p.proname IN ('accept_invitation', 'admin_correct_org_legal_name', 'admin_correct_org_name', 'admin_create_organisation', 'admin_issue_owner_invitation',
         'admin_record_agreement', 'admin_resend_invitation', 'admin_revoke_invitation', 'admin_set_account_active', 'personal_platform_rows')`))
       .toEqual([{ owner: 'makrai_definer', definer: true, config: ['search_path=pg_catalog, public, pg_temp'] }]);
   });
@@ -302,7 +312,7 @@ describe('definer functions and their wrappers', () => {
   it('FR-ACC-03 FR-ACC-01: acceptInvitationViaDefiner on a given transaction commits or rolls back with it', async () => {
     const u = await makeUser();
     const token = hex(randomUUID());
-    await adminCreateOrganisation({ ...keyed(), actorUserId: admin.id, name: 'Tx', slug: `tx-${randomUUID().slice(0, 6)}`, agreement: AGREEMENT,
+    await adminCreateOrganisation({ ...keyed(), actorUserId: admin.id, name: 'Tx', slug: `tx-${randomUUID().slice(0, 6)}`, legalName: LEGAL_NAME,
       ownerEmail: u.email, tokenHash: token, expiresAt: in7days(), linkShown: false });
     // An identity-lane interactive transaction, as lib/data/preauth.ts's client opens one.
     const identity = new PrismaClient({ adapter: new PrismaPg(new Pool({ connectionString: process.env.IDENTITY_DATABASE_URL, max: 1, options: '' })) });
@@ -324,7 +334,7 @@ describe('definer functions and their wrappers', () => {
 
   it('NFR-SEC-12 (helper): an unknown definer error is not turned into an AppError', async () => {
     await expect(adminCorrectOrgName({ actorUserId: admin.id, orgId: randomUUID(), name: 'x' })).rejects.toMatchObject({ status: 404, code: 'not_found' });
-    const e = await adminRecordAgreement({ ...keyed(), actorUserId: admin.id, orgId: (await orgWithMember()).orgId, agreement: { ...AGREEMENT, acceptedOn: 'not-a-date' } }).catch((x) => x);
+    const e = await recordAgreementSql(admin.id, (await orgWithMember()).orgId, '1', 'not-a-date').catch((x) => x);
     expect(e).not.toBeInstanceOf(AppError);
   });
 });

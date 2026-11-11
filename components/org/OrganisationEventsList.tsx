@@ -18,6 +18,7 @@ const ACTION_WORDS: Readonly<Record<OrgEventAction, string>> = {
   owner_invitation_resent: 'Resent the first-owner invitation',
   owner_invitation_revoked: 'Revoked the first-owner invitation',
   organisation_name_corrected: 'Corrected the organisation name',
+  organisation_legal_name_corrected: 'Corrected the institution\'s legal name',
   account_deactivated: 'Deactivated an account',
   account_reactivated: 'Reactivated an account',
   member_invited: 'Invited a member',

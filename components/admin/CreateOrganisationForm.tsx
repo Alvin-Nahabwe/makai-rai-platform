@@ -7,8 +7,11 @@ import { requestIdFor, sendWrite, type RetryState, type SendOutcome } from '@/li
 import { CopyLinkFallback } from '@/components/invitations/CopyLinkFallback';
 import { formatDay } from '@/lib/format/dates';
 import { useHydrated } from '@/lib/client/useHydrated';
-import type { AgreementInput, CreateOrganisationResponse, InviteMemberResponse } from '@/types/api';
+import type { AgreementView, CreateOrganisationResponse, InviteMemberResponse } from '@/types/api';
 import type { CalendarDate, FieldError } from '@/types/record';
+
+/** The agreement fields as the form sends them. Stage 0 Task 2 replaces this form; until then it only keeps compiling. */
+type AgreementInput = Omit<AgreementView, 'id' | 'recordedAt'>;
 
 /** A published version of the organisation agreement, as the page reads it from the registry. */
 export type AgreementVersionOption = { version: string; publishedOn: CalendarDate; sha256: string };
