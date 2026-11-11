@@ -1,5 +1,11 @@
 # Sitting 5.1.0: the ten technical notebooks write one ZIP
 
+## The owner's answer
+
+On 11 November 2026 at 22:55 EAT the owner was shown the ten notebooks with the first 12 characters of the hashes in the "Batch hash" table below, and was asked to pass them, with C-10 passed as its privacy-competent reviewer as on 6 November. The owner answered "Pass all ten (Recommended)". The outcome is pass, with no edits, for all ten notebooks, and the reviewer is "Product owner, MAK-AI". The passes are recorded in each notebook's review file, below the record of 6 November.
+
+The rest of this note is as the owner read it.
+
 Prepared for the owner's second look at the ten technical notebooks. The first sitting is in `SITTING.md` and the answers of 6 November 2026 are in each notebook's review file; neither is changed. Nothing here is approved in advance. A pass is tied to the exact bytes whose hashes are below.
 
 ## Why the notebooks changed
