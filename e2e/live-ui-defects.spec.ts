@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { expect, test, type Page } from '@playwright/test';
 import { buildOrg } from '../__tests__/helpers/recordFixture';
-import { actAsSeat, fixtureOrgSlug } from './helpers/session';
+import { actAsSeat, fixtureOrgSlug, newProject, questionPath, seatRequest, stageOf } from './helpers/session';
 
 /**
  * v0.6.1 U12 rows (a), (b), (d) and (e): four defects that were broken for people on v0.6.0, each checked at the
@@ -60,5 +60,36 @@ test('U12 (b): the organisation chooser shows its links on the card, at 4.5:1 or
   } finally {
     await context.close();
   }
+});
+
+test('U12 (d): a viewer sees the current decision\'s reason and evidence names on the question page', async ({ page, baseURL }) => {
+  const Q = 'Q-PP-01';
+  const projectId = await newProject(baseURL!);
+  const owner = await seatRequest(baseURL!, 'owner');
+  try {
+    const org = fixtureOrgSlug();
+    const ev = await owner.post(`/api/v1/orgs/${org}/projects/${projectId}/evidence`, {
+      data: { requestId: crypto.randomUUID(), kind: 'link', url: 'https://example.org/audit-report', label: 'Audit report for U12' },
+    });
+    expect(ev.status(), 'evidence create').toBe(201);
+    const evidenceId = ((await ev.json()) as { id: string }).id;
+    const saved = await owner.post(`/api/v1/orgs/${org}/projects/${projectId}/decisions`, { data: {
+      requestId: crypto.randomUUID(), stage: stageOf(Q), questionId: Q, baseVersionNumber: null, status: 'done', scopeAnswer: null,
+      optionsInPlace: [], reasonCode: null, reason: 'We checked the data sources with the team.',
+      decidedBy: { kind: 'outside_role', role: 'supervisor' }, declaredDate: '2026-10-12', evidenceIds: [evidenceId],
+    } });
+    expect(saved.status(), 'decision save').toBe(201);
+  } finally {
+    await owner.dispose();
+  }
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.emulateMedia({ colorScheme: 'light' });
+  await actAsSeat(page, 'viewer');
+  await page.goto(questionPath(projectId, Q));
+  const region = page.locator('[data-region="current-decision"]');
+  await expect(region).toContainText('We checked the data sources with the team.');
+  await expect(region).toContainText('Audit report for U12');
+  // A viewer has no form to record a decision.
+  await expect(page.getByRole('button', { name: /save/i })).toHaveCount(0);
 });
 

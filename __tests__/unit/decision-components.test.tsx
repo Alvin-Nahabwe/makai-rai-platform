@@ -205,8 +205,8 @@ describe('S-12 regions', () => {
   });
 
   it('FR-DEC-01 FR-DEC-03 (screen): with no version, Current decision reads "No decision yet."', () => {
-    expect(renderToStaticMarkup(<CurrentDecision current={null} historyCount={0} historyHref="/h" seals={[]} />)).toContain('No decision yet.');
-    const v2 = renderToStaticMarkup(<CurrentDecision current={V2} historyCount={2} historyHref="/h" seals={[]} />);
+    expect(renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={null} historyCount={0} historyHref="/h" seals={[]} />)).toContain('No decision yet.');
+    const v2 = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={V2} historyCount={2} historyHref="/h" seals={[]} />);
     expect(v2).not.toContain('No decision yet.');
     expect(v2).toContain('Partly');
     expect(v2).toContain('version 2');
@@ -215,8 +215,18 @@ describe('S-12 regions', () => {
     expect(v2).toMatch(/<a[^>]*href="\/h"[^>]*>History: 2 versions<\/a>/);
   });
 
+  it('U12 (d): the current decision shows the version\'s reason and its evidence, or None, for every role', () => {
+    const withBoth = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={{ ...V2, reason: 'We checked the sources.', evidence: [{ id: 'e1', kind: 'link', url: 'https://example.org/a', label: 'Audit report', fileName: null, mimeType: null, byteSize: null, erased: null } as never] }} historyCount={2} historyHref="/h" seals={[]} />);
+    expect(withBoth).toMatch(/<dt>Reason<\/dt><dd>We checked the sources\.<\/dd>/);
+    expect(withBoth).toContain('Audit report');
+    const none = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={{ ...V2, reason: null, evidence: [] }} historyCount={2} historyHref="/h" seals={[]} />);
+    expect(none).toMatch(/<dt>Evidence<\/dt><dd>None<\/dd>/);
+    const erased = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={{ ...V2, reason: null, reasonErased: { erasedOn: '2026-11-01' } as never, evidence: [] }} historyCount={2} historyHref="/h" seals={[]} />);
+    expect(erased).toContain("on the organisation&#x27;s instruction.");
+  });
+
   it('FR-DEC-08 (screen): a withdrawal as the current version reads as no decision, with its history link', () => {
-    const w = renderToStaticMarkup(<CurrentDecision current={{ ...V2, versionNumber: 3, status: 'withdrawn', withdrawalCode: 'duplicate', decidedBy: null, declaredDate: null }} historyCount={3} historyHref="/h" seals={[]} />);
+    const w = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={{ ...V2, versionNumber: 3, status: 'withdrawn', withdrawalCode: 'duplicate', decidedBy: null, declaredDate: null }} historyCount={3} historyHref="/h" seals={[]} />);
     expect(w).toContain('No decision. Version 3 withdrew the decision: Duplicate.');
     expect(w).toContain('History: 3 versions');
   });

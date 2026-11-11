@@ -107,7 +107,7 @@ describe('S-12 shell', () => {
     renderToStaticMarkup(await QuestionPanelRegions({ data: PANEL }));
     expect(propsSeen.QuestionContent).toEqual({ question: QUESTION, suggestionCount: 3 });
     expect(propsSeen.CurrentDecision).toEqual({
-      current: CURRENT, historyCount: 2, seals: PANEL.seals,
+      orgSlug: 'acme-health', current: CURRENT, historyCount: 2, seals: PANEL.seals,
       historyHref: '/orgs/acme-health/projects/p1/stages/pre-processing/questions/Q-PP-01/history',
     });
     expect(propsSeen.SealNote).toEqual({ seals: PANEL.seals, nextVersionNumber: 3 });
