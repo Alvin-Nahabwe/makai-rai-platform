@@ -938,6 +938,19 @@ input:focus-visible {
   padding: var(--space-4) var(--space-3);
 }
 
+/* The organisation chooser on a light card (app/page.tsx): .sidebar-link is for the dark sidebar. */
+.chooser-link {
+  display: block;
+  padding: var(--space-3) var(--space-4);
+  font-weight: var(--font-weight-semibold);
+  color: var(--link);
+  border-radius: var(--border-radius-md);
+}
+
+.chooser-link:hover {
+  background-color: var(--surface-raised);
+}
+
 .sidebar-link {
   display: flex;
   align-items: center;

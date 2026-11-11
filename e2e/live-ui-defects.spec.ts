@@ -1,4 +1,6 @@
+import 'dotenv/config';
 import { expect, test, type Page } from '@playwright/test';
+import { buildOrg } from '../__tests__/helpers/recordFixture';
 import { actAsSeat, fixtureOrgSlug } from './helpers/session';
 
 /**
@@ -38,5 +40,25 @@ test('U12 (a): at 390 wide in the dark theme, the menu button bars stand out fro
   await expect(toggle).toBeVisible();
   expect(await page.locator('.sidebar-toggle__bar').count()).toBeGreaterThan(0);
   expect(await contrastOf(page, '.sidebar-toggle__bar', '.sidebar-toggle', 'backgroundColor')).toBeGreaterThanOrEqual(3);
+});
+
+test('U12 (b): the organisation chooser shows its links on the card, at 4.5:1 or better, in the light theme', async ({ browser }) => {
+  // A fixture seat may carry a last organisation from earlier runs and then skips the chooser, so this signs in a new account.
+  const fx = await buildOrg({ label: 'chooser' });
+  const context = await browser.newContext({ extraHTTPHeaders: { 'x-forwarded-for': '10.49.0.2' }, colorScheme: 'light', viewport: { width: 1280, height: 800 } });
+  const page = await context.newPage();
+  try {
+    await page.goto('/login');
+    await page.fill('#email', fx.members.viewer.email);
+    await page.fill('#password', fx.members.viewer.password);
+    await page.locator('button[type="submit"]').click();
+    await page.waitForURL((url) => url.pathname !== '/login');
+    await page.goto('/');
+    await expect(page.locator(`a[href="/orgs/${fx.org.slug}/dashboard"]`)).toBeVisible();
+    expect(await contrastOf(page, '.auth-card nav a', '.auth-card', 'color')).toBeGreaterThanOrEqual(4.5);
+    await expect(page.getByRole('heading', { level: 1, name: 'Choose an organisation' })).toBeVisible();
+  } finally {
+    await context.close();
+  }
 });
 
