@@ -212,9 +212,22 @@ jobs:
         # __tests__/unit/document-render.test.ts reads the rendered PDF back with pdftotext (C4 M2); in CI that test fails, not skips, without it.
         # This step has hung a job for 30 minutes on the runner's network: each attempt is bounded, three are made (the step cap sits above the whole loop), and the
         # final `command -v pdftotext` fails the step if none of them installed it.
+        # The runner's mirror list (/etc/apt/apt-mirrors.txt) puts azure.archive.ubuntu.com first. When that host does not
+        # answer, `apt-get update` waits on it until the 150 s limit and never reaches the next mirror (runs 43033760696,
+        # 43033770570 and 43033776763, 11 Nov 2026: three attempts, each ending at "Ign ... azure.archive.ubuntu.com"). So
+        # after a failed attempt the Azure line is dropped and the retry starts at archive.ubuntu.com.
         timeout-minutes: 17
         run: |
-          for i in 1 2 3; do timeout 150 sudo apt-get update && timeout 150 sudo apt-get install -y poppler-utils && break; echo "retry $i"; sleep 10; done; command -v pdftotext
+          for i in 1 2 3; do
+            timeout 150 sudo apt-get update && timeout 150 sudo apt-get install -y poppler-utils && break
+            echo "retry $i"
+            if grep -q 'azure\.archive\.ubuntu\.com' /etc/apt/apt-mirrors.txt 2>/dev/null; then
+              sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+              echo "dropped the Azure mirror; mirrors left:"; cat /etc/apt/apt-mirrors.txt
+            fi
+            sleep 10
+          done
+          command -v pdftotext
 
       - name: Unit + integration tests
         # DATABASE_URL (job-level, above) matches vitest.config.ts's own
@@ -693,6 +706,11 @@ jobs:
           for i in 1 2 3; do
             sudo env "PATH=$PATH" timeout -k 15 420 ./node_modules/.bin/playwright install-deps chromium && { deps=yes; break; }
             echo "retry deps $i"
+            # Same mirror fault as the poppler step above: drop the Azure mirror so the retry starts at archive.ubuntu.com.
+            if grep -q 'azure\.archive\.ubuntu\.com' /etc/apt/apt-mirrors.txt 2>/dev/null; then
+              sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+              echo "dropped the Azure mirror; mirrors left:"; cat /etc/apt/apt-mirrors.txt
+            fi
             for j in $(seq 1 24); do sudo fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock >/dev/null 2>&1 || break; sleep 5; done
             sudo dpkg --configure -a || true
             sleep 10
