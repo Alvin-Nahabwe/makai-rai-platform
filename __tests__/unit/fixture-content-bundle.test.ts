@@ -6,6 +6,7 @@ import { computeVersionBundleHash } from '@/lib/content/bundleHash';
 import { contentRoot, readContentBytes, readContentIndex, runningSemver } from '@/lib/content/root';
 import { readContentBytes as readByRelativePath } from '../../lib/content/root';
 import { FIXTURE_QUESTION_IDS } from '../helpers/content';
+import { allowListedQuestionTexts, cleanText } from '../helpers/contentQuestions';
 
 /**
  * G-17 (unit H0). The fixture content bundle under __tests__/fixtures/content holds the 78 question ids of
@@ -170,6 +171,16 @@ describe('the fixture content bundle', () => {
       running: '0.0.1-fixture',
       versions: ['0.0.1-fixture', '0.0.2-fixture'],
     });
+  });
+
+  it('FR-PUB-01 AL-7 (harness): every allow-listed question stem the fixture serves is a reviewed wording, one a data/content version holds', () => {
+    // e2e/claims-crawl.spec.ts exempts these stems on the pages the fixture-serving server renders; a stem no listed
+    // version holds would be flagged there (content 5.1.0 rewording Q-PO-14 did exactly that).
+    const entries = JSON.parse(readFileSync(join(process.cwd(), '__tests__', 'lint', 'claim-allowlist.json'), 'utf8')) as unknown[];
+    const reviewed = new Set(allowListedQuestionTexts(entries, join(process.cwd(), 'data', 'content')));
+    const ids = entries.flatMap((e) => (typeof (e as { id?: unknown }).id === 'string' ? [(e as { id: string }).id] : []));
+    expect(ids.length).toBeGreaterThan(0);
+    for (const v of VERSIONS) for (const id of ids) expect(reviewed.has(cleanText(byId(v)[id].text)), `${v} ${id}`).toBe(true);
   });
 });
 
