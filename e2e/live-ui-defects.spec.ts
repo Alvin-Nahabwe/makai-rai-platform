@@ -153,13 +153,14 @@ test.describe('U12 (c): at phone width the members and accounts tables keep ever
     }, actions);
   }
 
-  const pages: Array<{ name: string; path: () => string; seat: 'owner' | 'admin'; actions: string; expected: RegExp[] }> = [
+  const pages: Array<{ name: string; path: () => string; seat: 'owner' | 'admin'; actions: string; expected: RegExp[]; widths: number[] }> = [
     {
       name: 'members',
       path: () => `/orgs/${fixtureOrgSlug()}/settings/members`,
       seat: 'owner',
       actions: '.admin-table button',
       expected: [/^Remove /, /^Resend invitation to /, /^Revoke invitation for /],
+      widths: [320, 390],
     },
     {
       name: 'accounts',
@@ -167,11 +168,13 @@ test.describe('U12 (c): at phone width the members and accounts tables keep ever
       seat: 'admin',
       actions: '.admin-table button',
       expected: [/^Deactivate /],
+      // 1024: laptop and tablet landscape, where the card is wider than the stacking threshold but narrower than the table.
+      widths: [320, 390, 1024],
     },
   ];
 
-  for (const width of [320, 390]) {
-    for (const p of pages) {
+  for (const p of pages) {
+    for (const width of p.widths) {
       test(`${p.name} at ${width} wide, light theme`, async ({ browser, baseURL }) => {
         const storageState = p.seat === 'admin' ? adminSeat().storageStatePath : seatOf('owner').storageStatePath;
         const ctx = await browser.newContext({ baseURL, storageState, colorScheme: 'light', viewport: { width, height: 800 } });
@@ -197,6 +200,13 @@ test.describe('U12 (c): at phone width the members and accounts tables keep ever
           expect(exposed('row'), `${p.name} at ${width}: rows exposed`).toBe(domRows);
           expect(exposed('columnheader'), `${p.name} at ${width}: column headings exposed`).toBe(domHeadings);
           expect(exposed('cell'), `${p.name} at ${width}: cells exposed`).toBe(domCells);
+          // The label is drawn by ::before with empty alternative text, so the cell's accessible text does not start with it
+          // (the column heading already names the column).
+          if (width < 600) {
+            const labels = await page.locator('.admin-table td[data-label]').evaluateAll((els) => [...new Set(els.map((e) => `${e.getAttribute('data-label')}: `))]);
+            const spoken = nodes.filter((n) => !n.ignored && (n.role?.value === 'StaticText' || n.role?.value === 'cell')).map((n) => String(n.name?.value ?? ''));
+            expect(spoken.filter((t) => labels.some((l) => t.startsWith(l))), `${p.name} at ${width}: accessible text that starts with its label`).toEqual([]);
+          }
         } finally {
           await ctx.close();
         }

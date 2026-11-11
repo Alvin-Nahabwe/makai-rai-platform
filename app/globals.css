@@ -845,7 +845,9 @@ input:focus-visible {
 
 /* Tables that carry row actions (members, invitations, accounts) stack each row in a narrow card, so the actions
    stay on the screen instead of past the wrapper's scrolling edge. The column headings stay in the accessibility
-   tree (clipped, not display:none) and each cell shows its own heading as a label. */
+   tree (clipped, not display:none) and each cell shows its own heading as a label.
+   `--stack` stacks under 600px of card width (members, invitations); `--stack-wide` under 800px, for the accounts
+   table, whose six columns need about 781px. The two blocks carry the same declarations. */
 @container (width < 600px) {
   .admin-table--stack,
   .admin-table--stack tbody,
@@ -875,10 +877,50 @@ input:focus-visible {
   }
   .admin-table--stack td[data-label]::before {
     content: attr(data-label) ": ";
+    content: attr(data-label) ": " / "";
     font-weight: var(--font-weight-semibold);
     color: var(--text-muted);
   }
   .admin-table--stack .admin-table__actions {
+    display: flex;
+    flex-wrap: wrap;
+  }
+}
+
+@container (width < 800px) {
+  .admin-table--stack-wide,
+  .admin-table--stack-wide tbody,
+  .admin-table--stack-wide tr,
+  .admin-table--stack-wide td {
+    display: block;
+  }
+  .admin-table--stack-wide caption {
+    display: block;
+  }
+  .admin-table--stack-wide thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .admin-table--stack-wide tr {
+    border-bottom: 1px solid var(--color-gray-300);
+    padding-block: var(--space-2);
+  }
+  .admin-table--stack-wide td {
+    border-bottom: 0;
+    padding-block: var(--space-1);
+    overflow-wrap: anywhere;
+  }
+  .admin-table--stack-wide td[data-label]::before {
+    content: attr(data-label) ": ";
+    content: attr(data-label) ": " / "";
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-muted);
+  }
+  .admin-table--stack-wide .admin-table__actions {
     display: flex;
     flex-wrap: wrap;
   }

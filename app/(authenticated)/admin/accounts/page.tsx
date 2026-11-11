@@ -63,7 +63,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
       </div>
       {refusal !== null ? <div className="form-error" role="alert" id="accounts-refusal">{refusal}</div> : null}
       <div className="admin-table-wrapper card" tabIndex={0} role="region" aria-labelledby="accounts-caption">
-        <table className="admin-table admin-table--stack" role="table">
+        <table className="admin-table admin-table--stack-wide" role="table">
           <caption id="accounts-caption">Every account on the platform, oldest first</caption>
           <thead role="rowgroup">
             <tr role="row">

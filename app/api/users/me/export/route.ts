@@ -13,8 +13,9 @@ import { toResponse } from '@/lib/http/toResponse';
  *
  * Gated with `allowMissingAcceptances: true` (G028): a person who has not accepted the current legal
  * texts can still take their data (FR-ACC-04, SRS line 491). The proxy limits it to 3 an hour.
+ * Next always passes the request; it is optional only for tests that call GET() directly, and without one no
+ * navigation redirect is made.
  */
-// Next always passes the request; it is optional only for tests that call GET() directly, and without one no navigation redirect is made.
 export async function GET(req?: Request) {
   try {
     const identity = await requireIdentityForApi({ allowMissingAcceptances: true });
