@@ -6,7 +6,7 @@ import { testDb } from '../__tests__/helpers/db';
 import { buildOrg, type FixtureAccount, type OrgFixture } from '../__tests__/helpers/recordFixture';
 import { claimMatches } from '../lib/claims/pattern';
 import { currentLegalText } from '../lib/legal/registry';
-import { ACCEPTED_KINDS } from '../types/legal';
+import { ACCEPTED_KINDS, CONSENT_TYPE_FOR } from '../types/legal';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { expectNoHorizontalScroll } from './helpers/reflow';
@@ -234,7 +234,7 @@ test.describe('S-04 and S-05 in a browser', () => {
     await page.waitForURL((url) => url.pathname !== '/acceptances');
     expect(bodies).toHaveLength(2);
     expect(bodies[1]).toBe(bodies[0]);
-    expect(await testDb.consentRecord.count({ where: { userId: fx.members.assessor.userId, version: { in: ACCEPTED_KINDS.map((k) => currentLegalText(k).version) } } })).toBe(3);
+    expect(await testDb.consentRecord.count({ where: { userId: fx.members.assessor.userId, OR: ACCEPTED_KINDS.map((k) => ({ consentType: CONSENT_TYPE_FOR[k], version: currentLegalText(k).version })) } })).toBe(3);
     await page.context().close();
   });
 

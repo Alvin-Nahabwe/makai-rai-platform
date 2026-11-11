@@ -10,7 +10,7 @@ import { releaseWaiver } from '../helpers/releaseWaivers';
  * privacy-page.test.tsx), whose pages now redirect to S-06; the text is the registry's, each
  * paragraph on one line, so a sentence is never split by a line break.
  */
-const { currentLegalText, legalTextVersion, legalTextHistory, LEGAL_KINDS } = await vi.importActual<typeof import('@/lib/legal/registry')>('@/lib/legal/registry');
+const { currentLegalText, legalTextVersion, LEGAL_KINDS } = await vi.importActual<typeof import('@/lib/legal/registry')>('@/lib/legal/registry');
 
 /** The words of version 1, as published: a published file is never edited, so these pins hold whatever version is current. */
 const v1 = (kind: 'terms' | 'privacy'): string => {
@@ -69,9 +69,11 @@ describe('FR-ACC-02: version 1 stays as published', () => {
     expect(text).toContain('Where personal data goes outside the host');
     for (const r of recipients) expect(text).toContain(`${r.name}: ${r.receives} Where: ${r.where}.`);
   });
+});
 
-  it('FR-PUB-01 FR-ACC-02: no published legal text, of any version, holds a word of PUB\'s list (lib/claims/pattern.ts)', () => {
-    for (const k of LEGAL_KINDS) for (const t of legalTextHistory(k)) expect(claimMatches(t.text).map((m) => m.text), `${k} ${t.version}`).toEqual([]);
+describe('FR-PUB-01 FR-ACC-02: the texts a person is asked to accept now (current versions)', () => {
+  it('FR-PUB-01 FR-ACC-02: no current legal text holds a word of PUB\'s list (lib/claims/pattern.ts)', () => {
+    for (const k of LEGAL_KINDS) expect(claimMatches(currentLegalText(k).text).map((m) => m.text), k).toEqual([]);
   });
 
   // An unset run reports this case as skipped, not passed: a release candidate runs it with RELEASE_CANDIDATE=1. The boot

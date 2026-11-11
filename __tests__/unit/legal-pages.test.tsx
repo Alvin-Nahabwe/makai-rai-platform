@@ -117,6 +117,8 @@ describe('S-06 /legal/[kind] and /legal/[kind]/[version]', () => {
     for (const version of ['..%2Fterms%2F1', '../terms/1', '9', '01', 'constructor', '__proto__', '']) {
       await expect(versionPage('privacy', version), version).rejects.toThrow(NOT_FOUND);
     }
+    // A version another kind has is not a version of this kind: privacy has a version 2 in the fixture, terms has none.
+    await expect(versionPage('terms', '2')).rejects.toThrow(NOT_FOUND);
     // A version past the newest one of the kind is not a version of it; the newest is the registry's, so a published
     // terms version 2 moves this case to 3 without an edit.
     await expect(versionPage('terms', String(Number(currentLegalText('terms').version) + 1))).rejects.toThrow(NOT_FOUND);
