@@ -58,6 +58,40 @@ test('NFR-A11Y-04 (harness): a 10 by 10 button fails the target-size check, a 24
   await expectTargetsAtLeast24px(page);
 });
 
+test('NFR-A11Y-04 (harness): a target hidden by a clipping box is not compared with one outside that box', async ({ page }) => {
+  const small = 'display:block;width:10px;height:10px;padding:0;border:0;margin:0 0 2px 0;background:#333';
+  const box = 'position:absolute;left:20px;top:20px;width:200px;height:100px;overflow:auto;border:0';
+  // (a) Two crowded 10 px buttons visible inside a scroll box fail.
+  await page.setContent(`<html lang="en"><body style="margin:0"><div style="${box}"><button style="${small}">a</button><button style="${small}">b</button></div></body></html>`);
+  await expect(expectTargetsAtLeast24px(page)).rejects.toThrow(/button/);
+  // (b) A 10 px button below the box's visible edge is clipped, not drawn. A link outside the box that sits where
+  // the button's box falls on paper is not something a person can mistake it for: not compared.
+  await page.setContent(
+    `<html lang="en"><body style="margin:0"><div style="${box}"><div style="height:200px"></div><button style="${small}">a</button></div>` +
+      '<a href="#x" style="position:absolute;left:10px;top:205px;width:80px;height:40px;display:block">Outside link</a></body></html>',
+  );
+  await expectTargetsAtLeast24px(page);
+  // (c) Two crowded 10 px buttons both clipped inside the same box still fail: same clipping box, so compared.
+  await page.setContent(
+    `<html lang="en"><body style="margin:0"><div style="${box}"><div style="height:200px"></div><button style="${small}">a</button><button style="${small}">b</button></div></body></html>`,
+  );
+  await expect(expectTargetsAtLeast24px(page)).rejects.toThrow(/button/);
+  // (d) Two crowded 10 px buttons, both on screen, each in its own non-scrolling `overflow: hidden` box: compared.
+  const cell = 'width:20px;height:14px;overflow:hidden';
+  await page.setContent(
+    `<html lang="en"><body style="margin:20px"><div style="display:flex"><div style="${cell}"><button style="${small}">a</button></div><div style="${cell}"><button style="${small}">b</button></div></div></body></html>`,
+  );
+  await expect(expectTargetsAtLeast24px(page)).rejects.toThrow(/button/);
+  // (e) Both buttons are hidden by the same outer scroll box but sit in two adjacent inner wrappers. Scrolled into
+  // view they are crowded across the wrapper boundary, so they are compared.
+  const wrap = 'width:50px;height:14px;overflow-x:auto';
+  await page.setContent(
+    `<html lang="en"><body style="margin:0"><div style="${box}"><div style="height:200px"></div><div style="display:flex">` +
+      `<div style="${wrap}"><button style="${small};margin-left:40px">a</button></div><div style="${wrap}"><button style="${small}">b</button></div></div></div></body></html>`,
+  );
+  await expect(expectTargetsAtLeast24px(page)).rejects.toThrow(/button/);
+});
+
 test('NFR-A11Y-02 (harness): a focused field under a fixed bar fails the focus check', async ({ page }) => {
   // The indicator is a `:focus` rule: one that is there whether or not the field has focus shows nothing (SF-11).
   const covered = (rule: string) => `<html lang="en"><head><style>
