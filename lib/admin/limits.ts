@@ -4,5 +4,5 @@
  */
 export const MAX_ORG_NAME = 100;
 export const MAX_REQUEST_REFERENCE = 200;
-/** The longest institution legal name (the create form, the correction form). `lib/data/admin.ts` keeps its own copy for the routes; admin-screens.test.tsx holds the two equal. */
+/** The longest institution legal name: shared by the create form, the correction form and the route parsers in `lib/data/admin.ts`. */
 export const MAX_LEGAL_NAME = 200;
