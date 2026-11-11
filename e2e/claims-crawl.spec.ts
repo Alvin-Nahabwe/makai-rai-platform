@@ -506,7 +506,7 @@ test('FR-PUB-01 (helper): a framework area or control name passes only where it 
 test('FR-PUB-01 AL-7 (helper): an allow-listed question text passes as a whole text node only, and an id that names no question throws', () => {
   const words = (body: string[]): Words => ({ head: ['t'], body, notes: [], titles: [], attributes: [] });
   const stem = 'Have you ensured compliance with applicable data protection regulations and ethical guidelines?';   // Q-PO-22.text
-  expect(ALLOWED_QUESTION_TEXTS.has(stem), 'Q-PO-22 is allow-listed by id and resolves to its 5.0.0 text').toBe(true);
+  expect(ALLOWED_QUESTION_TEXTS.has(stem), 'Q-PO-22 is allow-listed by id and resolves to the running text').toBe(true);
   expect(claimsIn(words(['Post-processing', stem]))).toEqual([]);
   // The same stem with more words in its node is not the stem: the claim word in it is found.
   expect(claimsIn(words([`${stem} We are fully covered.`])).join(';')).toMatch(/compliance/);

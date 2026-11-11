@@ -14,7 +14,9 @@ What was applied:
 - The proposal file now says `approved`.
 - One batch hash moved from the draft: pre-processing, from `88edf6c1c567` to `dc9a520349bb`. The other six did not change. Final hashes are in the table under "What you sign".
 
-Nothing is signed yet. The rest of this pack is the record of what was asked.
+At this point in the sitting nothing was signed yet. The rest of this pack is the record of what was asked, as it stood at the sitting.
+
+Signed since: on 11 November 2026 at 20:13 EAT you answered "Approve all seven (Recommended)" and the seven batches were signed. The seven records, with their hashes, are in `data/content/5.1.0/signoffs.json`.
 
 For the product owner, 11 November 2026. This is a draft. Content 5.0.0 stays the running version, and nothing in this pack has been signed. Each line below is a change proposed to the wording teams see. You accept it, edit it or decline it, and only then is anything signed.
 

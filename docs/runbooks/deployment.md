@@ -906,6 +906,18 @@ nginx the checked-out file names. `docker_default` is the stack's network becaus
 project is `docker`; `docker network ls` shows it. Step 5 exits non-zero
 if `nextjs` is not healthy within the 120 seconds: roll back (section 9).
 
+A release that carries a content version (9.6 describes one) has one more effect between
+steps 4 and 5. The migrator marks the earlier content version as no longer published, and
+the app still serving was built for that version, so from the moment step 4 ends until the
+swap in step 5 it refuses three actions: saving a decision, withdrawing a decision and
+sealing a review. A person who presses Save sees "Not saved: the server had a problem. Your
+answer is kept on this device. Retry." Some pages also fail with a 503 in that interval. The
+project page, the review page, the review's documents page and the seal page fail for a
+project that has a sealed review, and a stage page fails when that stage has one. The seal
+page also fails, for a person who can seal, in any project that is not archived. A single
+question's page and a question's history still open. Run step 5 straight after step 4, so
+that the interval is short.
+
 If step 3 fails (an expired credential, a mistyped digest), the running stack has not
 changed. Fix the cause and repeat step 3, or put the checkout and `.env` back to PREV
 with the first three commands of 9.2: the `checkout --detach`, `set_env WEB_IMAGE` and
@@ -1375,7 +1387,8 @@ taken is lost for good**. Do 9.2 first, so that the checkout and `.env` are PREV
 
 Migrations in this project are additive unless their pull request says otherwise, so
 the previous release's code normally runs against the newer schema, and 9.2 alone is
-the rollback.
+the rollback. The releases v0.6.0 and v0.6.1 are the exceptions: 9.5 and 9.6 say why 9.2
+alone is not a full rollback for them.
 
 ### 9.4 Verify
 
@@ -1490,6 +1503,73 @@ crontab -l | grep -c '^#v060-pause '
 The last line must print `0`; anything else is a stop before you resume anything. Then resume the
 `makrai-synthetic` check. If you paused the reminder job, un-comment its cron line and resume the
 `makrai-reminders` check too.
+
+### 9.6 v0.6.1: content 5.1.0 and a rollback to v0.6.0
+
+**What the release changes in the database.** Its migration, `20261112010000_content_5_1_0`,
+marks the earlier content versions (3.0.0, 3.0.1, 4.0.0 and 5.0.0) as no longer published and
+adds content 5.1.0 as the published one. It adds or drops no table or column; it updates and
+inserts rows in `framework_versions`. 9.5's reasoning about a schema that an older image can
+read therefore still holds. What an older image cannot cope with is the content version, in two
+ways. These effects are read from the code; they have not been rehearsed against a v0.6.0
+image.
+
+- **The v0.6.0 image refuses three actions once the migration has run: saving a decision,
+  withdrawing a decision and sealing a review.** It runs content 5.0.0, and each of these checks
+  first that 5.0.0 is still the published version (`resolveRunningContentVersion` in
+  `lib/data/framework.ts`). It no longer is, so the action is answered with 503
+  `content_not_published`. The same check runs when a page reads a sealed review, so these pages
+  also fail with a 503: the project page, the review page, the review's documents page and the
+  seal page, for a project that has a sealed review, and a stage page, when that stage has one.
+  The seal page also fails, for a person who can seal, in any project that is not archived; for
+  anyone else it fails only when the project has a sealed review. A person who presses Save
+  sees "Not saved: the server had a problem. Your answer is kept on this device. Retry." The
+  answer stays as a draft on their device if the browser keeps drafts; if it does not, the
+  answer is only in the open field, and the screen says so. They can save it once a v0.6.x that
+  runs 5.1.0 is back. People can still sign in. A single question's page opens (unless its
+  current decision was saved under 5.1.0, see the next point) and so does a question's history.
+  The pages named here are the only ones that make this check: nothing else in the v0.6.0 code
+  does.
+- **The v0.6.0 image also fails on pages and requests that read something saved under 5.1.0.** It
+  lists only content 5.0.0 (`data/content/index.json` at v0.6.0), so anything that must load the
+  wording of 5.1.0 answers 500 `unknown_content_version`: a question's page when its current
+  decision was saved under 5.1.0; a stage page when a current decision in it was; and the project's
+  findings page and that finding's page when a shortfall finding was raised against such a decision.
+  Documents cannot be made from a page opened under v0.6.0: making one needs a sealed review, and
+  the review's documents page then fails as the first point says. Through the API, or from a
+  documents page opened before the rollback to v0.6.0, making or previewing a document fails with
+  the same 500 when the seal it is made from, or the latest seal of another stage of the project,
+  holds a decision saved under 5.1.0; a mitigation plan made from a seal taken under 5.1.0 always
+  fails. A document already issued can still be downloaded from a link the person already has; the
+  review page and the documents page that list it fail as the first point says. A question's
+  history page still opens and shows such an entry without its wording. Decisions saved under
+  5.0.0 show as before. The hourly synthetic journey (7.4) saves a decision in the synthetic
+  organisation, so
+  within an hour of the v0.6.1 deploy a decision exists there under 5.1.0, and that question's page
+  and its stage page fail from then. The document failures need a seal that holds such a decision or
+  was taken under 5.1.0; the journey takes no seal.
+
+The same refusals apply in the deploy itself: between 8.3 step 4 and step 5 the app still serving
+is the old one, and it refuses the three actions and the pages of the first point for that short
+interval (8.3 says so). The second point does not apply then, because nothing has yet been saved
+under 5.1.0.
+
+**The rule: fix forward with a later v0.6.x.** An application rollback to v0.6.0 (9.2) is an
+emergency stop only. After it, people can sign in and read single questions (except one whose current
+decision was saved under 5.1.0) and their history, but cannot save or withdraw a decision or seal a review, the pages of the first point that read a
+sealed review fail, and the pages of the second point that read something saved under 5.1.0 fail.
+If you must stop the release that way, say so to the teams, and expect those pages to fail until
+the return deploy. The hourly journey's save is refused while v0.6.0 serves, so it reports a
+failure to the `makrai-synthetic` check every hour. Pause the journey with the lines of 8.5 step 6
+and pause the `makrai-synthetic` check, as 9.5 does, and write down that both are paused. After the
+return deploy to v0.6.1 or later, put the crontab back and resume the check with the block at the
+end of 9.5 that begins "Whatever you paused and wrote down comes back now"; 8.5 step 11 has
+completed, so that block applies as 9.5 words it. A database restore (9.3) follows 9.5's rule about
+real records: it is safe only before the first real v1 record, and after that it discards every
+write since BACKUP, the file 8.2 wrote down. A restore to BACKUP also puts 5.0.0 back as the
+published version, which is why v0.6.0 can save again after it.
+
+This runbook gives no way to re-publish 5.0.0 by hand while the migration stays applied.
 
 ---
 
