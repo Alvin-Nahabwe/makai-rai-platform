@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { MANIFEST_PATH, adminSeat, type FixtureManifest } from './fixtures/manifest';
 import { buildOrg } from '../__tests__/helpers/recordFixture';
+import { testDb } from '../__tests__/helpers/db';
 import { actAsSeat, fixtureOrgSlug, newProject, questionPath, seatOf, seatRequest, stageOf } from './helpers/session';
 
 /**
@@ -95,6 +96,115 @@ test('U12 (d): a viewer sees the current decision\'s reason and evidence names o
   await expect(page.getByRole('button', { name: /save/i })).toHaveCount(0);
 });
 
+test.describe('U12 (c): at phone width the members and accounts tables keep every row action on the screen', () => {
+  const PENDING_EMAIL = `u12c-pending-${Date.now()}@fixture.test`;
+
+  test.beforeAll(async ({ baseURL }) => {
+    // A pending invitation, so the invitations table has a row with Resend and Revoke.
+    const owner = await seatRequest(baseURL!, 'owner');
+    try {
+      const made = await owner.post(`/api/v1/orgs/${fixtureOrgSlug()}/members`, {
+        data: { requestId: crypto.randomUUID(), email: PENDING_EMAIL, role: 'reviewer', showLink: false },
+      });
+      expect(made.status(), 'the pending invitation').toBe(201);
+    } finally {
+      await owner.dispose();
+    }
+  });
+
+  test.afterAll(async () => {
+    try {
+      await testDb.invitation.deleteMany({ where: { email: { startsWith: 'u12c-pending-' } } });
+    } finally {
+      await testDb.$disconnect();
+    }
+  });
+
+  /**
+   * Every row action whose box is not wholly inside the viewport AND inside the visible box of every ancestor that
+   * scrolls or clips sideways (`.admin-table-wrapper` is `overflow-x: auto`: an action scrolled past its right edge is
+   * inside the viewport by coordinates and still not on the screen). Also the page's own widths.
+   */
+  async function offScreenActions(page: Page, actions: string): Promise<{ outside: string[]; scrollWidth: number; clientWidth: number }> {
+    return page.evaluate((selector) => {
+      const root = document.documentElement;
+      const outside: string[] = [];
+      for (const el of Array.from(document.querySelectorAll<HTMLElement>(selector))) {
+        const r = el.getBoundingClientRect();
+        let left = 0;
+        let right = root.clientWidth;
+        let by = '';
+        for (let a = el.parentElement; a && a !== root && a !== document.body; a = a.parentElement) {
+          if (getComputedStyle(a).overflowX === 'visible') continue;
+          const box = a.getBoundingClientRect();
+          const l = box.left + a.clientLeft;
+          const rt = l + a.clientWidth;
+          if (r.left < l || r.right > rt) {
+            // The innermost one that cuts the action is named: it is the box whose content is too wide.
+            by ||= `${a.tagName.toLowerCase()}.${a.className.trim().split(/\s+/).join('.')}`;
+            left = Math.max(left, l);
+            right = Math.min(right, rt);
+          }
+        }
+        if (r.left >= left - 0.5 && r.right <= right + 0.5) continue;
+        outside.push(`"${el.getAttribute('aria-label') ?? el.textContent?.trim()}" spans ${Math.round(r.left)}-${Math.round(r.right)}, visible box ${Math.round(left)}-${Math.round(right)} (cut by ${by || 'the viewport'})`);
+      }
+      return { outside, scrollWidth: root.scrollWidth, clientWidth: root.clientWidth };
+    }, actions);
+  }
+
+  const pages: Array<{ name: string; path: () => string; seat: 'owner' | 'admin'; actions: string; expected: RegExp[] }> = [
+    {
+      name: 'members',
+      path: () => `/orgs/${fixtureOrgSlug()}/settings/members`,
+      seat: 'owner',
+      actions: '.admin-table button',
+      expected: [/^Remove /, /^Resend invitation to /, /^Revoke invitation for /],
+    },
+    {
+      name: 'accounts',
+      path: () => '/admin/accounts',
+      seat: 'admin',
+      actions: '.admin-table button',
+      expected: [/^Deactivate /],
+    },
+  ];
+
+  for (const width of [320, 390]) {
+    for (const p of pages) {
+      test(`${p.name} at ${width} wide, light theme`, async ({ browser, baseURL }) => {
+        const storageState = p.seat === 'admin' ? adminSeat().storageStatePath : seatOf('owner').storageStatePath;
+        const ctx = await browser.newContext({ baseURL, storageState, colorScheme: 'light', viewport: { width, height: 800 } });
+        const page = await ctx.newPage();
+        try {
+          await page.goto(p.path());
+          await expect(page.locator('.admin-table').first()).toBeVisible();
+          // Each kind of action this check is about is present, so an empty table cannot pass it.
+          const labels = await page.locator(p.actions).evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? ''));
+          for (const re of p.expected) expect(labels.some((l) => re.test(l)), `${p.name}: an action matching ${re}`).toBe(true);
+          const m = await offScreenActions(page, p.actions);
+          expect(m.outside, `${p.name} at ${width}: row actions outside the viewport`).toEqual([]);
+          expect(m.scrollWidth, `${p.name} at ${width}: document scrollWidth`).toBeLessThanOrEqual(m.clientWidth);
+          // The stacked layout keeps the table's semantics. Playwright's own role queries read the tag, not what the
+          // browser exposes, so the browser's accessibility tree is read through the protocol.
+          const cdp = await ctx.newCDPSession(page);
+          const { nodes } = await cdp.send('Accessibility.getFullAXTree');
+          const exposed = (role: string) => nodes.filter((n) => !n.ignored && n.role?.value === role).length;
+          const domRows = await page.locator('.admin-table tr').count();
+          const domCells = await page.locator('.admin-table td').count();
+          const domHeadings = await page.locator('.admin-table th').count();
+          expect(exposed('table'), `${p.name} at ${width}: tables exposed`).toBe(await page.locator('.admin-table').count());
+          expect(exposed('row'), `${p.name} at ${width}: rows exposed`).toBe(domRows);
+          expect(exposed('columnheader'), `${p.name} at ${width}: column headings exposed`).toBe(domHeadings);
+          expect(exposed('cell'), `${p.name} at ${width}: cells exposed`).toBe(domCells);
+        } finally {
+          await ctx.close();
+        }
+      });
+    }
+  }
+});
+
 test.describe('U12 (e): a refused download address does not leave raw JSON on the screen', () => {
   const m = (): FixtureManifest => JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf8')) as FixtureManifest;
 
@@ -105,13 +215,13 @@ test.describe('U12 (e): a refused download address does not leave raw JSON on th
     const page = await context.newPage();
     const request = context.request;
     const org = m().orgs[0].slug;
-    const projectId = '3f2b8f0e-1c11-4d6e-9a55-0a1b2c3d4e5f';
+    const unknownId = '3f2b8f0e-1c11-4d6e-9a55-0a1b2c3d4e5f';
     // The last address is opened as a page only: with the team export's page and API checks it would be a fourth export request.
     const addresses: Array<[string, boolean]> = [
-      [`/api/v1/orgs/${org}/documents/${projectId}/pdf`, true],
+      [`/api/v1/orgs/${org}/documents/${unknownId}/pdf`, true],
       ['/api/users/me/export', true],
       [`/api/v1/orgs/${org}/export`, true],
-      [`/api/v1/orgs/${org}/export?projectId=${projectId}`, false],
+      [`/api/v1/orgs/${org}/export?projectId=${unknownId}`, false],
     ];
     for (const [address, alsoAsApiClient] of addresses) {
       await page.context().clearCookies();

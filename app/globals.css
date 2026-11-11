@@ -796,6 +796,7 @@ input:focus-visible {
 .admin-table-wrapper {
   overflow-x: auto;
   padding: 0;
+  container-type: inline-size;
 }
 
 .admin-table {
@@ -840,6 +841,47 @@ input:focus-visible {
   display: flex;
   gap: var(--space-2);
   align-items: center;
+}
+
+/* Tables that carry row actions (members, invitations, accounts) stack each row in a narrow card, so the actions
+   stay on the screen instead of past the wrapper's scrolling edge. The column headings stay in the accessibility
+   tree (clipped, not display:none) and each cell shows its own heading as a label. */
+@container (width < 600px) {
+  .admin-table--stack,
+  .admin-table--stack tbody,
+  .admin-table--stack tr,
+  .admin-table--stack td {
+    display: block;
+  }
+  .admin-table--stack caption {
+    display: block;
+  }
+  .admin-table--stack thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .admin-table--stack tr {
+    border-bottom: 1px solid var(--color-gray-300);
+    padding-block: var(--space-2);
+  }
+  .admin-table--stack td {
+    border-bottom: 0;
+    padding-block: var(--space-1);
+    overflow-wrap: anywhere;
+  }
+  .admin-table--stack td[data-label]::before {
+    content: attr(data-label) ": ";
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-muted);
+  }
+  .admin-table--stack .admin-table__actions {
+    display: flex;
+    flex-wrap: wrap;
+  }
 }
 
 /* ── Small buttons for admin actions ── */

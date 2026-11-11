@@ -16,6 +16,9 @@ const REFUSALS: Readonly<Record<string, string>> = {
   single_admin: 'The platform keeps one MAK-AI administrator. This account stays an assessor.',
 };
 
+/** The column headings: one source for each <th> and for the label its cells show in the stacked narrow layout. */
+const ACCOUNT_COLUMNS = ['Name', 'Email', 'Platform role', 'Status', 'Created', 'Actions'] as const;
+
 /** The longest request reference route 47 accepts. */
 const MAX_REQUEST_REFERENCE = 200;
 
@@ -60,16 +63,11 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
       </div>
       {refusal !== null ? <div className="form-error" role="alert" id="accounts-refusal">{refusal}</div> : null}
       <div className="admin-table-wrapper card" tabIndex={0} role="region" aria-labelledby="accounts-caption">
-        <table className="admin-table">
+        <table className="admin-table admin-table--stack">
           <caption id="accounts-caption">Every account on the platform, oldest first</caption>
           <thead>
             <tr>
-              <th scope="col">Name</th>
-              <th scope="col">Email</th>
-              <th scope="col">Platform role</th>
-              <th scope="col">Status</th>
-              <th scope="col">Created</th>
-              <th scope="col">Actions</th>
+              {ACCOUNT_COLUMNS.map((c) => <th key={c} scope="col">{c}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -82,14 +80,14 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
               const verb = a.isActive ? 'Deactivate' : 'Reactivate';
               return (
                 <tr key={a.userId}>
-                  <td className="admin-table__name">
+                  <td className="admin-table__name" data-label={ACCOUNT_COLUMNS[0]}>
                     {a.name}
                     {isSelf ? <span className="text-muted"> (you)</span> : null}
                   </td>
-                  <td className="admin-table__email">{a.email}</td>
-                  <td>{a.platformRole === 'admin' ? 'MAK-AI administrator' : 'Assessor'}</td>
-                  <td>{a.isActive ? 'Active' : 'Deactivated'}</td>
-                  <td>{formatDay(a.createdAt, 'Africa/Kampala')}</td>
+                  <td className="admin-table__email" data-label={ACCOUNT_COLUMNS[1]}>{a.email}</td>
+                  <td data-label={ACCOUNT_COLUMNS[2]}>{a.platformRole === 'admin' ? 'MAK-AI administrator' : 'Assessor'}</td>
+                  <td data-label={ACCOUNT_COLUMNS[3]}>{a.isActive ? 'Active' : 'Deactivated'}</td>
+                  <td data-label={ACCOUNT_COLUMNS[4]}>{formatDay(a.createdAt, 'Africa/Kampala')}</td>
                   <td className="admin-table__actions">
                     {isSelf ? null : (
                       <form action={`/api/admin/users/${encodeURIComponent(a.userId)}/role`} method="POST">

@@ -31,6 +31,9 @@ const NOT_SAVED_NETWORK = 'Not saved: connection lost. It may have arrived. Retr
 const EMAIL_FAILED = 'The invitation email could not be sent. Send this link another way.';
 const NOT_SAVED_TIMEOUT = 'Not saved: no reply from the server after 30 seconds. It may have arrived. Retry is safe: it will not repeat the action.';
 const REPLAYED = 'This invitation was already created. If the email did not arrive, use Resend.';
+// The column headings, one source for each <th> and for the label its cells show in the stacked narrow layout.
+const MEMBER_COLUMNS = ['Name', 'Role', 'Actions'] as const;
+const INVITATION_COLUMNS = ['Email', 'Role', 'Expires', 'Actions'] as const;
 
 /**
  * S-22, Members (FR-MEM-01 to FR-MEM-05). Every write goes through `sendWrite` with a request id from
@@ -203,19 +206,19 @@ export default function MembersManager({ slug, currentUserId, currentRole, membe
       )}
 
       <div className="admin-table-wrapper card" style={{ marginBottom: 'var(--space-4)' }}>
-        <table className="admin-table">
+        <table className="admin-table admin-table--stack">
           <caption>Members</caption>
           <thead>
-            <tr><th scope="col">Name</th><th scope="col">Role</th><th scope="col">Actions</th></tr>
+            <tr>{MEMBER_COLUMNS.map((c) => <th key={c} scope="col">{c}</th>)}</tr>
           </thead>
           <tbody>
             {members.map((m) => (
               <tr key={m.userId}>
-                <td>
+                <td data-label={MEMBER_COLUMNS[0]}>
                   {m.name}{m.userId === currentUserId ? ' (you)' : ''}
                   {m.createdFromShownLink && <span className="text-muted"> account created from a copied link</span>}
                 </td>
-                <td>
+                <td data-label={MEMBER_COLUMNS[1]}>
                   {mayChangeRole(m) ? (
                     <select
                       aria-label={`Role for ${m.name}`}
@@ -279,18 +282,18 @@ export default function MembersManager({ slug, currentUserId, currentRole, membe
       {canInvite && (
         <>
           <div className="admin-table-wrapper card" style={{ marginBottom: 'var(--space-4)' }}>
-            <table className="admin-table">
+            <table className="admin-table admin-table--stack">
               <caption>Pending invitations</caption>
               <thead>
-                <tr><th scope="col">Email</th><th scope="col">Role</th><th scope="col">Expires</th><th scope="col">Actions</th></tr>
+                <tr>{INVITATION_COLUMNS.map((c) => <th key={c} scope="col">{c}</th>)}</tr>
               </thead>
               <tbody>
                 {invitations.length === 0 && <tr><td colSpan={4}>No pending invitations.</td></tr>}
                 {invitations.map((inv) => (
                   <tr key={inv.id}>
-                    <td>{inv.email}</td>
-                    <td><span className="badge">{inv.role}</span></td>
-                    <td>{formatDay(inv.expiresAt)}</td>
+                    <td data-label={INVITATION_COLUMNS[0]}>{inv.email}</td>
+                    <td data-label={INVITATION_COLUMNS[1]}><span className="badge">{inv.role}</span></td>
+                    <td data-label={INVITATION_COLUMNS[2]}>{formatDay(inv.expiresAt)}</td>
                     <td>
                       <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', alignItems: 'center' }}>
                         {(inv.role !== 'owner' || can(currentRole, 'member:grant_owner')) && (
