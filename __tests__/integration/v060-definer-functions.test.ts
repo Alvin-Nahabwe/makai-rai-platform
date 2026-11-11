@@ -128,7 +128,7 @@ describe('definer functions and their wrappers', () => {
     // migration *_v060_identity_revoke), so the inactive administrator is that account, not a second one.
     const inactiveAdmin = await testDb.user.update({ where: { id: admin.id }, data: { isActive: false } });
     const fingerprint = async () => (await q(`SELECT
-      (SELECT string_agg(id || ':' || name, ',' ORDER BY id) FROM organizations) AS orgs,
+      (SELECT string_agg(id || ':' || name || ':' || coalesce("legalName", '(none)'), ',' ORDER BY id) FROM organizations) AS orgs,
       (SELECT count(*)::int FROM organization_agreements) AS agreements,
       (SELECT string_agg(id || ':' || status, ',' ORDER BY id) FROM invitations) AS invitations,
       (SELECT count(*)::int FROM organisation_events) AS org_events,

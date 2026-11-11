@@ -115,7 +115,7 @@ test('UX-06 NFR-A11Y-05 (helper): status labels are words in a neutral colour, a
       '<span class="status-label body">Done</span><span class="status-label muted">No decision</span>' +
         '<span class="status-label status-label--warning">Overdue</span>' +
         '<span class="status-label status-label--warning">Owner cannot act</span>' +
-        '<span class="status-label status-label--warning">No agreement recorded</span>' +
+        '<span class="status-label status-label--warning">Legal name not recorded</span>' +
         '<span class="status-label status-label--warning">Overdue: 3</span>' +
         '<div class="body"><span class="status-label">Open</span></div>',
     ),

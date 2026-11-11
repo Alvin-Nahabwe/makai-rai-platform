@@ -5,20 +5,18 @@ import type { ReactElement } from 'react';
 import Link from 'next/link';
 import { requestIdFor, sendWrite, type RetryState, type SendOutcome } from '@/lib/client/retrySafeWrite';
 import { CopyLinkFallback } from '@/components/invitations/CopyLinkFallback';
-import { formatDay } from '@/lib/format/dates';
 import { useHydrated } from '@/lib/client/useHydrated';
-import type { AgreementView, CreateOrganisationResponse, InviteMemberResponse } from '@/types/api';
-import type { CalendarDate, FieldError } from '@/types/record';
+import { MAX_ORG_NAME } from '@/lib/admin/limits';
+import type { CreateOrganisationResponse, InviteMemberResponse } from '@/types/api';
+import type { FieldError } from '@/types/record';
 
-/** The agreement fields as the form sends them. Stage 0 Task 2 replaces this form; until then it only keeps compiling. */
-type AgreementInput = Omit<AgreementView, 'id' | 'recordedAt'>;
+/**
+ * The longest institution legal name. The route's own limit is `MAX_LEGAL_NAME` in `lib/data/admin.ts`, a server
+ * module a client component cannot import; admin-screens.test.tsx holds the two equal.
+ */
+export const MAX_LEGAL_NAME = 200;
 
-/** A published version of the organisation agreement, as the page reads it from the registry. */
-export type AgreementVersionOption = { version: string; publishedOn: CalendarDate; sha256: string };
-
-/** The agreement fields as typed: the date in three parts, as W-10 draws it (SRS lines 2166-2210). */
-export type AgreementDraft = { version: string; day: string; month: string; year: string; controllerLegalName: string; dpContactEmail: string };
-export type CreateDraft = AgreementDraft & { name: string; ownerEmail: string; showLink: boolean };
+export type CreateDraft = { name: string; legalName: string; ownerEmail: string; showLink: boolean };
 export type FieldErrors = Partial<Record<keyof CreateDraft, string>>;
 
 export const EMAIL_FAILED = 'The invitation email could not be sent. Send this link another way.';
@@ -34,54 +32,25 @@ const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const HINT_STYLE = { color: 'var(--text-muted)', fontSize: 'var(--font-size-sm)', margin: 0 } as const;
 export const ERROR_STYLE = { color: 'var(--tint-critical-fg)', fontSize: 'var(--font-size-sm)', fontWeight: 600, margin: 0 } as const;
 
-export const EMPTY_AGREEMENT: AgreementDraft = { version: '', day: '', month: '', year: '', controllerLegalName: '', dpContactEmail: '' };
-
-/** The `YYYY-MM-DD` day the three parts name, or null when they name no real day. */
-export function dayOf(d: Pick<AgreementDraft, 'day' | 'month' | 'year'>): CalendarDate | null {
-  if (!/^\d{1,2}$/.test(d.day.trim()) || !/^\d{1,2}$/.test(d.month.trim()) || !/^\d{4}$/.test(d.year.trim())) return null;
-  const [y, m, dd] = [Number(d.year), Number(d.month), Number(d.day)];
-  const date = new Date(Date.UTC(y, m - 1, dd));
-  if (date.getUTCFullYear() !== y || date.getUTCMonth() !== m - 1 || date.getUTCDate() !== dd) return null;
-  return date.toISOString().slice(0, 10);
-}
-
-/** The agreement fields' errors (7.4.2 S-24 Validation: each required, email format, date not in the future, a published version). */
-export function agreementErrors(d: AgreementDraft, today: CalendarDate, versions: readonly AgreementVersionOption[]): FieldErrors {
-  const e: FieldErrors = {};
-  if (!versions.some((v) => v.version === d.version)) e.version = 'Choose the agreement version that was signed.';
-  const day = dayOf(d);
-  if (day === null) e.day = 'Enter the date the agreement was accepted, as day, month and year.';
-  else if (day > today) e.day = 'The date the agreement was accepted cannot be after today.';
-  if (d.controllerLegalName.trim() === '') e.controllerLegalName = 'Enter the controller\'s legal name.';
-  if (!EMAIL_SHAPE.test(d.dpContactEmail.trim())) e.dpContactEmail = 'Enter the data-protection contact\'s email address.';
-  return e;
-}
-
 /** Every field's error of the create form. */
-export function createErrors(d: CreateDraft, today: CalendarDate, versions: readonly AgreementVersionOption[]): FieldErrors {
+export function createErrors(d: CreateDraft): FieldErrors {
   const e: FieldErrors = {};
   if (d.name.trim() === '') e.name = 'Enter the organisation name.';
-  else if (d.name.trim().length > 100) e.name = 'Use 100 characters or fewer.';
-  Object.assign(e, agreementErrors(d, today, versions));
+  else if (d.name.trim().length > MAX_ORG_NAME) e.name = `Use ${MAX_ORG_NAME} characters or fewer.`;
+  if (d.legalName.trim() === '') e.legalName = 'Enter the institution\'s legal name.';
+  else if (d.legalName.trim().length > MAX_LEGAL_NAME) e.legalName = `Use ${MAX_LEGAL_NAME} characters or fewer.`;
   if (!EMAIL_SHAPE.test(d.ownerEmail.trim())) e.ownerEmail = 'Enter the first owner\'s email address.';
   return e;
 }
 
-/** The request body route 41 and route 43 read: the agreement with the chosen version's own text hash. */
-export function agreementInputOf(d: AgreementDraft, versions: readonly AgreementVersionOption[]): AgreementInput {
-  return {
-    agreementVersion: d.version, textHash: versions.find((v) => v.version === d.version)?.sha256 ?? '',
-    acceptedOn: dayOf(d) ?? '', controllerLegalName: d.controllerLegalName.trim(), dpContactEmail: d.dpContactEmail.trim(),
-  };
+/** The fields route 41 reads, trimmed (the request id is added by the sender). */
+export function createFields(d: CreateDraft): { name: string; legalName: string; ownerEmail: string; showLink: boolean } {
+  return { name: d.name.trim(), legalName: d.legalName.trim(), ownerEmail: d.ownerEmail.trim(), showLink: d.showLink };
 }
 
 /** A server's field errors (422) on the form's own fields. */
 export function serverFieldErrors(fields: readonly FieldError[] | undefined): FieldErrors {
-  const map: Record<string, keyof CreateDraft> = {
-    name: 'name', ownerEmail: 'ownerEmail', 'agreement.agreementVersion': 'version', 'agreement.textHash': 'version',
-    'agreement.acceptedOn': 'day', 'agreement.controllerLegalName': 'controllerLegalName', 'agreement.dpContactEmail': 'dpContactEmail',
-    agreementVersion: 'version', textHash: 'version', acceptedOn: 'day', controllerLegalName: 'controllerLegalName', dpContactEmail: 'dpContactEmail',
-  };
+  const map: Record<string, keyof CreateDraft> = { name: 'name', legalName: 'legalName', ownerEmail: 'ownerEmail' };
   const e: FieldErrors = {};
   for (const f of fields ?? []) {
     const key = map[f.field];
@@ -169,55 +138,8 @@ export function Field({ id, label, hint, error, children }: FieldProps): ReactEl
   );
 }
 
-/** The agreement's fields, shared by S-24's create form and its "Record a newer agreement version" form. */
-export function AgreementFields({ prefix, draft, errors, versions, onChange }: {
-  prefix: string; draft: AgreementDraft; errors: FieldErrors; versions: readonly AgreementVersionOption[];
-  onChange: (patch: Partial<AgreementDraft>) => void;
-}): ReactElement {
-  const legendId = `${prefix}-date-legend`;
-  const dateErrorId = `${prefix}-date-error`;
-  const dateDescribedBy = errors.day ? dateErrorId : undefined;
-  return (
-    <>
-      <Field id={`${prefix}-version`} label="Agreement version accepted" error={errors.version}>
-        {(a) => (
-          <select id={a.id} name="agreementVersion" required value={draft.version} aria-describedby={a.describedBy} aria-invalid={a.invalid}
-            onChange={(e) => onChange({ version: e.target.value })}>
-            <option value="">Choose a version</option>
-            {versions.map((v) => <option key={v.version} value={v.version}>{`Organisation agreement v${v.version} (published ${formatDay(v.publishedOn)})`}</option>)}
-          </select>
-        )}
-      </Field>
-      {draft.version !== '' ? <p style={HINT_STYLE}><Link href={`/legal/organisation-agreement/${encodeURIComponent(draft.version)}`} prefetch={false}>Read this version</Link></p> : null}
-      <fieldset className="form-group" aria-describedby={dateDescribedBy}>
-        <legend id={legendId}>Date the agreement was accepted</legend>
-        <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
-          {(['day', 'month', 'year'] as const).map((part) => (
-            <span key={part} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
-              <label htmlFor={`${prefix}-${part}`}>{part === 'day' ? 'Day' : part === 'month' ? 'Month' : 'Year'}</label>
-              <input id={`${prefix}-${part}`} name={part} type="text" inputMode="numeric" required autoComplete="off"
-                size={part === 'year' ? 4 : 2} maxLength={part === 'year' ? 4 : 2} value={draft[part]}
-                aria-invalid={errors.day ? true : undefined} aria-describedby={dateDescribedBy}
-                onChange={(e) => onChange({ [part]: e.target.value } as Partial<AgreementDraft>)} />
-            </span>
-          ))}
-        </div>
-        {errors.day ? <p id={dateErrorId} style={ERROR_STYLE}>{errors.day}</p> : null}
-      </fieldset>
-      <Field id={`${prefix}-controller`} label="Controller legal name" error={errors.controllerLegalName}>
-        {(a) => <input id={a.id} name="controllerLegalName" type="text" required autoComplete="organization" value={draft.controllerLegalName}
-          aria-describedby={a.describedBy} aria-invalid={a.invalid} onChange={(e) => onChange({ controllerLegalName: e.target.value })} />}
-      </Field>
-      <Field id={`${prefix}-dpo`} label="Data-protection contact email" error={errors.dpContactEmail}>
-        {(a) => <input id={a.id} name="dpContactEmail" type="email" required autoComplete="off" spellCheck={false} value={draft.dpContactEmail}
-          aria-describedby={a.describedBy} aria-invalid={a.invalid} onChange={(e) => onChange({ dpContactEmail: e.target.value })} />}
-      </Field>
-    </>
-  );
-}
-
 export type CreateOrganisationFormViewProps = {
-  draft: CreateDraft; errors: FieldErrors; versions: readonly AgreementVersionOption[];
+  draft: CreateDraft; errors: FieldErrors;
   status: string; busy: boolean; result: CreateResult | null;
   /** False until React has hydrated; the submit button is disabled till then (default true for a static render). */
   hydrated?: boolean;
@@ -257,7 +179,12 @@ export function CreateOrganisationFormView(p: CreateOrganisationFormViewProps): 
             {(a) => <input id={a.id} name="name" type="text" required maxLength={100} autoComplete="off" value={d.name}
               aria-describedby={a.describedBy} aria-invalid={a.invalid} onChange={(e) => p.onChange({ name: e.target.value })} />}
           </Field>
-          <AgreementFields prefix={`${formId}-agreement`} draft={d} errors={p.errors} versions={p.versions} onChange={p.onChange} />
+          <Field id={`${formId}-legal-name`} label="Institution's legal name"
+            hint="The registered name of the university, hospital or institute the team belongs to."
+            error={p.errors.legalName}>
+            {(a) => <input id={a.id} name="legalName" type="text" required maxLength={MAX_LEGAL_NAME} autoComplete="off" value={d.legalName}
+              aria-describedby={a.describedBy} aria-invalid={a.invalid} onChange={(e) => p.onChange({ legalName: e.target.value })} />}
+          </Field>
           <Field id={`${formId}-owner`} label="First owner's email" error={p.errors.ownerEmail}>
             {(a) => <input id={a.id} name="ownerEmail" type="email" required autoComplete="off" spellCheck={false} value={d.ownerEmail}
               aria-describedby={a.describedBy} aria-invalid={a.invalid} onChange={(e) => p.onChange({ ownerEmail: e.target.value })} />}
@@ -266,7 +193,7 @@ export function CreateOrganisationFormView(p: CreateOrganisationFormViewProps): 
             <input id={`${formId}-show`} name="showLink" type="checkbox" checked={d.showLink} onChange={(e) => p.onChange({ showLink: e.target.checked })} />
             <label htmlFor={`${formId}-show`}>Show link (to send it yourself if the email does not arrive)</label>
           </div>
-          <p>Creating the organisation also records the agreement and sends an invitation to the first owner. If any part does not go through, nothing is created.</p>
+          <p>Creating the organisation also sends an invitation to the first owner. If either part does not go through, nothing is created.</p>
           <button type="submit" className="btn btn--primary" disabled={p.hydrated === false} aria-disabled={p.busy || undefined}>Create organisation and send invitation</button>
         </form>
       )}
@@ -278,15 +205,12 @@ type Send = (body: Record<string, unknown>) => Promise<SendOutcome<CreateOrganis
 
 /**
  * S-24 create mode (FR-ORG-01, J-01). Validates every field on submit (7.4.2 S-24 Validation) and moves focus to
- * the first field at fault; then sends route 41 and shows the 7.4.2 texts. `send` and `today` are injectable for the
- * unit tests; the page passes today's date in East Africa Time.
+ * the first field at fault; then sends route 41 and shows the 7.4.2 texts. `send` is injectable for the unit tests.
  */
 type Resend = (url: string, body: Record<string, unknown>) => Promise<SendOutcome<InviteMemberResponse>>;
 
-export function CreateOrganisationForm({ versions, today, send, resend }: {
-  versions: readonly AgreementVersionOption[]; today: CalendarDate; send?: Send; resend?: Resend;
-}): ReactElement {
-  const [draft, setDraft] = useState<CreateDraft>({ ...EMPTY_AGREEMENT, name: '', ownerEmail: '', showLink: false });
+export function CreateOrganisationForm({ send, resend }: { send?: Send; resend?: Resend }): ReactElement {
+  const [draft, setDraft] = useState<CreateDraft>({ name: '', legalName: '', ownerEmail: '', showLink: false });
   const [errors, setErrors] = useState<FieldErrors>({});
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
@@ -312,16 +236,16 @@ export function CreateOrganisationForm({ versions, today, send, resend }: {
 
   function submit(): void {
     if (busy) return;
-    const e = createErrors(draft, today, versions);
+    const e = createErrors(draft);
     setErrors(e);
     const first = Object.keys(e)[0];
     if (first !== undefined) {
       setStatus('');
-      const input = document.querySelector<HTMLElement>(`form [name="${first === 'version' ? 'agreementVersion' : first}"]`);
+      const input = document.querySelector<HTMLElement>(`form [name="${first}"]`);
       input?.focus();
       return;
     }
-    const fields = { name: draft.name.trim(), agreement: agreementInputOf(draft, versions), ownerEmail: draft.ownerEmail.trim(), showLink: draft.showLink };
+    const fields = createFields(draft);
     // One request id per body until it is created: Retry, or a second press with the same fields, is answered, not
     // created twice (NFR-INT-02).
     const { requestId, state } = requestIdFor(createRetry.current, fields);
@@ -354,7 +278,7 @@ export function CreateOrganisationForm({ versions, today, send, resend }: {
   }
 
   return (
-    <CreateOrganisationFormView draft={draft} errors={errors} versions={versions} status={status} busy={busy} hydrated={hydrated} result={result}
+    <CreateOrganisationFormView draft={draft} errors={errors} status={status} busy={busy} hydrated={hydrated} result={result}
       onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))} onSubmit={submit}
       onRetry={() => { if (!busy && lastBody.current !== null) void run(lastBody.current); }}
       onResendWithLink={() => { void resendWithLink(); }} />

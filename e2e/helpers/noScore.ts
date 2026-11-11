@@ -34,7 +34,7 @@ const PERCENT = /\d+(?:[.,]\d+)?\s?%/g;
 /** FR-RM-04 (SRS line 469): no element is labelled as a total. */
 const TOTAL_WORDS = /\b(total|overall|in all)\b/gi;
 /** UX-06 (SRS line 2296): the warning tint is allowed on these three labels only. */
-const WARNING_LABELS: ReadonlySet<string> = new Set(['overdue', 'owner cannot act', 'no agreement recorded']);
+const WARNING_LABELS: ReadonlySet<string> = new Set(['overdue', 'owner cannot act', 'legal name not recorded']);
 
 /** Elements that draw a progress bar, a gauge or a meter. A `<canvas>` or an undecorated `<svg>` is a drawn chart. */
 const PROGRESS_KINDS: readonly string[] = ['<progress>', '<meter>', 'role=progressbar', 'role=meter'];
@@ -221,7 +221,7 @@ type LabelSnapshot = {
 /**
  * UX-06 (SRS line 2296) and NFR-A11Y-05 (SC 1.4.1): every `.status-label` is words, not a colour or an
  * icon; its computed colour is `--text-body` or `--text-muted` as `:root` resolves them; and
- * `.status-label--warning` is on "Overdue", "Owner cannot act" and "No agreement recorded" only (a count
+ * `.status-label--warning` is on "Overdue", "Owner cannot act" and "Legal name not recorded" only (a count
  * or punctuation beside the words is ignored). A warning-tinted label is exempt from the colour check.
  * The order of the to-do counts and the recorded counts in a stage column needs S-10's markup, which is
  * PRJ's: its own test asserts that.
@@ -273,7 +273,7 @@ export async function expectNeutralStatusLabels(page: Page): Promise<void> {
   for (const text of snap.warnings) {
     const words = text.toLowerCase().replace(/[\d\p{P}\p{S}]+/gu, ' ').replace(/\s+/g, ' ').trim();
     if (!WARNING_LABELS.has(words)) {
-      findings.push(`warning tint on "${text}"; allowed only on Overdue, Owner cannot act and No agreement recorded`);
+      findings.push(`warning tint on "${text}"; allowed only on Overdue, Owner cannot act and Legal name not recorded`);
     }
   }
   fail(who, findings);

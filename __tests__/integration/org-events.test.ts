@@ -7,8 +7,6 @@ import { captureLogs } from '../helpers/logCapture';
 import { withTriggersDisabled } from '../helpers/triggers';
 import { buildOrg, buildPlatformAdmin, ctxFor, type FixtureAccount, type OrgFixture } from '../helpers/recordFixture';
 import { listOrganisationEvents } from '../../lib/data/orgEvents';
-import { currentAgreement } from '../../lib/data/agreements';
-import { AgreementSummary } from '../../components/org/AgreementSummary';
 import { ALL_ORG_EVENT_ACTIONS, OrganisationEventsList, actionWords } from '../../components/org/OrganisationEventsList';
 import type { OrgEventView } from '../../types/api';
 
@@ -155,20 +153,7 @@ describe('listOrganisationEvents', () => {
   });
 });
 
-describe('currentAgreement and the S-30 slots', () => {
-  it('FR-ORG-05 (S-30): currentAgreement is the newest row, and the summary says when there is none', async () => {
-    await testDb.organisationAgreement.create({ data: {
-      orgId: fxA.org.id, agreementVersion: '2', textHash: hex('v2'), acceptedOn: new Date('2026-11-01T00:00:00Z'),
-      controllerLegalName: 'Makerere University', dpContactEmail: 'dpo@mak.fixture.test', recordedById: admin.userId,
-    } });
-    const current = (await currentAgreement(ctxFor(fxA, 'viewer')))!;
-    expect(current).toMatchObject({ agreementVersion: '2', acceptedOn: '2026-11-01', controllerLegalName: 'Makerere University' });
-    expect(await currentAgreement(ctxFor(await buildOrg({ withAgreement: false }), 'owner'))).toBeNull();
-    expect(renderToString(createElement(AgreementSummary, { agreement: null }))).toContain('No agreement recorded');
-    const html = renderToString(createElement(AgreementSummary, { agreement: current }));
-    for (const text of ['2', '1 Nov 2026', 'Makerere University', 'dpo@mak.fixture.test']) expect(html).toContain(text);
-  });
-
+describe('the S-30 action rows', () => {
   it('FR-ORG-09 NFR-A11Y-05: every action has words, and the administrator is named by role', async () => {
     const constraint = await testDb.$queryRaw<{ def: string }[]>`
       SELECT pg_get_constraintdef(c.oid) AS def FROM pg_constraint c
