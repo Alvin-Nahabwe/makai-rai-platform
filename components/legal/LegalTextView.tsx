@@ -74,7 +74,11 @@ export function LegalTextView({ text }: { text: LegalTextVersion }): ReactElemen
           </code>
         </dd>
       </dl>
+      {/* data-legal-text: the words of the text, and only they, are exempt from the claim-word crawl (e2e/claims-crawl.spec.ts)
+          and the claim-word unit check, on S-06's two routes (owner ruling R1, 11 Nov 2026). The heading, version line and
+          fingerprint above stay checked. Nothing else reads it: the no-score check does not (e2e/helpers/noScore.ts). */}
       <div
+        data-legal-text
         style={{
           display: 'flex',
           flexDirection: 'column',

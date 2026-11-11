@@ -203,6 +203,29 @@ describe('S-06 /legal/[kind] and /legal/[kind]/[version]', () => {
     expect(shown).toMatch(/^[0-9a-f]{4}( [0-9a-f]{4}){15}$/);
   });
 
+  it('FR-PUB-01: only the text block of S-06 carries data-legal-text', () => {
+    const text: LegalTextVersion = {
+      kind: 'terms', version: '3', publishedOn: '2027-01-05', acceptance: 'offered', sha256: 'ab'.repeat(32),
+      text: '## Our promise\n\nWe certify the words of this stub.\n\nA second paragraph.\n',
+    };
+    const html = renderToStaticMarkup(<LegalTextView text={text} />);
+    expect(html.match(/data-legal-text/g), 'one marked element').toHaveLength(1);
+    const at = html.indexOf('data-legal-text');
+    const open = html.lastIndexOf('<', at);
+    const close = html.lastIndexOf('</div>');
+    const marked = html.slice(open, close + '</div>'.length);
+    const outside = html.slice(0, open) + html.slice(close + '</div>'.length);
+    expect(marked.startsWith('<div ')).toBe(true);
+    expect(marked).toContain('We certify the words of this stub.');
+    expect(marked).toContain('<h2>Our promise</h2>');
+    // The page's heading, the version line and the fingerprint are interface copy: they stay outside.
+    for (const part of ['<h1', 'Version 3, published 5 Jan 2027', groupsOfFour('ab'.repeat(32)), 'SHA-256']) {
+      expect(marked, part).not.toContain(part);
+      expect(outside, part).toContain(part);
+    }
+    expect(outside).not.toContain('certify');
+  });
+
   it('FR-ACC-02: the text is one paragraph per blank-line-separated block, and keeps its single line breaks', () => {
     const text: LegalTextVersion = {
       kind: 'terms', version: '3', publishedOn: '2027-01-05', acceptance: 'offered', sha256: 'ab'.repeat(32),

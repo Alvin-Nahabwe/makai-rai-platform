@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { claimMatches } from '@/lib/claims/pattern';
+import { ACCEPT_LABEL } from '@/components/legal/AcceptancesForm';
 import { releaseWaiver } from '../helpers/releaseWaivers';
 
 /**
@@ -72,8 +73,12 @@ describe('FR-ACC-02: version 1 stays as published', () => {
 });
 
 describe('FR-PUB-01 FR-ACC-02: the texts a person is asked to accept now (current versions)', () => {
-  it('FR-PUB-01 FR-ACC-02: no current legal text holds a word of PUB\'s list (lib/claims/pattern.ts)', () => {
-    for (const k of LEGAL_KINDS) expect(claimMatches(currentLegalText(k).text).map((m) => m.text), k).toEqual([]);
+  it('FR-PUB-01 (owner ruling R1, 11 Nov 2026): legal texts are exempt from the claim-word list; the consent labels are not', () => {
+    // The words of a legal text are not checked here: the owner ruled they may use words such as "comply". The sentence
+    // that sits beside a tick box is interface copy and is checked.
+    const labels = Object.values(ACCEPT_LABEL);
+    expect(labels.length).toBeGreaterThan(0);
+    for (const label of labels) expect(claimMatches(label).map((m) => m.text), label).toEqual([]);
   });
 
   // An unset run reports this case as skipped, not passed: a release candidate runs it with RELEASE_CANDIDATE=1. The boot

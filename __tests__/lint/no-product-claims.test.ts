@@ -186,6 +186,35 @@ function claimsAllowedMarkers(roots: string[]): Array<{ file: string; reason: st
   return out;
 }
 
+/**
+ * Every place under `roots` that names `data-legal-text`: a JSX attribute, or any string, template or identifier that
+ * spells it (a spread object, `createElement`, a computed prop). Comments are not code and are not counted.
+ */
+function legalTextMarkers(roots: string[]): string[] {
+  const out: string[] = [];
+  for (const root of roots) {
+    for (const file of sourceFiles(root)) {
+      const sf = ts.createSourceFile(
+        file,
+        readFileSync(file, 'utf8'),
+        ts.ScriptTarget.Latest,
+        true,
+        file.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+      );
+      const visit = (n: ts.Node): void => {
+        // A JSX attribute's name is an identifier node, so the JSX case needs no branch of its own.
+        const spelled =
+          ts.isStringLiteralLike(n) || ts.isIdentifier(n) || ts.isTemplateHead(n) || ts.isTemplateMiddle(n) || ts.isTemplateTail(n) ? n.text :
+          '';
+        if (spelled.includes('data-legal-text')) out.push(relative(process.cwd(), file));
+        ts.forEachChild(n, visit);
+      };
+      visit(sf);
+    }
+  }
+  return out;
+}
+
 /** The one component that may carry `data-source-note`, and the one page that may render it (review r1 I-2). */
 const REFERENCES_LIST = 'components/report/ReferencesList';
 const S26_PAGE = 'app/(authenticated)/explore/framework/page.tsx';
@@ -644,6 +673,12 @@ describe('no product claims', () => {
       [`${about} about-model-scores`, `${about} about-model-scores`, `${about} not-an-approval-service`, `${about} why-no-score`,
         'components/documents/GenerateDocumentForm.tsx AL-1 document statement'].sort(),
     );   // why-no-score: the heading only
+  });
+
+  it('FR-PUB-01: data-legal-text appears in exactly one source file, components/legal/LegalTextView.tsx, once', () => {
+    // The attribute exempts words from the claim-word crawl and unit check (owner ruling R1), so it is fenced like
+    // data-claims-allowed: a second place would let a claim through on a screen that is not a legal text.
+    expect(legalTextMarkers(['app', 'components', 'lib'])).toEqual(['components/legal/LegalTextView.tsx']);
   });
 
   it('FR-PUB-01 FR-RM-01: data-source-note sits only on ReferencesList\'s relevance note, and only S-26 renders ReferencesList', () => {

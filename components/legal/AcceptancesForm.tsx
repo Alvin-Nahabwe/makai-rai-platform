@@ -34,7 +34,7 @@ type AcceptancesFormMode =
 export type AcceptancesFormProps = AcceptancesFormBase & AcceptancesFormMode;
 
 /** The sentence each box carries as its label (W-11 note 2). */
-const ACCEPT_LABEL: Record<AcceptedKind, string> = {
+export const ACCEPT_LABEL: Record<AcceptedKind, string> = {
   terms: 'I accept the terms of service.',
   privacy: 'I have read the privacy notice.',
   'cross-border-consent': 'I agree that my account and my team\'s records are stored and processed outside my country, as the cross-border storage consent describes.',
