@@ -354,6 +354,7 @@ test.describe('S-04 and S-05 in a browser', () => {
       ['S-05', signedIn, '/acceptances', null],
       ['S-06 current', signedOut, '/legal/privacy', null],
       ['S-06 version', signedOut, '/legal/terms/1', null],
+      ['S-06 retired agreement', signedOut, '/legal/organisation-agreement', null],
     ];
     for (const [name, page, path, then] of states) {
       for (const width of [1280, 360]) for (const colorScheme of ['light', 'dark'] as const) {

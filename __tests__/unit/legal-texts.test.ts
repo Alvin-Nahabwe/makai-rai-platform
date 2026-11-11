@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { claimMatches } from '@/lib/claims/pattern';
 import { ACCEPTED_KINDS } from '@/types/legal';
+import { RETIRED_KINDS } from '@/lib/legal/kinds';
 import { ACCEPT_LABEL } from '@/components/legal/AcceptancesForm';
 import { releaseWaiver } from '../helpers/releaseWaivers';
 
@@ -92,6 +93,20 @@ describe('FR-ACC-02: version 1 stays as published', () => {
 });
 
 describe('FR-PUB-01 FR-ACC-02: the texts a person is asked to accept now (current versions)', () => {
+  it('FR-ACC-02: the consent labels read exactly as approved', () => {
+    // The map pin: every other test takes the sentences from ACCEPT_LABEL, so this is the one place that says what a person
+    // consents to. A change of wording changes this case, the label and the version it belongs to in one commit.
+    expect(ACCEPT_LABEL).toEqual({
+      terms: 'I accept the terms of service.',
+      privacy: 'I have read the privacy notice.',
+      'cross-border-consent': "I agree that my account and my team's records are stored and processed outside my country, as the cross-border storage consent describes.",
+    });
+  });
+
+  it('FR-ACC-02: no kind is both retired and accepted', () => {
+    expect(RETIRED_KINDS.filter((k) => (ACCEPTED_KINDS as readonly string[]).includes(k))).toEqual([]);
+  });
+
   it('FR-PUB-01 (owner ruling R1, 11 Nov 2026): legal texts are exempt from the claim-word list; the consent labels are not', () => {
     // The words of a legal text are not checked here: the owner ruled they may use words such as "comply". The sentence
     // that sits beside a tick box is interface copy and is checked.
@@ -115,19 +130,22 @@ describe('FR-PUB-01 FR-ACC-02: the texts a person is asked to accept now (curren
   });
 
   it.skipIf(process.env.RELEASE_CANDIDATE !== '1')('FR-ACC-02 (release): no current legal text holds an unresolved field', () => {
-    // A field the author left open in braces, or the words that mark a gap for the owner to fill, in the text a person is asked
+    // A field the author left open in braces or square brackets, or the words that mark a gap for the owner to fill, in the text a person is asked
     // to accept now. Version files that are no longer current are not scanned: they can never change, so once a later version is
     // current their open fields no longer reach anyone who is asked to accept.
     const found = ACCEPTED_KINDS.flatMap((k) => {
       const { version, text } = currentLegalText(k);
-      return [...(text.match(/\{[^}\n]+\}/g) ?? []), ...(text.match(/named by the owner/gi) ?? [])].map((m) => `${k}/${version}.md: ${m}`);
+      // None of the version 2 drafts or the version 1 texts uses square brackets, TBD, TODO or "to be confirmed" in its words.
+      const gaps = [/\{[^}\n]+\}/g, /\[[^\]\n]*\]/g, /named by the owner/gi, /\b(?:TBD|TODO|to be confirmed)\b/gi];
+      return gaps.flatMap((re) => text.match(re) ?? []).map((m) => `${k}/${version}.md: ${m}`);
     });
     expect(found, 'an open field in the current version of an accepted legal text').toEqual([]);
   });
 
   it.skipIf(process.env.RELEASE_CANDIDATE !== '1')('FR-ACC-02 (release): no current legal text says it was written or reviewed by a lawyer', () => {
-    // The stand-in texts were not written by a lawyer, and nothing a person is shown may say they were.
-    const found = ACCEPTED_KINDS.flatMap((k) => (currentLegalText(k).text.match(/lawyer|reviewed by/gi) ?? []).map((m) => `${k}: ${m}`));
+    // The stand-in texts were not written by a lawyer, and nothing a person is shown may say they were. The other words for the
+    // profession are refused too; none of the version 2 drafts or the version 1 texts uses them.
+    const found = ACCEPTED_KINDS.flatMap((k) => (currentLegalText(k).text.match(/lawyer|reviewed by|advocate|attorney|solicitor|counsel/gi) ?? []).map((m) => `${k}: ${m}`));
     expect(found, 'a claim of legal authorship or review in the current version of an accepted legal text').toEqual([]);
   });
 

@@ -1,4 +1,3 @@
-import type { CSSProperties } from 'react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -13,7 +12,7 @@ import {
   legalTextVersion,
 } from '@/lib/legal/registry';
 import { RETIRED_NOTE, isRetiredKind } from '@/lib/legal/kinds';
-import { LEGAL_LINK_STYLE, LEGAL_PAGE_STYLE, LegalTextView, legalTextHeading } from '@/components/legal/LegalTextView';
+import { LEGAL_LINK_STYLE, LEGAL_NOTE_STYLE, LEGAL_PAGE_STYLE, LegalTextView, legalTextHeading } from '@/components/legal/LegalTextView';
 
 /**
  * S-06, one version (FR-ACC-02, SRS line 479: "/legal/privacy/<old-version>"): that version's text, version,
@@ -24,14 +23,6 @@ import { LEGAL_LINK_STYLE, LEGAL_PAGE_STYLE, LegalTextView, legalTextHeading } f
  */
 
 export const dynamicParams = false;
-
-/** The tinted band of S-06's notes (the same look as the earlier-version note of the version page). */
-const NOTE_STYLE: CSSProperties = {
-  padding: 'var(--space-3) var(--space-4)',
-  background: 'var(--tint-moderate-bg)',
-  color: 'var(--tint-moderate-fg)',
-  borderRadius: 'var(--border-radius-sm)',
-};
 
 export function generateStaticParams(): Array<{ kind: LegalTextKind; version: string }> {
   return LEGAL_KINDS.flatMap((kind) => legalTextHistory(kind).map((text) => ({ kind, version: text.version })));
@@ -55,19 +46,19 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
 export default async function LegalVersionPage({ params }: { params: Params }) {
   const text = await versionOf(params);
   const current = currentLegalText(text.kind);
+  // One note at most. The retired note says what matters about every version of the agreement, so it stands in for the
+  // earlier-version note.
+  const note = isRetiredKind(text.kind)
+    ? RETIRED_NOTE[text.kind]
+    : current.version !== text.version
+      ? `This is an earlier version. The current one is version ${current.version}, published ${formatDay(current.publishedOn)}.`
+      : null;
   return (
     <div style={LEGAL_PAGE_STYLE}>
-      {isRetiredKind(text.kind) ? (
-        // The retired note says what matters about every version of the agreement, so it stands in for the earlier-version note.
-        <p role="note" style={{ ...NOTE_STYLE, marginBottom: 'var(--space-6)' }}>
-          {RETIRED_NOTE[text.kind]}
+      {note !== null && (
+        <p role="note" style={LEGAL_NOTE_STYLE}>
+          {note}
         </p>
-      ) : (
-        current.version !== text.version && (
-          <p role="note" style={{ ...NOTE_STYLE, marginBottom: 'var(--space-6)' }}>
-            {`This is an earlier version. The current one is version ${current.version}, published ${formatDay(current.publishedOn)}.`}
-          </p>
-        )
       )}
       <LegalTextView text={text} />
       <p style={{ marginTop: 'var(--space-6)' }}>
