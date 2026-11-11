@@ -522,6 +522,62 @@ describe('C-10: the never-upload warning is printed', () => {
   });
 });
 
+describe('D8: each evidence-summary cell writes one ZIP outside evidence/ and tells the reader to attach it', () => {
+  it.each(CONTROLS)('%s', (c) => {
+    const nb = readNotebook(c);
+    const cell = cellsTagged(nb, 'evidence-summary')[0];
+    const body = text(cell);
+    // The ZIP holds this control's own files only: members come from EVIDENCE_DIR.glob('<C>_*'), never the whole folder.
+    expect(body, `${c}: no shutil.make_archive (it archives the whole folder, other controls' files included)`).not.toContain('make_archive');
+    // One archive call, built under a .part name and moved into place only once complete (so a failed run leaves no ZIP).
+    expect(body.split('zipfile.ZipFile(').length - 1, `${c}: exactly one zipfile.ZipFile( call`).toBe(1);
+    const zipAt = body.indexOf(`zipfile.ZipFile('${c}_evidence.zip.part', 'w', zipfile.ZIP_DEFLATED)`);
+    expect(zipAt, `${c}: the cell opens '${c}_evidence.zip.part' for writing with zipfile`).toBeGreaterThan(-1);
+    const removeAt = body.indexOf(`Path('${c}_evidence.zip').unlink(missing_ok=True)`);
+    expect(removeAt, `${c}: an earlier ZIP is removed first`).toBeGreaterThan(-1);
+    expect(removeAt, `${c}: the removal comes before the archive is opened`).toBeLessThan(zipAt);
+    const moveAt = body.indexOf(`os.replace('${c}_evidence.zip.part', '${c}_evidence.zip')`);
+    expect(moveAt, `${c}: os.replace moves the .part file onto ${c}_evidence.zip`).toBeGreaterThan(-1);
+    expect(moveAt, `${c}: the move comes after the archive block`).toBeGreaterThan(body.indexOf('archive.write(path, path.name)'));
+    nb.cells.forEach((x, i) => {
+      if (x !== cell) expect(text(x), `${c}: cell ${i} mentions zipfile`).not.toContain('zipfile');
+    });
+    expect(body, `${c}: members come from EVIDENCE_DIR.glob('${c}_*') in sorted order`).toContain(
+      `for path in sorted(EVIDENCE_DIR.glob('${c}_*')):`,
+    );
+    expect(body, `${c}: members are added under their bare file names`).toContain('archive.write(path, path.name)');
+    // The prefix rule only works if every file the cell writes into the folder carries the prefix.
+    const written = [...body.matchAll(/EVIDENCE_DIR \/ '([^']+)'/g)].map((m) => m[1]);
+    expect(written.length, `${c}: the cell writes files into EVIDENCE_DIR`).toBeGreaterThan(0);
+    for (const name of written) expect(name.startsWith(`${c}_`), `${c}: ${name} must start with ${c}_`).toBe(true);
+    // Written after the summary, so the ZIP holds the summary (a ZIP made first would leave it out).
+    const summaryWritten = body.indexOf(`'${c}_summary.md').write_text(`);
+    expect(summaryWritten, `${c}: the cell writes the summary file`).toBeGreaterThan(-1);
+    expect(zipAt, `${c}: the archive is written after the summary`).toBeGreaterThan(summaryWritten);
+    // The ZIP sits beside evidence/, not inside it: the checker allows only .md, .csv and .png in the folder.
+    expect(body, `${c}: the summary tells the reader which file to attach`).toContain(`\`${c}_evidence.zip\``);
+    expect(
+      nb.cells.some((x) => /^\s*import\s+(?:[\w.]+\s*,\s*)*zipfile\b/m.test(text(x))),
+      `${c}: zipfile is imported`,
+    ).toBe(true);
+    expect(
+      nb.cells.some((x) => /^\s*import\s+(?:[\w.]+\s*,\s*)*os\b/m.test(text(x))),
+      `${c}: os is imported (the archive step calls os.replace)`,
+    ).toBe(true);
+    for (const old of ['CSV and PNG files beside it', 'CSV files beside it', 'plan files beside it']) {
+      for (const [i, x] of nb.cells.entries()) expect(text(x), `${c}: cell ${i} still says "${old}"`).not.toContain(old);
+    }
+  });
+
+  it('C-10: the never-upload warning names the ZIP, not the summary', () => {
+    const calls = runCode(readNotebook('C-10')).flatMap((x) => printCalls(text(x)));
+    const warning = calls.find((p) => /never upload/i.test(p) && /\battach\b/i.test(p));
+    expect(warning, 'a never-upload print call that says what to attach').toBeDefined();
+    expect(warning).toContain('C-10_evidence.zip');
+    expect(warning).not.toMatch(/Attach this summary only/);
+  });
+});
+
 describe('NB-AC-09 (floor): each notebook uses the methods SRS 10.5.2 names', () => {
   const NAMES: Record<Control, string[]> = {
     'C-03': ['chisquare'],
