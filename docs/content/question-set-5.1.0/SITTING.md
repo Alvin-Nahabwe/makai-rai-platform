@@ -4,8 +4,8 @@
 
 You answered this pack on 11 November 2026 at 19:43 EAT. Your answers, in your words:
 
-- "5.1.0 sitting pack: Accept all."
-- On the two optional edits: "Apply both (Recommended)."
+- "5.1.0 sitting pack: Accept all".
+- On the two optional edits: "Apply both (Recommended)".
 
 What was applied:
 

@@ -97,7 +97,7 @@ describe('content 5.1.0, the draft for the owner', () => {
     expect(keys.filter((k, i) => keys.indexOf(k) !== i)).toEqual([]);
   });
 
-  it('every row is pending, or accepted with its final text; the draft shows each final as proposed', () => {
+  it('every row has a known decision, and a row accepted or still pending carries its proposed text as final', () => {
     for (const c of changes) {
       expect(['pending', 'accept', 'edit', 'decline'], c.row).toContain(c.decision);
       if (c.decision === 'pending') expect(c.final, c.row).toBe(c.to);
@@ -139,8 +139,8 @@ describe('content 5.1.0, the draft for the owner', () => {
 
   it("the two edited texts end as the owner chose, and pass the length and claim checks", () => {
     const edited = new Map(changes.filter((c) => c.decision === 'edit').map((c) => [c.id, c.final]));
-    expect(edited.get('Q-PP-05')?.endsWith('this question asks about those rights, and a separate question asks about particular groups.')).toBe(true);
-    expect(edited.get('Q-PP-24')?.endsWith('for example through multi-stakeholder consultation.')).toBe(true);
+    expect(edited.get('Q-PP-05')).toBe('Some harms fall on everyone the system touches, such as a lost chance to appeal or a withheld service; this question asks about those rights, and a separate question asks about particular groups.');
+    expect(edited.get('Q-PP-24')).toBe('A team whose members share one background misses the same things, so it needs to know which perspectives are missing and bring them in, for example through multi-stakeholder consultation.');
     for (const t of edited.values()) {
       expect(claimMatches(t)).toEqual([]);
       // whyAsked: 1 to 300 characters and at most two sentences (lib/content/validate.ts:577, QC-01).
@@ -158,10 +158,8 @@ describe('content 5.1.0, the draft for the owner', () => {
     expect(validate(false)).toEqual([]);
   });
 
-  it('with completeness on, the only problems are the seven missing sign-offs (QC-01 lengths hold)', () => {
-    const problems = validate(true);
-    expect(problems.filter((p) => !/^5\.1\.0: sign-off [\w:-]+: no record$/.test(p))).toEqual([]);
-    expect(problems).toHaveLength(7);
+  it('with completeness on, all seven batches are signed and nothing is left to report (QC-01 lengths hold)', () => {
+    expect(validate(true)).toEqual([]);
   });
 
   it('no 5.1.0 rendered field holds a claim word that is not already in 5.0.0 at the same place, and no changed field holds one', () => {
