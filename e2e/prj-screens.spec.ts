@@ -5,6 +5,7 @@ import { HOSTILE_STRINGS } from '../__tests__/helpers/hostile';
 import {
   addAcceptedRisk, addFinding, addMitigationVersion, addProject, buildOrg, type FixtureAccount, type OrgFixture,
 } from '../__tests__/helpers/recordFixture';
+import { testDb } from '../__tests__/helpers/db';
 import type { Stage } from '../types/record';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { failOnDialog } from './helpers/dialogs';
@@ -330,7 +331,15 @@ test('NFR-SEC-11 FR-PRJ-01: hostile project text shows as text on S-08, S-10 and
 const SENTINELS: Record<Stage, number> = { 'pre-processing': 41, 'in-processing': 28, 'post-processing': 13 };   // in-processing gets one more below, with the mitigation   // open findings per stage after the extra in-processing finding below (28 + 1 = 29); the sum, 83, must appear nowhere
 test('FR-RM-04 UX-06 UX-07: each stage count on S-10 and S-08 is a whole number in text, none is a percentage or a total, and the labels are neutral', async ({ browser }) => {
   test.setTimeout(120_000);
+  const sentinels = { 'pre-processing': [41], 'in-processing': [29], 'post-processing': [13] };
+  const sum = Object.values(sentinels).reduce((n, [count]) => n + count, 0);
   const sentinelOrg = await buildOrg({ label: 'prjsent' });
+  // S-10 prints the organisation's name in its breadcrumb, and the name carries buildOrg's random run id, whose digits
+  // can be the sum (about one id in 150 holds a whole "83"). The name is the test's own text, so the check is told to
+  // leave it out (`ownText`). Here the name always holds the sum, so a run that stops leaving it out fails every time.
+  const orgName = `${sentinelOrg.org.name} (${sum})`;
+  await testDb.organization.update({ where: { id: sentinelOrg.org.id }, data: { name: orgName } });
+  const own = { ownText: [orgName, sentinelOrg.org.slug] };
   const project = await addProject(sentinelOrg, { name: 'Sentinel counts' });
   for (const [stage, n] of Object.entries(SENTINELS)) {
     for (let i = 0; i < n; i += 1) await addFinding(sentinelOrg, project.id, { stage: stage as Stage, source: 'team' });
@@ -340,10 +349,24 @@ test('FR-RM-04 UX-06 UX-07: each stage count on S-10 and S-08 is a whole number 
   // The owner owns one mitigation that is not yet due, so S-08 has a status label to check.
   await addMitigationVersion(sentinelOrg, (await addFinding(sentinelOrg, project.id, { stage: 'in-processing', source: 'team' })).id, { status: 'planned', owner: 'owner', dueDate: '2099-01-01' });
   const page = await signedIn(browser, sentinelOrg.members.owner);
-  const sentinels = { 'pre-processing': [41], 'in-processing': [29], 'post-processing': [13] };
-  for (const p of [`/orgs/${sentinelOrg.org.slug}/projects/${project.id}`, `/orgs/${sentinelOrg.org.slug}/dashboard`]) {
+  const s10 = `/orgs/${sentinelOrg.org.slug}/projects/${project.id}`;
+  for (const p of [s10, `/orgs/${sentinelOrg.org.slug}/dashboard`]) {
     await page.goto(p);
-    await expectCountsAsWholeNumbersPerStage(page, sentinels);
+    if (p === s10) await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toContainText(orgName);
+    await expectCountsAsWholeNumbersPerStage(page, sentinels, own);
     await expectNeutralStatusLabels(page);
   }
+  // Only the name is left out: the three counts added up and written into S-10 beside it are still found. Hydration can
+  // land after load and drop an element React did not render, so the element is written again until the check has read it.
+  await page.goto(s10);
+  await expect(async () => {
+    await page.locator('main').first().evaluate((main, n) => {
+      if (main.querySelector('#planted-total')) return;
+      const p = document.createElement('p');
+      p.id = 'planted-total';
+      p.textContent = `${n} open findings`;
+      main.append(p);
+    }, sum);
+    await expect(expectCountsAsWholeNumbersPerStage(page, sentinels, own)).rejects.toThrow(new RegExp(`the sum ${sum} of three stages' counts appears: "[^"]*${sum} open findings"`));
+  }).toPass({ timeout: 10_000 });
 });
