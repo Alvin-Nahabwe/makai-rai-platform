@@ -159,7 +159,15 @@ async function checkFixture(r: PerfSeedResult, out: string, scale: PerfScale) {
   // no seat of the organisation keeps the builder's shared password, the three seats outside the manifest included
   const seatIds = (await testDb.membership.findMany({ where: { orgId: org }, select: { userId: true } })).map((x) => x.userId);
   expect(seatIds).toHaveLength(13);                                           // the builder's five and the eight further admins
-  for (const u of await testDb.user.findMany({ where: { id: { in: seatIds } } })) expect(await compare(pw, u.passwordHash!), u.email).toBe(true);
+  // Every seat's hash is checked, with one compare for each distinct hash: bcryptjs runs on this thread and a compare at
+  // the seeder's cost of 12 takes a quarter of a second, and the seeder writes one hash to every seat. A seat that held a
+  // hash of its own would get its own compare.
+  const accepts = new Map<string, boolean>();
+  for (const u of await testDb.user.findMany({ where: { id: { in: seatIds } } })) {
+    const stored = u.passwordHash!;
+    if (!accepts.has(stored)) accepts.set(stored, await compare(pw, stored));
+    expect(accepts.get(stored), u.email).toBe(true);
+  }
   const lines = summaryLines(r);
   expect(lines[0]).toBe(`perf-fixture: org=${slug} projects=${scale.projects} questions=${q} decision_versions=${scale.versionsPerQuestion * q * scale.projects}`
     + ` findings=${scale.findingsPerProject * scale.projects} evidence=${scale.evidenceFilesPerProject * scale.projects} seals=${scale.sealsPerStage * scale.stages.length * scale.projects}`);

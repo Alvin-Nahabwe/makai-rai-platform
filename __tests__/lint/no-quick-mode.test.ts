@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { execSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 
 /**
  * D-012 was closed once while the feature was still half-present, and the
@@ -60,7 +61,8 @@ describe('quick assessment mode is gone', () => {
       .filter((f) => f !== '__tests__/lint/no-quick-mode.test.ts');
     const offenders: string[] = [];
     for (const f of files) {
-      const src = execSync(`cat ${JSON.stringify(f)}`).toString();
+      // Read in this process: a child process for each tracked file takes seconds on a busy machine.
+      const src = readFileSync(f, 'utf8');
       const allowed = new Set(JUSTIFIED_SELF_REFERENCES[f] ?? []);
       for (const { name, pattern } of RETIRED_IDENTIFIERS) {
         if (allowed.has(name)) continue;

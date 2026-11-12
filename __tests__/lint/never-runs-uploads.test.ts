@@ -63,8 +63,21 @@ function codeFiles(dir: string): string[] {
  * The code of a file with its comments left out. Each token keeps its own text; the
  * trivia before it (spaces, newlines, comments) becomes one space, or nothing when there
  * was none, so `new Function(` stays one piece and a comment never reaches the pattern.
+ *
+ * Kept per path for the run: the cases apply several patterns to the same files, and parsing is
+ * the slow step, so each file is parsed once. No file a case scans changes after its first read.
  */
+const codeByFile = new Map<string, string>();
 function codeOf(file: string): string {
+  let code = codeByFile.get(file);
+  if (code === undefined) {
+    code = parseCode(file);
+    codeByFile.set(file, code);
+  }
+  return code;
+}
+
+function parseCode(file: string): string {
   const text = readFileSync(file, 'utf8');
   const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
   let out = '';
