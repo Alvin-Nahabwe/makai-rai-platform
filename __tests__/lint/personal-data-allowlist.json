@@ -210,6 +210,7 @@
   {"table":"organization_agreements","column":"recordedAt","maps":"no personal data"},
   {"table":"organization_agreements","column":"recordedById","maps":"Organisation agreements"},
   {"table":"organization_agreements","column":"textHash","maps":"no personal data"},
+  {"table":"organizations","column":"legalName","maps":"no personal data"},
   {"table":"password_reset_tokens","column":"createdAt","maps":"Accounts"},
   {"table":"password_reset_tokens","column":"expiresAt","maps":"Accounts"},
   {"table":"password_reset_tokens","column":"id","maps":"Accounts"},

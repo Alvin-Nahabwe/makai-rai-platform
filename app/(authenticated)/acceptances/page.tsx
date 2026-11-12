@@ -16,7 +16,10 @@ export const metadata: Metadata = { title: 'Acceptances - MAK-AI RAI Platform' }
 export default async function AcceptancesPage() {
   const identity = await requireIdentity();
   const missing = await missingAcceptances(identity.userId);
-  const texts = missing.length > 0 ? missing.map((k) => currentLegalText(k)) : await offeredAcceptances(identity.userId);
+  const shown = missing.length > 0 ? missing.map((k) => currentLegalText(k)) : await offeredAcceptances(identity.userId);
+  // The form shows each text's version and date, links its words on S-06 and posts only kind and version, so the words
+  // stay on the server: serialised props reach the client payload (S-04 does the same, invitations/[token]/page.tsx).
+  const texts = shown.map((t) => ({ ...t, text: '' }));
   if (texts.length === 0) redirect('/');
   const mode = missing.length > 0 ? 'required' : 'offer';
   return (

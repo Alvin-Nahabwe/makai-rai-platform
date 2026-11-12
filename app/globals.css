@@ -132,6 +132,7 @@
   --form-field-border: #767C88;           /* 4.19:1 on --surface-card (D-1, needs 3:1) */
   --link: var(--color-primary);           /* text links, 5.59:1 or better (D-3, needs 4.5:1) */
   --focus-ring: var(--color-primary);     /* the 3-pixel ring (D-3, needs 3:1) */
+  --sidebar-toggle-bar: var(--color-white); /* the phone menu button's bars, on --color-navy in both themes (needs 3:1) */
   --stage-fg: var(--tint-brand-fg);       /* stage labels (D-5, needs 4.5:1) */
   --stage-bg: var(--tint-brand-bg);
 
@@ -389,7 +390,7 @@ h5 { font-size: var(--font-size-lg); }
   color: var(--tint-moderate-fg);
 }
 
-/* The warning tint of UX-06: "Overdue", "Owner cannot act" and "No agreement recorded" only (the label word, never the phrase). */
+/* The warning tint of UX-06: "Overdue", "Owner cannot act" and "Legal name not recorded" only (the label word, never the phrase). */
 .status-label--warning {
   background-color: var(--tint-moderate-bg);
   color: var(--tint-moderate-fg);
@@ -795,6 +796,7 @@ input:focus-visible {
 .admin-table-wrapper {
   overflow-x: auto;
   padding: 0;
+  container-type: inline-size;
 }
 
 .admin-table {
@@ -839,6 +841,89 @@ input:focus-visible {
   display: flex;
   gap: var(--space-2);
   align-items: center;
+}
+
+/* Tables that carry row actions (members, invitations, accounts) stack each row in a narrow card, so the actions
+   stay on the screen instead of past the wrapper's scrolling edge. The column headings stay in the accessibility
+   tree (clipped, not display:none) and each cell shows its own heading as a label.
+   `--stack` stacks under 600px of card width (members, invitations); `--stack-wide` under 800px, for the accounts
+   table, whose six columns need about 781px. The two blocks carry the same declarations. */
+@container (width < 600px) {
+  .admin-table--stack,
+  .admin-table--stack tbody,
+  .admin-table--stack tr,
+  .admin-table--stack td {
+    display: block;
+  }
+  .admin-table--stack caption {
+    display: block;
+  }
+  .admin-table--stack thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .admin-table--stack tr {
+    border-bottom: 1px solid var(--color-gray-300);
+    padding-block: var(--space-2);
+  }
+  .admin-table--stack td {
+    border-bottom: 0;
+    padding-block: var(--space-1);
+    overflow-wrap: anywhere;
+  }
+  .admin-table--stack td[data-label]::before {
+    content: attr(data-label) ": ";
+    content: attr(data-label) ": " / "";
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-muted);
+  }
+  .admin-table--stack .admin-table__actions {
+    display: flex;
+    flex-wrap: wrap;
+  }
+}
+
+@container (width < 800px) {
+  .admin-table--stack-wide,
+  .admin-table--stack-wide tbody,
+  .admin-table--stack-wide tr,
+  .admin-table--stack-wide td {
+    display: block;
+  }
+  .admin-table--stack-wide caption {
+    display: block;
+  }
+  .admin-table--stack-wide thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .admin-table--stack-wide tr {
+    border-bottom: 1px solid var(--color-gray-300);
+    padding-block: var(--space-2);
+  }
+  .admin-table--stack-wide td {
+    border-bottom: 0;
+    padding-block: var(--space-1);
+    overflow-wrap: anywhere;
+  }
+  .admin-table--stack-wide td[data-label]::before {
+    content: attr(data-label) ": ";
+    content: attr(data-label) ": " / "";
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-muted);
+  }
+  .admin-table--stack-wide .admin-table__actions {
+    display: flex;
+    flex-wrap: wrap;
+  }
 }
 
 /* ── Small buttons for admin actions ── */
@@ -935,6 +1020,19 @@ input:focus-visible {
   flex-direction: column;
   gap: var(--space-1);
   padding: var(--space-4) var(--space-3);
+}
+
+/* The organisation chooser on a light card (app/page.tsx): .sidebar-link is for the dark sidebar. */
+.chooser-link {
+  display: block;
+  padding: var(--space-3) var(--space-4);
+  font-weight: var(--font-weight-semibold);
+  color: var(--link);
+  border-radius: var(--border-radius-md);
+}
+
+.chooser-link:hover {
+  background-color: var(--surface-raised);
 }
 
 .sidebar-link {
@@ -1301,7 +1399,7 @@ input:focus-visible {
     display: block;
     width: 100%;
     height: 2px;
-    background: var(--surface-card);
+    background: var(--sidebar-toggle-bar);
     border-radius: 1px;
     transition: all var(--transition-fast);
   }

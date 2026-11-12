@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { execSync } from 'node:child_process';
+import { execSync, spawnSync } from 'node:child_process';
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
@@ -423,5 +423,88 @@ describe('sign-offs and completeness', () => {
     expect(v.match(/readFileSync\((?!\/\*turbopackIgnore: true\*\/)/g) ?? []).toEqual([]);
     expect(v).not.toMatch(/computeVersionBundleHash|contentRoot\(/);
     expect(execSync('grep -rln "@/lib/content/validate" app components lib --include=*.ts --include=*.tsx || true').toString().trim()).toBe('');
+  });
+});
+
+/**
+ * The sign-off script names the version it signs (`--version`, required): a run that omits it, or names a version
+ * data/content/index.json does not list, writes nothing, and so does a run with the content test seam open. The script
+ * reads and writes under its working directory (`loadContent` reads `<cwd>/data/content`), so each case runs it in a
+ * temporary repository holding H0's fixture bundle as 5.0.0 and as 5.1.0, never in this one.
+ */
+describe('the sign-off command', () => {
+  const REPO = process.cwd();
+  function signOffRepo(): string {
+    const root = tempDir();
+    for (const v of ['5.0.0', '5.1.0']) cpSync(join(FIXTURES, '0.0.1-fixture'), join(root, 'data', 'content', v), { recursive: true });
+    write(join(root, 'data', 'content', 'index.json'), { running: '5.0.0', versions: ['5.0.0', '5.1.0'] });
+    return root;
+  }
+  function signOff(root: string, args: string[], seam: Record<string, string> = {}): { status: number | null; out: string } {
+    const env: NodeJS.ProcessEnv = { ...process.env, NO_COLOR: '1' };
+    for (const k of ['FORCE_COLOR', 'MAKRAI_TEST_SEAMS', 'MAKRAI_CONTENT_ROOT']) delete env[k];
+    Object.assign(env, seam);
+    const r = spawnSync(join(REPO, 'node_modules', '.bin', 'tsx'), ['--tsconfig', join(REPO, 'tsconfig.json'), join(REPO, 'scripts', 'content', 'sign-off.ts'), ...args],
+      { cwd: root, encoding: 'utf8', env, timeout: 60_000 });
+    // Without its stack frames: vitest reads a source map for every frame in a failure message, and tsx's frames have none it can read.
+    return { status: r.status, out: `${r.stdout}${r.stderr}`.split('\n').filter((l) => !/^\s+at /.test(l)).join('\n') };
+  }
+  const bytes = (root: string, v: string) => readFileSync(join(root, 'data', 'content', v, 'signoffs.json'), 'utf8');
+  const SIGN = ['--batch', 'pre-processing', '--at', AT];
+
+  it('FR-CNT-02: without --version the command writes nothing and asks for it', () => {
+    const root = signOffRepo();
+    const before = [bytes(root, '5.0.0'), bytes(root, '5.1.0')];
+    const r = signOff(root, SIGN);
+    expect(r.status).not.toBe(0);
+    expect(r.out).toMatch(/--version/);
+    expect([bytes(root, '5.0.0'), bytes(root, '5.1.0')]).toEqual(before);
+  });
+
+  it('FR-CNT-02: --version names a version index.json lists, or the command writes nothing', () => {
+    const root = signOffRepo();
+    const before = [bytes(root, '5.0.0'), bytes(root, '5.1.0')];
+    const r = signOff(root, ['--version', '9.9.9', ...SIGN]);
+    expect(r.status).not.toBe(0);
+    expect(r.out).toContain('9.9.9 is not listed in data/content/index.json');
+    expect([bytes(root, '5.0.0'), bytes(root, '5.1.0')]).toEqual(before);
+  });
+
+  it('FR-CNT-02: an empty or path-like --version is refused and the command writes nothing', () => {
+    const root = signOffRepo();
+    const before = [bytes(root, '5.0.0'), bytes(root, '5.1.0')];
+    for (const v of ['', '../x', '5.1.0/../5.0.0']) {
+      const r = signOff(root, ['--version', v, ...SIGN]);
+      expect(r.status, v).not.toBe(0);
+      expect(r.out, v).toContain('is not listed in data/content/index.json');
+    }
+    expect([bytes(root, '5.0.0'), bytes(root, '5.1.0')]).toEqual(before);
+  });
+
+  it('FR-CNT-02: with the content test seam open the command refuses to run and writes nothing', () => {
+    // An accepted seam: <cwd>/__tests__/fixtures/content holding a 5.1.0 whose texts differ from data/content's. Without
+    // the refusal the record would be hashed from the seam's bundle and appended to data/content/5.1.0/signoffs.json.
+    const root = signOffRepo();
+    const seamRoot = join(root, '__tests__', 'fixtures', 'content');
+    cpSync(join(FIXTURES, '0.0.1-fixture'), join(seamRoot, '5.1.0'), { recursive: true });
+    write(join(seamRoot, 'index.json'), { running: '5.1.0', versions: ['5.1.0'] });
+    editQuestion(join(seamRoot, '5.1.0'), 'Q-PP-01', (q) => ({ ...q, text: 'A stem only the seam holds?' }));
+    const before = [bytes(root, '5.0.0'), bytes(root, '5.1.0'), readFileSync(join(seamRoot, '5.1.0', 'signoffs.json'), 'utf8')];
+    const r = signOff(root, ['--version', '5.1.0', ...SIGN], { MAKRAI_TEST_SEAMS: '1', MAKRAI_CONTENT_ROOT: seamRoot });
+    expect(r.status).not.toBe(0);
+    expect(r.out).toContain('MAKRAI_TEST_SEAMS');
+    expect([bytes(root, '5.0.0'), bytes(root, '5.1.0'), readFileSync(join(seamRoot, '5.1.0', 'signoffs.json'), 'utf8')]).toEqual(before);
+  });
+
+  it('FR-CNT-02: --version 5.1.0 appends the record to data/content/5.1.0/signoffs.json, and 5.0.0 is untouched', () => {
+    const root = signOffRepo();
+    const dir = join(root, 'data', 'content', '5.1.0');
+    editQuestion(dir, 'Q-PP-01', (q) => ({ ...q, text: 'A stem that only 5.1.0 holds?' }));   // so the record can only be 5.1.0's
+    const old = bytes(root, '5.0.0');
+    const r = signOff(root, ['--version', '5.1.0', ...SIGN]);
+    expect(r.status, r.out).toBe(0);
+    expect(bytes(root, '5.0.0')).toBe(old);
+    const p = signOffPayload(loadDir(dir), 'pre-processing');
+    expect(json(join(dir, 'signoffs.json')).records).toEqual([{ batch: 'pre-processing', approver: 'Product owner, MAK-AI', at: AT, sha256: signOffHash(p), items: signOffItems(p) }]);
   });
 });

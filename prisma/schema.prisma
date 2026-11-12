@@ -301,6 +301,8 @@ model Organization {
   id        String   @id @default(uuid())
   name      String
   slug      String   @unique
+  /// The institution's legal name; null for an organisation from before v0.6.1 with no agreement record to copy from.
+  legalName String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   deletedAt DateTime?

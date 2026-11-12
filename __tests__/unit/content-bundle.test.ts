@@ -1,8 +1,9 @@
 import { afterAll, describe, expect, it } from 'vitest';
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { validateContentVersion } from '@/lib/content/validate';
+import { proposalStatus, withApprovedCopy } from '../content/helpers/draft-proposal';
 
 /**
  * The structure of the versioned content directory (SRS 10.1.1, ADR-C9; contract "Content bundle").
@@ -29,8 +30,16 @@ describe('content bundle structure', () => {
     expect(idx.versions).toContain(v);
     for (const ver of idx.versions as string[]) {
       const proposal = `docs/content/question-set-${ver}/proposal.json`;
-      expect(validateContentVersion(`${C}/${ver}`, { baselineDir: 'data', proposalFile: existsSync(proposal) ? proposal : null, completeness: false }), ver).toEqual([]);
+      const check = (file: string | null) => validateContentVersion(`${C}/${ver}`, { baselineDir: 'data', proposalFile: file, completeness: false });
+      const status = proposalStatus(proposal);
+      expect(['approved', 'checked'], `${ver}: its proposal status is ${String(status)}`).toContain(status === null ? 'approved' : status);
+      // A draft awaiting the owner's sitting has a proposal that says 'checked'; its content is checked through an approved copy.
+      if (status === 'checked') expect(withApprovedCopy(proposal, check), ver).toEqual([]);
+      else expect(check(status === null ? null : proposal), ver).toEqual([]);
     }
+  });
+  it('the running version has a committed proposal that says approved (a draft can be listed, never run)', () => {
+    expect(proposalStatus(`docs/content/question-set-${v}/proposal.json`)).toBe('approved');
   });
   it('FR-CNT-01 NFR-SEC-11: every control resource link of every listed version is https', () => {
     // Every version index.json lists, not only the running one: S-13 shows an older version's wording and links.

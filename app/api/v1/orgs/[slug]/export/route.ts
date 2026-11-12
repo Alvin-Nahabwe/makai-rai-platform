@@ -3,6 +3,7 @@ import { requireOrgContextWithIdentity } from '@/lib/auth/context';
 import { openTeamExport, releaseTeamExport, writeTeamExport } from '@/lib/data/export';
 import { AppError } from '@/lib/http/errors';
 import { exportRefusalLocation } from '@/lib/http/exportRefusal';
+import { isNavigation, navigationRefusal } from '@/lib/http/navigationRefusal';
 import { toResponse } from '@/lib/http/toResponse';
 import { publicOrigin } from '@/lib/publicOrigin';
 
@@ -128,10 +129,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
       throw e;
     }
   } catch (e) {
-    if (e instanceof AppError && e.code === 'export_busy' && req.headers.get('sec-fetch-mode') === 'navigate') {
+    if (e instanceof AppError && e.code === 'export_busy' && isNavigation(req)) {
       const redirect = refusalRedirect(slug, projectId);
       if (redirect !== null) return redirect;
     }
-    return toResponse(e);
+    return navigationRefusal(req, e) ?? toResponse(e);
   }
 }

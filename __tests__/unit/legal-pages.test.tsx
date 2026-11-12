@@ -14,6 +14,8 @@ import { HOSTILE_STRINGS } from '../helpers/hostile';
  * are the shipped version-1 files. Hashes are computed here from the files' bytes, independently of the registry.
  */
 const privacyHistory = vi.hoisted(() => ({ versions: [] as LegalTextVersion[], fixture: [] as LegalTextVersion[] }));
+/** One case gives the retired agreement a second version, to show the retired note and the earlier-version note never meet. */
+const agreementHistory = vi.hoisted(() => ({ versions: null as LegalTextVersion[] | null }));
 vi.mock('@/lib/legal/registry', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/legal/registry')>();
   const fixture = actual.loadLegalRegistry('__tests__/fixtures/legal').get('privacy');
@@ -21,21 +23,32 @@ vi.mock('@/lib/legal/registry', async (importOriginal) => {
   privacyHistory.fixture = [...fixture];
   privacyHistory.versions = [...fixture];
   const privacy = () => privacyHistory.versions;
+  const swapped = (kind: LegalTextVersion['kind']): LegalTextVersion[] | null =>
+    kind === 'privacy' ? privacy() : kind === 'organisation-agreement' ? agreementHistory.versions : null;
   return {
     ...actual,
-    currentLegalText: (kind: LegalTextVersion['kind']) =>
-      kind === 'privacy' ? privacy()[privacy().length - 1] : actual.currentLegalText(kind),
-    legalTextHistory: (kind: LegalTextVersion['kind']) =>
-      kind === 'privacy' ? [...privacy()] : actual.legalTextHistory(kind),
-    legalTextVersion: (kind: LegalTextVersion['kind'], version: string) =>
-      kind === 'privacy' ? (privacy().find((t) => t.version === version) ?? null) : actual.legalTextVersion(kind, version),
+    currentLegalText: (kind: LegalTextVersion['kind']) => {
+      const history = swapped(kind);
+      return history === null ? actual.currentLegalText(kind) : history[history.length - 1];
+    },
+    legalTextHistory: (kind: LegalTextVersion['kind']) => {
+      const history = swapped(kind);
+      return history === null ? actual.legalTextHistory(kind) : [...history];
+    },
+    legalTextVersion: (kind: LegalTextVersion['kind'], version: string) => {
+      const history = swapped(kind);
+      return history === null ? actual.legalTextVersion(kind, version) : (history.find((t) => t.version === version) ?? null);
+    },
   };
 });
 afterEach(() => {
   privacyHistory.versions = [...privacyHistory.fixture];
+  agreementHistory.versions = null;
 });
+const { LEGAL_KINDS, currentLegalText, legalTextHistory, legalTextVersion } = await import('@/lib/legal/registry');
 const actualRegistry = await vi.importActual<typeof import('@/lib/legal/registry')>('@/lib/legal/registry');
 
+const { RETIRED_NOTE } = await import('@/lib/legal/kinds');
 const KindModule = await import('@/app/(public)/legal/[kind]/page');
 const VersionModule = await import('@/app/(public)/legal/[kind]/[version]/page');
 const { LegalTextView } = await import('@/components/legal/LegalTextView');
@@ -112,12 +125,52 @@ describe('S-06 /legal/[kind] and /legal/[kind]/[version]', () => {
     expect(current).toContain('href="/legal/privacy"');
   });
 
+  it('FR-ACC-02: the retired organisation agreement says it is no longer used, on its kind page and its version page', async () => {
+    // The owner's sentence, word for word. It holds no link and no section number: terms version 1, current under this
+    // change alone, has no section on organisations, so the note must be true before and after the new texts are published.
+    const sentence = 'This agreement is no longer used. MAK-AI does not ask organisations to sign it.';
+    expect(RETIRED_NOTE['organisation-agreement']).toBe(sentence);
+    for (const html of [await kindPage('organisation-agreement'), await versionPage('organisation-agreement', '1')]) {
+      const notes = [...html.matchAll(/<p[^>]*role="note"[^>]*>(.*?)<\/p>/g)].map((m) => m[1]);
+      expect(notes).toEqual([sentence]);
+      expect(notes[0]).not.toMatch(/<a[\s>]|href|section|\d/i);
+      expect(html).not.toContain('This is an earlier version.');
+      // Outside the block that holds the text's own words, so the claim-word and no-score checks still read it.
+      expect(html.indexOf(sentence)).toBeLessThan(html.indexOf('data-legal-text'));
+    }
+  });
+
+  it('FR-ACC-02: an older version of the retired agreement shows the retired note and not the earlier-version note', async () => {
+    const [v1] = actualRegistry.legalTextHistory('organisation-agreement');
+    agreementHistory.versions = [v1, { ...v1, version: '2', publishedOn: '2027-01-04', sha256: 'ef'.repeat(32), text: 'A second version.\n' }];
+    const html = await versionPage('organisation-agreement', '1');
+    expect([...html.matchAll(/role="note"/g)]).toHaveLength(1);
+    expect(html).toContain(RETIRED_NOTE['organisation-agreement']);
+    expect(html).not.toContain('This is an earlier version.');
+  });
+
+  it('FR-ACC-02: the other kinds carry no retired note', async () => {
+    for (const html of [await kindPage('terms'), await kindPage('privacy'), await versionPage('privacy', '2'), await versionPage('privacy', '1')]) {
+      expect(html).not.toContain('no longer used');
+    }
+    expect(await versionPage('privacy', '1')).toContain('This is an earlier version.');
+  });
+
   it('FR-ACC-02: an unknown kind or a traversal version answers 404', async () => {
     for (const version of ['..%2Fterms%2F1', '../terms/1', '9', '01', 'constructor', '__proto__', '']) {
       await expect(versionPage('privacy', version), version).rejects.toThrow(NOT_FOUND);
     }
-    // A version another kind has is not a version of this kind.
-    await expect(versionPage('terms', '2')).rejects.toThrow(NOT_FOUND);
+    // A version another kind has is not a version of this kind. Privacy is given a version far past any real one, so
+    // terms lacks it however many versions terms is later published with; the premise is asserted, not assumed.
+    const ahead = '9999';
+    privacyHistory.versions = [...privacyHistory.fixture, { ...privacyHistory.fixture[1], version: ahead }];
+    expect(legalTextVersion('privacy', ahead), 'privacy has the version').not.toBeNull();
+    expect(legalTextVersion('terms', ahead), 'terms lacks it').toBeNull();
+    await expect(versionPage('privacy', ahead)).resolves.toContain(`Version ${ahead}`);
+    await expect(versionPage('terms', ahead)).rejects.toThrow(NOT_FOUND);
+    // A version past the newest one of the kind is not a version of it; the newest is the registry's, so a published
+    // terms version 2 moves this case to 3 without an edit.
+    await expect(versionPage('terms', String(Number(currentLegalText('terms').version) + 1))).rejects.toThrow(NOT_FOUND);
     for (const kind of ['x', 'Privacy', 'terms ', 'constructor', '__proto__', 'hasOwnProperty', '..']) {
       await expect(kindPage(kind), kind).rejects.toThrow(NOT_FOUND);
       await expect(versionPage(kind, '1'), kind).rejects.toThrow(NOT_FOUND);
@@ -130,13 +183,10 @@ describe('S-06 /legal/[kind] and /legal/[kind]/[version]', () => {
     expect(await KindModule.generateStaticParams()).toEqual([
       { kind: 'terms' }, { kind: 'privacy' }, { kind: 'cross-border-consent' }, { kind: 'organisation-agreement' },
     ]);
-    expect(await VersionModule.generateStaticParams()).toEqual([
-      { kind: 'terms', version: '1' },
-      { kind: 'privacy', version: '1' },
-      { kind: 'privacy', version: '2' },
-      { kind: 'cross-border-consent', version: '1' },
-      { kind: 'organisation-agreement', version: '1' },
-    ]);
+    // Generated from the registry's history, oldest first: a published version joins the list without an edit here.
+    expect(await VersionModule.generateStaticParams()).toEqual(
+      LEGAL_KINDS.flatMap((kind) => legalTextHistory(kind).map((t) => ({ kind, version: t.version }))),
+    );
   });
 
   it('FR-ACC-02: past versions are listed newest first, without the current one', async () => {
@@ -166,25 +216,40 @@ describe('S-06 /legal/[kind] and /legal/[kind]/[version]', () => {
   });
 
   it('FR-ACC-02: a kind with one version lists no past versions', async () => {
-    const html = await kindPage('terms');
+    // The retired organisation agreement is the one kind that still has a single version (version 1, as published).
+    const html = await kindPage('organisation-agreement');
     const past = html.slice(html.indexOf('<h2>Past versions</h2>'));
     expect(past).toContain('<p>None</p>');
-    expect(past).not.toContain('href="/legal/terms/');
-    expect(html).toContain('href="/legal/terms/1"');
+    expect(past).not.toContain('href="/legal/organisation-agreement/');
+    expect(html).toContain('href="/legal/organisation-agreement/1"');
   });
 
-  it('FR-ACC-02: each kind is headed by its 7.5.7 name, and its hash is the SHA-256 of its shipped file', async () => {
+  it('FR-ACC-02: a kind with two versions lists version 1 as a past version, with its link, and not the current version', async () => {
+    for (const kind of ['terms', 'cross-border-consent'] as const) {
+      const html = await kindPage(kind);
+      const past = html.slice(html.indexOf('<h2>Past versions</h2>'));
+      expect(past, kind).not.toContain('<p>None</p>');
+      expect(past, kind).toContain(`href="/legal/${kind}/1"`);
+      expect(past, kind).toContain('Version 1, published 2 Nov 2026');
+      expect(past, kind).not.toContain(`href="/legal/${kind}/2"`);
+      expect(html, kind).toContain(`href="/legal/${kind}/2"`);
+    }
+  });
+
+  it('FR-ACC-02: each kind is headed by its 7.5.7 name, and the hash shown is the SHA-256 of the file of its current version', async () => {
+    // The page of a kind shows its CURRENT text: version 2 of the three accepted kinds (12 November 2026), and version 1
+    // of the retired agreement (2 November 2026). Each hash is computed here from that file's bytes.
     const names = {
-      terms: 'Terms of service',
-      'cross-border-consent': 'Cross-border storage consent',
-      'organisation-agreement': 'Organisation agreement',
+      terms: ['Terms of service', '2', '12 Nov 2026'],
+      'cross-border-consent': ['Consent to storage abroad', '2', '12 Nov 2026'],
+      'organisation-agreement': ['Organisation agreement', '1', '2 Nov 2026'],
     } as const;
-    for (const [kind, heading] of Object.entries(names)) {
+    for (const [kind, [heading, version, day]] of Object.entries(names)) {
       const html = await kindPage(kind);
       expect(html.match(/<h1[ >]/g), kind).toHaveLength(1);
       expect(html).toMatch(new RegExp(`<h1[^>]*>${heading}</h1>`));
-      expect(html).toContain(groupsOfFour(sha(`data/legal/${kind}/1.md`)));
-      expect(html).toContain('Version 1, published 2 Nov 2026');
+      expect(html).toContain(groupsOfFour(sha(`data/legal/${kind}/${version}.md`)));
+      expect(html).toContain(`Version ${version}, published ${day}`);
     }
     expect(await kindPage('privacy')).toMatch(/<h1[^>]*>Privacy notice<\/h1>/);
   });
@@ -194,6 +259,32 @@ describe('S-06 /legal/[kind] and /legal/[kind]/[version]', () => {
     const shown = /<code[^>]*>([^<]*)<\/code>/.exec(html)?.[1];
     expect(shown).toBe(groupsOfFour(PRIVACY_V2.sha256));
     expect(shown).toMatch(/^[0-9a-f]{4}( [0-9a-f]{4}){15}$/);
+  });
+
+  it('FR-PUB-01: only the text block of S-06 carries data-legal-text', () => {
+    const text: LegalTextVersion = {
+      kind: 'terms', version: '3', publishedOn: '2027-01-05', acceptance: 'offered', sha256: 'ab'.repeat(32),
+      text: '## Our promise\n\nWe certify the words of this stub.\n\nA second paragraph.\n',
+    };
+    const html = renderToStaticMarkup(<LegalTextView text={text} />);
+    expect(html.match(/data-legal-text/g), 'one marked element').toHaveLength(1);
+    const at = html.indexOf('data-legal-text');
+    const open = html.lastIndexOf('<', at);
+    const close = html.lastIndexOf('</div>');
+    const marked = html.slice(open, close + '</div>'.length);
+    const outside = html.slice(0, open) + html.slice(close + '</div>'.length);
+    expect(marked.startsWith('<div ')).toBe(true);
+    expect(marked).toContain('We certify the words of this stub.');
+    expect(marked).toContain('<h2>Our promise</h2>');
+    // Nothing but the stub's blocks, in order: interface copy added inside the block, before or after them, fails here.
+    const inner = marked.slice(marked.indexOf('>') + 1, marked.length - '</div>'.length);
+    expect(inner).toBe('<h2>Our promise</h2><p>We certify the words of this stub.</p><p>A second paragraph.</p>');
+    // The page's heading, the version line and the fingerprint are interface copy: they stay outside.
+    for (const part of ['<h1', 'Version 3, published 5 Jan 2027', groupsOfFour('ab'.repeat(32)), 'SHA-256']) {
+      expect(marked, part).not.toContain(part);
+      expect(outside, part).toContain(part);
+    }
+    expect(outside).not.toContain('certify');
   });
 
   it('FR-ACC-02: the text is one paragraph per blank-line-separated block, and keeps its single line breaks', () => {
