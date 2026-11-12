@@ -2,8 +2,9 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { LegalTextKind } from '@/types/legal';
+import { RETIRED_NOTE, isRetiredKind } from '@/lib/legal/kinds';
 import { LEGAL_KINDS, currentLegalText, legalKindFrom, legalTextHistory } from '@/lib/legal/registry';
-import { LEGAL_LINK_STYLE, LEGAL_PAGE_STYLE, LegalTextView, legalTextHeading, versionLine } from '@/components/legal/LegalTextView';
+import { LEGAL_LINK_STYLE, LEGAL_NOTE_STYLE, LEGAL_PAGE_STYLE, LegalTextView, legalTextHeading, versionLine } from '@/components/legal/LegalTextView';
 
 /**
  * S-06, one kind (FR-ACC-02, SRS line 479): the current version of the text and the list of its past versions,
@@ -38,6 +39,11 @@ export default async function LegalKindPage({ params }: { params: Params }) {
   const past = legalTextHistory(kind).slice(0, -1).reverse();
   return (
     <div style={LEGAL_PAGE_STYLE}>
+      {isRetiredKind(kind) && (
+        <p role="note" style={LEGAL_NOTE_STYLE}>
+          {RETIRED_NOTE[kind]}
+        </p>
+      )}
       <LegalTextView text={current} />
       <p style={{ marginTop: 'var(--space-6)' }}>
         <Link href={`/legal/${kind}/${current.version}`} style={LEGAL_LINK_STYLE}>

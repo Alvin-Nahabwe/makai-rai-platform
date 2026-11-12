@@ -1,17 +1,22 @@
 [
   {
+    "name": "Hetzner",
+    "receives": "The server that runs the platform and holds its database: all accounts, records and evidence files.",
+    "where": "Helsinki, Finland"
+  },
+  {
+    "name": "Hetzner Storage Box",
+    "receives": "Copies of the database backups.",
+    "where": "Finland"
+  },
+  {
     "name": "Cloudflare",
-    "receives": "Web traffic to and from the platform. Cloudflare terminates TLS and so sees traffic in clear at its edge.",
-    "where": "Cloudflare's edge network"
+    "receives": "All web traffic between your browser and the platform, including your IP address and the pages, records and files you send and receive. Cloudflare can read this traffic as it passes.",
+    "where": "Cloudflare's data centres around the world, usually the one nearest to you"
   },
   {
     "name": "Resend",
-    "receives": "The email messages the platform sends, with the recipient's address.",
+    "receives": "The emails the platform sends, with the recipient's email address.",
     "where": "United States"
-  },
-  {
-    "name": "Off-site backup store",
-    "receives": "Copies of the database backups.",
-    "where": "The backup provider's storage, named by the owner"
   }
 ]

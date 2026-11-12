@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHash, randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { Client } from 'pg';
 import { testDb, resetDb } from '../helpers/db';
 import { addIssuedDocument, addProject, addSealRow, addStageReview, buildOrg, buildPlatformAdmin, type FixtureAccount, type OrgFixture } from '../helpers/recordFixture';
@@ -14,7 +15,7 @@ import { createOrgContext } from '../../lib/data/tenant';
 import { ROUTE_ACTIONS } from '../../lib/authz/routeActions';
 import { requestDigest } from '../../lib/data/idempotency';
 import { organisationIdFor } from '../../lib/data/definer';
-import type { CreateOrganisationResponse, AgreementInput } from '../../types/api';
+import type { CreateOrganisationResponse } from '../../types/api';
 
 /**
  * Routes 41 to 46, the MAK-AI administrator's organisation actions (FR-ORG-01, 02, 03, 05, 06, 09, 10; contract
@@ -24,17 +25,12 @@ import type { CreateOrganisationResponse, AgreementInput } from '../../types/api
 
 const R41 = 'app/api/admin/organisations/route.ts';
 const R42 = 'app/api/admin/organisations/[orgId]/route.ts';
-const R43 = 'app/api/admin/organisations/[orgId]/agreements/route.ts';
+const R43_GONE = 'app/api/admin/organisations/[orgId]/agreements/route.ts';   // route 43 is retired: nothing serves it
 const R44 = 'app/api/admin/organisations/[orgId]/owner-invitations/route.ts';
 const R45 = 'app/api/admin/organisations/[orgId]/owner-invitations/[invitationId]/resend/route.ts';
 const R46 = 'app/api/admin/organisations/[orgId]/owner-invitations/[invitationId]/revoke/route.ts';
 
 const sha256 = (b: Buffer | string) => createHash('sha256').update(b).digest('hex');
-/** The stub organisation agreement every test file's registry serves (__tests__/setup/legal.ts). */
-const AGREEMENT_INPUT: AgreementInput = {
-  agreementVersion: '1', textHash: sha256('Stub organisation-agreement v1 for tests only.'), acceptedOn: '2026-10-30',
-  controllerLegalName: 'Makerere University', dpContactEmail: 'dpo@fixture.test',
-};
 
 let admin: FixtureAccount;
 let fx: OrgFixture;
@@ -44,10 +40,6 @@ const post41 = (body: object) => {
   return callRoute(R41, 'POST', { slug: '', body: { requestId: randomUUID(), ...body } });
 };
 const patch42 = (orgId: string, body: unknown) => { sessionAs(admin.userId); return callRoute(R42, 'PATCH', { slug: '', params: { orgId }, body }); };
-const post43 = (orgId: string, body: object) => {
-  sessionAs(admin.userId);
-  return callRoute(R43, 'POST', { slug: '', params: { orgId }, body: { requestId: randomUUID(), ...body } });
-};
 const post44 = (orgId: string, body: unknown) => { sessionAs(admin.userId); return callRoute(R44, 'POST', { slug: '', params: { orgId }, body }); };
 const post45 = (orgId: string, invitationId: string, body: Record<string, unknown>) => {
   sessionAs(admin.userId);
@@ -56,7 +48,7 @@ const post45 = (orgId: string, invitationId: string, body: Record<string, unknow
 const post46 = (orgId: string, invitationId: string) => { sessionAs(admin.userId); return callRoute(R46, 'POST', { slug: '', params: { orgId, invitationId } }); };
 
 const valid = (over: Record<string, unknown> = {}) => ({
-  name: `Makerere CAI Lab ${randomUUID().slice(0, 6)}`, agreement: AGREEMENT_INPUT, ownerEmail: `head-${randomUUID().slice(0, 6)}@fixture.test`, showLink: false, ...over,
+  name: `Makerere CAI Lab ${randomUUID().slice(0, 6)}`, legalName: 'Makerere University', ownerEmail: `head-${randomUUID().slice(0, 6)}@fixture.test`, showLink: false, ...over,
 });
 /** The raw token at the end of an accept link. */
 const tokenOf = (acceptUrl: string | null) => {
@@ -94,12 +86,12 @@ beforeEach(async () => {
 });
 
 describe('route 41: create an organisation', () => {
-  it('FR-ORG-01: S-24 with all fields creates one organisation, one agreement and one pending owner invitation', async () => {
+  it('FR-ORG-01: S-24 with all fields creates one organisation with its legal name, no agreement and one pending owner invitation', async () => {
     const body = valid({ name: 'Makerere CAI Lab', showLink: true });
     const r = await post41(body);
     expect(r.status).toBe(201);
     const b = await r.json() as CreateOrganisationResponse;
-    expect(await counts(b.orgId)).toEqual({ organizations: 1, organization_agreements: 1, invitations: 1 });
+    expect(await counts(b.orgId)).toEqual({ organizations: 1, organization_agreements: 0, invitations: 1 });
     expect(b.slug).toBe('makerere-cai-lab');
     expect(b.invitation).toMatchObject({ kind: 'first_owner', state: 'pending', role: 'owner', linkShown: true, email: body.ownerEmail });
     expect(Object.keys(b).sort()).toEqual(['acceptUrl', 'emailSent', 'invitation', 'orgId', 'slug']);
@@ -109,13 +101,11 @@ describe('route 41: create an organisation', () => {
     expect(inv.tokenHash).toBe(hashInvitationToken(tokenOf(b.acceptUrl)));
     const days = (inv.expiresAt.getTime() - inv.createdAt.getTime()) / 86_400_000;
     expect(days).toBeGreaterThan(6.99); expect(days).toBeLessThan(7.01);
-    const agreement = await testDb.organisationAgreement.findFirstOrThrow({ where: { orgId: b.orgId } });
-    expect(agreement).toMatchObject({ agreementVersion: '1', textHash: AGREEMENT_INPUT.textHash, controllerLegalName: 'Makerere University', recordedById: admin.userId });
+    expect(await testDb.organization.findUniqueOrThrow({ where: { id: b.orgId } })).toMatchObject({ legalName: 'Makerere University' });
   });
 
-  it('FR-ORG-01: when the invitation insert is forced to fail, no organisation and no agreement exist', async () => {
+  it('FR-ORG-01: when the invitation insert is forced to fail, no organisation exists', async () => {
     const fn = `org_test_fail_${randomUUID().replace(/-/g, '').slice(0, 8)}`;
-    const agreements = await testDb.organisationAgreement.count();
     await testDb.$executeRawUnsafe(`CREATE FUNCTION ${fn}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'forced'; END $$`);
     await testDb.$executeRawUnsafe(`CREATE TRIGGER ${fn} BEFORE INSERT ON invitations FOR EACH ROW EXECUTE FUNCTION ${fn}()`);
     const body = valid();
@@ -126,7 +116,6 @@ describe('route 41: create an organisation', () => {
       await testDb.$executeRawUnsafe(`DROP FUNCTION ${fn}()`);
     }
     expect(await testDb.organization.count({ where: { name: body.name } })).toBe(0);
-    expect(await testDb.organisationAgreement.count()).toBe(agreements);
   });
 
   it('FR-ORG-01 FR-ORG-02: with no public origin configured, routes 41, 44 and 45 fail before anything is written, so no link is lost', async () => {
@@ -147,7 +136,7 @@ describe('route 41: create an organisation', () => {
     sessionAs(fx.members.owner.userId);
     const r = await callRoute(R41, 'POST', { slug: '', body: valid() });
     expect({ status: r.status, code: (await r.json()).code }).toEqual({ status: 403, code: 'not_platform_admin' });
-    for (const [file, method, params] of [[R42, 'PATCH', { orgId: fx.org.id }], [R43, 'POST', { orgId: fx.org.id }], [R44, 'POST', { orgId: fx.org.id }],
+    for (const [file, method, params] of [[R42, 'PATCH', { orgId: fx.org.id }], [R44, 'POST', { orgId: fx.org.id }],
       [R45, 'POST', { orgId: fx.org.id, invitationId: randomUUID() }], [R46, 'POST', { orgId: fx.org.id, invitationId: randomUUID() }]] as const) {
       expect((await callRoute(file, method as Method, { slug: '', params, body: {} })).status, file).toBe(403);
     }
@@ -156,20 +145,15 @@ describe('route 41: create an organisation', () => {
     expect(await rowCounts()).toEqual(before);
   });
 
-  it('FR-ORG-01: the create form validates every field and refuses an accepted date in the future (422, nothing written)', async () => {
+  it('FR-ORG-01: the create form validates every field (422, nothing written)', async () => {
     const before = await rowCounts();
     const cases: Array<[Record<string, unknown>, string]> = [
       [{ name: '' }, 'name'],
       [{ name: 'x'.repeat(101) }, 'name'],
       [{ ownerEmail: 'not-an-address' }, 'ownerEmail'],
       [{ showLink: 'yes' }, 'showLink'],
-      [{ agreement: { ...AGREEMENT_INPUT, acceptedOn: '2999-01-01' } }, 'agreement.acceptedOn'],
-      [{ agreement: { ...AGREEMENT_INPUT, acceptedOn: '2026-02-30' } }, 'agreement.acceptedOn'],
-      [{ agreement: { ...AGREEMENT_INPUT, agreementVersion: '9' } }, 'agreement.agreementVersion'],
-      [{ agreement: { ...AGREEMENT_INPUT, textHash: sha256('another text') } }, 'agreement.textHash'],
-      [{ agreement: { ...AGREEMENT_INPUT, controllerLegalName: ' ' } }, 'agreement.controllerLegalName'],
-      [{ agreement: { ...AGREEMENT_INPUT, dpContactEmail: 'nope' } }, 'agreement.dpContactEmail'],
-      [{ agreement: null }, 'agreement'],
+      [{ legalName: ' ' }, 'legalName'],
+      [{ legalName: 'x'.repeat(201) }, 'legalName'],
     ];
     for (const [over, field] of cases) {
       const r = await post41(valid(over));
@@ -278,24 +262,18 @@ describe('routes 44 to 46: first-owner invitations', () => {
   });
 });
 
-describe('routes 42 and 43: name correction and agreements', () => {
-  it('FR-ORG-06: an organisation with no agreement keeps working until one is recorded', async () => {
+describe('route 42 and the retired route 43: name correction', () => {
+  it('FR-ORG-06: an organisation with no agreement keeps working, and nothing serves route 43 any more', async () => {
     const fx2 = await buildOrg({ label: 'no-agreement', withAgreement: false });
-    expect((await listOrganisationsForAdmin()).find((r) => r.orgId === fx2.org.id)!.currentAgreementVersion).toBeNull();
+    expect((await listOrganisationsForAdmin()).find((r) => r.orgId === fx2.org.id)!.legalName).toBeNull();
     const file = 'app/api/v1/orgs/[slug]/projects/[id]/decisions/route.ts';
     sessionAs(fx2.members.assessor.userId);
     const ids = await idsOf(fx2, file);
     const saved = await callRoute(file, 'POST', { slug: fx2.org.slug, params: ids, ...validRequestFor(file, 'POST', ids) });
     expect([200, 201]).toContain(saved.status);
-    const r = await post43(fx2.org.id, AGREEMENT_INPUT);
-    expect(r.status).toBe(201);
-    const view = await r.json();
-    expect(view).toMatchObject({ agreementVersion: '1', acceptedOn: '2026-10-30', controllerLegalName: 'Makerere University', dpContactEmail: 'dpo@fixture.test', textHash: AGREEMENT_INPUT.textHash });
-    expect(Object.keys(view).sort()).toEqual(['acceptedOn', 'agreementVersion', 'controllerLegalName', 'dpContactEmail', 'id', 'recordedAt', 'textHash']);
-    expect((await listOrganisationsForAdmin()).find((r) => r.orgId === fx2.org.id)!.currentAgreementVersion).toBe('1');
-    const bad = await post43(fx2.org.id, { ...AGREEMENT_INPUT, agreementVersion: '7' });
-    expect(bad.status).toBe(422);
-    expect((await post43(randomUUID(), AGREEMENT_INPUT)).status).toBe(404);
+    // Route 43 (POST .../agreements) is gone: no module to serve it and no authorisation entry, so Next answers 404.
+    expect(existsSync(R43_GONE)).toBe(false);
+    expect(Object.keys(ROUTE_ACTIONS)).not.toContain(R43_GONE);
   });
 
   it('FR-ORG-10 (C4 ORG-SF-4): correcting a name to the name it already has answers 200 and writes nothing', async () => {
@@ -324,8 +302,7 @@ describe('routes 42 and 43: name correction and agreements', () => {
   });
 });
 
-describe('routes 41, 43 and 45: retry-safe by request id (NFR-INT-02, owner answer A1)', () => {
-  const agreementCount = (orgId: string) => testDb.organisationAgreement.count({ where: { orgId } });
+describe('routes 41 and 45: retry-safe by request id (NFR-INT-02, owner answer A1)', () => {
   const receipts = (orgId: string) => testDb.requestReceipt.count({ where: { orgId } });
   const events = (orgId: string, action: string) => testDb.organisationEvent.count({ where: { orgId, action } });
   /** A receipt as another writer would have left it, written as the table owner (RLS does not bind it). */
@@ -418,7 +395,7 @@ describe('routes 41, 43 and 45: retry-safe by request id (NFR-INT-02, owner answ
         orgId, email: body.ownerEmail, role: 'owner', kind: 'first_owner', tokenHash: sha256(randomUUID()), invitedById: admin.userId,
         expiresAt: new Date(Date.now() + 86_400_000),
       } });
-      const parsed = { requestId, name: body.name, agreement: body.agreement, ownerEmail: body.ownerEmail, showLink: body.showLink };
+      const parsed = { requestId, name: body.name, legalName: body.legalName, ownerEmail: body.ownerEmail, showLink: body.showLink };
       await testDb.requestReceipt.create({ data: { orgId, requestId, requestDigest: requestDigest({ path: {}, body: parsed }), actorUserId: actor, route, rowId: invitation.id } });
       return { body, orgId, invitationId: invitation.id };
     };
@@ -468,46 +445,6 @@ describe('routes 41, 43 and 45: retry-safe by request id (NFR-INT-02, owner answ
     expect((await first.json()).orgId).not.toBe(organisationIdFor(next.userId, requestId));
   });
 
-  it('NFR-INT-02 FR-ORG-05: a replay of route 43 answers the first agreement and writes one row', async () => {
-    const body = { ...AGREEMENT_INPUT, requestId: randomUUID() };
-    const before = await agreementCount(fx.org.id);
-    const first = await post43(fx.org.id, body);
-    expect(first.status).toBe(201);
-    const firstBody = await first.json();
-    const again = await post43(fx.org.id, body);
-    expect(again.status).toBe(200);
-    expect(await again.json()).toEqual(firstBody);
-    expect(await agreementCount(fx.org.id)).toBe(before + 1);
-    expect(await events(fx.org.id, 'agreement_recorded')).toBe(1);
-    expect(await receipts(fx.org.id)).toBe(1);
-  });
-
-  it('NFR-INT-02: route 43 with a used request id and a changed body answers 409 request_id_reused and writes nothing', async () => {
-    const requestId = randomUUID();
-    expect((await post43(fx.org.id, { ...AGREEMENT_INPUT, requestId })).status).toBe(201);
-    const before = await rowCounts();
-    const r = await post43(fx.org.id, { ...AGREEMENT_INPUT, controllerLegalName: 'Another Controller', requestId });
-    expect({ status: r.status, code: (await r.json()).code }).toEqual({ status: 409, code: 'request_id_reused' });
-    expect(await rowCounts()).toEqual(before);
-  });
-
-  it('NFR-INT-02: a double submit of route 43 held at the receipt lock writes one agreement', async () => {
-    const body = { ...AGREEMENT_INPUT, requestId: randomUUID() };
-    const before = await agreementCount(fx.org.id);
-    const [a, b] = await whileLockHeld(fx.org.id, body.requestId, () => [post43(fx.org.id, body), post43(fx.org.id, body)]);
-    expect([a.status, b.status].sort()).toEqual([200, 201]);
-    expect((await a.json()).id).toBe((await b.json()).id);
-    expect(await agreementCount(fx.org.id)).toBe(before + 1);
-    expect(await receipts(fx.org.id)).toBe(1);
-  });
-
-  it('NFR-INT-02: route 43 without a request id answers 422 on that field', async () => {
-    sessionAs(admin.userId);
-    const r = await callRoute(R43, 'POST', { slug: '', params: { orgId: fx.org.id }, body: AGREEMENT_INPUT });
-    const b = await r.json();
-    expect({ status: r.status, field: b.fields?.some((f: { field: string }) => f.field === 'requestId') }).toEqual({ status: 422, field: true });
-  });
-
   it('NFR-INT-02 FR-ORG-02: a replay of route 45 answers the first invitation, with no link, and writes one new invitation', async () => {
     const org = await created();
     const requestId = randomUUID();
@@ -545,25 +482,19 @@ describe('routes 41, 43 and 45: retry-safe by request id (NFR-INT-02, owner answ
     expect(await testDb.requestReceipt.count({ where: { orgId: org.orgId, route: { not: R41_KEY } } })).toBe(1);
   });
 
-  it('NFR-INT-02 (C4 SEC-1, ORG-SF-3): a receipt of another actor or another route under the same request id and digest answers 409 on routes 43 and 45, and nothing is written', async () => {
+  it('NFR-INT-02 (C4 SEC-1, ORG-SF-3): a receipt of another actor or another route under the same request id and digest answers 409 on route 45, and nothing is written', async () => {
     const org = await created();
     const MEMBER_ROUTE = 'app/api/v1/orgs/[slug]/members/route.ts::POST';
-    const R43_KEY = 'app/api/admin/organisations/[orgId]/agreements/route.ts::POST';
     const R45_KEY = 'app/api/admin/organisations/[orgId]/owner-invitations/[invitationId]/resend/route.ts::POST';
-    const cases: Array<{ name: string; actor: string; route43: string; route45: string }> = [
-      { name: 'another actor', actor: fx.members.owner.userId, route43: R43_KEY, route45: R45_KEY },
-      { name: 'another route', actor: admin.userId, route43: MEMBER_ROUTE, route45: MEMBER_ROUTE },
+    const cases: Array<{ name: string; actor: string; route45: string }> = [
+      { name: 'another actor', actor: fx.members.owner.userId, route45: R45_KEY },
+      { name: 'another route', actor: admin.userId, route45: MEMBER_ROUTE },
     ];
     for (const c of cases) {
-      const id43 = randomUUID();
-      const body43 = { ...AGREEMENT_INPUT, requestId: id43 };
-      await seedReceipt(org.orgId, id43, requestDigest({ path: { orgId: org.orgId }, body: body43 }), c.actor, c.route43);
       const id45 = randomUUID();
       const body45 = { requestId: id45, showLink: false };
       await seedReceipt(org.orgId, id45, requestDigest({ path: { orgId: org.orgId, invitationId: org.invitation.id }, body: body45 }), c.actor, c.route45);
       const before = await rowCounts();
-      const r43 = await post43(org.orgId, body43);
-      expect({ case: c.name, status: r43.status, code: (await r43.json()).code }).toEqual({ case: c.name, status: 409, code: 'request_id_reused' });
       const r45 = await post45(org.orgId, org.invitation.id, body45);
       expect({ case: c.name, status: r45.status, code: (await r45.json()).code }).toEqual({ case: c.name, status: 409, code: 'request_id_reused' });
       expect(await rowCounts(), c.name).toEqual(before);
@@ -585,15 +516,15 @@ describe('the administrator and the organisations', () => {
   it('FR-ORG-09: each administrator route writes one row per affected organisation', async () => {
     const before = await testDb.organisationEvent.count();
     const org = await created();                                                   // organisation_created
-    expect((await post43(org.orgId, AGREEMENT_INPUT)).status).toBe(201);          // agreement_recorded
     const resent = await (await post45(org.orgId, org.invitation.id, { showLink: false })).json();   // owner_invitation_resent
     expect((await post46(org.orgId, resent.invitation.id)).status).toBe(204);     // owner_invitation_revoked
     expect((await post44(org.orgId, { email: 'next@fixture.test', requestReference: 'CTRL-9', showLink: false })).status).toBe(201);   // owner_invitation_issued
     expect((await patch42(org.orgId, { name: 'Renamed Lab' })).status).toBe(200); // organisation_name_corrected
+    expect((await patch42(org.orgId, { legalName: 'Renamed University' })).status).toBe(200); // organisation_legal_name_corrected
     // `at` is the database clock to the millisecond, so two routes answered in one millisecond tie and the order is not
     // the property here (one row per route is): compare the actions as a sorted multiset.
     const rows = await testDb.organisationEvent.findMany({ where: { orgId: org.orgId } });
-    expect(rows.map((e) => e.action).sort()).toEqual(['organisation_created', 'agreement_recorded', 'owner_invitation_resent', 'owner_invitation_revoked', 'owner_invitation_issued', 'organisation_name_corrected'].sort());
+    expect(rows.map((e) => e.action).sort()).toEqual(['organisation_created', 'owner_invitation_resent', 'owner_invitation_revoked', 'owner_invitation_issued', 'organisation_name_corrected', 'organisation_legal_name_corrected'].sort());
     expect(rows.every((e) => e.actorRole === 'platform_admin' && e.actorId === admin.userId)).toBe(true);
     expect(await testDb.organisationEvent.count()).toBe(before + 6);
   });
@@ -604,11 +535,11 @@ describe('the administrator and the organisations', () => {
     const { lines } = await captureLogs(async () => {
       const r = await post41(valid({ name, ownerEmail, showLink: true }));
       const org = await r.json() as CreateOrganisationResponse;
-      await post43(org.orgId, AGREEMENT_INPUT);
       const resent = await (await post45(org.orgId, org.invitation.id, { showLink: true })).json();
       await post46(org.orgId, resent.invitation.id);
       await post44(org.orgId, { email: `${markerFor('issueEmail', 2)}@fixture.test`, requestReference: markerFor('reference', 3), showLink: true });
       await patch42(org.orgId, { name: `Renamed ${markerFor('orgName', 4)}` });
+      await patch42(org.orgId, { legalName: `Legal ${markerFor('orgName', 5)}` });
     });
     expect(scanLines(lines, { markers: true, emails: true })).toEqual([]);
     expect(lines.filter((l) => l.includes('ADMIN_ACTION')).length).toBeGreaterThanOrEqual(6);

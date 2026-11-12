@@ -482,7 +482,12 @@ A backup on the machine that holds the database is lost with it.
 every night at 00:30 UTC, half an hour after the backup.
 
 **What is copied.** Only `makrai-*.sql.gz.gpg`, over `rsync` on SSH port 23, with
-`--delete`, so the box holds what the host holds: 30 days.
+`--delete`, so the box holds what the host holds: about 31 days while nightly backups succeed (the
+backup script deletes a file once `find -mtime +30` matches it, which is 31 whole days,
+`ops/host/makrai-backup.sh:15,238`, and only after a verified backup, `:235-238`). The box's own
+daily snapshots, 10 kept (`ops/host/README.md:278-279`), hold a deleted file about 10 more days, so
+the last copy goes after about 41 to 42 days. The operating documents use 43 as a safe upper bound
+(`ops/host/makrai-rotate-secrets.sh:1792`).
 
 - The files are already encrypted (§1.2) and the passphrase is not copied. **An
   off-site copy opens only if the passphrase is kept somewhere other than this

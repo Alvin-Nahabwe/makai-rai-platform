@@ -50,6 +50,15 @@ export const LEGAL_PAGE_STYLE: CSSProperties = {
   padding: 'var(--space-12) var(--space-6)',
 };
 
+/** The tinted band of S-06's notes (the retired agreement's, the earlier version's), above the text and outside its block. */
+export const LEGAL_NOTE_STYLE: CSSProperties = {
+  marginBottom: 'var(--space-6)',
+  padding: 'var(--space-3) var(--space-4)',
+  background: 'var(--tint-moderate-bg)',
+  color: 'var(--tint-moderate-fg)',
+  borderRadius: 'var(--border-radius-sm)',
+};
+
 /**
  * A link on its own line: underlined (7.6.3 D-4, links are not shown by colour alone) and at least 24 CSS
  * pixels tall (UX-34, WCAG 2.5.8). Pixels, not rem: the root font is 14 pixels on narrow screens until 7.6.3
@@ -74,7 +83,12 @@ export function LegalTextView({ text }: { text: LegalTextVersion }): ReactElemen
           </code>
         </dd>
       </dl>
+      {/* data-legal-text: body text inside this block, and only that, is skipped by the claim-word crawl
+          (e2e/claims-crawl.spec.ts), and only on S-06's two routes (owner ruling R1, 11 Nov 2026). The heading, version line
+          and fingerprint above, spoken attributes inside the block and the consent labels stay checked. Nothing else
+          reads it: not the unit check (it reads ACCEPT_LABEL, not the texts) and not the no-score check (e2e/helpers/noScore.ts). */}
       <div
+        data-legal-text
         style={{
           display: 'flex',
           flexDirection: 'column',

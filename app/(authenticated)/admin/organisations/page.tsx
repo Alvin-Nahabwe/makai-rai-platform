@@ -15,8 +15,8 @@ const STATE_WORDS: Readonly<Record<InvitationState, string>> = {
 
 /**
  * S-23, the MAK-AI administrator's organisations (FR-ORG-03, FR-ORG-06, FR-ORG-07; SRS line 571 and 7.4.2,
- * line 2387). Each row names the organisation, its creation date, its current agreement version, its
- * member count and its first-owner invitation state, and flags in words an organisation with no agreement
+ * line 2387). Each row names the organisation, its creation date, its institution's legal name, its
+ * member count and its first-owner invitation state, and flags in words an organisation with no legal name
  * recorded or no active owner. It reads `lib/data/admin.ts` only, which reaches no record table, so the
  * page cannot show a project, a decision or a count of records (NFR-SEC-04 (b)).
  *
@@ -46,7 +46,7 @@ export default async function OrganisationsPage({ searchParams }: { searchParams
       </div>
       {rows.length === 0 ? (
         <>
-          <p>No organisations yet. Create one after its agreement is signed.</p>
+          <p>No organisations yet.</p>
           <ListLink href="/admin/organisations/new" className="btn btn--primary">Create organisation</ListLink>
         </>
       ) : (
@@ -57,7 +57,7 @@ export default async function OrganisationsPage({ searchParams }: { searchParams
               <tr>
                 <th scope="col">Organisation</th>
                 <th scope="col">Created</th>
-                <th scope="col">Current agreement</th>
+                <th scope="col">Legal name</th>
                 <th scope="col">Members</th>
                 <th scope="col">First-owner invitation</th>
               </tr>
@@ -71,7 +71,7 @@ export default async function OrganisationsPage({ searchParams }: { searchParams
                     {r.hasActiveOwner ? null : <><br /><strong>No active owner</strong></>}
                   </td>
                   <td>{formatDay(r.createdAt, 'Africa/Kampala')}</td>
-                  <td>{r.currentAgreementVersion === null ? <strong>No agreement recorded</strong> : `Version ${r.currentAgreementVersion}`}</td>
+                  <td>{r.legalName === null ? <strong>Legal name not recorded</strong> : r.legalName}</td>
                   <td>{r.memberCount}</td>
                   <td>{r.ownerInvitationState === null ? 'None' : STATE_WORDS[r.ownerInvitationState]}</td>
                 </tr>

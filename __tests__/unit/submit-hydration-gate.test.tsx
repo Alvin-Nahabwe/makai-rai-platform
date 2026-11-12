@@ -22,7 +22,7 @@ const { ForgotPasswordView, ForgotPasswordClient } = await import('@/app/(public
 const { ResetPasswordView } = await import('@/app/(public)/reset-password/ResetPasswordClient');
 const { ChangePasswordView, ChangePasswordForm } = await import('@/app/(authenticated)/change-password/ChangePasswordForm');
 const { NewAccountView, default: AcceptInvitationClient } = await import('@/app/(public)/invitations/[token]/AcceptInvitationClient');
-const { CreateOrganisationFormView, CreateOrganisationForm, EMPTY_AGREEMENT } = await import('@/components/admin/CreateOrganisationForm');
+const { CreateOrganisationFormView, CreateOrganisationForm } = await import('@/components/admin/CreateOrganisationForm');
 const { IssueInvitationFormView } = await import('@/components/admin/OwnerInvitationBox');
 
 const noop = () => {};
@@ -35,7 +35,6 @@ const NewAccount = (over: Record<string, unknown>) => (
     texts={STUB_LEGAL_TEXTS.slice()} viewerEmail={null} step="details" name="" password="" showPassword={false} errors={{}} send={{ state: 'idle' }}
     onName={noop} onPassword={noop} onToggleShow={noop} onContinue={noop} onAccepted={async () => {}} onRetry={noop} {...over} />);
 
-const VERSIONS = [{ version: '1', publishedOn: '2026-10-20', sha256: 'a'.repeat(64) }];
 const views: Array<[string, (over: Record<string, unknown>) => React.ReactElement]> = [
   ['S-01 sign in', (o) => <LoginView email="" password="" showPassword={false} error="" notice={null} loading={false}
     onEmail={noop} onPassword={noop} onToggleShow={noop} onSubmit={noop} {...o} />],
@@ -45,8 +44,8 @@ const views: Array<[string, (over: Record<string, unknown>) => React.ReactElemen
   ['S-29 change password', (o) => <ChangePasswordView currentPassword="" newPassword="" show={false} state={{ kind: 'idle' }}
     onCurrent={noop} onNew={noop} onToggleShow={noop} onSubmit={noop} {...o} />],
   ['S-04 create account', (o) => NewAccount(o)],
-  ['S-24 create organisation', (o) => <CreateOrganisationFormView draft={{ ...EMPTY_AGREEMENT, name: '', ownerEmail: '', showLink: false }} errors={{}}
-    versions={VERSIONS} status="" busy={false} result={null} onChange={noop} onSubmit={noop} onRetry={noop} {...o} />],
+  ['S-24 create organisation', (o) => <CreateOrganisationFormView draft={{ name: '', legalName: '', ownerEmail: '', showLink: false }} errors={{}}
+    status="" busy={false} result={null} onChange={noop} onSubmit={noop} onRetry={noop} {...o} />],
   ['S-24 issue first-owner invitation', (o) => <IssueInvitationFormView formId="f" draft={{ email: '', requestReference: '', showLink: false }}
     errors={{}} busy={false} onDraft={noop} onSubmit={noop} onCancel={noop} {...o} />],
 ];
@@ -72,7 +71,7 @@ describe('containers pass the hydration state to their view (NFR-SEC)', () => {
     ['S-29 ChangePasswordForm', () => <ChangePasswordForm />],
     ['S-04 AcceptInvitationClient (signed out)', () => <AcceptInvitationClient token={'t'.repeat(64)} invitedEmail="a@x.test" orgName="Lab" role="assessor"
       inviterName="Amina N." viewerEmail={null} viewerUserId={null} expiresOn="2026-11-09" texts={STUB_LEGAL_TEXTS.slice()} />],
-    ['S-24 CreateOrganisationForm', () => <CreateOrganisationForm versions={VERSIONS} today="2026-11-02" />],
+    ['S-24 CreateOrganisationForm', () => <CreateOrganisationForm />],
   ];
   for (const [name, element] of containers) {
     it(`NFR-SEC: ${name}: rendered whole, its submit button is disabled`, () => {
