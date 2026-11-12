@@ -1,20 +1,27 @@
 /**
- * Appends one owner sign-off record to content 5.0.0's `signoffs.json` (FR-CNT-02, SRS line 693; X2 in the brief).
- * A record is written only from the owner's answer as the controller relays it; the commit that adds it quotes that
- * answer and its time.
+ * Appends one owner sign-off record to `data/content/<version>/signoffs.json` (FR-CNT-02, SRS line 693; X2 in the
+ * brief). A record is written only from the owner's answer as the controller relays it; the commit that adds it quotes
+ * that answer and its time.
  *
- *   npx tsx scripts/content/sign-off.ts --batch <batch> --approver <text> --at <ISO instant with zone>
- *   npx tsx scripts/content/sign-off.ts --batch question-set:<stage> --from-proposal <proposal> --approver <text> --at <ISO>
+ *   npx tsx scripts/content/sign-off.ts --version <semver> --batch <batch> --approver <text> --at <ISO instant with zone>
+ *   npx tsx scripts/content/sign-off.ts --version <semver> --batch question-set:<stage> --from-proposal <proposal> --approver <text> --at <ISO>
  *
- * The record's `sha256` and `items` are `signOffHash` and `signOffItems` of `signOffPayload(loadContent('5.0.0'), batch)`
+ * `--version` is required and has no default, so a run cannot sign the wrong bundle silently; it must be listed in
+ * `data/content/index.json` versions. It reads and writes under the working directory (`<cwd>/data/content`), which is
+ * how the tests run it on a copy. It refuses to run while the content test seam is open (`MAKRAI_TEST_SEAMS=1`,
+ * lib/content/root.ts): the seam moves where content is read but not where the record is written, so a record could
+ * be hashed from fixture content and land in a real `signoffs.json`.
+ * The record's `sha256` and `items` are `signOffHash` and `signOffItems` of `signOffPayload(loadContent(version), batch)`
  * (lib/content/signoffs.ts, CNT), the same bytes the content check recomputes. With `--from-proposal`, the stage's
  * payload is first built from the proposal's approved stems in the bank's content order; any id or stem that differs
  * from the bank stops the command, and so does a hash that differs from CNT's. A record already present for the same
  * batch, approver, time and hash is not written twice.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { loadContent, questionsInStage } from '@/lib/content/loader';
+import { readContentIndex } from '@/lib/content/root';
 import { SIGN_OFF_BATCHES, signOffHash, signOffItems, signOffPayload, type SignOffBatch } from '@/lib/content/signoffs';
 import type { LoadedContent, SignOffRecord, SignOffsFile } from '@/types/content';
 import { STAGES, type Stage } from '@/types/record';
@@ -22,7 +29,6 @@ import { STAGES, type Stage } from '@/types/record';
 import { isMainModule } from './cli';
 import type { QuestionSetProposal } from './types';
 
-const SIGNOFFS_FILE = 'data/content/5.0.0/signoffs.json';
 const ZONED = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
 
 export interface Signer { approver: string; at: string }
@@ -89,20 +95,29 @@ export function appendRecord(file: SignOffsFile, r: SignOffRecord): SignOffsFile
 }
 
 function main(argv: string[]): void {
+  // Before anything is read: this script writes the owner's sign-off records.
+  if (process.env.MAKRAI_TEST_SEAMS === '1') throw new Error('sign-off: refused while MAKRAI_TEST_SEAMS=1 (the content test seam is open); unset it and run again');
   const opts = new Map<string, string>();
   for (let i = 0; i < argv.length; i += 2) {
     const k = argv[i];
     const v = argv[i + 1];
-    if (!['--batch', '--approver', '--at', '--from-proposal'].includes(k) || v === undefined || opts.has(k)) {
+    if (!['--version', '--batch', '--approver', '--at', '--from-proposal'].includes(k) || v === undefined || opts.has(k)) {
       throw new Error(`sign-off: bad argument ${JSON.stringify(k)}`);
     }
     opts.set(k, v);
   }
+  const version = opts.get('--version');
   const batch = opts.get('--batch');
   const approver = opts.get('--approver') ?? 'Product owner, MAK-AI';
   const at = opts.get('--at');
-  if (batch === undefined || at === undefined) throw new Error('usage: sign-off.ts --batch <batch> --at <ISO> [--approver <text>] [--from-proposal <file>]');
-  const c = loadContent('5.0.0');
+  if (version === undefined || batch === undefined || at === undefined) {
+    throw new Error('usage: sign-off.ts --version <semver> --batch <batch> --at <ISO> [--approver <text>] [--from-proposal <file>]');
+  }
+  // Named here, before loadContent, whose refusal is the bare code `unknown_content_version`; the path below is built
+  // only from a version the index lists and the loader has accepted as a semver.
+  if (!readContentIndex().versions.includes(version)) throw new Error(`sign-off: ${version} is not listed in data/content/index.json versions`);
+  const c = loadContent(version);
+  const signoffsFile = join('data', 'content', version, 'signoffs.json');
   const proposalFile = opts.get('--from-proposal');
   let record: SignOffRecord;
   if (proposalFile !== undefined) {
@@ -112,8 +127,8 @@ function main(argv: string[]): void {
   } else {
     record = buildRecord(c, batch as SignOffBatch, { approver, at });
   }
-  const file = JSON.parse(readFileSync(SIGNOFFS_FILE, 'utf8')) as SignOffsFile;
-  writeFileSync(SIGNOFFS_FILE, `${JSON.stringify(appendRecord(file, record), null, 2)}\n`);
+  const file = JSON.parse(readFileSync(signoffsFile, 'utf8')) as SignOffsFile;
+  writeFileSync(signoffsFile, `${JSON.stringify(appendRecord(file, record), null, 2)}\n`);
   console.log(`${record.batch} ${record.sha256} (${record.items.length} items)`);
 }
 
