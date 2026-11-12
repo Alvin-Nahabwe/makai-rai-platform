@@ -823,8 +823,9 @@ is for 0.6.0.
 For v0.6.1, one case outside the legal texts fails until that is done: the screen-reader walk
 (NFR-A11Y-07, `__tests__/lint/screen-reader-walk.test.ts:114-118`; the walk sheet
 `docs/accessibility/screen-reader-walk-v0.6.0.md` says "not yet walked"). The owner has deferred the
-walk for v0.6.1 (register D-301), so the release needs a waiver entry for 0.6.1; it is added with
-the change that raises the version.
+walk for v0.6.1 (register D-301), so the release needs a waiver entry for 0.6.1. The entry
+carries the owner's words; whoever prepares the release writes it into the file in the pull
+request that raises the version.
 
 Some end-to-end cases also read `RELEASE_CANDIDATE` (`e2e/claims-crawl.spec.ts:53,719`). No job
 runs them and no command for them has been rehearsed, so they are not part of the gate yet
@@ -948,6 +949,14 @@ page also fails, for a person who can seal, in any project that is not archived.
 question's page and a question's history still open. Run step 5 straight after step 4, so
 that the interval is short.
 
+Each refusal in that interval also writes an error line to the app's log. A refused save,
+withdrawal or seal writes one line that holds `"code":"content_not_published"`
+(`lib/http/toResponse.ts`, `lib/http/supportReference.ts`); a page that fails writes lines of
+its own. The old and the new container write under the same log name, and the post-check (8.4)
+counts the error lines of the last 10 minutes, so after such a release its third line prints
+more than `0` when someone saved, withdrew or sealed, or opened one of those pages, in the
+interval. That alone is not a failed deploy: 8.4 says how to tell the two apart.
+
 If step 3 fails (an expired credential, a mistyped digest), the running stack has not
 changed. Fix the cause and repeat step 3, or put the checkout and `.env` back to PREV
 with the first three commands of 9.2: the `checkout --detach`, `set_env WEB_IMAGE` and
@@ -972,6 +981,26 @@ else is a failed deploy: roll back (section 9) and look at the logs afterwards.
 The one expected exception is `makrai-nextjs:rollback`, which the host built and
 which carries no version label: after a rollback to it the second line prints
 `DIFFERENT`, and that is correct.
+
+A second expected exception, only for a release that carries a content version (8.3): the
+third line may print more than `0`. Do not roll back on that count alone. Print the error
+lines with their times, and the time the new container started with its restart count, all
+in UTC:
+
+```bash
+journalctl CONTAINER_TAG=makrai/docker-nextjs-1 --since -10min -p err -o short-iso-precise --utc
+docker inspect -f '{{.State.StartedAt}} restarts={{.RestartCount}}' docker-nextjs-1
+```
+
+The second line must end in `restarts=0`; any other count is a failed deploy, as above. A
+line stamped before the start time that holds `"code":"content_not_published"` was written by
+the old app while it refused in the interval between 8.3 steps 4 and 5, and is expected. Any
+other line stamped before the start time was also written by the old app (a failing page in
+that interval, or something from before step 4): read it before you decide, and do not count
+it as expected if it holds another `"code"`. A line stamped at or after the start time was
+written by the new app: that is a failed deploy, as above. The two commands were run on a
+workstation to check that their times can be compared; they have not been run on the host
+after a content release.
 
 ### 8.5 v0.6.0: the owner's steps
 
@@ -1312,14 +1341,14 @@ owner's approval (8.1 step 2). Every step on the host and every sign-in on produ
 owner's, in the owner's own session (12.1), in a terminal and a browser outside any AI session. No
 output of the host is pasted into an AI session (NFR-SEC-17). Before 8.2, on the host, run the
 "Set these once per session" block of section 8. 8.2 to 8.4 use its `cd` (for `../.env`), `$C`
-and `set_env`. Step 5 below also uses `$PGU`. Nothing here uses `unset_env`. Deploy v0.6.1 with
+and `set_env`. Step 5 of the list below also uses `$PGU`. Nothing here uses `unset_env`. Deploy v0.6.1 with
 8.1 to 8.4 as written, plus the steps below, in this order. 8.5 was v0.6.0's list and is not
 repeated. This release carries two database migrations
 (`prisma/migrations/20261112000000_v061_organisation_legal_name` and
 `prisma/migrations/20261112010000_content_5_1_0`), so 8.2's backup and 8.3 step 4 (the migrator)
-apply to it. The second registers content 5.1.0: from the end of 8.3 step 4 until the swap in step 5
-the old app refuses saves, withdrawals and seals, as 8.3 says, and 9.6 says what that means for a
-rollback.
+apply to it. The second registers content 5.1.0: from the end of 8.3 step 4 until the swap in
+8.3 step 5 the old app refuses saves, withdrawals and seals, as 8.3 says, and 9.6 says what that
+means for a rollback.
 
 1. **Before the tag (8.1).** Run the release-candidate unit cases as the paragraph "Before the v0.6.1 tag"
    in 8.1 says, and see it pass. The always-on cases check that the three accepted texts are at
@@ -1343,7 +1372,7 @@ rollback.
    list (S-23) for the name before trying again. The old create-organisation function stays
    callable until the later contract migration (`migration.sql:3-7`).
 3. **8.2, 8.3 and 8.4 as written.** When it worked, the post-check prints `200`, every service is up,
-   `0`, and `SAME` twice.
+   `0` (or only the lines 8.4's second exception calls expected), and `SAME` twice.
 4. **After the post-check, once: accept the three version-2 texts.** In the owner's own browser, sign
    in on production as the platform administrator and then as the synthetic account, and accept the
    three texts each time. The synthetic account's password comes from wherever the owner keeps it. No
@@ -1505,6 +1534,24 @@ Run the post-check in 8.4. `SAME` now means the container runs the image PREV na
 After a rollback to `makrai-nextjs:rollback` the second line prints `DIFFERENT`, as 8.4
 says it should.
 
+After a rollback of v0.6.1 to v0.6.0 the third line may print more than `0`, and that alone
+does not fail the verification. While content 5.1.0 stays registered, v0.6.0 keeps refusing
+saves, withdrawals and seals, and fails the pages 9.6 lists. Each refused request writes an
+error line, and a failing page may write lines of its own. Count the lines that are not one of
+the two refusals 9.6 describes. Run the command once 10 minutes have passed since 9.2's `up`
+returned, so that it reads only v0.6.0's lines; an earlier run also counts the lines of the
+release you rolled back from:
+
+```bash
+journalctl CONTAINER_TAG=makrai/docker-nextjs-1 --since -10min -p err -o cat | grep -vcE '"code":"(content_not_published|unknown_content_version)"'
+```
+
+It prints the count (and exits 1 when the count is `0`, which is how `grep` reports no match).
+If it is not `0`, read the lines that remain, with the same command without `c` in `-vcE`. A
+line written by one of the failing pages 9.6 lists is expected; the form of those lines has
+not been captured (register D-331), so read each one. Any other error line fails the
+verification. The filter was tried on sample lines on a workstation, not on the host.
+
 ### 9.5 v0.6.0: when to roll back, and how
 
 The rollback target of this release is v0.5.0, the last tag. The v0.5.0 application image runs
@@ -1650,7 +1697,7 @@ It prints `UPDATE N`, where N is the number of organisations that gained a name.
 **Reverting the migration itself** is only for a case where the new column or functions must go.
 It is not needed for an application rollback.
 
-**Only after 9.2, with v0.6.0's image serving and 9.4 passed.** Run while v0.6.1 still serves, the
+**Only after 9.2, with v0.6.0's image serving and 9.4 passed as 9.4 words it for this release.** Run while v0.6.1 still serves, the
 SQL drops the create-organisation function v0.6.1 calls (`lib/data/definer.ts:96`) and the
 `legalName` column it reads (`app/(authenticated)/admin/organisations/page.tsx:74`,
 `lib/data/admin.ts:301`), so creating an organisation and the organisation screens fail.
@@ -1705,12 +1752,13 @@ how the migrator treats it (register D-325).
 marks the earlier content versions (3.0.0, 3.0.1, 4.0.0 and 5.0.0) as no longer published and
 adds content 5.1.0 as the published one. It adds or drops no table or column; it updates and
 inserts rows in `framework_versions`. The release's other migration,
-`20261112000000_v061_organisation_legal_name`, adds a column and only adds; 9.5a covers it. So
-9.5's reasoning about a schema that an older image can read still holds for both. What an older image cannot cope with is the content version, in two
-ways. These effects are read from the code; they have not been rehearsed against a v0.6.0
-image.
+`20261112000000_v061_organisation_legal_name`, adds a column with a check on it, the functions
+that write it and a grant, and widens one other check; it takes away nothing the older image
+uses, and 9.5a covers it. So 9.5's reasoning about a schema that an older image can read still
+holds for both. What an older image cannot cope with is the content version, in two ways.
+These effects are read from the code; they have not been rehearsed against a v0.6.0 image.
 
-- **The v0.6.0 image refuses three actions once the migration has run: saving a decision,
+- **The v0.6.0 image refuses three actions once the content migration has run: saving a decision,
   withdrawing a decision and sealing a review.** It runs content 5.0.0, and each of these checks
   first that 5.0.0 is still the published version (`resolveRunningContentVersion` in
   `lib/data/framework.ts`). It no longer is, so the action is answered with 503
@@ -1722,7 +1770,8 @@ image.
   sees "Not saved: the server had a problem. Your answer is kept on this device. Retry." The
   answer stays as a draft on their device if the browser keeps drafts; if it does not, the
   answer is only in the open field, and the screen says so. They can save it once a v0.6.x that
-  runs 5.1.0 is back. People can still sign in. A single question's page opens (unless its
+  runs 5.1.0 is back. People can still sign in; an account created after the deploy is first
+  asked to accept the version-1 legal texts (9.5a). A single question's page opens (unless its
   current decision was saved under 5.1.0, see the next point) and so does a question's history.
   The pages named here are the only ones that make this check: nothing else in the v0.6.0 code
   does.
@@ -1740,9 +1789,9 @@ image.
   review page and the documents page that list it fail as the first point says. A question's
   history page still opens and shows such an entry without its wording. Decisions saved under
   5.0.0 show as before. The hourly synthetic journey (7.4) saves a decision in the synthetic
-  organisation, so
-  within an hour of the v0.6.1 deploy a decision exists there under 5.1.0, and that question's page
-  and its stage page fail from then. The document failures need a seal that holds such a decision or
+  organisation once its account has accepted the version-2 legal texts (8.6 step 4; until then
+  its run is refused), so from the first hourly run after that step a decision exists there
+  under 5.1.0, and that question's page and its stage page fail from then. The document failures need a seal that holds such a decision or
   was taken under 5.1.0; the journey takes no seal.
 
 The same refusals apply in the deploy itself: between 8.3 step 4 and step 5 the app still serving
@@ -1751,9 +1800,10 @@ interval (8.3 says so). The second point does not apply then, because nothing ha
 under 5.1.0.
 
 **The rule: fix forward with a later v0.6.x.** An application rollback to v0.6.0 (9.2) is an
-emergency stop only. After it, people can sign in and read single questions (except one whose current
-decision was saved under 5.1.0) and their history, but cannot save or withdraw a decision or seal a review, the pages of the first point that read a
-sealed review fail, and the pages of the second point that read something saved under 5.1.0 fail.
+emergency stop only. After it, people can sign in (an account created after the deploy must
+first accept the version-1 legal texts, 9.5a) and read single questions (except one whose
+current decision was saved under 5.1.0) and their history, but cannot save or withdraw a
+decision or seal a review, the pages of the first point that read a sealed review fail, and the pages of the second point that read something saved under 5.1.0 fail.
 If you must stop the release that way, say so to the teams, and expect those pages to fail until
 the return deploy. The hourly journey's save is refused while v0.6.0 serves, so it reports a
 failure to the `makrai-synthetic` check every hour. Pause the journey with the lines of 8.5 step 6
@@ -1765,8 +1815,7 @@ real records: it is safe only before the first real v1 record, and after that it
 write since BACKUP, the file 8.2 wrote down. A restore to BACKUP also puts 5.0.0 back as the
 published version, which is why v0.6.0 can save again after it.
 
-This runbook gives no way to re-publish 5.0.0 by hand while the migration stays applied.
-
+This runbook gives no way to re-publish 5.0.0 by hand while the content migration stays applied.
 
 ---
 
