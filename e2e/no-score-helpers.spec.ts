@@ -115,7 +115,7 @@ test('UX-06 NFR-A11Y-05 (helper): status labels are words in a neutral colour, a
       '<span class="status-label body">Done</span><span class="status-label muted">No decision</span>' +
         '<span class="status-label status-label--warning">Overdue</span>' +
         '<span class="status-label status-label--warning">Owner cannot act</span>' +
-        '<span class="status-label status-label--warning">No agreement recorded</span>' +
+        '<span class="status-label status-label--warning">Legal name not recorded</span>' +
         '<span class="status-label status-label--warning">Overdue: 3</span>' +
         '<div class="body"><span class="status-label">Open</span></div>',
     ),
@@ -156,4 +156,12 @@ test('UX-07 (helper): a findings list grouped by stage with a count per group an
     await page.setContent(html);
     await expect(expectNoCrossStageTotal(page, SENTINELS), `bad ${i}: ${html}`).rejects.toThrow(finding);
   }
+});
+
+test('FR-RM-01: the no-score check still reads a legal page\'s text', async ({ page }) => {
+  // data-legal-text exempts claim words only (owner ruling R1); the no-score check skips data-claims-allowed and nothing else.
+  await page.setContent('<main><p>Version 2.</p><div data-legal-text><p>Score: 85%</p></div></main>');
+  // Both paths: the score-word check and the percentage check read inside the block.
+  await expect(expectNoScoreShapes(page, 'legal page')).rejects.toThrow(/score word "Score:"/);
+  await expect(expectNoScoreShapes(page, 'legal page')).rejects.toThrow(/percentage "85%"/);
 });

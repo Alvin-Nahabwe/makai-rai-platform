@@ -118,7 +118,7 @@ describe('My acceptances on S-21 (FR-ACC-03, FR-ACC-04)', () => {
       { kind: 'cross-border-consent', version: '1', sha256: 'c'.repeat(64), acceptedAt: '2026-10-29T09:00:00.000Z' },
     ]);
     const t = text(html(await MyAcceptances({ userId: 'u1' })));
-    expect(t.indexOf('Terms of service v1')).toBeLessThan(t.indexOf('Cross-border storage consent v1'));
+    expect(t.indexOf('Terms of service v1')).toBeLessThan(t.indexOf('Consent to storage abroad v1'));
     expect(t).not.toContain('A newer version');
     vi.mocked(myAcceptances).mockResolvedValue([]);
     expect(text(html(await MyAcceptances({ userId: 'u1' })))).toContain('No acceptance is recorded for this account.');

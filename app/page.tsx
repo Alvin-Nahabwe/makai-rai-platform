@@ -57,10 +57,10 @@ export default async function LandingPage() {
         <div className="auth-card" style={{ maxWidth: 460, margin: '3rem auto' }}>
           {hasOrgs ? (
             <>
-              <h1>Choose an organization</h1>
-              <nav aria-label="Your organizations" className="sidebar-nav">
+              <h1>Choose an organisation</h1>
+              <nav aria-label="Your organisations" className="sidebar-nav">
                 {dispatch.orgs.map((org) => (
-                  <Link key={org.slug} href={`/orgs/${org.slug}/dashboard`} className="sidebar-link">
+                  <Link key={org.slug} href={`/orgs/${org.slug}/dashboard`} className="chooser-link">
                     {org.name}
                   </Link>
                 ))}

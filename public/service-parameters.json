@@ -1,6 +1,5 @@
 {
   "version": "1.0.0",
-  "source": "Gate 2 decision G2-22",
   "published": "2026-10-14",
   "criticalPatchWindowDays": 7,
   "restoreTest": "after every backup rotation",

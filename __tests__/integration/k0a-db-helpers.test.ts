@@ -30,7 +30,7 @@ beforeAll(async () => {
   platformAdmin = await user('Platform Admin', 'admin');
   // An organisation created by the administrator, so its organisation_created row names the administrator.
   orgId = (await adminCreateOrganisation({ requestId: randomUUID(), digest: randomUUID(), actorUserId: platformAdmin, name: 'Helpers', slug: `helpers-${randomUUID().slice(0, 6)}`,
-    agreement: { agreementVersion: '1', textHash: hex('a'), acceptedOn: '2026-10-30', controllerLegalName: 'C', dpContactEmail: 'dpo@fixture.test' },
+    legalName: 'C',
     ownerEmail: 'first-owner@fixture.test', tokenHash: hex(randomUUID()), expiresAt: new Date(Date.now() + 86400000), linkShown: false })).orgId;
   for (const [u, role] of [[owner, 'owner'], [assessor, 'assessor']] as const) await testDb.membership.create({ data: { orgId, userId: u, role } });
   await testDb.$executeRaw`INSERT INTO organisation_events (id, "orgId", "actorId", "actorRole", action, "targetUserId") VALUES (gen_random_uuid()::text, ${orgId}, ${owner}, 'owner', 'member_removed', ${removedViewer})`;

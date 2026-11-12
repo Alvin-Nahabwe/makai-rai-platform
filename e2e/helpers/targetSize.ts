@@ -14,6 +14,14 @@ import type { Page } from '@playwright/test';
  * Not modelled: the "user agent control" and "essential" exceptions. A page that relies on one fails
  * here and its owner decides, with the reason written next to the markup.
  *
+ * Pairs: a box that a clipping ancestor (an ancestor whose `overflow` is not `visible`) hides wholly is not
+ * drawn, so it cannot crowd a target that ancestor does not contain. A pair is therefore skipped only when
+ * one of the two is wholly hidden by a clipping ancestor that does not also contain the other; every other
+ * pair is compared. A `position: fixed` target, or a walk up that reaches a `position: fixed` ancestor, is
+ * treated as on the page. Approximations: the ancestor's border box stands in for the padding box that
+ * `overflow` clips at; a clipper that clips only one axis is treated as clipping both; `display:
+ * contents` clippers and absolutely positioned boxes that escape a non-positioned clipper are not modelled.
+ *
  * Not targets: elements that are not rendered (`display: none`, `visibility: hidden`, no box), those
  * wholly off the left or top of the page, and the screen-reader-only idiom (a clipped box of 1 pixel).
  */
@@ -29,6 +37,7 @@ export async function expectTargetsAtLeast24px(page: Page): Promise<void> {
     const RADIUS = MIN / 2;
     interface Target {
       el: Element;
+      hiders: Element[];
       x: number;
       y: number;
       w: number;
@@ -64,11 +73,25 @@ export async function expectTargetsAtLeast24px(page: Page): Promise<void> {
       return (copy.textContent ?? '').trim() !== '';
     };
 
+    // The clipping ancestors that hide the box wholly (none for a position: fixed box).
+    const hidersOf = (el: Element, r: DOMRect): Element[] => {
+      const hiders: Element[] = [];
+      if (getComputedStyle(el).position === 'fixed') return hiders;
+      for (let a = el.parentElement; a && a !== document.body && a !== document.documentElement; a = a.parentElement) {
+        const acs = getComputedStyle(a);
+        if (acs.position === 'fixed') break;
+        if (acs.overflowX === 'visible' && acs.overflowY === 'visible') continue;
+        const ar = a.getBoundingClientRect();
+        if (r.bottom <= ar.top || r.top >= ar.bottom || r.right <= ar.left || r.left >= ar.right) hiders.push(a);
+      }
+      return hiders;
+    };
+
     const targets: Target[] = Array.from(document.querySelectorAll('a, button, input, select, textarea, summary, [role=button], label'))
       .filter(isTarget)
       .map((el) => {
         const r = el.getBoundingClientRect();
-        return { el, x: r.left, y: r.top, w: r.width, h: r.height };
+        return { el, hiders: hidersOf(el, r), x: r.left, y: r.top, w: r.width, h: r.height };
       });
     const small = (t: Target) => Math.round(t.w * 10) / 10 < MIN || Math.round(t.h * 10) / 10 < MIN;
     const undersized = targets.filter(small);
@@ -83,6 +106,7 @@ export async function expectTargetsAtLeast24px(page: Page): Promise<void> {
       const c = centre(t);
       const crowded = targets.find((o) => {
         if (o === t || o.el.contains(t.el) || t.el.contains(o.el)) return false;
+        if (t.hiders.some((a) => !a.contains(o.el)) || o.hiders.some((a) => !a.contains(t.el))) return false;
         if (small(o)) {
           const oc = centre(o);
           return Math.hypot(oc.x - c.x, oc.y - c.y) < 2 * RADIUS;

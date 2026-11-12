@@ -11,7 +11,8 @@ import {
   legalTextHistory,
   legalTextVersion,
 } from '@/lib/legal/registry';
-import { LEGAL_LINK_STYLE, LEGAL_PAGE_STYLE, LegalTextView, legalTextHeading } from '@/components/legal/LegalTextView';
+import { RETIRED_NOTE, isRetiredKind } from '@/lib/legal/kinds';
+import { LEGAL_LINK_STYLE, LEGAL_NOTE_STYLE, LEGAL_PAGE_STYLE, LegalTextView, legalTextHeading } from '@/components/legal/LegalTextView';
 
 /**
  * S-06, one version (FR-ACC-02, SRS line 479: "/legal/privacy/<old-version>"): that version's text, version,
@@ -45,20 +46,18 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
 export default async function LegalVersionPage({ params }: { params: Params }) {
   const text = await versionOf(params);
   const current = currentLegalText(text.kind);
+  // One note at most. The retired note says what matters about every version of the agreement, so it stands in for the
+  // earlier-version note.
+  const note = isRetiredKind(text.kind)
+    ? RETIRED_NOTE[text.kind]
+    : current.version !== text.version
+      ? `This is an earlier version. The current one is version ${current.version}, published ${formatDay(current.publishedOn)}.`
+      : null;
   return (
     <div style={LEGAL_PAGE_STYLE}>
-      {current.version !== text.version && (
-        <p
-          role="note"
-          style={{
-            marginBottom: 'var(--space-6)',
-            padding: 'var(--space-3) var(--space-4)',
-            background: 'var(--tint-moderate-bg)',
-            color: 'var(--tint-moderate-fg)',
-            borderRadius: 'var(--border-radius-sm)',
-          }}
-        >
-          {`This is an earlier version. The current one is version ${current.version}, published ${formatDay(current.publishedOn)}.`}
+      {note !== null && (
+        <p role="note" style={LEGAL_NOTE_STYLE}>
+          {note}
         </p>
       )}
       <LegalTextView text={text} />

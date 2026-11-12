@@ -8,6 +8,7 @@ import { captureLogs, scanLines } from '../helpers/logCapture';
 import { STUB_LEGAL_TEXTS, currentAcceptances } from '../helpers/legalStub';
 import { hashInvitationToken } from '../../lib/data/invitationToken';
 import { ACCEPTED_KINDS } from '../../types/legal';
+import { LEGAL_KIND_NAMES, acceptanceError } from '../../lib/legal/kinds';
 
 /**
  * Route 31, POST /api/v1/invitations/[token]/register (FR-ACC-01, FR-ACC-03, FR-ACC-10; contract
@@ -87,8 +88,8 @@ describe('route 31: an account only from an invitation, with its acceptances (FR
     const res = await register(raw, { name: 'New', password: 'a'.repeat(12), acceptances: currentAcceptances(['terms', 'privacy']) });
     expect(res.status).toBe(422);
     expect(await res.json()).toMatchObject({ code: 'validation', missing: ['cross-border-consent'],
-      error: 'To continue, accept the cross-border storage consent.',
-      fields: [{ field: 'acceptances.cross-border-consent', message: 'To continue, accept the cross-border storage consent.' }] });
+      error: acceptanceError('cross-border-consent'),
+      fields: [{ field: 'acceptances.cross-border-consent', message: acceptanceError('cross-border-consent') }] });
     expect(await counts('new@fixture.test')).toEqual({ users: 0, memberships: 0, consent_records: 0 });
   });
 
@@ -128,7 +129,7 @@ describe('route 31: an account only from an invitation, with its acceptances (FR
     const { raw, inv } = await invitationRow(fx, { email: 'new@fixture.test', role: 'assessor' });
     const res = await register(raw, { ...bodyA, acceptances: [...currentAcceptances(['terms', 'privacy']), { kind: 'cross-border-consent', version: '0' }] });
     expect([res.status, await res.json()]).toEqual([409, {
-      error: 'A new version of the cross-border storage consent was published on 30 Oct 2026.', code: 'legal_text_changed',
+      error: `A new version of the ${LEGAL_KIND_NAMES['cross-border-consent']} was published on 30 Oct 2026.`, code: 'legal_text_changed',
       missing: ['cross-border-consent'] }]);
     expect(await counts('new@fixture.test')).toEqual({ users: 0, memberships: 0, consent_records: 0 });
     expect((await testDb.invitation.findUniqueOrThrow({ where: { id: inv.id } })).status).toBe('pending');

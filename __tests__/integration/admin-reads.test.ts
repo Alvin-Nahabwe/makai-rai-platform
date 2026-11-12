@@ -1,14 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { testDb, resetDb } from '../helpers/db';
 import { buildOrg, buildPlatformAdmin, type FixtureAccount, type OrgFixture } from '../helpers/recordFixture';
-import { adminRecordAgreement } from '../../lib/data/definer';
 import { accountsForAdmin, listOrganisationsForAdmin, organisationForAdmin } from '../../lib/data/admin';
 import { NotFoundError } from '../../lib/data/tenant';
-import type { AgreementInput } from '../../types/api';
-
-/** A fresh request id and digest for a call of a retry-keyed definer function (routes 43 and 45, NFR-INT-02). */
-const keyed = () => ({ requestId: randomUUID(), digest: randomUUID() });
 
 /**
  * The administrator's reads (S-23, S-24, S-25), on the identity lane through identityLaneClient. They name
@@ -16,10 +11,6 @@ const keyed = () => ({ requestId: randomUUID(), digest: randomUUID() });
  */
 
 const hex = (s: string) => createHash('sha256').update(s).digest('hex');
-const V1: AgreementInput = {
-  agreementVersion: '1', textHash: hex('agreement v1'), acceptedOn: '2026-10-30',
-  controllerLegalName: 'Fixture Controller Ltd', dpContactEmail: 'dpo@fixture.test',
-};
 
 let admin: FixtureAccount;
 let withAgreement: OrgFixture;
@@ -43,12 +34,13 @@ async function firstOwnerInvitation(fx: OrgFixture, over: { status?: 'pending' |
 
 describe('listOrganisationsForAdmin', () => {
   it('FR-ORG-03 FR-ORG-06: the organisation rows hold only the allowed fields and flag what is missing', async () => {
+    await testDb.organization.update({ where: { id: withAgreement.org.id }, data: { legalName: 'Fixture Controller Ltd' } });
     const rows = await listOrganisationsForAdmin();
     const a = rows.find((r) => r.orgId === withAgreement.org.id)!;
-    expect(Object.keys(a).sort()).toEqual(['archived', 'createdAt', 'currentAgreementVersion', 'hasActiveOwner', 'memberCount', 'name', 'orgId', 'ownerInvitationState']);
-    expect(a).toMatchObject({ name: withAgreement.org.name, memberCount: 5, currentAgreementVersion: '1', hasActiveOwner: true, archived: false, ownerInvitationState: null });
+    expect(Object.keys(a).sort()).toEqual(['archived', 'createdAt', 'hasActiveOwner', 'legalName', 'memberCount', 'name', 'orgId', 'ownerInvitationState']);
+    expect(a).toMatchObject({ name: withAgreement.org.name, memberCount: 5, legalName: 'Fixture Controller Ltd', hasActiveOwner: true, archived: false, ownerInvitationState: null });
     expect(a.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-    expect(rows.find((r) => r.orgId === noAgreement.org.id)!.currentAgreementVersion).toBeNull();
+    expect(rows.find((r) => r.orgId === noAgreement.org.id)!.legalName).toBeNull();
   });
 
   it('FR-ORG-02 FR-ORG-03: the owner invitation state is the newest first-owner invitation, and archiving is shown', async () => {
@@ -62,12 +54,14 @@ describe('listOrganisationsForAdmin', () => {
 });
 
 describe('organisationForAdmin', () => {
-  it('FR-ORG-05: a newer agreement version keeps the earlier one and becomes current', async () => {
+  it('FR-ORG-05: the agreement records an organisation already holds stay in its history, newest first, beside its legal name', async () => {
     const orgId = withAgreement.org.id;
-    await adminRecordAgreement({ ...keyed(), actorUserId: admin.userId, orgId, agreement: { ...V1, agreementVersion: '2' } });
+    await testDb.organisationAgreement.create({ data: { orgId, agreementVersion: '2', textHash: hex('agreement v2'), acceptedOn: new Date('2026-10-30T00:00:00Z'),
+      controllerLegalName: 'Fixture Controller Ltd', dpContactEmail: 'dpo@fixture.test', recordedById: admin.userId } });
+    await testDb.organization.update({ where: { id: orgId }, data: { legalName: 'Fixture Controller Ltd' } });
     const d = await organisationForAdmin(orgId);
     expect(d.agreements.map((x) => x.agreementVersion)).toEqual(['2', '1']);
-    expect(d.row.currentAgreementVersion).toBe('2');
+    expect(d.row.legalName).toBe('Fixture Controller Ltd');
     expect(Object.keys(d.agreements[0]).sort()).toEqual(['acceptedOn', 'agreementVersion', 'controllerLegalName', 'dpContactEmail', 'id', 'recordedAt', 'textHash']);
     expect(d.agreements[0].acceptedOn).toBe('2026-10-30');
   });

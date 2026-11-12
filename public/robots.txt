@@ -1,14 +1,2 @@
-# The platform is pre-production and its content sits behind authentication.
-# Disallow indexing entirely until a deployment exists and a public-content
-# decision has been taken.
 User-agent: *
 Disallow: /
-
-# This file previously carried `Allow: /` together with:
-#   Sitemap: https://mak-responsible-ai-toolkit.netlify.app/sitemap.xml
-# Two things were wrong with that line. It pointed at the legacy static SPA
-# rather than at this platform — a different product — and that hostname now
-# returns HTTP 404 (checked 2026-08-18). The SPA that is actually live is
-# makrai.netlify.app (HTTP 200), which this platform is intended to replace.
-# See docs/VISION_AND_PLAN.md §1 and the SPA sunset decision (D6) in
-# docs/planning/2026-08-17-revised-vision-and-plan.md §6.1.

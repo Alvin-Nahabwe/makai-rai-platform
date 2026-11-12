@@ -22,6 +22,7 @@ function rateLimitedText(code: string | null | undefined): string {
   const minutes = Math.max(1, Math.ceil(seconds / 60));
   return `Too many sign-ins right now. Wait ${minutes} ${minutes === 1 ? 'minute' : 'minutes'} and try again.`;
 }
+const SIGNED_OUT = 'You are signed out. Sign in, then start the download again.';
 const PASSWORD_CHANGED = 'Password changed. Please sign in with your new password.';
 
 const TARGET: CSSProperties = { minWidth: '24px', minHeight: '24px' };
@@ -159,7 +160,7 @@ export function LoginForm() {
   const searchParams = useSearchParams();
   // Defaults to `/`, the org dispatcher; a caller (the invitation page) may ask to come back. Validated same-origin.
   const callbackUrl = safeCallbackUrl(searchParams.get('callbackUrl'));
-  const notice = searchParams.get('passwordChanged') ? PASSWORD_CHANGED : null;
+  const notice = searchParams.get('passwordChanged') ? PASSWORD_CHANGED : searchParams.get('reason') === 'signed_out' ? SIGNED_OUT : null;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);

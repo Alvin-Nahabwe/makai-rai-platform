@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
+import { readdirSync, readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
-import type { AcceptedKind, LegalTextVersion } from '@/types/legal';
+import { ACCEPTED_KINDS, type AcceptedKind, type LegalTextVersion } from '@/types/legal';
+import { LEGAL_KIND_NAMES } from '@/lib/legal/kinds';
 import { STUB_LEGAL_TEXTS } from '../helpers/legalStub';
 
 /**
@@ -15,9 +17,10 @@ import { STUB_LEGAL_TEXTS } from '../helpers/legalStub';
 vi.mock('next/navigation', async (importOriginal) => ({
   ...(await importOriginal<typeof import('next/navigation')>()), useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
 }));
-const { AcceptancesForm, AcceptancesFormView, untickedKinds, acceptanceError, acceptancePairs, recordOutcome, failureOutcome, handleFailure } =
+const { ACCEPT_LABEL, AcceptancesForm, AcceptancesFormView, untickedKinds, acceptanceError, acceptancePairs, textsKey, recordOutcome, failureOutcome, handleFailure } =
   await import('@/components/legal/AcceptancesForm');
 
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const TEXTS: LegalTextVersion[] = STUB_LEGAL_TEXTS.slice();
 const html = (el: React.ReactElement) => renderToStaticMarkup(el);
 type ViewProps = Parameters<typeof AcceptancesFormView>[0];
@@ -76,7 +79,8 @@ describe('S-05 acceptances form (UX-22, FR-ACC-03)', () => {
     const boxes = markup.match(/<input[^>]*type="checkbox"[^>]*>/g) ?? [];
     expect(boxes).toHaveLength(3);
     expect(boxes.filter((b) => /\bchecked\b/.test(b))).toEqual([]);
-    for (const [kind, name] of [['terms', 'terms of service'], ['privacy', 'privacy notice'], ['cross-border-consent', 'cross-border storage consent']]) {
+    for (const kind of ACCEPTED_KINDS) {
+      const name = LEGAL_KIND_NAMES[kind];
       expect(markup).toMatch(new RegExp(`<a[^>]*href="/legal/${kind}/1"[^>]*target="_blank"[^>]*rel="noopener"[^>]*>Read the ${name}<span[^>]*> \\(opens in a new tab\\)</span></a>`));
     }
     expect(markup.match(/>Version 1, published 30 Oct 2026\.</g)).toHaveLength(3);
@@ -85,24 +89,24 @@ describe('S-05 acceptances form (UX-22, FR-ACC-03)', () => {
 
   it('UX-22 (W-11 note 2): each box carries its own sentence as its label', () => {
     const markup = view();
-    for (const [kind, label] of [['terms', 'I accept the terms of service.'], ['privacy', 'I have read the privacy notice.'],
-      ['cross-border-consent', 'I agree that my account and my team&#x27;s records are stored and processed outside my country, as the cross-border storage consent describes.']]) {
+    for (const kind of ACCEPTED_KINDS) {
+      // The label as React writes it into markup: the apostrophe is escaped, and no character of the label is a pattern.
+      const label = ACCEPT_LABEL[kind].replace(/'/g, '&#x27;').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       expect(markup).toContain(`<label for="accept-${kind}"`);
-      expect(markup).toMatch(new RegExp(`<label for="accept-${kind}"[^>]*>${label.replace(/[.()]/g, '\\$&')}</label>`));
+      expect(markup).toMatch(new RegExp(`<label for="accept-${kind}"[^>]*>${label}</label>`));
     }
   });
 
   it('UX-22 M-25: a missing tick names the text, and the submit rule sends nothing until all are ticked', () => {
     expect(untickedKinds(TEXTS, new Set<AcceptedKind>(['terms']))).toEqual(['privacy', 'cross-border-consent']);
     expect(untickedKinds(TEXTS, new Set<AcceptedKind>(['terms', 'privacy', 'cross-border-consent']))).toEqual([]);
-    expect(acceptanceError('privacy')).toBe('To continue, accept the privacy notice.');
-    expect(acceptanceError('cross-border-consent')).toBe('To continue, accept the cross-border storage consent.');
-    expect(acceptanceError('terms')).toBe('To continue, accept the terms of service.');
+    // M-25's wording, "To continue, accept the <name>.", with each text's name from the names map.
+    for (const kind of ACCEPTED_KINDS) expect(acceptanceError(kind)).toBe(`To continue, accept the ${LEGAL_KIND_NAMES[kind]}.`);
   });
 
   it('UX-22 M-25 NFR-A11Y-04: each missing box shows M-25 tied by aria-describedby and aria-invalid, under a role=alert summary', () => {
     const markup = view({ ticked: new Set<AcceptedKind>(['terms']), errors: ['privacy', 'cross-border-consent'] });
-    expect(markup).toMatch(/<div[^>]*role="alert"[^>]*>.*To continue, accept the privacy notice\..*To continue, accept the cross-border storage consent\..*<\/div>/);
+    expect(markup).toMatch(new RegExp(`<div[^>]*role="alert"[^>]*>.*${escapeRe(acceptanceError('privacy'))}.*${escapeRe(acceptanceError('cross-border-consent'))}.*</div>`));
     for (const kind of ['privacy', 'cross-border-consent']) {
       const box = tagOf(markup, `accept-${kind}`);
       expect(box).toContain('aria-invalid="true"');
@@ -147,5 +151,24 @@ describe('S-05 acceptances form (UX-22, FR-ACC-03)', () => {
 
   it('UX-22: a busy form disables its submit button and keeps its label', () => {
     expect(view({ busy: true })).toMatch(/<button[^>]*type="submit"[^>]*disabled=""[^>]*>Accept and continue<\/button>/);
+  });
+
+  it('FR-ACC-03: textsKey differs when any one kind\'s version differs, and is equal for the same versions in the same order', () => {
+    const same = TEXTS.map((t) => ({ ...t }));
+    expect(textsKey(same)).toBe(textsKey(TEXTS));
+    TEXTS.forEach((_, i) => {
+      const changed = TEXTS.map((t, j) => (j === i ? { ...t, version: `${t.version}-next` } : t));
+      expect(textsKey(changed), `version of ${TEXTS[i].kind} changed`).not.toBe(textsKey(TEXTS));
+    });
+  });
+
+  it('FR-ACC-03: every <AcceptancesForm in app/ and components/ carries key={textsKey(, so a new text version starts the form unticked', () => {
+    const sources = ['app', 'components'].flatMap((dir) => (readdirSync(dir, { recursive: true }) as string[])
+      .filter((f) => /\.tsx$/.test(f)).map((f) => readFileSync(`${dir}/${f}`, 'utf8')));
+    const all = sources.join('\n');
+    const uses = all.match(/<AcceptancesForm(?=\s)/g) ?? [];
+    const keyed = all.match(/<AcceptancesForm\s+key=\{textsKey\(/g) ?? [];
+    expect(uses.length).toBeGreaterThanOrEqual(3);
+    expect(keyed.length).toBe(uses.length);
   });
 });

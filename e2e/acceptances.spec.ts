@@ -5,6 +5,10 @@ import { test, expect, type Browser, type Page } from '@playwright/test';
 import { testDb } from '../__tests__/helpers/db';
 import { buildOrg, type FixtureAccount, type OrgFixture } from '../__tests__/helpers/recordFixture';
 import { claimMatches } from '../lib/claims/pattern';
+import { currentLegalText } from '../lib/legal/registry';
+import { acceptanceError } from '../lib/legal/kinds';
+import { ACCEPT_LABEL } from '../components/legal/AcceptancesForm';
+import { ACCEPTED_KINDS, CONSENT_TYPE_FOR } from '../types/legal';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { expectNoHorizontalScroll } from './helpers/reflow';
@@ -96,18 +100,18 @@ test.describe('S-04 and S-05 in a browser', () => {
     await expect(page.getByRole('link', { name: /\(opens in a new tab\)$/ })).toHaveCount(3);
 
     // Two ticks: M-25 names the third, focus moves to it, and nothing is sent.
-    await page.getByLabel('I accept the terms of service.').check();
-    await page.getByLabel('I have read the privacy notice.').check();
+    await page.getByLabel(ACCEPT_LABEL.terms, { exact: true }).check();
+    await page.getByLabel(ACCEPT_LABEL.privacy, { exact: true }).check();
     await page.getByRole('button', { name: 'Create account' }).click();
     const summary = page.locator('#acceptances-errors');   // Next's own route announcer is also role=alert
     await expect(summary).toHaveAttribute('role', 'alert');
-    await expect(summary).toHaveText('To continue, accept the cross-border storage consent.');
-    await expect(page.getByLabel(/cross-border storage consent describes/)).toBeFocused();
-    await expect(page.getByLabel(/cross-border storage consent describes/)).toHaveAttribute('aria-invalid', 'true');
+    await expect(summary).toHaveText(acceptanceError('cross-border-consent'));
+    await expect(page.getByLabel(ACCEPT_LABEL['cross-border-consent'], { exact: true })).toBeFocused();
+    await expect(page.getByLabel(ACCEPT_LABEL['cross-border-consent'], { exact: true })).toHaveAttribute('aria-invalid', 'true');
     expect(posts).toEqual([]);
     expect(await userCount(email)).toBe(0);
 
-    await page.getByLabel(/cross-border storage consent describes/).check();
+    await page.getByLabel(ACCEPT_LABEL['cross-border-consent'], { exact: true }).check();
     await page.getByRole('button', { name: 'Create account' }).click();
     await page.waitForURL(`**/orgs/${fx.org.slug}/dashboard?welcome=1`);
     expect(new URL(page.url()).search).toBe('?welcome=1');
@@ -164,17 +168,17 @@ test.describe('S-04 and S-05 in a browser', () => {
     await page.goto('/acceptances');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Before you continue');
     await expect(page.getByRole('link', { name: /\(opens in a new tab\)$/ })).toHaveCount(3);
-    await page.getByLabel('I accept the terms of service.').check();
+    await page.getByLabel(ACCEPT_LABEL.terms, { exact: true }).check();
     await page.getByRole('button', { name: 'Accept and continue' }).click();
     const summary = page.locator('#acceptances-errors');
     await expect(summary).toHaveAttribute('role', 'alert');
-    await expect(summary).toContainText('To continue, accept the privacy notice.');
-    await expect(summary).toContainText('To continue, accept the cross-border storage consent.');
-    await expect(page.getByLabel('I have read the privacy notice.')).toBeFocused();
+    await expect(summary).toContainText(acceptanceError('privacy'));
+    await expect(summary).toContainText(acceptanceError('cross-border-consent'));
+    await expect(page.getByLabel(ACCEPT_LABEL.privacy, { exact: true })).toBeFocused();
     expect(posts).toEqual([]);
 
-    await page.getByLabel('I have read the privacy notice.').check();
-    await page.getByLabel(/cross-border storage consent describes/).check();
+    await page.getByLabel(ACCEPT_LABEL.privacy, { exact: true }).check();
+    await page.getByLabel(ACCEPT_LABEL['cross-border-consent'], { exact: true }).check();
     await page.getByRole('button', { name: 'Accept and continue' }).click();
     await page.waitForURL((url) => url.pathname !== '/acceptances');
     expect(posts).toHaveLength(1);
@@ -232,7 +236,7 @@ test.describe('S-04 and S-05 in a browser', () => {
     await page.waitForURL((url) => url.pathname !== '/acceptances');
     expect(bodies).toHaveLength(2);
     expect(bodies[1]).toBe(bodies[0]);
-    expect(await testDb.consentRecord.count({ where: { userId: fx.members.assessor.userId, version: '1' } })).toBe(3);
+    expect(await testDb.consentRecord.count({ where: { userId: fx.members.assessor.userId, OR: ACCEPTED_KINDS.map((k) => ({ consentType: CONSENT_TYPE_FOR[k], version: currentLegalText(k).version })) } })).toBe(3);
     await page.context().close();
   });
 
@@ -350,6 +354,7 @@ test.describe('S-04 and S-05 in a browser', () => {
       ['S-05', signedIn, '/acceptances', null],
       ['S-06 current', signedOut, '/legal/privacy', null],
       ['S-06 version', signedOut, '/legal/terms/1', null],
+      ['S-06 retired agreement', signedOut, '/legal/organisation-agreement', null],
     ];
     for (const [name, page, path, then] of states) {
       for (const width of [1280, 360]) for (const colorScheme of ['light', 'dark'] as const) {
@@ -386,10 +391,11 @@ test.describe('S-04 and S-05 in a browser', () => {
 
   test('FR-ACC-02: /legal/privacy and /legal/privacy/1 answer 200 without signing in and show the hash of the file', async ({ browser }) => {
     const page = await newPage(browser);
-    const hash = createHash('sha256').update(readFileSync('data/legal/privacy/1.md')).digest('hex').replace(/(.{4})(?!$)/g, '$1 ');
-    for (const path of ['/legal/privacy', '/legal/privacy/1']) {
+    const hashOf = (file: string) => createHash('sha256').update(readFileSync(file)).digest('hex').replace(/(.{4})(?!$)/g, '$1 ');
+    const currentFile = `data/legal/privacy/${currentLegalText('privacy').version}.md`;
+    for (const [path, file] of [['/legal/privacy', currentFile], ['/legal/privacy/1', 'data/legal/privacy/1.md']] as const) {
       expect((await page.goto(path))?.status(), path).toBe(200);
-      await expect(page.locator('code')).toHaveText(hash);
+      await expect(page.locator('code')).toHaveText(hashOf(file));
     }
     await page.context().close();
   });

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { requireOrgContextWithIdentity } from '@/lib/auth/context';
 import { readDocumentPdf } from '@/lib/data/documents';
+import { navigationRefusal } from '@/lib/http/navigationRefusal';
 import { toResponse } from '@/lib/http/toResponse';
 
 /**
@@ -11,7 +12,7 @@ import { toResponse } from '@/lib/http/toResponse';
  */
 // No nosniff header here: nginx sets it on every response, once (docker/nginx/default.conf), and a second source fails
 // __tests__/lint/security-headers.test.ts.
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ slug: string; documentId: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ slug: string; documentId: string }> }) {
   const { slug, documentId } = await params;
   try {
     const { ctx } = await requireOrgContextWithIdentity(slug, 'record:read');
@@ -24,6 +25,6 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
       },
     });
   } catch (e) {
-    return toResponse(e);
+    return navigationRefusal(req, e) ?? toResponse(e);
   }
 }

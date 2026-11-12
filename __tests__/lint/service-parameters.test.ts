@@ -45,7 +45,6 @@ describe('public/service-parameters.json', () => {
     delete values.published; // a publication date may ride along; the decided values are everything else
     expect(values).toEqual({
       version: '1.0.0',
-      source: 'Gate 2 decision G2-22',
       criticalPatchWindowDays: 7,
       restoreTest: 'after every backup rotation',
       syntheticJourneyInterval: 'PT1H',

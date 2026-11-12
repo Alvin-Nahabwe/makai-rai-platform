@@ -46,6 +46,7 @@ export type ActorRole = OrgRole | 'platform_admin';
 export type OrgEventAction =
   | 'organisation_created' | 'agreement_recorded' | 'owner_invitation_issued'
   | 'owner_invitation_resent' | 'owner_invitation_revoked' | 'organisation_name_corrected'
+  | 'organisation_legal_name_corrected'
   | 'account_deactivated' | 'account_reactivated'
   | 'member_invited' | 'member_joined' | 'member_role_changed' | 'member_removed' | 'member_left';
 export type PlatformEventAction = 'account_deactivated' | 'account_reactivated';

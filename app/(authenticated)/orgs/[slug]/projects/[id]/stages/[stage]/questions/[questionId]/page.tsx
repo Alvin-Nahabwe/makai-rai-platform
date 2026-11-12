@@ -71,6 +71,7 @@ export function QuestionPanelRegions({ data }: { data: QuestionPanelData }) {
           <section data-region="current-decision" aria-labelledby="s12-current-decision">
             <h2 id="s12-current-decision">Current decision</h2>
             <CurrentDecision
+              orgSlug={data.orgSlug}
               current={data.current}
               historyCount={data.historyCount}
               historyHref={`${base}/stages/${data.stage}/questions/${question.id}/history`}

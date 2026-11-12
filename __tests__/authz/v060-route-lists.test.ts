@@ -41,7 +41,6 @@ const CONTRACT_ROUTE_FILES = [
   'app/api/internal/reminders/route.ts',
   'app/api/admin/organisations/route.ts',
   'app/api/admin/organisations/[orgId]/route.ts',
-  'app/api/admin/organisations/[orgId]/agreements/route.ts',
   'app/api/admin/organisations/[orgId]/owner-invitations/route.ts',
   'app/api/admin/organisations/[orgId]/owner-invitations/[invitationId]/resend/route.ts',
   'app/api/admin/organisations/[orgId]/owner-invitations/[invitationId]/revoke/route.ts',

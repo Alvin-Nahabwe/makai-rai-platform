@@ -150,12 +150,20 @@ describe('design tokens', () => {
       ['D-3 focus ring on the page', 'focus-ring', 'surface-base', 3, THEMES],
       ['D-5 stage label', 'stage-fg', 'stage-bg', 4.5, THEMES],
       ['D-6 moderate text', 'tint-moderate-fg', 'tint-moderate-bg', 4.5, THEMES],
+      // The phone menu button is navy in both themes; its bars were painted with the card colour, which is dark
+      // in the dark theme, so the button showed as a blank square.
+      ['menu button bars', 'sidebar-toggle-bar', 'color-navy', 3, THEMES],
     ];
     for (const [id, fg, bg, min, themes] of pairs) {
       for (const theme of themes) {
         expect(contrast(theme, fg, bg), `${id} (${fg} on ${bg}), ${theme}`).toBeGreaterThanOrEqual(min);
       }
     }
+  });
+
+  it('UX-33: the phone menu button draws its bars with the token tested above, on the navy it tests against', () => {
+    expect(ruleFor(css, '.sidebar-toggle__bar')).toMatch(/background:\s*var\(--sidebar-toggle-bar\)/);
+    expect(ruleFor(css, '.sidebar-toggle')).toMatch(/background:\s*var\(--color-navy\)/);
   });
 
   it('UX-33 (D-1, D-3, D-5): the rules that draw fields, links, the ring and stage labels read the tokens tested above', () => {
