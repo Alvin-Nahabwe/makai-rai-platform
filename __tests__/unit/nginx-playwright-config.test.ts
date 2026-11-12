@@ -81,12 +81,22 @@ describe('playwright.nginx.config.ts', () => {
     expect(sh).toMatch(/trap\s+'[^']*down\.sh[^']*'\s+TERM\s+INT/);
     expect(sh).toMatch(/docker wait v060-nginx-b/);
     expect(sh).toMatch(/--pull=never/);
-    expect(sh).toMatch(/nginx:1\.31-alpine@sha256:df221db836e1754089190208cee7eeda94f233197056426eda74a43ab1abeac2/);
     // No E2E_PORT, so it must stop before any docker call. NO_COLOR for the child; ANSI stripped before matching.
     const r = spawnSync('sh', ['scripts/nginx-test/up.sh', '4'], { env: { PATH: process.env.PATH ?? '', NO_COLOR: '1' } as unknown as NodeJS.ProcessEnv, encoding: 'utf8' });
     expect([r.status, stripAnsi(r.stderr)]).toEqual([2, expect.stringMatching(/E2E_PORT/)]);
     const bad = spawnSync('sh', ['scripts/nginx-test/up.sh', '4'], { env: { PATH: process.env.PATH ?? '', NO_COLOR: '1', E2E_PORT: '31x' } as unknown as NodeJS.ProcessEnv, encoding: 'utf8' });
     expect(bad.status).toBe(2);
+  });
+
+  it('NFR-SEC-06 D-338: the nginx specs run the image the production compose file pins, in up.sh and in CI', () => {
+    const compose = readFileSync('docker/docker-compose.prod.yml', 'utf8');
+    const pins = [...compose.matchAll(/^\s*image:\s*(nginx:\S*@sha256:[0-9a-f]{64})\s*$/gm)].map((m) => m[1]);
+    expect(pins).toHaveLength(1);
+    const ref = pins[0];
+    const up = readFileSync('scripts/nginx-test/up.sh', 'utf8');
+    expect(up.split('\n')).toContain(`IMAGE='${ref}'`); // up.sh runs the pinned image
+    const ci = readFileSync('.github/workflows/ci.yml', 'utf8');
+    expect(ci.split('\n').map((l) => l.trim())).toContain(`run: docker pull ${ref}`); // and CI pulls that same one
   });
 
   it('NFR-SEC-06: the browser channel follows E2E_BROWSER_CHANNEL as playwright.config.ts does; unset, Playwright\'s own build', async () => {
