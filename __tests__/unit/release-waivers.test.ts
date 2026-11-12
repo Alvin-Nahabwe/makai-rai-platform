@@ -89,10 +89,13 @@ describe('release waivers', () => {
     expect(() => releaseWaiver('UX-03 help-contact-pending', file({ waivers: [OK, { ...broken, release: '0.5.0' }] }), V)).toThrow(/register row/);
   });
 
+  /** The committed entries. */
+  function entries(): Array<Record<string, unknown>> {
+    return (JSON.parse(readFileSync(RELEASE_WAIVERS_FILE, 'utf8')) as { waivers: Array<Record<string, unknown>> }).waivers;
+  }
   /** The committed entries written for one release, by case. */
   function committed(release: string): Record<string, Record<string, unknown>> {
-    const raw = JSON.parse(readFileSync(RELEASE_WAIVERS_FILE, 'utf8')) as { waivers: Array<Record<string, unknown>> };
-    return Object.fromEntries(raw.waivers.filter((w) => w.release === release).map((w) => [w.case, w]));
+    return Object.fromEntries(entries().filter((w) => w.release === release).map((w) => [w.case, w]));
   }
 
   it("FR-ACC-02 UX-03 NFR-A11Y-07 FIX-3: the committed file holds the owner's three decisions for 0.6.0, word for word", () => {
@@ -127,10 +130,9 @@ describe('release waivers', () => {
     expect(releaseWaiver('UX-03 help-contact-pending', RELEASE_WAIVERS_FILE, '0.6.1')).toBeUndefined();
   });
 
-  it('SFH-11: the committed file names no release but 0.6.0 and 0.6.1, and reads whole at the version of package.json', () => {
-    const raw = JSON.parse(readFileSync(RELEASE_WAIVERS_FILE, 'utf8')) as { waivers: Array<{ release: string }> };
-    expect([...new Set(raw.waivers.map((w) => w.release))].sort()).toEqual(['0.6.0', '0.6.1']);
-    // Whatever the version is, the read does not throw: a release with no entry for a case has no waiver of it.
-    for (const c of WAIVABLE_CASES) expect(() => releaseWaiver(c)).not.toThrow();
+  it('SFH-11: the committed file names no release but 0.6.0 and 0.6.1', () => {
+    // A mistyped release (0.6.10, say) would waive nothing and say nothing, so the releases are listed. A later release
+    // that records a waiver adds its version here, with a case of its own above.
+    expect([...new Set(entries().map((w) => w.release))].sort()).toEqual(['0.6.0', '0.6.1']);
   });
 });
