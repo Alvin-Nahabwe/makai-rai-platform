@@ -182,6 +182,17 @@ function allowedTitlesOn(pathname: string, allowed: readonly string[]): readonly
   return pathname === '/explore/framework' ? allowed : [];
 }
 
+/** The two route templates on which S-06 shows a legal text (app/(public)/legal/[kind] and [kind]/[version]). */
+const LEGAL_TEXT_ROUTES: readonly string[] = ['/legal/[kind]', '/legal/[kind]/[version]'];
+
+/** Legal pages the marker crawl starts from: a kind's current page and a version page. */
+const LEGAL_STARTS = ['/legal/terms', '/legal/privacy', '/legal/privacy/1'];
+
+/** True when `pathname` is a path one of S-06's two route templates covers; any other path, `''` included, is not. */
+function isLegalTextRoute(pathname: string): boolean {
+  return LEGAL_TEXT_ROUTES.some((template) => templateRegExp(template).test(pathname));
+}
+
 /**
  * The words on the page that a person reads or hears, one entry per text node or attribute value, outside the
  * elements that carry `data-claims-allowed`: every text node of the body (a mounted but closed panel
@@ -189,10 +200,13 @@ function allowedTitlesOn(pathname: string, allowed: readonly string[]): readonly
  * attributes a screen reader speaks. A page whose body has no words is refused: the title alone would
  * otherwise make an empty page pass for one with no claim.
  */
-async function readWords(page: Page, who: string): Promise<Words> {
-  const words = await page.evaluate(({ sourceTitle, statusWords }) => {
+async function readWords(page: Page, who: string, pathname = ''): Promise<Words> {
+  const words = await page.evaluate(({ sourceTitle, statusWords, legalRoute }) => {
     const skip = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE']);
     const outside = (el: Element) => el.closest('[data-claims-allowed]') === null;
+    // The words of a published legal text (owner ruling R1): the block LegalTextView marks, on S-06's two routes only. A marker
+    // anywhere else exempts nothing, and the attributes below are read inside it as everywhere.
+    const inLegalText = (el: Element) => legalRoute && el.closest('[data-legal-text]') !== null;
     const clean = (s: string) => s.replace(/\s+/g, ' ').trim();
     const head: string[] = [document.title];
     const description = document.querySelector('meta[name="description"]')?.getAttribute('content');
@@ -204,7 +218,7 @@ async function readWords(page: Page, who: string): Promise<Words> {
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       const parent = node.parentElement;
-      if (!parent || skip.has(parent.tagName) || !outside(parent)) continue;
+      if (!parent || skip.has(parent.tagName) || !outside(parent) || inLegalText(parent)) continue;
       if (parent.closest('.status-label') !== null && statusWords.includes(clean(node.nodeValue ?? ''))) continue;
       const into = parent.closest('[data-source-note]') !== null ? notes : parent.closest(sourceTitle) !== null ? titles : body;
       into.push(node.nodeValue ?? '');
@@ -225,7 +239,7 @@ async function readWords(page: Page, who: string): Promise<Words> {
       titles: titles.map(clean).filter(Boolean),
       attributes: attributes.map(clean).filter(Boolean),
     };
-  }, { sourceTitle: SOURCE_TITLE, statusWords: [...MITIGATION_STATUS_WORDS] });
+  }, { sourceTitle: SOURCE_TITLE, statusWords: [...MITIGATION_STATUS_WORDS], legalRoute: isLegalTextRoute(pathname) });
   if (words.body.length === 0 && words.notes.length === 0 && words.titles.length === 0 && words.attributes.length === 0) throw new Error(`${who}: the page has no words to check`);
   return words;
 }
@@ -445,16 +459,21 @@ function ownedProblems(owned: readonly string[], words: Words): string[] {
   ]);
 }
 
-function pageChecker(page: Page, who: string, teamText: () => Promise<string[]>): { claims: string[]; check: (url: string) => Promise<void>; finish: () => Promise<void> } {
+function pageChecker(page: Page, who: string, teamText: () => Promise<string[]>): { claims: string[]; legalTextBlocks: Array<{ pathname: string; count: number }>; check: (url: string) => Promise<void>; finish: () => Promise<void> } {
   const claims: string[] = [];
+  const legalTextBlocks: Array<{ pathname: string; count: number }> = [];
   const scriptErrors: string[] = [];
   const pending: Array<{ url: string; pathname: string; words: Words; owned: string[] }> = [];
   page.on('pageerror', (error) => scriptErrors.push(error.message));
   const check = async (url: string): Promise<void> => {
-    const words = await readWords(page, `${who} ${url}`);
+    const pathname = new URL(page.url()).pathname;
+    const words = await readWords(page, `${who} ${url}`, pathname);
     expect(await page.locator('h1', { hasText: ERROR_PAGE_HEADING }).count(), `${who} ${url} shows the error page`).toBe(0);
     expect(scriptErrors, `${who} ${url} threw in the browser`).toEqual([]);
-    const pathname = new URL(page.url()).pathname;
+    const marked = await page.locator('[data-legal-text]').count();
+    legalTextBlocks.push({ pathname, count: marked });
+    // Every seat's crawl: only S-06's two route templates may hold the marker (the exemption is read nowhere else).
+    if (!isLegalTextRoute(pathname)) expect(marked, `${who} ${url}: data-legal-text on a page that is not S-06`).toBe(0);
     const owned = Object.entries(OWNED_ELSEWHERE).filter(([template]) => !RELEASE_CANDIDATE && templateRegExp(template).test(pathname)).flatMap(([, texts]) => texts);
     expect(ownedProblems(owned, words), `${who} ${url}: stale OWNED_ELSEWHERE entries`).toEqual([]);
     pending.push({ url, pathname, words, owned });
@@ -471,7 +490,7 @@ function pageChecker(page: Page, who: string, teamText: () => Promise<string[]>)
       for (const found of claimsIn(p.words, p.pathname.startsWith('/orgs/') ? own : [], allowedTitlesOn(p.pathname, CONTENT_ALLOWED), p.owned)) claims.push(`${who} ${p.url}: ${found}`);
     }
   };
-  return { claims, check, finish };
+  return { claims, legalTextBlocks, check, finish };
 }
 
 test('FR-PUB-01 (helper): the word reader and the claim pattern flag a claim and skip an allowed element', async ({ page }) => {
@@ -492,6 +511,39 @@ test('FR-PUB-01 (helper): the word reader and the claim pattern flag a claim and
   expect(claims.some((c) => /score/i.test(c)), 'the allowed element is skipped').toBe(false);
   expect(claims.some((c) => /compliance/i.test(c)), 'an aria-label is read').toBe(true);
   expect(claims.some((c) => /certified/i.test(c)), 'a button value is read').toBe(true);
+});
+
+// Shaped like S-06: a title and an <article> holding an <h1>, the marked block, and a sibling paragraph, each with a claim word.
+// The title and the heading carry different words, so a finding names which of them it came from.
+// The span inside the block holds a spoken attribute: a marker exempts body text, never what a screen reader adds.
+const LEGAL_PAGE_HTML = '<!doctype html><title>Compliance notice - MAK-AI</title><main><article><h1>Score notice</h1>'
+  + '<div data-legal-text><p>We certify this.</p><span aria-label="Certified badge">x</span></div><p>Certified by us.</p></article></main>';
+
+test('FR-PUB-01: a claim word outside the legal-text block of a legal page still fails', async ({ page }) => {
+  await page.setContent(LEGAL_PAGE_HTML);
+  for (const pathname of ['/legal/terms', '/legal/privacy/2']) {
+    const claims = claimsIn(await readWords(page, 'self-test', pathname));
+    // Four findings, as read: the document title, the heading of the enclosing article, the sibling paragraph and the
+    // aria-label inside the block. "certify" in the block's body is skipped.
+    expect(claims.length, `${pathname}: ${claims.join('; ')}`).toBe(4);
+    expect(claims.filter((c) => c.startsWith('"Compliance"')), `${pathname}: the document title`).toHaveLength(1);
+    expect(claims.filter((c) => c.startsWith('"Score"')), `${pathname}: the heading of the enclosing article`).toHaveLength(1);
+    expect(claims.some((c) => /Certified by us/.test(c)), `${pathname}: the sibling`).toBe(true);
+    expect(claims.some((c) => /Certified badge/.test(c)), `${pathname}: the spoken attribute inside the block`).toBe(true);
+    expect(claims.some((c) => /We certify this/.test(c)), `${pathname}: the block's body is skipped`).toBe(false);
+  }
+});
+
+test('FR-PUB-01: data-legal-text on a non-legal route exempts nothing', async ({ page }) => {
+  await page.setContent(LEGAL_PAGE_HTML);
+  // One, two, three and four segments: a route list widened to a template of any of those lengths would exempt one of these.
+  for (const pathname of ['/about', '/', '/legal', '/explore/framework', '/orgs/acme', '/legal/terms/2/extra', '/orgs/acme/legal/terms', '/explore/legal/terms', '']) {
+    const claims = claimsIn(await readWords(page, 'self-test', pathname));
+    expect(claims.length, `${pathname}: ${claims.join('; ')}`).toBe(5);   // the title, the heading, the block's body, the sibling, the attribute
+    expect(claims.filter((c) => c.startsWith('"Compliance"')), `${pathname}: the document title`).toHaveLength(1);
+    expect(claims.filter((c) => c.startsWith('"Score"')), `${pathname}: the heading`).toHaveLength(1);
+    expect(claims.some((c) => /We certify this/.test(c)), `${pathname}: the block's body is read`).toBe(true);
+  }
 });
 
 test('FR-PUB-01 (helper): a framework area or control name passes only where it appears verbatim; a non-name "failure" is still found', () => {
@@ -681,6 +733,22 @@ test('FR-PUB-01: no page reachable signed out shows a product claim', async ({ b
   expect(unaccounted('(public)', withRedirects(pages), NOT_CRAWLED), 'public page files no crawl reads').toEqual([]);
 
   expect(signedOut.claims, 'claims on pages reachable signed out').toEqual([]);
+  await context.close();
+});
+
+test('FR-PUB-01: data-legal-text appears only on /legal pages', async ({ browser, baseURL }) => {
+  test.setTimeout(5 * 60_000);
+  const context = await browser.newContext({ baseURL });
+  await abortPendingBackgroundRequests(context);
+  const page = await context.newPage();
+  failOnDialog(page);
+  const crawl = pageChecker(page, 'signed out', async () => []);
+  // The legal pages are given as starts, so the crawl reaches a marked page whatever else it follows.
+  await reachablePages(page, ['/', ...LEGAL_STARTS], { max: MAX_PAGES, label: 'signed out' }, crawl.check);
+  const marked = crawl.legalTextBlocks.filter((b) => b.count > 0);
+  expect(marked.length, 'the crawl reached a legal page that carries the marker').toBeGreaterThan(0);
+  expect(marked.filter((b) => !isLegalTextRoute(b.pathname)), 'pages that carry data-legal-text but are not S-06').toEqual([]);
+  expect(marked.filter((b) => b.count !== 1), 'a legal page carries the marker once').toEqual([]);
   await context.close();
 });
 

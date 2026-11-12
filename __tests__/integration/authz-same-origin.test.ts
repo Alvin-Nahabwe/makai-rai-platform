@@ -11,7 +11,6 @@ import { buildOrg, buildPlatformAdmin, type FixtureAccount, type OrgFixture } fr
 import { callRoute, sessionAs, idsOf, rowCounts, validRequestFor, type Method } from '../helpers/routeDriver';
 import { currentAcceptances } from '../helpers/legalStub';
 import { adminCreateOrganisation } from '../../lib/data/definer';
-import { currentLegalText } from '../../lib/legal/registry';
 
 /**
  * NFR-SEC-08 (SRS lines 2943-2947): a state-changing request that does not come from the platform's own origin
@@ -93,7 +92,7 @@ beforeAll(async () => {
   [a, b] = [await buildOrg({ label: 'origin-a' }), await buildOrg({ label: 'origin-b' })];
   platformAdmin = await buildPlatformAdmin();
   const created = (slug: string) => adminCreateOrganisation({ requestId: randomUUID(), digest: randomUUID(),
-    actorUserId: platformAdmin.userId, name: slug, slug, agreement: agreementInput(), ownerEmail: `${slug}@fixture.test`,
+    actorUserId: platformAdmin.userId, name: slug, slug, legalName: 'Origin Probe Ltd', ownerEmail: `${slug}@fixture.test`,
     tokenHash: createHash('sha256').update(randomUUID()).digest('hex'), expiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000), linkShown: false,
   });
   ownerless = await created('origin-ownerless');
@@ -115,12 +114,6 @@ beforeAll(async () => {
   } });
   await idsOf(a, 'app/api/v1/orgs/[slug]/projects/[id]/route.ts');   // build A's objects before any case counts rows
 });
-
-/** The organisation agreement the stub registry publishes, as S-24 sends it. */
-function agreementInput() {
-  const text = currentLegalText('organisation-agreement');
-  return { agreementVersion: text.version, textHash: text.sha256, acceptedOn: '2026-10-30', controllerLegalName: 'Origin Probe Ltd', dpContactEmail: 'dpo-origin@fixture.test' };
-}
 
 /** The caller each route would serve: a member allowed the action, the platform administrator, or nobody. */
 function sessionFor(file: string, method: Method): string | null {
@@ -148,11 +141,10 @@ async function requestFor(file: string, method: Method): Promise<{ params: Recor
       return { params: { ...params, token: registerToken }, body: { name: 'Probe Invitee', password: 'ProbeNewPassword123!', acceptances: currentAcceptances() } };
     case 'app/api/admin/users/[id]/role/route.ts': return { params, body: new URLSearchParams({ active: 'false', requestId: randomUUID() }) };
     case REGISTER: return { params, body: {} };   // the 404 tombstone reads no body
-    // Routes 41 to 46 (ORG): each body the route would accept for the platform administrator.
+    // Routes 41, 42 and 44 to 46 (ORG; route 43 is gone): each body the route would accept for the platform administrator.
     case 'app/api/admin/organisations/route.ts':
-      return { params, body: { requestId: randomUUID(), name: 'Origin Probe Lab', agreement: agreementInput(), ownerEmail: 'origin-probe-owner@fixture.test', showLink: false } };
+      return { params, body: { requestId: randomUUID(), name: 'Origin Probe Lab', legalName: 'Origin Probe Ltd', ownerEmail: 'origin-probe-owner@fixture.test', showLink: false } };
     case 'app/api/admin/organisations/[orgId]/route.ts': return { params: { orgId: ownerless.orgId }, body: { name: 'Origin Probe Renamed' } };
-    case 'app/api/admin/organisations/[orgId]/agreements/route.ts': return { params: { orgId: ownerless.orgId }, body: agreementInput() };
     case 'app/api/admin/organisations/[orgId]/owner-invitations/route.ts':
       return { params: { orgId: lapsed.orgId }, body: { email: 'origin-probe-next@fixture.test', requestReference: 'CTRL-ORIGIN', showLink: false } };
     case 'app/api/admin/organisations/[orgId]/owner-invitations/[invitationId]/resend/route.ts':

@@ -193,6 +193,7 @@ keep the receipt themselves (below).
 | `makrai_definer` | `organisation_events` | * | INSERT, SELECT |
 | `makrai_definer` | `organization_agreements` | * | INSERT |
 | `makrai_definer` | `organizations` | * | INSERT, SELECT |
+| `makrai_definer` | `organizations` | `legalName` | UPDATE |
 | `makrai_definer` | `organizations` | `name` | UPDATE |
 | `makrai_definer` | `password_reset_tokens` | `usedAt` | SELECT |
 | `makrai_definer` | `password_reset_tokens` | `userId` | SELECT |
@@ -265,13 +266,18 @@ keep the receipt themselves (below).
 
 ### Definer functions
 
-`makrai_identity` may execute exactly nine functions, all SECURITY DEFINER and owned by the
-NOLOGIN role `makrai_definer` (migration `20261030000500_v060_05_functions`; SRS 9.5 line 3673):
-`accept_invitation`, `admin_create_organisation`, `admin_record_agreement`,
-`admin_issue_owner_invitation`, `admin_resend_invitation`, `admin_revoke_invitation`,
-`admin_set_account_active` and `admin_correct_org_name`, and the read
-`personal_platform_rows` (migration `20261105000000_exp_personal_platform_rows`). Each
-administrator function checks that its actor is an active platform administrator; each writes
+`makrai_identity` may execute exactly eleven function signatures, all SECURITY DEFINER and owned by the
+NOLOGIN role `makrai_definer`: `accept_invitation`, `admin_create_organisation` (two signatures),
+`admin_record_agreement`, `admin_issue_owner_invitation`, `admin_resend_invitation`,
+`admin_revoke_invitation`, `admin_set_account_active`, `admin_correct_org_name`,
+`admin_correct_org_legal_name`, and the read `personal_platform_rows`. Migration
+`20261030000500_v060_05_functions` created eight of the names (SRS 9.5 line 3673), migration
+`20261105130000_v060_org_create_receipt` the 15-argument `admin_create_organisation`, migration
+`20261105000000_exp_personal_platform_rows` the read, and migration
+`20261112000000_v061_organisation_legal_name` the legal-name correction and the second
+`admin_create_organisation` signature. That signature takes the institution's legal name and writes no
+agreement record; the 15-argument signature stays callable for the previous image until a later
+migration revokes it. Each administrator function checks that its actor is an active platform administrator; each writes
 its `organisation_events` (or `platform_events`) row in the same transaction as the action.
 `makrai_app` may execute none. `role-grants.test.ts` pins the list, with each function's exact
 signature. The identity lane calls them only through `lib/data/definer.ts`, on

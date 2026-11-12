@@ -34,7 +34,7 @@ type AcceptancesFormMode =
 export type AcceptancesFormProps = AcceptancesFormBase & AcceptancesFormMode;
 
 /** The sentence each box carries as its label (W-11 note 2). */
-const ACCEPT_LABEL: Record<AcceptedKind, string> = {
+export const ACCEPT_LABEL: Record<AcceptedKind, string> = {
   terms: 'I accept the terms of service.',
   privacy: 'I have read the privacy notice.',
   'cross-border-consent': 'I agree that my account and my team\'s records are stored and processed outside my country, as the cross-border storage consent describes.',
@@ -42,8 +42,8 @@ const ACCEPT_LABEL: Record<AcceptedKind, string> = {
 
 function acceptedKindOf(text: LegalTextVersion): AcceptedKind {
   const kind = ACCEPTED_KINDS.find((k) => k === text.kind);
-  // A programming error, not a state a person can reach: the organisation agreement is recorded by
-  // the administrator (FR-ORG-05) and is never offered here.
+  // A programming error, not a state a person can reach: the organisation agreement is retired
+  // and is not one of the accepted texts, so it is never offered here.
   if (kind === undefined) throw new TypeError(`not an accepted kind: ${text.kind}`);
   return kind;
 }

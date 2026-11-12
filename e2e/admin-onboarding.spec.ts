@@ -11,8 +11,8 @@ import { testDb } from '../__tests__/helpers/db';
 import { buildOrg } from '../__tests__/helpers/recordFixture';
 
 /**
- * J-01, the MAK-AI administrator's journey (units/ORG.md Task 9): create an organisation with its agreement and first
- * owner (S-24), recover the first owner (resend, revoke, issue again with the controller's request reference), and
+ * J-01, the MAK-AI administrator's journey (units/ORG.md Task 9): create an organisation with its institution's legal
+ * name and first owner (S-24), correct the legal name, recover the first owner (resend, revoke, issue again with the controller's request reference), and
  * see it on S-23; the administrator pages hold no record content (FR-ORG-03, NFR-SEC-04 (c)); an organisation address
  * gives the administrator the same S-31 as a non-member (UX-05); the removed creation paths answer 404 (FR-ORG-04);
  * keyboard, axe and reflow (NFR-A11Y-02, NFR-A11Y-05). The administrator is the run's one seat (adminSeat(), Task 8b).
@@ -29,15 +29,10 @@ function seat(m: FixtureManifest, orgSlug: string, role: string, index: 0 | 1): 
 
 test.use({ storageState: adminSeat().storageStatePath });
 
-/** Fills S-24's create form with W-10's fields, by label. */
-async function fillCreate(page: Page, name: string, ownerEmail: string): Promise<void> {
+/** Fills S-24's create form by label: the organisation, its institution's legal name and the first owner. */
+async function fillCreate(page: Page, name: string, ownerEmail: string, legalName = 'Makerere University'): Promise<void> {
   await page.getByLabel('Organisation name').fill(name);
-  await page.getByLabel('Agreement version accepted').selectOption({ index: 1 });
-  await page.getByLabel('Day', { exact: true }).fill('27');
-  await page.getByLabel('Month', { exact: true }).fill('10');
-  await page.getByLabel('Year', { exact: true }).fill('2026');
-  await page.getByLabel('Controller legal name').fill('Makerere University');
-  await page.getByLabel('Data-protection contact email').fill('dpo@fixture.test');
+  await page.getByLabel("Institution's legal name").fill(legalName);
   await page.getByLabel("First owner's email").fill(ownerEmail);
 }
 
@@ -65,7 +60,7 @@ test('FR-ORG-01 FR-ORG-02 UX-23: the administrator creates an organisation and r
   await page.goto('/admin/organisations');
   await page.getByRole('link', { name: 'Create organisation' }).first().click();
   await expect(page.getByRole('heading', { level: 1, name: 'Create an organisation' })).toBeVisible();
-  await fillCreate(page, name, ownerEmail);
+  await fillCreate(page, name, ownerEmail, 'J01 University');
   await page.getByLabel(/^Show link/).check();
   await page.getByRole('button', { name: 'Create organisation and send invitation' }).click();
   // The e2e server has no mail sender, so this is UX-23's failure branch: the sentence in the status region, the link.
@@ -76,7 +71,20 @@ test('FR-ORG-01 FR-ORG-02 UX-23: the administrator creates an organisation and r
 
   await page.getByRole('link', { name: 'Open the organisation' }).click();
   await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
+  await expect(page.getByText('Legal name: J01 University')).toBeVisible();
   await expect(page.getByText(`${ownerEmail} · owner · Pending`, { exact: false })).toBeVisible();
+
+  // The legal name is corrected on its own form, and the page and S-23 show the new value.
+  await page.getByRole('button', { name: 'Correct the legal name' }).click();
+  await page.getByLabel("Institution's legal name").fill('J01 University of Science');
+  await page.getByRole('button', { name: 'Save the corrected legal name' }).click();
+  await expect(page.getByRole('status').filter({ hasText: /^Saved\./ })).toHaveText('Saved. The legal name is now J01 University of Science; it was J01 University.');
+  await expect(page.getByText('Legal name: J01 University of Science')).toBeVisible();
+
+  // The retired agreements route answers 404 for this organisation, to the administrator with the app's own headers.
+  const orgId = (await testDb.organization.findFirstOrThrow({ where: { name }, select: { id: true } })).id;
+  const retired = await page.request.post(`/api/admin/organisations/${orgId}/agreements`, { data: {}, headers: { origin: new URL(page.url()).origin } });
+  expect(retired.status()).toBe(404);
 
   await page.getByRole('button', { name: 'Resend invitation' }).click();
   await expect(page.getByText(/^Resent: the old link no longer works\./)).toBeVisible();
@@ -95,6 +103,35 @@ test('FR-ORG-01 FR-ORG-02 UX-23: the administrator creates an organisation and r
 
   await page.goto('/admin/organisations?shown=1000');
   await expect(page.getByRole('link', { name })).toBeVisible();
+  await expect(page.getByRole('row', { name: new RegExp(`^${name}`) })).toContainText('J01 University of Science');
+});
+
+test('FR-ORG-01 FR-ACC-03 FR-ORG-09: the first owner accepts the three texts from the shown link and S-30 shows the legal name, with no agreement', async ({ page, browser }) => {
+  const name = `Owner Lab ${randomUUID().slice(0, 8)}`;
+  await page.goto('/admin/organisations/new');
+  await fillCreate(page, name, `owner-${randomUUID().slice(0, 8)}@fixture.test`, 'Owner University');
+  await page.getByLabel(/^Show link/).check();
+  await page.getByRole('button', { name: 'Create organisation and send invitation' }).click();
+  const link = await page.getByLabel('Invitation link').inputValue();
+  const org = await testDb.organization.findFirstOrThrow({ where: { name }, select: { slug: true } });
+  const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
+  await abortPendingBackgroundRequests(context);
+  const owner = await context.newPage();
+  await owner.goto(link);
+  await owner.getByLabel('Your name').fill('Olive Owner');
+  await owner.getByLabel('Password', { exact: true }).fill('Owner-password-ok-1');
+  await owner.getByRole('button', { name: 'Continue' }).click();
+  // The acceptance step offers exactly three texts (the code's accepted kinds), none ticked: tick each.
+  const boxes = owner.getByRole('checkbox');
+  await expect(boxes).toHaveCount(3);
+  for (const box of await boxes.all()) await box.check();
+  await owner.getByRole('button', { name: 'Create account' }).click();
+  await owner.waitForURL(`**/orgs/${org.slug}/dashboard?welcome=1`);
+  await owner.goto(`/orgs/${org.slug}/settings/organisation`);
+  await expect(owner.getByRole('heading', { level: 1, name: 'Organisation details' })).toBeVisible();
+  await expect(owner.getByText('Legal name: Owner University')).toBeVisible();
+  await expect(owner.locator('main')).not.toContainText(/agreement/i);
+  await context.close();
 });
 
 test('UX-23 FR-ORG-02: with the email failed and no link shown, Resend and show link gives the administrator a working link', async ({ page, browser }) => {
@@ -194,18 +231,15 @@ test('NFR-A11Y-02 NFR-A11Y-05: J-01 by keyboard; S-07 and S-23 to S-25 pass axe 
   // J-01's create form by keyboard alone: Tab to each field, type, Space for the checkbox, Enter to submit.
   await page.goto('/admin/organisations/new');
   const name = `Keys Lab ${randomUUID().slice(0, 8)}`;
-  const steps: Array<[string, string | null]> = [
-    ['name', name], ['agreementVersion', null], ['day', '27'], ['month', '10'], ['year', '2026'],
-    ['controllerLegalName', 'Keyboard University'], ['dpContactEmail', 'dpo-keys@fixture.test'], ['ownerEmail', `keys-${randomUUID().slice(0, 8)}@fixture.test`],
+  const steps: Array<[string, string]> = [
+    ['name', name], ['legalName', 'Keyboard University'], ['ownerEmail', `keys-${randomUUID().slice(0, 8)}@fixture.test`],
   ];
   await page.getByLabel('Organisation name').focus();
   for (const [field, value] of steps) {
     await expect(page.locator(`form [name="${field}"]`)).toBeFocused();
     await expectFocusVisibleAndUncovered(page);
-    if (field === 'agreementVersion') await page.keyboard.press('ArrowDown');
-    else await page.keyboard.type(value!);
+    await page.keyboard.type(value);
     await page.keyboard.press('Tab');
-    if (field === 'agreementVersion' && !(await page.locator('form [name="day"]').evaluate((el) => el === document.activeElement))) await page.keyboard.press('Tab');   // past "Read this version"
   }
   await expect(page.locator('form [name="showLink"]')).toBeFocused();
   await page.keyboard.press('Space');

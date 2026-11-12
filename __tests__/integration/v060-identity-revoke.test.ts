@@ -6,7 +6,6 @@ import { Client } from 'pg';
 import { testDb, resetDb } from '../helpers/db';
 import { buildOrg, buildPlatformAdmin, type FixtureAccount, type OrgFixture } from '../helpers/recordFixture';
 import { acceptInvitationViaDefiner, adminCreateOrganisation } from '../../lib/data/definer';
-import type { AgreementInput } from '../../types/api';
 
 /**
  * v0.6.0 step 8 (ORG; SRS 9.5 grant table, line 3673): the identity lane loses its direct writes to
@@ -67,10 +66,6 @@ async function triggerEnabled(table: string, name: string): Promise<string> {
 }
 
 const hex = (s: string) => createHash('sha256').update(s).digest('hex');
-const AGREEMENT: AgreementInput = {
-  agreementVersion: '1', textHash: hex('organisation agreement v1'), acceptedOn: '2026-10-30',
-  controllerLegalName: 'Revoke Lab Controller', dpContactEmail: 'dpo@revoke.fixture.test',
-};
 const plainAccount = async (email: string) => (await testDb.user.create({ data: { email, name: email, passwordHash: 'x' } })).id;
 
 let admin: FixtureAccount;
@@ -103,7 +98,7 @@ describe('step 8: the identity lane writes these tables only through the definer
     const token = randomBytes(32).toString('hex');
     const h = hex(token);
     const ownerUser = await plainAccount('o@fixture.test');
-    const r = await adminCreateOrganisation({ requestId: randomUUID(), digest: randomUUID(), actorUserId: admin.userId, name: 'Revoke Lab', slug: 'revoke-lab', agreement: AGREEMENT, ownerEmail: 'o@fixture.test', tokenHash: h, expiresAt: new Date(Date.now() + 7 * 86_400_000), linkShown: false });
+    const r = await adminCreateOrganisation({ requestId: randomUUID(), digest: randomUUID(), actorUserId: admin.userId, name: 'Revoke Lab', slug: 'revoke-lab', legalName: 'Revoke Lab Controller', ownerEmail: 'o@fixture.test', tokenHash: h, expiresAt: new Date(Date.now() + 7 * 86_400_000), linkShown: false });
     await expect(acceptInvitationViaDefiner({ tokenHash: h, userId: ownerUser })).resolves.toMatchObject({ orgId: r.orgId, role: 'owner' });
     expect(await testDb.membership.count({ where: { orgId: r.orgId, userId: ownerUser, role: 'owner' } })).toBe(1);
   });
