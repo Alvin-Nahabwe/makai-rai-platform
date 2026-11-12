@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { ESLint } from 'eslint';
 import { execFileSync } from 'node:child_process';
 import { writeFileSync, unlinkSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -42,20 +43,51 @@ type ImportPattern = {
   message?: string;
 };
 
-// Memoized per file: several `it` blocks below assert on the SAME
-// resolved config for the SAME representative file, and `eslint
-// --print-config` is a real subprocess spawn (Node + full flat-config
-// resolution) — recomputing it per assertion is pure waste for a value
-// that is deterministic within one test run. Efficiency-pass finding.
-const rawConfigCache = new Map<string, { rules?: Record<string, unknown> }>();
+type ResolvedConfig = { rules?: Record<string, unknown> };
 
-function resolvedConfig(file: string): { rules?: Record<string, unknown> } {
-  let cached = rawConfigCache.get(file);
-  if (!cached) {
-    const raw = execFileSync('npx', ['eslint', '--print-config', file], { encoding: 'utf8' });
-    cached = JSON.parse(raw) as { rules?: Record<string, unknown> };
-    rawConfigCache.set(file, cached);
+// A representative ordinary `app/**` file — not one of the sanctioned
+// exemption files (lib/data/**, lib/auth/identity.ts, lib/auth/context.ts).
+const REPRESENTATIVE_FILE = 'app/(public)/login/page.tsx';
+
+// Every file whose resolved config a case below reads.
+const RESOLVED_FILES = [
+  REPRESENTATIVE_FILE,
+  'lib/data/connection.ts',
+  'lib/data/tenant.ts',
+  'lib/auth/identity.ts',
+  'lib/auth/context.ts',
+  'lib/data/framework.ts',
+];
+
+const resolvedConfigs = new Map<string, ResolvedConfig>();
+
+// One ESLint instance resolves all of them, once, before any case runs.
+// Loading the flat config is nearly all of the cost (the five files after
+// the first take about 60 ms together), and each of these files used to pay
+// it again in its own `npx eslint --print-config` subprocess: about 2 s per
+// file with nothing else running, inside the first case to read that file.
+// `eslint --print-config <file>` prints `JSON.stringify` of
+// `calculateConfigForFile(<file>)` (lib/cli.js in the eslint package), on an
+// ESLint that differs from this one only by an empty `rules` override, so
+// the JSON round trip below leaves a case exactly what it parsed before.
+//
+// The limit is this hook's own: it waits for ESLint to import
+// eslint.config.mjs and every plugin that file names. Measured at 1.4 s on
+// a quiet 12-core machine, 2.0 s with six CPU-bound processes running and
+// 4.6 to 5.8 s with 24.
+beforeAll(async () => {
+  const eslint = new ESLint();
+  for (const file of RESOLVED_FILES) {
+    const config: unknown = await eslint.calculateConfigForFile(file);
+    resolvedConfigs.set(file, JSON.parse(JSON.stringify(config)) as ResolvedConfig);
   }
+}, 30_000);
+
+function resolvedConfig(file: string): ResolvedConfig {
+  const cached = resolvedConfigs.get(file);
+  // A missing entry must not read as "no rules": that is the vacuous pass
+  // this suite exists to prevent.
+  if (!cached) throw new Error(`${file} is not in RESOLVED_FILES, so its config was never resolved`);
   return cached;
 }
 
@@ -90,10 +122,6 @@ function hasCreateOrgContextBan(patterns: ImportPattern[]): boolean {
 }
 
 describe('eslint effective config — the three import bans coexist (CRITICAL-1)', () => {
-  // A representative ordinary `app/**` file — not one of the sanctioned
-  // exemption files (lib/data/**, lib/auth/identity.ts, lib/auth/context.ts).
-  const REPRESENTATIVE_FILE = 'app/(public)/login/page.tsx';
-
   it('carries the lib/db ban (D-074)', () => {
     const patterns = effectiveNoRestrictedImportsPatterns(REPRESENTATIVE_FILE);
     const dbBan = patterns.find((p) => p.group?.includes('@/lib/db'));
@@ -158,7 +186,12 @@ describe('eslint effective config — the three import bans coexist (CRITICAL-1)
     } finally {
       if (existsSync(probePath)) unlinkSync(probePath);
     }
-  });
+    // Its own limit: the case waits for a whole `npx eslint` run on the probe,
+    // a subprocess that starts npm, loads the flat config and lints one file.
+    // That run is the check. Measured at 1.3 to 1.6 s on a quiet 12-core
+    // machine, 1.9 to 6.4 s with six CPU-bound processes running beside other
+    // work (load average 9 to 15) and 4.5 to 5.0 s with 24.
+  }, 30_000);
 });
 
 describe('eslint effective config — per-file override exemptions resolve as intended', () => {
