@@ -1,8 +1,8 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { failOnDialog } from './helpers/dialogs';
 import { applyNetworkProfile } from './helpers/network';
 import {
-  captureDecisionRequestIds, draftKeys, draftValues, fillValid, fixtureOrgId, openQuestion, questionPath, saveAlert, saveStatus, saveViaApi, seatOf, waitForQuestionPage,
+  captureDecisionRequestIds, draftKeys, draftValues, fillValid, fixtureOrgId, historyPath, openQuestion, questionPath, saveAlert, saveStatus, saveViaApi, seatOf, waitForQuestionPage,
 } from './helpers/session';
 
 /**
@@ -355,4 +355,219 @@ test('UX-26 B2: the draft key holds the session\'s account, organisation, projec
   await page.getByLabel('Reason (required)').fill('x');
   const [key] = await draftKeys(page);
   expect(key).toBe(`makrai.draft.v1:${seatOf('assessor').userId}:${fixtureOrgId()}:${projectId}:q:${Q}`);
+});
+
+/**
+ * UX-30, FR-EVD-01, FR-EVD-04: a file that finished uploading is attached to the answer that is saved. The block reports
+ * the new id and the end of the upload in the same effect flush, and the second report must not undo the first.
+ * Each case opens a new project, so the history it reads holds only its own versions.
+ */
+// Upload budget. The evidence route allows 10 POSTs a minute per account, links included (lib/rate-limit.ts:72), and index-0
+// seats are shared: evidence-block.spec.ts uploads from assessor 0 (about 6 in a minute) and authz-api-matrix.spec.ts posts one
+// link as every index-0 seat; evidence-block's M-19 spends admin 1. These cases therefore use the two index-1 seats nothing else
+// uploads from (the fixture has no other index-1 seat that may upload). assessor 1: fill-upload-Save 1, upload-fill-Save 1, link 1,
+// reload 1, two files 2 = 6 POSTs. owner 1: Save while uploading 1, typed during the wait 1, second version 2, failed upload 1 = 5
+// (the cut-off upload never reaches the server). A retry re-runs one case on its seat, 2 POSTs at most, so 8 is the worst minute.
+const evidencePdf = (name: string, size = 20 * 1024) => ({ name, mimeType: 'application/pdf', buffer: Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(size - 9, 0x20)]) });
+const isEvidencePost = (r: { request(): { method(): string }; url(): string }) => r.request().method() === 'POST' && /\/evidence$/.test(new URL(r.url()).pathname);
+const isDecisionPost = (r: { method(): string; url(): string }) => r.method() === 'POST' && /\/decisions$/.test(new URL(r.url()).pathname);
+
+/** Chooses `file` and returns the id the upload's 201 reply gave it, once the block says "Uploaded". */
+async function uploadAndWait(page: Page, file: ReturnType<typeof evidencePdf>): Promise<string> {
+  const reply = page.waitForResponse(isEvidencePost);
+  await page.locator('input[type="file"]').setInputFiles(file);
+  const res = await reply;
+  expect(res.status()).toBe(201);
+  const { id } = (await res.json()) as { id: string };
+  await expect(page.getByText(new RegExp(`^Uploaded ${file.name.replace('.', '\\.')} `))).toBeVisible();
+  return id;
+}
+async function historyText(page: Page, projectId: string): Promise<string> {
+  await page.goto(historyPath(projectId, Q));
+  await expect(page.getByRole('heading', { level: 1, name: `History of ${Q}` })).toBeVisible();
+  return (await page.locator('main').innerText());
+}
+async function draftEvidenceIds(page: Page): Promise<string[]> {
+  const raw = (await draftValues(page))[0];
+  return raw === undefined ? [] : (JSON.parse(raw) as { value: { evidenceIds: string[] } }).value.evidenceIds;
+}
+
+test('UX-30 FR-EVD-01: fill, upload a PDF, Save: the decision carries the file and the draft held it before Save', async ({ page, baseURL }) => {
+  const projectId = await openQuestion(page, 'assessor', Q, baseURL!, undefined, 1); await fillValid(page);
+  const id = await uploadAndWait(page, evidencePdf('kept-one.pdf'));
+  await expect.poll(() => draftEvidenceIds(page)).toEqual([id]);
+  const sent = page.waitForRequest(isDecisionPost);
+  await page.getByRole('button', { name: 'Save decision' }).click();
+  expect(((await sent).postDataJSON() as { evidenceIds: string[] }).evidenceIds).toEqual([id]);
+  await expect(saveStatus(page)).toHaveText(/^Saved as version 1 at /);
+  const text = await historyText(page, projectId);
+  expect(text).toContain('kept-one.pdf');
+  expect(text).not.toContain('Evidence\nNone');
+});
+
+test('UX-30 FR-EVD-01: upload first, then fill, Save: the decision carries the file', async ({ page, baseURL }) => {
+  const projectId = await openQuestion(page, 'assessor', Q, baseURL!, undefined, 1);
+  const id = await uploadAndWait(page, evidencePdf('kept-two.pdf'));
+  await fillValid(page);
+  const sent = page.waitForRequest(isDecisionPost);
+  await page.getByRole('button', { name: 'Save decision' }).click();
+  expect(((await sent).postDataJSON() as { evidenceIds: string[] }).evidenceIds).toEqual([id]);
+  await expect(saveStatus(page)).toHaveText(/^Saved as version 1 at /);
+  const text = await historyText(page, projectId);
+  expect(text).toContain('kept-two.pdf');
+  expect(text).not.toContain('Evidence\nNone');
+});
+
+test('UX-30: Save while the file is still uploading; the form sends by itself when it finishes, with the file', async ({ page, baseURL }) => {
+  test.slow();   // the Poor profile makes the wait real; the 60 s steps below need more than the 30 s default
+  const projectId = await openQuestion(page, 'owner', Q, baseURL!, undefined, 1); await fillValid(page);
+  await applyNetworkProfile(page, 'Poor');
+  const reply = page.waitForResponse(isEvidencePost);
+  await page.locator('input[type="file"]').setInputFiles(evidencePdf('kept-three.pdf', 600 * 1024));
+  await expect(page.getByText(/^Uploading kept-three\.pdf:/)).toBeVisible();
+  await page.getByRole('button', { name: 'Save decision' }).click();
+  await expect(page.getByText('Waiting for kept-three.pdf to finish uploading.')).toBeVisible();
+  const sent = page.waitForRequest(isDecisionPost, { timeout: 60_000 });
+  const res = await reply;
+  expect(res.status()).toBe(201);
+  const { id } = (await res.json()) as { id: string };
+  expect(((await sent).postDataJSON() as { evidenceIds: string[] }).evidenceIds).toEqual([id]);
+  await expect(saveStatus(page)).toHaveText(/^Saved as version 1 at /, { timeout: 60_000 });
+  // The save that waited is the answer on screen: no draft is left behind and the form does not claim one.
+  await expect(page.getByText('Draft on this device, not saved yet')).toHaveCount(0);
+  expect(await draftKeys(page)).toHaveLength(0);
+  const text = await historyText(page, projectId);
+  expect(text).toContain('kept-three.pdf');
+  expect(text).not.toContain('Evidence\nNone');
+});
+
+test('UX-30: the answer on screen when the wait ends is what is saved, with the file', async ({ page, baseURL }) => {
+  test.slow();   // the Poor profile makes the wait real; the 60 s steps below need more than the 30 s default
+  const projectId = await openQuestion(page, 'owner', Q, baseURL!, undefined, 1); await fillValid(page);
+  await applyNetworkProfile(page, 'Poor');
+  const reply = page.waitForResponse(isEvidencePost);
+  await page.locator('input[type="file"]').setInputFiles(evidencePdf('kept-five.pdf', 600 * 1024));
+  await expect(page.getByText(/^Uploading kept-five\.pdf:/)).toBeVisible();
+  await page.getByRole('button', { name: 'Save decision' }).click();
+  await expect(page.getByText('Waiting for kept-five.pdf to finish uploading.')).toBeVisible();
+  await page.getByLabel('Reason (required)').fill('Typed while the save was waiting');
+  const sent = page.waitForRequest(isDecisionPost, { timeout: 60_000 });
+  const res = await reply;
+  expect(res.status()).toBe(201);
+  const { id } = (await res.json()) as { id: string };
+  const body = (await sent).postDataJSON() as { evidenceIds: string[]; reason: string };
+  expect(body.reason).toBe('Typed while the save was waiting');
+  expect(body.evidenceIds).toEqual([id]);
+  await expect(saveStatus(page)).toHaveText(/^Saved as version 1 at /, { timeout: 60_000 });
+  await expect(page.getByText('Draft on this device, not saved yet')).toHaveCount(0);
+  expect(await draftKeys(page)).toHaveLength(0);
+  const text = await historyText(page, projectId);
+  expect(text).toContain('kept-five.pdf');
+  expect(text).toContain('Typed while the save was waiting');
+});
+
+test('UX-30 FR-EVD-04: version 2 carries the earlier file and the one uploaded since', async ({ page, baseURL }) => {
+  const projectId = await openQuestion(page, 'owner', Q, baseURL!, undefined, 1); await fillValid(page);
+  const first = await uploadAndWait(page, evidencePdf('kept-four-a.pdf'));
+  let sent = page.waitForRequest(isDecisionPost);
+  await page.getByRole('button', { name: 'Save decision' }).click();
+  expect(((await sent).postDataJSON() as { evidenceIds: string[] }).evidenceIds).toEqual([first]);
+  await expect(saveStatus(page)).toHaveText(/^Saved as version 1 at /);
+  // FR-EVD-04: the new version starts from the previous version's evidence, which the block shows as attached.
+  await expect(page.getByText('kept-four-a.pdf').first()).toBeVisible();
+  const second = await uploadAndWait(page, evidencePdf('kept-four-b.pdf'));
+  await page.getByLabel('Reason (required)').fill('Version 2 with a second file');
+  sent = page.waitForRequest(isDecisionPost);
+  await page.getByRole('button', { name: 'Save decision' }).click();
+  expect([...((await sent).postDataJSON() as { evidenceIds: string[] }).evidenceIds].sort()).toEqual([first, second].sort());
+  await expect(saveStatus(page)).toHaveText(/^Saved as version 2 at /);
+  const text = await historyText(page, projectId);
+  expect(text).toContain('kept-four-a.pdf');
+  expect(text).toContain('kept-four-b.pdf');
+});
+
+test('FR-EVD-01 (control): a link alone is saved with the link\'s id', async ({ page, baseURL }) => {
+  const projectId = await openQuestion(page, 'assessor', Q, baseURL!, undefined, 1); await fillValid(page);
+  await page.getByRole('button', { name: 'Add a link' }).click();
+  await page.getByLabel('Web address').fill('https://example.org/minutes');
+  const reply = page.waitForResponse(isEvidencePost);
+  await page.getByRole('button', { name: 'Add link', exact: true }).click();
+  const { id } = (await (await reply).json()) as { id: string };
+  const sent = page.waitForRequest(isDecisionPost);
+  await page.getByRole('button', { name: 'Save decision' }).click();
+  expect(((await sent).postDataJSON() as { evidenceIds: string[] }).evidenceIds).toEqual([id]);
+  await expect(saveStatus(page)).toHaveText(/^Saved as version 1 at /);
+  expect(await historyText(page, projectId)).toContain('https://example.org/minutes');
+});
+
+test('UX-30 FR-EVD-01: upload, reload, Save: the reloaded form holds the file and the save carries it', async ({ page, baseURL }) => {
+  const projectId = await openQuestion(page, 'assessor', Q, baseURL!, undefined, 1); await fillValid(page);
+  const id = await uploadAndWait(page, evidencePdf('kept-six.pdf'));
+  await expect.poll(() => draftEvidenceIds(page)).toEqual([id]);
+  await page.reload(); await waitForQuestionPage(page);
+  // keptEvidenceLine (lib/question/draft.ts): the card the form shows for evidence the draft holds and the block does not.
+  await expect(page.locator('[data-kept-evidence]')).toHaveText(/^This answer also holds 1 evidence item added before the page was closed\. It is attached when you save\./);
+  const sent = page.waitForRequest(isDecisionPost);
+  await page.getByRole('button', { name: 'Save decision' }).click();
+  expect(((await sent).postDataJSON() as { evidenceIds: string[] }).evidenceIds).toEqual([id]);
+  await expect(saveStatus(page)).toHaveText(/^Saved as version 1 at /);
+  await expect(page.getByText('Draft on this device, not saved yet')).toHaveCount(0);
+  expect(await draftKeys(page)).toHaveLength(0);
+  expect(await historyText(page, projectId)).toContain('kept-six.pdf');
+});
+
+test('UX-30: Save while two files are uploading sends once, after both finished, with both ids', async ({ page, baseURL }) => {
+  test.slow();
+  const projectId = await openQuestion(page, 'assessor', Q, baseURL!, undefined, 1); await fillValid(page);
+  await applyNetworkProfile(page, 'Poor');
+  const ids: string[] = [];
+  let finished = 0;
+  let finishedAtSend = -1;
+  let posts = 0;
+  page.on('response', (r) => { if (isEvidencePost(r) && r.status() === 201) { finished++; void r.json().then((b: { id: string }) => ids.push(b.id)); } });
+  page.on('request', (r) => { if (isDecisionPost(r)) { posts++; finishedAtSend = finished; } });
+  await page.locator('input[type="file"]').setInputFiles([evidencePdf('kept-seven-a.pdf', 150 * 1024), evidencePdf('kept-seven-b.pdf', 450 * 1024)]);
+  await expect(page.getByText(/^Uploading kept-seven-/).first()).toBeVisible();
+  await page.getByRole('button', { name: 'Save decision' }).click();
+  await expect(page.locator('[data-upload-wait]')).toBeVisible();
+  // A partial finish must not send: the smaller file is done, the larger still moves, the wait card stays and nothing was posted.
+  await expect(page.getByText(/^Uploaded kept-seven-a\.pdf /)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/^Uploading kept-seven-b\.pdf:/)).toBeVisible();
+  await expect(page.locator('[data-upload-wait]')).toBeVisible();
+  expect(posts).toBe(0);
+  const sent = page.waitForRequest(isDecisionPost, { timeout: 60_000 });
+  const body = (await sent).postDataJSON() as { evidenceIds: string[] };
+  await expect(saveStatus(page)).toHaveText(/^Saved as version 1 at /, { timeout: 60_000 });
+  expect(posts).toBe(1);
+  expect(finishedAtSend).toBe(2);
+  await expect.poll(() => ids.length).toBe(2);
+  expect([...body.evidenceIds].sort()).toEqual([...ids].sort());
+  await expect(page.getByText('Draft on this device, not saved yet')).toHaveCount(0);
+  expect(await draftKeys(page)).toHaveLength(0);
+  const text = await historyText(page, projectId);
+  expect(text).toContain('kept-seven-a.pdf');
+  expect(text).toContain('kept-seven-b.pdf');
+});
+
+test('UX-30: a failed upload is never waited out by itself; Save without it leaves it out and names it', async ({ page, context, baseURL }) => {
+  const projectId = await openQuestion(page, 'owner', Q, baseURL!, undefined, 1); await fillValid(page);
+  const good = await uploadAndWait(page, evidencePdf('kept-eight-ok.pdf'));
+  const bodies: Array<{ evidenceIds: string[] }> = [];
+  page.on('request', (r) => { if (isDecisionPost(r)) bodies.push(r.postDataJSON() as { evidenceIds: string[] }); });
+  await context.setOffline(true);
+  await page.locator('input[type="file"]').setInputFiles(evidencePdf('kept-eight-bad.pdf'));
+  await expect(page.getByText('Not uploaded: connection lost.')).toBeVisible();
+  await context.setOffline(false);
+  await page.getByRole('button', { name: 'Save decision' }).click();
+  await expect(page.getByText('Waiting for kept-eight-bad.pdf to finish uploading.')).toBeVisible();
+  expect(bodies).toEqual([]);
+  const sent = page.waitForRequest(isDecisionPost);
+  await page.getByRole('button', { name: 'Save without it' }).click();
+  expect(((await sent).postDataJSON() as { evidenceIds: string[] }).evidenceIds).toEqual([good]);
+  await expect(saveStatus(page)).toHaveText(/^Saved as version 1 at /);
+  await expect(page.getByText('Saved without kept-eight-bad.pdf. Add it in a new save once it has uploaded.')).toBeVisible();
+  expect(bodies).toHaveLength(1);
+  const text = await historyText(page, projectId);
+  expect(text).toContain('kept-eight-ok.pdf');
+  expect(text).not.toContain('kept-eight-bad.pdf');
 });

@@ -172,6 +172,9 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
 
   /** An edit: kept on this device, never sent (UX-24). An edit after a press is no longer the answer that was pressed. */
   const edit = useCallback((next: DecisionDraft): void => {
+    // The ref is made current here, not only by the layout effect after the next render: the evidence block reports a
+    // finished upload with two edits in one effect flush, and the second must build on the first, not on the old value.
+    latest.current = { ...latest.current, value: next };
     setValue(next);
     setRestoredPressed(false);
     setTypedSinceCurrent(true);
@@ -284,7 +287,9 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
 
   function save(withoutUploads: boolean, files: { uploading: string[]; failed: string[] } = uploads, saveBase: number | null = base): void {
     if (saving) return;
-    const errs = draftErrors(value, data, new Date());
+    // The wait path runs inside the evidence block's effect flush, before this form re-renders, so the render's `value` can be one edit behind.
+    const answer = latest.current.value;
+    const errs = draftErrors(answer, data, new Date());
     if (errs.length > 0) {
       setErrors(errs);
       setStatus(null);
@@ -295,7 +300,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
     const pendingFiles = [...files.uploading, ...files.failed];
     if (pendingFiles.length > 0 && !withoutUploads) { setWaiting(true); return; }
     setWaiting(false);
-    void send(value, saveBase, retry, withoutUploads ? pendingFiles : []);
+    void send(answer, saveBase, retry, withoutUploads ? pendingFiles : []);
   }
 
   // UX-30: a Save that waited is sent once every chosen file has finished (the block reports each change of its uploads).
@@ -381,10 +386,11 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
             }}
             onUploadState={(s) => {
               setUploads(s);
-              afterUploads.current(s);
               const now = latest.current.value;
               // The draft names the files moving now, so a reload can say which did not finish (M-18).
               if (!sameIds(s.uploading, now.notUploaded)) edit({ ...now, notUploaded: [...s.uploading] });
+              // Last, so a Save that waited sends the answer with that edit already in it; otherwise `send` sees the answer change under it.
+              afterUploads.current(s);
             }}
             onItemsChange={setEvidenceItems}
             notUploaded={restoredNotUploaded}
