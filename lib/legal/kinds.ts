@@ -11,7 +11,7 @@ export const LEGAL_KINDS: readonly LegalTextKind[] = ['terms', 'privacy', 'cross
 export const LEGAL_KIND_NAMES: Record<LegalTextKind, string> = {
   terms: 'terms of service',
   privacy: 'privacy notice',
-  'cross-border-consent': 'cross-border storage consent',
+  'cross-border-consent': 'consent to storage abroad',
   'organisation-agreement': 'organisation agreement',
 };
 

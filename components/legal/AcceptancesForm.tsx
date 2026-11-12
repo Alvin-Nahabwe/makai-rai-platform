@@ -37,7 +37,7 @@ export type AcceptancesFormProps = AcceptancesFormBase & AcceptancesFormMode;
 export const ACCEPT_LABEL: Record<AcceptedKind, string> = {
   terms: 'I accept the terms of service.',
   privacy: 'I have read the privacy notice.',
-  'cross-border-consent': 'I agree that my account and my team\'s records are stored and processed outside my country, as the cross-border storage consent describes.',
+  'cross-border-consent': 'I agree that my data is stored in Finland and handled by Cloudflare, around the world, and Resend, in the United States, as the consent to storage abroad describes.',
 };
 
 function acceptedKindOf(text: LegalTextVersion): AcceptedKind {

@@ -6,6 +6,8 @@ import type { Stage, StoredDecisionStatus, ScopeAnswer, Decider, DeclaredDate, F
   MitigationStatus, MitigationKind, DocumentType, CalendarDate } from '../../types/record';
 import { testDb } from './db';
 import { stubAcceptanceRows } from './legalStub';
+import { legalTextVersion } from '../../lib/legal/registry';
+import { ACCEPTED_KINDS, CONSENT_TYPE_FOR } from '../../types/legal';
 
 /**
  * The record fixture builder of 00-contract.md, Test harness API (K0a): one organisation with a
@@ -19,6 +21,7 @@ import { stubAcceptanceRows } from './legalStub';
  * app/, lib/ or components/ may import this file (NFR-PRIV-05; record-fixture.test.ts).
  */
 
+export type Acceptances = 'current' | 'version-1' | 'pre-v1' | 'none';
 export type FixtureTextSource = (field: string, seq: number) => string;
 export interface FixtureAccount { userId: string; email: string; name: string; password: string }
 export interface FixtureMember extends FixtureAccount { role: OrgRole; orgId: string; orgSlug: string }
@@ -30,7 +33,10 @@ export interface OrgFixture {
 export interface BuildOrgOptions {
   label?: string;
   text?: FixtureTextSource;                     // default: plain 'Fixture <field> <seq>'
-  acceptances?: 'v1' | 'pre-v1' | 'none';       // default 'v1' (rows of fixtureLegalTexts()); 'pre-v1' = version '1.0', no hash
+  // default 'current' (rows of fixtureLegalTexts(): the registry's current version of each kind); 'version-1' = the
+  // registry's version 1 of each kind with its hash, which stops counting as current once a later required version exists;
+  // 'pre-v1' = version '1.0', no hash
+  acceptances?: Acceptances;
   withAgreement?: boolean;                       // default true
 }
 
@@ -51,10 +57,23 @@ function fixturePasswordHash(): Promise<string> {
 let seq = 0;
 const nextSeq = () => ++seq;
 
-async function writeAcceptances(userId: string, acceptances: 'v1' | 'pre-v1' | 'none'): Promise<void> {
+/** The rows of version 1 of each accepted kind, as the registry holds it (the words and hash published on 2 November 2026). */
+function versionOneAcceptanceRows(userId: string) {
+  return ACCEPTED_KINDS.map((kind) => {
+    const v1 = legalTextVersion(kind, '1');
+    if (v1 === null) throw new Error(`no version 1 of ${kind} in the registry`);
+    return { userId, consentType: CONSENT_TYPE_FOR[kind], version: v1.version, textHash: v1.sha256, granted: true as const };
+  });
+}
+
+async function writeAcceptances(userId: string, acceptances: Acceptances): Promise<void> {
   if (acceptances === 'none') return;
-  if (acceptances === 'v1') {
+  if (acceptances === 'current') {
     await testDb.consentRecord.createMany({ data: stubAcceptanceRows(userId) });
+    return;
+  }
+  if (acceptances === 'version-1') {
+    await testDb.consentRecord.createMany({ data: versionOneAcceptanceRows(userId) });
     return;
   }
   await testDb.consentRecord.createMany({ data: (['terms_of_service', 'privacy_policy'] as const).map((consentType) =>
@@ -62,7 +81,7 @@ async function writeAcceptances(userId: string, acceptances: 'v1' | 'pre-v1' | '
 }
 
 /** An account, with its acceptances; never a platform administrator unless `admin`. */
-async function fixtureAccount(a: { email: string; name: string; admin?: boolean; acceptances: 'v1' | 'pre-v1' | 'none' }): Promise<FixtureAccount> {
+async function fixtureAccount(a: { email: string; name: string; admin?: boolean; acceptances: Acceptances }): Promise<FixtureAccount> {
   const user = await testDb.user.create({
     data: { email: a.email, name: a.name, passwordHash: await fixturePasswordHash(), role: a.admin ? 'admin' : 'assessor' },
   });
@@ -81,7 +100,7 @@ export async function buildOrg(opts: BuildOrgOptions = {}): Promise<OrgFixture> 
   for (const role of ROLES) {
     const account = await fixtureAccount({
       email: `fixture-${label}-${role}-0-${run}@fixture.test`.toLowerCase(), name: `Fixture ${label} ${role} 0`,
-      acceptances: opts.acceptances ?? 'v1',
+      acceptances: opts.acceptances ?? 'current',
     });
     await testDb.membership.create({ data: { orgId: org.id, userId: account.userId, role } });
     members[role] = { ...account, role, orgId: org.id, orgSlug: org.slug };
@@ -96,9 +115,9 @@ export async function buildOrg(opts: BuildOrgOptions = {}): Promise<OrgFixture> 
 }
 
 /** The platform administrator: role `admin`, no membership (FR-ORG-03, NFR-SEC-04). */
-export async function buildPlatformAdmin(opts: { acceptances?: 'v1' | 'none' } = {}): Promise<FixtureAccount> {
+export async function buildPlatformAdmin(opts: { acceptances?: 'current' | 'none' } = {}): Promise<FixtureAccount> {
   const run = runId();
-  return fixtureAccount({ email: `fixture-platform-admin-${run}@fixture.test`, name: 'Fixture Platform Admin', admin: true, acceptances: opts.acceptances ?? 'v1' });
+  return fixtureAccount({ email: `fixture-platform-admin-${run}@fixture.test`, name: 'Fixture Platform Admin', admin: true, acceptances: opts.acceptances ?? 'current' });
 }
 
 /** Test-only cast, as fixture.ts does: the fixture knows the organisation and role it just made. */
