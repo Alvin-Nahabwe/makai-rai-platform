@@ -987,12 +987,14 @@ the app writes its audit warnings to that stream with `console.warn` (`lib/secur
 one line each, beginning `{"timestamp":"…","level":"warn","event":"…",`. Inviting a member or an
 administrator's correction writes one; so do a failed or locked sign-in, a rate limit and a
 refused password change, which anyone on the internet can cause. So this count does not show
-whether signing in works: 8.6 step 4 and the synthetic check do. The `grep` drops those lines,
+whether signing in works. Signing in does: yours, as 8.6 step 4 has you do for v0.6.1, or the
+next hourly synthetic journey. The `grep` drops those lines,
 only where the line starts with that form, and counts every other line, so an audit line at
 level `error` still counts, and so does a warning the app writes as plain text. A failing page
 writes several lines: a first line beginning `⨯`, then its stack and fields.
 
-Lines beginning `[auth][error]`, `[auth][cause]` or `[auth][details]`, with stack lines between
+Lines that show `[auth][error]`, `[auth][cause]` or `[auth][details]` (in red: each starts with
+a colour code, so a search for a line beginning `[auth]` finds nothing), with stack lines between
 them, are written by the sign-in library when a browser sends a session cookie the app cannot
 read. They count. A few from one request are a stale or made-up cookie, not a failed deploy; one
 for every signed-in person means the app cannot read any session, and is. Their form is read from
@@ -1005,7 +1007,7 @@ lines with their times, and the time the new container started with its restart 
 in UTC:
 
 ```bash
-journalctl CONTAINER_TAG=makrai/docker-nextjs-1 --since -10min -p err -o short-iso-precise --utc | grep -vE '\]: [{]"timestamp":"[^"]*","level":"warn","event":"[A-Z_]+",'
+journalctl CONTAINER_TAG=makrai/docker-nextjs-1 --since -10min -p err -o short-iso-precise --utc | grep -vE '^[^]]*\]: [{]"timestamp":"[^"]*","level":"warn","event":"[A-Z_]+",'
 docker inspect -f '{{.State.StartedAt}} restarts={{.RestartCount}}' docker-nextjs-1
 ```
 
@@ -1018,7 +1020,7 @@ it as expected if it holds another `"code"`. A line stamped at or after the star
 written by the new app: that is a failed deploy, as above, except for the few sign-in library
 lines described above. The first line leaves out the audit warnings, as the count does, so an
 invitation or an administrator's action in those ten minutes does not show here; it finds them
-after the journal's own prefix, which ends `]: `. The two commands were run on a workstation to check that their times can be
+right after the journal's own prefix, which ends at the first `]: ` of the line. The two commands were run on a workstation to check that their times can be
 compared; they have not been run on the host after a content release. The `grep` was run on the
 app's error lines captured with `docker logs` in the local rehearsal of 12 November 2026, not
 read from a journal: it kept the old app's one `content_not_published` line, dropped the new
@@ -1556,13 +1558,13 @@ Run the post-check in 8.4. `SAME` now means the container runs the image PREV na
 After a rollback to `makrai-nextjs:rollback` the second line prints `DIFFERENT`, as 8.4
 says it should.
 
-After a rollback of v0.6.1 to v0.6.0 the third line may print more than `0`, and that alone
+After a rollback of v0.6.1 to v0.6.0, 8.4's third line may print more than `0`, and that alone
 does not fail the verification. While content 5.1.0 stays registered, v0.6.0 keeps refusing
 saves, withdrawals and seals, and fails the pages 9.6 lists. Each refused request writes an
 error line, and a failing page writes several. Count the lines that are not one of the two
 refusals 9.6 describes, not part of a failing page's lines, and not an audit warning (8.4). Run
 the commands once 10 minutes have passed since the last `up` of 9.2 returned (for this release
-9.2 also recreates postgres after the app), so that they read only v0.6.0's lines; an earlier run
+9.2 also brings up postgres, then nginx, after the app), so that they read only v0.6.0's lines; an earlier run
 also counts the lines of the release you rolled back from. The first line holds the pattern, the
 second prints the count, and the third prints the lines that were counted:
 
@@ -1756,16 +1758,20 @@ SQL drops the create-organisation function v0.6.1 calls (`lib/data/definer.ts:96
 administrator recorded or corrected after the deploy. Names entered when an organisation was created on
 v0.6.1: they have no agreement record to copy from, and cannot be recovered. Only names copied
 from agreement records can be copied again from `organization_agreements`.** Before the revert,
-the owner, outside any AI session, runs this read-only statement and keeps its output:
+the owner, outside any AI session, runs this read-only statement, which saves its output to
+`/root/legal-names-kept.txt`, readable by root only:
 
 ```bash
-$C exec -T postgres psql -U "$PGU" -d makrai -At -v ON_ERROR_STOP=1 <<'SQL'
+( umask 077; $C exec -T postgres psql -U "$PGU" -d makrai -At -v ON_ERROR_STOP=1 > /root/legal-names-kept.txt <<'SQL'
 select id, name, "legalName" from organizations where "legalName" is not null order by name;
 SQL
+)
 ```
 
-It prints one line per organisation with a legal name: `id|name|legal name`. It prints nothing
-when none is set. It was run on a local database only (it ran clean and printed no line there).
+The file holds one line per organisation with a legal name: `id|name|legal name`. It is empty
+when none is set. The statement was run in the local rehearsal of 12 November 2026 and its output
+kept; the form above, which saves it to a file under `/root`, was checked on a workstation with a
+stand-in for the database command, not on the host.
 
 Run the revert as the owner role, in this order, in one transaction (the statements are the ones
 run on the scratch database, unchanged):
@@ -1828,9 +1834,11 @@ v0.6.1. In the rehearsal the name recorded in 8.6 step 6 was gone and S-23 flagg
 organisation "Legal name not recorded" again. Do 8.6 step 6 again. It finds only organisations
 left without a name: an organisation whose name was corrected on v0.6.1 and that has an agreement
 record now shows the agreement's name and is not flagged (read from the migration; the rehearsal
-had no such organisation). So also run the read-only statement above again and compare its output
-with the output kept before the revert (`diff kept.txt now.txt`). For every organisation whose
-line differs or is missing, open it (S-24) and record the kept name with its legal-name form.
+had no such organisation). So also run the read-only statement above again, saving to
+`/root/legal-names-now.txt` in place of `/root/legal-names-kept.txt`, then run
+`diff /root/legal-names-kept.txt /root/legal-names-now.txt`. Each line marked `<` is an
+organisation whose kept name differs or is missing now. Open it (S-24) and record the kept name
+with its legal-name form.
 
 ### 9.6 v0.6.1: content 5.1.0 and a rollback to v0.6.0
 
