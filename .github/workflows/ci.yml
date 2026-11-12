@@ -212,9 +212,23 @@ jobs:
         # __tests__/unit/document-render.test.ts reads the rendered PDF back with pdftotext (C4 M2); in CI that test fails, not skips, without it.
         # This step has hung a job for 30 minutes on the runner's network: each attempt is bounded, three are made (the step cap sits above the whole loop), and the
         # final `command -v pdftotext` fails the step if none of them installed it.
+        # The runner's mirror list (/etc/apt/apt-mirrors.txt) names only ubuntu.com hosts: azure.archive, archive and
+        # security. On 11 Nov 2026 none of them resolved on the runners for hours (runs 43033760696, 43033770570,
+        # 43033776763: "Temporary failure resolving 'azure.archive.ubuntu.com'"; run 43059649436, with the Azure line
+        # dropped: "Temporary failure resolving 'archive.ubuntu.com'"), while other hosts did. So after a failed attempt
+        # a mirror outside ubuntu.com is put first. apt verifies the signature on every index with the Ubuntu archive
+        # key already on the runner, whichever mirror serves it, so a mirror cannot change what is installed.
         timeout-minutes: 17
         run: |
-          for i in 1 2 3; do timeout 150 sudo apt-get update && timeout 150 sudo apt-get install -y poppler-utils && break; echo "retry $i"; sleep 10; done; command -v pdftotext
+          for i in 1 2 3; do
+            timeout 150 sudo apt-get update && timeout 150 sudo apt-get install -y poppler-utils && break
+            echo "retry $i"
+            if [ -f /etc/apt/apt-mirrors.txt ]; then
+              printf 'https://mirrors.kernel.org/ubuntu/\tpriority:1\nhttps://archive.ubuntu.com/ubuntu/\tpriority:2\n' | sudo tee /etc/apt/apt-mirrors.txt
+            fi
+            sleep 10
+          done
+          command -v pdftotext
 
       - name: Unit + integration tests
         # DATABASE_URL (job-level, above) matches vitest.config.ts's own
@@ -693,6 +707,10 @@ jobs:
           for i in 1 2 3; do
             sudo env "PATH=$PATH" timeout -k 15 420 ./node_modules/.bin/playwright install-deps chromium && { deps=yes; break; }
             echo "retry deps $i"
+            # Same mirror fault as the poppler step above: put a mirror outside ubuntu.com first for the retry.
+            if [ -f /etc/apt/apt-mirrors.txt ]; then
+              printf 'https://mirrors.kernel.org/ubuntu/\tpriority:1\nhttps://archive.ubuntu.com/ubuntu/\tpriority:2\n' | sudo tee /etc/apt/apt-mirrors.txt
+            fi
             for j in $(seq 1 24); do sudo fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock >/dev/null 2>&1 || break; sleep 5; done
             sudo dpkg --configure -a || true
             sleep 10
