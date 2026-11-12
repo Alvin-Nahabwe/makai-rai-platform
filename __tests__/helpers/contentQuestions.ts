@@ -30,20 +30,39 @@ export function runningVersion(contentRoot: string): string {
 export const cleanText = (s: string): string => s.replace(/\s+/g, ' ').trim();
 
 /**
- * The question texts the allow-list's `{ id, reason }` entries name, cleaned, read from the running bundle under
- * `contentRoot`. An id that names no question there, or a question with no `text` string, throws: an entry that
- * resolves to nothing would exempt nothing without anyone noticing.
+ * The question texts the allow-list's `{ id, reason }` entries name, cleaned, from every version `<contentRoot>/index.json`
+ * lists: the owner-reviewed wordings of those questions, as the lint exempts the id in every version directory. The
+ * running version must hold every id (an id that names no question there, or a question with no `text` string, throws:
+ * an entry that resolves to nothing would exempt nothing without anyone noticing); an older version adds its wording
+ * where it holds the id.
  */
 export function allowListedQuestionTexts(entries: readonly unknown[], contentRoot: string): string[] {
-  const version = runningVersion(contentRoot);
-  const bankFile = path.join(contentRoot, version, 'questionBank.json');
-  const byId = new Map(questionsIn(JSON.parse(fs.readFileSync(bankFile, 'utf8'))).map(({ q }) => [q.id as string, q]));
-  return entries.flatMap((e) => {
+  const bankOf = (version: string) => {
+    const file = path.join(contentRoot, version, 'questionBank.json');
+    return { file, byId: new Map(questionsIn(JSON.parse(fs.readFileSync(file, 'utf8'))).map(({ q }) => [q.id as string, q])) };
+  };
+  const ids = entries.flatMap((e) => {
     const id = (e as { id?: unknown } | null)?.id;
-    if (typeof id !== 'string') return [];
+    return typeof id === 'string' ? [id] : [];
+  });
+  const running = runningVersion(contentRoot);
+  const { file: bankFile, byId } = bankOf(running);
+  const out = new Set<string>();
+  for (const id of ids) {
     const q = byId.get(id);
     if (q === undefined) throw new Error(`claim-allowlist.json: id ${id} names no question in ${bankFile}`);
     if (typeof q.text !== 'string') throw new Error(`claim-allowlist.json: question ${id} in ${bankFile} has no text`);
-    return [cleanText(q.text)];
-  });
+    out.add(cleanText(q.text));
+  }
+  const index = JSON.parse(fs.readFileSync(path.join(contentRoot, 'index.json'), 'utf8')) as { versions?: unknown };
+  const versions = Array.isArray(index.versions) ? index.versions.filter((v): v is string => typeof v === 'string') : [];
+  for (const version of versions) {
+    if (version === running) continue;
+    const { byId: older } = bankOf(version);
+    for (const id of ids) {
+      const text = older.get(id)?.text;
+      if (typeof text === 'string') out.add(cleanText(text));
+    }
+  }
+  return [...out];
 }

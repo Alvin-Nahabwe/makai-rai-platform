@@ -102,11 +102,11 @@
       "controlId": "C-03",
       "file": "/notebooks/C-03_data-quality-audit.ipynb",
       "requirementsFile": "/notebooks/requirements.txt",
-      "sha256": "a478bc653ebb0afe7687683a9400453be53404620947199c65c3bc39c297bca1",
-      "bytes": 38905,
+      "sha256": "e9bbf24cf1929a21f812853725a726038c78558e9641993eb9d40951cf992bbd",
+      "bytes": 40133,
       "review": {
         "reviewer": "Product owner, MAK-AI",
-        "date": "2026-11-06",
+        "date": "2026-11-12",
         "outcome": "passed"
       },
       "released": true
@@ -115,11 +115,11 @@
       "controlId": "C-04",
       "file": "/notebooks/C-04_bias-detection.ipynb",
       "requirementsFile": "/notebooks/requirements.txt",
-      "sha256": "4b7423006c177a7426c7df7c86bb611ac483a5e081c915f53ac75f9c19f3341a",
-      "bytes": 32252,
+      "sha256": "ac3f3c3b81fc488eb4aaaad60302ac5be92e14ad1380d39cf3296260fd48ca5b",
+      "bytes": 33478,
       "review": {
         "reviewer": "Product owner, MAK-AI",
-        "date": "2026-11-06",
+        "date": "2026-11-12",
         "outcome": "passed"
       },
       "released": true
@@ -128,11 +128,11 @@
       "controlId": "C-05",
       "file": "/notebooks/C-05_data-distribution.ipynb",
       "requirementsFile": "/notebooks/requirements.txt",
-      "sha256": "8bd325cce56c08ccfde3cb5da20f932042f40fb7ef79356bcbbb3621241a3e48",
-      "bytes": 28543,
+      "sha256": "950009e0b79679c2b5e23a0976e5c2b2f0fad37c503c11abf764393b5bdccb73",
+      "bytes": 29799,
       "review": {
         "reviewer": "Product owner, MAK-AI",
-        "date": "2026-11-06",
+        "date": "2026-11-12",
         "outcome": "passed"
       },
       "released": true
@@ -141,11 +141,11 @@
       "controlId": "C-10",
       "file": "/notebooks/C-10_privacy-anonymization.ipynb",
       "requirementsFile": "/notebooks/requirements.txt",
-      "sha256": "46df30a6b7c5506491967a3944878ce1626592be852fc9121936e9d2be0d8159",
-      "bytes": 36514,
+      "sha256": "1369680345eb6c8573d8058db8894f633edbde84a7fd3df30a73a1296086f772",
+      "bytes": 37670,
       "review": {
         "reviewer": "Product owner, MAK-AI",
-        "date": "2026-11-06",
+        "date": "2026-11-12",
         "outcome": "passed"
       },
       "released": true
@@ -154,11 +154,11 @@
       "controlId": "C-13",
       "file": "/notebooks/C-13_subgroup-fairness.ipynb",
       "requirementsFile": "/notebooks/requirements.txt",
-      "sha256": "a7aa2b5456ff9f994a3ecc4ddb98be23136e086d01e1116e507f44799c31c98b",
-      "bytes": 35878,
+      "sha256": "5b4bd7303e779ae7cb92df9da29673f57855adbcdf81c18946638757b1b60550",
+      "bytes": 37084,
       "review": {
         "reviewer": "Product owner, MAK-AI",
-        "date": "2026-11-06",
+        "date": "2026-11-12",
         "outcome": "passed"
       },
       "released": true
@@ -167,11 +167,11 @@
       "controlId": "C-14",
       "file": "/notebooks/C-14_disaggregated-performance.ipynb",
       "requirementsFile": "/notebooks/requirements.txt",
-      "sha256": "6c28b2673aca6a44ed70d22d300896a41ed7fd62c8b29dc20a414a684ecf48ea",
-      "bytes": 37531,
+      "sha256": "7e4101a3ffd081bca911419ec618f3717b4630d3086d376dfea024b58a813eba",
+      "bytes": 38661,
       "review": {
         "reviewer": "Product owner, MAK-AI",
-        "date": "2026-11-06",
+        "date": "2026-11-12",
         "outcome": "passed"
       },
       "released": true
@@ -180,11 +180,11 @@
       "controlId": "C-15",
       "file": "/notebooks/C-15_bias-mitigation.ipynb",
       "requirementsFile": "/notebooks/requirements.txt",
-      "sha256": "267249dce3a37818fb60e771913b1a700cd47d9244d5446384be94f31f36abbd",
-      "bytes": 29804,
+      "sha256": "37159c7a9933a63b118c915554fb6463011dc324c058c4310ac13a1f92c62f80",
+      "bytes": 30932,
       "review": {
         "reviewer": "Product owner, MAK-AI",
-        "date": "2026-11-06",
+        "date": "2026-11-12",
         "outcome": "passed"
       },
       "released": true
@@ -193,11 +193,11 @@
       "controlId": "C-16",
       "file": "/notebooks/C-16_stratified-evaluation.ipynb",
       "requirementsFile": "/notebooks/requirements.txt",
-      "sha256": "9827ce699cc329e9c223d51f064f295503b98d09e07adf2e309db08f1ee9367c",
-      "bytes": 35242,
+      "sha256": "81168f814925702f3c1e69be3db2b8e6131dc7721242cdc008846a02114c4935",
+      "bytes": 36461,
       "review": {
         "reviewer": "Product owner, MAK-AI",
-        "date": "2026-11-06",
+        "date": "2026-11-12",
         "outcome": "passed"
       },
       "released": true
@@ -206,11 +206,11 @@
       "controlId": "C-18",
       "file": "/notebooks/C-18_explainability-analysis.ipynb",
       "requirementsFile": "/notebooks/requirements.txt",
-      "sha256": "454452565c34b2a51db9d3a4a24bc6a1f87d8df91ad3a09f9260dc12e21b8fba",
-      "bytes": 41861,
+      "sha256": "08aa9226fcf89b677c609127614896f6e5bea1cbb69af900e75891ff395a1802",
+      "bytes": 43228,
       "review": {
         "reviewer": "Product owner, MAK-AI",
-        "date": "2026-11-06",
+        "date": "2026-11-12",
         "outcome": "passed"
       },
       "released": true
@@ -219,11 +219,11 @@
       "controlId": "C-21",
       "file": "/notebooks/C-21_monitoring-drift.ipynb",
       "requirementsFile": "/notebooks/requirements.txt",
-      "sha256": "c938055f5331d2395e7f0b144970d8a9d947de6704dcbe951ee55739fd4ea0cc",
-      "bytes": 33853,
+      "sha256": "fdd279abaebe86a8eb702850685ad813c3305556e3531978b8f5d2766e3796c6",
+      "bytes": 35169,
       "review": {
         "reviewer": "Product owner, MAK-AI",
-        "date": "2026-11-06",
+        "date": "2026-11-12",
         "outcome": "passed"
       },
       "released": true

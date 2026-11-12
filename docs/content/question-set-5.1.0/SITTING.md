@@ -1,5 +1,23 @@
 # Sitting: the question set for content 5.1.0
 
+## The owner's answers
+
+You answered this pack on 11 November 2026 at 19:43 EAT. Your answers, in your words:
+
+- "5.1.0 sitting pack: Accept all".
+- On the two optional edits: "Apply both (Recommended)".
+
+What was applied:
+
+- All 35 open rows are accepted as drafted: the 27 question wordings, the 3 good practice texts (C-Q161 and C-Q196 as the draft carries them, and C-Q205 with the draft's sentence), the 2 reason code descriptions, and the 3 document help lines. No row is declined and none is pending.
+- The two optional edits are applied to the "why this is asked" text of Q-PP-05 (ending "…this question asks about those rights, and a separate question asks about particular groups.") and Q-PP-24 (ending "…for example through multi-stakeholder consultation."). Each keeps its "Risk area" cut. In `changes.json` these two rows are named `WA-tail+owner-edit`, with decision `edit`; the field `to` still shows the cut text as drafted and `final` holds your edit.
+- The proposal file now says `approved`.
+- One batch hash moved from the draft: pre-processing, from `88edf6c1c567` to `dc9a520349bb`. The other six did not change. Final hashes are in the table under "What you sign".
+
+At this point in the sitting nothing was signed yet. The rest of this pack is the record of what was asked, as it stood at the sitting.
+
+Signed since: on 11 November 2026 at 20:13 EAT you answered "Approve all seven (Recommended)" and the seven batches were signed. The seven records, with their hashes, are in `data/content/5.1.0/signoffs.json`.
+
 For the product owner, 11 November 2026. This is a draft. Content 5.0.0 stays the running version, and nothing in this pack has been signed. Each line below is a change proposed to the wording teams see. You accept it, edit it or decline it, and only then is anything signed.
 
 The proposed wording is the wording of the copy audit of 11 November 2026. Seven rows differ from the audit or fill in a part it left open: C-Q161 and C-Q196 (the audit's text held a note to a designer, and the draft leaves it out; both are explained below), and C-Q38, C-Q205, C-DH1, C-DH2 and C-DH3, where the audit gave only an instruction (C-Q38: drop the second sentence), the changed sentence or a choice, and the pack puts it into the whole text. The draft of 5.1.0 is in `data/content/5.1.0/`. Every proposed change, with the text it replaces, is in `docs/content/question-set-5.1.0/changes.json`.
@@ -223,16 +241,16 @@ Two "why this is asked" texts name another question or a control by its code. Th
 
 ## What you sign
 
-Seven batches are signed for 5.1.0, because 5.1.0 starts with no sign-off. A batch hash is the fingerprint of the texts it covers. The hashes below are those of the bundle as drafted, with every proposed row as written. An edited or declined row changes the hash of its batch, and you then sign the new hash. Signing the batches covers the changes in them.
+Seven batches are signed for 5.1.0, because 5.1.0 starts with no sign-off. A batch hash is the fingerprint of the texts it covers. The hashes below are the final ones, after your answers. The last column says which batch hash moved from the draft pack. Only the pre-processing batch changed, because the two texts you edited (Q-PP-05 and Q-PP-24) are pre-processing questions. The other six are identical to the draft. Signing the batches covers the changes in them.
 
-| Batch | What changed in it | Draft hash |
-|---|---|---|
-| pre-processing | 9 question wordings, 0 good practice texts, 22 cut sentences, help text and example removed | `88edf6c1c567` |
-| in-processing | 12 question wordings, 0 good practice texts, 22 cut sentences, help text and example removed | `5de38caa9f20` |
-| post-processing | 6 question wordings, 3 good practice texts, 23 cut sentences, help text and example removed | `c341d4c95c9c` |
-| help-and-reason-codes | 2 reason code descriptions, 3 document help lines | `e454ab532987` |
-| question-set:pre-processing | 9 question wordings | `821b7105adae` |
-| question-set:in-processing | 12 question wordings | `55530c798bf1` |
-| question-set:post-processing | 6 question wordings | `851310d26dbf` |
+| Batch | What changed in it | Final hash | Changed from the draft |
+|---|---|---|---|
+| pre-processing | 9 question wordings, 0 good practice texts, 22 cut sentences, help text and example removed; two "why this is asked" texts edited by you | `dc9a520349bb` | yes |
+| in-processing | 12 question wordings, 0 good practice texts, 22 cut sentences, help text and example removed | `5de38caa9f20` | no |
+| post-processing | 6 question wordings, 3 good practice texts, 23 cut sentences, help text and example removed | `c341d4c95c9c` | no |
+| help-and-reason-codes | 2 reason code descriptions, 3 document help lines | `e454ab532987` | no |
+| question-set:pre-processing | 9 question wordings | `821b7105adae` | no |
+| question-set:in-processing | 12 question wordings | `55530c798bf1` | no |
+| question-set:post-processing | 6 question wordings | `851310d26dbf` | no |
 
-Say, for each batch: "I approve the pre-processing batch, hash 88edf6c1c567." with the time you give it, or we record the time you said it. The batches are: question-set:pre-processing, question-set:in-processing, question-set:post-processing, pre-processing, in-processing, post-processing and help-and-reason-codes.
+Say, for each batch: "I approve the pre-processing batch, hash dc9a520349bb." with the time you give it, or we record the time you said it. The batches are: question-set:pre-processing, question-set:in-processing, question-set:post-processing, pre-processing, in-processing, post-processing and help-and-reason-codes.

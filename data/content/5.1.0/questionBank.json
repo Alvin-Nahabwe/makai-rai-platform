@@ -95,7 +95,7 @@
                 "PP-04"
               ],
               "expectedPractice": "In proportion to the risk, the team assessed how the system could affect people's rights, such as privacy, fair treatment, access to services and the chance to challenge a decision. For a low-stakes tool this can be a short written note; for a system that decides about people it is a fuller assessment.",
-              "whyAsked": "Some harms fall on everyone the system touches, such as a lost chance to appeal or a withheld service; this question asks about those rights, Q-PP-04 about particular groups.",
+              "whyAsked": "Some harms fall on everyone the system touches, such as a lost chance to appeal or a withheld service; this question asks about those rights, and a separate question asks about particular groups.",
               "reasonPrompt": "Say which rights you looked at, what you found and what you changed. If you judged a short note enough, say why the risk is low. Name any reviewer by role.",
               "evidenceExamples": [
                 "the rights assessment, or its section of the C-02 assessment",
@@ -113,7 +113,7 @@
                 "PP-04"
               ],
               "expectedPractice": "The team listed the perspectives the problem needs and compared them with the people it has. It filled the gaps it found, for example with a domain adviser, a community representative or a reviewer from another discipline. The list says who fills each gap, by role, and how they take part.",
-              "whyAsked": "A team whose members share one background misses the same things, so it needs to know which perspectives are missing and bring them in, for example through C-20 Multi-stakeholder Consultation.",
+              "whyAsked": "A team whose members share one background misses the same things, so it needs to know which perspectives are missing and bring them in, for example through multi-stakeholder consultation.",
               "reasonPrompt": "Name the perspectives you found missing and who now provides them, by role. Do not record anyone's gender, nationality or other personal details.",
               "evidenceExamples": [
                 "the perspectives list",

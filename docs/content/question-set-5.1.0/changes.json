@@ -6,7 +6,7 @@
     "field": "text",
     "from": "Have you evaluated whether AI/ML is the most appropriate approach, compared to simpler alternatives (e.g., statistical models, rule-based systems, manual processes)?",
     "to": "Have you checked whether AI is the best approach, compared with simpler options such as a statistical model, a set of rules or a manual process?",
-    "decision": "pending",
+    "decision": "accept",
     "final": "Have you checked whether AI is the best approach, compared with simpler options such as a statistical model, a set of rules or a manual process?"
   },
   {
@@ -16,7 +16,7 @@
     "field": "text",
     "from": "Have you assessed how the AI system might affect protected or vulnerable groups (e.g., by gender, age, ethnicity, disability, socioeconomic status)?",
     "to": "Have you assessed how the AI system might affect protected or vulnerable groups, for example by gender, age, ethnicity, disability or income?",
-    "decision": "pending",
+    "decision": "accept",
     "final": "Have you assessed how the AI system might affect protected or vulnerable groups, for example by gender, age, ethnicity, disability or income?"
   },
   {
@@ -26,7 +26,7 @@
     "field": "text",
     "from": "Have you assessed the environmental sustainability impact (e.g., energy consumption, carbon footprint) of the proposed AI solution?",
     "to": "Have you estimated the energy use and carbon cost of the proposed AI system?",
-    "decision": "pending",
+    "decision": "accept",
     "final": "Have you estimated the energy use and carbon cost of the proposed AI system?"
   },
   {
@@ -36,7 +36,7 @@
     "field": "text",
     "from": "Have you identified and addressed potential proxy variables for protected attributes?",
     "to": "Have you checked whether any input could stand in for a sensitive attribute (for example, village standing in for ethnicity), and decided what to do about it?",
-    "decision": "pending",
+    "decision": "accept",
     "final": "Have you checked whether any input could stand in for a sensitive attribute (for example, village standing in for ethnicity), and decided what to do about it?"
   },
   {
@@ -46,7 +46,7 @@
     "field": "text",
     "from": "Have you ensured the quality and consistency of data labels/annotations?",
     "to": "Have you checked that the data labels are correct and consistent?",
-    "decision": "pending",
+    "decision": "accept",
     "final": "Have you checked that the data labels are correct and consistent?"
   },
   {
@@ -56,7 +56,7 @@
     "field": "text",
     "from": "Does your dataset contain sensitive or personally identifiable information (PII)?",
     "to": "Does your data contain information that could identify a person, or other sensitive personal information?",
-    "decision": "pending",
+    "decision": "accept",
     "final": "Does your data contain information that could identify a person, or other sensitive personal information?"
   },
   {
@@ -66,7 +66,7 @@
     "field": "text",
     "from": "Have you applied appropriate anonymization or pseudonymization techniques to protect personal data?",
     "to": "Have you removed or replaced the details in your data that could identify a person (anonymisation or pseudonymisation)?",
-    "decision": "pending",
+    "decision": "accept",
     "final": "Have you removed or replaced the details in your data that could identify a person (anonymisation or pseudonymisation)?"
   },
   {
@@ -76,7 +76,7 @@
     "field": "text",
     "from": "Have you assessed the temporal relevance of your training data?",
     "to": "Have you checked whether your training data is recent enough for the time the system will be used?",
-    "decision": "pending",
+    "decision": "accept",
     "final": "Have you checked whether your training data is recent enough for the time the system will be used?"
   },
   {
@@ -86,7 +86,7 @@
     "field": "text",
     "from": "Have you evaluated whether your data adequately represents edge cases and rare conditions?",
     "to": "Have you checked whether your data has enough examples of rare cases and conditions?",
-    "decision": "pending",
+    "decision": "accept",
     "final": "Have you checked whether your data has enough examples of rare cases and conditions?"
   },
   {
@@ -96,7 +96,7 @@
     "field": "text",
     "from": "Have you justified the choice of model architecture relative to the problem complexity and data availability?",
     "to": "Have you written down why you chose this type of model for your problem and your data?",
-    "decision": "pending",
+    "decision": "accept",
     "final": "Have you written down why you chose this type of model for your problem and your data?"
   },
   {
@@ -106,7 +106,7 @@
     "field": "text",
     "from": "Have you evaluated model performance using a confusion matrix and derived metrics (precision, recall, F1, specificity)?",
     "to": "Have you measured the different kinds of error your model makes, for example with a confusion matrix, precision, recall, specificity and F1?",
-    "decision": "pending",
+    "decision": "accept",
     "final": "Have you measured the different kinds of error your model makes, for example with a confusion matrix, precision, recall, specificity and F1?"
   },
   {
@@ -116,7 +116,7 @@
     "field": "text",
     "from": "Have you tested the model's robustness to distribution shifts, noise, and edge cases?",
     "to": "Have you tested the model on data that differs from its training data, such as noisy, incomplete or unusual inputs?",
-    "decision": "pending",
+    "decision": "accept",
     "final": "Have you tested the model on data that differs from its training data, such as noisy, incomplete or unusual inputs?"
   },
   {
@@ -126,7 +126,7 @@
     "field": "text",
     "from": "Have you assessed whether the model relies on spurious correlations rather than meaningful features?",
     "to": "Have you checked whether the model relies on shortcuts in the data that will not hold in real use?",
-    "decision": "pending",
+    "decision": "accept",
     "final": "Have you checked whether the model relies on shortcuts in the data that will not hold in real use?"
   },
   {
@@ -136,7 +136,7 @@
     "field": "text",
     "from": "Have you evaluated model uncertainty and calibration quality?",
     "to": "Have you checked whether the model's confidence matches how often it is right?",
-    "decision": "pending",
+    "decision": "accept",
     "final": "Have you checked whether the model's confidence matches how often it is right?"
   },
   {
@@ -146,7 +146,7 @@
     "field": "text",
     "from": "Have you applied the parsimony principle, seeking the simplest model that achieves acceptable performance?",
     "to": "Have you chosen the simplest model that performs well enough?",
-    "decision": "pending",
+    "decision": "accept",
     "final": "Have you chosen the simplest model that performs well enough?"
   },
   {
@@ -156,7 +156,7 @@
     "field": "text",
     "from": "Have you documented all hyperparameters, random seeds, and training configurations for reproducibility?",
     "to": "Have you recorded everything needed to train the same model again: settings (hyperparameters), random seeds, code and software versions?",
-    "decision": "pending",
+    "decision": "accept",
     "final": "Have you recorded everything needed to train the same model again: settings (hyperparameters), random seeds, code and software versions?"
   },
   {
@@ -166,7 +166,7 @@
     "field": "text",
     "from": "Have you validated data integrity through your processing pipeline (ETL checks, validation rules)?",
     "to": "Have you checked that records are not lost or changed as your data is moved and processed?",
-    "decision": "pending",
+    "decision": "accept",
     "final": "Have you checked that records are not lost or changed as your data is moved and processed?"
   },
   {
@@ -176,7 +176,7 @@
     "field": "text",
     "from": "Have you identified and mitigated any bias introduced during hyperparameter tuning?",
     "to": "When you tuned the model's settings (for example the decision threshold), did you check that results did not get worse for some groups?",
-    "decision": "pending",
+    "decision": "accept",
     "final": "When you tuned the model's settings (for example the decision threshold), did you check that results did not get worse for some groups?"
   },
   {
@@ -186,7 +186,7 @@
     "field": "text",
     "from": "Have you used version control for your model code, data processing pipelines, and trained model artifacts?",
     "to": "Have you used version control for your code, data processing and trained models?",
-    "decision": "pending",
+    "decision": "accept",
     "final": "Have you used version control for your code, data processing and trained models?"
   },
   {
@@ -196,7 +196,7 @@
     "field": "text",
     "from": "Have you assessed the model for potential adversarial vulnerabilities or manipulation?",
     "to": "Have you checked whether someone could trick or manipulate the model?",
-    "decision": "pending",
+    "decision": "accept",
     "final": "Have you checked whether someone could trick or manipulate the model?"
   },
   {
@@ -206,7 +206,7 @@
     "field": "text",
     "from": "Have you tested the model's performance on data from different time periods to assess temporal stability?",
     "to": "Have you tested the model on data from a later time than its training data?",
-    "decision": "pending",
+    "decision": "accept",
     "final": "Have you tested the model on data from a later time than its training data?"
   },
   {
@@ -216,7 +216,7 @@
     "field": "text",
     "from": "Have you established continuous monitoring for model performance degradation and data drift?",
     "to": "Do you regularly check, once the system is in use, whether its performance or its input data have changed?",
-    "decision": "pending",
+    "decision": "accept",
     "final": "Do you regularly check, once the system is in use, whether its performance or its input data have changed?"
   },
   {
@@ -226,7 +226,7 @@
     "field": "text",
     "from": "Is there a human-in-the-loop mechanism for reviewing and overriding AI decisions?",
     "to": "Can a person review and overrule the system's outputs before they are acted on?",
-    "decision": "pending",
+    "decision": "accept",
     "final": "Can a person review and overrule the system's outputs before they are acted on?"
   },
   {
@@ -236,7 +236,7 @@
     "field": "expectedPractice",
     "from": "The system shows users each output with how confident it is and the main limits that apply, in words they understand, and the team checked that users read them correctly. In proportion to the risk, where an output is about a person, the user can see the main reasons for it. Telling stakeholders the limits in general is Q-PO-15.",
     "to": "The system shows users each output with how confident it is and the main limits that apply, in words they understand, and the team checked that users read them correctly. In proportion to the risk, where an output is about a person, the user can see the main reasons for it. Telling stakeholders the limits in general is a separate question.",
-    "decision": "pending",
+    "decision": "accept",
     "final": "The system shows users each output with how confident it is and the main limits that apply, in words they understand, and the team checked that users read them correctly. In proportion to the risk, where an output is about a person, the user can see the main reasons for it. Telling stakeholders the limits in general is a separate question."
   },
   {
@@ -246,7 +246,7 @@
     "field": "text",
     "from": "Have you implemented A/B testing or staged rollout procedures for model deployment?",
     "to": "Have you introduced the system in stages, for example at one site first, before using it everywhere?",
-    "decision": "pending",
+    "decision": "accept",
     "final": "Have you introduced the system in stages, for example at one site first, before using it everywhere?"
   },
   {
@@ -256,7 +256,7 @@
     "field": "text",
     "from": "Have you established monitoring for fairness metrics in production, not just accuracy?",
     "to": "Once the system is in use, do you check results for each group as well as overall accuracy?",
-    "decision": "pending",
+    "decision": "accept",
     "final": "Once the system is in use, do you check results for each group as well as overall accuracy?"
   },
   {
@@ -266,7 +266,7 @@
     "field": "text",
     "from": "Have you planned for the eventual decommissioning or replacement of the AI system?",
     "to": "Have you planned when and how the AI system will be retired or replaced?",
-    "decision": "pending",
+    "decision": "accept",
     "final": "Have you planned when and how the AI system will be retired or replaced?"
   },
   {
@@ -276,7 +276,7 @@
     "field": "text",
     "from": "Is the system designed to gracefully degrade or fail safely when it encounters out-of-distribution inputs?",
     "to": "Does the system handle unusual inputs safely, for example by flagging them for a person instead of giving a confident answer?",
-    "decision": "pending",
+    "decision": "accept",
     "final": "Does the system handle unusual inputs safely, for example by flagging them for a person instead of giving a confident answer?"
   },
   {
@@ -286,7 +286,7 @@
     "field": "expectedPractice",
     "from": "The team told the people who decide on, run or rely on the system what it is for, where it may not be used and its main limits. It did so in writing and in their language, and keeps a record of who was told, by role. How each output is shown to users is Q-PO-07.",
     "to": "The team told the people who decide on, run or rely on the system what it is for, where it may not be used and its main limits. It did so in writing and in their language, and keeps a record of who was told, by role. How each output is shown to users is a separate question.",
-    "decision": "pending",
+    "decision": "accept",
     "final": "The team told the people who decide on, run or rely on the system what it is for, where it may not be used and its main limits. It did so in writing and in their language, and keeps a record of who was told, by role. How each output is shown to users is a separate question."
   },
   {
@@ -296,7 +296,7 @@
     "field": "expectedPractice",
     "from": "The team identified which data-protection, research-ethics and sector rules apply where the system is built and where it is used. Examples are Uganda's Data Protection and Privacy Act 2019 and the national research guidelines. It obtained the approvals and registrations they require, and keeps a record of each with its reference and date.",
     "to": "The team identified which data-protection, research-ethics and sector rules apply where the system is built and where it is used. Examples are the national data protection law and the national research ethics guidelines of each country where the system is built and used. It obtained the approvals and registrations they require, and keeps a record of each with its reference and date.",
-    "decision": "pending",
+    "decision": "accept",
     "final": "The team identified which data-protection, research-ethics and sector rules apply where the system is built and where it is used. Examples are the national data protection law and the national research ethics guidelines of each country where the system is built and used. It obtained the approvals and registrations they require, and keeps a record of each with its reference and date."
   },
   {
@@ -306,7 +306,7 @@
     "field": "useWhen",
     "from": "The project holds no information that could identify a person. Set by the platform on Q-PP-13 and Q-PP-14 when the gate is \"no\".",
     "to": "The project holds no information that could identify a person. The platform chooses this for you when you answer \"no\" to the question on personal data.",
-    "decision": "pending",
+    "decision": "accept",
     "final": "The project holds no information that could identify a person. The platform chooses this for you when you answer \"no\" to the question on personal data."
   },
   {
@@ -316,7 +316,7 @@
     "field": "useWhen",
     "from": "Post-processing practices for a model that will never be deployed.",
     "to": "Practices for using and monitoring a model that will never be deployed.",
-    "decision": "pending",
+    "decision": "accept",
     "final": "Practices for using and monitoring a model that will never be deployed."
   },
   {
@@ -326,7 +326,7 @@
     "field": "text",
     "from": "Teams use this as the description of the data in a data transfer agreement, or as dataset documentation for a conference or repository. Check what your requester asks for.",
     "to": "Teams use this as the description of the data in a data transfer agreement, or as dataset documentation for a conference or repository. Check what the person asking for it needs.",
-    "decision": "pending",
+    "decision": "accept",
     "final": "Teams use this as the description of the data in a data transfer agreement, or as dataset documentation for a conference or repository. Check what the person asking for it needs."
   },
   {
@@ -336,7 +336,7 @@
     "field": "text",
     "from": "Teams paste this into a model card on a repository such as Hugging Face, or use it to answer a venue's checklist. It informs, but does not replace, a regulator's technical file.",
     "to": "Teams paste this into a model card on a repository such as Hugging Face, or use it to answer a conference or journal checklist. It can help with a regulator's technical file, but it is not one.",
-    "decision": "pending",
+    "decision": "accept",
     "final": "Teams paste this into a model card on a repository such as Hugging Face, or use it to answer a conference or journal checklist. It can help with a regulator's technical file, but it is not one."
   },
   {
@@ -346,7 +346,7 @@
     "field": "text",
     "from": "Teams use this where a protocol, a data protection impact assessment or a funder asks for the risks and the measures against them. A plan from a later seal can go with an annual renewal or an amendment. The platform does not estimate likelihood or impact: if your template asks for them, add them outside the platform.",
     "to": "Teams use this where a protocol, a data protection impact assessment or a funder asks for the risks and the measures against them. If you seal the stage again later, the new plan can go with an annual renewal or an amendment. The platform does not estimate likelihood or impact: if your template asks for them, add them outside the platform.",
-    "decision": "pending",
+    "decision": "accept",
     "final": "Teams use this where a protocol, a data protection impact assessment or a funder asks for the risks and the measures against them. If you seal the stage again later, the new plan can go with an annual renewal or an amendment. The platform does not estimate likelihood or impact: if your template asks for them, add them outside the platform."
   },
   {
@@ -390,24 +390,24 @@
     "final": "Harms from AI systems fall most often on groups already disadvantaged and least present in the data, and which groups those are depends on the setting."
   },
   {
-    "row": "WA-tail",
+    "row": "WA-tail+owner-edit",
     "id": "Q-PP-05",
     "file": "questionBank.json",
     "field": "whyAsked",
     "from": "Some harms fall on everyone the system touches, such as a lost chance to appeal or a withheld service; this question asks about those rights, Q-PP-04 about particular groups. Risk areas: Historical & Societal Bias and Population Bias.",
     "to": "Some harms fall on everyone the system touches, such as a lost chance to appeal or a withheld service; this question asks about those rights, Q-PP-04 about particular groups.",
-    "decision": "accept",
-    "final": "Some harms fall on everyone the system touches, such as a lost chance to appeal or a withheld service; this question asks about those rights, Q-PP-04 about particular groups."
+    "decision": "edit",
+    "final": "Some harms fall on everyone the system touches, such as a lost chance to appeal or a withheld service; this question asks about those rights, and a separate question asks about particular groups."
   },
   {
-    "row": "WA-tail",
+    "row": "WA-tail+owner-edit",
     "id": "Q-PP-24",
     "file": "questionBank.json",
     "field": "whyAsked",
     "from": "A team whose members share one background misses the same things, so it needs to know which perspectives are missing and bring them in, for example through C-20 Multi-stakeholder Consultation. Risk areas: Historical & Societal Bias and Population Bias.",
     "to": "A team whose members share one background misses the same things, so it needs to know which perspectives are missing and bring them in, for example through C-20 Multi-stakeholder Consultation.",
-    "decision": "accept",
-    "final": "A team whose members share one background misses the same things, so it needs to know which perspectives are missing and bring them in, for example through C-20 Multi-stakeholder Consultation."
+    "decision": "edit",
+    "final": "A team whose members share one background misses the same things, so it needs to know which perspectives are missing and bring them in, for example through multi-stakeholder consultation."
   },
   {
     "row": "WA-tail",

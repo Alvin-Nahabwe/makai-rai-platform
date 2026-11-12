@@ -522,6 +522,77 @@ describe('C-10: the never-upload warning is printed', () => {
   });
 });
 
+describe('D8: each evidence-summary cell writes one ZIP outside evidence/ and tells the reader to attach it', () => {
+  it.each(CONTROLS)('%s', (c) => {
+    const nb = readNotebook(c);
+    const cell = cellsTagged(nb, 'evidence-summary')[0];
+    const body = text(cell);
+    // The ZIP holds only the files this cell wrote: an explicit list of names, no glob over the folder.
+    expect(body, `${c}: no shutil.make_archive (it archives the whole folder)`).not.toContain('make_archive');
+    expect(body, `${c}: no glob( (a person's own file with this prefix would be zipped)`).not.toContain('glob(');
+    // One archive call, built under a .part name that is removed first and created exclusively, then moved into place
+    // only once complete (so an error while it is built leaves no ZIP under the final name).
+    expect(body.split('zipfile.ZipFile(').length - 1, `${c}: exactly one zipfile.ZipFile( call`).toBe(1);
+    const zipAt = body.indexOf(`zipfile.ZipFile('${c}_evidence.zip.part', 'x', zipfile.ZIP_DEFLATED)`);
+    expect(zipAt, `${c}: the cell opens '${c}_evidence.zip.part' with mode 'x' (exclusive creation)`).toBeGreaterThan(-1);
+    const removeAt = body.indexOf(`Path('${c}_evidence.zip').unlink(missing_ok=True)`);
+    expect(removeAt, `${c}: an earlier ZIP is removed first`).toBeGreaterThan(-1);
+    const removePartAt = body.indexOf(`Path('${c}_evidence.zip.part').unlink(missing_ok=True)`);
+    expect(removePartAt, `${c}: an existing .part (a file or a link) is removed first`).toBeGreaterThan(-1);
+    expect(removeAt, `${c}: the ZIP is removed before the .part`).toBeLessThan(removePartAt);
+    expect(removePartAt, `${c}: the .part is removed before it is created`).toBeLessThan(zipAt);
+    const moveAt = body.indexOf(`os.replace('${c}_evidence.zip.part', '${c}_evidence.zip')`);
+    expect(moveAt, `${c}: os.replace moves the .part file onto ${c}_evidence.zip`).toBeGreaterThan(-1);
+    expect(moveAt, `${c}: the move comes after the archive block`).toBeGreaterThan(body.indexOf('archive.write(path, name)'));
+    nb.cells.forEach((x, i) => {
+      if (x !== cell) expect(text(x), `${c}: cell ${i} mentions zipfile`).not.toContain('zipfile');
+    });
+    // The list in the archive step equals, name for name, the set the cell writes into EVIDENCE_DIR (quoted literals).
+    const listed = /for name in \[([^\]]*)\]:/.exec(body);
+    expect(listed, `${c}: the archive step loops over a literal list of names`).not.toBeNull();
+    const names = [...listed![1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+    const written = [...body.matchAll(/EVIDENCE_DIR \/ '([^']+)'/g)].map((m) => m[1]);
+    expect(written.length, `${c}: the cell writes files into EVIDENCE_DIR`).toBeGreaterThan(0);
+    expect(new Set(written).size, `${c}: no name is written twice`).toBe(written.length);
+    expect(names.filter((n) => !written.includes(n)), `${c}: listed but not written`).toEqual([]);
+    expect(written.filter((n) => !names.includes(n)), `${c}: written but not listed`).toEqual([]);
+    expect(names, `${c}: the list is in sorted order, without repeats`).toEqual([...new Set(names)].sort());
+    for (const name of written) expect(name.startsWith(`${c}_`), `${c}: ${name} must start with ${c}_`).toBe(true);
+    // Each listed file is checked when archived, and added under its bare name.
+    expect(body, `${c}: a listed file must be a regular file and not a link`).toContain('if not path.is_file() or path.is_symlink():');
+    expect(body, `${c}: a missing or linked file raises`).toContain('raise RuntimeError(');
+    expect(body, `${c}: the error says what to do`).toContain(
+      "is missing or is a link, so no ZIP was made. Run this notebook again from the top; if the file is a link, delete it first.')",
+    );
+    expect(body, `${c}: members are added under their bare file names`).toContain('archive.write(path, name)');
+    // Written after the summary, so the ZIP holds the summary (a ZIP made first would leave it out).
+    const summaryWritten = body.indexOf(`'${c}_summary.md').write_text(`);
+    expect(summaryWritten, `${c}: the cell writes the summary file`).toBeGreaterThan(-1);
+    expect(zipAt, `${c}: the archive is written after the summary`).toBeGreaterThan(summaryWritten);
+    // The ZIP sits beside evidence/, not inside it: the checker allows only .md, .csv and .png in the folder.
+    expect(body, `${c}: the summary tells the reader which file to attach`).toContain(`\`${c}_evidence.zip\``);
+    expect(
+      nb.cells.some((x) => /^\s*import\s+(?:[\w.]+\s*,\s*)*zipfile\b/m.test(text(x))),
+      `${c}: zipfile is imported`,
+    ).toBe(true);
+    expect(
+      nb.cells.some((x) => /^\s*import\s+(?:[\w.]+\s*,\s*)*os\b/m.test(text(x))),
+      `${c}: os is imported (the archive step calls os.replace)`,
+    ).toBe(true);
+    for (const old of ['CSV and PNG files beside it', 'CSV files beside it', 'plan files beside it']) {
+      for (const [i, x] of nb.cells.entries()) expect(text(x), `${c}: cell ${i} still says "${old}"`).not.toContain(old);
+    }
+  });
+
+  it('C-10: the never-upload warning names the ZIP, not the summary', () => {
+    const calls = runCode(readNotebook('C-10')).flatMap((x) => printCalls(text(x)));
+    const warning = calls.find((p) => /never upload/i.test(p) && /\battach\b/i.test(p));
+    expect(warning, 'a never-upload print call that says what to attach').toBeDefined();
+    expect(warning).toContain('C-10_evidence.zip');
+    expect(warning).not.toMatch(/Attach this summary only/);
+  });
+});
+
 describe('NB-AC-09 (floor): each notebook uses the methods SRS 10.5.2 names', () => {
   const NAMES: Record<Control, string[]> = {
     'C-03': ['chisquare'],

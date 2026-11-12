@@ -127,9 +127,11 @@ const CONTENT_ALLOWED: readonly string[] = contentAllowedTexts(CONTENT_ALLOWLIST
 const CONTENT_TEXTS: ReadonlySet<string> = new Set(contentAllowedTexts(CONTENT_ALLOWLIST, 'assessmentAreas.json'));
 
 /**
- * The question texts the allow-list's `{ id, reason }` entries name (AL-7), read from the running bundle of data/content,
- * the bundle the release candidate's crawl checks, with the lint's reader (`__tests__/helpers/contentQuestions.ts`;
- * coordinator ruling, 5 Nov 2026). On any page, a body text node whose whole cleaned text equals one is exempt, as narrow
+ * The question texts the allow-list's `{ id, reason }` entries name (AL-7), as every version data/content/index.json lists
+ * words them (the owner-reviewed wordings; the lint exempts the id in every version), read with the lint's reader
+ * (`__tests__/helpers/contentQuestions.ts`; coordinator ruling, 5 Nov 2026). The server this crawl runs against serves the
+ * fixture bundle, release candidate included (playwright.config.ts), whose stems are frozen at v0.5.0; a unit test
+ * (`__tests__/unit/fixture-content-bundle.test.ts`) checks each one is such a wording. On any page, a body text node whose whole cleaned text equals one is exempt, as narrow
  * as the source-title exemption: the same text with other words in its node, an attribute value (C4 F4), or any other
  * node holding the claim word is still read. An id that names no question in the bundle throws when the spec loads.
  */
@@ -558,7 +560,9 @@ test('FR-PUB-01 (helper): a framework area or control name passes only where it 
 test('FR-PUB-01 AL-7 (helper): an allow-listed question text passes as a whole text node only, and an id that names no question throws', () => {
   const words = (body: string[]): Words => ({ head: ['t'], body, notes: [], titles: [], attributes: [] });
   const stem = 'Have you ensured compliance with applicable data protection regulations and ethical guidelines?';   // Q-PO-22.text
-  expect(ALLOWED_QUESTION_TEXTS.has(stem), 'Q-PO-22 is allow-listed by id and resolves to its 5.0.0 text').toBe(true);
+  expect(ALLOWED_QUESTION_TEXTS.has(stem), 'Q-PO-22 is allow-listed by id and resolves to the running text').toBe(true);
+  // The fixture the server serves keeps 5.0.0's wording of Q-PO-14; 5.1.0 rewords it. Both wordings are reviewed, so both pass.
+  expect(ALLOWED_QUESTION_TEXTS.has('Is the system designed to gracefully degrade or fail safely when it encounters out-of-distribution inputs?')).toBe(true);
   expect(claimsIn(words(['Post-processing', stem]))).toEqual([]);
   // The same stem with more words in its node is not the stem: the claim word in it is found.
   expect(claimsIn(words([`${stem} We are fully covered.`])).join(';')).toMatch(/compliance/);
