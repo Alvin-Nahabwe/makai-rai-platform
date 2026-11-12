@@ -800,6 +800,22 @@ A run that refuses a tag (not a plain `vX.Y.Z`, not equal to `package.json`, not
 `main`, or already released) has built and published nothing. Correct the cause,
 usually a version that was not raised, and tag the corrected version.
 
+**After the tag, before the deploy: the image scan.** Start it from the owner's own machine and
+wait for the run:
+
+```bash
+gh workflow run image-scan.yml -R <owner>/<repo> -f scanners=vuln,secret
+```
+
+It scans the two release images and the postgres and nginx images the compose file pins. It fails
+when an image has a CRITICAL advisory that has a fix, or a CRITICAL-rated secret, or could not be
+scanned (`.github/workflows/image-scan.yml`: `--severity CRITICAL --ignore-unfixed --exit-code 1`).
+A failed run stops the deploy until the owner has read which image and which advisory
+(`gh run view <run id> -R <owner>/<repo> --log-failed`) and has decided: move the pin or the
+dependency in a new release, or deploy with the finding. The decision and its reason go in the
+register. For v0.6.1 the run failed on the nginx image and the owner chose a new release, v0.6.2.
+A green run says nothing about advisories below CRITICAL or without a fix.
+
 **Before the v0.6.1 tag.** No v0.6.1 tag before the pull request that publishes version 2 of the
 legal texts is merged. CI does not run the release-candidate cases (`.github/workflows/ci.yml:241`
 runs `npx vitest run` without `RELEASE_CANDIDATE`), and `.github/workflows/release.yml` runs no
@@ -824,6 +840,14 @@ For v0.6.1, one case passes on a waiver: the screen-reader walk (NFR-A11Y-07,
 `docs/accessibility/screen-reader-walk-v0.6.0.md` says "not yet walked"). The owner deferred the
 walk for v0.6.1 (register D-301), and the file holds that entry for 0.6.1, with the owner's words.
 It is the only entry for 0.6.1: the three entries for 0.6.0 waive nothing in this release.
+
+**v0.6.2.** v0.6.1 was tagged on 12 November 2026 and was not deployed: the image scan run after
+its tag failed on the pinned nginx image, which holds a library with a CRITICAL advisory (register
+D-339). v0.6.2 is v0.6.1 with the nginx pin moved to an image that holds the fixed library; nothing
+in the application changed. Deploy v0.6.2 wherever this runbook says v0.6.1: 8.6, 9.4, 9.5a and 9.6
+apply to it unchanged, and the release it replaces on the host is still v0.6.0. The tag gate is the
+same command. The walk is deferred again, by a waiver entry for 0.6.2 with the owner's words
+(register D-301); the entries for 0.6.0 and 0.6.1 waive nothing in it.
 
 Some end-to-end cases also read `RELEASE_CANDIDATE` (`e2e/claims-crawl.spec.ts:53,719`). No job
 runs them and no command for them has been rehearsed, so they are not part of the gate yet
