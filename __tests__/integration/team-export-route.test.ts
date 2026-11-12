@@ -123,7 +123,10 @@ describe('route 20, GET team export', () => {
       WHERE usename = 'makrai_app' AND state IN ('active', 'idle in transaction')`).toEqual([{ n: BigInt(0) }]);
     expect(exportDirs()).toEqual([]); // the directory is already gone; the open handle still streams the unlinked file
     await drainAt(reader, 50_000);
-  });
+    // Its own limit, because the time is the case (FR-EXP-01's test names the pace): it sleeps 1 s before the connection
+    // count, then reads the other 140 kB at 50 kB/s (2.8 s), about 4 s in all. The default 5 s leaves a busy machine
+    // too little.
+  }, 30_000);
 
   it('FR-EXP-01 NFR-SEC-20: a third export while two run answers 429 export_busy, and a slot frees on cancel', async () => {
     const a = await GET(req({}), params());

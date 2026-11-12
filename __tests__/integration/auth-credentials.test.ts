@@ -1,11 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { hash } from 'bcryptjs';
 import { resetDb, testDb } from '../helpers/db';
 import { buildOrg } from '../helpers/recordFixture';
 import { identityDb } from '../../lib/data/identity';
 import { FIXTURE_PASSWORD } from '../helpers/fixture';
-import { authorizeCredentials as authorizeWithRequest } from '../../lib/auth/credentials';
+import { authorizeCredentials as authorizeWithRequest, signInDeps } from '../../lib/auth/credentials';
 import { logSecurityEvent } from '../../lib/security-logger';
 
 // `cookies()` needs a Next request scope; the success path sets the known-device cookie through it (FR-ACC-05), which
@@ -57,6 +57,17 @@ afterEach(() => {
   for (const m of METHODS) spies[m].mockRestore();
 });
 
+/**
+ * Every refused sign-in resolves no earlier than SIGN_IN_FLOOR_MS (500 ms) after it began; sign-in-limits.test.ts checks
+ * that floor. A case that makes six or seven refusals around a lock would spend 3 to 3.5 s of the default 5 s waiting
+ * it out, so it calls this first. Only the sleep is replaced, until the case ends: the clock, count, lock, comparison
+ * and log lines are real.
+ */
+function skipRefusalFloor(): void {
+  const sleep = vi.spyOn(signInDeps, 'sleepUntil').mockResolvedValue(undefined);
+  onTestFinished(() => sleep.mockRestore());
+}
+
 /** Everything written to the console since the test began, as the lines a log collector would see. */
 const output = (): string[] => METHODS.flatMap((m) => spies[m].mock.calls.map((c) => c.map(String).join(' ')));
 const events = (): Record<string, unknown>[] => output().map((l) => JSON.parse(l) as Record<string, unknown>);
@@ -104,6 +115,7 @@ describe('authorizeCredentials', () => {
   });
 
   it('keeps counting attempts per account, so a brute force can still be traced (P2)', async () => {
+    skipRefusalFloor();
     const id = await makeUser();
     for (let i = 0; i < 5; i += 1) await authorizeCredentials({ email: EMAIL, password: WRONG });
 
@@ -189,6 +201,7 @@ describe('account lockout', () => {
   }
 
   it('locks after 5 failed attempts and refuses the right password while locked', async () => {
+    skipRefusalFloor();
     const id = await makeUser();
 
     // Four failures count but do not lock.
@@ -214,6 +227,7 @@ describe('account lockout', () => {
   });
 
   it('signs in after the lock expires and resets the counter', async () => {
+    skipRefusalFloor();
     const id = await makeUser();
     // Only the clock is faked: bcrypt and the database driver keep their real timers.
     vi.useFakeTimers({ toFake: ['Date'] });

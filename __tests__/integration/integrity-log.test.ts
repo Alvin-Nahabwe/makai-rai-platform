@@ -491,5 +491,8 @@ describe("the hook's SQL, run against the schema", () => {
     } finally {
       await su.end();
     }
-  });
+    // Its own limit, because the wait is the check: on each lane the recipients query waits on the locked table until the
+    // 1.5 s deadline this case gives the hook cancels it, about 3 s in all. The default 5 s leaves a busy machine too
+    // little.
+  }, 30_000);
 });
