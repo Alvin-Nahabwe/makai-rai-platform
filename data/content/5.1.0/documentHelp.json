@@ -1,0 +1,5 @@
+{
+  "data_card": "Teams use this as the description of the data in a data transfer agreement, or as dataset documentation for a conference or repository. Check what the person asking for it needs.",
+  "model_card": "Teams paste this into a model card on a repository such as Hugging Face, or use it to answer a conference or journal checklist. It can help with a regulator's technical file, but it is not one.",
+  "mitigation_plan": "Teams use this where a protocol, a data protection impact assessment or a funder asks for the risks and the measures against them. If you seal the stage again later, the new plan can go with an annual renewal or an amendment. The platform does not estimate likelihood or impact: if your template asks for them, add them outside the platform."
+}
