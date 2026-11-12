@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { LegalTextKind, LegalTextVersion } from '@/types/legal';
+import { ACCEPTED_KINDS, type LegalTextKind, type LegalTextVersion } from '@/types/legal';
 import { testDb, resetDb } from '../helpers/db';
 import { buildOrg } from '../helpers/recordFixture';
 import { STUB_LEGAL_TEXTS } from '../helpers/legalStub';
@@ -66,9 +66,11 @@ describe('acceptance rows (FR-ACC-03, FR-ACC-04)', () => {
     await recordAcceptances(fx.members.owner.userId, ['terms', 'privacy', 'cross-border-consent']);
     const rows = await testDb.consentRecord.findMany({ where: { userId: fx.members.owner.userId } });
     expect(rows.map((r) => [r.consentType, r.version, r.textHash, r.ipAddress]).sort()).toEqual([
-      ['cross_border_storage', '1', currentLegalText('cross-border-consent').sha256, null],
-      ['privacy_policy', '1', currentLegalText('privacy').sha256, null],
-      ['terms_of_service', '1', currentLegalText('terms').sha256, null]].sort());
+      ['cross_border_storage', currentLegalText('cross-border-consent').version, currentLegalText('cross-border-consent').sha256, null],
+      ['privacy_policy', currentLegalText('privacy').version, currentLegalText('privacy').sha256, null],
+      ['terms_of_service', currentLegalText('terms').version, currentLegalText('terms').sha256, null]].sort());
+    // The literal: a registry that silently stayed at version 1 must not pass.
+    expect(ACCEPTED_KINDS.map((k) => currentLegalText(k).version)).toEqual(['2', '2', '2']);
     expect(rows.every((r) => r.granted)).toBe(true);
     await recordAcceptances(fx.members.owner.userId, ['terms']);
     expect(await testDb.consentRecord.count({ where: { userId: fx.members.owner.userId } })).toBe(3);

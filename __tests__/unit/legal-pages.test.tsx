@@ -216,25 +216,40 @@ describe('S-06 /legal/[kind] and /legal/[kind]/[version]', () => {
   });
 
   it('FR-ACC-02: a kind with one version lists no past versions', async () => {
-    const html = await kindPage('terms');
+    // The retired organisation agreement is the one kind that still has a single version (version 1, as published).
+    const html = await kindPage('organisation-agreement');
     const past = html.slice(html.indexOf('<h2>Past versions</h2>'));
     expect(past).toContain('<p>None</p>');
-    expect(past).not.toContain('href="/legal/terms/');
-    expect(html).toContain('href="/legal/terms/1"');
+    expect(past).not.toContain('href="/legal/organisation-agreement/');
+    expect(html).toContain('href="/legal/organisation-agreement/1"');
   });
 
-  it('FR-ACC-02: each kind is headed by its 7.5.7 name, and its hash is the SHA-256 of its shipped file', async () => {
+  it('FR-ACC-02: a kind with two versions lists version 1 as a past version, with its link, and not the current version', async () => {
+    for (const kind of ['terms', 'cross-border-consent'] as const) {
+      const html = await kindPage(kind);
+      const past = html.slice(html.indexOf('<h2>Past versions</h2>'));
+      expect(past, kind).not.toContain('<p>None</p>');
+      expect(past, kind).toContain(`href="/legal/${kind}/1"`);
+      expect(past, kind).toContain('Version 1, published 2 Nov 2026');
+      expect(past, kind).not.toContain(`href="/legal/${kind}/2"`);
+      expect(html, kind).toContain(`href="/legal/${kind}/2"`);
+    }
+  });
+
+  it('FR-ACC-02: each kind is headed by its 7.5.7 name, and the hash shown is the SHA-256 of the file of its current version', async () => {
+    // The page of a kind shows its CURRENT text: version 2 of the three accepted kinds (12 November 2026), and version 1
+    // of the retired agreement (2 November 2026). Each hash is computed here from that file's bytes.
     const names = {
-      terms: 'Terms of service',
-      'cross-border-consent': 'Cross-border storage consent',
-      'organisation-agreement': 'Organisation agreement',
+      terms: ['Terms of service', '2', '12 Nov 2026'],
+      'cross-border-consent': ['Consent to storage abroad', '2', '12 Nov 2026'],
+      'organisation-agreement': ['Organisation agreement', '1', '2 Nov 2026'],
     } as const;
-    for (const [kind, heading] of Object.entries(names)) {
+    for (const [kind, [heading, version, day]] of Object.entries(names)) {
       const html = await kindPage(kind);
       expect(html.match(/<h1[ >]/g), kind).toHaveLength(1);
       expect(html).toMatch(new RegExp(`<h1[^>]*>${heading}</h1>`));
-      expect(html).toContain(groupsOfFour(sha(`data/legal/${kind}/1.md`)));
-      expect(html).toContain('Version 1, published 2 Nov 2026');
+      expect(html).toContain(groupsOfFour(sha(`data/legal/${kind}/${version}.md`)));
+      expect(html).toContain(`Version ${version}, published ${day}`);
     }
     expect(await kindPage('privacy')).toMatch(/<h1[^>]*>Privacy notice<\/h1>/);
   });

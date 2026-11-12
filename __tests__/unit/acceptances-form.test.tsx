@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { readdirSync, readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ACCEPTED_KINDS, type AcceptedKind, type LegalTextVersion } from '@/types/legal';
 import { LEGAL_KIND_NAMES } from '@/lib/legal/kinds';
@@ -16,7 +17,7 @@ import { STUB_LEGAL_TEXTS } from '../helpers/legalStub';
 vi.mock('next/navigation', async (importOriginal) => ({
   ...(await importOriginal<typeof import('next/navigation')>()), useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
 }));
-const { ACCEPT_LABEL, AcceptancesForm, AcceptancesFormView, untickedKinds, acceptanceError, acceptancePairs, recordOutcome, failureOutcome, handleFailure } =
+const { ACCEPT_LABEL, AcceptancesForm, AcceptancesFormView, untickedKinds, acceptanceError, acceptancePairs, textsKey, recordOutcome, failureOutcome, handleFailure } =
   await import('@/components/legal/AcceptancesForm');
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -150,5 +151,24 @@ describe('S-05 acceptances form (UX-22, FR-ACC-03)', () => {
 
   it('UX-22: a busy form disables its submit button and keeps its label', () => {
     expect(view({ busy: true })).toMatch(/<button[^>]*type="submit"[^>]*disabled=""[^>]*>Accept and continue<\/button>/);
+  });
+
+  it('FR-ACC-03: textsKey differs when any one kind\'s version differs, and is equal for the same versions in the same order', () => {
+    const same = TEXTS.map((t) => ({ ...t }));
+    expect(textsKey(same)).toBe(textsKey(TEXTS));
+    TEXTS.forEach((_, i) => {
+      const changed = TEXTS.map((t, j) => (j === i ? { ...t, version: `${t.version}-next` } : t));
+      expect(textsKey(changed), `version of ${TEXTS[i].kind} changed`).not.toBe(textsKey(TEXTS));
+    });
+  });
+
+  it('FR-ACC-03: every <AcceptancesForm in app/ and components/ carries key={textsKey(, so a new text version starts the form unticked', () => {
+    const sources = ['app', 'components'].flatMap((dir) => (readdirSync(dir, { recursive: true }) as string[])
+      .filter((f) => /\.tsx$/.test(f)).map((f) => readFileSync(`${dir}/${f}`, 'utf8')));
+    const all = sources.join('\n');
+    const uses = all.match(/<AcceptancesForm(?=\s)/g) ?? [];
+    const keyed = all.match(/<AcceptancesForm\s+key=\{textsKey\(/g) ?? [];
+    expect(uses.length).toBeGreaterThanOrEqual(3);
+    expect(keyed.length).toBe(uses.length);
   });
 });

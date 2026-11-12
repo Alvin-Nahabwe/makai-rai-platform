@@ -97,13 +97,18 @@ describe('legal text registry', () => {
     expect(() => loadLegalRegistry(join(base, 'no-such-root'))).toThrow(/ENOENT/);
   });
 
-  it('FR-ACC-02: the shipped registry has version 1 of all four kinds and hashes its own files', () => {
+  it('FR-ACC-02: the shipped registry holds versions 1 and 2 of the three accepted kinds and version 1 of the retired agreement, and hashes its own files', () => {
+    const shipped = {
+      terms: ['1', '2'], privacy: ['1', '2'], 'cross-border-consent': ['1', '2'], 'organisation-agreement': ['1'],
+    } as const;
     for (const k of ['terms', 'privacy', 'cross-border-consent', 'organisation-agreement'] as const) {
-      expect(currentLegalText(k).version).toBe('1');
-      expect(currentLegalText(k).sha256).toBe(sha(`data/legal/${k}/1.md`));
-      expect(legalTextHistory(k)).toHaveLength(1);
+      const versions = shipped[k];
+      expect(legalTextHistory(k).map((t) => t.version), k).toEqual(versions);
+      expect(currentLegalText(k).version, k).toBe(versions[versions.length - 1]);
+      for (const t of legalTextHistory(k)) expect(t.sha256, `${k}/${t.version}`).toBe(sha(`data/legal/${k}/${t.version}.md`));
     }
-    expect(legalTextVersion('privacy', '1')).toBe(currentLegalText('privacy'));
+    expect(legalTextVersion('privacy', '2')).toBe(currentLegalText('privacy'));
+    expect(legalTextVersion('organisation-agreement', '1')).toBe(currentLegalText('organisation-agreement'));
     expect(legalTextVersion('privacy', '9')).toBeNull();
     expect(legalTextVersion('privacy', '../terms/1')).toBeNull();
   });
@@ -126,7 +131,7 @@ describe('legal text registry', () => {
   it('FR-ACC-02: callers cannot change the registry through what it returns', () => {
     const history = legalTextHistory('privacy');
     history.pop();
-    expect(legalTextHistory('privacy')).toHaveLength(1);
+    expect(legalTextHistory('privacy')).toHaveLength(2);
     expect(Object.isFrozen(currentLegalText('privacy'))).toBe(true);
     expect(() => { (currentLegalText('privacy') as { sha256: string }).sha256 = '0'; }).toThrow(TypeError);
   });
@@ -136,7 +141,7 @@ describe('legal text registry', () => {
     expect(LEGAL_KIND_NAMES).toEqual({
       terms: 'terms of service',
       privacy: 'privacy notice',
-      'cross-border-consent': 'cross-border storage consent',
+      'cross-border-consent': 'consent to storage abroad',
       'organisation-agreement': 'organisation agreement',
     });
   });

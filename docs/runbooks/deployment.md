@@ -750,7 +750,7 @@ unset_env() { local k="$1" f=/srv/makrai/app/.env
   && cat "$f.new" >"$f" && rm -f "$f.new"; }
 
 # The owner role (`makrai`), read from .env into a variable. Never echoed. 8.5 step 2,
-# 9.5 and 12.6 use it to run SQL as the owner.
+# 8.6 step 5, 9.3 step 5, 9.5, 9.5a and 12.6 use it to run SQL as the owner.
 PGU=$(sed -n 's/^POSTGRES_USER=//p' ../.env)
 ```
 
@@ -799,6 +799,35 @@ a release.
 A run that refuses a tag (not a plain `vX.Y.Z`, not equal to `package.json`, not on
 `main`, or already released) has built and published nothing. Correct the cause,
 usually a version that was not raised, and tag the corrected version.
+
+**Before the v0.6.1 tag.** No v0.6.1 tag before the pull request that publishes version 2 of the
+legal texts is merged. CI does not run the release-candidate cases (`.github/workflows/ci.yml:227`
+runs `npx vitest run` without `RELEASE_CANDIDATE`), and `.github/workflows/release.yml` runs no
+tests on a tag. So the tag gate is the unit run. Whoever prepares the release may run it, on a
+checkout of the commit to be tagged; the owner tags (8.1 step 2). Run it with the test database
+up, migrated and provisioned (`CONTRIBUTING.md:11-23`)
+and `pdftotext` installed (CI's unit job installs `poppler-utils`, `.github/workflows/ci.yml:217`),
+and see it pass first:
+
+```bash
+RELEASE_CANDIDATE=1 npx vitest run
+```
+
+If any test fails, do not tag. A failing release-candidate case names something the release still
+lacks. Clear it by supplying what is missing or, where the owner accepts shipping without it, by a
+waiver entry the owner records for this release in `docs/releases/release-waivers.json`. A waiver
+recorded for an earlier release waives nothing: a waiver counts only when its `release` equals
+`package.json`'s version (`__tests__/helpers/releaseWaivers.ts:76`), and every entry there today
+is for 0.6.0.
+
+For v0.6.1, two cases outside the legal texts fail until that is done: the help and contact
+address (UX-03, `__tests__/unit/about-page.test.tsx:271-276`; `data/help-contact.json` holds no
+address) and the screen-reader walk (NFR-A11Y-07, `__tests__/lint/screen-reader-walk.test.ts:114-118`;
+the walk sheet `docs/accessibility/screen-reader-walk-v0.6.0.md` says "not yet walked").
+
+Some end-to-end cases also read `RELEASE_CANDIDATE` (`e2e/claims-crawl.spec.ts:53,715`). No job
+runs them and no command for them has been rehearsed, so they are not part of the gate yet
+(register D-308).
 
 ### 8.2 Pre-check
 
@@ -932,6 +961,8 @@ which carries no version label: after a rollback to it the second line prints
 `DIFFERENT`, and that is correct.
 
 ### 8.5 v0.6.0: the owner's steps
+
+v0.6.0 is deployed. For v0.6.1, follow 8.6.
 
 Every step here is the owner's, in the owner's own session (12.1), in a terminal outside any AI
 session. No output of the host is pasted into an AI session (NFR-SEC-17). Run the "Set these once
@@ -1261,6 +1292,80 @@ check ran. `0` means no pass today: read the line itself, in your own terminal, 
 Keep the previous images until the next release passes its post-check: no `docker image prune`
 before then (section 9).
 
+### 8.6 v0.6.1: the owner's steps
+
+The release-candidate run (8.1) may be done by whoever prepares the release; the tag needs the
+owner's approval (8.1 step 2). Every step on the host and every sign-in on production is the
+owner's, in the owner's own session (12.1), in a terminal and a browser outside any AI session. No
+output of the host is pasted into an AI session (NFR-SEC-17). Before 8.2, on the host, run the
+"Set these once per session" block of section 8. 8.2 to 8.4 use its `cd` (for `../.env`), `$C`
+and `set_env`. Step 5 below also uses `$PGU`. Nothing here uses `unset_env`. Deploy v0.6.1 with
+8.1 to 8.4 as written, plus the steps below, in this order. 8.5 was v0.6.0's list and is not
+repeated. This release carries one database migration
+(`prisma/migrations/20261112000000_v061_organisation_legal_name`), so 8.2's backup and 8.3 step 4
+(the migrator) apply to it.
+
+1. **Before the tag (8.1).** Run the release-candidate unit cases as the paragraph "Before the v0.6.1 tag"
+   in 8.1 says, and see it pass. The always-on cases check that the three accepted texts are at
+   version 2 and the organisation agreement is retired at version 1
+   (`__tests__/unit/legal-texts.test.ts:82-108`). The release-candidate cases add that no current
+   text holds placeholder text, an unresolved field, or a claim of review by a lawyer (`:184-210`).
+   What to do when any case fails is in the 8.1 paragraph.
+2. **Before 8.3, and until the post-check has passed: create no organisation.** The window runs from
+   the migrator (8.3 step 4) until the post-check (8.4) has passed. A create sent to the old image
+   and sent again after the swap is refused, or creates a second organisation. What a person at the
+   screen meets: a page loaded before the swap is refused with 422, because it sends no legal name
+   (`lib/data/admin.ts:220,225`). A page reloaded and sent again gets a new request id
+   (`lib/client/retrySafeWrite.ts:39`, `components/admin/CreateOrganisationForm.tsx:215`) and is
+   refused as `slug_taken` against the organisation the old image made
+   (`prisma/migrations/20261112000000_v061_organisation_legal_name/migration.sql:86`), or, for a name
+   with no letter a to z and no digit 0 to 9 once accents are removed (é counts as e; a name written only
+   in Amharic, Arabic, Cyrillic or Chinese, or only in letters such as ø that have no plain form,
+   has none), `deriveSlug` returns an empty string (`lib/data/preauth.ts:194-201`), the route picks
+   a random slug (`app/api/admin/organisations/route.ts:40`) and a second organisation is created.
+   Read from the code, not rehearsed. If a create was sent in the window, check the organisation
+   list (S-23) for the name before trying again. The old create-organisation function stays
+   callable until the later contract migration (`migration.sql:3-7`).
+3. **8.2, 8.3 and 8.4 as written.** When it worked, the post-check prints `200`, every service is up,
+   `0`, and `SAME` twice.
+4. **After the post-check, once: accept the three version-2 texts.** In the owner's own browser, sign
+   in on production as the platform administrator and then as the synthetic account, and accept the
+   three texts each time. The synthetic account's password comes from wherever the owner keeps it. No
+   AI session types a production password. When it worked, the synthetic account lands on its
+   organisation's dashboard after it accepts (`app/page.tsx:44-45` sends an account that has an
+   organisation to `/orgs/<slug>/dashboard`), and the platform administrator lands on the list of
+   organisations (S-23), which is the administrator's home (`app/page.tsx:32`). Neither is sent back
+   to where it was (`components/legal/RecordAcceptances.tsx:38`). Until the synthetic account has accepted, the hourly
+   synthetic journey is refused with 403 and shows red: its read of the decision fails on any status
+   other than 200 (`scripts/synthetic-journey.mjs:228-230`), and the 403 is the acceptance gate
+   (`lib/auth/identity.ts:324-328`, `lib/http/errors.ts:64-67`). Do it before the next hourly run, or
+   expect one red run.
+5. **Then tell every account holder what changed, once.** The terms (section 17) and the privacy
+   notice (section 13) both say MAK-AI will tell people what changed when it asks them to accept a
+   new version, and the acceptance screen shows no summary. So on the deploy day the owner emails
+   the text of `docs/releases/v0.6.1-legal-changes.md` to every person who already has an account.
+   Nothing in the platform sends this message. The owner sends it from the owner's own mailbox.
+   Send each address its own message, or put all of them in Bcc. Never put them in To or Cc:
+   account holders in different organisations must not see each other's addresses.
+   To get the addresses, run this read-only statement on the host, with the session block's `$PGU`.
+   It skips accounts that were deleted, which are the ones whose address was replaced by
+   `deleted-<id>@invalid` (`lib/data/identity.ts:394`):
+
+   ```bash
+   $C exec -T postgres psql -U "$PGU" -d makrai -At -v ON_ERROR_STOP=1 <<'SQL'
+   select email from users where email not like 'deleted-%@invalid' order by email;
+   SQL
+   ```
+
+   It prints one address per line. The list stays in the owner's terminal and is not pasted into any
+   AI session (NFR-SEC-17). The synthetic account's address and the platform administrator's own address are on the list and
+   need no message. When
+   it worked, one message has gone to each other address. The statement was run on a local database
+   only.
+6. **Then record legal names.** As the platform administrator, on S-23, find each organisation
+   flagged "Legal name not recorded" (FR-ORG-06), open it (S-24) and use its legal-name form. When it
+   worked, the flag is gone from that organisation's row.
+
 ---
 
 ## 9. Rollback Procedure
@@ -1490,6 +1595,88 @@ crontab -l | grep -c '^#v060-pause '
 The last line must print `0`; anything else is a stop before you resume anything. Then resume the
 `makrai-synthetic` check. If you paused the reminder job, un-comment its cron line and resume the
 `makrai-reminders` check too.
+
+### 9.5a v0.6.1: rolling back past the legal texts
+
+Everything here is read from the code, except the SQL below, which was run on a local scratch
+database only. Nothing in this section has been run on the host or against v0.6.0's images.
+
+**Rolling back the application (9.2) keeps every stored row.** The v0.6.1 migration only adds:
+nothing is dropped or revoked, and the widened action CHECK still allows every old value
+(`prisma/migrations/20261112000000_v061_organisation_legal_name/migration.sql:3-7`).
+
+- Accounts that accepted the version-1 texts before the deploy still pass the old gate. It counts
+  a row when its version and hash match a version it knows, and version 1 is the only one it
+  knows (`lib/data/acceptances.ts` at v0.6.0, `9932c51f`, lines 59 to 69, and
+  `data/legal/published.json` there).
+- Accounts created after the deploy hold only version-2 rows. The old image does not count them,
+  so it sends those accounts to accept the version-1 texts, including the one-line placeholder
+  consent ("The text of this document is supplied by legal before the deploy day.", v0.6.0's
+  `data/legal/cross-border-consent/1.md`). An account that accepted version 2 on top of version 1
+  passes.
+
+After rolling forward again, or after an organisation was created by the old image during the
+deploy, run the legal-name backfill again. It fills only empty values, so it is safe to repeat:
+
+```bash
+$C exec -T postgres psql -U "$PGU" -d makrai -v ON_ERROR_STOP=1 <<'SQL'
+UPDATE "organizations" o SET "legalName" = a."controllerLegalName" FROM (SELECT DISTINCT ON ("orgId") "orgId", "controllerLegalName" FROM "organization_agreements" ORDER BY "orgId", "recordedAt" DESC, "id" DESC) a WHERE o."id" = a."orgId" AND o."legalName" IS NULL;
+SQL
+```
+
+It prints `UPDATE N`, where N is the number of organisations that gained a name.
+
+**Reverting the migration itself** is only for a case where the new column or functions must go.
+It is not needed for an application rollback.
+
+**Only after 9.2, with v0.6.0's image serving and 9.4 passed.** Run while v0.6.1 still serves, the
+SQL drops the create-organisation function v0.6.1 calls (`lib/data/definer.ts:96`) and the
+`legalName` column it reads (`app/(authenticated)/admin/organisations/page.tsx:74`,
+`lib/data/admin.ts:301`), so creating an organisation and the organisation screens fail.
+
+**Warning: the SQL deletes the `legalName` column, and these names are lost with it. Names the
+administrator recorded or corrected after the deploy. Names entered when an organisation was created on
+v0.6.1: they have no agreement record to copy from, and cannot be recovered. Only names copied
+from agreement records can be copied again from `organization_agreements`.** Before the revert,
+the owner, outside any AI session, runs this read-only statement and keeps its output:
+
+```bash
+$C exec -T postgres psql -U "$PGU" -d makrai -At -v ON_ERROR_STOP=1 <<'SQL'
+select id, name, "legalName" from organizations where "legalName" is not null order by name;
+SQL
+```
+
+It prints one line per organisation with a legal name: `id|name|legal name`. It prints nothing
+when none is set. It was run on a local database only (it ran clean and printed no line there).
+
+Run the revert as the owner role, in this order, in one transaction (the statements are the ones
+run on the scratch database, unchanged):
+
+```bash
+$C exec -T postgres psql -U "$PGU" -d makrai -v ON_ERROR_STOP=1 <<'SQL'
+BEGIN;
+DROP FUNCTION public.admin_create_organisation(text, text, text, text, text, text, text, timestamptz, boolean, uuid, text);
+DROP FUNCTION public.admin_correct_org_legal_name(text, text, text);
+REVOKE UPDATE ("legalName") ON "organizations" FROM makrai_definer;
+ALTER TABLE "organisation_events" DROP CONSTRAINT "organisation_events_action_check";
+ALTER TABLE "organisation_events" ADD CONSTRAINT "organisation_events_action_check"
+  CHECK ("action" IN ('organisation_created', 'agreement_recorded', 'owner_invitation_issued',
+      'owner_invitation_resent', 'owner_invitation_revoked', 'organisation_name_corrected',
+      'account_deactivated', 'account_reactivated',
+      'member_invited', 'member_joined', 'member_role_changed', 'member_removed', 'member_left'));
+ALTER TABLE "organizations" DROP CONSTRAINT "organizations_legalName_chk";
+ALTER TABLE "organizations" DROP COLUMN "legalName";
+COMMIT;
+SQL
+```
+
+The scratch run had no `organisation_legal_name_corrected` row. Postgres re-checks existing rows
+when the constraint is added, so the restore fails while such a row exists (not run). Those rows
+are append-only history, so the CHECK stays widened: because the script is one transaction and stops on the first error,
+nothing has changed, so run it again without the two `organisation_events_action_check`
+statements. After the SQL runs, the migration is still listed as applied. The rehearsal did not
+cover rolling forward after it, so do not roll forward to v0.6.1 again until someone has checked
+how the migrator treats it (register D-325).
 
 ---
 
@@ -1896,5 +2083,8 @@ organisation and cannot. It shows "valid; N erased", where N counts every erasur
 review: "valid; 1 field erased" after one field, "valid; 1 file erased" after one file (FR-REV-08,
 FR-EVD-05).
 
-The old value stays in the write-ahead log and in backups until they age out, within 30 days
-(NFR-PRIV-07); nothing more is done for them.
+The old value stays in the write-ahead log and in backups until they age out: about 31 days on the
+server while nightly backups succeed, and about 41 to 42 days counting the off-site snapshots,
+longer than the 30 days (NFR-PRIV-07) the requirement sets (register D-324). The privacy notice says
+"about 43 days": 43 is the operating documents' safe upper bound, which `backup-restore.md`
+explains. Nothing more is done for them.

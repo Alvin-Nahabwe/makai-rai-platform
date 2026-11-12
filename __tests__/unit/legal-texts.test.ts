@@ -92,6 +92,70 @@ describe('FR-ACC-02: version 1 stays as published', () => {
   });
 });
 
+/** The words of version 2, as published on 12 November 2026: the text a person is asked to accept now. */
+const v2 = (kind: 'terms' | 'privacy' | 'cross-border-consent'): string => {
+  const found = legalTextVersion(kind, '2');
+  if (found === null) throw new Error(`no version 2 of ${kind}`);
+  return found.text;
+};
+
+describe('FR-ACC-02: version 2 of the three accepted texts', () => {
+  it('FR-ACC-02: version 2 of each accepted kind is current, required, and published on 12 November 2026', () => {
+    for (const kind of ACCEPTED_KINDS) {
+      const found = legalTextVersion(kind, '2');
+      expect(found?.publishedOn, kind).toBe('2026-11-12');
+      expect(found?.acceptance, kind).toBe('required');
+      expect(currentLegalText(kind).version, kind).toBe('2');
+    }
+  });
+
+  it('FR-ACC-02: the terms name the operator, the contact, and the section for organisations', () => {
+    const text = v2('terms');
+    expect(text).toContain('The platform is provided by Makerere University Centre for Artificial Intelligence (MAK-AI), College of Computing and Information Sciences, Makerere University, P.O. Box 7062, Kampala, Uganda.');
+    expect(text).toContain('For questions about these terms or about personal data, write to privacy@makrai.org. To report a security problem, write to security@makrai.org.');
+    expect(text).toContain('## 7. Using the platform on behalf of an organisation');
+    expect(text).toContain('The first owner of an organisation accepts these terms for the institution as well as for themselves.');
+    expect(text).toContain('Your institution is the controller of the personal data in your organisation\'s records.');
+  });
+
+  it('FR-ACC-02: the privacy notice names the operator, the server and backup countries, the recipients, the contact and the retention periods', () => {
+    const text = v2('privacy');
+    expect(text).toContain('The platform is run by Makerere University Centre for Artificial Intelligence (MAK-AI), College of Computing and Information Sciences, Makerere University, P.O. Box 7062, Kampala, Uganda.');
+    expect(text).toContain('The platform\'s server, and everything it holds, is in Finland, in the European Union. This includes your account, your team\'s records, every evidence file, and the copies of the database backups.');
+    for (const line of [
+      'Hetzner: The server that runs the platform and holds its database: all accounts, records and evidence files. Where: Helsinki, Finland.',
+      'Hetzner Storage Box: Copies of the database backups. Where: Finland.',
+      "Cloudflare: All web traffic between your browser and the platform, including your IP address and the pages, records and files you send and receive. Cloudflare can read this traffic as it passes. Where: Cloudflare's data centres around the world, usually the one nearest to you.",
+      "Resend: The emails the platform sends, with the recipient's email address. Where: United States.",
+    ]) expect(text).toContain(line);
+    expect(text).toContain('To contact MAK-AI about personal data, write to privacy@makrai.org. MAK-AI has not appointed a data protection officer, or a representative in any country.');
+    expect(text).toContain('Security logs and web server logs (4.3): 90 days, then deleted automatically.');
+    expect(text).toContain('Backups: each backup is deleted automatically, from the server after about 31 days and from the off-site store, including its own daily snapshots, after about 43 days.');
+    expect(text).toContain('MAK-AI does not record a separate data protection contact for the institution. It writes to the organisation\'s owners instead.');
+  });
+
+  it('FR-ACC-02 NFR-PRIV-10: the consent text names Finland, Cloudflare around the world and Resend in the United States, in four sentences', () => {
+    const text = v2('cross-border-consent');
+    expect(text).toContain('I agree that my personal data, including my account and my team\'s records, is stored in Finland, on a server and in backup copies, and is carried or handled by Cloudflare, through its data centres around the world, and by Resend, in the United States.');
+    expect(text).toContain('I can withdraw this consent at any time by deleting my account, after which I can no longer use the platform and the records I added stay with my organisation. Section 3 of the Privacy Notice gives the details.');
+    // Four sentences, and no heading of its own: the page shows the kind's name.
+    expect(text.trim().split(/(?<=[.])\s+/)).toHaveLength(4);
+    expect(text).not.toMatch(/^#/m);
+  });
+
+  it('FR-ACC-02: every place the consent label names is in the consent text and the privacy notice, in the same spelling', () => {
+    // A plain comparison, not a rule about the words: the box a person ticks and the text it points at name the same places.
+    const label = ACCEPT_LABEL['cross-border-consent'];
+    const consent = currentLegalText('cross-border-consent').text;
+    const privacy = currentLegalText('privacy').text;
+    for (const place of ['Finland', 'around the world', 'the United States', 'Cloudflare', 'Resend']) {
+      expect(label, `the label names ${place}`).toContain(place);
+      expect(consent, `the consent text names ${place}`).toContain(place);
+      expect(privacy, `the privacy notice names ${place}`).toContain(place);
+    }
+  });
+});
+
 describe('FR-PUB-01 FR-ACC-02: the texts a person is asked to accept now (current versions)', () => {
   it('FR-ACC-02: the consent labels read exactly as approved', () => {
     // The map pin: every other test takes the sentences from ACCEPT_LABEL, so this is the one place that says what a person
@@ -99,7 +163,7 @@ describe('FR-PUB-01 FR-ACC-02: the texts a person is asked to accept now (curren
     expect(ACCEPT_LABEL).toEqual({
       terms: 'I accept the terms of service.',
       privacy: 'I have read the privacy notice.',
-      'cross-border-consent': "I agree that my account and my team's records are stored and processed outside my country, as the cross-border storage consent describes.",
+      'cross-border-consent': 'I agree that my data is stored in Finland and handled by Cloudflare, around the world, and Resend, in the United States, as the consent to storage abroad describes.',
     });
   });
 
