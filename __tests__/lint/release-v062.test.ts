@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 /**
- * The v0.6.2 release notes held to their form, to the waiver file and to the compose file's nginx pin. The notes are
+ * The v0.6.2 release notes held to their form and to the waiver file. The notes are
  * read as text: no case here can tell whether a test total or a rehearsal verdict in them is right. package.json's
  * version is not pinned here: the next release moves it, and the notes name their own version in a sentence instead.
  */
@@ -58,12 +58,11 @@ describe('the v0.6.2 release notes', () => {
     expect(t).not.toMatch(/hc-ping\.com\/|\b[0-9a-f]{64}\b/); // no ping address and no 64-hex token or digest
   });
 
-  it('NFR-SEC-06 D-338 D-339: the nginx image the notes name is the one the compose file pins, and v0.6.1 is not a target', () => {
+  it('NFR-SEC-06 D-338 D-339: the notes name the nginx image v0.6.2 pins, and v0.6.1 is not a target', () => {
     const t = read();
-    const compose = readFileSync('docker/docker-compose.prod.yml', 'utf8');
-    const pins = [...compose.matchAll(/^\s*image:\s*nginx:\S*@sha256:([0-9a-f]{64})\s*$/gm)].map((m) => m[1]);
-    expect(pins).toHaveLength(1);
-    expect(t).toContain(`\`sha256:${pins[0].slice(0, 8)}\``); // the digest's first eight characters, as the notes write it
+    // The digest v0.6.2 pins (docker/docker-compose.prod.yml at 4c4c2c30). A literal: the compose file moves on with
+    // later releases, and these notes do not. nginx-playwright-config.test.ts holds the tooling to the compose file.
+    expect(t).toContain('`sha256:713fc2eb`');
     expect(t).toMatch(/v0\.6\.1 was tagged on 12 November 2026 and was not deployed/);
     const deploy = section(t, 'Deploy and rollback');
     expect(deploy).toMatch(/Deploy v0\.6\.2, never v0\.6\.1/);
