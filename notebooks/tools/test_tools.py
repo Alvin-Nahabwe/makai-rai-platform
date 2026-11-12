@@ -15,6 +15,7 @@ import importlib.metadata
 import json
 import os
 import platform
+import re
 import subprocess
 import sys
 import tempfile
@@ -340,34 +341,40 @@ class CheckEvidenceTest(EvidenceFixture):
 
 
 class EvidenceArchiveTest(EvidenceFixture):
-    """The archive block each notebook's evidence-summary cell runs (D8): one ZIP beside the folder, with this control's own files only."""
+    """The archive step each notebook's evidence-summary cell runs (D8): one ZIP beside the folder, holding only the files the cell wrote."""
 
     MAX_ZIP_BYTES = 10 * 1024 * 1024  # lib/evidence/inspect.ts accepts a ZIP up to 10 MiB
 
-    def archive_blocks(self):
+    def archive_steps(self):
         """The archive step of the evidence-summary cell of each of the ten notebooks, as written.
 
         The rule: the step runs from the line that starts `Path('<C>_evidence.zip').unlink(` (removal of an earlier ZIP)
         to the line that starts `os.replace(` (the move of the .part file onto the final name), both included. The
-        notebooks have exactly one of each, and nothing between them but the `with zipfile.ZipFile(` block.
+        notebooks have exactly one of each, and between them the removal of the .part, the `with zipfile.ZipFile(` block
+        and its literal list of file names. Returns {control: (step source, the list of names in it)}.
         """
-        blocks = {}
+        steps = {}
         for path in sorted((REPO / "notebooks" / "technical").glob("C-*.ipynb")):
             cells = [c for c in json.loads(path.read_text())["cells"] if "evidence-summary" in c["metadata"].get("tags", [])]
             self.assertEqual(len(cells), 1, f"{path.name}: one evidence-summary cell")
-            lines = "".join(cells[0]["source"]).splitlines()
+            source = "".join(cells[0]["source"])
+            lines = source.splitlines()
             starts = [i for i, ln in enumerate(lines) if ln.startswith("Path('") and "_evidence.zip').unlink(" in ln]
             ends = [i for i, ln in enumerate(lines) if ln.startswith("os.replace(")]
             self.assertEqual((len(starts), len(ends)), (1, 1), f"{path.name}: one removal and one move")
             self.assertLess(starts[0], ends[0])
-            step = lines[starts[0]:ends[0] + 1]
-            self.assertEqual(sum(ln.startswith("with zipfile.ZipFile(") for ln in step), 1, f"{path.name}: one zipfile block in the step")
-            blocks[path.name[:4]] = "\n".join(step)
-            self.assertNotIn("make_archive", "".join(cells[0]["source"]), f"{path.name}: no make_archive")
-        self.assertEqual(len(blocks), 10)
-        return blocks
+            step = "\n".join(lines[starts[0]:ends[0] + 1])
+            self.assertEqual(step.count("zipfile.ZipFile("), 1, f"{path.name}: one zipfile block in the step")
+            self.assertNotIn("make_archive", source, f"{path.name}: no make_archive")
+            self.assertNotIn("glob(", source, f"{path.name}: no glob")
+            listed = ast.literal_eval("[" + step.split("for name in [", 1)[1].split("]:", 1)[0] + "]")
+            written = re.findall(r"EVIDENCE_DIR / '([^']+)'", source)
+            self.assertEqual(sorted(listed), sorted(written), f"{path.name}: the list is what the cell writes")
+            steps[path.name[:4]] = (step, listed)
+        self.assertEqual(len(steps), 10)
+        return steps
 
-    def run_block(self, block, fail_after=None):
+    def run_step(self, step, fail_after=None):
         """Runs the archive step in the folder that holds `evidence/`. `fail_after=N` makes the (N+1)th member fail to be added."""
         prelude = "import os, zipfile\nfrom pathlib import Path\nEVIDENCE_DIR = Path('evidence')\n"
         if fail_after is not None:
@@ -380,93 +387,133 @@ class EvidenceArchiveTest(EvidenceFixture):
                 "zipfile.ZipFile.write = _failing\n"
             )
         # -I and a working folder of its own: the step writes its ZIP next to `evidence`, as it does in a notebook.
-        return subprocess.run([sys.executable, "-I", "-c", prelude + block + "\n"], cwd=self.technical, capture_output=True, text=True, timeout=120)
+        return subprocess.run([sys.executable, "-I", "-c", prelude + step + "\n"], cwd=self.technical, capture_output=True, text=True, timeout=120)
 
     def members(self, archive):
         with zipfile.ZipFile(archive) as z:
             self.assertIsNone(z.testzip())
             return z.namelist()
 
+    def write_listed(self, names):
+        """Writes every listed file with content of its kind (a PNG needs its signature, so the checker accepts the folder)."""
+        for name in names:
+            body = PNG_SIGNATURE + b"rest of an image" if name.endswith(".png") else b"group,rate\nA,0.31\n" if name.endswith(".csv") else b"# own " + name.encode() + b"\n"
+            (self.evidence / name).write_bytes(body)
+
+    def clear(self, control, extra=()):
+        for p in list(self.evidence.iterdir()):
+            if p.name.startswith(f"{control}_") or p.name in extra:
+                if p.is_dir() and not p.is_symlink():
+                    for q in p.iterdir():
+                        q.unlink()
+                    p.rmdir()
+                else:
+                    p.unlink()
+        for leftover in self.technical.glob(f"{control}_evidence.zip*"):
+            leftover.unlink()
+
     def test_the_zip_exists_starts_with_pk_is_small_and_the_folder_still_passes(self):
         # D8 NB-AC-04
-        for control, block in self.archive_blocks().items():
+        for control, (step, listed) in self.archive_steps().items():
             with self.subTest(control=control):
-                own = {f"{control}_summary.md", f"{control}_table.csv", f"{control}_plot.png"}
-                (self.evidence / f"{control}_summary.md").write_text((self.evidence / "C-99_summary.md").read_text())
-                (self.evidence / f"{control}_table.csv").write_text("group,rate\nA,0.31\nB,0.12\n")
-                (self.evidence / f"{control}_plot.png").write_bytes(PNG_SIGNATURE + b"rest of an image")
-                done = self.run_block(block)
+                self.write_listed(listed)
+                done = self.run_step(step)
                 self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
                 archive = self.technical / f"{control}_evidence.zip"
                 self.assertTrue(archive.is_file(), f"{archive.name} is written beside the evidence folder")
                 self.assertFalse((self.evidence / archive.name).exists(), "the ZIP is not inside the evidence folder")
+                self.assertFalse((self.technical / f"{control}_evidence.zip.part").exists(), "the move leaves no .part file")
                 self.assertEqual(archive.read_bytes()[:4], b"PK\x03\x04")
                 self.assertLess(archive.stat().st_size, self.MAX_ZIP_BYTES)
-                self.assertFalse((self.technical / f"{control}_evidence.zip.part").exists(), "the move leaves no .part file")
-                self.assertEqual(self.members(archive), sorted(own), "this control's files, sorted, under bare names")
+                self.assertEqual(self.members(archive), sorted(listed), "the listed files, sorted, under bare names")
                 # The folder is as before: the checker still accepts it (a ZIP inside it would be refused).
                 done = self.check()
                 self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-                archive.unlink()
-                for name in own:
-                    (self.evidence / name).unlink()
+                self.clear(control)
 
-    def test_the_zip_holds_only_this_controls_files_whatever_else_is_in_the_folder(self):
-        # D8: notebooks run side by side share evidence/; another control's files, a stray file, a folder and a link stay out
-        for control, block in self.archive_blocks().items():
+    def test_the_zip_holds_only_the_listed_files_whatever_else_is_in_the_folder(self):
+        # D8 H2: notebooks run side by side share evidence/; another control's files, a person's own file with this
+        # control's prefix, a stray file, a folder and a link stay out
+        for control, (step, listed) in self.archive_steps().items():
             with self.subTest(control=control):
-                own = {f"{control}_summary.md", f"{control}_table.csv", f"{control}_plot.png"}
-                for name in own:
-                    (self.evidence / name).write_bytes(b"own " + name.encode())
-                others = {"C-77_summary.md", "C-77_table.csv", "C-77_plot.png", "notes.txt", f"{control}.csv", f"x{control}_table.csv", "C-1_table.csv"}
+                self.write_listed(listed)
+                others = {"C-77_summary.md", "C-77_table.csv", "C-77_plot.png", "notes.txt", f"{control}.csv", f"x{control}_table.csv", "C-1_table.csv", f"{control}_anonymised.csv", f"{control}_own.png"}
                 for name in others:
-                    (self.evidence / name).write_bytes(b"not this control's")
+                    (self.evidence / name).write_bytes(b"not one of the files the notebook wrote")
                 (self.evidence / f"{control}_folder").mkdir()
                 (self.evidence / f"{control}_folder" / f"{control}_inner.csv").write_text("a\n1\n")
                 (self.evidence / f"{control}_link.csv").symlink_to(self.data)
                 # A ZIP of the same name left by an earlier run is replaced, not added to.
                 with zipfile.ZipFile(self.technical / f"{control}_evidence.zip", "w") as old:
                     old.writestr("stale_member.csv", "old")
-                done = self.run_block(block)
+                done = self.run_step(step)
                 self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-                self.assertEqual(self.members(self.technical / f"{control}_evidence.zip"), sorted(own))
-                with zipfile.ZipFile(self.technical / f"{control}_evidence.zip") as z:
-                    for name in own:
-                        self.assertEqual(z.read(name), b"own " + name.encode())
-                (self.technical / f"{control}_evidence.zip").unlink()
-                for name in own | others:
-                    (self.evidence / name).unlink()
-                (self.evidence / f"{control}_link.csv").unlink()
-                (self.evidence / f"{control}_folder" / f"{control}_inner.csv").unlink()
-                (self.evidence / f"{control}_folder").rmdir()
+                final = self.technical / f"{control}_evidence.zip"
+                self.assertEqual(self.members(final), sorted(listed))
+                with zipfile.ZipFile(final) as z:
+                    for name in listed:
+                        self.assertEqual(z.read(name), (self.evidence / name).read_bytes())
+                self.clear(control, extra=others)
 
+    def test_a_link_at_the_part_name_is_not_written_through(self):
+        # D8 H1: a symbolic link planted at <C>_evidence.zip.part must not send the archive into its target
+        outside = self.root / "outside.txt"
+        for control, (step, listed) in self.archive_steps().items():
+            with self.subTest(control=control):
+                outside.write_bytes(b"a file outside the folder, not to be touched")
+                self.write_listed(listed)
+                part = self.technical / f"{control}_evidence.zip.part"
+                part.symlink_to(outside)
+                done = self.run_step(step)
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                self.assertEqual(outside.read_bytes(), b"a file outside the folder, not to be touched")
+                self.assertFalse(part.exists() or part.is_symlink(), "the link was removed and the .part moved away")
+                self.assertEqual(self.members(self.technical / f"{control}_evidence.zip"), sorted(listed))
+                self.clear(control)
+
+    def test_a_missing_or_linked_listed_file_leaves_no_zip(self):
+        # D8: complete or absent, and a listed file that is not a regular file is an error, not a skip
+        for control, (step, listed) in self.archive_steps().items():
+            with self.subTest(control=control):
+                for kind in ("missing", "link"):
+                    self.write_listed(listed)
+                    victim = self.evidence / listed[-1]
+                    victim.unlink()
+                    if kind == "link":
+                        victim.symlink_to(self.data)
+                    final = self.technical / f"{control}_evidence.zip"
+                    with zipfile.ZipFile(final, "w") as earlier:
+                        earlier.writestr(listed[0], "the previous run")
+                    done = self.run_step(step)
+                    self.assertNotEqual(done.returncode, 0, f"{kind}: the step stops with an error")
+                    self.assertIn(listed[-1], done.stderr)
+                    self.assertIn("missing or is a link", done.stderr)
+                    self.assertIn("Run this notebook again from the top; if the file is a link, delete it first.", done.stderr)
+                    self.assertFalse(final.exists(), f"{kind}: no ZIP carries the final name, and the previous run's ZIP is gone")
+                    self.assertFalse((self.evidence / final.name).exists())
+                    self.clear(control)
 
     def test_a_failure_while_adding_members_leaves_no_zip(self):
         # D8: complete or absent. The platform takes a ZIP by its first bytes, so a part-written one must never carry the final name.
-        for control, block in self.archive_blocks().items():
+        for control, (step, listed) in self.archive_steps().items():
             with self.subTest(control=control):
-                for name in (f"{control}_summary.md", f"{control}_table.csv", f"{control}_plot.png"):
-                    (self.evidence / name).write_bytes(b"own " + name.encode())
+                self.write_listed(listed)
                 final = self.technical / f"{control}_evidence.zip"
                 with zipfile.ZipFile(final, "w") as earlier:
                     earlier.writestr(f"{control}_summary.md", "the previous run")
-                done = self.run_block(block, fail_after=1)
+                done = self.run_step(step, fail_after=1)
                 self.assertNotEqual(done.returncode, 0, "the step stops with an error")
                 self.assertIn("disk full", done.stderr)
                 self.assertFalse(final.exists(), "no ZIP carries the final name, and the previous run's ZIP is gone")
                 part = self.technical / f"{control}_evidence.zip.part"
                 self.assertFalse((self.evidence / part.name).exists(), "a leftover .part file is beside the folder, never in it")
-                # What is left beside the folder is not zipped and does not disturb the checker.
-                self.assertEqual(sorted(p.name for p in self.evidence.glob(f"{control}_*")), sorted([f"{control}_summary.md", f"{control}_table.csv", f"{control}_plot.png"]))
                 # A later successful run replaces the leftover and leaves only the final ZIP.
-                done = self.run_block(block)
+                done = self.run_step(step)
                 self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
                 self.assertTrue(final.is_file())
                 self.assertFalse(part.exists(), "the move leaves no .part file")
-                self.assertEqual(len(self.members(final)), 3)
-                final.unlink()
-                for name in (f"{control}_summary.md", f"{control}_table.csv", f"{control}_plot.png"):
-                    (self.evidence / name).unlink()
+                self.assertEqual(self.members(final), sorted(listed))
+                self.clear(control)
 
 
 class FetchCheckedTest(unittest.TestCase):
