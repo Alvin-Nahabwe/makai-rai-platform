@@ -42,7 +42,9 @@ function sessionFor(userId: string, sessionEpoch: number): void {
 
 /** An organisation's owner (K0a's buildOrg, with the three acceptances) under this email and password. */
 async function makeUser(email: string, plaintextPassword: string): Promise<string> {
-  const passwordHash = await hash(plaintextPassword, 12);
+  // Cost 4: the hash is only here to be compared against, and the cost is stored in it. The route still makes its own
+  // cost-12 hash of the new password.
+  const passwordHash = await hash(plaintextPassword, 4);
   const userId = (await buildOrg()).members.owner.userId;
   await testDb.user.update({ where: { id: userId }, data: { email, name: 'Test User', passwordHash } });
   return userId;
