@@ -94,9 +94,12 @@ describe('playwright.nginx.config.ts', () => {
     expect(pins).toHaveLength(1);
     const ref = pins[0];
     const up = readFileSync('scripts/nginx-test/up.sh', 'utf8');
-    expect(up.split('\n')).toContain(`IMAGE='${ref}'`); // up.sh runs the pinned image
+    expect(up.match(/^[ \t]*IMAGE=.*$/gm)).toEqual([`IMAGE='${ref}'`]); // set once, to the pin
+    expect(up.match(/nginx:[^\s'"]*@sha256:[0-9a-f]{64}/g)).toEqual([ref]); // no other nginx reference
+    expect(up).toMatch(/^docker run -d [^\n]*--pull=never[^\n]*\\\n[^\n]*"\$IMAGE" >\/dev\/null$/m); // and runs it, never pulling
     const ci = readFileSync('.github/workflows/ci.yml', 'utf8');
-    expect(ci.split('\n').map((l) => l.trim())).toContain(`run: docker pull ${ref}`); // and CI pulls that same one
+    expect(ci.match(/nginx:[^\s'"]*@sha256:[0-9a-f]{64}/g)).toEqual([ref]); // CI names one nginx image, the pin
+    expect(ci.split('\n').map((l) => l.trim())).toContain(`run: docker pull ${ref}`); // and pulls it
   });
 
   it('NFR-SEC-06: the browser channel follows E2E_BROWSER_CHANNEL as playwright.config.ts does; unset, Playwright\'s own build', async () => {

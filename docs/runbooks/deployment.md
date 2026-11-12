@@ -814,7 +814,10 @@ A failed run stops the deploy until the owner has read which image and which adv
 (`gh run view <run id> -R <owner>/<repo> --log-failed`) and has decided: move the pin or the
 dependency in a new release, or deploy with the finding. The decision and its reason go in the
 register. For v0.6.1 the run failed on the nginx image and the owner chose a new release, v0.6.2.
-A green run says nothing about advisories below CRITICAL or without a fix.
+A green run says nothing about advisories below CRITICAL or without a fix. Run it before anything
+else is merged to `main`: started this way it reads the compose file's pins from `main`, not from
+the tag, and the two release images from the latest release. The same scan also runs every day on
+`main`; while a finding stays, that daily run fails and its dead-man check alerts.
 
 **Before the v0.6.1 tag.** No v0.6.1 tag before the pull request that publishes version 2 of the
 legal texts is merged. CI does not run the release-candidate cases (`.github/workflows/ci.yml:241`
@@ -844,8 +847,11 @@ It is the only entry for 0.6.1: the three entries for 0.6.0 waive nothing in thi
 **v0.6.2.** v0.6.1 was tagged on 12 November 2026 and was not deployed: the image scan run after
 its tag failed on the pinned nginx image, which holds a library with a CRITICAL advisory (register
 D-339). v0.6.2 is v0.6.1 with the nginx pin moved to an image that holds the fixed library; nothing
-in the application changed. Deploy v0.6.2 wherever this runbook says v0.6.1: 8.6, 9.4, 9.5a and 9.6
-apply to it unchanged, and the release it replaces on the host is still v0.6.0. The tag gate is the
+in the application changed. The release it replaces on the host is still v0.6.0, so 8.3 steps 6
+and 7a move postgres and nginx from v0.6.0's digests. Read 8.6, 9.4, 9.5a and 9.6 with v0.6.2 in
+place of v0.6.1: they apply to it unchanged. v0.6.1 is never a deploy or a rollback target. A
+rollback of v0.6.2 returns to v0.6.0 (9.1), whose nginx image holds the same unfixed library
+(D-339), and a return deploy after 9.6's emergency stop is to v0.6.2 or later. The tag gate is the
 same command. The walk is deferred again, by a waiver entry for 0.6.2 with the owner's words
 (register D-301); the entries for 0.6.0 and 0.6.1 waive nothing in it.
 
@@ -1479,6 +1485,9 @@ gh release list -R <owner>/<repo> --limit 5
 gh release view vA.B.C -R <owner>/<repo> --json body --jq .body
 ```
 
+A release that was tagged and never deployed (v0.6.1) is not a release to return to: PREV is the
+release the host last ran, which 8.2 recorded.
+
 ### 9.2 Roll the app back
 
 ```bash
@@ -1935,7 +1944,7 @@ If you must stop the release that way, say so to the teams, and expect those pag
 the return deploy. The hourly journey's save is refused while v0.6.0 serves, so it reports a
 failure to the `makrai-synthetic` check every hour. Pause the journey with the lines of 8.5 step 6
 and pause the `makrai-synthetic` check, as 9.5 does, and write down that both are paused. After the
-return deploy to v0.6.1 or later, put the crontab back and resume the check with the block at the
+return deploy to v0.6.2 or later, put the crontab back and resume the check with the block at the
 end of 9.5 that begins "Whatever you paused and wrote down comes back now"; 8.5 step 11 has
 completed, so that block applies as 9.5 words it. A database restore (9.3) follows 9.5's rule about
 real records: it is safe only before the first real v1 record, and after that it discards every
