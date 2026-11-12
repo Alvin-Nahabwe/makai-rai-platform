@@ -966,7 +966,7 @@ pulled.
 ```bash
 curl -s -o /dev/null -w '%{http_code}\n' https://makrai.org/login
 $C ps
-journalctl CONTAINER_TAG=makrai/docker-nextjs-1 --since -10min -p err -o cat | grep -vE '[{]"timestamp":"[^"]*","level":"warn","event":"[A-Z_]+",' | wc -l
+journalctl CONTAINER_TAG=makrai/docker-nextjs-1 --since -10min -p err -o cat | grep -vE '^[{]"timestamp":"[^"]*","level":"warn","event":"[A-Z_]+",' | wc -l
 [ "$(docker inspect -f '{{.Config.Image}}' docker-nextjs-1)" = "$(sed -n 's/^WEB_IMAGE=//p' ../.env)" ] && echo SAME || echo DIFFERENT
 [ "$(docker inspect -f '{{ index .Config.Labels "org.opencontainers.image.version" }}' docker-nextjs-1)" = "$(sudo -u <operator> git -C /srv/makrai/app describe --tags --exact-match | sed 's/^v//')" ] && echo SAME || echo DIFFERENT
 ```
@@ -985,9 +985,19 @@ journald driver records every line a container writes to its error stream at pri
 (`daemon/logger/journald/journald.go` in Docker's source; read there, not observed on the host), and
 the app writes its audit warnings to that stream with `console.warn` (`lib/security-logger.ts:94-95`):
 one line each, beginning `{"timestamp":"…","level":"warn","event":"…",`. Inviting a member or an
-administrator's correction writes one. The `grep` drops those lines and counts every other line,
-so an audit line at level `error` still counts, and so does a warning the app writes as plain
-text. A failing page writes several lines: a first line beginning `⨯`, then its stack and fields.
+administrator's correction writes one; so do a failed or locked sign-in, a rate limit and a
+refused password change, which anyone on the internet can cause. So this count does not show
+whether signing in works: 8.6 step 4 and the synthetic check do. The `grep` drops those lines,
+only where the line starts with that form, and counts every other line, so an audit line at
+level `error` still counts, and so does a warning the app writes as plain text. A failing page
+writes several lines: a first line beginning `⨯`, then its stack and fields.
+
+Lines beginning `[auth][error]`, `[auth][cause]` or `[auth][details]`, with stack lines between
+them, are written by the sign-in library when a browser sends a session cookie the app cannot
+read. They count. A few from one request are a stale or made-up cookie, not a failed deploy; one
+for every signed-in person means the app cannot read any session, and is. Their form is read from
+the library's logger (`node_modules/@auth/core/lib/utils/logger.js`); they were not seen from the
+running app in the rehearsal.
 
 A second expected exception, only for a release that carries a content version (8.3): the
 third line may print more than `0`. Do not roll back on that count alone. Print the error
@@ -995,7 +1005,7 @@ lines with their times, and the time the new container started with its restart 
 in UTC:
 
 ```bash
-journalctl CONTAINER_TAG=makrai/docker-nextjs-1 --since -10min -p err -o short-iso-precise --utc | grep -vE '[{]"timestamp":"[^"]*","level":"warn","event":"[A-Z_]+",'
+journalctl CONTAINER_TAG=makrai/docker-nextjs-1 --since -10min -p err -o short-iso-precise --utc | grep -vE '\]: [{]"timestamp":"[^"]*","level":"warn","event":"[A-Z_]+",'
 docker inspect -f '{{.State.StartedAt}} restarts={{.RestartCount}}' docker-nextjs-1
 ```
 
@@ -1005,9 +1015,10 @@ the old app while it refused in the interval between 8.3 steps 4 and 5, and is e
 other line stamped before the start time was also written by the old app (a failing page in
 that interval, or something from before step 4): read it before you decide, and do not count
 it as expected if it holds another `"code"`. A line stamped at or after the start time was
-written by the new app: that is a failed deploy, as above. The first line leaves out the audit
-warnings, as the count does, so an invitation or an administrator's action in those ten minutes
-does not show here. The two commands were run on a workstation to check that their times can be
+written by the new app: that is a failed deploy, as above, except for the few sign-in library
+lines described above. The first line leaves out the audit warnings, as the count does, so an
+invitation or an administrator's action in those ten minutes does not show here; it finds them
+after the journal's own prefix, which ends `]: `. The two commands were run on a workstation to check that their times can be
 compared; they have not been run on the host after a content release. The `grep` was run on the
 app's error lines captured with `docker logs` in the local rehearsal of 12 November 2026, not
 read from a journal: it kept the old app's one `content_not_published` line, dropped the new
@@ -1550,15 +1561,19 @@ does not fail the verification. While content 5.1.0 stays registered, v0.6.0 kee
 saves, withdrawals and seals, and fails the pages 9.6 lists. Each refused request writes an
 error line, and a failing page writes several. Count the lines that are not one of the two
 refusals 9.6 describes, not part of a failing page's lines, and not an audit warning (8.4). Run
-the command once 10 minutes have passed since 9.2's `up` returned, so that it reads only
-v0.6.0's lines; an earlier run also counts the lines of the release you rolled back from:
+the commands once 10 minutes have passed since the last `up` of 9.2 returned (for this release
+9.2 also recreates postgres after the app), so that they read only v0.6.0's lines; an earlier run
+also counts the lines of the release you rolled back from. The first line holds the pattern, the
+second prints the count, and the third prints the lines that were counted:
 
 ```bash
-journalctl CONTAINER_TAG=makrai/docker-nextjs-1 --since -10min -p err -o cat | grep -vcE '^(    at |  [a-z]+: |}$)|^ ?⨯ [A-Za-z_$][A-Za-z0-9_$]*: (unknown_content_version|content_not_published)$|^[{]"event":"REQUEST_FAILED","reference":"[0-9a-f]+","status":(503,"code":"content_not_published"|500,"code":"unknown_content_version"),"at":"[^"]*"}$|^[{]"timestamp":"[^"]*","level":"warn","event":"[A-Z_]+",'
+X='^(    at |  [a-z]+: |}$)|^ ?⨯ [A-Za-z_$][A-Za-z0-9_$]*: (unknown_content_version|content_not_published)$|^[{]"event":"REQUEST_FAILED","reference":"[0-9a-f]+","status":(503,"code":"content_not_published"|500,"code":"unknown_content_version"),"at":"[^"]*"}$|^[{]"timestamp":"[^"]*","level":"warn","event":"[A-Z_]+",'
+journalctl CONTAINER_TAG=makrai/docker-nextjs-1 --since -10min -p err -o cat | grep -vcE "$X"
+journalctl CONTAINER_TAG=makrai/docker-nextjs-1 --since -10min -p err -o cat | grep -vE "$X"
 ```
 
-It prints the count (and exits 1 when the count is `0`, which is how `grep` reports no match).
-It leaves out, as whole lines only: a refused request,
+The second line prints the count (and exits 1 when the count is `0`, which is how `grep` reports
+no match). The pattern leaves out, as whole lines only: a refused request,
 `{"event":"REQUEST_FAILED","reference":"…","status":503,"code":"content_not_published","at":"…"}`,
 and the same line with `500` and `unknown_content_version`; the first line of a failing page,
 `⨯ b: unknown_content_version` (the name before the colon may differ), or the same with
@@ -1568,7 +1583,9 @@ the stack and fields under a failing page's first line; and an audit warning. Ev
 counts, including the first line of any other failing page, so an unexpected error shows at
 least its first line. A line in another form, for example a `⨯` rendered differently by the
 journal, is counted, not left out. What it could hide is an error whose own first line has one
-of the stack or field shapes; none was seen.
+of the stack or field shapes; none was seen. It also accepts a failing page with either code
+whatever page it is: the first line names no page, so 9.6's list says which pages to expect, but
+the count cannot check it.
 
 The form of these lines was captured in the local rehearsal of 12 November 2026 (register
 D-331), with `docker logs` on a workstation, not from a journal and not on the host. On the 25
@@ -1578,9 +1595,8 @@ captured 500 of a missing column, or a plain-text error added, it printed `1` or
 `content_not_published` page line and the `unknown_content_version` request line were not
 captured; v0.6.0 writes the request line for every refusal it answers with 500 or above
 (`lib/http/toResponse.ts` at v0.6.0, `9932c51f`, lines 101 to 106). If the count is not `0`, read
-the lines that remain, with the same command without `c` in `-vcE`. A line that holds
-`content_not_published` or `unknown_content_version` and comes from a page or request 9.6 lists
-is expected. Any other line fails the verification.
+the lines the third command prints. Each of them fails the verification, except the few sign-in
+library lines 8.4 describes.
 
 ### 9.5 v0.6.0: when to roll back, and how
 
@@ -1783,16 +1799,21 @@ statements. In the rehearsal that second run printed `COMMIT` and the column was
 **Rolling forward to v0.6.1 again after the revert (register D-325).** After the SQL runs, the
 migration is still listed as applied, so a return deploy as 8.3 words it does not apply it again.
 In the rehearsal the migrator printed `No pending migrations to apply.`, the new container came up
-healthy, the login page answered 200, both `SAME` lines of 8.4 printed `SAME` and the restart
-count was 0, and the organisations screen (S-23) answered 500: Prisma's P2022, the column
-`organizations.legalName` does not exist. So, as the owner role, remove the migration's record,
-then run the migrator line of 8.3 step 4:
+healthy, the login page answered 200, and the organisations screen (S-23) answered 500: Prisma's
+P2022, the column `organizations.legalName` does not exist. (The two `SAME` lines of 8.4 and the
+restart count, run later on the same container, printed `SAME` and 0. 8.4's third line was not run
+then; it would have counted the lines of that 500.) So, as the owner role, first see that the
+column is gone, then remove the migration's record, then run the migrator line of 8.3 step 4:
 
 ```bash
+$C exec -T postgres psql -U "$PGU" -d makrai -Atc "select count(*) from information_schema.columns where table_name='organizations' and column_name='legalName'"
 $C exec -T postgres psql -U "$PGU" -d makrai -v ON_ERROR_STOP=1 -Atc 'DELETE FROM "_prisma_migrations" WHERE migration_name = '\''20261112000000_v061_organisation_legal_name'\'''
 ```
 
-It must print `DELETE 1`. In the rehearsal it did; the migrator then printed
+The first must print `0`. If it prints `1` the revert did not commit (its first run stops with an
+error, above): do not run the second line, because the migration applied again would then fail on
+a column that exists. That case was not run. The second must print `DELETE 1`. In the rehearsal it
+did; the migrator then printed
 ``Applying migration `20261112000000_v061_organisation_legal_name` `` and `All migrations have been
 successfully applied.`, and S-23 answered 200. There it was run as a statement of its own, after
 the revert had committed and after a return deploy without it had already swapped the container;
@@ -1804,8 +1825,12 @@ The migration applied again fills `legalName` only from each organisation's late
 above then prints `UPDATE 0`, as it did in the rehearsal. Every other name is gone: the names an
 administrator recorded or corrected, and the names entered when an organisation was created on
 v0.6.1. In the rehearsal the name recorded in 8.6 step 6 was gone and S-23 flagged that
-organisation "Legal name not recorded" again. Do 8.6 step 6 again, from the output of the
-read-only statement kept before the revert.
+organisation "Legal name not recorded" again. Do 8.6 step 6 again. It finds only organisations
+left without a name: an organisation whose name was corrected on v0.6.1 and that has an agreement
+record now shows the agreement's name and is not flagged (read from the migration; the rehearsal
+had no such organisation). So also run the read-only statement above again and compare its output
+with the output kept before the revert (`diff kept.txt now.txt`). For every organisation whose
+line differs or is missing, open it (S-24) and record the kept name with its legal-name form.
 
 ### 9.6 v0.6.1: content 5.1.0 and a rollback to v0.6.0
 
