@@ -1,5 +1,11 @@
 # Sitting 5.1.0 (b): the ten technical notebooks, a third look
 
+## The owner's answer
+
+On 12 November 2026 at 04:05 EAT the owner was shown the ten notebooks with the first 12 characters of the hashes in the "Batch hash" table below, and was asked to pass them, with C-10 passed as its privacy-competent reviewer. The owner answered "Pass all ten (Recommended)". The outcome is pass, with no edits, for all ten notebooks, and the reviewer is "Product owner, MAK-AI". The passes are recorded in each notebook's review file, below the records of 6 and 11 November.
+
+The rest of this note is as the owner read it.
+
 Prepared for the owner's third look at the ten technical notebooks. The note of 11 November 2026, `SITTING-5.1.0.md`, is what the owner read and answered that day; it is not changed. Nothing here is approved in advance. A pass is tied to the exact bytes whose hashes are below.
 
 ## Why the notebooks changed
