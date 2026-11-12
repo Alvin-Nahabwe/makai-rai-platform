@@ -801,12 +801,12 @@ A run that refuses a tag (not a plain `vX.Y.Z`, not equal to `package.json`, not
 usually a version that was not raised, and tag the corrected version.
 
 **Before the v0.6.1 tag.** No v0.6.1 tag before the pull request that publishes version 2 of the
-legal texts is merged. CI does not run the release-candidate cases (`.github/workflows/ci.yml:227`
+legal texts is merged. CI does not run the release-candidate cases (`.github/workflows/ci.yml:241`
 runs `npx vitest run` without `RELEASE_CANDIDATE`), and `.github/workflows/release.yml` runs no
 tests on a tag. So the tag gate is the unit run. Whoever prepares the release may run it, on a
 checkout of the commit to be tagged; the owner tags (8.1 step 2). Run it with the test database
 up, migrated and provisioned (`CONTRIBUTING.md:11-23`)
-and `pdftotext` installed (CI's unit job installs `poppler-utils`, `.github/workflows/ci.yml:217`),
+and `pdftotext` installed (CI's unit job installs `poppler-utils`, `.github/workflows/ci.yml:224`),
 and see it pass first:
 
 ```bash
@@ -817,15 +817,13 @@ If any test fails, do not tag. A failing release-candidate case names something 
 lacks. Clear it by supplying what is missing or, where the owner accepts shipping without it, by a
 waiver entry the owner records for this release in `docs/releases/release-waivers.json`. A waiver
 recorded for an earlier release waives nothing: a waiver counts only when its `release` equals
-`package.json`'s version (`__tests__/helpers/releaseWaivers.ts:76`), and every entry there today
-is for 0.6.0.
+`package.json`'s version (`__tests__/helpers/releaseWaivers.ts:76`).
 
-For v0.6.1, one case outside the legal texts fails until that is done: the screen-reader walk
-(NFR-A11Y-07, `__tests__/lint/screen-reader-walk.test.ts:114-118`; the walk sheet
-`docs/accessibility/screen-reader-walk-v0.6.0.md` says "not yet walked"). The owner has deferred the
-walk for v0.6.1 (register D-301), so the release needs a waiver entry for 0.6.1. The entry
-carries the owner's words; whoever prepares the release writes it into the file in the pull
-request that raises the version.
+For v0.6.1, one case passes on a waiver: the screen-reader walk (NFR-A11Y-07,
+`__tests__/lint/screen-reader-walk.test.ts:114-118`; the walk sheet
+`docs/accessibility/screen-reader-walk-v0.6.0.md` says "not yet walked"). The owner deferred the
+walk for v0.6.1 (register D-301), and the file holds that entry for 0.6.1, with the owner's words.
+It is the only entry for 0.6.1: the three entries for 0.6.0 waive nothing in this release.
 
 Some end-to-end cases also read `RELEASE_CANDIDATE` (`e2e/claims-crawl.spec.ts:53,719`). No job
 runs them and no command for them has been rehearsed, so they are not part of the gate yet
@@ -968,7 +966,7 @@ pulled.
 ```bash
 curl -s -o /dev/null -w '%{http_code}\n' https://makrai.org/login
 $C ps
-journalctl CONTAINER_TAG=makrai/docker-nextjs-1 --since -10min -p err -o cat | wc -l
+journalctl CONTAINER_TAG=makrai/docker-nextjs-1 --since -10min -p err -o cat | grep -vE '^[{]"timestamp":"[^"]*","level":"warn","event":"[A-Z_]+",' | wc -l
 [ "$(docker inspect -f '{{.Config.Image}}' docker-nextjs-1)" = "$(sed -n 's/^WEB_IMAGE=//p' ../.env)" ] && echo SAME || echo DIFFERENT
 [ "$(docker inspect -f '{{ index .Config.Labels "org.opencontainers.image.version" }}' docker-nextjs-1)" = "$(sudo -u <operator> git -C /srv/makrai/app describe --tags --exact-match | sed 's/^v//')" ] && echo SAME || echo DIFFERENT
 ```
@@ -982,13 +980,35 @@ The one expected exception is `makrai-nextjs:rollback`, which the host built and
 which carries no version label: after a rollback to it the second line prints
 `DIFFERENT`, and that is correct.
 
+The third line counts the app's error lines and leaves out its audit warnings. Docker's
+journald driver records every line a container writes to its error stream at priority `err`
+(`daemon/logger/journald/journald.go` in Docker's source; read there, not observed on the host), and
+the app writes its audit warnings to that stream with `console.warn` (`lib/security-logger.ts:94-95`):
+one line each, beginning `{"timestamp":"…","level":"warn","event":"…",`. Inviting a member or an
+administrator's correction writes one; so do a failed or locked sign-in, a rate limit and a
+refused password change, which anyone on the internet can cause. So this count does not show
+whether signing in works. Signing in does: yours, as 8.6 step 4 has you do for v0.6.1, or the
+next hourly synthetic journey. The `grep` drops those lines,
+only where the line starts with that form, and counts every other line, so an audit line at
+level `error` still counts, and so does a warning the app writes as plain text. A failing page
+writes several lines: a first line beginning `⨯`, then its stack and fields.
+
+Lines that show `[auth][error]`, `[auth][cause]` or `[auth][details]` (in red in the
+count's output: each starts with a colour code there, so a search for a line beginning `[auth]`
+may find nothing), with stack lines between
+them, are written by the sign-in library when a browser sends a session cookie the app cannot
+read. They count. A few from one request are a stale or made-up cookie, not a failed deploy; one
+for every signed-in person means the app cannot read any session, and is. Their form is read from
+the library's logger (`node_modules/@auth/core/lib/utils/logger.js`); they were not seen from the
+running app in the rehearsal.
+
 A second expected exception, only for a release that carries a content version (8.3): the
 third line may print more than `0`. Do not roll back on that count alone. Print the error
 lines with their times, and the time the new container started with its restart count, all
 in UTC:
 
 ```bash
-journalctl CONTAINER_TAG=makrai/docker-nextjs-1 --since -10min -p err -o short-iso-precise --utc
+journalctl CONTAINER_TAG=makrai/docker-nextjs-1 --since -10min -p err -o short-iso-precise --utc | grep -vE '^[^]]*\]: [{]"timestamp":"[^"]*","level":"warn","event":"[A-Z_]+",'
 docker inspect -f '{{.State.StartedAt}} restarts={{.RestartCount}}' docker-nextjs-1
 ```
 
@@ -998,9 +1018,14 @@ the old app while it refused in the interval between 8.3 steps 4 and 5, and is e
 other line stamped before the start time was also written by the old app (a failing page in
 that interval, or something from before step 4): read it before you decide, and do not count
 it as expected if it holds another `"code"`. A line stamped at or after the start time was
-written by the new app: that is a failed deploy, as above. The two commands were run on a
-workstation to check that their times can be compared; they have not been run on the host
-after a content release.
+written by the new app: that is a failed deploy, as above, except for the few sign-in library
+lines described above. The first line leaves out the audit warnings, as the count does, so an
+invitation or an administrator's action in those ten minutes does not show here; it finds them
+right after the journal's own prefix, which ends at the first `]: ` of the line. The two commands were run on a workstation to check that their times can be
+compared; they have not been run on the host after a content release. The `grep` was run on the
+app's error lines captured with `docker logs` in the local rehearsal of 12 November 2026, not
+read from a journal: it kept the old app's one `content_not_published` line, dropped the new
+app's three audit warnings, and kept an error line and a failing page's lines added by hand.
 
 ### 8.5 v0.6.0: the owner's steps
 
@@ -1534,23 +1559,47 @@ Run the post-check in 8.4. `SAME` now means the container runs the image PREV na
 After a rollback to `makrai-nextjs:rollback` the second line prints `DIFFERENT`, as 8.4
 says it should.
 
-After a rollback of v0.6.1 to v0.6.0 the third line may print more than `0`, and that alone
+After a rollback of v0.6.1 to v0.6.0, 8.4's third line may print more than `0`, and that alone
 does not fail the verification. While content 5.1.0 stays registered, v0.6.0 keeps refusing
 saves, withdrawals and seals, and fails the pages 9.6 lists. Each refused request writes an
-error line, and a failing page may write lines of its own. Count the lines that are not one of
-the two refusals 9.6 describes. Run the command once 10 minutes have passed since 9.2's `up`
-returned, so that it reads only v0.6.0's lines; an earlier run also counts the lines of the
-release you rolled back from:
+error line, and a failing page writes several. Count the lines that are not one of the two
+refusals 9.6 describes, not part of a failing page's lines, and not an audit warning (8.4). Run
+the commands once 10 minutes have passed since the last `up` of 9.2 returned (for this release
+9.2 also brings up postgres, then nginx, after the app), so that they read only v0.6.0's lines; an earlier run
+also counts the lines of the release you rolled back from. The first line holds the pattern, the
+second prints the count, and the third prints the lines that were counted:
 
 ```bash
-journalctl CONTAINER_TAG=makrai/docker-nextjs-1 --since -10min -p err -o cat | grep -vcE '"code":"(content_not_published|unknown_content_version)"'
+X='^(    at |  [a-z]+: |}$)|^ ?⨯ [A-Za-z_$][A-Za-z0-9_$]*: (unknown_content_version|content_not_published)$|^[{]"event":"REQUEST_FAILED","reference":"[0-9a-f]+","status":(503,"code":"content_not_published"|500,"code":"unknown_content_version"),"at":"[^"]*"}$|^[{]"timestamp":"[^"]*","level":"warn","event":"[A-Z_]+",'
+journalctl CONTAINER_TAG=makrai/docker-nextjs-1 --since -10min -p err -o cat | grep -vcE "$X"
+journalctl CONTAINER_TAG=makrai/docker-nextjs-1 --since -10min -p err -o cat | grep -vE "$X"
 ```
 
-It prints the count (and exits 1 when the count is `0`, which is how `grep` reports no match).
-If it is not `0`, read the lines that remain, with the same command without `c` in `-vcE`. A
-line written by one of the failing pages 9.6 lists is expected; the form of those lines has
-not been captured (register D-331), so read each one. Any other error line fails the
-verification. The filter was tried on sample lines on a workstation, not on the host.
+The second line prints the count (and exits 1 when the count is `0`, which is how `grep` reports
+no match). The pattern leaves out, as whole lines only: a refused request,
+`{"event":"REQUEST_FAILED","reference":"…","status":503,"code":"content_not_published","at":"…"}`,
+and the same line with `500` and `unknown_content_version`; the first line of a failing page,
+`⨯ b: unknown_content_version` (the name before the colon may differ), or the same with
+`content_not_published`; a line indented four spaces that starts `at `, a line indented two
+spaces that starts with a lower-case word and a colon, and a line that is only `}`, which are
+the stack and fields under a failing page's first line; and an audit warning. Every other line
+counts, including the first line of any other failing page, so an unexpected error shows at
+least its first line. A line in another form, for example a `⨯` rendered differently by the
+journal, is counted, not left out. What it could hide is an error whose own first line has one
+of the stack or field shapes; none was seen. It also accepts a failing page with either code
+whatever page it is: the first line names no page, so 9.6's list says which pages to expect, but
+the count cannot check it.
+
+The form of these lines was captured in the local rehearsal of 12 November 2026 (register
+D-331), with `docker logs` on a workstation, not from a journal and not on the host. On the 25
+lines of two failing pages and one refused save, this filter printed `0`, where the filter it
+replaces printed `24`. With an unexpected error line, a failing page with another code, the
+captured 500 of a missing column, or a plain-text error added, it printed `1` or more. The
+`content_not_published` page line and the `unknown_content_version` request line were not
+captured; v0.6.0 writes the request line for every refusal it answers with 500 or above
+(`lib/http/toResponse.ts` at v0.6.0, `9932c51f`, lines 101 to 106). If the count is not `0`, read
+the lines the third command prints. Each of them fails the verification, except the few sign-in
+library lines 8.4 describes.
 
 ### 9.5 v0.6.0: when to roll back, and how
 
@@ -1666,8 +1715,11 @@ Whether to roll back v0.6.1 at all is decided by 9.6: its rule is to fix forward
 content 5.1.0. This section covers only the legal side of a rollback: what it does to accounts,
 to the legal texts and to legal names.
 
-Everything here is read from the code, except the SQL below, which was run on a local scratch
-database only. Nothing in this section has been run on the host or against v0.6.0's images.
+Everything here is read from the code, except where it says what the rehearsal showed. The SQL
+below was run on a local scratch database, and on 12 November 2026 the rollback, the revert and
+the roll-forward were rehearsed on a workstation with a v0.6.0 image built locally from the
+v0.6.0 release candidate (`makrai-web:v060-428c553`, not the published image) and the 0.6.1
+candidate at `fd7a9da5`. Nothing in this section has been run on the host.
 
 **Rolling back the application (9.2) keeps every stored row.** The legal-name migration only adds:
 nothing is dropped or revoked, and the widened action CHECK still allows every old value
@@ -1681,7 +1733,8 @@ nothing is dropped or revoked, and the widened action CHECK still allows every o
   so it sends those accounts to accept the version-1 texts, including the one-line placeholder
   consent ("The text of this document is supplied by legal before the deploy day.", v0.6.0's
   `data/legal/cross-border-consent/1.md`). An account that accepted version 2 on top of version 1
-  passes.
+  passes. In the rehearsal, an account holding only version-2 rows was sent to the acceptance
+  page with the three version-1 texts.
 
 After rolling forward again, or after an organisation was created by the old image during the
 deploy, run the legal-name backfill again. It fills only empty values, so it is safe to repeat:
@@ -1706,16 +1759,21 @@ SQL drops the create-organisation function v0.6.1 calls (`lib/data/definer.ts:96
 administrator recorded or corrected after the deploy. Names entered when an organisation was created on
 v0.6.1: they have no agreement record to copy from, and cannot be recovered. Only names copied
 from agreement records can be copied again from `organization_agreements`.** Before the revert,
-the owner, outside any AI session, runs this read-only statement and keeps its output:
+the owner, outside any AI session, runs this read-only statement, which saves its output to
+`/root/legal-names-kept.txt`, readable by root only:
 
 ```bash
-$C exec -T postgres psql -U "$PGU" -d makrai -At -v ON_ERROR_STOP=1 <<'SQL'
+( umask 077; set -C; $C exec -T postgres psql -U "$PGU" -d makrai -At -v ON_ERROR_STOP=1 > /root/legal-names-kept.txt <<'SQL'
 select id, name, "legalName" from organizations where "legalName" is not null order by name;
 SQL
+)
 ```
 
-It prints one line per organisation with a legal name: `id|name|legal name`. It prints nothing
-when none is set. It was run on a local database only (it ran clean and printed no line there).
+The file holds one line per organisation with a legal name: `id|name|legal name`. It is empty
+when none is set. `set -C` makes the shell refuse to write over a file that exists (`cannot
+overwrite existing file`), so a second run cannot replace the kept names by mistake. The statement was run in the local rehearsal of 12 November 2026 and its output
+kept; the form above, which saves it to a file under `/root`, was checked on a workstation with a
+stand-in for the database command, not on the host.
 
 Run the revert as the owner role, in this order, in one transaction (the statements are the ones
 run on the scratch database, unchanged):
@@ -1738,13 +1796,51 @@ COMMIT;
 SQL
 ```
 
-The scratch run had no `organisation_legal_name_corrected` row. Postgres re-checks existing rows
-when the constraint is added, so the restore fails while such a row exists (not run). Those rows
+Postgres re-checks existing rows when the constraint is added, so the script stops while an
+`organisation_legal_name_corrected` row exists. The rehearsal had one, and psql printed
+`ERROR:  check constraint "organisation_events_action_check" of relation "organisation_events" is violated by some row`;
+the `legalName` column was still there. Those rows
 are append-only history, so the CHECK stays widened: because the script is one transaction and stops on the first error,
 nothing has changed, so run it again without the two `organisation_events_action_check`
-statements. After the SQL runs, the migration is still listed as applied. The rehearsal did not
-cover rolling forward after it, so do not roll forward to v0.6.1 again until someone has checked
-how the migrator treats it (register D-325).
+statements. In the rehearsal that second run printed `COMMIT` and the column was gone.
+
+**Rolling forward to v0.6.1 again after the revert (register D-325).** After the SQL runs, the
+migration is still listed as applied, so a return deploy as 8.3 words it does not apply it again.
+In the rehearsal the migrator printed `No pending migrations to apply.`, the new container came up
+healthy, the login page answered 200, and the organisations screen (S-23) answered 500: Prisma's
+P2022, the column `organizations.legalName` does not exist. (The two `SAME` lines of 8.4 and the
+restart count, run later on the same container, printed `SAME` and 0. 8.4's third line was not run
+then; it would have counted the lines of that 500.) So, as the owner role, first see that the
+column is gone, then remove the migration's record, then run the migrator line of 8.3 step 4:
+
+```bash
+$C exec -T postgres psql -U "$PGU" -d makrai -Atc "select count(*) from information_schema.columns where table_name='organizations' and column_name='legalName'"
+$C exec -T postgres psql -U "$PGU" -d makrai -v ON_ERROR_STOP=1 -Atc 'DELETE FROM "_prisma_migrations" WHERE migration_name = '\''20261112000000_v061_organisation_legal_name'\'''
+```
+
+The first must print `0`. If it prints `1` the revert did not commit (its first run stops with an
+error, above): do not run the second line, because the migration applied again would then fail on
+a column that exists. That case was not run. The second must print `DELETE 1`. In the rehearsal it
+did; the migrator then printed
+``Applying migration `20261112000000_v061_organisation_legal_name` `` and `All migrations have been
+successfully applied.`, and S-23 answered 200. There it was run as a statement of its own, after
+the revert had committed and after a return deploy without it had already swapped the container;
+the migrator line was then run again. Running it before the return deploy's 8.3 step 4 was not
+tried, and neither was running it inside the revert's transaction.
+
+The migration applied again fills `legalName` only from each organisation's latest agreement record
+(`prisma/migrations/20261112000000_v061_organisation_legal_name/migration.sql:23`), so the backfill
+above then prints `UPDATE 0`, as it did in the rehearsal. Every other name is gone: the names an
+administrator recorded or corrected, and the names entered when an organisation was created on
+v0.6.1. In the rehearsal the name recorded in 8.6 step 6 was gone and S-23 flagged that
+organisation "Legal name not recorded" again. Do 8.6 step 6 again. It finds only organisations
+left without a name: an organisation whose name was corrected on v0.6.1 and that has an agreement
+record now shows the agreement's name and is not flagged (read from the migration; the rehearsal
+had no such organisation). So also run the read-only statement above again, saving to
+`/root/legal-names-now.txt` in place of `/root/legal-names-kept.txt`, then run
+`diff /root/legal-names-kept.txt /root/legal-names-now.txt`. Each line marked `<` is an
+organisation whose kept name differs or is missing now. Open it (S-24) and record the kept name
+with its legal-name form.
 
 ### 9.6 v0.6.1: content 5.1.0 and a rollback to v0.6.0
 
@@ -1756,7 +1852,14 @@ inserts rows in `framework_versions`. The release's other migration,
 that write it and a grant, and widens one other check; it takes away nothing the older image
 uses, and 9.5a covers it. So 9.5's reasoning about a schema that an older image can read still
 holds for both. What an older image cannot cope with is the content version, in two ways.
-These effects are read from the code; they have not been rehearsed against a v0.6.0 image.
+These effects are read from the code. Part of them was rehearsed on 12 November 2026 on a
+workstation, not on the host, with a v0.6.0 image built locally from the v0.6.0 release candidate
+(`makrai-web:v060-428c553`, not the published image) after the content migration had run. There,
+saving a decision answered 503 `content_not_published`; a question's page and a stage page that
+held a decision saved under 5.1.0 answered 500; a question saved under 5.0.0, a question's history,
+a project page without a sealed review and the findings page answered 200; and an account holding
+only version-2 acceptances was sent to accept version 1. Withdrawing, sealing, documents, and the
+pages that read a sealed review were not exercised: no sealed review existed.
 
 - **The v0.6.0 image refuses three actions once the content migration has run: saving a decision,
   withdrawing a decision and sealing a review.** It runs content 5.0.0, and each of these checks
