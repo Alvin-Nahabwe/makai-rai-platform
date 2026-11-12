@@ -14,11 +14,11 @@ function manifest(): FixtureManifest {
   return JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf8')) as FixtureManifest;
 }
 
-/** The index-0 seat of `role` in the first fixture organisation. */
-export function seatOf(role: OrgRole): FixtureManifestUser {
+/** The seat of `role` (index 0 unless asked for index 1) in the first fixture organisation. */
+export function seatOf(role: OrgRole, index: 0 | 1 = 0): FixtureManifestUser {
   const m = manifest();
-  const s = m.users.find((u) => u.orgSlug === m.orgs[0].slug && u.role === role && u.index === 0);
-  if (!s) throw new Error(`the fixture manifest has no ${role} seat for ${m.orgs[0].slug}`);
+  const s = m.users.find((u) => u.orgSlug === m.orgs[0].slug && u.role === role && u.index === index);
+  if (!s) throw new Error(`the fixture manifest has no ${role} seat ${index} for ${m.orgs[0].slug}`);
   return s;
 }
 
@@ -95,8 +95,8 @@ export async function openQuestionIn(page: Page, questionId: string): Promise<st
 // ─── Fixture-seat helpers the decision specs share (storage states, no new sign-in) ──────────────────────────────
 
 /** Puts the role's saved session (from `auth.setup.ts`) into this page's context. */
-export async function actAsSeat(page: Page, role: OrgRole): Promise<void> {
-  const state = JSON.parse(fs.readFileSync(seatOf(role).storageStatePath, 'utf8')) as { cookies: Parameters<import('@playwright/test').BrowserContext['addCookies']>[0] };
+export async function actAsSeat(page: Page, role: OrgRole, index: 0 | 1 = 0): Promise<void> {
+  const state = JSON.parse(fs.readFileSync(seatOf(role, index).storageStatePath, 'utf8')) as { cookies: Parameters<import('@playwright/test').BrowserContext['addCookies']>[0] };
   await page.context().clearCookies();
   await page.context().addCookies(state.cookies);
 }
@@ -125,9 +125,9 @@ export const historyPath = (projectId: string, questionId: string): string => `$
 export const stagePath = (projectId: string, stage: string): string => `/orgs/${fixtureOrgSlug()}/projects/${projectId}/stages/${stage}`;
 
 /** Opens S-12 of `questionId` in a new project (or `projectId`) with the role's saved session; returns the project id. */
-export async function openQuestion(page: Page, role: OrgRole, questionId: string, baseURL: string, projectId?: string): Promise<string> {
+export async function openQuestion(page: Page, role: OrgRole, questionId: string, baseURL: string, projectId?: string, index: 0 | 1 = 0): Promise<string> {
   const id = projectId ?? await newProject(baseURL);
-  await actAsSeat(page, role);
+  await actAsSeat(page, role, index);
   await page.goto(questionPath(id, questionId));
   await waitForQuestionPage(page);
   return id;
