@@ -993,8 +993,9 @@ only where the line starts with that form, and counts every other line, so an au
 level `error` still counts, and so does a warning the app writes as plain text. A failing page
 writes several lines: a first line beginning `⨯`, then its stack and fields.
 
-Lines that show `[auth][error]`, `[auth][cause]` or `[auth][details]` (in red: each starts with
-a colour code, so a search for a line beginning `[auth]` finds nothing), with stack lines between
+Lines that show `[auth][error]`, `[auth][cause]` or `[auth][details]` (in red in the
+count's output: each starts with a colour code there, so a search for a line beginning `[auth]`
+may find nothing), with stack lines between
 them, are written by the sign-in library when a browser sends a session cookie the app cannot
 read. They count. A few from one request are a stale or made-up cookie, not a failed deploy; one
 for every signed-in person means the app cannot read any session, and is. Their form is read from
@@ -1762,14 +1763,15 @@ the owner, outside any AI session, runs this read-only statement, which saves it
 `/root/legal-names-kept.txt`, readable by root only:
 
 ```bash
-( umask 077; $C exec -T postgres psql -U "$PGU" -d makrai -At -v ON_ERROR_STOP=1 > /root/legal-names-kept.txt <<'SQL'
+( umask 077; set -C; $C exec -T postgres psql -U "$PGU" -d makrai -At -v ON_ERROR_STOP=1 > /root/legal-names-kept.txt <<'SQL'
 select id, name, "legalName" from organizations where "legalName" is not null order by name;
 SQL
 )
 ```
 
 The file holds one line per organisation with a legal name: `id|name|legal name`. It is empty
-when none is set. The statement was run in the local rehearsal of 12 November 2026 and its output
+when none is set. `set -C` makes the shell refuse to write over a file that exists (`cannot
+overwrite existing file`), so a second run cannot replace the kept names by mistake. The statement was run in the local rehearsal of 12 November 2026 and its output
 kept; the form above, which saves it to a file under `/root`, was checked on a workstation with a
 stand-in for the database command, not on the host.
 

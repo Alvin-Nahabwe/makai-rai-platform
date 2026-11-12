@@ -77,6 +77,7 @@ describe('the v0.6.1 release notes', () => {
     expect(review, 'the Security review: line').toBeDefined();
     expect(review).toMatch(/no Critical, High, Medium or Low finding|\d+ Critical/);
     expect(review).toMatch(/not a live test/);
+    expect(review).toMatch(/not inspected/);
   });
 
   it('NFR-MNT-02: the CI times read as whole minutes, and a figure over a limit is carried to the next release', () => {
@@ -102,6 +103,7 @@ describe('the v0.6.1 release notes', () => {
     const incident = section(t, 'The incident in the rehearsal');
     expect(incident).toContain('D-335');
     expect(incident).toContain('answered "No need"');
+    expect(incident).toMatch(/inferred/); // "no production data" is not stated as observed
     // The header line does not say the rehearsal stayed off the host without naming the incident.
     expect(/^Rehearsal: (.+)$/m.exec(t)?.[1]).toMatch(/incident/i);
     const deploy = section(t, 'Deploy and rollback');
@@ -126,7 +128,7 @@ describe('the v0.6.1 release notes', () => {
     expect(next).toContain('8.1 steps 2 to 4');
     // Step 1 sends the owner to every runbook section this release changes for a deploy or a rollback.
     const first = next.slice(0, next.indexOf('2. The owner merges'));
-    for (const s of ['8.1', '8.3', '8.4', '8.6', '9.4', '9.5a', '9.6']) expect(first, `step 1 names ${s}`).toContain(s);
+    for (const s of ['8.1', '8.3', '8.4', '8.6', '9.3', '9.4', '9.5a', '9.6']) expect(first, `step 1 names ${s}`).toContain(s);
     for (const step of ['8.6 step 2', '8.6 step 3', '8.6 step 4', '8.6 step 5', '8.6 step 6']) expect(next).toContain(step);
   });
 
