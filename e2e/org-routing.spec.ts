@@ -35,7 +35,7 @@ test.describe('Org URL routing', () => {
     await page.waitForURL((url) => url.pathname !== '/login');
     await page.goto('/');
     await expect(page).toHaveURL('/');
-    await expect(page.locator('h1')).toHaveText('Choose an organization');
+    await expect(page.locator('h1')).toHaveText('Choose an organisation');
     await expect(page.locator(`a[href="/orgs/${fx.org.slug}/dashboard"]`)).toHaveCount(1);
     await context.close();
     await testDb.$disconnect();
