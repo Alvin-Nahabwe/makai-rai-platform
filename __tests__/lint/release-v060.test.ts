@@ -30,7 +30,8 @@ describe('the v0.6.0 release', () => {
 
   it('NFR-SEC-14 NFR-SEC-17 NFR-PRIV-05: the v0.6.0 release notes carry the release facts and no value', () => {
     const t = readFileSync('docs/releases/v0.6.0.md', 'utf8');
-    expect(JSON.parse(readFileSync('package.json', 'utf8')).version).toBe('0.6.0');
+    // The notes say which version they are for; package.json moves on with later releases.
+    expect(t).toContain('The version in `package.json` is `0.6.0`.');
     expect(t).toMatch(/^Checked release commit: [0-9a-f]{40}$/m);
     expect(t).toContain('The owner tags the merge commit of this pull request into main, not the checked release commit.');
     const candidate = /^Candidate: ([0-9a-f]{40})$/m.exec(readFileSync('docs/releases/v0.6.0-live-run.md', 'utf8'))?.[1];

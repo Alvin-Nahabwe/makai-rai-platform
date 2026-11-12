@@ -89,9 +89,14 @@ describe('release waivers', () => {
     expect(() => releaseWaiver('UX-03 help-contact-pending', file({ waivers: [OK, { ...broken, release: '0.5.0' }] }), V)).toThrow(/register row/);
   });
 
-  it("FR-ACC-02 UX-03 FIX-3: the committed file holds the owner's three decisions, word for word", () => {
+  /** The committed entries written for one release, by case. */
+  function committed(release: string): Record<string, Record<string, unknown>> {
     const raw = JSON.parse(readFileSync(RELEASE_WAIVERS_FILE, 'utf8')) as { waivers: Array<Record<string, unknown>> };
-    const byCase = Object.fromEntries(raw.waivers.map((w) => [w.case, w]));
+    return Object.fromEntries(raw.waivers.filter((w) => w.release === release).map((w) => [w.case, w]));
+  }
+
+  it("FR-ACC-02 UX-03 NFR-A11Y-07 FIX-3: the committed file holds the owner's three decisions for 0.6.0, word for word", () => {
+    const byCase = committed('0.6.0');
     expect(Object.keys(byCase).sort()).toEqual([...WAIVABLE_CASES].sort());
     expect(byCase['FR-ACC-02 legal-placeholder']).toMatchObject({
       owner_words: 'Ship placeholders',
@@ -106,9 +111,26 @@ describe('release waivers', () => {
       owner_words: 'postpone the screen reader accessibility check for later versions/releases. It is not a priority right now and should not block the release.',
       date: '2026-11-08', covers: ['docs/accessibility/screen-reader-walk-v0.6.0.md'], register_row: 'D-301', release: '0.6.0',
     });
-    // An entry's release is the version of package.json, or it waives nothing (SFH-11).
-    expect(JSON.parse(readFileSync('package.json', 'utf8')).version).toBe('0.6.0');
-    // Every entry is complete, so each reads without throwing.
-    for (const c of WAIVABLE_CASES) expect(releaseWaiver(c)?.case).toBe(c);
+    // Read as 0.6.0, each of the three waives its case.
+    for (const c of WAIVABLE_CASES) expect(releaseWaiver(c, RELEASE_WAIVERS_FILE, '0.6.0')?.case).toBe(c);
+  });
+
+  it('NFR-A11Y-07 FR-ACC-02 UX-03 SFH-11: for 0.6.1 the committed file waives the screen-reader walk and nothing else', () => {
+    const byCase = committed('0.6.1');
+    expect(Object.keys(byCase)).toEqual(['NFR-A11Y-07 screen-reader-walk']);
+    expect(byCase['NFR-A11Y-07 screen-reader-walk']).toMatchObject({
+      owner_words: 'Defer the walk', date: '2026-11-12', covers: ['docs/accessibility/screen-reader-walk-v0.6.0.md'], register_row: 'D-301', release: '0.6.1',
+    });
+    // The legal texts and the help address were supplied, so their 0.6.0 waivers do no work in 0.6.1: each case passes
+    // on its own or fails.
+    expect(releaseWaiver('FR-ACC-02 legal-placeholder', RELEASE_WAIVERS_FILE, '0.6.1')).toBeUndefined();
+    expect(releaseWaiver('UX-03 help-contact-pending', RELEASE_WAIVERS_FILE, '0.6.1')).toBeUndefined();
+  });
+
+  it('SFH-11: the committed file names no release but 0.6.0 and 0.6.1, and reads whole at the version of package.json', () => {
+    const raw = JSON.parse(readFileSync(RELEASE_WAIVERS_FILE, 'utf8')) as { waivers: Array<{ release: string }> };
+    expect([...new Set(raw.waivers.map((w) => w.release))].sort()).toEqual(['0.6.0', '0.6.1']);
+    // Whatever the version is, the read does not throw: a release with no entry for a case has no waiver of it.
+    for (const c of WAIVABLE_CASES) expect(() => releaseWaiver(c)).not.toThrow();
   });
 });

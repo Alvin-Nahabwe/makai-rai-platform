@@ -801,12 +801,12 @@ A run that refuses a tag (not a plain `vX.Y.Z`, not equal to `package.json`, not
 usually a version that was not raised, and tag the corrected version.
 
 **Before the v0.6.1 tag.** No v0.6.1 tag before the pull request that publishes version 2 of the
-legal texts is merged. CI does not run the release-candidate cases (`.github/workflows/ci.yml:227`
+legal texts is merged. CI does not run the release-candidate cases (`.github/workflows/ci.yml:241`
 runs `npx vitest run` without `RELEASE_CANDIDATE`), and `.github/workflows/release.yml` runs no
 tests on a tag. So the tag gate is the unit run. Whoever prepares the release may run it, on a
 checkout of the commit to be tagged; the owner tags (8.1 step 2). Run it with the test database
 up, migrated and provisioned (`CONTRIBUTING.md:11-23`)
-and `pdftotext` installed (CI's unit job installs `poppler-utils`, `.github/workflows/ci.yml:217`),
+and `pdftotext` installed (CI's unit job installs `poppler-utils`, `.github/workflows/ci.yml:224`),
 and see it pass first:
 
 ```bash
@@ -817,15 +817,13 @@ If any test fails, do not tag. A failing release-candidate case names something 
 lacks. Clear it by supplying what is missing or, where the owner accepts shipping without it, by a
 waiver entry the owner records for this release in `docs/releases/release-waivers.json`. A waiver
 recorded for an earlier release waives nothing: a waiver counts only when its `release` equals
-`package.json`'s version (`__tests__/helpers/releaseWaivers.ts:76`), and every entry there today
-is for 0.6.0.
+`package.json`'s version (`__tests__/helpers/releaseWaivers.ts:76`).
 
-For v0.6.1, one case outside the legal texts fails until that is done: the screen-reader walk
-(NFR-A11Y-07, `__tests__/lint/screen-reader-walk.test.ts:114-118`; the walk sheet
-`docs/accessibility/screen-reader-walk-v0.6.0.md` says "not yet walked"). The owner has deferred the
-walk for v0.6.1 (register D-301), so the release needs a waiver entry for 0.6.1. The entry
-carries the owner's words; whoever prepares the release writes it into the file in the pull
-request that raises the version.
+For v0.6.1, one case passes on a waiver: the screen-reader walk (NFR-A11Y-07,
+`__tests__/lint/screen-reader-walk.test.ts:114-118`; the walk sheet
+`docs/accessibility/screen-reader-walk-v0.6.0.md` says "not yet walked"). The owner deferred the
+walk for v0.6.1 (register D-301), and the file holds that entry for 0.6.1, with the owner's words.
+It is the only entry for 0.6.1: the three entries for 0.6.0 waive nothing in this release.
 
 Some end-to-end cases also read `RELEASE_CANDIDATE` (`e2e/claims-crawl.spec.ts:53,719`). No job
 runs them and no command for them has been rehearsed, so they are not part of the gate yet
