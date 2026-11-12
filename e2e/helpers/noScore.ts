@@ -159,18 +159,55 @@ function sentinelSums(sentinels: Record<Stage, number[]>): number[] {
   return sums;
 }
 
-function sentinelFindings(s: MainSnapshot, sentinels: Record<Stage, number[]>, sums: number[]): string[] {
+function sentinelFindings(s: MainSnapshot, sentinels: Record<Stage, number[]>, sums: number[], own: readonly string[]): string[] {
+  const text = withoutOwnText(s.text, own);
   const findings: string[] = [];
   for (const [stage, values] of Object.entries(sentinels) as Array<[Stage, number[]]>) {
     for (const n of values) {
-      if (!wholeNumber(n).test(s.text)) findings.push(`sentinel ${n} (${stage}) does not appear as a whole number in text`);
+      if (!wholeNumber(n).test(text)) findings.push(`sentinel ${n} (${stage}) does not appear as a whole number in text`);
     }
   }
   for (const sum of sums) {
-    const m = wholeNumber(sum).exec(s.text);
-    if (m) findings.push(`the sum ${sum} of three stages' counts appears: "${around(s.text, m.index, String(sum).length)}"`);
+    const m = wholeNumber(sum).exec(text);
+    if (m) findings.push(`the sum ${sum} of three stages' counts appears: "${around(text, m.index, String(sum).length)}"`);
   }
   return findings;
+}
+
+/**
+ * `ownText`: text the test itself wrote into its fixture and the page prints back, such as the organisation's name.
+ * The sentinel and sum checks do not read it, because digits in it are not a count the page shows. buildOrg names an
+ * organisation 'Fixture Org <LABEL> <run id>' with a random run id (__tests__/helpers/recordFixture.ts), S-10 prints the
+ * name in its breadcrumb, and an id such as 'mwdfwl83-ffa0ab' would otherwise read as the sum 83 shown, or stand in for
+ * a count of 83 the page does not show. The percentage, progress and total-label checks read the whole text.
+ */
+export type CountCheckOptions = { ownText?: readonly string[] };
+
+/**
+ * The own text as the checks use it: white space collapsed, longest first so that a name goes before a shorter text it
+ * contains. Each must hold a letter: it is a name or an address, and a bare number would hand the check the total to
+ * look away from. Refused before the page is read, as a bad sentinel set is.
+ */
+function ownTextOf(opts: CountCheckOptions, who: string): string[] {
+  const own = (opts.ownText ?? []).map((t) => t.replace(/\s+/g, ' ').trim());
+  for (const t of own) {
+    if (!/\p{L}/u.test(t)) throw new Error(`${who}: own text ${JSON.stringify(t)} must be a name or an address with a letter in it, not a number or nothing`);
+  }
+  return own.sort((a, b) => b.length - a.length);
+}
+
+/**
+ * `text` without the own text. An occurrence counts only where it stands whole, with no letter or digit running on from
+ * either side of it: 'Org 83' inside 'Org 8341' is the page's text, not the test's. Each occurrence becomes one space.
+ */
+function withoutOwnText(text: string, own: readonly string[]): string {
+  if (own.length === 0) return text;
+  let out = text.replace(/\s+/g, ' ');
+  for (const t of own) {
+    const literal = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    out = out.replace(new RegExp(`(?<![\\p{L}\\p{N}])${literal}(?![\\p{L}\\p{N}])`, 'gu'), ' ');
+  }
+  return out;
 }
 
 function totalLabelFindings(s: MainSnapshot): string[] {
@@ -185,30 +222,34 @@ function totalLabelFindings(s: MainSnapshot): string[] {
 /**
  * FR-RM-04 (SRS line 469): every sentinel count is a whole number in text; no `%` in main; no progress
  * element; no element labelled "total", "overall" or "in all"; and the sum of any measure's three
- * sentinels appears nowhere. Which column a count sits in is the screen owner's own test.
+ * sentinels appears nowhere. Which column a count sits in is the screen owner's own test. The sentinels and their sums
+ * are looked for outside `opts.ownText`.
  */
-export async function expectCountsAsWholeNumbersPerStage(page: Page, sentinels: Record<Stage, number[]>): Promise<void> {
+export async function expectCountsAsWholeNumbersPerStage(page: Page, sentinels: Record<Stage, number[]>, opts: CountCheckOptions = {}): Promise<void> {
+  const who = `expectCountsAsWholeNumbersPerStage(${page.url()})`;
   const sums = sentinelSums(sentinels);
-  const s = await snapshotMain(page, `expectCountsAsWholeNumbersPerStage(${page.url()})`);
+  const own = ownTextOf(opts, who);
+  const s = await snapshotMain(page, who);
   const findings = [
-    ...sentinelFindings(s, sentinels, sums),
+    ...sentinelFindings(s, sentinels, sums, own),
     ...(s.text.includes('%') ? [`"%" appears in "${around(s.text, s.text.indexOf('%'), 1)}"`] : []),
     ...shapeFindings(s, PROGRESS_KINDS),
     ...totalLabelFindings(s),
   ];
-  fail(`expectCountsAsWholeNumbersPerStage(${page.url()})`, findings);
+  fail(who, findings);
 }
 
 /**
  * UX-07: no screen shows a count summed across stages. The sentinel counts must be on the page (a page
  * that shows none of them says nothing about their sum), their sums must not be, and nothing is labelled
- * as a total.
+ * as a total. The sentinels and their sums are looked for outside `opts.ownText`.
  */
-export async function expectNoCrossStageTotal(page: Page, sentinels: Record<Stage, number[]>): Promise<void> {
+export async function expectNoCrossStageTotal(page: Page, sentinels: Record<Stage, number[]>, opts: CountCheckOptions = {}): Promise<void> {
   const sums = sentinelSums(sentinels);
   const who = `expectNoCrossStageTotal(${page.url()})`;
+  const own = ownTextOf(opts, who);
   const s = await snapshotMain(page, who);
-  fail(who, [...sentinelFindings(s, sentinels, sums), ...totalLabelFindings(s)]);
+  fail(who, [...sentinelFindings(s, sentinels, sums, own), ...totalLabelFindings(s)]);
 }
 
 type LabelSnapshot = {

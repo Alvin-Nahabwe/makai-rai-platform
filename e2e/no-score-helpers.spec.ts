@@ -107,6 +107,59 @@ test('FR-RM-04 (helper): counts must be whole numbers in text, per stage, with n
   await expect(expectCountsAsWholeNumbersPerStage(page, { ...SENTINELS, 'post-processing': [37] })).rejects.toThrow(/sentinel/);
 });
 
+test('FR-RM-04 UX-07 (helper): text the test wrote itself is left out of the count checks, and a total anywhere else still fails', async ({ page }) => {
+  // A fixture organisation's name carries a random run id (__tests__/helpers/recordFixture.ts, `runId`), and S-10 prints
+  // the name in its breadcrumb. This id holds the sum, 71.
+  const NAME = 'Fixture Org PRJSENT mwdfwl71-ffa0ab';
+  const SLUG = 'fixture-org-prjsent-mwdfwl71-ffa0ab';
+  const own = [NAME, SLUG];
+  const stages = THREE_STAGES('37 open findings', '23 open findings', '11 open findings');
+  const withCrumb = (html: string, name = NAME) => html.replace('<main>', `<main><nav aria-label="Breadcrumb"><a href="/orgs/${SLUG}/dashboard">${name}</a> &gt; <span>Counts</span></nav>`);
+
+  for (const check of [expectCountsAsWholeNumbersPerStage, expectNoCrossStageTotal]) {
+    // Not told whose text it is, the check reads the id's digits as a total: the false finding.
+    await page.setContent(withCrumb(stages));
+    await expect(check(page, SENTINELS), check.name).rejects.toThrow(/the sum 71 of three stages' counts appears: ".*mwdfwl71-ffa0ab/);
+    // Told, it passes, however the page spaces the name and whatever punctuation follows it.
+    await check(page, SENTINELS, { ownText: own });
+    await page.setContent(withCrumb(stages, 'Fixture Org\n   PRJSENT  mwdfwl71-ffa0ab'));
+    await check(page, SENTINELS, { ownText: own });
+    await page.setContent(withCrumb(stages, `Welcome to ${NAME}. Its address is /orgs/${SLUG}/dashboard.`));
+    await check(page, SENTINELS, { ownText: own });
+
+    const twoStages = THREE_STAGES('37 open findings', 'None open.', '11 open findings');
+    const NAME_23 = 'Fixture Org PRJSENT mwdfwl23-ffa0ab';
+    const ENDS_71 = 'Fixture Org PRJSENT mwdfwl-ffa0ab 71';
+    const bad: Array<[html: string, finding: RegExp, ownText?: string[]]> = [
+      // A total anywhere else on the page, with the name on it as well.
+      [withCrumb(stages).replace('</main>', '<p>71 open findings</p></main>'), /the sum 71 .*"[^"]*71 open findings/],
+      // A total printed against the name, before it or after it, in the same element.
+      [withCrumb(stages, `71 ${NAME}`), /the sum 71/],
+      [withCrumb(stages, `${NAME} 71`), /the sum 71/],
+      [withCrumb(stages, `${NAME}: 71 open findings`), /the sum 71/],
+      // Text that only starts or ends like the test's own is the page's: another run id, a letter or a digit run on.
+      [withCrumb(stages, 'Fixture Org PRJSENT mwdfwl71-ffa0ac'), /the sum 71/],
+      [withCrumb(stages, `${NAME}c`), /the sum 71/],
+      [withCrumb(stages, `x${NAME}`), /the sum 71/],
+      [withCrumb(stages, `${NAME}1`), /the sum 71/],
+      // A count that is on the page only inside the test's own text is not on the page.
+      [withCrumb(twoStages, NAME_23), /sentinel 23 \(in-processing\) does not appear/, [NAME_23]],
+      // Own text that ends in digits does not take the front off a longer number and leave a count behind: 7123 is not 23.
+      [withCrumb(twoStages, `${ENDS_71}23`), /sentinel 23 \(in-processing\) does not appear/, [ENDS_71]],
+    ];
+    for (const [i, [html, finding, ownText = own]] of bad.entries()) {
+      await page.setContent(html);
+      await expect(check(page, SENTINELS, { ownText }), `${check.name} bad ${i}: ${html}`).rejects.toThrow(finding);
+    }
+
+    // Own text is a name or an address, never a number: a caller cannot hand the check the total to look away from.
+    await page.setContent(stages.replace('</main>', '<p>71</p></main>'));
+    for (const ownText of [['71'], [''], ['  '], ['71 - 2026'], [NAME, '71']]) {
+      await expect(check(page, SENTINELS, { ownText }), `${check.name} own text ${JSON.stringify(ownText)}`).rejects.toThrow(/own text/);
+    }
+  }
+});
+
 test('UX-06 NFR-A11Y-05 (helper): status labels are words in a neutral colour, and the warning tint sits only on the three warning labels', async ({ page }) => {
   const labels = (inner: string) => `${TOKENS}<main>${inner}</main>`;
 
