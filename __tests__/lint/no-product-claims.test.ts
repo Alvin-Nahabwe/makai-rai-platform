@@ -364,7 +364,11 @@ const SOURCE_FRAMEWORK_NAMES = readFrameworkNames();
  * file), and the entries whose text is no longer a claim in their file. The caller passes only source entries (`isSourceEntry`).
  */
 function sourceClaims(roots: string[], source: readonly PathEntry[], names: readonly string[] = SOURCE_FRAMEWORK_NAMES): { hits: Hit[]; stale: string[] } {
-  const strings = userFacingStrings(roots).filter((s) => !s.insideClaimsAllowed && isClaimOutsideNames(s.text, names));
+  // `isClaim` first: a string with no match of the pattern has none outside a name either, because `claimsOutsideNames`
+  // returns a subset of `claimMatches`, and `isClaim` is true exactly when `claimMatches` finds one. It is one compiled
+  // pattern; `isClaimOutsideNames` builds the pattern again for each framework name on each call, so it is asked only of
+  // the strings that match.
+  const strings = userFacingStrings(roots).filter((s) => !s.insideClaimsAllowed && isClaim(s.text) && isClaimOutsideNames(s.text, names));
   const matches = (e: PathEntry, s: UserString) => s.where.startsWith(`${e.path}:`) && s.text === cleanText(e.text);
   return {
     hits: strings.filter((s) => !source.some((e) => matches(e, s))).map(({ where, text }) => ({ where, text })),
