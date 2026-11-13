@@ -65,7 +65,9 @@ export function TabNav({ label, items }: TabNavProps): ReactElement {
     const list = listRef.current;
     if (list === null) return;
     revealCurrent(list);
-    // A web font that arrives later changes every tab's width: look again once the fonts are in.
+    // A web font that arrives later changes every tab's width: look again once the fonts are in. That second look
+    // happens once, and it brings the current tab back into view even if the reader has moved the row by hand before
+    // the fonts arrived.
     let live = true;
     void document.fonts.ready.then(() => { if (live) revealCurrent(list); });
     return () => { live = false; };

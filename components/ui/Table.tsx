@@ -41,7 +41,10 @@ export type TableProps<K extends string = string> = {
 
 /** The longest part of a caller's key a report quotes. */
 const KEY_LIMIT = 40;
-/** A caller's key, cut to 40 characters and quoted as JSON, so a key from an address cannot forge a log line. */
+/**
+ * A caller's key, cut to 40 characters and quoted as JSON: a quote, a backslash, a line feed and every other character
+ * below U+0020 come out escaped. Later ones (U+007F, U+0085, U+2028, U+2029) are left as they are.
+ */
 const quoted = (key: string) => JSON.stringify(String(key).slice(0, KEY_LIMIT));
 const DIRECTIONS: readonly string[] = ['ascending', 'descending'] satisfies readonly SortDirection[];
 

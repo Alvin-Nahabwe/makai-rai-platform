@@ -14,7 +14,10 @@
   padding: 0;
   list-style: none;
   border-block-end: 1px solid var(--color-border-control);
-  scroll-padding-inline: var(--space-4);
+  /* Twice a tab's own inline padding: a tab brought into view stops this far from the row's edge, so past it show the
+     neighbour's blank padding and then the first or last 16 px of its words. With no fade at the edges, those words
+     are what says that tabs follow. */
+  scroll-padding-inline: var(--space-8);
 }
 
 .ui-tabnav__list > li {

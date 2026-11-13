@@ -86,7 +86,7 @@ async function boxOf(locator: Locator, what: string): Promise<{ x: number; y: nu
 /**
  * Waits until the page has stopped scrolling. The page scrolls smoothly (`html { scroll-behavior: smooth }`,
  * app/globals.css), so a script's focus() or scrollIntoView() starts an animation; a key pressed or a box measured
- * during it acts on a page in motion, and a later focus scroll can cut short an inner scroller's own.
+ * during it acts on a page in motion.
  */
 async function scrollSettled(page: Page): Promise<void> {
   // Settled: the same scroll position on two polls 100 ms apart. The predicate is synchronous: waitForFunction takes a
@@ -963,6 +963,40 @@ test.describe('TabNav', () => {
     expect(await page.evaluate(() => window.scrollY), 'the page did not scroll').toBe(0);
   });
 
+  test('at 320 px the tabs beside the current one show their first and last letters at the row\'s edges', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    await openKit(page);
+    const list = page.getByRole('navigation', { name: 'Sample guidance', exact: true }).getByRole('list');
+    // The row looks at its current tab once more when the fonts are in: measure after that.
+    await page.evaluate(() => document.fonts.ready.then(() => undefined));
+    await expect.poll(() => list.evaluate((ul) => ul.scrollLeft), 'the row scrolled itself').toBeGreaterThan(0);
+    // There is no fade at the row's edges, so the words of the tab cut off at an edge are what says that tabs follow.
+    // The words are measured, not the link's box: a link begins and ends with its own blank padding.
+    const edges = await list.evaluate((ul) => {
+      const links = Array.from(ul.querySelectorAll('a'));
+      const at = links.findIndex((a) => a.getAttribute('aria-current') === 'page');
+      const words = (a: Element) => {
+        const range = document.createRange();
+        range.selectNodeContents(a);
+        return range.getBoundingClientRect();
+      };
+      const rowBox = ul.getBoundingClientRect();
+      const previous = links[at - 1];
+      const next = links[at + 1];
+      return {
+        tabs: [previous.textContent, links[at].textContent, next.textContent],
+        // How far inside the row's end the next tab's words start, and inside its start the previous tab's words end.
+        nextWordsInside: Math.round(rowBox.right - words(next).left),
+        previousWordsInside: Math.round(words(previous).right - rowBox.left),
+        previousWhole: previous.getBoundingClientRect().left >= rowBox.left,
+      };
+    });
+    expect(edges.tabs).toEqual(['Pre-processing', 'In processing', 'Post-processing']);
+    expect(edges.nextWordsInside, 'the next tab\'s words start at least 8 px inside the row\'s end').toBeGreaterThanOrEqual(8);
+    expect(edges.previousWhole || edges.previousWordsInside >= 8,
+      `the previous tab is wholly in view, or its words end at least 8 px inside the row's start (${edges.previousWordsInside} px)`).toBe(true);
+  });
+
   test('at 320 px a row of tabs that does not fit scrolls inside itself, on one line, and the page does not', async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 640 });
     await openKit(page);
@@ -973,8 +1007,8 @@ test.describe('TabNav', () => {
     await expectNoHorizontalScroll(page);
     // By keyboard: from the row's first tab, Tab along the row to the last. Every stop is checked, not the last alone:
     // Chrome's own scroll on focus brings in a tab that is wholly hidden and leaves one that already shows a strip of
-    // itself where it is (measured on this row in Chrome 157: the third tab stayed with 43 px showing and the last with
-    // 70 px of its 207), so the row itself brings the focused tab in.
+    // itself where it is (measured on this row in Chrome 157, when its scroll padding was 16 px: the third tab stayed
+    // with 43 px showing and the last with 70 px of its 207), so the row itself brings the focused tab in.
     const links = list.getByRole('link');
     /** How far tab `i` runs past each end of the row, in whole pixels: both 0 when it is wholly in view inside the row. */
     const pastRow = (i: number) => links.nth(i).evaluate((a) => {
@@ -1022,8 +1056,8 @@ test.describe('TabNav', () => {
     // The row's own look at its current tab runs once more when the fonts are in: wait for it before placing the row.
     await page.evaluate(() => document.fonts.ready.then(() => undefined));
     // The fourth tab runs 60 px past the row's end, and the press is 6 px inside that end. A row that moved on the press
-    // to bring the tab in (76 px, measured without the keyboard-only rule) would put the next tab under the pointer
-    // before the release.
+    // to bring the tab in would put the next tab under the pointer before the release (seen without the keyboard-only
+    // rule: this case failed on a row that had moved).
     const at = await list.evaluate((ul) => {
       const tab = ul.querySelectorAll('a')[3];
       ul.scrollLeft += tab.getBoundingClientRect().right - ul.getBoundingClientRect().right - 60;
