@@ -6,6 +6,7 @@ import { withOrg } from '@/lib/data/tenant';
 import { listProjectRows } from '@/lib/data/projects';
 import { can } from '@/lib/authz/policy';
 import { ORG_COPY } from '@/lib/org/copy';
+import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
 import { pageOf, LIST_PAGE_SIZE } from '@/lib/ui/showMore';
 import { ShowMoreLink } from '@/components/ui/ShowMoreLink';
@@ -31,7 +32,7 @@ const orgNameOf = cache(async (slug: string): Promise<string> => {
 });
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
-  return { title: pageTitle(ORG_COPY.titles.projects, await orgNameOf((await params).slug)) };
+  return { title: pageTitle(ORG_COPY.titles.projects, await orNotFound(orgNameOf((await params).slug))) };
 }
 
 /**

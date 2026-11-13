@@ -7,6 +7,7 @@ import { ForbiddenError, withOrg } from '@/lib/data/tenant';
 import { EditProjectView } from '@/components/project/EditProjectView';
 import type { ProjectFormValues } from '@/components/project/ProjectForm';
 import { PROJECT_COPY } from '@/lib/project/copy';
+import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
 
 const day = (d: Date | null): string | null => (d === null ? null : d.toISOString().slice(0, 10));
@@ -33,7 +34,7 @@ const load = cache(async (slug: string, id: string) => {
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { slug, id } = await params;
-  return { title: pageTitle(PROJECT_COPY.titles.editProject, (await load(slug, id)).name) };
+  return { title: pageTitle(PROJECT_COPY.titles.editProject, (await orNotFound(load(slug, id))).name) };
 }
 
 /**

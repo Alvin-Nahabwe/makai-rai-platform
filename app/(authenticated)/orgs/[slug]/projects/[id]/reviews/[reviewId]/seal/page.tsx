@@ -9,8 +9,8 @@ import { listStageReviews, sealPreview } from '@/lib/data/reviews';
 import { questionsInStage, reasonCodesFor, runningContent } from '@/lib/content/loader';
 import { ArchivedBanner } from '@/components/project/ArchivedBanner';
 import { SealConfirm } from '@/components/review/SealConfirm';
-import type { OrgContext } from '@/lib/data/tenant';
 import { REVIEW_COPY } from '@/lib/review/copy';
+import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
 import { contentChangedLine, previewLines } from '@/components/review/reviewText';
 
@@ -33,17 +33,14 @@ const load = cache(async (slug: string, id: string, reviewId: string) => {
   return { identity, ctx, project, review };
 });
 
-/** Whether the role may seal; the page shows a refusal line, and the title names no project, when not. */
-const maySeal = (ctx: OrgContext): boolean => can(ctx.role, 'review:seal');
-
 /** The seal number the next seal of this review takes. */
 const nextSealNumber = (review: { latestSeal: { sealNumber: number } | null }): number => (review.latestSeal?.sealNumber ?? 0) + 1;
 
-/** The page's own heading, then the project for a role that may seal. */
+/** The page's own heading, then the project. */
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug, id, reviewId } = await params;
-  const { ctx, project, review } = await load(slug, id, reviewId);
-  return { title: pageTitle(REVIEW_COPY.titles.seal(review.name, nextSealNumber(review)), maySeal(ctx) ? project.name : null) };
+  const { project, review } = await orNotFound(load(slug, id, reviewId));
+  return { title: pageTitle(REVIEW_COPY.titles.seal(review.name, nextSealNumber(review)), project.name) };
 }
 
 /**
@@ -60,7 +57,7 @@ export default async function SealConfirmationPage({ params }: PageProps) {
   const base = `/orgs/${encodeURIComponent(slug)}/projects/${encodeURIComponent(id)}`;
   const heading = <h1>{`Seal "${review.name}" as seal ${sealNumber}`}</h1>;
 
-  if (!maySeal(ctx)) {
+  if (!can(ctx.role, 'review:seal')) {
     return <div className="page-content">{heading}<p>Only owners, admins and reviewers can seal a stage review.</p></div>;
   }
   if (archived) {

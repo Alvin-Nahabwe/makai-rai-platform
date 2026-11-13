@@ -27,13 +27,15 @@ import { REVIEW_COPY } from '@/lib/review/copy';
 function pagesUnder(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
     const p = join(dir, name);
-    if (statSync(p).isDirectory()) return p.split(sep).join('/').startsWith('app/dev') ? [] : pagesUnder(p);
+    if (statSync(p).isDirectory()) return p.split(sep).join('/') === 'app/dev' ? [] : pagesUnder(p);
     return name === 'page.tsx' ? [p.split(sep).join('/')] : [];
   });
 }
 
 const PAGES = pagesUnder('app');
 const code = (f: string): string => readFileSync(f, 'utf8');
+/** The source without comments, so a comment that names a token cannot satisfy a check for it. */
+const withoutComments = (s: string): string => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:\\])\/\/.*$/gm, '$1');
 const STATIC = /\bexport const metadata\b/;
 const DYNAMIC = /\bexport (async )?function generateMetadata\b/;
 
@@ -41,7 +43,7 @@ describe('page titles (spec 7.5)', () => {
   it('1A spec 7.5: every page exports metadata or generateMetadata, never both, and builds its title with pageTitle(', () => {
     expect(PAGES.length).toBeGreaterThanOrEqual(37);
     const wrong = PAGES.filter((f) => {
-      const s = code(f);
+      const s = withoutComments(code(f));
       return STATIC.test(s) === DYNAMIC.test(s) || !s.includes('pageTitle(');
     });
     expect(wrong).toEqual([]);
@@ -57,12 +59,14 @@ describe('page titles (spec 7.5)', () => {
     for (const f of ['app/not-found.tsx', 'app/(authenticated)/not-found.tsx']) expect(code(f)).toContain('title: pageTitle(ERRORS_COPY.titles.notFound)');
   });
 
-  it('1A R10-2: a signed-in page that names its organisation or project in generateMetadata loads it once, through cache(), after the gates', () => {
+  // Shape only: the behaviour (gates first, Next's 404 for a non-member or an unknown organisation, no name on a refusal)
+  // is proven page by page in __tests__/integration/page-titles-tenancy.test.ts.
+  it('1A R10-2: each signed-in page that names its organisation or project in generateMetadata defines a cache() load, calls the two gates and maps the gate\'s not-found through orNotFound', () => {
     const named = PAGES.filter((f) => f.startsWith('app/(authenticated)/orgs/') && DYNAMIC.test(code(f)));
     expect(named.length).toBe(18); // 6 organisation pages and 12 project pages
     const wrong = named.filter((f) => {
-      const s = code(f);
-      return !/= cache\(/.test(s) || !s.includes('requireIdentity(') || !s.includes('requireOrgContextFor(');
+      const s = withoutComments(code(f));
+      return !/= cache\(/.test(s) || !s.includes('requireIdentity(') || !s.includes('requireOrgContextFor(') || !s.includes('await orNotFound(');
     });
     expect(wrong).toEqual([]);
   });

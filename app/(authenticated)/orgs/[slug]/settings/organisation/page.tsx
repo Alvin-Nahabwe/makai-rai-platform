@@ -8,6 +8,7 @@ import { listOrganisationEvents } from '@/lib/data/orgEvents';
 import { OrganisationEventsList } from '@/components/org/OrganisationEventsList';
 import { TeamExportLink } from '@/components/org/TeamExportLink';
 import { ORG_COPY } from '@/lib/org/copy';
+import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
 
 const EVENTS_PAGE_SIZE = 50;
@@ -26,7 +27,7 @@ const load = cache(async (slug: string) => {
 });
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
-  return { title: pageTitle(ORG_COPY.titles.organisation, (await load((await params).slug)).org.name) };
+  return { title: pageTitle(ORG_COPY.titles.organisation, (await orNotFound(load((await params).slug))).org.name) };
 }
 
 /**

@@ -7,6 +7,7 @@ import { estimateTeamExport } from '@/lib/data/export';
 import { TeamExportPanel, refusedFrom } from '@/components/export/TeamExportPanel';
 import { EXPORT_NOT_ALLOWED } from '@/lib/export/messages';
 import { EXPORT_COPY } from '@/lib/export/copy';
+import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
 
 type Params = Promise<{ slug: string }>;
@@ -31,7 +32,7 @@ const load = cache(async (slug: string) => {
 });
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
-  const loaded = await load((await params).slug);
+  const loaded = await orNotFound(load((await params).slug));
   return { title: pageTitle(EXPORT_COPY.titles.downloadRecords, loaded.refused ? null : loaded.org.name) };
 }
 

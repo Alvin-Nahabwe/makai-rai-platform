@@ -3,6 +3,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, it, vi } from 'vitest';
 import ErrorPage from '../../app/error';
 import GlobalError from '../../app/global-error';
+import { ERRORS_COPY } from '../../lib/errors/copy';
+import { pageTitle } from '../../lib/ui/title';
 
 /**
  * NFR-OBS-05 and NFR-AVL-04 (unit H0). When a page fails on the server, the person sees what did not happen,
@@ -82,4 +84,9 @@ it('NFR-OBS-05 NFR-AVL-04: the global error page is a whole document with the sa
   expect(html).not.toContain('secret adapter text');
   expect(html).toMatch(/<button[^>]*>Try again<\/button>/);
   expect(html).toMatch(/<title>[^<]+<\/title>/); // a document title, because the root layout's metadata does not apply here
+});
+
+it('1A spec 7.5 (WCAG 2.4.2): the error page names itself in the tab, because a failed page has no metadata of its own', () => {
+  const html = renderToStaticMarkup(<ErrorPage error={failure('1234567890')} retry={() => {}} />);
+  expect(html).toContain(`<title>${pageTitle(ERRORS_COPY.titles.error)}</title>`);
 });

@@ -5,6 +5,7 @@ import { requireIdentity } from '@/lib/auth/identity';
 import { requireOrgContextFor } from '@/lib/auth/context';
 import { ForbiddenError, withOrg } from '@/lib/data/tenant';
 import { ORG_COPY } from '@/lib/org/copy';
+import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
 import ProjectForm from '@/components/project/ProjectForm';
 
@@ -39,7 +40,7 @@ const orgNameOf = cache(async (slug: string): Promise<string> => {
 });
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
-  return { title: pageTitle(ORG_COPY.titles.newProject, await orgNameOf((await params).slug)) };
+  return { title: pageTitle(ORG_COPY.titles.newProject, await orNotFound(orgNameOf((await params).slug))) };
 }
 
 /**

@@ -6,6 +6,7 @@ import { requireOrgContextFor } from '@/lib/auth/context';
 import { NotFoundError } from '@/lib/data/tenant';
 import { loadFindingsPage, type FindingsPageData, type RaisePrefill } from '@/lib/findings/pageData';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
+import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
 import { FindingsPageView } from '@/components/findings/FindingsPageView';
 import { STAGES, type Stage } from '@/types/record';
@@ -16,8 +17,11 @@ const asStage = (v: string | null): Stage | null => ((STAGES as readonly (string
 type Params = Promise<{ slug: string; id: string }>;
 type Search = Promise<Record<string, string | string[] | undefined>>;
 
+/** The query values the loader reads, in `load`'s parameter order after the slug and the project id. */
+type FindingsQuery = readonly [stage: string | null, raise: string | null, questionId: string | null, versionId: string | null, shown: string | null];
+
 /** The query values the loader reads, as primitives: the page and its title derive them here, so they share one load. */
-async function queryOf(searchParams: Search) {
+async function queryOf(searchParams: Search): Promise<FindingsQuery> {
   const query = await searchParams;
   return [first(query.stage), first(query.raise), first(query.questionId), first(query.versionId), first(query.shown)] as const;
 }
@@ -47,7 +51,7 @@ const load = cache(async (
 
 export async function generateMetadata({ params, searchParams }: { params: Params; searchParams: Search }): Promise<Metadata> {
   const { slug, id } = await params;
-  const data = await load(slug, id, ...(await queryOf(searchParams)));
+  const data = await orNotFound(load(slug, id, ...(await queryOf(searchParams))));
   return { title: pageTitle(FINDINGS_COPY.titles.findings, data.projectName) };
 }
 

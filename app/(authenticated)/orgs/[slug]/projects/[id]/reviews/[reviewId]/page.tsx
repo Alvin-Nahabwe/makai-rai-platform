@@ -16,6 +16,7 @@ import { SealCheckButton } from '@/components/review/SealCheckButton';
 import { ReviewDocumentsList } from '@/components/documents/ReviewDocumentsList';
 import { FingerprintDisplay } from '@/components/review/FingerprintDisplay';
 import { DeviceDateTime, ReviewStateLine } from '@/components/review/DeviceTime';
+import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
 import { SEAL_PROOF_HREF, contentChangedLine, reviewStateLine, sealAgainLabel } from '@/components/review/reviewText';
 
@@ -35,13 +36,13 @@ const load = cache(async (slug: string, id: string, reviewId: string) => {
   if (project === null) notFound();
   const review = (await listStageReviews(ctx, id)).find((r) => r.id === reviewId);
   if (review === undefined) notFound();
-  return { identity, ctx, project, review };
+  return { ctx, project, review };
 });
 
 /** The review's own heading (its name), then the project. */
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug, id, reviewId } = await params;
-  const { project, review } = await load(slug, id, reviewId);
+  const { project, review } = await orNotFound(load(slug, id, reviewId));
   return { title: pageTitle(review.name, project.name) };
 }
 

@@ -20,6 +20,7 @@ import { isReworded } from '@/lib/question/reworded';
 import { STAGE_TITLE } from '@/lib/question/stageList';
 import { canWithdrawVersion, questionHref } from '@/lib/question/draft';
 import { DECISION_COPY } from '@/lib/decision/copy';
+import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
 
 /** n in the in-page link "Ways teams address this (n)": SUG's `suggestionCount`. At 0 (the gate) there is no link and no section. */
@@ -150,7 +151,7 @@ const load = cache(async (slug: string, id: string, stage: string, questionId: s
 /** The question's own heading, then the project. */
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { slug, id, stage, questionId } = await params;
-  const data = await load(slug, id, stage, questionId);
+  const data = await orNotFound(load(slug, id, stage, questionId));
   return { title: pageTitle(DECISION_COPY.titles.question(data.question.id, data.question.moduleTitle), data.projectName) };
 }
 

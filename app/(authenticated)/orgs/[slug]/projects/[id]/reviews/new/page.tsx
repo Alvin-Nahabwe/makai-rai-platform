@@ -8,17 +8,14 @@ import { withOrg } from '@/lib/data/tenant';
 import { ArchivedBanner } from '@/components/project/ArchivedBanner';
 import { OpenReviewForm } from '@/components/review/OpenReviewForm';
 import { STAGES, type Stage } from '@/types/record';
-import type { OrgContext } from '@/lib/data/tenant';
 import { REVIEW_COPY } from '@/lib/review/copy';
+import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
 
 interface PageProps {
   params: Promise<{ slug: string; id: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
-
-/** Whether the role may open a stage review; the page shows a refusal line, and the title names no project, when not. */
-const mayOpen = (ctx: OrgContext): boolean => can(ctx.role, 'review:open');
 
 /**
  * The gates and the project read, once per request: the page and its title both read through this (React `cache()`), so
@@ -34,8 +31,8 @@ const load = cache(async (slug: string, id: string) => {
 
 export async function generateMetadata({ params }: Pick<PageProps, 'params'>): Promise<Metadata> {
   const { slug, id } = await params;
-  const { ctx, project } = await load(slug, id);
-  return { title: pageTitle(REVIEW_COPY.titles.openReview, mayOpen(ctx) ? project.name : null) };
+  const { project } = await orNotFound(load(slug, id));
+  return { title: pageTitle(REVIEW_COPY.titles.openReview, project.name) };
 }
 
 /**
@@ -48,7 +45,7 @@ export default async function OpenReviewPage({ params, searchParams }: PageProps
   const { stage } = await searchParams;
   const { identity, ctx, project } = await load(slug, id);
   const heading = <h1>Open a stage review</h1>;
-  if (!mayOpen(ctx)) {
+  if (!can(ctx.role, 'review:open')) {
     return <div className="page-content">{heading}<p>Only owners, admins and assessors can open a stage review.</p></div>;
   }
   if (project.archivedAt !== null) {

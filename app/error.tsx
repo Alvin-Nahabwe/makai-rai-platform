@@ -1,5 +1,8 @@
 'use client';
 
+import { ERRORS_COPY } from '@/lib/errors/copy';
+import { pageTitle } from '@/lib/ui/title';
+
 /**
  * The page a person sees when a page fails on the server (NFR-OBS-05, NFR-AVL-04). It says what did not happen,
  * what is safe and what to do (SRS 7.5.7, line 2544), and shows the support reference to read out.
@@ -25,6 +28,8 @@ export default function ErrorPage({ error, retry }: { error: unknown; retry: () 
   const reference = supportReferenceOf(error);
   return (
     <main id="main-content" tabIndex={-1} className="public-layout">
+      {/* React 19 hoists this into the head: a failed page's own metadata never resolved, so the tab still names the screen. */}
+      <title>{pageTitle(ERRORS_COPY.titles.error)}</title>
       <div className="auth-card" style={{ maxWidth: 520, margin: '3rem auto' }}>
         <h1>This page could not be loaded</h1>
         {reference === null ? (

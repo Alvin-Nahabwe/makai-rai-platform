@@ -5,6 +5,7 @@ import { requireIdentity } from '@/lib/auth/identity';
 import { requireOrgContextFor } from '@/lib/auth/context';
 import { NotFoundError } from '@/lib/data/tenant';
 import { loadFindingPage, type FindingPageData } from '@/lib/findings/pageData';
+import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
 import { FindingPageView } from '@/components/findings/FindingPageView';
 
@@ -30,7 +31,7 @@ const load = cache(async (slug: string, id: string, findingId: string): Promise<
 /** The finding's own heading (its `h1`), then the project. */
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { slug, id, findingId } = await params;
-  const data = await load(slug, id, findingId);
+  const data = await orNotFound(load(slug, id, findingId));
   return { title: pageTitle(data.title, data.projectName) };
 }
 

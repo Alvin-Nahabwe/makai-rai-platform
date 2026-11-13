@@ -6,6 +6,7 @@ import { requireOrgContextFor } from '@/lib/auth/context';
 import { loadProjectOverview } from '@/lib/data/projects';
 import { eatDate } from '@/lib/followup/overdue';
 import { PROJECT_COPY } from '@/lib/project/copy';
+import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
 import { ProjectOverview } from '@/components/project/ProjectOverview';
 
@@ -27,7 +28,7 @@ const load = cache(async (slug: string, id: string) => {
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug, id } = await params;
-  return { title: pageTitle(PROJECT_COPY.titles.project, (await load(slug, id)).project.name) };
+  return { title: pageTitle(PROJECT_COPY.titles.project, (await orNotFound(load(slug, id))).project.name) };
 }
 
 /**

@@ -20,6 +20,7 @@ import { STAGES, type Stage } from '@/types/record';
 import type { DecisionVersionView } from '@/types/api';
 import type { OrgRole } from '@prisma/client';
 import { DECISION_COPY } from '@/lib/decision/copy';
+import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
 
 export interface HistoryPageData {
@@ -81,7 +82,7 @@ const load = cache(async (slug: string, id: string, stage: string, questionId: s
 /** The page's own heading, then the project. */
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { slug, id, stage, questionId } = await params;
-  const data = await load(slug, id, stage, questionId);
+  const data = await orNotFound(load(slug, id, stage, questionId));
   return { title: pageTitle(DECISION_COPY.titles.history(data.questionId), data.projectName) };
 }
 

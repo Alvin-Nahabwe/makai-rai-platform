@@ -21,6 +21,7 @@ import { ShowMoreLink } from '@/components/ui/ShowMoreLink';
 import { ListLink } from '@/components/ui/ListLink';
 import { STAGES, type ScopeAnswer, type Stage } from '@/types/record';
 import type { ChangedSinceSeal } from '@/types/api';
+import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
 
 
@@ -86,7 +87,7 @@ const load = cache(async (slug: string, id: string, stage: string) => {
 /** The stage's own heading, then the project. */
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { slug, id, stage } = await params;
-  const data = await load(slug, id, stage);
+  const data = await orNotFound(load(slug, id, stage));
   return { title: pageTitle(STAGE_TITLE[data.stage], data.projectName) };
 }
 

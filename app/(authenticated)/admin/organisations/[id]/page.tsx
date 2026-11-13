@@ -7,7 +7,6 @@ import { OwnerInvitationBox } from '@/components/admin/OwnerInvitationBox';
 import { AgreementRecords } from '@/components/admin/AgreementRecords';
 import { CorrectNameForm } from '@/components/admin/CorrectNameForm';
 import { CorrectLegalNameForm } from '@/components/admin/CorrectLegalNameForm';
-
 import { ADMIN_COPY } from '@/lib/admin/copy';
 import { pageTitle } from '@/lib/ui/title';
 

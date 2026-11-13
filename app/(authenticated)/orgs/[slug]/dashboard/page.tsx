@@ -5,6 +5,7 @@ import { requireOrgContextFor } from '@/lib/auth/context';
 import { loadDashboard } from '@/lib/data/projects';
 import { eatDate } from '@/lib/followup/overdue';
 import { HOME_COPY } from '@/lib/home/copy';
+import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
 import { DashboardView } from '@/components/project/DashboardView';
 
@@ -26,7 +27,7 @@ const load = cache(async (slug: string, welcome: string | null) => {
 
 export async function generateMetadata({ params, searchParams }: { params: Params; searchParams: Search }): Promise<Metadata> {
   const { slug } = await params;
-  const data = await load(slug, await welcomeOf(searchParams));
+  const data = await orNotFound(load(slug, await welcomeOf(searchParams)));
   return { title: pageTitle(HOME_COPY.titles.home, data.orgName) };
 }
 

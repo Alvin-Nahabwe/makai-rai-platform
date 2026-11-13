@@ -5,7 +5,6 @@ import { ListLink } from '@/components/ui/ListLink';
 import { ShowMoreLink } from '@/components/ui/ShowMoreLink';
 import { LIST_PAGE_SIZE, pageOf } from '@/lib/ui/showMore';
 import type { InvitationState } from '@/types/record';
-
 import { ADMIN_COPY } from '@/lib/admin/copy';
 import { pageTitle } from '@/lib/ui/title';
 

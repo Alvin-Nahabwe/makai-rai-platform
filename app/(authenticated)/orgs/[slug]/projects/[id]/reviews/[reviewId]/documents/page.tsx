@@ -10,6 +10,7 @@ import { listSeals } from '@/lib/data/seals';
 import { documentDraft, documentSummaries, listDocuments, typedFieldsOf } from '@/lib/data/documents';
 import { runningContent } from '@/lib/content/loader';
 import { DOCUMENT_TITLES, DOCUMENTS_COPY } from '@/lib/documents/copy';
+import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
 import { DOCUMENT_TYPES, type DocumentType } from '@/types/record';
 import { MSG_SEAL_CHECK_FAILED } from '@/lib/documents/copy';
@@ -37,12 +38,14 @@ const load = cache(async (slug: string, id: string, reviewId: string) => {
   if (project === null) notFound();
   const review = (await listStageReviews(ctx, id)).find((r) => r.id === reviewId);
   if (review === undefined) notFound();
-  return { identity, ctx, project, review };
+  return { ctx, project, review };
 });
 
+/** The review's documents, then the project. */
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug, id, reviewId } = await params;
-  return { title: pageTitle(DOCUMENTS_COPY.titles.makeDocument, (await load(slug, id, reviewId)).project.name) };
+  const { project, review } = await orNotFound(load(slug, id, reviewId));
+  return { title: pageTitle(DOCUMENTS_COPY.titles.documentsOf(review.name), project.name) };
 }
 
 /**
