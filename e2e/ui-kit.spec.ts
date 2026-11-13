@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { expectNoSeriousA11yViolations, settleHover } from './helpers/a11y';
 import { expectNoHorizontalScroll } from './helpers/reflow';
 import { expectTargetsAtLeast24px } from './helpers/targetSize';
@@ -48,6 +48,19 @@ async function withForcedColors(page: Page, check: () => Promise<void>): Promise
   }
 }
 
+/**
+ * The hydration errors among console and page error messages, in both of React's wordings. Development React writes
+ * words ("Hydration failed because the server rendered text didn't match the client", "A tree hydrated but some
+ * attributes of the server rendered HTML didn't match"); the production build CI serves writes only a code. In the
+ * React that Next.js 16.4.5 bundles (node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.production.js),
+ * a mismatch throws #418 (`throwOnHydrationMismatch`), and the recovery React logs is #422 (client rendering from the
+ * nearest Suspense boundary) or #423 (client rendering the entire root). #425 is React 18's text-mismatch code and is
+ * not in this build; it is matched anyway, at no cost, in case the bundled React changes back.
+ */
+function hydrationErrors(messages: readonly string[]): string[] {
+  return messages.filter((m) => /hydrat|did not match|didn't match|server rendered|Minified React error #(?:418|422|423|425)(?!\d)/i.test(m));
+}
+
 /** A kit section by its id (`data-kit-section`). */
 const section = (page: Page, id: string) => page.locator(`[data-kit-section="${id}"]`);
 
@@ -67,6 +80,24 @@ async function shapesVisible(page: Page, selector: string): Promise<{ count: num
     }
     return { count: shapes.length, invisible };
   }, selector);
+}
+
+/**
+ * Each element's top border, and whether it is drawn: a border is drawn when it has a style, a width and a colour that is
+ * neither transparent nor the page background. `marked` says whether the element matches `markedSelector`, the state that
+ * should be the one ringed. Forced
+ * colours repaint every author border, a transparent one included, so a state shown by a border must be the only border.
+ */
+async function drawnBorders(locator: Locator, markedSelector: string): Promise<Array<{ marked: boolean; drawn: boolean; ring: string }>> {
+  return locator.evaluateAll((els, marked) => {
+    const ground = getComputedStyle(document.body).backgroundColor;
+    return els.map((el) => {
+      const s = getComputedStyle(el);
+      const drawn = s.borderTopStyle !== 'none' && parseFloat(s.borderTopWidth) > 0
+        && s.borderTopColor !== 'rgba(0, 0, 0, 0)' && s.borderTopColor !== ground;
+      return { marked: el.matches(marked), drawn, ring: `${s.borderTopStyle} ${s.borderTopWidth} ${s.borderTopColor}` };
+    });
+  }, markedSelector);
 }
 
 test.describe('the gallery page', () => {
@@ -150,21 +181,16 @@ test.describe('RouteRow', () => {
     await expect(section(page, 'route-row').locator('.ui-route-row__tally').first()).toHaveText(/^\d+ done \(2 with no evidence attached\), /);
   });
 
-  test('in forced colours the current stop is still the only ringed one', async ({ page }) => {
+  test('the current stop is the only ringed one, in normal and in forced colours', async ({ page }) => {
     await openKit(page);
     const row = page.getByRole('list', { name: 'Sample stage', exact: true });
-    await withForcedColors(page, async () => {
-      // A ring is drawn when the border has a style, a width and a colour that is neither transparent nor the background.
-      const rings = await row.locator('.ui-route-row__point').evaluateAll((points) => points.map((p) => {
-        const s = getComputedStyle(p);
-        const ground = getComputedStyle(document.body).backgroundColor;
-        const drawn = s.borderTopStyle !== 'none' && parseFloat(s.borderTopWidth) > 0
-          && s.borderTopColor !== 'rgba(0, 0, 0, 0)' && s.borderTopColor !== ground;
-        return { current: p.getAttribute('aria-current') === 'step', drawn, ring: `${s.borderTopStyle} ${s.borderTopWidth} ${s.borderTopColor}` };
-      }));
-      expect(rings.filter((r) => r.current)).toHaveLength(1);
-      expect(rings.filter((r) => r.drawn).map((r) => r.current), `rings drawn: ${JSON.stringify(rings.filter((r) => r.drawn))}`).toEqual([true]);
-    });
+    const expectOneRing = async (mode: string) => {
+      const rings = await drawnBorders(row.locator('.ui-route-row__point'), '[aria-current="step"]');
+      expect(rings.filter((r) => r.marked), mode).toHaveLength(1);
+      expect(rings.filter((r) => r.drawn).map((r) => r.marked), `${mode}, rings drawn: ${JSON.stringify(rings.filter((r) => r.drawn))}`).toEqual([true]);
+    };
+    await expectOneRing('normal colours');
+    await withForcedColors(page, () => expectOneRing('forced colours'));
   });
 
   test('the row shows no progress bar, meter or percentage', async ({ page }) => {
@@ -222,6 +248,6 @@ test.describe('LocalTime', () => {
     await expect(times.first()).toHaveText('11 Nov 2026, 11:23');
     await expect(times.first()).toHaveAttribute('dateTime', '2026-11-11T08:23:00.000Z');
     await expect(times.nth(1)).toHaveText('11 Nov 2026');
-    expect(errors.filter((e) => /hydrat|did not match|server rendered/i.test(e))).toEqual([]);
+    expect(hydrationErrors(errors)).toEqual([]);
   });
 });

@@ -94,7 +94,8 @@ describe('StatusMark.css: the mark is ink, never another colour', () => {
       const source = readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
       for (const [, selector, body] of source.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
         const mark = /\.ui-mark(?![\w-])|\.ui-mark(?:--|__)[\w-]+/.test(selector);
-        const stop = /\.ui-route-row__(?:stop|point)[\w-]*/.test(selector);
+        // A stop (`__stop`, `__stop--current`, ...) or a point, never the list `__stops` or another element.
+        const stop = /\.ui-route-row__(?:stop(?:--[\w-]+)?|point)(?![\w-])/.test(selector);
         if (!mark && !stop) continue;
         checked += 1;
         for (const [, prop, raw] of body.matchAll(/(?:^|;)\s*(color|fill|stroke)\s*:\s*([^;]+)/g)) {

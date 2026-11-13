@@ -56,7 +56,9 @@ export default async function UiKitPage(): Promise<ReactElement> {
   await connection(); // the environment is read per request: CI builds first and sets the test seam only on the server
   // notFound() answers status 404 only before streaming starts; once a loading.tsx or <Suspense> above this page has
   // streamed, the status stays 200 with the not-found UI (node_modules/next/dist/docs/01-app/03-api-reference/
-  // 03-file-conventions/not-found.md:15 and :45). Keep both out of app/dev/ while the 404 is the production guard.
+  // 03-file-conventions/not-found.md:15 and :45). While the 404 is the production guard, keep every one of them out of
+  // the path above this page: no loading.tsx in app/dev/ui-kit/ or app/dev/, no root app/loading.tsx, and no <Suspense>
+  // around {children} in app/layout.tsx (none of them exists today).
   if (!devGalleryShown(process.env)) notFound();
   const iconNames = Object.keys(ICONS) as IconName[];
   return (
