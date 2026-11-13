@@ -48,6 +48,20 @@ export function DialogDemo(): ReactElement {
   );
 }
 
+/** A dialog taller than the window, to show that it scrolls inside itself and keeps its gutter. */
+export function LongDialogDemo(): ReactElement {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <Button variant="secondary" onClick={() => setOpen(true)}>Open the long sample dialog</Button>
+      <Dialog open={open} title="A long sample dialog" onClose={() => setOpen(false)}
+        actions={<Button variant="secondary" onClick={() => setOpen(false)}>Close</Button>}>
+        {Array.from({ length: 30 }, (_, i) => <p key={i}>Sample paragraph {i + 1} of 30. This is a sample: nothing is sent.</p>)}
+      </Dialog>
+    </div>
+  );
+}
+
 export function InlineConfirmDemo(): ReactElement {
   const [said, setSaid] = useState('nothing yet');
   return (

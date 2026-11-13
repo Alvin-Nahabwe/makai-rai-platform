@@ -191,24 +191,31 @@ test('SC 2.4.11 (D-349): a refresh that adds the resent invitation\'s row after 
     if (route.request().headers()['rsc'] !== undefined) await held;
     await route.continue();
   });
-  const rows = page.locator('section').filter({ has: page.getByRole('heading', { name: 'First-owner invitation' }) }).locator('ul > li');
-  await expect(rows).toHaveCount(1);
-  await page.getByRole('button', { name: 'Resend invitation' }).click();
-  await expect(page.getByText(/^Resent: the old link no longer works\./)).toBeVisible();
-  await page.getByRole('button', { name: 'Revoke invitation' }).first().click();
-  const confirm = page.getByRole('group').getByRole('button', { name: 'Revoke invitation' });
-  // Put the confirm button's bottom a few pixels above the window's edge, as at 720 px in J-01: wholly in view, so
-  // reaching it scrolls nothing, and a row added above it afterwards pushes it past the edge.
-  const box = await confirm.boundingBox();
-  await page.setViewportSize({ width: 1280, height: Math.ceil(box!.y + box!.height) + 3 });
-  for (let i = 0; i < 10 && !(await confirm.evaluate((el) => el === document.activeElement)); i += 1) await page.keyboard.press('Tab');
-  await expect(confirm).toBeFocused();
-  await expect(confirm).toBeInViewport({ ratio: 1 });
-  release();
-  await expect(rows).toHaveCount(2);
-  await expect(confirm).toBeFocused();
-  await expect(confirm).toBeInViewport({ ratio: 1 });
-  await page.unroute('**/admin/organisations/**');
+  try {
+    const rows = page.locator('section').filter({ has: page.getByRole('heading', { name: 'First-owner invitation' }) }).locator('ul > li');
+    await expect(rows).toHaveCount(1);
+    await page.getByRole('button', { name: 'Resend invitation' }).click();
+    await expect(page.getByText(/^Resent: the old link no longer works\./)).toBeVisible();
+    await page.getByRole('button', { name: 'Revoke invitation' }).first().click();
+    const confirm = page.getByRole('group').getByRole('button', { name: 'Revoke invitation' });
+    // Put the confirm button's bottom a few pixels above the window's edge, as at 720 px in J-01: wholly in view, so
+    // reaching it scrolls nothing, and a row added above it afterwards pushes it past the edge.
+    const box = await confirm.boundingBox();
+    expect(box, 'the confirm button has a box').not.toBeNull();
+    if (box === null) throw new Error('the confirm button has no box');
+    await page.setViewportSize({ width: 1280, height: Math.ceil(box.y + box.height) + 3 });
+    for (let i = 0; i < 10 && !(await confirm.evaluate((el) => el === document.activeElement)); i += 1) await page.keyboard.press('Tab');
+    await expect(confirm).toBeFocused();
+    await expect(confirm).toBeInViewport({ ratio: 1 });
+    release();
+    await expect(rows).toHaveCount(2);
+    await expect(confirm).toBeFocused();
+    await expect(confirm).toBeInViewport({ ratio: 1 });
+  } finally {
+    // Released and removed whatever happened above, so a failure cannot leave the held request waiting for ever.
+    release();
+    await page.unroute('**/admin/organisations/**');
+  }
 });
 
 test('FR-ORG-03 NFR-SEC-04: the administrator pages hold no record content', async ({ browser, baseURL }) => {

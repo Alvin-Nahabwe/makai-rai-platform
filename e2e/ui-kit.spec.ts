@@ -75,6 +75,14 @@ function hydrationErrors(messages: readonly string[]): string[] {
   return messages.filter((m) => /hydrat|did not match|didn't match|server rendered|Minified React error #(?:418|422|423|425)(?!\d)/i.test(m));
 }
 
+/** A locator's box, failing the case with its name when the element is not rendered (no non-null assertion). */
+async function boxOf(locator: Locator, what: string): Promise<{ x: number; y: number; width: number; height: number }> {
+  const box = await locator.boundingBox();
+  expect(box, `${what} has a box`).not.toBeNull();
+  if (box === null) throw new Error(`${what} has no box`);
+  return box;
+}
+
 /** A kit section by its id (`data-kit-section`). */
 const section = (page: Page, id: string) => page.locator(`[data-kit-section="${id}"]`);
 
@@ -514,12 +522,21 @@ test.describe('Callout', () => {
     const caution = section(page, 'callout').locator('.ui-callout--caution');
     const startBorder = () => caution.first().evaluate((el) => {
       const s = getComputedStyle(el);
-      return { width: s.borderInlineStartWidth, style: s.borderInlineStartStyle, colour: s.borderInlineStartColor, fill: s.backgroundColor };
+      // WCAG relative luminance of a computed rgb() colour, then the contrast of the border against the callout's own fill.
+      const luminance = (c: string) => {
+        const [r, g, b] = (c.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number).map((v) => {
+          const x = v / 255;
+          return x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+        });
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      };
+      const [hi, lo] = [luminance(s.borderInlineStartColor), luminance(s.backgroundColor)].sort((x, y) => y - x);
+      return { width: s.borderInlineStartWidth, style: s.borderInlineStartStyle, colour: s.borderInlineStartColor, contrast: (hi + 0.05) / (lo + 0.05) };
     });
     await inEachTheme(page, async (theme) => {
       const border = await startBorder();
       expect(border.width, theme).toBe('4px');
-      expect(border.colour, `${theme}: the border is not the callout's own tint`).not.toBe(border.fill);
+      expect(border.contrast, `${theme}: the border against the callout's own fill`).toBeGreaterThanOrEqual(3);
       expect((await shapesVisible(page, '[data-kit-section="callout"] .ui-callout--caution')).invisible, theme).toEqual([]);
     });
     await withForcedColors(page, async () => {
@@ -578,9 +595,9 @@ test.describe('Banner', () => {
     await page.setViewportSize({ width: 320, height: 640 });
     await openKit(page);
     const session = section(page, 'banner').locator('.ui-banner--session');
-    const body = await session.locator('.ui-banner__body').boundingBox();
-    const action = await session.locator('.ui-banner__action').boundingBox();
-    expect(action!.y).toBeGreaterThanOrEqual(body!.y + body!.height - 1);
+    const body = await boxOf(session.locator('.ui-banner__body'), 'the session banner\'s words');
+    const action = await boxOf(session.locator('.ui-banner__action'), 'the session banner\'s action');
+    expect(action.y).toBeGreaterThanOrEqual(body.y + body.height - 1);
     await expectNoHorizontalScroll(page);
   });
 });
@@ -634,6 +651,31 @@ test.describe('Dialog', () => {
     await expect(opener).toBeFocused();
   });
 
+  test('sits in the centre of the window with at least a 16 px gutter at 1280 and 320 px, and a long one scrolls inside itself', async ({ page }) => {
+    await openKit(page);
+    for (const viewport of [VIEWPORTS[0], VIEWPORTS[2]]) {
+      await page.setViewportSize(viewport);
+      for (const [opener, title] of [['Open the sample dialog', 'Archive the sample project?'], ['Open the long sample dialog', 'A long sample dialog']] as const) {
+        await section(page, 'dialog').getByRole('button', { name: opener }).click();
+        const dialog = page.getByRole('dialog', { name: title });
+        await expect(dialog).toBeVisible();
+        const box = await boxOf(dialog, title);
+        const where = `${title} at ${viewport.width} px`;
+        expect(Math.abs(box.x + box.width / 2 - viewport.width / 2), `${where}: centred across`).toBeLessThanOrEqual(2);
+        expect(Math.abs(box.y + box.height / 2 - viewport.height / 2), `${where}: centred down`).toBeLessThanOrEqual(2);
+        expect(box.x, where).toBeGreaterThanOrEqual(16);
+        expect(box.y, where).toBeGreaterThanOrEqual(16);
+        expect(box.x + box.width, where).toBeLessThanOrEqual(viewport.width - 16);
+        expect(box.y + box.height, where).toBeLessThanOrEqual(viewport.height - 16);
+        if (title === 'A long sample dialog') {
+          expect(await dialog.evaluate((d) => d.scrollHeight > d.clientHeight), `${where}: scrolls inside itself`).toBe(true);
+        }
+        await page.keyboard.press('Escape');
+        await expect(dialog).toBeHidden();
+      }
+    }
+  });
+
   test('an action closes it through the caller, which onClose does not report', async ({ page }) => {
     await openKit(page);
     const opener = section(page, 'dialog').getByRole('button', { name: 'Open the sample dialog' });
@@ -659,8 +701,8 @@ test.describe('InlineConfirm', () => {
       await page.setViewportSize(viewport);
       for (const group of await groups.all()) {
         const [cancel, confirm] = await group.locator('.ui-confirm__actions button').all();
-        const a = (await cancel.boundingBox())!;
-        const b = (await confirm.boundingBox())!;
+        const a = await boxOf(cancel, 'Cancel');
+        const b = await boxOf(confirm, 'the confirm button');
         expect(a.y < b.y - 1 || (Math.abs(a.y - b.y) <= 1 && a.x < b.x), `${viewport.width} px: Cancel before confirm`).toBe(true);
       }
     }

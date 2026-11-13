@@ -25,7 +25,7 @@ import { devGalleryShown } from '@/lib/ui/devGallery';
 import { MAIN_CONTENT_ID } from '@/components/layout/SkipLink';
 import { PRODUCT_NAME } from '@/lib/ui/title';
 import { BusySubmitDemo, DateStates, DecidedOnDemo, ErrorSummaryDemo, InPlaceDemo, ReasonDemo, StatusDemo, TextAreaStates } from './FormDemos';
-import { DialogDemo, InlineConfirmDemo, StatusRegionDemo } from './FeedbackDemos';
+import { DialogDemo, InlineConfirmDemo, LongDialogDemo, StatusRegionDemo } from './FeedbackDemos';
 import { SavedDemo } from './SavedDemo';
 
 /**
@@ -235,6 +235,7 @@ export default async function UiKitPage(): Promise<ReactElement> {
 
       <KitSection id="dialog" title="Dialog">
         <DialogDemo />
+        <LongDialogDemo />
       </KitSection>
 
       <KitSection id="local-time" title="Local time">
