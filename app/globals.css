@@ -33,8 +33,8 @@
   --color-mark: #1A1F36;
   --color-focus: #B85F14;
 
-  /* Typography. The family is still Source Sans 3 until the Overpass change lands (ADR 0022). */
-  --font-family: var(--font-source-sans, system-ui), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  /* Typography. One family, Overpass, self-hosted (app/layout.tsx, ADR 0022). */
+  --font-family: var(--font-overpass, system-ui), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-size-h1: 1.875rem;
   --font-size-h2: 1.375rem;
   --font-size-h3: 1.125rem;
@@ -136,8 +136,8 @@
   --color-post-processing: var(--color-ink);
   --color-cross-cutting: var(--color-ink);
   --gradient-brand: none;
-  /* Kept as the layout sets it: the search for a serif display face ends with the type change (ADR 0022). */
-  --font-display: var(--font-dm-serif, Georgia), Georgia, 'Times New Roman', serif;
+  /* One family now: the display face is the body face. Alias only; nothing reads it after the About page change. */
+  --font-display: var(--font-family);
   --font-size-xs: var(--font-size-small);
   --font-size-sm: var(--font-size-small);
   --font-size-base: var(--font-size-body);

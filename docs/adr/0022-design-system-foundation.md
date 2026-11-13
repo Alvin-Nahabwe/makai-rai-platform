@@ -60,11 +60,12 @@ on a dark operating system, `light dark` would draw native controls dark while t
   `--color-white` stays `#FFFFFF` in every theme (the plan's surface role is dark in dark mode, and white is read as
   text on navy and on the action fill, as it is at the base), `--color-primary-light` is `#F0A35E` in every theme (its
   only reader, AboutPage.css, draws it as text on the navy hero; the plan's action-text role is 2.66:1 there in
-  light; its readers go in Task 19), and `--font-family` and `--font-display` still read the Source Sans and
-  DM Serif variables the layout defines, because Overpass is not loaded yet and the font tests pin both.
+  light; its readers go in Task 19), and `--font-family` reads the `--font-overpass` variable the layout defines
+  (Overpass, self-hosted, replaced Source Sans 3 and DM Serif Display in Task 2), while `--font-display` is an alias of
+  `--font-family`: there is one family, and the About page no longer reads the alias.
 - `--color-risk-critical` is ink, not the overdue role as the plan maps it: its readers are field errors, a required
   mark and a hover state, none an overdue date, and red means overdue only (B5).
-- A mistyped variable fails `legacy-tokens.test.ts` (a), which lists the six variables defined outside the stylesheet.
+- A mistyped variable fails `legacy-tokens.test.ts` (a), which lists the five variables defined outside the stylesheet.
 
 ## Residual risks
 

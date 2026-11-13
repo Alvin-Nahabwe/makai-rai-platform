@@ -6,5 +6,61 @@
     "property": "Each text and non-text colour pair the screens draw holds its WCAG minimum in light and both dark blocks: the new roles (field and control borders >= 3:1, links, stage and tint text >= 4.5:1, focus ring >= 3:1) in the 35 role pairs, and the seven old pairs on the legacy names the rules still read (field border, link, focus ring, stage label, moderate text) in the legacy-pairs case; the phone-menu bar pair (3:1 on the navy) has its own case",
     "proof": "__tests__/unit/design-tokens.test.ts::1A NFR-A11Y-05: the 35 colour pairs meet their minimum in light and in both dark blocks; __tests__/unit/design-tokens.test.ts::UX-33 NFR-A11Y-05 (legacy, until Task 21): the legacy names the rules still read hold the minimums the SRS 7.6.3 pairs set; __tests__/unit/design-tokens.test.ts::UX-33 NFR-A11Y-05 (legacy, until Task 11): the phone menu button bars hold 3:1 on the navy in every theme",
     "task": "1A-1"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/lint/fonts.test.ts::UX-38: the layout self-hosts Source Sans 3 through next/font/local, in a file that covers 400 to 700",
+    "replacedBy": "__tests__/lint/fonts.test.ts::UX-38: the layout self-hosts Overpass through next/font/local, in a file that covers 400 to 700",
+    "property": "The layout loads its one typeface from app/fonts through next/font/local, never next/font/google, every file it names exists, and the four calls declare weight 400 to 700; the family is now Overpass, and the case also pins that only Overpass files are named and that the core call carries the --font-overpass variable",
+    "proof": "__tests__/lint/fonts.test.ts::UX-38: the layout self-hosts Overpass through next/font/local, in a file that covers 400 to 700",
+    "task": "1A-2"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/font-subsets.test.ts::NFR-PERF-02: the latin-ext letters names commonly carry sit in a small Source Sans face of their own, not preloaded",
+    "replacedBy": "__tests__/unit/font-subsets.test.ts::NFR-PERF-02: the latin-ext letters names commonly carry sit in a small Overpass face of their own, not preloaded",
+    "property": "The 70 latin-ext letters names commonly carry are declared by one small face, not preloaded, whose file maps all of them and stays under its byte cap; the family is now Overpass and the cap is 14,100 B (controller ruling of 13 Nov 2026)",
+    "proof": "__tests__/unit/font-subsets.test.ts::NFR-PERF-02: the latin-ext letters names commonly carry sit in a small Overpass face of their own, not preloaded",
+    "task": "1A-2"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/font-subsets.test.ts::NFR-PERF-02: every Source Sans code point lands in exactly one face, whose file maps it",
+    "replacedBy": "__tests__/unit/font-subsets.test.ts::NFR-PERF-02: every Overpass code point a page can use lands in exactly one face, whose file maps it",
+    "property": "The four faces' declared ranges are disjoint, the two latin-ext faces declare exactly what their files map, and every code point either source file maps (controls aside) is declared by exactly one face whose file holds its glyph; widened from the Source Sans cut to every code point of both Overpass source files",
+    "proof": "__tests__/unit/font-subsets.test.ts::NFR-PERF-02: every Overpass code point a page can use lands in exactly one face, whose file maps it",
+    "task": "1A-2"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/local-fonts.test.ts::(harness) a layout that narrows the weight on every Source Sans call passes, so the range may change",
+    "replacedBy": "__tests__/unit/local-fonts.test.ts::(harness) a layout that narrows the weight on every Overpass call passes, so the range may change",
+    "property": "A layout that narrows the weight range on all four calls at once is accepted, and narrowing one call is reported; the family is now Overpass",
+    "proof": "__tests__/unit/local-fonts.test.ts::(harness) a layout that narrows the weight on every Overpass call passes, so the range may change",
+    "task": "1A-2"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/local-fonts.test.ts::app/globals.css: --font-family and --font-display keep a valid fallback inside their var()",
+    "replacedBy": "__tests__/unit/local-fonts.test.ts::app/globals.css: --font-family reads --font-overpass with a valid fallback, and --font-display is the same family",
+    "property": "globals.css reads the font variable the layout defines with a valid fallback (system-ui) inside the var(); there is one family now, so --font-display is the alias var(--font-family) and no longer carries a serif stack",
+    "proof": "__tests__/unit/local-fonts.test.ts::app/globals.css: --font-family reads --font-overpass with a valid fallback, and --font-display is the same family",
+    "task": "1A-2"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/local-fonts.test.ts::no .css file under app or components reads --font-source-sans or --font-dm-serif without its fallback",
+    "replacedBy": "__tests__/unit/local-fonts.test.ts::no .css file under app or components reads a font variable without its fallback, or one of the retired families",
+    "property": "No stylesheet reads a font variable without its fallback inside the var(), and none reads the variable of a retired family, which no layout defines any more",
+    "proof": "__tests__/unit/local-fonts.test.ts::no .css file under app or components reads a font variable without its fallback, or one of the retired families",
+    "task": "1A-2"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/local-fonts.test.ts::(harness) a use without its fallback, or with another one, is reported; the right fallback and a comment are not",
+    "replacedBy": "__tests__/unit/local-fonts.test.ts::(harness) a use without its fallback, or with another one, or of a retired variable is reported; the right fallback and a comment are not",
+    "property": "The fallback check reports a var() with no fallback, with another fallback, or of a retired variable, and passes the right fallback and a comment",
+    "proof": "__tests__/unit/local-fonts.test.ts::(harness) a use without its fallback, or with another one, or of a retired variable is reported; the right fallback and a comment are not",
+    "task": "1A-2"
   }
 ]

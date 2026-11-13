@@ -7,10 +7,11 @@ import { abortIfPendingBackground } from './helpers/pendingLinks';
 
 /**
  * NFR-PERF-02 (SRS line 3195): every public page transfers at most 220 KB on a first visit, 220000 bytes. S-04, the
- * invitation page, shows the inviter's name in Source Sans 3 (app/(public)/invitations/[token]/page.tsx). Ugandan
- * and other African names are written with latin-ext letters such as U+014B (Luganda's eng); one such letter used to
- * fetch the whole 60,048 B Source Sans latin-ext file and put the page at 264 KB. The letters names commonly carry now sit in a small
- * face of their own (app/fonts/source-sans-3-latin-ext-common.woff2, scripts/fonts/subset.sh), and this spec measures
+ * invitation page, shows the inviter's name in Overpass (app/(public)/invitations/[token]/page.tsx). Ugandan
+ * and other African names are written with latin-ext letters such as U+014B (Luganda's eng); one such letter would
+ * fetch the whole latin-ext file (46,080 B for Overpass; 60,048 B for the Source Sans 3 it replaced, which put the page at
+ * 264 KB). The letters names commonly carry sit in a small
+ * face of their own (app/fonts/overpass-latin-ext-common.woff2, scripts/fonts/subset.sh), and this spec measures
  * the page with such a name.
  *
  * The count is every byte the browser received from navigation to `networkidle` in a fresh context, Link prefetches
@@ -122,8 +123,8 @@ for (const { language, inviter, letters, clientIp } of CASES) test(`NFR-PERF-02:
     const fonts = [...urls.values()].filter((u) => u.endsWith('.woff2')).map((u) => u.split('/').pop()!);
     console.log(`route=/invitations/[token] inviter=${language} bytes=${total} budget=${PUBLIC_BUDGET} abandoned_prefetches=${abandonedPrefetches.length} fonts=${fonts.join(',')}`);
     // The name's letters come from the small face; the large remainder face is not fetched.
-    expect(fonts.some((f) => f.startsWith('source_sans_3_latin_ext_common'))).toBe(true);
-    expect(fonts.some((f) => f.startsWith('source_sans_3_latin_ext_rest'))).toBe(false);
+    expect(fonts.some((f) => f.startsWith('overpass_latin_ext_common'))).toBe(true);
+    expect(fonts.some((f) => f.startsWith('overpass_latin_ext_rest'))).toBe(false);
     expect(total, `first-visit bytes of S-04 with a ${language} inviter name`).toBeLessThanOrEqual(PUBLIC_BUDGET);
   } finally {
     await context.close();

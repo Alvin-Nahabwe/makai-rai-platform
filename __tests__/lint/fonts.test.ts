@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process';
  * screens use, which are 400, 600 and 700. Two halves, because the property is
  * "the weights the CSS asks for are the weights the layout loads":
  *
- *  - the layout loads Source Sans 3 from app/fonts through next/font/local (never next/font/google), in a variable
+ *  - the layout loads Overpass from app/fonts through next/font/local (never next/font/google), in a variable
  *    file whose weight range covers those three;
  *  - no stylesheet asks for another one, whether it writes a number, a
  *    keyword or a `var(--font-weight-*)` token. Tokens are resolved against the
@@ -40,17 +40,22 @@ describe('fonts', () => {
   const globals = readFileSync('app/globals.css', 'utf8');
   const tokens = tokenWeights(globals);
 
-  it('UX-38: the layout self-hosts Source Sans 3 through next/font/local, in a file that covers 400 to 700', () => {
+  it('UX-38: the layout self-hosts Overpass through next/font/local, in a file that covers 400 to 700', () => {
     // Comments may name the Google loader to say it is not used; only code counts.
     const layout = readFileSync('app/layout.tsx', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
     expect(layout).toMatch(/from 'next\/font\/local'/);
     expect(layout).not.toMatch(/next\/font\/google/);
-    const files = [...layout.matchAll(/src:\s*'\.\/(fonts\/source-sans-3[^']*\.woff2)'/g)].map((m) => m[1]);
-    expect(files.length, 'Source Sans 3 files in the layout').toBeGreaterThan(0);
+    const files = [...layout.matchAll(/src:\s*'\.\/(fonts\/[^']*\.woff2)'/g)].map((m) => m[1]);
+    expect(files.length, 'font files in the layout').toBeGreaterThan(0);
     for (const f of files) expect(existsSync(`app/${f}`), f).toBe(true);
-    // The four Source Sans 3 calls (latin-ext-rest, latin-ext-common, latin-rest, latin-core; NFR-PERF-02) declare 400
+    // Only Overpass is loaded: every file the layout names is one of its four.
+    expect(files.filter((f) => !/^fonts\/overpass-latin-/.test(f))).toEqual([]);
+    // The core file is the one every page preloads: it carries the variable and the 400 to 700 range of the
+    // variable font (Overpass is one file for every weight).
+    expect(layout).toMatch(/src:\s*'\.\/fonts\/overpass-latin-core\.woff2',\s*weight:\s*'400 700',\s*variable:\s*'--font-overpass'/);
+    // The four Overpass calls (latin-ext-rest, latin-ext-common, latin-rest, latin-core; NFR-PERF-02) declare 400
     // to 700, the weights the screens use (every file is the same variable font).
-    const ranges = [...layout.matchAll(/src:\s*'\.\/fonts\/source-sans-3[^']*\.woff2',\s*weight:\s*'([^']+)'/g)].map((m) => m[1]);
+    const ranges = [...layout.matchAll(/src:\s*'\.\/fonts\/overpass-[^']*\.woff2',\s*weight:\s*'([^']+)'/g)].map((m) => m[1]);
     expect(ranges).toEqual(['400 700', '400 700', '400 700', '400 700']);
   });
 

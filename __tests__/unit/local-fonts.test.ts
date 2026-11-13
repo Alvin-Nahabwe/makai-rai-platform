@@ -5,41 +5,39 @@ import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
- * Register row D-279 (unit FONTS). The two typefaces are served from this repository, not fetched from Google at
- * build time (`next/font/google`; a build that cannot reach Google, or that Google's stylesheet breaks, fails).
- * The `latin` and `latin-ext` files of Source Sans 3 (variable weight) and DM Serif Display 400 are byte copies of
- * what that loader downloaded. DM Serif's `latin-ext` file is served as it came; the `latin` files are kept under
- * fonts/source/ and split by scripts/fonts/subset.sh into the `latin-core` file every page preloads and the
- * `latin-rest` file it fetches only when it shows one of those characters, and Source Sans 3's `latin-ext` file is
- * kept there too and split into `latin-ext-common` and `latin-ext-rest` (NFR-PERF-02; the splits themselves are
- * pinned by `__tests__/unit/font-subsets.test.ts`). Every file is pinned by size and sha256, because the served
- * ones go to every visitor and a same-size file would otherwise pass. Each family's SIL Open Font License text
- * sits beside its files in both directories, because the licence requires the text to travel with any copy of the
- * font software. The import ban itself is `__tests__/lint/no-google-fonts.test.ts`.
+ * Register row D-279 (unit FONTS), carried over to Overpass by stage 1A task 2. The one typeface is served from this
+ * repository, not fetched from Google at build time (`next/font/google`; a build that cannot reach Google, or that
+ * Google's stylesheet breaks, fails). The `latin` and `latin-ext` files of Overpass (variable weight, 400 to 700) are
+ * byte copies of what Google's stylesheet lists for them, fetched by scripts/fonts/fetch-overpass.sh into fonts/source/.
+ * scripts/fonts/subset.sh splits the `latin` file into the `latin-core` file every page preloads and the `latin-rest`
+ * file a page fetches only when it shows one of those characters, and the `latin-ext` file into `latin-ext-common`
+ * and `latin-ext-rest` (NFR-PERF-02; the splits themselves are pinned by `__tests__/unit/font-subsets.test.ts`).
+ * Every file is pinned by size and sha256, because the served ones go to every visitor and a same-size file would
+ * otherwise pass. The SIL Open Font License text sits beside the files in both directories, because the licence
+ * requires the text to travel with any copy of the font software. The import ban itself is
+ * `__tests__/lint/no-google-fonts.test.ts`.
  */
 
 const DIR = join(process.cwd(), 'app', 'fonts');
 const SOURCE_DIR = join(process.cwd(), 'fonts', 'source');
 
-/** The directory, file name, and the byte size and sha256 of each file (the originals as taken from the built output). */
+/** The directory, file name, and the byte size and sha256 of each file (the originals as Google serves them). */
 const FONT_FILES = [
-  { dir: SOURCE_DIR, name: 'source-sans-3-latin.woff2', bytes: 28_804, sha256: '587435ca9d90732b8c1ce4958222c6ad3ade2b875500188e1d318efbcb61f4c5' },
-  { dir: SOURCE_DIR, name: 'source-sans-3-latin-ext.woff2', bytes: 60_048, sha256: 'ed3571ea9ff752f1c846f1c9ad2b0006de42f478a2db9163a74db0729a4eb281' },
-  { dir: SOURCE_DIR, name: 'dm-serif-display-latin.woff2', bytes: 17_844, sha256: 'f273cf2c9ce9bc7d6b0f4fcb8aee72f8cf5a249991308b6a144217e0760c5d3f' },
-  { dir: DIR, name: 'source-sans-3-latin-core.woff2', bytes: 18_616, sha256: 'a3853dd48650b263c16f6d1681373684483eaa38bfb413c99927ca93f8814b68' },
-  { dir: DIR, name: 'source-sans-3-latin-rest.woff2', bytes: 11_740, sha256: '9976f3c415dc28fc314c11f4bed5deef5eb017753e3701d899b587e6ed2e3225' },
-  { dir: DIR, name: 'source-sans-3-latin-ext-common.woff2', bytes: 11_600, sha256: 'bcecffe7be6310ee964675987fed39725a4b96c02bb6280fdcf46998e6069f7f' },
-  { dir: DIR, name: 'source-sans-3-latin-ext-rest.woff2', bytes: 45_420, sha256: 'd87cbc1e156400ec1eaeb9f50df8ffca513dac5b4d0d5d6ab8fbc46d8f661908' },
-  { dir: DIR, name: 'dm-serif-display-latin-core.woff2', bytes: 11_420, sha256: '3844ad1d6b683dc6c86576b50a797f4983907251a2bd0bd617997568c38821ed' },
-  { dir: DIR, name: 'dm-serif-display-latin-rest.woff2', bytes: 7_528, sha256: '579b37a6279b3159ce80986421f1f991dea79467db4ab4f8432e3266b7d903de' },
-  { dir: DIR, name: 'dm-serif-display-latin-ext.woff2', bytes: 6_800, sha256: 'dfea1d6549e78df6e55d942c1d1eba5e2f809496205bc0b3a9d684f268b60011' },
+  { dir: SOURCE_DIR, name: 'overpass-latin.woff2', bytes: 39_380, sha256: '29217ef8adef5f6c059feb461bdb029348205fc233dc9b6ca8604b0d068ac086' },
+  { dir: SOURCE_DIR, name: 'overpass-latin-ext.woff2', bytes: 46_080, sha256: '0a1c9727f08b91252c19bd4ca36caf98162455f33c0adcac935606b5d8d11938' },
+  { dir: DIR, name: 'overpass-latin-core.woff2', bytes: 27_212, sha256: '27b7dffd898afaef5a65883fa98d994006128dce58bba2ac555e5c996f0c39c4' },
+  { dir: DIR, name: 'overpass-latin-rest.woff2', bytes: 15_640, sha256: 'b0e87c81c23a574398c802874846cbd8b712223aa80bbc6406edae620619366e' },
+  { dir: DIR, name: 'overpass-latin-ext-common.woff2', bytes: 13_952, sha256: '4fd1720bcf21db833305624ac30fe8a17bae7298429785c2ac7b6d7912142069' },
+  { dir: DIR, name: 'overpass-latin-ext-rest.woff2', bytes: 38_152, sha256: 'e9bcb0113b01bb2fb994a5816e0f999fd40e1cef246042522e28c1eddf2fea83' },
 ] as const;
 
-/** The licence file and the copyright line of the family it covers, as the upstream text opens. */
-const LICENCES = [
-  { name: 'OFL-SourceSans3.txt', copyright: /^Copyright 2010-2020 Adobe \(http:\/\/www\.adobe\.com\/\), with Reserved Font Name 'Source'/ },
-  { name: 'OFL-DMSerifDisplay.txt', copyright: /^Copyright 2014-2018 Adobe \(http:\/\/www\.adobe\.com\/\).*Copyright 2019 Google LLC\./ },
-] as const;
+/** The licence file: the first line of the upstream text (google/fonts ofl/overpass/OFL.txt at 5dac96833c85), exactly. */
+const LICENCE = {
+  name: 'OFL-Overpass.txt',
+  firstLine: 'Copyright 2021 The Overpass Project Authors (https://github.com/RedHatOfficial/Overpass)',
+  bytes: 4_392,
+  sha256: '86e5ff25c701ec446d20b1a85b02ee6d36de8503a7288a4c948f5459809af1f0',
+} as const;
 
 describe('the typeface files are committed under app/fonts and fonts/source (D-279, NFR-PERF-02)', () => {
   it('app/fonts holds exactly the served files, and the latin originals are not among them', () => {
@@ -58,21 +56,29 @@ describe('the typeface files are committed under app/fonts and fonts/source (D-2
     });
   }
 
-  for (const { name, copyright, dir } of LICENCES.flatMap((l) => [DIR, SOURCE_DIR].map((dir) => ({ ...l, dir })))) {
-    it(`${relative(process.cwd(), dir)}/${name} exists and opens with its family's copyright line`, () => {
-      const path = join(dir, name);
+  for (const dir of [DIR, SOURCE_DIR]) {
+    it(`${relative(process.cwd(), dir)}/${LICENCE.name} exists, opens with the upstream first line and is the upstream text`, () => {
+      const path = join(dir, LICENCE.name);
       expect(existsSync(path), `${path} exists`).toBe(true);
-      const text = readFileSync(path, 'utf8');
-      expect(text.split('\n')[0]).toMatch(copyright);
+      const file = readFileSync(path);
+      const text = file.toString('utf8');
+      expect(text.split('\n')[0]).toBe(LICENCE.firstLine);
       expect(text, 'licence name').toContain('SIL OPEN FONT LICENSE Version 1.1');
+      expect(file.length).toBe(LICENCE.bytes);
+      expect(createHash('sha256').update(file).digest('hex'), 'sha256').toBe(LICENCE.sha256);
     });
   }
+
+  it('no file of another family is left in app/fonts or fonts/source', () => {
+    const left = [...readdirSync(DIR), ...readdirSync(SOURCE_DIR)].filter((f) => /source-sans|dm-serif|SourceSans|DMSerif/i.test(f));
+    expect(left).toEqual([]);
+  });
 });
 
 /**
  * `next/font/local` takes `declarations` once per call and puts them on every @font-face of that call, so a
  * family that has one file per subset needs one `localFont()` call per file, each with its own `unicode-range`.
- * The CSS variable the stylesheet reads (`--font-source-sans`) is built from the JS constant's name, so the
+ * The CSS variable the stylesheet reads (`--font-overpass`) is built from the JS constant's name, so the
  * `font-family` every call of a family declares has to equal that constant's name, or the variable names a
  * family that no @font-face defines (measured on the Turbopack 16.4.2 build). `wiringProblems` reads the layout's
  * source text and lists what differs from that wiring; if a formatter reflows the font block the parse finds
@@ -82,12 +88,14 @@ describe('the typeface files are committed under app/fonts and fonts/source (D-2
 const LATIN_CORE = 'U+20-7E,U+A0,U+A7,U+B7,U+304,U+308,U+329,U+2013-2014,U+2018-201D,U+2026,U+2191,U+2193';
 const LATIN_REST =
   'U+A1-A6,U+A8-B6,U+B8-FF,U+131,U+152-153,U+2BB-2BC,U+2C6,U+2DA,U+2DC,U+2000-2012,U+2015-2017,U+201E-201F,U+2021-2025,U+2027-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD';
-/** Source Sans 3's latin-ext file, cut in two (NFR-PERF-02): the letters names commonly carry, and the rest it maps. */
-const SANS_EXT_COMMON = 'U+100-101,U+104-107,U+10C-10D,U+112-113,U+116-119,U+11E-11F,U+122-123,U+128-12B,U+12E-130,U+136-137,U+13B-13C,U+141-148,U+14A-14D,U+150-151,U+158-15B,U+15E-161,U+168-16B,U+16E-173,U+179-17E,U+181,U+186,U+18A,U+190,U+192,U+194,U+253-254,U+256-257,U+25B,U+263,U+28B,U+1E62-1E63';
-const SANS_EXT_REST =
-  'U+102-103,U+108-10B,U+10E-111,U+114-115,U+11A-11D,U+120-121,U+124-127,U+12C-12D,U+132-135,U+138-13A,U+13D-140,U+149,U+14E-14F,U+154-157,U+15C-15D,U+162-167,U+16C-16D,U+174-178,U+17F-180,U+18D-18F,U+193,U+196-197,U+19A-19B,U+19E,U+1A0-1A1,U+1AF-1B1,U+1B7,U+1BF-1C3,U+1CD-1DD,U+1E2-1E7,U+1EA-1EB,U+1EE-1F0,U+1F4-1F5,U+1F7-201,U+204-205,U+208-209,U+20C-20D,U+218-220,U+222-223,U+226-227,U+237,U+23A-23E,U+241-245,U+248-249,U+250-252,U+255,U+258-25A,U+25C-262,U+264-27B,U+27D-285,U+287-28A,U+28C-292,U+294-295,U+298-299,U+29B-29F,U+2A1-2A8,U+2B0-2B4,U+2B7-2B9,U+2BD-2C1,U+2C7-2CC,U+2D0-2D7,U+2DD-2DE,U+2E0-2E4,U+2ED,U+1D25,U+1D2C,U+1D2E,U+1D30-1D31,U+1D33-1D3A,U+1D3C,U+1D3E-1D43,U+1D47-1D4B,U+1D4D,U+1D4F-1D52,U+1D56-1D58,U+1D5B,U+1D6F-1D70,U+1D79,U+1D7B,U+1D7F,U+1D9C,U+1DA0,U+1DAC,U+1DAE,U+1DB0,U+1DBB,U+1DBF,U+1E02-1E03,U+1E06-1E07,U+1E0A-1E11,U+1E16-1E17,U+1E1E-1E2B,U+1E32-1E3B,U+1E3E-1E49,U+1E52-1E53,U+1E56-1E61,U+1E66-1E67,U+1E6A-1E6F,U+1E72-1E73,U+1E7E-1E85,U+1E8E-1E97,U+1E9E-1E9F,U+1EF2-1EF9,U+2020,U+20A1,U+20A3-20A4,U+20A6-20A7,U+20A9,U+20AB,U+20AE,U+20B1-20B2,U+20B4-20B5,U+20B8-20BA,U+20BD,U+2113,U+2C60-2C62,U+2C65-2C66,U+2C71,U+2C7D,U+A722-A725,U+A74E-A74F,U+A75A-A75B,U+A764-A765,U+A779-A787,U+A789,U+A7AD-A7AE,U+A7B3,U+A7B5,U+A7F2-A7F4';
-const LATIN_EXT =
-  'U+100-2BA,U+2BD-2C5,U+2C7-2CC,U+2CE-2D7,U+2DD-2FF,U+304,U+308,U+329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C4,U+2113,U+2C60-2C7F,U+A720-A7FF';
+/**
+ * Overpass's latin-ext file, cut in two (NFR-PERF-02): the letters names commonly carry (the old Source Sans range
+ * intersected with the file's cmap), and every other code point the file maps that no latin face holds
+ * (scripts/fonts/subset.sh computes and prints both).
+ */
+const EXT_COMMON = 'U+100-101,U+104-107,U+10C-10D,U+112-113,U+116-119,U+11E-11F,U+122-123,U+128-12B,U+12E-130,U+136-137,U+13B-13C,U+141-148,U+14A-14D,U+150-151,U+158-15B,U+15E-161,U+168-16B,U+16E-173,U+179-17E,U+181,U+186,U+18A,U+190,U+192,U+194,U+253-254,U+256-257,U+25B,U+263,U+28B,U+1E62-1E63';
+const EXT_REST =
+  'U+102-103,U+108-10B,U+10E-111,U+114-115,U+11A-11D,U+120-121,U+124-127,U+12C-12D,U+132-135,U+138-13A,U+13D-140,U+149,U+14E-14F,U+154-157,U+15C-15D,U+162-167,U+16C-16D,U+174-178,U+17F,U+187-189,U+18E-18F,U+191,U+193,U+196-199,U+19D,U+1A0-1A1,U+1A4-1A5,U+1A9,U+1AC-1B4,U+1B7,U+1C0-1F5,U+1F8-21B,U+21E-21F,U+226-233,U+237,U+242-245,U+24B-24C,U+250-252,U+259,U+25F-261,U+265-266,U+268-269,U+26E-26F,U+272,U+279,U+27D-27E,U+283,U+288-28A,U+28C-28E,U+292,U+294-295,U+29E,U+2A1-2A4,U+2A6-2A7,U+2A9-2AC,U+2B0,U+2B2,U+2B7-2BA,U+2C7,U+2C9,U+2D6,U+2DD,U+2E1-2E3,U+300-301,U+303,U+309,U+323,U+1E04-1E05,U+1E0C-1E0F,U+1E12-1E13,U+1E20-1E21,U+1E24-1E25,U+1E2E-1E2F,U+1E36-1E37,U+1E3C-1E3F,U+1E44-1E47,U+1E4A-1E4D,U+1E50-1E53,U+1E6C-1E71,U+1E80-1E85,U+1E92-1E93,U+1E9E,U+1EF2-1EF9,U+2020,U+20A1-20AB,U+20AD-20BF,U+2113,U+2C64,U+2C6D,U+2C72-2C73,U+A78B-A78D,U+A7AA';
 
 interface FontCall {
   constName: string;
@@ -117,7 +125,7 @@ function declared(call: FontCall, name: string): string | undefined {
 interface Spec {
   file: string;
   range: string;
-  family: 'sourceSans' | 'dmSerif';
+  family: 'overpass';
   /** Not preloaded: the latin-ext and latin-rest files. Only the core file of a family is preloaded. */
   ext: boolean;
   /** The CSS variable only the core call of a family defines. */
@@ -127,15 +135,12 @@ interface Spec {
 }
 
 const SPECS: Spec[] = [
-  { file: 'source-sans-3-latin-core.woff2', range: LATIN_CORE, family: 'sourceSans', ext: false, variable: '--font-source-sans' },
-  { file: 'source-sans-3-latin-rest.woff2', range: LATIN_REST, family: 'sourceSans', ext: true },
-  { file: 'source-sans-3-latin-ext-rest.woff2', range: SANS_EXT_REST, family: 'sourceSans', ext: true },
-  { file: 'source-sans-3-latin-ext-common.woff2', range: SANS_EXT_COMMON, family: 'sourceSans', ext: true },
-  // next/font/local builds the fallback face from Arial unless told otherwise, and Arial is a sans-serif: DM Serif
-  // Display headings would show in it while the font loads, or for good if it fails. The Google build used a serif.
-  { file: 'dm-serif-display-latin-core.woff2', range: LATIN_CORE, family: 'dmSerif', ext: false, variable: '--font-dm-serif', fallback: "'Times New Roman'" },
-  { file: 'dm-serif-display-latin-rest.woff2', range: LATIN_REST, family: 'dmSerif', ext: true },
-  { file: 'dm-serif-display-latin-ext.woff2', range: LATIN_EXT, family: 'dmSerif', ext: true },
+  // next/font/local builds the fallback face from Arial unless told otherwise; Overpass is a sans-serif, so Arial is the
+  // metric match for the face every page preloads (the layout writes it out, so a change of fallback is a visible edit).
+  { file: 'overpass-latin-core.woff2', range: LATIN_CORE, family: 'overpass', ext: false, variable: '--font-overpass', fallback: "'Arial'" },
+  { file: 'overpass-latin-rest.woff2', range: LATIN_REST, family: 'overpass', ext: true },
+  { file: 'overpass-latin-ext-rest.woff2', range: EXT_REST, family: 'overpass', ext: true },
+  { file: 'overpass-latin-ext-common.woff2', range: EXT_COMMON, family: 'overpass', ext: true },
 ];
 
 /** What differs, in the layout source `src`, from the wiring above; empty when it is wired as required. */
@@ -164,12 +169,12 @@ function wiringProblems(src: string): string[] {
     // The CSS variable is built from the constant's name, so the latin call is the constant named for the family.
     if (!s.ext) check('constant name', c.constName, s.family);
   }
-  for (const family of ['sourceSans', 'dmSerif'] as const) {
+  for (const family of ['overpass'] as const) {
     // Where two faces of a family cover a code point, the one declared last is tried first. Google's stylesheet declared
     // latin-ext before latin, so the code points they share resolved to the latin file where it had the glyph: U+0304,
     // U+0308 and U+0329 are in core now, U+0131 and U+0152-0153 in rest, so latin-ext comes before both of the files cut
     // from the latin one. (U+2020, which no latin file maps, is declared by the latin-ext faces only.)
-    // (Source Sans 3's two latin-ext faces declare no code point the latin faces declare; the order is kept anyway.)
+    // (Overpass's two latin-ext faces declare no code point the latin faces declare; the order is kept anyway.)
     const fam = SPECS.filter((x) => x.family === family);
     for (const ext of fam.filter((x) => x.file.includes('-latin-ext'))) {
       for (const latin of fam.filter((x) => !x.file.includes('-latin-ext'))) {
@@ -187,14 +192,11 @@ function wiringProblems(src: string): string[] {
     const c = callFor.get(file);
     return c && prop(c, 'weight');
   };
-  // One variable file serves every weight a page asks for, so the three Source Sans calls share a weight range; which
+  // One variable file serves every weight a page asks for, so the four Overpass calls share a weight range; which
   // range is the UI unit's to narrow (SRS UX-38), not this test's to pin.
-  const sansWeights = ['source-sans-3-latin-core.woff2', 'source-sans-3-latin-rest.woff2', 'source-sans-3-latin-ext-common.woff2', 'source-sans-3-latin-ext-rest.woff2'].map(weight);
-  if (!sansWeights[0] || sansWeights.some((w) => w !== sansWeights[0])) problems.push(`the four Source Sans calls declare the weights ${sansWeights.map((w) => JSON.stringify(w)).join(', ')}, expected one weight on all`);
-  for (const file of ['dm-serif-display-latin-core.woff2', 'dm-serif-display-latin-rest.woff2', 'dm-serif-display-latin-ext.woff2']) {
-    if (weight(file) !== '400') problems.push(`${file} weight: ${JSON.stringify(weight(file))}, expected "400"`);
-  }
-  if (!src.includes('className={`${sourceSans.variable} ${dmSerif.variable}`}')) problems.push('the html element lost a font variable class');
+  const weights = SPECS.map((x) => weight(x.file));
+  if (!weights[0] || weights.some((w) => w !== weights[0])) problems.push(`the four Overpass calls declare the weights ${weights.map((w) => JSON.stringify(w)).join(', ')}, expected one weight on all`);
+  if (!src.includes('className={overpass.variable}')) problems.push('the html element lost its font variable class');
   return problems;
 }
 
@@ -212,55 +214,55 @@ describe('the layout loads the committed files with next/font/local (D-279)', ()
     return out;
   }
 
-  it('(harness) a layout that narrows the weight on every Source Sans call passes, so the range may change', () => {
+  it('(harness) a layout that narrows the weight on every Overpass call passes, so the range may change', () => {
     expect(wiringProblems(mutate("weight: '400 700'", "weight: '500 700'", true))).toEqual([]);
   });
 
   it('(harness) each way the wiring can break is reported', () => {
     expect(wiringProblems(mutate("weight: '400 700'", "weight: '500 700'"))[0]).toMatch(/one weight on all/);
     expect(wiringProblems(mutate("value: 'U+20-7E,", "value: 'U+0-FF,"))[0]).toMatch(/unicode-range/);
-    expect(wiringProblems(mutate("value: 'dmSerif'", "value: 'dmSerifDisplay'"))[0]).toMatch(/font-family/);
+    expect(wiringProblems(mutate("value: 'overpass'", "value: 'overpassSans'"))[0]).toMatch(/font-family/);
     expect(wiringProblems(mutate("  preload: false,\n", ''))[0]).toMatch(/preload/);
-    expect(wiringProblems(mutate("  adjustFontFallback: 'Times New Roman',\n", ''))[0]).toMatch(/adjustFontFallback/);
-    expect(wiringProblems(mutate('${sourceSans.variable} ', ''))[0]).toMatch(/variable class/);
+    expect(wiringProblems(mutate("  adjustFontFallback: 'Arial',\n", ''))[0]).toMatch(/adjustFontFallback/);
+    expect(wiringProblems(mutate('className={overpass.variable}', 'className=""'))[0]).toMatch(/variable class/);
     expect(wiringProblems('')[0]).toMatch(/0 localFont calls/);
     // The order check reads where each file's path first appears, so exchanging the two paths exchanges the order.
-    const swapped = mutate("./fonts/source-sans-3-latin-core.woff2", '@@').replace('./fonts/source-sans-3-latin-ext-common.woff2', './fonts/source-sans-3-latin-core.woff2').replace('@@', './fonts/source-sans-3-latin-ext-common.woff2');
+    const swapped = mutate("./fonts/overpass-latin-core.woff2", '@@').replace('./fonts/overpass-latin-ext-common.woff2', './fonts/overpass-latin-core.woff2').replace('@@', './fonts/overpass-latin-ext-common.woff2');
     expect(wiringProblems(swapped).join('\n')).toMatch(/is declared after/);
     expect(wiringProblems(mutate('never use', 'do use')).join('\n')).toMatch(/never to use the constant/);
   });
 });
 
 /**
- * The uses of a font variable in the stylesheet text `css` (comments ignored) that lack the fallback this unit
- * requires inside the var(): `system-ui` for the Source Sans variable and `Georgia` for the DM Serif one. A var()
- * with no fallback makes the whole declaration invalid when the variable is unset, so the text drops to the
- * browser's default instead of the stack that follows it.
+ * The uses of a font variable in the stylesheet text `css` (comments ignored) that break this unit's rule: the
+ * Overpass variable carries the fallback `system-ui` inside the var(), and the variables of the two retired families
+ * are not read at all (nothing defines them). A var() with no fallback makes the whole declaration invalid when the
+ * variable is unset, so the text drops to the browser's default instead of the stack that follows it.
  */
 function fontVariableProblems(css: string): string[] {
   const text = css.replace(/\/\*[\s\S]*?\*\//g, '');
   const problems: string[] = [];
-  for (const m of text.matchAll(/var\(\s*(--font-source-sans|--font-dm-serif)\s*(?:,\s*([^)]*?)\s*)?\)/g)) {
-    const want = m[1] === '--font-source-sans' ? 'system-ui' : 'Georgia';
-    if (m[2] !== want) problems.push(`${m[0]} has ${m[2] === undefined ? 'no fallback' : `the fallback ${m[2]}`}, expected ${want}`);
+  for (const m of text.matchAll(/var\(\s*(--font-overpass|--font-source-sans|--font-dm-serif)\s*(?:,\s*([^)]*?)\s*)?\)/g)) {
+    if (m[1] !== '--font-overpass') problems.push(`${m[0]} reads a variable no layout defines any more`);
+    else if (m[2] !== 'system-ui') problems.push(`${m[0]} has ${m[2] === undefined ? 'no fallback' : `the fallback ${m[2]}`}, expected system-ui`);
   }
   return problems;
 }
 
-describe('every stylesheet reads the font variables the layout defines with a fallback (D-279)', () => {
+describe('every stylesheet reads the font variable the layout defines with a fallback (D-279)', () => {
   const out = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', 'app', 'components'], { encoding: 'utf8' });
   const sheets = out.split('\n').filter((f) => f.endsWith('.css') && existsSync(f));
 
-  // app/global-error.tsx renders its own <html> without the two font classes. It loads none of this stylesheet today
+  // app/global-error.tsx renders its own <html> without the font class. It loads none of this stylesheet today
   // (only app/layout.tsx imports it), but a page of that kind that did, or a second root layout, would leave the
-  // variables unset, so every use keeps its fallback.
-  it('app/globals.css: --font-family and --font-display keep a valid fallback inside their var()', () => {
+  // variable unset, so every use keeps its fallback.
+  it('app/globals.css: --font-family reads --font-overpass with a valid fallback, and --font-display is the same family', () => {
     const css = readFileSync(join(process.cwd(), 'app', 'globals.css'), 'utf8');
-    expect(css).toMatch(/--font-family:\s*var\(--font-source-sans,\s*system-ui\),/);
-    expect(css).toMatch(/--font-display:\s*var\(--font-dm-serif,\s*Georgia\),/);
+    expect(css).toMatch(/--font-family:\s*var\(--font-overpass,\s*system-ui\),/);
+    expect(css).toMatch(/--font-display:\s*var\(--font-family\);/);
   });
 
-  it('no .css file under app or components reads --font-source-sans or --font-dm-serif without its fallback', () => {
+  it('no .css file under app or components reads a font variable without its fallback, or one of the retired families', () => {
     // A scan over no files would pass for nothing.
     expect(sheets.length, 'stylesheets in the scan').toBeGreaterThan(5);
     expect(sheets).toContain('app/globals.css');
@@ -268,11 +270,14 @@ describe('every stylesheet reads the font variables the layout defines with a fa
     expect(problems).toEqual({});
   });
 
-  it('(harness) a use without its fallback, or with another one, is reported; the right fallback and a comment are not', () => {
-    expect(fontVariableProblems('.a { font-family: var(--font-source-sans), monospace; }')).toEqual(['var(--font-source-sans) has no fallback, expected system-ui']);
-    expect(fontVariableProblems('.a { font-family: var(--font-dm-serif); }')).toEqual(['var(--font-dm-serif) has no fallback, expected Georgia']);
-    expect(fontVariableProblems('.a { font-family: var(--font-source-sans, monospace), x; }')).toEqual(['var(--font-source-sans, monospace) has the fallback monospace, expected system-ui']);
-    expect(fontVariableProblems('.a { font-family: var(--font-source-sans, system-ui), monospace; } .b { font-family: var( --font-dm-serif , Georgia ); }')).toEqual([]);
+  it('(harness) a use without its fallback, or with another one, or of a retired variable is reported; the right fallback and a comment are not', () => {
+    expect(fontVariableProblems('.a { font-family: var(--font-overpass), monospace; }')).toEqual(['var(--font-overpass) has no fallback, expected system-ui']);
+    expect(fontVariableProblems('.a { font-family: var(--font-overpass, monospace), x; }')).toEqual(['var(--font-overpass, monospace) has the fallback monospace, expected system-ui']);
+    expect(fontVariableProblems('.a { font-family: var(--font-source-sans, system-ui); } .b { font-family: var(--font-dm-serif); }')).toEqual([
+      'var(--font-source-sans, system-ui) reads a variable no layout defines any more',
+      'var(--font-dm-serif) reads a variable no layout defines any more',
+    ]);
+    expect(fontVariableProblems('.a { font-family: var(--font-overpass, system-ui), monospace; } .b { font-family: var( --font-overpass , system-ui ); }')).toEqual([]);
     expect(fontVariableProblems('/* was var(--font-source-sans) */ .a { color: red; }')).toEqual([]);
   });
 });
