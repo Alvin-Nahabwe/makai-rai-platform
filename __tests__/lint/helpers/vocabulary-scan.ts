@@ -208,14 +208,47 @@ export const lintHtml = (file: string, html: string, rules: Rule[] = RULES, name
   htmlTexts(file, html).flatMap((t) => lintText(t.where, t.text, rules, names));
 
 // ---------------------------------------------------------------------------------------------------------------------
-// Notebooks: markdown cells only. Where is `file:cell <n> line <m>` (both 1-based within the notebook's cells).
+// Plain text and markdown, by block: lines of one paragraph are joined with their white space collapsed, so a phrase
+// across a line wrap is found; a hit reports the line (1-based) its first character sits on.
 
-export function notebookTexts(file: string, json: string): Array<{ where: string; text: string }> {
-  const nb = JSON.parse(json) as { cells: Array<{ cell_type: string; source: string | string[] }> };
+export type Block = { text: string; lineAt: (index: number) => number };
+const MD_HEADING = /^\s{0,3}#{1,6}\s/;
+const MD_BLOCK_START = /^\s{0,3}(?:[-*+]\s|\d+[.)]\s|>|\|)/;
+
+export function textBlocks(text: string, markdown: boolean): Block[] {
+  const groups: Array<Array<{ line: string; n: number }>> = [];
+  let current: Array<{ line: string; n: number }> | null = null;
+  text.split('\n').forEach((line, i) => {
+    if (!line.trim()) { current = null; return; }
+    const heading = markdown && MD_HEADING.test(line);
+    if (!current || heading || (markdown && MD_BLOCK_START.test(line)) || (markdown && MD_HEADING.test(current[0].line))) {
+      current = [];
+      groups.push(current);
+    }
+    current.push({ line, n: i + 1 });
+  });
+  return groups.map((g) => {
+    let out = '';
+    const lines: number[] = [];
+    for (const { line, n } of g) {
+      for (const ch of line.trim()) {
+        if (/\s/.test(ch)) { if (!out.endsWith(' ')) { out += ' '; lines.push(n); } } else { out += ch; lines.push(n); }
+      }
+      if (!out.endsWith(' ')) { out += ' '; lines.push(n); }
+    }
+    const text = out.trimEnd();
+    return { text, lineAt: (index: number) => lines[Math.min(index, lines.length - 1)] };
+  });
+}
+
+/** Markdown cells only, by block. Where is `file:cell <n> line <m>` (both 1-based within the notebook). */
+export function notebookTexts(file: string, json: string): TextUnit[] {
+  const nb = JSON.parse(json) as { cells?: Array<{ cell_type: string; source: string | string[] }> };
+  if (!Array.isArray(nb.cells)) throw new Error(`${file}: no "cells" list`);
   return nb.cells.flatMap((c, i) => {
     if (c.cell_type !== 'markdown') return [];
     const src = Array.isArray(c.source) ? c.source.join('') : c.source;
-    return src.split('\n').map((line, j) => ({ where: `${file}:cell ${i + 1} line ${j + 1}`, text: line }));
+    return textBlocks(src, true).map((b) => ({ text: b.text, where: (index: number) => `${file}:cell ${i + 1} line ${b.lineAt(index)}` }));
   });
 }
 
@@ -296,7 +329,7 @@ export const scopeCopyModules = () => scan(filesMatching(/^lib\/(?:.*\/)?copy\.t
 export const scopeFieldMaps = () => scan(filesMatching(/^data\/fieldmaps\/[^/]+\.json$/), (f) => fieldMapTexts(f, read(f)));
 export const scopeEmail = () => scan(
   ['lib/email/templates.ts', ...filesMatching(/^lib\/email\/templates\/[^/]+\.ts$/), 'ops/host/break-glass-notice.txt'],
-  (f) => f.endsWith('.txt') ? read(f).split('\n').map((line, i) => ({ where: `${f}:${i + 1}`, text: line })) : tsLiterals(f, read(f)),
+  (f) => f.endsWith('.txt') ? textBlocks(read(f), false).map((b) => ({ text: b.text, where: (i: number) => `${f}:${b.lineAt(i)}` })) : tsLiterals(f, read(f)),
 );
 export const scopeTemplates = () => scan(filesMatching(/^public\/templates\/[^/]+\.html$/), (f) => htmlTexts(f, read(f)));
 export const scopeNotebooks = () => scan(filesMatching(/^(?:public\/notebooks\/[^/]+|notebooks\/.+)\.ipynb$/), (f) => notebookTexts(f, read(f)));

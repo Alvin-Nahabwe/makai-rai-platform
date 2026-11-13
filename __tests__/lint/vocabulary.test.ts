@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   type ContentExclusions, contentStrings, CONTENT_FILES, fieldMapTexts, formatHit, lintHtml, lintText, lintTs, notebookTexts,
   phraseRules, PROPER_NAMES, ratchetViolations, readBundle, RULES, RUNNING, scopeContent, scopeCopyModules, scopeEmail,
-  scopeFieldMaps, scopeNotebooks, type ScopeResult, type SignedKeys,
+  scopeFieldMaps, scopeNotebooks, type ScopeResult, type SignedKeys, textBlocks,
   scopeTemplates, VOCABULARY, type Worklist, worklistOf, writeHits,
 } from './helpers/vocabulary-scan';
 
@@ -207,6 +207,26 @@ describe('the vocabulary lint, on fixtures', () => {
     ]);
   });
 
+  it('plain text is read by paragraph: a phrase across a line wrap is found and reported on the line it starts', () => {
+    const notice = 'Subject: notice\n\nA login was made at the\nRAI\n   Toolkit server.\n\nEvent: {EVENT}';
+    expect(textBlocks(notice, false).flatMap((b) => lintText((i) => `n.txt:${b.lineAt(i)}`, b.text)).map(formatHit).sort()).toEqual([
+      'n.txt:3: "login" → use "sign in, sign out" (concept sign-in-sign-out)',
+      'n.txt:4: "RAI Toolkit" → use "MAK-AI RAI Platform" (concept product)',
+    ]);
+  });
+
+  it('markdown is read by block: wrapped lines join; a heading is one line; a list item starts a block', () => {
+    expect(textBlocks('# Organization\nroles\n- Dashboard\n  continued\n- item', true).map((b) => b.text)).toEqual(['# Organization', 'roles', '- Dashboard continued', '- item']);
+    expect(textBlocks('# Title\nPart of the RAI\nToolkit.', true).map((b) => b.text)).toEqual(['# Title', 'Part of the RAI Toolkit.']);
+  });
+
+  it('notebooks: a phrase wrapped across lines of a markdown cell is found, on its first line', () => {
+    const nb = JSON.stringify({ cells: [{ cell_type: 'markdown', source: ['Intro.\n', '\n', 'Part of the RAI\n', 'Toolkit.\n'] }] });
+    expect(notebookTexts('n.ipynb', nb).flatMap((t) => lintText(t.where, t.text)).map(formatHit)).toEqual([
+      'n.ipynb:cell 1 line 3: "RAI Toolkit" → use "MAK-AI RAI Platform" (concept product)',
+    ]);
+  });
+
   it('notebooks: markdown cells are scanned, code cells are not', () => {
     const nb = JSON.stringify({ cells: [
       { cell_type: 'markdown', source: ['# Title\n', 'Part of the RAI Toolkit.\n'] },
@@ -313,7 +333,7 @@ const CONTENT_STRINGS: Record<string, number> = { 'data/content/5.1.0': 977 };
 /** Today's counts (13 Nov 2026), as floors: a scope that reads fewer strings has lost a file or a field. */
 const COPY_STRINGS_FLOOR = 206;
 const FIELD_MAP_STRINGS_FLOOR = 156;
-const EMAIL_STRINGS_FLOOR = 52;
+const EMAIL_STRINGS_FLOOR = 45;
 
 describe('the vocabulary lint, on the repository', () => {
   it('scope (2): every string of the running content bundle, signed and unsigned, holds no retired phrase', () => {
