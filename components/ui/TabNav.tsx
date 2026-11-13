@@ -16,14 +16,12 @@ export type TabNavItem = {
 export type TabNavProps = { label: string; items: readonly TabNavItem[] };
 
 /**
- * Brings the current tab wholly into view inside its own row, by the row's `scrollLeft` alone: never the page's scroll
- * position, never smoothly, and not at all when the tab is already wholly in view. The row's scroll padding is kept
- * clear at both ends, as the browser keeps it when it scrolls a focused tab into view. `scrollLeft` is a physical offset,
- * so the same arithmetic holds right to left.
+ * Brings a tab wholly into view inside its own row, by the row's `scrollLeft` alone: never the page's scroll position,
+ * never smoothly, and not at all when the tab is already wholly in view. The row's scroll padding is kept clear at both
+ * ends, as the browser keeps it when it scrolls a focused tab into view. `scrollLeft` is a physical offset, so the same
+ * arithmetic holds right to left.
  */
-function revealCurrent(list: HTMLElement): void {
-  const tab = list.querySelector<HTMLElement>('[aria-current="page"]');
-  if (tab === null) return; // no tab is current: nothing to bring into view
+function reveal(list: HTMLElement, tab: Element): void {
   const row = list.getBoundingClientRect();
   const box = tab.getBoundingClientRect();
   // The row's scroll padding is a length here (TabNav.css); `auto` reads as NaN and means no padding.
@@ -34,11 +32,28 @@ function revealCurrent(list: HTMLElement): void {
 }
 
 /**
+ * Brings the focused tab into view when the focus ring is drawn (`:focus-visible`: focus from the keyboard), so the tab
+ * and its ring are never cut by the row's edge. The browser's own scroll on focus is not enough: Chrome brings in a tab
+ * that is wholly hidden and leaves one that already shows a strip of itself where it is. Focus from a pointer press draws
+ * no ring and moves nothing: a row that moved under the pointer would put another tab beneath it before the release.
+ */
+function revealFocused(list: HTMLElement, focused: Element): void {
+  if (focused.matches(':focus-visible')) reveal(list, focused);
+}
+
+/** Brings the current tab into view; with no tab current there is nothing to bring. */
+function revealCurrent(list: HTMLElement): void {
+  const tab = list.querySelector('[aria-current="page"]');
+  if (tab !== null) reveal(list, tab);
+}
+
+/**
  * Tabs as navigation (plan 1A Task 5, decision B9; modern-web-guidance `tabs` and `navbar`): each tab is an address, so
  * this is a labelled <nav> of links that stay in the tab order, never an ARIA tab list. The current one says
  * aria-current="page" and carries a 3 px underline (a shape, not a colour alone). The tabs keep one row that scrolls
  * inside itself; an effect brings the current tab into view when the page opens, when its fonts arrive and when the tabs
- * change (a client component for that alone: with no script the row still scrolls by hand). The links are plain next/link,
+ * change, and the row brings in a tab focused from the keyboard (a client component for those two alone: with no script
+ * the row still scrolls by hand, and the browser's own scroll on focus still applies). The links are plain next/link,
  * which prefetches: a tab bar holds a few links, each a likely next page. The list keeps role="list" because Safari
  * drops the list role from a list styled `list-style: none`.
  */
@@ -57,7 +72,7 @@ export function TabNav({ label, items }: TabNavProps): ReactElement {
   }, [shape]);
   return (
     <nav className="ui-tabnav" aria-label={label}>
-      <ul ref={listRef} className="ui-tabnav__list" role="list">
+      <ul ref={listRef} className="ui-tabnav__list" role="list" onFocus={(event) => revealFocused(event.currentTarget, event.target)}>
         {items.map((item, i) => (
           <li key={`${i}-${item.href}`}>
             <Link className={item.current ? 'ui-tabnav__item ui-tabnav__item--current' : 'ui-tabnav__item'}

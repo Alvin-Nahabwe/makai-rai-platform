@@ -971,11 +971,24 @@ test.describe('TabNav', () => {
     const tops = new Set(await list.getByRole('link').evaluateAll((as) => as.map((a) => Math.round(a.getBoundingClientRect().top))));
     expect(tops.size).toBe(1);
     await expectNoHorizontalScroll(page);
-    // By keyboard: from the row's first tab, Tab four times to the last.
+    // By keyboard: from the row's first tab, Tab along the row to the last. Every stop is checked, not the last alone:
+    // Chrome's own scroll on focus brings in a tab that is wholly hidden and leaves one that already shows a strip of
+    // itself where it is (measured on this row in Chrome 157: the third tab stayed with 43 px showing and the last with
+    // 70 px of its 207), so the row itself brings the focused tab in.
     const links = list.getByRole('link');
+    /** How far tab `i` runs past each end of the row, in whole pixels: both 0 when it is wholly in view inside the row. */
+    const pastRow = (i: number) => links.nth(i).evaluate((a) => {
+      const box = a.getBoundingClientRect();
+      const rowBox = (a.closest('ul') as Element).getBoundingClientRect();
+      return { start: Math.max(0, Math.round(rowBox.left - box.left)), end: Math.max(0, Math.round(box.right - rowBox.right)) };
+    });
     await links.first().focus();
     await scrollSettled(page);
-    for (let i = 0; i < 4; i += 1) await page.keyboard.press('Tab');
+    for (let i = 1; i < 5; i += 1) {
+      await page.keyboard.press('Tab');
+      await expect(links.nth(i)).toBeFocused();
+      expect(await pastRow(i), `tab ${i + 1}, reached by Tab, is wholly inside the row`).toEqual({ start: 0, end: 0 });
+    }
     await scrollSettled(page);
     const last = list.getByRole('link', { name: 'Cross-cutting questions', exact: true });
     await expect(last).toBeFocused();
@@ -990,6 +1003,42 @@ test.describe('TabNav', () => {
         inside: box.left - outset >= rowBox.left - 0.5 && box.right + outset <= rowBox.right + 0.5 };
     });
     expect(ring).toEqual({ focusVisible: true, style: 'solid', width: '3px', outset: 0, inside: true });
+    // And back along the row with Shift+Tab, to the first.
+    for (let i = 3; i >= 0; i -= 1) {
+      await page.keyboard.press('Shift+Tab');
+      await expect(links.nth(i)).toBeFocused();
+      expect(await pastRow(i), `tab ${i + 1}, reached by Shift+Tab, is wholly inside the row`).toEqual({ start: 0, end: 0 });
+    }
+    expect(await page.evaluate(() => window.scrollX), 'the page did not scroll sideways').toBe(0);
+    await expectNoHorizontalScroll(page);
+  });
+
+  test('at 320 px a pointer press on a partly shown tab leaves the row where it is, and the click reaches that tab', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    await openKit(page);
+    const list = page.getByRole('navigation', { name: 'Sample guidance', exact: true }).getByRole('list');
+    await list.scrollIntoViewIfNeeded();
+    await scrollSettled(page);
+    // The row's own look at its current tab runs once more when the fonts are in: wait for it before placing the row.
+    await page.evaluate(() => document.fonts.ready.then(() => undefined));
+    // The fourth tab runs 60 px past the row's end, and the press is 6 px inside that end. A row that moved on the press
+    // to bring the tab in (76 px, measured without the keyboard-only rule) would put the next tab under the pointer
+    // before the release.
+    const at = await list.evaluate((ul) => {
+      const tab = ul.querySelectorAll('a')[3];
+      ul.scrollLeft += tab.getBoundingClientRect().right - ul.getBoundingClientRect().right - 60;
+      const rowBox = ul.getBoundingClientRect();
+      const box = tab.getBoundingClientRect();
+      const x = rowBox.right - 6;
+      const y = box.top + box.height / 2;
+      return { x, y, left: ul.scrollLeft, past: Math.round(box.right - rowBox.right), under: document.elementFromPoint(x, y)?.textContent };
+    });
+    expect({ past: at.past, under: at.under }, 'the fourth tab is partly shown, under the pointer').toEqual({ past: 60, under: 'Post-processing' });
+    await page.mouse.move(at.x, at.y);
+    await page.mouse.down();
+    expect(await list.evaluate((ul) => ul.scrollLeft), 'the press did not move the row').toBe(at.left);
+    await page.mouse.up();
+    await expect(page).toHaveURL(/\?guide=post$/);
   });
 });
 

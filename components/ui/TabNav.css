@@ -1,6 +1,6 @@
 /* Tabs as navigation (plan 1A Task 5, decision B9; modern-web-guidance `tabs`). The tabs keep one row: when they do not
    fit, the list scrolls sideways inside itself (the guide's first strategy), never the page; TabNav.tsx brings the
-   current tab into view. The current tab is shown
+   current tab into view, and a tab focused from the keyboard. The current tab is shown
    by a 3 px underline on a pseudo-element that takes no space, and its ink colour; nothing changes a tab's size. The
    underline is a border, so forced colours keep it; it is the only one drawn under a tab. */
 .ui-tabnav {

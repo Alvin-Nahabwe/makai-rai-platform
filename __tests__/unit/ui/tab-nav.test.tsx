@@ -50,7 +50,7 @@ describe('TabNav', () => {
     expect(css).not.toMatch(/box-shadow/);
   });
 
-  it('is a client component, for the effect that brings the current tab into view inside its row', () => {
+  it('is a client component, to bring the current tab and a keyboard-focused tab into view by the row\'s own scroll alone', () => {
     const source = readFileSync('components/ui/TabNav.tsx', 'utf8');
     expect(source).toMatch(/^'use client';/);
     expect(source).not.toMatch(/scrollIntoView|window\.scroll|scrollTo\(|behavior/);
