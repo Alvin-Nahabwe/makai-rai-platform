@@ -19,7 +19,7 @@ const { sendEmail } = await import('../../lib/email/send');
 const { POST: REQUEST } = await import('../../app/api/password-reset/route');
 const { POST: COMPLETE } = await import('../../app/api/password-reset/complete/route');
 const { resolveIdentity, SessionError } = await import('../../lib/auth/identity');
-const { VALIDATION_COPY } = await import('../../lib/errors/copy');
+const { VALIDATION_COPY } = await import('../../lib/http/copy');
 const { RESET_PER_ACCOUNT_PER_HOUR, RESET_PER_PLATFORM_PER_HOUR, RESET_TTL_MS } = await import('../../lib/data/passwordReset');
 
 const M21 = 'If an account exists for this email, we have sent a link. It works once and expires in 30 minutes.';

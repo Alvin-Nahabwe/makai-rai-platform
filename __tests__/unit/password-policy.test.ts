@@ -18,7 +18,7 @@ vi.mock('next/server', async (orig) => ({ ...(await orig<typeof import('next/ser
 vi.mock('../../lib/email/send', async (orig) => ({ ...(await orig<typeof import('../../lib/email/send')>()), sendEmail: vi.fn(async () => ({ id: 'm1' })) }));
 
 const { validatePassword, PASSWORD_MIN_LENGTH } = await import('../../lib/validate');
-const { VALIDATION_COPY } = await import('../../lib/errors/copy');
+const { VALIDATION_COPY } = await import('../../lib/http/copy');
 const { authorizeCredentials } = await import('../../lib/auth/credentials');
 const { POST: CHANGE } = await import('../../app/api/users/me/password/route');
 const { POST: REGISTER } = await import('../../app/api/v1/invitations/[token]/register/route');

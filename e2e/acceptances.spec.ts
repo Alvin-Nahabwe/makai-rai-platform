@@ -7,7 +7,7 @@ import { buildOrg, type FixtureAccount, type OrgFixture } from '../__tests__/hel
 import { claimMatches } from '../lib/claims/pattern';
 import { currentLegalText } from '../lib/legal/registry';
 import { acceptanceError } from '../lib/legal/kinds';
-import { VALIDATION_COPY } from '../lib/errors/copy';
+import { VALIDATION_COPY } from '../lib/http/copy';
 import { ACCEPT_LABEL } from '../components/legal/AcceptancesForm';
 import { ACCEPTED_KINDS, CONSENT_TYPE_FOR } from '../types/legal';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';

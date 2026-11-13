@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { validateEmail } from '../../lib/validate';
 import { redactText } from '../../lib/redact';
-import { VALIDATION_COPY } from '../../lib/errors/copy';
+import { VALIDATION_COPY } from '../../lib/http/copy';
 
 /**
  * RL 2.3 / 7.12: an address the platform will hold is an address the log redactor must catch.

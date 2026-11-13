@@ -6,8 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { safeCallbackUrl } from '@/lib/safe-callback-url';
 import { DRAFT_PREFIX, openDraftStore } from '@/lib/client/drafts';
-import { M20 } from '@/lib/http/messages';
-import { SIGN_IN_COPY } from '@/lib/auth/copy';
+import { AUTH_MESSAGE_COPY, SIGN_IN_COPY } from '@/lib/auth/copy';
 import { useHydrated } from '@/lib/client/useHydrated';
 import { Button } from '@/components/ui/Button';
 import { StatusRegion } from '@/components/ui/StatusRegion';
@@ -35,7 +34,7 @@ function rateLimitedText(code: string | null | undefined): string {
  * not told as a wrong password; it says nothing about the account either way.
  */
 export function signInErrorText(result: { error?: string | null; code?: string | null }): string {
-  if (result.error === 'CredentialsSignin') return M20;
+  if (result.error === 'CredentialsSignin') return AUTH_MESSAGE_COPY.wrongCredentials;
   if (result.error === 'rate_limited') return rateLimitedText(result.code);
   if (result.error === 'sign_in_busy') return SIGN_IN_BUSY;
   return SIGN_IN_SERVER_PROBLEM;
@@ -138,8 +137,10 @@ export function LoginView(v: LoginViewProps) {
         <TextInput id="password" name="password" label={SIGN_IN_COPY.password} type={v.showPassword ? 'text' : 'password'} required
           autoComplete="current-password" value={v.password} onChange={(e) => v.onPassword(e.currentTarget.value)} />
         {/* The kit's Button cannot carry aria-pressed or aria-controls (ruling T16-5), so this is a native button in the kit's classes. */}
-        <button type="button" className="ui-button ui-button--quiet ui-button--compact" aria-controls="password"
-          aria-pressed={v.showPassword} onClick={v.onToggleShow}>{SIGN_IN_COPY.showPassword}</button>
+        <p style={{ margin: 'calc(-1 * var(--space-4)) 0 var(--space-6)' }}>
+          <button type="button" className="ui-button ui-button--quiet ui-button--compact" aria-controls="password"
+            aria-pressed={v.showPassword} onClick={v.onToggleShow}>{SIGN_IN_COPY.showPassword}</button>
+        </p>
         <Button variant="primary" type="submit" disabled={v.loading || v.hydrated === false}>
           {v.loading ? SIGN_IN_COPY.submitting : SIGN_IN_COPY.submit}
         </Button>

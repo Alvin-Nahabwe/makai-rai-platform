@@ -758,5 +758,13 @@
     "property": "The module-level lines added are the imports of the copy constants the cases read (AUTH_MESSAGE_COPY, SIGN_IN_COPY, FORGOT_COPY, RESET_COPY, VALIDATION_COPY) and one helper, regionText, that reads the words inside a live region of a given role with the markup tags removed; it asserts nothing and no case is removed",
     "proof": "__tests__/unit/auth-pages.test.tsx::M-20 FR-ACC-05: every refused sign-in shows one text, and there is no Create account link: expect(regionText(markup, 'alert')).toBe(M20)",
     "task": "1A-16"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/auth-pages.test.tsx::M-20 M-21 M-22: the texts live once, in lib/http/messages.ts, and every screen and route imports them",
+    "replacedBy": "__tests__/unit/auth-pages.test.tsx::M-20 M-21 M-22: the texts live once, in lib/http/messages.ts, and every screen and route imports them",
+    "property": "Each of M-20, M-21 and M-22 is written once (in lib/auth/copy.ts, re-exported by lib/http/messages.ts) and no screen or route repeats the text: the two server files still import M21 and M22 from lib/http/messages, and the three client screens now import AUTH_MESSAGE_COPY from lib/auth/copy and read the matching key, so the sign-in pages never load lib/http/messages.ts",
+    "proof": "__tests__/unit/auth-pages.test.tsx::M-20 M-21 M-22: the texts live once, in lib/http/messages.ts, and every screen and route imports them: the users map for the server files, the clients map (import of AUTH_MESSAGE_COPY, the key read, no lib/http/messages import) and the no-repeat check for all five files",
+    "task": "1A-16"
   }
 ]

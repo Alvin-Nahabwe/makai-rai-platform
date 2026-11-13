@@ -4,8 +4,7 @@ import { useState, useSyncExternalStore, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { PASSWORD_MIN_LENGTH } from '@/lib/validate';
-import { M22 } from '@/lib/http/messages';
-import { RESET_COPY } from '@/lib/auth/copy';
+import { AUTH_MESSAGE_COPY, RESET_COPY } from '@/lib/auth/copy';
 import { useHydrated } from '@/lib/client/useHydrated';
 import { Button } from '@/components/ui/Button';
 import { StatusRegion } from '@/components/ui/StatusRegion';
@@ -72,7 +71,7 @@ export function ResetPasswordView(v: ResetPasswordViewProps) {
   if (v.token === null || v.state.kind === 'unusable') {
     return (
       <>
-        <StatusRegion message={M22} politeness="assertive" tone="error" />
+        <StatusRegion message={AUTH_MESSAGE_COPY.resetLinkUnusable} politeness="assertive" tone="error" />
         <p className="auth-footer">
           <Link href="/forgot-password" style={{ display: 'inline-block', minHeight: '24px' }}>{RESET_COPY.askNewLink}</Link>
         </p>
@@ -88,8 +87,10 @@ export function ResetPasswordView(v: ResetPasswordViewProps) {
           autoComplete="new-password" value={v.password} onChange={(e) => v.onPassword(e.currentTarget.value)}
           hint={RESET_COPY.hint(PASSWORD_MIN_LENGTH)} error={invalid ?? undefined} />
         {/* The kit's Button cannot carry aria-pressed or aria-controls (ruling T16-5), so this is a native button in the kit's classes. */}
-        <button type="button" className="ui-button ui-button--quiet ui-button--compact" aria-controls="new-password"
-          aria-pressed={v.showPassword} onClick={v.onToggleShow}>{RESET_COPY.showPassword}</button>
+        <p style={{ margin: 'calc(-1 * var(--space-4)) 0 var(--space-6)' }}>
+          <button type="button" className="ui-button ui-button--quiet ui-button--compact" aria-controls="new-password"
+            aria-pressed={v.showPassword} onClick={v.onToggleShow}>{RESET_COPY.showPassword}</button>
+        </p>
         <Button variant="primary" type="submit" disabled={v.state.kind === 'sending' || v.hydrated === false}>{RESET_COPY.submit}</Button>
       </form>
     </>

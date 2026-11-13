@@ -33,7 +33,7 @@ const { invitationByToken, membershipsForUser } = await import('@/lib/data/preau
 const realPreauth = await vi.importActual<typeof import('@/lib/data/preauth')>('@/lib/data/preauth');
 const bcrypt = await import('@/lib/auth/passwordHash');
 const { validatePassword, PASSWORD_MIN_LENGTH } = await import('@/lib/validate');
-const { VALIDATION_COPY } = await import('@/lib/errors/copy');
+const { VALIDATION_COPY } = await import('@/lib/http/copy');
 
 const M23 = 'This invitation link does not work. It may have expired, been used, or been replaced by a newer one. Ask the person who invited you to send it again.';
 const bodyA = { name: 'New Person', password: 'a'.repeat(12), acceptances: currentAcceptances() };

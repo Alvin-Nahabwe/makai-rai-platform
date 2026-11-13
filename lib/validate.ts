@@ -4,7 +4,7 @@
  */
 
 import { EMAIL_SHAPE_SOURCE } from './email-shape';
-import { VALIDATION_COPY } from './errors/copy';
+import { VALIDATION_COPY } from './http/copy';
 
 export interface ValidationError {
   field: string;

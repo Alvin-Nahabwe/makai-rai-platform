@@ -25,7 +25,7 @@ const { AccountRegions } = await import('@/components/account/AccountRegions');
 const { signOutEverywhere } = await import('@/components/account/SignOutEverywhere');
 const { ChangePasswordView, changePasswordOutcome } = await import('@/app/(authenticated)/change-password/ChangePasswordForm');
 const { CHANGE_PASSWORD_COPY } = await import('@/lib/auth/copy');
-const { VALIDATION_COPY } = await import('@/lib/errors/copy');
+const { VALIDATION_COPY } = await import('@/lib/http/copy');
 
 const id: Identity = { userId: 'u1', email: 'amina@fixture.test', name: 'Amina N.', platformRole: 'assessor', mustChangePassword: false };
 const html = (el: React.ReactElement) => renderToStaticMarkup(el);

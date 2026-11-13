@@ -27,7 +27,7 @@ const { SendStatus } = await import('@/components/legal/AcceptancesForm');
 const { invitationByToken } = await import('@/lib/data/preauth');
 const { tryResolveIdentity } = await import('@/lib/auth/identity');
 const { PASSWORD_MIN_LENGTH } = await import('@/lib/validate');
-const { VALIDATION_COPY } = await import('@/lib/errors/copy');
+const { VALIDATION_COPY } = await import('@/lib/http/copy');
 
 const M23 = 'This invitation link does not work. It may have expired, been used, or been replaced by a newer one. Ask the person who invited you to send it again.';
 const TEXTS = STUB_LEGAL_TEXTS.slice();

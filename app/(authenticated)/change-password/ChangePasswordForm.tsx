@@ -57,7 +57,7 @@ export function ChangePasswordView(v: ChangePasswordViewProps) {
           autoComplete="new-password" value={v.newPassword} onChange={(e) => v.onNew(e.currentTarget.value)}
           hint={CHANGE_PASSWORD_COPY.hint(PASSWORD_MIN_LENGTH)} error={invalid ?? undefined} />
         {/* The kit's Button cannot carry aria-pressed or aria-controls (ruling T16-5), so this is a native button in the kit's classes. */}
-        <p>
+        <p style={{ margin: 'calc(-1 * var(--space-4)) 0 var(--space-6)' }}>
           <button type="button" className="ui-button ui-button--quiet ui-button--compact" aria-controls="currentPassword newPassword"
             aria-pressed={v.show} onClick={v.onToggleShow}>{CHANGE_PASSWORD_COPY.showPasswords}</button>
         </p>

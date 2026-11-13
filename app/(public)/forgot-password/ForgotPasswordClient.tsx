@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import { M21 } from '@/lib/http/messages';
-import { FORGOT_COPY } from '@/lib/auth/copy';
+import { AUTH_MESSAGE_COPY, FORGOT_COPY } from '@/lib/auth/copy';
 import { useHydrated } from '@/lib/client/useHydrated';
 import { Button } from '@/components/ui/Button';
 import { StatusRegion } from '@/components/ui/StatusRegion';
@@ -41,7 +40,7 @@ export interface ForgotPasswordViewProps {
 export function ForgotPasswordView(v: ForgotPasswordViewProps) {
   return (
     <>
-      <StatusRegion message={v.state.kind === 'sent' ? M21 : null} />
+      <StatusRegion message={v.state.kind === 'sent' ? AUTH_MESSAGE_COPY.resetLinkSent : null} />
       <StatusRegion message={v.state.kind === 'error' ? v.state.message : null} politeness="assertive" tone="error" />
       <form method="post" onSubmit={v.onSubmit}>
         <TextInput id="email" name="email" label={FORGOT_COPY.email} type="email" required autoComplete="username" spellCheck={false}

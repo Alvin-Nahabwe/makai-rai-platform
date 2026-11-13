@@ -1235,19 +1235,6 @@ h5 { font-size: var(--font-size-body); }
   flex-direction: column;
 }
 
-.auth-card label {
-  display: block;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-body);
-  margin-bottom: var(--space-1);
-  margin-top: var(--space-4);
-}
-
-.auth-card label:first-of-type {
-  margin-top: 0;
-}
-
 .auth-error {
   padding: var(--space-3) var(--space-4);
   background: var(--tint-critical-bg);
