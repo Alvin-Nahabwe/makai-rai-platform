@@ -514,10 +514,12 @@ test.describe('Callout', () => {
     const caution = section(page, 'callout').locator('.ui-callout--caution');
     const startBorder = () => caution.first().evaluate((el) => {
       const s = getComputedStyle(el);
-      return { width: s.borderInlineStartWidth, style: s.borderInlineStartStyle, colour: s.borderInlineStartColor };
+      return { width: s.borderInlineStartWidth, style: s.borderInlineStartStyle, colour: s.borderInlineStartColor, fill: s.backgroundColor };
     });
     await inEachTheme(page, async (theme) => {
-      expect((await startBorder()).width, theme).toBe('4px');
+      const border = await startBorder();
+      expect(border.width, theme).toBe('4px');
+      expect(border.colour, `${theme}: the border is not the callout's own tint`).not.toBe(border.fill);
       expect((await shapesVisible(page, '[data-kit-section="callout"] .ui-callout--caution')).invisible, theme).toEqual([]);
     });
     await withForcedColors(page, async () => {

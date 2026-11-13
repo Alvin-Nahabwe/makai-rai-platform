@@ -1,6 +1,7 @@
 /* Callouts (plan 1A Task 6). A tint panel in ink. A caution adds the triangle-alert icon and a 4 px border on its start
-   side in the shell navy (the plan's table); its padding gives the 4 px back, so a note and a caution start their words
-   at the same place. Forced colours drop the tint and keep the border and the icon. */
+   side in --color-heading: the shell navy in light, as the plan's table has it, and near-white in dark, where the
+   plan's --color-shell (#0A0D18) would vanish on the dark tint (#232842). Its padding gives the 4 px back, so a note
+   and a caution start their words at the same place. Forced colours drop the tint and keep the border and the icon. */
 .ui-callout {
   display: flex;
   align-items: flex-start;
@@ -15,7 +16,7 @@
 
 .ui-callout--caution {
   padding-inline-start: calc(var(--space-4) - 4px);
-  border-inline-start: 4px solid var(--color-shell);
+  border-inline-start: 4px solid var(--color-heading);
 }
 
 .ui-callout__icon {

@@ -10,7 +10,7 @@ export type CalloutProps = {
 
 /**
  * A note or a caution inside the content (plan 1A Task 6). Not a live region: it is part of the page, read in order. A
- * caution carries the triangle-alert icon and a 4 px shell-coloured border on its start side; the words carry the
+ * caution carries the triangle-alert icon and a 4 px heading-coloured border on its start side; the words carry the
  * meaning, so forced colours, which drop the tint, keep the border and the icon.
  */
 export function Callout({ kind, title, children }: CalloutProps): ReactElement {

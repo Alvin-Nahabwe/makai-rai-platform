@@ -8,7 +8,7 @@ export type DialogProps = {
   open: boolean;
   title: string;
   children: ReactNode;
-  /** The dialog's buttons, safe action first; it takes the first focus when the dialog opens. */
+  /** The dialog's buttons, safe action first: showModal() focuses the first focusable element, so the safe action takes focus. */
   actions: ReactNode;
   /** Called once when the browser closes the dialog (Escape, or a button of a form whose method is dialog); the caller then sets `open` to false. */
   onClose?: () => void;
@@ -21,6 +21,11 @@ export type DialogProps = {
  *
  * Escape fires the native `cancel` and then `close`; `onClose` is called once for the two. A close the caller makes by
  * setting `open` to false is not reported back.
+ *
+ * Focus on opening: showModal() focuses the first focusable element inside the dialog, so the caller makes the safe
+ * action the focused one by putting it first in `actions` (Cancel before Archive) with nothing focusable in `children`
+ * before it. React's `autoFocus` is not the way: on the client it writes no `autofocus` attribute and focuses at mount,
+ * while the dialog is still closed (react-dom-client `setProp` skips it, `commitMount` calls focus()).
  */
 export function Dialog({ open, title, children, actions, onClose }: DialogProps): ReactElement {
   const ref = useRef<HTMLDialogElement>(null);

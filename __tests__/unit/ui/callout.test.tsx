@@ -26,9 +26,9 @@ describe('Callout', () => {
     expect(renderToStaticMarkup(<Callout kind="caution" title="t">w</Callout>)).not.toMatch(/role=|aria-live/);
   });
 
-  it('a tint background; the caution adds a 4 px shell border on the start side, which forced colours keep', () => {
+  it('a tint background; the caution adds a 4 px heading-coloured border on the start side, which forced colours keep', () => {
     expect(rules.find((r) => r.selector === '.ui-callout')?.body).toMatch(/background-color:\s*var\(--color-tint\)/);
-    expect(rules.find((r) => r.selector === '.ui-callout--caution')?.body).toMatch(/border-inline-start:\s*4px solid var\(--color-shell\)/);
+    expect(rules.find((r) => r.selector === '.ui-callout--caution')?.body).toMatch(/border-inline-start:\s*4px solid var\(--color-heading\)/);
     expect(CSS).not.toMatch(/--color-overdue|--color-action/);
   });
 });
