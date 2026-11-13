@@ -1,0 +1,48 @@
+'use client';
+
+import { useState, type ReactElement } from 'react';
+import { Button } from '@/components/ui/Button';
+import { Dialog } from '@/components/ui/Dialog';
+import { StatusRegion } from '@/components/ui/StatusRegion';
+
+/**
+ * The gallery's live feedback demos (plan 1A Task 6): a status line that receives its message after the page loads, and a
+ * dialog the browser spec opens and closes with Escape. Nothing is sent anywhere; each demo only shows what happened.
+ */
+
+export function StatusRegionDemo(): ReactElement {
+  const [message, setMessage] = useState<{ text: string; tone: 'neutral' | 'error' } | null>(null);
+  return (
+    <div>
+      <div>
+        <Button variant="secondary" onClick={() => setMessage({ text: 'Sample member invited.', tone: 'neutral' })}>Show a message</Button>
+        <Button variant="secondary" onClick={() => setMessage({ text: 'The sample invitation was not sent. Try again.', tone: 'error' })}>Show an error</Button>
+        <Button variant="quiet" onClick={() => setMessage(null)}>Clear</Button>
+      </div>
+      <StatusRegion id="kit-status-live" message={message?.text ?? null} tone={message?.tone ?? 'neutral'} />
+    </div>
+  );
+}
+
+export function DialogDemo(): ReactElement {
+  const [open, setOpen] = useState(false);
+  const [closedByBrowser, setClosedByBrowser] = useState(0);
+  const [chosen, setChosen] = useState('nothing yet');
+  const choose = (what: string) => { setChosen(what); setOpen(false); };
+  return (
+    <div>
+      <Button variant="secondary" onClick={() => setOpen(true)}>Open the sample dialog</Button>
+      <p data-demo-output="dialog">Closed by the browser: {closedByBrowser}. Chosen: {chosen}.</p>
+      <Dialog
+        open={open} title="Archive the sample project?"
+        onClose={() => { setClosedByBrowser((n) => n + 1); choose('dismissed'); }}
+        actions={<>
+          <Button variant="secondary" onClick={() => choose('cancel')}>Cancel</Button>
+          <Button variant="destructive" onClick={() => choose('archive')}>Archive project</Button>
+        </>}
+      >
+        <p>Nothing in it can be changed until it is unarchived. This is a sample: nothing is sent.</p>
+      </Dialog>
+    </div>
+  );
+}

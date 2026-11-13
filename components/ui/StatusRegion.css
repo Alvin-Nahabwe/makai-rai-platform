@@ -1,0 +1,27 @@
+/* The status line (plan 1A Task 6). A message is ink at reading size; an error is bold ink with the triangle-alert icon
+   beside it (decision B5: never red), so the icon and the words carry it in forced colours. */
+.ui-status {
+  margin: var(--space-3) 0;
+  color: var(--color-ink);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+}
+
+/* Empty, it takes no room but stays rendered (never display:none), so it stays in the accessibility tree and a message
+   put into it is announced. */
+.ui-status:empty {
+  margin: 0;
+}
+
+.ui-status--error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-weight: var(--font-weight-bold);
+}
+
+.ui-status__icon {
+  display: inline-flex;
+  flex: none;
+  padding-block-start: 0.125rem;
+}

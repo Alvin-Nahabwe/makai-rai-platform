@@ -35,7 +35,7 @@ test('live drive: viewer seat, role under the name, dark link colour, M-40 offli
     await page.goto(`/orgs/${slug}/dashboard`);
     await context.setOffline(true);
     await expect(page.getByRole('status').filter({ hasText: 'You are offline.' })).toBeVisible();
-    seen.offline = (await page.locator('.offline-banner__text').textContent()) ?? '';
+    seen.offline = (await page.locator('.ui-banner__body').textContent()) ?? '';
     await page.screenshot({ path: path.join(DIR!, '3-offline-banner.png') });
     await context.setOffline(false);
   } finally {

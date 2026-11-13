@@ -1453,24 +1453,10 @@ h5 { font-size: var(--font-size-body); }
 }
 
 /* ── Shell components (unit UI) ──────────────────────────────────────────
-   Offline banner (M-40). Plain flow content on purpose: nothing fixed or
-   sticky, so it can never cover a focused control (WCAG 2.4.11). */
-.offline-banner {
-  padding: var(--space-3) var(--space-4);
-  background: var(--tint-moderate-bg);
-  color: var(--tint-moderate-fg);
-  border-bottom: 1px solid var(--border-strong);
-  font-size: var(--font-size-sm);
-}
-
-.offline-banner__text {
-  max-width: var(--max-width);
-  margin: 0 auto;
-}
-
-/* On narrow screens the fixed menu button sits over the top-left corner, so the text starts clear of it (as .idle-ended). */
+   On narrow screens the fixed menu button sits over the top-left corner, so the offline banner (M-40, the kit's Banner
+   inside .offline-banner-region) starts clear of it (as .idle-ended). */
 @media (max-width: 768px) {
-  .offline-banner {
+  .offline-banner-region .ui-banner {
     padding-left: calc(var(--space-4) + 48px);
   }
 }

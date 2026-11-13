@@ -507,3 +507,141 @@ test.describe('forced colours, the remaining states', () => {
     });
   });
 });
+
+test.describe('Callout', () => {
+  test('a caution keeps its 4 px start border and its icon in both themes and in forced colours; a note has neither', async ({ page }) => {
+    await openKit(page);
+    const caution = section(page, 'callout').locator('.ui-callout--caution');
+    const startBorder = () => caution.first().evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { width: s.borderInlineStartWidth, style: s.borderInlineStartStyle, colour: s.borderInlineStartColor };
+    });
+    await inEachTheme(page, async (theme) => {
+      expect((await startBorder()).width, theme).toBe('4px');
+      expect((await shapesVisible(page, '[data-kit-section="callout"] .ui-callout--caution')).invisible, theme).toEqual([]);
+    });
+    await withForcedColors(page, async () => {
+      const border = await startBorder();
+      expect(border.width).toBe('4px');
+      expect(border.style).toBe('solid');
+      expect(border.colour).not.toBe('rgba(0, 0, 0, 0)');
+      const shapes = await shapesVisible(page, '[data-kit-section="callout"] .ui-callout--caution');
+      expect(shapes.count).toBeGreaterThan(0);
+      expect(shapes.invisible).toEqual([]);
+    });
+    await expect(section(page, 'callout').locator('.ui-callout--note svg')).toHaveCount(0);
+    await expect(section(page, 'callout').locator('[role], [aria-live]')).toHaveCount(0);
+  });
+});
+
+test.describe('StatusRegion', () => {
+  test('the region is in the page before its message, receives it, and empties again without leaving', async ({ page }) => {
+    await openKit(page);
+    const region = page.locator('#kit-status-live');
+    await expect(region).toHaveAttribute('role', 'status');
+    await expect(region).toBeEmpty();
+    await section(page, 'status-region').getByRole('button', { name: 'Show a message' }).click();
+    await expect(region).toHaveText('Sample member invited.');
+    await section(page, 'status-region').getByRole('button', { name: 'Show an error' }).click();
+    await expect(region).toHaveText('The sample invitation was not sent. Try again.');
+    await expect(region).toHaveClass(/ui-status--error/);
+    expect(await region.evaluate((el) => getComputedStyle(el).fontWeight)).toBe('700');
+    await section(page, 'status-region').getByRole('button', { name: 'Clear' }).click();
+    await expect(region).toBeEmpty();
+    await expect(region).toBeAttached();
+  });
+});
+
+test.describe('Banner', () => {
+  test('each kind shows its icon and words in both themes and in forced colours; the actions sit in __action', async ({ page }) => {
+    await openKit(page);
+    const banners = section(page, 'banner').locator('.ui-banner');
+    await expect(banners).toHaveCount(4);
+    for (const [kind, icon] of [['offline', 'wifi-off'], ['archived', 'archive'], ['session', 'clock'], ['info', 'info']] as const) {
+      await expect(section(page, 'banner').locator(`.ui-banner--${kind} .ui-banner__icon svg`), `${kind} draws ${icon}`).toHaveCount(1);
+    }
+    await expect(section(page, 'banner').locator('.ui-banner__action > a')).toHaveCount(2);
+    await expect(section(page, 'banner').locator('.ui-banner--info .ui-banner__action').getByRole('link', { name: 'Read the sample guidance' })).toBeVisible();
+    await inEachTheme(page, async (theme) => {
+      expect((await shapesVisible(page, '[data-kit-section="banner"] .ui-banner')).invisible, theme).toEqual([]);
+    });
+    await withForcedColors(page, async () => {
+      expect((await shapesVisible(page, '[data-kit-section="banner"] .ui-banner')).invisible).toEqual([]);
+      for (const b of await banners.all()) await expect(b.locator('.ui-banner__body')).toBeVisible();
+    });
+    expect(await banners.evaluateAll((els) => els.map((el) => getComputedStyle(el).position))).toEqual(['static', 'static', 'static', 'static']);
+  });
+
+  test('at 320 px the action wraps below the words and nothing scrolls sideways', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    await openKit(page);
+    const session = section(page, 'banner').locator('.ui-banner--session');
+    const body = await session.locator('.ui-banner__body').boundingBox();
+    const action = await session.locator('.ui-banner__action').boundingBox();
+    expect(action!.y).toBeGreaterThanOrEqual(body!.y + body!.height - 1);
+    await expectNoHorizontalScroll(page);
+  });
+});
+
+test.describe('Skeleton', () => {
+  test('nothing moves, and each says what is loading through a visually hidden status line', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await openKit(page);
+    const running = await page.evaluate(() => document.getAnimations()
+      .filter((a) => a.effect instanceof KeyframeEffect && a.effect.target instanceof Element && a.effect.target.closest('.ui-skeleton') !== null).length);
+    expect(running).toBe(0);
+    const lines = section(page, 'skeleton').locator('.ui-skeleton > p[role="status"].visually-hidden');
+    await expect(lines).toHaveText(['Loading the sample text', 'Loading the sample question', 'Loading the sample table']);
+    await expect(section(page, 'skeleton').locator('.ui-skeleton > [aria-hidden="true"] .ui-skeleton__line')).toHaveCount(9);
+  });
+});
+
+test.describe('EmptyState', () => {
+  test('says what is empty and how it fills, with its action after the words', async ({ page }) => {
+    await openKit(page);
+    const empty = section(page, 'empty-state').locator('.ui-empty').first();
+    await expect(empty.locator('.ui-empty__title')).toHaveText('No findings yet');
+    await expect(empty.locator('.ui-empty__action').getByRole('link', { name: 'Open the sample stage' })).toBeVisible();
+    await expect(section(page, 'empty-state').locator('.ui-empty').nth(1).locator('.ui-empty__action')).toHaveCount(0);
+  });
+});
+
+test.describe('Dialog', () => {
+  test('opens as a native modal, the safe action takes focus, Escape closes it once and focus returns to the invoker', async ({ page }) => {
+    await openKit(page);
+    const opener = section(page, 'dialog').getByRole('button', { name: 'Open the sample dialog' });
+    const output = page.locator('[data-demo-output="dialog"]');
+    await opener.focus();
+    await page.keyboard.press('Enter');
+    const dialog = page.getByRole('dialog', { name: 'Archive the sample project?' });
+    await expect(dialog).toBeVisible();
+    expect(await dialog.evaluate((d) => d.matches(':modal'))).toBe(true);
+    expect(await dialog.evaluate((d) => [d.getAttribute('role'), d.getAttribute('aria-modal')])).toEqual([null, null]);
+    await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
+    // Nothing trapped by script: no inert attribute anywhere, and the page's root keeps its own overflow.
+    expect(await page.evaluate(() => document.querySelectorAll('[inert]').length)).toBe(0);
+    expect(await page.evaluate(() => [getComputedStyle(document.body).overflow, getComputedStyle(document.documentElement).overflow])).toEqual(['visible', 'visible']);
+    await inEachTheme(page, async (theme) => {
+      await expectNoSeriousA11yViolations(page, `${KIT} dialog open, ${theme}`);
+    });
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await expect(output).toHaveText('Closed by the browser: 1. Chosen: dismissed.');
+    await expect(opener).toBeFocused();
+  });
+
+  test('an action closes it through the caller, which onClose does not report', async ({ page }) => {
+    await openKit(page);
+    const opener = section(page, 'dialog').getByRole('button', { name: 'Open the sample dialog' });
+    await opener.click();
+    const dialog = page.getByRole('dialog', { name: 'Archive the sample project?' });
+    await dialog.getByRole('button', { name: 'Archive project' }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.locator('[data-demo-output="dialog"]')).toHaveText('Closed by the browser: 0. Chosen: archive.');
+    await expect(opener).toBeFocused();
+    await opener.click();
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('[data-demo-output="dialog"]')).toHaveText('Closed by the browser: 1. Chosen: dismissed.');
+  });
+});
