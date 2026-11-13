@@ -46,7 +46,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
     if (invitation === null) throw unusable();
 
     const body = await bodyOf(req);
-    const name = validateString(body.name, 'name', 100);
+    const name = validateString(body.name, 'name', 100, true, 'name');
     // validateString trims: a name of spaces only reads as empty, and S-04 requires a name (7.4.2), in the client's words.
     const blankName = name.error === null && name.value.length === 0 ? { field: 'name', message: 'Name is required' } : null;
     // FR-MEM-01 (obligation M9): a name that reads as a link is shown to colleagues and on S-04, so sign-up refuses it.

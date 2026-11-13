@@ -33,6 +33,7 @@ const { invitationByToken, membershipsForUser } = await import('@/lib/data/preau
 const realPreauth = await vi.importActual<typeof import('@/lib/data/preauth')>('@/lib/data/preauth');
 const bcrypt = await import('@/lib/auth/passwordHash');
 const { validatePassword, PASSWORD_MIN_LENGTH } = await import('@/lib/validate');
+const { VALIDATION_COPY } = await import('@/lib/errors/copy');
 
 const M23 = 'This invitation link does not work. It may have expired, been used, or been replaced by a newer one. Ask the person who invited you to send it again.';
 const bodyA = { name: 'New Person', password: 'a'.repeat(12), acceptances: currentAcceptances() };
@@ -303,7 +304,7 @@ describe('route 31: an account only from an invitation, with its acceptances (FR
     expect(PASSWORD_MIN_LENGTH).toBe(12); // NFR-SEC-18 (ACC-b raised it from ACC-a's 8)
     expect(validatePassword('a'.repeat(PASSWORD_MIN_LENGTH - 1))).not.toBeNull();
     expect(validatePassword('a'.repeat(PASSWORD_MIN_LENGTH))).toBeNull();
-    expect(validatePassword('a'.repeat(PASSWORD_MIN_LENGTH - 1))?.message).toBe(`Password must be at least ${PASSWORD_MIN_LENGTH} characters`);
+    expect(validatePassword('a'.repeat(PASSWORD_MIN_LENGTH - 1))?.message).toBe(VALIDATION_COPY.passwordTooShort(PASSWORD_MIN_LENGTH));
   });
 
   it('NFR-AVL-04 NFR-OBS-05: with the database unreachable, route 31 answers 503 database_unavailable with a reference and writes one REQUEST_FAILED line', async () => {

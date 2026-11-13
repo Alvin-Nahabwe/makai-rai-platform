@@ -50,7 +50,7 @@ export function afterCreated(signedIn: boolean, orgSlug: string): { push: string
 /** Step 1's checks (7.4.2 row S-04: "Name required; password rules"), the same as route 31's. */
 export function signUpErrors(name: string, password: string): FieldErrors {
   const errors: FieldErrors = {};
-  const n = validateString(name, 'Name', 100);
+  const n = validateString(name, 'Name', 100, true, 'name');
   if (n.error !== null || n.value.length === 0) errors.name = n.error?.message ?? 'Name is required';
   const p = validatePassword(password);
   if (p !== null) errors.password = p.message;

@@ -9,6 +9,7 @@ import { e2eBaseURL } from './helpers/port';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { expectNoHorizontalScroll } from './helpers/reflow';
+import { AUTH_COPY, AUTH_MESSAGE_COPY, FORGOT_COPY, RESET_COPY, SIGN_IN_COPY } from '../lib/auth/copy';
 import { expectTargetsAtLeast24px } from './helpers/targetSize';
 
 /**
@@ -188,9 +189,9 @@ test.describe('My account and sessions', () => {
     await page.fill('#email', a.email);
     await page.fill('#password', a.password);
     await page.locator('button[type="submit"]').click();
-    await expect(page.getByText('Not signed in: connection lost. Nothing was changed. Try again.')).toBeVisible();
+    await expect(page.getByText(SIGN_IN_COPY.connectionLost)).toBeVisible();
     await expect(page.locator('button[type="submit"]')).toBeEnabled();
-    await expect(page.locator('button[type="submit"]')).toHaveText('Sign In');
+    await expect(page.locator('button[type="submit"]')).toHaveText(SIGN_IN_COPY.submit);
   });
 
   test('FR-ACC-04 FR-ACC-08 (C4 ruling RE-5): a pre-v1 account opens S-29 from S-21', async ({ browser }) => {
@@ -355,6 +356,12 @@ test.describe('My account and sessions', () => {
         await page.emulateMedia({ colorScheme });
         await loadAfresh(page, await path());
         await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+        // The submit button is disabled until hydration and the kit's button changes colour over 150 ms when it is
+        // enabled: axe reads a colour mid-way if it runs in that window, so wait for the enabled button and for every
+        // transition to end.
+        const submit = page.locator('form button[type="submit"]');
+        if (await submit.count()) await expect(submit.first()).toBeEnabled();
+        await page.waitForFunction(() => document.getAnimations().length === 0);
         await expectNoSeriousA11yViolations(page, `${screen} ${colorScheme} ${width}`);
         await expectTargetsAtLeast24px(page);
       }
@@ -368,7 +375,7 @@ test.describe('My account and sessions', () => {
     await expect(anon.getByLabel('New password')).toBeVisible();
     expect(new URL(anon.url()).hash).toBe('');
     await anon.goto('/reset-password');
-    await expect(anon.locator('.auth-error')).toHaveText(M22);
+    await expect(anon.locator('.ui-status--error')).toHaveText(M22);
   });
 });
 
@@ -401,20 +408,20 @@ test.describe('J-15 with a mail catcher', { tag: '@nginx' }, () => {
 
     const page = await newPage(browser);
     await page.goto('/login');
-    await page.getByRole('link', { name: 'Forgot your password?' }).click();
+    await page.getByRole('link', { name: SIGN_IN_COPY.forgotLink }).click();
     // A client-side navigation: wait for S-02 itself, or the fill can land in S-01's Email field on its way out.
     await page.waitForURL(/\/forgot-password$/);
-    await expect(page.getByRole('heading', { level: 1, name: 'Forgot password' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: AUTH_COPY.resetHeading })).toBeVisible();
     await page.getByLabel('Email').fill(a.email);
-    await page.getByRole('button', { name: 'Send reset link' }).click();
+    await page.getByRole('button', { name: FORGOT_COPY.submit }).click();
     // The page's own status, not the shell's offline banner (also role="status").
-    await expect(page.locator('.auth-success[role="status"]')).toHaveText('If an account exists for this email, we have sent a link. It works once and expires in 30 minutes.');
+    await expect(page.getByRole('status').filter({ hasText: AUTH_MESSAGE_COPY.resetLinkSent })).toHaveText(AUTH_MESSAGE_COPY.resetLinkSent);
     await expect.poll(() => mailedResetToken(a.email), { timeout: 15_000 }).not.toBeNull();
     const token = mailedResetToken(a.email)!;
 
     await page.goto(`/reset-password#token=${token}`);
     await page.getByLabel('New password').fill('j'.repeat(12));
-    await page.getByRole('button', { name: 'Set password' }).click();
+    await page.getByRole('button', { name: RESET_COPY.submit }).click();
     await page.waitForURL(/\/login\?passwordChanged=1$/);
 
     await before.goto('/account');
@@ -431,15 +438,15 @@ test.describe('J-15 with a mail catcher', { tag: '@nginx' }, () => {
     await page.goto('/forgot-password');
     await tabTo(page, page.getByLabel('Email'));
     await page.keyboard.type(a.email);
-    await tabTo(page, page.getByRole('button', { name: 'Send reset link' }));
+    await tabTo(page, page.getByRole('button', { name: FORGOT_COPY.submit }));
     await page.keyboard.press('Enter');
-    await expect(page.locator('.auth-success[role="status"]')).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: AUTH_MESSAGE_COPY.resetLinkSent })).toBeVisible();
     await expect.poll(() => mailedResetToken(a.email), { timeout: 15_000 }).not.toBeNull();
 
     await page.goto(`/reset-password#token=${mailedResetToken(a.email)!}`);
     await tabTo(page, page.getByLabel('New password'));
     await page.keyboard.type('k'.repeat(12));
-    await tabTo(page, page.getByRole('button', { name: 'Set password' }));
+    await tabTo(page, page.getByRole('button', { name: RESET_COPY.submit }));
     await page.keyboard.press('Enter');
     await page.waitForURL(/\/login\?passwordChanged=1$/);
     // The URL can change while S-01 still shows its Suspense fallback (LoginForm's useSearchParams boundary). Since the
@@ -448,7 +455,7 @@ test.describe('J-15 with a mail catcher', { tag: '@nginx' }, () => {
 
     await tabTo(page, page.getByLabel('Email'));
     await page.keyboard.type(a.email);
-    await tabTo(page, page.getByLabel('Password', { exact: true }));
+    await tabTo(page, page.locator('#password'));
     await page.keyboard.type('k'.repeat(12));
     await page.keyboard.press('Enter');
     await page.waitForURL((url) => url.pathname !== '/login');

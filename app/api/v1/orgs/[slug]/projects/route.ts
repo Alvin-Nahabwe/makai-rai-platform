@@ -60,10 +60,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     const { requestId, name, description, aiSystemType, ...metadataFields } = raw;
 
     // Every refusal is a 422 `validation` naming the form's own field (contract Error codes), so the form shows it there.
-    const nameResult = validateString(name, 'Project name', 200);
-    const nameError = requireNonBlank(nameResult, 'Project name');
+    const nameResult = validateString(name, 'Project name', 200, true, 'project name');
+    const nameError = requireNonBlank(nameResult, 'Project name', 'project name');
     if (nameError) throw new ValidationFailed([{ field: 'name', message: nameError.message }]);
-    const descResult = validateString(description, 'Description', 2000, false);
+    const descResult = validateString(description, 'Description', 2000, false, 'description');
     if (descResult.error) throw new ValidationFailed([{ field: 'description', message: descResult.error.message }]);
     // IMPORTANT-2 (final Plan 1b review): validate the metadata keys against the real `ProjectMetadata` schema
     // BEFORE they reach Prisma, shared with the PATCH route (lib/validate.ts) so the two cannot drift.

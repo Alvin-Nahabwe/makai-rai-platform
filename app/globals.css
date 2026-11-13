@@ -1248,45 +1248,10 @@ h5 { font-size: var(--font-size-body); }
   margin-top: 0;
 }
 
-.auth-card input[type="text"],
-.auth-card input[type="email"],
-.auth-card input[type="password"] {
-  width: 100%;
-  padding: var(--space-3) var(--space-4);
-  font-family: var(--font-family);
-  font-size: var(--font-size-base);
-  color: var(--text-body);
-  background: var(--surface-card);
-  border: 1px solid var(--form-field-border);
-  border-radius: var(--border-radius-sm);
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
-}
-
-.auth-card input[type="text"]:focus,
-.auth-card input[type="email"]:focus,
-.auth-card input[type="password"]:focus {
-  /* The 3-pixel ring of *:focus-visible stays (D-2); only the border follows it. */
-  border-color: var(--focus-ring);
-}
-
-.auth-card button[type="submit"] {
-  margin-top: var(--space-6);
-}
-
 .auth-error {
   padding: var(--space-3) var(--space-4);
   background: var(--tint-critical-bg);
   color: var(--color-risk-critical);
-  border-radius: var(--border-radius-sm);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  margin-bottom: var(--space-4);
-}
-
-.auth-success {
-  padding: var(--space-3) var(--space-4);
-  background: var(--tint-low-bg);
-  color: var(--tint-low-fg);
   border-radius: var(--border-radius-sm);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);

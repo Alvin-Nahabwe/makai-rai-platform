@@ -1,10 +1,8 @@
 [
-  "app/(authenticated)/change-password/ChangePasswordForm.tsx",
   "app/(authenticated)/explore/controls/ControlsLibraryPage.css",
   "app/(authenticated)/explore/framework/FrameworkMapPage.css",
   "app/(public)/about/AboutPage.css",
   "app/(public)/invitations/[token]/AcceptInvitationClient.tsx",
-  "app/(public)/reset-password/ResetPasswordClient.tsx",
   "app/globals.css",
   "components/account/PersonalExportAndDeletionForm.tsx",
   "components/admin/CreateOrganisationForm.tsx",

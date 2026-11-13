@@ -24,11 +24,16 @@ const { DraftsOnThisDevice } = await import('@/components/decision/DraftsOnThisD
 const { AccountRegions } = await import('@/components/account/AccountRegions');
 const { signOutEverywhere } = await import('@/components/account/SignOutEverywhere');
 const { ChangePasswordView, changePasswordOutcome } = await import('@/app/(authenticated)/change-password/ChangePasswordForm');
+const { CHANGE_PASSWORD_COPY } = await import('@/lib/auth/copy');
+const { VALIDATION_COPY } = await import('@/lib/errors/copy');
 
 const id: Identity = { userId: 'u1', email: 'amina@fixture.test', name: 'Amina N.', platformRole: 'assessor', mustChangePassword: false };
 const html = (el: React.ReactElement) => renderToStaticMarkup(el);
 const tagOf = (markup: string, elId: string) => markup.match(new RegExp(`<[a-z]+[^>]*\\bid="${elId}"[^>]*>`))?.[0] ?? '';
 const noop = () => {};
+/** The words inside the page's live region of this role (the kit's StatusRegion), tags removed. */
+const regionText = (markup: string, role: 'alert' | 'status') =>
+  (markup.match(new RegExp(`<div role="${role}"[^>]*>(.*?)</div>`))?.[1] ?? '').replace(/<[^>]*>/g, '');
 
 describe('S-21 My account', () => {
   it('M-38 FR-EXP-03 (S-21): the page passes the organisations where the account is the only active owner', () => {
@@ -109,28 +114,30 @@ describe('S-29 and S-21\'s password change', () => {
     expect(tagOf(markup, 'currentPassword')).toMatch(/autocomplete="current-password"/i);
     expect(tagOf(markup, 'newPassword')).toMatch(/autocomplete="new-password"/i);
     expect(tagOf(markup, 'newPassword')).toMatch(/aria-describedby="newPassword-hint"/);
-    expect(markup).toContain('At least 12 characters.');
+    expect(markup).toContain(CHANGE_PASSWORD_COPY.hint(12));
     expect(markup.match(/type="password"/g)).toHaveLength(2);
     expect(markup).not.toMatch(/confirm/i);
-    expect(markup).toMatch(/<button[^>]*type="submit"[^>]*>Change password<\/button>/);
+    expect(markup).toMatch(new RegExp(`<button[^>]*type="submit"[^>]*>${CHANGE_PASSWORD_COPY.submit}</button>`));
+    expect(markup).toMatch(new RegExp(`<button[^>]*type="button"[^>]*aria-controls="currentPassword newPassword"[^>]*>${CHANGE_PASSWORD_COPY.showPasswords}</button>`));
   });
 
   it('FR-ACC-08 NFR-SEC-18: a 422 is shown under the new password and named by aria-describedby; a 400 is shown at the top', async () => {
-    const r422 = await changePasswordOutcome(new Response(JSON.stringify({ code: 'validation', fields: [{ field: 'newPassword', message: 'Password must be at least 12 characters' }] }), { status: 422 }));
-    expect(r422).toEqual({ kind: 'invalid', field: 'newPassword', message: 'Password must be at least 12 characters' });
+    const tooShort = VALIDATION_COPY.passwordTooShort(12);
+    const r422 = await changePasswordOutcome(new Response(JSON.stringify({ code: 'validation', fields: [{ field: 'newPassword', message: tooShort }] }), { status: 422 }));
+    expect(r422).toEqual({ kind: 'invalid', field: 'newPassword', message: tooShort });
     const markup = html(<ChangePasswordView currentPassword="x" newPassword="y" show={false} state={r422} onCurrent={noop} onNew={noop} onToggleShow={noop} onSubmit={noop} />);
     expect(tagOf(markup, 'newPassword')).toMatch(/aria-describedby="newPassword-hint newPassword-error"/);
     expect(tagOf(markup, 'newPassword')).toMatch(/aria-invalid="true"/);
-    expect(markup).toMatch(/id="newPassword-error"[^>]*>Password must be at least 12 characters</);
+    expect(markup).toMatch(new RegExp(`id="newPassword-error"[^>]*>${tooShort}<`));
     const r400 = await changePasswordOutcome(new Response(JSON.stringify({ error: 'Current password is incorrect' }), { status: 400 }));
     expect(r400).toEqual({ kind: 'error', message: 'Current password is incorrect' });
-    expect(html(<ChangePasswordView currentPassword="x" newPassword="y" show={false} state={r400} onCurrent={noop} onNew={noop} onToggleShow={noop} onSubmit={noop} />))
-      .toMatch(/role="alert"[^>]*>Current password is incorrect</);
+    expect(regionText(html(<ChangePasswordView currentPassword="x" newPassword="y" show={false} state={r400} onCurrent={noop} onNew={noop} onToggleShow={noop} onSubmit={noop} />), 'alert'))
+      .toBe('Current password is incorrect');
     expect(await changePasswordOutcome(new Response('{"success":true}', { status: 200 }))).toEqual({ kind: 'done' });
     // A failure on the server is said as such, with its support reference, and never as "your password is as it was".
     expect(await changePasswordOutcome(new Response('{"error":"Service unavailable","code":"database_unavailable","reference":"0a1b2c3d"}', { status: 503 })))
-      .toEqual({ kind: 'error', message: 'The server had a problem (reference 0a1b2c3d). Try again.' });
+      .toEqual({ kind: 'error', message: CHANGE_PASSWORD_COPY.serverProblem('0a1b2c3d') });
     expect(await changePasswordOutcome(new Response('<html>Bad gateway</html>', { status: 502 })))
-      .toEqual({ kind: 'error', message: 'The server had a problem. Try again.' });
+      .toEqual({ kind: 'error', message: CHANGE_PASSWORD_COPY.serverProblem(null) });
   });
 });

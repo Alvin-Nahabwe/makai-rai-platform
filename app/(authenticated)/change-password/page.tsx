@@ -13,9 +13,9 @@ export default function ChangePasswordPage() {
   return (
     <div className="page-content">
       <div className="auth-card" style={{ maxWidth: 460, margin: '3rem auto' }}>
-        <h1>Change your password</h1>
+        <h1>{AUTH_COPY.titles.changePassword}</h1>
         <p className="text-muted" style={{ marginBottom: 'var(--space-4)' }}>
-          Changing it ends every session of your account, including this one, and you sign in again with the new password.
+          {AUTH_COPY.changeLead}
         </p>
         <ChangePasswordForm />
       </div>

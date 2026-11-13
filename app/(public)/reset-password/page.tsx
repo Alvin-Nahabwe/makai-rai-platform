@@ -18,13 +18,13 @@ export default function ResetPasswordPage() {
         <img
           src="/logo-makai-252.png"
           srcSet="/logo-makai-252.png 1x, /logo-makai-504.png 2x"
-          alt="MAK-AI"
+          alt={AUTH_COPY.logoAlt}
           className="auth-logo"
           width={200}
           height={60}
           fetchPriority="high"
         />
-        <h1>Set a new password</h1>
+        <h1>{AUTH_COPY.titles.resetPassword}</h1>
         <ResetPasswordClient />
       </div>
     </div>

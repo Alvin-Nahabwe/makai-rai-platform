@@ -322,14 +322,17 @@ describe('design tokens', () => {
   });
 
   it('UX-33 (D-1, D-2, D-3): the sign-in and reset fields and the links under them follow the same tokens', () => {
-    // Found live: the .form-group rules the SRS measured are not the only field rules. The auth
-    // pages draw their fields with .auth-card, which had the same faint border, the same switched-off
-    // ring and a dark-theme link at 2.69:1. The Email field of /login is the field the e2e focus check uses.
+    // Found live: the .form-group rules the SRS measured are not the only field rules. The auth pages drew their fields
+    // with .auth-card, which had the same faint border and a switched-off ring. Since plan 1A Task 16 the sign-in, reset
+    // and change-password fields are the kit's TextInput, so the kit's field rule carries the property: the control
+    // border token (3:1, pinned by the colour pairs case above), no outline switched off, and the border following the
+    // ring. The .auth-card field rules are gone from app/globals.css, where they would have outranked it.
+    const kit = readFileSync('components/ui/TextInput.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(ruleFor(kit, '.ui-input')).toMatch(/border:\s*1px solid var\(--color-border-control\)/);
+    expect(ruleFor(kit, '.ui-input:focus-visible')).not.toMatch(/outline:\s*none/);
+    expect(ruleFor(kit, '.ui-input:focus-visible')).toMatch(/border-color:/);
     for (const type of ['text', 'email', 'password']) {
-      expect(ruleFor(css, `.auth-card input[type="${type}"]`), type).toMatch(/border:\s*1px solid var\(--form-field-border\)/);
-      const focus = ruleFor(css, `.auth-card input[type="${type}"]:focus`);
-      expect(focus, `${type} focus`).not.toMatch(/outline:\s*none/);
-      expect(focus, `${type} focus`).toMatch(/border-color:\s*var\(--focus-ring\)/);
+      expect(css, `${type}: no .auth-card field rule is left to outrank the kit`).not.toContain(`.auth-card input[type="${type}"]`);
     }
     expect(ruleFor(css, '.auth-footer a')).toMatch(/color:\s*var\(--link\)/);
   });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { validateEmail } from '../../lib/validate';
 import { redactText } from '../../lib/redact';
+import { VALIDATION_COPY } from '../../lib/errors/copy';
 
 /**
  * RL 2.3 / 7.12: an address the platform will hold is an address the log redactor must catch.
@@ -40,14 +41,14 @@ describe('validateEmail', () => {
   ])('rejects %s, which the old rule accepted and the shape does not cover: %j', (_why, email) => {
     // The point of the test: these passed before.
     expect(OLD_RULE.test(email.trim().toLowerCase()), 'the old rule no longer accepts it, so this proves nothing').toBe(true);
-    expect(validateEmail(email)).toEqual({ field: 'email', message: 'Please enter a valid email address' });
+    expect(validateEmail(email)).toEqual({ field: 'email', message: VALIDATION_COPY.emailShape });
   });
 
   it('keeps the other refusals: empty, not a string, too long, no at sign', () => {
-    expect(validateEmail('')?.message).toBe('Email is required');
-    expect(validateEmail(undefined)?.message).toBe('Email is required');
-    expect(validateEmail(`${'a'.repeat(250)}@example.org`)?.message).toBe('Email must be 254 characters or fewer');
-    expect(validateEmail('not-an-address')?.message).toBe('Please enter a valid email address');
+    expect(validateEmail('')?.message).toBe(VALIDATION_COPY.emailRequired);
+    expect(validateEmail(undefined)?.message).toBe(VALIDATION_COPY.emailRequired);
+    expect(validateEmail(`${'a'.repeat(250)}@example.org`)?.message).toBe(VALIDATION_COPY.tooLong(254));
+    expect(validateEmail('not-an-address')?.message).toBe(VALIDATION_COPY.emailShape);
   });
 
   it('accepts nothing the redactor would leave any of behind', () => {

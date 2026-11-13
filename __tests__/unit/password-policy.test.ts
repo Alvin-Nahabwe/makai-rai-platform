@@ -18,6 +18,7 @@ vi.mock('next/server', async (orig) => ({ ...(await orig<typeof import('next/ser
 vi.mock('../../lib/email/send', async (orig) => ({ ...(await orig<typeof import('../../lib/email/send')>()), sendEmail: vi.fn(async () => ({ id: 'm1' })) }));
 
 const { validatePassword, PASSWORD_MIN_LENGTH } = await import('../../lib/validate');
+const { VALIDATION_COPY } = await import('../../lib/errors/copy');
 const { authorizeCredentials } = await import('../../lib/auth/credentials');
 const { POST: CHANGE } = await import('../../app/api/users/me/password/route');
 const { POST: REGISTER } = await import('../../app/api/v1/invitations/[token]/register/route');
@@ -37,9 +38,9 @@ beforeEach(async () => {
 describe('passwords of at least 12 characters (NFR-SEC-18)', () => {
   it('NFR-SEC-18: 11 characters are refused with 422, 12 accepted, an existing 8-character password still signs in', async () => {
     expect(PASSWORD_MIN_LENGTH).toBe(12);
-    expect(validatePassword('a'.repeat(11))).toEqual({ field: 'password', message: 'Password must be at least 12 characters' });
+    expect(validatePassword('a'.repeat(11))).toEqual({ field: 'password', message: VALIDATION_COPY.passwordTooShort(12) });
     expect(validatePassword('a'.repeat(12))).toBeNull();
-    expect(validatePassword('a'.repeat(129))).toEqual({ field: 'password', message: 'Password must be 128 characters or fewer' });
+    expect(validatePassword('a'.repeat(129))).toEqual({ field: 'password', message: VALIDATION_COPY.tooLong(128) });
     const fx = await buildOrg();
     await testDb.user.update({ where: { id: fx.members.viewer.userId }, data: { passwordHash: await hash('eight888', 12) } });
     expect(await authorizeCredentials({ email: fx.members.viewer.email, password: 'eight888' },
@@ -69,7 +70,7 @@ describe('passwords of at least 12 characters (NFR-SEC-18)', () => {
     await testDb.passwordResetToken.create({ data: { userId: fx.members.viewer.userId, tokenHash: hashInvitationToken(reset), expiresAt: new Date(Date.now() + 30 * 60 * 1000) } });
     const r34 = await COMPLETE(sameOriginJson('/api/password-reset/complete', { token: reset, newPassword: 'p'.repeat(11) }));
     const b34 = await r34.json();
-    expect([r34.status, b34.code, b34.fields]).toEqual([422, 'validation', [{ field: 'newPassword', message: 'Password must be at least 12 characters' }]]);
+    expect([r34.status, b34.code, b34.fields]).toEqual([422, 'validation', [{ field: 'newPassword', message: VALIDATION_COPY.passwordTooShort(12) }]]);
     expect((await COMPLETE(sameOriginJson('/api/password-reset/complete', { token: reset, newPassword: 'p'.repeat(12) }))).status).toBe(204);
   }, 60_000);
 });

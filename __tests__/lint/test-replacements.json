@@ -702,5 +702,61 @@
     "property": "To-do counts come before recorded counts, and the status on S-10 and S-08 is not carried by colour: words in ink, with no tick and no green, and text colour, background and border held to the ink lists (spec 7.2; spec 12: rewritten to the new rule). The old title's second half, the warning tint allowed only on the allowed labels (UX-06), is retired by spec 12, which replaces UX-06 with section 7.2, and is not carried over.",
     "proof": "e2e/prj-screens.spec.ts::UX-06: to-do counts come before recorded counts; status is words in ink, with no tick and no green (S-10 and S-08): the unchanged indexOf('with no decision') < indexOf('Recorded') assertion, and expectStatusMarksInk(page) on both screens, which rejects a green, a tick, a colour outside the ink lists on a status label or the elements inside it, and a label's own colour other than ink or muted ink; each of those rejections is asserted in e2e/no-score-helpers.spec.ts::spec 7.2 NFR-A11Y-05 (helper): a status mark is a shape and words in ink, with no tick and no green",
     "task": "1A-15"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/auth-pages.test.tsx::M-20 FR-ACC-05: every refused sign-in shows one text, and there is no Create account link",
+    "replacedBy": "__tests__/unit/auth-pages.test.tsx::M-20 FR-ACC-05: every refused sign-in shows one text, and there is no Create account link",
+    "property": "A refused sign-in shows the one M-20 text in the page's assertive live region (now the kit's StatusRegion, whose error icon sits before the words, so the words are read with the tags removed), the page offers no Create account link and no register address, and the Forgot link still goes to /forgot-password with its words from SIGN_IN_COPY; the fields keep their autocomplete, spellcheck, type and required values and the Show password button keeps aria-controls=\"password\"",
+    "proof": "__tests__/unit/auth-pages.test.tsx::M-20 FR-ACC-05: every refused sign-in shows one text, and there is no Create account link: expect(regionText(markup, 'alert')).toBe(M20) and the href and text assertions on the forgot-password link",
+    "task": "1A-16"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/auth-pages.test.tsx::FR-ACC-06: after a reset or a change the page says the password changed",
+    "replacedBy": "__tests__/unit/auth-pages.test.tsx::FR-ACC-06: after a reset or a change the page says the password changed",
+    "property": "S-01 shows the password-changed notice in its polite live region when it is given one; the words are read from the region with the kit's tags removed and compared with SIGN_IN_COPY.passwordChanged",
+    "proof": "__tests__/unit/auth-pages.test.tsx::FR-ACC-06: after a reset or a change the page says the password changed: expect(regionText(loginView({ notice: SIGN_IN_COPY.passwordChanged }), 'status')).toBe(SIGN_IN_COPY.passwordChanged)",
+    "task": "1A-16"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/auth-pages.test.tsx::M-21 FR-ACC-06: S-02 answers with one text",
+    "replacedBy": "__tests__/unit/auth-pages.test.tsx::M-21 FR-ACC-06: S-02 answers with one text",
+    "property": "S-02 answers a 202 with the one M-21 text in its polite live region, posts the address to /api/password-reset, offers one Send reset link submit button, and keeps the email field's autocomplete and spellcheck values; the region's words are read with the kit's tags removed",
+    "proof": "__tests__/unit/auth-pages.test.tsx::M-21 FR-ACC-06: S-02 answers with one text: expect(regionText(sent, 'status')).toBe(M21) and the submit-button assertion on FORGOT_COPY.submit",
+    "task": "1A-16"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/auth-pages.test.tsx::M-22: a used or expired link shows the M-22 text, and so does a missing token",
+    "replacedBy": "__tests__/unit/auth-pages.test.tsx::M-22: a used or expired link shows the M-22 text, and so does a missing token",
+    "property": "A used or expired reset link, and a page opened with no token, show the one M-22 text in the assertive live region with a link to /forgot-password and no password field; the words are read from the region with the kit's tags removed",
+    "proof": "__tests__/unit/auth-pages.test.tsx::M-22: a used or expired link shows the M-22 text, and so does a missing token: expect(regionText(markup, 'alert')).toBe(M22) and expect(missing).toContain(M22)",
+    "task": "1A-16"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/auth-pages.test.tsx::NFR-SEC-18 FR-ACC-06: S-03 states the minimum, shows a 422 under the field, and has one new-password field",
+    "replacedBy": "__tests__/unit/auth-pages.test.tsx::NFR-SEC-18 FR-ACC-06: S-03 states the minimum, shows a 422 under the field, and has one new-password field",
+    "property": "S-03 states the minimum length, shows the server's 422 message under the new-password field named by aria-describedby (the message is now taken from VALIDATION_COPY.passwordTooShort, held in a local so the fixture body, the outcome and the markup read the same text), has exactly one password input, one Set password submit button and a Show password button with aria-controls=\"new-password\"",
+    "proof": "__tests__/unit/auth-pages.test.tsx::NFR-SEC-18 FR-ACC-06: S-03 states the minimum, shows a 422 under the field, and has one new-password field: expect(r).toEqual({ kind: 'invalid', message: tooShort }) and the id=\"new-password-error\" assertion",
+    "task": "1A-16"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/auth-pages.test.tsx::FR-ACC-06: once the password is set, the page never shows M-22, even after the token is forgotten",
+    "replacedBy": "__tests__/unit/auth-pages.test.tsx::FR-ACC-06: once the password is set, the page never shows M-22, even after the token is forgotten",
+    "property": "After the password is set the page shows the password-changed notice in its polite live region and never M-22 or the new-password field, even with the token forgotten; the words are read from the region with the kit's tags removed",
+    "proof": "__tests__/unit/auth-pages.test.tsx::FR-ACC-06: once the password is set, the page never shows M-22, even after the token is forgotten: expect(regionText(markup, 'status')).toBe(RESET_COPY.passwordChanged) and not.toContain(M22)",
+    "task": "1A-16"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/auth-pages.test.tsx::(module)",
+    "replacedBy": "__tests__/unit/auth-pages.test.tsx::M-20 FR-ACC-05: every refused sign-in shows one text, and there is no Create account link",
+    "property": "The module-level lines added are the imports of the copy constants the cases read (AUTH_MESSAGE_COPY, SIGN_IN_COPY, FORGOT_COPY, RESET_COPY, VALIDATION_COPY) and one helper, regionText, that reads the words inside a live region of a given role with the markup tags removed; it asserts nothing and no case is removed",
+    "proof": "__tests__/unit/auth-pages.test.tsx::M-20 FR-ACC-05: every refused sign-in shows one text, and there is no Create account link: expect(regionText(markup, 'alert')).toBe(M20)",
+    "task": "1A-16"
   }
 ]

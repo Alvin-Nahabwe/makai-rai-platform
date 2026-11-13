@@ -27,6 +27,7 @@ const { SendStatus } = await import('@/components/legal/AcceptancesForm');
 const { invitationByToken } = await import('@/lib/data/preauth');
 const { tryResolveIdentity } = await import('@/lib/auth/identity');
 const { PASSWORD_MIN_LENGTH } = await import('@/lib/validate');
+const { VALIDATION_COPY } = await import('@/lib/errors/copy');
 
 const M23 = 'This invitation link does not work. It may have expired, been used, or been replaced by a newer one. Ask the person who invited you to send it again.';
 const TEXTS = STUB_LEGAL_TEXTS.slice();
@@ -98,7 +99,7 @@ describe('S-04, the invitation page (FR-ACC-01)', () => {
   });
 
   it('FR-ACC-01 (7.4.2 S-04 validation): an empty name and a short password are named on their fields and nothing is posted', () => {
-    expect(signUpErrors('', 'short')).toEqual({ name: 'Name is required', password: `Password must be at least ${PASSWORD_MIN_LENGTH} characters` });
+    expect(signUpErrors('', 'short')).toEqual({ name: VALIDATION_COPY.required('name'), password: VALIDATION_COPY.passwordTooShort(PASSWORD_MIN_LENGTH) });
     expect(signUpErrors('  Amina  ', 'a'.repeat(PASSWORD_MIN_LENGTH))).toEqual({});
     const markup = view({ errors: { name: 'Name is required', password: `Password must be at least ${PASSWORD_MIN_LENGTH} characters` } });
     expect(tagOf(markup, 'name')).toContain('aria-invalid="true"');

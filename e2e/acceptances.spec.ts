@@ -7,6 +7,7 @@ import { buildOrg, type FixtureAccount, type OrgFixture } from '../__tests__/hel
 import { claimMatches } from '../lib/claims/pattern';
 import { currentLegalText } from '../lib/legal/registry';
 import { acceptanceError } from '../lib/legal/kinds';
+import { VALIDATION_COPY } from '../lib/errors/copy';
 import { ACCEPT_LABEL } from '../components/legal/AcceptancesForm';
 import { ACCEPTED_KINDS, CONSENT_TYPE_FOR } from '../types/legal';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
@@ -84,7 +85,7 @@ test.describe('S-04 and S-05 in a browser', () => {
     await page.getByRole('button', { name: 'Continue' }).click();
     await expect(page.getByLabel('Your name')).toHaveAttribute('aria-invalid', 'true');
     await expect(page.getByLabel('Your name')).toBeFocused();
-    await expect(page.getByLabel('Password', { exact: true })).toHaveAccessibleDescription(/Password is required/);
+    await expect(page.getByLabel('Password', { exact: true })).toHaveAccessibleDescription(new RegExp(VALIDATION_COPY.passwordRequired.replace('.', '\\.')));
 
     await page.getByLabel('Your name').fill('Jay Three');
     await page.getByLabel('Password', { exact: true }).fill('J03-password-ok');
