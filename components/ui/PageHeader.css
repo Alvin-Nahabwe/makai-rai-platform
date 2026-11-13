@@ -1,0 +1,44 @@
+/* The top of a page (plan 1A Task 5). The title and its code share a line while they fit and wrap otherwise; the code is
+   small and muted, after the words (voice rule 8). Long titles wrap anywhere rather than scroll (Review Focus 2). The
+   actions wrap below the lead on a narrow screen and keep their order. */
+.ui-page-header {
+  display: grid;
+  gap: var(--space-3);
+  margin-block: var(--space-8) var(--space-6);
+}
+
+.ui-page-header .ui-breadcrumb {
+  margin-block-end: 0;
+}
+
+.ui-page-header__heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--space-3);
+  row-gap: var(--space-1);
+}
+
+.ui-page-header__title {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.ui-page-header__code {
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.ui-page-header__lead {
+  max-inline-size: var(--measure-reading);
+  color: var(--color-ink);
+}
+
+.ui-page-header__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}

@@ -13,3 +13,11 @@ export type { ScopeAnswer } from '@/types/record';
 export type BreadcrumbItem = { label: string; href?: string };
 export type FieldOption = { value: string; label: string; hint?: string };
 export type DateParts = { day: string; month: string; year: string };
+
+/** A table column's sort direction: aria-sort's two values. */
+export type SortDirection = 'ascending' | 'descending';
+/**
+ * The two phrases a sortable column is announced with, keyed by aria-sort's two values: the owner's decision of 13
+ * November 2026, "Words that fit the column". The common pairs are `SORT_WORDS` in lib/ui/copy.ts.
+ */
+export type SortWords = { readonly ascending: string; readonly descending: string };

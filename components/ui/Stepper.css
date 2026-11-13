@@ -1,0 +1,64 @@
+/* Stepper (plan 1A Task 5): the steps in a row that wraps, no line joining them and nothing filled in proportion. Each
+   disc is a 16 px circle made only of its own border, in currentColor: a 2 px ring when upcoming, a 4 px ring in the
+   action text colour when current, and a ring as thick as its radius, so a filled disc, when done. A border, not a
+   background, so forced colours keep every state; the widths tell them apart there. No tick. */
+.ui-stepper {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: var(--space-6);
+  row-gap: var(--space-2);
+  margin: 0 0 var(--space-6);
+  padding: 0;
+  list-style: none;
+}
+
+.ui-stepper__step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-inline-size: 0;
+  color: var(--color-ink-muted);
+}
+
+.ui-stepper__disc {
+  flex: none;
+  box-sizing: border-box;
+  inline-size: 16px;
+  block-size: 16px;
+  border: 2px solid currentColor;
+  border-radius: var(--radius-pill);
+}
+
+.ui-stepper__label {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--target-min);
+  overflow-wrap: anywhere;
+}
+
+a.ui-stepper__label {
+  color: var(--color-link);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.ui-stepper__step--done {
+  color: var(--color-ink);
+}
+
+.ui-stepper__step--done .ui-stepper__disc {
+  border-width: 8px;
+}
+
+.ui-stepper__step--current {
+  color: var(--color-ink);
+}
+
+.ui-stepper__step--current .ui-stepper__disc {
+  border-width: 4px;
+  border-color: var(--color-action-text);
+}
+
+.ui-stepper__step--current .ui-stepper__label {
+  font-weight: var(--font-weight-bold);
+}
