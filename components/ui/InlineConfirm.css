@@ -1,0 +1,26 @@
+/* The inline confirmation (plan 1A Task 6, UX-29): a surface panel with a container border, in place, never a modal. Its
+   buttons wrap, Cancel first on every width; nothing about it moves. Forced colours keep the border and the buttons'. */
+.ui-confirm {
+  margin: 0 0 var(--space-6);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border-container);
+  border-radius: var(--radius-surface);
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+}
+
+.ui-confirm__object {
+  margin: 0 0 var(--space-1);
+}
+
+.ui-confirm__consequence {
+  margin: 0 0 var(--space-4);
+  max-inline-size: 65ch;
+}
+
+.ui-confirm__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-block-start: var(--space-4);
+}

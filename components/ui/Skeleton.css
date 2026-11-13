@@ -1,0 +1,38 @@
+/* Skeletons (plan 1A Task 6, decision B12): static tint bars, no shimmer and nothing that moves. Text lines are
+   reading height with the last one shorter; a plate is a bordered block of lines; a table is full-width rows divided
+   by rules. Forced colours drop the tint; the visually hidden status line still says what is loading. */
+.ui-skeleton {
+  margin: 0 0 var(--space-6);
+}
+
+.ui-skeleton__line {
+  display: block;
+  block-size: 1rem;
+  margin-block: 0.25rem 0.5rem;
+  border-radius: var(--radius-control);
+  background-color: var(--color-tint);
+}
+
+.ui-skeleton__line:last-child:not(:first-child) {
+  inline-size: 60%;
+}
+
+.ui-skeleton--plate {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border-container);
+  border-radius: var(--radius-surface);
+  background-color: var(--color-surface);
+}
+
+.ui-skeleton--table .ui-skeleton__line {
+  block-size: 1.5rem;
+  margin: 0;
+  padding-block: var(--space-2);
+  border-radius: 0;
+  border-bottom: 1px solid var(--color-border-container);
+  background-clip: content-box;
+}
+
+.ui-skeleton--table .ui-skeleton__line:last-child:not(:first-child) {
+  inline-size: auto;
+}

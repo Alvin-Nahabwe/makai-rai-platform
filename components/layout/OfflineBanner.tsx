@@ -1,6 +1,7 @@
 'use client';
 
 import { useSyncExternalStore } from 'react';
+import { Banner } from '@/components/ui/Banner';
 
 /** M-40, copied exactly from SRS 7.5 (the offline message, line 2582 of the SRS). */
 export const OFFLINE_MESSAGE =
@@ -23,7 +24,8 @@ export function subscribeConnection(onChange: () => void): () => void {
 
 /**
  * The banner is a polite status region (WCAG 4.1.3). The region is always in the page, empty while online, and the text is put
- * inside it when the connection is lost: a live region that is inserted already holding its text is often not announced. Pages
+ * inside it when the connection is lost: a live region that is inserted already holding its text is often not announced. The text
+ * is the kit's Banner (plan 1A Task 6), which adds no live region of its own, so this region stays the one that announces. Pages
  * with a status message of their own (a saved or created confirmation) therefore have two `role="status"` elements; a test that
  * looks for one scopes itself to its own message. The banner is ordinary flow content: nothing fixed or sticky that could cover a
  * focused control, and nothing disabled, because the browser's offline flag can be wrong and a Save is still attempted
@@ -32,11 +34,7 @@ export function subscribeConnection(onChange: () => void): () => void {
 export function OfflineBannerView({ offline }: { offline: boolean }) {
   return (
     <div role="status" className="offline-banner-region">
-      {offline ? (
-        <div className="offline-banner">
-          <p className="offline-banner__text">{OFFLINE_MESSAGE}</p>
-        </div>
-      ) : null}
+      {offline ? <Banner kind="offline">{OFFLINE_MESSAGE}</Banner> : null}
     </div>
   );
 }

@@ -1,0 +1,48 @@
+/* Dialogs (plan 1A Task 6, modern-web-guidance `dialog`). The browser's <dialog> sets display itself, so this file never
+   sets it on a closed dialog. The surface with a 1 px container border (forced colours keep it), ink, and a shell-tinted
+   backdrop. Scroll is held by the guide's two rules, never by overflow on the root. Nothing animates. */
+.ui-dialog {
+  box-sizing: border-box;
+  inline-size: min(36rem, calc(100% - 2 * var(--space-4)));
+  max-block-size: calc(100% - 2 * var(--space-4));
+  /* The browser centres a modal dialog with margin: auto, but app/globals.css resets every margin to 0 (an author rule
+     beats the browser's), which left it in the top-left corner. */
+  margin: auto;
+  padding: var(--space-6);
+  border: 1px solid var(--color-border-container);
+  border-radius: var(--radius-surface);
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+  line-height: var(--line-height-body);
+}
+
+.ui-dialog:modal {
+  overscroll-behavior: contain;
+}
+
+.ui-dialog::backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background-color: color-mix(in srgb, var(--color-shell) 60%, transparent);
+}
+
+.ui-dialog__title {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-h2);
+  line-height: var(--line-height-heading);
+}
+
+.ui-dialog__body {
+  max-inline-size: 65ch;
+}
+
+.ui-dialog__body > :last-child {
+  margin-block-end: 0;
+}
+
+.ui-dialog__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-block-start: var(--space-6);
+}

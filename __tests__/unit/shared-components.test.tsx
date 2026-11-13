@@ -32,7 +32,7 @@ describe('InlineConfirm', () => {
     expect(html).not.toMatch(/<dialog|aria-modal|role="dialog"|role="alertdialog"/);
     expect(html).toContain('<input type="password" name="password"/>');
     // a confirm button that submits nothing by itself
-    expect(html).toMatch(/<button type="button"[^>]*>Delete account<\/button>/);
+    expect(html).toMatch(/<button [^>]*type="button"[^>]*>Delete account<\/button>/);
   });
 
   it('UX-29 (helper): the group is named by the object, so a screen reader hears what is being confirmed', () => {

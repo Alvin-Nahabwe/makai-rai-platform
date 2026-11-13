@@ -132,7 +132,7 @@ export function FindingActions(p: FindingActionsProps): ReactElement {
 
   // Opening the confirmation puts focus on its action button (UX-42); Cancel puts it back on what opened it.
   useEffect(() => {
-    if (open === 'withdraw') confirmWrap.current?.querySelector<HTMLButtonElement>('button.btn--primary')?.focus();
+    if (open === 'withdraw') confirmWrap.current?.querySelector<HTMLButtonElement>('.ui-confirm__actions button:last-child')?.focus();
   }, [open]);
   const close = (back: React.RefObject<HTMLButtonElement | null>) => {
     setOpen(null); setReason(''); setErrors([]); w.clearFailure();
