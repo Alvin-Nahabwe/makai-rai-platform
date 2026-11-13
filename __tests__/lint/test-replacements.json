@@ -686,5 +686,21 @@
     "property": "every labelled region of S-12 is named by a heading it points to; the evidence block is named once, by its fieldset legend (audit B #151): the \"Evidence\" h3 and the evidence section's aria-labelledby are removed, so S-12 has 6 labelled regions (5 for the gate question), and the evidence block still sits inside the answer form; for the gate question there is still no suggestions section and no link to it",
     "proof": "__tests__/unit/s12-shell.test.tsx::FR-SUG-02 UX-08: for the gate question (nothing to suggest) the page renders no Ways teams address this section and no link to it; __tests__/unit/evidence-components.test.tsx::UX-30: the block names itself once: one legend \"Evidence\" and no heading",
     "task": "1A-14"
+  },
+  {
+    "kind": "rule",
+    "deleted": "e2e/no-score-helpers.spec.ts::UX-06 NFR-A11Y-05 (helper): status labels are words in a neutral colour, and the warning tint sits only on the three warning labels",
+    "replacedBy": "e2e/no-score-helpers.spec.ts::spec 7.2 NFR-A11Y-05 (helper): a status mark is a shape and words in ink, with no tick and no green",
+    "property": "A status is not carried by colour: it is words in ink (--color-ink, or --color-ink-muted for a legacy .status-label; a mark's shape is in --color-mark), with no tick and no green on it (spec 7.2; spec 12: rewritten to the new rule). The old case's second half, the warning tint allowed only on \"Overdue\", \"Owner cannot act\" and \"Legal name not recorded\" (UX-06), is retired by spec 12, which replaces UX-06 with section 7.2, and is not carried over.",
+    "proof": "e2e/no-score-helpers.spec.ts::spec 7.2 NFR-A11Y-05 (helper): a status mark is a shape and words in ink, with no tick and no green: the bad list's green, colour, tick, no-words and token lines each name their finding (/green/, /is not --color-mark/, /neither --color-ink/, /tick/, /no words/, /--color-mark is not defined/), and the kit's own route row and a legacy label page pass; the vectors of isGreenColour and tickShapeOf are asserted in e2e/no-score-helpers.spec.ts::spec 7.2 (helper): isGreenColour and tickShapeOf judge the vectors the spec lists",
+    "task": "1A-15"
+  },
+  {
+    "kind": "rule",
+    "changed": "e2e/prj-screens.spec.ts::UX-06: to-do counts come before recorded counts; status labels are neutral and the warning tint stays on the allowed labels (S-10 and S-08)",
+    "replacedBy": "e2e/prj-screens.spec.ts::UX-06: to-do counts come before recorded counts; status is words in ink, with no tick and no green (S-10 and S-08)",
+    "property": "To-do counts come before recorded counts, and the status on S-10 and S-08 is not carried by colour: words in ink, with no tick and no green (spec 7.2; spec 12: rewritten to the new rule). The old title's second half, the warning tint allowed only on the allowed labels (UX-06), is retired by spec 12, which replaces UX-06 with section 7.2, and is not carried over.",
+    "proof": "e2e/prj-screens.spec.ts::UX-06: to-do counts come before recorded counts; status is words in ink, with no tick and no green (S-10 and S-08): the unchanged indexOf('with no decision') < indexOf('Recorded') assertion and expectStatusMarksInk(page) on both screens, which rejects a green, a tick or a colour other than ink on a status label (proved in e2e/no-score-helpers.spec.ts::spec 7.2 NFR-A11Y-05 (helper): a status mark is a shape and words in ink, with no tick and no green)",
+    "task": "1A-15"
   }
 ]

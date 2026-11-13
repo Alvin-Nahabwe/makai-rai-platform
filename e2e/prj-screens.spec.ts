@@ -10,7 +10,7 @@ import type { Stage } from '../types/record';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { failOnDialog } from './helpers/dialogs';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
-import { expectCountsAsWholeNumbersPerStage, expectNeutralStatusLabels } from './helpers/noScore';
+import { expectCountsAsWholeNumbersPerStage, expectStatusMarksInk } from './helpers/noScore';
 
 /**
  * The project screens in a browser: S-08 (dashboard), S-09 (new and edit project), S-10 (stage view) and S-32 (all
@@ -117,14 +117,14 @@ test('UX-36 FR-PRJ-02: S-10 delivers its headings and counts with JavaScript off
   await expect(page.getByRole('listitem').filter({ hasText: /\d+ with no decision/ }).first()).toBeVisible();   // the collapsed-heading copy of the count is hidden while the stage is open
 });
 
-test('UX-06: to-do counts come before recorded counts; status labels are neutral and the warning tint stays on the allowed labels (S-10 and S-08)', async ({ browser }) => {
+test('UX-06: to-do counts come before recorded counts; status is words in ink, with no tick and no green (S-10 and S-08)', async ({ browser }) => {
   const page = await signedIn(browser, fx.members.owner);
   await page.goto(path(`/projects/${main.id}`));
   const text = await page.locator('[data-stage="pre-processing"]').innerText();
   expect(text.indexOf('with no decision')).toBeLessThan(text.indexOf('Recorded'));
   for (const p of [path(`/projects/${main.id}`), path('/dashboard')]) {
     await page.goto(p);
-    await expectNeutralStatusLabels(page);
+    await expectStatusMarksInk(page);
   }
 });
 
@@ -354,7 +354,7 @@ test('FR-RM-04 UX-06 UX-07: each stage count on S-10 and S-08 is a whole number 
     await page.goto(p);
     if (p === s10) await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toContainText(orgName);
     await expectCountsAsWholeNumbersPerStage(page, sentinels, own);
-    await expectNeutralStatusLabels(page);
+    await expectStatusMarksInk(page);
   }
   // Only the name is left out: the three counts added up and written into S-10 beside it are still found. Hydration can
   // land after load and drop an element React did not render, so the element is written again until the check has read it.
