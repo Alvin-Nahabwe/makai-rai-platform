@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   type ContentExclusions, contentStrings, CONTENT_FILES, fieldMapTexts, formatHit, lintHtml, lintText, lintTs, notebookTexts,
-  phraseRules, PROPER_NAMES, ratchetViolations, readBundle, RULES, RUNNING, scopeContent, scopeCopyModules, scopeEmail,
+  phraseRules, PROPER_NAMES, ratchetViolations, worklistShapeProblems, readBundle, RULES, RUNNING, scopeContent, scopeCopyModules, scopeEmail,
   scopeFieldMaps, scopeNotebooks, type ScopeResult, type SignedKeys, textBlocks,
   scopeTemplates, type Worklist, worklistOf, writeHits,
 } from './helpers/vocabulary-scan';
@@ -25,11 +25,12 @@ import {
  * With `VOCABULARY_HITS_DIR` set, the hit lists are written there; otherwise the test writes nothing.
  *
  * The worklist (scopes 1, 3 and 4 until Task 20). `__tests__/lint/vocabulary-worklist.json` holds, per file and per
- * "<concept id> :: <item text>", the number of hits each file may still have. A normal test fails when any of them
- * has MORE hits than the file allows (an absent entry allows 0), so a new retired phrase cannot join the worklist
- * unseen. Entries are only ever lowered or removed, never raised; a copy task that removes hits need not touch the
- * file. Task 20 deletes the file together with `.fails`. `VOCABULARY_WORKLIST_PRINT=1` prints the current worklist
- * as JSON for a one-time write by hand; the test never writes the file.
+ * "<concept id> :: <item text>", the number of hits each file has. A normal test fails when a count differs from its
+ * entry in either direction: above it (a new retired phrase; an absent entry means 0) or below it (lower or remove the
+ * entry). So every task that removes a retired phrase lowers the worklist in the same commit, and an entry that
+ * reaches 0 is removed, not kept. Entries are never raised or added, except by Task 8's own regeneration when its
+ * rules changed. Task 20 deletes the file together with `.fails`. `VOCABULARY_WORKLIST_PRINT=1` prints the current
+ * worklist as JSON for writing by hand; the test never writes the file.
  */
 
 const WORKLIST_FILE = join(__dirname, 'vocabulary-worklist.json');
@@ -251,7 +252,7 @@ describe('the vocabulary lint, on fixtures', () => {
     expect(lintText('t', 'Guidance from the World Health Organization')).toEqual([]);
   });
 
-  it('the worklist ratchet refuses a new hit, and allows fewer', () => {
+  it('the worklist ratchet is exact: a new hit, a raised count and a stale entry are each refused', () => {
     const allowed: Worklist = { 'lib/a/copy.ts': { 'dashboard :: Dashboard': 1 } };
     const planted = lintTs('lib/a/copy.ts', "export const A = 'Back to Dashboard';\nexport const B = 'Open the RAI Toolkit';");
     expect(ratchetViolations(worklistOf(planted), allowed)).toEqual([
@@ -259,7 +260,23 @@ describe('the vocabulary lint, on fixtures', () => {
     ]);
     const twice = lintTs('lib/a/copy.ts', "export const A = 'Dashboard';\nexport const B = 'Back to Dashboard';");
     expect(ratchetViolations(worklistOf(twice), allowed)).toEqual(['lib/a/copy.ts: dashboard :: Dashboard: 2 hit(s), the worklist allows 1']);
-    expect(ratchetViolations(worklistOf([]), allowed)).toEqual([]);
+    const stale = ratchetViolations(worklistOf([]), allowed);
+    expect(stale).toEqual([
+      'lib/a/copy.ts: dashboard :: Dashboard: 0 hit(s), the worklist allows 1: lower or remove this entry: the worklist only shrinks (VOCABULARY_WORKLIST_PRINT=1 prints the current list)',
+    ]);
+    expect(ratchetViolations(worklistOf(lintTs('lib/a/copy.ts', "export const A = 'Dashboard';")), allowed)).toEqual([]);
+  });
+
+  it('the worklist file must be an object of objects whose values are positive integers', () => {
+    expect(worklistShapeProblems({ 'a.ts': { 'x :: y': 2 } })).toEqual([]);
+    expect(worklistShapeProblems([])).toEqual(['the worklist is not an object of files']);
+    expect(worklistShapeProblems({ 'a.ts': [] })).toEqual(['a.ts: not an object of entries']);
+    expect(worklistShapeProblems({ 'a.ts': { 'x :: y': 0, 'x :: z': 1.5, 'x :: w': '2', 'x :: v': -1 } })).toEqual([
+      'a.ts: x :: y: 0 is not a positive integer (remove an entry that reaches 0)',
+      'a.ts: x :: z: 1.5 is not a positive integer (remove an entry that reaches 0)',
+      'a.ts: x :: w: "2" is not a positive integer (remove an entry that reaches 0)',
+      'a.ts: x :: v: -1 is not a positive integer (remove an entry that reaches 0)',
+    ]);
   });
 
   it('content: a phrase planted in a signed field and in an unsigned field fails, each with its sign-off status', () => {
@@ -381,17 +398,27 @@ describe('the vocabulary lint, on the repository', () => {
     expect(email.strings).toBeGreaterThanOrEqual(EMAIL_STRINGS_FLOOR);
   });
 
-  it('the worklist only shrinks: no file has more hits of a retired item than vocabulary-worklist.json allows', () => {
+  it('the worklist is exact: each file has exactly the hits of each retired item that vocabulary-worklist.json lists', () => {
     const current = worklistOf(worklistHits());
     writeHits('vocabulary-hits-baseline.txt', worklistHits());
     if (process.env.VOCABULARY_WORKLIST_PRINT === '1') console.log(JSON.stringify(current, null, 2));
-    const allowed = JSON.parse(readFileSync(WORKLIST_FILE, 'utf8')) as Worklist;
-    expect(ratchetViolations(current, allowed)).toEqual([]);
+    const allowed = JSON.parse(readFileSync(WORKLIST_FILE, 'utf8')) as unknown;
+    expect(worklistShapeProblems(allowed)).toEqual([]);
+    expect(ratchetViolations(current, allowed as Worklist)).toEqual([]);
   });
 
   // Scopes (1) copy modules, (3) field maps and (4) email all hold hits today: the worklist of the copy tasks.
   // Register row (toolkit-process/docs/DEFERRED_REGISTER.md), trigger "Task 20 merged"; Task 20 removes `.fails`.
   it.fails('vocabulary lint (worklist until Task 20)', () => {
+    // `it.fails` turns every throw into a pass. So a scan that crashed, or read no file in a scope, must not throw
+    // here: the body returns normally, which `it.fails` reports as a failure of this case, even when it runs alone.
+    let scan: ReturnType<typeof scanWorklistScopes> | undefined;
+    try { scan = scanWorklistScopes(); } catch (e) {
+      console.error(`vocabulary lint: the worklist scan failed: ${(e as Error).message}`);
+      return;
+    }
+    const empty = Object.entries(scan).filter(([, r]) => !r.files.length).map(([name]) => name);
+    if (empty.length) { console.error(`vocabulary lint: the worklist scan read no file in: ${empty.join(', ')}`); return; }
     expect(worklistHits().map(formatHit)).toEqual([]);
   });
 

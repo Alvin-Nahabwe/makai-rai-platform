@@ -356,13 +356,38 @@ export function worklistOf(hits: Hit[]): Worklist {
   return sorted;
 }
 
-/** Every (file, concept, item) with more hits than `allowed` permits; an entry that is absent allows 0. */
+/**
+ * Every (file, concept, item) whose count differs from its worklist entry: above it (a new hit; an absent entry means
+ * 0), or below it, including an entry whose file no longer has the item (the entry must be lowered or removed).
+ */
 export function ratchetViolations(current: Worklist, allowed: Worklist): string[] {
   const out: string[] = [];
   for (const [file, byKey] of Object.entries(current)) {
     for (const [key, n] of Object.entries(byKey)) {
       const max = allowed[file]?.[key] ?? 0;
       if (n > max) out.push(`${file}: ${key}: ${n} hit(s), the worklist allows ${max}`);
+    }
+  }
+  for (const [file, byKey] of Object.entries(allowed)) {
+    for (const [key, max] of Object.entries(byKey)) {
+      const n = current[file]?.[key] ?? 0;
+      if (n < max) {
+        out.push(`${file}: ${key}: ${n} hit(s), the worklist allows ${max}: lower or remove this entry: the worklist only shrinks (VOCABULARY_WORKLIST_PRINT=1 prints the current list)`);
+      }
+    }
+  }
+  return out;
+}
+
+/** Problems with the worklist file's shape: it must be an object of files, each an object of positive integers. */
+export function worklistShapeProblems(w: unknown): string[] {
+  const isObject = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
+  if (!isObject(w)) return ['the worklist is not an object of files'];
+  const out: string[] = [];
+  for (const [file, byKey] of Object.entries(w)) {
+    if (!isObject(byKey)) { out.push(`${file}: not an object of entries`); continue; }
+    for (const [key, n] of Object.entries(byKey)) {
+      if (!(typeof n === 'number' && Number.isInteger(n) && n > 0)) out.push(`${file}: ${key}: ${JSON.stringify(n)} is not a positive integer (remove an entry that reaches 0)`);
     }
   }
   return out;
