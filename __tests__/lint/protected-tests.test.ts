@@ -275,3 +275,26 @@ it('(harness) a missing base tag fails with a message naming the tag and the ful
   expect(() => requireBaseTag('stage-1-base', missing)).toThrow(/stage-1-base.*not found.*full checkout/);
   expect(() => requireBaseTag('stage-1-base', () => 'abc123\n')).not.toThrow();
 });
+
+// ---- harness: fix round 2 ----------------------------------------------------------------------------------------
+
+it('(harness) code on the line of an added case is compared: the two probe lines fail; a case on its own lines passes', () => {
+  const inside = grouped().replace("  it('saves'", "  it('new', () => {}); vi.mock('@/lib/data/decisions', () => ({}));\n  it('saves'");
+  expect(check(grouped(), inside).length).toBeGreaterThan(0);
+  expect(check(grouped(), grouped({ extra: "it('n', () => {}); globalThis.X = 1;\n" })).length).toBeGreaterThan(0);
+  const plain = grouped().replace("  it('saves'", "  it('new', () => {\n    expect(1).toBe(1);\n  });\n  it('saves'");
+  expect(check(grouped(), plain)).toEqual([]);
+  // the case itself, on one line, is still not compared
+  expect(check(grouped(), grouped({ extra: "it('n', () => {});\n" }))).toEqual([]);
+});
+
+it('(harness) a case added to a protected file fails when its body calls vi.mock or vi.hoisted, unless a complete structure or rule entry excuses it', () => {
+  for (const call of ["vi.mock('@/lib/data/decisions', () => ({}));", 'const h = vi.hoisted(() => 1);']) {
+    const added = grouped().replace("  it('saves'", `  it('another', () => {\n    ${call}\n  });\n  it('saves'`);
+    expect(check(grouped(), added).length).toBeGreaterThan(0);
+    const own = entry({ kind: 'structure', changed: `${FILE}::another`, replacedBy: `${FILE}::another` });
+    expect(check(grouped(), added, { ledger: [own], titles: ['another'] })).toEqual([]);
+    expect(check(grouped(), added, { ledger: [{ ...own, proof: '' }], titles: ['another'] }).length).toBeGreaterThan(0);
+    expect(check(grouped(), added, { ledger: [{ ...own, kind: 'wording' }], titles: ['another'] }).length).toBeGreaterThan(0);
+  }
+});

@@ -269,11 +269,11 @@ export function linePairs(baseBody: string, headBody: string): Array<[string, st
 // ---- cases -------------------------------------------------------------------------------------------------------
 
 /** The `it(` and `test(` cases of a source with a literal title, with their full lines as the body. */
-export function casesOf(source: string, fileName = 'file.ts'): Array<{ title: string; body: string; from: number; to: number }> {
+export function casesOf(source: string, fileName = 'file.ts'): Array<{ title: string; body: string; from: number; to: number; start: number; end: number }> {
   const kind = /\.[cm]?jsx?$/.test(fileName) ? (/\.jsx$/.test(fileName) ? ts.ScriptKind.JSX : ts.ScriptKind.JS) : /\.tsx$/.test(fileName) ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
   const sf = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, kind);
   const lines = source.split('\n');
-  const cases: Array<{ title: string; body: string; from: number; to: number }> = [];
+  const cases: Array<{ title: string; body: string; from: number; to: number; start: number; end: number }> = [];
   const visit = (node: ts.Node): void => {
     if (ts.isCallExpression(node)) {
       let callee: ts.Expression = node.expression;
@@ -284,7 +284,9 @@ export function casesOf(source: string, fileName = 'file.ts'): Array<{ title: st
         if (title !== undefined) {
           const from = sf.getLineAndCharacterOfPosition(node.getStart(sf)).line;
           const to = sf.getLineAndCharacterOfPosition(node.getEnd()).line;
-          cases.push({ title, body: lines.slice(from, to + 1).join('\n'), from, to });
+          // the case's own characters: from its call to its closing parenthesis and an optional `;`
+          const end = source[node.getEnd()] === ';' ? node.getEnd() + 1 : node.getEnd();
+          cases.push({ title, body: lines.slice(from, to + 1).join('\n'), from, to, start: node.getStart(sf), end });
         }
       }
     }
@@ -294,11 +296,12 @@ export function casesOf(source: string, fileName = 'file.ts'): Array<{ title: st
   return cases;
 }
 
-/** `source` with the lines of every case blanked, so the code outside the cases can be compared with line numbers kept. */
+/** `source` with every case's own characters blanked, so the code outside the cases can be compared with line numbers kept. */
 export function outsideCases(source: string, fileName = 'file.ts'): string {
-  const lines = source.split('\n');
-  for (const c of casesOf(source, fileName)) for (let l = c.from; l <= c.to; l += 1) lines[l] = '';
-  return lines.join('\n');
+  const chars = [...source];
+  // only the case's own characters are blanked (line breaks kept), so code sharing a line with a case is still compared
+  for (const c of casesOf(source, fileName)) for (let i = c.start; i < c.end; i += 1) if (chars[i] !== '\n' && chars[i] !== '\r') chars[i] = ' ';
+  return chars.join('');
 }
 
 /** True when the code outside the cases differs at all, apart from copy imports and blank lines. */
@@ -345,11 +348,13 @@ export function checkProtectedFile(args: {
   const headCases = casesOf(headSource, file);
   const copyNames = copyImportsOf(headSource);
   const seen = new Map<string, number>();
+  const matched = new Set<number>();
   for (const baseCase of casesOf(baseSource, file)) {
     const nth = seen.get(baseCase.title) ?? 0;
     seen.set(baseCase.title, nth + 1);
     const key = `${file}::${baseCase.title}`;
     const headCase = headCases.filter((c) => c.title === baseCase.title)[nth];
+    if (headCase) matched.add(headCases.indexOf(headCase));
     const bad: string[] = [];
     if (isHumanRead) {
       // compared by a reviewer: a removed or changed case needs a wording, structure or rule entry
@@ -368,6 +373,14 @@ export function checkProtectedFile(args: {
       if (!sameUnits(before, after, copyNames)) problems.push(`${key}: "${before.trim()}" became "${after.trim()}"`);
     }
   }
+  // a case added at HEAD is not compared, but vitest hoists vi.mock and vi.hoisted to the top of the file wherever they are
+  // written, so such a call in a new case acts on every case in the file
+  headCases.forEach((c, i) => {
+    if (matched.has(i) || !/\bvi\.(mock|hoisted)\s*\(/.test(c.body)) return;
+    const key = `${file}::${c.title}`;
+    const bad: string[] = [];
+    if (!excuse(key, ['structure', 'rule'], ledger, titlesAtHead, bad)) problems.push(...bad, `${key}: an added case calls vi.mock or vi.hoisted, which vitest hoists over every case in the file, without a structure or rule entry`);
+  });
   // the code outside the cases (constants, hooks, describe blocks, helpers) is compared as a whole
   const moduleKey = `${file}::(module)`;
   const baseOutside = outsideCases(baseSource, file);
