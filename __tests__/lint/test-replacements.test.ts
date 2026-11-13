@@ -24,7 +24,7 @@ it('every test title at the base tag that is absent at HEAD has a replacement en
   }
   expect(Object.keys(baseTitles).length).toBeGreaterThan(0);
   expect(unexplainedRemovals({ baseTitles, titlesAtHead, ledger })).toEqual([]);
-});
+}, 60_000); // reads every test file of the base tag from git
 
 it('(harness) a removed title without an entry fails; an entry needs an existing replacedBy, a property and a proof', () => {
   const baseTitles = { 'a.test.ts': ['kept', 'gone'] };
@@ -38,4 +38,13 @@ it('(harness) a removed title without an entry fails; an entry needs an existing
   expect(unexplainedRemovals({ baseTitles, titlesAtHead: at, ledger: [{ ...entry, proof: '' }] })).toHaveLength(1);
   // a title added at HEAD needs nothing
   expect(unexplainedRemovals({ baseTitles: { 'a.test.ts': ['kept'] }, titlesAtHead: at, ledger: [] })).toEqual([]);
+});
+
+it('(harness) removing one of two cases with the same title is a removal', () => {
+  const baseTitles = { 'a.test.ts': ['twice', 'twice', 'kept'] };
+  const atHead = (): string[] => ['twice', 'kept'];
+  expect(unexplainedRemovals({ baseTitles, titlesAtHead: atHead, ledger: [] })).toHaveLength(1);
+  const entry: LedgerEntry = { kind: 'removed', deleted: 'a.test.ts::twice', replacedBy: 'a.test.ts::kept', property: 'p', proof: 'q', task: 't' };
+  expect(unexplainedRemovals({ baseTitles, titlesAtHead: atHead, ledger: [entry] })).toEqual([]);
+  expect(unexplainedRemovals({ baseTitles: { 'a.test.ts': ['twice', 'twice'] }, titlesAtHead: () => ['twice', 'twice'], ledger: [] })).toEqual([]);
 });

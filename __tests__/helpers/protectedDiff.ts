@@ -30,11 +30,12 @@ export type GitAdapter = { show(ref: string, file: string): string; changed(a: s
 const COPY_MODULE = /(^@\/lib\/|(\.\.\/)+lib\/).*copy$/;
 const COPY_CONST = [/^[A-Z][A-Z0-9_]*_COPY$/, /^TERM_[A-Z0-9_]+$/];
 const K = ts.SyntaxKind;
+const HAS_LETTER = /\p{L}/u;
 
 // ---- tokens and units --------------------------------------------------------------------------------------------
 
 type Tok = { kind: ts.SyntaxKind; text: string };
-type Unit = { text: string; lit: boolean; isConst: boolean };
+type Unit = { text: string; lit: boolean; isConst: boolean; regexLit?: string; regexCall?: string };
 
 const NO_REGEX_AFTER = new Set<ts.SyntaxKind>([
   K.Identifier, K.PrivateIdentifier, K.NumericLiteral, K.BigIntLiteral, K.StringLiteral, K.NoSubstitutionTemplateLiteral,
@@ -91,14 +92,16 @@ function matchConst(toks: Tok[], i: number, copyNames: ReadonlySet<string>): num
     return -1;
   }
   // a template literal all of whose substitutions are CONST units
+  // (its fixed text, the head, middles and tail, holds no letter: new wording cannot hide in a template)
   if (t.kind === K.TemplateHead) {
+    if (HAS_LETTER.test(t.text)) return -1;
     let e = i + 1;
     for (;;) {
       const sub = matchConst(toks, e, copyNames);
       if (sub < 0) return -1;
       e = sub;
-      if (toks[e]?.kind === K.TemplateMiddle) e += 1;
-      else if (toks[e]?.kind === K.TemplateTail) return e + 1;
+      if (toks[e]?.kind === K.TemplateMiddle && !HAS_LETTER.test(toks[e].text)) e += 1;
+      else if (toks[e]?.kind === K.TemplateTail && !HAS_LETTER.test(toks[e].text)) return e + 1;
       else return -1;
     }
   }
@@ -130,11 +133,18 @@ function unitsOf(text: string, copyNames: ReadonlySet<string>): Unit[] {
   for (let i = 0; i < toks.length; ) {
     const end = matchConst(toks, i, copyNames);
     if (end > i) {
-      units.push({ text: toks.slice(i, end).map((t) => t.text).join(' '), lit: false, isConst: true });
+      const isCall = (toks[i].kind === K.NewKeyword || toks[i].text === 'RegExp') && toks[i].kind !== K.TemplateHead;
+      const flagsArg = toks[end - 3]?.kind === K.CommaToken && toks[end - 2]?.kind === K.StringLiteral && toks[end - 1]?.kind === K.CloseParenToken ? toks[end - 2].text.slice(1, -1) : '';
+      units.push({ text: toks.slice(i, end).map((t) => t.text).join(' '), lit: false, isConst: true, regexCall: isCall ? flagsArg : undefined });
       i = end;
     } else {
       const k = toks[i].kind;
-      units.push({ text: toks[i].text, lit: k === K.StringLiteral || k === K.NoSubstitutionTemplateLiteral || k === K.RegularExpressionLiteral, isConst: false });
+      units.push({
+        text: toks[i].text,
+        lit: k === K.StringLiteral || k === K.NoSubstitutionTemplateLiteral || k === K.RegularExpressionLiteral,
+        isConst: false,
+        regexLit: k === K.RegularExpressionLiteral ? toks[i].text.slice(toks[i].text.lastIndexOf('/') + 1) : undefined,
+      });
       i += 1;
     }
   }
@@ -146,7 +156,14 @@ export function sameUnits(before: string, after: string, copyNames: ReadonlySet<
   const b = unitsOf(before, copyNames);
   const a = unitsOf(after, copyNames);
   if (b.length !== a.length) return false;
-  return b.every((u, i) => u.text === a[i].text || (u.lit && a[i].isConst));
+  const sortedFlags = (f: string): string => [...f].sort().join('');
+  return b.every((u, i) => {
+    if (u.text === a[i].text) return true;
+    if (!u.lit || !a[i].isConst) return false;
+    // RegExp(X, flags) may replace only a regular-expression literal, with the same flags
+    const call = a[i].regexCall;
+    return call === undefined || (u.regexLit !== undefined && sortedFlags(u.regexLit) === sortedFlags(call));
+  });
 }
 
 // ---- imports -----------------------------------------------------------------------------------------------------
@@ -218,11 +235,14 @@ const toLines = (text: string): Line[] => text.split('\n').map((t, k) => ({ text
 /** `source` lines without the lines of its copy imports (rule (d)), keeping each line's original number. */
 function withoutCopyImports(source: string): Line[] {
   const sf = parse(source);
+  const lines = source.split('\n');
   const dropped = new Set<number>();
   for (const decl of copyImportDeclarations(sf)) {
-    const first = sf.getLineAndCharacterOfPosition(decl.getStart(sf)).line;
-    const last = sf.getLineAndCharacterOfPosition(decl.getEnd()).line;
-    for (let l = first; l <= last; l += 1) dropped.add(l + 1);
+    const start = sf.getLineAndCharacterOfPosition(decl.getStart(sf));
+    const end = sf.getLineAndCharacterOfPosition(decl.getEnd());
+    // dropped only when the line is nothing but the import: no other statement shares its first or last line
+    const alone = lines[start.line].slice(0, start.character).trim() === '' && lines[end.line].slice(end.character).trim() === '';
+    if (alone) for (let l = start.line; l <= end.line; l += 1) dropped.add(l + 1);
   }
   return toLines(source).filter((l) => !dropped.has(l.no));
 }
@@ -249,11 +269,11 @@ export function linePairs(baseBody: string, headBody: string): Array<[string, st
 // ---- cases -------------------------------------------------------------------------------------------------------
 
 /** The `it(` and `test(` cases of a source with a literal title, with their full lines as the body. */
-export function casesOf(source: string, fileName = 'file.ts'): Array<{ title: string; body: string }> {
+export function casesOf(source: string, fileName = 'file.ts'): Array<{ title: string; body: string; from: number; to: number }> {
   const kind = /\.[cm]?jsx?$/.test(fileName) ? (/\.jsx$/.test(fileName) ? ts.ScriptKind.JSX : ts.ScriptKind.JS) : /\.tsx$/.test(fileName) ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
   const sf = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, kind);
   const lines = source.split('\n');
-  const cases: Array<{ title: string; body: string }> = [];
+  const cases: Array<{ title: string; body: string; from: number; to: number }> = [];
   const visit = (node: ts.Node): void => {
     if (ts.isCallExpression(node)) {
       let callee: ts.Expression = node.expression;
@@ -264,7 +284,7 @@ export function casesOf(source: string, fileName = 'file.ts'): Array<{ title: st
         if (title !== undefined) {
           const from = sf.getLineAndCharacterOfPosition(node.getStart(sf)).line;
           const to = sf.getLineAndCharacterOfPosition(node.getEnd()).line;
-          cases.push({ title, body: lines.slice(from, to + 1).join('\n') });
+          cases.push({ title, body: lines.slice(from, to + 1).join('\n'), from, to });
         }
       }
     }
@@ -272,6 +292,20 @@ export function casesOf(source: string, fileName = 'file.ts'): Array<{ title: st
   };
   visit(sf);
   return cases;
+}
+
+/** `source` with the lines of every case blanked, so the code outside the cases can be compared with line numbers kept. */
+export function outsideCases(source: string, fileName = 'file.ts'): string {
+  const lines = source.split('\n');
+  for (const c of casesOf(source, fileName)) for (let l = c.from; l <= c.to; l += 1) lines[l] = '';
+  return lines.join('\n');
+}
+
+/** True when the code outside the cases differs at all, apart from copy imports and blank lines. */
+function outsideChanged(baseOutside: string, headOutside: string): boolean {
+  return pairLines(withoutCopyImports(baseOutside), withoutCopyImports(headOutside)).some(
+    ({ before, after }) => (before?.text.trim() ?? '') !== (after?.text.trim() ?? ''),
+  );
 }
 
 // ---- the ledger --------------------------------------------------------------------------------------------------
@@ -286,6 +320,10 @@ function excuse(key: string, kinds: LedgerEntry['kind'][], ledger: LedgerEntry[]
   let excused = false;
   for (const e of ledger) {
     if (!kinds.includes(e.kind) || (e.deleted !== key && e.changed !== key)) continue;
+    if (![e.property, e.proof, e.task].every((f) => typeof f === 'string' && f.trim() !== '')) {
+      bad.push(`${key}: the ${e.kind} entry needs a property, a proof and a task`);
+      continue;
+    }
     const target = e.replacedBy.includes('::') ? splitKey(e.replacedBy) : undefined;
     if (target && titlesAtHead(target.file).includes(target.title)) excused = true;
     else bad.push(`${key}: the ${e.kind} entry's replacedBy "${e.replacedBy}" does not exist at HEAD`);
@@ -314,10 +352,10 @@ export function checkProtectedFile(args: {
     const headCase = headCases.filter((c) => c.title === baseCase.title)[nth];
     const bad: string[] = [];
     if (isHumanRead) {
-      // compared by a reviewer: a removed or changed case needs a wording entry (a removed one may carry structure or rule)
+      // compared by a reviewer: a removed or changed case needs a wording, structure or rule entry
       if (headCase && headCase.body === baseCase.body) continue;
-      const kinds: LedgerEntry['kind'][] = headCase ? ['wording'] : ['wording', 'structure', 'rule'];
-      if (!excuse(key, kinds, ledger, titlesAtHead, bad)) problems.push(...bad, `${key}: a humanRead file's case ${headCase ? 'changed' : 'was removed'} without a wording entry`);
+      const kinds: LedgerEntry['kind'][] = ['wording', 'structure', 'rule'];
+      if (!excuse(key, kinds, ledger, titlesAtHead, bad)) problems.push(...bad, `${key}: a humanRead file's case ${headCase ? 'changed' : 'was removed'} without a wording, structure or rule entry`);
       continue;
     }
     if (excuse(key, ['wording', 'structure', 'rule'], ledger, titlesAtHead, bad)) continue;
@@ -328,6 +366,21 @@ export function checkProtectedFile(args: {
     }
     for (const [before, after] of linePairs(baseCase.body, headCase.body)) {
       if (!sameUnits(before, after, copyNames)) problems.push(`${key}: "${before.trim()}" became "${after.trim()}"`);
+    }
+  }
+  // the code outside the cases (constants, hooks, describe blocks, helpers) is compared as a whole
+  const moduleKey = `${file}::(module)`;
+  const baseOutside = outsideCases(baseSource, file);
+  const headOutside = outsideCases(headSource, file);
+  const bad: string[] = [];
+  if (isHumanRead) {
+    if (outsideChanged(baseOutside, headOutside) && !excuse(moduleKey, ['wording', 'structure', 'rule'], ledger, titlesAtHead, bad)) {
+      problems.push(...bad, `${moduleKey}: a humanRead file changed outside its cases without a wording, structure or rule entry`);
+    }
+  } else {
+    const violations = compareSources(baseOutside, headOutside);
+    if (violations.length > 0 && !excuse(moduleKey, ['wording', 'structure', 'rule'], ledger, titlesAtHead, bad)) {
+      problems.push(...bad, ...violations.map((v) => `${moduleKey} line ${v.line}: "${v.before.trim()}" became "${v.after.trim()}" (${v.why})`));
     }
   }
   return problems;
@@ -349,9 +402,10 @@ export function unexplainedRemovals(args: {
   const { baseTitles, titlesAtHead, ledger } = args;
   const problems: string[] = [];
   for (const [file, titles] of Object.entries(baseTitles)) {
-    const atHead = new Set(titlesAtHead(file));
+    const count = (list: string[], title: string): number => list.filter((t) => t === title).length;
+    const atHead = titlesAtHead(file);
     for (const title of new Set(titles)) {
-      if (atHead.has(title)) continue;
+      if (count(atHead, title) >= count(titles, title)) continue;
       const key = `${file}::${title}`;
       const entries = ledger.filter((e) => e.deleted === key || e.changed === key);
       if (entries.length === 0) { problems.push(`${key}: removed without an entry in test-replacements.json`); continue; }

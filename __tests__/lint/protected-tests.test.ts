@@ -11,6 +11,7 @@ import {
   type GitAdapter,
   type LedgerEntry,
 } from '../helpers/protectedDiff';
+import { loadsLensModule } from '../../scripts/redesign/protected-tests.mjs';
 
 /**
  * Spec 12: while the interface is reworded, a protected test (one that pins saving, drafts, conflicts, sealing,
@@ -49,7 +50,7 @@ it('spec 12: a protected test changes only where a message literal became a copy
     );
   }
   expect(problems).toEqual([]);
-});
+}, 60_000); // reads every protected file of the base tag from git
 
 // ---- harness: the comparison itself ------------------------------------------------------------------------------
 
@@ -173,4 +174,94 @@ it('(harness) a protected file changed only by a listed main merge passes', () =
   expect(resolveBaseSource(FILE, 'stage-1-base', ['abc123'], fake(true))).toBe('MAIN SIDE');
   expect(resolveBaseSource(FILE, 'stage-1-base', ['abc123'], fake(false))).toBe('BASE SIDE');
   expect(resolveBaseSource(FILE, 'stage-1-base', [], fake(true))).toBe('BASE SIDE');
+});
+
+// ---- harness: fix round 1 ----------------------------------------------------------------------------------------
+
+const MODULE = `${FILE}::(module)`;
+const grouped = (o: { k?: string; before?: string; d?: string; i?: string; extra?: string } = {}): string =>
+  `import { it, expect, describe, beforeEach } from 'vitest';\nconst K = ${o.k ?? '1'};\n${o.extra ?? ''}${o.d ?? 'describe'}('group', () => {\n  beforeEach(() => {\n    ${o.before ?? 'setup();'}\n  });\n  ${o.i ?? 'it'}('saves', () => {\n    expect(K).toBe(1);\n  });\n});\n`;
+
+it('(harness) the import lens matches a static, relative, dynamic, required and mocked load of a lens module, and not another module', () => {
+  expect(loadsLensModule("import { x } from '@/lib/data/decisions';")).toBe(true);
+  expect(loadsLensModule("import { x } from '../../lib/seal/verify';")).toBe(true);
+  expect(loadsLensModule("vi.mock('@/lib/data/reviews', () => ({}));")).toBe(true);
+  expect(loadsLensModule("vi.doMock('../lib/authz/policy');")).toBe(true);
+  expect(loadsLensModule("const m = await import('../lib/client/drafts');")).toBe(true);
+  expect(loadsLensModule("const m = require('@/lib/question/saveOutcome');")).toBe(true);
+  expect(loadsLensModule("import { x } from '@/lib/data/projects';")).toBe(false);
+  expect(loadsLensModule("import { x } from '@/lib/decision/copy';")).toBe(false);
+  expect(loadsLensModule("// see @/lib/data/decisions in the docs")).toBe(false);
+});
+
+it('(harness) a change outside the cases fails: a top-level constant, a beforeEach body, describe turned into describe.skip', () => {
+  expect(check(grouped(), grouped())).toEqual([]);
+  expect(check(grouped(), grouped({ k: '2' })).length).toBeGreaterThan(0);
+  expect(check(grouped(), grouped({ before: 'setup(2);' })).length).toBeGreaterThan(0);
+  expect(check(grouped(), grouped({ d: 'describe.skip' })).length).toBeGreaterThan(0);
+  expect(check(grouped(), grouped({ extra: 'helper();\n' })).length).toBeGreaterThan(0);
+});
+
+it('(harness) it turned into it.skip fails', () => {
+  expect(check(grouped(), grouped({ i: 'it.skip' })).length).toBeGreaterThan(0);
+  expect(check(grouped(), grouped({ i: 'it.only' })).length).toBeGreaterThan(0);
+});
+
+it('(harness) an added copy import at the top passes; a case added at HEAD passes with no entry; a (module) entry excuses a change outside the cases', () => {
+  expect(check(grouped(), COPY_IMPORT + grouped())).toEqual([]);
+  const withNewCase = grouped().replace(/\}\);\n$/, "  it('another', () => {\n    expect(1).toBe(1);\n  });\n});\n");
+  expect(check(grouped(), withNewCase)).toEqual([]);
+  const ledger = [entry({ kind: 'rule', changed: MODULE })];
+  expect(check(grouped(), grouped({ k: '2' }), { ledger, titles: ['new case'] })).toEqual([]);
+  expect(check(grouped(), grouped({ k: '2' }), { ledger: [entry({ kind: 'removed', changed: MODULE })], titles: ['new case'] }).length).toBeGreaterThan(0);
+});
+
+it('(harness) in a humanRead file any change outside the cases needs a (module) entry', () => {
+  expect(check(grouped(), grouped(), { isHumanRead: true })).toEqual([]);
+  expect(check(grouped(), grouped({ k: '2' }), { isHumanRead: true }).length).toBeGreaterThan(0);
+  const ledger = [entry({ kind: 'wording', changed: MODULE })];
+  expect(check(grouped(), grouped({ k: '2' }), { isHumanRead: true, ledger, titles: ['new case'] })).toEqual([]);
+});
+
+it('(harness) a template literal is a copy constant only when its fixed text has no letter', () => {
+  const none = new Set<string>();
+  expect(sameUnits("x.toMatch('Saved.');", 'x.toMatch(`^${DECISION_COPY.savedPrefix}`);', none)).toBe(true);
+  expect(sameUnits("x.toBe('Saved.');", 'x.toBe(`Not saved, retry ${DECISION_COPY.x}`);', none)).toBe(false);
+  expect(sameUnits("x.toBe('Saved.');", 'x.toBe(`${DECISION_COPY.a}: ${DECISION_COPY.b}`);', none)).toBe(true);
+});
+
+it('(harness) RegExp(X) may replace only a regular-expression literal, and with the same flags', () => {
+  const none = new Set<string>();
+  expect(sameUnits('x.toMatch(/Saved/i);', "x.toMatch(new RegExp(DECISION_COPY.saved, 'i'));", none)).toBe(true);
+  expect(sameUnits('x.toMatch(/Saved/i);', 'x.toMatch(new RegExp(DECISION_COPY.saved));', none)).toBe(false);
+  expect(sameUnits('x.toMatch(/^Saved/);', "x.toMatch(RegExp(DECISION_COPY.saved, 'i'));", none)).toBe(false);
+  expect(sameUnits("x.toMatch('Saved');", 'x.toMatch(new RegExp(DECISION_COPY.saved));', none)).toBe(false);
+  expect(sameUnits('x.toMatch(/^Saved/gi);', "x.toMatch(new RegExp(DECISION_COPY.saved, 'ig'));", none)).toBe(true);
+});
+
+it('(harness) a ledger entry with an empty proof, property or task does not excuse a protected change; a case may be its own replacement', () => {
+  const before = base("  expect(msg).toBe('Saved.');");
+  const after = base("  expect(msg).toBe('Saved and kept.');");
+  const own = entry({ kind: 'rule', changed: `${FILE}::saves`, replacedBy: `${FILE}::saves` });
+  expect(check(before, after, { ledger: [own], titles: ['saves'] })).toEqual([]);
+  for (const field of ['proof', 'property', 'task'] as const) {
+    expect(check(before, after, { ledger: [{ ...own, [field]: '' }], titles: ['saves'] }).length).toBeGreaterThan(0);
+  }
+});
+
+it('(harness) a changed case in a humanRead file accepts a wording, structure or rule entry', () => {
+  const before = base("  expect(msg).toBe('Saved.');");
+  const after = base("  expect(msg).toBe(['Saved', 'and kept.'].join(' '));");
+  for (const kind of ['wording', 'structure', 'rule'] as const) {
+    expect(check(before, after, { isHumanRead: true, ledger: [entry({ kind, changed: `${FILE}::saves` })], titles: ['new case'] })).toEqual([]);
+  }
+  expect(check(before, after, { isHumanRead: true, ledger: [entry({ kind: 'removed', changed: `${FILE}::saves` })], titles: ['new case'] }).length).toBeGreaterThan(0);
+});
+
+it('(harness) a copy import is dropped only when the line holds nothing else', () => {
+  const body = "  expect(msg).toBe('Saved.');";
+  expect(compareSources(base(body), "import { A_COPY } from '@/lib/a/copy';\n" + base(body))).toEqual([]);
+  const sneaky = "import { A_COPY } from '@/lib/a/copy'; evil();\n" + base(body);
+  expect(compareSources(base(body), sneaky).length).toBeGreaterThan(0);
+  expect(compareSources(base(body), "evil(); import { A_COPY } from '@/lib/a/copy';\n" + base(body)).length).toBeGreaterThan(0);
 });
