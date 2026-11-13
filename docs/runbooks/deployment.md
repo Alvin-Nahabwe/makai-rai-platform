@@ -836,6 +836,11 @@ and see it pass first:
 RELEASE_CANDIDATE=1 npx vitest run
 ```
 
+Before that run, regenerate the list of claims markers with `node scripts/release/claims-markers.mjs`
+and commit `docs/releases/claims-markers.md` if it changed: the release-candidate run compares that
+file with the tree byte for byte, line numbers included
+(`__tests__/lint/live-run-report.test.ts`), and everyday runs do not.
+
 If any test fails, do not tag. A failing release-candidate case names something the release still
 lacks. Clear it by supplying what is missing or, where the owner accepts shipping without it, by a
 waiver entry the owner records for this release in `docs/releases/release-waivers.json`. A waiver

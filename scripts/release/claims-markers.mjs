@@ -13,7 +13,7 @@
 // compares the file byte for byte, line numbers included, only under RELEASE_CANDIDATE=1: an edit that moves a marker
 // does not fail every suite, but the file must be regenerated before a release candidate.
 // docs/releases/v0.6.0-live-run.md stays the v0.6.0 record. Importing this module has no side effect.
-import { readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
@@ -124,7 +124,8 @@ export function parse(text) {
   return rows;
 }
 
-if (process.argv[1] !== undefined && realpathSync(process.argv[1]) === SELF) {
+// `argv[1]` may name no file (`node -e … some-argument`): then this module is being imported, not run.
+if (process.argv[1] !== undefined && existsSync(process.argv[1]) && realpathSync(process.argv[1]) === SELF) {
   writeFileSync(join(REPO, OUT), render(claimMarkers()));
   console.log(`${OUT} written`);
 }
