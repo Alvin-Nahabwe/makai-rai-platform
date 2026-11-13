@@ -27,7 +27,7 @@ export interface QuestionPanelData {
 }
 
 /**
- * The panel for one question of one project, or `NotFoundError` when the project or the question is not
+ * The panel for one question of one project, with the project's name for the page title, or `NotFoundError` when the project or the question is not
  * this organisation's (NFR-SEC-02: row-level security makes another organisation's project invisible, so
  * it reads as absent) or the question is not in the running content's `p.stage`.
  *
@@ -41,14 +41,14 @@ export interface QuestionPanelData {
  */
 export async function loadQuestionPanel(
   ctx: OrgContext, identity: Identity, p: { projectId: string; stage: Stage; questionId: string },
-): Promise<QuestionPanelData> {
+): Promise<QuestionPanelData & { projectName: string }> {
   const running = runningContent();
   const runningQuestion = running.questions.get(p.questionId);
   if (runningQuestion === undefined || runningQuestion.stage !== p.stage) throw new NotFoundError();
   const gateId = gateQuestionId(running);
 
   const read = await withOrg(ctx, async (tx) => {
-    const project = await tx.project.findFirst({ where: { id: p.projectId }, select: { archivedAt: true, org: { select: { slug: true } } } });
+    const project = await tx.project.findFirst({ where: { id: p.projectId }, select: { name: true, archivedAt: true, org: { select: { slug: true } } } });
     if (project === null) throw new NotFoundError();
     const [memberships, lastOwn, gate] = await Promise.all([
       tx.membership.findMany({ select: { userId: true } }),
@@ -81,7 +81,7 @@ export async function loadQuestionPanel(
   const archived = read.project.archivedAt !== null;
 
   return {
-    orgSlug: read.project.org.slug, projectId: p.projectId, projectArchived: archived, stage: p.stage,
+    orgSlug: read.project.org.slug, projectId: p.projectId, projectName: read.project.name, projectArchived: archived, stage: p.stage,
     question: answeredAgainst ?? runningQuestion, runningQuestion,
     position: { index, total: ordered.length, previousId: ordered[index - 1]?.id ?? null, nextId: ordered[index + 1]?.id ?? null },
     current, historyCount: history.length, seals, reasonCodes: [...running.reasonCodes],

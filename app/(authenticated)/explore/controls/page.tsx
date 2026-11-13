@@ -2,7 +2,11 @@ import Link from 'next/link';
 import { ControlCard } from '@/components/suggestions/ControlCard';
 import { runningContent } from '@/lib/content/loader';
 import { loadResources } from '@/lib/content/resources';
+import { GUIDANCE_COPY } from '@/lib/guidance/copy';
+import { pageTitle } from '@/lib/ui/title';
 import './ControlsLibraryPage.css';
+
+export const metadata = { title: pageTitle(GUIDANCE_COPY.titles.controls) };
 
 /**
  * S-27, the controls (FR-SUG-04 to 06, UX-13). A server component: every control of the running content, on the same

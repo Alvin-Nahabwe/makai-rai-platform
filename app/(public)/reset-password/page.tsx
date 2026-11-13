@@ -1,6 +1,8 @@
+import { AUTH_COPY } from '@/lib/auth/copy';
+import { pageTitle } from '@/lib/ui/title';
 import { ResetPasswordClient } from './ResetPasswordClient';
 
-export const metadata = { title: 'Set a new password - MAK-AI RAI Platform', referrer: 'no-referrer' as const };
+export const metadata = { title: pageTitle(AUTH_COPY.titles.resetPassword), referrer: 'no-referrer' as const };
 
 /**
  * S-03 Set a new password (FR-ACC-06), opened from E-03's link. The token is in the address's fragment, which the browser

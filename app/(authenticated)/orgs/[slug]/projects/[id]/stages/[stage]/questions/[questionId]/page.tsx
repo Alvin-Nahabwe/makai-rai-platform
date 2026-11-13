@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { cache } from 'react';
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { requireIdentity } from '@/lib/auth/identity';
 import { requireOrgContextFor } from '@/lib/auth/context';
@@ -17,6 +19,9 @@ import { SuggestedControls, suggestionCount } from '@/components/suggestions/Sug
 import { isReworded } from '@/lib/question/reworded';
 import { STAGE_TITLE } from '@/lib/question/stageList';
 import { canWithdrawVersion, questionHref } from '@/lib/question/draft';
+import { DECISION_COPY } from '@/lib/decision/copy';
+import { orNotFound } from '@/lib/auth/titleGate';
+import { pageTitle } from '@/lib/ui/title';
 
 /** n in the in-page link "Ways teams address this (n)": SUG's `suggestionCount`. At 0 (the gate) there is no link and no section. */
 function countFor(data: QuestionPanelData): number {
@@ -124,6 +129,32 @@ export function QuestionPanelRegions({ data }: { data: QuestionPanelData }) {
   );
 }
 
+type Params = Promise<{ slug: string; id: string; stage: string; questionId: string }>;
+
+/**
+ * The gates and the loader, once per request: the page and its title both read through this (React `cache()`), so an
+ * unknown stage, question or project is the same `notFound()` for both and the title names nothing.
+ */
+const load = cache(async (slug: string, id: string, stage: string, questionId: string) => {
+  const identity = await requireIdentity();
+  const ctx = await requireOrgContextFor(identity.userId, slug, 'record:read');
+  if (!(STAGES as readonly string[]).includes(stage)) notFound();
+
+  try {
+    return await loadQuestionPanel(ctx, identity, { projectId: id, stage: stage as Stage, questionId });
+  } catch (e) {
+    if (e instanceof NotFoundError) notFound();
+    throw e;
+  }
+});
+
+/** The question's own heading, then the project. */
+export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
+  const { slug, id, stage, questionId } = await params;
+  const data = await orNotFound(load(slug, id, stage, questionId));
+  return { title: pageTitle(DECISION_COPY.titles.question(data.question.id, data.question.moduleTitle), data.projectName) };
+}
+
 /**
  * S-12, the question panel. The gate is `record:read`, every role's, so this refuses only a person who is
  * not a member (404, ADR-0001); the page and the loader decide what the person may then do. `requireIdentity`
@@ -133,19 +164,10 @@ export function QuestionPanelRegions({ data }: { data: QuestionPanelData }) {
 export default async function QuestionPage({
   params,
 }: {
-  params: Promise<{ slug: string; id: string; stage: string; questionId: string }>;
+  params: Params;
 }) {
   const { slug, id, stage, questionId } = await params;
-  const identity = await requireIdentity();
-  const ctx = await requireOrgContextFor(identity.userId, slug, 'record:read');
-  if (!(STAGES as readonly string[]).includes(stage)) notFound();
-
-  let data: QuestionPanelData;
-  try {
-    data = await loadQuestionPanel(ctx, identity, { projectId: id, stage: stage as Stage, questionId });
-  } catch (e) {
-    if (e instanceof NotFoundError) notFound();
-    throw e;
-  }
+  // The project's name is for the title only; the regions (and the client form inside them) get the panel as before.
+  const { projectName: _projectName, ...data } = await load(slug, id, stage, questionId);
   return <QuestionPanelRegions data={data} />;
 }

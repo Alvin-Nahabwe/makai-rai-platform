@@ -9,6 +9,10 @@ import { membershipsForUser } from '@/lib/data/preauth';
 import { resolveOrgDispatch } from '@/lib/org-dispatch';
 import IdleWarning from '@/components/layout/IdleWarning';
 import { MAIN_CONTENT_ID } from '@/components/layout/SkipLink';
+import { ORG_COPY } from '@/lib/org/copy';
+import { pageTitle } from '@/lib/ui/title';
+
+export const metadata = { title: pageTitle(ORG_COPY.titles.chooser) };
 
 /**
  * The active org is a URL segment now, not ambient session state (Task 6).

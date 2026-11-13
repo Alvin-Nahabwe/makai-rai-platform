@@ -1,6 +1,10 @@
 // app/(public)/login/page.tsx
 import { Suspense } from 'react';
+import { AUTH_COPY } from '@/lib/auth/copy';
+import { pageTitle } from '@/lib/ui/title';
 import { LoginForm } from './LoginClient';
+
+export const metadata = { title: pageTitle(AUTH_COPY.titles.signIn) };
 
 /** S-01 Sign in (FR-ACC-05). The form is LoginClient.tsx's; `useSearchParams` there needs the Suspense boundary. */
 export default function LoginPage() {

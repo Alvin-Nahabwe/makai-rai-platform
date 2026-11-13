@@ -6,9 +6,11 @@ import { ACCEPTED_KINDS } from '@/types/legal';
 import type { OrgRole } from '@prisma/client';
 import { formatDay } from '@/lib/format/dates';
 import { M23 } from '@/lib/http/messages';
+import { ORG_COPY } from '@/lib/org/copy';
+import { pageTitle } from '@/lib/ui/title';
 import AcceptInvitationClient from './AcceptInvitationClient';
 
-export const metadata: Metadata = { title: 'Invitation - MAK-AI RAI Platform' };
+export const metadata: Metadata = { title: pageTitle(ORG_COPY.titles.invitation) };
 
 /** "Amina N. invited you as an assessor. The invitation expires on 4 Nov 2026." (W-11, SRS line 2218). */
 function invitedLine(inviterName: string, role: OrgRole, expiresOn: string): string {

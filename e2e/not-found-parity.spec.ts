@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import { test, expect } from '@playwright/test';
 import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
+import { ERRORS_COPY } from '../lib/errors/copy';
+import { pageTitle } from '../lib/ui/title';
 
 /**
  * UX-05 and FR-AUTHZ-01 (SRS lines 1646-1647): a non-member opening an organisation's page, a member opening a
@@ -28,15 +30,20 @@ test('UX-05 FR-AUTHZ-01: non-member, missing record and unknown organisation get
     '/orgs/no-such-organisation/dashboard',                                     // an organisation that does not exist
   ];
   const mains: string[] = [];
+  const titles: string[] = [];
   try {
     for (const p of pages) {
       const r = await page.goto(p);
       expect({ p, status: r?.status() }).toEqual({ p, status: 404 });
       mains.push(await page.locator('main').innerHTML());
+      titles.push(await page.title());
     }
   } finally {
     await context.close();
   }
   expect(mains[0].length).toBeGreaterThan(0);
   expect(new Set(mains).size).toBe(1);   // one page for all three (M-27's text is pinned by UI and ORG)
+  // Spec 7.5 (Task 10): the same non-empty tab title for all three, so the title says no more than the page.
+  console.log(`not-found-parity titles: ${JSON.stringify(titles)}`);
+  expect(titles).toEqual(pages.map(() => pageTitle(ERRORS_COPY.titles.notFound)));
 });
