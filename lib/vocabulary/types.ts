@@ -7,3 +7,6 @@ export type VocabularyEntry = {
   readonly definition: string | null;
   readonly defineOnFirstUse: boolean;
 };
+
+/** An entry whose definition may be shown: the one kind `Definition` accepts at compile time. */
+export type DefinedEntry = VocabularyEntry & { readonly definition: string; readonly defineOnFirstUse: true };

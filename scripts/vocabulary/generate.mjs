@@ -13,12 +13,14 @@
 // written with `text` only.
 //
 // overrides.json (hand-written texts; the lint class of an item is NOT here):
-//   terms.spec / terms.extract / terms.whole / terms.fromConcept   { "<id>": "<term>" } four kinds, one id in one kind:
+//   terms.spec / terms.extract / terms.fromConcept   { "<id>": "<term>" }, and terms.labels { "<id>": ["<label>", ...] };
+//       four kinds, one id in one kind:
 //       spec         the design spec's own term (any text);
 //       extract      a verbatim, case-sensitive substring of the row's Ruled-term cell;
-//       whole        equals the Ruled-term cell (records that someone looked);
+//       labels       each label a verbatim, case-sensitive substring of the cell; the term is the labels joined by "; ";
 //       fromConcept  the Concept column, lower-cased (for a cell that is only a cross-reference).
-//   definitions     { "<id>": "<text>" }          replaces the parsed definition
+//   definitions     { "<id>": "<text>" | null }   replaces the parsed definition; null means there is none
+//                   (decided by whether the key is present, never by the value being falsy)
 //   retired.add     { "<id>": ["<text>", ...] }   retired items the table does not hold
 //   additions       [ { id, group, concept, term, definition, retired, defineOnFirstUse, source } ]
 //   historical      [ "<id>" ]                    concepts kept for records that predate a change
@@ -30,14 +32,19 @@
 //                                    | { "lint": "review", "why": "<reason>" } } }
 // A key naming an unknown id, or a text the concept does not retire, is an error (exit 2).
 //
+// Unknown keys in overrides.json and in a lint rule are errors; a missing optional key is allowed. Every concept is
+// validated after the merge (kebab-case id, non-empty group, concept and term, a definition of at most 20 words or null).
+// Command line: only --allow-missing-rules and --out-dir <dir>, and at most one path; anything else exits 2 before any
+// file is read or written. A missing or invalid input file exits 2 with `vocabulary: <path>: <reason>`.
+//
 // Retired-cell split: items are separated by commas and semicolons outside parentheses, double quotes and backticks.
 // A cell that starts with `n/a` has no items. Surrounding quotes are stripped only when the whole item is one quoted
 // string; an item's text is otherwise kept exactly.
 
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 
 const REPO_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 export const SOURCE_RELATIVE = 'records/plans/2026-11-11-ux-redesign/copy-audit/CONSOLIDATED.md';
@@ -47,7 +54,16 @@ const COMMAND = 'node scripts/vocabulary/generate.mjs <CONSOLIDATED.md> [--allow
 const HEADER = `Generated; do not edit by hand. Command: ${COMMAND}`;
 const SECTION_START = '## 2. The vocabulary';
 const SECTION_END = '### Terms the owner must decide';
-const TERM_KINDS = ['spec', 'extract', 'whole', 'fromConcept'];
+const TERM_KINDS = ['spec', 'extract', 'labels', 'fromConcept'];
+// The first table of section 2 spells two column names out; the other seven use the short names. Both are in the source.
+const HEADERS = [
+  ['Concept', 'Forms in use (one example each)', 'Ruled term', 'Definition (shown at first use)', 'Retire'],
+  ['Concept', 'Forms in use', 'Ruled term', 'Definition', 'Retire'],
+];
+const ID_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+const MAX_DEFINITION_WORDS = 20;
+const OVERRIDE_KEYS = ['terms', 'definitions', 'retired', 'additions', 'historical', 'defineOnFirstUse'];
+const ADDITION_KEYS = ['id', 'group', 'concept', 'term', 'definition', 'retired', 'defineOnFirstUse', 'source'];
 const GUARD = /[;:("]/;
 
 /**
@@ -67,16 +83,49 @@ export class VocabularyError extends Error {
   }
 }
 
+const has = (object, key) => object !== null && typeof object === 'object' && Object.hasOwn(object, key);
+const isText = (value) => typeof value === 'string' && value.trim() !== '';
+const reason = (error) => (error.code === 'ENOENT' ? 'no such file' : error.code === 'EISDIR' ? 'is a directory' : error.message);
+
+/** @param {string} file @param {string} [label] */
+function readText(file, label = file) {
+  try {
+    return readFileSync(file, 'utf8');
+  } catch (error) {
+    throw new VocabularyError(`${label}: ${reason(error)}`);
+  }
+}
+
+/** @param {string} file @param {string} [label] */
+function readJson(file, label = file) {
+  const text = readText(file, label);
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    throw new VocabularyError(`${label}: ${reason(error)}`);
+  }
+}
+
+/** @param {unknown} object @param {string[]} allowed @param {string} where */
+function onlyKeys(object, allowed, where) {
+  if (object === null || typeof object !== 'object' || Array.isArray(object)) throw new VocabularyError(`${where} must be an object`);
+  for (const key of Object.keys(object)) {
+    if (!allowed.includes(key)) throw new VocabularyError(`${where}: unknown key "${key}"`);
+  }
+}
+
 /**
- * The source file: VOCABULARY_SOURCE if set (an error if that file is missing), else walk up from `start` (at most four
+ * The source file: VOCABULARY_SOURCE if set (an error unless it names a regular file), else walk up from `start` (at most four
  * levels above it) until the plan's path exists. Undefined when it is nowhere (CI).
  * @param {string} [start]
  * @returns {string | undefined}
  */
 export function findSource(start = REPO_ROOT) {
   const env = process.env.VOCABULARY_SOURCE;
-  if (env) {
-    if (!existsSync(env)) throw new VocabularyError('VOCABULARY_SOURCE is set but names no file');
+  if (env !== undefined) {
+    if (env === '' || !existsSync(env) || !statSync(env).isFile()) {
+      throw new VocabularyError('VOCABULARY_SOURCE is set but is empty or does not name a regular file');
+    }
     return resolve(env);
   }
   let dir = resolve(start);
@@ -96,11 +145,12 @@ const kebab = (text) => text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/
 /**
  * Split a Retire cell into its items (see the header).
  * @param {string} cell
+ * @param {string} [label] names the row in an error message
  * @returns {string[]}
  */
-export function splitRetire(cell) {
+export function splitRetire(cell, label = '') {
   const text = cell.trim();
-  if (text.startsWith('n/a')) return [];
+  if (/^n\/a/i.test(text)) return [];
   const items = [];
   let depth = 0;
   let quoted = false;
@@ -120,6 +170,9 @@ export function splitRetire(cell) {
     }
     current += ch;
   }
+  if (quoted || ticked || depth > 0) {
+    throw new VocabularyError(`${label ? `${label}: ` : ''}the retired cell ends inside an open quote, parenthesis or backtick: ${cell}`);
+  }
   items.push(current);
   return items
     .map((item) => item.trim())
@@ -133,24 +186,47 @@ export function splitRetire(cell) {
  * @returns {Array<{ id: string, group: string, concept: string, ownerDecision: boolean, ruled: string, definition: string, retire: string }>}
  */
 export function parseSection2(markdown) {
-  const lines = markdown.split(/\r?\n/);
-  const start = lines.findIndex((l) => l.trim() === SECTION_START);
+  const lines = markdown.split(/\r?\n/).map((l) => l.trim());
+  const start = lines.indexOf(SECTION_START);
   if (start < 0) throw new VocabularyError(`the source has no "${SECTION_START}" heading`);
-  const end = lines.findIndex((l, i) => i > start && l.trim() === SECTION_END);
+  const end = lines.findIndex((l, i) => i > start && l === SECTION_END);
   if (end < 0) throw new VocabularyError(`the source has no "${SECTION_END}" heading after section 2`);
+  const section = lines.slice(start + 1, end);
   const rows = [];
   let group = null;
-  for (const line of lines.slice(start + 1, end)) {
-    const heading = /^###\s+(.+?)\s*$/.exec(line);
-    if (heading) { group = heading[1]; continue; }
-    if (!line.startsWith('|')) continue;
+  let tableLines = 0;
+  let skipped = 0;
+  section.forEach((line, i) => {
+    if (line.startsWith('#')) {
+      const heading = /^### (\S.*)$/.exec(line);
+      if (!heading) throw new VocabularyError(`section 2 holds a heading that is not "### ...": ${line}`);
+      group = heading[1];
+      return;
+    }
+    if (!line.startsWith('|')) return;
+    tableLines++;
+    const separator = (l) => /^\|[\s|:-]+\|$/.test(l);
+    if (separator(line)) { skipped++; return; }
     const cells = line.slice(1, line.lastIndexOf('|')).split('|').map((c) => c.trim());
-    if (cells[0] === 'Concept' || /^[\s|:-]+$/.test(line)) continue;
+    if (i + 1 < section.length && separator(section[i + 1])) {
+      if (!HEADERS.some((h) => h.length === cells.length && h.every((name, k) => name === cells[k]))) {
+        throw new VocabularyError(`a table header is not one of the two known spellings of the five column names (${HEADERS.map((h) => h.join(' | ')).join(' / ')}): ${line}`);
+      }
+      skipped++;
+      return;
+    }
     if (cells.length !== 5) throw new VocabularyError(`row "${cells[0]}" has ${cells.length} cells, not 5`);
     if (group === null) throw new VocabularyError(`row "${cells[0]}" comes before any group heading`);
+    if (cells[0] === '') throw new VocabularyError(`a row has an empty Concept cell: ${line}`);
     const ownerDecision = /\*\*\[owner\]\*\*/.test(cells[0]);
     const concept = cells[0].replace(/\s*\*\*\[owner\]\*\*/g, '').trim();
-    rows.push({ id: kebab(concept), group, concept, ownerDecision, ruled: cells[2], definition: cells[3], retire: cells[4] });
+    const id = kebab(concept);
+    if (cells[2] === '') throw new VocabularyError(`concept "${id}": the Ruled-term cell is empty`);
+    if (cells[3] === '') throw new VocabularyError(`concept "${id}": the Definition cell is empty`);
+    rows.push({ id, group, concept, ownerDecision, ruled: cells[2], definition: cells[3], retire: cells[4] });
+  });
+  if (rows.length !== tableLines - skipped) {
+    throw new VocabularyError(`section 2 has ${tableLines - skipped} data rows but ${rows.length} were parsed`);
   }
   const seen = new Set();
   for (const r of rows) {
@@ -165,13 +241,17 @@ export function parseSection2(markdown) {
  * @returns {Array<{ text: string, source: string }>}
  */
 export function readProperNames(root = REPO_ROOT) {
-  const running = JSON.parse(readFileSync(join(root, 'data/content/index.json'), 'utf8')).running;
+  const indexFile = 'data/content/index.json';
+  const running = readJson(join(root, indexFile), indexFile).running;
+  if (!isText(running)) throw new VocabularyError(`${indexFile}: "running" is not a version string`);
   const file = `data/content/${running}/assessmentAreas.json`;
-  const areas = JSON.parse(readFileSync(join(root, file), 'utf8'));
+  const areas = readJson(join(root, file), file);
+  if (!Array.isArray(areas.controls)) throw new VocabularyError(`${file}: "controls" is not a list`);
   const names = [];
   const seen = new Set();
   areas.controls.forEach((control, i) => {
     (control.resources ?? []).forEach((resource, j) => {
+      if (!isText(resource.title)) throw new VocabularyError(`${file}: controls[${i}].resources[${j}] has no title`);
       if (seen.has(resource.title)) return;
       seen.add(resource.title);
       names.push({ text: resource.title, source: `${file}:controls[${i}].resources[${j}].title` });
@@ -182,18 +262,74 @@ export function readProperNames(root = REPO_ROOT) {
 
 /** @param {unknown} rule @param {string} where */
 function checkRule(rule, where) {
-  const r = /** @type {Record<string, unknown>} */ (rule ?? {});
+  const r = /** @type {Record<string, unknown>} */ (rule);
+  if (r === null || typeof r !== 'object') throw new VocabularyError(`lint rule for ${where} must be an object`);
   if (r.lint === 'phrase') {
+    onlyKeys(r, ['lint', 'pattern', 'caseSensitive'], `lint rule for ${where}`);
     if (typeof r.pattern !== 'string' || typeof r.caseSensitive !== 'boolean') {
       throw new VocabularyError(`lint rule for ${where}: a "phrase" rule needs a string "pattern" and a boolean "caseSensitive"`);
     }
     return { lint: 'phrase', pattern: r.pattern, caseSensitive: r.caseSensitive };
   }
   if (r.lint === 'review') {
-    if (typeof r.why !== 'string' || r.why === '') throw new VocabularyError(`lint rule for ${where}: a "review" rule needs a "why"`);
+    onlyKeys(r, ['lint', 'why'], `lint rule for ${where}`);
+    if (!isText(r.why)) throw new VocabularyError(`lint rule for ${where}: a "review" rule needs a "why"`);
     return { lint: 'review', why: r.why };
   }
   throw new VocabularyError(`lint rule for ${where}: "lint" must be "phrase" or "review"`);
+}
+
+/** @param {any} overrides */
+function checkOverrides(overrides) {
+  onlyKeys(overrides, OVERRIDE_KEYS, 'overrides.json');
+  const map = (value, where) => {
+    onlyKeys(value ?? {}, Object.keys(value ?? {}), where);
+    return value ?? {};
+  };
+  if (overrides.terms !== undefined) {
+    onlyKeys(overrides.terms, TERM_KINDS, 'overrides.terms');
+    for (const kind of TERM_KINDS) {
+      for (const [id, value] of Object.entries(map(overrides.terms[kind], `overrides.terms.${kind}`))) {
+        const ok = kind === 'labels' ? Array.isArray(value) && value.length > 0 && value.every(isText) : isText(value);
+        if (!ok) throw new VocabularyError(`overrides.terms.${kind}: "${id}" must be ${kind === 'labels' ? 'a non-empty list of texts' : 'a non-empty text'}`);
+      }
+    }
+  }
+  for (const [id, value] of Object.entries(map(overrides.definitions, 'overrides.definitions'))) {
+    if (value !== null && !isText(value)) throw new VocabularyError(`overrides.definitions: "${id}" must be a non-empty text or null`);
+  }
+  if (overrides.retired !== undefined) {
+    onlyKeys(overrides.retired, ['add'], 'overrides.retired');
+    for (const [id, texts] of Object.entries(map(overrides.retired.add, 'overrides.retired.add'))) {
+      if (!Array.isArray(texts) || !texts.every(isText)) throw new VocabularyError(`overrides.retired.add: "${id}" must be a list of texts`);
+    }
+  }
+  for (const list of ['historical', 'defineOnFirstUse']) {
+    if (overrides[list] !== undefined && !(Array.isArray(overrides[list]) && overrides[list].every(isText))) {
+      throw new VocabularyError(`overrides.${list} must be a list of ids`);
+    }
+  }
+  if (overrides.additions !== undefined && !Array.isArray(overrides.additions)) throw new VocabularyError('overrides.additions must be a list');
+  for (const add of overrides.additions ?? []) {
+    onlyKeys(add, ADDITION_KEYS, `overrides.additions (${add?.id ?? 'no id'})`);
+    if (!isText(add.source)) throw new VocabularyError(`addition "${add.id}": a source citation is required`);
+    if (add.retired !== undefined && !(Array.isArray(add.retired) && add.retired.every(isText))) {
+      throw new VocabularyError(`addition "${add.id}": retired must be a list of texts`);
+    }
+  }
+}
+
+/** The one place a merged concept is validated. @param {Concept} c */
+function checkConcept(c) {
+  if (typeof c.id !== 'string' || !ID_PATTERN.test(c.id)) throw new VocabularyError(`concept "${c.id}": the id is not kebab case`);
+  for (const key of ['group', 'concept', 'term']) {
+    if (!isText(c[key])) throw new VocabularyError(`concept "${c.id}": ${key} must be a non-empty text`);
+  }
+  if (c.definition !== null) {
+    if (!isText(c.definition)) throw new VocabularyError(`concept "${c.id}": the definition must be a non-empty text or null`);
+    const words = c.definition.trim().split(/\s+/).length;
+    if (words > MAX_DEFINITION_WORDS) throw new VocabularyError(`concept "${c.id}": the definition has ${words} words, over ${MAX_DEFINITION_WORDS}`);
+  }
 }
 
 /**
@@ -206,10 +342,11 @@ function checkRule(rule, where) {
  */
 export function generate(markdown, overrides, rules, options) {
   if (!options || !Array.isArray(options.properNames)) throw new VocabularyError('generate needs options.properNames');
+  checkOverrides(overrides);
   const rows = parseSection2(markdown);
-  const parsed = new Map(rows.map((r) => [r.id, r]));
+  const parsedIds = new Set(rows.map((r) => r.id));
   const additions = overrides.additions ?? [];
-  const known = new Set(parsed.keys());
+  const known = new Set(parsedIds);
   for (const add of additions) {
     if (known.has(add.id)) throw new VocabularyError(`addition "${add.id}" clashes with a parsed concept id`);
     known.add(add.id);
@@ -219,17 +356,19 @@ export function generate(markdown, overrides, rules, options) {
     for (const id of ids) if (!within.has(id)) throw new VocabularyError(`overrides.${list} names unknown id "${id}"`);
   };
   const terms = overrides.terms ?? {};
+  const definitions = overrides.definitions ?? {};
+  const retiredAdd = overrides.retired?.add ?? {};
   const kindOf = new Map();
   for (const kind of TERM_KINDS) {
     const map = terms[kind] ?? {};
-    requireKnown(`terms.${kind}`, Object.keys(map), new Set(parsed.keys()));
+    requireKnown(`terms.${kind}`, Object.keys(map), parsedIds);
     for (const id of Object.keys(map)) {
       if (kindOf.has(id)) throw new VocabularyError(`concept "${id}" has a term override of two kinds (${kindOf.get(id)} and ${kind})`);
       kindOf.set(id, kind);
     }
   }
-  requireKnown('definitions', Object.keys(overrides.definitions ?? {}), new Set(parsed.keys()));
-  requireKnown('retired.add', Object.keys(overrides.retired?.add ?? {}), new Set(parsed.keys()));
+  requireKnown('definitions', Object.keys(definitions), parsedIds);
+  requireKnown('retired.add', Object.keys(retiredAdd), parsedIds);
   requireKnown('historical', overrides.historical ?? []);
   requireKnown('defineOnFirstUse', overrides.defineOnFirstUse ?? []);
   const historical = new Set(overrides.historical ?? []);
@@ -247,8 +386,11 @@ export function generate(markdown, overrides, rules, options) {
     if (kind === 'extract' && !row.ruled.includes(value)) {
       throw new VocabularyError(`concept "${row.id}": term "${value}" is not a substring of the cell "${row.ruled}"`);
     }
-    if (kind === 'whole' && value !== row.ruled) {
-      throw new VocabularyError(`concept "${row.id}": term "${value}" does not equal the cell "${row.ruled}"`);
+    if (kind === 'labels') {
+      for (const label of value) {
+        if (!row.ruled.includes(label)) throw new VocabularyError(`concept "${row.id}": label "${label}" is not a substring of the cell "${row.ruled}"`);
+      }
+      return value.join('; ');
     }
     if (kind === 'fromConcept' && value !== row.concept.toLowerCase()) {
       throw new VocabularyError(`concept "${row.id}": term "${value}" is not the Concept column lower-cased ("${row.concept.toLowerCase()}")`);
@@ -258,9 +400,9 @@ export function generate(markdown, overrides, rules, options) {
 
   /** @type {Concept[]} */
   const concepts = rows.map((row) => {
-    const retiredTexts = splitRetire(row.retire);
-    for (const added of overrides.retired?.add?.[row.id] ?? []) if (!retiredTexts.includes(added)) retiredTexts.push(added);
-    const definition = overrides.definitions?.[row.id] ?? (row.definition.startsWith('n/a') ? null : row.definition);
+    const retiredTexts = splitRetire(row.retire, `concept "${row.id}"`);
+    for (const added of has(retiredAdd, row.id) ? retiredAdd[row.id] : []) if (!retiredTexts.includes(added)) retiredTexts.push(added);
+    const definition = has(definitions, row.id) ? definitions[row.id] : /^n\/a/i.test(row.definition) ? null : row.definition;
     /** @type {Concept} */
     const concept = {
       id: row.id, group: row.group, concept: row.concept, term: termOf(row), definition,
@@ -271,25 +413,28 @@ export function generate(markdown, overrides, rules, options) {
     return concept;
   });
   for (const add of additions) {
-    if (add.defineOnFirstUse !== firstUse.has(add.id)) {
+    if (add.defineOnFirstUse !== undefined && add.defineOnFirstUse !== firstUse.has(add.id)) {
       throw new VocabularyError(`addition "${add.id}": defineOnFirstUse disagrees with the defineOnFirstUse list`);
     }
     /** @type {Concept} */
     const concept = {
       id: add.id, group: add.group, concept: add.concept, term: add.term, definition: add.definition,
-      ownerDecision: false, defineOnFirstUse: add.defineOnFirstUse,
+      ownerDecision: false, defineOnFirstUse: firstUse.has(add.id),
     };
     if (historical.has(add.id)) concept.historical = true;
     concept.retired = (add.retired ?? []).map((text) => ({ text }));
     concept.source = add.source;
     concepts.push(concept);
   }
-  const byId = new Map(concepts.map((c) => [c.id, c]));
-  for (const id of firstUse) {
-    if (byId.get(id).definition === null) throw new VocabularyError(`defineOnFirstUse id "${id}" has a null definition`);
+  for (const concept of concepts) {
+    checkConcept(concept);
+    if (concept.defineOnFirstUse && typeof concept.definition !== 'string') {
+      throw new VocabularyError(`defineOnFirstUse id "${concept.id}" has no definition`);
+    }
   }
+  const byId = new Map(concepts.map((c) => [c.id, c]));
 
-  for (const [id, byText] of Object.entries(rules ?? {})) {
+  for (const [id, byText] of Object.entries(rules)) {
     const concept = byId.get(id);
     if (!concept) throw new VocabularyError(`lint-rules.json names unknown id "${id}"`);
     for (const text of Object.keys(byText)) {
@@ -301,9 +446,8 @@ export function generate(markdown, overrides, rules, options) {
   const missing = [];
   for (const concept of concepts) {
     concept.retired = concept.retired.map(({ text }) => {
-      const rule = rules?.[concept.id]?.[text];
-      if (rule === undefined) { missing.push(`${concept.id}: "${text}"`); return { text }; }
-      return { text, ...checkRule(rule, `${concept.id}: "${text}"`) };
+      if (!has(rules, concept.id) || !has(rules[concept.id], text)) { missing.push(`${concept.id}: "${text}"`); return { text }; }
+      return { text, ...checkRule(rules[concept.id][text], `${concept.id}: "${text}"`) };
     });
   }
   if (missing.length && !options.allowMissingRules) {
@@ -334,26 +478,38 @@ export function emitIds(vocabulary) {
 export function emitTerms(vocabulary) {
   const lines = vocabulary.concepts.map((c) => {
     const name = `TERM_${c.id.replace(/-/g, '_').toUpperCase()}`;
-    return `export const ${name}: VocabularyEntry = { id: ${JSON.stringify(c.id)}, term: ${JSON.stringify(c.term)}, definition: ${JSON.stringify(c.definition)}, defineOnFirstUse: ${c.defineOnFirstUse} };`;
+    return `export const ${name} = { id: ${JSON.stringify(c.id)}, term: ${JSON.stringify(c.term)}, definition: ${JSON.stringify(c.definition)}, defineOnFirstUse: ${c.defineOnFirstUse} } as const satisfies VocabularyEntry;`;
   });
   return `// ${HEADER}\n\nimport type { VocabularyEntry } from './types';\n\n${lines.join('\n')}\n`;
 }
 
+/** @param {string[]} args */
+function parseArgs(args) {
+  let allowMissingRules = false;
+  let outDir = REPO_ROOT;
+  const positional = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--allow-missing-rules') allowMissingRules = true;
+    else if (arg === '--out-dir') {
+      const value = args[i + 1];
+      if (value === undefined || value.startsWith('--')) throw new VocabularyError('--out-dir needs a directory after it');
+      outDir = resolve(value);
+      i++;
+    } else if (arg.startsWith('--')) throw new VocabularyError(`unknown argument ${arg}`);
+    else positional.push(arg);
+  }
+  if (positional.length > 1) throw new VocabularyError(`more than one source path: ${positional.join(' ')}`);
+  return { allowMissingRules, outDir, sourcePath: positional[0] ?? findSource() };
+}
+
 function main() {
-  const args = process.argv.slice(2);
-  const flags = new Set(args.filter((a) => a.startsWith('--') && a !== '--out-dir'));
-  const outAt = args.indexOf('--out-dir');
-  const outDir = outAt >= 0 ? resolve(args[outAt + 1] ?? '') : REPO_ROOT;
-  const positional = args.filter((a, i) => !a.startsWith('--') && !(outAt >= 0 && i === outAt + 1));
-  const sourcePath = positional[0] ?? findSource();
+  const { allowMissingRules, outDir, sourcePath } = parseArgs(process.argv.slice(2));
   if (!sourcePath) throw new VocabularyError('no source file: pass the path to CONSOLIDATED.md');
-  const markdown = readFileSync(sourcePath, 'utf8');
-  const overrides = JSON.parse(readFileSync(join(REPO_ROOT, OVERRIDES_PATH), 'utf8'));
-  const rules = JSON.parse(readFileSync(join(REPO_ROOT, LINT_RULES_PATH), 'utf8'));
-  const vocabulary = generate(markdown, overrides, rules, {
-    allowMissingRules: flags.has('--allow-missing-rules'),
-    properNames: readProperNames(),
-  });
+  const markdown = readText(sourcePath);
+  const overrides = readJson(join(REPO_ROOT, OVERRIDES_PATH), OVERRIDES_PATH);
+  const rules = readJson(join(REPO_ROOT, LINT_RULES_PATH), LINT_RULES_PATH);
+  const vocabulary = generate(markdown, overrides, rules, { allowMissingRules, properNames: readProperNames() });
   const outputs = {
     'data/vocabulary.json': serialise(vocabulary),
     'lib/vocabulary/ids.ts': emitIds(vocabulary),
@@ -366,7 +522,7 @@ function main() {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   try {
     main();
   } catch (error) {
