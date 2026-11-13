@@ -89,4 +89,8 @@ it('NFR-OBS-05 NFR-AVL-04: the global error page is a whole document with the sa
 it('1A spec 7.5 (WCAG 2.4.2): the error page names itself in the tab, because a failed page has no metadata of its own', () => {
   const html = renderToStaticMarkup(<ErrorPage error={failure('1234567890')} retry={() => {}} />);
   expect(html).toContain(`<title>${pageTitle(ERRORS_COPY.titles.error)}</title>`);
+  // The global error document takes its title from ErrorPage alone: exactly one <title>.
+  const whole = renderToStaticMarkup(<GlobalError error={failure('1234567890')} retry={() => {}} />);
+  expect(whole.match(/<title>/g)).toHaveLength(1);
+  expect(whole).toContain(`<title>${pageTitle(ERRORS_COPY.titles.error)}</title>`);
 });

@@ -55,7 +55,10 @@ describe('page titles (spec 7.5)', () => {
 
   it('1A spec 7.5: the root layout title is PRODUCT_NAME, and the error and not-found files use pageTitle', () => {
     expect(code('app/layout.tsx')).toMatch(/\btitle: PRODUCT_NAME\b/);
-    expect(code('app/global-error.tsx')).toContain('<title>{pageTitle(ERRORS_COPY.titles.error)}</title>');
+    // One source for the error title: ErrorPage writes it, and the global error document renders ErrorPage with no <title> of its own.
+    expect(code('app/error.tsx')).toContain('<title>{pageTitle(ERRORS_COPY.titles.error)}</title>');
+    expect(code('app/global-error.tsx')).toContain('<ErrorPage ');
+    expect(withoutComments(code('app/global-error.tsx'))).not.toContain('<title');
     for (const f of ['app/not-found.tsx', 'app/(authenticated)/not-found.tsx']) expect(code(f)).toContain('title: pageTitle(ERRORS_COPY.titles.notFound)');
   });
 
