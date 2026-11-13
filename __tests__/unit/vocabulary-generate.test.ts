@@ -579,6 +579,18 @@ describe('the table structure is checked, not counted (fix round 2, item 1)', ()
     fails(() => run([HEADER, SEP, ROW('A', 'a'), SHORT_HEADER, ROW('B', 'b')]), 'second header');
   });
 
+  it('a table line with text after its last pipe exits 2 and the message quotes the line', () => {
+    fails(() => run([HEADER, SEP, `${ROW('B', 'b')} junk`]), 'does not end with "|"', `${ROW('B', 'b')} junk`);
+    fails(() => run([`${HEADER} x`, SEP, ROW('A', 'a')]), 'does not end with "|"');
+  });
+
+  it('a code fence or an HTML comment in section 2 exits 2, so a table inside one is never read as concepts', () => {
+    fails(() => run(['```', HEADER, SEP, ROW('A', 'a'), '```']), 'code fence', '```');
+    fails(() => run(['~~~markdown', HEADER, SEP, ROW('A', 'a'), '~~~']), 'code fence', '~~~markdown');
+    fails(() => run(['<!--', HEADER, SEP, ROW('A', 'a'), '-->']), 'HTML comment', '<!--');
+    fails(() => run([HEADER, SEP, ROW('A', 'a'), '', '<!-- an example follows -->']), 'HTML comment');
+  });
+
   it('prose without a pipe, and several well-formed blocks, still parse', () => {
     const rows = run([HEADER, SEP, ROW('A', 'a'), '', 'A note with no bar.', '', SHORT_HEADER, SEP, ROW('B', 'b')]);
     expect(rows.map((r: { id: string }) => r.id)).toEqual(['a', 'b']);

@@ -214,6 +214,9 @@ export function parseSection2(markdown) {
       group = heading[1];
       continue;
     }
+    if (/^(```|~~~)/.test(line)) throw new VocabularyError(`section 2 holds a code fence, and a table inside one would be read as concepts: ${line}`);
+    if (line.includes('<!--')) throw new VocabularyError(`section 2 holds an HTML comment, and a table inside one would be read as concepts: ${line}`);
+    if (line.startsWith('|') && !line.endsWith('|')) throw new VocabularyError(`a table line does not end with "|", so the text after its last pipe would be lost: ${line}`);
     if (!line.startsWith('|')) {
       if (line.includes('|')) throw new VocabularyError(`section 2 holds a prose line with a "|" that is not a table line (a row needs its leading "|", and a table is not a quotation): ${line}`);
       continue;
