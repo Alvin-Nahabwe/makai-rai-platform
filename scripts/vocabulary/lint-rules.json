@@ -307,7 +307,7 @@
   "version-of-a-decision": {
     "v3": {
       "lint": "phrase",
-      "pattern": "(?<![\\w./-])v(?:\\d+(?![\\w/]|\\.\\w)|(?=\\u2060))",
+      "pattern": "(?<![\\w./-])v(?:\\d+(?![\\w/]|\\.\\w)|(?=\\p{Cf}))",
       "caseSensitive": true
     },
     "version arithmetic in messages": {
@@ -592,7 +592,7 @@
   "legal-text-version": {
     "v1": {
       "lint": "phrase",
-      "pattern": "(?<![\\w./-])v(?:\\d+(?![\\w/]|\\.\\w)|(?=\\u2060))",
+      "pattern": "(?<![\\w./-])v(?:\\d+(?![\\w/]|\\.\\w)|(?=\\p{Cf}))",
       "caseSensitive": true
     }
   },
