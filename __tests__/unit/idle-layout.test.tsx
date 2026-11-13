@@ -98,8 +98,10 @@ describe('the signed-in layout and the idle warning', () => {
     expect(membershipsMock).toHaveBeenCalledWith('user-1');
     expect(orgRoleLabelMock.mock.calls.map((c) => c[1]).sort()).toEqual(['a', 'b', undefined]); // once per organisation, once for the platform
     expect(orgRoleLabelMock.mock.calls[0][0]).toMatchObject({ userId: 'user-1' });
-    // D-10: the account's platform role field (here 'assessor') never reaches the shell
-    expect(JSON.stringify(shell)).not.toContain('assessor');
+    // D-10: the account's platform role field (here 'assessor') never reaches the shell, through any prop
+    expect(Object.keys(shells[0].props as object).sort()).toEqual(['children', 'shell']);
+    const { children: _children, ...dataProps } = shells[0].props as { children?: unknown };
+    expect(JSON.stringify(dataProps)).not.toContain('assessor');
   });
 
   it('UX-02: with the stub label function (null) the layout passes no role label at all', async () => {

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
+import ts from 'typescript';
 import type { Identity } from '@/lib/auth/identity';
 
 /**
@@ -13,7 +14,7 @@ const orgRoleLabelMock = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/data/preauth', () => ({ membershipsForUser: membershipsMock }));
 vi.mock('@/lib/authz/roleLabel', () => ({ orgRoleLabel: orgRoleLabelMock }));
 
-import { loadShellData } from '@/lib/shell/data';
+import { loadShellData, roleWord } from '@/lib/shell/data';
 
 const identity: Identity = { userId: 'user-1', email: 'a@example.test', name: 'Ssekandi Nnaŋŋa', platformRole: 'assessor', mustChangePassword: false };
 
@@ -78,9 +79,6 @@ describe('loadShellData', () => {
     membershipsMock.mockResolvedValue([row('__proto__', 'P'), row('constructor', 'C')]);
     orgRoleLabelMock.mockResolvedValue('viewer');
     const shell = await loadShellData(identity);
-    expect(Object.keys({})).toEqual([]);
-    expect(({} as Record<string, unknown>).x).toBeUndefined();
-    expect(Object.getPrototypeOf({})).toBe(Object.prototype);
     expect(Object.hasOwn(shell.roleLabels, '__proto__')).toBe(true);
     expect(Object.hasOwn(shell.roleLabels, 'constructor')).toBe(true);
     expect(shell.roleLabels.__proto__).toBe('Viewer');
@@ -100,10 +98,52 @@ describe('loadShellData', () => {
     expect(Object.keys(shell.roleLabels)).toEqual([]);
   });
 
-  it('1A Task 11 T1: the shell data module reads only through membershipsForUser and orgRoleLabel', () => {
-    const source = readFileSync('lib/shell/data.ts', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|\s)\/\/.*$/gm, '');
-    const imports = [...source.matchAll(/^import[\s\S]*?from\s+'([^']+)'/gm)].map((m) => m[1]).sort();
-    expect(imports).toEqual(['@/lib/auth/identity', '@/lib/authz/roleLabel', '@/lib/data/preauth', '@/lib/shell/copy', '@/lib/shell/types']);
-    expect(source).not.toMatch(/idleDeadline|next-auth\/jwt|identityClient|identityLaneClient|systemContext|prisma|headers\(|cookies\(/);
+  it('1A Task 11 T1: the shell data module and the signed-in layout read only through membershipsForUser and orgRoleLabel', () => {
+    const expected: Record<string, string[]> = {
+      'lib/shell/data.ts': ['@/lib/auth/identity', '@/lib/authz/roleLabel', '@/lib/data/preauth', '@/lib/shell/types', '@/lib/vocabulary/terms'],
+      'app/(authenticated)/layout.tsx': [
+        '@/components/layout/AppShell', '@/components/layout/IdleWarning', '@/components/legal/NewerLegalTextNotice', '@/lib/auth/identity',
+        '@/lib/auth/idle', '@/lib/auth/idleDeadline', '@/lib/shell/data', 'next/headers',
+      ],
+    };
+    for (const [file, modules] of Object.entries(expected)) {
+      expect(moduleSpecifiers(file), file).toEqual(modules);
+      const source = readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|\s)\/\/.*$/gm, '');
+      // The layout reads the cookie's deadlines (headers()) and leaves the memberships to loadShellData.
+      const forbidden = file === 'lib/shell/data.ts'
+        ? /idleDeadline|next-auth\/jwt|identityClient|identityLaneClient|systemContext|prisma|headers\(|cookies\(/
+        : /next-auth\/jwt|identityClient|identityLaneClient|systemContext|prisma|cookies\(|membershipsForUser|orgRoleLabel/;
+      expect(source, file).not.toMatch(forbidden);
+    }
+  });
+});
+
+/** Every module a file names: import declarations (side-effect ones included), export-from, dynamic import() and require(), sorted. */
+function moduleSpecifiers(file: string): string[] {
+  const sf = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true, file.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const out: string[] = [];
+  const visit = (node: ts.Node): void => {
+    if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
+      out.push(node.moduleSpecifier.text);
+    } else if (ts.isCallExpression(node) && (node.expression.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(node.expression) && node.expression.text === 'require'))) {
+      const arg = node.arguments[0];
+      out.push(arg && ts.isStringLiteralLike(arg) ? arg.text : '(not a literal)');
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return [...new Set(out)].sort();
+}
+
+describe('roleWord', () => {
+  it('1A Task 11 L2-50 (CONSOLIDATED section 2): the five organisation roles are shown capitalised, from the vocabulary', () => {
+    expect(['owner', 'admin', 'assessor', 'reviewer', 'viewer'].map(roleWord)).toEqual(['Owner', 'Admin', 'Assessor', 'Reviewer', 'Viewer']);
+  });
+
+  it('1A Task 11 L2-50: any other label is shown as it is, never hidden, and a prototype name is not looked up', () => {
+    expect(roleWord('MAK-AI administrator')).toBe('MAK-AI administrator');
+    expect(roleWord('Viewer')).toBe('Viewer');
+    expect(roleWord('toString')).toBe('toString');
+    expect(roleWord('__proto__')).toBe('__proto__');
   });
 });

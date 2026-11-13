@@ -13,7 +13,6 @@
 .shell__main {
   min-width: 0;
   padding: var(--space-4);
-  background-color: var(--color-ground);
 }
 
 /* ── The top bar (below 1024 px): ordinary flow content, neither sticky nor fixed ── */
@@ -81,6 +80,7 @@
     height: auto;
     max-block-size: calc(100dvh - var(--shell-panel-top, 3.75rem));
     overflow-y: auto;
+    /* Only for a browser without popovers (the fallback class): an open popover is in the top layer already. */
     z-index: 100;
     box-shadow: var(--shadow-surface);
   }
@@ -100,18 +100,17 @@
     display: none;
   }
 
-  /* The rail's column, open as a popover or not: author CSS replaces the browser's rule that hides a closed popover. */
+  /* The rail's column, open as a popover or not: author CSS replaces the browser's rule that hides a closed popover.
+     z-index 1 keeps the rail, and the sign-out warning inside it, over positioned content of main (the sidebar had one). */
   .shell-topbar__panel {
     display: block;
     position: sticky;
     inset: auto;
     top: 0;
+    z-index: 1;
     width: auto;
     height: 100vh;
     overflow-y: auto;
-    margin: 0;
-    padding: 0;
-    border: 0;
   }
 
   .shell__main {
@@ -129,10 +128,12 @@
   min-block-size: 100%;
   /* Room on every side for the 3 px focus ring and its offset, inside the panel's scroll edge. */
   padding: var(--space-4) var(--space-3);
-  background-color: var(--color-shell);
-  color: var(--color-shell-ink);
 }
 
+/* The sign-out warning (SignOutWithDraftsGuard) is a surface box inside the rail: it takes the page's ink, not the rail's. */
+.shell-rail [data-sign-out-drafts] {
+  color: var(--color-ink);
+}
 .shell-rail__product {
   padding-inline: var(--space-3);
   color: var(--color-shell-muted);
@@ -189,6 +190,7 @@
 @media (forced-colors: active) {
   .shell-rail__item--current {
     border-color: CanvasText;
+    border-inline-start-width: 4px;
   }
 }
 
@@ -315,6 +317,8 @@
 
 .shell-org__link:hover {
   background-color: var(--color-shell-hover);
+  /* a:hover in app/globals.css (0,1,1) would paint it the link colour, navy on navy. */
+  color: var(--color-shell-ink);
 }
 
 .shell-org__link[aria-current='true'] {
@@ -380,6 +384,9 @@
 }
 
 .shell-public-header__name {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--target-min);
   color: var(--color-heading);
   font-weight: var(--font-weight-bold);
   text-decoration: none;
@@ -394,7 +401,7 @@
   gap: var(--space-2) var(--space-6);
 }
 
-.shell-public-header a,
+.shell-public-header__nav a,
 .shell-footer__nav a {
   display: inline-flex;
   align-items: center;

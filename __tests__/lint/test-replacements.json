@@ -586,9 +586,9 @@
   {
     "kind": "removed",
     "deleted": "e2e/documents.spec.ts::NFR-A11Y-05 (Task 10): at 769, 800 and 820 px wide .app-main has no horizontal overflow on S-18 and the UNCST table stacks",
-    "replacedBy": "e2e/documents.spec.ts::NFR-A11Y-05 (Task 10): at 769, 800 and 820 px wide the main landmark has no horizontal overflow on S-18",
+    "replacedBy": "e2e/documents.spec.ts::NFR-A11Y-05 (Task 10): at 769, 800, 820 and 1024 px wide the main landmark has no horizontal overflow on S-18",
     "property": "At 769, 800 and 820 px .app-main has no horizontal overflow on S-18 and the page does not scroll sideways; the table that stacked is removed",
-    "proof": "e2e/documents.spec.ts::NFR-A11Y-05 (Task 10): at 769, 800 and 820 px wide the main landmark has no horizontal overflow on S-18",
+    "proof": "e2e/documents.spec.ts::NFR-A11Y-05 (Task 10): at 769, 800, 820 and 1024 px wide the main landmark has no horizontal overflow on S-18",
     "task": "1A-14"
   },
   {
@@ -810,25 +810,25 @@
   {
     "kind": "removed",
     "deleted": "__tests__/unit/sidebar-role.test.tsx::M-41: before any press the guard renders its children, and no warning",
-    "replacedBy": "__tests__/unit/ui/shell.test.tsx::M-41: before any press the guard renders its children, and no warning",
+    "replacedBy": "__tests__/unit/shell-slots.test.tsx::M-41: before any press the guard renders its children, and no warning",
     "property": "Unchanged: the case does not touch the sidebar.",
-    "proof": "Moved unchanged, title and body, into the new file, because the old file imported the deleted Sidebar.",
+    "proof": "Moved unchanged, title and body, into __tests__/unit/shell-slots.test.tsx, because the old file imported the deleted Sidebar; not into __tests__/unit/ui, which runs with no database.",
     "task": "1A Task 11"
   },
   {
     "kind": "removed",
     "deleted": "__tests__/unit/sidebar-role.test.tsx::M-39: the notice renders nothing for an account offered no newer text",
-    "replacedBy": "__tests__/unit/ui/shell.test.tsx::M-39: the notice renders nothing for an account offered no newer text",
+    "replacedBy": "__tests__/unit/shell-slots.test.tsx::M-39: the notice renders nothing for an account offered no newer text",
     "property": "Unchanged: the case does not touch the sidebar.",
-    "proof": "Moved unchanged, title and body, into the new file, because the old file imported the deleted Sidebar.",
+    "proof": "Moved unchanged, title and body, into __tests__/unit/shell-slots.test.tsx, because the old file imported the deleted Sidebar; not into __tests__/unit/ui, which runs with no database.",
     "task": "1A Task 11"
   },
   {
     "kind": "removed",
     "deleted": "__tests__/unit/sidebar-role.test.tsx::M-39 M-41: a slot keeps its producer marker until the producer fills it",
-    "replacedBy": "__tests__/unit/ui/shell.test.tsx::M-39 M-41: a slot keeps its producer marker until the producer fills it",
+    "replacedBy": "__tests__/unit/shell-slots.test.tsx::M-39 M-41: a slot keeps its producer marker until the producer fills it",
     "property": "Unchanged: the case does not touch the sidebar.",
-    "proof": "Moved unchanged, title and body, into the new file, because the old file imported the deleted Sidebar.",
+    "proof": "Moved unchanged, title and body, into __tests__/unit/shell-slots.test.tsx, because the old file imported the deleted Sidebar; not into __tests__/unit/ui, which runs with no database.",
     "task": "1A Task 11"
   },
   {
@@ -844,7 +844,7 @@
     "changed": "__tests__/unit/idle-layout.test.tsx::UX-02: the layout gives the Sidebar the person's role in each of their organisations, the platform label and no platform role",
     "replacedBy": "__tests__/unit/idle-layout.test.tsx::UX-02: the layout gives the Sidebar the person's role in each of their organisations, the platform label and no platform role",
     "property": "The layout hands the shell the person's role in each of their organisations and the platform label, asks orgRoleLabel once per organisation and once for the platform, and the account's platform role field never reaches the shell (UX-02, D-10).",
-    "proof": "The case now finds the one AppShell element in the layout's tree and asserts its shell prop equals the expected object exactly (role words now capitalised, Viewer and Owner; orgs as slug and name in place of orgCount), the same membershipsForUser and orgRoleLabel call checks, and that the serialised shell prop holds no 'assessor', the mocked identity's platform role. An exact toEqual on the whole prop admits no other field. The title still says Sidebar: it is kept so the case keeps its identity.",
+    "proof": "The case now finds the one AppShell element in the layout's tree, asserts its props are exactly children and shell, and that shell equals the expected object exactly (role words now capitalised, Viewer and Owner; orgs as slug and name in place of orgCount), the same membershipsForUser and orgRoleLabel call checks, and that every prop but children, serialised, holds no 'assessor', the mocked identity's platform role. With the prop list pinned and an exact toEqual on shell, no other prop or field can carry the platform role to the shell. The title still says Sidebar: it is kept so the case keeps its identity.",
     "task": "1A Task 11"
   },
   {

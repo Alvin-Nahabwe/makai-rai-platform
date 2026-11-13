@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LAST_PROJECT_KEY, LAST_PROJECT_PREFIX, findingsHref, railItems, roleUnderName } from '@/lib/shell/nav';
-import { SHELL_COPY, roleWord } from '@/lib/shell/copy';
+import { SHELL_COPY } from '@/lib/shell/copy';
 
 /**
  * Plan 1A Task 11 (rulings L2-49, L2-50): the rail's items, which one is current, the Findings address and the role under the
@@ -121,18 +121,5 @@ describe('roleUnderName (ported from the sidebar, UX-02)', () => {
   it('UX-02: a label that is not a string gives no role', () => {
     const odd = { a: 7 } as unknown as Record<string, string>;
     expect(roleUnderName('/orgs/a/dashboard', odd, null)).toBeNull();
-  });
-});
-
-describe('roleWord', () => {
-  it('1A Task 11 L2-50 (CONSOLIDATED section 2): the five organisation roles are shown capitalised, from the vocabulary', () => {
-    expect(['owner', 'admin', 'assessor', 'reviewer', 'viewer'].map(roleWord)).toEqual(['Owner', 'Admin', 'Assessor', 'Reviewer', 'Viewer']);
-  });
-
-  it('1A Task 11 L2-50: any other label is shown as it is, never hidden, and a prototype name is not looked up', () => {
-    expect(roleWord('MAK-AI administrator')).toBe('MAK-AI administrator');
-    expect(roleWord('Viewer')).toBe('Viewer');
-    expect(roleWord('toString')).toBe('toString');
-    expect(roleWord('__proto__')).toBe('__proto__');
   });
 });

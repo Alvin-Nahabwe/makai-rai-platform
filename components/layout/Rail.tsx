@@ -30,8 +30,9 @@ function Item({ item }: { item: RailItem }) {
 }
 
 /**
- * The rail (plan 1A Task 11, ruling L2-52): the product name, the organisation switcher, the one navigation landmark, Sign
- * out and the theme switch. Navy in both themes, with the current item a filled orange shape and white text; no text on it
+ * The rail (plan 1A Task 11, rulings L2-52 and L2-60): the one navigation landmark, holding the product name, the organisation
+ * switcher (not for the platform administrator, L2-61), the items, Sign out and the theme switch, so a person moving by
+ * landmarks reaches all of them. Navy in both themes, with the current item a filled orange shape and white text; no text on it
  * is ever orange.
  *
  * Under the person's name it shows their role in the organisation whose page is open, or "MAK-AI administrator" outside any
@@ -53,14 +54,14 @@ export default function Rail({ shell }: { shell: ShellData }) {
   const role = roleUnderName(pathname, shell.roleLabels, shell.platformLabel);
 
   return (
-    <div className="shell-rail">
+    <nav className="shell-rail" aria-label={SHELL_COPY.nav}>
       <p className="shell-rail__product">{PRODUCT_NAME}</p>
-      {shell.orgs.length > 0 ? (
+      {shell.platformLabel === null && shell.orgs.length > 0 ? (
         <div className="shell-rail__org">
           <OrgSwitcher orgs={shell.orgs} currentSlug={slug ?? null} />
         </div>
       ) : null}
-      <nav className="shell-rail__nav" aria-label={SHELL_COPY.nav}>
+      <div className="shell-rail__nav">
         <ul className="shell-rail__main">
           {items.filter((i) => i.group === 'main').map((item) => <Item key={item.key} item={item} />)}
         </ul>
@@ -72,7 +73,7 @@ export default function Rail({ shell }: { shell: ShellData }) {
           </li>
           {items.filter((i) => i.key === 'account').map((item) => <Item key={item.key} item={item} />)}
         </ul>
-      </nav>
+      </div>
       <div className="shell-rail__actions">
         <SignOutWithDraftsGuard userId={shell.userId}>
           <button type="button" className="shell-rail__signout" onClick={() => signOut({ callbackUrl: '/login' })}>
@@ -82,6 +83,6 @@ export default function Rail({ shell }: { shell: ShellData }) {
         </SignOutWithDraftsGuard>
         <ThemeToggle />
       </div>
-    </div>
+    </nav>
   );
 }

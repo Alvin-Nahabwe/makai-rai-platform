@@ -12,8 +12,6 @@ import TopBar from '@/components/layout/TopBar';
 import OrgSwitcher from '@/components/layout/OrgSwitcher';
 import ThemeToggle from '@/components/layout/ThemeToggle';
 import PublicHeader from '@/components/layout/PublicHeader';
-import { SignOutWithDraftsGuard } from '@/components/decision/SignOutWithDraftsGuard';
-import { NewerLegalTextNotice } from '@/components/legal/NewerLegalTextNotice';
 import type { ShellData } from '@/lib/shell/types';
 
 /**
@@ -61,8 +59,8 @@ describe('the one navigation tree (L2-44)', () => {
     expect([...html.matchAll(/<nav\b/g)]).toHaveLength(1);
     expect([...html.matchAll(/<nav [^>]*aria-label="Main"/g)]).toHaveLength(1);
     const panel = /<div [^>]*id="shell-menu"[^>]*>([\s\S]*)<\/div><main/.exec(html)?.[1] ?? '';
-    expect(panel).toContain('<div class="shell-rail">');
-    expect(panel).toContain('aria-label="Main"');
+    // L2-60: the rail's root is the landmark, so the product name, the switcher, Sign out and the theme switch are in it.
+    expect(panel).toMatch(/^<nav class="shell-rail" aria-label="Main">/);
   });
 
   it('1A Task 11 L2-44: the Menu button reads "Menu" and opens the panel by popovertarget', () => {
@@ -73,7 +71,8 @@ describe('the one navigation tree (L2-44)', () => {
     // React writes the attribute as popoverTarget; HTML attribute names are case-insensitive, so the parser reads popovertarget.
     expect(button![0]).toMatch(/ popovertarget="shell-menu"/i);
     expect(button![0]).toContain('aria-controls="shell-menu"');
-    expect(button![0]).toContain('aria-expanded="false"');
+    // L2-44 amended: no state in the server markup; the mount sync and every toggle set it.
+    expect(button![0]).not.toContain('aria-expanded');
     expect(button![0]).toContain('type="button"');
     expect(html).toMatch(/<div [^>]*id="shell-menu"[^>]*popover="auto"|<div [^>]*popover="auto"[^>]*id="shell-menu"/);
     expect(html).toMatch(/<div [^>]*class="shell-topbar__panel"/);
@@ -106,17 +105,19 @@ describe('the one navigation tree (L2-44)', () => {
 
   it('1A Task 11 L2-52: the rail holds the product name, the switcher, the navigation, Sign out and the theme switch, in that order', () => {
     const html = rail('/orgs/a/dashboard');
-    expect(html).toMatch(/^<div class="shell-rail">/);
-    const order = ['<p class="shell-rail__product">MAK-AI RAI Platform</p>', 'class="shell-rail__org"', '<nav', 'class="shell-rail__lower"', 'class="shell-rail__signout"', 'class="shell-theme'];
+    expect(html).toMatch(/^<nav class="shell-rail" aria-label="Main">/);
+    expect(html).toMatch(/<\/nav>$/);
+    const order = ['<p class="shell-rail__product">MAK-AI RAI Platform</p>', 'class="shell-rail__org"', '<div class="shell-rail__nav">', 'class="shell-rail__lower"', 'class="shell-rail__signout"', 'class="shell-theme'];
     const positions = order.map((s) => html.indexOf(s));
     for (const p of positions) expect(p).toBeGreaterThanOrEqual(0);
     expect([...positions].sort((x, y) => x - y)).toEqual(positions);
     expect(html).not.toMatch(/<img|<aside/);
   });
 
-  it('1A Task 11 L2-52: no organisation, no switcher block', () => {
+  it('1A Task 11 L2-52 L2-61: no organisation, no switcher block; and none for the administrator', () => {
     expect(rail('/explore/framework', noOrg)).not.toContain('shell-rail__org');
     expect(rail('/admin/organisations', admin)).not.toContain('shell-rail__org');
+    expect(rail('/admin/organisations', { ...admin, orgs: [{ slug: 'a', name: 'Alpha Lab' }] })).not.toContain('shell-org');
   });
 });
 
@@ -152,6 +153,7 @@ describe('the rail, ported from the sidebar (UX-02, UX-41)', () => {
     for (const slug of ['__proto__', 'constructor', 'toString', 'hasOwnProperty', 'valueOf']) {
       const html = rail(`/orgs/${slug}/dashboard`);
       expect(personText(html), slug).toBe('A');
+      expect(html, slug).not.toContain('shell-rail__role');
       expect(stripTags(html), slug).not.toMatch(/\[object|function|viewer|owner/i);
     }
   });
@@ -297,25 +299,6 @@ describe('the public header (L2-55)', () => {
     expect(html).toMatch(/<a href="\/about">About<\/a>/);
     expect(html).toMatch(/<a href="\/login">Sign in<\/a>/);
     expect(html).toContain('class="shell-theme shell-theme--on-light"');
-  });
-});
-
-describe('the slots the shell carries (ported unchanged from the sidebar test)', () => {
-  it('M-41: before any press the guard renders its children, and no warning', () => {
-    // DEC-b filled the slot: the guard wraps the button to catch a press, and shows M-41 only when this device holds drafts.
-    const html = renderToStaticMarkup(<SignOutWithDraftsGuard userId="u1"><button>Sign out</button></SignOutWithDraftsGuard>);
-    expect(html).toContain('<button>Sign out</button>');
-    expect(html).not.toContain('answers on this device');
-  });
-
-  it('M-39: the notice renders nothing for an account offered no newer text', async () => {
-    // ACC-a filled the slot (Task 12); an account with no acceptance row is offered nothing (lib/data/acceptances.ts).
-    expect(await NewerLegalTextNotice({ userId: 'u1' })).toBeNull();
-  });
-
-  it('M-39 M-41: a slot keeps its producer marker until the producer fills it', () => {
-    expect(readFileSync('components/legal/NewerLegalTextNotice.tsx', 'utf8')).not.toMatch(/SLOT_STUB/);   // ACC-a, Task 12
-    expect(readFileSync('components/decision/SignOutWithDraftsGuard.tsx', 'utf8')).not.toMatch(/SLOT_STUB/);   // DEC-b, Task 7
   });
 });
 

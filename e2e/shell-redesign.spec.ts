@@ -66,6 +66,34 @@ async function hydrated(page: Page, selector = '.shell-topbar__menu-button'): Pr
   }, selector);
 }
 
+/**
+ * Waits until nothing scrolls: the page and the panel keep their scroll positions for five animation frames. The method of
+ * e2e/about.spec.ts's scrollSettled: app/globals.css sets `scroll-behavior: smooth` on html, so a box read right after a
+ * focus, a scrollIntoView or a press that scrolls is read mid-way.
+ */
+async function scrollSettled(page: Page): Promise<void> {
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        const position = () => `${window.scrollY}:${document.querySelector('.shell-topbar__panel')?.scrollTop ?? 0}`;
+        let last = position();
+        let still = 0;
+        const tick = () => {
+          const now = position();
+          if (now === last) {
+            still += 1;
+            if (still >= 5) return resolve();
+          } else {
+            still = 0;
+            last = now;
+          }
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }),
+  );
+}
+
 const railLinks = (page: Page) => page.getByRole('navigation', { name: 'Main', exact: true }).getByRole('link');
 
 // ── The person in two organisations, with long names, made for this spec ─────────────────────────────────────────────
@@ -128,10 +156,13 @@ test('1A Task 11 (1): at 1280 px the rail is the first column, full height, Home
     expect(await home.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(action);
     expect(await home.evaluate((el) => getComputedStyle(el).color)).toBe(onAction);
 
-    const orange = new Set([action, await resolved(page, '--color-action-text'), await resolved(page, '--color-selected')]);
-    const colours = await page.locator('.shell-rail, .shell-rail *, .shell-topbar, .shell-topbar *').evaluateAll((els) => els.map((e) => getComputedStyle(e).color));
-    expect(colours.length).toBeGreaterThan(10);
-    expect(colours.filter((c) => orange.has(c)), 'text on the rail or the bar painted orange').toEqual([]);
+    for (const colorScheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme });
+      const orange = new Set([await resolved(page, '--color-action'), await resolved(page, '--color-action-text'), await resolved(page, '--color-selected')]);
+      const colours = await page.locator('.shell-rail, .shell-rail *, .shell-topbar, .shell-topbar *').evaluateAll((els) => els.map((e) => getComputedStyle(e).color));
+      expect(colours.length).toBeGreaterThan(10);
+      expect(colours.filter((c) => orange.has(c)), `text on the rail or the bar painted orange, ${colorScheme}`).toEqual([]);
+    }
   } finally {
     await context.close();
   }
@@ -188,6 +219,7 @@ for (const width of [1023, 375]) {
       const panel = page.locator('.shell-topbar__panel');
       await expect(panel).toBeVisible();
       await expect(menu).toHaveAttribute('aria-expanded', 'true');
+      await scrollSettled(page);
       const p = await box(page, '.shell-topbar__panel');
       expect(Math.abs(p.y - (bar.y + bar.height)), 'the panel starts at the bar\'s bottom edge').toBeLessThanOrEqual(2);
       expect(p.x).toBe(0);
@@ -196,6 +228,7 @@ for (const width of [1023, 375]) {
       await expect(railLinks(page)).toHaveText(ORG_ITEMS);
       for (const link of await railLinks(page).all()) {
         await link.scrollIntoViewIfNeeded();
+        await scrollSettled(page);
         const l = (await link.boundingBox())!;
         expect(l.y, await link.innerText()).toBeGreaterThanOrEqual(p.y - 0.5);
         expect(l.y + l.height, await link.innerText()).toBeLessThanOrEqual(700 + 0.5);
@@ -206,17 +239,69 @@ for (const width of [1023, 375]) {
       await expect(menu).toHaveAttribute('aria-expanded', 'false');
       await expect(menu).toBeFocused();
 
+      // A client navigation (the marker on window survives it): the panel is closed on the new page.
+      await page.evaluate(() => { (window as unknown as { __shellMarker?: number }).__shellMarker = 1; });
       await menu.click();
       await railLinks(page).filter({ hasText: 'Projects' }).click();
       await page.waitForURL((url) => url.pathname === `/orgs/${slug}/projects`);
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
       await expect(panel).toBeHidden();
       await expect(menu).toHaveAttribute('aria-expanded', 'false');
+      expect(await page.evaluate(() => (window as unknown as { __shellMarker?: number }).__shellMarker), 'a client navigation').toBe(1);
+
+      // A link that keeps the pathname closes the panel too: Findings (?for=findings), then the current item.
+      await menu.click();
+      await expect(panel).toBeVisible();
+      await railLinks(page).filter({ hasText: 'Findings' }).click();
+      await page.waitForURL((url) => url.pathname === `/orgs/${slug}/projects` && url.searchParams.get('for') === 'findings');
+      await expect(panel).toBeHidden();
+      await expect(menu).toHaveAttribute('aria-expanded', 'false');
+      await menu.click();
+      await expect(panel).toBeVisible();
+      await railLinks(page).filter({ hasText: 'Projects' }).click();
+      await expect(panel).toBeHidden();
+      await expect(menu).toHaveAttribute('aria-expanded', 'false');
+      expect(await page.evaluate(() => (window as unknown as { __shellMarker?: number }).__shellMarker), 'still the same document').toBe(1);
     } finally {
       await context.close();
     }
   });
 }
+
+test('1A Task 11 (2) F1: a panel opened before the scripts arrive stays open through hydration, and aria-expanded follows it', async ({ browser }) => {
+  const { slug, seat: owner } = seat('owner');
+  const context = await contextAs(browser, owner.storageStatePath, { viewport: { width: 375, height: 700 } });
+  try {
+    const page = await context.newPage();
+    // Hold back the application's script chunks until Menu has been pressed.
+    const held: Array<import('@playwright/test').Route> = [];
+    let release = false;
+    await page.route(/\/_next\/static\/chunks\/.*\.js(\?|$)/, (route) => {
+      if (release) return route.continue();
+      held.push(route);
+    });
+    await page.goto(`/orgs/${slug}/dashboard`, { waitUntil: 'commit' });
+    const menu = page.locator('.shell-topbar__menu-button');
+    await expect(menu).toBeVisible();
+    expect(await menu.getAttribute('aria-expanded'), 'no state in the server markup').toBeNull();
+    expect(held.length, 'scripts were held').toBeGreaterThan(0);
+    await menu.click();
+    const panel = page.locator('.shell-topbar__panel');
+    await expect(panel).toBeVisible();
+    release = true;
+    for (const route of held.splice(0)) await route.continue();
+    await hydrated(page);
+    await page.waitForLoadState('load');
+    expect(await panel.evaluate((el) => el.matches(':popover-open')), 'still open after hydration').toBe(true);
+    await expect(menu).toHaveAttribute('aria-expanded', 'true');
+    await scrollSettled(page);
+    const bar = await box(page, '.shell-topbar');
+    const p = await box(page, '.shell-topbar__panel');
+    expect(Math.abs(p.y - (bar.y + bar.height))).toBeLessThanOrEqual(2);
+  } finally {
+    await context.close();
+  }
+});
 
 test('1A Task 11 (2): the panel opened at 375 px gives way to the rail\'s column when the window is widened to 1280 px', async ({ browser }) => {
   const { slug, seat: owner } = seat('owner');
@@ -356,12 +441,15 @@ test('1A Task 11 (5): one organisation is a name; two are a switcher whose list 
 
     await button.click();
     await expect(button).toHaveAttribute('aria-expanded', 'true');
+    await scrollSettled(page);
     const b = await box(page, '.shell-org__button');
     const list = await box(page, '.shell-org__list');
     const rail = await box(page, '.shell-rail');
     expect(list.y).toBeGreaterThanOrEqual(b.y + b.height - 0.5);
     expect(list.x).toBeGreaterThanOrEqual(rail.x);
     expect(list.x + list.width).toBeLessThanOrEqual(rail.x + rail.width + 0.5);
+    expect(list.y).toBeGreaterThanOrEqual(rail.y - 0.5);
+    expect(list.y + list.height).toBeLessThanOrEqual(rail.y + rail.height + 0.5);
     const links = page.locator('.shell-org__list a');
     await expect(links).toHaveCount(2);
     await expect(links.filter({ hasText: LONG_ORG_NAME })).toHaveAttribute('aria-current', 'true');
@@ -377,8 +465,75 @@ test('1A Task 11 (5): one organisation is a name; two are a switcher whose list 
     await expect(button).toContainText(p.b.org.name);
     await expect(button).toHaveAttribute('aria-expanded', 'false');
     await expect(page.locator('.shell-org__list a')).toHaveCount(0);
+
+    // The list does not come back by itself: open it, follow Projects, come back to Home.
+    await button.click();
+    await expect(button).toHaveAttribute('aria-expanded', 'true');
+    await railLinks(page).filter({ hasText: 'Projects' }).click();
+    await page.waitForURL((url) => url.pathname === `/orgs/${p.b.org.slug}/projects`);
+    await railLinks(page).filter({ hasText: 'Home' }).click();
+    await page.waitForURL((url) => url.pathname === `/orgs/${p.b.org.slug}/dashboard`);
+    await expect(button).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.locator('.shell-org__list a')).toHaveCount(0);
+    // Choosing the organisation already open closes the list.
+    await button.click();
+    await expect(button).toHaveAttribute('aria-expanded', 'true');
+    await page.locator('.shell-org__list a').filter({ hasText: p.b.org.name }).click();
+    await expect(button).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.locator('.shell-org__list a')).toHaveCount(0);
   } finally {
     await two.close();
+  }
+});
+
+test('1A Task 11 (5) F3: a hovered organisation in the open switcher keeps the shell ink, in light and dark', async ({ browser }) => {
+  const p = await twoOrgPerson(browser);
+  const context = await contextAs(browser, p.state, { viewport: { width: 1280, height: 800 } });
+  try {
+    const page = await context.newPage();
+    await page.goto(`/orgs/${p.a.org.slug}/dashboard`);
+    await hydrated(page, '.shell-org__button');
+    await page.locator('.shell-org__button').click();
+    const other = page.locator('.shell-org__list a').filter({ hasText: p.b.org.name });
+    for (const colorScheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme });
+      await page.mouse.move(600, 400);
+      await other.hover();
+      // Links carry a colour transition: read the colour once it has finished, not at its first frame.
+      const colour = await other.evaluate(async (el) => {
+        await Promise.all(el.getAnimations().map((a) => a.finished));
+        return getComputedStyle(el).color;
+      });
+      expect(colour, colorScheme).toBe(await resolved(page, '--color-shell-ink'));
+    }
+    await expectNoSeriousA11yViolations(page, 'switcher open, a link hovered');
+  } finally {
+    await context.close();
+  }
+});
+
+test('1A Task 11 (5) T3 S-31: the rail on a refused organisation and on one that does not exist reads the same, with no role and nothing of that organisation', async ({ browser }) => {
+  const { seat: viewer } = seat('viewer');
+  const other = manifest().orgs[1];
+  const row = await testDb.organization.findFirst({ where: { slug: other.slug }, select: { name: true } });
+  expect(row, 'the other fixture organisation exists').not.toBeNull();
+  const context = await contextAs(browser, viewer.storageStatePath, { viewport: { width: 1280, height: 800 } });
+  try {
+    const page = await context.newPage();
+    const texts: string[] = [];
+    for (const slug of [other.slug, 'no-such-organisation-t3']) {
+      const response = await page.goto(`/orgs/${slug}/dashboard`);
+      expect(response!.status(), slug).toBe(404);
+      await expect(page.locator('.shell-rail__name')).toBeVisible();
+      await expect(page.locator('.shell-rail__role'), slug).toHaveCount(0);
+      const text = await page.locator('.shell-rail').innerText();
+      expect(text, slug).not.toContain(slug);
+      expect(text, slug).not.toContain(row!.name);
+      texts.push(text);
+    }
+    expect(texts[0], 'the refused organisation reads like one that does not exist').toBe(texts[1]);
+  } finally {
+    await context.close();
   }
 });
 
@@ -440,6 +595,22 @@ for (const where of [{ name: 'the rail', signedIn: true, scope: '.shell-rail' },
       expect(await shownThemeWords(page, where.scope)).toEqual(['Switch to light theme']);
     } finally {
       await dark.close();
+    }
+
+    // Light stored and a dark system: the stored choice wins, before any script of the app.
+    const stored = await browser.newContext({ colorScheme: 'dark', viewport: { width: 1280, height: 800 }, ...(where.signedIn ? { storageState: owner.storageStatePath } : {}) });
+    try {
+      const page = await stored.newPage();
+      await page.goto(url);
+      await page.evaluate(() => localStorage.setItem('theme', 'light'));
+      await watchFirstTheme(page);
+      await page.reload();
+      const first = await page.evaluate(() => (window as unknown as { __firstTheme?: { value: string; reactRan: boolean } }).__firstTheme);
+      expect(first, 'data-theme was set while the page loaded').toEqual({ value: 'light', reactRan: false });
+      expect(await shownThemeWords(page, where.scope)).toEqual(['Switch to dark theme']);
+      await page.evaluate(() => localStorage.removeItem('theme'));
+    } finally {
+      await stored.close();
     }
   });
 }
@@ -518,6 +689,7 @@ for (const width of [1280, 375]) {
       const dialog = page.getByRole('dialog');
       await expect(dialog).toContainText(WARNING, { timeout: 10_000 });
       await expect(page.getByRole('button', { name: 'Stay signed in' })).toBeFocused();
+      await scrollSettled(page);
       const d = (await dialog.boundingBox())!;
       const vw = await page.evaluate(() => document.documentElement.clientWidth);
       expect(Math.abs(d.x + d.width / 2 - vw / 2), 'horizontal centre').toBeLessThanOrEqual(2);
@@ -533,6 +705,7 @@ for (const width of [1280, 375]) {
       await expect(dialog).toHaveCount(0, { timeout: 10_000 });
       const notice = page.getByRole('alert').filter({ hasText: ENDED });
       await expect(notice).toBeVisible();
+      await scrollSettled(page);
       const n = (await notice.boundingBox())!;
       const shell = await box(page, '.shell');
       expect(n.y + n.height).toBeLessThanOrEqual(shell.y + 0.5);
@@ -563,30 +736,43 @@ for (const width of [1280, 375]) {
         const key = `makrai.draft.v1:${userId}:${orgId}:00000000-0000-4000-8000-000000000000:q:Q-PP-01`;
         localStorage.setItem(key, JSON.stringify({ baseVersionNumber: null, value: { reason: 'x' }, savedAt: new Date().toISOString(), savePressedAt: null, retry: { requestId: null, sentBody: null } }));
       }, [p.account.userId, p.a.org.id] as const);
-      if (width < 1024) {
-        await page.locator('.shell-topbar__menu-button').click();
-        await expect(page.locator('.shell-topbar__panel')).toBeVisible();
+      if (width >= 1024) {
+        // A positioned element in main (kit components will be): the warning must still paint over it.
+        await page.evaluate(() => { (document.querySelector('main') as HTMLElement).style.position = 'relative'; });
       }
-      const signOut = page.getByRole('button', { name: 'Sign out', exact: true });
-      await signOut.scrollIntoViewIfNeeded();
-      await signOut.click();
-      const warning = page.getByRole('alertdialog');
-      await expect(warning).toBeVisible();
-      const w = (await warning.boundingBox())!;
-      const vw = await page.evaluate(() => document.documentElement.clientWidth);
-      expect(w.x).toBeGreaterThanOrEqual(0);
-      expect(w.y).toBeGreaterThanOrEqual(0);
-      expect(w.x + w.width).toBeLessThanOrEqual(vw + 0.5);
-      expect(w.y + w.height).toBeLessThanOrEqual(700 + 0.5);
-      const controls = [warning.getByRole('link', { name: 'Go to them' }), warning.getByRole('button', { name: 'Delete them and sign out' }), warning.getByRole('button', { name: 'Cancel' })];
-      for (const control of controls) {
-        const c = (await control.boundingBox())!;
-        const free = await control.evaluate((el, [x, y]) => { const hit = document.elementFromPoint(x, y); return hit !== null && (hit === el || el.contains(hit)); }, [c.x + c.width / 2, c.y + c.height / 2]);
-        expect(free, await control.innerText()).toBe(true);
+      for (const colorScheme of ['light', 'dark'] as const) {
+        await page.emulateMedia({ colorScheme });
+        if (width < 1024 && !(await page.locator('.shell-topbar__panel').isVisible())) {
+          await page.locator('.shell-topbar__menu-button').click();
+          await expect(page.locator('.shell-topbar__panel')).toBeVisible();
+        }
+        const signOut = page.getByRole('button', { name: 'Sign out', exact: true });
+        await signOut.scrollIntoViewIfNeeded();
+        await scrollSettled(page);
+        await signOut.click();
+        const warning = page.getByRole('alertdialog');
+        await expect(warning).toBeVisible();
+        // The warning takes focus as it opens, which may scroll.
+        await scrollSettled(page);
+        const w = (await warning.boundingBox())!;
+        const vw = await page.evaluate(() => document.documentElement.clientWidth);
+        expect(w.x).toBeGreaterThanOrEqual(0);
+        expect(w.y).toBeGreaterThanOrEqual(0);
+        expect(w.x + w.width).toBeLessThanOrEqual(vw + 0.5);
+        expect(w.y + w.height).toBeLessThanOrEqual(700 + 0.5);
+        const controls = [warning.getByRole('link', { name: 'Go to them' }), warning.getByRole('button', { name: 'Delete them and sign out' }), warning.getByRole('button', { name: 'Cancel' })];
+        for (const control of controls) {
+          const c = (await control.boundingBox())!;
+          const free = await control.evaluate((el, [x, y]) => { const hit = document.elementFromPoint(x, y); return hit !== null && (hit === el || el.contains(hit)); }, [c.x + c.width / 2, c.y + c.height / 2]);
+          expect(free, `${await control.innerText()} ${colorScheme}`).toBe(true);
+        }
+        // The message is in the page's ink, not the rail's: readable on the warning's surface.
+        expect(await page.locator('#sign-out-drafts-text').evaluate((el) => getComputedStyle(el).color), colorScheme).toBe(await resolved(page, '--color-ink'));
+        await expectNoSeriousA11yViolations(page, `sign-out warning ${width} ${colorScheme}`);
+        await warning.getByRole('button', { name: 'Cancel' }).click();
+        await expect(warning).toHaveCount(0);
+        expect(new URL(page.url()).pathname).toBe(`/orgs/${p.a.org.slug}/dashboard`);
       }
-      await warning.getByRole('button', { name: 'Cancel' }).click();
-      await expect(warning).toHaveCount(0);
-      expect(new URL(page.url()).pathname).toBe(`/orgs/${p.a.org.slug}/dashboard`);
       await page.evaluate(() => { for (const k of Object.keys(localStorage)) if (k.startsWith('makrai.draft.v1:')) localStorage.removeItem(k); });
     } finally {
       await context.close();
@@ -632,6 +818,7 @@ test('1A Task 11 (12): at 375 px every control of the bar and the open panel is 
       expect(s.w, s.what).toBeGreaterThanOrEqual(24);
       expect(s.h, s.what).toBeGreaterThanOrEqual(24);
     }
+    await expect(page.locator('.shell-rail__item')).toHaveCount(ORG_ITEMS.length);
     for (const h of await page.locator('.shell-rail__item').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height))) expect(h).toBeGreaterThanOrEqual(44);
 
     // Tab from the Menu button through the open panel: each control's ring shows, inside the viewport, uncovered.
@@ -641,6 +828,7 @@ test('1A Task 11 (12): at 375 px every control of the bar and the open panel is 
       await page.keyboard.press('Tab');
       const inPanel = await page.evaluate(() => !!document.activeElement?.closest('.shell-topbar__panel'));
       if (!inPanel) break;
+      await scrollSettled(page);
       await expectFocusVisibleAndUncovered(page);
       checked += 1;
     }

@@ -1,6 +1,10 @@
-import { TERM_ADMIN, TERM_ASSESSOR, TERM_OWNER, TERM_REVIEWER, TERM_VIEWER } from '@/lib/vocabulary/terms';
+import type { RailItem } from '@/lib/shell/types';
 
-/** The words of the shell (plan 1A Task 11): the rail, the top bar, the switcher, the theme switch and the public header. */
+/**
+ * The words of the shell (plan 1A Task 11): the rail, the top bar, the switcher, the theme switch and the public header.
+ * Client components import this module, and the bundler ships it whole to every page whose client code does (ruling X-2),
+ * so it holds only the words those components show: the role words are lib/shell/data.ts's, on the server.
+ */
 export const SHELL_COPY = Object.freeze({
   nav: 'Main',
   publicNav: 'Site',
@@ -14,23 +18,5 @@ export const SHELL_COPY = Object.freeze({
     home: 'Home', projects: 'Projects', findings: 'Findings', guidance: 'Guidance', help: 'Help',
     members: 'Members', organisation: 'Organisation details', account: 'My account',
     'admin-organisations': 'Organisations', 'admin-accounts': 'Accounts',
-  }),
+  } satisfies Record<RailItem['key'], string>),
 });
-
-/** The organisation roles as orgRoleLabel returns them (lower case), and the word the shell shows for each. */
-const ROLE_WORDS: Readonly<Record<string, string>> = Object.freeze({
-  owner: TERM_OWNER.term,
-  admin: TERM_ADMIN.term,
-  assessor: TERM_ASSESSOR.term,
-  reviewer: TERM_REVIEWER.term,
-  viewer: TERM_VIEWER.term,
-});
-
-/**
- * The role word shown under the person's name (CONSOLIDATED section 2: capitalised, "Viewer"). Any label that is not one of
- * the five roles is shown as it is, never hidden; it is looked up as an own property, so a label such as "toString" is
- * not mistaken for one.
- */
-export function roleWord(label: string): string {
-  return Object.hasOwn(ROLE_WORDS, label) ? ROLE_WORDS[label] : label;
-}
