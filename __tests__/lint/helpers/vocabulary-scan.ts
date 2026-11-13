@@ -29,16 +29,22 @@ export const RULES = phraseRules(VOCABULARY);
 export const PROPER_NAMES = VOCABULARY.properNames.map((p) => p.text);
 
 /** Not white space (so `^\s*…\s*$` anchors do not see through it) and not a word character (so `\b` holds). */
-const MASK = '⁠';
+export const MASK = '\u2060';
+
+/** Where a piece of text sits: a fixed place, or a function of the hit's index in the text (for text that spans lines). */
+export type Where = string | ((index: number) => string);
+export type TextUnit = { where: Where; text: string };
 
 /** Hits in one piece of text: each proper name's exact spans masked, then every phrase rule run over the rest. */
-export function lintText(where: string, text: string, rules: Rule[] = RULES, properNames: string[] = PROPER_NAMES): Hit[] {
+export function lintText(where: Where, text: string, rules: Rule[] = RULES, properNames: string[] = PROPER_NAMES): Hit[] {
   let masked = text;
   for (const name of properNames) if (name) masked = masked.split(name).join(MASK.repeat(name.length));
   const hits: Hit[] = [];
   for (const rule of rules) {
     rule.re.lastIndex = 0;
-    for (const m of masked.matchAll(rule.re)) hits.push({ where, match: m[0].trim() || m[0], rule, text });
+    for (const m of masked.matchAll(rule.re)) {
+      hits.push({ where: typeof where === 'string' ? where : where(m.index), match: m[0].trim() || m[0], rule, text });
+    }
   }
   return hits;
 }
@@ -48,30 +54,94 @@ export const formatHit = (h: Hit) => `${h.where}: "${h.match}" → use "${h.rule
 // ---------------------------------------------------------------------------------------------------------------------
 // TypeScript: string and template literals, skipping the arguments of an allowed verbatim(…) call.
 
+/** Positions where a string literal is a key or a code, never text a reader sees. Decided by syntax kind only. */
+const COMPARISON = new Set([ts.SyntaxKind.EqualsEqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken,
+  ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsToken]);
+export function isNonCopyPosition(n: ts.Node): boolean {
+  const p = n.parent;
+  if (!p) return false;
+  if ((ts.isPropertyAssignment(p) || ts.isPropertySignature(p) || ts.isPropertyDeclaration(p) || ts.isMethodDeclaration(p) ||
+    ts.isMethodSignature(p) || ts.isEnumMember(p) || ts.isGetAccessorDeclaration(p) || ts.isSetAccessorDeclaration(p)) && p.name === n) return true;
+  if (ts.isCaseClause(p) && p.expression === n) return true;
+  if (ts.isLiteralTypeNode(p)) return true;
+  if (ts.isElementAccessExpression(p) && p.argumentExpression === n) return true;
+  return ts.isBinaryExpression(p) && COMPARISON.has(p.operatorToken.kind);
+}
+
+/** One piece of text built from source parts; a hit's line is the line of the source character it starts on. */
+type Part = { text: string; start: number; spansLines: boolean };
+/** A `${…}` hole or a non-literal operand of `+`: one MASK, so neither side's words join across it. */
+const holeAt = (start: number): Part => ({ text: MASK, start, spansLines: false });
+
 /**
- * The text of every string and template literal in a TypeScript source, with its line. A template's static parts are
- * joined by MASK, so a `${…}` hole is never read as text; a literal inside a hole is a literal of its own and is read.
- * Skipped: the module specifiers of import and export declarations (paths, not copy), and every literal inside the
- * arguments of a verbatim call whose first argument is an allowed kind.
+ * The text a reader may see in a TypeScript source, as units with their place. A template's static parts are joined by
+ * MASK, so a `${…}` hole is never read as text; adjacent operands of `+` are one unit when one of them is a string,
+ * with any other operand read as a hole. A literal inside a hole is a unit of its own.
+ * Skipped: import and export module paths; every literal inside the arguments of an allowed verbatim call; a literal
+ * in a non-copy position (isNonCopyPosition). A source with parse errors throws, naming the file.
  */
-export function tsLiterals(file: string, source: string): Array<{ where: string; text: string }> {
+export function tsLiterals(file: string, source: string): TextUnit[] {
   const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, file.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const diagnostics = (sf as unknown as { parseDiagnostics?: readonly ts.Diagnostic[] }).parseDiagnostics;
+  if (!Array.isArray(diagnostics)) throw new Error(`${file}: the TypeScript parser gave no diagnostics list`);
+  if (diagnostics.length) {
+    throw new Error(`${file}: does not parse: ${diagnostics.map((d) => ts.flattenDiagnosticMessageText(d.messageText, ' ')).join('; ')}`);
+  }
   const b = verbatimBindings(sf, file);
-  const out: Array<{ where: string; text: string }> = [];
-  const lineOf = (n: ts.Node) => sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1;
+  const out: TextUnit[] = [];
+  const lineAt = (pos: number) => sf.getLineAndCharacterOfPosition(pos).line + 1;
+  const hole = (e: ts.Node) => holeAt(e.getStart(sf));
+
+  const unit = (parts: Part[]) => {
+    const offsets: number[] = [];
+    let text = '';
+    for (const part of parts) { offsets.push(text.length); text += part.text; }
+    out.push({ text, where: (index: number) => {
+      let k = 0;
+      while (k + 1 < parts.length && offsets[k + 1] <= index) k++;
+      const before = parts[k].spansLines ? parts[k].text.slice(0, Math.max(0, index - offsets[k])).split('\n').length - 1 : 0;
+      return `${file}:${lineAt(parts[k].start) + before}`;
+    } });
+  };
+  /** The static parts of a template (start just after the backtick or the closing brace), its holes visited. */
+  const templateParts = (n: ts.TemplateExpression | ts.NoSubstitutionTemplateLiteral): Part[] => {
+    if (ts.isNoSubstitutionTemplateLiteral(n)) return [{ text: n.text, start: n.getStart(sf) + 1, spansLines: true }];
+    const parts: Part[] = [{ text: n.head.text, start: n.head.getStart(sf) + 1, spansLines: true }];
+    for (const s of n.templateSpans) {
+      visit(s.expression);
+      parts.push(hole(s.expression), { text: s.literal.text, start: s.literal.getStart(sf) + 1, spansLines: true });
+    }
+    return parts;
+  };
+  const isStringy = (n: ts.Node) => ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n) || ts.isTemplateExpression(n);
+  const plusOperands = (n: ts.Expression): ts.Expression[] => {
+    const e = ts.isParenthesizedExpression(n) ? n.expression : n;
+    return ts.isBinaryExpression(e) && e.operatorToken.kind === ts.SyntaxKind.PlusToken ? [...plusOperands(e.left), ...plusOperands(e.right)] : [n];
+  };
+
   const visit = (n: ts.Node): void => {
-    if ((ts.isImportDeclaration(n) || ts.isExportDeclaration(n))) {
-      if (ts.isExportDeclaration(n) && n.exportClause) visit(n.exportClause);
-      return;
-    }
+    if (ts.isImportDeclaration(n) || ts.isExportDeclaration(n)) return;
     if (isAllowedVerbatimCall(n, b)) return;
-    if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) {
-      out.push({ where: `${file}:${lineOf(n)}`, text: n.text });
+    if (ts.isBinaryExpression(n) && n.operatorToken.kind === ts.SyntaxKind.PlusToken && !(ts.isBinaryExpression(n.parent) && n.parent.operatorToken.kind === ts.SyntaxKind.PlusToken)) {
+      const ops = plusOperands(n);
+      if (ops.some(isStringy)) {
+        const parts: Part[] = [];
+        for (const op of ops) {
+          if (ts.isStringLiteral(op)) parts.push({ text: op.text, start: op.getStart(sf), spansLines: false });
+          else if (ts.isNoSubstitutionTemplateLiteral(op) || ts.isTemplateExpression(op)) parts.push(...templateParts(op));
+          else { parts.push(hole(op)); visit(op); }
+        }
+        if (!isNonCopyPosition(n)) unit(parts);
+        return;
+      }
+    }
+    if (ts.isStringLiteral(n)) {
+      if (!isNonCopyPosition(n)) unit([{ text: n.text, start: n.getStart(sf), spansLines: false }]);
       return;
     }
-    if (ts.isTemplateExpression(n)) {
-      out.push({ where: `${file}:${lineOf(n)}`, text: [n.head.text, ...n.templateSpans.map((s) => s.literal.text)].join(MASK) });
-      for (const s of n.templateSpans) visit(s.expression);
+    if (ts.isNoSubstitutionTemplateLiteral(n) || ts.isTemplateExpression(n)) {
+      const parts = templateParts(n);
+      if (!isNonCopyPosition(n)) unit(parts);
       return;
     }
     ts.forEachChild(n, visit);

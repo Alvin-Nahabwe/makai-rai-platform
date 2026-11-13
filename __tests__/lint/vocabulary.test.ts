@@ -128,6 +128,46 @@ describe('the vocabulary lint, on fixtures', () => {
     expect(lintTs('a/copy.ts', "export const C = 'Post';").map((h) => h.rule.id)).toEqual(['stage-3']);
   });
 
+  it('a property name is not copy; its value is', () => {
+    expect(lintTs('a/copy.ts', "export const S = { 'pre-processing': 'Pre-processing' };")).toEqual([]);
+    expect(lintTs('a/copy.ts', "export const S = { 'Dashboard': 'Home' };")).toEqual([]);
+    expect(lintTs('a/copy.ts', "export const S = { home: 'Dashboard' };").map((h) => h.rule.id)).toEqual(['dashboard']);
+    expect(lintTs('a/copy.ts', "export interface S { 'Dashboard': string }\nexport class C { 'Dashboard' = 1; }\nexport enum E { 'Dashboard' = 1 }")).toEqual([]);
+  });
+
+  it('a case label is not copy', () => {
+    expect(lintTs('a/copy.ts', "export const f = (x: string) => { switch (x) { case 'Dashboard': return 1; default: return 0; } };")).toEqual([]);
+  });
+
+  it('a literal type is not copy', () => {
+    expect(lintTs('a/copy.ts', "export type T = 'Dashboard' | 'Post';\nexport const x = y as 'Dashboard';")).toEqual([]);
+  });
+
+  it('an element-access key is not copy', () => {
+    expect(lintTs('a/copy.ts', "export const v = m['Dashboard'];")).toEqual([]);
+  });
+
+  it('an operand of ===, !==, == or != is not copy; other operators are', () => {
+    expect(lintTs('a/copy.ts', "export const a = x === 'Dashboard' || x !== 'Post' || x == 'In' || x != 'Pre';")).toEqual([]);
+    expect(lintTs('a/copy.ts', "export const a = x || 'Dashboard';").map((h) => h.rule.id)).toEqual(['dashboard']);
+  });
+
+  it('a TypeScript file that does not parse fails the scan, naming the file', () => {
+    expect(() => lintTs('lib/a/copy.ts', "export const C = <p>the RAI Toolkit</p>;")).toThrow(/lib\/a\/copy\.ts/);
+  });
+
+  it("a multi-line template reports the hit on the hit's own line", () => {
+    const src = "export const f = (n: number) => `First line ${n}\nsecond line\nBack to the Dashboard`;";
+    expect(lintTs('a/copy.ts', src).map(formatHit)).toEqual(['a/copy.ts:3: "Dashboard" → use "Home" (concept dashboard)']);
+  });
+
+  it('adjacent literals joined by + are read as one string, a non-literal operand as a hole', () => {
+    expect(lintTs('a/copy.ts', "export const C = 'Open the ' +\n  'RAI ' + 'Toolkit';").map(formatHit))
+      .toEqual(['a/copy.ts:2: "RAI Toolkit" → use "MAK-AI RAI Platform" (concept product)']);
+    expect(lintTs('a/copy.ts', "export const C = (n: string) => n + ' Post';")).toEqual([]);
+    expect(lintTs('a/copy.ts', "export const C = (n: string) => 'Back to ' + n + ' Dashboard';").map((h) => h.rule.id)).toEqual(['dashboard']);
+  });
+
   it('import and export paths are not copy', () => {
     expect(lintTs('a/copy.ts', "import { x } from '@/lib/Dashboard';\nexport { y } from './Dashboard';")).toEqual([]);
   });
@@ -190,9 +230,9 @@ describe('the vocabulary lint, on fixtures', () => {
 });
 
 /** Today's counts (13 Nov 2026), as floors: a scope that reads fewer strings has lost a file or a field. */
-const COPY_STRINGS_FLOOR = 211;
+const COPY_STRINGS_FLOOR = 206;
 const FIELD_MAP_STRINGS_FLOOR = 156;
-const EMAIL_STRINGS_FLOOR = 55;
+const EMAIL_STRINGS_FLOOR = 52;
 
 describe('the vocabulary lint, on the repository', () => {
   it('scope (2): the running content bundle, signed and unsigned fields, holds no retired phrase', () => {
