@@ -1,0 +1,55 @@
+/* A date as three boxes (plan 1A Task 4, spec 7.5): Day and Month take two digits, Year four. The boxes and the buttons
+   wrap onto further lines at 320 px rather than scroll. The boxes are TextInput.css's .ui-input. */
+.ui-date {
+  min-inline-size: 0;
+  margin: 0 0 var(--space-6);
+  padding: 0;
+  border: 0;
+}
+
+.ui-date__legend {
+  margin-block-end: var(--space-2);
+  padding: 0;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-ink);
+}
+
+.ui-date > .ui-field__hint {
+  margin-block-end: var(--space-3);
+}
+
+.ui-date__parts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.ui-date__part {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.ui-date__label {
+  min-block-size: var(--target-min);
+  color: var(--color-ink);
+}
+
+.ui-date__part--day .ui-input,
+.ui-date__part--month .ui-input {
+  inline-size: 3.5rem;
+}
+
+.ui-date__part--year .ui-input {
+  inline-size: 5rem;
+}
+
+.ui-date__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-block-start: var(--space-3);
+}
+
+.ui-date > .ui-field__error {
+  margin-block-start: var(--space-3);
+}

@@ -1,0 +1,37 @@
+/* The error summary (plan 1A Task 4): a 2 px ink border, never red (decision B5), with the title and a link to each
+   field. Focused by the caller after a failed submit; the base :focus-visible ring does not show for a programmatic
+   focus, so the summary draws its own ring while it has focus. */
+.ui-error-summary {
+  box-sizing: border-box;
+  max-inline-size: var(--measure-reading);
+  margin-block-end: var(--space-6);
+  padding: var(--space-4);
+  border: 2px solid var(--color-ink);
+  border-radius: var(--radius-surface);
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+}
+
+.ui-error-summary:focus {
+  outline: var(--focus-width) solid var(--color-focus);
+  outline-offset: var(--focus-offset);
+}
+
+.ui-error-summary__title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-ink);
+}
+
+.ui-error-summary__list {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding-inline-start: var(--space-5);
+}
+
+.ui-error-summary__list a {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-link);
+}

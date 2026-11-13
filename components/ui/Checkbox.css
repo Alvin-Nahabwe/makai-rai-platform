@@ -1,0 +1,91 @@
+/* A checkbox (plan 1A Task 4; modern-web-guidance checkbox). The native input stays the target, drawn with
+   `appearance: none`: a 2 px box in currentColor, and when checked a tick made of two borders. Borders and currentColor
+   survive forced colours, where a background or a mask image would be dropped. The label's row is 44 px high. */
+.ui-checkbox {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: var(--space-3);
+  align-items: center;
+}
+
+.ui-checkbox__input {
+  appearance: none;
+  box-sizing: border-box;
+  display: grid;
+  place-content: center;
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+  margin: 0;
+  border: 2px solid currentColor;
+  border-radius: 3px;
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+  cursor: pointer;
+}
+
+.ui-checkbox__input::before {
+  content: '';
+  box-sizing: border-box;
+  inline-size: 0.375rem;
+  block-size: 0.7rem;
+  margin-block-start: -0.15rem;
+  border: 0 solid currentColor;
+  rotate: 45deg;
+}
+
+.ui-checkbox__input:checked::before {
+  border-width: 0 2.5px 2.5px 0;
+}
+
+.ui-checkbox__input:disabled {
+  color: var(--color-ink-muted);
+  cursor: not-allowed;
+}
+
+.ui-checkbox__label {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--target-primary);
+  color: var(--color-ink);
+  cursor: pointer;
+}
+
+.ui-checkbox__input:disabled + .ui-checkbox__label {
+  color: var(--color-ink-muted);
+  cursor: not-allowed;
+}
+
+.ui-checkbox__hint {
+  grid-column: 2;
+  max-inline-size: var(--measure-reading);
+  margin-block-end: var(--space-2);
+  color: var(--color-ink-muted);
+}
+
+.ui-checkbox > .ui-field__error {
+  grid-column: 1 / -1;
+}
+
+.ui-checkbox-group {
+  min-inline-size: 0;
+  margin: 0 0 var(--space-6);
+  padding: 0;
+  border: 0;
+}
+
+.ui-checkbox-group__legend {
+  margin-block-end: var(--space-2);
+  padding: 0;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-ink);
+}
+
+.ui-checkbox-group__hint {
+  max-inline-size: var(--measure-reading);
+  margin-block-end: var(--space-2);
+  color: var(--color-ink-muted);
+}
+
+.ui-checkbox-group > .ui-field__error {
+  margin-block-end: var(--space-2);
+}

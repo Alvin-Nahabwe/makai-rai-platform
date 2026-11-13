@@ -2,17 +2,25 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { connection } from 'next/server';
 import type { ReactElement, ReactNode } from 'react';
+import { Button, ButtonLink } from '@/components/ui/Button';
+import { Checkbox, CheckboxGroup } from '@/components/ui/Checkbox';
+import { ErrorSummary } from '@/components/ui/ErrorSummary';
 import { Icon } from '@/components/ui/Icon';
 import { ICONS } from '@/components/ui/icons';
 import { LocalTime } from '@/components/ui/LocalTime';
+import { RadioCards } from '@/components/ui/RadioCards';
 import { RouteRow, type RouteRowStop } from '@/components/ui/RouteRow';
 import { SavedMark } from '@/components/ui/SavedMark';
+import { Select } from '@/components/ui/Select';
 import { StatusMark } from '@/components/ui/StatusMark';
+import { TextArea } from '@/components/ui/TextArea';
+import { TextInput } from '@/components/ui/TextInput';
 import type { IconName, StatusMarkKind } from '@/components/ui/types';
 import { tallyOf } from '@/lib/ui/marks';
 import { devGalleryShown } from '@/lib/ui/devGallery';
 import { MAIN_CONTENT_ID } from '@/components/layout/SkipLink';
 import { PRODUCT_NAME } from '@/lib/ui/title';
+import { DateStates, DecidedOnDemo, InPlaceDemo, ReasonDemo, StatusDemo } from './FormDemos';
 import { SavedDemo } from './SavedDemo';
 
 /**
@@ -32,6 +40,11 @@ const ROUTE: readonly RouteRowStop[] = Array.from({ length: 22 }, (_, i) => {
   const kind: StatusMarkKind = i === 0 ? 'scope_answered' : (['done', 'done', 'partly', 'not_yet', 'not_applicable', 'does_not_apply', 'no_decision'] as const)[i % 7];
   return { id: `q${i + 1}`, kind, title: `Sample question ${i + 1}`, href: `#q${i + 1}`, current: i === 3, scopeAnswer: i === 0 ? 'yes' : undefined };
 });
+
+const VARIANTS = ['primary', 'secondary', 'quiet', 'destructive'] as const;
+const PEOPLE = [{ value: 'u1', label: 'Amina Namusoke' }, { value: 'u2', label: 'Joseph Okello' }];
+const ROLES = [{ value: 'role:dpo', label: 'Data protection officer' }, { value: 'role:ethics', label: 'Ethics committee' }];
+const sampleCount = (n: number, max: number) => (n > max ? `${n - max} characters too many. Shorten the text to ${max} characters.` : `${n} of ${max} characters`);
 
 function KitSection({ id, title, children }: { id: string; title: string; children: ReactNode }): ReactElement {
   return (
@@ -100,6 +113,86 @@ export default async function UiKitPage(): Promise<ReactElement> {
           ['version 2, with history', <SavedMark key="2" saved={{ version: 2, savedAt: '2026-11-11T08:23:00.000Z', decidedOn: '2026-02-11' }} historyHref="#saved-mark" live={false} />],
           ['version 3, month precision, no history link', <SavedMark key="3" saved={{ version: 3, savedAt: '2026-11-11T08:23:00.000Z', decidedOn: '2026-02' }} live={false} />],
         ]} />
+      </KitSection>
+
+      <KitSection id="buttons" title="Buttons">
+        <p>Hover, focus and pressed are each button&rsquo;s own browser states; busy and disabled are shown below.</p>
+        {VARIANTS.map((variant) => (
+          <StateTable key={variant} caption={`The ${variant} button`} rows={[
+            ['default', <Button key="d" variant={variant}>Save decision</Button>],
+            ['compact', <Button key="c" variant={variant} size="compact">Save decision</Button>],
+            ['icon at the start', <Button key="s" variant={variant} icon="paperclip">Add evidence</Button>],
+            ['icon at the end', <Button key="e" variant={variant} icon="chevron-right" iconPosition="end">Next question</Button>],
+            ['busy', <Button key="b" variant={variant} busy>Saving</Button>],
+            ['disabled', <Button key="x" variant={variant} disabled>Save decision</Button>],
+          ]} />
+        ))}
+        <StateTable caption="A link drawn as a button" rows={[
+          ['secondary', <ButtonLink key="s" variant="secondary" href="#buttons">Back to the buttons</ButtonLink>],
+          ['quiet, icon', <ButtonLink key="q" variant="quiet" href="#text-input" icon="arrow-up">Text box</ButtonLink>],
+        ]} />
+      </KitSection>
+
+      <KitSection id="text-input" title="Text box">
+        <TextInput id="kit-name" name="kit-name" label="Project name" hint="The name your team uses for it." />
+        <TextInput id="kit-email" name="kit-email" type="email" label="Email address" required autoComplete="email" spellCheck={false} width="medium" />
+        <TextInput id="kit-code" name="kit-code" label="Short code" width="short" />
+        <TextInput id="kit-error" name="kit-error" label="Organisation name" hint="As it appears on your letterhead." error="Enter the organisation's name." required />
+        <TextInput id="kit-readonly" name="kit-readonly" label="Sign-in email" defaultValue="amina@example.org" readOnly />
+        <TextInput id="kit-disabled" name="kit-disabled" label="Project name, while saving" defaultValue="Maternal health triage" disabled />
+        <TextInput id="kit-password" name="kit-password" type="password" label="Password" autoComplete="new-password" hint="At least 12 characters." />
+      </KitSection>
+
+      <KitSection id="text-area" title="Text area">
+        <ReasonDemo />
+        <TextArea id="kit-reason-over" name="kit-reason-over" label="Reason, over the limit" maxLength={40} count={sampleCount}
+          defaultValue="We assessed effects on adolescent mothers and on women with no recorded education." />
+        <TextArea id="kit-reason-error" name="kit-reason-error" label="Reason, with an error" maxLength={40} count={sampleCount} defaultValue=""
+          error="Write a reason. Say what was checked and what it showed." describedBy={['kit-reason-note']} required />
+        <p id="kit-reason-note">A further description the area points to, between its count and its error.</p>
+        <TextArea id="kit-reason-readonly" name="kit-reason-readonly" label="Reason, read only" maxLength={40} count={sampleCount} defaultValue="Checked the consent forms." readOnly />
+        <TextArea id="kit-reason-disabled" name="kit-reason-disabled" label="Reason, while saving" maxLength={40} count={sampleCount} defaultValue="Checked the consent forms." disabled />
+      </KitSection>
+
+      <KitSection id="select" title="Select">
+        <Select id="kit-decided-by" name="kit-decided-by" label="Decided by" required placeholder="Choose a person or a role" defaultValue=""
+          groups={[{ label: 'Members of this team', options: PEOPLE }, { label: 'A role outside the team', options: ROLES }]} />
+        <Select id="kit-select-plain" name="kit-select-plain" label="Assigned to" hint="Only members can be assigned." options={PEOPLE} defaultValue="u2" />
+        <Select id="kit-select-error" name="kit-select-error" label="Decided by, with an error" placeholder="Choose a person or a role" defaultValue=""
+          options={PEOPLE} error="Choose who decided." />
+        <Select id="kit-select-disabled" name="kit-select-disabled" label="Decided by, while saving" options={PEOPLE} defaultValue="u1" disabled />
+      </KitSection>
+
+      <KitSection id="radio-cards" title="Radio cards">
+        <StatusDemo />
+        <RadioCards name="kit-scope" legend="Does the data hold personal information?" legendHint="Answer for the data this project uses." columns={2}
+          options={[{ value: 'yes', label: 'Yes', help: 'It contains sensitive or personal information.' }, { value: 'no', label: 'No', help: 'It does not.' }, { value: 'not_sure', label: 'Not sure' }]} />
+        <RadioCards name="kit-status-error" legend="Status, with an error" error="Choose a status." required
+          options={[{ value: 'done', label: 'Done', mark: 'done' }, { value: 'partly', label: 'Partly', mark: 'partly' }]} />
+        <RadioCards name="kit-status-disabled" legend="Status, while saving" disabled defaultValue="partly"
+          options={[{ value: 'done', label: 'Done', mark: 'done' }, { value: 'partly', label: 'Partly', mark: 'partly' }]} />
+      </KitSection>
+
+      <KitSection id="checkbox" title="Checkbox">
+        <Checkbox id="kit-agree" name="kit-agree" label="Send me an email when a finding is assigned to me" hint="You can change this on My account." />
+        <Checkbox id="kit-agree-checked" name="kit-agree-checked" label="Keep me signed in on this device" defaultChecked />
+        <Checkbox id="kit-agree-error" name="kit-agree-error" label="I have read the consent to storage abroad" error="Tick this to go on." />
+        <InPlaceDemo />
+        <CheckboxGroup name="kit-in-place-disabled" legend="Which of these are in place? While saving" disabled defaultValues={['policy']}
+          options={[{ value: 'policy', label: 'A written policy' }, { value: 'owner', label: 'A named owner' }]} />
+      </KitSection>
+
+      <KitSection id="date-field" title="Date">
+        <DecidedOnDemo />
+        <DateStates />
+      </KitSection>
+
+      <KitSection id="error-summary" title="Error summary">
+        <ErrorSummary title="There is a problem" errors={[
+          { fieldId: 'kit-error', message: "Enter the organisation's name." },
+          { fieldId: 'kit-decided-day', message: 'Enter the day, month and year the decision was made.' },
+        ]} />
+        <p>With no errors the summary renders nothing.</p>
       </KitSection>
 
       <KitSection id="local-time" title="Local time">

@@ -1,0 +1,59 @@
+/* The text area and its count (plan 1A Task 4). The field parts are TextInput.css's .ui-field. The area resizes
+   vertically only, so it never pushes the page sideways at 320 px. */
+.ui-textarea {
+  box-sizing: border-box;
+  display: block;
+  inline-size: 100%;
+  min-block-size: calc(var(--target-primary) * 2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border-control);
+  border-radius: var(--radius-control);
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  resize: vertical;
+  transition: border-color var(--duration-state) var(--easing-state);
+}
+
+.ui-textarea--medium {
+  max-inline-size: 30em;
+}
+
+.ui-textarea--short {
+  max-inline-size: 15em;
+}
+
+.ui-textarea:hover:not(:disabled, [readonly]),
+.ui-textarea:focus-visible {
+  border-color: var(--color-ink);
+}
+
+.ui-textarea--invalid {
+  padding: calc(var(--space-3) - 1px);
+  border: 2px solid var(--color-ink);
+}
+
+.ui-textarea--readonly {
+  border-color: var(--color-tint);
+  background-color: var(--color-tint);
+}
+
+.ui-textarea:disabled {
+  border-style: dashed;
+  background-color: var(--color-tint);
+  color: var(--color-ink-muted);
+  cursor: not-allowed;
+}
+
+.ui-count {
+  margin: 0;
+  font-size: var(--font-size-small);
+  color: var(--color-ink-muted);
+}
+
+/* Over the limit: ink and bold, the same voice as an error, never red. */
+.ui-count--over {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-ink);
+}
