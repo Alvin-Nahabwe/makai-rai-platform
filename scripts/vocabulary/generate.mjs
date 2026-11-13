@@ -9,8 +9,8 @@
 // With no argument the file is looked for as findSource() does. CI does not have it: the tests then compare the
 // committed ids.ts and terms.ts against a fresh emit from the committed data/vocabulary.json.
 // Exit codes: 0 written; 2 for every validation failure (the message names the concept id). Nothing is written on 2.
-// `--allow-missing-rules` is used only until Task 8 fills lint-rules.json; it lets a retired item with no rule be
-// written with `text` only.
+// `--allow-missing-rules` lets a retired item with no rule be written with `text` only. Since Task 8 filled
+// lint-rules.json the committed files are generated WITHOUT it; only fixture tests still pass it.
 //
 // overrides.json (hand-written texts; the lint class of an item is NOT here):
 //   terms.spec / terms.extract / terms.fromConcept   { "<id>": "<term>" }, and terms.labels { "<id>": ["<label>", ...] };
@@ -31,6 +31,9 @@
 //   { "<concept id>": { "<item text>": { "lint": "phrase", "pattern": "<regex source>", "caseSensitive": false }
 //                                    | { "lint": "review", "why": "<reason>" } } }
 // A key naming an unknown id, or a text the concept does not retire, is an error (exit 2).
+// A pattern never names a code point (no `\u…` escape, no character outside printable ASCII): it is copied into
+// data/vocabulary.json, and __tests__/unit/font-subsets.test.ts reads every file under data/ as page copy. The lint
+// shows a template hole (`${…}`) to a pattern as one format character, so "before a hole" is written `(?=\p{Cf})`.
 //
 // Unknown keys in overrides.json and in a lint rule are errors; a missing optional key is allowed. Every concept is
 // validated after the merge (kebab-case id, non-empty group, concept and term, a definition of at most 20 words or null).
@@ -214,6 +217,9 @@ export function parseSection2(markdown) {
       group = heading[1];
       continue;
     }
+    if (/^(```|~~~)/.test(line)) throw new VocabularyError(`section 2 holds a code fence, and a table inside one would be read as concepts: ${line}`);
+    if (line.includes('<!--')) throw new VocabularyError(`section 2 holds an HTML comment, and a table inside one would be read as concepts: ${line}`);
+    if (line.startsWith('|') && !line.endsWith('|')) throw new VocabularyError(`a table line does not end with "|", so the text after its last pipe would be lost: ${line}`);
     if (!line.startsWith('|')) {
       if (line.includes('|')) throw new VocabularyError(`section 2 holds a prose line with a "|" that is not a table line (a row needs its leading "|", and a table is not a quotation): ${line}`);
       continue;

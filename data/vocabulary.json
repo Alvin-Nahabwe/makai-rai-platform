@@ -15,13 +15,22 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "Toolkit"
+          "text": "Toolkit",
+          "lint": "phrase",
+          "pattern": "\\bMAK-AI Responsible AI Toolkit\\b|\\b[Tt]he Toolkit\\b",
+          "caseSensitive": true
         },
         {
-          "text": "RAI Toolkit"
+          "text": "RAI Toolkit",
+          "lint": "phrase",
+          "pattern": "\\bRAI Toolkit\\b",
+          "caseSensitive": true
         },
         {
-          "text": "lower-case \"platform\" in the name"
+          "text": "lower-case \"platform\" in the name",
+          "lint": "phrase",
+          "pattern": "\\bMAK-AI (?:RAI |Responsible AI (?:\\(RAI\\) )?)?platform\\b",
+          "caseSensitive": true
         }
       ]
     },
@@ -35,7 +44,10 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "organization"
+          "text": "organization",
+          "lint": "phrase",
+          "pattern": "\\borganization(?:s|al)?\\b|(?<=^[\\s#>*_\\-\\d.)|]*|[.!?:]\\s{1,4})Organization(?:s|al)?\\b",
+          "caseSensitive": true
         }
       ]
     },
@@ -49,7 +61,9 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "\"team\" as a page or account name"
+          "text": "\"team\" as a page or account name",
+          "lint": "review",
+          "why": "\"Your team's records\" is a correct sentence: \"team\" is ruled for sentences and only its use as a page or account name is retired, which a pattern cannot tell apart."
         }
       ]
     },
@@ -73,7 +87,9 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "lower-case role words on screen"
+          "text": "lower-case role words on screen",
+          "lint": "review",
+          "why": "\"Ask a reviewer at your ethics committee\" correctly uses \"reviewer\" as a plain English word, not the role name."
         }
       ]
     },
@@ -97,7 +113,9 @@
       "defineOnFirstUse": true,
       "retired": [
         {
-          "text": "\"administrator\" for this role"
+          "text": "\"administrator\" for this role",
+          "lint": "review",
+          "why": "\"MAK-AI administrator\" is itself a ruled term, and \"ask your university's research administrator\" correctly names a person outside the platform."
         }
       ]
     },
@@ -141,10 +159,15 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "Platform Admin"
+          "text": "Platform Admin",
+          "lint": "phrase",
+          "pattern": "\\bplatform[- ]admin(?:s|istrators?)?\\b",
+          "caseSensitive": false
         },
         {
-          "text": "plural \"administrators\""
+          "text": "plural \"administrators\"",
+          "lint": "review",
+          "why": "\"Research administrators at your university can help\" is a correct sentence about people outside the platform; only the bare plural standing for MAK-AI staff or the Admin role is retired."
         }
       ]
     },
@@ -158,10 +181,15 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "Platform role"
+          "text": "Platform role",
+          "lint": "phrase",
+          "pattern": "\\bplatform roles?\\b",
+          "caseSensitive": false
         },
         {
-          "text": "\"Assessor\" as an account type"
+          "text": "\"Assessor\" as an account type",
+          "lint": "review",
+          "why": "\"Assessor\" is the correct name of a role in an organisation (\"Choose Assessor to let them record decisions\"); only its use as an account type is retired."
         }
       ]
     },
@@ -185,7 +213,10 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "first-owner invitation"
+          "text": "first-owner invitation",
+          "lint": "phrase",
+          "pattern": "\\bfirst[- ]owner invitations?\\b",
+          "caseSensitive": false
         }
       ]
     },
@@ -199,10 +230,16 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "issue (for invitations)"
+          "text": "issue (for invitations)",
+          "lint": "phrase",
+          "pattern": "\\bissu(?:e|es|ed|ing)\\s+(?:(?:an|a|the|this|that|new|another|owner|first-owner)\\s+)*invitations?\\b|\\binvitations?\\s+(?:(?:was|were|is|has been|have been)\\s+)?issued\\b",
+          "caseSensitive": false
         },
         {
-          "text": "revoke"
+          "text": "revoke",
+          "lint": "phrase",
+          "pattern": "^\\s*Revoked?\\s*$|\\brevok(?:e|es|ed|ing)\\b[^.!?\\n]{0,40}\\binvitations?\\b|\\binvitations?\\b[^.!?\\n]{0,60}\\brevoked\\b",
+          "caseSensitive": false
         }
       ]
     },
@@ -226,13 +263,21 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "Deleted user"
+          "text": "Deleted user",
+          "lint": "phrase",
+          "pattern": "\\bdeleted users?\\b",
+          "caseSensitive": false
         },
         {
-          "text": "Unknown"
+          "text": "Unknown",
+          "lint": "review",
+          "why": "\"Unknown\" is correct in other places, for example \"Unknown file type\" or a status the reader has not set."
         },
         {
-          "text": "An account no longer on the platform"
+          "text": "An account no longer on the platform",
+          "lint": "phrase",
+          "pattern": "\\ban account no longer on the platform\\b",
+          "caseSensitive": false
         }
       ]
     },
@@ -246,7 +291,10 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "\"controller\" alone"
+          "text": "\"controller\" alone",
+          "lint": "phrase",
+          "pattern": "(?<!\\bdata[-\\s]+)\\bcontrollers?\\b",
+          "caseSensitive": false
         }
       ]
     },
@@ -271,10 +319,16 @@
       "historical": true,
       "retired": [
         {
-          "text": "\"accepted\" for the agreement"
+          "text": "\"accepted\" for the agreement",
+          "lint": "phrase",
+          "pattern": "\\borganisation\\s+agreement\\s+(?:(?:was|were|is|has been|had been)\\s+)?accepted\\b|\\baccept(?:s|ed|ing)?\\s+(?:(?:the|this|an|its|your)\\s+)?organisation\\s+agreement\\b",
+          "caseSensitive": false
         },
         {
-          "text": "Agreement records"
+          "text": "Agreement records",
+          "lint": "phrase",
+          "pattern": "\\bagreement records\\b",
+          "caseSensitive": false
         }
       ]
     },
@@ -288,7 +342,9 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "bare \"Organisation\" in the sidebar"
+          "text": "bare \"Organisation\" in the sidebar",
+          "lint": "review",
+          "why": "\"Organisation\" correctly begins sentence-case text such as \"Organisation name changed\"; only the bare sidebar label is retired (plan 1A line 278)."
         }
       ]
     },
@@ -302,10 +358,14 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "correct"
+          "text": "correct",
+          "lint": "review",
+          "why": "\"Check that the date is correct\" is a correct sentence; only \"correct\" as the verb for changing the organisation name is retired."
         },
         {
-          "text": "corrected"
+          "text": "corrected",
+          "lint": "review",
+          "why": "\"The fingerprint is checked against the record, so nothing needs to be corrected\" uses the word in its plain sense; only the name-change event is retired."
         }
       ]
     },
@@ -319,7 +379,10 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "\"register\" a system"
+          "text": "\"register\" a system",
+          "lint": "phrase",
+          "pattern": "\\bregister(?:s|ed|ing)?\\s+(?:(?:a|an|the|your|this|new|another)\\s+)*(?:AI\\s+)?systems?\\b",
+          "caseSensitive": false
         }
       ]
     },
@@ -333,7 +396,10 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "\"lifecycle stage\" for this field"
+          "text": "\"lifecycle stage\" for this field",
+          "lint": "phrase",
+          "pattern": "^\\s*life[- ]?cycle stage\\s*(?:\\([^)]*\\))?\\s*:?\\s*$",
+          "caseSensitive": false
         }
       ]
     },
@@ -347,7 +413,9 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "\"archive\" for the ZIP (say \"ZIP file\")"
+          "text": "\"archive\" for the ZIP (say \"ZIP file\")",
+          "lint": "review",
+          "why": "\"Archive this project\" is the ruled verb for projects; only \"archive\" meaning the downloaded ZIP is retired, which a pattern cannot tell apart."
         }
       ]
     },
@@ -361,7 +429,10 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "ML lifecycle"
+          "text": "ML lifecycle",
+          "lint": "phrase",
+          "pattern": "\\bML life[- ]?cycle\\b",
+          "caseSensitive": false
         }
       ]
     },
@@ -375,10 +446,16 @@
       "defineOnFirstUse": true,
       "retired": [
         {
-          "text": "Pre"
+          "text": "Pre",
+          "lint": "phrase",
+          "pattern": "^\\s*Pre\\s*$",
+          "caseSensitive": true
         },
         {
-          "text": "raw lower-case segment"
+          "text": "raw lower-case segment",
+          "lint": "phrase",
+          "pattern": "^\\s*pre-processing\\s*$",
+          "caseSensitive": true
         }
       ]
     },
@@ -392,7 +469,10 @@
       "defineOnFirstUse": true,
       "retired": [
         {
-          "text": "In"
+          "text": "In",
+          "lint": "phrase",
+          "pattern": "^\\s*In\\s*$",
+          "caseSensitive": true
         }
       ]
     },
@@ -406,7 +486,10 @@
       "defineOnFirstUse": true,
       "retired": [
         {
-          "text": "Post"
+          "text": "Post",
+          "lint": "phrase",
+          "pattern": "^\\s*Post\\s*$",
+          "caseSensitive": true
         }
       ]
     },
@@ -420,7 +503,9 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "module"
+          "text": "module",
+          "lint": "review",
+          "why": "\"Import the fairness module in Python\" correctly uses \"module\" in its software sense in guidance and notebooks."
         }
       ]
     },
@@ -434,7 +519,9 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "a code standing alone for a question"
+          "text": "a code standing alone for a question",
+          "lint": "review",
+          "why": "\"Q-PP-03\" shown small after the question's text is correct (question code row), and a string holding only the code cannot show whether the text sits beside it."
         }
       ]
     },
@@ -458,7 +545,10 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "expected practice"
+          "text": "expected practice",
+          "lint": "phrase",
+          "pattern": "\\bexpected practices?\\b",
+          "caseSensitive": false
         }
       ]
     },
@@ -482,10 +572,15 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "content version"
+          "text": "content version",
+          "lint": "phrase",
+          "pattern": "\\bcontent versions?\\b",
+          "caseSensitive": false
         },
         {
-          "text": "reworded"
+          "text": "reworded",
+          "lint": "review",
+          "why": "\"Your reason was saved as you reworded it\" uses the word plainly; only \"reworded\" as the label for a changed question is retired."
         }
       ]
     },
@@ -499,13 +594,21 @@
       "defineOnFirstUse": true,
       "retired": [
         {
-          "text": "scope answer"
+          "text": "scope answer",
+          "lint": "phrase",
+          "pattern": "\\bscope answers?\\b",
+          "caseSensitive": false
         },
         {
-          "text": "scope question"
+          "text": "scope question",
+          "lint": "phrase",
+          "pattern": "\\bscope questions?\\b",
+          "caseSensitive": false
         },
         {
-          "text": "gate"
+          "text": "gate",
+          "lint": "review",
+          "why": "\"Plan the review before the funding gate\" uses \"gate\" as plain English; only \"gate\" for the personal data question is retired."
         }
       ]
     },
@@ -519,7 +622,10 @@
       "defineOnFirstUse": true,
       "retired": [
         {
-          "text": "Not applicable (scope answer: no)"
+          "text": "Not applicable (scope answer: no)",
+          "lint": "phrase",
+          "pattern": "\\bNot applicable \\(scope answer: no\\)",
+          "caseSensitive": false
         }
       ]
     },
@@ -543,7 +649,10 @@
       "defineOnFirstUse": true,
       "retired": [
         {
-          "text": "assessment area"
+          "text": "assessment area",
+          "lint": "phrase",
+          "pattern": "\\bassessment areas?\\b",
+          "caseSensitive": false
         }
       ]
     },
@@ -567,10 +676,15 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "Explore"
+          "text": "Explore",
+          "lint": "phrase",
+          "pattern": "^\\s*Explore\\s*$",
+          "caseSensitive": true
         },
         {
-          "text": "do not use \"Reference\" (it already means support reference and request reference)"
+          "text": "do not use \"Reference\" (it already means support reference and request reference)",
+          "lint": "review",
+          "why": "\"Reference\" is a correct field label (components/documents/GenerateDocumentForm.tsx:125); only a menu section named \"Reference\" was proposed and retired."
         }
       ]
     },
@@ -584,7 +698,9 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "\"answer\" for a decision"
+          "text": "\"answer\" for a decision",
+          "lint": "review",
+          "why": "\"Answer\" is the ruled field of the personal data question (D2), and \"If you answer No\" is its ruled line."
         }
       ]
     },
@@ -598,7 +714,10 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "Shortfalls (`stageList.ts:47`)"
+          "text": "Shortfalls (`stageList.ts:47`)",
+          "lint": "phrase",
+          "pattern": "^\\s*Shortfalls\\b",
+          "caseSensitive": true
         }
       ]
     },
@@ -682,10 +801,16 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "reason code"
+          "text": "reason code",
+          "lint": "phrase",
+          "pattern": "\\breason codes?\\b",
+          "caseSensitive": false
         },
         {
-          "text": "raw codes"
+          "text": "raw codes",
+          "lint": "phrase",
+          "pattern": "\\b(?:na|ny)_[a-z]+(?:_[a-z]+)*\\b",
+          "caseSensitive": true
         }
       ]
     },
@@ -709,7 +834,10 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "outside role"
+          "text": "outside role",
+          "lint": "phrase",
+          "pattern": "\\boutside roles?\\b",
+          "caseSensitive": false
         }
       ]
     },
@@ -723,13 +851,20 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "attachment"
+          "text": "attachment",
+          "lint": "review",
+          "why": "\"This email has no attachment\" is a correct sentence; only \"attachment\" for a piece of evidence is retired."
         },
         {
-          "text": "evidence item"
+          "text": "evidence item",
+          "lint": "phrase",
+          "pattern": "\\bevidence items?\\b",
+          "caseSensitive": false
         },
         {
-          "text": "artefact"
+          "text": "artefact",
+          "lint": "review",
+          "why": "\"Store the trained model artefact with its version number\" correctly uses \"artefact\" in its machine-learning sense in guidance."
         }
       ]
     },
@@ -743,10 +878,15 @@
       "defineOnFirstUse": true,
       "retired": [
         {
-          "text": "v3"
+          "text": "v3",
+          "lint": "phrase",
+          "pattern": "(?<![\\w./-])v(?:\\d+(?![\\w/]|\\.\\w)|(?=\\p{Cf}))",
+          "caseSensitive": true
         },
         {
-          "text": "version arithmetic in messages"
+          "text": "version arithmetic in messages",
+          "lint": "review",
+          "why": "The saved mark correctly names the version, \"Saved as version 4\" (spec 6 override; plan 1A line 277)."
         }
       ]
     },
@@ -760,13 +900,21 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "content version"
+          "text": "content version",
+          "lint": "phrase",
+          "pattern": "\\bcontent versions?\\b",
+          "caseSensitive": false
         },
         {
-          "text": "semver"
+          "text": "semver",
+          "lint": "review",
+          "why": "\"Install scikit-learn 1.3.0\" correctly gives a third-party version number in a notebook; only a version number of the questions is retired."
         },
         {
-          "text": "question set"
+          "text": "question set",
+          "lint": "phrase",
+          "pattern": "\\bquestion sets?\\b",
+          "caseSensitive": false
         }
       ]
     },
@@ -790,13 +938,21 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "draft"
+          "text": "draft",
+          "lint": "review",
+          "why": "\"Send the draft data card to your ethics committee\" uses \"draft\" in its plain sense; only \"draft\" for unsaved changes is retired."
         },
         {
-          "text": "on this device"
+          "text": "on this device",
+          "lint": "phrase",
+          "pattern": "\\bon this device\\b",
+          "caseSensitive": false
         },
         {
-          "text": "saved on this device"
+          "text": "saved on this device",
+          "lint": "phrase",
+          "pattern": "\\bsaved on this device\\b",
+          "caseSensitive": false
         }
       ]
     },
@@ -810,7 +966,10 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "withdrawal code"
+          "text": "withdrawal code",
+          "lint": "phrase",
+          "pattern": "\\bwithdrawal codes?\\b",
+          "caseSensitive": false
         }
       ]
     },
@@ -824,13 +983,20 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "instruction"
+          "text": "instruction",
+          "lint": "review",
+          "why": "\"Follow the instructions in the notebook\" is a correct sentence; only \"instruction\" for an erasure request is retired."
         },
         {
-          "text": "tombstone"
+          "text": "tombstone",
+          "lint": "phrase",
+          "pattern": "\\btombstones?\\b",
+          "caseSensitive": false
         },
         {
-          "text": "operator"
+          "text": "operator",
+          "lint": "review",
+          "why": "\"The operator of a deployed AI system must be able to stop it\" correctly uses \"operator\" in guidance."
         }
       ]
     },
@@ -844,7 +1010,10 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "Done without evidence"
+          "text": "Done without evidence",
+          "lint": "phrase",
+          "pattern": "\\bDone without evidence\\b",
+          "caseSensitive": false
         }
       ]
     },
@@ -858,10 +1027,15 @@
       "defineOnFirstUse": true,
       "retired": [
         {
-          "text": "shortfall"
+          "text": "shortfall",
+          "lint": "phrase",
+          "pattern": "\\bshortfalls?\\b",
+          "caseSensitive": false
         },
         {
-          "text": "issue"
+          "text": "issue",
+          "lint": "review",
+          "why": "\"Issue this document\" is the ruled verb for documents, and \"a known issue with the data\" is plain English."
         }
       ]
     },
@@ -875,10 +1049,14 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "opens"
+          "text": "opens",
+          "lint": "review",
+          "why": "\"The link opens in a new tab\" is a correct sentence; only \"opens\" for a finding being raised is retired."
         },
         {
-          "text": "added"
+          "text": "added",
+          "lint": "review",
+          "why": "\"Evidence added on 2 Nov 2026\" is correct; only \"added\" for a finding being raised is retired."
         }
       ]
     },
@@ -892,10 +1070,16 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "Close it"
+          "text": "Close it",
+          "lint": "phrase",
+          "pattern": "^\\s*Close it\\b|\\bClose it\\s*:",
+          "caseSensitive": true
         },
         {
-          "text": "Closed by mitigation"
+          "text": "Closed by mitigation",
+          "lint": "phrase",
+          "pattern": "\\bClosed by mitigation\\b",
+          "caseSensitive": false
         }
       ]
     },
@@ -909,7 +1093,10 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "bare \"Withdraw\""
+          "text": "bare \"Withdraw\"",
+          "lint": "phrase",
+          "pattern": "^\\s*Withdraw\\s*$",
+          "caseSensitive": true
         }
       ]
     },
@@ -923,10 +1110,14 @@
       "defineOnFirstUse": true,
       "retired": [
         {
-          "text": "measures"
+          "text": "measures",
+          "lint": "review",
+          "why": "\"The model's accuracy measures how often it is right\" uses \"measures\" as a verb or metric; only \"measures\" for mitigations is retired."
         },
         {
-          "text": "action"
+          "text": "action",
+          "lint": "review",
+          "why": "\"This action cannot be undone\" is a correct sentence; only \"action\" for a mitigation is retired."
         }
       ]
     },
@@ -950,7 +1141,10 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "\"owner\" and \"own\" for mitigations"
+          "text": "\"owner\" and \"own\" for mitigations",
+          "lint": "phrase",
+          "pattern": "\\bmitigations?\\s+(?:I|you|we|they)\\s+own\\b|\\bmitigation(?:'s)?\\s+owners?\\b|\\bown(?:s|ed)?\\s+(?:a|the|this)\\s+mitigation\\b",
+          "caseSensitive": false
         }
       ]
     },
@@ -964,10 +1158,15 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "closure evidence"
+          "text": "closure evidence",
+          "lint": "phrase",
+          "pattern": "\\bclosure evidence\\b",
+          "caseSensitive": false
         },
         {
-          "text": "artefact"
+          "text": "artefact",
+          "lint": "review",
+          "why": "\"Store the trained model artefact with its version number\" correctly uses \"artefact\" in its machine-learning sense in guidance."
         }
       ]
     },
@@ -981,7 +1180,9 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "deadline"
+          "text": "deadline",
+          "lint": "review",
+          "why": "\"Plan around your ethics committee's submission deadline\" is a correct sentence; only \"deadline\" for a mitigation's due date is retired."
         }
       ]
     },
@@ -995,7 +1196,10 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "the East Africa Time line"
+          "text": "the East Africa Time line",
+          "lint": "phrase",
+          "pattern": "\\bEast Africa Time\\b",
+          "caseSensitive": false
         }
       ]
     },
@@ -1019,10 +1223,16 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "look at again"
+          "text": "look at again",
+          "lint": "phrase",
+          "pattern": "\\blook(?:s|ing)?\\s+at\\s+again\\b|\\blook(?:s|ing)?\\s+(?:at\\s+(?:(?:it|this|them)\\s+)?)?again\\s+on\\b|\\bdate\\s+to\\s+look\\s+(?:at\\s+it\\s+)?again\\b",
+          "caseSensitive": false
         },
         {
-          "text": "looked at again"
+          "text": "looked at again",
+          "lint": "phrase",
+          "pattern": "\\blooked\\s+at\\s+again\\b|\\blooked\\s+(?:at\\s+(?:(?:it|this|them)\\s+)?)?again\\s+on\\b",
+          "caseSensitive": false
         }
       ]
     },
@@ -1046,7 +1256,10 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "My open and overdue mitigations"
+          "text": "My open and overdue mitigations",
+          "lint": "phrase",
+          "pattern": "\\bMy open and overdue mitigations\\b",
+          "caseSensitive": false
         }
       ]
     },
@@ -1060,7 +1273,10 @@
       "defineOnFirstUse": true,
       "retired": [
         {
-          "text": "\"Open review\" as a link"
+          "text": "\"Open review\" as a link",
+          "lint": "phrase",
+          "pattern": "^\\s*Open review\\s*$",
+          "caseSensitive": true
         }
       ]
     },
@@ -1104,7 +1320,10 @@
       "defineOnFirstUse": true,
       "retired": [
         {
-          "text": "SHA-256 on screen (keep it in the export README only)"
+          "text": "SHA-256 on screen (keep it in the export README only)",
+          "lint": "phrase",
+          "pattern": "(?<=^|[.!?]\\s{1,4})SHA-?256\\b|\\bSHA-?256\\s*:",
+          "caseSensitive": false
         }
       ]
     },
@@ -1118,7 +1337,10 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "\"Matches the record\" without saying what was checked"
+          "text": "\"Matches the record\" without saying what was checked",
+          "lint": "phrase",
+          "pattern": "^\\s*Matches the record(?:\\.|\\s*$)",
+          "caseSensitive": true
         }
       ]
     },
@@ -1132,7 +1354,9 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "report"
+          "text": "report",
+          "lint": "review",
+          "why": "\"Use this data card in your funder report\" is a correct sentence; only \"report\" as the name of a platform document is retired."
         }
       ]
     },
@@ -1176,7 +1400,9 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "Generate"
+          "text": "Generate",
+          "lint": "review",
+          "why": "\"The notebook can generate a summary table\" is a correct sentence; only \"Generate\" as the label of the preview action is retired."
         }
       ]
     },
@@ -1210,7 +1436,10 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "fields the record cannot hold"
+          "text": "fields the record cannot hold",
+          "lint": "phrase",
+          "pattern": "\\bfields the record cannot hold\\b",
+          "caseSensitive": false
         }
       ]
     },
@@ -1224,7 +1453,10 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "the bare \"at the time of issue\" form"
+          "text": "the bare \"at the time of issue\" form",
+          "lint": "phrase",
+          "pattern": "\\bnot recorded at the time of issue\\b",
+          "caseSensitive": false
         }
       ]
     },
@@ -1238,7 +1470,10 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "export as a label (file names may keep it)"
+          "text": "export as a label (file names may keep it)",
+          "lint": "phrase",
+          "pattern": "\\b[Tt]eam export\\b|^\\s*Export\\b[^.!?\\n]{0,40}$",
+          "caseSensitive": true
         }
       ]
     },
@@ -1252,10 +1487,15 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "Export my data"
+          "text": "Export my data",
+          "lint": "phrase",
+          "pattern": "\\bexport my data\\b",
+          "caseSensitive": false
         },
         {
-          "text": "JSON"
+          "text": "JSON",
+          "lint": "review",
+          "why": "\"Save the results as a JSON file\" is a correct instruction in a notebook; only \"JSON\" as the name of the download is retired."
         }
       ]
     },
@@ -1269,7 +1509,10 @@
       "defineOnFirstUse": true,
       "retired": [
         {
-          "text": "\"Other controls\" (say \"More ways to address this\")"
+          "text": "\"Other controls\" (say \"More ways to address this\")",
+          "lint": "phrase",
+          "pattern": "^\\s*Other controls\\b",
+          "caseSensitive": true
         }
       ]
     },
@@ -1293,7 +1536,10 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "\"web page\" as its kind"
+          "text": "\"web page\" as its kind",
+          "lint": "phrase",
+          "pattern": "^\\s*web page\\s*$",
+          "caseSensitive": false
         }
       ]
     },
@@ -1327,7 +1573,10 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "\"Legal texts\" as a link"
+          "text": "\"Legal texts\" as a link",
+          "lint": "phrase",
+          "pattern": "^\\s*Legal texts\\s*$",
+          "caseSensitive": false
         }
       ]
     },
@@ -1341,7 +1590,10 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "Title Case form"
+          "text": "Title Case form",
+          "lint": "phrase",
+          "pattern": "\\bTerms of Service\\b",
+          "caseSensitive": true
         }
       ]
     },
@@ -1355,7 +1607,10 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "Privacy Policy"
+          "text": "Privacy Policy",
+          "lint": "phrase",
+          "pattern": "\\bPrivacy Policy\\b",
+          "caseSensitive": true
         }
       ]
     },
@@ -1369,7 +1624,10 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "cross-border storage consent"
+          "text": "cross-border storage consent",
+          "lint": "phrase",
+          "pattern": "\\bcross[- ]border storage consent\\b",
+          "caseSensitive": false
         }
       ]
     },
@@ -1394,7 +1652,9 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "Review (for this action)"
+          "text": "Review (for this action)",
+          "lint": "review",
+          "why": "\"Review\" is a correct word for a stage review (\"View review\"), so the bare label cannot be told apart from its use for accepting a legal text."
         }
       ]
     },
@@ -1408,7 +1668,10 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "v1"
+          "text": "v1",
+          "lint": "phrase",
+          "pattern": "(?<![\\w./-])v(?:\\d+(?![\\w/]|\\.\\w)|(?=\\p{Cf}))",
+          "caseSensitive": true
         }
       ]
     },
@@ -1422,10 +1685,16 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "Sign In"
+          "text": "Sign In",
+          "lint": "phrase",
+          "pattern": "\\bSign In\\b",
+          "caseSensitive": true
         },
         {
-          "text": "login"
+          "text": "login",
+          "lint": "phrase",
+          "pattern": "(?<![/\\w.-])log-?ins?\\b",
+          "caseSensitive": false
         }
       ]
     },
@@ -1439,7 +1708,10 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "the \"nothing has happened\" reason"
+          "text": "the \"nothing has happened\" reason",
+          "lint": "phrase",
+          "pattern": "\\bbecause nothing has happened\\b",
+          "caseSensitive": false
         }
       ]
     },
@@ -1453,7 +1725,9 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "session"
+          "text": "session",
+          "lint": "review",
+          "why": "\"Plan a working session with your team\" is a correct sentence; only \"session\" for a signed-in browser is retired."
         }
       ]
     },
@@ -1477,7 +1751,10 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "Dashboard"
+          "text": "Dashboard",
+          "lint": "phrase",
+          "pattern": "\\bDashboards?\\b",
+          "caseSensitive": true
         }
       ]
     },
@@ -1491,7 +1768,9 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "the repeated \"My account\" h2"
+          "text": "the repeated \"My account\" h2",
+          "lint": "review",
+          "why": "\"My account\" is the ruled page name; only a second \"My account\" heading on the same page is retired, which a single string cannot show."
         }
       ]
     },
@@ -1515,7 +1794,10 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "\"reference\" in brackets mid-sentence"
+          "text": "\"reference\" in brackets mid-sentence",
+          "lint": "phrase",
+          "pattern": "\\(\\s*reference\\b",
+          "caseSensitive": false
         }
       ]
     },
@@ -1529,16 +1811,26 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "break-glass"
+          "text": "break-glass",
+          "lint": "phrase",
+          "pattern": "\\bbreak[- ]?glass\\b",
+          "caseSensitive": false
         },
         {
-          "text": "root"
+          "text": "root",
+          "lint": "review",
+          "why": "\"Find the root cause of the bias\" is a correct sentence in guidance; only \"root\" for the server login is retired."
         },
         {
-          "text": "console"
+          "text": "console",
+          "lint": "review",
+          "why": "\"Open the browser console\" or \"print it to the console\" in a notebook is correct; only \"console\" for the server login is retired."
         },
         {
-          "text": "integrity log"
+          "text": "integrity log",
+          "lint": "phrase",
+          "pattern": "\\bintegrity logs?\\b",
+          "caseSensitive": false
         }
       ]
     },
@@ -1552,13 +1844,21 @@
       "defineOnFirstUse": false,
       "retired": [
         {
-          "text": "EAT"
+          "text": "EAT",
+          "lint": "phrase",
+          "pattern": "\\bEAT\\b",
+          "caseSensitive": true
         },
         {
-          "text": "unlabelled zones"
+          "text": "unlabelled zones",
+          "lint": "review",
+          "why": "\"14:05\" with no zone is correct on screen, where times are in the reader's own zone (voice rule 10); a string cannot show where it is rendered."
         },
         {
-          "text": "Show UTC"
+          "text": "Show UTC",
+          "lint": "phrase",
+          "pattern": "\\bShow UTC\\b",
+          "caseSensitive": false
         }
       ]
     },
