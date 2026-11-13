@@ -4,7 +4,11 @@ import { principleSlugMap, stageLabels } from '@/data/constants';
 import ReferencesList from '@/components/report/ReferencesList';
 import { STAGES, type Stage } from '@/types/record';
 import type { ContentArea, LoadedContent } from '@/types/content';
+import { GUIDANCE_COPY } from '@/lib/guidance/copy';
+import { pageTitle } from '@/lib/ui/title';
 import './FrameworkMapPage.css';
+
+export const metadata = { title: pageTitle(GUIDANCE_COPY.titles.framework) };
 
 /**
  * S-26, the framework for reference (FR-CNT-01; contract Screens row S-26). A server component: every stage, module,

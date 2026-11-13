@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { EvidenceBlock } from '@/components/evidence/EvidenceBlock';
 import { ErrorSummary, FailureText, Field, StatusLine } from '@/components/findings/FindingActions';
-import { LocalTime } from '@/components/findings/LocalTime';
+import { LocalTime } from '@/components/ui/LocalTime';
 import { openDraftStore, type DraftKey, type DraftStore } from '@/lib/client/drafts';
 import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafeWrite';
 import {

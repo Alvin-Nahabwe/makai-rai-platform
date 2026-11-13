@@ -1,7 +1,9 @@
 import { requireIdentity } from '@/lib/auth/identity';
 import { CreateOrganisationForm } from '@/components/admin/CreateOrganisationForm';
+import { ADMIN_COPY } from '@/lib/admin/copy';
+import { pageTitle } from '@/lib/ui/title';
 
-export const metadata = { title: 'Create an organisation' };
+export const metadata = { title: pageTitle(ADMIN_COPY.titles.newOrganisation) };
 
 /**
  * S-24 create mode (FR-ORG-01, J-01; W-10, SRS lines 2166-2210): the organisation, the institution's legal name and

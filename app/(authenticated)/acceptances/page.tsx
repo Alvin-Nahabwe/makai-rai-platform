@@ -4,8 +4,10 @@ import { requireIdentity } from '@/lib/auth/identity';
 import { missingAcceptances, offeredAcceptances } from '@/lib/data/acceptances';
 import { currentLegalText } from '@/lib/legal/registry';
 import { RecordAcceptances } from '@/components/legal/RecordAcceptances';
+import { LEGAL_COPY } from '@/lib/legal/copy';
+import { pageTitle } from '@/lib/ui/title';
 
-export const metadata: Metadata = { title: 'Acceptances - MAK-AI RAI Platform' };
+export const metadata: Metadata = { title: pageTitle(LEGAL_COPY.titles.acceptances) };
 
 /**
  * S-05 (FR-ACC-03, FR-ACC-04, UX-22): the texts this account must accept before any other page,

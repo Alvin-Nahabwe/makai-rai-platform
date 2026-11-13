@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { LegalTextVersion } from '@/types/legal';
 import { HOSTILE_STRINGS } from '../helpers/hostile';
+import { LEGAL_COPY } from '@/lib/legal/copy';
+import { pageTitle } from '@/lib/ui/title';
 
 /**
  * S-06, the public legal text pages (FR-ACC-02, SRS line 479; 7.1.5 line 1629). The registry is the actual
@@ -324,10 +326,10 @@ describe('S-06 /legal/[kind] and /legal/[kind]/[version]', () => {
 
   it('FR-ACC-02 (7.6.2, 2.4.2): each page title names the text, then the product', async () => {
     expect(await KindModule.generateMetadata({ params: Promise.resolve({ kind: 'privacy' }) })).toEqual({
-      title: 'Privacy notice - MAK-AI RAI Platform',
+      title: pageTitle('Privacy notice'),
     });
     expect(await VersionModule.generateMetadata({ params: Promise.resolve({ kind: 'privacy', version: '1' }) })).toEqual({
-      title: 'Privacy notice, version 1 - MAK-AI RAI Platform',
+      title: pageTitle(LEGAL_COPY.titles.version('Privacy notice', '1')),
     });
     await expect(KindModule.generateMetadata({ params: Promise.resolve({ kind: 'x' }) })).rejects.toThrow(NOT_FOUND);
     await expect(

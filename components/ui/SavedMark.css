@@ -1,0 +1,46 @@
+/* The saved mark (spec 7.3). Green is the "Saved" confirmation's alone: the check shape is --color-saved, the words stay
+   ink on the saved tint. Empty, the region keeps its place in the accessibility tree but draws nothing. */
+.ui-saved {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: var(--space-3);
+  row-gap: var(--space-1);
+  padding: var(--space-4);
+  border: 1px solid var(--color-saved);
+  border-radius: var(--radius-surface);
+  background-color: var(--color-saved-tint);
+  color: var(--color-ink);
+}
+
+.ui-saved:empty {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.ui-saved__shape {
+  grid-row: 1 / span 3;
+  color: var(--color-saved);
+}
+
+.ui-saved__title {
+  margin: 0;
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-heading);
+}
+
+.ui-saved__when,
+.ui-saved__line {
+  margin: 0;
+}
+
+.ui-saved__when {
+  color: var(--color-ink-muted);
+}
+
+.ui-saved__history a {
+  color: var(--color-link);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}

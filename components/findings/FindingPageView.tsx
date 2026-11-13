@@ -3,7 +3,7 @@ import { ArchivedBanner } from '@/components/project/ArchivedBanner';
 import { CloseByDecisionButton } from '@/components/findings/CloseByDecisionButton';
 import { FindingActions } from '@/components/findings/FindingActions';
 import { AcceptRiskForm } from '@/components/findings/AcceptRiskForm';
-import { LocalTime } from '@/components/findings/LocalTime';
+import { LocalTime } from '@/components/ui/LocalTime';
 import { MitigationFormToggle, MitigationStatusWord } from '@/components/findings/MitigationForm';
 import { VersionEvidenceList } from '@/components/evidence/VersionEvidenceList';
 import { FindingSuggestions, findingSuggestionCount } from '@/components/suggestions/FindingSuggestions';

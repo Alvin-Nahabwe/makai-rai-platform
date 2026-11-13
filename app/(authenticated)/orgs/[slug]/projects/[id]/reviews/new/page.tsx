@@ -1,3 +1,5 @@
+import { cache } from 'react';
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { requireIdentity } from '@/lib/auth/identity';
 import { requireOrgContextFor } from '@/lib/auth/context';
@@ -6,10 +8,31 @@ import { withOrg } from '@/lib/data/tenant';
 import { ArchivedBanner } from '@/components/project/ArchivedBanner';
 import { OpenReviewForm } from '@/components/review/OpenReviewForm';
 import { STAGES, type Stage } from '@/types/record';
+import { REVIEW_COPY } from '@/lib/review/copy';
+import { orNotFound } from '@/lib/auth/titleGate';
+import { pageTitle } from '@/lib/ui/title';
 
 interface PageProps {
   params: Promise<{ slug: string; id: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
+
+/**
+ * The gates and the project read, once per request: the page and its title both read through this (React `cache()`), so
+ * a project that is not visible is the same `notFound()` for both. The page's later read stays in the page.
+ */
+const load = cache(async (slug: string, id: string) => {
+  const identity = await requireIdentity();
+  const ctx = await requireOrgContextFor(identity.userId, slug, 'record:read');
+  const project = await withOrg(ctx, (tx) => tx.project.findUnique({ where: { id }, select: { id: true, name: true, archivedAt: true } }));
+  if (project === null) notFound();
+  return { identity, ctx, project };
+});
+
+export async function generateMetadata({ params }: Pick<PageProps, 'params'>): Promise<Metadata> {
+  const { slug, id } = await params;
+  const { project } = await orNotFound(load(slug, id));
+  return { title: pageTitle(REVIEW_COPY.titles.openReview, project.name) };
 }
 
 /**
@@ -20,10 +43,7 @@ interface PageProps {
 export default async function OpenReviewPage({ params, searchParams }: PageProps) {
   const { slug, id } = await params;
   const { stage } = await searchParams;
-  const identity = await requireIdentity();
-  const ctx = await requireOrgContextFor(identity.userId, slug, 'record:read');
-  const project = await withOrg(ctx, (tx) => tx.project.findUnique({ where: { id }, select: { id: true, archivedAt: true } }));
-  if (project === null) notFound();
+  const { identity, ctx, project } = await load(slug, id);
   const heading = <h1>Open a stage review</h1>;
   if (!can(ctx.role, 'review:open')) {
     return <div className="page-content">{heading}<p>Only owners, admins and assessors can open a stage review.</p></div>;
