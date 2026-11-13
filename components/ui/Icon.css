@@ -1,0 +1,6 @@
+/* An icon sits in the line beside its word and takes the word's colour. app/globals.css makes every svg a block. */
+.ui-icon {
+  display: inline-block;
+  flex: none;
+  vertical-align: -0.125em;
+}

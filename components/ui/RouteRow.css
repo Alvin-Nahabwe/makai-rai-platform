@@ -1,0 +1,66 @@
+/* The route row (spec 7.2, plan B8): one mark per question, joined by a 2 px line in the mark colour. Each stop draws the
+   line to its right inside its own box, so a row that wraps draws its line per wrapped line and never overflows. The
+   line is a border, not a background, so forced colours keep it. No fill, no percentage, no total. */
+.ui-route-row {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.ui-route-row__stops {
+  display: flex;
+  flex-wrap: wrap;
+  row-gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ui-route-row__stop {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding-inline-end: var(--space-2);
+  color: var(--color-mark);
+}
+
+.ui-route-row__stop:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  inset-inline-end: 0;
+  inset-block-start: 50%;
+  inline-size: var(--space-2);
+  block-size: 0;
+  border-block-start: 2px solid var(--color-mark);
+  translate: 0 -50%;
+}
+
+/* A 28 px box around the 20 px shape: a target of at least 24 by 24 (spec 7.5) and room for the current ring. */
+.ui-route-row__point {
+  display: grid;
+  place-items: center;
+  inline-size: 28px;
+  block-size: 28px;
+  border: 2px solid transparent;
+  border-radius: var(--radius-pill);
+  color: inherit;
+  transition: border-color var(--duration-state) var(--easing-state), background-color var(--duration-state) var(--easing-state);
+}
+
+a.ui-route-row__point:hover {
+  background-color: var(--color-tint);
+}
+
+a.ui-route-row__point:active {
+  border-color: var(--color-border-control);
+}
+
+/* The current stop is ringed in the action orange as text and lines use it: --color-action-text holds 3:1 on the
+   surface in both themes, where the --color-action fill is 2.8:1 on the dark surface. */
+.ui-route-row__stop--current .ui-route-row__point {
+  border-color: var(--color-action-text);
+}
+
+.ui-route-row__tally {
+  margin: 0;
+  color: var(--color-ink);
+}

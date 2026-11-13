@@ -1,0 +1,18 @@
+/* A status mark (spec 7.2): a shape and its words, both in ink. Status is never colour-coded, so no rule here or
+   elsewhere sets a .ui-mark colour other than --color-mark (__tests__/unit/ui/status-mark.test.tsx). In forced colours
+   the shape follows currentColor, which the browser sets to the system text colour, so it stays visible. */
+.ui-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-mark);
+}
+
+.ui-mark__shape {
+  display: block;
+  flex: none;
+}
+
+.ui-mark__words {
+  color: var(--color-ink);
+}

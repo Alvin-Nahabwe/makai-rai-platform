@@ -74,6 +74,16 @@ export function formatDay(d: Date | CalendarDate | UtcInstant, timeZone?: string
   return written(String(Number(part(parts, 'year'))), Number(part(parts, 'month')), Number(part(parts, 'day')));
 }
 
+/**
+ * A day and a 24-hour clock time with no zone name: "11 Nov 2026, 11:23" (voice rule 10). The instant is written as it
+ * is in `timeZone` (default: the process's). A caller that shows UTC says so beside it (components/ui/LocalTime.tsx).
+ */
+export function formatDayTime(t: UtcInstant, timeZone?: string): string {
+  const instant = instantOf(t, t);
+  const clock = formatter('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }, timeZone).formatToParts(instant);
+  return `${formatDay(instant, timeZone)}, ${part(clock, 'hour')}:${part(clock, 'minute')}`;
+}
+
 /** A declared date at its own precision: "12 Oct 2026", "Oct 2026" or "2026". */
 export function formatDeclaredDate(d: DeclaredDate): string {
   const m = DECLARED_DATE.exec(d);
