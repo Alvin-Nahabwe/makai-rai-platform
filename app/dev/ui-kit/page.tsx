@@ -25,7 +25,7 @@ import { devGalleryShown } from '@/lib/ui/devGallery';
 import { MAIN_CONTENT_ID } from '@/components/layout/SkipLink';
 import { PRODUCT_NAME } from '@/lib/ui/title';
 import { BusySubmitDemo, DateStates, DecidedOnDemo, ErrorSummaryDemo, InPlaceDemo, ReasonDemo, StatusDemo, TextAreaStates } from './FormDemos';
-import { DialogDemo, StatusRegionDemo } from './FeedbackDemos';
+import { DialogDemo, InlineConfirmDemo, StatusRegionDemo } from './FeedbackDemos';
 import { SavedDemo } from './SavedDemo';
 
 /**
@@ -227,6 +227,10 @@ export default async function UiKitPage(): Promise<ReactElement> {
           Findings appear here when the team records a decision of Partly or Not yet.
         </EmptyState>
         <EmptyState title="No members invited">Invited people appear here until they accept.</EmptyState>
+      </KitSection>
+
+      <KitSection id="inline-confirm" title="Inline confirmation">
+        <InlineConfirmDemo />
       </KitSection>
 
       <KitSection id="dialog" title="Dialog">

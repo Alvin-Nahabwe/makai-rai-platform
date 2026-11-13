@@ -3,6 +3,7 @@
 import { useState, type ReactElement } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
+import { InlineConfirm } from '@/components/ui/InlineConfirm';
 import { StatusRegion } from '@/components/ui/StatusRegion';
 
 /**
@@ -43,6 +44,21 @@ export function DialogDemo(): ReactElement {
       >
         <p>Nothing in it can be changed until it is unarchived. This is a sample: nothing is sent.</p>
       </Dialog>
+    </div>
+  );
+}
+
+export function InlineConfirmDemo(): ReactElement {
+  const [said, setSaid] = useState('nothing yet');
+  return (
+    <div>
+      <InlineConfirm objectName="Sample data card v1" consequence="It stays listed as withdrawn. This is a sample: nothing is sent."
+        actionLabel="Withdraw document" onConfirm={() => setSaid('withdraw')} onCancel={() => setSaid('cancel')} />
+      <InlineConfirm objectName="Sample project" consequence="Nothing in it can be changed until it is unarchived."
+        actionLabel="Archive project" destructive cancelLabel="Keep it open" onConfirm={() => setSaid('archive')} onCancel={() => setSaid('keep')} />
+      <InlineConfirm objectName="Sample invitation" consequence="Its link stops working at once." actionLabel="Revoke invitation" busy
+        onConfirm={() => setSaid('revoke')} onCancel={() => setSaid('cancel while busy')} />
+      <p data-demo-output="confirm">Pressed: {said}.</p>
     </div>
   );
 }

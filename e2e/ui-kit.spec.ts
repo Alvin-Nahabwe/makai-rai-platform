@@ -649,3 +649,35 @@ test.describe('Dialog', () => {
     await expect(page.locator('[data-demo-output="dialog"]')).toHaveText('Closed by the browser: 1. Chosen: dismissed.');
   });
 });
+
+test.describe('InlineConfirm', () => {
+  test('Cancel comes first on screen at every width, the destructive variant is the kit\'s, and a busy confirm is disabled', async ({ page }) => {
+    await openKit(page);
+    const groups = section(page, 'inline-confirm').getByRole('group');
+    await expect(groups).toHaveCount(3);
+    for (const viewport of VIEWPORTS) {
+      await page.setViewportSize(viewport);
+      for (const group of await groups.all()) {
+        const [cancel, confirm] = await group.locator('.ui-confirm__actions button').all();
+        const a = (await cancel.boundingBox())!;
+        const b = (await confirm.boundingBox())!;
+        expect(a.y < b.y - 1 || (Math.abs(a.y - b.y) <= 1 && a.x < b.x), `${viewport.width} px: Cancel before confirm`).toBe(true);
+      }
+    }
+    await expect(groups.nth(1).getByRole('button', { name: 'Archive project' })).toHaveClass(/ui-button--destructive/);
+    await expect(groups.nth(1).getByRole('button', { name: 'Keep it open' })).toBeVisible();
+    await expect(groups.nth(2).getByRole('button', { name: 'Revoke invitation' })).toBeDisabled();
+    await expect(groups.nth(2).getByRole('button', { name: 'Cancel' })).toBeEnabled();
+  });
+
+  test('Enter on Cancel cancels and never confirms; the confirm runs only from its own button', async ({ page }) => {
+    await openKit(page);
+    const group = section(page, 'inline-confirm').getByRole('group').first();
+    const output = page.locator('[data-demo-output="confirm"]');
+    await group.getByRole('button', { name: 'Cancel' }).focus();
+    await page.keyboard.press('Enter');
+    await expect(output).toHaveText('Pressed: cancel.');
+    await group.getByRole('button', { name: 'Withdraw document' }).click();
+    await expect(output).toHaveText('Pressed: withdraw.');
+  });
+});
