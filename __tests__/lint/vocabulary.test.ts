@@ -1,7 +1,10 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  contentExtraFields, contentFields, formatHit, lintHtml, lintText, lintTs, notebookTexts, PROPER_NAMES, RULES, RUNNING,
-  scopeContent, scopeCopyModules, scopeEmail, scopeFieldMaps, scopeNotebooks, scopeTemplates, VOCABULARY, writeHits,
+  contentExtraFields, contentFields, formatHit, lintHtml, lintText, lintTs, notebookTexts, PROPER_NAMES, ratchetViolations,
+  RULES, RUNNING, scopeContent, scopeCopyModules, scopeEmail, scopeFieldMaps, scopeNotebooks, type ScopeResult,
+  scopeTemplates, VOCABULARY, type Worklist, worklistOf, writeHits,
 } from './helpers/vocabulary-scan';
 
 /**
@@ -19,7 +22,21 @@ import {
  * before the patterns run, so the rest of the same string is still linted.
  * `data/legal/**` and `data/credit.json` are the quoted texts and are not scanned. There is no allow-list file.
  * With `VOCABULARY_HITS_DIR` set, the hit lists are written there; otherwise the test writes nothing.
+ *
+ * The worklist (scopes 1, 3 and 4 until Task 20). `__tests__/lint/vocabulary-worklist.json` holds, per file and per
+ * "<concept id> :: <item text>", the number of hits each file may still have. A normal test fails when any of them
+ * has MORE hits than the file allows (an absent entry allows 0), so a new retired phrase cannot join the worklist
+ * unseen. Entries are only ever lowered or removed, never raised; a copy task that removes hits need not touch the
+ * file. Task 20 deletes the file together with `.fails`. `VOCABULARY_WORKLIST_PRINT=1` prints the current worklist
+ * as JSON for a one-time write by hand; the test never writes the file.
  */
+
+const WORKLIST_FILE = join(__dirname, 'vocabulary-worklist.json');
+
+/** Scopes (1), (3) and (4), scanned once and shared: a normal test forces the scan, so a crash cannot hide in `.fails`. */
+let worklistScan: { copy: ScopeResult; fieldMaps: ScopeResult; email: ScopeResult } | undefined;
+const scanWorklistScopes = () => (worklistScan ??= { copy: scopeCopyModules(), fieldMaps: scopeFieldMaps(), email: scopeEmail() });
+const worklistHits = () => { const s = scanWorklistScopes(); return [...s.copy.hits, ...s.fieldMaps.hits, ...s.email.hits]; };
 
 // ---------------------------------------------------------------------------------------------------------------------
 
@@ -151,6 +168,17 @@ describe('the vocabulary lint, on fixtures', () => {
     expect(lintText('t', 'Guidance from the World Health Organization')).toEqual([]);
   });
 
+  it('the worklist ratchet refuses a new hit, and allows fewer', () => {
+    const allowed: Worklist = { 'lib/a/copy.ts': { 'dashboard :: Dashboard': 1 } };
+    const planted = lintTs('lib/a/copy.ts', "export const A = 'Back to Dashboard';\nexport const B = 'Open the RAI Toolkit';");
+    expect(ratchetViolations(worklistOf(planted), allowed)).toEqual([
+      'lib/a/copy.ts: product :: RAI Toolkit: 1 hit(s), the worklist allows 0',
+    ]);
+    const twice = lintTs('lib/a/copy.ts', "export const A = 'Dashboard';\nexport const B = 'Back to Dashboard';");
+    expect(ratchetViolations(worklistOf(twice), allowed)).toEqual(['lib/a/copy.ts: dashboard :: Dashboard: 2 hit(s), the worklist allows 1']);
+    expect(ratchetViolations(worklistOf([]), allowed)).toEqual([]);
+  });
+
   it('content fields carry their sign-off status: question texts and reason codes signed, area names not', () => {
     const fields = contentFields(RUNNING);
     expect(fields.find((f) => f.where.endsWith('.questions[0].text'))?.signed).toBe(true);
@@ -160,6 +188,11 @@ describe('the vocabulary lint, on fixtures', () => {
     expect(ruleOf('product').length).toBe(3);
   });
 });
+
+/** Today's counts (13 Nov 2026), as floors: a scope that reads fewer strings has lost a file or a field. */
+const COPY_STRINGS_FLOOR = 211;
+const FIELD_MAP_STRINGS_FLOOR = 156;
+const EMAIL_STRINGS_FLOOR = 55;
 
 describe('the vocabulary lint, on the repository', () => {
   it('scope (2): the running content bundle, signed and unsigned fields, holds no retired phrase', () => {
@@ -174,12 +207,30 @@ describe('the vocabulary lint, on the repository', () => {
     console.log([`vocabulary lint: ${hits.length} hit(s) in rendered content fields the scope list does not name`, ...hits.map(formatHit)].join('\n'));
   });
 
+  it('scopes (1), (3) and (4) were scanned: files and strings at or above today\'s floors', () => {
+    const { copy, fieldMaps, email } = scanWorklistScopes();
+    console.log(`vocabulary lint: copy modules ${copy.files.length} files / ${copy.strings} strings, field maps ${fieldMaps.files.length} / ${fieldMaps.strings}, email ${email.files.length} / ${email.strings}`);
+    expect(copy.files).toEqual(expect.arrayContaining(['lib/decision/copy.ts', 'lib/documents/copy.ts', 'lib/evidence/copy.ts', 'lib/followup/copy.ts']));
+    expect(copy.strings).toBeGreaterThanOrEqual(COPY_STRINGS_FLOOR);
+    expect(fieldMaps.files).toEqual(['data/fieldmaps/data_card.json', 'data/fieldmaps/mitigation_plan.json', 'data/fieldmaps/model_card.json']);
+    expect(fieldMaps.strings).toBeGreaterThanOrEqual(FIELD_MAP_STRINGS_FLOOR);
+    expect(email.files).toEqual(expect.arrayContaining(['lib/email/templates.ts', 'ops/host/break-glass-notice.txt']));
+    expect(email.files.filter((f) => f.startsWith('lib/email/templates/')).length).toBeGreaterThanOrEqual(6);
+    expect(email.strings).toBeGreaterThanOrEqual(EMAIL_STRINGS_FLOOR);
+  });
+
+  it('the worklist only shrinks: no file has more hits of a retired item than vocabulary-worklist.json allows', () => {
+    const current = worklistOf(worklistHits());
+    writeHits('vocabulary-hits-baseline.txt', worklistHits());
+    if (process.env.VOCABULARY_WORKLIST_PRINT === '1') console.log(JSON.stringify(current, null, 2));
+    const allowed = JSON.parse(readFileSync(WORKLIST_FILE, 'utf8')) as Worklist;
+    expect(ratchetViolations(current, allowed)).toEqual([]);
+  });
+
   // Scopes (1) copy modules, (3) field maps and (4) email all hold hits today: the worklist of the copy tasks.
   // Register row (toolkit-process/docs/DEFERRED_REGISTER.md), trigger "Task 20 merged"; Task 20 removes `.fails`.
   it.fails('vocabulary lint (worklist until Task 20)', () => {
-    const hits = [...scopeCopyModules(), ...scopeFieldMaps(), ...scopeEmail()];
-    writeHits('vocabulary-hits-baseline.txt', hits);
-    expect(hits.map(formatHit)).toEqual([]);
+    expect(worklistHits().map(formatHit)).toEqual([]);
   });
 
   it('templates (scope 5, stage 3): report-only, prints the count, never fails', () => {

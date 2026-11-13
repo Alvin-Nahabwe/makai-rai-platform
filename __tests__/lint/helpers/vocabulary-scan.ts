@@ -217,22 +217,64 @@ const filesMatching = (re: RegExp) => repoFiles().filter((f) => re.test(f));
 
 export const RUNNING = `data/content/${(JSON.parse(read('data/content/index.json')) as { running: string }).running}`;
 
-export const scopeCopyModules = () => filesMatching(/^lib\/(?:.*\/)?copy\.ts$/).flatMap((f) => lintTs(f, read(f)));
-export const scopeFieldMaps = () => filesMatching(/^data\/fieldmaps\/[^/]+\.json$/).flatMap((f) => {
+/** What one scope read and found: the files, the number of strings linted, and the hits. */
+export type ScopeResult = { files: string[]; strings: number; hits: Hit[] };
+
+function scan(files: string[], texts: (f: string) => Array<{ where: string; text: string }>): ScopeResult {
+  let strings = 0;
+  const hits: Hit[] = [];
+  for (const f of files) for (const t of texts(f)) { strings++; hits.push(...lintText(t.where, t.text)); }
+  return { files, strings, hits };
+}
+
+export const scopeCopyModules = () => scan(filesMatching(/^lib\/(?:.*\/)?copy\.ts$/), (f) => tsLiterals(f, read(f)));
+export const scopeFieldMaps = () => scan(filesMatching(/^data\/fieldmaps\/[^/]+\.json$/), (f) => {
   const m = JSON.parse(read(f)) as { fields: Array<{ label?: string; section?: string }> };
   return m.fields.flatMap((x, i) => [
-    ...(typeof x.label === 'string' ? lintText(`${f}:fields[${i}].label`, x.label) : []),
-    ...(typeof x.section === 'string' ? lintText(`${f}:fields[${i}].section`, x.section) : []),
+    ...(typeof x.label === 'string' ? [{ where: `${f}:fields[${i}].label`, text: x.label }] : []),
+    ...(typeof x.section === 'string' ? [{ where: `${f}:fields[${i}].section`, text: x.section }] : []),
   ]);
 });
-export const scopeEmail = () => [
-  ...['lib/email/templates.ts', ...filesMatching(/^lib\/email\/templates\/[^/]+\.ts$/)].flatMap((f) => lintTs(f, read(f))),
-  ...read('ops/host/break-glass-notice.txt').split('\n').flatMap((line, i) => lintText(`ops/host/break-glass-notice.txt:${i + 1}`, line)),
-];
-export const scopeTemplates = () => filesMatching(/^public\/templates\/[^/]+\.html$/).flatMap((f) => lintHtml(f, read(f)));
-export const scopeNotebooks = () => filesMatching(/^(?:public\/notebooks\/[^/]+|notebooks\/.+)\.ipynb$/).flatMap((f) => notebookTexts(f, read(f)).flatMap((t) => lintText(t.where, t.text)));
+export const scopeEmail = () => scan(
+  ['lib/email/templates.ts', ...filesMatching(/^lib\/email\/templates\/[^/]+\.ts$/), 'ops/host/break-glass-notice.txt'],
+  (f) => f.endsWith('.txt') ? read(f).split('\n').map((line, i) => ({ where: `${f}:${i + 1}`, text: line })) : tsLiterals(f, read(f)),
+);
+export const scopeTemplates = () => scan(filesMatching(/^public\/templates\/[^/]+\.html$/), (f) => htmlTexts(f, read(f)));
+export const scopeNotebooks = () => scan(filesMatching(/^(?:public\/notebooks\/[^/]+|notebooks\/.+)\.ipynb$/), (f) => notebookTexts(f, read(f)));
 export const scopeContent = (fields: Field[] = contentFields(RUNNING)) =>
   fields.flatMap((f) => lintText(f.where, f.text).map((h) => ({ ...h, signed: f.signed })));
+
+// ---------------------------------------------------------------------------------------------------------------------
+// The worklist ratchet (scopes 1, 3 and 4 until Task 20): hits per file, per "<concept id> :: <item text>".
+
+export type Worklist = Record<string, Record<string, number>>;
+
+/** The file a hit's `where` names: everything before its first colon (no scanned path holds one). */
+export const fileOf = (where: string) => where.slice(0, where.indexOf(':'));
+export const worklistKey = (h: Hit) => `${h.rule.id} :: ${h.rule.item}`;
+
+export function worklistOf(hits: Hit[]): Worklist {
+  const w: Worklist = {};
+  for (const h of hits) {
+    const byKey = (w[fileOf(h.where)] ??= {});
+    byKey[worklistKey(h)] = (byKey[worklistKey(h)] ?? 0) + 1;
+  }
+  const sorted: Worklist = {};
+  for (const f of Object.keys(w).sort()) sorted[f] = Object.fromEntries(Object.entries(w[f]).sort(([a], [b]) => a.localeCompare(b)));
+  return sorted;
+}
+
+/** Every (file, concept, item) with more hits than `allowed` permits; an entry that is absent allows 0. */
+export function ratchetViolations(current: Worklist, allowed: Worklist): string[] {
+  const out: string[] = [];
+  for (const [file, byKey] of Object.entries(current)) {
+    for (const [key, n] of Object.entries(byKey)) {
+      const max = allowed[file]?.[key] ?? 0;
+      if (n > max) out.push(`${file}: ${key}: ${n} hit(s), the worklist allows ${max}`);
+    }
+  }
+  return out;
+}
 
 /** Writes a hit list into VOCABULARY_HITS_DIR, only when it is set. */
 export function writeHits(name: string, hits: Hit[]) {
