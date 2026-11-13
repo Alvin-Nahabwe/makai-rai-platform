@@ -102,7 +102,19 @@ describe('S-10 (Task 5)', () => {
     const html = renderPage({});
     const line = 'To share your record outside the team, seal a stage review and create a document from it.';
     expect(html.split(line)).toHaveLength(2);
-    expect(html.indexOf(line)).toBeGreaterThan(html.lastIndexOf('stage-column'));
+    // The end of the stage list (the jump links and the three columns), found by balancing its <div>s.
+    const start = html.indexOf('<div class="stage-list">');
+    expect(start).toBeGreaterThan(-1);
+    const tags = /<(\/?)div\b[^>]*>/g;
+    tags.lastIndex = start;
+    let depth = 0;
+    let end = -1;
+    for (let t = tags.exec(html); t; t = tags.exec(html)) {
+      depth += t[1] ? -1 : 1;
+      if (depth === 0) { end = tags.lastIndex; break; }
+    }
+    expect(end).toBeGreaterThan(start);
+    expect(html.indexOf(line)).toBeGreaterThan(end);
     expect(html.indexOf(line)).toBeLessThan(html.indexOf('Findings for this project'));
     expect(html).not.toContain('Team working view');
   });

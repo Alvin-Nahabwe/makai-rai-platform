@@ -79,7 +79,7 @@ test('FR-REV-01 FR-REV-02 FR-REV-03 FR-REV-05 M-28 NFR-A11Y-02: J-08 by keyboard
   await expect(page.getByText('Never sealed.')).toBeVisible();
   const s16 = page.url();
   expect(urls.length).toBeGreaterThan(1);
-  expect(urls.filter((u) => /Ethics(%20|\+| )board(%20|\+| )submission/i.test(u))).toEqual([]);
+  expect(urls.filter((u) => /Ethics|board(%20|\+| )submission/i.test(u))).toEqual([]);
 
   await signIn(page, 'reviewer');
   await page.goto(s16);

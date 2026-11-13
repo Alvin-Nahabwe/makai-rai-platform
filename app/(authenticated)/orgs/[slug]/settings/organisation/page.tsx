@@ -34,8 +34,8 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
  * S-30, Organisation details (FR-ORG-09). Every member reads the name and the institution's legal name; the action
  * rows (who invited, changed or removed whom) are shown to owners and admins only (SRS line 577), and the export block,
  * heading included, only to a role that can export (`team:export`). The two slots belong to ORG (events) and EXP
- * (export); this page wires them and edits none. One heading per block: the events list carries its own
- * (CONSOLIDATED section 4). `?before=<event id>` pages back through the events.
+ * (export); this page wires them and edits none. One heading per block: the events list carries its own.
+ * `?before=<event id>` pages back through the events.
  */
 export default async function OrganisationSettingsPage({
   params,

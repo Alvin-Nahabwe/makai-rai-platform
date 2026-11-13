@@ -53,7 +53,6 @@ export function ProjectOverview({ data }: { data: ProjectOverviewData }): ReactE
           ))}
         </div>
       </div>
-      {/* Beside the stage reviews it is about (CONSOLIDATED section 4; audit B #51). */}
       <p className="text-muted">To share your record outside the team, seal a stage review and create a document from it.</p>
       <p><ListLink href={`${base}/findings`}>Findings for this project</ListLink></p>
     </div>

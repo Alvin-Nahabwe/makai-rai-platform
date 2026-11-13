@@ -31,7 +31,6 @@ export function refusedFrom(searchParams: Record<string, string | string[] | und
 
 export function TeamExportPanel(p: { href: string; scopeName: string; aboutBytes: number; refused: 'export_busy' | 'rate_limited' | null }): ReactElement {
   return (
-    // No heading of its own: "Download" repeated the link, and the page's h1 names the page (CONSOLIDATED section 4).
     <div className="card">
       {p.refused !== null && <p role="alert" style={ALERT}>{REFUSED_TEXT[p.refused]}</p>}
       <p>{`Export ${p.scopeName}: about ${formatSize(p.aboutBytes)} as one ZIP file.`}</p>

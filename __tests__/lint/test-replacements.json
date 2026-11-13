@@ -539,8 +539,8 @@
     "kind": "removed",
     "deleted": "__tests__/unit/about-page.test.tsx::FR-PUB-04: the About page says the platform never runs evaluations, models, notebooks or uploaded files and never computes metrics from a team's data",
     "replacedBy": "__tests__/unit/about-page.test.tsx::FR-PUB-04: the section \"What this platform is and is not\" says the platform does not test your model or calculate anything from your data",
-    "property": "About still says the platform runs nothing of the team's and computes nothing from its data, now as the one sentence CONSOLIDATED section 4 moves into \"What this platform is and is not\": \"The platform does not test your model or calculate anything from your data.\"; the section \"What this platform never does\" is gone",
-    "proof": "__tests__/unit/about-page.test.tsx::FR-PUB-04: the section \"What this platform is and is not\" says the platform does not test your model or calculate anything from your data",
+    "property": "About still states, in \"What this platform is and is not\", that the platform does not test your model or calculate anything from your data (the one sentence CONSOLIDATED section 4 keeps from the removed section \"What this platform never does\"; ruling R14-1). No screen states any longer that it never runs notebooks or uploaded files: that returns as the upload control's sentence of plan 1C (\"Your file is stored as it is. The platform checks its type and records a fingerprint. It does not open or run the file.\", stage-1c-recording-loop-plan.md line 54). The behaviour itself (no code that starts a process or runs a file; uploads read only for their type) stays held by __tests__/lint/never-runs-uploads.test.ts, unchanged",
+    "proof": "__tests__/unit/about-page.test.tsx::FR-PUB-04: the section \"What this platform is and is not\" says the platform does not test your model or calculate anything from your data (the sentence on About); __tests__/lint/never-runs-uploads.test.ts (the behaviour)",
     "task": "1A-14"
   },
   {
@@ -594,9 +594,9 @@
   {
     "kind": "removed",
     "deleted": "__tests__/lint/live-run-report.test.ts::12.2 FR-PUB-01: every data-claims-allowed marker in app/, components/ and lib/ is listed in the report with its AL id (or FR id, for about-model-scores), and one with none fails step 5",
-    "replacedBy": "__tests__/lint/live-run-report.test.ts::FR-PUB-01: docs/releases/claims-markers.md is what scripts/release/claims-markers.mjs writes now, and every marker in it has an allow-list id",
-    "property": "Every data-claims-allowed marker in app, components and lib is listed with its file:line and the allow-list id it wraps, and a marker with no id fails: now in the generated docs/releases/claims-markers.md, regenerated in memory and compared, so a moved or new marker fails at once; the why-no-score to AL-5 mapping is removed with its marker; docs/releases/v0.6.0-live-run.md stays the v0.6.0 record",
-    "proof": "__tests__/lint/live-run-report.test.ts::FR-PUB-01: docs/releases/claims-markers.md is what scripts/release/claims-markers.mjs writes now, and every marker in it has an allow-list id",
+    "replacedBy": "__tests__/lint/live-run-report.test.ts::FR-PUB-01: docs/releases/claims-markers.md lists every data-claims-allowed marker in the tree, with its reason and allow-list id, and none lacks an id",
+    "property": "Every data-claims-allowed marker in app, components and lib is listed with the allow-list id it wraps, and a marker with no id fails: now in the generated docs/releases/claims-markers.md. On every run the list of (file, reason, id) rows is compared with the tree, so an added, removed or re-reasoned marker fails at once; the exact file, line numbers included, is compared only under RELEASE_CANDIDATE=1, as the replaced case was (a moved marker must not fail every builder's suite). Markers are found with the TypeScript parser, the one scanner no-product-claims.test.ts also uses. The why-no-score to AL-5 mapping is removed with its marker; docs/releases/v0.6.0-live-run.md stays the v0.6.0 record",
+    "proof": "__tests__/lint/live-run-report.test.ts::FR-PUB-01: docs/releases/claims-markers.md lists every data-claims-allowed marker in the tree, with its reason and allow-list id, and none lacks an id; __tests__/lint/live-run-report.test.ts::FR-PUB-01 (release candidate): docs/releases/claims-markers.md is byte for byte what scripts/release/claims-markers.mjs writes now, line numbers included; __tests__/lint/live-run-report.test.ts::FR-PUB-01 (harness): the scanner reads a split, spaced, single-quoted or expression value, skips comments, and refuses a non-literal or a \"|\"",
     "task": "1A-14"
   },
   {
@@ -643,7 +643,7 @@
     "kind": "rule",
     "deleted": "__tests__/integration/decision-pages.test.ts::FR-DEC-04 (screen) FR-CNT-07: versions newest first, each with its content version and that version's wording",
     "replacedBy": "__tests__/integration/decision-pages.test.ts::FR-DEC-04 (screen) FR-CNT-07: versions newest first, each with that version's wording, and no content version or UTC toggle",
-    "property": "S-13 lists the versions newest first, each with the question as worded in that version (FR-CNT-07), and shows no content version and no \"Show UTC\" disclosure (CONSOLIDATED section 4: internal); a viewer still has no withdraw control",
+    "property": "S-13 lists the versions newest first, each with the question as worded in its own content version (version 1 on 0.0.1-fixture, version 2 on 0.0.2-fixture, whose wordings differ; each block holds its own and not the other's, FR-CNT-07), and shows no content version and no \"Show UTC\" disclosure; a viewer still has no withdraw control",
     "proof": "__tests__/integration/decision-pages.test.ts::FR-DEC-04 (screen) FR-CNT-07: versions newest first, each with that version's wording, and no content version or UTC toggle",
     "task": "1A-14"
   },
@@ -660,7 +660,31 @@
     "deleted": "__tests__/unit/question-content.test.tsx::UX-08 (W-3): the id and module title, then the principle, then the question, as the wireframe orders them",
     "replacedBy": "__tests__/unit/question-content.test.tsx::UX-08 (W-3): the principle, then the question; the id and module title are left to the page heading",
     "property": "QuestionContent shows the principle, then the question, in the order W-3 gives; the id and module title it repeated are the page heading (h1) only, so the slot no longer carries its own id-and-module line (CONSOLIDATED section 4, audit B #248)",
-    "proof": "__tests__/unit/question-content.test.tsx::UX-08 (W-3): the principle, then the question; the id and module title are left to the page heading",
+    "proof": "__tests__/unit/question-content.test.tsx::UX-08 (W-3): the principle, then the question; the id and module title are left to the page heading; __tests__/unit/decision-components.test.tsx::UX-42 W-3: one h1 for the question that takes focus, and Previous and Next go to the neighbouring questions (the h1 carries \"Q-PP-01 . Problem Formulation\")",
+    "task": "1A-14"
+  },
+  {
+    "kind": "rule",
+    "deleted": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 UX-08: S-12 shell regions in order, each labelled, evidence block inside the answer form",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 UX-08: S-12 shell regions in order, each but the evidence block labelled by a heading, evidence block inside the answer form",
+    "property": "every labelled region of S-12 is named by a heading it points to; the evidence block is named once, by its fieldset legend (audit B #151): the \"Evidence\" h3 and the evidence section's aria-labelledby are removed, so S-12 has 6 labelled regions (5 for the gate question), and the evidence block still sits inside the answer form",
+    "proof": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 UX-08: S-12 shell regions in order, each but the evidence block labelled by a heading, evidence block inside the answer form; __tests__/unit/evidence-components.test.tsx::UX-30: the block names itself once: one legend \"Evidence\" and no heading; __tests__/unit/evidence-components.test.tsx::NFR-A11Y-02 UX-30: the block is a fieldset with legend \"Evidence\", its inputs labelled and described by the help text",
+    "task": "1A-14"
+  },
+  {
+    "kind": "rule",
+    "deleted": "__tests__/unit/s12-shell.test.tsx::UX-08: every region is named by a heading of the page that it points to, and the suggestions section is the in-page target",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::UX-08: every labelled region is named by a heading of the page that it points to, the evidence block has no heading of its own, and the suggestions section is the in-page target",
+    "property": "every labelled region of S-12 is named by a heading it points to; the evidence block is named once, by its fieldset legend (audit B #151): the \"Evidence\" h3 and the evidence section's aria-labelledby are removed, so S-12 has 6 labelled regions (5 for the gate question), and the evidence block still sits inside the answer form",
+    "proof": "__tests__/unit/s12-shell.test.tsx::UX-08: every labelled region is named by a heading of the page that it points to, the evidence block has no heading of its own, and the suggestions section is the in-page target; __tests__/unit/evidence-components.test.tsx::UX-30: the block names itself once: one legend \"Evidence\" and no heading",
+    "task": "1A-14"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/s12-shell.test.tsx::FR-SUG-02 UX-08: for the gate question (nothing to suggest) the page renders no Ways teams address this section and no link to it",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::FR-SUG-02 UX-08: for the gate question (nothing to suggest) the page renders no Ways teams address this section and no link to it",
+    "property": "every labelled region of S-12 is named by a heading it points to; the evidence block is named once, by its fieldset legend (audit B #151): the \"Evidence\" h3 and the evidence section's aria-labelledby are removed, so S-12 has 6 labelled regions (5 for the gate question), and the evidence block still sits inside the answer form; for the gate question there is still no suggestions section and no link to it",
+    "proof": "__tests__/unit/s12-shell.test.tsx::FR-SUG-02 UX-08: for the gate question (nothing to suggest) the page renders no Ways teams address this section and no link to it; __tests__/unit/evidence-components.test.tsx::UX-30: the block names itself once: one legend \"Evidence\" and no heading",
     "task": "1A-14"
   }
 ]

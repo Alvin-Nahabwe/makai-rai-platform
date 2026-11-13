@@ -51,7 +51,6 @@ export default async function LegalKindPage({ params }: { params: Params }) {
           {`Permanent link to version ${current.version}`}
         </Link>
       </p>
-      {/* An empty "Past versions" block is not shown (CONSOLIDATED section 4: it read "None"). */}
       {past.length > 0 && (
         <section style={{ marginTop: 'var(--space-8)' }}>
           <h2>Past versions</h2>

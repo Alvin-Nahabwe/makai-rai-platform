@@ -2,15 +2,25 @@
 //
 //   node scripts/release/claims-markers.mjs
 //
-// Writes docs/releases/claims-markers.md: every `data-claims-allowed=` marker under app/, components/ and lib/, one row
-// each, with its file:line, its reason and the id of the allow-list entry it wraps (an AL row of SRS 7.5.3, or
-// FR-RM-01 for the About page's model-score sentences, SRS line 451). The output is deterministic: rows sorted by file
-// then line, no date, no absolute path. __tests__/lint/live-run-report.test.ts regenerates it in memory and fails when
-// the committed file differs, or when a marker has no id. docs/releases/v0.6.0-live-run.md stays the v0.6.0 record.
-import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+// Writes docs/releases/claims-markers.md: every `data-claims-allowed` JSX attribute in the .ts and .tsx files under
+// app/, components/ and lib/, one row each, with its file:line, its reason and the id of the allow-list entry it wraps
+// (an AL row of SRS 7.5.3, or FR-RM-01 for the About page's model-score sentences, SRS line 451). Markers are found
+// with the TypeScript parser, so a comment never counts and a value split over lines, spaced around `=`, single-quoted
+// or written as a JSX expression is read like any other; a value that is not a string literal is an error, not a guess.
+// The output is sorted by file then line and holds no date and no absolute path.
+//
+// __tests__/lint/live-run-report.test.ts always compares the list of markers (file, reason, id) with the tree, and
+// compares the file byte for byte, line numbers included, only under RELEASE_CANDIDATE=1: an edit that moves a marker
+// does not fail every suite, but the file must be regenerated before a release candidate.
+// docs/releases/v0.6.0-live-run.md stays the v0.6.0 record. Importing this module has no side effect.
+import { readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 
+const SELF = realpathSync(fileURLToPath(import.meta.url));
+/** The repository root: two directories above this file, whatever the current directory. */
+export const REPO = dirname(dirname(dirname(SELF)));
 export const OUT = 'docs/releases/claims-markers.md';
 const ROOTS = ['app', 'components', 'lib'];
 
@@ -22,26 +32,62 @@ export function alId(reason) {
   return Object.hasOwn(AL_BY_REASON, reason) ? AL_BY_REASON[reason] : /^(AL-[1-8])\b/.exec(reason)?.[1];
 }
 
-/** Every marker under the roots of `repo`, sorted by file then line. @param {string} repo */
-export function claimMarkers(repo = '.') {
-  /** @type {{ file: string; line: number; reason: string }[]} */
-  const out = [];
-  for (const root of ROOTS) {
-    // readdirSync throws on a missing root, so a renamed directory cannot turn the list into a list of nothing.
-    for (const entry of readdirSync(join(repo, root), { recursive: true })) {
-      const rel = String(entry).split('\\').join('/');
-      if (!/\.tsx?$/.test(rel)) continue;
-      readFileSync(join(repo, root, rel), 'utf8').split('\n').forEach((text, i) => {
-        for (const m of text.matchAll(/data-claims-allowed=(?:"([^"]*)"|\{([^}]*)\})/g)) {
-          out.push({ file: `${root}/${rel}`, line: i + 1, reason: m[1] ?? m[2] });
-        }
-      });
-    }
-  }
-  return out.sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : a.line - b.line));
+/** @typedef {{ file: string; line: number; reason: string }} Marker */
+
+/** Sorted by file, then line (numerically). @param {Marker[]} markers @returns {Marker[]} */
+export function sortMarkers(markers) {
+  return [...markers].sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : a.line - b.line));
 }
 
-/** The file's text for `markers`. @param {{ file: string; line: number; reason: string }[]} markers */
+/**
+ * The reason of one marker: the text of a string literal, or of the string literal inside a JSX expression; '' for an
+ * attribute with no value. Anything else throws, naming where. @param {ts.JsxAttribute} attr @param {string} where
+ */
+function reasonOf(attr, where) {
+  let init = attr.initializer;
+  if (init === undefined) return '';
+  if (ts.isJsxExpression(init)) init = init.expression;
+  if (init !== undefined && (ts.isStringLiteral(init) || ts.isNoSubstitutionTemplateLiteral(init))) {
+    const reason = init.text.trim();
+    if (reason.includes('|')) throw new Error(`${where}: a data-claims-allowed reason may not contain "|"`);
+    return reason;
+  }
+  throw new Error(`${where}: the data-claims-allowed value is not a string literal, so its reason cannot be read`);
+}
+
+/** Every .ts and .tsx file under `dir`, as a path relative to `repo` with '/' separators. */
+function sourceFiles(repo, dir) {
+  // readdirSync throws on a missing root, so a renamed directory cannot turn the list into a list of nothing.
+  return readdirSync(join(repo, dir), { recursive: true })
+    .map((entry) => `${dir}/${String(entry).split('\\').join('/')}`)
+    .filter((rel) => /\.tsx?$/.test(rel));
+}
+
+/** Every marker under `roots` of `repo`, sorted. @param {string} [repo] @param {string[]} [roots] @returns {Marker[]} */
+export function claimMarkers(repo = REPO, roots = ROOTS) {
+  /** @type {Marker[]} */
+  const out = [];
+  for (const root of roots) {
+    for (const file of sourceFiles(repo, root)) {
+      const sf = ts.createSourceFile(file, readFileSync(join(repo, file), 'utf8'), ts.ScriptTarget.Latest, true, file.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+      /** @param {ts.Node} n */
+      const visit = (n) => {
+        if (ts.isJsxAttribute(n) && n.name.getText(sf) === 'data-claims-allowed') {
+          const line = sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1;
+          out.push({ file, line, reason: reasonOf(n, `${file}:${line}`) });
+        }
+        ts.forEachChild(n, visit);
+      };
+      visit(sf);
+    }
+  }
+  return sortMarkers(out);
+}
+
+const HEAD = '| Marker | Reason | Allow-list id |';
+const RULE = '|---|---|---|';
+
+/** The file's text for `markers`. @param {Marker[]} markers */
 export function render(markers) {
   return [
     '# data-claims-allowed markers',
@@ -50,15 +96,35 @@ export function render(markers) {
     '`data-claims-allowed` marker under `app/`, `components/` and `lib/`: where it is, the reason it',
     'gives, and the allow-list entry it wraps (an AL row of SRS 7.5.3, or FR-RM-01). `NONE` means the',
     'marker wraps no allow-listed sentence, and `__tests__/lint/live-run-report.test.ts` fails on it.',
+    'Line numbers are as of the last generation: regenerate before a release candidate.',
     '',
-    '| Marker | Reason | Allow-list id |',
-    '|---|---|---|',
+    HEAD,
+    RULE,
     ...markers.map((m) => `| ${m.file}:${m.line} | ${m.reason} | ${alId(m.reason) ?? 'NONE'} |`),
     '',
   ].join('\n');
 }
 
-if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) === process.argv[1]) {
-  writeFileSync(OUT, render(claimMarkers()));
+/**
+ * The rows of a rendered file, read strictly: everything after the header row must be a row, and there must be one.
+ * @param {string} text @returns {Array<{ file: string; line: number; reason: string; id: string }>}
+ */
+export function parse(text) {
+  const lines = text.split('\n');
+  const at = lines.indexOf(HEAD);
+  if (at === -1 || lines[at + 1] !== RULE) throw new Error(`${OUT}: no marker table`);
+  const rows = [];
+  for (const row of lines.slice(at + 2)) {
+    if (row === '') continue;
+    const m = /^\| ([^|\s]+):(\d+) \| ([^|]*?) \| ([^|\s]+) \|$/.exec(row);
+    if (!m) throw new Error(`${OUT}: not a marker row: ${row}`);
+    rows.push({ file: m[1], line: Number(m[2]), reason: m[3], id: m[4] });
+  }
+  if (rows.length === 0) throw new Error(`${OUT}: the table has no rows`);
+  return rows;
+}
+
+if (process.argv[1] !== undefined && realpathSync(process.argv[1]) === SELF) {
+  writeFileSync(join(REPO, OUT), render(claimMarkers()));
   console.log(`${OUT} written`);
 }

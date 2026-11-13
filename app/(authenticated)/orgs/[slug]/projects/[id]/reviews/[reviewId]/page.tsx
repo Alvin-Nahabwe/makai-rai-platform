@@ -114,8 +114,6 @@ export default async function StageReviewPage({ params }: PageProps) {
 
       <section aria-labelledby="review-seals">
         <h2 id="review-seals">Seals</h2>
-        {/* The seal explanation link sits by the heading; the sentence "Sealed by the platform; not independently
-            time-stamped." is no longer on screen (CONSOLIDATED section 4). The PDF keeps its own note. */}
         <p><a href={SEAL_PROOF_HREF}>What a seal proves</a></p>
         {seals.length === 0 ? null : (
           <ul>

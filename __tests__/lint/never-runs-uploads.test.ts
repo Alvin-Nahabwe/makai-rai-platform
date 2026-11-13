@@ -8,8 +8,10 @@ import { inspect } from '@/lib/evidence/inspect';
 
 /**
  * FR-PUB-04: the platform never runs evaluations, models, notebooks or
- * uploaded files, and never computes metrics from a team's data. The About
- * page says so (S-28, `app/(public)/about/page.tsx`); this test keeps it true.
+ * uploaded files, and never computes metrics from a team's data. About
+ * (S-28, `app/(public)/about/page.tsx`) states part of it: the platform does
+ * not test a model or calculate anything from a team's data; this test keeps
+ * the whole of it true.
  *
  * Two properties, each checked from a different side:
  *   1. No module under `app` or `lib` can start a process, a script, a worker,

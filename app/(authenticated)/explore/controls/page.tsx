@@ -33,7 +33,6 @@ export default function ControlsPage() {
     <div className="controls-page page-content" id="controls-library-page">
       <header className="controls-page__header">
         <h1>Controls</h1>
-        {/* The introduction About's "Free toolkits" section became (CONSOLIDATED section 4; D AB45-AB47, EX19). */}
         <p className="controls-page__intro">
           A control is a practice that lowers a risk. When your team closes a finding with a mitigation, it can follow
           one of these. Each control links to free guidance.

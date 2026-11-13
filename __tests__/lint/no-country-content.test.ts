@@ -39,9 +39,13 @@ describe('CONSOLIDATED section 4: no country table', () => {
     expect(files.length, 'not vacuous').toBeGreaterThan(100);
     expect(files.filter((f) => COUNTRY_TABLE.test(f) || COUNTRY_TABLE.test(readFileSync(f, 'utf8')))).toEqual([]);
     const about = renderToStaticMarkup(createElement(AboutPage));
-    expect(about).toContain('id="help-and-contact"');   // the section that held the table still renders
     expect(about).not.toMatch(COUNTRY_TABLE);
-    expect(about).not.toMatch(/<table[\s>]/);
+    // The section that held the table still renders, and holds no table.
+    const at = about.search(/<h2[^>]*id="help-and-contact"/);
+    expect(at).toBeGreaterThan(-1);
+    const help = about.slice(at, about.indexOf('</section>', at));
+    expect(help).toContain('Help and contact');
+    expect(help).not.toMatch(/<table[\s>]/);
   });
 
   it('(harness) the pattern catches each form the removed table was written in, and not the country alone', () => {

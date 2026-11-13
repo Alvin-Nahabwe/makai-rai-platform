@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import ts from 'typescript';
+import { claimMarkers } from '@/scripts/release/claims-markers.mjs';
 import { CLAIMS_CORE, MAY_APPEAR, NEVER_LIST, NEVER_WORDS, isClaim } from '@/lib/claims/pattern';
 import { REVIEWED_CLAIM_NAMES, claimBearingNames, claimsOutsideNames, frameworkNames, isClaimOutsideNames, readFrameworkNames, runningFrameworkFile } from '@/__tests__/helpers/frameworkNames';
 // The bundle reader the crawl shares, so an { id } entry resolves the same way in both (coordinator ruling, 5 Nov 2026).
@@ -158,32 +159,12 @@ function userFacingStrings(roots: string[]): UserString[] {
 }
 
 /**
- * Every `data-claims-allowed` attribute under `roots`, with its file and reason. The
- * reason is '' when the attribute has no string value, which the test below refuses:
- * an exemption has to say what it exempts.
+ * Every `data-claims-allowed` attribute under `roots`, with its file and reason, read by the one scanner the release
+ * list uses (scripts/release/claims-markers.mjs). The reason is '' when the attribute has no value, which the test below
+ * refuses; a value that is not a string literal throws there. An exemption has to say what it exempts.
  */
 function claimsAllowedMarkers(roots: string[]): Array<{ file: string; reason: string }> {
-  const out: Array<{ file: string; reason: string }> = [];
-  for (const root of roots) {
-    for (const file of sourceFiles(root)) {
-      const sf = ts.createSourceFile(
-        file,
-        readFileSync(file, 'utf8'),
-        ts.ScriptTarget.Latest,
-        true,
-        file.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-      );
-      const visit = (n: ts.Node): void => {
-        if (ts.isJsxAttribute(n) && n.name.getText() === 'data-claims-allowed') {
-          const init = n.initializer;
-          out.push({ file: relative(process.cwd(), file), reason: init && ts.isStringLiteral(init) ? init.text.trim() : '' });
-        }
-        ts.forEachChild(n, visit);
-      };
-      visit(sf);
-    }
-  }
-  return out;
+  return claimMarkers(process.cwd(), roots).map(({ file, reason }) => ({ file, reason }));
 }
 
 /**

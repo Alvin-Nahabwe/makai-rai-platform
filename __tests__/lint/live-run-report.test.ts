@@ -2,11 +2,14 @@
  * The live-run report's own check (SRS 12.2; V Task 6 Step 3). It reads docs/releases/v0.6.0-live-run.md and holds it to
  * the shape the owner reads before tagging: one section per 12.2 step with a verdict, one candidate commit, and the
  * idle-dialog, RM-helper and idle-log lines. The list of data-claims-allowed markers with the allow-list id each wraps
- * is the generated docs/releases/claims-markers.md (scripts/release/claims-markers.mjs), held here to be current.
+ * is the generated docs/releases/claims-markers.md (scripts/release/claims-markers.mjs): its list is held to the tree on
+ * every run, its exact bytes (line numbers included) only under RELEASE_CANDIDATE=1.
  */
-import { readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { OUT, alId, claimMarkers, render } from '../../scripts/release/claims-markers.mjs';
+import { OUT, REPO, alId, claimMarkers, parse, render, sortMarkers } from '../../scripts/release/claims-markers.mjs';
 
 const REPORT = 'docs/releases/v0.6.0-live-run.md';
 const range = (a: number, b: number): number[] => Array.from({ length: b - a + 1 }, (_, i) => a + i);
@@ -32,20 +35,67 @@ describe('the v0.6.0 live-run report', () => {
     expect(t).not.toMatch(/^Source: V-prog round/m);   // a round's row is never the evidence (V-S5)
   });
 
-  // The list is generated, so a marker that moves or is added fails here until `node scripts/release/claims-markers.mjs`
-  // is run and its output committed. The v0.6.0 record above keeps the rows of that release.
-  it('FR-PUB-01: docs/releases/claims-markers.md is what scripts/release/claims-markers.mjs writes now, and every marker in it has an allow-list id', () => {
+  // Always on: the list (file, reason, id) must match the tree, so an added, removed or re-reasoned marker fails at once,
+  // while an edit that only moves a marker's line does not. Byte for byte, line numbers included, under RELEASE_CANDIDATE=1.
+  it('FR-PUB-01: docs/releases/claims-markers.md lists every data-claims-allowed marker in the tree, with its reason and allow-list id, and none lacks an id', () => {
     const found = claimMarkers();
     expect(found.length, 'not vacuous').toBeGreaterThan(0);
-    expect(readFileSync(OUT, 'utf8'), 'stale: run node scripts/release/claims-markers.mjs').toBe(render(found));
+    const key = (file: string, reason: string, id: string) => `${file} | ${reason} | ${id}`;
+    const listed = parse(readFileSync(join(REPO, OUT), 'utf8')).map((r) => key(r.file, r.reason, r.id)).sort();
+    expect(listed, 'run node scripts/release/claims-markers.mjs').toEqual(found.map((m) => key(m.file, m.reason, alId(m.reason) ?? 'NONE')).sort());
     expect(found.filter((m) => alId(m.reason) === undefined).map((m) => `${m.file}:${m.line} ${m.reason}`), 'a marker with no allow-list id').toEqual([]);
   });
 
-  it('FR-PUB-01 (harness): a marker with no id is written NONE, and the rows are sorted by file then line', () => {
+  it.skipIf(process.env.RELEASE_CANDIDATE !== '1')('FR-PUB-01 (release candidate): docs/releases/claims-markers.md is byte for byte what scripts/release/claims-markers.mjs writes now, line numbers included', () => {
+    expect(readFileSync(join(REPO, OUT), 'utf8'), 'stale: run node scripts/release/claims-markers.mjs').toBe(render(claimMarkers()));
+  });
+
+  it('FR-PUB-01 (harness): a marker with no id is written NONE, and the table is read back strictly', () => {
     const text = render([{ file: 'app/a.tsx', line: 9, reason: 'about-model-scores' }, { file: 'app/a.tsx', line: 10, reason: 'something-new' }]);
     expect(text).toContain('| app/a.tsx:9 | about-model-scores | FR-RM-01 |\n| app/a.tsx:10 | something-new | NONE |');
-    const ordered = claimMarkers().map((m) => [m.file, m.line] as const);
-    expect(ordered).toEqual([...ordered].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] - b[1])));
+    expect(parse(text)).toEqual([
+      { file: 'app/a.tsx', line: 9, reason: 'about-model-scores', id: 'FR-RM-01' },
+      { file: 'app/a.tsx', line: 10, reason: 'something-new', id: 'NONE' },
+    ]);
+    expect(() => parse(render([]))).toThrow(/no rows/);
+    expect(() => parse(`${text}a line that is not a row\n`)).toThrow(/not a marker row/);
+    expect(() => parse('# no table\n')).toThrow(/no marker table/);
+  });
+
+  it('FR-PUB-01 (harness): the scanner reads a split, spaced, single-quoted or expression value, skips comments, and refuses a non-literal or a "|"', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'claims-markers-'));
+    try {
+      mkdirSync(join(dir, 'app'));
+      writeFileSync(join(dir, 'app', 'a.tsx'), [
+        'export const a = (<div>',
+        '  <p',
+        '    data-claims-allowed',
+        '      =',
+        '    "split-form">x</p>',
+        "  <p data-claims-allowed = 'single-form'>x</p>",
+        '  <p data-claims-allowed={"expression-form"}>x</p>',
+        '  {/* <p data-claims-allowed="in-a-comment">x</p> */}',
+        '</div>);',
+        '// <p data-claims-allowed="line-comment">x</p>',
+      ].join('\n'));
+      expect(claimMarkers(dir, ['app'])).toEqual([
+        { file: 'app/a.tsx', line: 3, reason: 'split-form' },
+        { file: 'app/a.tsx', line: 6, reason: 'single-form' },
+        { file: 'app/a.tsx', line: 7, reason: 'expression-form' },
+      ]);
+      writeFileSync(join(dir, 'app', 'a.tsx'), 'const r = "x";\nexport const a = <p data-claims-allowed={r}>x</p>;\n');
+      expect(() => claimMarkers(dir, ['app'])).toThrow(/app\/a\.tsx:2: .*not a string literal/);
+      writeFileSync(join(dir, 'app', 'a.tsx'), 'export const a = <p data-claims-allowed="a|b">x</p>;\n');
+      expect(() => claimMarkers(dir, ['app'])).toThrow(/may not contain "\|"/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('FR-PUB-01 (harness): markers sort by file, then by line as a number', () => {
+    const m = (file: string, line: number) => ({ file, line, reason: 'r' });
+    expect(sortMarkers([m('components/b.tsx', 1), m('app/a.tsx', 10), m('lib/c.ts', 2), m('app/a.tsx', 9)]))
+      .toEqual([m('app/a.tsx', 9), m('app/a.tsx', 10), m('components/b.tsx', 1), m('lib/c.ts', 2)]);
   });
 
   it('12.2 FR-PUB-01 FR-RM-01: alId gives each known reason its id, a leading AL-n counts, and an unknown reason has none', () => {

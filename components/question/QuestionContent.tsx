@@ -13,7 +13,7 @@ export type QuestionContentProps = { question: LoadedQuestion; suggestionCount: 
  * 1835-1855, and line 1942 for narrow screens): the principle, the question, then, when there
  * is something to suggest, a link down to the shell's `suggestions` section, which only narrow screens show (on wide
  * ones the suggestions sit beside the question), then the expected practice and why the question is asked. The id and
- * module title are the page's heading (`h1`), so they are not repeated here (CONSOLIDATED section 4).
+ * module title are the page's heading (`h1`), so they are not repeated here.
  */
 export function QuestionContent({ question, suggestionCount }: QuestionContentProps): ReactElement {
   return (

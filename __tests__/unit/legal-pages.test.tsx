@@ -296,11 +296,12 @@ describe('S-06 /legal/[kind] and /legal/[kind]/[version]', () => {
   it('FR-ACC-02: the fingerprint sits below the text, labelled "File fingerprint, for checking that this text has not changed"', () => {
     const text: LegalTextVersion = { kind: 'terms', version: '3', publishedOn: '2027-01-05', acceptance: 'offered', sha256: 'cd'.repeat(32), text: 'Only paragraph.\n' };
     const html = renderToStaticMarkup(<LegalTextView text={text} />);
-    // CONSOLIDATED section 4: the SHA-256 block moved from above the text to below it, under a plain label.
     expect(html).not.toContain('SHA-256');
     const label = html.indexOf(`>${FINGERPRINT_LABEL}<`);
     expect(label).toBeGreaterThan(html.indexOf('Only paragraph.'));
     expect(html.indexOf(groupsOfFour('cd'.repeat(32)))).toBeGreaterThan(label);
+    // In the article's footer, after the text block, so it is not heard as part of the text's last section.
+    expect(html).toMatch(/<\/div><footer><dl[^>]*><dt[^>]*>File fingerprint, for checking that this text has not changed<\/dt>[\s\S]*<\/dl><\/footer><\/article>$/);
     expect(html.indexOf('Version 3, published 5 Jan 2027')).toBeLessThan(html.indexOf('data-legal-text'));
   });
 

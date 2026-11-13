@@ -152,18 +152,25 @@ describe('S-13 page', () => {
   };
 
   it("FR-DEC-04 (screen) FR-CNT-07: versions newest first, each with that version's wording, and no content version or UTC toggle", async () => {
-    // CONSOLIDATED section 4: the content version and the "Show UTC" disclosure are internal and are not shown.
+    // Version 1 answers content 0.0.1-fixture and version 2 answers 0.0.2-fixture, whose wording of Q-PP-01 differs, so
+    // each block must show its own version's wording. The content version itself and a "Show UTC" disclosure are not shown.
     await addDecision(fx, project.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId: c1.contentVersionId, status: 'done', declaredDate: '2026-10' });
-    await addDecision(fx, project.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId: c1.contentVersionId, status: 'partly', declaredDate: '2026' });
+    const c2 = await useFixtureContent('0.0.2-fixture');
+    await addDecision(fx, project.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId: c2.contentVersionId, status: 'partly', declaredDate: '2026' });
     const h = await history('viewer');
     expect([...h.matchAll(/data-version-number="(\d+)"/g)].map((m) => m[1])).toEqual(['2', '1']);
-    const wording = wordingIn(c1.semver, 'Q-PP-01')!;
     const asMarkup = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
-    for (const v of h.split('data-version-number=').slice(1)) {
-      expect(v).toContain(`<dd>${asMarkup(wording.text)}</dd>`);
-      expect(v).toContain(`<dd>${asMarkup(wording.expectedPractice)}</dd>`);
-    }
-    for (const gone of ['Show UTC', 'Content version', c1.semver]) expect(h, gone).not.toContain(gone);
+    const [v2, v1] = h.split('data-version-number=').slice(1);
+    const w1 = wordingIn(c1.semver, 'Q-PP-01')!;
+    const w2 = wordingIn(c2.semver, 'Q-PP-01')!;
+    expect(w2.text).not.toBe(w1.text);   // not vacuous: the two versions word the question differently
+    expect(v1).toContain(`<dd>${asMarkup(w1.text)}</dd>`);
+    expect(v1).not.toContain(`<dd>${asMarkup(w2.text)}</dd>`);
+    expect(v2).toContain(`<dd>${asMarkup(w2.text)}</dd>`);
+    expect(v2).not.toContain(`<dd>${asMarkup(w1.text)}</dd>`);
+    expect(v1).toContain(`<dd>${asMarkup(w1.expectedPractice)}</dd>`);
+    expect(v2).toContain(`<dd>${asMarkup(w2.expectedPractice)}</dd>`);
+    for (const gone of ['Show UTC', 'Content version', `<dd>${c1.semver}</dd>`, `<dd>${c2.semver}</dd>`]) expect(h, gone).not.toContain(gone);
     expect(h).not.toContain('Withdraw this decision');   // a viewer has no withdraw control (FR-DEC-08)
   });
 
