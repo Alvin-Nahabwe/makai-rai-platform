@@ -238,6 +238,56 @@ describe('design tokens', () => {
     }
   });
 
+  it('UX-33 NFR-A11Y-05 (legacy, until Task 21): the legacy names the rules still read hold the minimums the SRS 7.6.3 pairs set', () => {
+    // The 35 role pairs test the new roles; these tie each old name to a role that was tested.
+    const pairs: Array<[string, string, string, number]> = [
+      ['D-1 field border', 'form-field-border', 'surface-card', 3],
+      ['D-3 link on cards', 'link', 'surface-card', 4.5],
+      ['D-3 link on the page', 'link', 'surface-base', 4.5],
+      ['D-3 focus ring on cards', 'focus-ring', 'surface-card', 3],
+      ['D-3 focus ring on the page', 'focus-ring', 'surface-base', 3],
+      ['D-5 stage label', 'stage-fg', 'stage-bg', 4.5],
+      ['D-6 moderate text', 'tint-moderate-fg', 'tint-moderate-bg', 4.5],
+    ];
+    for (const [id, fg, bg, min] of pairs) {
+      for (const theme of THEMES) {
+        expect(contrast(theme, fg, bg), `${id} (${fg} on ${bg}), ${theme}`).toBeGreaterThanOrEqual(min);
+      }
+    }
+  });
+
+  it('1A: no legacy alias resolves to the overdue red or the saved green, which each mean one thing', () => {
+    const legacy = legacyNames(readFileSync('app/globals.css', 'utf8'));
+    const valueOf = (theme: Theme, name: string): string | undefined => {
+      const tokens = tokensFor(theme);
+      let value = tokens[name];
+      for (let hops = 0; value !== undefined && hops < 10; hops++) {
+        const ref = /^var\((--[\w-]+)\)$/.exec(value);
+        if (!ref) break;
+        value = tokens[ref[1]];
+      }
+      return value?.toUpperCase();
+    };
+    for (const theme of THEMES) {
+      const reserved = new Set([valueOf(theme, '--color-overdue'), valueOf(theme, '--color-saved')]);
+      expect(reserved.has(undefined)).toBe(false);
+      const offenders = legacy.filter((name) => reserved.has(valueOf(theme, name)));
+      expect(offenders, `${theme}: legacy names that resolve to overdue or saved`).toEqual([]);
+    }
+  });
+
+  it('1A: the focus ring is exactly 3 px wide', () => {
+    expect(ROOT['--focus-width']).toBe('3px');
+  });
+
+  it('1A (usage): a visually-hidden class clips to 1 x 1 px and never uses display:none', () => {
+    const rule = declarationsOf(ruleFor(css, '.visually-hidden'));
+    expect(rule['clip-path']).toBe('inset(50%)');
+    expect(rule['width']).toBe('1px');
+    expect(rule['height']).toBe('1px');
+    expect(rule['display']).toBeUndefined();
+  });
+
   it('UX-33 NFR-A11Y-05 (legacy, until Task 11): the phone menu button bars hold 3:1 on the navy in every theme', () => {
     for (const theme of THEMES) {
       expect(contrast(theme, 'sidebar-toggle-bar', 'color-navy'), `menu button bars, ${theme}`).toBeGreaterThanOrEqual(3);

@@ -62,6 +62,8 @@ on a dark operating system, `light dark` would draw native controls dark while t
   only reader, AboutPage.css, draws it as text on the navy hero; the plan's action-text role is 2.66:1 there in
   light; its readers go in Task 19), and `--font-family` and `--font-display` still read the Source Sans and
   DM Serif variables the layout defines, because Overpass is not loaded yet and the font tests pin both.
+- `--color-risk-critical` is ink, not the overdue role as the plan maps it: its readers are field errors, a required
+  mark and a hover state, none an overdue date, and red means overdue only (B5).
 - A mistyped variable fails `legacy-tokens.test.ts` (a), which lists the six variables defined outside the stylesheet.
 
 ## Residual risks

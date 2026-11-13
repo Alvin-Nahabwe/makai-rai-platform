@@ -3,8 +3,8 @@
     "kind": "removed",
     "deleted": "__tests__/unit/design-tokens.test.ts::UX-33 NFR-A11Y-05: every 7.6.3 token pair meets its minimum in every theme",
     "replacedBy": "__tests__/unit/design-tokens.test.ts::1A NFR-A11Y-05: the 35 colour pairs meet their minimum in light and in both dark blocks",
-    "property": "Each text and non-text colour pair the screens draw (field and control borders >= 3:1, links, stage and tint text >= 4.5:1, focus ring >= 3:1, light and both dark blocks) holds its WCAG minimum, now stated for the 1A roles; the phone-menu bar pair (3:1 on the navy) moves to its own case in the same file",
-    "proof": "__tests__/unit/design-tokens.test.ts::UX-33 NFR-A11Y-05 (legacy, until Task 11): the phone menu button bars hold 3:1 on the navy in every theme",
+    "property": "Each text and non-text colour pair the screens draw holds its WCAG minimum in light and both dark blocks: the new roles (field and control borders >= 3:1, links, stage and tint text >= 4.5:1, focus ring >= 3:1) in the 35 role pairs, and the seven old pairs on the legacy names the rules still read (field border, link, focus ring, stage label, moderate text) in the legacy-pairs case; the phone-menu bar pair (3:1 on the navy) has its own case",
+    "proof": "__tests__/unit/design-tokens.test.ts::1A NFR-A11Y-05: the 35 colour pairs meet their minimum in light and in both dark blocks; __tests__/unit/design-tokens.test.ts::UX-33 NFR-A11Y-05 (legacy, until Task 21): the legacy names the rules still read hold the minimums the SRS 7.6.3 pairs set; __tests__/unit/design-tokens.test.ts::UX-33 NFR-A11Y-05 (legacy, until Task 11): the phone menu button bars hold 3:1 on the navy in every theme",
     "task": "1A-1"
   }
 ]

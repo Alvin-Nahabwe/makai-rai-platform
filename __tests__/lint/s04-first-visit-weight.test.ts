@@ -96,9 +96,10 @@ describe('NFR-PERF-02 FIX-15: S-04 downloads nothing it does not use', () => {
     /*
      * Kept although nothing renders them, each for its own reason:
      *  - stage-indicator and its four stage modifiers: the stage colour pairs UX-06 pins (__tests__/unit/design-tokens.test.ts).
+     *  - visually-hidden: the base utility of plan 1A; its first writer is a components/ui component in a later task.
      *  - btn--arrow: its `content: '→'` is the reason the latin core font subset maps U+2192 (__tests__/unit/font-subsets.test.ts).
      */
-    const kept = new Set(['stage-indicator', 'stage-indicator--pre', 'stage-indicator--in', 'stage-indicator--post', 'stage-indicator--cross', 'btn--arrow']);
+    const kept = new Set(['stage-indicator', 'stage-indicator--pre', 'stage-indicator--in', 'stage-indicator--post', 'stage-indicator--cross', 'btn--arrow', 'visually-hidden']);
     const corpus = ['app', 'components', 'lib'].flatMap(sourceFiles).map((f) => readFileSync(join(ROOT, f), 'utf8')).join('\n');
     const unused = [...selectorClasses(readFileSync(join(ROOT, 'app/globals.css'), 'utf8'))]
       .filter((c) => !kept.has(c))
