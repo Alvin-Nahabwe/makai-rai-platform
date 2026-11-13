@@ -1,0 +1,4 @@
+{
+  "rule": "A command added to or changed in a covered file after 13 November 2026 has an entry here: status \"run\" with a record under docs/runbooks/runs/, or status \"not-run\" with a reason and the words \"Not run\" beneath the command.",
+  "blocks": {}
+}
