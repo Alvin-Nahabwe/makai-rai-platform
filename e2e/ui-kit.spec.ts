@@ -30,10 +30,15 @@ async function openKit(page: Page): Promise<void> {
   await expect(page.locator('[data-kit-section="local-time"] time').first()).not.toHaveText(/UTC$/);
 }
 
-/** Runs `check` in each theme, by the operating system's preference the tokens follow (app/globals.css). */
+/**
+ * Runs `check` in each theme, by the operating system's preference the tokens follow (app/globals.css). A theme change
+ * starts every colour transition on the page (links and buttons fade over --duration-state), and a contrast check taken
+ * inside that fade reads the old theme's ink on the new theme's ground, so `check` waits until no transition runs.
+ */
 async function inEachTheme(page: Page, check: (theme: (typeof THEMES)[number]) => Promise<void>): Promise<void> {
   for (const theme of THEMES) {
     await page.emulateMedia({ colorScheme: theme });
+    await page.waitForFunction(() => document.getAnimations().every((a) => !(a instanceof CSSTransition)));
     await check(theme);
   }
 }

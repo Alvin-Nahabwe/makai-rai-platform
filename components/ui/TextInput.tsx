@@ -49,9 +49,9 @@ export function describedBy(...ids: ReadonlyArray<string | false | null | undefi
 }
 
 /** A field's label; a required field says so in words after it ("Reason (required)"). */
-export function FieldLabel({ htmlFor, label, required = false, className = 'ui-field__label' }: { htmlFor: string; label: ReactNode; required?: boolean; className?: string }): ReactElement {
+export function FieldLabel({ htmlFor, label, required = false }: { htmlFor: string; label: ReactNode; required?: boolean }): ReactElement {
   return (
-    <label className={className} htmlFor={htmlFor}>
+    <label className="ui-field__label" htmlFor={htmlFor}>
       {label}
       {required ? <> <span className="ui-field__required">{UI_COPY.field.required}</span></> : null}
     </label>

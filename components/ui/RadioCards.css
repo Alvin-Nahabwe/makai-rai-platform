@@ -107,6 +107,10 @@
   background-color: var(--color-surface);
   color: var(--color-ink);
   cursor: inherit;
+  /* Above the label's stretched ::after, so a pointer on the radio itself reaches the radio (a browser test's check()
+     clicks its centre, e2e/helpers/session.ts:147). */
+  position: relative;
+  z-index: 1;
 }
 
 .ui-radio-card__input::before {
