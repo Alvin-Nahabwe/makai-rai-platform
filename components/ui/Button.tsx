@@ -37,7 +37,6 @@ export type ButtonLinkProps = {
   href: string;
   icon?: IconName;
   iconPosition?: 'start' | 'end';
-  prefetch?: boolean;
   children: ReactNode;
 };
 
@@ -76,10 +75,14 @@ export function Button({
   );
 }
 
-/** A link drawn as a button (next/link), for an action that goes to another address. */
-export function ButtonLink({ variant, href, icon, iconPosition = 'start', prefetch, children }: ButtonLinkProps): ReactElement {
+/**
+ * A link drawn as a button (next/link), for an action that goes to another address. It never prefetches, and there is
+ * no prop to turn that on: Button.tsx is imported by most pages, and SRS 7.6.4 (UX-37) forbids a prefetching link in
+ * any file a long-list page imports (__tests__/lint/no-prefetch-long-lists.test.ts accepts only a literal false).
+ */
+export function ButtonLink({ variant, href, icon, iconPosition = 'start', children }: ButtonLinkProps): ReactElement {
   return (
-    <Link className={classesOf(variant, 'default')} href={href} prefetch={prefetch}>
+    <Link className={classesOf(variant, 'default')} href={href} prefetch={false}>
       {content(children, icon, iconPosition)}
     </Link>
   );
