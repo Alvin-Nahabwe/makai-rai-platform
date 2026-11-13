@@ -20,7 +20,6 @@ import { logSecurityEvent } from '@/lib/security-logger';
 import { ArchivedBanner } from '@/components/project/ArchivedBanner';
 import { GenerateDocumentForm, NeverSealed, type GenerateDocumentFormProps } from '@/components/documents/GenerateDocumentForm';
 import { IssuedDocumentsList } from '@/components/documents/IssuedDocumentsList';
-import { UncstTable } from '@/components/help/UncstTable';
 
 interface PageProps {
   params: Promise<{ slug: string; id: string; reviewId: string }>;
@@ -105,10 +104,6 @@ export default async function DocumentsPage({ params }: PageProps) {
           <section aria-labelledby="documents-issued">
             <h2 id="documents-issued">Issued documents</h2>
             <IssuedDocumentsList orgSlug={slug} documents={documents} latestSealNumber={latestNumber} canWithdraw={canWithdraw} />
-          </section>
-          <section aria-labelledby="uncst-heading">
-            <h2 id="uncst-heading">Uganda&apos;s AI protocol issues</h2>
-            <UncstTable />
           </section>
         </>
       )}

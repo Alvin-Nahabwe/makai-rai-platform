@@ -72,13 +72,16 @@ const bodyOf = (path: string) => {
 const unescaped = (s: string) =>
   s.replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&gt;/g, '>').replace(/&lt;/g, '<').replace(/&amp;/g, '&');
 
-/** The paragraphs of the text itself: every `<p>` after the hash block, which closes the text's header. */
+/** The marked text block: from data-legal-text to the fingerprint below it. */
+const textBlock = (html: string) => html.slice(html.indexOf('data-legal-text'), html.indexOf('<dl', html.indexOf('data-legal-text')));
+
+/** The paragraphs of the text itself: every `<p>` of the marked block. */
 const textParagraphs = (html: string) =>
-  [...html.slice(html.indexOf('</dl>')).matchAll(/<p[^>]*>([^<]*)<\/p>/g)].map((m) => m[1]);
+  [...textBlock(html).matchAll(/<p[^>]*>([^<]*)<\/p>/g)].map((m) => m[1]);
 
 /** The blocks of the text itself in order, headings (h2) and paragraphs alike: what a reader is shown of its words. */
 const textBlocks = (html: string) =>
-  [...html.slice(html.indexOf('</dl>')).matchAll(/<(p|h2)[^>]*>([^<]*)<\/\1>/g)].map((m) => m[2]);
+  [...textBlock(html).matchAll(/<(p|h2)[^>]*>([^<]*)<\/\1>/g)].map((m) => m[2]);
 
 const PRIVACY_V1 = { sha256: sha(`${FIX}/privacy/1.md`), text: bodyOf(`${FIX}/privacy/1.md`) };
 const PRIVACY_V2 = { sha256: sha(`${FIX}/privacy/2.md`), text: bodyOf(`${FIX}/privacy/2.md`) };
@@ -87,6 +90,7 @@ const kindPage = async (kind: string) => renderToStaticMarkup(await KindPage({ p
 const versionPage = async (kind: string, version: string) =>
   renderToStaticMarkup(await VersionPage({ params: Promise.resolve({ kind, version }) }));
 const NOT_FOUND = /NEXT_HTTP_ERROR_FALLBACK;404/;
+const FINGERPRINT_LABEL = 'File fingerprint, for checking that this text has not changed';
 
 describe('S-06 /legal/[kind] and /legal/[kind]/[version]', () => {
   it('FR-ACC-02: /legal/privacy shows the current version, its hash and the past versions', async () => {
@@ -219,11 +223,11 @@ describe('S-06 /legal/[kind] and /legal/[kind]/[version]', () => {
 
   it('FR-ACC-02: a kind with one version lists no past versions', async () => {
     // The retired organisation agreement is the one kind that still has a single version (version 1, as published).
+    // CONSOLIDATED section 4: an empty "Past versions" block ("None") is hidden, heading included.
     const html = await kindPage('organisation-agreement');
-    const past = html.slice(html.indexOf('<h2>Past versions</h2>'));
-    expect(past).toContain('<p>None</p>');
-    expect(past).not.toContain('href="/legal/organisation-agreement/');
-    expect(html).toContain('href="/legal/organisation-agreement/1"');
+    expect(html).not.toContain('Past versions');
+    expect(html).not.toContain('<p>None</p>');
+    expect(html.match(/href="\/legal\/organisation-agreement\/[^"]*"/g)).toEqual(['href="/legal/organisation-agreement/1"']);   // the permanent link only
   });
 
   it('FR-ACC-02: a kind with two versions lists version 1 as a past version, with its link, and not the current version', async () => {
@@ -282,11 +286,23 @@ describe('S-06 /legal/[kind] and /legal/[kind]/[version]', () => {
     const inner = marked.slice(marked.indexOf('>') + 1, marked.length - '</div>'.length);
     expect(inner).toBe('<h2>Our promise</h2><p>We certify the words of this stub.</p><p>A second paragraph.</p>');
     // The page's heading, the version line and the fingerprint are interface copy: they stay outside.
-    for (const part of ['<h1', 'Version 3, published 5 Jan 2027', groupsOfFour('ab'.repeat(32)), 'SHA-256']) {
+    for (const part of ['<h1', 'Version 3, published 5 Jan 2027', groupsOfFour('ab'.repeat(32)), FINGERPRINT_LABEL]) {
       expect(marked, part).not.toContain(part);
       expect(outside, part).toContain(part);
     }
     expect(outside).not.toContain('certify');
+  });
+
+  it('FR-ACC-02: the fingerprint sits below the text, labelled "File fingerprint, for checking that this text has not changed"', () => {
+    const text: LegalTextVersion = { kind: 'terms', version: '3', publishedOn: '2027-01-05', acceptance: 'offered', sha256: 'cd'.repeat(32), text: 'Only paragraph.\n' };
+    const html = renderToStaticMarkup(<LegalTextView text={text} />);
+    expect(html).not.toContain('SHA-256');
+    const label = html.indexOf(`>${FINGERPRINT_LABEL}<`);
+    expect(label).toBeGreaterThan(html.indexOf('Only paragraph.'));
+    expect(html.indexOf(groupsOfFour('cd'.repeat(32)))).toBeGreaterThan(label);
+    // In the article's footer, after the text block, so it is not heard as part of the text's last section.
+    expect(html).toMatch(/<\/div><footer><dl[^>]*><dt[^>]*>File fingerprint, for checking that this text has not changed<\/dt>[\s\S]*<\/dl><\/footer><\/article>$/);
+    expect(html.indexOf('Version 3, published 5 Jan 2027')).toBeLessThan(html.indexOf('data-legal-text'));
   });
 
   it('FR-ACC-02: the text is one paragraph per blank-line-separated block, and keeps its single line breaks', () => {

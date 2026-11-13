@@ -41,6 +41,14 @@ describe('S-27, the controls page', () => {
     expect(html).not.toContain('<button');
   });
 
+  // CONSOLIDATED section 4 (D AB45-AB47, EX19): About's "Free toolkits" section is this page's introduction now.
+  it("UX-13 UX-03: S-27 opens with the line that took over the About page's free toolkits section", () => {
+    const html = renderToStaticMarkup(<ControlsPage />);
+    const intro = 'A control is a practice that lowers a risk. When your team closes a finding with a mitigation, it can follow one of these. Each control links to free guidance.';
+    expect(html).toMatch(new RegExp(`<h1>Controls</h1><p[^>]*>${intro.replace(/\./g, '\\.')}</p>`));
+    expect(html.indexOf(intro)).toBeLessThan(html.indexOf('<h2'));
+  });
+
   it('FR-SUG-04: no file under app, components or lib links a template or notebook path except through the resources file', () => {
     // A quote or backtick before /templates/ or /notebooks/ keeps the e-mail templates (@/lib/email/templates/...) out of the match:
     // they are not a served file. grep exits 0 for a match and 1 for none; anything else (2) is a failed search, not a clean tree.

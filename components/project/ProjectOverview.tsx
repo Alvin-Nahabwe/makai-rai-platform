@@ -29,7 +29,7 @@ export function ProjectOverview({ data }: { data: ProjectOverviewData }): ReactE
         <div>
           <h1>{project.name}</h1>
           {project.descriptiveLine !== '' ? <p>{project.descriptiveLine}</p> : null}
-          <p className="text-muted">Stages can be recorded in any order. Overdue is counted in East Africa Time (UTC+3).</p>
+          <p className="text-muted">Stages can be recorded in any order.</p>
         </div>
         <div className="form-actions">
           {can.update ? <ListLink href={`${base}/edit`} className="btn btn--secondary">Edit project</ListLink> : null}
@@ -53,8 +53,8 @@ export function ProjectOverview({ data }: { data: ProjectOverviewData }): ReactE
           ))}
         </div>
       </div>
+      <p className="text-muted">To share your record outside the team, seal a stage review and create a document from it.</p>
       <p><ListLink href={`${base}/findings`}>Findings for this project</ListLink></p>
-      <p className="text-muted">Team working view. To share the record, generate a document from a sealed stage review.</p>
     </div>
   );
 }

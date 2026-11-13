@@ -92,10 +92,8 @@ test('FR-DOC-08 FR-DOC-04 FR-DOC-01 NFR-A11Y-02 NFR-A11Y-05 NFR-SEC-11: generate
   const downloads = page.getByRole('link', { name: /^Download PDF \(\d+ KB\)$/ });
   await expect(downloads).toHaveCount(2);
   expect(await downloads.evaluateAll((els) => new Set(els.map((e) => e.getAttribute('href'))).size)).toBe(1);
-  // Task 10 (OD-20): the UNCST table sits below the documents, with its heading, a caption and six body rows.
-  await expect(page.getByRole('heading', { name: "Uganda's AI protocol issues", level: 2 })).toBeVisible();
-  await expect(page.locator('.uncst-table caption')).toBeVisible();
-  await expect(page.locator('.uncst-table tbody tr')).toHaveCount(6);
+  // CONSOLIDATED section 4: no country table below the documents (the UNCST table was removed).
+  await expect(page.getByText(/UNCST|AI protocol issues/)).toHaveCount(0);
   await settleHover(page);
   await expectNoSeriousA11yViolations(page, 'S-18 issued');
 
@@ -199,7 +197,7 @@ test('UX-20 (accessibility audit): a refused typed value is marked aria-invalid,
   expect(await testDb.issuedDocument.count({ where: { stageReviewId: reviewId } })).toBe(0);
 });
 
-test('NFR-A11Y-05 (Task 10): at 769, 800 and 820 px wide .app-main has no horizontal overflow on S-18 and the UNCST table stacks', async ({ page, baseURL }) => {
+test('NFR-A11Y-05 (Task 10): at 769, 800 and 820 px wide .app-main has no horizontal overflow on S-18', async ({ page, baseURL }) => {
   test.setTimeout(120_000);
   failOnDialog(page);
   const { projectId, reviewId } = await sealedReview(baseURL!);
@@ -207,16 +205,12 @@ test('NFR-A11Y-05 (Task 10): at 769, 800 and 820 px wide .app-main has no horizo
   for (const width of [769, 800, 820]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto(`/orgs/${org.slug}/projects/${projectId}/reviews/${reviewId}/documents`);
-    await expect(page.getByRole('heading', { name: "Uganda's AI protocol issues", level: 2 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Issued documents', level: 2 })).toBeVisible();
     const m = await page.evaluate(() => {
       const main = document.querySelector('.app-main') as HTMLElement;
-      const wrap = document.querySelector('.uncst-table-wrap') as HTMLElement;
-      const row = document.querySelector('.uncst-table tbody tr') as HTMLElement;
-      return { mainScroll: main.scrollWidth, mainClient: main.clientWidth, wrap: wrap.clientWidth, rowDisplay: getComputedStyle(row).display };
+      return { mainScroll: main.scrollWidth, mainClient: main.clientWidth };
     });
     expect(m.mainScroll, `.app-main at ${width}`).toBeLessThanOrEqual(m.mainClient);
-    expect(m.wrap, `table container at ${width}`).toBeLessThanOrEqual(600);   // the container query's range: about 412 to 432 px is left
-    expect(m.rowDisplay, `rows stack at ${width}`).toBe('block');
     await expectNoHorizontalScroll(page);
   }
 });

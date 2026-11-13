@@ -36,9 +36,13 @@ describe('QuestionContent', () => {
     expect(readFileSync('components/question/QuestionContent.tsx', 'utf8')).not.toMatch(/['"]use client['"]|dangerouslySetInnerHTML/);
   });
 
-  it('UX-08 (W-3): the id and module title, then the principle, then the question, as the wireframe orders them', () => {
+  // CONSOLIDATED section 4: the second id-and-module line repeated the page's h1 and is removed.
+  it('UX-08 (W-3): the principle, then the question; the id and module title are left to the page heading', () => {
     const html = renderToStaticMarkup(<QuestionContent question={q} suggestionCount={2} />);
-    const order = [html.indexOf(q.id), html.indexOf(escape(q.moduleTitle)), html.indexOf('Principle:'), html.indexOf(escape(q.text))];
+    expect(html).not.toContain('question-content__meta');
+    expect(html.startsWith('<div class="question-content"><p class="question-content__principle">'), html).toBe(true);
+    expect(html).not.toContain(escape(q.moduleTitle));
+    const order = [html.indexOf('Principle:'), html.indexOf(escape(q.text))];
     expect(order.every((n, i, a) => n >= 0 && (i === 0 || n > a[i - 1])), html).toBe(true);
     expect(html).toContain('Ways teams address this (2)');
   });

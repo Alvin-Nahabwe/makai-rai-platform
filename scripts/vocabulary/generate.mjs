@@ -33,7 +33,8 @@
 // A key naming an unknown id, or a text the concept does not retire, is an error (exit 2).
 // A pattern never names a code point (no `\u…` escape, no character outside printable ASCII): it is copied into
 // data/vocabulary.json, and __tests__/unit/font-subsets.test.ts reads every file under data/ as page copy. The lint
-// shows a template hole (`${…}`) to a pattern as one format character, so "before a hole" is written `(?=\p{Cf})`.
+// shows a template hole (`${…}`), or a masked proper name, to a pattern as one format character, so "before a hole"
+// is written `(?=\p{Cf})`. Such a pattern, or one that does not compile with the `u` flag, is an error (exit 2).
 //
 // Unknown keys in overrides.json and in a lint rule are errors; a missing optional key is allowed. Every concept is
 // validated after the merge (kebab-case id, non-empty group, concept and term, a definition of at most 20 words or null).
@@ -288,6 +289,16 @@ function checkRule(rule, where) {
     onlyKeys(r, ['lint', 'pattern', 'caseSensitive'], `lint rule for ${where}`);
     if (typeof r.pattern !== 'string' || typeof r.caseSensitive !== 'boolean') {
       throw new VocabularyError(`lint rule for ${where}: a "phrase" rule needs a string "pattern" and a boolean "caseSensitive"`);
+    }
+    // An unescaped `\u` or `\x` (an even run of backslashes before it is literal backslashes), or any character
+    // outside printable ASCII, names a code point; see the header.
+    if (/(^|[^\\])(\\\\)*\\[ux]/.test(r.pattern) || /[^\x20-\x7e]/.test(r.pattern)) {
+      throw new VocabularyError(`lint rule for ${where}: the pattern names a code point (a \\u or \\x escape, or a character outside printable ASCII)`);
+    }
+    try {
+      new RegExp(r.pattern, 'u');
+    } catch (error) {
+      throw new VocabularyError(`lint rule for ${where}: the pattern does not compile with the u flag: ${reason(error)}`);
     }
     return { lint: 'phrase', pattern: r.pattern, caseSensitive: r.caseSensitive };
   }
