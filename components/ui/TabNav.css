@@ -1,0 +1,69 @@
+/* Tabs as navigation (plan 1A Task 5, decision B9; modern-web-guidance `tabs`). The tabs keep one row: when they do not
+   fit, the list scrolls sideways inside itself (the guide's first strategy), never the page; TabNav.tsx brings the
+   current tab into view, and a tab focused from the keyboard. The current tab is shown
+   by a 3 px underline on a pseudo-element that takes no space, and its ink colour; nothing changes a tab's size. The
+   underline is a border, so forced colours keep it; it is the only one drawn under a tab. */
+.ui-tabnav {
+  margin-block-end: var(--space-6);
+}
+
+.ui-tabnav__list {
+  display: flex;
+  overflow-x: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-block-end: 1px solid var(--color-border-control);
+  /* Twice a tab's own inline padding: a tab brought into view stops this far from the row's edge, so past it show the
+     neighbour's blank padding and then the first or last 16 px of its words. With no fade at the edges, those words
+     are what says that tabs follow. */
+  scroll-padding-inline: var(--space-8);
+}
+
+.ui-tabnav__list > li {
+  flex: none;
+}
+
+.ui-tabnav__item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  /* The gap keeps the count apart from the label: a flex container drops the space between them. */
+  column-gap: var(--space-1);
+  min-block-size: var(--target-primary);
+  padding: var(--space-2) var(--space-4);
+  white-space: nowrap;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-ink-muted);
+  text-decoration: none;
+  transition: color var(--duration-state) var(--easing-state);
+}
+
+.ui-tabnav__item:hover {
+  color: var(--color-ink);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+/* The list scrolls, so a ring outside the link would be cut: it is drawn inside. */
+.ui-tabnav__item:focus-visible {
+  outline-offset: calc(-1 * var(--focus-width));
+}
+
+.ui-tabnav__item--current,
+.ui-tabnav__item--current:hover {
+  color: var(--color-ink);
+  text-decoration: none;
+}
+
+.ui-tabnav__item--current::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0;
+  border-block-end: 3px solid var(--color-ink);
+}
+
+.ui-tabnav__count {
+  font-variant-numeric: tabular-nums;
+}

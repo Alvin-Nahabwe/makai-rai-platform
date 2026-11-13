@@ -83,8 +83,28 @@ async function boxOf(locator: Locator, what: string): Promise<{ x: number; y: nu
   return box;
 }
 
+/**
+ * Waits until the page has stopped scrolling. The page scrolls smoothly (`html { scroll-behavior: smooth }`,
+ * app/globals.css), so a script's focus() or scrollIntoView() starts an animation; a key pressed or a box measured
+ * during it acts on a page in motion.
+ */
+async function scrollSettled(page: Page): Promise<void> {
+  // Settled: the same scroll position on two polls 100 ms apart. The predicate is synchronous: waitForFunction takes a
+  // returned Promise as a truthy answer at once, without waiting for it.
+  await page.evaluate(() => { (window as unknown as { kitLastY?: number }).kitLastY = Number.NaN; });
+  await page.waitForFunction(() => {
+    const w = window as unknown as { kitLastY?: number };
+    const settled = w.kitLastY === window.scrollY;
+    w.kitLastY = window.scrollY;
+    return settled;
+  }, undefined, { polling: 100 });
+}
+
 /** A kit section by its id (`data-kit-section`). */
 const section = (page: Page, id: string) => page.locator(`[data-kit-section="${id}"]`);
+
+/** The first item plate's link. */
+const plateLink = (page: Page) => section(page, 'item-plate').locator('.ui-plate__link').first();
 
 /**
  * The drawn shapes inside `selector` whose paint is missing or equals the page background: each shape's computed stroke
@@ -721,5 +741,581 @@ test.describe('InlineConfirm', () => {
     await expect(output).toHaveText('Pressed: cancel.');
     await group.getByRole('button', { name: 'Withdraw document' }).click();
     await expect(output).toHaveText('Pressed: withdraw.');
+  });
+});
+
+test.describe('Table', () => {
+  const demo = (page: Page) => section(page, 'table').locator('[data-demo="sortable-table"]');
+
+  /** How the demo table is laid out: the table's display, the cell labels' display, and each body row's box. */
+  const layout = (page: Page) => demo(page).evaluate((root) => {
+    const table = root.querySelector('table') as HTMLElement;
+    const rows = Array.from(root.querySelectorAll('tbody tr')).map((tr) => {
+      const r = tr.getBoundingClientRect();
+      const cells = Array.from(tr.children).map((c) => Math.round(c.getBoundingClientRect().top));
+      return { top: r.top, bottom: r.bottom, cellTops: cells };
+    });
+    // Every cell of the first card: its label's box and its value's box (the cell's content after the label).
+    const firstCells = Array.from(root.querySelectorAll('tbody tr:first-child td')).map((cell) => {
+      const label = cell.querySelector('.ui-table__cell-label') as HTMLElement;
+      const valueRange = document.createRange();
+      valueRange.selectNodeContents(cell);
+      valueRange.setStartAfter(label);
+      const l = label.getBoundingClientRect();
+      const v = valueRange.getBoundingClientRect();
+      return { label: label.textContent, labelBottom: l.bottom, labelLeft: l.left, valueTop: v.top, valueLeft: v.left, cellLeft: cell.getBoundingClientRect().left };
+    });
+    const label = root.querySelector('td .ui-table__cell-label') as HTMLElement;
+    const caption = root.querySelector('caption') as HTMLElement;
+    const wrap = root.querySelector('.ui-table-wrap') as HTMLElement;
+    const captionText = document.createRange();
+    captionText.selectNodeContents(caption);
+    return {
+      table: getComputedStyle(table).display,
+      label: getComputedStyle(label).display,
+      firstCells,
+      captionWidth: caption.getBoundingClientRect().width,
+      captionLines: new Set(Array.from(captionText.getClientRects()).map((r) => Math.round(r.top))).size,
+      wrapContentWidth: wrap.clientWidth - parseFloat(getComputedStyle(wrap).paddingLeft) - parseFloat(getComputedStyle(wrap).paddingRight),
+      rows,
+      width: Math.round(root.getBoundingClientRect().width),
+    };
+  });
+
+  test('becomes cards in a 600 px container and stays a table at 800 px, whatever the window', async ({ page }) => {
+    await openKit(page);
+    expect(page.viewportSize()?.width).toBe(1280);
+    await demo(page).evaluate((el) => { (el as HTMLElement).style.inlineSize = '600px'; });
+    const cards = await layout(page);
+    expect(cards.width).toBe(600);
+    expect(cards.table).toBe('block');
+    expect(cards.label).toBe('block');
+    expect(cards.firstCells.map((c) => c.label)).toEqual(['Stage', 'Opened', 'Evidence files']);
+    for (const c of cards.firstCells) {
+      expect(c.labelBottom, `${c.label}: the label sits above its value`).toBeLessThanOrEqual(c.valueTop + 1);
+      expect(Math.abs(c.labelLeft - c.cellLeft), `${c.label}: the label starts at the cell's start`).toBeLessThanOrEqual(1);
+      expect(Math.abs(c.valueLeft - c.cellLeft), `${c.label}: the value starts at the cell's start`).toBeLessThanOrEqual(1);
+    }
+    expect(Math.abs(cards.captionWidth - cards.wrapContentWidth), 'the visible caption spans the wrapper').toBeLessThanOrEqual(1);
+    expect(cards.captionLines, 'the two-word caption stays on one line').toBe(1);
+    for (const [i, row] of cards.rows.entries()) {
+      expect(new Set(row.cellTops).size, `card ${i}: its cells stack`).toBe(row.cellTops.length);
+      if (i > 0) expect(row.top, `card ${i} is below card ${i - 1}`).toBeGreaterThanOrEqual(cards.rows[i - 1].bottom);
+    }
+    await expect(demo(page).getByRole('button', { name: 'Opened', exact: true })).toBeVisible();
+    await expect(demo(page).getByRole('columnheader', { name: 'Stage', exact: true })).toHaveCSS('position', 'absolute');
+
+    await demo(page).evaluate((el) => { (el as HTMLElement).style.inlineSize = '800px'; });
+    const table = await layout(page);
+    expect(table.width).toBe(800);
+    expect(table.table).toBe('table');
+    expect(table.label).toBe('none');
+    for (const row of table.rows) expect(new Set(row.cellTops).size, 'a row\'s cells share a line').toBe(1);
+  });
+
+  for (const viewport of [VIEWPORTS[0], VIEWPORTS[1]]) {
+    test(`a sort click moves the rows, announces in the column's words, and keeps focus in view, at ${viewport.width} px`, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      await openKit(page);
+      const status = demo(page).getByRole('status');
+      const firstRowHeader = demo(page).locator('tbody tr').first().getByRole('rowheader');
+      await expect(status).toHaveText('');
+      await expect(demo(page).locator('[aria-sort]')).toHaveCount(0);
+      // A probe on one row's element: React must move that element, not rebuild it.
+      await demo(page).locator('tbody tr', { hasText: 'Consent does not cover' }).evaluate((tr) => { (tr as unknown as { kitProbe: number }).kitProbe = 1; });
+
+      const opened = demo(page).getByRole('button', { name: 'Opened', exact: true });
+      await opened.click();
+      await expect(status).toHaveText('Sorted by Opened, earliest first');
+      await expect(firstRowHeader).toHaveText('Bias check on the triage model is pending');
+      await expect(demo(page).locator('[aria-sort]')).toHaveCount(1);
+      await expect(demo(page).getByRole('columnheader', { name: 'Opened', exact: true })).toHaveAttribute('aria-sort', 'ascending');
+      await expect(opened).toBeFocused();
+      await expect(opened).toBeInViewport({ ratio: 1 });
+
+      await page.keyboard.press('Enter');
+      await expect(status).toHaveText('Sorted by Opened, latest first');
+      await expect(firstRowHeader).toHaveText('Appeal route for patients is unclear');
+      await expect(demo(page).getByRole('columnheader', { name: 'Opened', exact: true })).toHaveAttribute('aria-sort', 'descending');
+
+      await demo(page).getByRole('button', { name: 'Evidence files', exact: true }).click();
+      await expect(status).toHaveText('Sorted by Evidence files, lowest first');
+      await expect(firstRowHeader).toHaveText('Retention period is not set');
+      await expect(demo(page).locator('[aria-sort]')).toHaveCount(1);
+      expect(await demo(page).locator('tbody tr', { hasText: 'Consent does not cover' }).evaluate((tr) => (tr as unknown as { kitProbe?: number }).kitProbe)).toBe(1);
+      await expect(demo(page).getByRole('button', { name: 'Evidence files', exact: true })).toBeInViewport({ ratio: 1 });
+
+      await settleHover(page);
+      await inEachTheme(page, (theme) => expectNoSeriousA11yViolations(page, `${KIT} table sorted, ${theme}, ${viewport.width} px`));
+    });
+  }
+
+  test('the sort arrows are drawn in both themes and forced colours: two-way arrows unsorted, one arrow sorted, turned when descending', async ({ page }) => {
+    await openKit(page);
+    const header = (name: string) => demo(page).getByRole('columnheader', { name, exact: true });
+    const shown = (name: string) => header(name).locator('svg').evaluateAll((svgs) => svgs.map((s) => ({
+      shown: getComputedStyle(s).display !== 'none', rotate: getComputedStyle(s).rotate,
+    })));
+    await demo(page).getByRole('button', { name: 'Opened', exact: true }).click();
+    await demo(page).getByRole('button', { name: 'Opened', exact: true }).click();
+    await expect(header('Opened')).toHaveAttribute('aria-sort', 'descending');
+    const check = async (mode: string) => {
+      expect((await shown('Finding')).map((s) => s.shown), `${mode}: unsorted shows the two-way arrows`).toEqual([true, false]);
+      const opened = await shown('Opened');
+      expect(opened.map((s) => s.shown), `${mode}: sorted shows the one arrow`).toEqual([false, true]);
+      expect(opened[1].rotate, `${mode}: descending turns the arrow`).toBe('180deg');
+      const painted = await shapesVisible(page, '[data-demo="sortable-table"] th');
+      expect(painted.count).toBeGreaterThan(0);
+      expect(painted.invisible, mode).toEqual([]);
+    };
+    await inEachTheme(page, (theme) => check(theme));
+    await withForcedColors(page, () => check('forced colours'));
+  });
+
+  test('the region is a keyboard stop named by its caption; a hidden caption still names it; no rows shows the empty words', async ({ page }) => {
+    await openKit(page);
+    await expect(page.getByRole('region', { name: 'Sample findings', exact: true })).toHaveAttribute('tabindex', '0');
+    await expect(page.getByRole('region', { name: 'Sample members', exact: true })).toBeVisible();
+    await expect(page.getByRole('table', { name: 'Sample members', exact: true }).locator('caption')).toHaveCSS('position', 'absolute');
+    await expect(section(page, 'table').locator('.ui-table__empty')).toHaveText('No invitations are waiting. Invited people appear here until they accept.');
+  });
+});
+
+test.describe('TabNav', () => {
+  const nav = (page: Page) => page.getByRole('navigation', { name: 'Sample findings', exact: true });
+
+  /** Each link's underline: the ::after box's border and where it sits against the link. */
+  const underlines = (page: Page, name: string) => page.getByRole('navigation', { name, exact: true }).getByRole('link').evaluateAll((links) => links.map((a) => {
+    const s = getComputedStyle(a, '::after');
+    return {
+      current: a.getAttribute('aria-current'),
+      drawn: s.content !== 'none' && s.borderBottomStyle === 'solid' && parseFloat(s.borderBottomWidth) > 0,
+      width: s.borderBottomWidth, bottom: s.bottom, left: s.left, right: s.right, position: s.position,
+      // The pseudo-element's used width and height, and its owner's: its box is read from its computed size, and its
+      // place from `bottom: 0` against an owner that is `position: relative` (so the owner is its containing block).
+      usedWidth: parseFloat(s.width), usedHeight: parseFloat(s.height), linkWidth: a.getBoundingClientRect().width,
+      linkPosition: getComputedStyle(a).position,
+      colour: s.borderBottomColor, ground: getComputedStyle(document.body).backgroundColor,
+    };
+  }));
+
+  test('links whose text carries the count; aria-current="page" on the current one only', async ({ page }) => {
+    await openKit(page);
+    await expect(nav(page).getByRole('link')).toHaveText(['Open 13', 'Closed 4', 'Accepted risk']);
+    await expect(nav(page).locator('[aria-current]')).toHaveCount(1);
+    await expect(nav(page).getByRole('link', { name: 'Open 13', exact: true })).toHaveAttribute('aria-current', 'page');
+    await expect(nav(page).locator('[role="tab"], [role="tablist"], [aria-selected]')).toHaveCount(0);
+  });
+
+  test('the current tab alone has a 3 px underline along its bottom edge, in normal and forced colours', async ({ page }) => {
+    await openKit(page);
+    const check = async (mode: string) => {
+      const lines = await underlines(page, 'Sample findings');
+      expect(lines.filter((l) => l.drawn).map((l) => l.current), mode).toEqual(['page']);
+      const line = lines.find((l) => l.drawn);
+      expect(line, mode).toMatchObject({ width: '3px', bottom: '0px', left: '0px', right: '0px', position: 'absolute', linkPosition: 'relative' });
+      expect(Math.abs((line?.usedWidth ?? 0) - (line?.linkWidth ?? -9)), `${mode}: the underline spans the tab`).toBeLessThanOrEqual(1);
+      // Border-box (app/globals.css), so a used height of 3 px is the border alone; with bottom 0 against the
+      // relatively positioned link, that border's bottom edge is the link's bottom edge.
+      expect(line?.usedHeight, `${mode}: the underline is its 3 px border alone`).toBe(3);
+      expect(line?.colour, mode).not.toBe(line?.ground);
+    };
+    await check('normal colours');
+    await withForcedColors(page, () => check('forced colours'));
+  });
+
+  test('Tab moves through the tabs from left to right', async ({ page }) => {
+    await openKit(page);
+    const links = nav(page).getByRole('link');
+    await links.first().focus();
+    const xs: number[] = [(await boxOf(links.first(), 'first tab')).x];
+    for (let i = 1; i < 3; i += 1) {
+      await page.keyboard.press('Tab');
+      await expect(links.nth(i)).toBeFocused();
+      xs.push((await boxOf(links.nth(i), `tab ${i + 1}`)).x);
+    }
+    expect([...xs].sort((a, b) => a - b)).toEqual(xs);
+    expect(new Set(xs).size).toBe(3);
+  });
+
+  test('the count is drawn apart from its label, "Open 13", not "Open13"', async ({ page }) => {
+    await openKit(page);
+    const gap = await nav(page).getByRole('link').first().evaluate((a) => {
+      const words = document.createRange();
+      words.selectNodeContents(a.firstChild as Node);
+      const count = a.querySelector('.ui-tabnav__count') as Element;
+      return count.getBoundingClientRect().left - words.getBoundingClientRect().right;
+    });
+    expect(gap).toBeGreaterThanOrEqual(3);
+  });
+
+  test('at 320 px the current tab is brought into view inside its row, and the page does not move', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    await openKit(page);
+    const list = page.getByRole('navigation', { name: 'Sample guidance', exact: true }).getByRole('list');
+    const current = list.getByRole('link', { name: 'In processing', exact: true });
+    await expect(current).toHaveAttribute('aria-current', 'page');
+    await expect.poll(() => list.evaluate((ul) => ul.scrollLeft), 'the row scrolled itself').toBeGreaterThan(0);
+    const row = await boxOf(list, 'the row');
+    const tab = await boxOf(current, 'the current tab');
+    expect(tab.x, 'the current tab starts inside the row').toBeGreaterThanOrEqual(row.x);
+    expect(tab.x + tab.width, 'the current tab ends inside the row').toBeLessThanOrEqual(row.x + row.width);
+    expect(await page.evaluate(() => window.scrollY), 'the page did not scroll').toBe(0);
+  });
+
+  test('at 320 px the tabs beside the current one show their first and last letters at the row\'s edges', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    await openKit(page);
+    const list = page.getByRole('navigation', { name: 'Sample guidance', exact: true }).getByRole('list');
+    // The row looks at its current tab once more when the fonts are in: measure after that.
+    await page.evaluate(() => document.fonts.ready.then(() => undefined));
+    await expect.poll(() => list.evaluate((ul) => ul.scrollLeft), 'the row scrolled itself').toBeGreaterThan(0);
+    // There is no fade at the row's edges, so the words of the tab cut off at an edge are what says that tabs follow.
+    // The words are measured, not the link's box: a link begins and ends with its own blank padding.
+    const edges = await list.evaluate((ul) => {
+      const links = Array.from(ul.querySelectorAll('a'));
+      const at = links.findIndex((a) => a.getAttribute('aria-current') === 'page');
+      const words = (a: Element) => {
+        const range = document.createRange();
+        range.selectNodeContents(a);
+        return range.getBoundingClientRect();
+      };
+      const rowBox = ul.getBoundingClientRect();
+      const previous = links[at - 1];
+      const next = links[at + 1];
+      return {
+        tabs: [previous.textContent, links[at].textContent, next.textContent],
+        // How far inside the row's end the next tab's words start, and inside its start the previous tab's words end.
+        nextWordsInside: Math.round(rowBox.right - words(next).left),
+        previousWordsInside: Math.round(words(previous).right - rowBox.left),
+        previousWhole: previous.getBoundingClientRect().left >= rowBox.left,
+      };
+    });
+    expect(edges.tabs).toEqual(['Pre-processing', 'In processing', 'Post-processing']);
+    expect(edges.nextWordsInside, 'the next tab\'s words start at least 8 px inside the row\'s end').toBeGreaterThanOrEqual(8);
+    expect(edges.previousWhole || edges.previousWordsInside >= 8,
+      `the previous tab is wholly in view, or its words end at least 8 px inside the row's start (${edges.previousWordsInside} px)`).toBe(true);
+  });
+
+  test('at 320 px a row of tabs that does not fit scrolls inside itself, on one line, and the page does not', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    await openKit(page);
+    const list = page.getByRole('navigation', { name: 'Sample guidance', exact: true }).getByRole('list');
+    expect(await list.evaluate((ul) => ul.scrollWidth > ul.clientWidth)).toBe(true);
+    const tops = new Set(await list.getByRole('link').evaluateAll((as) => as.map((a) => Math.round(a.getBoundingClientRect().top))));
+    expect(tops.size).toBe(1);
+    await expectNoHorizontalScroll(page);
+    // By keyboard: from the row's first tab, Tab along the row to the last. Every stop is checked, not the last alone:
+    // Chrome's own scroll on focus brings in a tab that is wholly hidden and leaves one that already shows a strip of
+    // itself where it is (measured on this row in Chrome 157, when its scroll padding was 16 px: the third tab stayed
+    // with 43 px showing and the last with 70 px of its 207), so the row itself brings the focused tab in.
+    const links = list.getByRole('link');
+    /** How far tab `i` runs past each end of the row, in whole pixels: both 0 when it is wholly in view inside the row. */
+    const pastRow = (i: number) => links.nth(i).evaluate((a) => {
+      const box = a.getBoundingClientRect();
+      const rowBox = (a.closest('ul') as Element).getBoundingClientRect();
+      return { start: Math.max(0, Math.round(rowBox.left - box.left)), end: Math.max(0, Math.round(box.right - rowBox.right)) };
+    });
+    await links.first().focus();
+    await scrollSettled(page);
+    for (let i = 1; i < 5; i += 1) {
+      await page.keyboard.press('Tab');
+      await expect(links.nth(i)).toBeFocused();
+      expect(await pastRow(i), `tab ${i + 1}, reached by Tab, is wholly inside the row`).toEqual({ start: 0, end: 0 });
+    }
+    await scrollSettled(page);
+    const last = list.getByRole('link', { name: 'Cross-cutting questions', exact: true });
+    await expect(last).toBeFocused();
+    await expect(last).toBeInViewport({ ratio: 1 });
+    const ring = await last.evaluate((a) => {
+      const s = getComputedStyle(a);
+      const box = a.getBoundingClientRect();
+      const rowBox = (a.closest('ul') as Element).getBoundingClientRect();
+      // The ring is drawn inside the link (a negative offset as deep as the ring), so its outer edge is the link's box.
+      const outset = parseFloat(s.outlineWidth) + parseFloat(s.outlineOffset);
+      return { focusVisible: a.matches(':focus-visible'), style: s.outlineStyle, width: s.outlineWidth, outset,
+        inside: box.left - outset >= rowBox.left - 0.5 && box.right + outset <= rowBox.right + 0.5 };
+    });
+    expect(ring).toEqual({ focusVisible: true, style: 'solid', width: '3px', outset: 0, inside: true });
+    // And back along the row with Shift+Tab, to the first.
+    for (let i = 3; i >= 0; i -= 1) {
+      await page.keyboard.press('Shift+Tab');
+      await expect(links.nth(i)).toBeFocused();
+      expect(await pastRow(i), `tab ${i + 1}, reached by Shift+Tab, is wholly inside the row`).toEqual({ start: 0, end: 0 });
+    }
+    expect(await page.evaluate(() => window.scrollX), 'the page did not scroll sideways').toBe(0);
+    await expectNoHorizontalScroll(page);
+  });
+
+  test('at 320 px a pointer press on a partly shown tab leaves the row where it is, and the click reaches that tab', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    await openKit(page);
+    const list = page.getByRole('navigation', { name: 'Sample guidance', exact: true }).getByRole('list');
+    await list.scrollIntoViewIfNeeded();
+    await scrollSettled(page);
+    // The row's own look at its current tab runs once more when the fonts are in: wait for it before placing the row.
+    await page.evaluate(() => document.fonts.ready.then(() => undefined));
+    // The fourth tab runs 60 px past the row's end, and the press is 6 px inside that end. A row that moved on the press
+    // to bring the tab in would put the next tab under the pointer before the release (seen without the keyboard-only
+    // rule: this case failed on a row that had moved).
+    const at = await list.evaluate((ul) => {
+      const tab = ul.querySelectorAll('a')[3];
+      ul.scrollLeft += tab.getBoundingClientRect().right - ul.getBoundingClientRect().right - 60;
+      const rowBox = ul.getBoundingClientRect();
+      const box = tab.getBoundingClientRect();
+      const x = rowBox.right - 6;
+      const y = box.top + box.height / 2;
+      return { x, y, left: ul.scrollLeft, past: Math.round(box.right - rowBox.right), under: document.elementFromPoint(x, y)?.textContent };
+    });
+    expect({ past: at.past, under: at.under }, 'the fourth tab is partly shown, under the pointer').toEqual({ past: 60, under: 'Post-processing' });
+    await page.mouse.move(at.x, at.y);
+    await page.mouse.down();
+    expect(await list.evaluate((ul) => ul.scrollLeft), 'the press did not move the row').toBe(at.left);
+    await page.mouse.up();
+    await expect(page).toHaveURL(/\?guide=post$/);
+  });
+});
+
+test.describe('Breadcrumb', () => {
+  test('aria-current on the last item only; the separators sit between the items, drawn in both themes and forced colours', async ({ page }) => {
+    await openKit(page);
+    const crumb = section(page, 'breadcrumb').getByRole('navigation', { name: 'Breadcrumb' }).first();
+    const items = crumb.getByRole('listitem');
+    await expect(items).toHaveCount(3);
+    await expect(crumb.locator('[aria-current]')).toHaveCount(1);
+    await expect(items.last().locator('[aria-current="page"]')).toHaveText('Pre-processing');
+    const boxes = [await boxOf(items.nth(0), 'item 1'), await boxOf(items.nth(1), 'item 2'), await boxOf(items.nth(2), 'item 3')];
+    for (let i = 1; i < 3; i += 1) {
+      expect(boxes[i].x, `item ${i + 1} follows item ${i} on the line`).toBeGreaterThanOrEqual(boxes[i - 1].x + boxes[i - 1].width - 1);
+      expect(Math.abs(boxes[i].y - boxes[0].y), 'one line at 1280 px').toBeLessThanOrEqual(2);
+    }
+    const separators = () => items.evaluateAll((lis) => lis.map((li) => {
+      const s = getComputedStyle(li, '::before');
+      const link = li.querySelector('a, span') as Element;
+      return {
+        content: s.content, top: s.borderTopWidth, end: s.borderRightWidth, colour: s.borderTopColor, rotate: s.rotate,
+        // The separator is the item's first box: the item's text starts after it.
+        gap: link.getBoundingClientRect().left - li.getBoundingClientRect().left,
+        ground: getComputedStyle(document.body).backgroundColor,
+      };
+    }));
+    const check = async (mode: string) => {
+      const seps = await separators();
+      expect(seps[0].content, `${mode}: none before the first item`).toBe('none');
+      for (const s of seps.slice(1)) {
+        expect(s.content, mode).toBe('""');
+        expect([s.top, s.end, s.rotate], mode).toEqual(['2px', '2px', '45deg']);
+        expect(s.colour, mode).not.toBe(s.ground);
+        expect(s.gap, `${mode}: the separator takes room before the item's words`).toBeGreaterThan(8);
+      }
+      expect(await crumb.textContent(), `${mode}: no separator character`).toBe('ProjectsMaternal health triagePre-processing');
+    };
+    await inEachTheme(page, (theme) => check(theme));
+    await withForcedColors(page, () => check('forced colours'));
+  });
+
+  test('a long organisation name wraps at 320 px with no sideways scroll', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    await openKit(page);
+    const crumb = section(page, 'breadcrumb').getByRole('navigation', { name: 'Breadcrumb' }).nth(1);
+    const link = crumb.getByRole('link');
+    const box = await boxOf(link, 'the long name');
+    expect(box.height, 'the long name takes more than one line').toBeGreaterThan(30);
+    expect(box.x + box.width).toBeLessThanOrEqual(320);
+    await expectNoHorizontalScroll(page);
+  });
+});
+
+test.describe('PageHeader', () => {
+  test('the page\'s one h1 is the header\'s title: breadcrumb above it, the code after its words, then the lead and the action', async ({ page }) => {
+    await openKit(page);
+    const header = page.locator('main > .ui-page-header');
+    await expect(header).toHaveCount(1);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
+    await expect(header.getByRole('heading', { level: 1, name: 'UI kit', exact: true })).toBeVisible();
+    const crumb = await boxOf(header.getByRole('navigation', { name: 'Breadcrumb' }), 'breadcrumb');
+    const title = await boxOf(header.getByRole('heading', { level: 1 }), 'title');
+    const code = await boxOf(header.locator('.ui-page-header__code'), 'code');
+    const lead = await boxOf(header.locator('.ui-page-header__lead'), 'lead');
+    const action = await boxOf(header.getByRole('link', { name: 'Go to the table' }), 'action');
+    expect(crumb.y + crumb.height).toBeLessThanOrEqual(title.y + 1);
+    expect(code.x, 'the code follows the title on its line').toBeGreaterThanOrEqual(title.x + title.width - 1);
+    expect(code.y).toBeLessThan(title.y + title.height);
+    expect(lead.y).toBeGreaterThanOrEqual(title.y + title.height - 1);
+    expect(action.y).toBeGreaterThanOrEqual(lead.y + lead.height - 1);
+    await expect(header.locator('.ui-page-header__code')).toHaveText('DEV-UI');
+  });
+});
+
+test.describe('ItemPlate', () => {
+  const plates = (page: Page) => section(page, 'item-plate').locator('.ui-plate');
+
+  test('words, then code, then the mark and state; the current plate alone has the thicker border and the pin, in normal and forced colours', async ({ page }) => {
+    await openKit(page);
+    const current = plates(page).nth(1);
+    await expect(section(page, 'item-plate').locator('[aria-current]')).toHaveCount(1);
+    await expect(current.getByRole('link', { name: 'A data protection impact assessment exists', exact: true })).toHaveAttribute('aria-current', 'step');
+    const first = plates(page).first();
+    const [title, code, mark, state] = [
+      await boxOf(first.locator('.ui-plate__title'), 'title'), await boxOf(first.locator('.ui-plate__code'), 'code'),
+      await boxOf(first.locator('.ui-plate__mark'), 'mark'), await boxOf(first.locator('.ui-plate__state'), 'state'),
+    ];
+    expect(code.y).toBeGreaterThanOrEqual(title.y + title.height - 1);
+    expect(mark.y).toBeGreaterThanOrEqual(code.y + code.height - 1);
+    expect(Math.abs(state.y + state.height / 2 - (mark.y + mark.height / 2)), 'the state shares the mark\'s line').toBeLessThanOrEqual(4);
+    expect(state.x).toBeGreaterThan(mark.x + mark.width);
+
+    const check = async (mode: string) => {
+      const widths = await plates(page).evaluateAll((els) => els.map((el) => ({ current: el.classList.contains('ui-plate--current'), width: parseFloat(getComputedStyle(el).borderTopWidth) })));
+      expect(widths.filter((w) => w.current).map((w) => w.width), mode).toEqual([2]);
+      expect(widths.filter((w) => !w.current).every((w) => w.width === 1), `${mode}: ${JSON.stringify(widths)}`).toBe(true);
+      const pin = current.locator('.ui-plate__pin');
+      await expect(pin).toHaveText('You are here');
+      const plateBox = await boxOf(current, 'current plate');
+      const pinBox = await boxOf(pin, 'pin');
+      const stateBox = await boxOf(current.locator('.ui-plate__state'), 'state');
+      expect(pinBox.y, `${mode}: the pin is the plate's last line`).toBeGreaterThanOrEqual(stateBox.y + stateBox.height - 1);
+      expect(pinBox.x).toBeGreaterThanOrEqual(plateBox.x);
+      expect(pinBox.y + pinBox.height).toBeLessThanOrEqual(plateBox.y + plateBox.height);
+      expect((await shapesVisible(page, '[data-kit-section="item-plate"] .ui-mark')).invisible, mode).toEqual([]);
+    };
+    await check('normal colours');
+    await withForcedColors(page, () => check('forced colours'));
+    await expect(plates(page).locator('.ui-plate__pin')).toHaveCount(1);
+  });
+
+  test('the pin is in the action text colour, outside the mark; the mark keeps the mark colour, in both themes', async ({ page }) => {
+    await openKit(page);
+    await inEachTheme(page, async (theme) => {
+      const colours = await section(page, 'item-plate').evaluate((sec) => {
+        const probe = document.createElement('span');
+        probe.style.color = 'var(--color-action-text)';
+        const mark = document.createElement('span');
+        mark.style.color = 'var(--color-mark)';
+        sec.append(probe, mark);
+        const want = { action: getComputedStyle(probe).color, mark: getComputedStyle(mark).color };
+        probe.remove();
+        mark.remove();
+        const pin = sec.querySelector('.ui-plate__pin') as Element;
+        const shapes = Array.from(sec.querySelectorAll('.ui-mark, .ui-mark__shape, .ui-mark__shape *')).map((el) => getComputedStyle(el).color);
+        return { want, pin: getComputedStyle(pin).color, inMark: pin.closest('.ui-mark') !== null, shapes };
+      });
+      expect(colours.pin, theme).toBe(colours.want.action);
+      expect(colours.inMark).toBe(false);
+      expect(colours.shapes.length, theme).toBeGreaterThan(4);
+      expect(new Set(colours.shapes), theme).toEqual(new Set([colours.want.mark]));
+    });
+  });
+
+  test('a linked plate is its link\'s target as a whole: its state line hits the link, a point just outside does not', async ({ page }) => {
+    await openKit(page);
+    const plate = plates(page).first();
+    await plate.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    await scrollSettled(page);
+    const hits = await plate.evaluate((el) => {
+      const link = el.querySelector('.ui-plate__link');
+      const state = (el.querySelector('.ui-plate__state') as Element).getBoundingClientRect();
+      const box = el.getBoundingClientRect();
+      const at = (x: number, y: number) => document.elementFromPoint(x, y);
+      const inside = at(state.left + state.width / 2, state.top + state.height / 2);
+      const below = at(box.left + box.width / 2, box.bottom + 3);
+      return { inside: inside === link, outside: below !== null && below.closest('.ui-plate__link') !== link };
+    });
+    expect(hits).toEqual({ inside: true, outside: true });
+  });
+
+  test('a long name wraps at 320 px inside its plate with no sideways scroll', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    await openKit(page);
+    const long = plates(page).nth(3);
+    const box = await boxOf(long, 'the long plate');
+    expect(box.x + box.width).toBeLessThanOrEqual(320);
+    expect((await boxOf(long.locator('.ui-plate__title'), 'its title')).height).toBeGreaterThan(48);
+    await expectNoHorizontalScroll(page);
+  });
+});
+
+test.describe('Stepper', () => {
+  test('done steps say "(done)" with no tick; the current step says so; each disc keeps its state in forced colours', async ({ page }) => {
+    await openKit(page);
+    const stepper = page.getByRole('list', { name: 'Sample stage documents', exact: true });
+    await expect(stepper.getByRole('link', { name: 'Data card (done)', exact: true })).toBeVisible();
+    await expect(stepper.getByRole('link', { name: 'Model card (done)', exact: true })).toBeVisible();
+    await expect(stepper.locator('[aria-current]')).toHaveCount(1);
+    await expect(stepper.getByRole('link', { name: 'Mitigation plan', exact: true })).toHaveAttribute('aria-current', 'step');
+    await expect(stepper.getByText('(done)').first()).toHaveCSS('position', 'absolute');
+    await expect(section(page, 'stepper').locator('svg, progress, [role="progressbar"], .ui-mark')).toHaveCount(0);
+    const discs = () => stepper.locator('.ui-stepper__disc').evaluateAll((els) => els.map((el) => {
+      const s = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      return { width: s.borderTopWidth, style: s.borderTopStyle, colour: s.borderTopColor, size: [Math.round(r.width), Math.round(r.height)], ground: getComputedStyle(document.body).backgroundColor };
+    }));
+    const check = async (mode: string) => {
+      const d = await discs();
+      expect(d.map((x) => x.width), mode).toEqual(['8px', '8px', '4px', '2px', '2px']);
+      for (const x of d) {
+        expect(x.style, mode).toBe('solid');
+        expect(x.colour, mode).not.toBe(x.ground);
+        expect(x.size, mode).toEqual([16, 16]);
+      }
+    };
+    await inEachTheme(page, (theme) => check(theme));
+    await withForcedColors(page, () => check('forced colours'));
+  });
+
+  test('at 320 px the steps wrap with no sideways scroll, each disc beside its name', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    await openKit(page);
+    const steps = page.getByRole('list', { name: 'Sample stage documents', exact: true }).getByRole('listitem');
+    const tops = new Set(await steps.evaluateAll((lis) => lis.map((li) => Math.round(li.getBoundingClientRect().top))));
+    expect(tops.size).toBeGreaterThan(1);
+    for (const step of await steps.all()) {
+      const disc = await boxOf(step.locator('.ui-stepper__disc'), 'disc');
+      const label = await boxOf(step.locator('.ui-stepper__label'), 'label');
+      expect(label.x).toBeGreaterThan(disc.x + disc.width);
+      expect(Math.abs(label.y + label.height / 2 - (disc.y + disc.height / 2))).toBeLessThanOrEqual(3);
+    }
+    await expectNoHorizontalScroll(page);
+  });
+});
+
+test.describe('focus rings of the structure components', () => {
+  test('a sort button, a tab, a breadcrumb link, a plate link and a step link each draw the 3 px ring by keyboard, unclipped', async ({ page }) => {
+    await openKit(page);
+    const targets: Array<[string, Locator]> = [
+      ['sort button', section(page, 'table').getByRole('button', { name: 'Finding', exact: true })],
+      ['tab', page.getByRole('navigation', { name: 'Sample findings', exact: true }).getByRole('link', { name: 'Open 13', exact: true })],
+      ['breadcrumb link', section(page, 'breadcrumb').getByRole('link', { name: 'Projects', exact: true }).first()],
+      ['plate link', plateLink(page)],
+      ['step link', page.getByRole('link', { name: 'Data card (done)', exact: true })],
+    ];
+    for (const [what, target] of targets) {
+      // Keyboard focus: from the target back one stop and forward again, so :focus-visible applies.
+      await target.focus();
+      await scrollSettled(page);
+      await page.keyboard.press('Shift+Tab');
+      await page.keyboard.press('Tab');
+      await scrollSettled(page);
+      await expect(target, what).toBeFocused();
+      const ring = await target.evaluate((el) => {
+        const s = getComputedStyle(el);
+        const outset = Math.max(0, parseFloat(s.outlineWidth) + parseFloat(s.outlineOffset));
+        const box = el.getBoundingClientRect();
+        const outer = { left: box.left - outset, right: box.right + outset, top: box.top - outset, bottom: box.bottom + outset };
+        // The visible area: the viewport, cut by every ancestor that clips its overflow.
+        let area = { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
+        for (let a = el.parentElement; a !== null; a = a.parentElement) {
+          const cs = getComputedStyle(a);
+          if (cs.overflowX === 'visible' && cs.overflowY === 'visible') continue;
+          const r = a.getBoundingClientRect();
+          area = { left: Math.max(area.left, r.left), top: Math.max(area.top, r.top), right: Math.min(area.right, r.right), bottom: Math.min(area.bottom, r.bottom) };
+        }
+        return {
+          focusVisible: el.matches(':focus-visible'), style: s.outlineStyle, width: s.outlineWidth,
+          inside: outer.left >= area.left - 0.5 && outer.right <= area.right + 0.5 && outer.top >= area.top - 0.5 && outer.bottom <= area.bottom + 0.5,
+        };
+      });
+      expect(ring, what).toEqual({ focusVisible: true, style: 'solid', width: '3px', inside: true });
+    }
   });
 });
