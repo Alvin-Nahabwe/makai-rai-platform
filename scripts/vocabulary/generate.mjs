@@ -31,6 +31,9 @@
 //   { "<concept id>": { "<item text>": { "lint": "phrase", "pattern": "<regex source>", "caseSensitive": false }
 //                                    | { "lint": "review", "why": "<reason>" } } }
 // A key naming an unknown id, or a text the concept does not retire, is an error (exit 2).
+// A pattern never names a code point (no `\u…` escape, no character outside printable ASCII): it is copied into
+// data/vocabulary.json, and __tests__/unit/font-subsets.test.ts reads every file under data/ as page copy. The lint
+// shows a template hole (`${…}`) to a pattern as one format character, so "before a hole" is written `(?=\p{Cf})`.
 //
 // Unknown keys in overrides.json and in a lint rule are errors; a missing optional key is allowed. Every concept is
 // validated after the merge (kebab-case id, non-empty group, concept and term, a definition of at most 20 words or null).
