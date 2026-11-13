@@ -114,11 +114,13 @@
   --color-info: var(--color-ink);
   --color-primary: var(--color-action);
   --color-primary-dark: var(--color-action-hover);
-  --color-primary-light: var(--color-action-text);
+  /* Read only by AboutPage.css, as text on dark grounds, where it was the light brand orange in both themes
+     (the action-text role is dark orange in light). Its readers go in Task 19. */
+  --color-primary-light: #F0A35E;
   --color-navy: var(--color-shell);
   --color-navy-light: var(--color-shell-hover);
-  /* Not the surface role the plan names: white is read as text on navy and on the action fill, and the surface
-     role is dark in the dark theme. White stays white in both themes, as it is today. */
+  /* Not the surface role the plan names: white is #FFFFFF in every theme at the base and is read as text on
+     navy and on the action fill, while the surface role is dark in the dark theme. An alias keeps that. */
   --color-white: var(--color-on-action);
   --color-off-white: var(--color-ground);
   --color-gray-200: var(--color-border-container);

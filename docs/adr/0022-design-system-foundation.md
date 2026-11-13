@@ -57,12 +57,14 @@ on a dark operating system, `light dark` would draw native controls dark while t
 - Every screen takes the new palette on the commit that adds the tokens; screens are restyled one area at a
   time, each removing files from `legacy-tokens.allow.json` until Task 21 deletes the block.
 - Where an old name could not take the plan's mapping without breaking a screen, the alias says why in a comment:
-  `--color-white` stays white in both themes (the plan's surface role is dark in dark mode, and white is read as
-  text on navy and on the action fill), and `--font-family` and `--font-display` still read the Source Sans and
+  `--color-white` stays `#FFFFFF` in every theme (the plan's surface role is dark in dark mode, and white is read as
+  text on navy and on the action fill, as it is at the base), `--color-primary-light` is `#F0A35E` in every theme (its
+  only reader, AboutPage.css, draws it as text on the navy hero; the plan's action-text role is 2.66:1 there in
+  light; its readers go in Task 19), and `--font-family` and `--font-display` still read the Source Sans and
   DM Serif variables the layout defines, because Overpass is not loaded yet and the font tests pin both.
 - A mistyped variable fails `legacy-tokens.test.ts` (a), which lists the six variables defined outside the stylesheet.
 
 ## Residual risks
 
-- Aliased screens may show a pair the new roles never intended (an orange alias on navy). The 35 pairs cover the
+- Aliased screens may show a pair the new roles never intended. The 35 pairs cover the
   roles, not the aliases; each restyle task checks its screen with axe.

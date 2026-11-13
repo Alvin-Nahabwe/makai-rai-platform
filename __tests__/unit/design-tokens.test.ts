@@ -231,6 +231,13 @@ describe('design tokens', () => {
     expect(ROOT['--sidebar-toggle-bar']).toBe('var(--color-shell-ink)');
   });
 
+  it('UX-33 NFR-A11Y-05 (legacy, until Task 19): the About hero eyebrow colour holds 4.5:1 on the navy in every theme', () => {
+    // AboutPage.css reads --color-primary-light as text on the navy hero; orange text on navy was 2.66:1.
+    for (const theme of THEMES) {
+      expect(contrast(theme, 'color-primary-light', 'color-shell'), `eyebrow on the hero, ${theme}`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   it('UX-33 NFR-A11Y-05 (legacy, until Task 11): the phone menu button bars hold 3:1 on the navy in every theme', () => {
     for (const theme of THEMES) {
       expect(contrast(theme, 'sidebar-toggle-bar', 'color-navy'), `menu button bars, ${theme}`).toBeGreaterThanOrEqual(3);

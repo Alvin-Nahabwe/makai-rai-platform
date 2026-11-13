@@ -91,7 +91,8 @@ describe('the v0.6.0 release', () => {
 
   it('NFR-MNT-06: the notes list every ADR this release adds, and the register rows', () => {
     const t = readFileSync('docs/releases/v0.6.0.md', 'utf8');
-    const added = readdirSync('docs/adr').filter((f) => /^\d{4}-.*\.md$/.test(f) && !ADRS_AT_LAST_RELEASE.has(f));
+    const added = readdirSync('docs/adr').filter((f) => /^\d{4}-.*\.md$/.test(f) && !ADRS_AT_LAST_RELEASE.has(f) && Number(f.slice(0, 4)) <= 21);
+    // Later ADRs belong to later releases' notes.
     expect(added.length, 'the release adds ADRs 0011 to 0021').toBeGreaterThanOrEqual(11);
     for (const f of added) expect(t, f).toMatch(new RegExp(`\\]\\(\\.\\./adr/${f.slice(0, 5)}`));
     expect(t).toMatch(/^Register rows: (None|D-\d{3}(, D-\d{3})*)$/m);
