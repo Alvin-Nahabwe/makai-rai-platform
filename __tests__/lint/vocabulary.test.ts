@@ -2,8 +2,9 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  contentExtraFields, contentFields, formatHit, lintHtml, lintText, lintTs, notebookTexts, phraseRules, PROPER_NAMES, ratchetViolations,
-  RULES, RUNNING, scopeContent, scopeCopyModules, scopeEmail, scopeFieldMaps, scopeNotebooks, type ScopeResult,
+  type ContentExclusions, contentStrings, CONTENT_FILES, fieldMapTexts, formatHit, lintHtml, lintText, lintTs, notebookTexts,
+  phraseRules, PROPER_NAMES, ratchetViolations, readBundle, RULES, RUNNING, scopeContent, scopeCopyModules, scopeEmail,
+  scopeFieldMaps, scopeNotebooks, type ScopeResult, type SignedKeys,
   scopeTemplates, VOCABULARY, type Worklist, worklistOf, writeHits,
 } from './helpers/vocabulary-scan';
 
@@ -242,15 +243,72 @@ describe('the vocabulary lint, on fixtures', () => {
     expect(ratchetViolations(worklistOf([]), allowed)).toEqual([]);
   });
 
-  it('content fields carry their sign-off status: question texts and reason codes signed, area names not', () => {
-    const fields = contentFields(RUNNING);
-    expect(fields.find((f) => f.where.endsWith('.questions[0].text'))?.signed).toBe(true);
-    expect(fields.find((f) => f.where.includes('reasonCodes.json:codes[0].label'))?.signed).toBe(true);
-    expect(fields.find((f) => f.where.endsWith('areas[0].name'))?.signed).toBe(false);
-    expect(fields.find((f) => f.where.endsWith('meta.framework'))?.signed).toBe(false);
-    expect(ruleOf('product').length).toBe(3);
+  it('content: a phrase planted in a signed field and in an unsigned field fails, each with its sign-off status', () => {
+    const bundle = {
+      'questionBank.json': { stages: { s: { modules: [{ id: 'm', title: 'T', questions: [{ id: 'q', text: 'Q?', whyAsked: 'Open the RAI Toolkit.' }] }] } } },
+      'assessmentAreas.json': { controls: [{ id: 'C-01', description: 'See the Dashboard.' }] },
+    };
+    const units = contentStrings(bundle, 'fixture', CONTENT_EXCLUSIONS, SIGNED_KEYS);
+    expect(units.map((u) => u.where)).toEqual([
+      'fixture/questionBank.json:stages.s.modules[0].title', 'fixture/questionBank.json:stages.s.modules[0].questions[0].text',
+      'fixture/questionBank.json:stages.s.modules[0].questions[0].whyAsked', 'fixture/assessmentAreas.json:controls[0].description',
+    ]);
+    expect(scopeContent(units).map((h) => `${h.signed ? 'signed' : 'unsigned'} ${formatHit(h)}`)).toEqual([
+      'signed fixture/questionBank.json:stages.s.modules[0].questions[0].whyAsked: "RAI Toolkit" → use "MAK-AI RAI Platform" (concept product)',
+      'unsigned fixture/assessmentAreas.json:controls[0].description: "Dashboard" → use "Home" (concept dashboard)',
+    ]);
+  });
+
+  it('content: a value that is neither text nor a list or object of text is refused, naming its path', () => {
+    expect(() => contentStrings({ 'documentHelp.json': { data_card: 3 } }, 'fixture', CONTENT_EXCLUSIONS, SIGNED_KEYS)).toThrow(/documentHelp\.json:data_card/);
+  });
+
+  it('field maps: a field map without a fields list, or a label or section that is not text, throws', () => {
+    expect(() => fieldMapTexts('f.json', '{}')).toThrow(/f\.json/);
+    expect(() => fieldMapTexts('f.json', JSON.stringify({ fields: [{ label: 'A', section: 1 }] }))).toThrow(/fields\[0\]\.section/);
+    expect(() => fieldMapTexts('f.json', JSON.stringify({ fields: [{ section: 'S' }] }))).toThrow(/fields\[0\]\.label/);
+    expect(fieldMapTexts('f.json', JSON.stringify({ fields: [{ label: 'A', section: 'S' }] })).map((t) => t.where)).toEqual(['f.json:fields[0].label', 'f.json:fields[0].section']);
   });
 });
+
+/**
+ * Scope (2) is every string value in the running bundle's content files, except the keys below: values that are
+ * identifiers, codes, links or enumerated kinds, never text a reader is shown as a sentence. Each excluded key must
+ * exist in the bundle, so an exclusion that has gone stale fails. A new key in a later content version is scanned.
+ */
+const CONTENT_EXCLUSIONS: ContentExclusions = {
+  'questionBank.json': {
+    version: 'the content version number', id: 'module and question ids', type: 'the question type code (likert-5, gate, checklist)',
+    gaps: 'gap ids', questionId: 'the id a condition names', value: 'the answer value a condition tests (yes)',
+    area: 'risk-area ids in optionGapMap', role: 'the mapping role code (primary, supporting, supplementary)',
+  },
+  'reasonCodes.json': { code: 'the reason code id (na_…, ny_…)', status: 'the status code it belongs to (not_applicable, not_yet)' },
+  'assessmentAreas.json': {
+    version: 'the content version number', lastUpdated: 'a date stamp', id: 'stage, area and control ids',
+    color: 'a colour value', icon: 'an icon name', stage: 'the stage key (pre-processing, …)', controls: 'control ids an area links',
+    doi: 'a DOI', url: 'a link', type: 'the control or resource kind code (procedural, framework, tool, …)',
+  },
+  'projectConfig.json': { version: 'a version number', principlesSourceUrl: 'a link' },
+};
+
+/**
+ * The keys a sign-off covers (lib/content/signoffs.ts `signOffPayload`): question text, expectedPractice, whyAsked,
+ * reasonPrompt, evidenceExamples, helpText, example; every documentHelp value; reason codes' label, useWhen and
+ * reasonMustSay (code and status are signed too, and excluded above as codes). Only the message uses it.
+ */
+const SIGNED_KEYS: SignedKeys = {
+  'questionBank.json': ['text', 'expectedPractice', 'whyAsked', 'reasonPrompt', 'evidenceExamples', 'helpText', 'example'],
+  'documentHelp.json': '*',
+  'reasonCodes.json': ['code', 'status', 'label', 'useWhen', 'reasonMustSay'],
+};
+/** Signed keys that no 5.1.0 question carries: allowed to be absent, scanned and signed when they appear. */
+const SIGNED_KEYS_MAY_BE_ABSENT = ['helpText', 'example'];
+/**
+ * The strings scope (2) reads, per running version. Tolerance 0: content changes only by a new, signed content
+ * version, and that change is the moment to record its count here; a field that vanishes or a key newly excluded
+ * then shows as a different number, never as a quiet pass.
+ */
+const CONTENT_STRINGS: Record<string, number> = { 'data/content/5.1.0': 977 };
 
 /** Today's counts (13 Nov 2026), as floors: a scope that reads fewer strings has lost a file or a field. */
 const COPY_STRINGS_FLOOR = 206;
@@ -258,16 +316,38 @@ const FIELD_MAP_STRINGS_FLOOR = 156;
 const EMAIL_STRINGS_FLOOR = 52;
 
 describe('the vocabulary lint, on the repository', () => {
-  it('scope (2): the running content bundle, signed and unsigned fields, holds no retired phrase', () => {
-    const fields = contentFields(RUNNING);
-    expect(fields.length).toBeGreaterThan(500);
-    const hits = scopeContent(fields);
+  it('scope (2): every string of the running content bundle, signed and unsigned, holds no retired phrase', () => {
+    const bundle = readBundle(RUNNING);
+    const units = contentStrings(bundle, RUNNING, CONTENT_EXCLUSIONS, SIGNED_KEYS);
+    console.log(`vocabulary lint: ${RUNNING}: ${units.length} strings (${units.filter((u) => u.signed).length} signed)`);
+    const hits = scopeContent(units);
     expect(hits.map((h) => `${h.signed ? 'signed' : 'unsigned'} ${formatHit(h)} in: ${h.text}`)).toEqual([]);
+    expect(units.length, `strings read in ${RUNNING}`).toBe(CONTENT_STRINGS[RUNNING]);
   });
 
-  it('rendered content fields outside the scope list: report-only, prints the count', () => {
-    const hits = scopeContent(contentExtraFields(RUNNING));
-    console.log([`vocabulary lint: ${hits.length} hit(s) in rendered content fields the scope list does not name`, ...hits.map(formatHit)].join('\n'));
+  it('scope (2): every excluded key exists, and every signed key occurs in the bundle and in lib/content/signoffs.ts', () => {
+    const bundle = readBundle(RUNNING);
+    expect(Object.keys(bundle).sort()).toEqual([...CONTENT_FILES].sort());
+    const keysIn = (v: unknown, out = new Set<string>()): Set<string> => {
+      if (Array.isArray(v)) v.forEach((x) => keysIn(x, out));
+      else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) { out.add(k); keysIn(x, out); }
+      return out;
+    };
+    const missing: string[] = [];
+    for (const [file, keys] of Object.entries(CONTENT_EXCLUSIONS)) {
+      const present = keysIn(bundle[file]);
+      for (const k of Object.keys(keys)) if (!present.has(k)) missing.push(`excluded ${file}:${k}`);
+    }
+    const signoffs = readFileSync(join(__dirname, '../../lib/content/signoffs.ts'), 'utf8');
+    for (const [file, keys] of Object.entries(SIGNED_KEYS)) {
+      if (keys === '*') continue;
+      const present = keysIn(bundle[file]);
+      for (const k of keys) {
+        if (!present.has(k) && !SIGNED_KEYS_MAY_BE_ABSENT.includes(k)) missing.push(`signed ${file}:${k}`);
+        if (!new RegExp(`\\b${k}\\b`).test(signoffs)) missing.push(`signed ${k} not in lib/content/signoffs.ts`);
+      }
+    }
+    expect(missing).toEqual([]);
   });
 
   it('scopes (1), (3) and (4) were scanned: files and strings at or above today\'s floors', () => {

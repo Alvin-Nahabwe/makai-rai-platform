@@ -220,69 +220,58 @@ export function notebookTexts(file: string, json: string): Array<{ where: string
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// The content bundle: the rendered fields, each with its JSON path and whether a sign-off covers it.
-// Signed (lib/content/signoffs.ts `signOffPayload`): question text, expectedPractice, whyAsked, reasonPrompt,
-// evidenceExamples, helpText, example; documentHelp; reasonCodes label, useWhen, reasonMustSay.
+// The content bundle: every string value of its content files, with its JSON path and whether a sign-off covers it.
 
-export type Field = { where: string; text: string; signed: boolean };
+export const CONTENT_FILES = ['questionBank.json', 'reasonCodes.json', 'assessmentAreas.json', 'documentHelp.json', 'projectConfig.json'] as const;
+/** Per file, the keys whose values are not read (key -> reason). */
+export type ContentExclusions = Record<string, Record<string, string>>;
+/** Per file, the keys a sign-off covers, or '*' for every value of the file. */
+export type SignedKeys = Record<string, readonly string[] | '*'>;
+export type ContentUnit = { where: string; text: string; signed: boolean };
 
-export function contentFields(dir: string): Field[] {
-  const j = (f: string) => JSON.parse(read(`${dir}/${f}`));
-  const out: Field[] = [];
-  const add = (file: string, path: string, v: unknown, signed: boolean) => {
-    if (typeof v === 'string') out.push({ where: `${dir}/${file}:${path}`, text: v, signed });
-    else if (Array.isArray(v)) v.forEach((x, i) => add(file, `${path}[${i}]`, x, signed));
-    else if (v !== undefined && v !== null) throw new Error(`${dir}/${file}:${path} is not text`);
-  };
-  const qb = j('questionBank.json');
-  for (const [stage, s] of Object.entries(qb.stages as Record<string, { modules: Array<Record<string, unknown> & { questions: Array<Record<string, unknown>> }> }>)) {
-    s.modules.forEach((m, mi) => {
-      const mp = `stages.${stage}.modules[${mi}]`;
-      add('questionBank.json', `${mp}.title`, m.title, false);
-      add('questionBank.json', `${mp}.description`, m.description, false);
-      m.questions.forEach((q, qi) => {
-        const qp = `${mp}.questions[${qi}]`;
-        for (const k of ['text', 'expectedPractice', 'whyAsked', 'reasonPrompt', 'evidenceExamples', 'helpText', 'example']) add('questionBank.json', `${qp}.${k}`, q[k], true);
-        add('questionBank.json', `${qp}.options`, q.options, false);
-      });
-    });
-  }
-  const rc = j('reasonCodes.json') as { codes: Array<Record<string, unknown>> };
-  rc.codes.forEach((r, i) => { for (const k of ['label', 'useWhen', 'reasonMustSay']) add('reasonCodes.json', `codes[${i}].${k}`, r[k], true); });
-  const dh = j('documentHelp.json') as Record<string, unknown>;
-  for (const [k, v] of Object.entries(dh)) add('documentHelp.json', k, v, true);
-  const aa = j('assessmentAreas.json');
-  add('assessmentAreas.json', 'meta.framework', aa.meta.framework, false);
-  for (const [k, s] of Object.entries(aa.stages as Record<string, Record<string, unknown>>)) {
-    add('assessmentAreas.json', `stages.${k}.label`, s.label, false);
-    add('assessmentAreas.json', `stages.${k}.description`, s.description, false);
-  }
-  (aa.areas as Array<Record<string, unknown>>).forEach((a, i) => {
-    for (const k of ['name', 'description', 'mitigated']) add('assessmentAreas.json', `areas[${i}].${k}`, a[k], false);
-  });
-  (aa.controls as Array<Record<string, unknown> & { resources?: Array<Record<string, unknown>> }>).forEach((c, i) => {
-    for (const k of ['name', 'description']) add('assessmentAreas.json', `controls[${i}].${k}`, c[k], false);
-    (c.resources ?? []).forEach((r, ri) => add('assessmentAreas.json', `controls[${i}].resources[${ri}].title`, r.title, false));
-  });
-  add('projectConfig.json', 'projectName', j('projectConfig.json').projectName, false);
-  return out;
+/** The content files of one bundle directory, parsed (signoffs.json is the sign-off record, not text). */
+export function readBundle(dir: string): Record<string, unknown> {
+  return Object.fromEntries(CONTENT_FILES.map((f) => [f, JSON.parse(read(`${dir}/${f}`))]));
 }
 
 /**
- * Fields the app renders that the scope list of plan 1A Task 8 does not name (area `context`, shown at
- * app/(authenticated)/explore/framework/page.tsx:49; reference `relevance`, components/report/ReferencesList.tsx:62).
- * Counted and reported only; whether they join scope (2) is not this file's decision.
+ * Every string value in `bundle` except the text of an excluded key. An array item takes the key of its array. A value
+ * that is not a string, an array or an object (a number, a boolean, null) throws, naming its path: the content files
+ * hold none today, and a new one should be looked at, not skipped.
  */
-export function contentExtraFields(dir: string): Field[] {
-  const aa = JSON.parse(read(`${dir}/assessmentAreas.json`));
-  const out: Field[] = [];
-  (aa.areas as Array<{ context?: string; references?: Array<{ relevance?: string }> }>).forEach((a, i) => {
-    if (typeof a.context === 'string') out.push({ where: `${dir}/assessmentAreas.json:areas[${i}].context`, text: a.context, signed: false });
-    (a.references ?? []).forEach((r, ri) => {
-      if (typeof r.relevance === 'string') out.push({ where: `${dir}/assessmentAreas.json:areas[${i}].references[${ri}].relevance`, text: r.relevance, signed: false });
-    });
-  });
+export function contentStrings(bundle: Record<string, unknown>, dir: string, excluded: ContentExclusions, signed: SignedKeys): ContentUnit[] {
+  const out: ContentUnit[] = [];
+  for (const [file, root] of Object.entries(bundle)) {
+    const skip = excluded[file] ?? {};
+    const signedKeys = signed[file] ?? [];
+    const walk = (v: unknown, path: string, key: string) => {
+      if (typeof v === 'string') {
+        out.push({ where: `${dir}/${file}:${path}`, text: v, signed: signedKeys === '*' || signedKeys.includes(key) });
+      } else if (Array.isArray(v)) {
+        v.forEach((x, i) => walk(x, `${path}[${i}]`, key));
+      } else if (v !== null && typeof v === 'object') {
+        for (const [k, x] of Object.entries(v)) {
+          // An exclusion covers a key's text only (a string or a list of strings); objects under the same key are read.
+          const isText = typeof x === 'string' || (Array.isArray(x) && x.every((y) => typeof y === 'string'));
+          if (!(Object.hasOwn(skip, k) && isText)) walk(x, path ? `${path}.${k}` : k, k);
+        }
+      } else {
+        throw new Error(`${dir}/${file}:${path} is ${JSON.stringify(v)}, not text, a list or an object`);
+      }
+    };
+    walk(root, '', '');
+  }
   return out;
+}
+
+/** A field map's label and section of every field; anything else in its shape throws, naming the place. */
+export function fieldMapTexts(file: string, json: string): TextUnit[] {
+  const m = JSON.parse(json) as { fields?: unknown };
+  if (!Array.isArray(m.fields)) throw new Error(`${file}: no "fields" list`);
+  return (m.fields as Array<Record<string, unknown>>).flatMap((x, i) => (['label', 'section'] as const).map((k) => {
+    if (typeof x[k] !== 'string') throw new Error(`${file}:fields[${i}].${k} is not text`);
+    return { where: `${file}:fields[${i}].${k}`, text: x[k] as string };
+  }));
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -304,21 +293,15 @@ function scan(files: string[], texts: (f: string) => TextUnit[]): ScopeResult {
 }
 
 export const scopeCopyModules = () => scan(filesMatching(/^lib\/(?:.*\/)?copy\.ts$/), (f) => tsLiterals(f, read(f)));
-export const scopeFieldMaps = () => scan(filesMatching(/^data\/fieldmaps\/[^/]+\.json$/), (f) => {
-  const m = JSON.parse(read(f)) as { fields: Array<{ label?: string; section?: string }> };
-  return m.fields.flatMap((x, i) => [
-    ...(typeof x.label === 'string' ? [{ where: `${f}:fields[${i}].label`, text: x.label }] : []),
-    ...(typeof x.section === 'string' ? [{ where: `${f}:fields[${i}].section`, text: x.section }] : []),
-  ]);
-});
+export const scopeFieldMaps = () => scan(filesMatching(/^data\/fieldmaps\/[^/]+\.json$/), (f) => fieldMapTexts(f, read(f)));
 export const scopeEmail = () => scan(
   ['lib/email/templates.ts', ...filesMatching(/^lib\/email\/templates\/[^/]+\.ts$/), 'ops/host/break-glass-notice.txt'],
   (f) => f.endsWith('.txt') ? read(f).split('\n').map((line, i) => ({ where: `${f}:${i + 1}`, text: line })) : tsLiterals(f, read(f)),
 );
 export const scopeTemplates = () => scan(filesMatching(/^public\/templates\/[^/]+\.html$/), (f) => htmlTexts(f, read(f)));
 export const scopeNotebooks = () => scan(filesMatching(/^(?:public\/notebooks\/[^/]+|notebooks\/.+)\.ipynb$/), (f) => notebookTexts(f, read(f)));
-export const scopeContent = (fields: Field[] = contentFields(RUNNING)) =>
-  fields.flatMap((f) => lintText(f.where, f.text).map((h) => ({ ...h, signed: f.signed })));
+export const scopeContent = (units: ContentUnit[]) =>
+  units.flatMap((u) => lintText(u.where, u.text).map((h) => ({ ...h, signed: u.signed })));
 
 // ---------------------------------------------------------------------------------------------------------------------
 // The worklist ratchet (scopes 1, 3 and 4 until Task 20): hits per file, per "<concept id> :: <item text>".
