@@ -84,6 +84,7 @@ export class VocabularyError extends Error {
 }
 
 const has = (object, key) => object !== null && typeof object === 'object' && Object.hasOwn(object, key);
+const isPlainObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const isText = (value) => typeof value === 'string' && value.trim() !== '';
 const reason = (error) => (error.code === 'ENOENT' ? 'no such file' : error.code === 'EISDIR' ? 'is a directory' : error.message);
 
@@ -194,27 +195,42 @@ export function parseSection2(markdown) {
   const section = lines.slice(start + 1, end);
   const rows = [];
   let group = null;
-  let tableLines = 0;
-  let skipped = 0;
-  section.forEach((line, i) => {
+  const separator = (l) => /^\|[\s|:-]+\|$/.test(l);
+  const cellsOf = (l) => l.slice(1, l.lastIndexOf('|')).split('|').map((c) => c.trim());
+  const isHeader = (cells) => HEADERS.some((h) => h.length === cells.length && h.every((name, k) => name === cells[k]));
+  const spellings = HEADERS.map((h) => h.join(' | ')).join(' / ');
+  // Position inside a table block (a run of consecutive table lines): 0 before its first line, 1 after the header, 2 after the separator.
+  let position = 0;
+  const endBlock = () => {
+    if (position === 1) throw new VocabularyError('a table header is the last line of its table, with no separator line after it');
+    position = 0;
+  };
+  for (const line of section) {
+    if (!line.startsWith('|')) endBlock();
+    if (line === '') continue;
     if (line.startsWith('#')) {
       const heading = /^### (\S.*)$/.exec(line);
       if (!heading) throw new VocabularyError(`section 2 holds a heading that is not "### ...": ${line}`);
       group = heading[1];
-      return;
+      continue;
     }
-    if (!line.startsWith('|')) return;
-    tableLines++;
-    const separator = (l) => /^\|[\s|:-]+\|$/.test(l);
-    if (separator(line)) { skipped++; return; }
-    const cells = line.slice(1, line.lastIndexOf('|')).split('|').map((c) => c.trim());
-    if (i + 1 < section.length && separator(section[i + 1])) {
-      if (!HEADERS.some((h) => h.length === cells.length && h.every((name, k) => name === cells[k]))) {
-        throw new VocabularyError(`a table header is not one of the two known spellings of the five column names (${HEADERS.map((h) => h.join(' | ')).join(' / ')}): ${line}`);
-      }
-      skipped++;
-      return;
+    if (!line.startsWith('|')) {
+      if (line.includes('|')) throw new VocabularyError(`section 2 holds a prose line with a "|" that is not a table line (a row needs its leading "|", and a table is not a quotation): ${line}`);
+      continue;
     }
+    const cells = cellsOf(line);
+    if (position === 0) {
+      if (!isHeader(cells)) throw new VocabularyError(`a table must start with a header, one of the two known spellings of the five column names (${spellings}): ${line}`);
+      position = 1;
+      continue;
+    }
+    if (position === 1) {
+      if (!separator(line)) throw new VocabularyError(`a table header must be followed by a separator line: ${line}`);
+      position = 2;
+      continue;
+    }
+    if (separator(line)) throw new VocabularyError(`a separator line inside a table, after its header: ${line}`);
+    if (isHeader(cells)) throw new VocabularyError(`a second header inside a table: ${line}`);
     if (cells.length !== 5) throw new VocabularyError(`row "${cells[0]}" has ${cells.length} cells, not 5`);
     if (group === null) throw new VocabularyError(`row "${cells[0]}" comes before any group heading`);
     if (cells[0] === '') throw new VocabularyError(`a row has an empty Concept cell: ${line}`);
@@ -224,10 +240,8 @@ export function parseSection2(markdown) {
     if (cells[2] === '') throw new VocabularyError(`concept "${id}": the Ruled-term cell is empty`);
     if (cells[3] === '') throw new VocabularyError(`concept "${id}": the Definition cell is empty`);
     rows.push({ id, group, concept, ownerDecision, ruled: cells[2], definition: cells[3], retire: cells[4] });
-  });
-  if (rows.length !== tableLines - skipped) {
-    throw new VocabularyError(`section 2 has ${tableLines - skipped} data rows but ${rows.length} were parsed`);
   }
+  endBlock();
   const seen = new Set();
   for (const r of rows) {
     if (seen.has(r.id)) throw new VocabularyError(`concept id "${r.id}" is produced by two rows`);
@@ -283,8 +297,9 @@ function checkRule(rule, where) {
 function checkOverrides(overrides) {
   onlyKeys(overrides, OVERRIDE_KEYS, 'overrides.json');
   const map = (value, where) => {
-    onlyKeys(value ?? {}, Object.keys(value ?? {}), where);
-    return value ?? {};
+    if (value === undefined) return {};
+    onlyKeys(value, Object.keys(value ?? {}), where);
+    return value;
   };
   if (overrides.terms !== undefined) {
     onlyKeys(overrides.terms, TERM_KINDS, 'overrides.terms');
@@ -434,6 +449,10 @@ export function generate(markdown, overrides, rules, options) {
   }
   const byId = new Map(concepts.map((c) => [c.id, c]));
 
+  if (!isPlainObject(rules)) throw new VocabularyError('lint-rules.json must be an object keyed by concept id');
+  for (const [id, byText] of Object.entries(rules)) {
+    if (!isPlainObject(byText)) throw new VocabularyError(`lint-rules.json: concept "${id}" must be an object keyed by retired item text`);
+  }
   for (const [id, byText] of Object.entries(rules)) {
     const concept = byId.get(id);
     if (!concept) throw new VocabularyError(`lint-rules.json names unknown id "${id}"`);
@@ -493,7 +512,7 @@ function parseArgs(args) {
     if (arg === '--allow-missing-rules') allowMissingRules = true;
     else if (arg === '--out-dir') {
       const value = args[i + 1];
-      if (value === undefined || value.startsWith('--')) throw new VocabularyError('--out-dir needs a directory after it');
+      if (value === undefined || value === '' || value.startsWith('--')) throw new VocabularyError('--out-dir needs a directory after it');
       outDir = resolve(value);
       i++;
     } else if (arg.startsWith('--')) throw new VocabularyError(`unknown argument ${arg}`);
@@ -522,7 +541,7 @@ function main() {
   }
 }
 
-if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
+if (process.argv[1] && existsSync(process.argv[1]) && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   try {
     main();
   } catch (error) {

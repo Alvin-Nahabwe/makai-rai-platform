@@ -531,3 +531,103 @@ describe('the command line is strict (fix C) and reports errors as exit 2 (fix F
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });
+
+describe('the table structure is checked, not counted (fix round 2, item 1)', () => {
+  const HEADER = '| Concept | Forms in use (one example each) | Ruled term | Definition (shown at first use) | Retire |';
+  const SHORT_HEADER = '| Concept | Forms in use | Ruled term | Definition | Retire |';
+  const SEP = '|---|---|---|---|---|';
+  const md = (body: string[]) => ['## 2. The vocabulary', '', '### G', '', ...body, '', '### Terms the owner must decide', ''].join('\n');
+  const run = (body: string[]) => parseSection2(md(body));
+
+  it('a row written without its leading pipe exits 2 and the message quotes the line', () => {
+    fails(() => run([HEADER, SEP, ROW('A', 'a'), 'B | f | b | d | n/a |']), 'B | f | b | d | n/a |', 'prose');
+  });
+
+  it('a row inside a blockquote exits 2 and the message quotes the line', () => {
+    fails(() => run([HEADER, SEP, `> ${ROW('B', 'b')}`]), `> ${ROW('B', 'b')}`, 'prose');
+  });
+
+  it('a header with no separator after it exits 2, in the first table and in a later one', () => {
+    fails(() => run([HEADER, ROW('A', 'a')]), 'separator');
+    fails(() => run([HEADER, SEP, ROW('A', 'a'), '', SHORT_HEADER, ROW('B', 'b')]), 'separator');
+    fails(() => run([HEADER]), 'separator');
+  });
+
+  it('a dashes-only line in the middle of a table exits 2', () => {
+    fails(() => run([HEADER, SEP, ROW('A', 'a'), '|---|---|---|---|---|', ROW('B', 'b')]), 'separator');
+  });
+
+  it('a table block that starts with a data row exits 2', () => {
+    fails(() => run([ROW('A', 'a')]), 'header', ROW('A', 'a'));
+    fails(() => run([HEADER, SEP, ROW('A', 'a'), '', ROW('B', 'b')]), 'header', ROW('B', 'b'));
+  });
+
+  it('a second header inside a block exits 2', () => {
+    fails(() => run([HEADER, SEP, ROW('A', 'a'), SHORT_HEADER, ROW('B', 'b')]), 'second header');
+  });
+
+  it('prose without a pipe, and several well-formed blocks, still parse', () => {
+    const rows = run([HEADER, SEP, ROW('A', 'a'), '', 'A note with no bar.', '', SHORT_HEADER, SEP, ROW('B', 'b')]);
+    expect(rows.map((r: { id: string }) => r.id)).toEqual(['a', 'b']);
+  });
+});
+
+describe('lint-rules.json of the wrong shape exits 2 (fix round 2, item 2)', () => {
+  const gen = (rules: unknown) => generate(FIXTURE_MD([ROW('X', 'x', 'd', 'foo')]), NO_OVERRIDES, rules, { allowMissingRules: true, properNames: [] });
+
+  it('null and an array are not a rules file', () => {
+    fails(() => gen(null), 'lint-rules.json', 'object');
+    fails(() => gen([]), 'lint-rules.json', 'object');
+    fails(() => gen('a'), 'lint-rules.json', 'object');
+  });
+
+  it('a concept whose value is not an object keyed by item text names the concept id', () => {
+    fails(() => gen({ x: null }), 'lint-rules.json', '"x"');
+    fails(() => gen({ x: 'a' }), 'lint-rules.json', '"x"');
+    fails(() => gen({ x: [] }), 'lint-rules.json', '"x"');
+  });
+});
+
+describe('an override map that is present must be an object (fix round 2, item 3)', () => {
+  const gen = (overrides: unknown) => generate(FIXTURE_MD([ROW('X', 'x')]), overrides, {}, { allowMissingRules: true, properNames: [] });
+
+  it('definitions: null exits 2 naming the key', () => {
+    fails(() => gen({ ...NO_OVERRIDES, definitions: null }), 'definitions');
+  });
+
+  it('every other map key given as null exits 2, and so does a list key', () => {
+    fails(() => gen({ ...NO_OVERRIDES, terms: { ...NO_OVERRIDES.terms, spec: null } }), 'terms.spec');
+    fails(() => gen({ ...NO_OVERRIDES, retired: { add: null } }), 'retired.add');
+    fails(() => gen({ ...NO_OVERRIDES, historical: null }), 'historical');
+    fails(() => gen({ ...NO_OVERRIDES, defineOnFirstUse: null }), 'defineOnFirstUse');
+    fails(() => gen({ ...NO_OVERRIDES, additions: null }), 'additions');
+  });
+
+  it('an absent key stays allowed', () => {
+    expect(gen({}).concepts).toHaveLength(1);
+  });
+});
+
+describe('the command line, items 4 and 5 (fix round 2)', () => {
+  const script = join(process.cwd(), 'scripts/vocabulary/generate.mjs');
+
+  it('--out-dir with an empty value exits 2 like a missing value and writes nothing', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'vocab-'));
+    try {
+      writeFileSync(join(dir, 'c.md'), FIXTURE_MD([ROW('Dash', 'dash')]));
+      const r = spawnSync(process.execPath, [script, join(dir, 'c.md'), '--out-dir', ''], { encoding: 'utf8', cwd: dir });
+      expect(r.status).toBe(2);
+      expect(r.stderr).toContain('--out-dir');
+      expect(readdirSync(dir)).toEqual(['c.md']);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it('importing the module when argv[1] names no file exits 0 and writes nothing', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'vocab-'));
+    try {
+      const r = spawnSync(process.execPath, ['-e', `import(${JSON.stringify(script)})`, 'x'], { encoding: 'utf8', cwd: dir });
+      expect(r.status, r.stderr).toBe(0);
+      expect(readdirSync(dir)).toEqual([]);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+});
