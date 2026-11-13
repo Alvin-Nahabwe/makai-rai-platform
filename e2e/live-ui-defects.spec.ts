@@ -34,15 +34,17 @@ async function contrastOf(page: Page, fgSelector: string, bgSelector: string, fg
   }, [fgSelector, bgSelector, fgProperty] as const);
 }
 
-test('U12 (a): at 390 wide in the dark theme, the menu button bars stand out from the button by at least 3:1', async ({ page }) => {
+test('U12 (a): at 390 wide in the dark theme, the Menu button text stands out from the button by at least 4.5:1', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ colorScheme: 'dark' });
   await actAsSeat(page, 'owner');
   await page.goto(`/orgs/${fixtureOrgSlug()}/dashboard`);
-  const toggle = page.locator('.sidebar-toggle');
-  await expect(toggle).toBeVisible();
-  expect(await page.locator('.sidebar-toggle__bar').count()).toBeGreaterThan(0);
-  expect(await contrastOf(page, '.sidebar-toggle__bar', '.sidebar-toggle', 'backgroundColor')).toBeGreaterThanOrEqual(3);
+  const button = page.locator('.shell-topbar__menu-button');
+  await expect(button).toBeVisible();
+  await expect(button).toHaveText('Menu');
+  // The page is dark: the ground is the dark one, so the button is measured where the dark tokens apply.
+  expect(await page.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches)).toBe(true);
+  expect(await contrastOf(page, '.shell-topbar__menu-button', '.shell-topbar__menu-button', 'color')).toBeGreaterThanOrEqual(4.5);
 });
 
 test('U12 (b): the organisation chooser shows its links on the card, at 4.5:1 or better, in the light theme', async ({ browser }) => {

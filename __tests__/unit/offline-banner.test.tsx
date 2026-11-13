@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { readFileSync } from 'node:fs';
 import OfflineBanner, { OfflineBannerView, OFFLINE_MESSAGE, readOffline, subscribeConnection } from '@/components/layout/OfflineBanner';
 
 /**
@@ -37,12 +36,6 @@ describe('OfflineBanner', () => {
     expect(offline).toContain(`<div class="ui-banner__body">${M40}</div>`);
     expect(offline.match(/role="status"/g)).toHaveLength(1);
     expect(offline.match(/role=|aria-live/g)).toHaveLength(1);
-  });
-
-  it('M-40 UX-35: on phones the banner text starts clear of the fixed menu button', () => {
-    const css = readFileSync('app/globals.css', 'utf8');
-    const narrow = css.split('@media (max-width: 768px)').slice(1).join('\n');
-    expect(narrow).toMatch(/\.offline-banner-region \.ui-banner\s*\{[^}]*padding-left:\s*calc\(var\(--space-4\) \+ 48px\)/);
   });
 
   it('M-40: the server render shows nothing, because the browser flag is read after mount', () => {

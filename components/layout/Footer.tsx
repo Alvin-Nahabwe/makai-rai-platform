@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { readCreditLine } from '@/lib/credit';
+import './shell.css';
 
 /**
  * The footer of every page (SRS 7.1.1 "Same place on every page"; UX-03; FR-PUB-02): the GIZ credit line, then the licence,
@@ -10,9 +11,9 @@ import { readCreditLine } from '@/lib/credit';
 export default function Footer() {
   const credit = readCreditLine();
   return (
-    <footer className="site-footer">
-      <p className="site-footer__credit">{credit.text}</p>
-      <nav aria-label="Footer" className="site-footer__nav">
+    <footer className="shell-footer">
+      <p className="shell-footer__credit">{credit.text}</p>
+      <nav aria-label="Footer" className="shell-footer__nav">
         {credit.href.startsWith('https://') ? (
           <a href={credit.href} rel="noopener noreferrer">
             {credit.licence}

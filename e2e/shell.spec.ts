@@ -127,7 +127,7 @@ test.describe('skip link, footer and landmarks (SRS 7.1.1)', () => {
 
   test('UX-03: the signed-out pages have a header with the product name, About and Sign in', async ({ page }) => {
     await page.goto('/about');
-    const header = page.locator('body > header.public-header');
+    const header = page.locator('body > header.shell-public-header');
     await expect(header.getByRole('link')).toHaveText(['MAK-AI RAI Platform', 'About', 'Sign in']);
   });
 
@@ -170,24 +170,24 @@ function seatWithRole(role: string): { slug: string; seat: FixtureManifestUser }
 }
 
 test.describe('role under the name, offline banner on phones, no emoji', () => {
-  test("UX-02: a viewer seat sees 'viewer' under the name on its organisation's pages and nothing on another organisation's", async ({ browser }) => {
+  test("UX-02: a viewer seat sees 'Viewer' under the name on its organisation's pages and nothing on another organisation's", async ({ browser }) => {
     const { slug, seat } = seatWithRole('viewer');
     const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf-8')) as FixtureManifest;
     const context = await browser.newContext({ storageState: seat.storageStatePath });
     try {
       const page = await context.newPage();
       await page.goto(`/orgs/${slug}/dashboard`);
-      await expect(page.locator('.sidebar-user-role')).toHaveText('viewer');
+      await expect(page.locator('.shell-rail__role')).toHaveText('Viewer');
       const response = await page.goto(`/orgs/${manifest.orgs[1].slug}/dashboard`);
       expect(response!.status()).toBe(404);
-      await expect(page.locator('.sidebar'), 'the sidebar is there, so the missing label is not a missing sidebar').toBeVisible();
-      await expect(page.locator('.sidebar-user-role')).toHaveCount(0);
+      await expect(page.locator('.shell-rail__name'), 'the rail and the name are there, so the missing label is not a missing rail').toBeVisible();
+      await expect(page.locator('.shell-rail__role')).toHaveCount(0);
     } finally {
       await context.close();
     }
   });
 
-  test('M-40 UX-35: at 360 pixels the fixed menu button does not cover the first words of the offline banner', async ({ browser }) => {
+  test('M-40 UX-35: at 360 pixels nothing covers the first words of the offline banner', async ({ browser }) => {
     const { slug, seat } = seatWithRole('viewer');
     const context = await browser.newContext({ storageState: seat.storageStatePath, viewport: { width: 360, height: 740 } });
     try {
@@ -219,15 +219,21 @@ test.describe('role under the name, offline banner on phones, no emoji', () => {
           const page = await context.newPage();
           await page.goto(url);
           await page.waitForLoadState('networkidle');
-          await expect(page.locator('.theme-toggle svg').first(), 'the theme button is hydrated (its icon renders only after mount)').toBeAttached();
+          // Hydrated: React has attached to the theme switch (the signal e2e/csp.spec.ts uses). The switch renders the same
+          // markup on the server and the client, so its icon is no sign of hydration any more.
+          await page.waitForFunction(() => {
+            const button = document.querySelector('.shell-theme');
+            return button !== null && Object.keys(button).some((k) => k.startsWith('__reactFiber$'));
+          });
           const found = await page.evaluate(() => {
-            // The shell's own parts: the skip link, header or sidebar, banner region and footer (a page's body is its owner's).
-            const shell = Array.from(document.querySelectorAll('.skip-link, .public-header, .sidebar, .offline-banner-region, .site-footer'));
+            // The shell's own parts: the skip link, the header or the top bar and rail, banner region and footer (a page's body is its owner's).
+            const shell = Array.from(document.querySelectorAll('.skip-link, .shell-public-header, .shell-topbar, .shell-rail, .offline-banner-region, .shell-footer'));
             const text = shell.map((e) => `${(e as HTMLElement).innerText} ${Array.from(e.querySelectorAll('[aria-label],[title]')).map((x) => `${x.getAttribute('aria-label')} ${x.getAttribute('title')}`).join(' ')}`).join(' ');
             return text.match(/\p{Extended_Pictographic}/gu) ?? [];
           });
           expect(found, `${url} ${colorScheme}`).toEqual([]);
-          expect(await page.locator('.site-footer').count(), `${url}: the shell parts were read`).toBe(1);
+          expect(await page.locator('.shell-footer').count(), `${url}: the shell parts were read`).toBe(1);
+          expect(await page.locator(signedIn ? '.shell-rail' : '.shell-public-header').count(), `${url}: the shell parts were read`).toBe(1);
         } finally {
           await context.close();
         }

@@ -29,8 +29,8 @@ export async function tabTo(page: Page, target: Locator): Promise<void> {
   throw new Error('tabTo: the target never took focus');
 }
 
-/** .app-main is a scroll container (overflow-y auto makes overflow-x auto too), so overflow inside it never reaches the root that expectNoHorizontalScroll reads (C4 m4). */
+/** From 1024 px .shell__main is a scroll container (overflow-y auto makes overflow-x auto too), so overflow inside it never reaches the root that expectNoHorizontalScroll reads (C4 m4); below 1024 px the document scrolls and both checks read the same overflow. */
 export async function expectMainDoesNotScroll(page: Page): Promise<void> {
-  const m = await page.evaluate(() => { const el = document.querySelector('.app-main') as HTMLElement; return { scroll: el.scrollWidth, client: el.clientWidth }; });
-  expect(m.scroll, '.app-main scrollWidth').toBeLessThanOrEqual(m.client);
+  const m = await page.evaluate(() => { const el = document.querySelector('.shell__main') as HTMLElement; return { scroll: el.scrollWidth, client: el.clientWidth }; });
+  expect(m.scroll, '.shell__main scrollWidth').toBeLessThanOrEqual(m.client);
 }

@@ -24,6 +24,7 @@ const EXTERNAL: Record<string, [string, RegExp]> = {
   '--about-hero-text': ['app/(public)/about/AboutPage.css', /--about-hero-text\s*:/],
   '--stage-color': ['app/(public)/about/page.tsx', /'--stage-color'\s*:/],
   '--decision-save-bar-h': ['components/decision/DecisionForm.tsx', /setProperty\('--decision-save-bar-h'/],
+  '--shell-panel-top': ['components/layout/TopBar.tsx', /setProperty\('--shell-panel-top'/],
 };
 
 const globals = readFileSync('app/globals.css', 'utf8');
