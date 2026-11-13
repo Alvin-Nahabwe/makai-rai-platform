@@ -613,6 +613,19 @@ describe('lint-rules.json of the wrong shape exits 2 (fix round 2, item 2)', () 
   });
 });
 
+describe('a phrase pattern names no code point and compiles with the u flag', () => {
+  const gen = (pattern: string) => generate(FIXTURE_MD([ROW('X', 'x', 'd', 'foo')]), NO_OVERRIDES, { x: { foo: { lint: 'phrase', pattern, caseSensitive: false } } }, { allowMissingRules: true, properNames: [] });
+
+  it('a \\u or \\x escape, or a character outside printable ASCII, exits 2 naming the concept and the item', () => {
+    for (const pattern of ['(?=\\u2060)', '\\u{2060}', '\\x41', '(?=⁠)', 'café', 'a\tb']) fails(() => gen(pattern), 'x: "foo"', 'code point');
+    expect(gen('(?=\\p{Cf})foo').concepts[0].retired[0]).toMatchObject({ pattern: '(?=\\p{Cf})foo' });
+  });
+
+  it('a pattern that does not compile with the u flag exits 2 naming the concept and the item', () => {
+    for (const pattern of ['\\-foo', '(foo', '\\p{Nope}']) fails(() => gen(pattern), 'x: "foo"', 'u flag');
+  });
+});
+
 describe('an override map that is present must be an object (fix round 2, item 3)', () => {
   const gen = (overrides: unknown) => generate(FIXTURE_MD([ROW('X', 'x')]), overrides, {}, { allowMissingRules: true, properNames: [] });
 
