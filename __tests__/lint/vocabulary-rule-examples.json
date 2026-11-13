@@ -345,7 +345,11 @@
         "v3",
         "Saved as v3",
         "Q-PP-03 v3",
-        "v\u2060"
+        "v\u2060",
+        "Saved as v3.",
+        "Saved as v3. Decided by: Amina.",
+        "Q-PP-03 \u00b7 v3.",
+        "(v3)."
       ],
       "passes": [
         "/api/v1/orgs",
@@ -484,7 +488,9 @@
         "look at again"
       ],
       "passes": [
-        "Look again at your sampling plan."
+        "Look again at your sampling plan.",
+        "It is worth asking an expert to look at it again.",
+        "We ask reviewers to look again at the labels."
       ]
     },
     "looked at again": {
@@ -642,12 +648,19 @@
       "hits": [
         "v1",
         "Terms of service, v1",
-        "v\u2060"
+        "v\u2060",
+        "Saved as v3.",
+        "Saved as v3. Decided by: Amina.",
+        "Q-PP-03 \u00b7 v3.",
+        "(v3)."
       ],
       "passes": [
         "/api/v1/orgs",
         "v1.2.3",
-        "version 1"
+        "version 1",
+        "x-v2",
+        "a/v2",
+        "TLS v1.2"
       ]
     }
   },
@@ -743,10 +756,12 @@
     "\"Matches the record\" without saying what was checked": {
       "hits": [
         "Matches the record",
-        "Matches the record."
+        "Matches the record.",
+        "Matches the record. \u2060 erased on 2 Nov 2026."
       ],
       "passes": [
-        "The fingerprint matches the record sealed on 2 Nov 2026."
+        "The fingerprint matches the record sealed on 2 Nov 2026.",
+        "Matches the record sealed on 2 Nov"
       ]
     }
   },
@@ -755,7 +770,8 @@
       "hits": [
         "Email me when a mitigation I own is due",
         "the mitigation owner",
-        "the mitigation's owner"
+        "the mitigation's owner",
+        "You get this email because you own a mitigation that is due."
       ],
       "passes": [
         "Only an Owner can make other members owners",

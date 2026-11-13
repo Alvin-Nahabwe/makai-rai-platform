@@ -22,7 +22,7 @@
     "personal-data-question-scope-question :: scope answer": 1
   },
   "lib/email/templates/mitigationDue.ts": {
-    "assigned-to :: \"owner\" and \"own\" for mitigations": 1
+    "assigned-to :: \"owner\" and \"own\" for mitigations": 2
   },
   "lib/evidence/copy.ts": {
     "unsaved-changes-draft :: on this device": 2

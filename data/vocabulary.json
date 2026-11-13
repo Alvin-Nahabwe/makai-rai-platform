@@ -880,7 +880,7 @@
         {
           "text": "v3",
           "lint": "phrase",
-          "pattern": "(?<![\\w./-])v(?:\\d+(?![\\w./])|(?=\\u2060))",
+          "pattern": "(?<![\\w./-])v(?:\\d+(?![\\w/]|\\.\\w)|(?=\\u2060))",
           "caseSensitive": true
         },
         {
@@ -1143,7 +1143,7 @@
         {
           "text": "\"owner\" and \"own\" for mitigations",
           "lint": "phrase",
-          "pattern": "\\bmitigations?\\s+(?:I|you|we|they)\\s+own\\b|\\bmitigation(?:'s)?\\s+owners?\\b",
+          "pattern": "\\bmitigations?\\s+(?:I|you|we|they)\\s+own\\b|\\bmitigation(?:'s)?\\s+owners?\\b|\\bown(?:s|ed)?\\s+(?:a|the|this)\\s+mitigation\\b",
           "caseSensitive": false
         }
       ]
@@ -1225,7 +1225,7 @@
         {
           "text": "look at again",
           "lint": "phrase",
-          "pattern": "\\blook(?:s|ing)?\\s+at\\s+again\\b|\\blook(?:s|ing)?\\s+(?:at\\s+(?:(?:it|this|them)\\s+)?)?again\\s+on\\b|\\bto\\s+look\\s+(?:at\\s+(?:(?:it|this|them)\\s+)?)?again\\b",
+          "pattern": "\\blook(?:s|ing)?\\s+at\\s+again\\b|\\blook(?:s|ing)?\\s+(?:at\\s+(?:(?:it|this|them)\\s+)?)?again\\s+on\\b|\\bdate\\s+to\\s+look\\s+(?:at\\s+it\\s+)?again\\b",
           "caseSensitive": false
         },
         {
@@ -1339,7 +1339,7 @@
         {
           "text": "\"Matches the record\" without saying what was checked",
           "lint": "phrase",
-          "pattern": "^\\s*Matches the record\\.?\\s*$",
+          "pattern": "^\\s*Matches the record(?:\\.|\\s*$)",
           "caseSensitive": true
         }
       ]
@@ -1670,7 +1670,7 @@
         {
           "text": "v1",
           "lint": "phrase",
-          "pattern": "(?<![\\w./-])v(?:\\d+(?![\\w./])|(?=\\u2060))",
+          "pattern": "(?<![\\w./-])v(?:\\d+(?![\\w/]|\\.\\w)|(?=\\u2060))",
           "caseSensitive": true
         }
       ]
