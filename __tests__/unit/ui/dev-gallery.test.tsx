@@ -23,6 +23,12 @@ describe('devGalleryShown', () => {
     expect(devGalleryShown({ NODE_ENV: 'development' })).toBe(true);
     expect(devGalleryShown({ NODE_ENV: 'test' })).toBe(true);
   });
+  it('an unset or unknown NODE_ENV is refused without the seam, and shown with it', () => {
+    for (const value of [undefined, '', 'staging', 'Production', 'prod']) {
+      expect(devGalleryShown({ NODE_ENV: value }), JSON.stringify(value)).toBe(false);
+      expect(devGalleryShown({ NODE_ENV: value, MAKRAI_TEST_SEAMS: '1' }), JSON.stringify(value)).toBe(true);
+    }
+  });
 });
 
 /**
