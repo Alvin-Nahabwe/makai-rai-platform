@@ -63,7 +63,6 @@
   background-color: transparent;
   color: inherit;
   font: inherit;
-  font-weight: inherit;
   text-align: inherit;
   cursor: pointer;
   transition: background-color var(--duration-state) var(--easing-state);
