@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import type { OrgRole } from '@prisma/client';
 import { failOnDialog } from './helpers/dialogs';
-import { expectNeutralStatusLabels } from './helpers/noScore';
+import { expectStatusMarksInk } from './helpers/noScore';
 import { actAsSeat, draftKeys, draftValues, fillValid, newProject, openQuestion, stagePath } from './helpers/session';
 
 /**
@@ -33,8 +33,8 @@ test('FR-RM-04 UX-06 UX-07 (S-11, R12-16): each stage page prints its own questi
     await openStage(page, 'assessor', stage, baseURL!, projectId);
     expect(await page.locator('main .status-label').count()).toBe(sentinels[stage][0]);   // one label per row, so the helper below does not pass over zero labels
     expect(await page.locator('main').innerText()).toMatch(new RegExp(`\\b${sentinels[stage][0]}\\b`));
-    await expectNeutralStatusLabels(page);
-    // RM's expectNoCrossStageTotal needs all three stages' sentinels on the page (e2e/helpers/noScore.ts:162-168), which
+    await expectStatusMarksInk(page);
+    // RM's expectNoCrossStageTotal needs all three stages' sentinels on the page (e2e/helpers/noScore.ts:172-181), which
     // fits S-10 and not a one-stage page; its other two properties are asserted here directly (UX-07).
     const text = (await page.locator('main').innerText()).replace(/\s+/g, ' ');
     const sum = sentinels['pre-processing'][0] + sentinels['in-processing'][0] + sentinels['post-processing'][0];

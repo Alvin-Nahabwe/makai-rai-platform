@@ -3,8 +3,10 @@ import {
   SCORE_WORDS,
   expectNoScoreShapes,
   expectCountsAsWholeNumbersPerStage,
-  expectNeutralStatusLabels,
+  expectStatusMarksInk,
   expectNoCrossStageTotal,
+  isGreenColour,
+  tickShapeOf,
 } from './helpers/noScore';
 
 /**
@@ -19,15 +21,27 @@ import {
 // 37 + 23 + 11 = 71, which therefore must appear nowhere on a page.
 const SENTINELS = { 'pre-processing': [37], 'in-processing': [23], 'post-processing': [11] };
 
-// Tokens a snippet needs for the colour checks; a real page has them in app/globals.css.
+// Tokens and classes a snippet needs for the colour checks; a real page has them in the kit's stylesheets. Marks and
+// graphics set their own fill and stroke in the snippets, as the kit's markup does.
 const TOKENS =
-  '<style>:root{--text-body:rgb(31, 41, 55);--text-muted:rgb(107, 114, 128)}' +
-  '.body{color:var(--text-body)}.muted{color:var(--text-muted)}.green{color:rgb(22, 163, 74)}</style>';
+  '<style>:root{--color-mark:rgb(26, 31, 54);--color-ink:rgb(27, 27, 31);--color-ink-muted:rgb(74, 80, 96);--color-saved:rgb(31, 122, 77);' +
+  '--color-tint:rgb(230, 233, 240);--color-action-text:rgb(154, 77, 16)}' +
+  '.ui-mark,[data-mark-kind]{color:var(--color-mark)}.ui-mark__words{color:var(--color-ink)}' +
+  '.ui-route-row__point{color:inherit}.ui-saved__shape{color:var(--color-saved)}' +
+  '.ink{color:var(--color-ink)}.muted{color:var(--color-ink-muted)}.green{color:rgb(22, 163, 74)}.red{color:rgb(180, 35, 24)}</style>';
 
 const THREE_STAGES = (a: string, b: string, c: string) =>
   `<main><section><h2>Pre-processing</h2><p>${a}</p></section>` +
   `<section><h2>In-processing</h2><p>${b}</p></section>` +
   `<section><h2>Post-processing</h2><p>${c}</p></section></main>`;
+
+// A route row's proportional fill, in the forms it can take: any inline value in per cent, or a width attribute in per cent.
+const FILLS = [
+  '<div style="width: calc(40%)"></div>',
+  '<div style="--fill: 40%"></div>',
+  '<div style="flex-basis: 40%"></div>',
+  '<svg aria-hidden="true"><rect width="40%" height="4"/></svg>',
+];
 
 test('FR-RM-01 (helper): score words, progress bars, meters and drawn charts fail; allowed sentences and decorative icons pass', async ({ page }) => {
   // SRS line 451's regex, with its `score:` alternative outside the word-boundary group so that
@@ -52,6 +66,14 @@ test('FR-RM-01 (helper): score words, progress bars, meters and drawn charts fai
     ['<main><svg role="img" aria-label="trend"><path d="M0 0"/></svg></main>', /<svg>/],
     ['<main>Level 2 band</main>', /score word/],
     ['<main>12 questions (40%)</main>', /percentage "40%"/],
+    ['<main>12 questions (45 %)</main>', /percentage "45 %"/],
+    ['<main><div class="ui-route-row"><div style="width: 40%"></div></div></main>', /proportional fill/],
+    ['<main><div class="ui-route-row"><div style="inline-size: 40%"></div></div></main>', /proportional fill/],
+    ['<main><span data-upload-progress><meter value="1" max="3"></meter></span></main>', /<meter>/],
+    ['<main><div class="ui-route-row"><span data-upload-progress><progress value="1" max="3"></progress></span></div></main>', /<progress>/],
+    // The upload exemption needs the attribute on the progress element or its parent, not on a distant ancestor.
+    ['<main data-upload-progress><p><progress value="1" max="3"></progress></p></main>', /<progress>/],
+    ...FILLS.map((f): [string, RegExp] => [`<main><div class="ui-route-row">${f}</div></main>`, /proportional fill/]),
     ['<main>12 questions (40<span>%</span>)</main>', /percentage/],
     // An allowed element exempts only its own text.
     ['<main><p data-claims-allowed="about-model-scores">Maturity</p><p>Maturity</p></main>', /score word "Maturity"/],
@@ -70,6 +92,16 @@ test('FR-RM-01 (helper): score words, progress bars, meters and drawn charts fai
       '<p>Uploading a.pdf: 0.8 of 2.4 MB</p><p>12 questions with no decision</p></main>',
   );
   await expectNoScoreShapes(page, 'clean');
+
+  // A progress element is allowed inside an upload's own element and nowhere else; a width in per cent is a fill only
+  // in a route row, and a width in pixels never is.
+  await page.setContent(
+    '<main><span data-upload-progress><progress value="1" max="3"></progress></span>' +
+      '<progress data-upload-progress value="1" max="3"></progress>' +
+      '<div style="width: 40%"></div><div class="ui-route-row"><div style="width: 24px"></div></div>' +
+      `${FILLS.join('')}</main>`,
+  );
+  await expectNoScoreShapes(page, 'upload progress');
 });
 
 test('FR-RM-04 (helper): counts must be whole numbers in text, per stage, with no percentage and no total', async ({ page }) => {
@@ -91,11 +123,22 @@ test('FR-RM-04 (helper): counts must be whole numbers in text, per stage, with n
     [THREE_STAGES('37 questions with no decision', '23 questions with no decision', '11 questions with no decision').replace('</main>', '<p>Overall</p></main>'), /overall/i],
     [THREE_STAGES('37 questions with no decision', '23 questions with no decision', '11 in all').replace('</main>', '<p>31 questions</p></main>'), /in all/i],
     [THREE_STAGES('37 questions with no decision', '23 questions with no decision', '11 questions with no decision').replace('<main>', '<main aria-label="Total">'), /total/i],
+    [THREE_STAGES('37 questions with no decision', '23 questions with no decision', '11 questions with no decision').replace('</main>', '<p>12 questions in all</p></main>'), /in all/i],
+    [THREE_STAGES('37 questions with no decision', '23 questions with no decision', '11 questions with no decision').replace('</main>', '<div class="ui-route-row"><div style="width: 40%"></div></div></main>'), /proportional fill/],
+    [THREE_STAGES('37 questions with no decision', '23 questions with no decision', '11 questions with no decision').replace('</main>', '<div class="ui-route-row"><div style="inline-size: 40%"></div></div></main>'), /proportional fill/],
+    ...FILLS.map((f): [string, RegExp] => [THREE_STAGES('37 questions with no decision', '23 questions with no decision', '11 questions with no decision').replace('</main>', `<div class="ui-route-row">${f}</div></main>`), /proportional fill/]),
+    [THREE_STAGES('37 questions with no decision', '23 questions with no decision', '11 questions with no decision').replace('</main>', '<span data-upload-progress><meter value="1" max="3"></meter></span></main>'), /<meter>/],
+    [THREE_STAGES('37 questions with no decision', '23 questions with no decision', '11 questions with no decision').replace('</main>', '<div class="ui-route-row"><span data-upload-progress><progress value="1" max="3"></progress></span></div></main>'), /<progress>/],
   ];
   for (const [i, [html, finding]] of bad.entries()) {
     await page.setContent(html);
     await expect(expectCountsAsWholeNumbersPerStage(page, SENTINELS), `bad ${i}: ${html}`).rejects.toThrow(finding);
   }
+
+  // An upload's own progress element is allowed; a per cent width outside a route row and a pixel width inside one are not fills.
+  await page.setContent(THREE_STAGES('37 questions with no decision', '23 questions with no decision', '11 questions with no decision').replace('</main>',
+    '<span data-upload-progress><progress value="1" max="3"></progress></span><div style="width: 40%"></div><div class="ui-route-row"><div style="width: 24px"></div></div>' + FILLS.join('') + '</main>'));
+  await expectCountsAsWholeNumbersPerStage(page, SENTINELS);
 
   // A sum that is only part of a longer number is not the sum on the page.
   await page.setContent(THREE_STAGES('37 questions with no decision', '23 questions with no decision', '11 questions with no decision').replace('</main>', '<p>171 files</p></main>'));
@@ -160,36 +203,167 @@ test('FR-RM-04 UX-07 (helper): text the test wrote itself is left out of the cou
   }
 });
 
-test('UX-06 NFR-A11Y-05 (helper): status labels are words in a neutral colour, and the warning tint sits only on the three warning labels', async ({ page }) => {
-  const labels = (inner: string) => `${TOKENS}<main>${inner}</main>`;
+// What the kit draws, written out as the kit writes it (components/ui StatusMark, RouteRow, SavedMark). Each graphic
+// sets its own fill and stroke from the mark's colour, as the kit's do.
+const page_ = (inner: string) => `${TOKENS}<main>${inner}</main>`;
+const shape = (inner: string) => `<svg class="ui-mark__shape" aria-hidden="true" viewBox="0 0 24 24">${inner}</svg>`;
+const DISC = '<circle cx="12" cy="12" r="8" fill="currentColor"/>';
+const HALF = '<path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/>';
+const RING_SLASH = '<circle cx="12" cy="12" r="8" fill="none" stroke="currentColor"/><line x1="6" y1="18" x2="18" y2="6" stroke="currentColor"/>';
+const TICK_PATH = '<path d="M8 12.5l2.7 2.7L16 9.8" fill="none" stroke="currentColor"/>';
+const mark = (inner = DISC, words = 'Done', attrs = '') =>
+  `<span class="ui-mark ui-mark--done" data-mark-kind="done"${attrs}>${shape(inner)}<span class="ui-mark__words">${words}</span></span>`;
+const stop = (kind: string, inner: string, word: string, point = '<span class="ui-route-row__point">', liStyle = '') =>
+  `<li class="ui-route-row__stop" data-mark-kind="${kind}"${liStyle}>${point}${shape(inner)}<span class="visually-hidden">${word}</span>${point.startsWith('<a') ? '</a>' : '</span>'}</li>`;
+// The connector between two stops is the first stop's ::after, as the kit draws it.
+const CONNECTOR = "<style>.ui-route-row__stop:not(:last-child)::after{content:'';border-block-start:2px solid var(--color-mark)}</style>";
+const routeRow = (liStyle = '') =>
+  CONNECTOR +
+  '<div class="ui-route-row"><ol class="ui-route-row__stops">' +
+  stop('done', DISC, 'Done', undefined, liStyle) +
+  stop('partly', HALF, 'Partly', '<span class="ui-route-row__point" style="background-color: var(--color-tint)">') +
+  stop('not-applicable', RING_SLASH, 'Not applicable') +
+  stop('not-yet', DISC, 'Not yet', '<a class="ui-route-row__point" href="#" style="border: 2px solid var(--color-action-text)">') +
+  '</ol><p class="ui-route-row__tally">9 done, 6 partly</p></div>';
+const SAVED_SVG = '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="m16 9-5.5 5.5L8 12"/></svg>';
+const SAVED = `<div class="ui-saved"><span class="ui-saved__shape">${SAVED_SVG}</span><span>Saved</span></div>`;
+const GREEN = 'rgb(22, 163, 74)';
+const RED = 'rgb(180, 35, 24)';
+const AMBER = 'rgb(253, 230, 138)';
+const BARE_STOP = (css: string) =>
+  `<style>${css}</style><ol><li class="ui-route-row__stop" data-mark-kind="done"><span class="visually-hidden">Done</span></li></ol>`;
 
-  await page.setContent(
-    labels(
-      '<span class="status-label body">Done</span><span class="status-label muted">No decision</span>' +
-        '<span class="status-label status-label--warning">Overdue</span>' +
-        '<span class="status-label status-label--warning">Owner cannot act</span>' +
-        '<span class="status-label status-label--warning">Legal name not recorded</span>' +
-        '<span class="status-label status-label--warning">Overdue: 3</span>' +
-        '<div class="body"><span class="status-label">Open</span></div>',
-    ),
-  );
-  await expectNeutralStatusLabels(page);
-
-  const bad: Array<[string, RegExp]> = [
-    [labels('<span class="status-label green">Done</span>'), /Done.*colour/],
-    [labels('<span class="status-label body">Done</span><span class="status-label">Open</span>'), /colour/],
-    [labels('<span class="status-label body status-label--warning">Done</span>'), /warning tint.*Done/],
-    [labels('<span class="status-label body">Overdue</span><span class="status-label--warning">Done</span>'), /warning tint.*Done/],
-    [labels('<span class="status-label body"></span>'), /no words/],
-    [labels('<span class="status-label body">3</span>'), /no words/],
-    [labels('<p class="body">no label on this page</p>'), /no \.status-label/],
-    ['<main><span class="status-label">Done</span></main>', /--text-body/],
-    ['<p><span class="status-label">Done</span></p>', /no <main>/],
-  ];
-  for (const [i, [html, finding]] of bad.entries()) {
+test('spec 7.2 NFR-A11Y-05 (helper): a status mark is a shape and words in ink, with no tick and no green', async ({ page }) => {
+  // The kit's own markup passes, with a saved mark beside the row (its tick and its green are outside any mark).
+  for (const [name, html] of [
+    ['a mark', page_(mark())],
+    ['a route row', page_(routeRow())],
+    ['a route row and a saved mark', page_(routeRow() + SAVED)],
+    ['legacy labels', page_(
+      '<span class="status-label ink">Done</span><span class="status-label muted">No decision</span>' +
+        '<span class="status-label status-label--warning ink" style="background-color: rgb(230, 233, 240)">Overdue</span>')],
+  ] as const) {
     await page.setContent(html);
-    await expect(expectNeutralStatusLabels(page), `bad ${i}: ${html}`).rejects.toThrow(finding);
+    await expectStatusMarksInk(page);
+    if (name !== 'legacy labels') await expectNoScoreShapes(page, name);
   }
+
+  const bad: Array<[string, string, RegExp]> = [
+    // A mark element's own colour is the mark colour (with no graphic in it at all, and with the graphics on the off colour).
+    ['mark colour: a mark in ink', page_(mark(DISC, 'Done', ' style="color: rgb(27, 27, 31)"')), /colour rgb\(27, 27, 31\) is not --color-mark/],
+    ['mark colour: a route stop in another colour', page_(routeRow(` style="color: ${RED}"`)), new RegExp(`colour ${RED.replace(/[()]/g, '\\$&')} is not --color-mark`)],
+    ['mark colour: no graphic', page_('<span data-mark-kind="done" style="color: rgb(27, 27, 31)">Done</span>'), /colour rgb\(27, 27, 31\) is not --color-mark/],
+    // Fill and stroke of each graphic.
+    ['fill', page_(mark(`<circle cx="12" cy="12" r="8" fill="${RED}"/>`)), /fill rgb\(180, 35, 24\) is not --color-mark/],
+    ['stroke', page_(mark(`<circle cx="12" cy="12" r="8" fill="currentColor" stroke="${RED}"/>`)), /stroke rgb\(180, 35, 24\) is not --color-mark/],
+    // No tick.
+    ['tick path', page_(mark(TICK_PATH)), /tick-shaped path/],
+    ['tick path with a repeated point', page_(mark('<path d="M8 12.5L10.7 15.2L10.7 15.2L16 9.8" fill="none" stroke="currentColor"/>')), /tick-shaped path/],
+    ['tick polyline', page_(mark('<polyline points="8,12.5 10.7,15.2 16,9.8" fill="none" stroke="currentColor"/>')), /tick-shaped polyline/],
+    ['tick polyline with a repeated point', page_(mark('<polyline points="8,12.5 10.7,15.2 10.7,15.2 16,9.8" fill="none" stroke="currentColor"/>')), /tick-shaped polyline/],
+    ['tick character', page_(mark(DISC, '\u2713 Done')), /tick character/],
+    ['unreadable path', page_(mark('<path d="M2 2c1 1 2 2 3 3m2 2 2 2 4-4" fill="none" stroke="currentColor"/>')), /cannot read path/],
+    // No green, anywhere in a mark.
+    ['green colour', page_(mark(DISC, 'Done', ` style="color: ${GREEN}"`)), /color rgb\(22, 163, 74\) is green in/],
+    ['the saved green', page_(mark(DISC, 'Done', ' style="color: rgb(31, 122, 77)"')), /color rgb\(31, 122, 77\) is green in/],
+    ['green fill', page_(mark(`<circle cx="12" cy="12" r="8" fill="${GREEN}"/>`)), /fill rgb\(22, 163, 74\) is green in/],
+    ['green background', page_(mark(DISC, 'Done', ` style="background-color: ${GREEN}"`)), /background-color rgb\(22, 163, 74\) is green in/],
+    ['green border', page_(mark(DISC, 'Done', ` style="border: 2px solid ${GREEN}"`)), /border colour rgb\(22, 163, 74\) is green in/],
+    ['green words', page_(mark().replace('class="ui-mark__words"', `class="ui-mark__words" style="color: ${GREEN}"`)), /color rgb\(22, 163, 74\) is green in/],
+    ['green child of a kind element with no shape', page_(`<span data-mark-kind="done">Done<span style="color: ${GREEN}">x</span></span>`), /color rgb\(22, 163, 74\) is green in/],
+    ['colour in a form it cannot read', page_(mark(DISC, 'Done', ' style="background-color: oklch(0.6 0.1 150)"')), /cannot read colour/],
+    // Words in ink.
+    ['words in muted ink', page_(mark().replace('class="ui-mark__words"', 'class="ui-mark__words" style="color: rgb(74, 80, 96)"')), /colour rgb\(74, 80, 96\) is not --color-ink \(/],
+    // Words exist.
+    ['mark with no words', page_(`<span class="ui-mark" data-mark-kind="done">${shape(DISC)}</span>`), /no words/],
+    ['bare shape, parent without words', page_(`<p>${shape(DISC)}</p>`), /no words beside it/],
+    // Not colour-coded: text colour, background and border are held to the ink lists, in a mark and in a label.
+    ['not colour-coded: a word span in red', page_(mark(DISC, `<span style="color: ${RED}">Done</span>`)), /colour rgb\(180, 35, 24\) is not an ink \(--color-mark, --color-ink, --color-ink-muted\) in/],
+    ['not colour-coded: an amber background', page_(mark(DISC, 'Done', ` style="background-color: ${AMBER}"`)), /background-color rgb\(253, 230, 138\) is neither transparent nor --color-tint in/],
+    ['not colour-coded: a red border', page_(mark(DISC, 'Done', ` style="border: 1px solid ${RED}"`)), /border colour rgb\(180, 35, 24\) is not an ink or --color-action-text in/],
+    ['not colour-coded: a label with an amber background', page_(`<span class="status-label ink" style="background-color: ${AMBER}">Done</span>`), /background-color rgb\(253, 230, 138\) is neither transparent nor --color-tint in/],
+    ['not colour-coded: a label holding a red child', page_(`<span class="status-label ink">Done <span style="color: ${RED}">now</span></span>`), /colour rgb\(180, 35, 24\) is not an ink \(--color-mark, --color-ink, --color-ink-muted\) in/],
+    // Pseudo-elements are read as elements are.
+    ['pseudo: a tick before a mark', `<style>.ui-mark::before{content:"\\2713"}</style>${page_(mark())}`, /tick character.*::before/],
+    ['pseudo: a tick after a label', `<style>.status-label::after{content:"\\2714"}</style>${page_('<span class="status-label ink">Done</span>')}`, /tick character.*::after/],
+    ['pseudo: a green border after a stop', page_(BARE_STOP('.ui-route-row__stop::after{content:"";border-top:2px solid rgb(22, 163, 74)}')), /border colour rgb\(22, 163, 74\) is green in .*::after/],
+    ['pseudo: a red background before a mark', `<style>.ui-mark::before{content:"";background-color:${RED}}</style>${page_(mark())}`, /background-color rgb\(180, 35, 24\) is neither transparent nor --color-tint in .*::before/],
+    // Legacy labels.
+    ['label: no words', page_('<span class="status-label ink">3</span>'), /no words/],
+    ['label: green is reported as green', page_('<span class="status-label green">Done</span>'), /color rgb\(22, 163, 74\) is green in/],
+    ['label: a colour that is neither ink', page_('<span class="status-label red">Done</span>'), /neither --color-ink/],
+    ['label: the warning label has no exemption', page_('<span class="status-label status-label--warning red">Overdue</span>'), /neither --color-ink/],
+    ['label: green background', page_('<span class="status-label ink" style="background-color: rgb(22, 163, 74)">Done</span>'), /background-color rgb\(22, 163, 74\) is green in/],
+    ['label: tick character', page_('<span class="status-label ink">\u2714 Done</span>'), /tick character/],
+    ['label: tick path', page_('<span class="status-label ink"><svg><path d="M8 12.5l2.7 2.7L16 9.8"/></svg>Done</span>'), /tick-shaped path/],
+    // The page and the tokens.
+    ['nothing to read', page_('<p class="ink">no status on this page</p>'), /no status mark/],
+    ['no main', '<p><span class="status-label">Done</span></p>', /no <main>/],
+    ['--color-mark undefined', '<main><span class="status-label">Done</span></main>', /--color-mark is not defined/],
+    ['--color-saved undefined', page_('<span class="status-label ink">Done</span>').replace('--color-saved:', '--other:'), /--color-saved is not defined/],
+    ['--color-tint undefined', page_('<span class="status-label ink">Done</span>').replace('--color-tint:', '--other:'), /--color-tint is not defined/],
+    ['--color-action-text undefined', page_('<span class="status-label ink">Done</span>').replace('--color-action-text:', '--other:'), /--color-action-text is not defined/],
+  ];
+  for (const [name, html, finding] of bad) {
+    await page.setContent(html);
+    await expect(expectStatusMarksInk(page), name).rejects.toThrow(finding);
+  }
+
+  // Moving the saved mark's tick inside a mark makes it a tick on a status.
+  await page.setContent(page_(`<span class="ui-mark" data-mark-kind="done">${SAVED_SVG}<span class="ui-mark__words">Saved</span></span>`));
+  await expect(expectStatusMarksInk(page)).rejects.toThrow(/tick-shaped path/);
+});
+
+test('spec 7.2 (helper): isGreenColour and tickShapeOf judge the vectors the spec lists', () => {
+  const SAVED_RGB = 'rgb(31, 122, 77)';
+  for (const c of ['rgb(31, 122, 77)', 'rgb(111, 207, 151)', 'rgb(22, 163, 74)', 'rgb(154, 205, 50)', 'rgba(22, 163, 74, 0.5)']) {
+    expect(isGreenColour(c, SAVED_RGB), c).toBe(true);
+  }
+  expect(isGreenColour('rgb(1, 2, 3)', 'rgb(1, 2, 3)'), 'equal to saved').toBe(true);
+  for (const c of ['rgb(26, 31, 54)', 'rgb(199, 204, 224)', 'rgb(27, 27, 31)', 'rgb(180, 35, 24)', 'rgb(154, 77, 16)', 'rgb(0, 128, 128)',
+    'rgb(200, 220, 50)', 'rgb(100, 110, 100)', 'rgb(230, 233, 240)', 'rgb(0, 0, 0)', 'rgba(22, 163, 74, 0)', 'none', 'transparent']) {
+    expect(isGreenColour(c, SAVED_RGB), c).toBe(false);
+  }
+  expect(() => isGreenColour('oklch(0.6 0.1 150)', SAVED_RGB)).toThrow(/cannot read colour/);
+  expect(() => isGreenColour('color(srgb 0.1 0.6 0.3)', SAVED_RGB)).toThrow(/cannot read colour/);
+
+  for (const d of ['M8 12.5l2.7 2.7L16 9.8', 'M20 6 9 17l-5-5', 'm9 12 2 2 4-4', 'm16 9-5.5 5.5L8 12', 'M18 6 7 17l-5-5M22 10l-7.5 7.5L13 16',
+    'M8 12.5L10.7 15.2L10.7 15.2L16 9.8', 'M8 12.5L10.7 15.2L16 9.8L16 9.8']) {
+    expect(tickShapeOf(d), d).toBe('tick');
+  }
+  for (const d of ['M12 4a8 8 0 0 1 0 16z', 'M6 18L18 6', 'M18 6 6 18M6 6l12 12', 'M4 4h16v16h-16z', 'M4 12h16', 'm6 15 6-6 6 6', '']) {
+    expect(tickShapeOf(d), d).toBe('clear');
+  }
+  expect(tickShapeOf('M2 2c1 1 2 2 3 3m2 2 2 2 4-4')).toBe('unreadable');
+});
+
+test('spec 7.2 (helper): the kit as built on /dev/ui-kit passes both checks in light and dark, and a planted green fails', async ({ page }) => {
+  const response = await page.goto('/dev/ui-kit');
+  expect(response?.status(), '/dev/ui-kit status').toBe(200);
+  await page.waitForLoadState('networkidle');
+  const settle = () => page.waitForFunction(() => document.getAnimations().every((a) => !(a instanceof CSSTransition)));
+  const markColour = () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--color-mark').trim());
+  const resolved: string[] = [];
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await settle();
+    resolved.push(await markColour());
+    expect(await page.locator('main .ui-mark').count(), `${scheme}: marks on the kit`).toBeGreaterThan(0);
+    expect(await page.locator('main .ui-route-row .ui-mark__shape').count(), `${scheme}: route row shapes`).toBeGreaterThan(0);
+    await expectStatusMarksInk(page);
+    await expectNoScoreShapes(page, `/dev/ui-kit ${scheme}`);
+  }
+  // A "dark" run that silently stayed light would check nothing new.
+  expect(resolved[1], '--color-mark in dark differs from light').not.toBe(resolved[0]);
+  await page.emulateMedia({ colorScheme: 'light' });
+  await settle();
+  // Hydration can undo a change made too early, so the plant and the assertion are retried together.
+  await expect(async () => {
+    await page.evaluate(() => {
+      (document.querySelector('main .ui-route-row__stop') as HTMLElement).style.color = 'rgb(31, 122, 77)';
+    });
+    await expect(expectStatusMarksInk(page)).rejects.toThrow(/is green in/);
+  }).toPass({ timeout: 10_000 });
 });
 
 test('UX-07 (helper): a findings list grouped by stage with a count per group and no sum passes; a sum or a total fails', async ({ page }) => {
@@ -202,6 +376,7 @@ test('UX-07 (helper): a findings list grouped by stage with a count per group an
     [group('37', '23', '11').replace('</main>', '<p>71 findings</p></main>'), /71/],
     [group('37', '23', '11').replace('</main>', '<p>Total: 71</p></main>'), /71|total/i],
     [group('37', '23', '11').replace('</main>', '<h2>Total</h2></main>'), /total/i],
+    [group('37', '23', '11').replace('</main>', '<p>12 questions in all</p></main>'), /in all/i],
     // A page that shows none of the counts proves nothing about their sum.
     ['<main><p>No findings recorded</p></main>', /37/],
   ];

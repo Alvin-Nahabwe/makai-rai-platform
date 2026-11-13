@@ -14,7 +14,7 @@ import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { failOnDialog } from './helpers/dialogs';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { claimMatches } from '../lib/claims/pattern';
-import { expectNeutralStatusLabels, expectNoCrossStageTotal, expectNoScoreShapes } from './helpers/noScore';
+import { expectStatusMarksInk, expectNoCrossStageTotal, expectNoScoreShapes } from './helpers/noScore';
 import { expectTargetsAtLeast24px } from './helpers/targetSize';
 
 /**
@@ -177,8 +177,8 @@ test.describe('UX-06 UX-07 FR-RM-04: sentinel counts on S-14 and S-15 (round 12,
     }
     expect(await page.locator('.status-label').count()).toBeGreaterThan(0);
     await expectNoCrossStageTotal(page, { 'pre-processing': [41], 'in-processing': [29], 'post-processing': [13] });
-    await expectNeutralStatusLabels(page);
-    await page.goto(`${base}/${first!.id}`); await expectNeutralStatusLabels(page);
+    await expectStatusMarksInk(page);
+    await page.goto(`${base}/${first!.id}`); await expectStatusMarksInk(page);
   });
 });
 
