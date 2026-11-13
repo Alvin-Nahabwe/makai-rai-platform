@@ -19,7 +19,7 @@
     "kind": "removed",
     "deleted": "__tests__/unit/font-subsets.test.ts::NFR-PERF-02: the latin-ext letters names commonly carry sit in a small Source Sans face of their own, not preloaded",
     "replacedBy": "__tests__/unit/font-subsets.test.ts::NFR-PERF-02: the latin-ext letters names commonly carry sit in a small Overpass face of their own, not preloaded",
-    "property": "The 70 latin-ext letters names commonly carry are declared by one small face, not preloaded, whose file maps all of them and stays under its byte cap; the family is now Overpass and the cap is 14,100 B (controller ruling of 13 Nov 2026)",
+    "property": "The 82 latin-ext letters names commonly carry are declared by one small face, not preloaded, whose file maps all of them and stays under its byte cap; the family is now Overpass and the cap is 14,100 B (controller ruling of 13 Nov 2026)",
     "proof": "__tests__/unit/font-subsets.test.ts::NFR-PERF-02: the latin-ext letters names commonly carry sit in a small Overpass face of their own, not preloaded",
     "task": "1A-2"
   },
