@@ -46,7 +46,7 @@
         {
           "text": "organization",
           "lint": "phrase",
-          "pattern": "\\borgani[z]ation(?:s|al)?\\b|(?:^|[.!?:]\\s+)Organi[z]ation(?:s|al)?\\b",
+          "pattern": "\\borgani[z]ation(?:s|al)?\\b|(?<=^|[.!?:]\\s{1,4})Organi[z]ation(?:s|al)?\\b",
           "caseSensitive": true
         }
       ]
@@ -881,7 +881,7 @@
         {
           "text": "v3",
           "lint": "phrase",
-          "pattern": "\\bv\\d+\\b(?!\\.\\d)",
+          "pattern": "(?<![\\w.]\\s)\\bv\\d+\\b(?!\\.\\d)",
           "caseSensitive": true
         },
         {
@@ -1669,7 +1669,7 @@
         {
           "text": "v1",
           "lint": "phrase",
-          "pattern": "\\bv\\d+\\b(?!\\.\\d)",
+          "pattern": "(?<![\\w.]\\s)\\bv\\d+\\b(?!\\.\\d)",
           "caseSensitive": true
         }
       ]
