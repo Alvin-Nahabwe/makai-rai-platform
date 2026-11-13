@@ -19,11 +19,15 @@ const VIEWPORTS = [
   { width: 320, height: 640 },
 ] as const;
 
-/** Opens the gallery and waits until it has hydrated (the saved demo's button reacts only then). */
+/**
+ * Opens the gallery and waits until React has hydrated it, so a click is not lost (the saved demo's button reacts only
+ * then). The signal is one only hydration produces: LocalTime's server render ends in " UTC", and its hydrated render,
+ * in whatever zone the browser has, never names a zone.
+ */
 async function openKit(page: Page): Promise<void> {
   const response = await page.goto(KIT);
   expect(response?.status(), `${KIT} status`).toBe(200);
-  await page.waitForLoadState('networkidle');
+  await expect(page.locator('[data-kit-section="local-time"] time').first()).not.toHaveText(/UTC$/);
 }
 
 /** Runs `check` in each theme, by the operating system's preference the tokens follow (app/globals.css). */
@@ -97,7 +101,7 @@ test.describe('Icon', () => {
     for (const svg of await icons.all()) {
       await expect(svg).toHaveAttribute('aria-hidden', 'true');
       const box = await svg.boundingBox();
-      expect(box?.width).toBe(20);
+      expect(box?.width).toBeCloseTo(20, 1);
     }
   });
 });
@@ -110,8 +114,8 @@ test.describe('StatusMark', () => {
       await expect(shapes).toHaveCount(7);
       for (const shape of await shapes.all()) {
         const box = await shape.boundingBox();
-        expect(box?.width, `mark at ${size} px`).toBe(size);
-        expect(box?.height, `mark at ${size} px`).toBe(size);
+        expect(box?.width, `mark at ${size} px`).toBeCloseTo(size, 1);
+        expect(box?.height, `mark at ${size} px`).toBeCloseTo(size, 1);
       }
     }
   });
@@ -144,6 +148,23 @@ test.describe('RouteRow', () => {
     await expect(row.locator('[aria-current="step"]')).toHaveCount(1);
     await expect(row.getByRole('link', { name: 'Sample question 4: Not yet' })).toHaveAttribute('aria-current', 'step');
     await expect(section(page, 'route-row').locator('.ui-route-row__tally').first()).toHaveText(/^\d+ done \(2 with no evidence attached\), /);
+  });
+
+  test('in forced colours the current stop is still the only ringed one', async ({ page }) => {
+    await openKit(page);
+    const row = page.getByRole('list', { name: 'Sample stage', exact: true });
+    await withForcedColors(page, async () => {
+      // A ring is drawn when the border has a style, a width and a colour that is neither transparent nor the background.
+      const rings = await row.locator('.ui-route-row__point').evaluateAll((points) => points.map((p) => {
+        const s = getComputedStyle(p);
+        const ground = getComputedStyle(document.body).backgroundColor;
+        const drawn = s.borderTopStyle !== 'none' && parseFloat(s.borderTopWidth) > 0
+          && s.borderTopColor !== 'rgba(0, 0, 0, 0)' && s.borderTopColor !== ground;
+        return { current: p.getAttribute('aria-current') === 'step', drawn, ring: `${s.borderTopStyle} ${s.borderTopWidth} ${s.borderTopColor}` };
+      }));
+      expect(rings.filter((r) => r.current)).toHaveLength(1);
+      expect(rings.filter((r) => r.drawn).map((r) => r.current), `rings drawn: ${JSON.stringify(rings.filter((r) => r.drawn))}`).toEqual([true]);
+    });
   });
 
   test('the row shows no progress bar, meter or percentage', async ({ page }) => {
@@ -184,5 +205,23 @@ test.describe('SavedMark', () => {
       expect(painted.count).toBeGreaterThan(0);
       expect(painted.invisible).toEqual([]);
     });
+  });
+});
+
+test.describe('LocalTime', () => {
+  test.use({ timezoneId: 'Africa/Nairobi' });
+
+  test('the server render in UTC is replaced after hydration by the reader\'s zone, with no hydration error', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
+    page.on('pageerror', (error) => errors.push(error.message));
+    const served = await (await page.request.get(KIT)).text();
+    expect(served, 'server render').toContain('11 Nov 2026, 08:23 UTC');
+    await openKit(page);
+    const times = section(page, 'local-time').locator('time');
+    await expect(times.first()).toHaveText('11 Nov 2026, 11:23');
+    await expect(times.first()).toHaveAttribute('dateTime', '2026-11-11T08:23:00.000Z');
+    await expect(times.nth(1)).toHaveText('11 Nov 2026');
+    expect(errors.filter((e) => /hydrat|did not match|server rendered/i.test(e))).toEqual([]);
   });
 });

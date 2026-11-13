@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { STATUS_MARK_COPY, positionWords, tallyWords } from '@/lib/ui/copy';
+import { STATUS_MARK_COPY, UI_COPY, positionWords, tallyWords } from '@/lib/ui/copy';
 
 /** Plan 1A Task 3, spec 7.2: the words of the marks, the tally and the position. */
 
@@ -24,9 +24,28 @@ describe('tallyWords', () => {
     expect(tallyWords({ done: 3, partly: 2 })).not.toMatch(/total|overall|%|of \d/i);
   });
 
+  it('owner, 13 Nov 2026: the personal data question is counted in a tally, as "1 answered"', () => {
+    expect(tallyWords({ done: 2, scope_answered: 1 })).toBe('2 done, 1 answered');
+  });
+
+  it('owner, 13 Nov 2026: tally labels agree in number; "no decision" and "not yet" do not change', () => {
+    expect(tallyWords({ does_not_apply: 1 })).toBe('1 does not apply');
+    expect(tallyWords({ does_not_apply: 3 })).toBe('3 do not apply');
+    expect(tallyWords({ no_decision: 1 })).toBe('1 no decision');
+    expect(tallyWords({ no_decision: 4 })).toBe('4 no decision');
+    expect(tallyWords({ not_yet: 1 })).toBe('1 not yet');
+    expect(tallyWords({ not_yet: 5 })).toBe('5 not yet');
+  });
+
   it('writes every kind in mark order, and a zero count is left out', () => {
     expect(tallyWords({ no_decision: 2, scope_answered: 1, does_not_apply: 3, not_applicable: 1, done: 0, doneNoEvidence: 0 }))
       .toBe('1 not applicable, 3 do not apply, 1 answered, 2 no decision');
+  });
+});
+
+describe('UI_COPY.marks', () => {
+  it('owner, 13 Nov 2026: the personal data question\'s mark reads "Answered" where no answer is at hand', () => {
+    expect(UI_COPY.marks.answered).toBe('Answered');
   });
 });
 

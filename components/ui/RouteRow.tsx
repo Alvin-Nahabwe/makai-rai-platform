@@ -23,17 +23,18 @@ export type RouteRowProps = { label: string; stops: readonly RouteRowStop[]; tal
  * A stage as a row of marks, one stop per question in question order, joined by a line (spec 7.2). Each stop's
  * accessible text is "<title>: <status words>"; the current stop is ringed and carries aria-current="step". The tally
  * in words follows. There is no fill, no percentage and no total. A stop with an address is a link that does not
- * prefetch (UX-37: a stage has up to 22 of them).
+ * prefetch (UX-37: a stage has up to 22 of them). The list keeps role="list" because Safari drops the list role, and so
+ * its label, from a list styled `list-style: none`.
  */
 export function RouteRow({ label, stops, tally }: RouteRowProps): ReactElement {
   return (
     <div className="ui-route-row">
-      <ol className="ui-route-row__stops" aria-label={label}>
+      <ol className="ui-route-row__stops" role="list" aria-label={label}>
         {stops.map((stop) => {
           const content = (
             <>
               <MarkShape kind={stop.kind} size={20} />
-              <span className="visually-hidden">{`${stop.title}: ${statusMarkWords(stop.kind, false, stop.scopeAnswer)}`}</span>
+              <span className="visually-hidden">{`${stop.title}: ${statusMarkWords(stop.kind, { scopeAnswer: stop.scopeAnswer })}`}</span>
             </>
           );
           const current = stop.current ? 'step' : undefined;

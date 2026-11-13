@@ -54,6 +54,9 @@ function StateTable({ caption, rows }: { caption: string; rows: ReadonlyArray<re
 
 export default async function UiKitPage(): Promise<ReactElement> {
   await connection(); // the environment is read per request: CI builds first and sets the test seam only on the server
+  // notFound() answers status 404 only before streaming starts; once a loading.tsx or <Suspense> above this page has
+  // streamed, the status stays 200 with the not-found UI (node_modules/next/dist/docs/01-app/03-api-reference/
+  // 03-file-conventions/not-found.md:15 and :45). Keep both out of app/dev/ while the 404 is the production guard.
   if (!devGalleryShown(process.env)) notFound();
   const iconNames = Object.keys(ICONS) as IconName[];
   return (

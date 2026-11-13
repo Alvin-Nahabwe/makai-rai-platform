@@ -3,15 +3,13 @@ import { describe, expect, it } from 'vitest';
 import { SavedMark } from '@/components/ui/SavedMark';
 import { LocalTime } from '@/components/ui/LocalTime';
 import { formatDayTime } from '@/lib/format/dates';
+import { text, textOf } from '@/__tests__/helpers/markup';
 
 /**
  * Plan 1A Task 3, spec 7.3: the saved mark. Instants carry milliseconds, the only form a UtcInstant has
  * (types/record.ts; lib/format/dates.ts rejects any other), so the brief's '2026-11-11T08:23:00Z' is written with '.000'.
  */
 
-const decode = (s: string) => s.replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
-const textOf = (html: string) => decode(html.replace(/<[^>]*>/g, ''));
-const text = (el: React.ReactElement) => textOf(renderToStaticMarkup(el));
 
 describe('SavedMark (spec 7.3)', () => {
   it('7.3: the saved mark', () => {

@@ -34,30 +34,36 @@
   translate: 0 -50%;
 }
 
-/* A 28 px box around the 20 px shape: a target of at least 24 by 24 (spec 7.5) and room for the current ring. */
+/* A 28 px box around the 20 px shape: a target of at least 24 by 24 (spec 7.5) and room for the current ring. Only the
+   current stop has a border: forced colours repaint every author border, a transparent resting ring included, so a
+   reserved ring would show on all 22 stops (e2e/ui-kit.spec.ts, "in forced colours the current stop is still the only
+   ringed one"). The box is border-box, so the ring does not change its size. */
 .ui-route-row__point {
   display: grid;
   place-items: center;
+  box-sizing: border-box;
   inline-size: 28px;
   block-size: 28px;
-  border: 2px solid transparent;
+  border: 0 solid;
   border-radius: var(--radius-pill);
   color: inherit;
-  transition: border-color var(--duration-state) var(--easing-state), background-color var(--duration-state) var(--easing-state);
+  transition: background-color var(--duration-state) var(--easing-state);
 }
 
+/* `color: inherit` here too: the global `a:hover` rule (app/globals.css) would otherwise repaint the mark in the link colour. */
 a.ui-route-row__point:hover {
+  color: inherit;
   background-color: var(--color-tint);
 }
 
 a.ui-route-row__point:active {
-  border-color: var(--color-border-control);
+  background-color: var(--color-border-container);
 }
 
 /* The current stop is ringed in the action orange as text and lines use it: --color-action-text holds 3:1 on the
    surface in both themes, where the --color-action fill is 2.8:1 on the dark surface. */
 .ui-route-row__stop--current .ui-route-row__point {
-  border-color: var(--color-action-text);
+  border: 2px solid var(--color-action-text);
 }
 
 .ui-route-row__tally {

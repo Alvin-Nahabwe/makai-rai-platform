@@ -76,7 +76,8 @@ export function formatDay(d: Date | CalendarDate | UtcInstant, timeZone?: string
 
 /**
  * A day and a 24-hour clock time with no zone name: "11 Nov 2026, 11:23" (voice rule 10). The instant is written as it
- * is in `timeZone` (default: the process's). A caller that shows UTC says so beside it (components/ui/LocalTime.tsx).
+ * is in `timeZone` (default: the process's). A server caller must pass a zone, since the process's zone is the host's and
+ * not the reader's. A caller that shows UTC says so beside it (components/ui/LocalTime.tsx).
  */
 export function formatDayTime(t: UtcInstant, timeZone?: string): string {
   const instant = instantOf(t, t);

@@ -31,7 +31,8 @@ const SHAPES: Readonly<Record<StatusMarkKind, ReactElement>> = {
  * The words of a mark: its kind's words, with the no-evidence note on done and the answer on the personal data question.
  * The answer mark given no answer says only that the question is answered.
  */
-export function statusMarkWords(kind: StatusMarkKind, noEvidence = false, scopeAnswer?: ScopeAnswer): string {
+export function statusMarkWords(kind: StatusMarkKind, options: { noEvidence?: boolean; scopeAnswer?: ScopeAnswer } = {}): string {
+  const { noEvidence = false, scopeAnswer } = options;
   if (kind === 'scope_answered') return scopeAnswer === undefined ? UI_COPY.marks.answered : STATUS_MARK_COPY.scope_answered(scopeAnswer);
   if (kind === 'done' && noEvidence) return `${STATUS_MARK_COPY.done}, ${STATUS_MARK_COPY.noEvidence}`;
   return STATUS_MARK_COPY[kind];
@@ -51,7 +52,7 @@ export function StatusMark({ kind, size = 16, words = 'visible', noEvidence = fa
   return (
     <span className={`ui-mark ui-mark--${kind}`} data-mark-kind={kind}>
       <MarkShape kind={kind} size={size} />
-      <span className={words === 'hidden' ? 'ui-mark__words visually-hidden' : 'ui-mark__words'}>{statusMarkWords(kind, noEvidence, scopeAnswer)}</span>
+      <span className={words === 'hidden' ? 'ui-mark__words visually-hidden' : 'ui-mark__words'}>{statusMarkWords(kind, { noEvidence, scopeAnswer })}</span>
     </span>
   );
 }

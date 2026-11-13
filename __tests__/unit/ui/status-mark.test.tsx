@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { StatusMark } from '@/components/ui/StatusMark';
 import type { StatusMarkKind } from '@/components/ui/types';
+import { text, textOf } from '@/__tests__/helpers/markup';
 
 /** Plan 1A Task 3, spec 7.2: status is a shape and a word, in ink, never a colour and never a tick. */
 
@@ -28,9 +29,6 @@ const EXPECTED_SHAPES: Record<StatusMarkKind, string[]> = {
   no_decision: ['circle cx=12 cy=12 fill=currentColor r=3.5'],
 };
 
-const decode = (s: string) => s.replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
-const textOf = (html: string) => decode(html.replace(/<[^>]*>/g, ''));
-const text = (el: React.ReactElement) => textOf(renderToStaticMarkup(el));
 
 describe('StatusMark (spec 7.2)', () => {
   it('7.2: each kind draws its shape in currentColor and has no tick', () => {
@@ -82,20 +80,34 @@ describe('StatusMark.css: the mark is ink, never another colour', () => {
     expect(rule![1]).toMatch(/(^|;|\s)color:\s*var\(--color-mark\)\s*(;|$)/);
   });
 
-  it('no stylesheet sets color, fill or stroke on a .ui-mark selector to anything else', () => {
+  /**
+   * Every rule in every tracked stylesheet whose selector names the mark (`.ui-mark`, `.ui-mark--*`, `.ui-mark__*`) or the
+   * route row's stops (`.ui-route-row__stop*`, `.ui-route-row__point`), checked for the paint it sets. The mark block is
+   * --color-mark, its words ink; a route stop or point may set only --color-mark or inherit; nothing sets fill or stroke.
+   */
+  it('no stylesheet paints a mark or a route stop in any colour but the mark\'s, or sets its fill or stroke', () => {
     const sheets = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '*.css'], { encoding: 'utf8' }).split('\n').filter(Boolean);
     expect(sheets.length).toBeGreaterThan(5);
     const offenders: string[] = [];
+    let checked = 0;
     for (const file of sheets) {
       const source = readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
       for (const [, selector, body] of source.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-        if (!/\.ui-mark\b/.test(selector)) continue;
-        for (const [, prop, value] of body.matchAll(/(?:^|;)\s*(color|fill|stroke)\s*:\s*([^;]+)/g)) {
-          const allowed = prop === 'color' ? /^var\(--color-mark\)$/ : /^currentColor$/i;
-          if (!allowed.test(value.trim())) offenders.push(`${file}: ${selector.trim()} { ${prop}: ${value.trim()} }`);
+        const mark = /\.ui-mark(?![\w-])|\.ui-mark(?:--|__)[\w-]+/.test(selector);
+        const stop = /\.ui-route-row__(?:stop|point)[\w-]*/.test(selector);
+        if (!mark && !stop) continue;
+        checked += 1;
+        for (const [, prop, raw] of body.matchAll(/(?:^|;)\s*(color|fill|stroke)\s*:\s*([^;]+)/g)) {
+          const value = raw.trim();
+          const allowed = prop !== 'color' ? false
+            : stop ? /^(var\(--color-mark\)|inherit)$/.test(value)
+            : /\.ui-mark__words(?![\w-])/.test(selector) ? value === 'var(--color-ink)'
+            : value === 'var(--color-mark)';
+          if (!allowed) offenders.push(`${file}: ${selector.trim()} { ${prop}: ${value} }`);
         }
       }
     }
+    expect(checked, 'rules that name a mark or a route stop').toBeGreaterThan(4);
     expect(offenders).toEqual([]);
   });
 });

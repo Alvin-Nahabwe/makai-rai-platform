@@ -20,7 +20,11 @@ export const STATUS_MARK_COPY = {
   noEvidence: 'no evidence attached',
 } as const;
 
-/** Each kind as a tally writes it after its count: [one, more than one]. Order is the order of spec 7.2's table. */
+/**
+ * Each kind as a tally writes it after its count: [one, more than one]. Order is the order of spec 7.2's table.
+ * The owner's decisions of 13 November 2026: the personal data question is counted in a tally, as "1 answered", and
+ * tally labels agree in number ("1 does not apply", "3 do not apply"; "no decision" and "not yet" do not change).
+ */
 const TALLY_WORDS: ReadonlyArray<readonly [StatusMarkKind, string, string]> = [
   ['done', 'done', 'done'],
   ['partly', 'partly', 'partly'],
@@ -33,7 +37,10 @@ const TALLY_WORDS: ReadonlyArray<readonly [StatusMarkKind, string, string]> = [
 
 export const UI_COPY = {
   marks: {
-    /** The personal data question's mark when the caller has no answer to give (a route row stop without `scopeAnswer`). */
+    /**
+     * The personal data question's mark when the caller has no answer to give (a route row stop without `scopeAnswer`).
+     * The owner's decision of 13 November 2026: the mark reads "Answered" where no answer is at hand.
+     */
     answered: 'Answered',
   },
   tally: {

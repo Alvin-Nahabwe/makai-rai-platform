@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { RouteRow, type RouteRowProps } from '@/components/ui/RouteRow';
+import { decode } from '@/__tests__/helpers/markup';
 
 /** Plan 1A Task 3, spec 7.2: a stage is a row of marks, one per question in question order; no fill, no percentage, no total. */
 
@@ -12,7 +13,6 @@ const STOPS: RouteRowProps['stops'] = [
 ];
 const TALLY = { done: 1, partly: 1, not_yet: 1, no_decision: 1 };
 
-const decode = (s: string) => s.replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&');
 
 describe('RouteRow', () => {
   it('RouteRow: one stop per item in order, no progress element, no percentage', () => {
@@ -25,7 +25,7 @@ describe('RouteRow', () => {
 
   it('the list is labelled, and each stop says its title and its status in words, in question order', () => {
     const html = renderToStaticMarkup(<RouteRow label="Pre-processing" stops={STOPS} tally={TALLY} />);
-    expect(html).toMatch(/<ol class="ui-route-row__stops" aria-label="Pre-processing">/);
+    expect(html).toMatch(/<ol class="ui-route-row__stops" role="list" aria-label="Pre-processing">/);
     const spoken = [...html.matchAll(/<span class="visually-hidden">([^<]*)<\/span>/g)].map((m) => decode(m[1]));
     expect(spoken).toEqual([
       'Data sources are recorded: Done', 'Consent covers this use: Partly',
