@@ -85,6 +85,13 @@ test('FR-DOC-06 FR-DOC-07 UX-29 NFR-A11Y-02 NFR-A11Y-05: copy and withdraw a doc
   const confirm = page.locator('[data-inline-confirm]');
   await expect(confirm.getByLabel('Reason (required)')).toBeFocused();
   await expectFocusVisibleAndUncovered(page);
+  // SC 2.4.11: the confirmation opens wholly in view, so both of its buttons are on screen without a scroll (measured once, not retried).
+  const view = page.viewportSize()!;
+  for (const name of ['Withdraw document', 'Cancel']) {
+    const b = (await confirm.getByRole('button', { name, exact: true }).boundingBox())!;
+    const box = `${Math.round(b.x)},${Math.round(b.y)} to ${Math.round(b.x + b.width)},${Math.round(b.y + b.height)} in ${view.width}x${view.height}`;
+    expect(b.x >= 0 && b.y >= 0 && b.x + b.width <= view.width && b.y + b.height <= view.height, `the confirmation's ${name} button is inside the viewport (box ${box})`).toBe(true);
+  }
   const today = formatUtcDay(new Date().toISOString());
   await expect(confirm).toContainText(`Withdraw data card? It will show 'Withdrawn by the team on ${today}'. The document stays stored.`);
   await expect(confirm).toContainText(`Data card issued ${formatUtcDay(row.issuedAt.toISOString())}`);
