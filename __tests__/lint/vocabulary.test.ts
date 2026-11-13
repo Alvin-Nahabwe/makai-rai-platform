@@ -5,7 +5,7 @@ import {
   type ContentExclusions, contentStrings, CONTENT_FILES, fieldMapTexts, formatHit, lintHtml, lintText, lintTs, notebookTexts,
   phraseRules, PROPER_NAMES, ratchetViolations, readBundle, RULES, RUNNING, scopeContent, scopeCopyModules, scopeEmail,
   scopeFieldMaps, scopeNotebooks, type ScopeResult, type SignedKeys, textBlocks,
-  scopeTemplates, VOCABULARY, type Worklist, worklistOf, writeHits,
+  scopeTemplates, type Worklist, worklistOf, writeHits,
 } from './helpers/vocabulary-scan';
 
 /**
@@ -42,7 +42,6 @@ const worklistHits = () => { const s = scanWorklistScopes(); return [...s.copy.h
 // ---------------------------------------------------------------------------------------------------------------------
 
 describe('the vocabulary lint, on fixtures', () => {
-  const ruleOf = (id: string) => RULES.filter((r) => r.id === id);
 
   it('every phrase rule is proved by examples: each hits its cited forms and passes the correct sentences named for it', () => {
     const examples = JSON.parse(readFileSync(join(__dirname, 'vocabulary-rule-examples.json'), 'utf8')) as
