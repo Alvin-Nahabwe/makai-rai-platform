@@ -1,5 +1,6 @@
 /* Tabs as navigation (plan 1A Task 5, decision B9; modern-web-guidance `tabs`). The tabs keep one row: when they do not
-   fit, the list scrolls sideways inside itself (the guide's first strategy), never the page. The current tab is shown
+   fit, the list scrolls sideways inside itself (the guide's first strategy), never the page; TabNav.tsx brings the
+   current tab into view, and an edge with more tabs beyond it fades (the @supports block at the end). The current tab is shown
    by a 3 px underline on a pseudo-element that takes no space, and its ink colour; nothing changes a tab's size. The
    underline is a border, so forced colours keep it; it is the only one drawn under a tab. */
 .ui-tabnav {
@@ -13,7 +14,9 @@
   padding: 0;
   list-style: none;
   border-block-end: 1px solid var(--color-border-control);
-  scroll-padding-inline: var(--space-4);
+  /* As wide as the edge fade, so a tab focused or brought into view never stops inside it. */
+  scroll-padding-inline: var(--tabnav-fade);
+  --tabnav-fade: var(--space-8);
 }
 
 .ui-tabnav__list > li {
@@ -25,6 +28,8 @@
   display: flex;
   align-items: center;
   box-sizing: border-box;
+  /* The gap keeps the count apart from the label: a flex container drops the space between them. */
+  column-gap: var(--space-1);
   min-block-size: var(--target-primary);
   padding: var(--space-2) var(--space-4);
   white-space: nowrap;
@@ -60,4 +65,51 @@
 
 .ui-tabnav__count {
   font-variant-numeric: tabular-nums;
+}
+
+/* The edge fade (guide `tabs`, "Fading the edges"): the list shows through an opaque layer minus a band at each end,
+   and each band grows from 0 as the row is scrolled away from that end, by a scroll-driven animation on the list's own
+   scroll position. When the tabs fit, the scroll timeline is inactive and nothing fades. An enhancement only: where
+   scroll-driven animations are not supported the row is plain. The scroll padding keeps a focused tab, and its ring
+   (drawn inside the link), out of the bands; forced colours drop the fade so nothing is dimmed there. */
+@property --tabnav-fade-start {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --tabnav-fade-end {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@supports (animation-timeline: scroll()) {
+  .ui-tabnav__list {
+    mask:
+      linear-gradient(black, black) no-clip subtract,
+      linear-gradient(to right, black, transparent) 0 0 / var(--tabnav-fade-start) 100% no-repeat no-clip,
+      linear-gradient(to right, transparent, black) 100% 0 / var(--tabnav-fade-end) 100% no-repeat no-clip;
+    animation: ui-tabnav-fade-start linear both, ui-tabnav-fade-end linear both;
+    animation-timeline: scroll(self inline);
+    animation-range: 0 var(--tabnav-fade), calc(100% - var(--tabnav-fade)) 100%;
+  }
+
+  @media (forced-colors: active) {
+    .ui-tabnav__list {
+      mask: none;
+    }
+  }
+}
+
+@keyframes ui-tabnav-fade-start {
+  to {
+    --tabnav-fade-start: var(--tabnav-fade);
+  }
+}
+
+@keyframes ui-tabnav-fade-end {
+  from {
+    --tabnav-fade-end: var(--tabnav-fade);
+  }
 }

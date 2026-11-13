@@ -1,5 +1,4 @@
-import type { SortWords } from '@/components/ui/Table';
-import type { ScopeAnswer, StatusMarkKind } from '@/components/ui/types';
+import type { ScopeAnswer, SortWords, StatusMarkKind } from '@/components/ui/types';
 import type { Tally } from '@/lib/ui/marks';
 
 /**

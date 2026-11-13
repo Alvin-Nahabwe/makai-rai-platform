@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { Children, isValidElement, type ReactElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { Table, type TableColumn, type TableProps } from '@/components/ui/Table';
 import { SORT_WORDS } from '@/lib/ui/copy';
 import { decode, textOf } from '@/__tests__/helpers/markup';
@@ -133,22 +133,101 @@ describe('Table', () => {
     expect(html({ onSort: undefined, columns: [{ key: 'finding', label: 'Finding' }, { key: 'stage', label: 'Stage' }] })).not.toContain('<button');
   });
 
-  it('in production the same mistakes render a plain table: no aria-sort, no status, no dead button', () => {
-    vi.stubEnv('NODE_ENV', 'production');
-    try {
-      const wrongKey = html({ sort: { key: 'stage', direction: 'ascending' } });
-      expect(wrongKey).not.toContain('aria-sort');
-      expect(wrongKey).toMatch(/<p role="status" class="ui-table__status visually-hidden"><\/p>/);
-      expect(html({ onSort: undefined })).not.toContain('<button');
-    } finally {
-      vi.unstubAllEnvs();
-    }
+  describe('in production a mistake renders a plain table and is reported with console.error', () => {
+    const EMPTY_STATUS = /<p role="status" class="ui-table__status visually-hidden"><\/p>/;
+    let errors: MockInstance<typeof console.error>;
+    beforeEach(() => {
+      vi.stubEnv('NODE_ENV', 'production');
+      errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    });
+    afterEach(() => { vi.unstubAllEnvs(); errors.mockRestore(); });
+    /** Every console.error message, which must never hold a cell's content or the caption. */
+    const reported = () => errors.mock.calls.map((c) => String(c[0]));
+    const noCellText = () => {
+      for (const m of reported()) for (const t of ['Retention is not set', 'Consent does not cover reuse', '3 Mar 2026', 'Sample findings']) expect(m).not.toContain(t);
+    };
+
+    it('a sort key naming a column that is not sortable: no aria-sort, an empty status, the buttons kept', () => {
+      const out = html({ sort: { key: 'stage', direction: 'ascending' } });
+      expect(out).not.toContain('aria-sort');
+      expect(out).toMatch(EMPTY_STATUS);
+      expect(out.match(/<button /g)).toHaveLength(3);
+      expect(reported()).toEqual(['Table: sort.key "stage" names a column that is not sortable']);
+      noCellText();
+    });
+
+    it('a sort key naming no column: the same, and the key is cut to 40 characters', () => {
+      const long = `x${'y'.repeat(59)}`;
+      const out = html({ sort: { key: long, direction: 'ascending' } });
+      expect(out).not.toContain('aria-sort');
+      expect(out).toMatch(EMPTY_STATUS);
+      expect(reported()).toEqual([`Table: sort.key "${long.slice(0, 40)}" names no column`]);
+    });
+
+    it('a sort direction that is not aria-sort\'s (cast from an address): no aria-sort, an empty status, one JSON-quoted report', () => {
+      const out = html({ sort: { key: 'opened', direction: 'asc\n"x' as 'ascending' } });
+      expect(out).not.toContain('aria-sort');
+      expect(out).toMatch(EMPTY_STATUS);
+      expect(reported()).toEqual(['Table: sort.direction "asc\\n\\"x" is not ascending or descending']);
+    });
+
+    it('many rows with no row-header cell are reported once', () => {
+      html({ rows: [1, 2, 3].map((n) => ({ key: `r${n}`, cells: { opened: '1 Mar 2026', stage: 'In processing', questions: n } })) });
+      expect(reported()).toEqual(['Table: 3 row(s) have no cell for the row header "finding", the first "r1"']);
+    });
+
+    it('a valid sort with sortable columns and no onSort: no button, no aria-sort, an empty status', () => {
+      const out = html({ onSort: undefined, sort: { key: 'opened', direction: 'descending' } });
+      expect(out).not.toContain('<button');
+      expect(out).not.toContain('aria-sort');
+      expect(out).toMatch(EMPTY_STATUS);
+      expect(out).toMatch(/<th role="columnheader" scope="col">Opened<\/th>/);
+      expect(reported()).toEqual(['Table: a column is sortable but no onSort was given']);
+    });
+
+    it('an unknown rowHeaderKey: no row header, every cell a data cell under its label', () => {
+      const out = html({ rowHeaderKey: 'owner' });
+      expect(out).not.toContain('role="rowheader"');
+      expect(out.match(/<td role="cell"/g)).toHaveLength(ROWS.length * COLUMNS.length);
+      expect(out).toContain('<td role="cell"><span class="ui-table__cell-label" aria-hidden="true">Finding</span>Retention is not set</td>');
+      expect(reported()).toEqual(['Table: rowHeaderKey "owner" names no column']);
+      noCellText();
+    });
+
+    it('a row with no row-header cell: that row\'s header is empty, the other rows are whole, the row key is reported', () => {
+      const out = html({ rows: [{ key: 'r1', cells: { opened: '1 Mar 2026', stage: 'In processing', questions: 1 } }, ROWS[0]] });
+      expect(out).toMatch(/<tr role="row"><th role="rowheader" scope="row"><\/th><td role="cell">/);
+      expect(out).toContain('<th role="rowheader" scope="row">Retention is not set</th>');
+      expect(reported()).toEqual(['Table: 1 row(s) have no cell for the row header "finding", the first "r1"']);
+      noCellText();
+    });
   });
 
-  it('the type refuses a sortable column without its words', () => {
+  it('the type refuses a sortable column without its words, and words on a column that is not sortable', () => {
     // @ts-expect-error sortable: true needs sortWords (the owner's decision: every sortable column says its own words)
     const refused: TableColumn = { key: 'opened', label: 'Opened', sortable: true };
-    expect(refused.key).toBe('opened');
+    // @ts-expect-error sortWords without sortable: true
+    const wordsAlone: TableColumn = { key: 'opened', label: 'Opened', sortWords: SORT_WORDS.date };
+    expect([refused.key, wordsAlone.key]).toEqual(['opened', 'opened']);
+  });
+
+  it('with columns written `as const`, the keys are checked: rowHeaderKey, sort.key and every row\'s cells', () => {
+    const TYPED = [
+      { key: 'finding', label: 'Finding', sortable: true, sortWords: SORT_WORDS.name },
+      { key: 'stage', label: 'Stage' },
+    ] as const satisfies readonly TableColumn[];
+    const ok = <Table caption="c" columns={TYPED} rowHeaderKey="finding" rows={[{ key: 'r', cells: { finding: 'a', stage: 'b' } }]} sort={{ key: 'finding', direction: 'ascending' }} onSort={() => {}} />;
+    // @ts-expect-error rowHeaderKey names no column
+    const badHeader = <Table caption="c" columns={TYPED} rowHeaderKey="owner" rows={[]} onSort={() => {}} />;
+    // @ts-expect-error sort.key names no column
+    const badSort = <Table caption="c" columns={TYPED} rowHeaderKey="finding" rows={[]} onSort={() => {}} sort={{ key: 'owner', direction: 'ascending' }} />;
+    // @ts-expect-error the row has no cell for the column "stage"
+    const badRow = <Table caption="c" columns={TYPED} rowHeaderKey="finding" rows={[{ key: 'r', cells: { finding: 'a' } }]} onSort={() => {}} />;
+    expect([ok, badHeader, badSort, badRow].every(isValidElement)).toBe(true);
+  });
+
+  it('a missing node, null or false shows no __empty', () => {
+    for (const empty of [undefined, null, false]) expect(html({ rows: [], empty })).not.toContain('ui-table__empty');
   });
 
   it('the CSS switches to cards under a 640 px container, shows the cell labels only there, and moves only colour', () => {

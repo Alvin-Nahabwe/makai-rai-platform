@@ -41,6 +41,13 @@ describe('PageHeader', () => {
     expect(renderToStaticMarkup(<PageHeader title="T" breadcrumb={[]} />)).not.toContain('ui-breadcrumb');
   });
 
+  it('a lead or actions given as null or false render no wrapper, as when left out', () => {
+    for (const none of [undefined, null, false]) {
+      const out = renderToStaticMarkup(<PageHeader title="T" lead={none} actions={none} />);
+      expect(out).not.toMatch(/ui-page-header__lead|ui-page-header__actions/);
+    }
+  });
+
   it('renders a caller\'s title as text, never as markup', () => {
     expect(renderToStaticMarkup(<PageHeader title={'<img src=x onerror=alert(1)>'} />)).toContain('&lt;img src=x onerror=alert(1)&gt;');
   });

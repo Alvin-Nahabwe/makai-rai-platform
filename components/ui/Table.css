@@ -136,6 +136,11 @@
     display: block;
   }
 
+  /* A caption keeps display: table-caption, which in a block table shrinks it to its longest word. */
+  .ui-table__caption {
+    display: block;
+  }
+
   .ui-table thead tr {
     display: flex;
     flex-wrap: wrap;
@@ -172,8 +177,10 @@
     background-color: var(--color-surface);
   }
 
+  /* `.ui-table .ui-table__end` would otherwise put an end-aligned column's label and value on the card's right edge. */
   .ui-table tbody th,
-  .ui-table tbody td {
+  .ui-table tbody td,
+  .ui-table tbody .ui-table__end {
     padding: 0;
     border: 0;
     text-align: start;

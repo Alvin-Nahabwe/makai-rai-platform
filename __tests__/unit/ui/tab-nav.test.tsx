@@ -50,7 +50,20 @@ describe('TabNav', () => {
     expect(css).not.toMatch(/box-shadow/);
   });
 
-  it('is a server component', () => {
-    expect(readFileSync('components/ui/TabNav.tsx', 'utf8')).not.toContain("'use client'");
+  it('is a client component, for the effect that brings the current tab into view inside its row', () => {
+    const source = readFileSync('components/ui/TabNav.tsx', 'utf8');
+    expect(source).toMatch(/^'use client';/);
+    expect(source).not.toMatch(/scrollIntoView|window\.scroll|scrollTo\(|behavior/);
+  });
+
+  it('the count is kept apart from the label by a gap the link draws (a flex container drops the space)', () => {
+    expect(readFileSync('components/ui/TabNav.css', 'utf8')).toMatch(/\.ui-tabnav__item\s*\{[^}]*column-gap:\s*var\(--space-1\)/);
+  });
+
+  it('the edge fade is an enhancement: inside @supports, and off in forced colours', () => {
+    const css = readFileSync('components/ui/TabNav.css', 'utf8');
+    expect(css).toMatch(/@supports \(animation-timeline: scroll\(\)\)\s*\{[\s\S]*mask:/);
+    expect(css).toMatch(/@media \(forced-colors: active\)\s*\{[^}]*\.ui-tabnav__list\s*\{[^}]*mask:\s*none/);
+    expect(css.slice(0, css.indexOf('@supports (animation-timeline: scroll())'))).not.toMatch(/mask/);
   });
 });

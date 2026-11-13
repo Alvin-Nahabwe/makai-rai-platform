@@ -297,8 +297,8 @@ export default async function UiKitPage(): Promise<ReactElement> {
         <ul role="list" style={{ display: 'grid', gap: 'var(--space-2)', listStyle: 'none' }}>
           <li><ItemPlate title="Consent covers the secondary use of the sample data" code="PO-03.2" mark="partly" state="Decided 11 Feb 2026" href="#item-plate" headingLevel={3} /></li>
           <li><ItemPlate title="A data protection impact assessment exists" code="PO-04.1" mark="not_yet" state="No decision recorded" href="#item-plate" current headingLevel={3} /></li>
-          <li><ItemPlate title="Retention is set, read only" code="PO-05.1" mark="done" state="Decided 2 Mar 2026" headingLevel={3} /></li>
-          <li><ItemPlate title="Does the sample model use personal data from patients, carers or health workers collected for another purpose, and was each group told how it would be reused?" code="PO-01.1" mark="scope_answered" state="Answered on 4 Feb 2026" href="#item-plate" headingLevel={3} /></li>
+          <li><ItemPlate title="Retention is set, read only" code="PO-05.1" mark="done" noEvidence state="Decided 2 Mar 2026" headingLevel={3} /></li>
+          <li><ItemPlate title="Does the sample model use personal data from patients, carers or health workers collected for another purpose, and was each group told how it would be reused?" code="PO-01.1" mark="scope_answered" scopeAnswer="yes" state="Recorded 4 Feb 2026" href="#item-plate" headingLevel={3} /></li>
           <li><ItemPlate title="A plate with the name alone" /></li>
         </ul>
       </KitSection>

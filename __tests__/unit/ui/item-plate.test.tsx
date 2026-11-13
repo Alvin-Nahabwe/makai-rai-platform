@@ -22,7 +22,7 @@ describe('ItemPlate', () => {
     expect(words).toBeLessThan(code);
     expect(code).toBeLessThan(state);
     expect(html).toMatch(/<p class="ui-plate__code">PO-03.2<\/p>/);
-    expect(html).toMatch(/<p class="ui-plate__state">Decided 11 Feb 2026<\/p>/);
+    expect(html).toMatch(/<div class="ui-plate__state">Decided 11 Feb 2026<\/div>/);
   });
 
   it('current gives aria-current="step" on the link and the pin "You are here"', () => {
@@ -42,7 +42,7 @@ describe('ItemPlate', () => {
   it('current without an address puts aria-current on the title', () => {
     const html = plate({ current: true, href: undefined });
     expect(html).not.toContain('<a ');
-    expect(html).toMatch(/<p class="ui-plate__title"><span aria-current="step">Consent covers secondary use<\/span><\/p>/);
+    expect(html).toMatch(/<div class="ui-plate__title"><span aria-current="step">Consent covers secondary use<\/span><\/div>/);
     expect(html).toMatch(/^<div class="ui-plate ui-plate--current">/);
   });
 
@@ -51,7 +51,7 @@ describe('ItemPlate', () => {
     expect(plate({ headingLevel: 2 })).toMatch(/<h2 class="ui-plate__title">/);
     expect(plate({ headingLevel: 4 })).toMatch(/<h4 class="ui-plate__title">/);
     expect(plate()).not.toMatch(/<h\d/);
-    expect(plate()).toMatch(/<p class="ui-plate__title"><a /);
+    expect(plate()).toMatch(/<div class="ui-plate__title"><a /);
   });
 
   it('the mark is StatusMark as it is, alone in __mark; the plate\'s own elements carry no mark class', () => {
@@ -64,7 +64,23 @@ describe('ItemPlate', () => {
 
   it('optional parts are absent when not given', () => {
     const html = renderToStaticMarkup(<ItemPlate title="Retention is set" />);
-    expect(html).toBe('<div class="ui-plate"><p class="ui-plate__title">Retention is set</p></div>');
+    expect(html).toBe('<div class="ui-plate"><div class="ui-plate__title">Retention is set</div></div>');
+  });
+
+  it('a state given as null or false renders no __state, as when left out', () => {
+    for (const none of [undefined, null, false]) expect(plate({ state: none })).not.toContain('ui-plate__state');
+  });
+
+  it('the state and a title that is not a heading are <div>s, so a caller\'s block content is valid markup', () => {
+    const html = renderToStaticMarkup(<ItemPlate title={<p>Block title</p>} state={<p>Block state</p>} />);
+    expect(html).toBe('<div class="ui-plate"><div class="ui-plate__title"><p>Block title</p></div><div class="ui-plate__state"><p>Block state</p></div></div>');
+  });
+
+  it('noEvidence and scopeAnswer reach the mark unchanged (spec 7.2)', () => {
+    expect(textOf(plate({ mark: 'done', noEvidence: true }))).toContain('Done, no evidence attached');
+    expect(textOf(plate({ mark: 'scope_answered', scopeAnswer: 'yes' }))).toContain('Answer: Yes');
+    expect(textOf(plate({ mark: 'scope_answered', scopeAnswer: 'not_sure' }))).toContain('Answer: Not sure');
+    expect(textOf(plate({ mark: 'done' }))).not.toContain('no evidence');
   });
 
   it('the link never prefetches (a plate sits in long lists)', () => {

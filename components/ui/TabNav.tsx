@@ -1,5 +1,7 @@
+'use client';
+
 import Link from 'next/link';
-import type { ReactElement } from 'react';
+import { useEffect, useRef, type ReactElement } from 'react';
 import './TabNav.css';
 
 export type TabNavItem = {
@@ -14,18 +16,50 @@ export type TabNavItem = {
 export type TabNavProps = { label: string; items: readonly TabNavItem[] };
 
 /**
+ * Brings the current tab wholly into view inside its own row, by the row's `scrollLeft` alone: never the page's scroll
+ * position, never smoothly, and not at all when the tab is already wholly in view. The row's scroll padding (the width
+ * of its edge fade) is kept clear at both ends, so the tab never sits under a fade. `scrollLeft` is a physical offset,
+ * so the same arithmetic holds right to left.
+ */
+function revealCurrent(list: HTMLElement): void {
+  const tab = list.querySelector<HTMLElement>('[aria-current="page"]');
+  if (tab === null) return; // no tab is current: nothing to bring into view
+  const row = list.getBoundingClientRect();
+  const box = tab.getBoundingClientRect();
+  // The row's scroll padding is a length here (TabNav.css); `auto` reads as NaN and means no padding.
+  const padding = parseFloat(getComputedStyle(list).scrollPaddingInlineStart) || 0;
+  // In view means clear of the edge fades too: the visible part of the row is its box less the padding at each end.
+  if (box.left < row.left + padding) list.scrollLeft += box.left - row.left - padding;
+  else if (box.right > row.right - padding) list.scrollLeft += box.right - row.right + padding;
+}
+
+/**
  * Tabs as navigation (plan 1A Task 5, decision B9; modern-web-guidance `tabs` and `navbar`): each tab is an address, so
  * this is a labelled <nav> of links that stay in the tab order, never an ARIA tab list. The current one says
- * aria-current="page" and carries a 3 px underline (a shape, not a colour alone). The links are plain next/link, which
- * prefetches: a tab bar holds a few links, each a likely next page. The list keeps role="list" because Safari drops the
- * list role from a list styled `list-style: none`.
+ * aria-current="page" and carries a 3 px underline (a shape, not a colour alone). The tabs keep one row that scrolls
+ * inside itself; an effect brings the current tab into view when the page opens, when its fonts arrive and when the tabs
+ * change (a client component for that alone: with no script the row still scrolls by hand). The links are plain next/link,
+ * which prefetches: a tab bar holds a few links, each a likely next page. The list keeps role="list" because Safari
+ * drops the list role from a list styled `list-style: none`.
  */
 export function TabNav({ label, items }: TabNavProps): ReactElement {
+  const listRef = useRef<HTMLUListElement>(null);
+  // What the row shows: a change in any tab's address, label, count or currency can move the current tab.
+  const shape = items.map((item) => `${item.href}\u0000${item.label}\u0000${item.count ?? ''}\u0000${item.current}`).join('\u0001');
+  useEffect(() => {
+    const list = listRef.current;
+    if (list === null) return;
+    revealCurrent(list);
+    // A web font that arrives later changes every tab's width: look again once the fonts are in.
+    let live = true;
+    void document.fonts.ready.then(() => { if (live) revealCurrent(list); });
+    return () => { live = false; };
+  }, [shape]);
   return (
     <nav className="ui-tabnav" aria-label={label}>
-      <ul className="ui-tabnav__list" role="list">
-        {items.map((item) => (
-          <li key={item.href}>
+      <ul ref={listRef} className="ui-tabnav__list" role="list">
+        {items.map((item, i) => (
+          <li key={`${i}-${item.href}`}>
             <Link className={item.current ? 'ui-tabnav__item ui-tabnav__item--current' : 'ui-tabnav__item'}
               aria-current={item.current ? 'page' : undefined} href={item.href}>
               {item.label}

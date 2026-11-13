@@ -22,15 +22,17 @@ export function Breadcrumb({ items }: BreadcrumbProps): ReactElement | null {
   return (
     <nav className="ui-breadcrumb" aria-label={UI_COPY.breadcrumbLabel}>
       <ol className="ui-breadcrumb__list" role="list">
-        {items.map((item, i) => (
-          <li key={`${i}-${item.label}`} className="ui-breadcrumb__item">
-            {i === last
-              ? (item.href === undefined
-                ? <span className="ui-breadcrumb__current" aria-current="page">{item.label}</span>
-                : <ListLink className="ui-breadcrumb__current" aria-current="page" href={item.href}>{item.label}</ListLink>)
-              : (item.href === undefined ? <span>{item.label}</span> : <ListLink href={item.href}>{item.label}</ListLink>)}
-          </li>
-        ))}
+        {items.map((item, i) => {
+          const className = i === last ? 'ui-breadcrumb__current' : undefined;
+          const ariaCurrent = i === last ? 'page' : undefined;
+          return (
+            <li key={`${i}-${item.label}`} className="ui-breadcrumb__item">
+              {item.href === undefined
+                ? <span className={className} aria-current={ariaCurrent}>{item.label}</span>
+                : <ListLink className={className} aria-current={ariaCurrent} href={item.href}>{item.label}</ListLink>}
+            </li>
+          );
+        })}
       </ol>
     </nav>
   );

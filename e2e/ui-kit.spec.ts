@@ -86,6 +86,9 @@ async function boxOf(locator: Locator, what: string): Promise<{ x: number; y: nu
 /** A kit section by its id (`data-kit-section`). */
 const section = (page: Page, id: string) => page.locator(`[data-kit-section="${id}"]`);
 
+/** The first item plate's link. */
+const plateLink = (page: Page) => section(page, 'item-plate').locator('.ui-plate__link').first();
+
 /**
  * The drawn shapes inside `selector` whose paint is missing or equals the page background: each shape's computed stroke
  * when it has one, else its fill (a <line> has a default black fill it never paints), against the body's background.
@@ -735,17 +738,28 @@ test.describe('Table', () => {
       const cells = Array.from(tr.children).map((c) => Math.round(c.getBoundingClientRect().top));
       return { top: r.top, bottom: r.bottom, cellTops: cells };
     });
+    // Every cell of the first card: its label's box and its value's box (the cell's content after the label).
+    const firstCells = Array.from(root.querySelectorAll('tbody tr:first-child td')).map((cell) => {
+      const label = cell.querySelector('.ui-table__cell-label') as HTMLElement;
+      const valueRange = document.createRange();
+      valueRange.selectNodeContents(cell);
+      valueRange.setStartAfter(label);
+      const l = label.getBoundingClientRect();
+      const v = valueRange.getBoundingClientRect();
+      return { label: label.textContent, labelBottom: l.bottom, labelLeft: l.left, valueTop: v.top, valueLeft: v.left, cellLeft: cell.getBoundingClientRect().left };
+    });
     const label = root.querySelector('td .ui-table__cell-label') as HTMLElement;
-    const cell = label.parentElement as HTMLElement;
-    const labelBox = label.getBoundingClientRect();
-    const valueRange = document.createRange();
-    valueRange.selectNodeContents(cell);
-    valueRange.setStartAfter(label);
-    const value = valueRange.getBoundingClientRect();
+    const caption = root.querySelector('caption') as HTMLElement;
+    const wrap = root.querySelector('.ui-table-wrap') as HTMLElement;
+    const captionText = document.createRange();
+    captionText.selectNodeContents(caption);
     return {
       table: getComputedStyle(table).display,
       label: getComputedStyle(label).display,
-      labelAbove: labelBox.bottom <= value.top + 1,
+      firstCells,
+      captionWidth: caption.getBoundingClientRect().width,
+      captionLines: new Set(Array.from(captionText.getClientRects()).map((r) => Math.round(r.top))).size,
+      wrapContentWidth: wrap.clientWidth - parseFloat(getComputedStyle(wrap).paddingLeft) - parseFloat(getComputedStyle(wrap).paddingRight),
       rows,
       width: Math.round(root.getBoundingClientRect().width),
     };
@@ -759,7 +773,14 @@ test.describe('Table', () => {
     expect(cards.width).toBe(600);
     expect(cards.table).toBe('block');
     expect(cards.label).toBe('block');
-    expect(cards.labelAbove, 'a cell\'s label sits above its value').toBe(true);
+    expect(cards.firstCells.map((c) => c.label)).toEqual(['Stage', 'Opened', 'Evidence files']);
+    for (const c of cards.firstCells) {
+      expect(c.labelBottom, `${c.label}: the label sits above its value`).toBeLessThanOrEqual(c.valueTop + 1);
+      expect(Math.abs(c.labelLeft - c.cellLeft), `${c.label}: the label starts at the cell's start`).toBeLessThanOrEqual(1);
+      expect(Math.abs(c.valueLeft - c.cellLeft), `${c.label}: the value starts at the cell's start`).toBeLessThanOrEqual(1);
+    }
+    expect(Math.abs(cards.captionWidth - cards.wrapContentWidth), 'the visible caption spans the wrapper').toBeLessThanOrEqual(1);
+    expect(cards.captionLines, 'the two-word caption stays on one line').toBe(1);
     for (const [i, row] of cards.rows.entries()) {
       expect(new Set(row.cellTops).size, `card ${i}: its cells stack`).toBe(row.cellTops.length);
       if (i > 0) expect(row.top, `card ${i} is below card ${i - 1}`).toBeGreaterThanOrEqual(cards.rows[i - 1].bottom);
@@ -820,6 +841,7 @@ test.describe('Table', () => {
     })));
     await demo(page).getByRole('button', { name: 'Opened', exact: true }).click();
     await demo(page).getByRole('button', { name: 'Opened', exact: true }).click();
+    await expect(header('Opened')).toHaveAttribute('aria-sort', 'descending');
     const check = async (mode: string) => {
       expect((await shown('Finding')).map((s) => s.shown), `${mode}: unsorted shows the two-way arrows`).toEqual([true, false]);
       const opened = await shown('Opened');
@@ -852,6 +874,10 @@ test.describe('TabNav', () => {
       current: a.getAttribute('aria-current'),
       drawn: s.content !== 'none' && s.borderBottomStyle === 'solid' && parseFloat(s.borderBottomWidth) > 0,
       width: s.borderBottomWidth, bottom: s.bottom, left: s.left, right: s.right, position: s.position,
+      // The pseudo-element's used width and height, and its owner's: its box is read from its computed size, and its
+      // place from `bottom: 0` against an owner that is `position: relative` (so the owner is its containing block).
+      usedWidth: parseFloat(s.width), usedHeight: parseFloat(s.height), linkWidth: a.getBoundingClientRect().width,
+      linkPosition: getComputedStyle(a).position,
       colour: s.borderBottomColor, ground: getComputedStyle(document.body).backgroundColor,
     };
   }));
@@ -870,7 +896,11 @@ test.describe('TabNav', () => {
       const lines = await underlines(page, 'Sample findings');
       expect(lines.filter((l) => l.drawn).map((l) => l.current), mode).toEqual(['page']);
       const line = lines.find((l) => l.drawn);
-      expect(line, mode).toMatchObject({ width: '3px', bottom: '0px', left: '0px', right: '0px', position: 'absolute' });
+      expect(line, mode).toMatchObject({ width: '3px', bottom: '0px', left: '0px', right: '0px', position: 'absolute', linkPosition: 'relative' });
+      expect(Math.abs((line?.usedWidth ?? 0) - (line?.linkWidth ?? -9)), `${mode}: the underline spans the tab`).toBeLessThanOrEqual(1);
+      // Border-box (app/globals.css), so a used height of 3 px is the border alone; with bottom 0 against the
+      // relatively positioned link, that border's bottom edge is the link's bottom edge.
+      expect(line?.usedHeight, `${mode}: the underline is its 3 px border alone`).toBe(3);
       expect(line?.colour, mode).not.toBe(line?.ground);
     };
     await check('normal colours');
@@ -891,6 +921,31 @@ test.describe('TabNav', () => {
     expect(new Set(xs).size).toBe(3);
   });
 
+  test('the count is drawn apart from its label, "Open 13", not "Open13"', async ({ page }) => {
+    await openKit(page);
+    const gap = await nav(page).getByRole('link').first().evaluate((a) => {
+      const words = document.createRange();
+      words.selectNodeContents(a.firstChild as Node);
+      const count = a.querySelector('.ui-tabnav__count') as Element;
+      return count.getBoundingClientRect().left - words.getBoundingClientRect().right;
+    });
+    expect(gap).toBeGreaterThanOrEqual(3);
+  });
+
+  test('at 320 px the current tab is brought into view inside its row, and the page does not move', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    await openKit(page);
+    const list = page.getByRole('navigation', { name: 'Sample guidance', exact: true }).getByRole('list');
+    const current = list.getByRole('link', { name: 'In processing', exact: true });
+    await expect(current).toHaveAttribute('aria-current', 'page');
+    await expect.poll(() => list.evaluate((ul) => ul.scrollLeft), 'the row scrolled itself').toBeGreaterThan(0);
+    const row = await boxOf(list, 'the row');
+    const tab = await boxOf(current, 'the current tab');
+    expect(tab.x, 'the current tab starts inside the row').toBeGreaterThanOrEqual(row.x);
+    expect(tab.x + tab.width, 'the current tab ends inside the row').toBeLessThanOrEqual(row.x + row.width);
+    expect(await page.evaluate(() => window.scrollY), 'the page did not scroll').toBe(0);
+  });
+
   test('at 320 px a row of tabs that does not fit scrolls inside itself, on one line, and the page does not', async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 640 });
     await openKit(page);
@@ -899,9 +954,23 @@ test.describe('TabNav', () => {
     const tops = new Set(await list.getByRole('link').evaluateAll((as) => as.map((a) => Math.round(a.getBoundingClientRect().top))));
     expect(tops.size).toBe(1);
     await expectNoHorizontalScroll(page);
+    // By keyboard: from the row's first tab, Tab four times to the last.
+    const links = list.getByRole('link');
+    await links.first().focus();
+    for (let i = 0; i < 4; i += 1) await page.keyboard.press('Tab');
     const last = list.getByRole('link', { name: 'Cross-cutting questions', exact: true });
-    await last.focus();
+    await expect(last).toBeFocused();
     await expect(last).toBeInViewport({ ratio: 1 });
+    const ring = await last.evaluate((a) => {
+      const s = getComputedStyle(a);
+      const box = a.getBoundingClientRect();
+      const rowBox = (a.closest('ul') as Element).getBoundingClientRect();
+      // The ring is drawn inside the link (a negative offset as deep as the ring), so its outer edge is the link's box.
+      const outset = parseFloat(s.outlineWidth) + parseFloat(s.outlineOffset);
+      return { focusVisible: a.matches(':focus-visible'), style: s.outlineStyle, width: s.outlineWidth, outset,
+        inside: box.left - outset >= rowBox.left - 0.5 && box.right + outset <= rowBox.right + 0.5 };
+    });
+    expect(ring).toEqual({ focusVisible: true, style: 'solid', width: '3px', outset: 0, inside: true });
   });
 });
 
@@ -1036,6 +1105,22 @@ test.describe('ItemPlate', () => {
     });
   });
 
+  test('a linked plate is its link\'s target as a whole: its state line hits the link, a point just outside does not', async ({ page }) => {
+    await openKit(page);
+    const plate = plates(page).first();
+    await plate.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    const hits = await plate.evaluate((el) => {
+      const link = el.querySelector('.ui-plate__link');
+      const state = (el.querySelector('.ui-plate__state') as Element).getBoundingClientRect();
+      const box = el.getBoundingClientRect();
+      const at = (x: number, y: number) => document.elementFromPoint(x, y);
+      const inside = at(state.left + state.width / 2, state.top + state.height / 2);
+      const below = at(box.left + box.width / 2, box.bottom + 3);
+      return { inside: inside === link, outside: below !== null && below.closest('.ui-plate__link') !== link };
+    });
+    expect(hits).toEqual({ inside: true, outside: true });
+  });
+
   test('a long name wraps at 320 px inside its plate with no sideways scroll', async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 640 });
     await openKit(page);
@@ -1088,5 +1173,44 @@ test.describe('Stepper', () => {
       expect(Math.abs(label.y + label.height / 2 - (disc.y + disc.height / 2))).toBeLessThanOrEqual(3);
     }
     await expectNoHorizontalScroll(page);
+  });
+});
+
+test.describe('focus rings of the structure components', () => {
+  test('a sort button, a tab, a breadcrumb link, a plate link and a step link each draw the 3 px ring by keyboard, unclipped', async ({ page }) => {
+    await openKit(page);
+    const targets: Array<[string, Locator]> = [
+      ['sort button', section(page, 'table').getByRole('button', { name: 'Finding', exact: true })],
+      ['tab', page.getByRole('navigation', { name: 'Sample findings', exact: true }).getByRole('link', { name: 'Open 13', exact: true })],
+      ['breadcrumb link', section(page, 'breadcrumb').getByRole('link', { name: 'Projects', exact: true }).first()],
+      ['plate link', plateLink(page)],
+      ['step link', page.getByRole('link', { name: 'Data card (done)', exact: true })],
+    ];
+    for (const [what, target] of targets) {
+      // Keyboard focus: from the target back one stop and forward again, so :focus-visible applies.
+      await target.focus();
+      await page.keyboard.press('Shift+Tab');
+      await page.keyboard.press('Tab');
+      await expect(target, what).toBeFocused();
+      const ring = await target.evaluate((el) => {
+        const s = getComputedStyle(el);
+        const outset = Math.max(0, parseFloat(s.outlineWidth) + parseFloat(s.outlineOffset));
+        const box = el.getBoundingClientRect();
+        const outer = { left: box.left - outset, right: box.right + outset, top: box.top - outset, bottom: box.bottom + outset };
+        // The visible area: the viewport, cut by every ancestor that clips its overflow.
+        let area = { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
+        for (let a = el.parentElement; a !== null; a = a.parentElement) {
+          const cs = getComputedStyle(a);
+          if (cs.overflowX === 'visible' && cs.overflowY === 'visible') continue;
+          const r = a.getBoundingClientRect();
+          area = { left: Math.max(area.left, r.left), top: Math.max(area.top, r.top), right: Math.min(area.right, r.right), bottom: Math.min(area.bottom, r.bottom) };
+        }
+        return {
+          focusVisible: el.matches(':focus-visible'), style: s.outlineStyle, width: s.outlineWidth,
+          inside: outer.left >= area.left - 0.5 && outer.right <= area.right + 0.5 && outer.top >= area.top - 0.5 && outer.bottom <= area.bottom + 0.5,
+        };
+      });
+      expect(ring, what).toEqual({ focusVisible: true, style: 'solid', width: '3px', inside: true });
+    }
   });
 });
