@@ -95,7 +95,10 @@ describe('ButtonLink', () => {
     const links = [...src.matchAll(/<Link\b[^>]*>/g)].map(([tag]) => tag);
     expect(links).toHaveLength(1);
     expect(links[0]).toMatch(/\sprefetch=\{false\}/);
-    // @ts-expect-error -- ButtonLinkProps has no prefetch: nothing can turn prefetching back on.
-    expect(renderToStaticMarkup(<ButtonLink variant="secondary" href="/a" prefetch>A</ButtonLink>)).toMatch(/^<a [^>]*href="\/a"/);
+    const refused = (
+      // @ts-expect-error -- ButtonLinkProps has no prefetch: nothing can turn prefetching back on.
+      <ButtonLink variant="secondary" href="/a" prefetch>A</ButtonLink>
+    );
+    expect(renderToStaticMarkup(refused)).toMatch(/^<a [^>]*href="\/a"/);
   });
 });

@@ -14,7 +14,7 @@ export function EmptyState({ title, children, action }: EmptyStateProps): ReactE
     <div className="ui-empty">
       <p className="ui-empty__title">{title}</p>
       <div className="ui-empty__body">{children}</div>
-      {action === undefined ? null : <div className="ui-empty__action">{action}</div>}
+      {action === undefined || action === null || action === false ? null : <div className="ui-empty__action">{action}</div>}
     </div>
   );
 }

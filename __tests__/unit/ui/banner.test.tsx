@@ -47,4 +47,11 @@ describe('Banner', () => {
     expect(CSS).not.toMatch(/position:\s*(fixed|sticky)/);
     expect(CSS).not.toMatch(/--color-overdue|--color-action/);
   });
+
+  it('an action that renders nothing (null, false) and an empty title leave no empty wrapper', () => {
+    for (const action of [null, false, undefined]) {
+      expect(renderToStaticMarkup(<Banner kind="info" action={action}>Words.</Banner>), String(action)).not.toContain('ui-banner__action');
+    }
+    expect(renderToStaticMarkup(<Banner kind="info" title="">Words.</Banner>)).not.toContain('ui-banner__title');
+  });
 });

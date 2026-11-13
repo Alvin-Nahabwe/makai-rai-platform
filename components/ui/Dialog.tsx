@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useId, useRef } from 'react';
-import type { ReactElement, ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef } from 'react';
+import type { ReactElement, ReactNode, SyntheticEvent } from 'react';
 import './Dialog.css';
 
 export type DialogProps = {
@@ -10,8 +10,12 @@ export type DialogProps = {
   children: ReactNode;
   /** The dialog's buttons, safe action first: showModal() focuses the first focusable element, so the safe action takes focus. */
   actions: ReactNode;
-  /** Called once when the browser closes the dialog (Escape, or a button of a form whose method is dialog); the caller then sets `open` to false. */
-  onClose?: () => void;
+  /**
+   * Called once when the browser closes the dialog (Escape, or a button of a form whose method is dialog); the caller
+   * then sets `open` to false. Required: Escape always closes the native dialog, and a caller that kept `open` true
+   * could never open it again.
+   */
+  onClose: () => void;
 };
 
 /**
@@ -20,7 +24,9 @@ export type DialogProps = {
  * Escape and returns focus to the invoker, so there is no role, no aria-modal, no focus trap and no key handler here.
  *
  * Escape fires the native `cancel` and then `close`; `onClose` is called once for the two. A close the caller makes by
- * setting `open` to false is not reported back.
+ * setting `open` to false is not reported back, nor is a `cancel` that bubbles from inside (a dismissed file picker), nor
+ * a late `close` that arrives after the dialog was opened again. Unmounted while open, it closes the native dialog
+ * first, so the browser returns focus to the invoker; a caller may also simply keep the Dialog mounted.
  *
  * Focus on opening: showModal() focuses the first focusable element inside the dialog, so the caller makes the safe
  * action the focused one by putting it first in `actions` (Cancel before Archive) with nothing focusable in `children`
@@ -43,14 +49,21 @@ export function Dialog({ open, title, children, actions, onClose }: DialogProps)
     }
   }, [open]);
 
+  useLayoutEffect(() => {
+    const dialog = ref.current;
+    return () => { if (dialog?.open === true) dialog.close(); };
+  }, []);
+
   const report = () => {
     if (reported.current) return;
     reported.current = true;
-    onClose?.();
+    onClose();
   };
+  const own = (e: SyntheticEvent<HTMLDialogElement>) => e.target === e.currentTarget;
 
   return (
-    <dialog ref={ref} className="ui-dialog" aria-labelledby={titleId} onCancel={report} onClose={() => { if (open) report(); }}>
+    <dialog ref={ref} className="ui-dialog" aria-labelledby={titleId} onCancel={(e) => { if (own(e)) report(); }}
+      onClose={(e) => { if (own(e) && open && ref.current?.open === false) report(); }}>
       <h2 id={titleId} className="ui-dialog__title">{title}</h2>
       <div className="ui-dialog__body">{children}</div>
       <div className="ui-dialog__actions">{actions}</div>

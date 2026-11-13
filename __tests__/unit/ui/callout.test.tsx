@@ -31,4 +31,8 @@ describe('Callout', () => {
     expect(rules.find((r) => r.selector === '.ui-callout--caution')?.body).toMatch(/border-inline-start:\s*4px solid var\(--color-heading\)/);
     expect(CSS).not.toMatch(/--color-overdue|--color-action/);
   });
+
+  it('an empty title leaves no empty title element', () => {
+    expect(renderToStaticMarkup(<Callout kind="note" title="">w</Callout>)).not.toContain('ui-callout__title');
+  });
 });

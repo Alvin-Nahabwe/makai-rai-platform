@@ -21,4 +21,10 @@ describe('EmptyState', () => {
     expect(html).not.toContain('ui-empty__action');
     expect(html).not.toMatch(/role=|aria-live/);
   });
+
+  it('an action that renders nothing (null, false) leaves no empty wrapper', () => {
+    for (const action of [null, false]) {
+      expect(renderToStaticMarkup(<EmptyState title="t" action={action}>w</EmptyState>), String(action)).not.toContain('ui-empty__action');
+    }
+  });
 });

@@ -18,7 +18,7 @@ export function Callout({ kind, title, children }: CalloutProps): ReactElement {
     <div className={`ui-callout ui-callout--${kind}`}>
       {kind === 'caution' ? <span className="ui-callout__icon"><Icon name="triangle-alert" /></span> : null}
       <div className="ui-callout__body">
-        {title === undefined ? null : <p className="ui-callout__title">{title}</p>}
+        {title ? <p className="ui-callout__title">{title}</p> : null}
         {children}
       </div>
     </div>

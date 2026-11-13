@@ -29,8 +29,10 @@ export interface InlineConfirmProps {
  * The confirmation of an action that cannot be undone or that changes what others rely on (UX-29): it
  * appears in place, names the object and the consequence, and its button repeats the action. It is not a
  * modal and not `window.confirm`. The confirm button is disabled while `busy` or when `canConfirm` is false (disabled, not
- * the kit's busy state, so a second press cannot send twice). Cancel comes first, in the markup and on screen, on every
- * width (plan 1A Task 6), and is never disabled.
+ * the kit's busy state, so a second press cannot send twice). It is disabled, not busy, because the seven screens that use
+ * it and their tests work that way today; a focused confirm button therefore loses focus during the send, the failure
+ * Button's own doc names, and the screens' own tasks move it to `busy`. Cancel comes first, in the markup and on screen,
+ * on every width (plan 1A Task 6), and is never disabled.
  */
 export function InlineConfirm(p: InlineConfirmProps): ReactElement {
   const headingId = useId();

@@ -3,13 +3,13 @@ import { Icon } from '@/components/ui/Icon';
 import type { IconName } from '@/components/ui/types';
 import './Banner.css';
 
-type BannerKind = 'offline' | 'archived' | 'session' | 'info';
+export type BannerKind = 'offline' | 'archived' | 'session' | 'info';
 
 export type BannerProps = {
   kind: BannerKind;
   title?: string;
   children: ReactNode;
-  /** Any node: a next/link Link, an <a> or a ButtonLink ("Sign in again"), rendered in __action as given. */
+  /** Any node: a next/link Link, an <a> or a ButtonLink ("Sign in again"), rendered in __action as given; null or false renders no __action. */
   action?: ReactNode;
 };
 
@@ -26,10 +26,10 @@ export function Banner({ kind, title, children, action }: BannerProps): ReactEle
     <div className={`ui-banner ui-banner--${kind}`}>
       <span className="ui-banner__icon"><Icon name={ICON_OF[kind]} /></span>
       <div className="ui-banner__body">
-        {title === undefined ? null : <p className="ui-banner__title">{title}</p>}
+        {title ? <p className="ui-banner__title">{title}</p> : null}
         {children}
       </div>
-      {action === undefined ? null : <div className="ui-banner__action">{action}</div>}
+      {action === undefined || action === null || action === false ? null : <div className="ui-banner__action">{action}</div>}
     </div>
   );
 }

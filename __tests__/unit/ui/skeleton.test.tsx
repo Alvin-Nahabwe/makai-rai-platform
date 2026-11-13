@@ -13,7 +13,7 @@ describe('Skeleton', () => {
     expect(CSS).not.toMatch(/@keyframes|animation|transition/);
   });
 
-  it('the label is a visually hidden role="status" line; the drawn lines are hidden from assistive technology', () => {
+  it('the label is a visually hidden role="status" line that says what is loading; the drawn lines are hidden from assistive technology', () => {
     const html = renderToStaticMarkup(<Skeleton label="Loading the findings" />);
     expect(html).toMatch(/^<div class="ui-skeleton"><p role="status" class="visually-hidden">Loading the findings<\/p><div aria-hidden="true">/);
     expect(textOf(html)).toBe('Loading the findings');
