@@ -10,6 +10,8 @@ import { claimsOutsideNames, claimsOutsideNamesJoined, readFrameworkNames } from
 import { allowListedQuestionTexts, cleanText } from '../__tests__/helpers/contentQuestions';
 import { abortPendingBackgroundRequests, assertNoStalePendingTargets } from './helpers/pendingLinks';
 import { reachablePages } from './helpers/reachablePages';
+import { isLegalTextRoute, pageFiles, staticPagesIn, templateRegExp, unaccounted } from './helpers/pageFiles';
+import { ownProject, seedCrawlProject } from './helpers/crawlProject';
 
 /**
  * FR-PUB-01 (SRS line 1103, and 12.2 step 5, SRS line 4985): no page shows a claim of compliance, audit
@@ -169,16 +171,8 @@ function allowedTitlesOn(pathname: string, allowed: readonly string[]): readonly
   return pathname === '/explore/framework' ? allowed : [];
 }
 
-/** The two route templates on which S-06 shows a legal text (app/(public)/legal/[kind] and [kind]/[version]). */
-const LEGAL_TEXT_ROUTES: readonly string[] = ['/legal/[kind]', '/legal/[kind]/[version]'];
-
 /** Legal pages the marker crawl starts from: a kind's current page and a version page. */
 const LEGAL_STARTS = ['/legal/terms', '/legal/privacy', '/legal/privacy/1'];
-
-/** True when `pathname` is a path one of S-06's two route templates covers; any other path, `''` included, is not. */
-function isLegalTextRoute(pathname: string): boolean {
-  return LEGAL_TEXT_ROUTES.some((template) => templateRegExp(template).test(pathname));
-}
 
 /**
  * The words on the page that a person reads or hears, one entry per text node or attribute value, outside the
@@ -284,62 +278,6 @@ function claimsIn(words: Words, teamText: readonly string[] = [], allowedTitles:
     }
   }
   return found;
-}
-
-/** A page file: its route template (route groups removed, `/` for the root) and the group it sits in, if any. */
-type PageFile = { template: string; group: string | null };
-
-/** Every page file under `app/`, from the files themselves (the source `e2e/csp.spec.ts` reads its routes from). */
-function pageFiles(): PageFile[] {
-  const root = path.join(process.cwd(), 'app');
-  const files: PageFile[] = [];
-  const walk = (dir: string, segments: string[]) => {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (entry.isDirectory()) {
-        walk(path.join(dir, entry.name), [...segments, entry.name]);
-      } else if (/^page\.(tsx|ts|jsx|js)$/.test(entry.name)) {
-        const group = segments.find((s) => /^\(.+\)$/.test(s)) ?? null;
-        const route = segments.filter((s) => !/^\(.+\)$/.test(s));
-        files.push({ template: `/${route.join('/')}`, group });
-      }
-    }
-  };
-  walk(root, []);
-  return files.sort((a, b) => a.template.localeCompare(b.template));
-}
-
-/** The page files with no dynamic segment in a route group: the pages a crawl can be told to visit. */
-function staticPagesIn(group: string): string[] {
-  return pageFiles().filter((f) => f.group === group && !f.template.includes('[')).map((f) => f.template);
-}
-
-/** A regular expression for the paths a route template covers: each `[segment]` stands for one path segment. */
-function templateRegExp(template: string): RegExp {
-  const body = template.split('/').map((s) => (/^\[.+\]$/.test(s) ? '[^/]+' : s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))).join('/');
-  return new RegExp(`^${body}$`);
-}
-
-/** True when some visited `pathname + search` is a path the template covers. */
-function reachedBy(template: string, visited: string[]): boolean {
-  return visited.some((v) => templateRegExp(template).test(new URL(v, 'http://path.invalid').pathname));
-}
-
-/**
- * The page files of `group` that no visited path matches and that `notCrawled` does not name, plus the
- * `notCrawled` keys that are not page files or that a visited path matches (a stale or reached entry).
- */
-function unaccounted(group: string, visited: string[], notCrawled: Record<string, string>): string[] {
-  const files = pageFiles();
-  const templates = files.filter((f) => f.group === group).map((f) => f.template);
-  const problems: string[] = [];
-  for (const t of templates) {
-    if (!reachedBy(t, visited) && !(t in notCrawled)) problems.push(`${t}: no crawl reached this page file and NOT_CRAWLED does not name it`);
-  }
-  for (const key of Object.keys(notCrawled)) {
-    if (!files.some((f) => f.template === key)) problems.push(`${key}: NOT_CRAWLED names a page file that does not exist`);
-    else if (templates.includes(key) && reachedBy(key, visited)) problems.push(`${key}: NOT_CRAWLED names a page a crawl reached; remove the entry`);
-  }
-  return problems;
 }
 
 /** Read when the test runs, because `setup` writes the manifest after Playwright has collected the specs. */
@@ -690,27 +628,7 @@ test('FR-PUB-01: no page reachable as any organisation role shows a product clai
   // connection: close, because Node's server destroys an idle keep-alive socket 6 s after its last response, and Playwright's
   // pooled socket has no idle timer: a GET sent just then, while the server is busy, is reset (read ECONNRESET).
   const api = await pwRequest.newContext({ baseURL, storageState: owner.storageStatePath, extraHTTPHeaders: { connection: 'close' } });
-  const seed = async (path: string, data: Record<string, unknown>, what: string): Promise<{ id: string }> => {
-    const response = await api.post(path, { headers: { origin: baseURL ?? '' }, data: { requestId: crypto.randomUUID(), ...data } });
-    expect(response.status(), `seeding ${what}`).toBe(201);
-    return (await response.json()) as { id: string };
-  };
-  const crawlProject = await seed(`/api/v1/orgs/${slug}/projects`, { name: `Claims crawl project ${Date.now()}`, aiSystemType: 'classification' }, 'the crawl project');
-  const projectApi = `/api/v1/orgs/${slug}/projects/${crawlProject.id}`;
-  await seed(`${projectApi}/decisions`, {
-    stage: 'pre-processing', questionId: 'Q-PP-01', baseVersionNumber: null, status: 'done', scopeAnswer: null, optionsInPlace: [], reasonCode: null,
-    reason: 'Crawl fixture reason for this decision.', decidedBy: { kind: 'outside_role', role: 'principal_investigator' }, declaredDate: '2026-10-30', evidenceIds: [],
-  }, 'the crawl project\'s decision');
-  await seed(`${projectApi}/findings`, {
-    stage: 'pre-processing', title: 'Crawl fixture finding', description: 'Raised so the crawl has a finding to open.', riskArea: null, questionId: null, decisionVersionId: null,
-  }, 'the crawl project\'s finding');
-  const review = await seed(`${projectApi}/reviews`, { stage: 'pre-processing', preparedFor: null }, 'the crawl project\'s stage review');
-  await seed(`${projectApi}/reviews/${review.id}/seals`, {}, 'the crawl project\'s seal');
-  // Every link into a project goes to the crawl's own project: the pages of any other project are not followed.
-  const ownProject = (pathname: string): boolean => {
-    const m = /^\/orgs\/[^/]+\/projects\/([^/]+)/.exec(pathname);
-    return m === null || m[1] === 'new' || m[1] === crawlProject.id;
-  };
+  const crawlProject = await seedCrawlProject(api, baseURL, slug, `Claims crawl project ${Date.now()}`);
   const list: ProjectList = async () => {
     const response = await api.get(`/api/v1/orgs/${slug}/projects`);
     expect(response.status(), 'listing the projects of the organisation').toBe(200);
@@ -732,7 +650,7 @@ test('FR-PUB-01: no page reachable as any organisation role shows a product clai
     const page = await context.newPage();
     failOnDialog(page);
     const seatChecker = pageChecker(page, label, teamText);
-    const pages = await reachablePages(page, starts, { max: MAX_PAGES, label, follows: ownProject }, seatChecker.check);
+    const pages = await reachablePages(page, starts, { max: MAX_PAGES, label, follows: (pathname) => ownProject(pathname, crawlProject) }, seatChecker.check);
     await seatChecker.finish();
     reachedBySomeSeat.push(...pages);
     console.log(`[claims-crawl] ${label}: ${pages.length} pages: ${pages.join(' ')}`);
