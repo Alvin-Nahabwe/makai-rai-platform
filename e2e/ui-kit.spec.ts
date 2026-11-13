@@ -611,6 +611,8 @@ test.describe('Dialog', () => {
     await openKit(page);
     const opener = section(page, 'dialog').getByRole('button', { name: 'Open the sample dialog' });
     const output = page.locator('[data-demo-output="dialog"]');
+    const rootOverflow = () => page.evaluate(() => [getComputedStyle(document.body).overflow, getComputedStyle(document.documentElement).overflow]);
+    const overflowBefore = await rootOverflow();
     await opener.focus();
     await page.keyboard.press('Enter');
     const dialog = page.getByRole('dialog', { name: 'Archive the sample project?' });
@@ -618,9 +620,9 @@ test.describe('Dialog', () => {
     expect(await dialog.evaluate((d) => d.matches(':modal'))).toBe(true);
     expect(await dialog.evaluate((d) => [d.getAttribute('role'), d.getAttribute('aria-modal')])).toEqual([null, null]);
     await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
-    // Nothing trapped by script: no inert attribute anywhere, and the page's root keeps its own overflow.
+    // Nothing trapped by script: no inert attribute anywhere, and opening changes neither root's overflow.
     expect(await page.evaluate(() => document.querySelectorAll('[inert]').length)).toBe(0);
-    expect(await page.evaluate(() => [getComputedStyle(document.body).overflow, getComputedStyle(document.documentElement).overflow])).toEqual(['visible', 'visible']);
+    expect(await rootOverflow()).toEqual(overflowBefore);
     await inEachTheme(page, async (theme) => {
       await expectNoSeriousA11yViolations(page, `${KIT} dialog open, ${theme}`);
     });
