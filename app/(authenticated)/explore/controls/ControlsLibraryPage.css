@@ -2,6 +2,7 @@
    themes keep their contrast, and links are at least 24 by 24 CSS pixels. */
 .controls-page__header { margin-bottom: var(--space-6); }
 .controls-page__header h1 { margin: 0; color: var(--text-primary); }
+.controls-page__intro { margin: var(--space-2) 0 0; max-width: 65ch; }
 .controls-page__counts { margin: var(--space-1) 0 0; color: var(--text-muted); font-size: var(--font-size-sm); }
 .controls-page__section { margin-bottom: var(--space-8); }
 .controls-page__section h2 { color: var(--text-primary); margin-bottom: var(--space-4); }

@@ -71,15 +71,15 @@ test('FR-REV-01 FR-REV-02 FR-REV-03 FR-REV-05 M-28 NFR-A11Y-02: J-08 by keyboard
   page.on('request', (req) => urls.push(req.url()));
   await page.goto(`/orgs/${org.slug}/projects/${p.id}/reviews/new?stage=pre-processing`);
   await tabTo(page, page.getByLabel('Prepared for (optional)'));
-  await page.keyboard.type('UNCST protocol submission');
+  await page.keyboard.type('Ethics board submission 1');
   await expect(page.getByText('25 of 120')).toBeVisible();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Pre-processing review 1');
-  await expect(page.getByText('Prepared for: UNCST protocol submission')).toBeVisible();
+  await expect(page.getByText('Prepared for: Ethics board submission 1')).toBeVisible();
   await expect(page.getByText('Never sealed.')).toBeVisible();
   const s16 = page.url();
   expect(urls.length).toBeGreaterThan(1);
-  expect(urls.filter((u) => /UNCST|protocol(%20|\+| )submission/i.test(u))).toEqual([]);
+  expect(urls.filter((u) => /Ethics(%20|\+| )board(%20|\+| )submission/i.test(u))).toEqual([]);
 
   await signIn(page, 'reviewer');
   await page.goto(s16);

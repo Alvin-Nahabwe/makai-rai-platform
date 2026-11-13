@@ -3,25 +3,20 @@ import { join } from 'node:path';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { readCreditLine } from '@/lib/credit';
-import { UncstTable } from '@/components/help/UncstTable';
 import { ABOUT_COPY } from '@/lib/about/copy';
 import { PRODUCT_NAME, pageTitle } from '@/lib/ui/title';
 import './AboutPage.css';
 
 /**
- * S-28, the public About page. It says what the platform is and is not, why
- * there is no score, what it never does, and what a seal does and does not
- * prove, credits GIZ, and gives Help and contact.
+ * S-28, the public About page. It says what the platform is and is not and
+ * what a seal does and does not prove, credits GIZ, and gives Help and contact.
  *
  * Section ids are linked from other pages and are part of the contract:
- * `why-no-score`, `never-runs`, `what-a-seal-proves`, `credit`,
- * `free-toolkits`, `help-and-contact` and `principle-<slug>`.
+ * `what-a-seal-proves`, `credit`, `help-and-contact` and `principle-<slug>`.
  *
- * `data-claims-allowed` marks the few places that must name a score, so the
- * phrase test (`__tests__/lint/no-product-claims.test.ts`) and the crawls skip
- * exactly those elements and nothing else on the page. In "Why there is no
- * score" it marks the heading and the explanation; the paragraph about what a
- * team gets instead is checked like any other text.
+ * `data-claims-allowed` marks the few places that must name a score or a claim
+ * word, so the phrase test (`__tests__/lint/no-product-claims.test.ts`) and the
+ * crawls skip exactly those elements and nothing else on the page.
  */
 export const metadata = { title: pageTitle(ABOUT_COPY.titles.about) };
 
@@ -280,7 +275,6 @@ export default function AboutPage() {
         <div className="page-hero__grid-overlay"></div>
         <div className="page-hero__accent-line"></div>
         <div className="container" style={{ position: 'relative', zIndex: 2 }}>
-          <span className="about-eyebrow">About the platform</span>
           <h1>{`About the ${PRODUCT_NAME}`}</h1>
           <p className="page-hero__desc">
             A place for a team to record what it decided about its AI system, why it decided it,
@@ -307,7 +301,8 @@ export default function AboutPage() {
             when, and any evidence. The team decides; the platform records. Where a decision falls
             short of the expected practice, the platform raises a finding. Your team closes a
             finding with a mitigation or by accepting the risk. When a stage review is ready, your
-            team seals it, and the platform builds documents from the sealed record.
+            team seals it, and the platform builds documents from the sealed record. The platform
+            does not test your model or calculate anything from your data.
           </p>
           <p data-claims-allowed="not-an-approval-service">
             It is not an approval, audit, certification or compliance service, and nothing it
@@ -318,41 +313,6 @@ export default function AboutPage() {
             Only members of your organisation can see its records, according to their role.
             MAK-AI&apos;s administrator has no access to records in the application, and the
             operator who runs the server has technical access to the database.
-          </p>
-        </section>
-
-        <section className="about-section" aria-labelledby="why-no-score">
-          <h2 id="why-no-score" data-claims-allowed="why-no-score">Why there is no score</h2>
-          <p>
-            Earlier versions of this tool turned a team&apos;s answers into a number and a label.
-            We removed both. The labels were never checked against what actually happened in real
-            projects. When the rules were tested on 5,000 simulated sets of answers, moving the
-            dividing lines by half of one answer step, as happened between two versions of this
-            tool, changed the label for 43 to 48 of every 100 identical sets of answers. A number
-            that moves when nothing about your practice moves tells you nothing true about your
-            practice, and it invites work on the number instead of the practice.
-          </p>
-          <p>
-            What you get instead: for every question, a record of what your team decided, why, who
-            decided and when, with evidence; a finding for every shortfall, closed by a mitigation
-            or an accepted risk; and documents built from that record, each stored with a
-            fingerprint so your team can show exactly what it issued. Counts of decisions,
-            findings and mitigations are shown as whole numbers for each stage, such as 12
-            questions with a decision or 3 open findings. They are never added into one total.
-          </p>
-        </section>
-
-        <section className="about-section" aria-labelledby="never-runs">
-          <h2 id="never-runs">What this platform never does</h2>
-          <p>
-            The platform never runs evaluations, models, notebooks or uploaded files. It never
-            computes metrics from your team&apos;s data.
-          </p>
-          <p>
-            When you attach evidence, the platform stores the file, reads only its first few bytes
-            to see what kind of file it is, and calculates its fingerprint. It does not open or
-            run what is inside. The platform records what your team says. It does not decide
-            whether it is true.
           </p>
         </section>
 
@@ -445,17 +405,6 @@ export default function AboutPage() {
           </p>
         </section>
 
-        <section className="about-section" aria-labelledby="free-toolkits">
-          <h2 id="free-toolkits">Free toolkits</h2>
-          <p>
-            Each control on the controls page links to free guidance and, where one applies, a
-            free tool. The platform does not run any of them.
-          </p>
-          <p>
-            <Link href="/explore/controls">Open the controls page</Link>
-          </p>
-        </section>
-
         <section className="about-section" aria-labelledby="help-and-contact">
           <h2 id="help-and-contact">Help and contact</h2>
           {helpEmail === null ? (
@@ -471,7 +420,6 @@ export default function AboutPage() {
             without screenshots of your records.
           </p>
           <p>Never send record text by email. That means decisions, findings, evidence names and file contents.</p>
-          <UncstTable />
         </section>
       </div>
     </div>

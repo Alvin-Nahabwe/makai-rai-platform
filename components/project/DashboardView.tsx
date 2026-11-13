@@ -19,7 +19,6 @@ export function DashboardView({ data }: { data: DashboardData }): ReactElement {
       <div className="page-header">
         <div>
           <h1>Dashboard</h1>
-          <p className="text-muted">Overdue is counted in East Africa Time (UTC+3).</p>
         </div>
         {data.canCreate ? <ListLink href={newProject} className="btn btn--primary">New project</ListLink> : null}
       </div>

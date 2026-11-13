@@ -32,9 +32,10 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
 
 /**
  * S-30, Organisation details (FR-ORG-09). Every member reads the name and the institution's legal name; the action
- * rows (who invited, changed or removed whom) are shown to owners and admins only (SRS line 577), and so is the
- * export link. The two slots belong to ORG (events) and EXP (export); this page wires them and
- * edits none. `?before=<event id>` pages back through the events.
+ * rows (who invited, changed or removed whom) are shown to owners and admins only (SRS line 577), and the export block,
+ * heading included, only to a role that can export (`team:export`). The two slots belong to ORG (events) and EXP
+ * (export); this page wires them and edits none. One heading per block: the events list carries its own
+ * (CONSOLIDATED section 4). `?before=<event id>` pages back through the events.
  */
 export default async function OrganisationSettingsPage({
   params,
@@ -51,6 +52,7 @@ export default async function OrganisationSettingsPage({
   // Who sees the action rows is FR-ORG-09's own rule (owners and admins), not whoever holds team:export.
   const seesEvents = ctx.role === 'owner' || ctx.role === 'admin';
   const page = seesEvents ? await listOrganisationEvents(ctx, { before, limit: EVENTS_PAGE_SIZE }) : null;
+  const canExport = can(ctx.role, 'team:export');
 
   return (
     <div className="page-content">
@@ -61,16 +63,13 @@ export default async function OrganisationSettingsPage({
           <p className="text-muted">{`Legal name: ${org.legalName ?? 'Not recorded'}`}</p>
         </div>
       </div>
-      <section aria-labelledby="export-heading">
-        <h2 id="export-heading">Team export</h2>
-        <TeamExportLink orgSlug={slug} canExport={can(ctx.role, 'team:export')} />
-      </section>
-      {page !== null && (
-        <section aria-labelledby="events-heading">
-          <h2 id="events-heading">Membership and organisation changes</h2>
-          <OrganisationEventsList events={page.events} hasMore={page.hasMore} />
+      {canExport && (
+        <section aria-labelledby="export-heading">
+          <h2 id="export-heading">Team export</h2>
+          <TeamExportLink orgSlug={slug} canExport={canExport} />
         </section>
       )}
+      {page !== null && <OrganisationEventsList events={page.events} hasMore={page.hasMore} />}
     </div>
   );
 }

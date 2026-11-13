@@ -9,8 +9,8 @@ import { stageReviewName } from '@/lib/seal/reviewName';
 import { STAGES, type Stage } from '@/types/record';
 import type { ApiErrorBody, StageReviewView } from '@/types/api';
 
-/** FR-REV-01's help text under the note (SRS line 2100), verbatim. */
-const HELP = 'What is this review for? For example: UNCST protocol submission; data transfer agreement with the partner hospital; annual renewal; NeurIPS datasets track; Hugging Face upload. Use roles, not names.';
+/** FR-REV-01's help text under the note (SRS line 2100), without its country example (CONSOLIDATED section 4, audit C #216). */
+const HELP = 'What is this review for? For example: data transfer agreement with the partner hospital; annual renewal; NeurIPS datasets track; Hugging Face upload. Use roles, not names.';
 const MAX = 120;
 const STAGE_WORDS: Record<Stage, string> = { 'pre-processing': 'Pre-processing', 'in-processing': 'In-processing', 'post-processing': 'Post-processing' };
 

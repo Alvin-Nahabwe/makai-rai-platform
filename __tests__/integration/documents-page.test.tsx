@@ -170,21 +170,18 @@ describe('S-18', () => {
     }
   });
 
-  it('OD-20 FR-DOC-01 UX-20: S-18 shows "Uganda\'s AI protocol issues" and the UNCST table below the documents for every sealed review and every role', async () => {
+  it('FR-DOC-01: S-18 shows no UNCST or Uganda-only table, for a sealed or never-sealed review and every role', async () => {
+    // CONSOLIDATED section 4 (owner ruling, country content): the UNCST table and its heading left S-18.
     for (const role of ['owner', 'admin', 'reviewer', 'assessor', 'viewer'] as const) {
       sessionFor(fxA.members[role].userId);
-      const html = await render(reviewOfA);
-      const at = html.search(/<h2[^>]*>Uganda&#x27;s AI protocol issues<\/h2>/);
-      expect(at, role).toBeGreaterThan(-1);
-      expect(html.slice(at), role).toContain('<caption');
-      const issuedAt = html.indexOf('id="documents-issued"');
-      expect(issuedAt, role).toBeGreaterThan(-1);   // the issued list is always on the page, whatever the earlier cases added to this review
-      expect(at, role).toBeGreaterThan(issuedAt);
-      if (can(role, 'document:generate')) expect(at, role).toBeGreaterThan(html.indexOf('>Data card<'));
+      for (const review of [reviewOfA, unsealedReviewOfA]) {
+        const html = await render(review);
+        expect(html, role).toMatch(/<h1[^>]*>Generate a document<\/h1>/);   // not vacuous: the page rendered
+        expect(html, role).not.toMatch(/UNCST|AI protocol|<table[\s>]/i);
+      }
+      const sealed = await render(reviewOfA);
+      expect(sealed.indexOf('id="documents-issued"'), role).toBeGreaterThan(-1);   // the issued list stays on the page
+      if (can(role, 'document:generate')) expect(sealed, role).toContain('>Data card<');   // and the form, for the roles that generate
     }
-  });
-
-  it('OD-20: a review never sealed shows no UNCST table', async () => {
-    expect(await render(unsealedReviewOfA)).not.toContain('AI protocol issues');
   });
 });

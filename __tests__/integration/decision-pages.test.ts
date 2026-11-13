@@ -151,13 +151,19 @@ describe('S-13 page', () => {
     return renderToStaticMarkup(createElement(HistoryView, { data: data!, shown }));
   };
 
-  it('FR-DEC-04 (screen) FR-CNT-07: versions newest first, each with its content version and that version\'s wording', async () => {
+  it("FR-DEC-04 (screen) FR-CNT-07: versions newest first, each with that version's wording, and no content version or UTC toggle", async () => {
+    // CONSOLIDATED section 4: the content version and the "Show UTC" disclosure are internal and are not shown.
     await addDecision(fx, project.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId: c1.contentVersionId, status: 'done', declaredDate: '2026-10' });
     await addDecision(fx, project.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId: c1.contentVersionId, status: 'partly', declaredDate: '2026' });
     const h = await history('viewer');
     expect([...h.matchAll(/data-version-number="(\d+)"/g)].map((m) => m[1])).toEqual(['2', '1']);
-    expect(h).toContain('0.0.1-fixture');
-    expect(h).toContain('Show UTC');
+    const wording = wordingIn(c1.semver, 'Q-PP-01')!;
+    const asMarkup = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
+    for (const v of h.split('data-version-number=').slice(1)) {
+      expect(v).toContain(`<dd>${asMarkup(wording.text)}</dd>`);
+      expect(v).toContain(`<dd>${asMarkup(wording.expectedPractice)}</dd>`);
+    }
+    for (const gone of ['Show UTC', 'Content version', c1.semver]) expect(h, gone).not.toContain(gone);
     expect(h).not.toContain('Withdraw this decision');   // a viewer has no withdraw control (FR-DEC-08)
   });
 

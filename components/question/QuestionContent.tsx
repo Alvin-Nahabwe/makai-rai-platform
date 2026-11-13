@@ -10,19 +10,14 @@ export type QuestionContentProps = { question: LoadedQuestion; suggestionCount: 
  * A server component (UX-36): all of it is in the page's HTML before any script runs, and every content text is a
  * React child, so it is escaped as text. It renders inside the shell's `question` region, which the shell names with
  * its own `<h2 id="s12-question">`, so its headings are one level below that one. Order and copy follow W-3 (SRS lines
- * 1835-1855, and line 1942 for narrow screens): the id and module title, the principle, the question, then, when there
+ * 1835-1855, and line 1942 for narrow screens): the principle, the question, then, when there
  * is something to suggest, a link down to the shell's `suggestions` section, which only narrow screens show (on wide
- * ones the suggestions sit beside the question), then the expected practice and why the question is asked.
+ * ones the suggestions sit beside the question), then the expected practice and why the question is asked. The id and
+ * module title are the page's heading (`h1`), so they are not repeated here (CONSOLIDATED section 4).
  */
 export function QuestionContent({ question, suggestionCount }: QuestionContentProps): ReactElement {
   return (
     <div className="question-content">
-      <p className="question-content__meta">
-        {/* The separator is drawn, not read: the id and the module title are announced as two words. */}
-        <span>{question.id}</span>
-        <span aria-hidden="true"> · </span>
-        <span>{question.moduleTitle}</span>
-      </p>
       <p className="question-content__principle">{`Principle: ${question.principle}`}</p>
       <h3 className="question-content__text">{question.text}</h3>
       {suggestionCount > 0 ? (

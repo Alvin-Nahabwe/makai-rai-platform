@@ -18,9 +18,9 @@ export type HistoryEntry = {
 /**
  * S-13's list (FR-DEC-04, FR-DEC-08, FR-CNT-07; 7.5.6, 7.5.8): every version newest first, each with its status (or
  * "Withdrawn: <code>"), reason or the erased line, who decided with the declared date at its precision, who entered it
- * with the received time (UTC on request, because the seal manifest uses UTC), the content version with that version's
- * wording, its evidence (EVD's slot) and its seals (REV-b's slot). A server component: every record text is a React
- * child, so it is shown as text and never as markup (NFR-SEC-11). Each entry carries `data-version-number`.
+ * with the received time, the question as worded in that version, its evidence (EVD's slot) and its seals (REV-b's
+ * slot). The content version and a UTC disclosure are internal and are not shown (CONSOLIDATED section 4). A server
+ * component: every record text is a React child, so it is shown as text and never as markup (NFR-SEC-11). Each entry carries `data-version-number`.
  */
 export function DecisionHistoryList({ orgSlug, entries }: { orgSlug: string; entries: HistoryEntry[] }): ReactElement {
   return (
@@ -38,13 +38,7 @@ export function DecisionHistoryList({ orgSlug, entries }: { orgSlug: string; ent
             <dd>{v.reasonErased !== null ? textErasedLine(v.reasonErased.erasedOn) : (v.reason ?? '')}</dd>
             {v.decidedBy !== null ? (<><dt>Decided by</dt><dd>{`${deciderLabel(v.decidedBy, '', 'record')}${v.declaredDate === null ? '' : `, ${formatDeclaredDate(v.declaredDate)}`}`}</dd></>) : null}
             <dt>Entered by</dt>
-            <dd>
-              {`${v.enteredBy.formerMember ? `${v.enteredBy.name} (former member)` : v.enteredBy.name}, ${formatDay(v.receivedAt)} ${formatTime(v.receivedAt)}`}
-              {' '}
-              <details style={{ display: 'inline-block' }}><summary>Show UTC</summary><time dateTime={v.receivedAt}>{v.receivedAt}</time></details>
-            </dd>
-            <dt>Content version</dt>
-            <dd>{v.content.semver}</dd>
+            <dd>{`${v.enteredBy.formerMember ? `${v.enteredBy.name} (former member)` : v.enteredBy.name}, ${formatDay(v.receivedAt)} ${formatTime(v.receivedAt)}`}</dd>
             {wording !== null ? (<><dt>Question in that version</dt><dd>{wording.text}</dd><dt>What good looked like</dt><dd>{wording.expectedPractice}</dd></>) : null}
             <dt>Evidence</dt>
             <dd>{v.evidence.length === 0 ? 'None' : <VersionEvidenceList orgSlug={orgSlug} items={v.evidence} />}</dd>

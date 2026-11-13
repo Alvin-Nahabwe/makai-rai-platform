@@ -391,15 +391,6 @@ h5 { font-size: var(--font-size-body); }
   font-size: var(--font-size-base);
 }
 
-.btn--arrow::after {
-  content: '→';
-  transition: transform var(--transition-fast);
-}
-
-.btn--arrow:hover::after {
-  transform: translateX(4px);
-}
-
 /* ── Cards ── */
 .card {
   background: var(--surface-card);

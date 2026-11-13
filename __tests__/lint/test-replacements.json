@@ -70,5 +70,597 @@
     "property": "Both S-20 pages carry their own title: the organisation export page names the organisation and the project export page names the project, through pageTitle and EXPORT_COPY.titles.downloadRecords; a role without team:export gets the refusal title with no name, and a project of another organisation is not found from generateMetadata as from the page",
     "proof": "__tests__/integration/export-pages.test.tsx::NFR-A11Y-02 (WCAG 2.4.2): both S-20 pages carry their own title",
     "task": "1A-10"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/uncst-table.test.tsx::OD-20 UX-03: readUncstTable returns the file, six issues a to f in order",
+    "replacedBy": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table",
+    "property": "No screen renders the UNCST table (Uganda's six AI protocol issues) or its words (CONSOLIDATED section 4, owner ruling: country content): the table, its data file, its reader and its stylesheet are deleted, and no source under app, components or lib, nor the rendered About page, names UNCST or Uganda's AI protocol",
+    "proof": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table; __tests__/integration/documents-page.test.tsx::FR-DOC-01: S-18 shows no UNCST or Uganda-only table, for a sealed or never-sealed review and every role (the rendered documents page for every role)",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/uncst-table.test.tsx::OD-20: a file without the six ids a to f in order is refused at read, naming the problem",
+    "replacedBy": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table",
+    "property": "No screen renders the UNCST table (Uganda's six AI protocol issues) or its words (CONSOLIDATED section 4, owner ruling: country content): the table, its data file, its reader and its stylesheet are deleted, and no source under app, components or lib, nor the rendered About page, names UNCST or Uganda's AI protocol",
+    "proof": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table; __tests__/integration/documents-page.test.tsx::FR-DOC-01: S-18 shows no UNCST or Uganda-only table, for a sealed or never-sealed review and every role (the rendered documents page for every role)",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/uncst-table.test.tsx::OD-20: a file with %s is refused at read, naming the file and the problem",
+    "replacedBy": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table",
+    "property": "No screen renders the UNCST table (Uganda's six AI protocol issues) or its words (CONSOLIDATED section 4, owner ruling: country content): the table, its data file, its reader and its stylesheet are deleted, and no source under app, components or lib, nor the rendered About page, names UNCST or Uganda's AI protocol",
+    "proof": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table; __tests__/integration/documents-page.test.tsx::FR-DOC-01: S-18 shows no UNCST or Uganda-only table, for a sealed or never-sealed review and every role (the rendered documents page for every role)",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/uncst-table.test.tsx::OD-20 UX-03: the table carries the caption and one row per issue, in order",
+    "replacedBy": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table",
+    "property": "No screen renders the UNCST table (Uganda's six AI protocol issues) or its words (CONSOLIDATED section 4, owner ruling: country content): the table, its data file, its reader and its stylesheet are deleted, and no source under app, components or lib, nor the rendered About page, names UNCST or Uganda's AI protocol",
+    "proof": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table; __tests__/integration/documents-page.test.tsx::FR-DOC-01: S-18 shows no UNCST or Uganda-only table, for a sealed or never-sealed review and every role (the rendered documents page for every role)",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/uncst-table.test.tsx::OD-20: a field id shows its label, not its id",
+    "replacedBy": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table",
+    "property": "No screen renders the UNCST table (Uganda's six AI protocol issues) or its words (CONSOLIDATED section 4, owner ruling: country content): the table, its data file, its reader and its stylesheet are deleted, and no source under app, components or lib, nor the rendered About page, names UNCST or Uganda's AI protocol",
+    "proof": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table; __tests__/integration/documents-page.test.tsx::FR-DOC-01: S-18 shows no UNCST or Uganda-only table, for a sealed or never-sealed review and every role (the rendered documents page for every role)",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/uncst-table.test.tsx::OD-20: each empty list and each null note reads None, in its own cell",
+    "replacedBy": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table",
+    "property": "No screen renders the UNCST table (Uganda's six AI protocol issues) or its words (CONSOLIDATED section 4, owner ruling: country content): the table, its data file, its reader and its stylesheet are deleted, and no source under app, components or lib, nor the rendered About page, names UNCST or Uganda's AI protocol",
+    "proof": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table; __tests__/integration/documents-page.test.tsx::FR-DOC-01: S-18 shows no UNCST or Uganda-only table, for a sealed or never-sealed review and every role (the rendered documents page for every role)",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/uncst-table.test.tsx::OD-20: a field map that is not JSON is refused at read, naming the map",
+    "replacedBy": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table",
+    "property": "No screen renders the UNCST table (Uganda's six AI protocol issues) or its words (CONSOLIDATED section 4, owner ruling: country content): the table, its data file, its reader and its stylesheet are deleted, and no source under app, components or lib, nor the rendered About page, names UNCST or Uganda's AI protocol",
+    "proof": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table; __tests__/integration/documents-page.test.tsx::FR-DOC-01: S-18 shows no UNCST or Uganda-only table, for a sealed or never-sealed review and every role (the rendered documents page for every role)",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/uncst-table.test.tsx::OD-20 WCAG 1.3.1: every table part carries its explicit role, so display changes cannot drop the semantics",
+    "replacedBy": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table",
+    "property": "No screen renders the UNCST table (Uganda's six AI protocol issues) or its words (CONSOLIDATED section 4, owner ruling: country content): the table, its data file, its reader and its stylesheet are deleted, and no source under app, components or lib, nor the rendered About page, names UNCST or Uganda's AI protocol",
+    "proof": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table; __tests__/integration/documents-page.test.tsx::FR-DOC-01: S-18 shows no UNCST or Uganda-only table, for a sealed or never-sealed review and every role (the rendered documents page for every role)",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/uncst-table.test.tsx::OD-20 NFR-A11Y-05: the table sits in a wrap that is an inline-size container, and the stacking follows it",
+    "replacedBy": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table",
+    "property": "No screen renders the UNCST table (Uganda's six AI protocol issues) or its words (CONSOLIDATED section 4, owner ruling: country content): the table, its data file, its reader and its stylesheet are deleted, and no source under app, components or lib, nor the rendered About page, names UNCST or Uganda's AI protocol",
+    "proof": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table; __tests__/integration/documents-page.test.tsx::FR-DOC-01: S-18 shows no UNCST or Uganda-only table, for a sealed or never-sealed review and every role (the rendered documents page for every role)",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/uncst-table.test.tsx::OD-20: fieldLabels throws naming an id the map lacks",
+    "replacedBy": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table",
+    "property": "No screen renders the UNCST table (Uganda's six AI protocol issues) or its words (CONSOLIDATED section 4, owner ruling: country content): the table, its data file, its reader and its stylesheet are deleted, and no source under app, components or lib, nor the rendered About page, names UNCST or Uganda's AI protocol",
+    "proof": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table; __tests__/integration/documents-page.test.tsx::FR-DOC-01: S-18 shows no UNCST or Uganda-only table, for a sealed or never-sealed review and every role (the rendered documents page for every role)",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/uncst-table.test.tsx::OD-20: fieldLabels names the first missing id, not a later one",
+    "replacedBy": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table",
+    "property": "No screen renders the UNCST table (Uganda's six AI protocol issues) or its words (CONSOLIDATED section 4, owner ruling: country content): the table, its data file, its reader and its stylesheet are deleted, and no source under app, components or lib, nor the rendered About page, names UNCST or Uganda's AI protocol",
+    "proof": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table; __tests__/integration/documents-page.test.tsx::FR-DOC-01: S-18 shows no UNCST or Uganda-only table, for a sealed or never-sealed review and every role (the rendered documents page for every role)",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/uncst-table.test.tsx::OD-20 WCAG 1.3.1 UX-03: the table has a caption, four column headers and a row header per issue",
+    "replacedBy": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table",
+    "property": "No screen renders the UNCST table (Uganda's six AI protocol issues) or its words (CONSOLIDATED section 4, owner ruling: country content): the table, its data file, its reader and its stylesheet are deleted, and no source under app, components or lib, nor the rendered About page, names UNCST or Uganda's AI protocol",
+    "proof": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table; __tests__/integration/documents-page.test.tsx::FR-DOC-01: S-18 shows no UNCST or Uganda-only table, for a sealed or never-sealed review and every role (the rendered documents page for every role)",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/uncst-table.test.tsx::OD-20 NFR-SEC-11: titles, notes and field labels render as text",
+    "replacedBy": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table",
+    "property": "No screen renders the UNCST table (Uganda's six AI protocol issues) or its words (CONSOLIDATED section 4, owner ruling: country content): the table, its data file, its reader and its stylesheet are deleted, and no source under app, components or lib, nor the rendered About page, names UNCST or Uganda's AI protocol",
+    "proof": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table; __tests__/integration/documents-page.test.tsx::FR-DOC-01: S-18 shows no UNCST or Uganda-only table, for a sealed or never-sealed review and every role (the rendered documents page for every role)",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/uncst-table.test.tsx::OD-20: a field map with %s is refused at read, naming the map",
+    "replacedBy": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table",
+    "property": "No screen renders the UNCST table (Uganda's six AI protocol issues) or its words (CONSOLIDATED section 4, owner ruling: country content): the table, its data file, its reader and its stylesheet are deleted, and no source under app, components or lib, nor the rendered About page, names UNCST or Uganda's AI protocol",
+    "proof": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table; __tests__/integration/documents-page.test.tsx::FR-DOC-01: S-18 shows no UNCST or Uganda-only table, for a sealed or never-sealed review and every role (the rendered documents page for every role)",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/uncst-table.test.tsx::OD-20 UX-03: the About page shows the table inside the Help and contact section",
+    "replacedBy": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table",
+    "property": "No screen renders the UNCST table (Uganda's six AI protocol issues) or its words (CONSOLIDATED section 4, owner ruling: country content): the table, its data file, its reader and its stylesheet are deleted, and no source under app, components or lib, nor the rendered About page, names UNCST or Uganda's AI protocol",
+    "proof": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table; __tests__/integration/documents-page.test.tsx::FR-DOC-01: S-18 shows no UNCST or Uganda-only table, for a sealed or never-sealed review and every role (the rendered documents page for every role)",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/content/uncst-table.test.ts::OD-20 FR-DOC-01: six issues a to f in order with the exact titles",
+    "replacedBy": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table",
+    "property": "No screen renders the UNCST table (Uganda's six AI protocol issues) or its words (CONSOLIDATED section 4, owner ruling: country content): the table, its data file, its reader and its stylesheet are deleted, and no source under app, components or lib, nor the rendered About page, names UNCST or Uganda's AI protocol",
+    "proof": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table; __tests__/integration/documents-page.test.tsx::FR-DOC-01: S-18 shows no UNCST or Uganda-only table, for a sealed or never-sealed review and every role (the rendered documents page for every role)",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/content/uncst-table.test.ts::OD-20: every listed field id exists in its map, once per issue",
+    "replacedBy": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table",
+    "property": "No screen renders the UNCST table (Uganda's six AI protocol issues) or its words (CONSOLIDATED section 4, owner ruling: country content): the table, its data file, its reader and its stylesheet are deleted, and no source under app, components or lib, nor the rendered About page, names UNCST or Uganda's AI protocol",
+    "proof": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table; __tests__/integration/documents-page.test.tsx::FR-DOC-01: S-18 shows no UNCST or Uganda-only table, for a sealed or never-sealed review and every role (the rendered documents page for every role)",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/content/uncst-table.test.ts::OD-20: every issue has at least one field or a note",
+    "replacedBy": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table",
+    "property": "No screen renders the UNCST table (Uganda's six AI protocol issues) or its words (CONSOLIDATED section 4, owner ruling: country content): the table, its data file, its reader and its stylesheet are deleted, and no source under app, components or lib, nor the rendered About page, names UNCST or Uganda's AI protocol",
+    "proof": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table; __tests__/integration/documents-page.test.tsx::FR-DOC-01: S-18 shows no UNCST or Uganda-only table, for a sealed or never-sealed review and every role (the rendered documents page for every role)",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/content/uncst-table.test.ts::OD-20: (c) says fairness results cannot exist before training, and (f) lists DC-30",
+    "replacedBy": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table",
+    "property": "No screen renders the UNCST table (Uganda's six AI protocol issues) or its words (CONSOLIDATED section 4, owner ruling: country content): the table, its data file, its reader and its stylesheet are deleted, and no source under app, components or lib, nor the rendered About page, names UNCST or Uganda's AI protocol",
+    "proof": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table; __tests__/integration/documents-page.test.tsx::FR-DOC-01: S-18 shows no UNCST or Uganda-only table, for a sealed or never-sealed review and every role (the rendered documents page for every role)",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/content/uncst-table.test.ts::OD-20 FR-PUB-01: no title or note makes a claim or holds a dash",
+    "replacedBy": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table",
+    "property": "No screen renders the UNCST table (Uganda's six AI protocol issues) or its words (CONSOLIDATED section 4, owner ruling: country content): the table, its data file, its reader and its stylesheet are deleted, and no source under app, components or lib, nor the rendered About page, names UNCST or Uganda's AI protocol",
+    "proof": "__tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table; __tests__/integration/documents-page.test.tsx::FR-DOC-01: S-18 shows no UNCST or Uganda-only table, for a sealed or never-sealed review and every role (the rendered documents page for every role)",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/evidence-attach.test.tsx::formats sub-KB sizes in bytes",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/evidence-attach.test.tsx::formats KB with one decimal",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/evidence-attach.test.tsx::formats MB with one decimal",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/evidence-attach.test.tsx::equals the server-side limit lib/evidence/inspect.ts enforces -- duplicated deliberately, not imported: inspect.ts's module-scope SIGNATURES array calls Buffer.from(...) eagerly at import time, which would throw in this client component's browser bundle (verified no \"buffer\" polyfill dependency in package.json, no polyfill config in next.config.ts, and no other 'use client' file in this repo references Buffer). This test is the coupling mechanism that catches drift instead of a shared import.",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/evidence-attach.test.tsx::renders \"Attach evidence\" when canCreate is true",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/evidence-attach.test.tsx::renders no \"Attach evidence\" control anywhere in the tree when canCreate is false",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/evidence-attach.test.tsx::renders \"Delete evidence\" per item when canDelete is true",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/evidence-attach.test.tsx::renders no \"Delete evidence\" control anywhere in the tree when canDelete is false",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/evidence-attach.test.tsx::renders \"Download evidence\" regardless of canCreate/canDelete -- evidence:read is universal, not gated by either",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/evidence-attach.test.tsx::renders a hostile filename as literal text, unmodified -- never stripped, never interpreted",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/evidence-attach.test.tsx::places the hostile filename as a scalar string child -- the exact mechanism React's default JSX-child escaping relies on (a text node, never innerHTML)",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/evidence-attach.test.tsx::never uses dangerouslySetInnerHTML as a prop in the component source -- the one API that would bypass React's default escaping",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/evidence-attach.test.tsx::applies an overflow-safe wrapping style to the filename so it cannot force horizontal overflow",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/evidence-attach.test.tsx::disables the attach trigger and relabels it \"Uploading…\" while busy",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/evidence-attach.test.tsx::disables each delete button while busy",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/evidence-attach.test.tsx::shows the error message in a role=alert region when error is set",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/evidence-attach.test.tsx::shows no alert region when error is null",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/evidence-attach.test.tsx::shows a confirmed-empty message for an empty list once loading has finished with no error",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/evidence-attach.test.tsx::shows a distinct could-not-load message (not the confirmed-empty one) when the list failed to load -- an empty list must never be presented as a confirmed absence of evidence when it is actually unknown",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/evidence-attach.test.tsx::shows a distinct loading message (not confirmed-empty, not could-not-load) while the initial fetch is in flight",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/evidence-attach.test.tsx::prefers the loading message over the could-not-load message if both were ever true simultaneously -- loading is not yet settled, so it cannot also be a settled failure",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/evidence-attach.test.tsx::shows the stale warning even when items is NON-EMPTY -- the exact case the round-2 bug missed",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/evidence-attach.test.tsx::does not show the stale warning when stale is false, even with non-empty items",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/evidence-attach.test.tsx::renders the stale warning via role=\"status\" (advisory), never role=\"alert\" -- distinct from `error`, which IS an alert: the action succeeded, so this must not read as a failure report",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/evidence-attach.test.tsx::never says the action \"failed\" when stale (that would be a different, worse lie than showing nothing) -- and still renders the (unrelated) list content underneath",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/evidence-attach.test.tsx::can show BOTH stale and a genuine mutation error together -- they are independent channels, not mutually exclusive",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/evidence-attach.test.tsx::calls onUpload with the selected file when the file input changes",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/evidence-attach.test.tsx::does not call onUpload when the change event carries no file (picker cancelled)",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/evidence-attach.test.tsx::calls onDelete with the item id when its delete button is clicked",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/evidence-attach.test.tsx::builds the download href from orgSlug and the evidence id, never from the filename",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/evidence-attach.test.tsx::sets accept on the file input to steer the OS picker toward the accepted formats",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/evidence-attach.test.tsx::states the accepted formats and size limit in visible copy, using the same MAX_UPLOAD_BYTES the coupling test pins",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/evidence-attach.test.tsx::offers the OOXML formats spec §3.2 accepts and the server already stores -- .docx/.xlsx/.pptx, not just .zip",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/mutate-then-confirm.test.ts::returns mutate-failed, with the error, when the mutation itself fails -- and never calls confirm",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/mutate-then-confirm.test.ts::returns ok when both the mutation and the confirmation succeed",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/mutate-then-confirm.test.ts::returns confirm-failed -- not ok, not mutate-failed -- when the mutation succeeds but confirmation fails",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/mutate-then-confirm.test.ts::calls confirm only after mutate has resolved, not concurrently -- confirming a write that has not yet landed would be meaningless",
+    "replacedBy": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "property": "Dead code: EvidenceAttach (components/evidence/EvidenceAttach.tsx) and mutateThenConfirm (lib/evidence/mutateThenConfirm.ts) were imported by nothing in app, components or lib before deletion (grep -rn \"EvidenceAttach\\b\" app components lib and grep -rn \"mutateThenConfirm\" app components lib answered only the two files themselves); the files are gone and no source names either again (defect 25)",
+    "proof": "__tests__/lint/no-dead-evidence.test.ts::EvidenceAttach is not in the tree",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/about-page.test.tsx::FR-PUB-05: the About page has the section \"Why there is no score\"",
+    "replacedBy": "__tests__/unit/about-page.test.tsx::About has no section about scores",
+    "property": "The no-score principle stays a product rule, not About text (CONSOLIDATED section 4, owner ruling): About carries no section, heading or paragraph about a score, and no page shows a score",
+    "proof": "__tests__/unit/about-page.test.tsx::About has no section about scores; e2e/no-score-crawl.spec.ts (no page of the crawl shows a score)",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/about-page.test.tsx::FR-PUB-04: the About page says the platform never runs evaluations, models, notebooks or uploaded files and never computes metrics from a team's data",
+    "replacedBy": "__tests__/unit/about-page.test.tsx::FR-PUB-04: the section \"What this platform is and is not\" says the platform does not test your model or calculate anything from your data",
+    "property": "About still says the platform runs nothing of the team's and computes nothing from its data, now as the one sentence CONSOLIDATED section 4 moves into \"What this platform is and is not\": \"The platform does not test your model or calculate anything from your data.\"; the section \"What this platform never does\" is gone",
+    "proof": "__tests__/unit/about-page.test.tsx::FR-PUB-04: the section \"What this platform is and is not\" says the platform does not test your model or calculate anything from your data",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/about-page.test.tsx::FR-PUB-05: the allowed elements are the section \"Why there is no score\" and the two sentences about a model's own scores",
+    "replacedBy": "__tests__/unit/about-page.test.tsx::FR-PUB-05: the allowed elements are the not-an-approval sentence and the two sentences about a model's own scores",
+    "property": "The About page's data-claims-allowed elements are exactly the not-an-approval sentence and the two model-score sentences (an accuracy score, a confidence score); the why-no-score marker left with its heading",
+    "proof": "__tests__/unit/about-page.test.tsx::FR-PUB-05: the allowed elements are the not-an-approval sentence and the two sentences about a model's own scores",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/about-page.test.tsx::FR-PUB-05 FR-PUB-01: the marker covers the heading only; the explanation and \"What you get instead\" are checked like any other text",
+    "replacedBy": "__tests__/unit/about-page.test.tsx::FR-PUB-01 FR-PUB-05: every marked element holds exactly one allow-listed sentence, and each sentence is marked once",
+    "property": "A marker shelters exactly one allow-listed sentence and nothing else: the section the why-no-score marker sat in is removed, so what is left of the property is that every marked element holds one allow-listed sentence and the rest of the page is checked",
+    "proof": "__tests__/unit/about-page.test.tsx::FR-PUB-01 FR-PUB-05: every marked element holds exactly one allow-listed sentence, and each sentence is marked once; __tests__/unit/about-page.test.tsx::FR-PUB-01 FR-PUB-05: every sentence that names a score sits inside a data-claims-allowed element",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/about-page.test.tsx::UX-03: the free toolkits section links to the controls page",
+    "replacedBy": "__tests__/unit/controls-page.test.tsx::UX-13 UX-03: S-27 opens with the line that took over the About page's free toolkits section",
+    "property": "The pointer to free guidance moved from About to the controls page itself, as its introduction under the h1 (CONSOLIDATED section 4, D AB45-AB47 and EX19); About no longer carries the section",
+    "proof": "__tests__/unit/controls-page.test.tsx::UX-13 UX-03: S-27 opens with the line that took over the About page's free toolkits section; __tests__/unit/about-page.test.tsx::UX-03: About has no eyebrow and no free toolkits section, and Help and contact keeps its id and holds no table",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "e2e/about.spec.ts::OD-20 UX-03 NFR-A11Y-05: Help and contact shows the UNCST table, and 360 px does not scroll sideways",
+    "replacedBy": "e2e/about.spec.ts::UX-03 NFR-A11Y-05: Help and contact holds no country table, and 360 px does not scroll sideways",
+    "property": "Help and contact on S-28 holds no country table and, at 360 px, does not scroll sideways and has no serious axe violation",
+    "proof": "e2e/about.spec.ts::UX-03 NFR-A11Y-05: Help and contact holds no country table, and 360 px does not scroll sideways",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "e2e/about.spec.ts::OD-20 UX-03 NFR-A11Y-05: no word of the UNCST table breaks in the middle at ",
+    "replacedBy": "e2e/about.spec.ts::UX-03 NFR-A11Y-05: Help and contact holds no country table, and 360 px does not scroll sideways",
+    "property": "The table whose words were checked for mid-word breaks is removed (CONSOLIDATED section 4); the section that held it is checked for no country table and no sideways scroll at 360 px",
+    "proof": "e2e/about.spec.ts::UX-03 NFR-A11Y-05: Help and contact holds no country table, and 360 px does not scroll sideways",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "e2e/documents.spec.ts::NFR-A11Y-05 (Task 10): at 769, 800 and 820 px wide .app-main has no horizontal overflow on S-18 and the UNCST table stacks",
+    "replacedBy": "e2e/documents.spec.ts::NFR-A11Y-05 (Task 10): at 769, 800 and 820 px wide .app-main has no horizontal overflow on S-18",
+    "property": "At 769, 800 and 820 px .app-main has no horizontal overflow on S-18 and the page does not scroll sideways; the table that stacked is removed",
+    "proof": "e2e/documents.spec.ts::NFR-A11Y-05 (Task 10): at 769, 800 and 820 px wide .app-main has no horizontal overflow on S-18",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/lint/live-run-report.test.ts::12.2 FR-PUB-01: every data-claims-allowed marker in app/, components/ and lib/ is listed in the report with its AL id (or FR id, for about-model-scores), and one with none fails step 5",
+    "replacedBy": "__tests__/lint/live-run-report.test.ts::FR-PUB-01: docs/releases/claims-markers.md is what scripts/release/claims-markers.mjs writes now, and every marker in it has an allow-list id",
+    "property": "Every data-claims-allowed marker in app, components and lib is listed with its file:line and the allow-list id it wraps, and a marker with no id fails: now in the generated docs/releases/claims-markers.md, regenerated in memory and compared, so a moved or new marker fails at once; the why-no-score to AL-5 mapping is removed with its marker; docs/releases/v0.6.0-live-run.md stays the v0.6.0 record",
+    "proof": "__tests__/lint/live-run-report.test.ts::FR-PUB-01: docs/releases/claims-markers.md is what scripts/release/claims-markers.mjs writes now, and every marker in it has an allow-list id",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/lint/no-product-claims.test.ts::FR-PUB-01: every data-claims-allowed marker states its reason, and the only markers are the four of the About page and AL-1 of S-18",
+    "replacedBy": "__tests__/lint/no-product-claims.test.ts::FR-PUB-01: every data-claims-allowed marker states its reason, and the only markers are the three of the About page and AL-1 of S-18",
+    "property": "Every data-claims-allowed marker states its reason, and the markers are exactly the listed ones, each with its file: the About page's three (not-an-approval-service, two about-model-scores) and AL-1 of S-18; why-no-score left with its heading",
+    "proof": "__tests__/lint/no-product-claims.test.ts::FR-PUB-01: every data-claims-allowed marker states its reason, and the only markers are the three of the About page and AL-1 of S-18",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/design-tokens.test.ts::UX-33 NFR-A11Y-05 (D-6): the stale-list notice is moderate-tint text on its tint, never the yellow risk colour",
+    "replacedBy": "__tests__/unit/design-tokens.test.ts::UX-33 NFR-A11Y-05 (D-6): a tinted note on S-06 (the retired text's) is moderate-tint text on its tint, never the yellow risk colour",
+    "property": "A tinted notice on screen is moderate-tint text on its tint, never the yellow risk colour (D-6); the stale-list notice was in the dead EvidenceAttach, so the rule is held on the live tinted note of S-06 (LEGAL_NOTE_STYLE), and the D-6 contrast pair stays pinned in the same file",
+    "proof": "__tests__/unit/design-tokens.test.ts::UX-33 NFR-A11Y-05 (D-6): a tinted note on S-06 (the retired text's) is moderate-tint text on its tint, never the yellow risk colour",
+    "task": "1A-14"
+  },
+  {
+    "kind": "rule",
+    "deleted": "__tests__/integration/documents-page.test.tsx::OD-20 FR-DOC-01 UX-20: S-18 shows \"Uganda's AI protocol issues\" and the UNCST table below the documents for every sealed review and every role",
+    "replacedBy": "__tests__/integration/documents-page.test.tsx::FR-DOC-01: S-18 shows no UNCST or Uganda-only table, for a sealed or never-sealed review and every role",
+    "property": "No screen renders the UNCST table (Uganda's six AI protocol issues) or its words (CONSOLIDATED section 4, owner ruling: country content): the table, its data file, its reader and its stylesheet are deleted, and no source under app, components or lib, nor the rendered About page, names UNCST or Uganda's AI protocol; S-18 of a sealed review renders for every role with the issued list and, for document:generate roles, the form",
+    "proof": "__tests__/integration/documents-page.test.tsx::FR-DOC-01: S-18 shows no UNCST or Uganda-only table, for a sealed or never-sealed review and every role; __tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table",
+    "task": "1A-14"
+  },
+  {
+    "kind": "rule",
+    "deleted": "__tests__/integration/documents-page.test.tsx::OD-20: a review never sealed shows no UNCST table",
+    "replacedBy": "__tests__/integration/documents-page.test.tsx::FR-DOC-01: S-18 shows no UNCST or Uganda-only table, for a sealed or never-sealed review and every role",
+    "property": "S-18 of a review never sealed shows no UNCST or Uganda-only table (now true of every S-18)",
+    "proof": "__tests__/integration/documents-page.test.tsx::FR-DOC-01: S-18 shows no UNCST or Uganda-only table, for a sealed or never-sealed review and every role; __tests__/lint/no-country-content.test.ts::no screen renders UNCST or a Uganda-only table",
+    "task": "1A-14"
+  },
+  {
+    "kind": "rule",
+    "deleted": "__tests__/unit/prj-components.test.tsx::FR-FUP-02 (page half) FR-PRJ-02: S-10 states the zone and that stages can be recorded in any order",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::no time-zone sentence on Home or the project page",
+    "property": "no country-specific time-zone line on screen (spec 12, CONSOLIDATED section 4): neither S-08 (Home) nor S-10 says \"East Africa\", \"UTC+3\" or \"EAT\", and S-10 still says that stages can be recorded in any order; how overdue is computed is unchanged",
+    "proof": "__tests__/unit/prj-components.test.tsx::no time-zone sentence on Home or the project page; the overdue behaviour stays proved by __tests__/unit/followup-rules.test.ts and __tests__/integration/reminder-job.test.ts, unchanged",
+    "task": "1A-14"
+  },
+  {
+    "kind": "rule",
+    "deleted": "__tests__/integration/decision-pages.test.ts::FR-DEC-04 (screen) FR-CNT-07: versions newest first, each with its content version and that version's wording",
+    "replacedBy": "__tests__/integration/decision-pages.test.ts::FR-DEC-04 (screen) FR-CNT-07: versions newest first, each with that version's wording, and no content version or UTC toggle",
+    "property": "S-13 lists the versions newest first, each with the question as worded in that version (FR-CNT-07), and shows no content version and no \"Show UTC\" disclosure (CONSOLIDATED section 4: internal); a viewer still has no withdraw control",
+    "proof": "__tests__/integration/decision-pages.test.ts::FR-DEC-04 (screen) FR-CNT-07: versions newest first, each with that version's wording, and no content version or UTC toggle",
+    "task": "1A-14"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/organisation-page.test.tsx::S-30 FR-ORG-09 (helper): every member reads the details; only owners and admins see the action rows and the export link",
+    "replacedBy": "__tests__/unit/organisation-page.test.tsx::S-30 FR-ORG-09 (helper): every member reads the details; only owners and admins see the action rows and the export link",
+    "property": "Every member reads the details; only owners and admins see the action rows; the export block (heading and link) is rendered only for team:export roles, and for them TeamExportLink gets canExport true and the slug: access is narrower for the three other roles (they no longer get an empty heading), wider for none (defect 42)",
+    "proof": "__tests__/unit/organisation-page.test.tsx::S-30 FR-ORG-09 (helper): every member reads the details; only owners and admins see the action rows and the export link",
+    "task": "1A-14"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/question-content.test.tsx::UX-08 (W-3): the id and module title, then the principle, then the question, as the wireframe orders them",
+    "replacedBy": "__tests__/unit/question-content.test.tsx::UX-08 (W-3): the principle, then the question; the id and module title are left to the page heading",
+    "property": "QuestionContent shows the principle, then the question, in the order W-3 gives; the id and module title it repeated are the page heading (h1) only, so the slot no longer carries its own id-and-module line (CONSOLIDATED section 4, audit B #248)",
+    "proof": "__tests__/unit/question-content.test.tsx::UX-08 (W-3): the principle, then the question; the id and module title are left to the page heading",
+    "task": "1A-14"
   }
 ]

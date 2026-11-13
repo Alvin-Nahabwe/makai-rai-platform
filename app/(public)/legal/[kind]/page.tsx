@@ -8,9 +8,9 @@ import { pageTitle } from '@/lib/ui/title';
 import { LEGAL_LINK_STYLE, LEGAL_NOTE_STYLE, LEGAL_PAGE_STYLE, LegalTextView, legalTextHeading, versionLine } from '@/components/legal/LegalTextView';
 
 /**
- * S-06, one kind (FR-ACC-02, SRS line 479): the current version of the text and the list of its past versions,
- * public (no `requireIdentity`). Every kind is rendered at build from the registry, and any other `[kind]` is a
- * 404 (`dynamicParams = false`, node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/
+ * S-06, one kind (FR-ACC-02, SRS line 479): the current version of the text and the list of its past versions, which
+ * is not shown when there are none; public (no `requireIdentity`). Every kind is rendered at build from the registry,
+ * and any other `[kind]` is a 404 (`dynamicParams = false`, node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/
  * 02-route-segment-config/dynamicParams.md). The page also answers 404 itself for a kind the registry does not
  * hold, so a request's segment never reaches a file path or an object key (obligation A15).
  */
@@ -51,11 +51,10 @@ export default async function LegalKindPage({ params }: { params: Params }) {
           {`Permanent link to version ${current.version}`}
         </Link>
       </p>
-      <section style={{ marginTop: 'var(--space-8)' }}>
-        <h2>Past versions</h2>
-        {past.length === 0 ? (
-          <p>None</p>
-        ) : (
+      {/* An empty "Past versions" block is not shown (CONSOLIDATED section 4: it read "None"). */}
+      {past.length > 0 && (
+        <section style={{ marginTop: 'var(--space-8)' }}>
+          <h2>Past versions</h2>
           <ul style={{ listStyle: 'none', padding: 0, marginTop: 'var(--space-2)' }}>
             {past.map((text) => (
               <li key={text.version}>
@@ -65,8 +64,8 @@ export default async function LegalKindPage({ params }: { params: Params }) {
               </li>
             ))}
           </ul>
-        )}
-      </section>
+        </section>
+      )}
     </div>
   );
 }
