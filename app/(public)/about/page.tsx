@@ -4,6 +4,8 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { readCreditLine } from '@/lib/credit';
 import { UncstTable } from '@/components/help/UncstTable';
+import { ABOUT_COPY } from '@/lib/about/copy';
+import { PRODUCT_NAME, pageTitle } from '@/lib/ui/title';
 import './AboutPage.css';
 
 /**
@@ -21,7 +23,7 @@ import './AboutPage.css';
  * score" it marks the heading and the explanation; the paragraph about what a
  * team gets instead is checked like any other text.
  */
-export const metadata = { title: 'About - MAK-AI RAI Platform' };
+export const metadata = { title: pageTitle(ABOUT_COPY.titles.about) };
 
 type Principle = {
   slug: string;
@@ -279,7 +281,7 @@ export default function AboutPage() {
         <div className="page-hero__accent-line"></div>
         <div className="container" style={{ position: 'relative', zIndex: 2 }}>
           <span className="about-eyebrow">About the platform</span>
-          <h1>About the MAK-AI RAI Platform</h1>
+          <h1>{`About the ${PRODUCT_NAME}`}</h1>
           <p className="page-hero__desc">
             A place for a team to record what it decided about its AI system, why it decided it,
             and the evidence behind the decision.
@@ -291,9 +293,7 @@ export default function AboutPage() {
         <section className="about-section" aria-labelledby="what-this-is">
           <h2 id="what-this-is">What this platform is and is not</h2>
           <p>
-            The MAK-AI RAI Platform helps a team keep one honest record of how it handled
-            responsible AI questions for one AI system. The questions follow three stages of AI
-            development.
+            {`The ${PRODUCT_NAME} helps a team keep one honest record of how it handled responsible AI questions for one AI system. The questions follow three stages of AI development.`}
           </p>
           <ul className="about-stages">
             {STAGES.map(([name, summary]) => (

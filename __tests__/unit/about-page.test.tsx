@@ -18,6 +18,8 @@ vi.mock('node:fs', async (importOriginal) => {
 });
 
 import AboutPage, { metadata } from '@/app/(public)/about/page';
+import { ABOUT_COPY } from '@/lib/about/copy';
+import { pageTitle } from '@/lib/ui/title';
 
 /**
  * S-28, the public About page (FR-PUB-01, FR-PUB-02, FR-PUB-04, FR-PUB-05, UX-03).
@@ -276,6 +278,6 @@ describe('S-28 About page', () => {
   });
 
   it('UX-03 WCAG 2.4.2: the page title says which page it is', () => {
-    expect(metadata.title).toBe('About - MAK-AI RAI Platform');
+    expect(metadata.title).toBe(pageTitle(ABOUT_COPY.titles.about));
   });
 });

@@ -1,3 +1,5 @@
+import { cache } from 'react';
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { requireIdentity } from '@/lib/auth/identity';
 import { requireOrgContextFor } from '@/lib/auth/context';
@@ -7,7 +9,9 @@ import { listStageReviews } from '@/lib/data/reviews';
 import { listSeals } from '@/lib/data/seals';
 import { documentDraft, documentSummaries, listDocuments, typedFieldsOf } from '@/lib/data/documents';
 import { runningContent } from '@/lib/content/loader';
-import { DOCUMENT_TITLES } from '@/lib/documents/copy';
+import { DOCUMENT_TITLES, DOCUMENTS_COPY } from '@/lib/documents/copy';
+import { orNotFound } from '@/lib/auth/titleGate';
+import { pageTitle } from '@/lib/ui/title';
 import { DOCUMENT_TYPES, type DocumentType } from '@/types/record';
 import { MSG_SEAL_CHECK_FAILED } from '@/lib/documents/copy';
 import { RENDERERS } from '@/lib/documents/render';
@@ -23,6 +27,28 @@ interface PageProps {
 }
 
 /**
+ * The gates, the project read and the review lookup, once per request: the page and its title both read through this
+ * (React `cache()`), so a project not visible, or a review not of this project, is the same `notFound()` for both and
+ * the title names nothing. The page's later reads stay in the page.
+ */
+const load = cache(async (slug: string, id: string, reviewId: string) => {
+  const identity = await requireIdentity();
+  const ctx = await requireOrgContextFor(identity.userId, slug, 'record:read');
+  const project = await withOrg(ctx, (tx) => tx.project.findUnique({ where: { id }, select: { id: true, name: true, archivedAt: true } }));
+  if (project === null) notFound();
+  const review = (await listStageReviews(ctx, id)).find((r) => r.id === reviewId);
+  if (review === undefined) notFound();
+  return { ctx, project, review };
+});
+
+/** The review's documents, then the project. */
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { slug, id, reviewId } = await params;
+  const { project, review } = await orNotFound(load(slug, id, reviewId));
+  return { title: pageTitle(DOCUMENTS_COPY.titles.documentsOf(review.name), project.name) };
+}
+
+/**
  * S-18, the documents of one stage review (W-9; FR-DOC-01 to 05, FR-DOC-08; UX-20). Every member reads it (`record:read`) and sees
  * the issued documents; the generate form is for `document:generate` roles of a live project, and the drafts of typed values are
  * read only for them. A review of another organisation or project is not found (RLS, then the review-to-project check) before
@@ -30,12 +56,7 @@ interface PageProps {
  */
 export default async function DocumentsPage({ params }: PageProps) {
   const { slug, id, reviewId } = await params;
-  const identity = await requireIdentity();
-  const ctx = await requireOrgContextFor(identity.userId, slug, 'record:read');
-  const project = await withOrg(ctx, (tx) => tx.project.findUnique({ where: { id }, select: { id: true, archivedAt: true } }));
-  if (project === null) notFound();
-  const review = (await listStageReviews(ctx, id)).find((r) => r.id === reviewId);
-  if (review === undefined) notFound();
+  const { ctx, project, review } = await load(slug, id, reviewId);
 
   const archived = project.archivedAt !== null;
   const [seals, documents] = await Promise.all([listSeals(ctx, reviewId), listDocuments(ctx, { projectId: id, reviewId })]);

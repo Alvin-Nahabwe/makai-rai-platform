@@ -1,3 +1,5 @@
+import { cache } from 'react';
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { requireIdentity } from '@/lib/auth/identity';
 import { requireOrgContextFor } from '@/lib/auth/context';
@@ -7,10 +9,38 @@ import { listStageReviews, sealPreview } from '@/lib/data/reviews';
 import { questionsInStage, reasonCodesFor, runningContent } from '@/lib/content/loader';
 import { ArchivedBanner } from '@/components/project/ArchivedBanner';
 import { SealConfirm } from '@/components/review/SealConfirm';
+import { REVIEW_COPY } from '@/lib/review/copy';
+import { orNotFound } from '@/lib/auth/titleGate';
+import { pageTitle } from '@/lib/ui/title';
 import { contentChangedLine, previewLines } from '@/components/review/reviewText';
 
 interface PageProps {
   params: Promise<{ slug: string; id: string; reviewId: string }>;
+}
+
+/**
+ * The gates, the project read and the review lookup, once per request: the page and its title both read through this
+ * (React `cache()`), so a project not visible, or a review not of this project, is the same `notFound()` for both and
+ * the title names nothing. The page's later reads stay in the page.
+ */
+const load = cache(async (slug: string, id: string, reviewId: string) => {
+  const identity = await requireIdentity();
+  const ctx = await requireOrgContextFor(identity.userId, slug, 'record:read');
+  const project = await withOrg(ctx, (tx) => tx.project.findUnique({ where: { id }, select: { id: true, name: true, archivedAt: true } }));
+  if (project === null) notFound();
+  const review = (await listStageReviews(ctx, id)).find((r) => r.id === reviewId);
+  if (review === undefined) notFound();
+  return { identity, ctx, project, review };
+});
+
+/** The seal number the next seal of this review takes. */
+const nextSealNumber = (review: { latestSeal: { sealNumber: number } | null }): number => (review.latestSeal?.sealNumber ?? 0) + 1;
+
+/** The page's own heading, then the project. */
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { slug, id, reviewId } = await params;
+  const { project, review } = await orNotFound(load(slug, id, reviewId));
+  return { title: pageTitle(REVIEW_COPY.titles.seal(review.name, nextSealNumber(review)), project.name) };
 }
 
 /**
@@ -21,14 +51,9 @@ interface PageProps {
  */
 export default async function SealConfirmationPage({ params }: PageProps) {
   const { slug, id, reviewId } = await params;
-  const identity = await requireIdentity();
-  const ctx = await requireOrgContextFor(identity.userId, slug, 'record:read');
-  const project = await withOrg(ctx, (tx) => tx.project.findUnique({ where: { id }, select: { id: true, archivedAt: true } }));
-  if (project === null) notFound();
-  const review = (await listStageReviews(ctx, id)).find((r) => r.id === reviewId);
-  if (review === undefined) notFound();
+  const { identity, ctx, project, review } = await load(slug, id, reviewId);
   const archived = project.archivedAt !== null;
-  const sealNumber = (review.latestSeal?.sealNumber ?? 0) + 1;
+  const sealNumber = nextSealNumber(review);
   const base = `/orgs/${encodeURIComponent(slug)}/projects/${encodeURIComponent(id)}`;
   const heading = <h1>{`Seal "${review.name}" as seal ${sealNumber}`}</h1>;
 

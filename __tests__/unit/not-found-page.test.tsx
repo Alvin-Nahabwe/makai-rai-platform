@@ -10,6 +10,8 @@ vi.mock('next/headers', () => ({ headers: headersMock }));
 vi.mock('@/lib/auth/idleDeadline', () => ({ readSessionDeadlines: readSessionDeadlinesMock }));
 
 import NotFound, { metadata } from '@/app/not-found';
+import { ERRORS_COPY } from '@/lib/errors/copy';
+import { pageTitle } from '@/lib/ui/title';
 import NotFoundInGroup, { metadata as groupMetadata } from '@/app/(authenticated)/not-found';
 import NotFoundCard from '@/components/layout/NotFoundCard';
 
@@ -50,7 +52,7 @@ describe('S-31 not-found page', () => {
   });
 
   it('FR-RM-03 UX-05 (S-31 part): the page title names the screen, then the product', () => {
-    expect(metadata.title).toBe('Not found - MAK-AI RAI Platform');
+    expect(metadata.title).toBe(pageTitle(ERRORS_COPY.titles.notFound));
   });
 
   it('FR-RM-03 UX-05 (S-31 part): the not-found page echoes nothing from the request', async () => {

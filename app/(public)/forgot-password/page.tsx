@@ -1,7 +1,9 @@
 import Link from 'next/link';
+import { AUTH_COPY } from '@/lib/auth/copy';
+import { pageTitle } from '@/lib/ui/title';
 import { ForgotPasswordClient } from './ForgotPasswordClient';
 
-export const metadata = { title: 'Forgot password - MAK-AI RAI Platform' };
+export const metadata = { title: pageTitle(AUTH_COPY.titles.forgotPassword) };
 
 /** S-02 Forgot password (FR-ACC-06): ask for a reset link by email; the answer never says whether an account exists. */
 export default function ForgotPasswordPage() {

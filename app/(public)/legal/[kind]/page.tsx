@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import type { LegalTextKind } from '@/types/legal';
 import { RETIRED_NOTE, isRetiredKind } from '@/lib/legal/kinds';
 import { LEGAL_KINDS, currentLegalText, legalKindFrom, legalTextHistory } from '@/lib/legal/registry';
+import { pageTitle } from '@/lib/ui/title';
 import { LEGAL_LINK_STYLE, LEGAL_NOTE_STYLE, LEGAL_PAGE_STYLE, LegalTextView, legalTextHeading, versionLine } from '@/components/legal/LegalTextView';
 
 /**
@@ -29,7 +30,7 @@ async function kindOf(params: Params): Promise<LegalTextKind> {
 }
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
-  return { title: `${legalTextHeading(await kindOf(params))} - MAK-AI RAI Platform` };
+  return { title: pageTitle(legalTextHeading(await kindOf(params))) };
 }
 
 export default async function LegalKindPage({ params }: { params: Params }) {

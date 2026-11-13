@@ -108,9 +108,20 @@ describe('S-20', () => {
     expect(await projectPage(projectOfB)).toBe(await projectPage(projectOfA));
   });
 
-  it('NFR-A11Y-02 (WCAG 2.4.2): both S-20 pages carry their own title', () => {
-    expect(orgModule.metadata).toEqual({ title: 'Team export - MAK-AI RAI Platform' });
-    expect(projectModule.metadata).toEqual({ title: 'Team export - MAK-AI RAI Platform' });
+  it('NFR-A11Y-02 (WCAG 2.4.2): both S-20 pages carry their own title', async () => {
+    const { pageTitle } = await import('../../lib/ui/title');
+    const { EXPORT_COPY } = await import('../../lib/export/copy');
+    const orgTitle = async () => (await orgModule.generateMetadata({ params: Promise.resolve({ slug: fxA.org.slug }) })).title;
+    const projectTitle = async (id: string) => (await projectModule.generateMetadata({ params: Promise.resolve({ slug: fxA.org.slug, id }) })).title;
+    expect(await orgTitle()).toBe(pageTitle(EXPORT_COPY.titles.downloadRecords, fxA.org.name));
+    expect(await projectTitle(projectOfA)).toBe(pageTitle(EXPORT_COPY.titles.downloadRecords, 'Maternal-risk triage'));
+    // A session with no right to the page: the role without team:export gets the refusal and a title that names nothing,
+    // and a project of organisation B is not found from the title as from the page.
+    sessionFor(fxA.members.viewer.userId);
+    expect(await orgTitle()).toBe(pageTitle(EXPORT_COPY.titles.downloadRecords));
+    expect(await projectTitle(projectOfA)).toBe(pageTitle(EXPORT_COPY.titles.downloadRecords));
+    sessionFor(fxA.members.owner.userId);
+    await expect(projectTitle(projectOfB)).rejects.toMatchObject({ digest: 'NEXT_HTTP_ERROR_FALLBACK;404' });
   });
 
   it('FR-EXP-01: estimateTeamExport sums held evidence files and issued PDFs of the scope', async () => {

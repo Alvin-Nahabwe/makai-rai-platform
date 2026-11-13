@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
+import { AUTH_COPY } from '@/lib/auth/copy';
+import { pageTitle } from '@/lib/ui/title';
 import { ChangePasswordForm } from './ChangePasswordForm';
 
-export const metadata: Metadata = { title: 'Change your password - MAK-AI RAI Platform' };
+export const metadata: Metadata = { title: pageTitle(AUTH_COPY.titles.changePassword) };
 
 /**
  * S-29 Forced password change, and S-21's **Change password** (FR-ACC-08). Gate 2 sends a flagged account here and

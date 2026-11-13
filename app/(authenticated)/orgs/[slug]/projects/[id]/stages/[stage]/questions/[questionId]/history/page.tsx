@@ -1,3 +1,5 @@
+import { cache } from 'react';
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { requireIdentity } from '@/lib/auth/identity';
 import { requireOrgContextFor } from '@/lib/auth/context';
@@ -17,9 +19,12 @@ import { ListLink } from '@/components/ui/ListLink';
 import { STAGES, type Stage } from '@/types/record';
 import type { DecisionVersionView } from '@/types/api';
 import type { OrgRole } from '@prisma/client';
+import { DECISION_COPY } from '@/lib/decision/copy';
+import { orNotFound } from '@/lib/auth/titleGate';
+import { pageTitle } from '@/lib/ui/title';
 
 export interface HistoryPageData {
-  orgSlug: string; projectId: string; projectArchived: boolean; stage: Stage; questionId: string;
+  orgSlug: string; projectId: string; projectName: string; projectArchived: boolean; stage: Stage; questionId: string;
   viewer: { userId: string; role: OrgRole }; versions: DecisionVersionView[]; entries: HistoryEntry[];
 }
 
@@ -48,15 +53,37 @@ export function wordingIn(semver: string, questionId: string, load: (semver: str
 export async function loadHistoryPage(ctx: OrgContext, viewerId: string, p: { projectId: string; stage: Stage; questionId: string }): Promise<HistoryPageData | null> {
   const q = runningContent().questions.get(p.questionId);
   if (q === undefined || q.stage !== p.stage) return null;
-  const project = await withOrg(ctx, (tx) => tx.project.findFirst({ where: { id: p.projectId }, select: { archivedAt: true, org: { select: { slug: true } } } }));
+  const project = await withOrg(ctx, (tx) => tx.project.findFirst({ where: { id: p.projectId }, select: { name: true, archivedAt: true, org: { select: { slug: true } } } }));
   if (project === null) return null;
   const versions = await decisionHistory(ctx, p.projectId, p.questionId);
   const seals = await sealsIncludingRows(ctx, versions.map((v) => v.id));
   return {
-    orgSlug: project.org.slug, projectId: p.projectId, projectArchived: project.archivedAt !== null, stage: p.stage, questionId: p.questionId,
+    orgSlug: project.org.slug, projectId: p.projectId, projectName: project.name, projectArchived: project.archivedAt !== null, stage: p.stage, questionId: p.questionId,
     viewer: { userId: viewerId, role: ctx.role }, versions,
     entries: versions.map((v) => ({ version: v, wording: wordingIn(v.content.semver, p.questionId), seals: seals.get(v.id) ?? [] })),
   };
+}
+
+type Params = Promise<{ slug: string; id: string; stage: string; questionId: string }>;
+
+/**
+ * The gates and the loader, once per request: the page and its title both read through this (React `cache()`), so an
+ * unknown stage, question or project is the same `notFound()` for both and the title names nothing.
+ */
+const load = cache(async (slug: string, id: string, stage: string, questionId: string) => {
+  const identity = await requireIdentity();
+  const ctx = await requireOrgContextFor(identity.userId, slug, 'record:read');
+  if (!(STAGES as readonly string[]).includes(stage)) notFound();
+  const data = await loadHistoryPage(ctx, identity.userId, { projectId: id, stage: stage as Stage, questionId });
+  if (data === null) notFound();
+  return data;
+});
+
+/** The page's own heading, then the project. */
+export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
+  const { slug, id, stage, questionId } = await params;
+  const data = await orNotFound(load(slug, id, stage, questionId));
+  return { title: pageTitle(DECISION_COPY.titles.history(data.questionId), data.projectName) };
 }
 
 /**
@@ -66,15 +93,11 @@ export async function loadHistoryPage(ctx: OrgContext, viewerId: string, p: { pr
 export default async function HistoryPage({
   params, searchParams,
 }: {
-  params: Promise<{ slug: string; id: string; stage: string; questionId: string }>;
+  params: Params;
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const { slug, id, stage, questionId } = await params;
-  const identity = await requireIdentity();
-  const ctx = await requireOrgContextFor(identity.userId, slug, 'record:read');
-  if (!(STAGES as readonly string[]).includes(stage)) notFound();
-  const data = await loadHistoryPage(ctx, identity.userId, { projectId: id, stage: stage as Stage, questionId });
-  if (data === null) notFound();
+  const data = await load(slug, id, stage, questionId);
   const sp = await searchParams;
   return <HistoryView data={data} shown={typeof sp.shown === 'string' ? sp.shown : null} />;
 }

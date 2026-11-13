@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { ERRORS_COPY } from '@/lib/errors/copy';
+import { pageTitle } from '@/lib/ui/title';
 import { headers } from 'next/headers';
 import IdleWarning from '@/components/layout/IdleWarning';
 import NotFoundCard from '@/components/layout/NotFoundCard';
@@ -6,7 +8,7 @@ import { MAIN_CONTENT_ID } from '@/components/layout/SkipLink';
 import { idleLimitSeconds } from '@/lib/auth/idle';
 import { readSessionDeadlines } from '@/lib/auth/idleDeadline';
 
-export const metadata: Metadata = { title: 'Not found - MAK-AI RAI Platform' };
+export const metadata: Metadata = { title: pageTitle(ERRORS_COPY.titles.notFound) };
 
 /**
  * S-31, "Not found or no access" (SRS 7.1.5; UX-05; M-27).

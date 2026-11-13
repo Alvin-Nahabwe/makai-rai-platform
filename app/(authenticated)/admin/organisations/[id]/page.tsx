@@ -7,8 +7,10 @@ import { OwnerInvitationBox } from '@/components/admin/OwnerInvitationBox';
 import { AgreementRecords } from '@/components/admin/AgreementRecords';
 import { CorrectNameForm } from '@/components/admin/CorrectNameForm';
 import { CorrectLegalNameForm } from '@/components/admin/CorrectLegalNameForm';
+import { ADMIN_COPY } from '@/lib/admin/copy';
+import { pageTitle } from '@/lib/ui/title';
 
-export const metadata = { title: 'Organisation' };
+export const metadata = { title: pageTitle(ADMIN_COPY.titles.organisation) };
 
 /**
  * S-24 detail mode (FR-ORG-02, FR-ORG-05, FR-ORG-06, FR-ORG-10; W-10 note 2): only the name, legal name, creation

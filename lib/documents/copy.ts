@@ -85,3 +85,10 @@ export const MSG_SEAL_CHECK_FAILED = 'This seal cannot be used: its check failed
 export function utcSecond(iso: string): string {
   return `${formatUtcDay(iso)} ${new Date(iso).toISOString().slice(11, 19)} UTC`;
 }
+
+/** Page titles of the documents screen (spec 7.5; "Documents" is the review page's step, spec section 4). */
+export const DOCUMENTS_COPY = Object.freeze({
+  titles: Object.freeze({
+    documentsOf: (reviewName: string): string => `Documents of ${reviewName}`,
+  }),
+});
