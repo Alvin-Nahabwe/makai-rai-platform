@@ -271,7 +271,7 @@ function gitFiles(...patterns: string[]): string[] {
 function publicCopyFiles(): string[] {
   const pages = gitFiles('app/(public)/**/page.tsx');
   // S-01 to S-04, S-06 and S-28 (with /terms and /privacy, which redirect); a glob that finds fewer proves less.
-  expect(pages.length, 'public pages found').toBeGreaterThanOrEqual(7);
+  expect(pages.length, 'public pages found').toBeGreaterThanOrEqual(8);
   // The not-found and error pages render for anyone, signed in or not, in the same layout.
   const roots = [...pages, ...gitFiles('app/(public)/**/layout.tsx'), 'app/layout.tsx', 'app/not-found.tsx', 'app/error.tsx', 'app/global-error.tsx', 'app/(authenticated)/acceptances/page.tsx'];
   return [...importClosure(roots), ...gitFiles('data/legal/**/*.md')];
