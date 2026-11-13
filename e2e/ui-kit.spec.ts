@@ -75,6 +75,14 @@ function hydrationErrors(messages: readonly string[]): string[] {
   return messages.filter((m) => /hydrat|did not match|didn't match|server rendered|Minified React error #(?:418|422|423|425)(?!\d)/i.test(m));
 }
 
+/** A locator's box, failing the case with its name when the element is not rendered (no non-null assertion). */
+async function boxOf(locator: Locator, what: string): Promise<{ x: number; y: number; width: number; height: number }> {
+  const box = await locator.boundingBox();
+  expect(box, `${what} has a box`).not.toBeNull();
+  if (box === null) throw new Error(`${what} has no box`);
+  return box;
+}
+
 /** A kit section by its id (`data-kit-section`). */
 const section = (page: Page, id: string) => page.locator(`[data-kit-section="${id}"]`);
 
@@ -505,5 +513,213 @@ test.describe('forced colours, the remaining states', () => {
       expect(arrow.count).toBeGreaterThan(0);
       expect(arrow.invisible).toEqual([]);
     });
+  });
+});
+
+test.describe('Callout', () => {
+  test('a caution keeps its 4 px start border and its icon in both themes and in forced colours; a note has neither', async ({ page }) => {
+    await openKit(page);
+    const caution = section(page, 'callout').locator('.ui-callout--caution');
+    const startBorder = () => caution.first().evaluate((el) => {
+      const s = getComputedStyle(el);
+      // WCAG relative luminance of a computed rgb() colour, then the contrast of the border against the callout's own fill.
+      const luminance = (c: string) => {
+        const [r, g, b] = (c.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number).map((v) => {
+          const x = v / 255;
+          return x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+        });
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      };
+      const [hi, lo] = [luminance(s.borderInlineStartColor), luminance(s.backgroundColor)].sort((x, y) => y - x);
+      return { width: s.borderInlineStartWidth, style: s.borderInlineStartStyle, colour: s.borderInlineStartColor, contrast: (hi + 0.05) / (lo + 0.05) };
+    });
+    await inEachTheme(page, async (theme) => {
+      const border = await startBorder();
+      expect(border.width, theme).toBe('4px');
+      expect(border.contrast, `${theme}: the border against the callout's own fill`).toBeGreaterThanOrEqual(3);
+      expect((await shapesVisible(page, '[data-kit-section="callout"] .ui-callout--caution')).invisible, theme).toEqual([]);
+    });
+    await withForcedColors(page, async () => {
+      const border = await startBorder();
+      expect(border.width).toBe('4px');
+      expect(border.style).toBe('solid');
+      expect(border.colour).not.toBe('rgba(0, 0, 0, 0)');
+      const shapes = await shapesVisible(page, '[data-kit-section="callout"] .ui-callout--caution');
+      expect(shapes.count).toBeGreaterThan(0);
+      expect(shapes.invisible).toEqual([]);
+    });
+    await expect(section(page, 'callout').locator('.ui-callout--note svg')).toHaveCount(0);
+    await expect(section(page, 'callout').locator('[role], [aria-live]')).toHaveCount(0);
+  });
+});
+
+test.describe('StatusRegion', () => {
+  test('the region is in the page before its message, receives it, and empties again without leaving', async ({ page }) => {
+    await openKit(page);
+    const region = page.locator('#kit-status-live');
+    await expect(region).toHaveAttribute('role', 'status');
+    await expect(region).toBeEmpty();
+    await section(page, 'status-region').getByRole('button', { name: 'Show a message' }).click();
+    await expect(region).toHaveText('Sample member invited.');
+    await section(page, 'status-region').getByRole('button', { name: 'Show an error' }).click();
+    await expect(region).toHaveText('The sample invitation was not sent. Try again.');
+    await expect(region).toHaveClass(/ui-status--error/);
+    expect(await region.evaluate((el) => getComputedStyle(el).fontWeight)).toBe('700');
+    await section(page, 'status-region').getByRole('button', { name: 'Clear' }).click();
+    await expect(region).toBeEmpty();
+    await expect(region).toBeAttached();
+  });
+});
+
+test.describe('Banner', () => {
+  test('each kind shows its icon and words in both themes and in forced colours; the actions sit in __action', async ({ page }) => {
+    await openKit(page);
+    const banners = section(page, 'banner').locator('.ui-banner');
+    await expect(banners).toHaveCount(4);
+    for (const [kind, icon] of [['offline', 'wifi-off'], ['archived', 'archive'], ['session', 'clock'], ['info', 'info']] as const) {
+      await expect(section(page, 'banner').locator(`.ui-banner--${kind} .ui-banner__icon svg`), `${kind} draws ${icon}`).toHaveCount(1);
+    }
+    await expect(section(page, 'banner').locator('.ui-banner__action > a')).toHaveCount(2);
+    await expect(section(page, 'banner').locator('.ui-banner--info .ui-banner__action').getByRole('link', { name: 'Read the sample guidance' })).toBeVisible();
+    await inEachTheme(page, async (theme) => {
+      expect((await shapesVisible(page, '[data-kit-section="banner"] .ui-banner')).invisible, theme).toEqual([]);
+    });
+    await withForcedColors(page, async () => {
+      expect((await shapesVisible(page, '[data-kit-section="banner"] .ui-banner')).invisible).toEqual([]);
+      for (const b of await banners.all()) await expect(b.locator('.ui-banner__body')).toBeVisible();
+    });
+    expect(await banners.evaluateAll((els) => els.map((el) => getComputedStyle(el).position))).toEqual(['static', 'static', 'static', 'static']);
+  });
+
+  test('at 320 px the action wraps below the words and nothing scrolls sideways', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    await openKit(page);
+    const session = section(page, 'banner').locator('.ui-banner--session');
+    const body = await boxOf(session.locator('.ui-banner__body'), 'the session banner\'s words');
+    const action = await boxOf(session.locator('.ui-banner__action'), 'the session banner\'s action');
+    expect(action.y).toBeGreaterThanOrEqual(body.y + body.height - 1);
+    await expectNoHorizontalScroll(page);
+  });
+});
+
+test.describe('Skeleton', () => {
+  test('nothing moves, and each says what is loading through a visually hidden status line', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await openKit(page);
+    const running = await page.evaluate(() => document.getAnimations()
+      .filter((a) => a.effect instanceof KeyframeEffect && a.effect.target instanceof Element && a.effect.target.closest('.ui-skeleton') !== null).length);
+    expect(running).toBe(0);
+    const lines = section(page, 'skeleton').locator('.ui-skeleton > p[role="status"].visually-hidden');
+    await expect(lines).toHaveText(['Loading the sample text', 'Loading the sample question', 'Loading the sample table']);
+    await expect(section(page, 'skeleton').locator('.ui-skeleton > [aria-hidden="true"] .ui-skeleton__line')).toHaveCount(9);
+  });
+});
+
+test.describe('EmptyState', () => {
+  test('says what is empty and how it fills, with its action after the words', async ({ page }) => {
+    await openKit(page);
+    const empty = section(page, 'empty-state').locator('.ui-empty').first();
+    await expect(empty.locator('.ui-empty__title')).toHaveText('No findings yet');
+    await expect(empty.locator('.ui-empty__action').getByRole('link', { name: 'Open the sample stage' })).toBeVisible();
+    await expect(section(page, 'empty-state').locator('.ui-empty').nth(1).locator('.ui-empty__action')).toHaveCount(0);
+  });
+});
+
+test.describe('Dialog', () => {
+  test('opens as a native modal, the safe action takes focus, Escape closes it once and focus returns to the invoker', async ({ page }) => {
+    await openKit(page);
+    const opener = section(page, 'dialog').getByRole('button', { name: 'Open the sample dialog' });
+    const output = page.locator('[data-demo-output="dialog"]');
+    const rootOverflow = () => page.evaluate(() => [getComputedStyle(document.body).overflow, getComputedStyle(document.documentElement).overflow]);
+    const overflowBefore = await rootOverflow();
+    await opener.focus();
+    await page.keyboard.press('Enter');
+    const dialog = page.getByRole('dialog', { name: 'Archive the sample project?' });
+    await expect(dialog).toBeVisible();
+    expect(await dialog.evaluate((d) => d.matches(':modal'))).toBe(true);
+    expect(await dialog.evaluate((d) => [d.getAttribute('role'), d.getAttribute('aria-modal')])).toEqual([null, null]);
+    await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
+    // Nothing trapped by script: no inert attribute anywhere, and opening changes neither root's overflow.
+    expect(await page.evaluate(() => document.querySelectorAll('[inert]').length)).toBe(0);
+    expect(await rootOverflow()).toEqual(overflowBefore);
+    await inEachTheme(page, async (theme) => {
+      await expectNoSeriousA11yViolations(page, `${KIT} dialog open, ${theme}`);
+    });
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await expect(output).toHaveText('Closed by the browser: 1. Chosen: dismissed.');
+    await expect(opener).toBeFocused();
+  });
+
+  test('sits in the centre of the window with at least a 16 px gutter at 1280 and 320 px, and a long one scrolls inside itself', async ({ page }) => {
+    await openKit(page);
+    for (const viewport of [VIEWPORTS[0], VIEWPORTS[2]]) {
+      await page.setViewportSize(viewport);
+      for (const [opener, title] of [['Open the sample dialog', 'Archive the sample project?'], ['Open the long sample dialog', 'A long sample dialog']] as const) {
+        await section(page, 'dialog').getByRole('button', { name: opener }).click();
+        const dialog = page.getByRole('dialog', { name: title });
+        await expect(dialog).toBeVisible();
+        const box = await boxOf(dialog, title);
+        const where = `${title} at ${viewport.width} px`;
+        expect(Math.abs(box.x + box.width / 2 - viewport.width / 2), `${where}: centred across`).toBeLessThanOrEqual(2);
+        expect(Math.abs(box.y + box.height / 2 - viewport.height / 2), `${where}: centred down`).toBeLessThanOrEqual(2);
+        expect(box.x, where).toBeGreaterThanOrEqual(16);
+        expect(box.y, where).toBeGreaterThanOrEqual(16);
+        expect(box.x + box.width, where).toBeLessThanOrEqual(viewport.width - 16);
+        expect(box.y + box.height, where).toBeLessThanOrEqual(viewport.height - 16);
+        if (title === 'A long sample dialog') {
+          expect(await dialog.evaluate((d) => d.scrollHeight > d.clientHeight), `${where}: scrolls inside itself`).toBe(true);
+        }
+        await page.keyboard.press('Escape');
+        await expect(dialog).toBeHidden();
+      }
+    }
+  });
+
+  test('an action closes it through the caller, which onClose does not report', async ({ page }) => {
+    await openKit(page);
+    const opener = section(page, 'dialog').getByRole('button', { name: 'Open the sample dialog' });
+    await opener.click();
+    const dialog = page.getByRole('dialog', { name: 'Archive the sample project?' });
+    await dialog.getByRole('button', { name: 'Archive project' }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.locator('[data-demo-output="dialog"]')).toHaveText('Closed by the browser: 0. Chosen: archive.');
+    await expect(opener).toBeFocused();
+    await opener.click();
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('[data-demo-output="dialog"]')).toHaveText('Closed by the browser: 1. Chosen: dismissed.');
+  });
+});
+
+test.describe('InlineConfirm', () => {
+  test('Cancel comes first on screen at every width, the destructive variant is the kit\'s, and a busy confirm is disabled', async ({ page }) => {
+    await openKit(page);
+    const groups = section(page, 'inline-confirm').getByRole('group');
+    await expect(groups).toHaveCount(3);
+    for (const viewport of VIEWPORTS) {
+      await page.setViewportSize(viewport);
+      for (const group of await groups.all()) {
+        const [cancel, confirm] = await group.locator('.ui-confirm__actions button').all();
+        const a = await boxOf(cancel, 'Cancel');
+        const b = await boxOf(confirm, 'the confirm button');
+        expect(a.y < b.y - 1 || (Math.abs(a.y - b.y) <= 1 && a.x < b.x), `${viewport.width} px: Cancel before confirm`).toBe(true);
+      }
+    }
+    await expect(groups.nth(1).getByRole('button', { name: 'Archive project' })).toHaveClass(/ui-button--destructive/);
+    await expect(groups.nth(1).getByRole('button', { name: 'Keep it open' })).toBeVisible();
+    await expect(groups.nth(2).getByRole('button', { name: 'Revoke invitation' })).toBeDisabled();
+    await expect(groups.nth(2).getByRole('button', { name: 'Cancel' })).toBeEnabled();
+  });
+
+  test('Enter on Cancel cancels and never confirms; the confirm runs only from its own button', async ({ page }) => {
+    await openKit(page);
+    const group = section(page, 'inline-confirm').getByRole('group').first();
+    const output = page.locator('[data-demo-output="confirm"]');
+    await group.getByRole('button', { name: 'Cancel' }).focus();
+    await page.keyboard.press('Enter');
+    await expect(output).toHaveText('Pressed: cancel.');
+    await group.getByRole('button', { name: 'Withdraw document' }).click();
+    await expect(output).toHaveText('Pressed: withdraw.');
   });
 });

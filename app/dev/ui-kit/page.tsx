@@ -1,9 +1,13 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { connection } from 'next/server';
 import type { ReactElement, ReactNode } from 'react';
+import { Banner } from '@/components/ui/Banner';
 import { Button, ButtonLink } from '@/components/ui/Button';
+import { Callout } from '@/components/ui/Callout';
 import { Checkbox, CheckboxGroup } from '@/components/ui/Checkbox';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { Icon } from '@/components/ui/Icon';
 import { ICONS } from '@/components/ui/icons';
 import { LocalTime } from '@/components/ui/LocalTime';
@@ -11,7 +15,9 @@ import { RadioCards } from '@/components/ui/RadioCards';
 import { RouteRow, type RouteRowStop } from '@/components/ui/RouteRow';
 import { SavedMark } from '@/components/ui/SavedMark';
 import { Select } from '@/components/ui/Select';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { StatusMark } from '@/components/ui/StatusMark';
+import { StatusRegion } from '@/components/ui/StatusRegion';
 import { TextInput } from '@/components/ui/TextInput';
 import type { IconName, StatusMarkKind } from '@/components/ui/types';
 import { tallyOf } from '@/lib/ui/marks';
@@ -19,6 +25,7 @@ import { devGalleryShown } from '@/lib/ui/devGallery';
 import { MAIN_CONTENT_ID } from '@/components/layout/SkipLink';
 import { PRODUCT_NAME } from '@/lib/ui/title';
 import { BusySubmitDemo, DateStates, DecidedOnDemo, ErrorSummaryDemo, InPlaceDemo, ReasonDemo, StatusDemo, TextAreaStates } from './FormDemos';
+import { DialogDemo, InlineConfirmDemo, LongDialogDemo, StatusRegionDemo } from './FeedbackDemos';
 import { SavedDemo } from './SavedDemo';
 
 /**
@@ -182,6 +189,53 @@ export default async function UiKitPage(): Promise<ReactElement> {
       <KitSection id="error-summary" title="Error summary">
         <ErrorSummaryDemo />
         <p>With no errors the summary renders nothing.</p>
+      </KitSection>
+
+      <KitSection id="callout" title="Callout">
+        <Callout kind="note" title="Before you start">Read the guidance for this stage. It takes about ten minutes.</Callout>
+        <Callout kind="note">A note without a title.</Callout>
+        <Callout kind="caution" title="This cannot be undone">Once sealed, the stage review cannot be changed. A new version starts a new review.</Callout>
+        <Callout kind="caution">A caution without a title.</Callout>
+      </KitSection>
+
+      <KitSection id="status-region" title="Status region">
+        <StatusRegionDemo />
+        <StateTable caption="States" rows={[
+          ['empty, polite', <StatusRegion key="e" message={null} />],
+          ['message', <StatusRegion key="m" message="Sample decision saved as version 2." />],
+          ['error', <StatusRegion key="x" message="The sample answer was not saved. Your words are kept on this device." tone="error" />],
+        ]} />
+      </KitSection>
+
+      <KitSection id="banner" title="Banner">
+        <Banner kind="offline">You are offline. This is a sample banner.</Banner>
+        <Banner kind="archived" title="This sample project is archived">Nothing in it can be changed. Owners and admins can unarchive it from All projects.</Banner>
+        <Banner kind="session" title="You were signed out" action={<ButtonLink variant="secondary" href="#banner">Sign in again</ButtonLink>}>Your answer on this page is kept.</Banner>
+        <Banner kind="info" action={<Link href="#banner">Read the sample guidance</Link>}>A sample notice with a link as its action.</Banner>
+      </KitSection>
+
+      <KitSection id="skeleton" title="Skeleton">
+        <StateTable caption="Variants, static: nothing moves" rows={[
+          ['text', <Skeleton key="t" label="Loading the sample text" />],
+          ['plate', <Skeleton key="p" label="Loading the sample question" variant="plate" lines={2} />],
+          ['table', <Skeleton key="b" label="Loading the sample table" variant="table" lines={4} />],
+        ]} />
+      </KitSection>
+
+      <KitSection id="empty-state" title="Empty state">
+        <EmptyState title="No findings yet" action={<ButtonLink variant="secondary" href="#empty-state">Open the sample stage</ButtonLink>}>
+          Findings appear here when the team records a decision of Partly or Not yet.
+        </EmptyState>
+        <EmptyState title="No members invited">Invited people appear here until they accept.</EmptyState>
+      </KitSection>
+
+      <KitSection id="inline-confirm" title="Inline confirmation">
+        <InlineConfirmDemo />
+      </KitSection>
+
+      <KitSection id="dialog" title="Dialog">
+        <DialogDemo />
+        <LongDialogDemo />
       </KitSection>
 
       <KitSection id="local-time" title="Local time">

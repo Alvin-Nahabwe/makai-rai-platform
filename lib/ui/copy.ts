@@ -59,6 +59,8 @@ export const UI_COPY = {
   },
   /** The three boxes of a date and its shortcut (DateField). */
   date: { day: 'Day', month: 'Month', year: 'Year', today: 'Today' },
+  /** InlineConfirm's cancel button, unless the caller names it. */
+  confirm: { cancel: 'Cancel' },
   field: {
     /** After a required field's label: "Reason (required)". */
     required: '(required)',

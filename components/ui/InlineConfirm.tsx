@@ -2,6 +2,9 @@
 
 import { useId } from 'react';
 import type { ReactElement, ReactNode } from 'react';
+import { Button } from '@/components/ui/Button';
+import { UI_COPY } from '@/lib/ui/copy';
+import './InlineConfirm.css';
 
 export interface InlineConfirmProps {
   /** What is being acted on, for example "Data card v1". */
@@ -16,23 +19,34 @@ export interface InlineConfirmProps {
   canConfirm?: boolean;
   /** Extra fields, such as account deletion's password and typed phrase (both must allow pasting). */
   children?: ReactNode;
+  /** The confirm button is the kit's destructive button (decision B6) rather than the primary one. */
+  destructive?: boolean;
+  /** The cancel button's words; "Cancel" by default. */
+  cancelLabel?: string;
 }
 
 /**
  * The confirmation of an action that cannot be undone or that changes what others rely on (UX-29): it
  * appears in place, names the object and the consequence, and its button repeats the action. It is not a
- * modal and not `window.confirm`. The confirm button is disabled while `busy` or when `canConfirm` is false.
+ * modal and not `window.confirm`. The confirm button is disabled while `busy` or when `canConfirm` is false (disabled, not
+ * the kit's busy state, so a second press cannot send twice). It is disabled, not busy, because the seven screens that use
+ * it and their tests work that way today; a focused confirm button therefore loses focus during the send, the failure
+ * Button's own doc names, and the screens' own tasks move it to `busy`. Cancel comes first, in the markup and on screen,
+ * on every width (plan 1A Task 6), and is never disabled.
  */
 export function InlineConfirm(p: InlineConfirmProps): ReactElement {
   const headingId = useId();
   return (
-    <div role="group" aria-labelledby={headingId} className="card">
-      <p id={headingId}><strong>{p.objectName}</strong></p>
-      <p>{p.consequence}</p>
+    <div role="group" aria-labelledby={headingId} className="ui-confirm">
+      <p id={headingId} className="ui-confirm__object"><strong>{p.objectName}</strong></p>
+      <p className="ui-confirm__consequence">{p.consequence}</p>
       {p.children}
-      <div className="form-actions">
-        <button type="button" className="btn btn--primary" disabled={p.busy === true || p.canConfirm === false} onClick={() => { void p.onConfirm(); }}>{p.actionLabel}</button>
-        <button type="button" className="btn btn--secondary" onClick={p.onCancel}>Cancel</button>
+      {/* Cancel first, confirm last, nothing else in here: FindingActions.tsx focuses the confirm button as the last
+          button of .ui-confirm__actions when the confirmation opens (UX-42). __tests__/unit/ui/inline-confirm.test.tsx
+          pins the order and that selector. */}
+      <div className="ui-confirm__actions">
+        <Button variant="secondary" onClick={p.onCancel}>{p.cancelLabel ?? UI_COPY.confirm.cancel}</Button>
+        <Button variant={p.destructive === true ? 'destructive' : 'primary'} disabled={p.busy === true || p.canConfirm === false} onClick={() => { void p.onConfirm(); }}>{p.actionLabel}</Button>
       </div>
     </div>
   );

@@ -32,14 +32,17 @@ describe('OfflineBanner', () => {
     expect(online).toBe('<div role="status" class="offline-banner-region"></div>');
     expect(renderToStaticMarkup(<OfflineBanner />)).toBe(online);
     const offline = renderToStaticMarkup(<OfflineBannerView offline />);
-    expect(offline).toMatch(/^<div role="status" class="offline-banner-region"><div class="offline-banner">.*<\/div><\/div>$/);
+    // The kit's Banner (plan 1A Task 6) inside the region, holding M-40 as its body; it adds no live region of its own.
+    expect(offline).toMatch(/^<div role="status" class="offline-banner-region"><div class="ui-banner ui-banner--offline">.*<\/div><\/div>$/);
+    expect(offline).toContain(`<div class="ui-banner__body">${M40}</div>`);
     expect(offline.match(/role="status"/g)).toHaveLength(1);
+    expect(offline.match(/role=|aria-live/g)).toHaveLength(1);
   });
 
   it('M-40 UX-35: on phones the banner text starts clear of the fixed menu button', () => {
     const css = readFileSync('app/globals.css', 'utf8');
     const narrow = css.split('@media (max-width: 768px)').slice(1).join('\n');
-    expect(narrow).toMatch(/\.offline-banner\s*\{[^}]*padding-left:\s*calc\(var\(--space-4\) \+ 48px\)/);
+    expect(narrow).toMatch(/\.offline-banner-region \.ui-banner\s*\{[^}]*padding-left:\s*calc\(var\(--space-4\) \+ 48px\)/);
   });
 
   it('M-40: the server render shows nothing, because the browser flag is read after mount', () => {

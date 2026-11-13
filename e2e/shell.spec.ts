@@ -194,7 +194,7 @@ test.describe('role under the name, offline banner on phones, no emoji', () => {
       const page = await context.newPage();
       await page.goto(`/orgs/${slug}/dashboard`);
       await context.setOffline(true);
-      const text = page.locator('.offline-banner__text');
+      const text = page.locator('.ui-banner__body');
       await expect(text).toHaveText(M40);
       const covered = await text.evaluate((el) => {
         const range = document.createRange();

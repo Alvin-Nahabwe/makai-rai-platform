@@ -87,4 +87,18 @@ describe('ButtonLink', () => {
     expect(html).toMatch(/^<a [^>]*class="ui-button ui-button--secondary"[^>]*>Projects<\/a>$/);
     expect(html).toContain('href="/orgs/a/projects"');
   });
+
+  it('never prefetches: its next/link carries a literal prefetch={false}, and the prefetch prop is refused (UX-37, SRS 7.6.4)', () => {
+    // The long-list lint (__tests__/lint/no-prefetch-long-lists.test.ts) reads every file a long-list page imports, and it
+    // accepts only a literal prefetch={false}: Button.tsx is imported by most pages, so its one Link must carry it.
+    const src = readFileSync('components/ui/Button.tsx', 'utf8');
+    const links = [...src.matchAll(/<Link\b[^>]*>/g)].map(([tag]) => tag);
+    expect(links).toHaveLength(1);
+    expect(links[0]).toMatch(/\sprefetch=\{false\}/);
+    const refused = (
+      // @ts-expect-error -- ButtonLinkProps has no prefetch: nothing can turn prefetching back on.
+      <ButtonLink variant="secondary" href="/a" prefetch>A</ButtonLink>
+    );
+    expect(renderToStaticMarkup(refused)).toMatch(/^<a [^>]*href="\/a"/);
+  });
 });
