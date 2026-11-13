@@ -3,8 +3,8 @@ import { pendingTargetFor } from './pendingLinks';
 
 /**
  * The page discovery of e2e/claims-crawl.spec.ts, moved here unchanged so that another spec can walk the same pages
- * (plan 1A Task 9, e2e/vocabulary-first-use.spec.ts) without importing a spec file. Only `reachablePages` is exported;
- * the rest is what it needs.
+ * (plan 1A Task 9, e2e/vocabulary-first-use.spec.ts) without importing a spec file. `reachablePages` and `routePattern`
+ * (for a worklist keyed by route) are exported; the rest is what they need.
  */
 
 /**
@@ -17,7 +17,7 @@ const NOT_FOLLOWED = /^\/api\/|(^|\/)(sign-?out|log-?out)(\/|$)|\.[a-z0-9]{2,5}$
 const ID_SEGMENT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$|\d/i;
 
 /** The route a path belongs to: its ids replaced by [id], and the names (not the values) of its query parameters. */
-function routePattern(pathAndSearchOf: string): string {
+export function routePattern(pathAndSearchOf: string): string {
   const url = new URL(pathAndSearchOf, 'http://pattern.invalid');
   const p = url.pathname.split('/').map((segment) => (ID_SEGMENT.test(segment) ? '[id]' : segment)).join('/');
   const params = [...new Set(url.searchParams.keys())].sort();
