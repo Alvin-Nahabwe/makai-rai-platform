@@ -4,6 +4,10 @@ Files that run on, or configure, the production host. They are tracked here so
 that the repository can say what the host is running, and so the properties that
 matter about them are checked in CI rather than remembered.
 
+Commands in this file that were added or changed after 13 November 2026 carry a recorded run
+under `docs/runbooks/runs/` or the words "Not run" beneath them. Older commands have no record
+either way. `docs/runbooks/command-runs.json` holds the state.
+
 `<operator>` is the unprivileged user that owns the cron jobs. No file here names
 a real user, a home directory or an address: scripts use `$HOME`, and anything
 secret or host-specific is read from the server `.env` (see "Rules").

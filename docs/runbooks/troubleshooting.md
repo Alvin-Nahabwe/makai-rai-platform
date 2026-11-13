@@ -3,6 +3,10 @@
 > RAI Toolkit Platform — `makrai.org`
 > Last updated: 2026-10-08
 
+Commands in this file that were added or changed after 13 November 2026 carry a recorded run
+under `docs/runbooks/runs/` or the words "Not run" beneath them. Older commands have no record
+either way. `docs/runbooks/command-runs.json` holds the state.
+
 ---
 
 
