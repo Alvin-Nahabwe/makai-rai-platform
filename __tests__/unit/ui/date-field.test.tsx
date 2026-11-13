@@ -38,7 +38,11 @@ describe('DateField', () => {
 
   it('with errorId and an error, the error element has that id and the inputs reference it', () => {
     const html = render({ hint: 'Leave the day empty if you only know the month.', errorId: 'decision-declaredDate-error', error: 'Enter a real date.' });
-    expect(html).toMatch(/<p class="ui-field__error" id="decision-declaredDate-error"><svg [^>]*aria-hidden="true"/);
+    expect(html).toMatch(/<p class="ui-field__error"><svg [^>]*aria-hidden="true"/);
+    expect(html).toMatch(/id="decision-declaredDate-error"[^>]*>Enter a real date\.</);
+    // A fieldset's error follows its legend and hint, before the boxes and the buttons.
+    expect(html.indexOf('ui-field__error')).toBeLessThan(html.indexOf('ui-date__parts'));
+    expect(html.indexOf('ui-field__error')).toBeGreaterThan(html.indexOf('decision-hint'));
     for (const i of inputs(html)) {
       expect(i).toContain('aria-describedby="decision-hint decision-declaredDate-error"');
       expect(i).toContain('aria-invalid="true"');

@@ -4,7 +4,6 @@ import { connection } from 'next/server';
 import type { ReactElement, ReactNode } from 'react';
 import { Button, ButtonLink } from '@/components/ui/Button';
 import { Checkbox, CheckboxGroup } from '@/components/ui/Checkbox';
-import { ErrorSummary } from '@/components/ui/ErrorSummary';
 import { Icon } from '@/components/ui/Icon';
 import { ICONS } from '@/components/ui/icons';
 import { LocalTime } from '@/components/ui/LocalTime';
@@ -13,14 +12,13 @@ import { RouteRow, type RouteRowStop } from '@/components/ui/RouteRow';
 import { SavedMark } from '@/components/ui/SavedMark';
 import { Select } from '@/components/ui/Select';
 import { StatusMark } from '@/components/ui/StatusMark';
-import { TextArea } from '@/components/ui/TextArea';
 import { TextInput } from '@/components/ui/TextInput';
 import type { IconName, StatusMarkKind } from '@/components/ui/types';
 import { tallyOf } from '@/lib/ui/marks';
 import { devGalleryShown } from '@/lib/ui/devGallery';
 import { MAIN_CONTENT_ID } from '@/components/layout/SkipLink';
 import { PRODUCT_NAME } from '@/lib/ui/title';
-import { DateStates, DecidedOnDemo, InPlaceDemo, ReasonDemo, StatusDemo } from './FormDemos';
+import { BusySubmitDemo, DateStates, DecidedOnDemo, ErrorSummaryDemo, InPlaceDemo, ReasonDemo, StatusDemo, TextAreaStates } from './FormDemos';
 import { SavedDemo } from './SavedDemo';
 
 /**
@@ -44,7 +42,6 @@ const ROUTE: readonly RouteRowStop[] = Array.from({ length: 22 }, (_, i) => {
 const VARIANTS = ['primary', 'secondary', 'quiet', 'destructive'] as const;
 const PEOPLE = [{ value: 'u1', label: 'Amina Namusoke' }, { value: 'u2', label: 'Joseph Okello' }];
 const ROLES = [{ value: 'role:dpo', label: 'Data protection officer' }, { value: 'role:ethics', label: 'Ethics committee' }];
-const sampleCount = (n: number, max: number) => (n > max ? `${n - max} characters too many. Shorten the text to ${max} characters.` : `${n} of ${max} characters`);
 
 function KitSection({ id, title, children }: { id: string; title: string; children: ReactNode }): ReactElement {
   return (
@@ -131,6 +128,7 @@ export default async function UiKitPage(): Promise<ReactElement> {
           ['secondary', <ButtonLink key="s" variant="secondary" href="#buttons">Back to the buttons</ButtonLink>],
           ['quiet, icon', <ButtonLink key="q" variant="quiet" href="#text-input" icon="arrow-up">Text box</ButtonLink>],
         ]} />
+        <BusySubmitDemo />
       </KitSection>
 
       <KitSection id="text-input" title="Text box">
@@ -145,13 +143,7 @@ export default async function UiKitPage(): Promise<ReactElement> {
 
       <KitSection id="text-area" title="Text area">
         <ReasonDemo />
-        <TextArea id="kit-reason-over" name="kit-reason-over" label="Reason, over the limit" maxLength={40} count={sampleCount}
-          defaultValue="We assessed effects on adolescent mothers and on women with no recorded education." />
-        <TextArea id="kit-reason-error" name="kit-reason-error" label="Reason, with an error" maxLength={40} count={sampleCount} defaultValue=""
-          error="Write a reason. Say what was checked and what it showed." describedBy={['kit-reason-note']} required />
-        <p id="kit-reason-note">A further description the area points to, between its count and its error.</p>
-        <TextArea id="kit-reason-readonly" name="kit-reason-readonly" label="Reason, read only" maxLength={40} count={sampleCount} defaultValue="Checked the consent forms." readOnly />
-        <TextArea id="kit-reason-disabled" name="kit-reason-disabled" label="Reason, while saving" maxLength={40} count={sampleCount} defaultValue="Checked the consent forms." disabled />
+        <TextAreaStates />
       </KitSection>
 
       <KitSection id="select" title="Select">
@@ -188,10 +180,7 @@ export default async function UiKitPage(): Promise<ReactElement> {
       </KitSection>
 
       <KitSection id="error-summary" title="Error summary">
-        <ErrorSummary title="There is a problem" errors={[
-          { fieldId: 'kit-error', message: "Enter the organisation's name." },
-          { fieldId: 'kit-decided-day', message: 'Enter the day, month and year the decision was made.' },
-        ]} />
+        <ErrorSummaryDemo />
         <p>With no errors the summary renders nothing.</p>
       </KitSection>
 

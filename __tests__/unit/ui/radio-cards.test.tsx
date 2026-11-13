@@ -50,7 +50,8 @@ describe('RadioCards', () => {
     const fieldset = html.match(/<fieldset[^>]*>/)?.[0] ?? '';
     expect(fieldset).toContain('disabled=""');
     expect(fieldset).toContain('aria-describedby="decision-finding-note status-error"');
-    expect(html).toMatch(/<p class="ui-field__error" id="status-error"><svg [^>]*aria-hidden="true"/);
+    expect(html).toMatch(/<p class="ui-field__error"><svg [^>]*aria-hidden="true"/);
+    expect(html).toMatch(/id="status-error"[^>]*>Choose a status\.</);
     expect(html.match(/<input [^>]*>/g)?.every((i) => !i.includes('disabled'))).toBe(true);
   });
 

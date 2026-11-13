@@ -2,6 +2,7 @@ import type { ReactElement, ReactNode } from 'react';
 import { MarkShape } from '@/components/ui/StatusMark';
 import { describedBy, FieldError, given } from '@/components/ui/TextInput';
 import type { StatusMarkKind } from '@/components/ui/types';
+import './TextInput.css';
 import './RadioCards.css';
 
 export type RadioCardsProps = {
@@ -10,10 +11,15 @@ export type RadioCardsProps = {
   /** Rendered after the legend, outside it, so the legend's text stays the group's name alone. */
   legendHint?: ReactNode;
   options: ReadonlyArray<{ value: string; label: string; help?: string; mark?: StatusMarkKind; id?: string }>;
+  /** Pass `value` (controlled, with `onChange`) or `defaultValue`, never both. */
   value?: string;
   defaultValue?: string;
   onChange?: (value: string) => void;
   error?: string;
+  /**
+   * Native `required` on each radio. No marker is drawn: the legend holds its own text alone, so a caller that wants
+   * the group to say it is required says so in `legendHint`.
+   */
   required?: boolean;
   columns?: 1 | 2;
   /** On the fieldset: it disables every radio. */
@@ -37,15 +43,15 @@ export function RadioCards({
   'aria-describedby': callerDescribedBy,
 }: RadioCardsProps): ReactElement {
   const hintId = given(legendHint) ? `${name}-hint` : undefined;
-  const errorId = given(error) ? `${name}-error` : undefined;
+  const errorId = `${name}-error`;
   return (
     <fieldset
       className={columns === 2 ? 'ui-radio-cards ui-radio-cards--columns-2' : 'ui-radio-cards'} disabled={disabled}
-      aria-describedby={describedBy(hintId, callerDescribedBy, errorId)}
+      aria-describedby={describedBy(hintId, callerDescribedBy, given(error) && errorId)}
     >
       <legend className="ui-radio-cards__legend">{legend}</legend>
       {hintId === undefined ? null : <div className="ui-radio-cards__hint" id={hintId}>{legendHint}</div>}
-      {errorId === undefined || error === undefined ? null : <FieldError id={errorId} message={error} />}
+      {given(error) ? <FieldError id={errorId} message={error} /> : null}
       <div className="ui-radio-cards__list">
         {options.map((o) => {
           const inputId = o.id ?? `${name}-${o.value}`;

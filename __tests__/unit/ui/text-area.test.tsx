@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { TextArea } from '@/components/ui/TextArea';
+import { TextArea, type TextAreaProps } from '@/components/ui/TextArea';
 import { decode } from '@/__tests__/helpers/markup';
 
 /** Plan 1A Task 4: TextArea with a count (spec 7.5). The count is plain text, not a live region. */
@@ -17,7 +17,7 @@ describe('TextArea', () => {
   });
 
   it('marks the count --over past the limit, and keeps the text over it (no native maxlength)', () => {
-    const html = renderToStaticMarkup(<TextArea id="r" name="r" label="Reason" maxLength={3} count={count} defaultValue="abcde" />);
+    const html = renderToStaticMarkup(<TextArea id="r" name="r" label="Reason" maxLength={3} count={count} value="abcde" onChange={() => {}} />);
     expect(html).toMatch(/<p class="ui-count ui-count--over" id="r-count">2 characters too many<\/p>/);
     expect(areaOf(html)).not.toMatch(/maxlength/i);
     expect(decode(html)).toContain('>abcde</textarea>');
@@ -29,26 +29,35 @@ describe('TextArea', () => {
   });
 
   it('is not --over at the limit', () => {
-    expect(renderToStaticMarkup(<TextArea id="r" name="r" label="Reason" maxLength={3} count={count} defaultValue="abc" />)).not.toContain('ui-count--over');
+    expect(renderToStaticMarkup(<TextArea id="r" name="r" label="Reason" maxLength={3} count={count} value="abc" onChange={() => {}} />)).not.toContain('ui-count--over');
   });
 
   it('with describedBy and an error, aria-describedby is hint, count, each id, then the error', () => {
     const html = renderToStaticMarkup(
-      <TextArea id="reason" name="reason" label="Reason" hint="Say why." maxLength={10} count={count} defaultValue="" describedBy={['x']} error="Write a reason." />,
+      <TextArea id="reason" name="reason" label="Reason" hint="Say why." maxLength={10} count={count} value="" onChange={() => {}} describedBy={['x']} error="Write a reason." />,
     );
     const area = areaOf(html);
     expect(area).toContain('aria-describedby="reason-hint reason-count x reason-error"');
     expect(area).toContain('aria-invalid="true"');
     expect(area).toContain('ui-textarea--invalid');
-    expect(html).toMatch(/<p class="ui-field__error" id="reason-error">/);
+    expect(html).toMatch(/id="reason-error"[^>]*>Write a reason\.</);
   });
 
   it('without an error, aria-invalid is false; rows, required, readOnly and disabled reach the textarea', () => {
-    const area = areaOf(renderToStaticMarkup(<TextArea id="r" name="r" label="Reason" maxLength={10} count={count} rows={6} required readOnly disabled />));
+    const area = areaOf(renderToStaticMarkup(<TextArea id="r" name="r" label="Reason" maxLength={10} count={count} value="" rows={6} required readOnly disabled />));
     expect(area).toContain('aria-invalid="false"');
     expect(area).toContain('rows="6"');
     expect(area).toContain('required=""');
     expect(area).toContain('readOnly=""');
     expect(area).toContain('disabled=""');
+  });
+
+  it('is controlled only: the count follows `value`, so an uncontrolled defaultValue is refused by the type', () => {
+    // @ts-expect-error defaultValue is not a TextArea prop: its count could not follow the typing.
+    const props: TextAreaProps = { id: 'r', name: 'r', label: 'R', maxLength: 3, count, value: '', defaultValue: 'abc' };
+    expect(props.id).toBe('r');
+    // @ts-expect-error value is required.
+    const missing: TextAreaProps = { id: 'r', name: 'r', label: 'R', maxLength: 3, count };
+    expect(missing.id).toBe('r');
   });
 });

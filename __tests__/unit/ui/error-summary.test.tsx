@@ -1,3 +1,4 @@
+import { createRef } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { ErrorSummary } from '@/components/ui/ErrorSummary';
@@ -9,13 +10,19 @@ describe('ErrorSummary', () => {
     expect(renderToStaticMarkup(<ErrorSummary title="There is a problem" errors={[]} />)).toBe('');
   });
 
-  it('a focusable-by-script summary: its title, then one link per error to #fieldId', () => {
+  it('its title is the element a script focuses (tabIndex -1), then one link per error to #fieldId', () => {
     const html = renderToStaticMarkup(
       <ErrorSummary title="There is a problem" errors={[{ fieldId: 'decision-reason', message: 'Write a reason.' }, { fieldId: 'decision-day', message: 'Enter a real date.' }]} />,
     );
-    expect(html).toMatch(/^<div class="ui-error-summary" tabindex="-1">/);
-    expect(html).toMatch(/<h2 class="ui-error-summary__title">There is a problem<\/h2>/);
+    // The protected e2e/decision-save.spec.ts:294 finds the focused element by its text: the title must hold it alone.
+    expect(html).toMatch(/^<div class="ui-error-summary"><h2 class="ui-error-summary__title" tabindex="-1">There is a problem<\/h2>/);
     expect(html).toContain('<ul class="ui-error-summary__list"><li><a href="#decision-reason">Write a reason.</a></li><li><a href="#decision-day">Enter a real date.</a></li></ul>');
+  });
+
+  it('a ref passed as a prop is attached to the title', () => {
+    const ref = createRef<HTMLHeadingElement>();
+    const tree = ErrorSummary({ title: 'T', errors: [{ fieldId: 'a', message: 'm' }], ref }) as { props: { children: Array<{ props: { ref?: unknown } }> } };
+    expect(tree.props.children[0].props.ref).toBe(ref);
   });
 
   it('a field id is used as given, as text, never as markup', () => {

@@ -43,10 +43,19 @@ async function inEachTheme(page: Page, check: (theme: (typeof THEMES)[number]) =
   }
 }
 
-/** Runs `check` with forced colours on (Windows high contrast), then turns them off again. */
+/**
+ * Runs `check` with forced colours on (Windows high contrast), then turns them off again. First it proves the emulation
+ * repaints rather than only flipping the media query: the query matches, and an author colour (the primary button's
+ * orange fill) computes to something else than it does in normal colours. Every forced-colours claim rests on this.
+ */
 async function withForcedColors(page: Page, check: () => Promise<void>): Promise<void> {
+  const fill = () => page.locator('.ui-button--primary').first().evaluate((b) => getComputedStyle(b).backgroundColor);
+  const normal = await fill();
   await page.emulateMedia({ forcedColors: 'active' });
   try {
+    await page.waitForFunction(() => document.getAnimations().every((a) => !(a instanceof CSSTransition)));
+    expect(await page.evaluate(() => matchMedia('(forced-colors: active)').matches), 'forced colours emulated').toBe(true);
+    expect(await fill(), 'forced colours repaint an author colour').not.toBe(normal);
     await check();
   } finally {
     await page.emulateMedia({ forcedColors: 'none' });
@@ -295,7 +304,8 @@ test.describe('TextInput and TextArea', () => {
     await openKit(page);
     const invalid = page.getByLabel('Organisation name (required)', { exact: true });
     await expect(invalid).toHaveAttribute('aria-invalid', 'true');
-    await expect(invalid).toHaveAccessibleDescription("As it appears on your letterhead. Error: Enter the organisation's name.");
+    await expect(invalid).toHaveAccessibleDescription("As it appears on your letterhead. Enter the organisation's name.");
+    await expect(page.locator('#kit-error-error')).toHaveText("Enter the organisation's name.");
     await expect(page.getByLabel('Sign-in email', { exact: true })).toHaveAttribute('readonly', '');
     const reason = page.getByLabel('Reason (required)', { exact: true });
     await reason.fill('Checked the consent forms.');
@@ -422,23 +432,78 @@ test.describe('DateField', () => {
     await page.setViewportSize({ width: 320, height: 640 });
     await openKit(page);
     const field = section(page, 'date-field').getByRole('group', { name: 'Decided on, with an error', exact: true });
-    await expect(field.getByLabel('Day', { exact: true })).toHaveAccessibleDescription('Error: Enter a date that exists. February 2026 has 28 days.');
+    await expect(field.getByLabel('Day', { exact: true })).toHaveAccessibleDescription('Enter a date that exists. February 2026 has 28 days.');
     await expect(page.locator('#kit-date-error-message')).toBeVisible();
     await expectNoHorizontalScroll(page);
   });
 });
 
 test.describe('ErrorSummary', () => {
-  test('each link goes to a field on the page, and the summary takes focus when a script gives it', async ({ page }) => {
+  test('each link goes to a field on the page, and a script\'s focus lands on the element holding the title', async ({ page }) => {
     await openKit(page);
     const summary = section(page, 'error-summary').locator('.ui-error-summary');
     for (const link of await summary.getByRole('link').all()) {
-      const href = await link.getAttribute('href');
-      expect(href).toMatch(/^#/);
-      await expect(page.locator(href as string)).toHaveCount(1);
+      const href = (await link.getAttribute('href')) ?? '';
+      expect(href).toMatch(/^#./);
+      await expect(page.locator(`[id="${href.slice(1)}"]`)).toHaveCount(1);
     }
-    await summary.focus();
-    await expect(summary).toBeFocused();
-    expect(await summary.evaluate((el) => getComputedStyle(el).outlineStyle)).toBe('solid');
+    await page.getByRole('button', { name: 'Move focus to the summary', exact: true }).click();
+    // The protected e2e/decision-save.spec.ts:294 asserts focus this way, by the title's text.
+    const title = page.getByText('There is a problem', { exact: true });
+    await expect(title).toBeFocused();
+    expect(await title.evaluate((el) => getComputedStyle(el).outlineStyle)).toBe('solid');
+  });
+});
+
+test.describe('Button, busy in a form', () => {
+  test('a busy submit button submits nothing: not by click, Space or Enter on it, nor Enter in the form\'s field', async ({ page }) => {
+    await openKit(page);
+    const form = page.getByRole('form', { name: 'A form while it saves' });
+    const busy = form.getByRole('button', { name: 'Saving the project', exact: true });
+    const submits = form.locator('[data-demo-output="busy-submits"]');
+    await busy.click();
+    await busy.focus();
+    await page.keyboard.press('Space');
+    await page.keyboard.press('Enter');
+    await form.getByLabel('Project name, in a form that is saving', { exact: true }).press('Enter');
+    await expect(submits).toHaveText('Submits: 0');
+  });
+});
+
+test.describe('forced colours, the remaining states', () => {
+  test('the focus ring, an invalid field, a disabled control, the select\'s arrow and a read-only field stay distinct', async ({ page }) => {
+    await openKit(page);
+    await withForcedColors(page, async () => {
+      const ground = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+      const border = (sel: string) => page.locator(sel).evaluate((el) => {
+        const s = getComputedStyle(el);
+        return { style: s.borderTopStyle, width: parseFloat(s.borderTopWidth), colour: s.borderTopColor };
+      });
+      // Focus ring, by keyboard so :focus-visible applies.
+      await page.locator('#kit-name').focus();
+      await page.keyboard.press('Tab');
+      const ring = await page.evaluate(() => {
+        const s = getComputedStyle(document.activeElement as Element);
+        return { style: s.outlineStyle, width: parseFloat(s.outlineWidth), colour: s.outlineColor };
+      });
+      expect(ring.style).toBe('solid');
+      expect(ring.width).toBeGreaterThanOrEqual(3);
+      expect(ring.colour).not.toBe(ground);
+      // An invalid field's border is thicker than a valid one's.
+      const valid = await border('#kit-name');
+      const invalid = await border('#kit-error');
+      expect(invalid.width).toBeGreaterThan(valid.width);
+      expect(invalid.colour).not.toBe(ground);
+      // A disabled control's border is dashed.
+      expect((await border('#kit-disabled')).style).toBe('dashed');
+      // A read-only field draws no border, so it does not look like a box to type in.
+      expect((await border('#kit-readonly')).width).toBe(0);
+      expect((await border('#kit-reason-readonly')).width).toBe(0);
+      expect(valid.width).toBeGreaterThan(0);
+      // The select's arrow is painted.
+      const arrow = await shapesVisible(page, '[data-kit-section="select"] .ui-select__icon');
+      expect(arrow.count).toBeGreaterThan(0);
+      expect(arrow.invisible).toEqual([]);
+    });
   });
 });

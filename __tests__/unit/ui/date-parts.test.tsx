@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { datePartsOf, parseDateParts } from '@/lib/ui/dateParts';
+import { datePartsOf, parseDateParts, todayParts, type DatePartsResult } from '@/lib/ui/dateParts';
 
 /** Plan 1A Task 4: the pure date helper beside DateField. A calendar date is 'YYYY-MM-DD' (types/record.ts). */
 
@@ -15,6 +15,11 @@ describe('datePartsOf', () => {
   it('a date given to the month or the year leaves the missing boxes empty', () => {
     expect(datePartsOf('2026-02')).toEqual({ day: '', month: '2', year: '2026' });
     expect(datePartsOf('2026')).toEqual({ day: '', month: '', year: '2026' });
+  });
+
+  it('a string that is not YYYY, YYYY-MM or YYYY-MM-DD is refused loudly, never shown as NaN', () => {
+    expect(() => datePartsOf('2026-02-11T00:00:00Z')).toThrow(new RangeError('not a calendar date: "2026-02-11T00:00:00Z"'));
+    expect(() => datePartsOf('2026-ab')).toThrow(RangeError);
   });
 
   it('null gives three empty strings', () => {
@@ -50,5 +55,16 @@ describe('parseDateParts', () => {
 
   it('reuses daysInMonth from lib/decision/copy.ts', () => {
     expect(readFileSync('lib/ui/dateParts.ts', 'utf8')).toMatch(/import \{ daysInMonth \} from '@\/lib\/decision\/copy'/);
+  });
+});
+
+describe('todayParts', () => {
+  it('the device\'s local date as the three boxes', () => {
+    expect(todayParts(new Date(2026, 1, 5, 23, 30))).toEqual({ day: '5', month: '2', year: '2026' });
+  });
+
+  it('DatePartsResult is the parse result\'s type', () => {
+    const r: DatePartsResult = parseDateParts({ day: '1', month: '1', year: '2026' });
+    expect(r).toEqual({ ok: true, value: '2026-01-01' });
   });
 });

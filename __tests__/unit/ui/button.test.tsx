@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import type { MouseEvent, ReactElement } from 'react';
 import { Button, ButtonLink } from '@/components/ui/Button';
 
 /** Plan 1A Task 4: Button and ButtonLink (spec 7.1 and 7.5, decision B6). */
@@ -28,6 +29,17 @@ describe('Button', () => {
     expect(html).not.toMatch(/\sdisabled(=|\s|>)/);
     expect(html).toContain('Save decision');
     expect(html).toMatch(/<span class="ui-button__spinner" aria-hidden="true"><\/span>/);
+  });
+
+  it('busy: the host handler prevents the default action and never calls the caller\'s onClick', () => {
+    const onClick = vi.fn();
+    const host = Button({ variant: 'primary', type: 'submit', busy: true, onClick, children: 'Save' }) as ReactElement<{ onClick: (e: MouseEvent<HTMLButtonElement>) => void }>;
+    const preventDefault = vi.fn();
+    host.props.onClick({ preventDefault } as unknown as MouseEvent<HTMLButtonElement>);
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+    expect(onClick).not.toHaveBeenCalled();
+    const idle = Button({ variant: 'primary', onClick, children: 'Save' }) as ReactElement<{ onClick: unknown }>;
+    expect(idle.props.onClick).toBe(onClick);
   });
 
   it('disabled reaches the native button; an icon sits in __icon, hidden, before or after the label', () => {

@@ -85,8 +85,11 @@
   border: 2px solid var(--color-ink);
 }
 
+/* Read-only: a tint with no border at all, so forced colours, which repaint every border and drop the fill, show
+   plain text rather than an editable box. The padding gives back the border's pixel. */
 .ui-input--readonly {
-  border-color: var(--color-tint);
+  padding: calc(var(--space-2) + 1px) calc(var(--space-3) + 1px);
+  border-width: 0;
   background-color: var(--color-tint);
 }
 

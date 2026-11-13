@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
-import { Checkbox, CheckboxGroup } from '@/components/ui/Checkbox';
+import type { ReactElement } from 'react';
+import { describe, expect, it, vi } from 'vitest';
+import { Checkbox, CheckboxGroup, type CheckboxGroupProps } from '@/components/ui/Checkbox';
 
 /** Plan 1A Task 4: Checkbox and CheckboxGroup (modern-web-guidance checkbox: appearance none, currentColor, 44 px row). */
 
@@ -16,7 +17,7 @@ describe('Checkbox', () => {
     expect(input).toContain('aria-describedby="agree-hint agree-error"');
     expect(input).toContain('aria-invalid="true"');
     expect(html).toMatch(/<label class="ui-checkbox__label" for="agree">I agree<\/label>/);
-    expect(html).toMatch(/<p class="ui-field__error" id="agree-error"><svg [^>]*aria-hidden="true"/);
+    expect(html).toMatch(/<p class="ui-field__error"><svg [^>]*aria-hidden="true"[\s\S]*?<span id="agree-error">Tick this to go on\.<\/span><\/span><\/p>/);
   });
 
   it('passes checked, defaultChecked and value', () => {
@@ -48,6 +49,32 @@ describe('CheckboxGroup', () => {
     expect(fieldset).toContain('aria-describedby="inPlace-hint note inPlace-error"');
     expect(html).toMatch(/<fieldset[^>]*>\s*<legend[^>]*>Which of these are in place\?<\/legend>/);
     expect(html).toContain('id="inPlace-1-hint"');
+  });
+
+  it('a group with an error marks every box invalid', () => {
+    const html = renderToStaticMarkup(<CheckboxGroup name="g" legend="G" options={OPTIONS} error="Tick at least one." />);
+    expect(inputs(html).every((i) => i.includes('aria-invalid="true"'))).toBe(true);
+    expect(inputs(renderToStaticMarkup(<CheckboxGroup name="g" legend="G" options={OPTIONS} />)).every((i) => i.includes('aria-invalid="false"'))).toBe(true);
+  });
+
+  /** Changes box `index` of a group to `checked` and returns what onChange received. `page` is the page's checked values. */
+  function change(props: Omit<CheckboxGroupProps, 'onChange' | 'name' | 'legend'>, index: number, checked: boolean, page: string[] = []): string[] {
+    const onChange = vi.fn();
+    const group = CheckboxGroup({ name: 'g', legend: 'G', ...props, onChange }) as ReactElement<{ children: unknown[] }>;
+    const boxes = (group.props.children[3] as Array<ReactElement<{ value: string; onChange: (e: unknown) => void }>>);
+    const box = boxes[index];
+    const fieldset = { querySelectorAll: () => page.map((value) => ({ value })) };
+    box.props.onChange({ target: { checked, value: box.props.value, closest: () => fieldset } });
+    return onChange.mock.calls[0][0] as string[];
+  }
+
+  it('onChange gives values in the options\' order in both modes; values not among the options are kept, last', () => {
+    const options = [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }, { value: 'c', label: 'C' }];
+    expect(change({ options, values: ['c'] }, 0, true)).toEqual(['a', 'c']);
+    expect(change({ options, values: ['legacy', 'c'] }, 1, true)).toEqual(['b', 'c', 'legacy']);
+    expect(change({ options, values: ['a', 'c'] }, 0, false)).toEqual(['c']);
+    // Uncontrolled: the page's boxes, read after the change, in the options' order.
+    expect(change({ options, defaultValues: ['c'] }, 0, true, ['a', 'c'])).toEqual(['a', 'c']);
   });
 
   it('controlled values check exactly those options', () => {

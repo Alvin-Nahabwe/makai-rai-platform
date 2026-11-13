@@ -35,7 +35,8 @@
 }
 
 .ui-textarea--readonly {
-  border-color: var(--color-tint);
+  padding: calc(var(--space-3) + 1px);
+  border-width: 0;
   background-color: var(--color-tint);
 }
 

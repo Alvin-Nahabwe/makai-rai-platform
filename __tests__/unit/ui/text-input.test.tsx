@@ -21,8 +21,9 @@ describe('TextInput', () => {
     const input = inputOf(html);
     expect(input).toContain('aria-invalid="true"');
     expect(input).toContain('aria-describedby="email-hint email-error"');
-    expect(html).toMatch(/<p class="ui-field__error" id="email-error"><svg [^>]*aria-hidden="true"/);
-    expect(textOf(html.slice(html.indexOf('id="email-error"')))).toContain('Error: Enter an email address.');
+    expect(html).toMatch(/<p class="ui-field__error"><svg [^>]*aria-hidden="true"[\s\S]*?<span class="visually-hidden">Error: <\/span><span id="email-error">Enter an email address\.<\/span><\/span><\/p>/);
+    // The protected tests' own form (__tests__/unit/decision-components.test.tsx:114): the id holds the message alone.
+    expect(html).toMatch(/id="email-error"[^>]*>Enter an email address\.</);
     expect(input).toContain('ui-input--invalid');
   });
 

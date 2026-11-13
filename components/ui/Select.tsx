@@ -2,6 +2,7 @@ import type { ChangeEventHandler, ReactElement, ReactNode } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { describedBy, FieldError, FieldHint, FieldLabel, given } from '@/components/ui/TextInput';
 import type { FieldOption } from '@/components/ui/types';
+import './TextInput.css';
 import './Select.css';
 
 export type SelectProps = {
@@ -12,6 +13,7 @@ export type SelectProps = {
   error?: string;
   required?: boolean;
   disabled?: boolean;
+  /** Pass `value` (controlled) or `defaultValue`, never both; a controlled select needs `onChange` or `disabled`. */
   value?: string;
   defaultValue?: string;
   onChange?: ChangeEventHandler<HTMLSelectElement>;
@@ -34,7 +36,7 @@ export function Select({
   id, name, label, hint, error, required = false, disabled = false, value, defaultValue, onChange, placeholder, options = [], groups = [],
 }: SelectProps): ReactElement {
   const hintId = given(hint) ? `${id}-hint` : undefined;
-  const errorId = given(error) ? `${id}-error` : undefined;
+  const errorId = `${id}-error`;
   return (
     <div className="ui-field">
       <FieldLabel htmlFor={id} label={label} required={required} />
@@ -43,7 +45,7 @@ export function Select({
         <select
           className={given(error) ? 'ui-select ui-select--invalid' : 'ui-select'} id={id} name={name} required={required}
           disabled={disabled} value={value} defaultValue={defaultValue} onChange={onChange}
-          aria-invalid={given(error)} aria-describedby={describedBy(hintId, errorId)}
+          aria-invalid={given(error)} aria-describedby={describedBy(hintId, given(error) && errorId)}
         >
           {placeholder === undefined ? null : <option value="">{placeholder}</option>}
           {options.map(optionOf)}
@@ -51,7 +53,7 @@ export function Select({
         </select>
         <span className="ui-select__icon"><Icon name="chevron-down" size={20} /></span>
       </div>
-      {errorId === undefined || error === undefined ? null : <FieldError id={errorId} message={error} />}
+      {given(error) ? <FieldError id={errorId} message={error} /> : null}
     </div>
   );
 }

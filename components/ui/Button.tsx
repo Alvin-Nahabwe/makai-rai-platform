@@ -12,7 +12,11 @@ export type ButtonProps = {
   variant: Variant;
   /** `button` unless the caller submits a form with it. */
   type?: 'button' | 'submit';
-  /** Working: `aria-busy`, the label stays, a spinner shows, and clicks are ignored while the button keeps its focus. */
+  /**
+   * Working: `aria-busy`, the label stays, a spinner shows, and the click's default action (a submit too) is prevented
+   * and `onClick` is not called, while the button keeps its focus. The click still bubbles: a parent's listener sees
+   * it with `defaultPrevented` true (no stopPropagation, which would break delegated and outside-click listeners).
+   */
   busy?: boolean;
   disabled?: boolean;
   icon?: IconName;
