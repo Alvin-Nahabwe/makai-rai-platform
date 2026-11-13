@@ -24,9 +24,10 @@ export function settingReducer(s: SettingState, a: SettingAction): SettingState 
 /**
  * The box and its label are two columns: a label too long for one line wraps beside the box. Wrapped
  * under it, the label's own box covers the checkbox, and the 24 px target check counts that as crowding.
+ * The gap is what keeps the label clear of the box's 24 px circle (e2e/helpers/targetSize.ts): do not narrow it.
  */
 const BOX_AND_LABEL: CSSProperties = { display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 'var(--space-2)', alignItems: 'baseline' };
-/** As wide as its words, not the whole column: empty space beside the label must not tick the box. */
+/** As wide as its words, up to the column: beside a one-line label, empty space does not tick the box. */
 const LABEL: CSSProperties = { justifySelf: 'start' };
 const FULL_ROW: CSSProperties = { gridColumn: '1 / -1' };
 
