@@ -6,6 +6,7 @@ import {
   checkProtectedFile,
   compareSources,
   copyImportsOf,
+  requireBaseTag,
   resolveBaseSource,
   sameUnits,
   type GitAdapter,
@@ -35,6 +36,7 @@ const headTitlesOf = (file: string): string[] => casesOf(readFileSync(file, 'utf
 
 it('spec 12: a protected test changes only where a message literal became a copy constant, or the ledger excuses it', () => {
   expect(protectedLedger.base).toBe('stage-1-base');
+  requireBaseTag(protectedLedger.base, git);
   expect(protectedLedger.files.length).toBeGreaterThan(0);
   const problems: string[] = [];
   for (const file of protectedLedger.files) {
@@ -264,4 +266,12 @@ it('(harness) a copy import is dropped only when the line holds nothing else', (
   const sneaky = "import { A_COPY } from '@/lib/a/copy'; evil();\n" + base(body);
   expect(compareSources(base(body), sneaky).length).toBeGreaterThan(0);
   expect(compareSources(base(body), "evil(); import { A_COPY } from '@/lib/a/copy';\n" + base(body)).length).toBeGreaterThan(0);
+});
+
+it('(harness) a missing base tag fails with a message naming the tag and the full checkout', () => {
+  const missing = (): string => {
+    throw new Error('fatal: Needed a single revision');
+  };
+  expect(() => requireBaseTag('stage-1-base', missing)).toThrow(/stage-1-base.*not found.*full checkout/);
+  expect(() => requireBaseTag('stage-1-base', () => 'abc123\n')).not.toThrow();
 });

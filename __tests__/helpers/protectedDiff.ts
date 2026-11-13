@@ -418,3 +418,12 @@ export function unexplainedRemovals(args: {
   }
   return problems;
 }
+
+/** Fails, naming the tag and the cure, when the base tag is not in the clone (a depth-1 checkout has no tags). */
+export function requireBaseTag(base: string, git: (...args: string[]) => string): void {
+  try {
+    git('rev-parse', '--verify', '--quiet', `${base}^{commit}`);
+  } catch (cause) {
+    throw new Error(`the tag ${base} was not found: this gate reads files at that tag, so CI needs a full checkout (actions/checkout with fetch-depth: 0)`, { cause });
+  }
+}

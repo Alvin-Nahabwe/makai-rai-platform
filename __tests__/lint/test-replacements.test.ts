@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
-import { casesOf, unexplainedRemovals, type LedgerEntry } from '../helpers/protectedDiff';
+import { casesOf, requireBaseTag, unexplainedRemovals, type LedgerEntry } from '../helpers/protectedDiff';
 
 /**
  * A test title that existed at the base tag and is gone at HEAD must be accounted for in `test-replacements.json`:
@@ -18,6 +18,7 @@ const titlesAtHead = (file: string): string[] => (existsSync(file) ? casesOf(rea
 const git = (...args: string[]): string => execFileSync('git', args, { encoding: 'utf8', maxBuffer: 1 << 26 });
 
 it('every test title at the base tag that is absent at HEAD has a replacement entry naming a title that exists at HEAD', () => {
+  requireBaseTag(BASE, git);
   const baseTitles: Record<string, string[]> = {};
   for (const file of git('ls-tree', '-r', '--name-only', BASE).split('\n').filter((f) => TEST_FILE.test(f))) {
     baseTitles[file] = casesOf(git('show', `${BASE}:${file}`), file).map((c) => c.title);
