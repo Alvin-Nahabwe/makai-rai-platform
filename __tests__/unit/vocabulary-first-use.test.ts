@@ -103,6 +103,38 @@ describe('firstUseViolations', () => {
     expect(firstUseViolations(nodes, [FINDING, SEAL])).toEqual([{ id: 'finding', text: 'A seal and a finding.' }, { id: 'seal', text: 'A seal and a finding.' }]);
   });
 
+  it('passes a plain word that carries a Term and a definition too: it is never checked', () => {
+    expect(firstUseViolations([node('project', { termIds: ['project'], defs: ['project'] })], [PROJECT])).toEqual([]);
+  });
+
+  it('checks a concept that is not a role inside a role choice as anywhere else', () => {
+    expect(firstUseViolations([node('Can raise a finding', { role: true })], [FINDING])).toEqual([{ id: 'finding', text: 'Can raise a finding' }]);
+  });
+
+  it('does not match a term touching an accented letter: "éseal" is not "seal"', () => {
+    expect(firstUseViolations([node('éseal sealé')], [SEAL])).toEqual([]);
+  });
+
+  it('takes the plural on the last word only: "personals data question" is not a use', () => {
+    expect(firstUseViolations([node('the personals data question')], [SCOPE])).toEqual([]);
+  });
+
+  it('matches a term beside a hyphen, as the word rule has it: "re-seal" is a use of "seal"', () => {
+    expect(firstUseViolations([node('re-seal')], [SEAL])).toEqual([{ id: 'seal', text: 're-seal' }]);
+  });
+
+  it('lets a longer checked term consume a shorter one inside it (L2-28): "mitigation plan" is not a use of "mitigation"', () => {
+    const MITIGATION: Concept = { id: 'mitigation', term: 'mitigation', defineOnFirstUse: true };
+    const PLAN: Concept = { id: 'mitigation-plan', term: 'mitigation plan', defineOnFirstUse: true };
+    const nodes = [node('Write the mitigation plans.', { termIds: ['mitigation-plan'], defs: ['mitigation-plan'] }), node('Add a mitigation.', { block: 'b1' })];
+    expect(firstUseViolations(nodes, [MITIGATION, PLAN])).toEqual([{ id: 'mitigation', text: 'Add a mitigation.' }]);
+    // In the same node, a use of the shorter term outside the longer one is still a use.
+    expect(firstUseViolations([node('A mitigation plan and a mitigation.', { termIds: ['mitigation-plan'], defs: ['mitigation-plan'] })], [MITIGATION, PLAN]))
+      .toEqual([{ id: 'mitigation', text: 'A mitigation plan and a mitigation.' }]);
+    // Without the longer concept in the list, nothing is consumed.
+    expect(firstUseViolations([node('Write the mitigation plan.')], [MITIGATION])).toHaveLength(1);
+  });
+
   it('finds every first-use term of the vocabulary in a sentence that uses it', () => {
     const checked = Object.values(terms).filter((c) => c.defineOnFirstUse);
     expect(checked).toHaveLength(26);

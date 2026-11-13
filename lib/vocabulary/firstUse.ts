@@ -6,7 +6,8 @@
  * Only concepts with `defineOnFirstUse: true` are checked. For each, the first node in document order whose text
  * holds the term as whole words (case-insensitive, an optional plural `s` on the last word) is the first use. That
  * node must be marked with `Term` (its `termIds` hold the id) and its block must hold `Definition` for the id. A role
- * (ROLE_IDS) counts only where a screen asks the reader to choose one, inside `[data-role-choice]`.
+ * (ROLE_IDS) counts only where a screen asks the reader to choose one, inside `[data-role-choice]`. A longer checked
+ * term consumes a shorter one inside it: "mitigation plan" is a use of `mitigation-plan`, not of `mitigation` (L2-28).
  */
 
 /** One text node of `main` outside `nav`, in document order, as the browser spec's collector reads it. */
@@ -14,9 +15,12 @@ export type TextNodeInfo = {
   text: string;
   /** The `data-term` ids of the node's ancestors. */
   termIds: readonly string[];
-  /** Stands for the node's block: its closest `p, li, dt, dd, label, legend, th, td, h1-h6, .ui-field, .ui-callout`. */
+  /**
+   * Stands for the node's block: its closest `p, li, dt, dd, label, legend, th, td, h1-h6, .ui-field, .ui-callout`.
+   * Diagnostics only: the rule never reads it (`definitionIdsInBlock` carries the relation).
+   */
   blockKey: string;
-  /** The `data-definition` ids in that block. */
+  /** The `data-definition` ids beside the node: in its block, or tied to it as the collector's comment says (L2-29). */
   definitionIdsInBlock: readonly string[];
   /** True when the node is inside `[data-role-choice]`. */
   inRoleChoice: boolean;
@@ -38,11 +42,15 @@ export function firstUseViolations(
   concepts: ReadonlyArray<{ id: string; term: string; defineOnFirstUse: boolean }>,
 ): Array<{ id: string; text: string }> {
   const violations: Array<{ id: string; text: string }> = [];
-  for (const concept of concepts) {
-    if (!concept.defineOnFirstUse) continue;
+  const checked = concepts.filter((c) => c.defineOnFirstUse);
+  for (const concept of checked) {
     const pattern = termPattern(concept.term);
+    // L2-28: a longer checked term that holds this one ("mitigation plan" holds "mitigation") consumes it, so the
+    // longer term's words are blanked before this term is looked for.
+    const longer = checked.filter((c) => c !== concept && c.term.length > concept.term.length && pattern.test(c.term)).map((c) => new RegExp(termPattern(c.term).source, 'giu'));
+    const outsideLonger = (text: string) => longer.reduce((t, re) => t.replace(re, ' '), text);
     const isRole = ROLES.has(concept.id);
-    const first = nodes.find((n) => (!isRole || n.inRoleChoice) && pattern.test(n.text));
+    const first = nodes.find((n) => (!isRole || n.inRoleChoice) && pattern.test(outsideLonger(n.text)));
     if (first === undefined) continue;
     if (!first.termIds.includes(concept.id) || !first.definitionIdsInBlock.includes(concept.id)) {
       violations.push({ id: concept.id, text: first.text });
