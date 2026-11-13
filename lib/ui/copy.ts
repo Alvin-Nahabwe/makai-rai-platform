@@ -57,6 +57,14 @@ export const UI_COPY = {
     keptBefore: (version: number) => `Version ${version} is kept in `,
     keptLink: 'the history',
   },
+  /** The three boxes of a date and its shortcut (DateField). */
+  date: { day: 'Day', month: 'Month', year: 'Year', today: 'Today' },
+  field: {
+    /** After a required field's label: "Reason (required)". */
+    required: '(required)',
+    /** Read before every field error, visually hidden: the error icon beside it is hidden from assistive technology. */
+    errorPrefix: 'Error:',
+  },
 } as const;
 
 /**
