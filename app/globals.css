@@ -260,6 +260,15 @@ body {
   font: var(--font-weight-regular) var(--font-size-body)/var(--line-height-body) var(--font-family);
 }
 
+/* Native controls compute the browser's own family unless told otherwise. Family only: the font shorthand would
+   also reset the size of every native control. */
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
 :focus-visible {
   outline: var(--focus-width) solid var(--color-focus);
   outline-offset: var(--focus-offset);

@@ -370,7 +370,8 @@ describe('NFR-PERF-02: the preloaded font files hold printable ASCII and the pag
         } else if (inCore === inRest) problems.push(`${hex(cp)} is declared by ${inCore ? 'both files' : 'neither file'}`);
       }
       for (const cp of [...codePoints(core.range), ...codePoints(rest.range)]) {
-        if (!inRanges(cp, OLD_LATIN)) problems.push(`${hex(cp)} is outside the old latin range`);
+        // The combining marks the latin file maps sit in core though Google's latin range omitted them (see the combining-marks case).
+        if (!inRanges(cp, OLD_LATIN) && !(cp >= 0x300 && cp <= 0x36f)) problems.push(`${hex(cp)} is outside the old latin range`);
       }
       expect(problems).toEqual([]);
     });
@@ -548,6 +549,28 @@ describe('NFR-PERF-02: the preloaded font files hold printable ASCII and the pag
     const mapped = new Set([...woff2CodePoints(ORIGINAL.overpass), ...woff2CodePoints(ORIGINAL_EXT)]);
     const unserved = [...mapped].filter((cp) => !isControl(cp) && !faces.some((f) => inRanges(cp, f.range))).sort((a, b) => a - b);
     expect(unserved.map(hex)).toEqual([]);
+  });
+
+  it('NFR-PERF-02: every combining mark (U+0300 to U+036F) that either source file maps is declared by the core or the rest face, never an extended-Latin face, and U+0300, U+0301, U+0303, U+0309 and U+0323 are not in core', () => {
+    // Names are shown as typed, so a decomposed name (an e and then U+0301) must find the mark in a latin file, not in
+    // the 37 KB ext-rest file. The five marks Google's latin range omitted sit in rest, not core: if core held both an
+    // ASCII letter and one of them, the browser could compose an accented letter from the preloaded file and never
+    // fetch the face that declares the designed precomposed glyph.
+    const { core, rest, ext } = callsOf('overpass');
+    const maps = (f: Call) => woff2CodePoints(join('app', f.file));
+    const marks = [...new Set([...woff2CodePoints(ORIGINAL.overpass), ...woff2CodePoints(ORIGINAL_EXT)])].filter((cp) => cp >= 0x300 && cp <= 0x36f).sort((a, b) => a - b);
+    expect(marks.length, 'combining marks the source files map').toBeGreaterThanOrEqual(7);
+    const problems: string[] = [];
+    for (const cp of marks) {
+      const homes = [core, rest].filter((f) => inRanges(cp, f.range) && maps(f).has(cp));
+      if (homes.length !== 1) problems.push(`${hex(cp)} is held by ${homes.length} of core and rest`);
+      for (const e of ext) if (inRanges(cp, e.range)) problems.push(`${hex(cp)} is declared by ${e.file}`);
+    }
+    for (const cp of [0x300, 0x301, 0x303, 0x309, 0x323]) {
+      if (inRanges(cp, core.range)) problems.push(`${hex(cp)} is declared by core`);
+      if (!inRanges(cp, rest.range)) problems.push(`${hex(cp)} is not declared by rest`);
+    }
+    expect(problems).toEqual([]);
   });
 
   it('NFR-PERF-02: every CASES letter of e2e/invitation-name-transfer.spec.ts is declared by exactly one face or listed as uncovered', () => {
