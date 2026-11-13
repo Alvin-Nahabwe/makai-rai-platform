@@ -75,7 +75,7 @@ export default async function UiKitPage(): Promise<ReactElement> {
   if (!devGalleryShown(process.env)) notFound();
   const iconNames = Object.keys(ICONS) as IconName[];
   return (
-    <main id={MAIN_CONTENT_ID} className="container">
+    <main id={MAIN_CONTENT_ID} tabIndex={-1} className="container">
       <h1>UI kit</h1>
       <p>Every interface component in every state. Development only: this page is not served in production.</p>
 
