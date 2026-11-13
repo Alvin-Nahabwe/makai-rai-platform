@@ -290,7 +290,7 @@ export const RUNNING = `data/content/${(JSON.parse(read('data/content/index.json
 /** What one scope read and found: the files, the number of strings linted, and the hits. */
 export type ScopeResult = { files: string[]; strings: number; hits: Hit[] };
 
-function scan(files: string[], texts: (f: string) => Array<{ where: string; text: string }>): ScopeResult {
+function scan(files: string[], texts: (f: string) => TextUnit[]): ScopeResult {
   let strings = 0;
   const hits: Hit[] = [];
   for (const f of files) for (const t of texts(f)) { strings++; hits.push(...lintText(t.where, t.text)); }

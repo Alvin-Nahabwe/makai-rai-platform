@@ -274,14 +274,14 @@ describe('the vocabulary lint, on the repository', () => {
   });
 
   it('templates (scope 5, stage 3): report-only, prints the count, never fails', () => {
-    const hits = scopeTemplates();
-    writeHits('vocabulary-template-hits.txt', hits);
-    console.log(`vocabulary lint: ${hits.length} hit(s) in public/templates (report-only until stage 3)`);
+    const r = scopeTemplates();
+    writeHits('vocabulary-template-hits.txt', r.hits);
+    console.log(`vocabulary lint: ${r.hits.length} hit(s) in public/templates, ${r.files.length} files / ${r.strings} strings (report-only until stage 3)`);
   });
 
   it('notebooks (scope 6, stage 3): report-only, prints the count, never fails', () => {
-    const hits = scopeNotebooks();
-    writeHits('vocabulary-notebook-hits.txt', hits);
-    console.log(`vocabulary lint: ${hits.length} hit(s) in notebooks (report-only until stage 3)`);
+    const r = scopeNotebooks();
+    writeHits('vocabulary-notebook-hits.txt', r.hits);
+    console.log(`vocabulary lint: ${r.hits.length} hit(s) in notebooks, ${r.files.length} files / ${r.strings} strings (report-only until stage 3)`);
   });
 });
