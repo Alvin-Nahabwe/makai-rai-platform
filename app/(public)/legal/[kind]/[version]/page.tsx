@@ -12,6 +12,8 @@ import {
   legalTextVersion,
 } from '@/lib/legal/registry';
 import { RETIRED_NOTE, isRetiredKind } from '@/lib/legal/kinds';
+import { LEGAL_COPY } from '@/lib/legal/copy';
+import { pageTitle } from '@/lib/ui/title';
 import { LEGAL_LINK_STYLE, LEGAL_NOTE_STYLE, LEGAL_PAGE_STYLE, LegalTextView, legalTextHeading } from '@/components/legal/LegalTextView';
 
 /**
@@ -40,7 +42,7 @@ async function versionOf(params: Params): Promise<LegalTextVersion> {
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const text = await versionOf(params);
-  return { title: `${legalTextHeading(text.kind)}, version ${text.version} - MAK-AI RAI Platform` };
+  return { title: pageTitle(LEGAL_COPY.titles.version(legalTextHeading(text.kind), text.version)) };
 }
 
 export default async function LegalVersionPage({ params }: { params: Params }) {

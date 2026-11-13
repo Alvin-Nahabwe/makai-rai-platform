@@ -1,3 +1,5 @@
+import { cache } from 'react';
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { requireIdentity } from '@/lib/auth/identity';
 import { requireOrgContextFor } from '@/lib/auth/context';
@@ -19,6 +21,7 @@ import { ShowMoreLink } from '@/components/ui/ShowMoreLink';
 import { ListLink } from '@/components/ui/ListLink';
 import { STAGES, type ScopeAnswer, type Stage } from '@/types/record';
 import type { ChangedSinceSeal } from '@/types/api';
+import { pageTitle } from '@/lib/ui/title';
 
 
 export interface StagePageData {
@@ -65,6 +68,28 @@ export async function loadStagePage(ctx: OrgContext, viewerId: string, projectId
   };
 }
 
+type Params = Promise<{ slug: string; id: string; stage: string }>;
+
+/**
+ * The gates and the loader, once per request: the page and its title both read through this (React `cache()`), so an
+ * unknown stage or a project not visible is the same `notFound()` for both and the title names nothing.
+ */
+const load = cache(async (slug: string, id: string, stage: string) => {
+  const identity = await requireIdentity();
+  const ctx = await requireOrgContextFor(identity.userId, slug, 'record:read');
+  if (!(STAGES as readonly string[]).includes(stage)) notFound();
+  const data = await loadStagePage(ctx, identity.userId, id, stage as Stage);
+  if (data === null) notFound();
+  return data;
+});
+
+/** The stage's own heading, then the project. */
+export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
+  const { slug, id, stage } = await params;
+  const data = await load(slug, id, stage);
+  return { title: pageTitle(STAGE_TITLE[data.stage], data.projectName) };
+}
+
 /**
  * S-11, the stage workspace (W-2). Every member reads it (`record:read`); a role that cannot record sees the same page,
  * with status 200 (owner question B21). `?show=<filter>` picks a filter: the server renders that filter's rows, so the
@@ -74,15 +99,11 @@ export async function loadStagePage(ctx: OrgContext, viewerId: string, projectId
 export default async function StagePage({
   params, searchParams,
 }: {
-  params: Promise<{ slug: string; id: string; stage: string }>;
+  params: Params;
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const { slug, id, stage } = await params;
-  const identity = await requireIdentity();
-  const ctx = await requireOrgContextFor(identity.userId, slug, 'record:read');
-  if (!(STAGES as readonly string[]).includes(stage)) notFound();
-  const data = await loadStagePage(ctx, identity.userId, id, stage as Stage);
-  if (data === null) notFound();
+  const data = await load(slug, id, stage);
   const sp = await searchParams;
   const show = isStageFilter(sp.show) ? sp.show : 'all';
   const shown = typeof sp.shown === 'string' ? sp.shown : null;

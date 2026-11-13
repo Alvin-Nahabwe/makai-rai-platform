@@ -1,3 +1,5 @@
+import { cache } from 'react';
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { requireIdentity } from '@/lib/auth/identity';
 import { requireOrgContextFor } from '@/lib/auth/context';
@@ -14,10 +16,33 @@ import { SealCheckButton } from '@/components/review/SealCheckButton';
 import { ReviewDocumentsList } from '@/components/documents/ReviewDocumentsList';
 import { FingerprintDisplay } from '@/components/review/FingerprintDisplay';
 import { DeviceDateTime, ReviewStateLine } from '@/components/review/DeviceTime';
+import { pageTitle } from '@/lib/ui/title';
 import { SEAL_PROOF_HREF, contentChangedLine, reviewStateLine, sealAgainLabel } from '@/components/review/reviewText';
 
 interface PageProps {
   params: Promise<{ slug: string; id: string; reviewId: string }>;
+}
+
+/**
+ * The gates, the project read and the review lookup, once per request: the page and its title both read through this
+ * (React `cache()`), so a project not visible, or a review not of this project, is the same `notFound()` for both and
+ * the title names nothing. The page's later reads stay in the page.
+ */
+const load = cache(async (slug: string, id: string, reviewId: string) => {
+  const identity = await requireIdentity();
+  const ctx = await requireOrgContextFor(identity.userId, slug, 'record:read');
+  const project = await withOrg(ctx, (tx) => tx.project.findUnique({ where: { id }, select: { id: true, name: true, archivedAt: true } }));
+  if (project === null) notFound();
+  const review = (await listStageReviews(ctx, id)).find((r) => r.id === reviewId);
+  if (review === undefined) notFound();
+  return { identity, ctx, project, review };
+});
+
+/** The review's own heading (its name), then the project. */
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { slug, id, reviewId } = await params;
+  const { project, review } = await load(slug, id, reviewId);
+  return { title: pageTitle(review.name, project.name) };
 }
 
 /**
@@ -29,12 +54,7 @@ interface PageProps {
  */
 export default async function StageReviewPage({ params }: PageProps) {
   const { slug, id, reviewId } = await params;
-  const identity = await requireIdentity();
-  const ctx = await requireOrgContextFor(identity.userId, slug, 'record:read');
-  const project = await withOrg(ctx, (tx) => tx.project.findUnique({ where: { id }, select: { id: true, archivedAt: true } }));
-  if (project === null) notFound();
-  const review = (await listStageReviews(ctx, id)).find((r) => r.id === reviewId);
-  if (review === undefined) notFound();
+  const { ctx, project, review } = await load(slug, id, reviewId);
   const [seals, documents, findings] = await Promise.all([
     listSeals(ctx, reviewId), listDocuments(ctx, { projectId: id, reviewId }),
     review.changed !== null && review.changed.changedFindings.length > 0 ? listFindings(ctx, id, review.stage) : Promise.resolve([]),

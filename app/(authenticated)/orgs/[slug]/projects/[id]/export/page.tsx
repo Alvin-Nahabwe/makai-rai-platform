@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { requireIdentity } from '@/lib/auth/identity';
@@ -6,9 +7,38 @@ import { ForbiddenError, withOrg } from '@/lib/data/tenant';
 import { estimateTeamExport } from '@/lib/data/export';
 import { TeamExportPanel, refusedFrom } from '@/components/export/TeamExportPanel';
 import { EXPORT_NOT_ALLOWED } from '@/lib/export/messages';
+import { EXPORT_COPY } from '@/lib/export/copy';
+import { pageTitle } from '@/lib/ui/title';
 import { ArchivedBanner } from '@/components/project/ArchivedBanner';
 
-export const metadata: Metadata = { title: 'Team export - MAK-AI RAI Platform' };
+type Params = Promise<{ slug: string; id: string }>;
+
+/**
+ * The gates and the project read, once per request: the page and its title both read through this (React `cache()`).
+ * A role without `team:export` is `refused` before the project is read, and a project not visible is `notFound()` for
+ * both, so neither title names a project.
+ */
+const load = cache(async (slug: string, id: string) => {
+  const identity = await requireIdentity();
+  let ctx;
+  try {
+    ctx = await requireOrgContextFor(identity.userId, slug, 'team:export');
+  } catch (e) {
+    // A member whose role lacks team:export sees M-26 in the page, status 200, and nothing of the scope
+    // (contract Q9, owner question B21). A non-member never gets here: requireOrgContextFor answers not found.
+    if (e instanceof ForbiddenError) return { refused: true } as const;
+    throw e;
+  }
+  const project = await withOrg(ctx, (tx) => tx.project.findUnique({ where: { id }, select: { id: true, name: true, archivedAt: true } }));
+  if (project === null) notFound();
+  return { refused: false, ctx, project } as const;
+});
+
+export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
+  const { slug, id } = await params;
+  const loaded = await load(slug, id);
+  return { title: pageTitle(EXPORT_COPY.titles.downloadRecords, loaded.refused ? null : loaded.project.name) };
+}
 
 /**
  * S-20 for one project (`/orgs/[slug]/projects/[id]/export`; FR-EXP-01, M-37). Owners and admins only
@@ -17,22 +47,13 @@ export const metadata: Metadata = { title: 'Team export - MAK-AI RAI Platform' }
  * be exported, under its banner (UX-31).
  */
 export default async function ProjectExportPage({ params, searchParams }: {
-  params: Promise<{ slug: string; id: string }>;
+  params: Params;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { slug, id } = await params;
-  const identity = await requireIdentity();
-  let ctx;
-  try {
-    ctx = await requireOrgContextFor(identity.userId, slug, 'team:export');
-  } catch (e) {
-    // A member whose role lacks team:export sees M-26 in the page, status 200, and nothing of the scope
-    // (contract Q9, owner question B21). A non-member never gets here: requireOrgContextFor answers not found.
-    if (e instanceof ForbiddenError) return <div className="page-content"><h1>Team export</h1><p>{EXPORT_NOT_ALLOWED}</p></div>;
-    throw e;
-  }
-  const project = await withOrg(ctx, (tx) => tx.project.findUnique({ where: { id }, select: { id: true, name: true, archivedAt: true } }));
-  if (project === null) notFound();
+  const loaded = await load(slug, id);
+  if (loaded.refused) return <div className="page-content"><h1>Team export</h1><p>{EXPORT_NOT_ALLOWED}</p></div>;
+  const { ctx, project } = loaded;
   const aboutBytes = await estimateTeamExport(ctx, project.id);
   return (
     <div className="page-content">

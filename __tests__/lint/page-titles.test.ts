@@ -1,0 +1,82 @@
+import { describe, expect, it } from 'vitest';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join, sep } from 'node:path';
+import { isClaim } from '@/lib/claims/pattern';
+import { ABOUT_COPY } from '@/lib/about/copy';
+import { ACCOUNT_COPY } from '@/lib/account/copy';
+import { ADMIN_COPY } from '@/lib/admin/copy';
+import { AUTH_COPY } from '@/lib/auth/copy';
+import { DECISION_COPY } from '@/lib/decision/copy';
+import { DOCUMENTS_COPY } from '@/lib/documents/copy';
+import { ERRORS_COPY } from '@/lib/errors/copy';
+import { EXPORT_COPY } from '@/lib/export/copy';
+import { FINDINGS_COPY } from '@/lib/findings/copy';
+import { GUIDANCE_COPY } from '@/lib/guidance/copy';
+import { HOME_COPY } from '@/lib/home/copy';
+import { LEGAL_COPY } from '@/lib/legal/copy';
+import { ORG_COPY } from '@/lib/org/copy';
+import { PROJECT_COPY } from '@/lib/project/copy';
+import { REVIEW_COPY } from '@/lib/review/copy';
+
+/**
+ * Spec 7.5 (WCAG 2.4.2): every page names itself in the browser tab as `<thing> · <project or organisation> · MAK-AI RAI
+ * Platform`, built by `pageTitle` (lib/ui/title.ts) from a `<AREA>_COPY.titles` word. Development-only routes under
+ * `app/dev/` are not product pages and are skipped.
+ */
+
+function pagesUnder(dir: string): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    const p = join(dir, name);
+    if (statSync(p).isDirectory()) return p.split(sep).join('/').startsWith('app/dev') ? [] : pagesUnder(p);
+    return name === 'page.tsx' ? [p.split(sep).join('/')] : [];
+  });
+}
+
+const PAGES = pagesUnder('app');
+const code = (f: string): string => readFileSync(f, 'utf8');
+const STATIC = /\bexport const metadata\b/;
+const DYNAMIC = /\bexport (async )?function generateMetadata\b/;
+
+describe('page titles (spec 7.5)', () => {
+  it('1A spec 7.5: every page exports metadata or generateMetadata, never both, and builds its title with pageTitle(', () => {
+    expect(PAGES.length).toBeGreaterThanOrEqual(37);
+    const wrong = PAGES.filter((f) => {
+      const s = code(f);
+      return STATIC.test(s) === DYNAMIC.test(s) || !s.includes('pageTitle(');
+    });
+    expect(wrong).toEqual([]);
+  });
+
+  it('1A spec 7.5: no page file spells out the product name or says Toolkit', () => {
+    expect(PAGES.filter((f) => code(f).includes('MAK-AI RAI Platform') || code(f).includes('Toolkit'))).toEqual([]);
+  });
+
+  it('1A spec 7.5: the root layout title is PRODUCT_NAME, and the error and not-found files use pageTitle', () => {
+    expect(code('app/layout.tsx')).toMatch(/\btitle: PRODUCT_NAME\b/);
+    expect(code('app/global-error.tsx')).toContain('<title>{pageTitle(ERRORS_COPY.titles.error)}</title>');
+    for (const f of ['app/not-found.tsx', 'app/(authenticated)/not-found.tsx']) expect(code(f)).toContain('title: pageTitle(ERRORS_COPY.titles.notFound)');
+  });
+
+  it('1A R10-2: a signed-in page that names its organisation or project in generateMetadata loads it once, through cache(), after the gates', () => {
+    const named = PAGES.filter((f) => f.startsWith('app/(authenticated)/orgs/') && DYNAMIC.test(code(f)));
+    expect(named.length).toBe(18); // 6 organisation pages and 12 project pages
+    const wrong = named.filter((f) => {
+      const s = code(f);
+      return !/= cache\(/.test(s) || !s.includes('requireIdentity(') || !s.includes('requireOrgContextFor(');
+    });
+    expect(wrong).toEqual([]);
+  });
+
+  it('1A spec 7.5: no title word holds a claim word or Toolkit', () => {
+    const words: string[] = [];
+    const collect = (v: unknown): void => {
+      if (typeof v === 'string') words.push(v);
+      else if (typeof v === 'function') words.push(String((v as (...a: string[]) => string)('X', 'Y')));
+      else if (v !== null && typeof v === 'object') Object.values(v).forEach(collect);
+    };
+    for (const m of [ABOUT_COPY, ACCOUNT_COPY, ADMIN_COPY, AUTH_COPY, DECISION_COPY, DOCUMENTS_COPY, ERRORS_COPY, EXPORT_COPY, FINDINGS_COPY,
+      GUIDANCE_COPY, HOME_COPY, LEGAL_COPY, ORG_COPY, PROJECT_COPY, REVIEW_COPY]) collect(m.titles);
+    expect(words.length).toBeGreaterThan(20);
+    expect(words.filter((w) => isClaim(w) || w.includes('Toolkit') || w.trim() === '')).toEqual([]);
+  });
+});

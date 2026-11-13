@@ -5,7 +5,10 @@ import { formatDay } from '@/lib/format/dates';
 import { LIST_PAGE_SIZE, pageOf } from '@/lib/ui/showMore';
 import { ShowMoreLink } from '@/components/ui/ShowMoreLink';
 
-export const metadata = { title: 'Accounts' };
+import { ADMIN_COPY } from '@/lib/admin/copy';
+import { pageTitle } from '@/lib/ui/title';
+
+export const metadata = { title: pageTitle(ADMIN_COPY.titles.accounts) };
 
 /** Route 47's refusal codes (app/api/admin/users/[id]/role/route.ts), each with the sentence S-25 shows. */
 const REFUSALS: Readonly<Record<string, string>> = {

@@ -150,3 +150,11 @@ export const WITHDRAW_COPY: Readonly<{
   objectName: (versionNumber: number, questionId: string) => `Version ${versionNumber} of the decision on ${questionId}`,
   consequence: 'The question returns to "no decision". Every version stays in the history.',
 });
+
+/** Page titles of the question and history pages (spec 7.5): the page's own heading, from data the page already loads. */
+export const DECISION_COPY = Object.freeze({
+  titles: Object.freeze({
+    question: (questionId: string, moduleTitle: string): string => `${questionId} . ${moduleTitle}`,
+    history: (questionId: string): string => `History of ${questionId}`,
+  }),
+});

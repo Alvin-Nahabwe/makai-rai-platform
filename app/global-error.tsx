@@ -1,5 +1,7 @@
 'use client';
 
+import { ERRORS_COPY } from '@/lib/errors/copy';
+import { pageTitle } from '@/lib/ui/title';
 import ErrorPage from './error';
 
 /**
@@ -14,7 +16,7 @@ export default function GlobalError({ error, retry }: { error: unknown; retry: (
     <html lang="en">
       <head>
         <meta name="color-scheme" content="light dark" />
-        <title>This page could not be loaded</title>
+        <title>{pageTitle(ERRORS_COPY.titles.error)}</title>
       </head>
       <body style={{ fontFamily: 'system-ui, sans-serif', lineHeight: 1.5, margin: '2rem auto', maxWidth: '40rem', padding: '0 1rem' }}>
         <ErrorPage error={error} retry={retry} />

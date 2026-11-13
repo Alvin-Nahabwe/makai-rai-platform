@@ -62,5 +62,13 @@
     "property": "The fallback check reports a var() with no fallback, with another fallback, or of a retired variable, and passes the right fallback and a comment",
     "proof": "__tests__/unit/local-fonts.test.ts::(harness) a use without its fallback, or with another one, or of a retired variable is reported; the right fallback and a comment are not",
     "task": "1A-2"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/integration/export-pages.test.tsx::NFR-A11Y-02 (WCAG 2.4.2): both S-20 pages carry their own title",
+    "replacedBy": "__tests__/integration/export-pages.test.tsx::NFR-A11Y-02 (WCAG 2.4.2): both S-20 pages carry their own title",
+    "property": "Both S-20 pages carry their own title: the organisation export page names the organisation and the project export page names the project, through pageTitle and EXPORT_COPY.titles.downloadRecords; a role without team:export gets the refusal title with no name, and a project of another organisation is not found from generateMetadata as from the page",
+    "proof": "__tests__/integration/export-pages.test.tsx::NFR-A11Y-02 (WCAG 2.4.2): both S-20 pages carry their own title",
+    "task": "1A-10"
   }
 ]
