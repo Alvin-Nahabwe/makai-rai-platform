@@ -24,7 +24,7 @@ if [ "${#E2E_PORT}" -lt 2 ] || [ "${#E2E_PORT}" -gt 5 ]; then
   exit 2
 fi
 
-IMAGE='nginx:1.31-alpine@sha256:df221db836e1754089190208cee7eeda94f233197056426eda74a43ab1abeac2'
+IMAGE='nginx:1.31-alpine@sha256:713fc2ebfd92e8217db451477182ee91944b123d2b1ee9fd5a8c6e91ca6c3a11'
 PORT=$((8440 + K))
 DIR=$(mktemp -d)
 # down.sh finds the directory here; it holds the test certificate's key, so it never sits in the repository.
