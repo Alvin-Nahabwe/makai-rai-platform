@@ -66,18 +66,21 @@ beforeEach(() => {
 });
 
 describe('S-12 shell', () => {
-  it('FR-DEC-01 UX-08: S-12 shell regions in order, each labelled, evidence block inside the answer form', async () => {
+  it('FR-DEC-01 UX-08: S-12 shell regions in order, each but the evidence block labelled by a heading, evidence block inside the answer form', async () => {
     const html = renderToStaticMarkup(await QuestionPanelRegions({ data: PANEL }));
     expect([...html.matchAll(/data-region="([a-z-]+)"/g)].map((m) => m[1]))
       .toEqual(['question', 'current-decision', 'seal-note', 'answer-form', 'evidence-block', 'finding-link', 'suggestions']);
-    expect(html.match(/<section[^>]*aria-labelledby=/g)).toHaveLength(7);
+    // The evidence block is named once, by its fieldset legend (evidence-components.test.tsx), not by a heading of its own.
+    expect(html.match(/<section[^>]*aria-labelledby=/g)).toHaveLength(6);
+    expect(html).toMatch(/<section data-region="evidence-block">/);
     expect(html).toMatch(/data-region="answer-form"[\s\S]*data-region="evidence-block"[\s\S]*<\/section>[\s\S]*<\/section>[\s\S]*data-region="finding-link"/);
   });
 
-  it('UX-08: every region is named by a heading of the page that it points to, and the suggestions section is the in-page target', async () => {
+  it('UX-08: every labelled region is named by a heading of the page that it points to, the evidence block has no heading of its own, and the suggestions section is the in-page target', async () => {
     const html = renderToStaticMarkup(await QuestionPanelRegions({ data: PANEL }));
     const labelled = [...html.matchAll(/aria-labelledby="([^"]+)"/g)].map((m) => m[1]);
-    expect(new Set(labelled).size).toBe(7);
+    expect(new Set(labelled).size).toBe(6);
+    expect(html).not.toContain('s12-evidence');
     for (const id of labelled) expect(html, id).toMatch(new RegExp(`<h[23] id="${id}">[^<]+</h[23]>`));
     expect(html).toMatch(/<section[^>]*data-region="suggestions"[^>]*id="suggestions"|<section[^>]*id="suggestions"[^>]*data-region="suggestions"/);
     expect(html.match(/id="suggestions"/g)).toHaveLength(1);
@@ -92,7 +95,7 @@ describe('S-12 shell', () => {
     expect(html).not.toContain('s12-suggestions');
     expect(html).not.toContain('data-region="suggestions"');
     expect(propsSeen.QuestionContent).toEqual({ question: gate, suggestionCount: 0 });
-    expect(html.match(/<section[^>]*aria-labelledby=/g)).toHaveLength(6);
+    expect(html.match(/<section[^>]*aria-labelledby=/g)).toHaveLength(5);
   });
 
   it('UX-31 FR-PRJ-03: an archived project shows the archived banner on S-12', async () => {

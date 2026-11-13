@@ -42,8 +42,18 @@ describe('S-30 organisation details page', () => {
       const manager = r === 'owner' || r === 'admin';
       expect(html).toContain(ORG_NAME);
       expect(html.includes('data-slot="organisation-events"')).toBe(manager);
-      expect((slotProps.TeamExportLink?.[0] as { canExport: boolean; orgSlug: string }).canExport).toBe(manager);
-      expect((slotProps.TeamExportLink?.[0] as { orgSlug: string }).orgSlug).toBe('acme');
+      // The export block renders only for a role that can export (defect 42), so the link is wired only for owners and admins.
+      expect(slotProps.TeamExportLink ?? [], r).toEqual(manager ? [{ orgSlug: 'acme', canExport: true }] : []);
+    }
+  });
+
+  it('S-30 (defect 42): one heading per block, no export heading for a role that cannot export, and no label pointing at nothing', async () => {
+    for (const r of ALL_ORG_ROLES) {
+      const html = await renderPage(r);
+      const manager = r === 'owner' || r === 'admin';
+      expect(html, r).not.toContain('Membership and organisation changes');   // OrganisationEventsList carries the block's one heading
+      expect(html.includes('<h2 id="export-heading">Team export</h2>'), r).toBe(manager);
+      for (const m of html.matchAll(/aria-labelledby="([^"]+)"/g)) expect(html, `${r}: ${m[1]}`).toContain(`id="${m[1]}"`);
     }
   });
 

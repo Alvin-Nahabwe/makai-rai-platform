@@ -31,11 +31,10 @@ export function refusedFrom(searchParams: Record<string, string | string[] | und
 
 export function TeamExportPanel(p: { href: string; scopeName: string; aboutBytes: number; refused: 'export_busy' | 'rate_limited' | null }): ReactElement {
   return (
-    <section aria-labelledby="team-export-heading" className="card">
-      <h2 id="team-export-heading">Download</h2>
+    <div className="card">
       {p.refused !== null && <p role="alert" style={ALERT}>{REFUSED_TEXT[p.refused]}</p>}
       <p>{`Export ${p.scopeName}: about ${formatSize(p.aboutBytes)} as one ZIP file.`}</p>
       <PreparingDownload href={p.href} label="Download export" preparing={PREPARING} />
-    </section>
+    </div>
   );
 }

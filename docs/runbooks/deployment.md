@@ -827,7 +827,15 @@ the tag, and the two release images from the latest release. The same scan also 
 legal texts is merged. CI does not run the release-candidate cases (`.github/workflows/ci.yml:241`
 runs `npx vitest run` without `RELEASE_CANDIDATE`), and `.github/workflows/release.yml` runs no
 tests on a tag. So the tag gate is the unit run. Whoever prepares the release may run it, on a
-checkout of the commit to be tagged; the owner tags (8.1 step 2). Run it with the test database
+checkout of the commit to be tagged; the owner tags (8.1 step 2).
+
+First regenerate the list of claims markers with `node scripts/release/claims-markers.mjs`. The
+release-candidate run compares `docs/releases/claims-markers.md` with the tree byte for byte, line
+numbers included (`__tests__/lint/live-run-report.test.ts`), and everyday runs do not. If the file
+changed, commit it and merge it to main, and make the run on that commit: it is then the commit to
+be tagged.
+
+Run it with the test database
 up, migrated and provisioned (`CONTRIBUTING.md:11-23`)
 and `pdftotext` installed (CI's unit job installs `poppler-utils`, `.github/workflows/ci.yml:224`),
 and see it pass first:

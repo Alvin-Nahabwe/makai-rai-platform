@@ -42,7 +42,9 @@ test('FR-DEC-04 (screen) FR-DEC-08: three versions in reverse order; after withd
   await expect(v3).toContainText('Withdrawn: Duplicate');
   await expect(v3).toContainText('Duplicate of Q-PP-02.');
   const v2 = page.locator('[data-version-number="2"]');
-  for (const part of ['Partly', 'Version 2', 'Supervisor (outside role), 12 Oct 2026', 'Entered by', '0.0.1-fixture', 'Show UTC']) await expect(v2).toContainText(part);
+  for (const part of ['Partly', 'Version 2', 'Supervisor (outside role), 12 Oct 2026', 'Entered by']) await expect(v2).toContainText(part);
+  // CONSOLIDATED section 4: the content version and the "Show UTC" disclosure are internal and are not shown.
+  for (const gone of ['0.0.1-fixture', 'Content version', 'Show UTC']) await expect(v2).not.toContainText(gone);
   await page.goto(stagePath(projectId, 'pre-processing'));
   await expect(page.locator(`[data-question-id="${Q}"] .status-label`)).toHaveText('No decision');
 });

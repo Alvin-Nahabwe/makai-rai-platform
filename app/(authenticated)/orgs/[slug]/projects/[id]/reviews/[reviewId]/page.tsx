@@ -114,6 +114,7 @@ export default async function StageReviewPage({ params }: PageProps) {
 
       <section aria-labelledby="review-seals">
         <h2 id="review-seals">Seals</h2>
+        <p><a href={SEAL_PROOF_HREF}>What a seal proves</a></p>
         {seals.length === 0 ? null : (
           <ul>
             {seals.map((s) => (
@@ -135,8 +136,6 @@ export default async function StageReviewPage({ params }: PageProps) {
           <p><a href={`${base}/reviews/${encodeURIComponent(review.id)}/documents`}>Generate a document</a></p>
         ) : null}
       </section>
-
-      <p>Sealed by the platform; not independently time-stamped. <a href={SEAL_PROOF_HREF}>What a seal proves</a></p>
     </div>
   );
 }

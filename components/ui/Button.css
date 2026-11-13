@@ -1,0 +1,138 @@
+/* Buttons (plan 1A Task 4, spec 7.1 and 7.5). Every button is 44 px high at least (a primary control) and the compact
+   one 32 px, inside a 24 px target. Primary is the action orange with white text (6.10:1); secondary is the surface
+   with the link colour and its 1 px border; quiet has no border and no fill; destructive is the surface, ink and the
+   control border (decision B6: never orange, never red). The ring is the base :focus-visible rule (app/globals.css).
+   Only colours and borders change, over --duration-state; nothing moves. */
+.ui-button {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--target-primary);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-heading);
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-state) var(--easing-state),
+    border-color var(--duration-state) var(--easing-state),
+    color var(--duration-state) var(--easing-state);
+}
+
+.ui-button--compact {
+  min-height: 32px;
+  padding: var(--space-1) var(--space-3);
+}
+
+.ui-button__icon {
+  display: inline-flex;
+  flex: none;
+}
+
+/* Primary: the one action of a view. */
+.ui-button--primary {
+  border-color: var(--color-action);
+  background-color: var(--color-action);
+  color: var(--color-on-action);
+}
+
+.ui-button--primary:hover {
+  border-color: var(--color-action-hover);
+  background-color: var(--color-action-hover);
+  color: var(--color-on-action);
+}
+
+.ui-button--primary:active {
+  border-color: var(--color-ink);
+  background-color: var(--color-action-hover);
+}
+
+.ui-button--secondary {
+  border-color: var(--color-link);
+  background-color: var(--color-surface);
+  color: var(--color-link);
+}
+
+.ui-button--secondary:hover {
+  background-color: var(--color-tint);
+  color: var(--color-link);
+}
+
+.ui-button--secondary:active {
+  background-color: var(--color-border-container);
+}
+
+.ui-button--quiet {
+  background-color: transparent;
+  color: var(--color-link);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.ui-button--quiet:hover {
+  background-color: var(--color-tint);
+  color: var(--color-link);
+}
+
+.ui-button--quiet:active {
+  background-color: var(--color-border-container);
+}
+
+.ui-button--destructive {
+  border-color: var(--color-border-control);
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+}
+
+.ui-button--destructive:hover {
+  border-color: var(--color-ink);
+  background-color: var(--color-tint);
+  color: var(--color-ink);
+}
+
+.ui-button--destructive:active {
+  background-color: var(--color-border-container);
+}
+
+/* Busy: the label stays, the pointer says wait, and the button keeps its colours so it does not read as disabled. */
+.ui-button[aria-busy='true'] {
+  cursor: progress;
+}
+
+.ui-button:disabled {
+  border-style: dashed;
+  border-color: var(--color-border-control);
+  background-color: var(--color-tint);
+  color: var(--color-ink-muted);
+  cursor: not-allowed;
+}
+
+/* A static ring with one open quarter; it turns only when motion is allowed. Drawn with borders in currentColor, so
+   forced colours keep it (the open quarter fills in there, which still reads as a ring). */
+.ui-button__spinner {
+  box-sizing: border-box;
+  flex: none;
+  inline-size: 1em;
+  block-size: 1em;
+  border: 2px solid currentColor;
+  border-inline-end-color: transparent;
+  border-radius: var(--radius-pill);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ui-button__spinner {
+    animation: ui-button-turn 0.9s linear infinite;
+  }
+}
+
+@keyframes ui-button-turn {
+  to {
+    rotate: 1turn;
+  }
+}

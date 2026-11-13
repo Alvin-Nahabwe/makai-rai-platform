@@ -327,7 +327,6 @@ function restOnlyCopy(entries: Array<[string, string]>): string[] {
  * this list can never excuse a character this change stopped covering.
  */
 const NEVER_COVERED: Record<string, string> = {
-  [hex(0x2192)]: "app/globals.css: content: '→' after a link (the latin subset maps U+2191 and U+2193, not U+2192)",
   [hex(0x2713)]: "app/(public)/about/AboutPage.css: content: '✓ ' before a list item",
 };
 
