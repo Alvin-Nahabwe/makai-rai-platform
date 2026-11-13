@@ -2,9 +2,9 @@ import type { Page } from '@playwright/test';
 import type { Stage } from '../../types/record';
 
 /**
- * The shared "no score" checks (FR-RM-01, FR-RM-04, UX-06, UX-07), for the screens other units build
- * (S-08, S-10, S-11, S-14, S-28) and for the crawl in e2e/no-score-crawl.spec.ts. The names and
- * signatures are contract symbols (00-contract.md, "Further cross-unit symbols", row `e2e/helpers/noScore.ts`).
+ * The shared "no score" checks (FR-RM-01, FR-RM-04, UX-07 and NFR-A11Y-05 with spec 7.2), for the screens other units build
+ * (S-08, S-10, S-11, S-14, S-28) and for the crawl in e2e/no-score-crawl.spec.ts. `expectStatusMarksInk` is the one
+ * new symbol and replaces `expectNeutralStatusLabels`; the other names and signatures are unchanged.
  *
  * Markup the checks read:
  *   - text inside an element carrying `data-claims-allowed="<reason>"` is skipped by every text and
@@ -14,13 +14,13 @@ import type { Stage } from '../../types/record';
  *     ruling 2, unit/cnt). Only the percentage check skips it; score words there are still checked;
  *   - a status mark is any `.ui-mark`, `.ui-mark__shape` or `[data-mark-kind]` element; a legacy status label is a
  *     `.status-label` element, read until its screen is rebuilt (expectStatusMarksInk);
- *   - an upload's own `<progress>` sits inside `[data-upload-progress]` and is the one progress element allowed, and
- *     not inside a route row; a route row's proportional fill (an inline width or inline-size in per cent) is a
- *     progress element too (spec 7.2).
- * They read computed values only. The status-mark check compares colours with the tokens `--color-mark`, `--color-ink`,
- * `--color-ink-muted` and `--color-saved` as `:root` resolves them; the warning-tint rule of UX-06 is retired by spec 12,
- * which replaces it with section 7.2: a status is words in ink, its shape is in the mark colour, and there is no tick
- * and no green on it.
+ *   - an upload's own `<progress>` carries `data-upload-progress` itself or sits directly in an element that does, and
+ *     is the one progress element allowed (never inside a route row); a route row's proportional fill is any element
+ *     in `.ui-route-row` with an inline style value in per cent (a custom property too) or a `width` attribute in per
+ *     cent, and is a progress element too (spec 7.2).
+ * Computed values are read, not source. The status-mark check (expectStatusMarksInk) compares colours with the tokens
+ * `--color-mark`, `--color-ink`, `--color-ink-muted`, `--color-saved`, `--color-tint` and `--color-action-text` as
+ * `:root` resolves them; its rules are listed at that function.
  *
  * Every check reads the `<main>` landmark and refuses a page that has none, because a page with no
  * `<main>` would otherwise pass for having nothing in it. A check that finds nothing to examine
@@ -83,7 +83,7 @@ async function snapshotMain(page: Page, who: string): Promise<MainSnapshot> {
         const tag = el.localName;
         const inRouteRow = el.closest('.ui-route-row') !== null;
         const kind =
-          tag === 'progress' ? (el.closest('[data-upload-progress]') !== null && !inRouteRow ? null : '<progress>')
+          tag === 'progress' ? ((el.matches('[data-upload-progress]') || el.parentElement?.matches('[data-upload-progress]')) && !inRouteRow ? null : '<progress>')
           : tag === 'meter' ? '<meter>'
           : el.getAttribute('role') === 'progressbar' ? 'role=progressbar'
           : el.getAttribute('role') === 'meter' ? 'role=meter'
@@ -91,11 +91,14 @@ async function snapshotMain(page: Page, who: string): Promise<MainSnapshot> {
           : tag === 'svg' && el.closest('svg[aria-hidden="true"]') === null ? '<svg> without aria-hidden="true"'
           : null;
         if (kind) shapes.push({ kind, html: el.outerHTML.slice(0, 90) });
-        if (inRouteRow && 'style' in el) {
-          const style = (el as HTMLElement).style;
-          if (style.getPropertyValue('width').endsWith('%') || style.getPropertyValue('inline-size').endsWith('%')) {
-            shapes.push({ kind: 'proportional fill', html: el.outerHTML.slice(0, 90) });
+        if (inRouteRow) {
+          // Any inline value in per cent (a custom property too), or a width attribute in per cent, is a drawn fill.
+          const style = 'style' in el ? (el as HTMLElement).style : null;
+          let percent = (el.getAttribute('width') ?? '').includes('%');
+          for (let i = 0; style && i < style.length; i += 1) {
+            if (style.getPropertyValue(style[i]).includes('%')) percent = true;
           }
+          if (percent) shapes.push({ kind: 'proportional fill', html: el.outerHTML.slice(0, 90) });
         }
       }
     }
@@ -262,8 +265,8 @@ export async function expectNoCrossStageTotal(page: Page, sentinels: Record<Stag
   fail(who, [...sentinelFindings(s, sentinels, sums, own), ...totalLabelFindings(s)]);
 }
 
-/** U+2713, U+2714, U+2705, U+2611, U+1F5F8: the characters that draw a tick. */
-const TICK_CHARACTERS = /[✓✔✅☑\u{1F5F8}]/u;
+/** The characters that draw a tick: U+2713, U+2714, U+2705, U+2611 and U+1F5F8. */
+const TICK_CHARACTERS = /[\u2713\u2714\u2705\u2611\u{1F5F8}]/u;
 
 type Point = { x: number; y: number };
 
@@ -272,13 +275,19 @@ function isTick(a: Point, b: Point, c: Point): boolean {
   return b.y > a.y && b.y > c.y && Math.min(a.x, c.x) < b.x && b.x < Math.max(a.x, c.x);
 }
 
-const PATH_TOKEN = /[a-zA-Z]|[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?/g;
+/** Drops a point equal to the one before it, so that a repeated point does not hide a tick. */
+function withoutRepeats(points: Point[]): Point[] {
+  return points.filter((p, i) => i === 0 || p.x !== points[i - 1].x || p.y !== points[i - 1].y);
+}
+
+const NUMBER = String.raw`[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?`;
+const PATH_TOKEN = new RegExp(`[a-zA-Z]|${NUMBER}`, 'g');
 const isLetter = (t: string): boolean => /^[a-zA-Z]$/.test(t);
 
 /**
  * Whether a path's `d` draws a tick: a subpath of exactly two straight segments, open, whose middle point is lower than
- * both ends and between them. `'unreadable'` when a command needs a current point that a curve or arc left unknown.
- * A chevron pointing down is a tick by this test, and a tick drawn with curves or as two lines is not found.
+ * both ends and between them (a point repeated in a row counts once). `'unreadable'` when a command needs a current
+ * point that a curve or arc left unknown. A chevron pointing down is a tick by this test.
  */
 export function tickShapeOf(d: string): 'tick' | 'clear' | 'unreadable' {
   const tokens = d.match(PATH_TOKEN) ?? [];
@@ -288,7 +297,10 @@ export function tickShapeOf(d: string): 'tick' | 'clear' | 'unreadable' {
   let found = false;
   let first = true;
   const endSub = (): void => {
-    if (sub && sub.points && !sub.closed && sub.points.length === 3 && isTick(sub.points[0], sub.points[1], sub.points[2])) found = true;
+    if (sub && sub.points && !sub.closed) {
+      const pts = withoutRepeats(sub.points);
+      if (pts.length === 3 && isTick(pts[0], pts[1], pts[2])) found = true;
+    }
     sub = null;
   };
   let i = 0;
@@ -346,11 +358,14 @@ export function tickShapeOf(d: string): 'tick' | 'clear' | 'unreadable' {
   return found ? 'tick' : 'clear';
 }
 
-/** A `polyline`'s `points`: exactly three points that pass the tick test. A `polygon` is closed and is never one. */
+/** A `polyline`'s `points`: three points (a point repeated in a row counts once) that pass the tick test. A `polygon` is closed and never one. */
 function polylineIsTick(points: string): boolean {
-  const n = (points.match(/[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?/g) ?? []).map(Number);
-  if (n.length !== 6) return false;
-  return isTick({ x: n[0], y: n[1] }, { x: n[2], y: n[3] }, { x: n[4], y: n[5] });
+  const n = (points.match(new RegExp(NUMBER, 'g')) ?? []).map(Number);
+  if (n.length % 2 !== 0) return false;
+  const pts: Point[] = [];
+  for (let i = 0; i < n.length; i += 2) pts.push({ x: n[i], y: n[i + 1] });
+  const run = withoutRepeats(pts);
+  return run.length === 3 && isTick(run[0], run[1], run[2]);
 }
 
 /**
@@ -377,17 +392,28 @@ export function isGreenColour(value: string, saved: string): boolean {
   return hue >= 70 && hue <= 170 && saturation >= 0.2;
 }
 
+/** A computed background that paints nothing: `transparent`, or an `rgba(...)` with alpha 0. */
+function isTransparent(value: string): boolean {
+  const v = value.trim().toLowerCase();
+  return v === 'transparent' || /^rgba\([^)]*,\s*0(?:\.0+)?\s*\)$/.test(v);
+}
+
+/** What one element, or one of its `::before` and `::after`, computes to. */
 type ElementFacts = {
   html: string;
   tag: string;
+  /** '' for the element itself. */
+  pseudo: '' | '::before' | '::after';
   color: string;
   background: string;
   /** Colours of the sides whose border width is not 0px. */
   borders: string[];
-  /** Set on the seven graphics elements of the colour rules. */
+  /** Set on the seven graphics elements; null elsewhere. */
   paint: { fill: string; stroke: string } | null;
   d: string | null;
   points: string | null;
+  /** A pseudo-element's computed `content`; null for an element. */
+  content: string | null;
 };
 type MarkFacts = {
   html: string;
@@ -396,24 +422,34 @@ type MarkFacts = {
   /** `.ui-mark` or `[data-mark-kind]`: its own text must hold a letter. */
   wrapper: boolean;
   isShape: boolean;
-  /** For a shape that is neither wrapper: whether an ancestor is one. */
+  /** Whether an ancestor is a wrapper. */
   insideWrapper: boolean;
   parentText: string;
 };
 type InkSnapshot = {
-  tokens: { mark: string | null; ink: string | null; muted: string | null; saved: string | null };
+  tokens: Record<'mark' | 'ink' | 'muted' | 'saved' | 'tint' | 'action', string | null>;
   marks: MarkFacts[];
-  /** Every mark element and every element inside one, once. */
+  /** Every mark element and every element inside one, with their pseudo-elements, once. */
   markTree: ElementFacts[];
   words: Array<{ html: string; color: string }>;
   labels: Array<{ html: string; text: string; color: string; tree: ElementFacts[] }>;
 };
 
 /**
- * NFR-A11Y-05 (SC 1.4.1) with spec 7.2: a status is words, and its mark is a shape in `--color-mark`, with no tick and
- * no green. The mark elements are every `.ui-mark`, `.ui-mark__shape` and `[data-mark-kind]` in `<main>`; every
- * `.status-label` there is read too, until its screen is rebuilt. K1 to K6 and L1 to L4 are in the finding wording.
- * A page with neither kind of element fails (a check that found nothing must not pass).
+ * NFR-A11Y-05 (SC 1.4.1) with spec 7.2: a status is words, its mark is a shape, and neither is carried by colour.
+ * The mark elements are every `.ui-mark`, `.ui-mark__shape` and `[data-mark-kind]` in `<main>`; every `.status-label`
+ * there is read too, until its screen is rebuilt. What it holds, by rule group:
+ *   - a mark element's own colour is `--color-mark`, and so is the fill and stroke of each graphic in it (a `line`'s
+ *     fill paints nothing and is not read); a mark's words (`.ui-mark__words`) are `--color-ink`, and a mark has words;
+ *   - on every mark element, legacy label and element inside either, and on their `::before` and `::after` that
+ *     exist: no tick (a tick-shaped `path` or `polyline`, or a tick character in the text or the pseudo-element's
+ *     content) and no green in text colour, background, a drawn border, fill or stroke;
+ *   - on the same elements, text colour is one of `--color-mark`, `--color-ink`, `--color-ink-muted`; background is
+ *     transparent or `--color-tint`; a drawn border is one of those inks or `--color-action-text`;
+ *   - a legacy label has words and its own colour is `--color-ink` or `--color-ink-muted`.
+ * A page with neither kind of element fails (a check that found nothing must not pass). Known limits: a tick drawn
+ * as a closed outline, over two subpaths or two `line` elements, with a collinear extra point or with curves is not
+ * recognised, and a chevron pointing down reads as a tick.
  */
 export async function expectStatusMarksInk(page: Page): Promise<void> {
   const who = `expectStatusMarksInk(${page.url()})`;
@@ -432,28 +468,42 @@ export async function expectStatusMarksInk(page: Page): Promise<void> {
     };
     const GRAPHICS = new Set(['circle', 'ellipse', 'path', 'polygon', 'polyline', 'rect', 'line']);
     const WRAPPER = '.ui-mark, [data-mark-kind]';
+    const borderColours = (cs: CSSStyleDeclaration): string[] => {
+      const out: string[] = [];
+      for (const side of ['top', 'right', 'bottom', 'left']) {
+        if (cs.getPropertyValue(`border-${side}-width`) !== '0px') out.push(cs.getPropertyValue(`border-${side}-color`));
+      }
+      return out;
+    };
     const facts = (el: Element) => {
       const cs = getComputedStyle(el);
-      const borders: string[] = [];
-      for (const side of ['top', 'right', 'bottom', 'left']) {
-        if (cs.getPropertyValue(`border-${side}-width`) !== '0px') borders.push(cs.getPropertyValue(`border-${side}-color`));
-      }
       const tag = el.localName;
-      return {
-        html: el.outerHTML.slice(0, 90),
+      const html = el.outerHTML.slice(0, 90);
+      const own = {
+        html,
         tag,
+        pseudo: '' as const,
         color: cs.color,
         background: cs.backgroundColor,
-        borders,
+        borders: borderColours(cs),
         paint: GRAPHICS.has(tag) ? { fill: cs.fill, stroke: cs.stroke } : null,
         d: tag === 'path' ? (el.getAttribute('d') ?? '') : null,
         points: tag === 'polyline' ? (el.getAttribute('points') ?? '') : null,
+        content: null,
       };
+      const out: Array<typeof own | { html: string; tag: string; pseudo: '::before' | '::after'; color: string; background: string; borders: string[]; paint: null; d: null; points: null; content: string }> = [own];
+      for (const pseudo of ['::before', '::after'] as const) {
+        const ps = getComputedStyle(el, pseudo);
+        // A pseudo-element whose content is none or normal does not exist.
+        if (ps.content === 'none' || ps.content === 'normal') continue;
+        out.push({ html, tag, pseudo, color: ps.color, background: ps.backgroundColor, borders: borderColours(ps), paint: null, d: null, points: null, content: ps.content });
+      }
+      return out;
     };
     const treeOf = (roots: Element[]) => {
       const seen = new Set<Element>();
       for (const r of roots) for (const el of [r, ...Array.from(r.querySelectorAll('*'))]) seen.add(el);
-      return Array.from(seen).map(facts);
+      return Array.from(seen).flatMap(facts);
     };
     const markEls = new Set<Element>();
     const labelEls: Element[] = [];
@@ -463,20 +513,24 @@ export async function expectStatusMarksInk(page: Page): Promise<void> {
       labelEls.push(...Array.from(main.querySelectorAll('.status-label')));
       wordEls.push(...Array.from(main.querySelectorAll('.ui-mark__words')));
     }
-    const marks = Array.from(markEls).map((el) => {
-      const wrapper = el.matches(WRAPPER);
-      return {
-        html: el.outerHTML.slice(0, 90),
-        color: getComputedStyle(el).color,
-        text: el.textContent ?? '',
-        wrapper,
-        isShape: el.matches('.ui-mark__shape'),
-        insideWrapper: el.parentElement?.closest(WRAPPER) != null,
-        parentText: el.parentElement?.textContent ?? '',
-      };
-    });
+    const marks = Array.from(markEls).map((el) => ({
+      html: el.outerHTML.slice(0, 90),
+      color: getComputedStyle(el).color,
+      text: el.textContent ?? '',
+      wrapper: el.matches(WRAPPER),
+      isShape: el.matches('.ui-mark__shape'),
+      insideWrapper: el.parentElement?.closest(WRAPPER) != null,
+      parentText: el.parentElement?.textContent ?? '',
+    }));
     return {
-      tokens: { mark: tokenColour('--color-mark'), ink: tokenColour('--color-ink'), muted: tokenColour('--color-ink-muted'), saved: tokenColour('--color-saved') },
+      tokens: {
+        mark: tokenColour('--color-mark'),
+        ink: tokenColour('--color-ink'),
+        muted: tokenColour('--color-ink-muted'),
+        saved: tokenColour('--color-saved'),
+        tint: tokenColour('--color-tint'),
+        action: tokenColour('--color-action-text'),
+      },
       marks,
       markTree: treeOf(Array.from(markEls)),
       words: wordEls.map((el) => ({ html: el.outerHTML.slice(0, 90), color: getComputedStyle(el).color })),
@@ -489,36 +543,47 @@ export async function expectStatusMarksInk(page: Page): Promise<void> {
     };
   });
   if (!snap) throw new Error(`${who}: no <main> element, so there is nothing to check`);
-  const { mark, ink, muted, saved } = snap.tokens;
-  const missing = ([['--color-mark', mark], ['--color-ink', ink], ['--color-ink-muted', muted], ['--color-saved', saved]] as Array<[string, string | null]>)
+  const { mark, ink, muted, saved, tint, action } = snap.tokens;
+  const missing = ([['--color-mark', mark], ['--color-ink', ink], ['--color-ink-muted', muted], ['--color-saved', saved], ['--color-tint', tint], ['--color-action-text', action]] as Array<[string, string | null]>)
     .filter(([, v]) => v === null)
     .map(([name]) => `${name} is not defined on :root, so no colour can be compared with it`);
   if (missing.length > 0) return fail(who, missing);
+  if (mark === null || ink === null || muted === null || saved === null || tint === null || action === null) {
+    throw new Error(`${who}: a token resolved to nothing after the defined-on-:root check`);
+  }
   if (snap.marks.length === 0 && snap.labels.length === 0) return fail(who, ['no status mark: neither a .ui-mark, .ui-mark__shape or [data-mark-kind] nor a .status-label in <main>']);
 
+  const inks = [mark, ink, muted];
   const findings: string[] = [];
   const green = (value: string, where: string, property: string): void => {
     try {
-      if (isGreenColour(value, saved as string)) findings.push(`${property} ${value} is green in ${where}`);
+      if (isGreenColour(value, saved)) findings.push(`${property} ${value} is green in ${where}`);
     } catch {
       findings.push(`cannot read colour ${JSON.stringify(value)} (${property}) in ${where}`);
     }
   };
   const treeFindings = (tree: ElementFacts[]): void => {
     for (const e of tree) {
-      green(e.color, e.html, 'color');
-      green(e.background, e.html, 'background-color');
-      for (const b of e.borders) green(b, e.html, 'border colour');
+      const where = e.pseudo === '' ? e.html : `${e.html} ${e.pseudo}`;
+      green(e.color, where, 'color');
+      green(e.background, where, 'background-color');
+      for (const b of e.borders) green(b, where, 'border colour');
       if (e.paint) {
-        green(e.paint.fill, e.html, 'fill');
-        green(e.paint.stroke, e.html, 'stroke');
+        green(e.paint.fill, where, 'fill');
+        green(e.paint.stroke, where, 'stroke');
       }
+      if (!inks.includes(e.color)) findings.push(`colour ${e.color} is not an ink (--color-mark, --color-ink, --color-ink-muted) in ${where}`);
+      if (e.background !== tint && !isTransparent(e.background)) findings.push(`background-color ${e.background} is neither transparent nor --color-tint in ${where}`);
+      for (const b of e.borders) {
+        if (!inks.includes(b) && b !== action) findings.push(`border colour ${b} is not an ink or --color-action-text in ${where}`);
+      }
+      if (e.content !== null && TICK_CHARACTERS.test(e.content)) findings.push(`tick character in the content of ${where}`);
       if (e.d !== null) {
         const verdict = tickShapeOf(e.d);
-        if (verdict === 'tick') findings.push(`tick-shaped path in ${e.html}`);
-        if (verdict === 'unreadable') findings.push(`cannot read path ${JSON.stringify(e.d)} in ${e.html}`);
+        if (verdict === 'tick') findings.push(`tick-shaped path in ${where}`);
+        if (verdict === 'unreadable') findings.push(`cannot read path ${JSON.stringify(e.d)} in ${where}`);
       }
-      if (e.points !== null && polylineIsTick(e.points)) findings.push(`tick-shaped polyline in ${e.html}`);
+      if (e.points !== null && polylineIsTick(e.points)) findings.push(`tick-shaped polyline in ${where}`);
     }
   };
 
