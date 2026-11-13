@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useReducer, type ReactElement } from 'react';
+import { useId, useReducer, type CSSProperties, type ReactElement } from 'react';
 import { sendWrite } from '@/lib/client/retrySafeWrite';
 import { REMINDER_SETTING_COPY, reminderSettingSaved } from '@/lib/followup/copy';
 import type { PreferencesRequest } from '@/types/api';
@@ -21,20 +21,29 @@ export function settingReducer(s: SettingState, a: SettingAction): SettingState 
   }
 }
 
+/**
+ * The box and its label are two columns: a label too long for one line wraps beside the box. Wrapped
+ * under it, the label's own box covers the checkbox, and the 24 px target check counts that as crowding.
+ */
+const BOX_AND_LABEL: CSSProperties = { display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 'var(--space-2)', alignItems: 'baseline' };
+/** As wide as its words, not the whole column: empty space beside the label must not tick the box. */
+const LABEL: CSSProperties = { justifySelf: 'start' };
+const FULL_ROW: CSSProperties = { gridColumn: '1 / -1' };
+
 /** What a person sees: pure, so the pending state can be rendered and asserted without a browser. */
 export function ReminderEmailsSettingView({ id, state: s, onChange }: { id: string; state: SettingState; onChange: (next: boolean) => void }): ReactElement {
   return (
-    <div>
+    <div style={BOX_AND_LABEL}>
       {/* aria-disabled, not disabled: a disabled control that has focus can drop it, and the next key press then misses the box. */}
       <input
         id={id} type="checkbox" checked={s.checked} aria-disabled={s.pending}
         style={s.pending ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
         onChange={(e) => { if (!s.pending) onChange(e.target.checked); }}
-      />{' '}
-      <label htmlFor={id}>{REMINDER_SETTING_COPY.label}</label>
-      <p>{REMINDER_SETTING_COPY.note}</p>
-      <p role="status">{s.status}</p>
-      {s.failed ? <p role="alert">{REMINDER_SETTING_COPY.failed}</p> : null}
+      />
+      <label htmlFor={id} style={LABEL}>{REMINDER_SETTING_COPY.label}</label>
+      <p style={FULL_ROW}>{REMINDER_SETTING_COPY.note}</p>
+      <p role="status" style={FULL_ROW}>{s.status}</p>
+      {s.failed ? <p role="alert" style={FULL_ROW}>{REMINDER_SETTING_COPY.failed}</p> : null}
     </div>
   );
 }
