@@ -219,6 +219,17 @@ describe('design tokens', () => {
     expect(body['color']).toBe('var(--color-ink)');
   });
 
+  it('1A (usage): native controls use the page family, and no rule sets the font shorthand on them', () => {
+    // A native button, input, select or textarea computes the browser's own family unless a rule says otherwise, so
+    // "one family, Overpass" is not true on screen without this. Only the family is inherited: the `font` shorthand
+    // would also reset the size of every native control.
+    for (const selector of ['button', 'input', 'select', 'textarea']) {
+      const rule = declarationsOf(ruleFor(css, selector));
+      expect(rule['font-family'], `${selector} font-family`).toBe('inherit');
+      expect(rule['font'], `${selector} font shorthand`).toBeUndefined();
+    }
+  });
+
   it('1A (usage): no rule paints text with the action colour, which is a fill; text uses --color-action-text', () => {
     const offenders = rules(css)
       .filter((r) => /(?<![-\w])color:\s*var\(--color-action\)/.test(r.body))

@@ -18,8 +18,9 @@
 #              5dac9683 was the head of google/fonts main that day)
 # __tests__/unit/local-fonts.test.ts pins the same sizes and hashes, so a changed upstream file fails there.
 #
-# Every file goes into a new empty temporary directory first, is checked to be a WOFF2 file (or, for the licence,
-# to start with its copyright line), and only then moved into fonts/source/. Run from the repository root:
+# Every file goes into a new empty temporary directory first, is compared with the sha256 recorded above, is checked to
+# be a WOFF2 file (or, for the licence, to start with its copyright line), and only then moved into fonts/source/.
+# Run from the repository root:
 #   scripts/fonts/fetch-overpass.sh
 set -euo pipefail
 
@@ -30,18 +31,33 @@ LATIN_URL='https://fonts.gstatic.com/s/overpass/v19/qFdH35WCmI96Ajtm81GlU9s.woff
 LATIN_EXT_URL='https://fonts.gstatic.com/s/overpass/v19/qFdH35WCmI96Ajtm81GrU9vyww.woff2'
 OFL_URL='https://github.com/google/fonts/raw/5dac96833c85ada9384fe3e50b11df08091b9246/ofl/overpass/OFL.txt'
 
+LATIN_SHA256='29217ef8adef5f6c059feb461bdb029348205fc233dc9b6ca8604b0d068ac086'
+LATIN_EXT_SHA256='0a1c9727f08b91252c19bd4ca36caf98162455f33c0adcac935606b5d8d11938'
+OFL_SHA256='86e5ff25c701ec446d20b1a85b02ee6d36de8503a7288a4c948f5459809af1f0'
+
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
 fetch() { # url, name
   echo "$1"
-  curl --fail --silent --show-error --location --user-agent "$UA" --output "$tmp/$2" "$1"
+  curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --user-agent "$UA" --output "$tmp/$2" "$1"
   echo "  $2 $(wc -c < "$tmp/$2") bytes, sha256 $(sha256sum "$tmp/$2" | cut -d' ' -f1)"
+}
+
+# A file that is not the recorded one is refused before anything is moved into fonts/source/.
+check_sha256() { # name, expected
+  local got
+  got="$(sha256sum "$tmp/$1" | cut -d' ' -f1)"
+  [ "$got" = "$2" ] || { echo "$1 has sha256 $got, expected $2; nothing was moved" >&2; exit 1; }
 }
 
 fetch "$LATIN_URL" overpass-latin.woff2
 fetch "$LATIN_EXT_URL" overpass-latin-ext.woff2
 fetch "$OFL_URL" OFL-Overpass.txt
+
+check_sha256 overpass-latin.woff2 "$LATIN_SHA256"
+check_sha256 overpass-latin-ext.woff2 "$LATIN_EXT_SHA256"
+check_sha256 OFL-Overpass.txt "$OFL_SHA256"
 
 for f in overpass-latin.woff2 overpass-latin-ext.woff2; do
   [ "$(head -c 4 "$tmp/$f")" = wOF2 ] || { echo "$f is not a WOFF2 file" >&2; exit 1; }

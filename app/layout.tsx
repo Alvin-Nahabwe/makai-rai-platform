@@ -13,7 +13,9 @@ import './globals.css';
 // scripts/fonts/subset.sh):
 //  - core: printable ASCII, the characters typed names add (no-break space, en dash, curly quotes, the NFD marks
 //    U+0304, U+0308, U+0329) and the few others page copy uses; the only file preloaded, on every page;
-//  - rest: the rest of Google's latin range, fetched only by a page that shows one of its characters;
+//  - rest: the rest of Google's latin range, and the combining marks U+0300-0301, U+0303, U+0309 and U+0323 that the
+//    latin file maps (a decomposed name finds them in this file, not in ext-rest; not in core, so no accented letter can
+//    be composed from the preloaded file), fetched only by a page that shows one of these characters;
 //  - latin-ext, cut in two: ext-common, the latin-ext letters names commonly carry (13,952 B), and ext-rest, every
 //    other code point the latin-ext file maps, the dagger U+2020 included. Their ranges are disjoint from each other
 //    and from core and rest, and each declares exactly what its file maps, so an inviter's name with U+014B, U+0169 or
@@ -32,7 +34,7 @@ const _overpassLatinExtRest = localFont({
   adjustFontFallback: false,
   declarations: [
     { prop: 'font-family', value: 'overpass' },
-    { prop: 'unicode-range', value: 'U+102-103,U+108-10B,U+10E-111,U+114-115,U+11A-11D,U+120-121,U+124-127,U+12C-12D,U+132-135,U+138-13A,U+13D-140,U+149,U+14E-14F,U+154-157,U+15C-15D,U+162-167,U+16C-16D,U+174-178,U+17F,U+187-189,U+18E-18F,U+191,U+193,U+196-199,U+19D,U+1A0-1A1,U+1A4-1A5,U+1A9,U+1AC-1B4,U+1B7,U+1C0-1F5,U+1F8-21B,U+21E-21F,U+226-233,U+237,U+242-245,U+24B-24C,U+250-252,U+259,U+25F-261,U+265-266,U+268-269,U+26E-26F,U+272,U+279,U+27D-27E,U+283,U+288-28A,U+28C-28E,U+292,U+294-295,U+29E,U+2A1-2A4,U+2A6-2A7,U+2A9-2AC,U+2B0,U+2B2,U+2B7-2BA,U+2C7,U+2C9,U+2D6,U+2DD,U+2E1-2E3,U+300-301,U+303,U+309,U+323,U+1E04-1E05,U+1E0C-1E0F,U+1E12-1E13,U+1E20-1E21,U+1E24-1E25,U+1E2E-1E2F,U+1E36-1E37,U+1E3C-1E3F,U+1E44-1E47,U+1E4A-1E4D,U+1E50-1E53,U+1E6C-1E71,U+1E80-1E85,U+1E92-1E93,U+1E9E,U+1EF2-1EF9,U+2020,U+20A1-20AB,U+20AD-20BF,U+2113,U+2C64,U+2C6D,U+2C72-2C73,U+A78B-A78D,U+A7AA' },
+    { prop: 'unicode-range', value: 'U+102-103,U+108-10B,U+10E-111,U+114-115,U+11A-11D,U+120-121,U+124-127,U+12C-12D,U+132-135,U+138-13A,U+13D-140,U+149,U+14E-14F,U+154-157,U+15C-15D,U+162-167,U+16C-16D,U+174-178,U+17F,U+187-189,U+18E-18F,U+191,U+193,U+196-199,U+19D,U+1A0-1A1,U+1A4-1A5,U+1A9,U+1AC-1B4,U+1B7,U+1C0-1F5,U+1F8-21B,U+21E-21F,U+226-233,U+237,U+242-245,U+24B-24C,U+250-252,U+259,U+25F-261,U+265-266,U+268-269,U+26E-26F,U+272,U+279,U+27D-27E,U+283,U+288-28A,U+28C-28E,U+292,U+294-295,U+29E,U+2A1-2A4,U+2A6-2A7,U+2A9-2AC,U+2B0,U+2B2,U+2B7-2BA,U+2C7,U+2C9,U+2D6,U+2DD,U+2E1-2E3,U+1E04-1E05,U+1E0C-1E0F,U+1E12-1E13,U+1E20-1E21,U+1E24-1E25,U+1E2E-1E2F,U+1E36-1E37,U+1E3C-1E3F,U+1E44-1E47,U+1E4A-1E4D,U+1E50-1E53,U+1E6C-1E71,U+1E80-1E85,U+1E92-1E93,U+1E9E,U+1EF2-1EF9,U+2020,U+20A1-20AB,U+20AD-20BF,U+2113,U+2C64,U+2C6D,U+2C72-2C73,U+A78B-A78D,U+A7AA' },
   ],
 });
 // Only its @font-face is wanted; never use this constant's className or variable (the family is overpass).
@@ -56,7 +58,7 @@ const _overpassLatinRest = localFont({
   adjustFontFallback: false,
   declarations: [
     { prop: 'font-family', value: 'overpass' },
-    { prop: 'unicode-range', value: 'U+A1-A6,U+A8-B6,U+B8-FF,U+131,U+152-153,U+2BB-2BC,U+2C6,U+2DA,U+2DC,U+2000-2012,U+2015-2017,U+201E-201F,U+2021-2025,U+2027-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD' },
+    { prop: 'unicode-range', value: 'U+A1-A6,U+A8-B6,U+B8-FF,U+131,U+152-153,U+2BB-2BC,U+2C6,U+2DA,U+2DC,U+300-301,U+303,U+309,U+323,U+2000-2012,U+2015-2017,U+201E-201F,U+2021-2025,U+2027-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD' },
   ],
 });
 const overpass = localFont({
