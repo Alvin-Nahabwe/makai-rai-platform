@@ -50,3 +50,4 @@ old one's status. The record of what we used to believe is the point.
 | [0019](0019-sign-in-limits-per-account.md) | Sign-in limits per account at every layer, with a spraying alarm | Accepted |
 | [0020](0020-expand-only-v060.md) | Expand-only v0.6.0 with frozen legacy tables | Accepted |
 | [0021](0021-no-agent-access-to-production.md) | No AI session reaches the production host or its data | Accepted |
+| [0022](0022-design-system-foundation.md) | Design tokens, a legacy alias layer and the builder's UI choices | Accepted |

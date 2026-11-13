@@ -66,6 +66,21 @@ function declarationsOf(body: string): Record<string, string> {
   return out;
 }
 
+/** Names defined inside the `LEGACY ALIASES` block of :root (raw source, the comment marks its start). */
+function legacyNames(raw: string): string[] {
+  const start = raw.indexOf('/* LEGACY ALIASES');
+  if (start === -1) return [];
+  const end = raw.indexOf('}', start);
+  return Object.keys(declarations(raw.slice(start, end + 1)));
+}
+
+/** The colour roles of the plan's token table. Every dark block defines each one. */
+const COLOUR_ROLES = [
+  'shell', 'shell-ink', 'shell-muted', 'shell-hover', 'action', 'action-hover', 'on-action', 'action-text', 'selected',
+  'ground', 'surface', 'tint', 'ink', 'ink-muted', 'heading', 'link', 'border-container', 'border-control',
+  'saved', 'saved-tint', 'overdue', 'mark', 'focus',
+].map((r) => `--color-${r}`);
+
 const ROOT = declarations(ruleFor(css, ':root'));
 const DARK_MEDIA = declarations(ruleFor(css, ":root:not([data-theme='light'])"));
 const DARK_ATTR = declarations(ruleFor(css, ":root[data-theme='dark']"));
@@ -123,6 +138,13 @@ describe('contrast function (helper)', () => {
       ['#A16207', '#FEF9C3', 4.58],
       ['#FACC15', '#FFFFFF', 1.53],
       ['#9A4D10', '#414042', 1.69],
+      // Values of the 1A palette (spec 7.1), as the plan computed them.
+      ['#FFFFFF', '#9A4D10', 6.1],
+      ['#9A4D10', '#1A1F36', 2.66],
+      ['#1B1B1F', '#F2F4F8', 15.59],
+      ['#4A5060', '#F2F4F8', 7.31],
+      ['#6B7385', '#F2F4F8', 4.32],
+      ['#B85F14', '#1A1F36', 3.62],
     ];
     for (const [fg, bg, expected] of cases) {
       expect(Number(contrastOfHex(fg, bg).toFixed(2)), `${fg} on ${bg}`).toBe(expected);
@@ -140,24 +162,78 @@ describe('design tokens', () => {
     expect(DARK_ATTR).toEqual(DARK_MEDIA);
   });
 
-  it('UX-33 NFR-A11Y-05: every 7.6.3 token pair meets its minimum in every theme', () => {
-    // [defect, tokens read as foreground and background, minimum ratio, themes]
-    const pairs: Array<[string, string, string, number, Theme[]]> = [
-      ['D-1 field border', 'form-field-border', 'surface-card', 3, THEMES],
-      ['D-3 link on cards', 'link', 'surface-card', 4.5, THEMES],
-      ['D-3 link on the page', 'link', 'surface-base', 4.5, THEMES],
-      ['D-3 focus ring on cards', 'focus-ring', 'surface-card', 3, THEMES],
-      ['D-3 focus ring on the page', 'focus-ring', 'surface-base', 3, THEMES],
-      ['D-5 stage label', 'stage-fg', 'stage-bg', 4.5, THEMES],
-      ['D-6 moderate text', 'tint-moderate-fg', 'tint-moderate-bg', 4.5, THEMES],
-      // The phone menu button is navy in both themes; its bars were painted with the card colour, which is dark
-      // in the dark theme, so the button showed as a blank square.
-      ['menu button bars', 'sidebar-toggle-bar', 'color-navy', 3, THEMES],
+  it('1A NFR-A11Y-05: the 35 colour pairs meet their minimum in light and in both dark blocks', () => {
+    // [name, foreground role, background role, minimum ratio]. 4.5 is text, 3 is a non-text mark (WCAG 1.4.3, 1.4.11).
+    const pairs: Array<[string, string, string, number]> = [
+      ['ink', 'color-ink', 'color-ground', 4.5], ['ink', 'color-ink', 'color-surface', 4.5], ['ink', 'color-ink', 'color-tint', 4.5],
+      ['ink-muted', 'color-ink-muted', 'color-ground', 4.5], ['ink-muted', 'color-ink-muted', 'color-surface', 4.5], ['ink-muted', 'color-ink-muted', 'color-tint', 4.5],
+      ['link', 'color-link', 'color-ground', 4.5], ['link', 'color-link', 'color-surface', 4.5], ['link', 'color-link', 'color-tint', 4.5],
+      ['heading', 'color-heading', 'color-ground', 4.5], ['heading', 'color-heading', 'color-surface', 4.5],
+      ['on-action', 'color-on-action', 'color-action', 4.5], ['on-action', 'color-on-action', 'color-action-hover', 4.5],
+      ['shell-ink', 'color-shell-ink', 'color-shell', 4.5], ['shell-ink', 'color-shell-ink', 'color-shell-hover', 4.5],
+      ['shell-muted', 'color-shell-muted', 'color-shell', 4.5],
+      ['action-text', 'color-action-text', 'color-surface', 4.5], ['action-text', 'color-action-text', 'color-ground', 4.5],
+      ['saved', 'color-saved', 'color-surface', 4.5], ['saved', 'color-saved', 'color-ground', 4.5], ['saved', 'color-saved', 'color-saved-tint', 4.5],
+      ['ink on saved-tint', 'color-ink', 'color-saved-tint', 4.5],
+      ['overdue', 'color-overdue', 'color-surface', 4.5], ['overdue', 'color-overdue', 'color-ground', 4.5],
+      ['border-control', 'color-border-control', 'color-surface', 3], ['border-control', 'color-border-control', 'color-ground', 3], ['border-control', 'color-border-control', 'color-tint', 3],
+      ['mark', 'color-mark', 'color-surface', 3], ['mark', 'color-mark', 'color-ground', 3], ['mark', 'color-mark', 'color-tint', 3],
+      ['selected', 'color-selected', 'color-surface', 3],
+      ['focus', 'color-focus', 'color-surface', 3], ['focus', 'color-focus', 'color-ground', 3], ['focus', 'color-focus', 'color-shell', 3], ['focus', 'color-focus', 'color-tint', 3],
     ];
-    for (const [id, fg, bg, min, themes] of pairs) {
-      for (const theme of themes) {
-        expect(contrast(theme, fg, bg), `${id} (${fg} on ${bg}), ${theme}`).toBeGreaterThanOrEqual(min);
+    expect(pairs).toHaveLength(35);
+    for (const [name, fg, bg, min] of pairs) {
+      for (const theme of THEMES) {
+        expect(contrast(theme, fg, bg), `${name} (${fg} on ${bg}), ${theme}`).toBeGreaterThanOrEqual(min);
       }
+    }
+  });
+
+  it('1A: the colour roles of spec 7.1 hold their exact light values', () => {
+    const spec: Record<string, string> = {
+      '--color-shell': '#1A1F36', '--color-action': '#9A4D10', '--color-ground': '#F2F4F8', '--color-surface': '#FFFFFF',
+      '--color-ink': '#1B1B1F', '--color-ink-muted': '#4A5060', '--color-border-container': '#D5DAE3',
+      '--color-border-control': '#6B7385', '--color-saved': '#1F7A4D', '--color-overdue': '#B42318',
+    };
+    for (const [token, hex] of Object.entries(spec)) expect(ROOT[token]?.toUpperCase(), token).toBe(hex);
+  });
+
+  it('1A: each dark block defines every colour role and no legacy name', () => {
+    const legacy = legacyNames(readFileSync('app/globals.css', 'utf8'));
+    expect(legacy.length).toBeGreaterThan(20);
+    for (const [label, block] of [['media', DARK_MEDIA], ['attribute', DARK_ATTR]] as const) {
+      for (const role of COLOUR_ROLES) expect(block[role], `dark (${label}) defines ${role}`).toBeDefined();
+      expect(Object.keys(block).filter((k) => legacy.includes(k)), `dark (${label}) legacy names`).toEqual([]);
+    }
+  });
+
+  it('1A (usage): the focus ring is drawn with the focus colour and width tokens, on every focusable element', () => {
+    const rule = declarationsOf(ruleFor(css, ':focus-visible'));
+    expect(rule['outline']).toBe('var(--focus-width) solid var(--color-focus)');
+    expect(rule['outline-offset']).toBe('var(--focus-offset)');
+  });
+
+  it('1A (usage): the page is drawn on the ground colour in the ink colour', () => {
+    const body = declarationsOf(ruleFor(css, 'body'));
+    expect(body['background']).toBe('var(--color-ground)');
+    expect(body['color']).toBe('var(--color-ink)');
+  });
+
+  it('1A (usage): no rule paints text with the action colour, which is a fill; text uses --color-action-text', () => {
+    const offenders = rules(css)
+      .filter((r) => /(?<![-\w])color:\s*var\(--color-action\)/.test(r.body))
+      .map((r) => r.selectors.join(', '));
+    expect(offenders).toEqual([]);
+  });
+
+  it('1A: the legacy block is in :root, is marked for deletion, and keeps the phone-menu bar alias on the shell-ink role', () => {
+    expect(readFileSync('app/globals.css', 'utf8')).toContain('/* LEGACY ALIASES: deleted by Task 21 */');
+    expect(ROOT['--sidebar-toggle-bar']).toBe('var(--color-shell-ink)');
+  });
+
+  it('UX-33 NFR-A11Y-05 (legacy, until Task 11): the phone menu button bars hold 3:1 on the navy in every theme', () => {
+    for (const theme of THEMES) {
+      expect(contrast(theme, 'sidebar-toggle-bar', 'color-navy'), `menu button bars, ${theme}`).toBeGreaterThanOrEqual(3);
     }
   });
 
@@ -169,8 +245,6 @@ describe('design tokens', () => {
   it('UX-33 (D-1, D-3, D-5): the rules that draw fields, links, the ring and stage labels read the tokens tested above', () => {
     expect(ruleFor(css, '.form-group input')).toMatch(/border:\s*1px solid var\(--form-field-border\)/);
     expect(ruleFor(css, 'a')).toMatch(/color:\s*var\(--link\)/);
-    expect(ruleFor(css, '*:focus-visible')).toMatch(/outline:\s*3px solid var\(--focus-ring\)/);
-    expect(ruleFor(css, 'button:focus-visible')).toMatch(/outline:\s*3px solid var\(--focus-ring\)/);
     for (const stage of ['pre', 'in', 'post', 'cross']) {
       const rule = ruleFor(css, `.stage-indicator--${stage}`);
       expect(rule, `.stage-indicator--${stage}`).toMatch(/color:\s*var\(--stage-fg\)/);
