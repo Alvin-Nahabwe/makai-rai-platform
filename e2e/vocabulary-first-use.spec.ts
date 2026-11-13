@@ -21,6 +21,8 @@ import * as terms from '../lib/vocabulary/terms';
  * Like e2e/claims-crawl.spec.ts, it first seeds its OWN project (a decision, a finding, a sealed stage review:
  * e2e/helpers/crawlProject.ts), starts from it, and follows links into no other project, so what it reaches does not
  * depend on what other specs wrote. Every authenticated page file must be reached by some seat or named in NOT_CRAWLED.
+ * Not covered: the public screens under `app/(public)` (sign-in, password reset, About and the legal pages as a
+ * signed-out reader sees them) are not crawled by this spec; a seat reaches some of them signed in.
  *
  * Two tests in a serial block, so that an expected failure cannot hide a broken crawl: the first crawls and collects and
  * must pass (its floors: the claims crawl's must-reach lists, the page-file gate, a text node on every page, all 26
@@ -68,30 +70,40 @@ function worklist(hits: readonly Hit[]): string[] {
 /**
  * Runs in the page (page.evaluate), so it imports nothing. The text nodes of the first `main`, in document order,
  * whitespace collapsed, empty ones dropped, `null` when the page has no `main`. Not collected: a node inside `nav`, a
- * script or a style; one the reader cannot see (its parent fails `checkVisibility()`, L2-30); a definition's own text
- * (inside `[data-definition]`, L2-27); and, on S-06's legal routes only, the quoted legal text (`[data-legal-text]`,
- * L2-25). A node's definitions (L2-29) are those inside, or being, its block; inside, or being, the element right
- * after its block; inside its closest `.ui-field` or `.ui-callout`; and an element named by `aria-describedby` on the
- * block or on a control inside it. A node in no block gets a key of its own.
+ * script or a style; one the reader cannot see (its parent fails `checkVisibility({ visibilityProperty: true })`,
+ * L2-30, L2-30a); a definition's own text (inside `[data-definition]`, L2-27); and, on S-06's legal routes only, the
+ * quoted legal text (`[data-legal-text]`, L2-25). A definition element D counts for a node whose closest block is B
+ * only when D is inside `main` and visible (L2-30a), and one of these holds (L2-29a): D is B, or D's nearest block
+ * ancestor is B; D is the element right after B, or that element's first element child; D is a direct child of B's
+ * closest `.ui-field` or `.ui-callout`, or its nearest block ancestor is that element; D's id is named by
+ * `aria-describedby` on B, on a control inside B, or on a label's control (`for`/`id`). A node in no block has no
+ * definitions and a key of its own.
  */
 function collectTextNodes({ blockSelector, legalRoute }: { blockSelector: string; legalRoute: boolean }): TextNodeInfo[] | null {
   const main = document.querySelector('main');
   if (main === null) return null;
   const skip = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE']);
-  const definitionsIn = (el: Element | null): string[] => (el === null ? [] : [el, ...Array.from(el.querySelectorAll('[data-definition]'))]
-    .map((d) => d.getAttribute('data-definition'))
-    .filter((id): id is string => Boolean(id)));
-  const describedBy = (block: Element): string[] => [block, ...Array.from(block.querySelectorAll('[aria-describedby]'))]
-    .flatMap((el) => (el.getAttribute('aria-describedby') ?? '').split(/\s+/).filter(Boolean))
-    .map((id) => document.getElementById(id)?.getAttribute('data-definition'))
-    .filter((id): id is string => Boolean(id));
+  const visible = (el: Element) => el.checkVisibility({ visibilityProperty: true });
+  /** The definition ids of `candidates` that are definitions the reader can see in `main`. */
+  const shown = (candidates: Array<Element | null | undefined>): string[] => candidates
+    .filter((d): d is Element => d instanceof Element && d.hasAttribute('data-definition') && main.contains(d) && visible(d))
+    .map((d) => d.getAttribute('data-definition') as string)
+    .filter(Boolean);
+  /** `owner` itself and the definitions whose nearest block ancestor is `owner`, or (for a field or callout) whose parent is. */
+  const near = (owner: Element, directChild: boolean): Element[] => [owner, ...Array.from(owner.querySelectorAll('[data-definition]'))]
+    .filter((d) => d === owner || d.parentElement?.closest(blockSelector) === owner || (directChild && d.parentElement === owner));
+  const describedBy = (block: Element): Array<Element | null> => {
+    const owners = [block, ...Array.from(block.querySelectorAll('[aria-describedby]'))];
+    if (block instanceof HTMLLabelElement && block.control) owners.push(block.control);
+    return owners.flatMap((el) => (el.getAttribute('aria-describedby') ?? '').split(/\s+/).filter(Boolean)).map((id) => document.getElementById(id));
+  };
   const blockKeys = new Map<Element, string>();
   const nodes: TextNodeInfo[] = [];
   const walker = document.createTreeWalker(main, NodeFilter.SHOW_TEXT);
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     const parent = node.parentElement;
     if (parent === null || skip.has(parent.tagName) || parent.closest('nav') !== null) continue;
-    if (!parent.checkVisibility() || parent.closest('[data-definition]') !== null) continue;
+    if (!visible(parent) || parent.closest('[data-definition]') !== null) continue;
     if (legalRoute && parent.closest('[data-legal-text]') !== null) continue;
     const text = (node.nodeValue ?? '').replace(/\s+/g, ' ').trim();
     if (text === '') continue;
@@ -102,11 +114,14 @@ function collectTextNodes({ blockSelector, legalRoute }: { blockSelector: string
     }
     const block = parent.closest(blockSelector);
     let blockKey = `none-${nodes.length}`;
-    const ids = new Set(definitionsIn(parent.closest('.ui-field, .ui-callout')));
+    const ids = new Set<string>();
     if (block !== null) {
       if (!blockKeys.has(block)) blockKeys.set(block, `block-${blockKeys.size}`);
       blockKey = blockKeys.get(block) as string;
-      for (const id of [...definitionsIn(block), ...definitionsIn(block.nextElementSibling), ...describedBy(block)]) ids.add(id);
+      const next = block.nextElementSibling;
+      const field = block.closest('.ui-field, .ui-callout');
+      const candidates = [...near(block, false), next, next?.firstElementChild, ...(field ? near(field, true) : []), ...describedBy(block)];
+      for (const id of shown(candidates)) ids.add(id);
     }
     nodes.push({ text, termIds, blockKey, definitionIdsInBlock: [...ids], inRoleChoice: parent.closest('[data-role-choice]') !== null });
   }
@@ -154,19 +169,35 @@ test('vocabulary first use (helper): legal text on a legal route, a definition\'
   expect(hidden?.map((n) => n.text)).toEqual(['More', 'A seal, shown.']);
 });
 
-test('vocabulary first use (helper): a definition is beside its term in the block, the next element, the field or callout, or by aria-describedby; two siblings away it is not (L2-29)', async ({ page }) => {
+test('vocabulary first use (helper): a definition is beside its term in the block, the next element or its first child, the field or callout, or by aria-describedby; nowhere else (L2-29a)', async ({ page }) => {
   const idsOf = async (html: string) => (await collect(page, `<main>${html}</main>`))![0].definitionIdsInBlock;
-  // In the block, as the plan has it.
-  expect(await idsOf('<p><span data-term="seal">seal</span> <span data-definition="seal">d</span></p>')).toEqual(['seal']);
-  // The element right after the block: a heading and its hint line.
-  expect(await idsOf('<h2><span data-term="seal">Seal</span></h2><p data-definition="seal">d</p>')).toEqual(['seal']);
-  expect(await idsOf('<h2><span data-term="seal">Seal</span></h2><div><p data-definition="seal">d</p></div>')).toEqual(['seal']);
-  // The closest .ui-field: a label whose hint sits outside it, in the same field.
-  expect(await idsOf('<div class="ui-field"><label><span data-term="seal">Seal</span></label><input><p data-definition="seal">d</p></div>')).toEqual(['seal']);
-  // aria-describedby on a control inside the block names the definition's id.
-  expect(await idsOf('<label><span data-term="seal">Seal</span> <input aria-describedby="x hint"></label><div></div><p id="hint" data-definition="seal">d</p>')).toEqual(['seal']);
+  const term = '<span data-term="seal">Seal</span>';
+  // (a) In the block, as the plan has it; not deep in a nested block of it.
+  expect.soft(await idsOf(`<p>${term} <span data-definition="seal">d</span></p>`)).toEqual(['seal']);
+  expect.soft(await idsOf(`<ul><li>${term}<ul><li><span data-definition="seal">d</span></li></ul></li></ul>`)).toEqual([]);
+  // (b) The element right after the block, or that element's first element child: a heading and its hint line.
+  expect.soft(await idsOf(`<h2>${term}</h2><p data-definition="seal">d</p>`)).toEqual(['seal']);
+  expect.soft(await idsOf(`<h2>${term}</h2><div><p data-definition="seal">d</p><p>More</p></div>`)).toEqual(['seal']);
+  // Not anywhere else inside the following element: a heading followed by a page-wide wrapper.
+  expect.soft(await idsOf(`<h2>${term}</h2><div><p>Intro</p><section><p data-definition="seal">d</p></section></div>`)).toEqual([]);
+  // (c) The closest .ui-field or .ui-callout: a hint that is a direct child of it.
+  expect.soft(await idsOf(`<div class="ui-field"><label>${term}</label><input><p data-definition="seal">d</p></div>`)).toEqual(['seal']);
+  expect.soft(await idsOf(`<div class="ui-callout"><h3>${term}</h3><p>Other</p><p data-definition="seal">d</p></div>`)).toEqual(['seal']);
+  // (d) aria-describedby on a control inside the block, on the block itself, or on a label's control (for/id).
+  expect.soft(await idsOf(`<label>${term} <input aria-describedby="x hint"></label><div></div><p id="hint" data-definition="seal">d</p>`)).toEqual(['seal']);
+  expect.soft(await idsOf(`<p aria-describedby="hint">${term}</p><div></div><p id="hint" data-definition="seal">d</p>`)).toEqual(['seal']);
+  expect.soft(await idsOf(`<label for="x">${term}</label><div></div><input id="x" aria-describedby="hint"><p id="hint" data-definition="seal">d</p>`)).toEqual(['seal']);
   // Two siblings away is not beside.
-  expect(await idsOf('<h2><span data-term="seal">Seal</span></h2><p>Other</p><p data-definition="seal">d</p>')).toEqual([]);
+  expect.soft(await idsOf(`<h2>${term}</h2><p>Other</p><p data-definition="seal">d</p>`)).toEqual([]);
+});
+
+test('vocabulary first use (helper): a definition the reader cannot see is not shown, and text hidden by visibility is not collected (L2-30a)', async ({ page }) => {
+  const term = '<span data-term="seal">Seal</span>';
+  const idsOf = async (html: string) => (await collect(page, html))![0].definitionIdsInBlock;
+  expect.soft(await idsOf(`<main><ul><li>${term} <details><summary>More</summary><span data-definition="seal">d</span></details></li></ul></main>`)).toEqual([]);
+  expect.soft(await idsOf(`<main><p>${term} <span hidden data-definition="seal">d</span></p></main>`)).toEqual([]);
+  expect.soft(await idsOf(`<main><p aria-describedby="hint">${term}</p></main><p id="hint" data-definition="seal">d</p>`)).toEqual([]);
+  expect.soft((await collect(page, '<main><p style="visibility: hidden">A seal, invisible.</p><p>Shown</p></main>'))?.map((n) => n.text)).toEqual(['Shown']);
 });
 
 /** Filled by the crawl and asserted by the expected failure; reset when the crawl starts. */
@@ -252,7 +283,9 @@ test.describe.serial('vocabulary first use', () => {
     console.log(`[vocabulary-first-use] ${hits.length} violations, ${lines.length} worklist lines; lines by id: ${ranked.map(([id, n]) => `${id} ${n}`).join(', ')}`);
     for (const line of lines) console.log(`[vocabulary-first-use] ${line}`);
     const dir = process.env.VOCABULARY_HITS_DIR;
-    if (dir) fs.writeFileSync(path.join(dir, 'vocabulary-first-use-hits.txt'), `${lines.join('\n')}\n`);
+    const hitsFile = dir ? path.join(dir, 'vocabulary-first-use-hits.txt') : null;
+    if (hitsFile) fs.writeFileSync(hitsFile, `${lines.join('\n')}\n`);
+    console.log(`[vocabulary-first-use] hits file: ${hitsFile ? `written to ${hitsFile}` : 'not written (VOCABULARY_HITS_DIR is unset)'}`);
     crawled = true;
   });
 
