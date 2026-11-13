@@ -9,8 +9,8 @@
 // With no argument the file is looked for as findSource() does. CI does not have it: the tests then compare the
 // committed ids.ts and terms.ts against a fresh emit from the committed data/vocabulary.json.
 // Exit codes: 0 written; 2 for every validation failure (the message names the concept id). Nothing is written on 2.
-// `--allow-missing-rules` is used only until Task 8 fills lint-rules.json; it lets a retired item with no rule be
-// written with `text` only.
+// `--allow-missing-rules` lets a retired item with no rule be written with `text` only. Since Task 8 filled
+// lint-rules.json the committed files are generated WITHOUT it; only fixture tests still pass it.
 //
 // overrides.json (hand-written texts; the lint class of an item is NOT here):
 //   terms.spec / terms.extract / terms.fromConcept   { "<id>": "<term>" }, and terms.labels { "<id>": ["<label>", ...] };
