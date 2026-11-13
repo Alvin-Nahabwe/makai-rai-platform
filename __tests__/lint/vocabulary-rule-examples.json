@@ -1,0 +1,783 @@
+{
+  "product": {
+    "Toolkit": {
+      "hits": [
+        "Welcome to the MAK-AI Responsible AI Toolkit",
+        "Open the Toolkit to start.",
+        "The Toolkit records decisions."
+      ],
+      "passes": [
+        "Google Model Card Toolkit",
+        "IBM AI Fairness 360 (AIF360): Bias Detection Toolkit",
+        "a toolkit for fairness checks"
+      ]
+    },
+    "RAI Toolkit": {
+      "hits": [
+        "RAI Toolkit"
+      ],
+      "passes": [
+        "MAK-AI RAI Platform"
+      ]
+    },
+    "lower-case \"platform\" in the name": {
+      "hits": [
+        "MAK-AI RAI platform: console break-glass login",
+        "the MAK-AI platform"
+      ],
+      "passes": [
+        "MAK-AI RAI Platform",
+        "the platform records it"
+      ]
+    }
+  },
+  "organisation": {
+    "organization": {
+      "hits": [
+        "organization",
+        "Adapt titles to your organization.",
+        "1. Organizational Roles",
+        "# Organization",
+        "- Organization name"
+      ],
+      "passes": [
+        "World Health Organization",
+        "organisation"
+      ]
+    }
+  },
+  "mak-ai-administrator": {
+    "Platform Admin": {
+      "hits": [
+        "Platform Admin",
+        "platform administrators"
+      ],
+      "passes": [
+        "Admin",
+        "MAK-AI administrator"
+      ]
+    }
+  },
+  "account-type-admin-screen": {
+    "Platform role": {
+      "hits": [
+        "Platform role"
+      ],
+      "passes": [
+        "Account type"
+      ]
+    }
+  },
+  "owner-invitation": {
+    "first-owner invitation": {
+      "hits": [
+        "First-owner invitation"
+      ],
+      "passes": [
+        "owner invitation"
+      ]
+    }
+  },
+  "send-cancel-an-invitation": {
+    "issue (for invitations)": {
+      "hits": [
+        "Issue invitation",
+        "Issue an owner invitation",
+        "Invitation issued"
+      ],
+      "passes": [
+        "Issue this document",
+        "a known issue with the data"
+      ]
+    },
+    "revoke": {
+      "hits": [
+        "Revoke",
+        "Revoked",
+        "Revoke this invitation",
+        "Invitation for \u2060 revoked."
+      ],
+      "passes": [
+        "Participants can revoke consent at any time."
+      ]
+    }
+  },
+  "deleted-account": {
+    "Deleted user": {
+      "hits": [
+        "Deleted user"
+      ],
+      "passes": [
+        "Deleted account"
+      ]
+    },
+    "An account no longer on the platform": {
+      "hits": [
+        "An account no longer on the platform"
+      ],
+      "passes": []
+    }
+  },
+  "data-controller": {
+    "\"controller\" alone": {
+      "hits": [
+        "Controller legal name",
+        "the controller's written request"
+      ],
+      "passes": [
+        "data controller",
+        "data-controller",
+        "data  controller"
+      ]
+    }
+  },
+  "organisation-agreement-record-of-signing": {
+    "\"accepted\" for the agreement": {
+      "hits": [
+        "Organisation agreement accepted",
+        "accepted the organisation agreement",
+        "Accept the organisation agreement"
+      ],
+      "passes": [
+        "The data-sharing agreement was accepted",
+        "Risk accepted"
+      ]
+    },
+    "Agreement records": {
+      "hits": [
+        "Agreement records"
+      ],
+      "passes": []
+    }
+  },
+  "project": {
+    "\"register\" a system": {
+      "hits": [
+        "Register a new AI system"
+      ],
+      "passes": [
+        "risk register"
+      ]
+    }
+  },
+  "development-status-project-field": {
+    "\"lifecycle stage\" for this field": {
+      "hits": [
+        "Lifecycle stage",
+        "Life cycle stage (optional):"
+      ],
+      "passes": [
+        "at each lifecycle stage of the model",
+        "Development status"
+      ]
+    }
+  },
+  "stage": {
+    "ML lifecycle": {
+      "hits": [
+        "ML lifecycle",
+        "the ML life cycle"
+      ],
+      "passes": [
+        "stage"
+      ]
+    }
+  },
+  "stage-1": {
+    "Pre": {
+      "hits": [
+        "Pre"
+      ],
+      "passes": [
+        "Pre-processing",
+        "Preview"
+      ]
+    },
+    "raw lower-case segment": {
+      "hits": [
+        "pre-processing"
+      ],
+      "passes": [
+        "Pre-processing",
+        "data pre-processing steps"
+      ]
+    }
+  },
+  "stage-2": {
+    "In": {
+      "hits": [
+        "In"
+      ],
+      "passes": [
+        "In-processing",
+        "In progress"
+      ]
+    }
+  },
+  "stage-3": {
+    "Post": {
+      "hits": [
+        "Post"
+      ],
+      "passes": [
+        "Post-processing"
+      ]
+    }
+  },
+  "what-good-looks-like": {
+    "expected practice": {
+      "hits": [
+        "The expected practice is in place."
+      ],
+      "passes": [
+        "What good looks like"
+      ]
+    }
+  },
+  "question-changed": {
+    "content version": {
+      "hits": [
+        "Wording updated in content version 1.3.0"
+      ],
+      "passes": []
+    }
+  },
+  "personal-data-question-scope-question": {
+    "scope answer": {
+      "hits": [
+        "Choose a scope answer."
+      ],
+      "passes": [
+        "the personal data question"
+      ]
+    },
+    "scope question": {
+      "hits": [
+        "Only the scope question takes a scope answer."
+      ],
+      "passes": []
+    }
+  },
+  "does-not-apply": {
+    "Not applicable (scope answer: no)": {
+      "hits": [
+        "Not applicable (scope answer: no)"
+      ],
+      "passes": [
+        "Not applicable",
+        "Does not apply"
+      ]
+    }
+  },
+  "risk-area": {
+    "assessment area": {
+      "hits": [
+        "Linked assessment areas"
+      ],
+      "passes": [
+        "risk area"
+      ]
+    }
+  },
+  "guidance-section-of-the-menu": {
+    "Explore": {
+      "hits": [
+        "Explore"
+      ],
+      "passes": [
+        "Explore the guidance for this stage."
+      ]
+    }
+  },
+  "status": {
+    "Shortfalls (`stageList.ts:47`)": {
+      "hits": [
+        "Shortfalls"
+      ],
+      "passes": [
+        "Findings"
+      ]
+    }
+  },
+  "main-reason-reason-code": {
+    "reason code": {
+      "hits": [
+        "Choose a reason code."
+      ],
+      "passes": [
+        "main reason"
+      ]
+    },
+    "raw codes": {
+      "hits": [
+        "ny_needs_skills",
+        "na_other"
+      ],
+      "passes": [
+        "not_yet",
+        "data_card"
+      ]
+    }
+  },
+  "someone-without-an-account": {
+    "outside role": {
+      "hits": [
+        "Ada (outside role)"
+      ],
+      "passes": [
+        "Ada (no platform account)"
+      ]
+    }
+  },
+  "evidence": {
+    "evidence item": {
+      "hits": [
+        "Attach each evidence item once."
+      ],
+      "passes": [
+        "Attach each file once."
+      ]
+    }
+  },
+  "version-of-a-decision": {
+    "v3": {
+      "hits": [
+        "v3",
+        "Saved as v3",
+        "Q-PP-03 v3",
+        "v\u2060",
+        "Saved as v3.",
+        "Saved as v3. Decided by: Amina.",
+        "Q-PP-03 \u00b7 v3.",
+        "(v3)."
+      ],
+      "passes": [
+        "/api/v1/orgs",
+        "v1.2.3",
+        "x-v2",
+        "a/v2",
+        "TLS v1.2",
+        "version 3"
+      ]
+    }
+  },
+  "content-version": {
+    "content version": {
+      "hits": [
+        "content version 1.3.0"
+      ],
+      "passes": [
+        "the questions"
+      ]
+    },
+    "question set": {
+      "hits": [
+        "question set"
+      ],
+      "passes": []
+    }
+  },
+  "unsaved-changes-draft": {
+    "on this device": {
+      "hits": [
+        "Draft on this device"
+      ],
+      "passes": [
+        "kept in this browser"
+      ]
+    },
+    "saved on this device": {
+      "hits": [
+        "answers saved on this device have not reached the server"
+      ],
+      "passes": []
+    }
+  },
+  "withdraw-a-decision": {
+    "withdrawal code": {
+      "hits": [
+        "Withdrawal code"
+      ],
+      "passes": [
+        "What kind of mistake was it?"
+      ]
+    }
+  },
+  "erased": {
+    "tombstone": {
+      "hits": [
+        "tombstone"
+      ],
+      "passes": []
+    }
+  },
+  "done-no-evidence-attached": {
+    "Done without evidence": {
+      "hits": [
+        "Done without evidence"
+      ],
+      "passes": [
+        "Done, no evidence attached"
+      ]
+    }
+  },
+  "finding": {
+    "shortfall": {
+      "hits": [
+        "shortfall finding",
+        "Shortfalls"
+      ],
+      "passes": [
+        "finding"
+      ]
+    }
+  },
+  "close-a-finding": {
+    "Close it": {
+      "hits": [
+        "Close it: decision changed",
+        "Close it"
+      ],
+      "passes": [
+        "If the mitigation is done, close it."
+      ]
+    },
+    "Closed by mitigation": {
+      "hits": [
+        "Closed by mitigation"
+      ],
+      "passes": [
+        "Closed by a mitigation"
+      ]
+    }
+  },
+  "withdraw-reopen-a-finding": {
+    "bare \"Withdraw\"": {
+      "hits": [
+        "Withdraw"
+      ],
+      "passes": [
+        "Withdraw this finding"
+      ]
+    }
+  },
+  "evidence-that-it-is-done": {
+    "closure evidence": {
+      "hits": [
+        "Closure evidence"
+      ],
+      "passes": [
+        "Evidence that it is done"
+      ]
+    }
+  },
+  "overdue": {
+    "the East Africa Time line": {
+      "hits": [
+        "Overdue is counted in East Africa Time (UTC+3)."
+      ],
+      "passes": []
+    }
+  },
+  "check-again-date": {
+    "look at again": {
+      "hits": [
+        "Look at it again on",
+        "Look again on 2 Dec 2026",
+        "date to look again",
+        "look at again"
+      ],
+      "passes": [
+        "Look again at your sampling plan.",
+        "It is worth asking an expert to look at it again.",
+        "We ask reviewers to look again at the labels."
+      ]
+    },
+    "looked at again": {
+      "hits": [
+        "Looked at again: keep accepted"
+      ],
+      "passes": [
+        "Look again at your sampling plan."
+      ]
+    }
+  },
+  "follow-up-list": {
+    "My open and overdue mitigations": {
+      "hits": [
+        "My open and overdue mitigations"
+      ],
+      "passes": [
+        "Mitigations assigned to me"
+      ]
+    }
+  },
+  "stage-review": {
+    "\"Open review\" as a link": {
+      "hits": [
+        "Open review"
+      ],
+      "passes": [
+        "Open a stage review",
+        "View review"
+      ]
+    }
+  },
+  "fingerprint": {
+    "SHA-256 on screen (keep it in the export README only)": {
+      "hits": [
+        "SHA-256",
+        "Issued. SHA-256 {fp}.",
+        "SHA-256: 3f2a"
+      ],
+      "passes": [
+        "Compute a SHA-256 checksum of the file.",
+        "HMAC-SHA256"
+      ]
+    }
+  },
+  "fields-to-type-in": {
+    "fields the record cannot hold": {
+      "hits": [
+        "fields the record cannot hold"
+      ],
+      "passes": [
+        "Fields to type in"
+      ]
+    }
+  },
+  "not-recorded": {
+    "the bare \"at the time of issue\" form": {
+      "hits": [
+        "Not recorded at the time of issue"
+      ],
+      "passes": [
+        "Not recorded: this stage had no seal when the document was issued"
+      ]
+    }
+  },
+  "download-all-records-team-export": {
+    "export as a label (file names may keep it)": {
+      "hits": [
+        "Export project",
+        "Team export",
+        "Export the organisation's records",
+        "Export"
+      ],
+      "passes": [
+        "Exported dataset statistics",
+        "export your model to ONNX format before you deploy it.",
+        "Download records"
+      ]
+    }
+  },
+  "download-my-data": {
+    "Export my data": {
+      "hits": [
+        "Export my data"
+      ],
+      "passes": [
+        "Download my data"
+      ]
+    }
+  },
+  "control": {
+    "\"Other controls\" (say \"More ways to address this\")": {
+      "hits": [
+        "Other controls"
+      ],
+      "passes": [
+        "Combine this with other controls.",
+        "More ways to address this"
+      ]
+    }
+  },
+  "template": {
+    "\"web page\" as its kind": {
+      "hits": [
+        "web page"
+      ],
+      "passes": [
+        "Open the web page in your browser."
+      ]
+    }
+  },
+  "legal-texts-collective": {
+    "\"Legal texts\" as a link": {
+      "hits": [
+        "Legal texts"
+      ],
+      "passes": [
+        "Terms and privacy"
+      ]
+    }
+  },
+  "terms-of-service": {
+    "Title Case form": {
+      "hits": [
+        "Terms of Service"
+      ],
+      "passes": [
+        "terms of service"
+      ]
+    }
+  },
+  "privacy-notice": {
+    "Privacy Policy": {
+      "hits": [
+        "Privacy Policy"
+      ],
+      "passes": [
+        "your institution's privacy policy"
+      ]
+    }
+  },
+  "cross-border-storage-consent": {
+    "cross-border storage consent": {
+      "hits": [
+        "cross-border storage consent",
+        "cross border storage consent"
+      ],
+      "passes": [
+        "consent to store data in other countries"
+      ]
+    }
+  },
+  "legal-text-version": {
+    "v1": {
+      "hits": [
+        "v1",
+        "Terms of service, v1",
+        "v\u2060",
+        "Saved as v3.",
+        "Saved as v3. Decided by: Amina.",
+        "Q-PP-03 \u00b7 v3.",
+        "(v3)."
+      ],
+      "passes": [
+        "/api/v1/orgs",
+        "v1.2.3",
+        "version 1",
+        "x-v2",
+        "a/v2",
+        "TLS v1.2"
+      ]
+    }
+  },
+  "sign-in-sign-out": {
+    "Sign In": {
+      "hits": [
+        "Sign In"
+      ],
+      "passes": [
+        "Sign in"
+      ]
+    },
+    "login": {
+      "hits": [
+        "console break-glass login",
+        "Login"
+      ],
+      "passes": [
+        "/login",
+        "auth.login",
+        "log in"
+      ]
+    }
+  },
+  "automatic-sign-out": {
+    "the \"nothing has happened\" reason": {
+      "hits": [
+        "because nothing has happened for a while"
+      ],
+      "passes": [
+        "Nothing has happened yet in this project."
+      ]
+    }
+  },
+  "dashboard": {
+    "Dashboard": {
+      "hits": [
+        "Dashboard",
+        "Back to Dashboard"
+      ],
+      "passes": [
+        "/orgs/x/dashboard",
+        "the dashboard of counts"
+      ]
+    }
+  },
+  "support-reference": {
+    "\"reference\" in brackets mid-sentence": {
+      "hits": [
+        "Quote this (reference ABC123) when you write."
+      ],
+      "passes": [
+        "Support reference: ABC123"
+      ]
+    }
+  },
+  "emergency-access": {
+    "break-glass": {
+      "hits": [
+        "break-glass",
+        "breakglass",
+        "break glass"
+      ],
+      "passes": [
+        "emergency access"
+      ]
+    },
+    "integrity log": {
+      "hits": [
+        "Integrity log entry"
+      ],
+      "passes": []
+    }
+  },
+  "time-and-time-zone": {
+    "EAT": {
+      "hits": [
+        "12 Nov 2026, 14:05 EAT"
+      ],
+      "passes": [
+        "eat",
+        "12 Nov 2026, 14:05"
+      ]
+    },
+    "Show UTC": {
+      "hits": [
+        "Show UTC"
+      ],
+      "passes": []
+    }
+  },
+  "check-a-seal": {
+    "\"Matches the record\" without saying what was checked": {
+      "hits": [
+        "Matches the record",
+        "Matches the record.",
+        "Matches the record. \u2060 erased on 2 Nov 2026."
+      ],
+      "passes": [
+        "The fingerprint matches the record sealed on 2 Nov 2026.",
+        "Matches the record sealed on 2 Nov"
+      ]
+    }
+  },
+  "assigned-to": {
+    "\"owner\" and \"own\" for mitigations": {
+      "hits": [
+        "Email me when a mitigation I own is due",
+        "the mitigation owner",
+        "the mitigation's owner",
+        "You get this email because you own a mitigation that is due."
+      ],
+      "passes": [
+        "Only an Owner can make other members owners",
+        "Owner",
+        "Assigned to"
+      ]
+    }
+  }
+}

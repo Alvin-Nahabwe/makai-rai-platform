@@ -1,1 +1,680 @@
-{}
+{
+  "product": {
+    "Toolkit": {
+      "lint": "phrase",
+      "pattern": "\\bMAK-AI Responsible AI Toolkit\\b|\\b[Tt]he Toolkit\\b",
+      "caseSensitive": true
+    },
+    "RAI Toolkit": {
+      "lint": "phrase",
+      "pattern": "\\bRAI Toolkit\\b",
+      "caseSensitive": true
+    },
+    "lower-case \"platform\" in the name": {
+      "lint": "phrase",
+      "pattern": "\\bMAK-AI (?:RAI |Responsible AI (?:\\(RAI\\) )?)?platform\\b",
+      "caseSensitive": true
+    }
+  },
+  "organisation": {
+    "organization": {
+      "lint": "phrase",
+      "pattern": "\\borganization(?:s|al)?\\b|(?<=^[\\s#>*_\\-\\d.)|]*|[.!?:]\\s{1,4})Organization(?:s|al)?\\b",
+      "caseSensitive": true
+    }
+  },
+  "team": {
+    "\"team\" as a page or account name": {
+      "lint": "review",
+      "why": "\"Your team's records\" is a correct sentence: \"team\" is ruled for sentences and only its use as a page or account name is retired, which a pattern cannot tell apart."
+    }
+  },
+  "role": {
+    "lower-case role words on screen": {
+      "lint": "review",
+      "why": "\"Ask a reviewer at your ethics committee\" correctly uses \"reviewer\" as a plain English word, not the role name."
+    }
+  },
+  "admin": {
+    "\"administrator\" for this role": {
+      "lint": "review",
+      "why": "\"MAK-AI administrator\" is itself a ruled term, and \"ask your university's research administrator\" correctly names a person outside the platform."
+    }
+  },
+  "mak-ai-administrator": {
+    "Platform Admin": {
+      "lint": "phrase",
+      "pattern": "\\bplatform[- ]admin(?:s|istrators?)?\\b",
+      "caseSensitive": false
+    },
+    "plural \"administrators\"": {
+      "lint": "review",
+      "why": "\"Research administrators at your university can help\" is a correct sentence about people outside the platform; only the bare plural standing for MAK-AI staff or the Admin role is retired."
+    }
+  },
+  "account-type-admin-screen": {
+    "Platform role": {
+      "lint": "phrase",
+      "pattern": "\\bplatform roles?\\b",
+      "caseSensitive": false
+    },
+    "\"Assessor\" as an account type": {
+      "lint": "review",
+      "why": "\"Assessor\" is the correct name of a role in an organisation (\"Choose Assessor to let them record decisions\"); only its use as an account type is retired."
+    }
+  },
+  "owner-invitation": {
+    "first-owner invitation": {
+      "lint": "phrase",
+      "pattern": "\\bfirst[- ]owner invitations?\\b",
+      "caseSensitive": false
+    }
+  },
+  "send-cancel-an-invitation": {
+    "issue (for invitations)": {
+      "lint": "phrase",
+      "pattern": "\\bissu(?:e|es|ed|ing)\\s+(?:(?:an|a|the|this|that|new|another|owner|first-owner)\\s+)*invitations?\\b|\\binvitations?\\s+(?:(?:was|were|is|has been|have been)\\s+)?issued\\b",
+      "caseSensitive": false
+    },
+    "revoke": {
+      "lint": "phrase",
+      "pattern": "^\\s*Revoked?\\s*$|\\brevok(?:e|es|ed|ing)\\b[^.!?\\n]{0,40}\\binvitations?\\b|\\binvitations?\\b[^.!?\\n]{0,60}\\brevoked\\b",
+      "caseSensitive": false
+    }
+  },
+  "deleted-account": {
+    "Deleted user": {
+      "lint": "phrase",
+      "pattern": "\\bdeleted users?\\b",
+      "caseSensitive": false
+    },
+    "Unknown": {
+      "lint": "review",
+      "why": "\"Unknown\" is correct in other places, for example \"Unknown file type\" or a status the reader has not set."
+    },
+    "An account no longer on the platform": {
+      "lint": "phrase",
+      "pattern": "\\ban account no longer on the platform\\b",
+      "caseSensitive": false
+    }
+  },
+  "data-controller": {
+    "\"controller\" alone": {
+      "lint": "phrase",
+      "pattern": "(?<!\\bdata[-\\s]+)\\bcontrollers?\\b",
+      "caseSensitive": false
+    }
+  },
+  "organisation-agreement-record-of-signing": {
+    "\"accepted\" for the agreement": {
+      "lint": "phrase",
+      "pattern": "\\borganisation\\s+agreement\\s+(?:(?:was|were|is|has been|had been)\\s+)?accepted\\b|\\baccept(?:s|ed|ing)?\\s+(?:(?:the|this|an|its|your)\\s+)?organisation\\s+agreement\\b",
+      "caseSensitive": false
+    },
+    "Agreement records": {
+      "lint": "phrase",
+      "pattern": "\\bagreement records\\b",
+      "caseSensitive": false
+    }
+  },
+  "organisation-details-page": {
+    "bare \"Organisation\" in the sidebar": {
+      "lint": "review",
+      "why": "\"Organisation\" correctly begins sentence-case text such as \"Organisation name changed\"; only the bare sidebar label is retired (plan 1A line 278)."
+    }
+  },
+  "change-the-organisation-name": {
+    "correct": {
+      "lint": "review",
+      "why": "\"Check that the date is correct\" is a correct sentence; only \"correct\" as the verb for changing the organisation name is retired."
+    },
+    "corrected": {
+      "lint": "review",
+      "why": "\"The fingerprint is checked against the record, so nothing needs to be corrected\" uses the word in its plain sense; only the name-change event is retired."
+    }
+  },
+  "project": {
+    "\"register\" a system": {
+      "lint": "phrase",
+      "pattern": "\\bregister(?:s|ed|ing)?\\s+(?:(?:a|an|the|your|this|new|another)\\s+)*(?:AI\\s+)?systems?\\b",
+      "caseSensitive": false
+    }
+  },
+  "development-status-project-field": {
+    "\"lifecycle stage\" for this field": {
+      "lint": "phrase",
+      "pattern": "^\\s*life[- ]?cycle stage\\s*(?:\\([^)]*\\))?\\s*:?\\s*$",
+      "caseSensitive": false
+    }
+  },
+  "archive-a-project": {
+    "\"archive\" for the ZIP (say \"ZIP file\")": {
+      "lint": "review",
+      "why": "\"Archive this project\" is the ruled verb for projects; only \"archive\" meaning the downloaded ZIP is retired, which a pattern cannot tell apart."
+    }
+  },
+  "stage": {
+    "ML lifecycle": {
+      "lint": "phrase",
+      "pattern": "\\bML life[- ]?cycle\\b",
+      "caseSensitive": false
+    }
+  },
+  "stage-1": {
+    "Pre": {
+      "lint": "phrase",
+      "pattern": "^\\s*Pre\\s*$",
+      "caseSensitive": true
+    },
+    "raw lower-case segment": {
+      "lint": "phrase",
+      "pattern": "^\\s*pre-processing\\s*$",
+      "caseSensitive": true
+    }
+  },
+  "stage-2": {
+    "In": {
+      "lint": "phrase",
+      "pattern": "^\\s*In\\s*$",
+      "caseSensitive": true
+    }
+  },
+  "stage-3": {
+    "Post": {
+      "lint": "phrase",
+      "pattern": "^\\s*Post\\s*$",
+      "caseSensitive": true
+    }
+  },
+  "topic-module": {
+    "module": {
+      "lint": "review",
+      "why": "\"Import the fairness module in Python\" correctly uses \"module\" in its software sense in guidance and notebooks."
+    }
+  },
+  "question": {
+    "a code standing alone for a question": {
+      "lint": "review",
+      "why": "\"Q-PP-03\" shown small after the question's text is correct (question code row), and a string holding only the code cannot show whether the text sits beside it."
+    }
+  },
+  "what-good-looks-like": {
+    "expected practice": {
+      "lint": "phrase",
+      "pattern": "\\bexpected practices?\\b",
+      "caseSensitive": false
+    }
+  },
+  "question-changed": {
+    "content version": {
+      "lint": "phrase",
+      "pattern": "\\bcontent versions?\\b",
+      "caseSensitive": false
+    },
+    "reworded": {
+      "lint": "review",
+      "why": "\"Your reason was saved as you reworded it\" uses the word plainly; only \"reworded\" as the label for a changed question is retired."
+    }
+  },
+  "personal-data-question-scope-question": {
+    "scope answer": {
+      "lint": "phrase",
+      "pattern": "\\bscope answers?\\b",
+      "caseSensitive": false
+    },
+    "scope question": {
+      "lint": "phrase",
+      "pattern": "\\bscope questions?\\b",
+      "caseSensitive": false
+    },
+    "gate": {
+      "lint": "review",
+      "why": "\"Plan the review before the funding gate\" uses \"gate\" as plain English; only \"gate\" for the personal data question is retired."
+    }
+  },
+  "does-not-apply": {
+    "Not applicable (scope answer: no)": {
+      "lint": "phrase",
+      "pattern": "\\bNot applicable \\(scope answer: no\\)",
+      "caseSensitive": false
+    }
+  },
+  "risk-area": {
+    "assessment area": {
+      "lint": "phrase",
+      "pattern": "\\bassessment areas?\\b",
+      "caseSensitive": false
+    }
+  },
+  "guidance-section-of-the-menu": {
+    "Explore": {
+      "lint": "phrase",
+      "pattern": "^\\s*Explore\\s*$",
+      "caseSensitive": true
+    },
+    "do not use \"Reference\" (it already means support reference and request reference)": {
+      "lint": "review",
+      "why": "\"Reference\" is a correct field label (components/documents/GenerateDocumentForm.tsx:125); only a menu section named \"Reference\" was proposed and retired."
+    }
+  },
+  "decision": {
+    "\"answer\" for a decision": {
+      "lint": "review",
+      "why": "\"Answer\" is the ruled field of the personal data question (D2), and \"If you answer No\" is its ruled line."
+    }
+  },
+  "status": {
+    "Shortfalls (`stageList.ts:47`)": {
+      "lint": "phrase",
+      "pattern": "^\\s*Shortfalls\\b",
+      "caseSensitive": true
+    }
+  },
+  "main-reason-reason-code": {
+    "reason code": {
+      "lint": "phrase",
+      "pattern": "\\breason codes?\\b",
+      "caseSensitive": false
+    },
+    "raw codes": {
+      "lint": "phrase",
+      "pattern": "\\b(?:na|ny)_[a-z]+(?:_[a-z]+)*\\b",
+      "caseSensitive": true
+    }
+  },
+  "someone-without-an-account": {
+    "outside role": {
+      "lint": "phrase",
+      "pattern": "\\boutside roles?\\b",
+      "caseSensitive": false
+    }
+  },
+  "evidence": {
+    "attachment": {
+      "lint": "review",
+      "why": "\"This email has no attachment\" is a correct sentence; only \"attachment\" for a piece of evidence is retired."
+    },
+    "evidence item": {
+      "lint": "phrase",
+      "pattern": "\\bevidence items?\\b",
+      "caseSensitive": false
+    },
+    "artefact": {
+      "lint": "review",
+      "why": "\"Store the trained model artefact with its version number\" correctly uses \"artefact\" in its machine-learning sense in guidance."
+    }
+  },
+  "version-of-a-decision": {
+    "v3": {
+      "lint": "phrase",
+      "pattern": "(?<![\\w./-])v(?:\\d+(?![\\w/]|\\.\\w)|(?=\\u2060))",
+      "caseSensitive": true
+    },
+    "version arithmetic in messages": {
+      "lint": "review",
+      "why": "The saved mark correctly names the version, \"Saved as version 4\" (spec 6 override; plan 1A line 277)."
+    }
+  },
+  "content-version": {
+    "content version": {
+      "lint": "phrase",
+      "pattern": "\\bcontent versions?\\b",
+      "caseSensitive": false
+    },
+    "semver": {
+      "lint": "review",
+      "why": "\"Install scikit-learn 1.3.0\" correctly gives a third-party version number in a notebook; only a version number of the questions is retired."
+    },
+    "question set": {
+      "lint": "phrase",
+      "pattern": "\\bquestion sets?\\b",
+      "caseSensitive": false
+    }
+  },
+  "unsaved-changes-draft": {
+    "draft": {
+      "lint": "review",
+      "why": "\"Send the draft data card to your ethics committee\" uses \"draft\" in its plain sense; only \"draft\" for unsaved changes is retired."
+    },
+    "on this device": {
+      "lint": "phrase",
+      "pattern": "\\bon this device\\b",
+      "caseSensitive": false
+    },
+    "saved on this device": {
+      "lint": "phrase",
+      "pattern": "\\bsaved on this device\\b",
+      "caseSensitive": false
+    }
+  },
+  "withdraw-a-decision": {
+    "withdrawal code": {
+      "lint": "phrase",
+      "pattern": "\\bwithdrawal codes?\\b",
+      "caseSensitive": false
+    }
+  },
+  "erased": {
+    "instruction": {
+      "lint": "review",
+      "why": "\"Follow the instructions in the notebook\" is a correct sentence; only \"instruction\" for an erasure request is retired."
+    },
+    "tombstone": {
+      "lint": "phrase",
+      "pattern": "\\btombstones?\\b",
+      "caseSensitive": false
+    },
+    "operator": {
+      "lint": "review",
+      "why": "\"The operator of a deployed AI system must be able to stop it\" correctly uses \"operator\" in guidance."
+    }
+  },
+  "done-no-evidence-attached": {
+    "Done without evidence": {
+      "lint": "phrase",
+      "pattern": "\\bDone without evidence\\b",
+      "caseSensitive": false
+    }
+  },
+  "finding": {
+    "shortfall": {
+      "lint": "phrase",
+      "pattern": "\\bshortfalls?\\b",
+      "caseSensitive": false
+    },
+    "issue": {
+      "lint": "review",
+      "why": "\"Issue this document\" is the ruled verb for documents, and \"a known issue with the data\" is plain English."
+    }
+  },
+  "raise-a-finding": {
+    "opens": {
+      "lint": "review",
+      "why": "\"The link opens in a new tab\" is a correct sentence; only \"opens\" for a finding being raised is retired."
+    },
+    "added": {
+      "lint": "review",
+      "why": "\"Evidence added on 2 Nov 2026\" is correct; only \"added\" for a finding being raised is retired."
+    }
+  },
+  "close-a-finding": {
+    "Close it": {
+      "lint": "phrase",
+      "pattern": "^\\s*Close it\\b|\\bClose it\\s*:",
+      "caseSensitive": true
+    },
+    "Closed by mitigation": {
+      "lint": "phrase",
+      "pattern": "\\bClosed by mitigation\\b",
+      "caseSensitive": false
+    }
+  },
+  "withdraw-reopen-a-finding": {
+    "bare \"Withdraw\"": {
+      "lint": "phrase",
+      "pattern": "^\\s*Withdraw\\s*$",
+      "caseSensitive": true
+    }
+  },
+  "mitigation": {
+    "measures": {
+      "lint": "review",
+      "why": "\"The model's accuracy measures how often it is right\" uses \"measures\" as a verb or metric; only \"measures\" for mitigations is retired."
+    },
+    "action": {
+      "lint": "review",
+      "why": "\"This action cannot be undone\" is a correct sentence; only \"action\" for a mitigation is retired."
+    }
+  },
+  "assigned-to": {
+    "\"owner\" and \"own\" for mitigations": {
+      "lint": "phrase",
+      "pattern": "\\bmitigations?\\s+(?:I|you|we|they)\\s+own\\b|\\bmitigation(?:'s)?\\s+owners?\\b|\\bown(?:s|ed)?\\s+(?:a|the|this)\\s+mitigation\\b",
+      "caseSensitive": false
+    }
+  },
+  "evidence-that-it-is-done": {
+    "closure evidence": {
+      "lint": "phrase",
+      "pattern": "\\bclosure evidence\\b",
+      "caseSensitive": false
+    },
+    "artefact": {
+      "lint": "review",
+      "why": "\"Store the trained model artefact with its version number\" correctly uses \"artefact\" in its machine-learning sense in guidance."
+    }
+  },
+  "due-date": {
+    "deadline": {
+      "lint": "review",
+      "why": "\"Plan around your ethics committee's submission deadline\" is a correct sentence; only \"deadline\" for a mitigation's due date is retired."
+    }
+  },
+  "overdue": {
+    "the East Africa Time line": {
+      "lint": "phrase",
+      "pattern": "\\bEast Africa Time\\b",
+      "caseSensitive": false
+    }
+  },
+  "check-again-date": {
+    "look at again": {
+      "lint": "phrase",
+      "pattern": "\\blook(?:s|ing)?\\s+at\\s+again\\b|\\blook(?:s|ing)?\\s+(?:at\\s+(?:(?:it|this|them)\\s+)?)?again\\s+on\\b|\\bdate\\s+to\\s+look\\s+(?:at\\s+it\\s+)?again\\b",
+      "caseSensitive": false
+    },
+    "looked at again": {
+      "lint": "phrase",
+      "pattern": "\\blooked\\s+at\\s+again\\b|\\blooked\\s+(?:at\\s+(?:(?:it|this|them)\\s+)?)?again\\s+on\\b",
+      "caseSensitive": false
+    }
+  },
+  "follow-up-list": {
+    "My open and overdue mitigations": {
+      "lint": "phrase",
+      "pattern": "\\bMy open and overdue mitigations\\b",
+      "caseSensitive": false
+    }
+  },
+  "stage-review": {
+    "\"Open review\" as a link": {
+      "lint": "phrase",
+      "pattern": "^\\s*Open review\\s*$",
+      "caseSensitive": true
+    }
+  },
+  "fingerprint": {
+    "SHA-256 on screen (keep it in the export README only)": {
+      "lint": "phrase",
+      "pattern": "(?<=^|[.!?]\\s{1,4})SHA-?256\\b|\\bSHA-?256\\s*:",
+      "caseSensitive": false
+    }
+  },
+  "check-a-seal": {
+    "\"Matches the record\" without saying what was checked": {
+      "lint": "phrase",
+      "pattern": "^\\s*Matches the record(?:\\.|\\s*$)",
+      "caseSensitive": true
+    }
+  },
+  "document": {
+    "report": {
+      "lint": "review",
+      "why": "\"Use this data card in your funder report\" is a correct sentence; only \"report\" as the name of a platform document is retired."
+    }
+  },
+  "preview": {
+    "Generate": {
+      "lint": "review",
+      "why": "\"The notebook can generate a summary table\" is a correct sentence; only \"Generate\" as the label of the preview action is retired."
+    }
+  },
+  "fields-to-type-in": {
+    "fields the record cannot hold": {
+      "lint": "phrase",
+      "pattern": "\\bfields the record cannot hold\\b",
+      "caseSensitive": false
+    }
+  },
+  "not-recorded": {
+    "the bare \"at the time of issue\" form": {
+      "lint": "phrase",
+      "pattern": "\\bnot recorded at the time of issue\\b",
+      "caseSensitive": false
+    }
+  },
+  "download-all-records-team-export": {
+    "export as a label (file names may keep it)": {
+      "lint": "phrase",
+      "pattern": "\\b[Tt]eam export\\b|^\\s*Export\\b[^.!?\\n]{0,40}$",
+      "caseSensitive": true
+    }
+  },
+  "download-my-data": {
+    "Export my data": {
+      "lint": "phrase",
+      "pattern": "\\bexport my data\\b",
+      "caseSensitive": false
+    },
+    "JSON": {
+      "lint": "review",
+      "why": "\"Save the results as a JSON file\" is a correct instruction in a notebook; only \"JSON\" as the name of the download is retired."
+    }
+  },
+  "control": {
+    "\"Other controls\" (say \"More ways to address this\")": {
+      "lint": "phrase",
+      "pattern": "^\\s*Other controls\\b",
+      "caseSensitive": true
+    }
+  },
+  "template": {
+    "\"web page\" as its kind": {
+      "lint": "phrase",
+      "pattern": "^\\s*web page\\s*$",
+      "caseSensitive": false
+    }
+  },
+  "legal-texts-collective": {
+    "\"Legal texts\" as a link": {
+      "lint": "phrase",
+      "pattern": "^\\s*Legal texts\\s*$",
+      "caseSensitive": false
+    }
+  },
+  "terms-of-service": {
+    "Title Case form": {
+      "lint": "phrase",
+      "pattern": "\\bTerms of Service\\b",
+      "caseSensitive": true
+    }
+  },
+  "privacy-notice": {
+    "Privacy Policy": {
+      "lint": "phrase",
+      "pattern": "\\bPrivacy Policy\\b",
+      "caseSensitive": true
+    }
+  },
+  "cross-border-storage-consent": {
+    "cross-border storage consent": {
+      "lint": "phrase",
+      "pattern": "\\bcross[- ]border storage consent\\b",
+      "caseSensitive": false
+    }
+  },
+  "accept-a-legal-text": {
+    "Review (for this action)": {
+      "lint": "review",
+      "why": "\"Review\" is a correct word for a stage review (\"View review\"), so the bare label cannot be told apart from its use for accepting a legal text."
+    }
+  },
+  "legal-text-version": {
+    "v1": {
+      "lint": "phrase",
+      "pattern": "(?<![\\w./-])v(?:\\d+(?![\\w/]|\\.\\w)|(?=\\u2060))",
+      "caseSensitive": true
+    }
+  },
+  "sign-in-sign-out": {
+    "Sign In": {
+      "lint": "phrase",
+      "pattern": "\\bSign In\\b",
+      "caseSensitive": true
+    },
+    "login": {
+      "lint": "phrase",
+      "pattern": "(?<![/\\w.-])log-?ins?\\b",
+      "caseSensitive": false
+    }
+  },
+  "automatic-sign-out": {
+    "the \"nothing has happened\" reason": {
+      "lint": "phrase",
+      "pattern": "\\bbecause nothing has happened\\b",
+      "caseSensitive": false
+    }
+  },
+  "signed-in-devices": {
+    "session": {
+      "lint": "review",
+      "why": "\"Plan a working session with your team\" is a correct sentence; only \"session\" for a signed-in browser is retired."
+    }
+  },
+  "dashboard": {
+    "Dashboard": {
+      "lint": "phrase",
+      "pattern": "\\bDashboards?\\b",
+      "caseSensitive": true
+    }
+  },
+  "my-account": {
+    "the repeated \"My account\" h2": {
+      "lint": "review",
+      "why": "\"My account\" is the ruled page name; only a second \"My account\" heading on the same page is retired, which a single string cannot show."
+    }
+  },
+  "support-reference": {
+    "\"reference\" in brackets mid-sentence": {
+      "lint": "phrase",
+      "pattern": "\\(\\s*reference\\b",
+      "caseSensitive": false
+    }
+  },
+  "emergency-access": {
+    "break-glass": {
+      "lint": "phrase",
+      "pattern": "\\bbreak[- ]?glass\\b",
+      "caseSensitive": false
+    },
+    "root": {
+      "lint": "review",
+      "why": "\"Find the root cause of the bias\" is a correct sentence in guidance; only \"root\" for the server login is retired."
+    },
+    "console": {
+      "lint": "review",
+      "why": "\"Open the browser console\" or \"print it to the console\" in a notebook is correct; only \"console\" for the server login is retired."
+    },
+    "integrity log": {
+      "lint": "phrase",
+      "pattern": "\\bintegrity logs?\\b",
+      "caseSensitive": false
+    }
+  },
+  "time-and-time-zone": {
+    "EAT": {
+      "lint": "phrase",
+      "pattern": "\\bEAT\\b",
+      "caseSensitive": true
+    },
+    "unlabelled zones": {
+      "lint": "review",
+      "why": "\"14:05\" with no zone is correct on screen, where times are in the reader's own zone (voice rule 10); a string cannot show where it is rendered."
+    },
+    "Show UTC": {
+      "lint": "phrase",
+      "pattern": "\\bShow UTC\\b",
+      "caseSensitive": false
+    }
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "data/fieldmaps/mitigation_plan.json": {
+    "check-again-date :: look at again": 1,
+    "close-a-finding :: Closed by mitigation": 1,
+    "evidence-that-it-is-done :: closure evidence": 1,
+    "main-reason-reason-code :: reason code": 1
+  },
+  "lib/decision/copy.ts": {
+    "content-version :: content version": 1,
+    "evidence :: evidence item": 2,
+    "main-reason-reason-code :: reason code": 2,
+    "personal-data-question-scope-question :: scope answer": 3,
+    "personal-data-question-scope-question :: scope question": 2,
+    "question-changed :: content version": 1,
+    "someone-without-an-account :: outside role": 1,
+    "what-good-looks-like :: expected practice": 3,
+    "withdraw-a-decision :: withdrawal code": 1
+  },
+  "lib/documents/copy.ts": {
+    "does-not-apply :: Not applicable (scope answer: no)": 1,
+    "not-recorded :: the bare \"at the time of issue\" form": 1,
+    "personal-data-question-scope-question :: scope answer": 1
+  },
+  "lib/email/templates/mitigationDue.ts": {
+    "assigned-to :: \"owner\" and \"own\" for mitigations": 2
+  },
+  "lib/evidence/copy.ts": {
+    "unsaved-changes-draft :: on this device": 2
+  },
+  "lib/followup/copy.ts": {
+    "assigned-to :: \"owner\" and \"own\" for mitigations": 1
+  },
+  "ops/host/break-glass-notice.txt": {
+    "emergency-access :: break-glass": 1,
+    "emergency-access :: integrity log": 1,
+    "product :: lower-case \"platform\" in the name": 1,
+    "sign-in-sign-out :: login": 2
+  }
+}

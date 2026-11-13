@@ -76,6 +76,22 @@ describe('the committed vocabulary (no source needed)', () => {
       .toEqual(['organisation-agreement', 'organisation-agreement-record-of-signing']);
   });
 
+  it('every retired item has a lint rule: a phrase with a pattern and a case flag, or a review with a why (Task 8)', () => {
+    const items = (COMMITTED.concepts as Concept[]).flatMap((c) => c.retired.map((r) => ({ id: c.id, ...r }))) as
+      Array<{ id: string; text: string; lint?: string; pattern?: unknown; caseSensitive?: unknown; why?: unknown }>;
+    expect(items.length).toBeGreaterThan(0);
+    for (const r of items) {
+      const where = `${r.id}: ${r.text}`;
+      expect(['phrase', 'review'], where).toContain(r.lint);
+      if (r.lint === 'phrase') {
+        expect(typeof r.pattern, where).toBe('string');
+        expect(typeof r.caseSensitive, where).toBe('boolean');
+      } else {
+        expect(typeof r.why === 'string' && r.why.trim().length > 0, where).toBe(true);
+      }
+    }
+  });
+
   it('definitions are at most 20 words, as CONSOLIDATED requires', () => {
     for (const c of COMMITTED.concepts as Concept[]) {
       if (c.definition) expect(c.definition.split(/\s+/).length, c.id).toBeLessThanOrEqual(20);
@@ -275,7 +291,7 @@ describe('against the source file', () => {
   });
 
   it.skipIf(!SOURCE)('the committed files equal a fresh generation, and the recorded hash is the source hash (needs the source file)', () => {
-    const v = generate(src(), OVERRIDES, RULES, { allowMissingRules: true, properNames: COMMITTED.properNames });
+    const v = generate(src(), OVERRIDES, RULES, { properNames: COMMITTED.properNames });
     expect(read('data/vocabulary.json')).toBe(serialise(v));
     expect(read('lib/vocabulary/terms.ts')).toBe(emitTerms(v));
     expect(read('lib/vocabulary/ids.ts')).toBe(emitIds(v));
@@ -306,14 +322,11 @@ describe('against the source file', () => {
   it.skipIf(!SOURCE)('runs as a process: exit code 0 and the committed bytes (needs the source file)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'vocab-'));
     try {
-      const r = spawnSync(process.execPath, ['scripts/vocabulary/generate.mjs', SOURCE as string, '--allow-missing-rules', '--out-dir', dir], { encoding: 'utf8' });
+      const r = spawnSync(process.execPath, ['scripts/vocabulary/generate.mjs', SOURCE as string, '--out-dir', dir], { encoding: 'utf8' });
       expect(r.status, r.stderr).toBe(0);
       expect(read(join(dir, 'data/vocabulary.json'))).toBe(read('data/vocabulary.json'));
       expect(read(join(dir, 'lib/vocabulary/terms.ts'))).toBe(read('lib/vocabulary/terms.ts'));
       expect(read(join(dir, 'lib/vocabulary/ids.ts'))).toBe(read('lib/vocabulary/ids.ts'));
-      const missing = spawnSync(process.execPath, ['scripts/vocabulary/generate.mjs', SOURCE as string, '--out-dir', dir], { encoding: 'utf8' });
-      expect(missing.status).toBe(2);
-      expect(missing.stderr).toContain('Toolkit');
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });
@@ -564,6 +577,18 @@ describe('the table structure is checked, not counted (fix round 2, item 1)', ()
 
   it('a second header inside a block exits 2', () => {
     fails(() => run([HEADER, SEP, ROW('A', 'a'), SHORT_HEADER, ROW('B', 'b')]), 'second header');
+  });
+
+  it('a table line with text after its last pipe exits 2 and the message quotes the line', () => {
+    fails(() => run([HEADER, SEP, `${ROW('B', 'b')} junk`]), 'does not end with "|"', `${ROW('B', 'b')} junk`);
+    fails(() => run([`${HEADER} x`, SEP, ROW('A', 'a')]), 'does not end with "|"');
+  });
+
+  it('a code fence or an HTML comment in section 2 exits 2, so a table inside one is never read as concepts', () => {
+    fails(() => run(['```', HEADER, SEP, ROW('A', 'a'), '```']), 'code fence', '```');
+    fails(() => run(['~~~markdown', HEADER, SEP, ROW('A', 'a'), '~~~']), 'code fence', '~~~markdown');
+    fails(() => run(['<!--', HEADER, SEP, ROW('A', 'a'), '-->']), 'HTML comment', '<!--');
+    fails(() => run([HEADER, SEP, ROW('A', 'a'), '', '<!-- an example follows -->']), 'HTML comment');
   });
 
   it('prose without a pipe, and several well-formed blocks, still parse', () => {
