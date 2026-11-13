@@ -13,7 +13,7 @@ const read = (p: string) => readFileSync(join(ROOT, p), 'utf8');
 
 type RetiredItem = { text: string; lint: 'phrase' | 'review'; pattern?: string; caseSensitive?: boolean; why?: string };
 type Concept = { id: string; term: string; retired: RetiredItem[] };
-type Vocabulary = { concepts: Concept[]; properNames: Array<{ text: string; source: string }> };
+export type Vocabulary = { concepts: Concept[]; properNames: Array<{ text: string; source: string }> };
 export type Rule = { id: string; term: string; item: string; re: RegExp };
 export type Hit = { where: string; match: string; rule: Rule; text: string };
 
@@ -23,7 +23,13 @@ export const VOCABULARY = JSON.parse(read('data/vocabulary.json')) as Vocabulary
 export function phraseRules(v: Vocabulary): Rule[] {
   return v.concepts.flatMap((c) => c.retired
     .filter((r) => r.lint === 'phrase')
-    .map((r) => ({ id: c.id, term: c.term, item: r.text, re: new RegExp(r.pattern as string, r.caseSensitive ? 'gu' : 'giu') })));
+    .map((r) => {
+      try {
+        return { id: c.id, term: c.term, item: r.text, re: new RegExp(r.pattern as string, r.caseSensitive ? 'gu' : 'giu') };
+      } catch (e) {
+        throw new Error(`vocabulary rule ${c.id} :: ${r.text}: invalid pattern ${JSON.stringify(r.pattern)}: ${(e as Error).message}`);
+      }
+    }));
 }
 export const RULES = phraseRules(VOCABULARY);
 export const PROPER_NAMES = VOCABULARY.properNames.map((p) => p.text);

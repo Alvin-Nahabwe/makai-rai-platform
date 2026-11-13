@@ -2,7 +2,7 @@
   "product": {
     "Toolkit": {
       "lint": "phrase",
-      "pattern": "\\bMAK-AI Responsible AI Toolkit\\b|\\bthe Toolkit\\b",
+      "pattern": "\\bMAK-AI Responsible AI Toolkit\\b|\\b[Tt]he Toolkit\\b",
       "caseSensitive": true
     },
     "RAI Toolkit": {
@@ -19,7 +19,7 @@
   "organisation": {
     "organization": {
       "lint": "phrase",
-      "pattern": "\\borgani[z]ation(?:s|al)?\\b|(?<=^|[.!?:]\\s{1,4})Organi[z]ation(?:s|al)?\\b",
+      "pattern": "\\borganization(?:s|al)?\\b|(?<=^[\\s#>*_\\-\\d.)|]*|[.!?:]\\s{1,4})Organization(?:s|al)?\\b",
       "caseSensitive": true
     }
   },
@@ -44,7 +44,7 @@
   "mak-ai-administrator": {
     "Platform Admin": {
       "lint": "phrase",
-      "pattern": "\\bplatform admins?\\b",
+      "pattern": "\\bplatform[- ]admin(?:s|istrators?)?\\b",
       "caseSensitive": false
     },
     "plural \"administrators\"": {
@@ -73,12 +73,12 @@
   "send-cancel-an-invitation": {
     "issue (for invitations)": {
       "lint": "phrase",
-      "pattern": "\\bissu(?:e|es|ed|ing)\\s+(?:(?:an|a|the|this|that|new|another)\\s+)*invitations?\\b|\\binvitations?\\s+(?:(?:was|were|is|has been|have been)\\s+)?issued\\b",
+      "pattern": "\\bissu(?:e|es|ed|ing)\\s+(?:(?:an|a|the|this|that|new|another|owner|first-owner)\\s+)*invitations?\\b|\\binvitations?\\s+(?:(?:was|were|is|has been|have been)\\s+)?issued\\b",
       "caseSensitive": false
     },
     "revoke": {
       "lint": "phrase",
-      "pattern": "^\\s*Revoked?\\s*$|\\brevok(?:e|es|ed|ing)\\s+(?:(?:an|a|the|this|that|their|your)\\s+)*invitations?\\b|\\binvitations?\\s+(?:(?:was|were|is|has been|have been)\\s+)?revoked\\b",
+      "pattern": "^\\s*Revoked?\\s*$|\\brevok(?:e|es|ed|ing)\\b[^.!?\\n]{0,40}\\binvitations?\\b|\\binvitations?\\b[^.!?\\n]{0,60}\\brevoked\\b",
       "caseSensitive": false
     }
   },
@@ -101,14 +101,14 @@
   "data-controller": {
     "\"controller\" alone": {
       "lint": "phrase",
-      "pattern": "(?<!\\bdata[- ])\\bcontrollers?\\b",
+      "pattern": "(?<!\\bdata[-\\s]+)\\bcontrollers?\\b",
       "caseSensitive": false
     }
   },
   "organisation-agreement-record-of-signing": {
     "\"accepted\" for the agreement": {
       "lint": "phrase",
-      "pattern": "\\b(?:organisation\\s+)?agreement\\s+(?:(?:was|were|is|has been|had been)\\s+)?accepted\\b|\\baccepted\\s+(?:(?:the|this|an|its)\\s+)?(?:organisation\\s+)?agreement\\b",
+      "pattern": "\\borganisation\\s+agreement\\s+(?:(?:was|were|is|has been|had been)\\s+)?accepted\\b|\\baccept(?:s|ed|ing)?\\s+(?:(?:the|this|an|its|your)\\s+)?organisation\\s+agreement\\b",
       "caseSensitive": false
     },
     "Agreement records": {
@@ -143,7 +143,7 @@
   "development-status-project-field": {
     "\"lifecycle stage\" for this field": {
       "lint": "phrase",
-      "pattern": "^\\s*lifecycle stage\\s*(?:\\([^)]*\\))?\\s*:?\\s*$",
+      "pattern": "^\\s*life[- ]?cycle stage\\s*(?:\\([^)]*\\))?\\s*:?\\s*$",
       "caseSensitive": false
     }
   },
@@ -253,9 +253,8 @@
       "caseSensitive": true
     },
     "do not use \"Reference\" (it already means support reference and request reference)": {
-      "lint": "phrase",
-      "pattern": "^\\s*Reference\\s*$",
-      "caseSensitive": true
+      "lint": "review",
+      "why": "\"Reference\" is a correct field label (components/documents/GenerateDocumentForm.tsx:125); only a menu section named \"Reference\" was proposed and retired."
     }
   },
   "decision": {
@@ -308,7 +307,7 @@
   "version-of-a-decision": {
     "v3": {
       "lint": "phrase",
-      "pattern": "(?<![\\w.]\\s)\\bv\\d+\\b(?!\\.\\d)",
+      "pattern": "(?<![\\w./-])v(?:\\d+(?![\\w./])|(?=\\u2060))",
       "caseSensitive": true
     },
     "version arithmetic in messages": {
@@ -429,8 +428,9 @@
   },
   "assigned-to": {
     "\"owner\" and \"own\" for mitigations": {
-      "lint": "review",
-      "why": "\"Owner\" is a ruled role name (\"Only an Owner can make other members owners\"); only its use for the person assigned a mitigation is retired."
+      "lint": "phrase",
+      "pattern": "\\bmitigations?\\s+(?:I|you|we|they)\\s+own\\b|\\bmitigation(?:'s)?\\s+owners?\\b",
+      "caseSensitive": false
     }
   },
   "evidence-that-it-is-done": {
@@ -460,12 +460,12 @@
   "check-again-date": {
     "look at again": {
       "lint": "phrase",
-      "pattern": "\\blook(?:s|ing)?\\s+(?:at\\s+(?:(?:it|this|them)\\s+)?)?again\\b",
+      "pattern": "\\blook(?:s|ing)?\\s+at\\s+again\\b|\\blook(?:s|ing)?\\s+(?:at\\s+(?:(?:it|this|them)\\s+)?)?again\\s+on\\b|\\bto\\s+look\\s+(?:at\\s+(?:(?:it|this|them)\\s+)?)?again\\b",
       "caseSensitive": false
     },
     "looked at again": {
       "lint": "phrase",
-      "pattern": "\\blooked\\s+(?:at\\s+(?:(?:it|this|them)\\s+)?)?again\\b",
+      "pattern": "\\blooked\\s+at\\s+again\\b|\\blooked\\s+(?:at\\s+(?:(?:it|this|them)\\s+)?)?again\\s+on\\b",
       "caseSensitive": false
     }
   },
@@ -486,14 +486,15 @@
   "fingerprint": {
     "SHA-256 on screen (keep it in the export README only)": {
       "lint": "phrase",
-      "pattern": "^\\s*SHA-?256\\b|\\bSHA-?256\\s*:",
+      "pattern": "(?<=^|[.!?]\\s{1,4})SHA-?256\\b|\\bSHA-?256\\s*:",
       "caseSensitive": false
     }
   },
   "check-a-seal": {
     "\"Matches the record\" without saying what was checked": {
-      "lint": "review",
-      "why": "\"The fingerprint matches the record sealed on 2 Nov 2026\" is the ruled form and contains the phrase; only the bare form that does not say what was checked is retired."
+      "lint": "phrase",
+      "pattern": "^\\s*Matches the record\\.?\\s*$",
+      "caseSensitive": true
     }
   },
   "document": {
@@ -525,7 +526,7 @@
   "download-all-records-team-export": {
     "export as a label (file names may keep it)": {
       "lint": "phrase",
-      "pattern": "^\\s*(?:Team export|Export\\b[^.!?\\n]{0,40})\\s*$",
+      "pattern": "\\b[Tt]eam export\\b|^\\s*Export\\b[^.!?\\n]{0,40}$",
       "caseSensitive": true
     }
   },
@@ -543,8 +544,8 @@
   "control": {
     "\"Other controls\" (say \"More ways to address this\")": {
       "lint": "phrase",
-      "pattern": "\\bOther controls\\b",
-      "caseSensitive": false
+      "pattern": "^\\s*Other controls\\b",
+      "caseSensitive": true
     }
   },
   "template": {
@@ -578,7 +579,7 @@
   "cross-border-storage-consent": {
     "cross-border storage consent": {
       "lint": "phrase",
-      "pattern": "\\bcross-border storage consent\\b",
+      "pattern": "\\bcross[- ]border storage consent\\b",
       "caseSensitive": false
     }
   },
@@ -591,7 +592,7 @@
   "legal-text-version": {
     "v1": {
       "lint": "phrase",
-      "pattern": "(?<![\\w.]\\s)\\bv\\d+\\b(?!\\.\\d)",
+      "pattern": "(?<![\\w./-])v(?:\\d+(?![\\w./])|(?=\\u2060))",
       "caseSensitive": true
     }
   },
@@ -603,7 +604,7 @@
     },
     "login": {
       "lint": "phrase",
-      "pattern": "\\blog-?ins?\\b",
+      "pattern": "(?<![/\\w.-])log-?ins?\\b",
       "caseSensitive": false
     }
   },
@@ -643,7 +644,7 @@
   "emergency-access": {
     "break-glass": {
       "lint": "phrase",
-      "pattern": "\\bbreak[- ]glass\\b",
+      "pattern": "\\bbreak[- ]?glass\\b",
       "caseSensitive": false
     },
     "root": {
