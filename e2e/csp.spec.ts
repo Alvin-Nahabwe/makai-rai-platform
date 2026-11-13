@@ -168,7 +168,8 @@ function whoFor(file: string): Who {
   if (file.startsWith('app/(public)/')) return 'anonymous';
   // The development gallery (app/dev/ui-kit) sits outside every route group and needs no sign-in. This server serves
   // it because Playwright sets MAKRAI_TEST_SEAMS=1 (lib/ui/devGallery.ts); the production host answers 404. It is
-  // swept, not skipped: it mounts every components/ui client component, so the policy is checked against all of them.
+  // swept, not skipped: it mounts the components/ui components the gallery shows, so the policy is checked against
+  // them in one visit (a component the gallery does not show, such as InlineConfirm today, is not covered by it).
   if (file.startsWith('app/dev/')) return 'anonymous';
   if (file.startsWith('app/(authenticated)/admin/')) return 'admin';
   if (file === 'app/(authenticated)/acceptances/page.tsx') return 'unaccepted';
