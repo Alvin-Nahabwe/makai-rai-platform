@@ -25,6 +25,11 @@ describe('datePartsOf', () => {
   it('null gives three empty strings', () => {
     expect(datePartsOf(null)).toEqual(EMPTY);
   });
+
+  it('the empty string is no date too (a native date input\'s empty value), but a string of spaces is refused', () => {
+    expect(datePartsOf('')).toEqual(EMPTY);
+    expect(() => datePartsOf(' ')).toThrow(new RangeError('not a calendar date: " "'));
+  });
 });
 
 describe('parseDateParts', () => {

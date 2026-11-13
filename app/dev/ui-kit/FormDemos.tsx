@@ -14,8 +14,9 @@ import { parseDateParts } from '@/lib/ui/dateParts';
 
 /**
  * The gallery's live form controls (plan 1A Task 4): each holds its own state, so the browser spec can type, tick,
- * choose with the arrow keys and press Today. Nothing is sent anywhere: the one form has no action, and its submit
- * handler prevents the browser's submit and only counts.
+ * choose with the arrow keys and press Today. Once the page has hydrated nothing is sent anywhere: the one form has
+ * no action, and its submit handler prevents the browser's submit and only counts. Before hydration (or without
+ * JavaScript) that form would post its one sample field to this development-only page, which reads no request body.
  */
 
 const EMPTY: DateParts = { day: '', month: '', year: '' };
