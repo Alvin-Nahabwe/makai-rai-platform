@@ -1,0 +1,93 @@
+/* The select (plan 1A Task 4, decision B11; modern-web-guidance branded-select-styling). The closed control drops the
+   native look and shows the kit's chevron-down; the icon ignores the pointer, so a click on it opens the select. Where
+   `appearance: base-select` is supported (Chromium, Safari 27) the picker is the kit's too; elsewhere (Firefox) the
+   operating system's picker opens, which is the fallback the guide names. */
+.ui-select__wrap {
+  position: relative;
+  display: grid;
+  max-inline-size: 30em;
+}
+
+.ui-select {
+  appearance: none;
+  box-sizing: border-box;
+  inline-size: 100%;
+  min-block-size: var(--target-primary);
+  padding: var(--space-2) calc(var(--space-3) + 20px + var(--space-2)) var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border-control);
+  border-radius: var(--radius-control);
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  cursor: pointer;
+  transition: border-color var(--duration-state) var(--easing-state);
+}
+
+.ui-select:hover:not(:disabled),
+.ui-select:focus-visible {
+  border-color: var(--color-ink);
+}
+
+.ui-select--invalid {
+  padding-block: calc(var(--space-2) - 1px);
+  padding-inline-start: calc(var(--space-3) - 1px);
+  border: 2px solid var(--color-ink);
+}
+
+.ui-select:disabled {
+  border-style: dashed;
+  background-color: var(--color-tint);
+  color: var(--color-ink-muted);
+  cursor: not-allowed;
+}
+
+.ui-select__icon {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: var(--space-3);
+  display: grid;
+  place-items: center;
+  color: var(--color-ink);
+  pointer-events: none;
+}
+
+.ui-select:disabled + .ui-select__icon {
+  color: var(--color-ink-muted);
+}
+
+@supports (appearance: base-select) {
+  .ui-select,
+  .ui-select::picker(select) {
+    appearance: base-select;
+  }
+
+  /* The kit draws its own chevron beside the control. */
+  .ui-select::picker-icon {
+    display: none;
+  }
+
+  .ui-select::picker(select) {
+    margin-block: var(--space-1);
+    padding: var(--space-1);
+    border: 1px solid var(--color-border-control);
+    border-radius: var(--radius-control);
+    background-color: var(--color-surface);
+    color: var(--color-ink);
+  }
+
+  .ui-select option {
+    min-block-size: var(--target-min);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-control);
+  }
+
+  .ui-select option:hover,
+  .ui-select option:focus-visible {
+    background-color: var(--color-tint);
+  }
+
+  .ui-select option::checkmark {
+    color: var(--color-ink);
+  }
+}
