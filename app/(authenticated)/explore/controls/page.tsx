@@ -33,6 +33,10 @@ export default function ControlsPage() {
     <div className="controls-page page-content" id="controls-library-page">
       <header className="controls-page__header">
         <h1>Controls</h1>
+        <p className="controls-page__intro">
+          A control is a practice that lowers a risk. When your team closes a finding with a mitigation, it can follow
+          one of these. Each control links to free guidance.
+        </p>
         <p className="controls-page__counts">{`${controls.length} controls`}</p>
       </header>
       {TYPES.map(({ type, label }) => {

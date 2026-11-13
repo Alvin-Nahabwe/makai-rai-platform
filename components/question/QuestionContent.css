@@ -10,7 +10,6 @@
   overflow-wrap: break-word;
 }
 
-.question-content__meta,
 .question-content__principle {
   margin: 0 0 var(--space-1);
   color: var(--text-muted);

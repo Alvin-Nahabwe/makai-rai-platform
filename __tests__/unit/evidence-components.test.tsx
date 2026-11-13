@@ -92,6 +92,11 @@ describe('the evidence block and the version evidence list', () => {
     expect(html).toContain('PDF, PNG, JPEG, Office documents or ZIP, up to 10 MB each. Do not upload datasets or files about the people your system affects. Add a link to where they are kept instead.');
     expect(html.match(/<button(?![^>]*type="button")/g)).toBeNull();
   });
+  it('UX-30: the block names itself once: one legend "Evidence" and no heading', () => {
+    const html = view({});
+    expect(html.match(/<legend>Evidence<\/legend>/g)).toHaveLength(1);
+    expect(html).not.toMatch(/<h[1-6][\s>]/);
+  });
   it('CR-1: while a link is being added the Add link button is disabled, so a second press sends nothing', () => {
     expect(view({ linkFormOpen: true, linkPending: true })).toMatch(/<button[^>]*disabled=""[^>]*>Add link<\/button>/);
     expect(view({ linkFormOpen: true })).not.toMatch(/<button[^>]*disabled=""[^>]*>Add link<\/button>/);

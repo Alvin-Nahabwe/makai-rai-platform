@@ -26,6 +26,14 @@ describe('S-20 TeamExportPanel', () => {
     expect(html).not.toMatch(/role="alert"/);
   });
 
+  it('S-20: the panel has no heading of its own and no label pointing at a missing heading', () => {
+    // CONSOLIDATED section 4: the panel's "Download" heading repeated its button; the page's h1 names the page.
+    const html = renderToStaticMarkup(<TeamExportPanel href="/api/v1/orgs/o/export" scopeName="Maternal-risk triage" aboutBytes={2_400_000} refused={null} />);
+    expect(html).not.toMatch(/<h[1-6][\s>]/);
+    expect(html).not.toContain('aria-labelledby');
+    expect(html).toMatch(/>Download export<\/a>/);
+  });
+
   it('FR-EXP-01 (owner question B4): S-20 says why an export was refused, for two running and for the hourly limit', () => {
     expect(REFUSED_TEXT).toEqual({ export_busy: 'Two exports are already being prepared. Try again when one has finished.', rate_limited: 'You can start 3 exports an hour. Try again later.' });
     for (const r of ['export_busy', 'rate_limited'] as const) {

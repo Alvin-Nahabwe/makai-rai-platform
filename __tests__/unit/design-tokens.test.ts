@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { EvidenceAttach, type EvidenceAttachProps } from '@/components/evidence/EvidenceAttach';
+import LegalKindPage from '@/app/(public)/legal/[kind]/page';
 
 /**
  * UX-33 / NFR-A11Y-05 (SRS 7.6.3 D-1 to D-7, D-11). Each token pair the SRS
@@ -362,21 +361,6 @@ describe('design tokens', () => {
 
 // ── D-6 and D-11 live in components, so they are read from what the components render ─────
 
-const evidenceProps: EvidenceAttachProps = {
-  questionId: 'Q-PP-01',
-  orgSlug: 'org-a',
-  items: [],
-  loading: false,
-  loadError: false,
-  stale: true,
-  canCreate: true,
-  canDelete: true,
-  busy: false,
-  error: null,
-  onUpload: () => {},
-  onDelete: () => {},
-};
-
 describe('buttons', () => {
   it('UX-33 NFR-A11Y-05: a hovered secondary button reads the page colour on the text colour, and that pair is at least 4.5:1 in every theme', () => {
     const hover = declarationsOf(ruleFor(css, '.btn--secondary:hover'));
@@ -389,9 +373,11 @@ describe('buttons', () => {
 });
 
 describe('component defects', () => {
-  it('UX-33 NFR-A11Y-05 (D-6): the stale-list notice is moderate-tint text on its tint, never the yellow risk colour', () => {
-    const html = renderToStaticMarkup(createElement(EvidenceAttach, evidenceProps));
-    const notice = /<p[^>]*role="status"[^>]*>/.exec(html)?.[0] ?? '';
+  // The stale-list notice D-6 was measured on lived in the dead EvidenceAttach (deleted, defect 25); S-06's note is the
+  // live element drawn with the same pair.
+  it("UX-33 NFR-A11Y-05 (D-6): a tinted note on S-06 (the retired text's) is moderate-tint text on its tint, never the yellow risk colour", async () => {
+    const html = renderToStaticMarkup(await LegalKindPage({ params: Promise.resolve({ kind: 'organisation-agreement' }) }));
+    const notice = /<p[^>]*role="note"[^>]*>/.exec(html)?.[0] ?? '';
     expect(notice).not.toBe('');
     expect(notice).toContain('color:var(--tint-moderate-fg)');
     expect(notice).toContain('var(--tint-moderate-bg)');

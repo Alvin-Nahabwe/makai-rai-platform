@@ -370,8 +370,8 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
 
         <DecisionFields data={data} value={value} errors={errors} disabled={false} onChange={edit} />
 
-        <section data-region="evidence-block" aria-labelledby="s12-evidence">
-          <h3 id="s12-evidence">Evidence</h3>
+        {/* Named once, by the block's own fieldset legend "Evidence". */}
+        <section data-region="evidence-block">
           <EvidenceBlock
             key={evidenceKey}
             orgSlug={data.orgSlug}

@@ -98,17 +98,20 @@ function renderWithFile(suffix: string, content: string): string {
 const renderWithHelpContact = (content: string): string => renderWithFile('help-contact.json', content);
 
 describe('S-28 About page', () => {
-  it('FR-PUB-05: the About page has the section "Why there is no score"', () => {
-    expect(html).toMatch(/<h2[^>]*id="why-no-score"[^>]*>Why there is no score<\/h2>/);
+  // CONSOLIDATED section 4 (owner ruling): the no-score principle stays a product rule, not About text.
+  it('About has no section about scores', () => {
+    expect(html).not.toContain('id="why-no-score"');
+    expect(html).not.toMatch(/<h[1-6][^>]*>[^<]*\bscores?\b[^<]*<\/h[1-6]>/i);
+    for (const gone of ['Why there is no score', 'What you get instead', 'Earlier versions of this tool', 'simulated sets of answers']) {
+      expect(text, gone).not.toContain(gone);
+    }
   });
 
-  it("FR-PUB-04: the About page says the platform never runs evaluations, models, notebooks or uploaded files and never computes metrics from a team's data", () => {
-    const s = plain(section(html, 'never-runs'));
-    for (const w of ['evaluations', 'models', 'notebooks', 'uploaded files', 'metrics']) {
-      expect(s).toContain(w);
-    }
-    expect(s).toMatch(/never runs evaluations, models, notebooks or uploaded files/);
-    expect(s).toMatch(/never computes metrics from your team's data/);
+  it('FR-PUB-04: the section "What this platform is and is not" says the platform does not test your model or calculate anything from your data', () => {
+    expect(plain(section(html, 'what-this-is'))).toContain('The platform does not test your model or calculate anything from your data.');
+    // The section "What this platform never does" is removed (CONSOLIDATED section 4); its one fact is the sentence above.
+    expect(html).not.toContain('id="never-runs"');
+    expect(text).not.toContain('What this platform never does');
   });
 
   it('FR-PUB-01: the About page says who can see records, and never that MAK-AI cannot', () => {
@@ -139,22 +142,12 @@ describe('S-28 About page', () => {
     expect(outside.length).toBeLessThan(text.length);
   });
 
-  it('FR-PUB-05: the allowed elements are the section "Why there is no score" and the two sentences about a model\'s own scores', () => {
+  it("FR-PUB-05: the allowed elements are the not-an-approval sentence and the two sentences about a model's own scores", () => {
     const reasons = [...html.matchAll(/data-claims-allowed="([^"]*)"/g)].map((m) => m[1]);
-    expect(reasons).toContain('why-no-score');
-    expect(reasons.filter((r) => r === 'about-model-scores')).toHaveLength(2);
+    expect(reasons.sort()).toEqual(['about-model-scores', 'about-model-scores', 'not-an-approval-service']);
     expect(plain(html.match(/<[a-z0-9]+[^>]*data-claims-allowed="about-model-scores"[^>]*>[\s\S]*?<\/[a-z0-9]+>/)![0])).toMatch(
       /accuracy score|confidence score/,
     );
-  });
-
-  it('FR-PUB-05 FR-PUB-01: the marker covers the heading only; the explanation and "What you get instead" are checked like any other text', () => {
-    const reasons = [...html.matchAll(/data-claims-allowed="([^"]*)"/g)].map((m) => m[1]);
-    expect(reasons.filter((r) => r === 'why-no-score')).toHaveLength(1);
-    const outside = plain(stripClaimsAllowed(html));
-    expect(outside).toContain('What you get instead');
-    expect(outside, 'the explanation holds no flagged word, so it needs no marker').toContain('Earlier versions of this tool');
-    expect(outside, 'the heading names a score and is inside the marker').not.toContain('Why there is no score');
   });
 
   it('FR-PUB-01 FR-PUB-05: every marked element holds exactly one allow-listed sentence, and each sentence is marked once', () => {
@@ -176,7 +169,6 @@ describe('S-28 About page', () => {
     }
     expect(marked.sort()).toEqual(
       [
-        'Why there is no score',
         'It is not an approval, audit, certification or compliance service, and nothing it produces is one.',
         'A healthcare algorithm that works well on average but works poorly for Black patients produces real harm, regardless of its overall accuracy score.',
         "A clinician who treats a model's 60% confidence score as certainty will make worse decisions than one who understands the margin of error.",
@@ -205,8 +197,16 @@ describe('S-28 About page', () => {
     expect(s).toMatch(/does not prove/);
   });
 
-  it('UX-03: the free toolkits section links to the controls page', () => {
-    expect(section(html, 'free-toolkits')).toContain('href="/explore/controls"');
+  // CONSOLIDATED section 4: the eyebrow repeated the h1; "Free toolkits" became the controls page's introduction
+  // (its test is in controls-page.test.tsx); the UNCST table left Help and contact, which the Footer still links to.
+  it('UX-03: About has no eyebrow and no free toolkits section, and Help and contact keeps its id and holds no table', () => {
+    expect(html).not.toContain('about-eyebrow');
+    expect(text).not.toContain('About the platform');
+    expect(html).not.toContain('id="free-toolkits"');
+    expect(text).not.toContain('Free toolkits');
+    const help = section(html, 'help-and-contact');
+    expect(help).not.toMatch(/<table[\s>]/);
+    expect(plain(help)).not.toMatch(/UNCST|protocol/);
   });
 
   it('FR-PUB-05: the principle sections keep the ids other pages link to', () => {

@@ -89,8 +89,34 @@ describe('S-10 (Task 5)', () => {
     for (const role of ['assessor', 'reviewer', 'viewer'] as const) expect(renderPage({ role })).not.toContain('Archive project');
   });
 
-  it('FR-FUP-02 (page half) FR-PRJ-02: S-10 states the zone and that stages can be recorded in any order', () => {
-    expect(renderPage({})).toContain('Stages can be recorded in any order. Overdue is counted in East Africa Time (UTC+3).');
+  it('no time-zone sentence on Home or the project page', () => {
+    // CONSOLIDATED section 4: the time-zone sentence is country-specific and internal; how overdue is counted is unchanged.
+    const project = renderPage({});
+    const home = renderToStaticMarkup(<DashboardView data={{ orgSlug: 'o', orgName: 'Org', role: 'owner', welcome: false, canCreate: true, projects: [], mine: [], projectNames: new Map(), archivedCount: 0 }} />);
+    expect(home).toMatch(/<h1>Dashboard<\/h1>/);   // not vacuous: the view rendered
+    expect(project).toContain('Stages can be recorded in any order.');
+    for (const html of [home, project]) expect(html).not.toMatch(/East Africa|UTC\+3|\bEAT\b/);
+  });
+
+  it('FR-PRJ-02: S-10 says how to share the record once, right after the stages and their reviews, before the findings link', () => {
+    const html = renderPage({});
+    const line = 'To share your record outside the team, seal a stage review and create a document from it.';
+    expect(html.split(line)).toHaveLength(2);
+    // The end of the stage list (the jump links and the three columns), found by balancing its <div>s.
+    const start = html.indexOf('<div class="stage-list">');
+    expect(start).toBeGreaterThan(-1);
+    const tags = /<(\/?)div\b[^>]*>/g;
+    tags.lastIndex = start;
+    let depth = 0;
+    let end = -1;
+    for (let t = tags.exec(html); t; t = tags.exec(html)) {
+      depth += t[1] ? -1 : 1;
+      if (depth === 0) { end = tags.lastIndex; break; }
+    }
+    expect(end).toBeGreaterThan(start);
+    expect(html.indexOf(line)).toBeGreaterThan(end);
+    expect(html.indexOf(line)).toBeLessThan(html.indexOf('Findings for this project'));
+    expect(html).not.toContain('Team working view');
   });
 
   it('FR-PRJ-02: a new project shows "Nothing recorded yet." in each stage', () => {
