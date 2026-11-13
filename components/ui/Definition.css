@@ -1,0 +1,11 @@
+/* The one-line definition shown beside a term's first use. Reads colour and type roles only. */
+.ui-definition {
+  color: var(--color-ink-muted);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-body);
+}
+
+/* A paragraph hint takes its spacing from the layout around it, not from the browser's default paragraph margin. */
+p.ui-definition {
+  margin: 0;
+}
