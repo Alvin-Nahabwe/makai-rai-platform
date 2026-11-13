@@ -83,6 +83,23 @@ async function boxOf(locator: Locator, what: string): Promise<{ x: number; y: nu
   return box;
 }
 
+/**
+ * Waits until the page has stopped scrolling. The page scrolls smoothly (`html { scroll-behavior: smooth }`,
+ * app/globals.css), so a script's focus() or scrollIntoView() starts an animation; a key pressed or a box measured
+ * during it acts on a page in motion, and a later focus scroll can cut short an inner scroller's own.
+ */
+async function scrollSettled(page: Page): Promise<void> {
+  // Settled: the same scroll position on two polls 100 ms apart. The predicate is synchronous: waitForFunction takes a
+  // returned Promise as a truthy answer at once, without waiting for it.
+  await page.evaluate(() => { (window as unknown as { kitLastY?: number }).kitLastY = Number.NaN; });
+  await page.waitForFunction(() => {
+    const w = window as unknown as { kitLastY?: number };
+    const settled = w.kitLastY === window.scrollY;
+    w.kitLastY = window.scrollY;
+    return settled;
+  }, undefined, { polling: 100 });
+}
+
 /** A kit section by its id (`data-kit-section`). */
 const section = (page: Page, id: string) => page.locator(`[data-kit-section="${id}"]`);
 
@@ -957,7 +974,9 @@ test.describe('TabNav', () => {
     // By keyboard: from the row's first tab, Tab four times to the last.
     const links = list.getByRole('link');
     await links.first().focus();
+    await scrollSettled(page);
     for (let i = 0; i < 4; i += 1) await page.keyboard.press('Tab');
+    await scrollSettled(page);
     const last = list.getByRole('link', { name: 'Cross-cutting questions', exact: true });
     await expect(last).toBeFocused();
     await expect(last).toBeInViewport({ ratio: 1 });
@@ -1109,6 +1128,7 @@ test.describe('ItemPlate', () => {
     await openKit(page);
     const plate = plates(page).first();
     await plate.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    await scrollSettled(page);
     const hits = await plate.evaluate((el) => {
       const link = el.querySelector('.ui-plate__link');
       const state = (el.querySelector('.ui-plate__state') as Element).getBoundingClientRect();
@@ -1189,8 +1209,10 @@ test.describe('focus rings of the structure components', () => {
     for (const [what, target] of targets) {
       // Keyboard focus: from the target back one stop and forward again, so :focus-visible applies.
       await target.focus();
+      await scrollSettled(page);
       await page.keyboard.press('Shift+Tab');
       await page.keyboard.press('Tab');
+      await scrollSettled(page);
       await expect(target, what).toBeFocused();
       const ring = await target.evaluate((el) => {
         const s = getComputedStyle(el);

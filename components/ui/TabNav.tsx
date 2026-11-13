@@ -17,8 +17,8 @@ export type TabNavProps = { label: string; items: readonly TabNavItem[] };
 
 /**
  * Brings the current tab wholly into view inside its own row, by the row's `scrollLeft` alone: never the page's scroll
- * position, never smoothly, and not at all when the tab is already wholly in view. The row's scroll padding (the width
- * of its edge fade) is kept clear at both ends, so the tab never sits under a fade. `scrollLeft` is a physical offset,
+ * position, never smoothly, and not at all when the tab is already wholly in view. The row's scroll padding is kept
+ * clear at both ends, as the browser keeps it when it scrolls a focused tab into view. `scrollLeft` is a physical offset,
  * so the same arithmetic holds right to left.
  */
 function revealCurrent(list: HTMLElement): void {
@@ -28,7 +28,7 @@ function revealCurrent(list: HTMLElement): void {
   const box = tab.getBoundingClientRect();
   // The row's scroll padding is a length here (TabNav.css); `auto` reads as NaN and means no padding.
   const padding = parseFloat(getComputedStyle(list).scrollPaddingInlineStart) || 0;
-  // In view means clear of the edge fades too: the visible part of the row is its box less the padding at each end.
+  // In view means clear of the scroll padding too: the row's box less the padding at each end.
   if (box.left < row.left + padding) list.scrollLeft += box.left - row.left - padding;
   else if (box.right > row.right - padding) list.scrollLeft += box.right - row.right + padding;
 }

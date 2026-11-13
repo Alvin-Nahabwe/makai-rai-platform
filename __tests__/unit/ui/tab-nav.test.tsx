@@ -59,11 +59,4 @@ describe('TabNav', () => {
   it('the count is kept apart from the label by a gap the link draws (a flex container drops the space)', () => {
     expect(readFileSync('components/ui/TabNav.css', 'utf8')).toMatch(/\.ui-tabnav__item\s*\{[^}]*column-gap:\s*var\(--space-1\)/);
   });
-
-  it('the edge fade is an enhancement: inside @supports, and off in forced colours', () => {
-    const css = readFileSync('components/ui/TabNav.css', 'utf8');
-    expect(css).toMatch(/@supports \(animation-timeline: scroll\(\)\)\s*\{[\s\S]*mask:/);
-    expect(css).toMatch(/@media \(forced-colors: active\)\s*\{[^}]*\.ui-tabnav__list\s*\{[^}]*mask:\s*none/);
-    expect(css.slice(0, css.indexOf('@supports (animation-timeline: scroll())'))).not.toMatch(/mask/);
-  });
 });
