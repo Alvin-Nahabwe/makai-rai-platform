@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { STATUS_MARK_COPY, UI_COPY, positionWords, tallyWords } from '@/lib/ui/copy';
+import { SORT_WORDS, STATUS_MARK_COPY, UI_COPY, positionWords, tallyWords } from '@/lib/ui/copy';
 
 /** Plan 1A Task 3, spec 7.2: the words of the marks, the tally and the position. */
 
@@ -51,4 +51,28 @@ describe('UI_COPY.marks', () => {
 
 describe('positionWords', () => {
   it('positionWords', () => expect(positionWords(4, 22)).toBe('Question 4 of 22'));
+});
+
+describe('the structure components\' words (plan 1A Task 5)', () => {
+  it('owner, 13 Nov 2026, "Words that fit the column": the sort line is "Sorted by {column}, {phrase}"', () => {
+    expect(UI_COPY.table.sorted('Opened', SORT_WORDS.date.descending)).toBe('Sorted by Opened, latest first');
+    expect(UI_COPY.table.sorted('Opened', SORT_WORDS.date.ascending)).toBe('Sorted by Opened, earliest first');
+  });
+
+  it('owner, 13 Nov 2026: the three common pairs, keyed by aria-sort\'s two values; never "ascending" or "in order"', () => {
+    expect(SORT_WORDS).toEqual({
+      date: { ascending: 'earliest first', descending: 'latest first' },
+      name: { ascending: 'A to Z', descending: 'Z to A' },
+      number: { ascending: 'lowest first', descending: 'highest first' },
+    });
+    for (const pair of Object.values(SORT_WORDS)) {
+      for (const phrase of Object.values(pair)) expect(phrase).not.toMatch(/ascending|descending|in order|reverse/i);
+    }
+  });
+
+  it('the breadcrumb\'s label, the plate\'s pin and the done step\'s hidden word', () => {
+    expect(UI_COPY.breadcrumbLabel).toBe('Breadcrumb');
+    expect(UI_COPY.plate.youAreHere).toBe('You are here');
+    expect(UI_COPY.stepper.done).toBe('(done)');
+  });
 });
