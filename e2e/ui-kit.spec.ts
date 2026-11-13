@@ -127,6 +127,16 @@ test.describe('the gallery page', () => {
     await openKit(page);
     await expectTargetsAtLeast24px(page);
   });
+
+  test('the skip link is the first stop and moves focus to the main landmark', async ({ page }) => {
+    await openKit(page);
+    await page.keyboard.press('Tab');
+    const skip = page.locator('a.skip-link');
+    await expect(skip).toBeFocused();
+    await page.keyboard.press('Enter');
+    // The target takes focus only because it carries tabindex="-1" (UX-04; __tests__/unit/shell-footer.test.tsx).
+    await expect(page.locator('main#main-content')).toBeFocused();
+  });
 });
 
 test.describe('Icon', () => {
