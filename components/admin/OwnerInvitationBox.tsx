@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useRef, useState } from 'react';
+import { useId, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import { useRouter } from 'next/navigation';
 import { requestIdFor, sendWrite, type RetryState, type SendOutcome } from '@/lib/client/retrySafeWrite';
@@ -85,6 +85,18 @@ export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, archive
   const [errors, setErrors] = useState<{ email?: string; requestReference?: string }>({});
   const retry = useRef(new Map<string, RetryState>());
   const statusRef = useRef<HTMLDivElement>(null);
+  const boxRef = useRef<HTMLElement>(null);
+
+  // SC 2.4.11: the refresh after a resend or an issue adds the new invitation's row some hundreds of milliseconds later,
+  // above the buttons. By then focus may already be on a button near the bottom of the window (the revoke
+  // confirmation's), which the browser left where it was because it was wholly in view; the row pushes it half below
+  // the fold and nothing scrolls it back. So when the list changes while focus is inside the box, the focused element
+  // is brought wholly into view, instantly, as DecisionForm.tsx does for its fields (the page's smooth scroll would
+  // still be moving while the next key is pressed).
+  useLayoutEffect(() => {
+    const focused = document.activeElement;
+    if (focused instanceof HTMLElement && boxRef.current?.contains(focused)) focused.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+  }, [invitations]);
 
   const base = `/api/admin/organisations/${encodeURIComponent(orgId)}/owner-invitations`;
   const doWrite: Write = write ?? ((url, body) => sendWrite<InviteMemberResponse | undefined>(url, 'POST', body ?? {}, { onSlow: () => setStatus(SENDING) }));
@@ -161,7 +173,7 @@ export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, archive
   }
 
   return (
-    <section aria-labelledby={`${formId}-heading`}>
+    <section ref={boxRef} aria-labelledby={`${formId}-heading`}>
       <h2 id={`${formId}-heading`}>First-owner invitation</h2>
       <div role="status" tabIndex={-1} ref={statusRef}>{status}</div>
       {issued !== null && !issuedReplayed && (issued.acceptUrl !== null || !issued.emailSent) ? (

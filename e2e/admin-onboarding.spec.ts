@@ -176,6 +176,41 @@ test('FR-ORG-02: a revoke straight after a resend revokes the new invitation, be
   await expect(page.getByText(`${ownerEmail} · owner · Pending`, { exact: false })).toHaveCount(0);
 });
 
+test('SC 2.4.11 (D-349): a refresh that adds the resent invitation\'s row after focus reached the confirmation leaves the focused button wholly in view', async ({ page }) => {
+  const name = `Late Row Lab ${randomUUID().slice(0, 8)}`;
+  const ownerEmail = `late-row-${randomUUID().slice(0, 8)}@fixture.test`;
+  await page.goto('/admin/organisations/new');
+  await fillCreate(page, name, ownerEmail);
+  await page.getByRole('button', { name: 'Create organisation and send invitation' }).click();
+  await page.getByRole('link', { name: 'Open the organisation' }).click();
+  await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
+  // Hold the refresh of the page's server data that follows the resend (the RSC request), until focus is on the button.
+  let release: () => void = () => {};
+  const held = new Promise<void>((r) => { release = r; });
+  await page.route('**/admin/organisations/**', async (route) => {
+    if (route.request().headers()['rsc'] !== undefined) await held;
+    await route.continue();
+  });
+  const rows = page.locator('section').filter({ has: page.getByRole('heading', { name: 'First-owner invitation' }) }).locator('ul > li');
+  await expect(rows).toHaveCount(1);
+  await page.getByRole('button', { name: 'Resend invitation' }).click();
+  await expect(page.getByText(/^Resent: the old link no longer works\./)).toBeVisible();
+  await page.getByRole('button', { name: 'Revoke invitation' }).first().click();
+  const confirm = page.getByRole('group').getByRole('button', { name: 'Revoke invitation' });
+  // Put the confirm button's bottom a few pixels above the window's edge, as at 720 px in J-01: wholly in view, so
+  // reaching it scrolls nothing, and a row added above it afterwards pushes it past the edge.
+  const box = await confirm.boundingBox();
+  await page.setViewportSize({ width: 1280, height: Math.ceil(box!.y + box!.height) + 3 });
+  for (let i = 0; i < 10 && !(await confirm.evaluate((el) => el === document.activeElement)); i += 1) await page.keyboard.press('Tab');
+  await expect(confirm).toBeFocused();
+  await expect(confirm).toBeInViewport({ ratio: 1 });
+  release();
+  await expect(rows).toHaveCount(2);
+  await expect(confirm).toBeFocused();
+  await expect(confirm).toBeInViewport({ ratio: 1 });
+  await page.unroute('**/admin/organisations/**');
+});
+
 test('FR-ORG-03 NFR-SEC-04: the administrator pages hold no record content', async ({ browser, baseURL }) => {
   const m = manifest();
   const owner = seat(m, m.orgs[0].slug, 'owner', 0);
