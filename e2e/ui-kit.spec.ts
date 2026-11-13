@@ -251,3 +251,179 @@ test.describe('LocalTime', () => {
     expect(hydrationErrors(errors)).toEqual([]);
   });
 });
+
+test.describe('Button', () => {
+  test('every default button is 44 px high at least, a compact one 32 px, and busy keeps focus without being disabled', async ({ page }) => {
+    await openKit(page);
+    const buttons = section(page, 'buttons');
+    for (const button of await buttons.locator('.ui-button:not(.ui-button--compact)').all()) {
+      expect((await button.boundingBox())?.height, await button.innerText()).toBeGreaterThanOrEqual(44);
+    }
+    for (const button of await buttons.locator('.ui-button--compact').all()) {
+      const box = await button.boundingBox();
+      expect(box?.height).toBeGreaterThanOrEqual(32);
+      expect(box?.width).toBeGreaterThanOrEqual(24);
+    }
+    const busy = buttons.getByRole('button', { name: 'Saving', exact: true }).first();
+    await expect(busy).toHaveAttribute('aria-busy', 'true');
+    await expect(busy).toBeEnabled();
+    await busy.focus();
+    await expect(busy).toBeFocused();
+    await busy.click();
+    await expect(busy).toBeFocused();
+    await expect(buttons.getByRole('button', { name: 'Save decision', exact: true }).last()).toBeDisabled();
+  });
+});
+
+test.describe('TextInput and TextArea', () => {
+  test('the error is read with the field; the count follows the typing and says when the text is too long', async ({ page }) => {
+    await openKit(page);
+    const invalid = page.getByLabel('Organisation name (required)', { exact: true });
+    await expect(invalid).toHaveAttribute('aria-invalid', 'true');
+    await expect(invalid).toHaveAccessibleDescription("As it appears on your letterhead. Error: Enter the organisation's name.");
+    await expect(page.getByLabel('Sign-in email', { exact: true })).toHaveAttribute('readonly', '');
+    const reason = page.getByLabel('Reason (required)', { exact: true });
+    await reason.fill('Checked the consent forms.');
+    const count = page.locator('#kit-reason-count');
+    await expect(count).toHaveText('26 of 40 characters');
+    await expect(count).not.toHaveClass(/ui-count--over/);
+    await reason.fill('Checked the consent forms against the protocol.');
+    await expect(count).toHaveText('7 characters too many. Shorten the text to 40 characters.');
+    await expect(count).toHaveClass(/ui-count--over/);
+    await expect(reason).toHaveAccessibleDescription(/^Say what was checked and what it showed\. 7 characters too many/);
+  });
+});
+
+test.describe('Select', () => {
+  test('a 44 px closed control with the chevron, which a person can choose from', async ({ page }) => {
+    await openKit(page);
+    const select = page.getByLabel('Decided by (required)', { exact: true });
+    expect((await select.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+    await expect(section(page, 'select').locator('.ui-select__icon svg').first()).toBeVisible();
+    await select.selectOption({ label: 'Ethics committee' });
+    await expect(select).toHaveValue('role:ethics');
+    await expect(page.getByLabel('Decided by, while saving', { exact: true })).toBeDisabled();
+  });
+});
+
+test.describe('RadioCards', () => {
+  test('each radio is named by its label alone; Tab reaches the group, Space chooses, the arrows move the choice', async ({ page }) => {
+    await openKit(page);
+    const group = section(page, 'radio-cards').getByRole('group', { name: 'Status', exact: true });
+    const done = group.getByRole('radio', { name: 'Done', exact: true });
+    await expect(done).toHaveCount(1);
+    await expect(done).toHaveAccessibleDescription('The expected practice is in place.');
+    await page.locator('#kit-select-error').focus();
+    await page.keyboard.press('Tab');
+    await expect(done).toBeFocused();
+    await page.keyboard.press('Space');
+    await expect(done).toBeChecked();
+    await page.keyboard.press('ArrowDown');
+    await expect(group.getByRole('radio', { name: 'Partly', exact: true })).toBeChecked();
+    await expect(page.locator('[data-demo-output="status"]')).toHaveText('Chosen: partly');
+  });
+
+  test('a click on the help sentence chooses its card', async ({ page }) => {
+    await openKit(page);
+    // The label's stretched ::after lies over the help sentence, so the click lands on the label, as a person's would;
+    // force skips Playwright's check that the sentence itself receives the pointer.
+    await page.getByText('Some of the expected practice is in place.').click({ force: true });
+    await expect(section(page, 'radio-cards').getByRole('group', { name: 'Status', exact: true }).getByRole('radio', { name: 'Partly', exact: true })).toBeChecked();
+  });
+
+  test('the chosen card is the only one with a border, and its radio stays drawn, in normal and in forced colours', async ({ page }) => {
+    await openKit(page);
+    const group = section(page, 'radio-cards').getByRole('group', { name: 'Status', exact: true });
+    await group.getByRole('radio', { name: 'Not yet', exact: true }).check();
+    const expectSelection = async (mode: string) => {
+      const cards = await drawnBorders(group.locator('.ui-radio-card'), ':has(:checked)');
+      expect(cards.filter((c) => c.marked), mode).toHaveLength(1);
+      expect(cards.filter((c) => c.drawn).map((c) => c.marked), `${mode}, borders drawn: ${JSON.stringify(cards.filter((c) => c.drawn))}`).toEqual([true]);
+      const dot = await group.locator('.ui-radio-card__input:checked').evaluate((input) => {
+        const s = getComputedStyle(input, '::before');
+        return { width: parseFloat(s.borderTopWidth), colour: s.borderTopColor, ground: getComputedStyle(document.body).backgroundColor };
+      });
+      expect(dot.width, `${mode}, the checked radio's dot`).toBeGreaterThan(0);
+      expect(dot.colour, `${mode}, the checked radio's dot`).not.toBe(dot.ground);
+    };
+    await expectSelection('normal colours');
+    await withForcedColors(page, () => expectSelection('forced colours'));
+  });
+});
+
+test.describe('Checkbox', () => {
+  test('Tab moves between boxes and Space ticks them; the group reports what is ticked', async ({ page }) => {
+    await openKit(page);
+    await page.locator('#kit-agree').focus();
+    await page.keyboard.press('Tab');
+    const checked = page.getByLabel('Keep me signed in on this device', { exact: true });
+    await expect(checked).toBeFocused();
+    await expect(checked).toBeChecked();
+    await page.keyboard.press('Space');
+    await expect(checked).not.toBeChecked();
+    await page.locator('#kit-in-place-policy').focus();
+    await page.keyboard.press('Space');
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Space');
+    await expect(page.locator('[data-demo-output="in-place"]')).toHaveText('Ticked: policy, owner');
+    for (const row of await section(page, 'checkbox').locator('.ui-checkbox__label').all()) {
+      expect((await row.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+    }
+  });
+
+  test('a ticked box keeps its tick in forced colours, and an empty one shows none', async ({ page }) => {
+    await openKit(page);
+    await withForcedColors(page, async () => {
+      const ticks = await section(page, 'checkbox').locator('.ui-checkbox__input:not(:disabled)').evaluateAll((boxes) => boxes.map((box) => {
+        const s = getComputedStyle(box, '::before');
+        return { checked: (box as HTMLInputElement).checked, drawn: parseFloat(s.borderRightWidth) > 0 && s.borderRightColor !== getComputedStyle(document.body).backgroundColor };
+      }));
+      expect(ticks.some((t) => t.checked)).toBe(true);
+      expect(ticks.every((t) => t.drawn === t.checked), JSON.stringify(ticks)).toBe(true);
+    });
+  });
+});
+
+test.describe('DateField', () => {
+  test('Enter on Today fills the reader\'s date, a shortcut fills its own, and nothing is filled before', async ({ page }) => {
+    await openKit(page);
+    const field = section(page, 'date-field').getByRole('group', { name: 'Decided on (required)', exact: true });
+    const boxes = [field.getByLabel('Day', { exact: true }), field.getByLabel('Month', { exact: true }), field.getByLabel('Year', { exact: true })];
+    for (const box of boxes) {
+      await expect(box).toHaveValue('');
+      await expect(box).toHaveAttribute('inputmode', 'numeric');
+    }
+    await field.getByRole('button', { name: 'Today', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    const today = await page.evaluate(() => { const d = new Date(); return [String(d.getDate()), String(d.getMonth() + 1), String(d.getFullYear())]; });
+    for (const [i, box] of boxes.entries()) await expect(box).toHaveValue(today[i]);
+    await field.getByRole('button', { name: 'Same as version 2 (11 Feb 2026)', exact: true }).click();
+    await expect(page.locator('[data-demo-output="decided-on"]')).toHaveText('Reads as: 2026-02-11');
+    await boxes[0].fill('31');
+    await expect(page.locator('[data-demo-output="decided-on"]')).toHaveText('Reads as: not_a_date');
+  });
+
+  test('the error is read with each box, and at 320 px the boxes and buttons wrap without scrolling', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    await openKit(page);
+    const field = section(page, 'date-field').getByRole('group', { name: 'Decided on, with an error', exact: true });
+    await expect(field.getByLabel('Day', { exact: true })).toHaveAccessibleDescription('Error: Enter a date that exists. February 2026 has 28 days.');
+    await expect(page.locator('#kit-date-error-message')).toBeVisible();
+    await expectNoHorizontalScroll(page);
+  });
+});
+
+test.describe('ErrorSummary', () => {
+  test('each link goes to a field on the page, and the summary takes focus when a script gives it', async ({ page }) => {
+    await openKit(page);
+    const summary = section(page, 'error-summary').locator('.ui-error-summary');
+    for (const link of await summary.getByRole('link').all()) {
+      const href = await link.getAttribute('href');
+      expect(href).toMatch(/^#/);
+      await expect(page.locator(href as string)).toHaveCount(1);
+    }
+    await summary.focus();
+    await expect(summary).toBeFocused();
+    expect(await summary.evaluate((el) => getComputedStyle(el).outlineStyle)).toBe('solid');
+  });
+});
