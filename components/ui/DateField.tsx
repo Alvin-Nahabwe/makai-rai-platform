@@ -7,8 +7,7 @@ import type { DateParts } from '@/components/ui/types';
 import { UI_COPY } from '@/lib/ui/copy';
 import { FIELD_COPY } from '@/lib/ui/field/copy';
 import { todayParts } from '@/lib/ui/dateParts';
-import './TextInput.css';
-import './DateField.css';
+import './dateFieldStyles';
 
 export type DateFieldProps = {
   /** The boxes' ids are `${idPrefix}-day`, `-month` and `-year`. */

@@ -1,7 +1,6 @@
 import type { ChangeEventHandler, ReactElement, Ref } from 'react';
 import { describedBy, FieldError, FieldHint, FieldLabel, given, type TextInputProps } from '@/components/ui/TextInput';
-import './TextInput.css';
-import './TextArea.css';
+import './textAreaStyles';
 
 export type TextAreaProps = Omit<TextInputProps, 'type' | 'maxLength' | 'onChange' | 'ref' | 'value' | 'defaultValue'> & {
   /**
