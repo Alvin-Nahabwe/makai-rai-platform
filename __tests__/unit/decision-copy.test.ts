@@ -179,6 +179,11 @@ describe('lib/decision/form/copy.ts', () => {
     expect(`${DECISION_FORM_COPY.savedWithout.before}a.pdf, b.pdf${DECISION_FORM_COPY.savedWithout.afterMany}`).toBe('Saved without a.pdf, b.pdf. When the upload has finished, save again to add them.');
   });
 
+  it('B3: the lines for a Save that waits for a link, and for a link that was not added while it waited', () => {
+    expect(DECISION_FORM_COPY.waitingLink).toBe('Waiting for the link to be added.');
+    expect(DECISION_FORM_COPY.linkNotAdded).toBe('Not saved. The link was not added. Add it again, or select Save decision to save without it.');
+  });
+
   it('the conflict view: the heading as its own sentence, and "my version" on the buttons', () => {
     expect(DECISION_FORM_COPY.conflict.heading).toBe('Not saved. A newer version was saved while you worked.');
     expect([DECISION_FORM_COPY.conflict.saveMine, DECISION_FORM_COPY.conflict.editMine, DECISION_FORM_COPY.conflict.discardMine])
@@ -206,7 +211,8 @@ describe('lib/decision/form/copy.ts', () => {
 
 describe('lib/question/copy.ts', () => {
   it('the question page\'s own words', () => {
-    expect(QUESTION_COPY.nav.back('Pre-processing')).toBe('Back to Pre-processing');
+    expect(QUESTION_COPY.nav.allQuestions).toBe('All questions');
+    expect(QUESTION_COPY.nav).not.toHaveProperty('back');
     expect(QUESTION_COPY.reworded).toEqual({ line: 'The description of good practice changed after your team\'s decision.', summary: 'See the earlier description' });
     expect(QUESTION_COPY.headings.seals).toBe('Sealed reviews');
     expect(QUESTION_COPY.current.history(2)).toBe('See all versions (2)');
@@ -215,8 +221,9 @@ describe('lib/question/copy.ts', () => {
     // copy review 17b, finding 14: the rest of the page's words, pinned once each
     expect([QUESTION_COPY.nav.label, QUESTION_COPY.nav.previous, QUESTION_COPY.nav.next]).toEqual(['Questions in this stage', 'Previous question', 'Next question']);
     expect(QUESTION_COPY.nav.position(4, 22, 'Pre-processing')).toBe('Question 4 of 22 in Pre-processing');
-    expect([QUESTION_COPY.headings.question, QUESTION_COPY.headings.current, QUESTION_COPY.headings.record, QUESTION_COPY.headings.findings])
-      .toEqual(['Question', 'Current decision', 'Record a decision', 'Findings']);
+    expect([QUESTION_COPY.headings.current, QUESTION_COPY.headings.record, QUESTION_COPY.headings.findings])
+      .toEqual(['Current decision', 'Record a decision', 'Findings']);
+    expect(QUESTION_COPY.headings).not.toHaveProperty('question');
     expect(QUESTION_COPY.current.none).toBe('No decision yet.');
     expect(QUESTION_COPY.current.version(2)).toBe('version 2');
     expect(QUESTION_COPY.current.withdrawnNoCode).toBe('No decision. The last decision was withdrawn.');

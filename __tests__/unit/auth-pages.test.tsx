@@ -72,6 +72,12 @@ describe('S-01 Sign in', () => {
     expect(markup).toMatch(new RegExp(`<button[^>]*type="button"[^>]*aria-controls="password"[^>]*>${escapeRe(SIGN_IN_COPY.showPassword)}</button>`));
   });
 
+  it('M-20 (workshop walk S7): the one refusal text says the details are wrong first, and the lock as a rule, not as a verdict', () => {
+    // One wrong password must not read as a lock; the lock's numbers are lib/auth/credentials.ts's LOCK_THRESHOLD (5) and LOCK_MS (15 min).
+    expect(M20).toBe('The email or password is wrong. Check them and try again. After five wrong tries an account is locked for 15 minutes. You can also reset your password.');
+    expect(M20).not.toMatch(/Try again in 15 minutes/);
+  });
+
   it('S-01 (a419413): the Create account link and the registered banner are gone from the page source', () => {
     const src = readFileSync('app/(public)/login/page.tsx', 'utf8') + readFileSync('app/(public)/login/LoginClient.tsx', 'utf8');
     expect(src).not.toMatch(/Create account/i);

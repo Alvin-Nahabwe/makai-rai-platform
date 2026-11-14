@@ -241,6 +241,49 @@ test.describe('S-04 and S-05 in a browser', () => {
     await page.context().close();
   });
 
+  test('FR-ACC-04 UX-01 (ruling after S4): a person held at gate 3 has no organisation link in the rail on S-05 and S-21, and has them once the texts are accepted', async ({ browser }) => {
+    const fx = await buildOrg({ label: 'heldrail', acceptances: 'pre-v1' });
+    const page = await newPage(browser);
+    await signIn(page, fx.members.assessor);
+    const nav = page.getByRole('navigation', { name: 'Main', exact: true });
+    // As for a person in no organisation: Guidance, Help and My account, and nothing that names the organisation.
+    for (const path of ['/acceptances', '/account']) {
+      await page.goto(path);
+      await expect(nav, path).toBeVisible();
+      expect(await nav.getByRole('link').evaluateAll((els) => els.map((e) => e.getAttribute('href'))), path)
+        .toEqual(['/explore/framework', '/help', '/account']);
+      await expect(nav, path).not.toContainText(fx.org.name);
+    }
+    // Accepting moves on by a client-side navigation to /, which sends a person whose last organisation is known straight to
+    // its dashboard; the shared signed-in layout must then give the rail that organisation without a reload.
+    await testDb.user.update({ where: { id: fx.members.assessor.userId }, data: { lastActiveOrgId: fx.org.id } });
+    await page.goto('/acceptances');
+    for (const box of await page.getByRole('checkbox').all()) await box.check();
+    await page.getByRole('button', { name: ACCEPTANCES_COPY.submit }).click();
+    await page.waitForURL((u) => u.pathname === `/orgs/${fx.org.slug}/dashboard`);
+    await expect(nav.locator(`a[href="/orgs/${fx.org.slug}/dashboard"]`)).toHaveCount(1);
+    await expect(nav.locator(`a[href="/orgs/${fx.org.slug}/projects"]`)).toHaveCount(1);
+    await page.context().close();
+  });
+
+  test('SRS 7.1.2 gate 2 (ruling after S4): with a password change due, the rail on S-29 has no organisation link', async ({ browser }) => {
+    const fx = await buildOrg({ label: 'heldpw' });
+    const page = await newPage(browser);
+    await signIn(page, fx.members.assessor);
+    await testDb.user.update({ where: { id: fx.members.assessor.userId }, data: { mustChangePassword: true } });
+    try {
+      await page.goto('/change-password');
+      const nav = page.getByRole('navigation', { name: 'Main', exact: true });
+      await expect(nav).toBeVisible();
+      expect(await nav.getByRole('link').evaluateAll((els) => els.map((e) => e.getAttribute('href'))))
+        .toEqual(['/explore/framework', '/help', '/account']);
+      await expect(nav).not.toContainText(fx.org.name);
+    } finally {
+      await testDb.user.update({ where: { id: fx.members.assessor.userId }, data: { mustChangePassword: false } });
+      await page.context().close();
+    }
+  });
+
   test('FR-ACC-01 (7.4.2 S-04): a lost connection on Create account says the account may already be created, and Try again sends the same body', async ({ browser }) => {
     const fx = await buildOrg({ label: 'resend' });
     const email = `resend-${Date.now()}@fixture.test`;

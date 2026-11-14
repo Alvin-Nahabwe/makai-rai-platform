@@ -161,6 +161,8 @@ export function EvidenceBlockView(p: EvidenceBlockViewProps): ReactElement {
                   onChange={(e) => p.onLinkLabelChange?.(e.target.value)} onKeyDown={onEnter} />
               </div>
               <Button variant="secondary" disabled={p.linkPending === true} onClick={() => p.onAddLink?.()}>{EVIDENCE_COPY.addLink}</Button>
+              {/* In the markup from the moment the link form opens and empty until a link is sent, so its words are announced. */}
+              <p role="status" data-link-adding className="evidence-block__adding">{p.linkPending === true ? EVIDENCE_COPY.link.adding : ''}</p>
               {/* Where the line was before the kit: after the button, so a refusal that is not about the address still reads in order. */}
               {p.linkError === null ? null : <div className="evidence-block__error" role="alert"><FieldError id={errorId} message={p.linkError} /></div>}
             </div>

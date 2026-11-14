@@ -1798,5 +1798,357 @@
     "property": "An export past the ZIP entry limit fails closed with 500 export_entry_limit, logs the code with ids only, leaves no file and frees its slot. Added: the error's message, ruled in the 18d brief in place of \"Export too large\".",
     "proof": "The same case: the rejects.toMatchObject now also holds message: 'This export is too large to make as one file. Export one project at a time.'; every other line is byte for byte unchanged.",
     "task": "plan 1A Task 18, part 18d"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::UX-06 FR-PRJ-02: to-do counts come before recorded counts in each stage column",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::UX-06 FR-PRJ-02: to-do counts come before recorded counts in each stage column",
+    "property": "In each stage block the to-do counts come before the recorded counts, and no count is a percentage, a score or \"complete\". The block is now plain (slice 2): the to-do counts sit under \"Still open in this stage\" (\"9 questions with no decision\"), the recorded counts under \"Recorded so far\" in the kit's tally words (\"7 done (2 with no evidence attached)\"), so the old words \"9 with no decision\" and \"Done 7\" no longer exist to be compared.",
+    "proof": "The case renders StageColumn with COUNTS and requires the index of \"Still open in this stage\" before \"9 questions with no decision\", that before \"Recorded so far\", and that before \"7 done (2 with no evidence attached)\"; the \"3 open findings\", \"1 overdue mitigation\" and no-%/score/complete lines are unchanged. Swapping the two sections, or printing a recorded count before the no-decision count, fails it.",
+    "task": "plan 1C Task 8 (cut), slice 2"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::UX-06 (R12-16): each status phrase of a stage column is a status-label element, and none carries the warning class",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::UX-06 (R12-16, spec 7.2): each status phrase of a stage column is the kit's mark with its words in ink, and none carries the warning class",
+    "property": "Each recorded status of a stage block is shown as words in ink with a neutral mark, never a warning style. The status-label spans (\"Done 7\") became the kit's tally (spec 7.2): one item per kind above zero, each the kit's MarkShape (hidden from assistive technology) followed by the kind's words from tallyWords.",
+    "proof": "The case renders StageColumn with COUNTS and requires the tally items, each matched as <li class=\"stage-column__tally-item\"> holding <svg class=\"ui-mark__shape\" … aria-hidden=\"true\"> then <span> with the words, to read exactly \"7 done (2 with no evidence attached)\", \"n partly\", \"n not yet\", \"n not applicable\", \"1 answered\", in that order; and the whole column to contain no status-label and no \"warning\". The ink itself is checked in the browser by expectStatusMarksInk in e2e/prj-screens.spec.ts.",
+    "task": "plan 1C Task 8 (cut), slice 2"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::FR-PRJ-02: the stage column says how many open findings have no mitigation yet, and counts gated questions as not applicable",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::FR-PRJ-02: the stage column says how many open findings have no mitigation yet, and counts gated questions as not applying, beside those marked not applicable",
+    "property": "The stage block says how many open findings have no mitigation yet, and questions the personal data answer gates are counted. Under the kit's tally (spec 7.2) gated questions are their own kind, \"does not apply\", beside \"not applicable\", where the old column added the two into \"Not applicable 4\".",
+    "proof": "The case renders StageColumn with COUNTS plus notApplicableByGate: 2 and requires \"3 open findings</a> (1 of them with no mitigation yet)\" (the count now a link to the findings page, the bracket plain text after it), \"<span>2 not applicable</span>\" and \"<span>2 do not apply</span>\". Dropping the gated count, or folding it back into not applicable, fails it.",
+    "task": "plan 1C Task 8 (cut), slice 2"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::FR-PRJ-02: a new project shows \"Nothing recorded yet.\" in each stage",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::FR-PRJ-02: a new project shows \"No decisions recorded yet\" in each stage",
+    "property": "A new project's page says in each of its three stages that nothing is recorded. The words are now the kit's empty tally, UI_COPY.tally.none, \"No decisions recorded yet\", shown when no tally kind is above zero.",
+    "proof": "The case renders the page with ZERO counts in every stage and requires \"<p>No decisions recorded yet</p>\" exactly three times (the split has length 4).",
+    "task": "plan 1C Task 8 (cut), slice 2"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::UX-36: each stage is a details element, open by default, that names its three to-do counts when collapsed",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::UX-36: each stage is a plain block, named by its heading, that names its three to-do counts",
+    "property": "Each of the three stages is one block that a person can find and that states its three to-do counts. The block is no longer a collapsible <details> with a summary line (slice 2): it is a <section> named by its <h2>, which states the counts in its \"Still open\" list.",
+    "proof": "The case renders the page and requires three <section class=\"stage-column\" id=… data-stage=… aria-labelledby=…> elements, no <details>, and in the pre-processing block an <h2 id=…>Pre-processing</h2> and the texts \"9 questions with no decision\", \"3 open findings\" and \"1 overdue mitigation\".",
+    "task": "plan 1C Task 8 (cut), slice 2"
+  },
+  {
+    "kind": "structure",
+    "changed": "e2e/role-matrix.spec.ts::(module)",
+    "replacedBy": "e2e/role-matrix.spec.ts::dashboard, projects, projects/new, project detail and members render only the controls this role may use",
+    "property": "The project page's three links to the stage pages are classified controls that every role sees. Slice 2 renamed them: each stage block ends in one link \"All questions in this stage\" (three on the page share these words, each described by its stage's heading) where the old column ended in \"Open pre-processing\" and its two siblings. The registry entries are rewritten for the new words.",
+    "proof": "PROJECT_DETAIL_CONTROLS now holds three presence entries named \"All questions in this stage\" (action null, so every role must see them), each located inside its own stage block, [data-stage=\"pre-processing\"], [data-stage=\"in-processing\"] and [data-stage=\"post-processing\"], by role link and exact name; a missing link in any one stage fails that entry. The name is the link's text, which findUnclassifiedControls matches by includes. The block's other new link, \"N open findings\", has no registry entry: the spec's project is created with no finding, so the link is not rendered there and the owner's census does not meet it; it leads to the findings page, which \"Findings for this project\" already classifies as a control every role sees.",
+    "task": "plan 1C Task 8 (cut), slice 2"
+  },
+  {
+    "kind": "structure",
+    "changed": "e2e/role-matrix.spec.ts::(module)",
+    "replacedBy": "e2e/role-matrix.spec.ts::dashboard, projects, projects/new, project detail and members render only the controls this role may use",
+    "property": "O-13: for the owner, the census of Home classifies every visible button and link in main, leaving out only regions that are navigation varying with data. Home's next step (components/home/NextStepCard.tsx, a section of class next-step) is two navigation links, to one question and to its stage's questions, shown only when the person has a next step; it joins the project cards as such a region. A role that records no decisions never gets it, and that is now asserted in this case for the Reviewer and the Viewer.",
+    "proof": "In findUnclassifiedControls, isIgnored's new line `if (el.closest('.next-step')) return true;` leaves out a control only when it sits inside an element of class next-step, which only NextStepCard.tsx writes (on its root section); the exclusion is by that element, never by link text, so New project, All projects and any other control of Home outside the card stay counted against DASHBOARD_CONTROLS. Seen RED then GREEN on the remote machine: with the owner seat of organisation A holding a saved decision, the unfixed census failed 'dashboard: unclassified control(s) ... Continue recording, Choose another question'; with the line, all ten role cases passed.",
+    "task": "plan 1B Tasks 9 and 10 (slice 3, Home's next step)"
+  },
+  {
+    "kind": "structure",
+    "changed": "e2e/role-matrix.spec.ts::O-13: org ",
+    "replacedBy": "e2e/role-matrix.spec.ts::dashboard, projects, projects/new, project detail and members render only the controls this role may use",
+    "property": "Each role of each fixture organisation walks Home, Projects, New project, a project and Members and sees only the controls its role may use; on Home, a role without decision:write (Reviewer, Viewer) is never shown the next step or its Continue recording link, whatever the data.",
+    "proof": "The describe block holds the one case below unchanged in title; its body only gains, after the dashboard's two existing checks, `if (!can(role, 'decision:write'))` with two soft assertions: page.locator('.next-step') toHaveCount(0) and the link named HOME_COPY.continueRecording toHaveCount(0). can() is policy.ts's own (false for reviewer and viewer only), so the assertions run for exactly those two roles in both organisations. \"Whatever the data\" is held by __tests__/integration/home-load.test.ts 'T9.5: a viewer and a reviewer get null, also when rows exist that they did not enter' (null even for versions entered under their own id): it fails when the decision:write check is removed, while the two assertions here would still pass then for as long as the fixture's Reviewer and Viewer have saved nothing.",
+    "task": "plan 1B Tasks 9 and 10 (slice 3, Home's next step)"
+  },
+  {
+    "kind": "structure",
+    "changed": "e2e/role-matrix.spec.ts::dashboard, projects, projects/new, project detail and members render only the controls this role may use",
+    "replacedBy": "e2e/role-matrix.spec.ts::dashboard, projects, projects/new, project detail and members render only the controls this role may use",
+    "property": "O-13 as before, plus Home's next-step role rule: a Reviewer or Viewer never sees the next step or a Continue recording link on Home. Presence for the roles that record depends on their saves and is not asserted here.",
+    "proof": "Every existing line of the case is unchanged; the added lines are the `if (!can(role, 'decision:write'))` block with `expect.soft(page.locator('.next-step'), ...).toHaveCount(0)` and `expect.soft(page.getByRole('link', { name: HOME_COPY.continueRecording }), ...).toHaveCount(0)`, run on the dashboard page the case has just loaded. The same rule is held by e2e/home-next-step.spec.ts 'T9.5: a viewer sees no next step and no Continue recording' and by __tests__/integration/home-load.test.ts 'T9.5: a viewer and a reviewer get null, also when rows exist that they did not enter' (null even for versions entered under their own id).",
+    "task": "plan 1B Tasks 9 and 10 (slice 3, Home's next step)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::UX-08: every labelled region is named by a heading of the page that it points to, the evidence block has no heading of its own, and the suggestions section is the in-page target",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::UX-08: every labelled region is named by a heading of the page that it points to, the evidence block has no heading of its own, and the suggestions section is the in-page target",
+    "property": "Every region the page labels is named by a heading of the page that it points to; the evidence block has no heading of its own; the suggestions section is the one in-page target, headed \"Ways teams address this\". Slice 1 makes the question region's name the page's h1 (#question-heading, the question in words, which carries tabindex=\"-1\" and its class) instead of the removed h2 \"Question\" (s12-question), so the heading a label points to can now be an h1 with further attributes.",
+    "proof": "The case renders QuestionPanelRegions with PANEL (QuestionContent mocked to nothing, so the guidance aside is not in its markup; question-frame.test.tsx carries the aside), collects every aria-labelledby value, requires six distinct ones and no s12-evidence, and for each id an h1, h2 or h3 element carrying that id (other attributes allowed) whose closing tag is of the same level and which holds text; it still requires the one id=\"suggestions\" on the suggestions section and <h2 id=\"s12-suggestions\">Ways teams address this</h2>. A label pointing to a missing heading, or to an id on anything but a heading, fails it.",
+    "task": "plan 1C Task 4 (cut), slice 1"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/decision-components.test.tsx::UX-42 W-3: one h1 for the question that takes focus, and Previous and Next go to the neighbouring questions",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::UX-42 W-3: one h1 for the question that takes focus, and Previous and Next go to the neighbouring questions",
+    "property": "The page has one h1, which takes focus (tabindex -1), and Previous and Next link to the neighbouring questions, with the position in words. Slice 1 (plan 1C decision C1, cut) makes the h1 the running question's text; the id and module \"{Q-ID} · {module}\" move to the code line, a separate element directly after it.",
+    "proof": "The case requires exactly one <h1, <h1 id=\"question-heading\" tabindex=\"-1\"…> holding the question's text 'Have you evaluated whether AI is the right approach?' immediately followed by a <p…> reading 'Q-PP-01 · Problem Formulation' (U+00B7, written \\u00b7 in the pattern), the two links with their exact hrefs, 'Question 2 of 24 in Pre-processing', and no Previous link on the first question; those three lines are unchanged.",
+    "task": "plan 1C Task 4 (cut), slice 1"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/decision-components.test.tsx::FR-CNT-08: S-12 shows the reworded line when the running wording differs",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::FR-CNT-08: S-12 shows the reworded line when the running wording differs",
+    "property": "When the running content words the question's good practice differently from the content the current decision was answered against, the page says so and holds the earlier wording in a disclosure; each wording appears once; with the same wording there is neither the line nor the summary. Slice 1 (plan 1C decision C1, cut) moves the running \"What good looks like\" into the guidance aside after the form, while the line and its disclosure stay in the question region under the h1, so the running wording now follows the disclosure in DOM order.",
+    "proof": "The case still requires QUESTION_COPY.reworded.line (HTML-escaped), a <details> whose <summary> is QUESTION_COPY.reworded.summary followed by 'Old wording.', each wording exactly once, and with the same wording neither summary nor line. In place of 'New wording.' before the summary it now requires 'New wording.' inside <aside … data-region=\"guidance\">…</aside> and 'Old wording.' inside <details>…</details>: the running wording printed outside the guidance, or the earlier one outside the disclosure, fails it.",
+    "task": "plan 1C Task 4 (cut), slice 1"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/question-content.test.tsx::UX-08 FR-CNT-02: question, link, What good looks like, then Why this is asked, with no form control",
+    "replacedBy": "__tests__/unit/question-content.test.tsx::UX-08 FR-CNT-02: What good looks like, then Why this is asked, the principle, then the link, with no form control",
+    "property": "QuestionContent shows its texts in a fixed order and holds no form control. Slice 1 (plan 1C decision C1, cut, ruling R2) makes it the guidance aside: the question text is the page's h1 and no longer printed here, and the order is \"What good looks like\" and its text, \"Why this is asked\" and its text, the principle, then the jump link.",
+    "proof": "The case renders QuestionContent with Q-PP-01 of 0.0.1-fixture and suggestionCount 3 and requires the indexes of 'What good looks like', the expected practice, 'Why this is asked', the reason for asking, 'Principle:' and 'Ways teams address this (3)' to be present and increasing, the principle line, href=\"#suggestions\", and no input, select, textarea, form or button.",
+    "task": "plan 1C Task 4 (cut), slice 1"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/question-content.test.tsx::UX-08 (W-3): the id and module title, then the principle, then the question, as the wireframe orders them",
+    "replacedBy": "__tests__/unit/question-content.test.tsx::UX-08 (W-3): the aside opens with What good looks like; the question text, id and module title are left to the page heading",
+    "property": "QuestionContent repeats nothing the page heading says. Slice 1 (plan 1C decision C1, cut) makes the question text the h1 and the id and module the code line under it, so the aside prints neither and opens with its first heading, \"What good looks like\", which names it.",
+    "proof": "The case renders QuestionContent and requires the markup to start with <aside class=\"question-content\" data-region=\"guidance\" aria-labelledby=\"s12-guidance\"><h2 id=\"s12-guidance\">What good looks like</h2>, and not to contain question-content__meta, the module title, the question text or 'Q-PP-01 · '; the jump link 'Ways teams address this (2)' is still there. question-frame.test.tsx requires the h1 and the code line on the page.",
+    "task": "plan 1C Task 4 (cut), slice 1"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/question-content.test.tsx::NFR-A11Y-02 UX-08: the texts sit under real headings below the shell's region heading, and no id of the shell is repeated",
+    "replacedBy": "__tests__/unit/question-content.test.tsx::NFR-A11Y-02 UX-08: the texts sit under real headings one level below the page's h1, and no id of the shell is repeated",
+    "property": "The guidance texts sit under real headings one level below the heading above them, and the slot repeats no id of the page. With the h2 \"Question\" removed (slice 1), that heading is the page's h1, so \"What good looks like\" and \"Why this is asked\" are h2 (they were h3), and the id it must not repeat is question-heading.",
+    "proof": "The case renders QuestionContent and requires no id=\"question-heading\", no h1 or h3 to h6, exactly two h2, and the h2 texts 'What good looks like' and 'Why this is asked'. question-frame.test.tsx requires, on the whole page, that the first heading is the h1 and no heading is more than one level below the one before it.",
+    "task": "plan 1C Task 4 (cut), slice 1"
+  },
+  {
+    "kind": "structure",
+    "changed": "e2e/role-matrix.spec.ts::(module)",
+    "replacedBy": "e2e/role-matrix.spec.ts::dashboard, projects, projects/new, project detail and members render only the controls this role may use",
+    "property": "O-13 on the project page: the page's one primary action (plan 1C C11) is a registered control, not an exclusion. For all five roles the link named PROJECT_COPY.start shows exactly where can(role, 'decision:write') (Owner, Admin, Assessor) and nowhere else (Reviewer, Viewer), and the owner's census of the page counts it.",
+    "proof": "PROJECT_DETAIL_CONTROLS gains one entry, first: { name: PROJECT_COPY.start, action: 'decision:write', mode: 'presence', locator: getByRole('link', { name: PROJECT_COPY.start, exact: true }) }; every other line is unchanged. The fixture's project is fresh, so the label there is Start recording. Seen RED then GREEN on the remote machine: without the entry the owner census failed 'project detail: unclassified control(s) — add to the registry in e2e/role-matrix.spec.ts: Start recording' (org A and org B owner); with it the case passes for every role. The role rule whatever the data is held by __tests__/integration/home-load.test.ts 'S4: a Reviewer and a Viewer get null, also when rows exist, their own included', which fails when the decision:write check in loadContinueTarget is removed (shown by mutation: Tests 1 failed | 17 passed).",
+    "task": "plan 1C C11, cut (lane 5, Continue recording on the project page)"
+  },
+  {
+    "kind": "structure",
+    "deleted": "__tests__/integration/decision-pages.test.ts::UX-06 (screen, R12-16): every S-11 row's status words sit in a status-label element, and none carries the warning class",
+    "replacedBy": "__tests__/unit/stage-route.test.tsx::each row shows its StatusMark with words and its code after the question in words; no \"v3\" or other version number",
+    "property": "Every S-11 question row shows its status as words in a status element of its own, never colour alone (UX-06, R12-16), and no row's status carries the warning style. Plan 1C Task 3 rebuilds each row as the kit's ItemPlate, whose status is the kit's StatusMark (shape plus words in ink, spec 7.2); the legacy .status-label element is gone from this page, so the property is now held on the mark.",
+    "proof": "The new case renders StageWorkspace from fixture rows of five kinds (done without and with evidence, the personal data question answered, partly, no decision) and, for each row's <li data-question-id> markup, requires exactly one `class=\"ui-mark ui-mark--` element, a `ui-mark__words` span holding letters, the question's code after its text, no version number, and no `status-label` class at all (so no warning class). Seen RED (0 marks per row, 'expected [] to have a length of 1') before the list used ItemPlate, GREEN after. The ink of the mark (no colour per status, no warning colour) is held in a browser by expectStatusMarksInk in e2e/stage-workspace.spec.ts 'FR-RM-04 UX-06 UX-07 (S-11, R12-16) ...', which now counts one `.ui-mark` per row in each stage before running it. The deleted case was seen failing on the new markup ('expected +0 to be 24').",
+    "task": "plan 1C Task 3 (lane 7 part 1, All questions)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/integration/decision-pages.test.ts::FR-DEC-06 (screen): with a decision recorded the empty line goes and the row shows its status and version",
+    "replacedBy": "__tests__/integration/decision-pages.test.ts::FR-DEC-06 (screen): with a decision recorded the empty line goes and the row shows its status and version",
+    "property": "With a decision recorded the empty line goes and the row shows the decision's status words followed by its declared date at its precision. The row is now the kit's ItemPlate: the words are the StatusMark's (`ui-mark__words`) and the date opens the plate's one line of state (`ui-plate__state`), after the mark, with no separator before it (plan 1C Task 3, spec 8).",
+    "proof": "The regular expression still anchors on the row's data-question-id and requires, in order, the status words \"Partly\" closing their </span> and then the state line starting with \"Oct 2026\" (the declared date at month precision): `class=\"ui-mark__words\">Partly<\\/span>[\\s\\S]*?class=\"ui-plate__state\">Oct 2026<`. The `<` after the date requires it to be the state line's first and only part here. The not-toContain of the empty line is unchanged. Seen failing on the new markup with the old pattern (`>Partly<\\/span> · Oct 2026`), passing with the new one.",
+    "task": "plan 1C Task 3 (lane 7 part 1, All questions)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::FR-PRJ-01: the form has a labelled control for each descriptive field",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::FR-PRJ-01: the form has a labelled control for each descriptive field",
+    "property": "Every descriptive field of the project form has a programmatic name. The eight that are single controls keep a <label for> naming them; Start date and End date became the kit's DateField (plan 1B Task 13), a fieldset whose legend names the date and whose three boxes (Day, Month, Year) each have a <label for>, so a <label for> with the words Start date or End date no longer exists and the two names are proved by the legend and the three labels instead",
+    "proof": "__tests__/unit/prj-components.test.tsx::FR-PRJ-01: the form has a labelled control for each descriptive field: the loop over the eight labels is unchanged but for dropping 'Start date' and 'End date'; for projectStart and projectEnd, expect(html).toMatch(<fieldset ...><legend ...>Start date</legend>) (and End date), and for each of day, month and year a <label for=\"{prefix}-{part}\"> with words directly followed by the <input id=\"{prefix}-{part}\">",
+    "task": "1B-13"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/idle-layout.test.tsx::(module)",
+    "replacedBy": "__tests__/unit/idle-layout.test.tsx::UX-02: the layout gives the Sidebar the person's role in each of their organisations, the platform label and no platform role",
+    "property": "The file's module code serves the cases below: the layout is walked as an element tree with every data read mocked, so no case reaches a database.",
+    "proof": "Two module changes, both forced by loadShellData reading the last-active hint for a person in two or more organisations (workshop walk finding S4): @/lib/data/identity is mocked with a findUnique that answers lastActiveOrgId 'org-b', and the two mocked membership rows carry orgId 'org-a' and 'org-b', which resolveOrgDispatch matches the hint against. Nothing is removed; without the mock the case would read the real identity table.",
+    "task": "workshop walk fix S4"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/idle-layout.test.tsx::UX-02: the layout gives the Sidebar the person's role in each of their organisations, the platform label and no platform role",
+    "replacedBy": "__tests__/unit/idle-layout.test.tsx::UX-02: the layout gives the Sidebar the person's role in each of their organisations, the platform label and no platform role",
+    "property": "The layout hands the shell the person's role in each of their organisations and the platform label, asks orgRoleLabel once per organisation and once for the platform, and the account's platform role field never reaches the shell (UX-02, D-10).",
+    "proof": "The exact-equality assertion on the shell prop gains one key, homeSlug: 'b' (the organisation the mocked hint names among the two mocked memberships); every other expected value and every other assertion of the case is unchanged, so the case is stricter, not weaker: a shell carrying any further field of the user or organisation row still fails it.",
+    "task": "workshop walk fix S4"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/admin-screens.test.tsx::UX-01: the administrator sidebar links S-23 and S-25 (SRS line 1514)",
+    "replacedBy": "__tests__/unit/admin-screens.test.tsx::UX-01: the administrator sidebar links S-23 and S-25 (SRS line 1514)",
+    "property": "The administrator's shell links S-23 (/admin/organisations) and S-25 (/admin/accounts), and no Settings or /admin/users link.",
+    "proof": "The shell prop the case renders Rail with gains homeSlug: null, the field ShellData now requires (workshop walk finding S4); the four assertions are unchanged. __tests__/unit/ui/shell.test.tsx::S4: no organisation gives no organisation link, and the administrator's rail is unchanged, with a home slug or without renders the administrator's rail with a home slug too and requires the same three links and no /orgs/ address.",
+    "task": "workshop walk fix S4"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/about-page.test.tsx::FR-PUB-01: a model-score sentence holds no banned word besides \"accuracy score\" and \"60% confidence score\"",
+    "replacedBy": "__tests__/unit/about-page.test.tsx::FR-PUB-01: a model-score sentence holds no banned word besides \"60% likely\"",
+    "property": "A sentence the about-model-scores marker exempts holds no claim word other than the model figure it is marked for, so the marker shelters nothing else.",
+    "proof": "The renamed case finds exactly one about-model-scores span (AB37i's first sentence; AB30's ruled text names no score, so its marker went) and asserts isClaim(...) is false on its text with \"60% likely\" removed.",
+    "task": "1A-19"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/about-page.test.tsx::FR-PUB-04: the About page says the platform never runs evaluations, models, notebooks or uploaded files and never computes metrics from a team's data",
+    "replacedBy": "__tests__/unit/about-page.test.tsx::FR-PUB-04: the section \"What the platform does\" says the platform does not test your model or calculate anything from your data",
+    "property": "About states, in its section what-this-is, that the platform does not test your model or calculate anything from your data. Only the section's heading changed (AB5, \"What the platform does\"); the 1A-14 entry for this title named the case under the old heading.",
+    "proof": "__tests__/unit/about-page.test.tsx::FR-PUB-04: the section \"What the platform does\" says the platform does not test your model or calculate anything from your data: the same assertion on section(html, 'what-this-is'), byte for byte",
+    "task": "1A-19"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/about-page.test.tsx::FR-PUB-05: the allowed elements are the section \"Why there is no score\" and the two sentences about a model's own scores",
+    "replacedBy": "__tests__/unit/about-page.test.tsx::FR-PUB-05: the allowed elements are the not-an-approval sentence and the one sentence about a model's own score",
+    "property": "The About page's data-claims-allowed elements are exactly the not-an-approval sentence and the model-score sentence. Narrowed from two model-score markers to one: AB30's ruled text names no score, so its marker went (lead's 19d block).",
+    "proof": "__tests__/unit/about-page.test.tsx::FR-PUB-05: the allowed elements are the not-an-approval sentence and the one sentence about a model's own score: reasons sorted equal ['about-model-scores', 'not-an-approval-service'] and the marked element holds \"60% likely\"",
+    "task": "1A-19"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/integration/question-panel.test.ts::FR-CNT-04 (screen) owner question B13: with the gate at no, Q-PP-13 and Q-PP-14 leave the position; unanswered, they count",
+    "replacedBy": "__tests__/integration/question-panel.test.ts::FR-CNT-04 (screen) workshop walk S3: with the gate at no, the position still counts all 24 questions of the stage while Next skips Q-PP-13 and Q-PP-14; unanswered, they are next",
+    "property": "The question page's position \"Question n of N\" counts every question of the stage, switched off by the personal data answer or not, in the stage's order, so no two questions share a place and N is the number of rows All questions lists. Previous and Next still skip a question the gate switches off (FR-CNT-04). The old rule took both the position and the total over the applying questions only, so after a No the switched-off Q-PP-13 and Q-PP-14 both read \"Question 14 of 23\" and every other question \"of 22\", against 24 on All questions (workshop walk S3).",
+    "proof": "The new case records the gate Q-PP-GATE-SENSITIVE as scopeAnswer 'no' on the fixture content and requires the gate's panel to have gateAnswer 'no', position.total 24 and position.nextId still Q-PP-15; before the answer, its nextId is Q-PP-13, as before. New cases in the same file require, with the gate at no, Q-PP-13's and Q-PP-14's index to be their own places in questionsInStage order with total 24, previousId Q-PP-GATE-SENSITIVE and nextId Q-PP-15; the 24 questions' indexes to be 0 to 23 in order; and total to equal loadStagePage's rows.length for the stage. lib/question/panel.ts takes index and total over questionsInStage(running, p.stage) and keeps previousId and nextId over the applying questions.",
+    "task": "workshop walk S3, the coordinator's order of 14 November 2026 21:35 EAT: the position counts every question of the stage"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 UX-08: S-12 shell regions in order, each but the evidence block labelled by a heading, evidence block inside the answer form",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 UX-08: S-12 shell regions in order, each but the evidence block labelled by a heading, evidence block inside the answer form",
+    "property": "S-12's regions in DOM order gain one, the way on at the foot of the main column (workshop walk S9): after the answer form and the evidence block inside it, before the guide column's finding link and suggestions, a paragraph data-region=\"way-on\" holding \"Next question: {the next question in words}\" (or, on the stage's last question, the sentence that it is the last) and All questions. Every other region, its order, its heading and the six aria-labelledby sections are unchanged; the new region is a paragraph, not a section, so it is named by no heading and adds no landmark.",
+    "proof": "The one changed line is the expected region list, which gains 'way-on' between 'evidence-block' and 'finding-link'; every other line of the case, including the count of six labelled sections and the order regex from answer-form to finding-link, is unchanged and passes. __tests__/unit/question-frame.test.tsx's new cases require the foot to be the last child of the main column after the answer form, its exact links and text, the last-question sentence, and that an unknown nextId throws.",
+    "task": "workshop walk S9, the coordinator's order of 14 November 2026 21:35 EAT: a way on at the foot of the form"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/document-resolve.test.ts::FR-DOC-02 (round 10): a project value of other prints its companion text, and Other when the companion is empty",
+    "replacedBy": "__tests__/unit/document-resolve.test.ts::FR-DOC-02 (round 10): a project value of other prints its companion text, and Other when the companion is empty",
+    "property": "A project value of other prints its companion text, and Other when the companion is empty; a project value that is a form option prints that option. Walk finding S1 (item 1) changes what the option prints: the AI system type prints the option's words as the project form shows them (PROJECT_FORM_COPY.aiSystemTypes in lib/project/form/copy.ts), so the stored key classification now prints Classification. The old last line pinned the stored key, which is the fault the walk found.",
+    "proof": "Only the last line changed: toContain('classification') became toBe(`Classification\\n${PROJECT_MARK}`), which requires the whole field text, the option word with its capital and the project mark, so it checks the new print at least as hard as the old line checked the old one. The companion and Other assertions are byte for byte unchanged. __tests__/unit/document-resolve-words.test.ts checks every option, other with and without companion text, and an unknown stored value.",
+    "task": "walk-documents S1, item 1"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/document-resolve.test.ts::FR-DOC-08 (H3): in a field with several sources, an undecided record source prints \"Not recorded\" in its place and the field counts",
+    "replacedBy": "__tests__/unit/document-resolve.test.ts::FR-DOC-08 (H3): in a field with several sources, an undecided record source beside a value prints \"No decision is recorded for question <id>.\" in its place and the field counts",
+    "property": "In a field with several sources, a record source with no decision is shown in its place, after the parts the map puts before it, and the field counts as having a gap; once the question is decided the gap is gone and the field does not count. The owner's decision of 14 November 2026 (walk finding S1, item 2) changes the words shown in that place when the field has another value: \"No decision is recorded for question <Q-id>.\" (noDecisionLine in lib/documents/copy.ts) instead of a bare \"Not recorded\" printed beside the value.",
+    "proof": "The same case on the same snapshots (DC-16, gate answered Yes, Q-PP-13 undecided, then decided). Three lines changed, each NOT_RECORDED to noDecisionLine('Q-PP-13'): the line is in the field, it comes after the gate line, and it is absent once Q-PP-13 is decided. The sentence names the question, so it is a stricter match than the bare \"Not recorded\" it replaces. Both notRecordedFields assertions are byte for byte unchanged. __tests__/unit/document-resolve-words.test.ts covers the same rule on DC-13, DC-19 style fields and DC-23.",
+    "task": "walk-documents S1, item 2"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/document-resolve.test.ts::FR-DOC-08 (F5): an empty project or typed part of a multi-source field prints Not recorded in its place and the field counts",
+    "replacedBy": "__tests__/unit/document-resolve.test.ts::FR-DOC-08 (F5): an empty project or typed part beside a value prints nothing and the field does not count; a multi-source field with no value prints Not recorded and counts",
+    "property": "An empty project or typed part of a multi-source field is handled so the preview and the summary count show a real gap and only a real gap. The owner's decision of 14 November 2026 (walk finding S1, item 2): an empty typed box (and, in the lead's reading, an empty project value) beside a value prints nothing, and the documents screen stops counting such a field; a field with nothing at all prints \"Not recorded\" once and counts.",
+    "proof": "The same case on the same snapshots. Two lines changed for DC-02 (typed The MCH unit, institution Makerere, no department): toContain(NOT_RECORDED) became toEqual(['The MCH unit', TYPED_MARK, 'Makerere', PROJECT_MARK]), which pins every line of the field, so the empty department can print nothing at all; toContain('DC-02') became not.toContain('DC-02'). The DC-35 lines (no value in any part: Not recorded, and the field counts) and the full DC-02 line are byte for byte unchanged.",
+    "task": "walk-documents S1, item 2"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-03: S-32 lists the archived project under Archived with Unarchive for an owner, and the dashboard leaves it out",
+    "replacedBy": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-03: S-32 lists the archived project under Archived with Unarchive for an owner, and the dashboard leaves it out",
+    "property": "The dashboard's project card still reads, per stage, \"<stage>: <n> open findings, <n> overdue mitigations\", with no score. Ruling R5 (S10, 14 Nov 2026) makes \"<n> open findings\" a link to that stage's findings when n is above 0, so the words are now split by the link's tags; the case reads the card's text without tags.",
+    "proof": "The case renders the dashboard as a viewer and requires, on its text with the tags removed, /Pre-processing: \\d+ open findings?, \\d+ overdue mitigations?/, and no score, % or maturity on the markup; __tests__/unit/project-card-findings-link.test.tsx requires the link to /orgs/<org>/projects/<id>/findings?stage=<stage> around \"2 open findings\", plain text at 0, and the zero line exactly as HOME_COPY.card.line writes it.",
+    "task": "fix/walk-findings-closure Part 2, ruling R5"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/integration/documents-page.test.tsx::S-16: the seal explanation link sits under the Seals heading, and the time-stamp sentence is not on screen",
+    "replacedBy": "__tests__/integration/documents-page.test.tsx::S-16: the seal explanation link sits in the Status section after the state line, and the time-stamp sentence is not on screen",
+    "property": "S-16 shows the \"What sealing means\" link exactly once, and the time-stamp sentence not at all. The link moved from under the Seals heading into the Status section, directly after the state line, because the Seals heading is now drawn only when the review has a seal (workshop walk finding S5-2: no heading with nothing under it).",
+    "proof": "For a sealed and an unsealed review the case takes the Status section's markup and requires it to start with <h2 id=\"review-state\">Status</h2>, then the state line's paragraph, then <p><a href=\"/help#what-sealing-means\">What sealing means</a></p>; the count of 'What sealing means' on the page stays exactly 1 and 'independently time-stamped' stays absent. __tests__/integration/stage-review-page.test.tsx requires that a review with no seal draws no Seals heading and a sealed one does.",
+    "task": "workshop walk fix S5"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/review-text.test.ts::UX-18: the unsaved-answers line, and the statement that sealing records open items",
+    "replacedBy": "__tests__/unit/review-text.test.ts::UX-18: the unsaved-answers line, and the statement that sealing records open items",
+    "property": "The seal page's preview lines say the decisions by status and the Not applicable and Not yet reasons with their counts. The separator \" . \" became a no-break space, a middle dot and a space (U+00A0, U+00B7, U+0020), so a line that wraps never starts with the dot (workshop walk finding S12-a).",
+    "proof": "The same case: in the two expected lines 'Decisions by status: ...' and 'Not applicable and Not yet by reason: ...' each ' . ' is now '\\u00a0· '; the words, counts and every other line of the case are byte for byte unchanged.",
+    "task": "workshop walk fix S12-a"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/documents-screen.test.tsx::UX-20: a document that takes questions says how many fields come from how many questions; one that takes none says only the fields (data card, model card, mitigation plan)",
+    "replacedBy": "__tests__/unit/documents-screen.test.tsx::UX-20: a document that takes questions says how many fields come from how many questions; one that takes none says only the fields (data card, model card, mitigation plan)",
+    "property": "S-18's summary line says how many fields come from how many questions and how many will read Not recorded. The separator \" . \" became a no-break space, a middle dot and a space (U+00A0, U+00B7, U+0020), so a line that wraps never starts with the dot (workshop walk finding S12-a).",
+    "proof": "The same case: in the three expected summary lines the one ' . ' is now '\\u00a0· '; the numbers, the words and the other assertions are unchanged.",
+    "task": "workshop walk fix S12-a"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/documents-screen.test.tsx::FR-DOC-01 (S-16 slot): the review lists each document with its seal, date and short SHA-256, and adds no link of its own",
+    "replacedBy": "__tests__/unit/documents-screen.test.tsx::FR-DOC-01 (S-16 slot): the review lists each document with its seal, date and short SHA-256, and adds no link of its own",
+    "property": "S-16's documents slot lists each document with its type, seal, issue date and short fingerprint, and adds no Generate a document link. The separator \" . \" became a no-break space, a middle dot and a space (U+00A0, U+00B7, U+0020), so a line that wraps never starts with the dot (workshop walk finding S12-a).",
+    "proof": "The same case: in the two expected lines each ' . ' is now '\\u00a0· '; the Withdrawn and Issued words, the absent 'Generate a document' and the empty slot for no documents are unchanged. The PDF link the slot now carries (workshop walk S5-4) is required by the added case 'FR-DOC-04 (S-16 slot, workshop walk S5-4): ...' in the same file.",
+    "task": "workshop walk fix S12-a"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/integration/documents-page.test.tsx::FR-REV-08 (C4 RE-1): after erase_text_field on the file name a document printed, S-16 and S-18 still render for every role and list the document as erased",
+    "replacedBy": "__tests__/integration/documents-page.test.tsx::FR-REV-08 (C4 RE-1): after erase_text_field on the file name a document printed, S-16 and S-18 still render for every role and list the document as erased",
+    "property": "After an evidence file name is erased, S-16 and S-18 still render for every role and list the document. The separator \" . \" became a no-break space, a middle dot and a space (U+00A0, U+00B7, U+0020), so a line that wraps never starts with the dot (workshop walk finding S12-a).",
+    "proof": "The same case: the S-16 check 'Data card . from seal 1' is now 'Data card\\u00a0· from seal 1'; every other line is unchanged.",
+    "task": "workshop walk fix S12-a"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/decision-components.test.tsx::plan 1A Task 17: every control keeps its id and name, and the status cards show each status shape",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::plan 1A Task 17: every control keeps its id and name, and each status card shows one symbol, its radio button",
+    "property": "Every control of the decision form keeps its id and name, and each status choice shows one symbol: the native radio button, which is the one that shows what is chosen. The status shape beside it is gone (workshop walk finding S12-d): before anything was chosen, Not yet showed two empty circles and Done's filled disc read as chosen.",
+    "proof": "The case renders DecisionFields and requires, for done, partly, not_yet and not_applicable, the radio with type=\"radio\", name=\"status\", its value and its aria-describedby, exactly as before; the count of class=\"ui-mark__shape\" in the markup, which was 4, is now none (match returns null). The option, reason-code and select assertions are unchanged. __tests__/unit/ui/radio-cards.test.tsx still requires RadioCards to draw a mark for an option that passes one, so the kit's option stays.",
+    "task": "workshop walk fix S12-d"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/idle-layout.test.tsx::(module)",
+    "replacedBy": "__tests__/unit/idle-layout.test.tsx::UX-02: the layout gives the Sidebar the person's role in each of their organisations, the platform label and no platform role",
+    "property": "The file's module code serves the cases below: the layout is walked as an element tree with the data reads mocked, so the cases see what the layout hands the shell.",
+    "proof": "One module change: the mock of @/lib/auth/identity gains identityPassesGates, resolving true, because lib/shell/data.ts now asks it before reading the memberships (a person held at a sign-in gate gets the shell of a person in no organisation; coordinator ruling after workshop walk finding S4). Without it vitest refuses the missing export of the mocked module. The mocked person is the ordinary one who has passed the gates, so every case still sees the membershipsForUser and orgRoleLabel mocks decide the shell, unchanged. The held case is required by __tests__/unit/shell-data.test.ts::gate 2 or 3 not passed: the shell of a person in no organisation, and the memberships are not read.",
+    "task": "workshop walk fix S4, gate ruling"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::NFR-SEC-02 FR-DEC-01: the page asks for record:read in this organisation, then loads the panel for this question",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::NFR-SEC-02 FR-DEC-01: the page asks for record:read in this organisation, then loads the panel for this question",
+    "property": "The page asks for record:read in the URL's organisation, then loads the panel for this question with that context and identity; and now also that the column's read, loadStagePage, is called with the same context, the same user and the same project and stage, nothing wider.",
+    "proof": "The existing toHaveBeenCalledWith on requireOrgContextFor and loadQuestionPanel are unchanged; one expectation is added: `expect(loadStagePage).toHaveBeenCalledWith({ orgId: 'o1', role: 'assessor' }, 'u1', 'p1', 'pre-processing')`. The page now also takes `searchParams` (it reads `?show` for the column, as the stage page does), so every call passes `searchParams: Promise.resolve({})`; `@/lib/question/stagePage` is mocked (`loadStagePage`, resolving null by default) so the page's second read, the column's, does not reach a database. No expectation of the case was removed or loosened.",
+    "task": "lane 7 part 2 (the route column on the question page)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::NFR-SEC-02: nothing is loaded when the identity or the membership is refused",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::NFR-SEC-02: nothing is loaded when the identity or the membership is refused",
+    "property": "When the membership is refused nothing is loaded: the panel's loader and now also the column's loader are never called.",
+    "proof": "The rejection with NotFoundError and `loadQuestionPanel` not called are unchanged; `expect(loadStagePage).not.toHaveBeenCalled()` is added. Seen RED (loadStagePage called once with the context) while the page started the column's read beside the panel's gate under React cache(), which does not memoise outside a request; the page now awaits the gate first, then starts both reads, and the case is GREEN. The page now also takes `searchParams` (it reads `?show` for the column, as the stage page does), so every call passes `searchParams: Promise.resolve({})`; `@/lib/question/stagePage` is mocked (`loadStagePage`, resolving null by default) so the page's second read, the column's, does not reach a database. No expectation of the case was removed or loosened.",
+    "task": "lane 7 part 2 (the route column on the question page)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::NFR-SEC-02: a stage that is not one of the three, and a question the loader does not find, are a 404 page",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::NFR-SEC-02: a stage that is not one of the three, and a question the loader does not find, are a 404 page",
+    "property": "A stage that is not one of the three, and a question the loader does not find, are a 404 page, with nothing loaded for the bad stage.",
+    "proof": "Both expectations are unchanged; only the page call gains `searchParams`. The page now also takes `searchParams` (it reads `?show` for the column, as the stage page does), so every call passes `searchParams: Promise.resolve({})`; `@/lib/question/stagePage` is mocked (`loadStagePage`, resolving null by default) so the page's second read, the column's, does not reach a database. No expectation of the case was removed or loosened.",
+    "task": "lane 7 part 2 (the route column on the question page)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::NFR-MNT-01: until DEC-b fills the loader the page fails loudly with the unit named, not with an empty panel",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::NFR-MNT-01: until DEC-b fills the loader the page fails loudly with the unit named, not with an empty panel",
+    "property": "Until DEC-b fills the loader the page fails with status 501 naming the unit, not with an empty panel.",
+    "proof": "The expectation is unchanged; only the page call gains `searchParams`. The page now also takes `searchParams` (it reads `?show` for the column, as the stage page does), so every call passes `searchParams: Promise.resolve({})`; `@/lib/question/stagePage` is mocked (`loadStagePage`, resolving null by default) so the page's second read, the column's, does not reach a database. No expectation of the case was removed or loosened.",
+    "task": "lane 7 part 2 (the route column on the question page)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::(module)",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::NFR-SEC-02 FR-DEC-01: the page asks for record:read in this organisation, then loads the panel for this question",
+    "property": "The S-12 page is rendered in a unit test with its auth and its loaders mocked, so no case reaches a database; every slot records its props.",
+    "proof": "Four lines are added and none removed: `const loadStagePage = vi.fn();`, a `vi.mock('@/lib/question/stagePage', ...)` that forwards to it, the comment above them, and `loadStagePage.mockReset().mockResolvedValue(null);` in beforeEach. The page now reads the stage's list for the route column through loadStagePage (lane 7 part 2); without the mock the page cases would open a database connection. Resolving null renders the page without the column, so the regions these cases check are the ones they checked before; the case 'NFR-SEC-02 FR-DEC-01 ...' asserts the mock's call with the gate's context and identity.",
+    "task": "lane 7 part 2 (the route column on the question page)"
+  },
+  {
+    "kind": "structure",
+    "deleted": "__tests__/unit/question-content.test.tsx::UX-08 NFR-A11Y-05 (UX-34): the jump link is shown only below the two-column width, is at least 24 by 24 pixels, and keeps a visible focus ring",
+    "replacedBy": "__tests__/unit/question-content.test.tsx::UX-08 NFR-A11Y-05 (UX-34): the jump link is shown only while the guidance is not beside the form, is at least 24 by 24 pixels, and keeps a visible focus ring",
+    "property": "The in-page link down to the suggestions shows exactly while the guidance (and the suggestions in it) is not beside the form, is a target of at least 24 by 24 pixels, and keeps a visible focus ring; it is hidden by the same media query that puts the guidance beside the form in components/question/workspace.css.",
+    "proof": "With the route column (owner's decision of 14 November 2026) the guidance sits beside the form only from 90rem; from 72.5rem to under 90rem it is below the form. The case now requires `@media (width >= 90rem) { .question-content__jump { display: none;` in QuestionContent.css and the same query in workspace.css opening the three-column grid (`grid-template-columns: minmax(16rem, 1fr) minmax(0, 2fr) minmax(16rem, 1fr); grid-template-areas: \"route main guide\";`), in place of the 72.5rem pair; the 24 px, focus-ring, colour-role and no-75rem expectations are unchanged. Seen RED on the old pattern after the CSS moved to 90rem, GREEN with the new one; e2e/question-frame.spec.ts sees the link visible at 1160 and hidden at 1440.",
+    "task": "lane 7 part 2 (the route column on the question page)"
   }
 ]

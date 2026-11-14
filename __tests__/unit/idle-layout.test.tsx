@@ -22,10 +22,14 @@ vi.mock('@/lib/auth/identity', () => ({
     platformRole: 'assessor',
     mustChangePassword: false,
   })),
+  // The ordinary person has passed the sign-in gates; lib/shell/data.ts asks before reading the memberships.
+  identityPassesGates: vi.fn(async () => true),
 }));
 vi.mock('@/lib/auth/idleDeadline', () => ({ readSessionDeadlines: readSessionDeadlinesMock }));
 vi.mock('@/lib/data/preauth', () => ({ membershipsForUser: membershipsMock }));
 vi.mock('@/lib/authz/roleLabel', () => ({ orgRoleLabel: orgRoleLabelMock }));
+// The last-active hint lib/shell/data.ts reads for a person in two organisations (S4): this one names b.
+vi.mock('@/lib/data/identity', () => ({ identityDb: { user: { findUnique: vi.fn(async () => ({ lastActiveOrgId: 'org-b' })) } } }));
 vi.mock('@/components/layout/AppShell', () => ({ default: () => null }));
 vi.mock('next/navigation', () => ({ usePathname: () => '/', redirect: vi.fn() }));
 
@@ -54,7 +58,7 @@ describe('the signed-in layout and the idle warning', () => {
     readSessionDeadlinesMock.mockReset();
     // The ordinary person: two organisations, and a stub label function that knows nothing yet.
     membershipsMock.mockReset();
-    membershipsMock.mockResolvedValue([{ org: { slug: 'a', name: 'A lab' } }, { org: { slug: 'b', name: 'B lab' } }]);
+    membershipsMock.mockResolvedValue([{ orgId: 'org-a', org: { slug: 'a', name: 'A lab' } }, { orgId: 'org-b', org: { slug: 'b', name: 'B lab' } }]);
     orgRoleLabelMock.mockReset();
     orgRoleLabelMock.mockResolvedValue(null);
     errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -93,7 +97,7 @@ describe('the signed-in layout and the idle warning', () => {
     const { shell } = shells[0].props as { shell: unknown };
     expect(shell).toEqual({
       userName: 'A', userId: 'user-1', roleLabels: { a: 'Viewer', b: 'Owner' }, platformLabel: null,
-      orgs: [{ slug: 'a', name: 'A lab' }, { slug: 'b', name: 'B lab' }],
+      orgs: [{ slug: 'a', name: 'A lab' }, { slug: 'b', name: 'B lab' }], homeSlug: 'b',
     });
     expect(membershipsMock).toHaveBeenCalledWith('user-1');
     expect(orgRoleLabelMock.mock.calls.map((c) => c[1]).sort()).toEqual(['a', 'b', undefined]); // once per organisation, once for the platform

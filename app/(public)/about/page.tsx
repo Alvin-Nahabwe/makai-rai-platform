@@ -1,8 +1,7 @@
-import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { readCreditLine } from '@/lib/credit';
 import { ABOUT_COPY } from '@/lib/about/copy';
-import { PRODUCT_NAME, pageTitle } from '@/lib/ui/title';
+import { pageTitle } from '@/lib/ui/title';
 import { readHelpEmail } from '@/lib/help/contact';
 import { HELP_COPY } from '@/lib/help/copy';
 import { SEAL_PROOF_HREF } from '@/components/review/reviewText';
@@ -22,39 +21,13 @@ import './AboutPage.css';
  */
 export const metadata = { title: pageTitle(ABOUT_COPY.titles.about) };
 
-type Principle = {
-  slug: string;
-  color: string;
-  title: string;
-  summary: string;
-  body: ReactNode;
-  checks: string;
-  areas: Array<[code: string, name: string]>;
-};
+type PrincipleSlug = Exclude<keyof typeof ABOUT_COPY.principles, 'heading' | 'lead' | 'asks' | 'areas' | 'sourceBefore' | 'sourceLink'>;
 
-const PRINCIPLES: Principle[] = [
+/** The titles and the risk areas are the content's (`data/constants.ts`); the words about each are the copy module's. */
+const PRINCIPLES: Array<{ slug: PrincipleSlug; title: string; areas: Array<[code: string, name: string]> }> = [
   {
     slug: 'fairness',
-    color: '#C06014',
     title: 'Fairness & Non-discrimination',
-    summary:
-      'AI systems should not systematically disadvantage people based on characteristics like race, gender, age, disability, or socioeconomic status.',
-    body: (
-      <>
-        Bias enters through training data that underrepresents certain groups, through labels that
-        encode historical discrimination, and through model architectures that optimize for
-        aggregate accuracy while masking poor performance on minorities.{' '}
-        <span data-claims-allowed="about-model-scores">
-          A healthcare algorithm that works well on average but works poorly for Black patients produces
-          real harm, regardless of its overall accuracy score.
-        </span>{' '}
-        Fairness requires active measurement: disaggregating performance by subgroup, testing for
-        disparate impact, and choosing evaluation metrics that surface inequality rather than hide
-        it.
-      </>
-    ),
-    checks:
-      'Data representativeness relative to the target population. Historical bias identification. Disaggregated model performance across protected groups. Labeling consistency and annotator agreement.',
     areas: [
       ['PP-02', 'Data Scarcity & Availability Bias'],
       ['PP-03', 'Historical & Societal Bias'],
@@ -66,22 +39,7 @@ const PRINCIPLES: Principle[] = [
   },
   {
     slug: 'proportionality',
-    color: '#8B4513',
     title: 'Proportionality & Do Not Harm',
-    summary:
-      'AI should only be used when it is the most appropriate solution, and should not cause more harm than the problem it solves.',
-    body: (
-      <>
-        When a rule-based system, a spreadsheet, or a human process would produce comparable
-        results, complex ML introduces unnecessary cost, opacity, and potential for harm with no
-        added benefit. Proportionality means matching the tool to the problem and being honest
-        about whether AI was chosen because it is the best approach or because it is the most
-        novel one. A facial recognition system deployed in schools may be technically feasible, but
-        the surveillance harms to children can far exceed the security benefits it provides.
-      </>
-    ),
-    checks:
-      'Alternatives analysis before choosing AI. Cost-benefit evaluation that accounts for harms to affected populations. Sampling methodology that supports the claims being made.',
     areas: [
       ['PP-01', 'Techno-solutionist Bias'],
       ['PP-05', 'Sampling & Generalization Bias'],
@@ -89,22 +47,7 @@ const PRINCIPLES: Principle[] = [
   },
   {
     slug: 'transparency',
-    color: '#A0522D',
     title: 'Transparency & Explainability',
-    summary: 'People affected by AI decisions should be able to understand why those decisions were made.',
-    body: (
-      <>
-        When an AI system denies someone a loan, flags them for additional scrutiny, or filters
-        their job application, the affected person deserves to know why. Transparency goes beyond
-        publishing model architecture details. It means providing meaningful explanations to the
-        people who bear the consequences of automated decisions. It also extends to data
-        collection: if personal data was gathered without informing the subjects, or if a deployed
-        system has no documentation of how it works, transparency has already been lost before any
-        prediction is made.
-      </>
-    ),
-    checks:
-      'Data collection transparency and consent practices. Explainability of model decisions to affected individuals. System documentation that regulators and successors can follow.',
     areas: [
       ['IP-03', 'Opacity & Unexplainability'],
       ['PO-07', 'Documentation Deficit'],
@@ -112,22 +55,7 @@ const PRINCIPLES: Principle[] = [
   },
   {
     slug: 'accountability',
-    color: '#C06014',
     title: 'Reproducibility & Accountability',
-    summary: 'Results should be reproducible, and someone should be accountable when things go wrong.',
-    body: (
-      <>
-        If you cannot reproduce an AI system&apos;s results, you cannot check them. If you cannot
-        check them, you cannot hold anyone accountable when it goes wrong. Reproducibility requires
-        documented code, versioned data, recorded hyperparameters, and fixed random seeds.
-        Accountability requires clear ownership of system outputs, defined escalation paths when
-        errors occur, and governance frameworks that survive personnel changes. Without both,
-        harmful AI decisions happen in a vacuum: the model made the decision, no one owns the
-        outcome, and no one can determine what went wrong.
-      </>
-    ),
-    checks:
-      'Evaluation metric appropriateness for the use case. Experiment documentation and reproducibility. Post-deployment performance monitoring. Governance structures assigning responsibility for system outcomes.',
     areas: [
       ['IP-04', 'Metric Selection Bias'],
       ['IP-06', 'Reproducibility Failure'],
@@ -137,21 +65,7 @@ const PRINCIPLES: Principle[] = [
   },
   {
     slug: 'safety',
-    color: '#8B4513',
     title: 'Safety & Security',
-    summary: 'Systems should handle unexpected inputs gracefully and protect data from corruption or misuse.',
-    body: (
-      <>
-        A model trained on clean, curated data will face noisy, incomplete, and adversarial inputs
-        in production. A data pipeline that works correctly in development can silently corrupt
-        records during ETL. Safety means the system degrades gracefully rather than
-        catastrophically when conditions change. Security means protecting the data pipeline from
-        corruption, unauthorized modification, or quality degradation. In healthcare or criminal
-        justice, a robustness problem causes direct harm to real people.
-      </>
-    ),
-    checks:
-      'Stress testing against realistic distribution shifts. Data pipeline integrity checks and validation. Mechanisms for detecting and responding to data quality issues.',
     areas: [
       ['PP-06', 'Privacy & Consent Violations'],
       ['IP-05', 'Model Robustness Failure'],
@@ -160,25 +74,7 @@ const PRINCIPLES: Principle[] = [
   },
   {
     slug: 'awareness',
-    color: '#A0522D',
     title: 'Awareness & Literacy',
-    summary:
-      'People who use or are affected by AI systems need to understand what those systems can and cannot do.',
-    body: (
-      <>
-        <span data-claims-allowed="about-model-scores">
-          A clinician who treats a model&apos;s 60% confidence score as certainty will make worse
-          decisions than one who understands the margin of error.
-        </span>{' '}
-        A loan officer who does not realize they can override an algorithmic recommendation becomes
-        a rubber stamp for the model&apos;s biases. AI literacy means giving end-users enough
-        understanding to know when to trust the system, when to question it, and how to escalate
-        when something looks wrong. Oversight mechanisms are only as strong as the people operating
-        them.
-      </>
-    ),
-    checks:
-      'Human oversight mechanisms for AI-driven decisions. End-user training on system outputs, confidence levels, and system limitations.',
     areas: [
       ['PO-02', 'Lack of Human Oversight'],
       ['PO-04', 'User Literacy Deficit'],
@@ -186,106 +82,65 @@ const PRINCIPLES: Principle[] = [
   },
   {
     slug: 'collaboration',
-    color: '#C06014',
     title: 'Multi-stakeholder Collaboration',
-    summary: 'The people affected by an AI system should have a say in how it is built and used.',
-    body: (
-      <>
-        AI systems built without input from the communities they affect tend to miss local
-        context, overlook harm, and lack mechanisms for redress. A crop disease
-        detection model deployed without consulting local farmers may misclassify regional crop
-        varieties. A content moderation system without an appeal mechanism has no way to correct
-        its mistakes. Feedback loops are how you discover that your system is going wrong in ways your
-        test data never showed.
-      </>
-    ),
-    checks:
-      'Mechanisms for affected communities and end-users to provide feedback, contest automated decisions, and report system issues.',
     areas: [['PO-06', 'Feedback Loop Absence']],
   },
   {
     slug: 'sustainability',
-    color: '#8B4513',
     title: 'Sustainability',
-    summary: 'The energy and environmental costs of AI should be proportionate to its benefits.',
-    body: (
-      <>
-        Training a single large language model can emit as much carbon as five cars over their
-        entire lifetimes. Running inference at scale compounds this. A model that reduces hospital
-        readmissions may justify significant compute. A marginally better recommendation engine may
-        not. This principle asks teams to measure and report the energy footprint of their AI
-        systems and to consider whether more efficient architectures or training methods could
-        achieve comparable results at lower cost.
-      </>
-    ),
-    checks:
-      'Environmental impact assessment for model training and deployment. Consideration of efficient architectures and green computing practices.',
     areas: [['PO-05', 'Environmental Impact']],
   },
 ];
 
-const STAGES: Array<[name: string, summary: string]> = [
-  ['Pre-processing', 'Most responsible AI considerations begin before any model is trained.'],
-  ['In-processing', 'Considerations that arise during model training, evaluation, and selection.'],
-  [
-    'Post-processing',
-    'What happens after the model is deployed: monitoring, governance, and community engagement.',
-  ],
-];
+/** The stage names are the content's; the meaning beside each is the vocabulary's, through the copy module. */
+const STAGE_NAMES = ['Pre-processing', 'In-processing', 'Post-processing'] as const;
+
+/** The awareness principle's first sentence names a model's "60% likely", so it alone sits in the marker. */
+function PrincipleBody({ slug }: { slug: PrincipleSlug }) {
+  const words = ABOUT_COPY.principles[slug];
+  if ('marked' in words) {
+    return (
+      <p>
+        <span data-claims-allowed="about-model-scores">{words.marked}</span> {words.body}
+      </p>
+    );
+  }
+  return <p>{words.body}</p>;
+}
 
 export default function AboutPage() {
   const credit = readCreditLine();
   const helpEmail = readHelpEmail();
 
+  const { hero, whatItDoes, principles, credit: creditWords, help } = ABOUT_COPY;
+
   return (
     <div className="about-page" id="about-page">
-      <header className="page-hero page-hero--animated">
-        <div className="page-hero__bg"></div>
-        <div className="page-hero__grid-overlay"></div>
-        <div className="page-hero__accent-line"></div>
-        <div className="container" style={{ position: 'relative', zIndex: 2 }}>
-          <h1>{`About the ${PRODUCT_NAME}`}</h1>
-          <p className="page-hero__desc">
-            A place for a team to record what it decided about its AI system, why it decided it,
-            and the evidence behind the decision.
-          </p>
+      <header className="page-hero">
+        <div className="container">
+          <h1>{hero.heading}</h1>
+          <p className="page-hero__desc">{hero.lead}</p>
         </div>
       </header>
 
       <div className="container container--narrow about-body">
         <section className="about-section" aria-labelledby="what-this-is">
-          <h2 id="what-this-is">What this platform is and is not</h2>
-          <p>
-            {`The ${PRODUCT_NAME} helps a team keep one honest record of how it handled responsible AI questions for one AI system. The questions follow three stages of AI development.`}
-          </p>
+          <h2 id="what-this-is">{whatItDoes.heading}</h2>
+          <p>{whatItDoes.intro}</p>
           <ul className="about-stages">
-            {STAGES.map(([name, summary]) => (
+            {STAGE_NAMES.map((name, i) => (
               <li key={name}>
-                <strong>{name}.</strong> {summary}
+                <strong>{name}.</strong> {whatItDoes.stageMeanings[i]}
               </li>
             ))}
           </ul>
-          <p>
-            For each question, your team records a decision, the reason for it, who decided and
-            when, and any evidence. The team decides; the platform records. Where a decision falls
-            short of the expected practice, the platform raises a finding. Your team closes a
-            finding with a mitigation or by accepting the risk. When a stage review is ready, your
-            team seals it, and the platform builds documents from the sealed record. The platform
-            does not test your model or calculate anything from your data.
-          </p>
-          <p data-claims-allowed="not-an-approval-service">
-            It is not an approval, audit, certification or compliance service, and nothing it
-            produces is one.
-          </p>
+          <p>{whatItDoes.record}</p>
+          <p data-claims-allowed="not-an-approval-service">{whatItDoes.notApproval}</p>
           <p>
             <Link href={SEAL_PROOF_HREF}>{HELP_COPY.sealing.heading}</Link>
           </p>
-          <h3>Who can see your records</h3>
-          <p>
-            Only members of your organisation can see its records, according to their role.
-            MAK-AI&apos;s administrator has no access to records in the application, and the
-            operator who runs the server has technical access to the database.
-          </p>
+          <h3>{whatItDoes.whoCanSee.heading}</h3>
+          <p>{whatItDoes.whoCanSee.text}</p>
         </section>
 
         <section
@@ -293,33 +148,26 @@ export default function AboutPage() {
           id="principles-section"
           aria-labelledby="principles-heading"
         >
-          <h2 id="principles-heading">Eight responsible AI principles</h2>
-          <p className="about-lead">
-            Every question in the framework maps back to one of these eight principles.
-          </p>
+          <h2 id="principles-heading">{principles.heading}</h2>
+          <p className="about-lead">{principles.lead}</p>
 
           <div className="stage-details">
             {PRINCIPLES.map((p) => (
-              <div
-                key={p.slug}
-                className="stage-detail"
-                id={`principle-${p.slug}`}
-                style={{ '--stage-color': p.color } as React.CSSProperties}
-              >
+              <div key={p.slug} className="stage-detail" id={`principle-${p.slug}`}>
                 <div className="stage-detail__header">
                   <div>
                     <h3>{p.title}</h3>
-                    <p className="stage-detail__summary">{p.summary}</p>
+                    <p className="stage-detail__summary">{principles[p.slug].summary}</p>
                   </div>
                 </div>
                 <div className="stage-detail__body">
                   <div className="stage-detail__areas">
-                    <p>{p.body}</p>
-                    <h4>What the platform asks about</h4>
-                    <p>{p.checks}</p>
+                    <PrincipleBody slug={p.slug} />
+                    <h4>{principles.asks}</h4>
+                    <p>{principles[p.slug].checks}</p>
                   </div>
                   <div className="stage-detail__assessment">
-                    <h4>Linked assessment areas</h4>
+                    <h4>{principles.areas}</h4>
                     <ul>
                       {p.areas.map(([code, name]) => (
                         <li key={code}>
@@ -336,42 +184,38 @@ export default function AboutPage() {
           </div>
 
           <p className="about-note about-note--centered">
-            These principles are drawn from the{' '}
+            {principles.sourceBefore}{' '}
             <a
               href="https://www.unesco.org/en/artificial-intelligence/recommendation-ethics"
               rel="noopener noreferrer"
             >
-              UNESCO Recommendation on the Ethics of Artificial Intelligence
+              {principles.sourceLink}
             </a>
             .
           </p>
         </section>
 
         <section className="about-section" aria-labelledby="credit">
-          <h2 id="credit">Credit</h2>
+          <h2 id="credit">{creditWords.heading}</h2>
           <p>{credit.text}</p>
           <p>
             <a href={credit.href} rel="noopener noreferrer">
-              Read the {credit.licence} licence
+              {creditWords.licenceLink(credit.licence)}
             </a>
           </p>
         </section>
 
         <section className="about-section" aria-labelledby="help-and-contact">
-          <h2 id="help-and-contact">Help and contact</h2>
+          <h2 id="help-and-contact">{help.heading}</h2>
           {helpEmail === null ? (
-            <p>The Help and contact address is published before the platform opens to teams.</p>
+            <p>{help.pending}</p>
           ) : (
             <p>
-              Write to <a href={`mailto:${helpEmail}`}>{helpEmail}</a>.
+              {help.writeTo} <a href={`mailto:${helpEmail}`}>{helpEmail}</a>.
             </p>
           )}
-          <p>
-            Tell us what you were doing and which page you were on. If an error page appeared,
-            give the support reference shown on it. The reference lets us find what happened
-            without screenshots of your records.
-          </p>
-          <p>Never send record text by email. That means decisions, findings, evidence names and file contents.</p>
+          <p>{help.reference}</p>
+          <p>{help.noRecords}</p>
         </section>
       </div>
     </div>

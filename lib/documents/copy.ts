@@ -12,6 +12,8 @@ export const STATEMENT = 'Made from this team\'s own records in the MAK-AI RAI P
 export const SEALED_NOTE = 'The platform keeps this seal. No outside body has time-stamped it.';
 export const NOT_RECORDED = 'Not recorded';                                           // FR-DOC-02, D1
 export const NOT_RECORDED_AT_ISSUE = 'Not recorded: this stage had no seal when the document was issued'; // FR-DOC-05, D3; C#273
+/** A question with no decision inside a field that has another value (the owner's decision of 14 November 2026, walk finding S1). */
+export const noDecisionLine = (questionId: string): string => `No decision is recorded for question ${questionId}.`;
 export const PROJECT_MARK = 'From the project details on the day of issue. Not part of the sealed record.'; // FR-DOC-02; C#274
 export const TYPED_MARK = 'Typed for this document; not part of the sealed record';   // FR-DOC-03
 export const NO_EVIDENCE = 'Evidence: none attached';                                 // FR-DOC-02, D9
@@ -81,6 +83,15 @@ export const outsideOtherBodyLine = (member: string): string =>
 export const evidenceFileLine = (name: string, fingerprint: string | null): string => `file ${name}${fingerprint === null ? '' : ` (fingerprint ${fingerprint})`}`;
 /** A finding's state, in its block (C#347). */
 export const findingStatusLine = (word: string): string => `Status: ${word}`;
+/**
+ * The status word of a finding closed with no real (kind action) mitigation done since its latest reopen: a decision closed it
+ * (the coordinator's ruling, 14 Nov 2026 21:45). "Closed by a mitigation" stays for a finding a real one closed.
+ */
+export const FINDING_CLOSED = 'Closed';
+/** Under a finding a decision closed: who entered the closing record and the UTC day it was received (the same ruling). */
+export const closedByLine = (name: string, day: string): string => `Closed by ${name} on ${day}.`;
+/** The cause under it when the record names the personal data question's version answering No (the same ruling). */
+export const CLOSED_NO_LONGER_APPLIES = 'Closed because this question no longer applies: the team answered No to the personal data question.';
 /** An accepted risk's check date and the note of its last check (C#359, C#360). */
 export const checkAgainLine = (day: string): string => `To be checked again on: ${day}`;
 export const lastCheckNoteLine = (note: string): string => `Notes from the last check: ${note}`;
@@ -163,7 +174,7 @@ export const DOCUMENTS_COPY = Object.freeze({
     fromRecord: (r: { fields: number; questions: number; notRecorded: number }): string => {
       const fields = (n: number) => `${n} ${n === 1 ? 'field' : 'fields'}`;
       const from = r.questions === 0 ? fields(r.fields) : `${fields(r.fields)} from ${r.questions} ${r.questions === 1 ? 'question' : 'questions'}`;
-      return `${from} . ${fields(r.notRecorded)} will read "${NOT_RECORDED}"`;
+      return `${from}\u00a0· ${fields(r.notRecorded)} will read "${NOT_RECORDED}"`;
     },
     previewButton: 'Preview document',
     retry: 'Retry',
@@ -201,13 +212,13 @@ export const DOCUMENTS_COPY = Object.freeze({
   }),
   list: Object.freeze({
     empty: 'No documents issued from this review yet.',
-    line: (title: string, sealNumber: number, day: string, by: string, short: string): string => `${title} . seal ${sealNumber} . ${day} . by ${by} . Fingerprint ${short}`,
+    line: (title: string, sealNumber: number, day: string, by: string, short: string): string => `${title}\u00a0· seal ${sealNumber}\u00a0· ${day}\u00a0· by ${by}\u00a0· Fingerprint ${short}`,
     olderSeal: 'Made from an older seal. A newer seal exists.',
     withdrawn: (day: string, reason: string): string => `Withdrawn on ${day}: ${reason}`,
     erased: (day: string): string => `File erased on ${day}`,
     issuedWord: 'Issued ',
     reviewLine: (title: string, sealNumber: number, day: string, short: string, withdrawn: boolean): string =>
-      `${title} . from seal ${sealNumber} . issued ${day} . Fingerprint ${short} . ${withdrawn ? 'Withdrawn' : 'Issued'}`,
+      `${title}\u00a0· from seal ${sealNumber}\u00a0· issued ${day}\u00a0· Fingerprint ${short}\u00a0· ${withdrawn ? 'Withdrawn' : 'Issued'}`,
   }),
   actions: Object.freeze({
     copy: 'Copy as text',

@@ -1,5 +1,5 @@
 /*
- * The S-12 question content slot (components/question/QuestionContent.tsx; UX-08, FR-CNT-02).
+ * The guidance aside of the question page (components/question/QuestionContent.tsx; UX-08, FR-CNT-02).
  * Colours are the colour roles of app/globals.css, which both themes redefine, so text keeps 4.5:1 in light and
  * dark (NFR-A11Y-05). The link uses --color-action-text, the role the legacy --tint-brand-fg resolved to, so it looks
  * as before in both themes.
@@ -8,25 +8,18 @@
 /* A long word or address in a content text wraps instead of widening the page at 320px (SC 1.4.10). */
 .question-content {
   overflow-wrap: break-word;
+  margin-block-end: var(--space-6);
 }
 
-.question-content__principle {
-  margin: 0 0 var(--space-1);
-  color: var(--color-ink-muted);
-  font-size: var(--font-size-small);
-}
-
-.question-content__text {
-  margin: var(--space-2) 0 var(--space-3);
-  color: var(--color-heading);
-  font-size: var(--font-size-h3);
-  line-height: 1.4;
-}
-
-.question-content__heading {
+/* The two headings are h2 (one level below the page's h1) at the size they had as h3 under the old "Question" h2. */
+.question-content > h2 {
   margin: var(--space-4) 0 var(--space-1);
   color: var(--color-heading);
   font-size: var(--font-size-body);
+}
+
+.question-content > h2:first-child {
+  margin-block-start: 0;
 }
 
 .question-content__body {
@@ -34,8 +27,14 @@
   color: var(--color-ink);
 }
 
+.question-content__principle {
+  margin: var(--space-4) 0 0;
+  color: var(--color-ink-muted);
+  font-size: var(--font-size-small);
+}
+
 .question-content__jump-line {
-  margin: 0 0 var(--space-3);
+  margin: var(--space-3) 0 0;
 }
 
 /* At least 24 by 24 CSS pixels, grown by padding so longer text is never clipped (UX-34, SC 2.5.8). */
@@ -60,14 +59,12 @@
 }
 
 /*
- * The suggestions sit beside the question once the shell's grid has two columns: each at least 24rem, so 49.5rem with
- * the 1.5rem gap. The grid's width is the viewport less the 260px sidebar, the 2rem padding of .app-main and the 2rem
- * padding of .page-content on each side (app/globals.css), so two columns start at a viewport of about 1180px. The
- * shell sizes its grid by its own width, not a media query, so this one is set a little above that: at a width
- * where both could apply the link shows, which only jumps to the column beside it; it is never hidden where the
- * suggestions are below the form.
+ * The suggestions are in the guidance column, just below this aside and the finding link, once that column sits
+ * beside the form: the same media query as the three columns (components/question/workspace.css), so the link shows
+ * exactly while the suggestions are below the form, and is never hidden where it is the way down to them. If the
+ * owner's swap in workspace.css puts the guidance beside the form from 72.5rem, this query becomes (width >= 72.5rem).
  */
-@media (width >= 75rem) {
+@media (width >= 90rem) {
   .question-content__jump {
     display: none;
   }

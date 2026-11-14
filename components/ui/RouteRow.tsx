@@ -34,7 +34,9 @@ export function RouteRow({ label, stops, tally }: RouteRowProps): ReactElement {
           const content = (
             <>
               <MarkShape kind={stop.kind} size={20} />
-              <span className="visually-hidden">{`${stop.title}: ${statusMarkWords(stop.kind, { scopeAnswer: stop.scopeAnswer })}`}</span>
+              {/* The title sits in an element of its own, so it is a whole text node whatever renders it: that is how the
+                  claims crawl knows an allow-listed question text (e2e/claims-crawl.spec.ts, FR-PUB-01). It reads the same. */}
+              <span className="visually-hidden"><span>{stop.title}</span>{`: ${statusMarkWords(stop.kind, { scopeAnswer: stop.scopeAnswer })}`}</span>
             </>
           );
           const current = stop.current ? 'step' : undefined;

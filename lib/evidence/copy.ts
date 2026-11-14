@@ -74,6 +74,8 @@ export const EVIDENCE_COPY = Object.freeze({
     nameTooLong: (max: number): string => `Use ${max} characters or fewer for the name.`,
     requestIdMissing: 'Something went wrong. Reload the page and try again.',
     chooseKind: 'Choose a file or a link.',
+    /** Under "Add link" while the link's request is out (walk finding B3). */
+    adding: 'Adding the link...',
   }),
   /** A version's evidence (components/evidence/VersionEvidenceList.tsx). */
   list: Object.freeze({

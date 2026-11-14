@@ -13,6 +13,11 @@ const membershipsMock = vi.hoisted(() => vi.fn());
 const orgRoleLabelMock = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/data/preauth', () => ({ membershipsForUser: membershipsMock }));
 vi.mock('@/lib/authz/roleLabel', () => ({ orgRoleLabel: orgRoleLabelMock }));
+const findUniqueMock = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/data/identity', () => ({ identityDb: { user: { findUnique: findUniqueMock } } }));
+// Whether the person passes the sign-in gates (a password change due, a legal text to accept): they do unless a case says not.
+const passesGatesMock = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/auth/identity', () => ({ identityPassesGates: passesGatesMock }));
 
 import { loadShellData, roleWord } from '@/lib/shell/data';
 
@@ -29,6 +34,43 @@ describe('loadShellData', () => {
     membershipsMock.mockReset();
     orgRoleLabelMock.mockReset();
     orgRoleLabelMock.mockResolvedValue(null);
+    findUniqueMock.mockReset();
+    findUniqueMock.mockResolvedValue({ lastActiveOrgId: null });
+    passesGatesMock.mockReset();
+    passesGatesMock.mockResolvedValue(true);
+  });
+
+  describe('a person held at a sign-in gate (coordinator ruling after S4)', () => {
+    it('gate 2 or 3 not passed: the shell of a person in no organisation, and the memberships are not read', async () => {
+      membershipsMock.mockResolvedValue([row('a', 'Alpha'), row('b', 'Beta')]);
+      orgRoleLabelMock.mockImplementation(async (_i: unknown, slug: string | undefined) => (slug === undefined ? null : 'viewer'));
+      findUniqueMock.mockResolvedValue({ lastActiveOrgId: 'org-id-b' });
+      passesGatesMock.mockResolvedValue(false);
+      const shell = await loadShellData(identity);
+      expect(shell).toEqual({ userId: 'user-1', userName: 'Ssekandi Nnaŋŋa', platformLabel: null, roleLabels: {}, orgs: [], homeSlug: null });
+      expect(passesGatesMock).toHaveBeenCalledWith(identity);
+      expect(membershipsMock).not.toHaveBeenCalled();
+      expect(findUniqueMock).not.toHaveBeenCalled();
+      expect(orgRoleLabelMock.mock.calls.map((c) => c[1])).toEqual([undefined]);
+      const serialised = JSON.stringify(shell);
+      for (const value of ['"a"', '"b"', 'Alpha', 'Beta', 'Viewer', 'org-id']) expect(serialised).not.toContain(value);
+    });
+
+    it('a held MAK-AI administrator keeps the platform label and still gets no organisation', async () => {
+      membershipsMock.mockResolvedValue([row('stray', 'Stray')]);
+      orgRoleLabelMock.mockImplementation(async (_i: unknown, slug: string | undefined) => (slug === undefined ? 'MAK-AI administrator' : 'viewer'));
+      passesGatesMock.mockResolvedValue(false);
+      const shell = await loadShellData({ ...identity, platformRole: 'admin', mustChangePassword: true });
+      expect(shell).toEqual({ userId: 'user-1', userName: 'Ssekandi Nnaŋŋa', platformLabel: 'MAK-AI administrator', roleLabels: {}, orgs: [], homeSlug: null });
+      expect(membershipsMock).not.toHaveBeenCalled();
+    });
+
+    it('a gate read that fails is an error, never a shell with organisations', async () => {
+      membershipsMock.mockResolvedValue([row('a', 'Alpha')]);
+      passesGatesMock.mockRejectedValue(new Error('database down'));
+      await expect(loadShellData(identity)).rejects.toThrow('database down');
+      expect(membershipsMock).not.toHaveBeenCalled();
+    });
   });
 
   it('1A Task 11 L2-50 T1: one read of the memberships, one label per organisation and one for the platform', async () => {
@@ -48,6 +90,7 @@ describe('loadShellData', () => {
       userId: 'user-1', userName: 'Ssekandi Nnaŋŋa', platformLabel: null,
       roleLabels: { a: 'Viewer', b: 'Owner', c: 'Assessor' },
       orgs: [{ slug: 'a', name: 'Alpha' }, { slug: 'b', name: 'Alpha' }, { slug: 'c', name: 'Zeta' }],
+      homeSlug: null,
     });
   });
 
@@ -112,9 +155,66 @@ describe('loadShellData', () => {
     for (const value of ['stray', 'Stray Lab', 'org-id-stray', 'm-stray', 'Legal name of stray', 'Viewer']) expect(serialised).not.toContain(value);
   });
 
+  describe('homeSlug (S4: the organisation / would send the person to)', () => {
+    it('S4: one organisation gives its slug, and the hint is not read', async () => {
+      membershipsMock.mockResolvedValue([row('a', 'Alpha')]);
+      const shell = await loadShellData(identity);
+      expect(shell.homeSlug).toBe('a');
+      expect(findUniqueMock).not.toHaveBeenCalled();
+    });
+
+    it('S4: no organisation gives null, and the hint is not read', async () => {
+      membershipsMock.mockResolvedValue([]);
+      const shell = await loadShellData(identity);
+      expect(shell.homeSlug).toBeNull();
+      expect(findUniqueMock).not.toHaveBeenCalled();
+    });
+
+    it('S4: two organisations and a hint naming one of them give that slug; the hint is read by the person\'s own id, its one field only', async () => {
+      membershipsMock.mockResolvedValue([row('a', 'Alpha'), row('b', 'Beta')]);
+      findUniqueMock.mockResolvedValue({ lastActiveOrgId: 'org-id-b' });
+      const shell = await loadShellData(identity);
+      expect(shell.homeSlug).toBe('b');
+      expect(findUniqueMock).toHaveBeenCalledTimes(1);
+      expect(findUniqueMock).toHaveBeenCalledWith({ where: { id: 'user-1' }, select: { lastActiveOrgId: true } });
+      // T2: nothing of the user row reaches the browser but the slug, which is one already in orgs.
+      expect(JSON.stringify(shell)).not.toContain('org-id-b');
+      expect(shell.orgs.map((o) => o.slug)).toContain(shell.homeSlug);
+    });
+
+    it('S4 T1 (D-069): a hint naming an organisation the person is not in gives null, never that organisation', async () => {
+      membershipsMock.mockResolvedValue([row('a', 'Alpha'), row('b', 'Beta')]);
+      findUniqueMock.mockResolvedValue({ lastActiveOrgId: 'org-id-removed' });
+      expect((await loadShellData(identity)).homeSlug).toBeNull();
+      findUniqueMock.mockResolvedValue({ lastActiveOrgId: null });
+      expect((await loadShellData(identity)).homeSlug).toBeNull();
+      findUniqueMock.mockResolvedValue(null);
+      expect((await loadShellData(identity)).homeSlug).toBeNull();
+    });
+
+    it('S4: the administrator gets null and the hint is not read, even with a stray membership', async () => {
+      membershipsMock.mockResolvedValue([row('stray', 'Stray'), row('stray2', 'Stray 2')]);
+      orgRoleLabelMock.mockImplementation(async (_i: unknown, slug: string | undefined) => (slug === undefined ? 'MAK-AI administrator' : null));
+      const shell = await loadShellData({ ...identity, platformRole: 'admin' });
+      expect(shell.homeSlug).toBeNull();
+      expect(findUniqueMock).not.toHaveBeenCalled();
+    });
+
+    it('S4 T3: an organisation whose slug is __proto__ is a home slug like any other', async () => {
+      membershipsMock.mockResolvedValue([row('__proto__', 'P')]);
+      expect((await loadShellData(identity)).homeSlug).toBe('__proto__');
+      membershipsMock.mockResolvedValue([row('__proto__', 'P'), row('b', 'Beta')]);
+      findUniqueMock.mockResolvedValue({ lastActiveOrgId: 'org-id-__proto__' });
+      expect((await loadShellData(identity)).homeSlug).toBe('__proto__');
+    });
+  });
+
   it('1A Task 11 T1: the shell data module and the signed-in layout read only through membershipsForUser and orgRoleLabel', () => {
     const expected: Record<string, string[]> = {
-      'lib/shell/data.ts': ['@/lib/auth/identity', '@/lib/authz/roleLabel', '@/lib/data/preauth', '@/lib/shell/types', '@/lib/vocabulary/terms'],
+      'lib/shell/data.ts': [
+        '@/lib/auth/identity', '@/lib/authz/roleLabel', '@/lib/data/identity', '@/lib/data/preauth', '@/lib/org-dispatch', '@/lib/shell/types',
+        '@/lib/vocabulary/terms',
+      ],
       'app/(authenticated)/layout.tsx': [
         '@/components/layout/AppShell', '@/components/layout/IdleWarning', '@/components/legal/NewerLegalTextNotice', '@/lib/auth/identity',
         '@/lib/auth/idle', '@/lib/auth/idleDeadline', '@/lib/shell/data', 'next/headers',

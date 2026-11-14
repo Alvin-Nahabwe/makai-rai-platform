@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CopyLinkFallback } from '@/components/invitations/CopyLinkFallback';
@@ -102,6 +103,16 @@ describe('S-22 MembersManager', () => {
     const rowOf = (name: string) => text(html.split('<tr').slice(1).find((r) => r.includes(name))!);
     expect(rowOf(m1.name)).toContain(MEMBERS_COPY.members.copiedLink.trim());
     expect(rowOf(m2.name)).not.toContain(MEMBERS_COPY.members.copiedLink.trim());
+  });
+
+  it('FR-ACC-10 (workshop walk S12-c): the copied-link mark stands on its own line under the name, small and muted, not run into it', () => {
+    const html = renderToStaticMarkup(<MembersManager {...ownerProps} members={[{ ...m1, createdFromShownLink: true }]} />);
+    expect(html.replace(/<!-- -->/g, '')).toContain(`${m1.name}${MEMBERS_COPY.members.you}<span class="members-mark">${MEMBERS_COPY.members.copiedLink}</span>`);
+    const css = readFileSync('app/(authenticated)/orgs/[slug]/settings/members/MembersManager.css', 'utf8');
+    const rule = css.match(/\.members-mark \{([^}]*)\}/)?.[1] ?? '';
+    expect(rule).toMatch(/display: block;/);
+    expect(rule).toMatch(/font-size: var\(--font-size-small\);/);
+    expect(rule).toMatch(/color: var\(--color-ink-muted\);/);
   });
 
   it('NFR-A11Y-05 (A11Y-4): the Leave control is not part of the members table', () => {

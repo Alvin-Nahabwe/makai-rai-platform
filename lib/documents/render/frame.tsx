@@ -13,7 +13,9 @@ import type { RenderInput, ResolvedField } from './index';
 
 const styles = StyleSheet.create({
   page: { fontFamily: PDF_FONT_FAMILY, fontSize: 10, lineHeight: 1.35, paddingTop: 40, paddingHorizontal: 44, paddingBottom: 96, color: '#111111' },
-  title: { fontSize: 20, marginBottom: 4 },
+  // react-pdf turns the page's unitless 1.35 into 13.5 pt (times the page's own 10 pt) and the title inherits that
+  // fixed height, shorter than its 20 pt text, so "Organisation:" printed through it. Its own ratio gives 27 pt.
+  title: { fontSize: 20, lineHeight: 1.35, marginBottom: 4 },
   meta: { fontSize: 10, marginBottom: 2 },
   note: { fontSize: 9, marginTop: 6, marginBottom: 2 },
   section: { fontSize: 14, marginTop: 16, marginBottom: 6 },

@@ -29,12 +29,16 @@
   max-inline-size: 14em;
 }
 
-/* The copied-link mark after a member's name, and a long email that may break anywhere. */
-.members-muted {
-  color: var(--color-ink-muted);
+/* The copied-link mark (FR-ACC-10): on its own line under the member's name, small and muted, so it never runs into
+   the name. */
+.members-mark {
+  display: block;
+  font-size: var(--font-size-small);
   font-weight: normal;
+  color: var(--color-ink-muted);
 }
 
+/* A long email may break anywhere. */
 .members-email {
   overflow-wrap: anywhere;
 }

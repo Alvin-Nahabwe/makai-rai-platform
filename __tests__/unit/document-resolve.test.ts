@@ -257,7 +257,7 @@ describe('project, typed and meta fields', () => {
     for (const t of [text(m, 'MC-03'), text(m, 'MC-10'), text(d, 'DC-06')]) expect(t).not.toContain('other');
     const bare = resolveFields(modelCardMap, snapWith({}, { metadata: { aiSystemType: 'other', aiSystemTypeOther: null } }), {});
     expect(text(bare, 'MC-03')).toMatch(/^Other/);
-    expect(text(resolveFields(modelCardMap, snapWith({}, { metadata: { aiSystemType: 'classification' } }), {}), 'MC-03')).toContain('classification');
+    expect(text(resolveFields(modelCardMap, snapWith({}, { metadata: { aiSystemType: 'classification' } }), {}), 'MC-03')).toBe(`Classification\n${PROJECT_MARK}`);
   });
 
   it('FR-DOC-02 (round 10): a dataset size band prints its words, never the enum value', () => {
@@ -397,14 +397,14 @@ describe('gaps, gate-derived questions and erasure lines', () => {
     expect(text(r, 'DC-17')).toContain('See DC-35');   // Q-PP-14 is first printed under DC-35
   });
 
-  it('FR-DOC-08 (H3): in a field with several sources, an undecided record source prints "Not recorded" in its place and the field counts', () => {
+  it('FR-DOC-08 (H3): in a field with several sources, an undecided record source beside a value prints "No decision is recorded for question <id>." in its place and the field counts', () => {
     const r = resolveFields(dataCardMap, snapWith({ 'Q-PP-GATE-SENSITIVE': decision({ v: 1, status: null, scopeAnswer: 'yes', reason: 'Checked.' }) }), {});
     const lines = (text(r, 'DC-16') as string).split('\n');
-    expect(lines).toContain(NOT_RECORDED);
-    expect(lines.indexOf(personalDataAnswerLine('Yes'))).toBeLessThan(lines.indexOf(NOT_RECORDED));   // the gate part first, as the map orders its sources
+    expect(lines).toContain(noDecisionLine('Q-PP-13'));
+    expect(lines.indexOf(personalDataAnswerLine('Yes'))).toBeLessThan(lines.indexOf(noDecisionLine('Q-PP-13')));   // the gate part first, as the map orders its sources
     expect(r.notRecordedFields).toContain('DC-16');
     const decided = resolveFields(dataCardMap, snapWith({ 'Q-PP-GATE-SENSITIVE': decision({ v: 1, status: null, scopeAnswer: 'yes' }), 'Q-PP-13': decision({ v: 1, reason: 'Consent kept.' }) }), {});
-    expect(text(decided, 'DC-16')).not.toContain(`\n${NOT_RECORDED}`);
+    expect(text(decided, 'DC-16')).not.toContain(noDecisionLine('Q-PP-13'));
     expect(decided.notRecordedFields).not.toContain('DC-16');
   });
 
@@ -496,11 +496,11 @@ describe('fix round 1: sources, Not yet, gaps and per-field dates', () => {
     }
   });
 
-  it('FR-DOC-08 (F5): an empty project or typed part of a multi-source field prints Not recorded in its place and the field counts', () => {
+  it('FR-DOC-08 (F5): an empty project or typed part beside a value prints nothing and the field does not count; a multi-source field with no value prints Not recorded and counts', () => {
     const r = resolveFields(dataCardMap, snapWith({}, { metadata: { institution: 'Makerere', department: null } }), { 'DC-02': 'The MCH unit' });
     const lines = (text(r, 'DC-02') as string).split('\n');
-    expect(lines).toContain(NOT_RECORDED);   // the empty department
-    expect(r.notRecordedFields).toContain('DC-02');
+    expect(lines).toEqual(['The MCH unit', TYPED_MARK, 'Makerere', PROJECT_MARK]);   // the empty department prints nothing
+    expect(r.notRecordedFields).not.toContain('DC-02');
     const dc35 = resolveFields(dataCardMap, snapWith({}, { metadata: { processesPersonalData: null } }), {});
     expect((text(dc35, 'DC-35') as string).split('\n')).toContain(NOT_RECORDED);
     expect(dc35.notRecordedFields).toContain('DC-35');
@@ -556,4 +556,4 @@ describe('boundaries', () => {
   });
 });
 
-import { GATE_DERIVED_NA, decidedByLine, decisionSource, evidenceFileLine, fromQuestion, outsideRoleLine, personalDataAnswerLine } from '@/lib/documents/copy';
+import { GATE_DERIVED_NA, decidedByLine, decisionSource, evidenceFileLine, fromQuestion, noDecisionLine, outsideRoleLine, personalDataAnswerLine } from '@/lib/documents/copy';

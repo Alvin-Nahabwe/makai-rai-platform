@@ -60,6 +60,8 @@ export const REVIEW_COPY = Object.freeze({
     note: (note: string): string => `Prepared for: ${note}`,
     openedBy: (name: string): string => `Opened by ${name} on`,
     statusHeading: 'Status',
+    /** After "Not sealed yet." while the review has no seal: who may seal it (lib/authz/policy.ts, `review:seal`). */
+    whoSeals: 'An Owner, an Admin or a Reviewer seals this review.',
     questionsChanged: (n: number): string => `Questions changed since the last seal (${n}): `,
     noLongerInContent: ' (no longer in the current questions)',
     findingsChanged: (n: number): string => `Findings changed since the last seal (${n}): `,
@@ -67,8 +69,8 @@ export const REVIEW_COPY = Object.freeze({
     sealThis: 'Seal this review',
     sealAgain: (n: number): string => `Seal again as seal ${n}`,
     sealsHeading: 'Seals',
-    sealLead: (n: number): string => `Seal ${n} . `,
-    sealedBy: (name: string, role: string): string => ` . sealed by ${name} (${role})`,
+    sealLead: (n: number): string => `Seal ${n}\u00a0· `,
+    sealedBy: (name: string, role: string): string => `\u00a0· sealed by ${name} (${role})`,
     documentsHeading: 'Documents from this review',
     createDocument: 'Create a document',
   }),
@@ -78,7 +80,7 @@ export const REVIEW_COPY = Object.freeze({
     includesHeading: 'What this seal will include',
     statement: (sealNumber: number): string => `Sealing saves a fixed copy of this stage as it is now. The copy includes questions with no decision and open findings. You can keep working after you seal. Later changes will show as "changed since seal ${sealNumber}". Documents are made from a seal.`,
     byStatus: (done: number, partly: number, notYet: number, notApplicable: number): string =>
-      `Decisions by status: Done ${done} . Partly ${partly} . Not yet ${notYet} . Not applicable ${notApplicable}`,
+      `Decisions by status: Done ${done}\u00a0· Partly ${partly}\u00a0· Not yet ${notYet}\u00a0· Not applicable ${notApplicable}`,
     byReason: (parts: string): string => `Not applicable and Not yet by reason: ${parts}`,
     gateAnswer: (answer: string): string => `Answer to the personal data question: ${answer}`,
     doneNoEvidence: (n: number): string => `Done, no evidence attached: ${n}`,

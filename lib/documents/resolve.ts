@@ -13,9 +13,12 @@ import { FINDINGS_COPY } from '@/lib/findings/copy';
 import { isOverdue } from '@/lib/followup/overdue';
 import { formatDay, formatDeclaredDate } from '@/lib/format/dates';
 import { DATASET_SIZE_WORDS, PERSONAL_DATA_WORDS } from '@/lib/project/labels';
+import { PROJECT_FORM_COPY } from '@/lib/project/form/copy';
+import { REVIEW_COPY } from '@/lib/review/copy';
 import { formatFingerprint } from '@/lib/seal/format';
 import {
-  ETHICS_APPROVED, ETHICS_NOT_REQUIRED, ETHICS_SUBMITTED, FILE_NAME_ERASED, GATE_DERIVED_NA, assignedToLine, checkAgainLine, decidedByLine, decidedInLine, decisionSource,
+  CLOSED_NO_LONGER_APPLIES, ETHICS_APPROVED, ETHICS_NOT_REQUIRED, ETHICS_SUBMITTED, FILE_NAME_ERASED, FINDING_CLOSED, GATE_DERIVED_NA, assignedToLine, closedByLine,
+  noDecisionLine, checkAgainLine, decidedByLine, decidedInLine, decisionSource,
   doneEvidenceLine, evidenceFileLine, fileErasedLine, findingStatusLine, formatUtcDay, fromQuestion, lastCheckNoteLine, outsideOtherBodyLine, outsideRoleLine, personalDataAnswerLine,
   reviewLineText, textErasedLine, utcSecond,
 } from './copy';
@@ -282,6 +285,11 @@ function projectValue(snap: DocumentSnapshot, field: string): string | null {
   }
   if (field === 'datasetSize' && Object.hasOwn(DATASET_SIZE_WORDS, v)) return DATASET_SIZE_WORDS[v as keyof typeof DATASET_SIZE_WORDS];
   if (field === 'processesPersonalData' && Object.hasOwn(PERSONAL_DATA_WORDS, v)) return PERSONAL_DATA_WORDS[v as 'true' | 'false'];
+  // The AI system type is stored as the form's option value; print the option's words as the form shows them (walk S1).
+  if (field === 'aiSystemType') {
+    const option = PROJECT_FORM_COPY.aiSystemTypes.find((o) => o.value === v);
+    if (option !== undefined) return option.label;
+  }
   return v;
 }
 
@@ -328,18 +336,95 @@ function findingTitle(f: FindingView, snap: DocumentSnapshot): string {
   return f.title ?? (shortfall ? `Finding on ${f.questionId}` : textOf(snap, 'findings', f.id, 'title', null));
 }
 
-function findingCounts(sealed: SealedStage): ResolvedPart {
-  const n = (state: FindingView['state']) => sealed.findings.filter(({ finding }) => finding.state === state).length;
+/**
+ * MP-02's first line. A finding the platform holds as closed by a mitigation is counted as "Closed by a mitigation" only when its
+ * status line says so (a real one closed it); the others are counted as "Closed", an item added only when there is one (the lane
+ * lead's reading 5 of the coordinator's ruling of 14 November 2026), so a document with none prints what it always printed.
+ */
+function findingCounts(sealed: SealedStage, snap: DocumentSnapshot): ResolvedPart {
+  const words = sealed.findings.map((sf) => findingStateWord(sf, snap));
+  const n = (w: string) => words.filter((x) => x === w).length;
+  const byMitigation = FINDING_STATE_WORD.closed_mitigation;
+  const closed = n(FINDING_CLOSED);
   return part({
-    text: `Open findings: ${n('open')}. Closed by a mitigation: ${n('closed_mitigation')}. Closed by an accepted risk: ${n('closed_accepted_risk')}.`,
+    text: `Open findings: ${n(FINDING_STATE_WORD.open)}. Closed by a mitigation: ${n(byMitigation)}. Closed by an accepted risk: ${n(FINDING_STATE_WORD.closed_accepted_risk)}.${closed === 0 ? '' : ` ${FINDING_CLOSED}: ${closed}.`}`,
     sealIds: [sealed.seal.sealId],
+  });
+}
+
+/** The `findingSeq` of the finding's latest reopen, or 0: R of `deriveFindingState` (lib/findings/state.mjs, lines 33 to 36). */
+function reopenedAt(sf: SealedFinding): number {
+  return Math.max(0, ...sf.events.filter((e) => e.kind === 'reopened').map((e) => e.findingSeq));
+}
+
+/**
+ * A closing record: the row `closeByDecision` writes when a decision closes a finding (kind decision_changed or decision_withdrawn,
+ * version 1, done, no text and no tombstone on its text). It is not a mitigation (the coordinator's ruling of 14 November 2026):
+ * documents print it as a line under its finding, never as a mitigation, and do not count it. Any other row of a decision kind (a
+ * later version, one not done, one with text, one whose text was erased) takes the ordinary mitigation path.
+ */
+function isClosingRecord(m: MitigationVersionView, snap: DocumentSnapshot): boolean {
+  return (m.kind === 'decision_changed' || m.kind === 'decision_withdrawn') && m.versionNumber === 1 && m.status === 'done' && m.what === null
+    && erasedAt(snap, 'mitigation_versions', m.id, 'what') === null;
+}
+
+/**
+ * A finding's status word. One the platform holds as closed by a mitigation says so only when a real (kind action) mitigation is
+ * done after its latest reopen, by the rule `deriveFindingState` uses for which done mitigations count (lib/findings/state.mjs,
+ * line 41: a current version done with `findingSeq` above R); otherwise a decision closed it, and it says "Closed".
+ */
+function findingStateWord(sf: SealedFinding, snap: DocumentSnapshot): string {
+  const f = sf.finding;
+  if (f.state !== 'closed_mitigation') return word(FINDING_STATE_WORD, f.state, 'finding state');
+  const r = reopenedAt(sf);
+  const real = sf.mitigations.some((m) => m.kind === 'action' && m.status === 'done' && m.findingSeq > r && !isClosingRecord(m, snap));
+  return real ? FINDING_STATE_WORD.closed_mitigation : FINDING_CLOSED;
+}
+
+/** Every sealed decision version of the snapshot with this id, in any stage, or undefined. */
+function sealedVersion(snap: DocumentSnapshot, id: string): SealedDecision | undefined {
+  for (const stage of STAGES) {
+    const s = snap.stages[stage];
+    if (s === null) continue;
+    for (const d of s.decisions.values()) if (d.row.id === id) return d;
+  }
+  return undefined;
+}
+
+/**
+ * The cause a closing record supports, or null. A withdrawal says so by its kind. A change names the version that closed it: one of
+ * the finding's own question says the decision changed; one of another question answering No is the personal data question's
+ * answer; a version the snapshot does not hold, or of another question answering anything else, states no cause (never a guess).
+ */
+function closingCause(m: MitigationVersionView, f: FindingView, snap: DocumentSnapshot): string | null {
+  if (m.kind === 'decision_withdrawn') return FINDINGS_COPY.mitigation.closedBecauseDecisionWithdrawn;
+  const d = m.closureDecisionVersionId === null ? undefined : sealedVersion(snap, m.closureDecisionVersionId);
+  if (d === undefined) return null;
+  if (d.row.questionId === f.questionId) return FINDINGS_COPY.mitigation.closedBecauseDecisionChanged;
+  return d.row.scopeAnswer === 'no' ? CLOSED_NO_LONGER_APPLIES : null;
+}
+
+/**
+ * The lines under a closed finding's status line: for the closing record that closed it, who entered it and the UTC day it was
+ * received (as "Raised on:" prints a day), then its cause when the record supports one. A closing record closed the finding only when
+ * it is after the latest reopen and nothing was recorded on the finding's mitigations after it (its `findingSeq` is the highest of the
+ * current versions): one entered while a planned mitigation was still open did not close it, and prints nothing. A finding that is
+ * open, withdrawn or closed by an accepted risk prints none.
+ */
+function closingLines(sf: SealedFinding, snap: DocumentSnapshot): string[] {
+  if (sf.finding.state !== 'closed_mitigation') return [];
+  const r = reopenedAt(sf);
+  const last = Math.max(...sf.mitigations.map((m) => m.findingSeq));
+  return sf.mitigations.filter((m) => isClosingRecord(m, snap) && m.findingSeq > r && m.findingSeq === last).flatMap((m) => {
+    const cause = closingCause(m, sf.finding, snap);
+    return [closedByLine(m.enteredBy.name, formatUtcDay(m.receivedAt)), ...(cause === null ? [] : [cause])];
   });
 }
 
 function resolveFindings(source: Extract<FieldSource, { kind: 'findings' }>, snap: DocumentSnapshot): ResolvedPart {
   const sealed = stageSource(source.stage, snap);
   if (sealed === null) return part({ text: NOT_RECORDED_AT_ISSUE });
-  if (source.filter === 'counts') return findingCounts(sealed);
+  if (source.filter === 'counts') return findingCounts(sealed, snap);
   const versions = new Map([...sealed.decisions.values()].map((d) => [d.row.id, d.row.versionNumber]));
   const wanted = (state: FindingView['state']): boolean => {
     if (source.filter === 'open') return state === 'open';
@@ -349,7 +434,8 @@ function resolveFindings(source: Extract<FieldSource, { kind: 'findings' }>, sna
   const items = sealed.findings.filter(({ finding: f }) =>
     wanted(f.state) && (source.areas === undefined || (f.riskArea !== null && source.areas.includes(f.riskArea))));
   const sources: RowRef[] = [];
-  const text = items.length === 0 ? NONE : items.map(({ finding: f }, i) => {
+  const text = items.length === 0 ? NONE : items.map((sf, i) => {
+    const f = sf.finding;
     const version = f.decisionVersionId === null ? undefined : versions.get(f.decisionVersionId);
     const origin = f.source === 'team' || f.questionId === null ? 'Raised by the team' : fromQuestion(f.questionId, version);
     sources.push({ sourceTable: 'findings', sourceId: f.id, field: 'title' }, { sourceTable: 'findings', sourceId: f.id, field: 'description' });
@@ -357,7 +443,7 @@ function resolveFindings(source: Extract<FieldSource, { kind: 'findings' }>, sna
     return [`${i + 1}. ${findingTitle(f, snap)}`, `Source: ${origin}`, `Risk area: ${areaText(snap, f.riskArea)}`,
       ...(f.description === null && shortfall ? [] : [`Description: ${textOf(snap, 'findings', f.id, 'description', f.description)}`]),
       ...(source.filter === 'open' ? [`Raised on: ${formatUtcDay(f.raisedAt)}`] : []),
-      findingStatusLine(word(FINDING_STATE_WORD, f.state, 'finding state'))].join('\n');
+      findingStatusLine(findingStateWord(sf, snap)), ...closingLines(sf, snap)].join('\n');
   }).join('\n\n');
   return part({ text, sources, sealIds: [sealed.seal.sealId] });
 }
@@ -395,7 +481,8 @@ function mitigationLines(m: MitigationVersionView, snap: DocumentSnapshot, sourc
 /** The current mitigation versions of the sealed stage, counted by status; those of withdrawn findings are not counted. */
 function mitigationCounts(sealed: SealedStage, snap: DocumentSnapshot): ResolvedPart {
   const counted = sealed.findings.filter(({ finding }) => finding.state !== 'withdrawn');
-  const all = counted.flatMap(({ finding, mitigations }) => mitigations.map((m) => ({ m, state: finding.state })));
+  // A closing record is not a mitigation, so it is not counted (the coordinator's ruling of 14 November 2026).
+  const all = counted.flatMap(({ finding, mitigations }) => mitigations.filter((m) => !isClosingRecord(m, snap)).map((m) => ({ m, state: finding.state })));
   const n = (status: string) => all.filter(({ m }) => m.status === status).length;
   const overdue = all.filter(({ m, state }) => isOverdue({ status: m.status, dueDate: m.dueDate }, state, snap.today)).length;
   return part({
@@ -411,7 +498,9 @@ function currentMitigations(sealed: SealedStage, snap: DocumentSnapshot): Resolv
   const sources: RowRef[] = [];
   const text = open.map(({ finding, mitigations }, i) => {
     sources.push({ sourceTable: 'findings', sourceId: finding.id, field: 'title' });
-    const blocks = mitigations.map((m, j) => {
+    // A closing record prints nothing here; its row stays a source of the document, as it was when it printed (reading 7).
+    for (const m of mitigations) if (isClosingRecord(m, snap)) sources.push({ sourceTable: 'mitigation_versions', sourceId: m.id, field: 'what' });
+    const blocks = mitigations.filter((m) => !isClosingRecord(m, snap)).map((m, j) => {
       const status = word(MITIGATION_STATUS_WORD, m.status, 'mitigation status');
       const late = isOverdue({ status: m.status, dueDate: m.dueDate }, finding.state, snap.today) ? ' (overdue)' : '';
       const [what, ...rest] = mitigationLines(m, snap, sources);
@@ -429,12 +518,14 @@ function resolveMitigations(source: Extract<FieldSource, { kind: 'mitigations' }
   if (source.filter === 'current') return currentMitigations(sealed, snap);
   // A mitigation plan lists the done mitigations of the findings it calls closed by a mitigation, each with its finding; the cards list every done one.
   const plan = snap.documentType === 'mitigation_plan';
-  const done = sealed.findings
+  const listed = sealed.findings
     .filter(({ finding }) => !plan || finding.state === 'closed_mitigation')
     .flatMap(({ finding, mitigations }) => mitigations.filter((m) => m.status === 'done').map((m) => ({ finding, m })));
-  // The plan's findings list above already says None; a second None under the same field would only repeat it.
-  if (done.length === 0 && plan) return part({ sealIds: [sealed.seal.sealId] });
-  const sources: RowRef[] = [];
+  // A closing record prints under its finding, not here; its row stays a source of the document, as it was when it printed (reading 7).
+  const sources: RowRef[] = listed.filter(({ m }) => isClosingRecord(m, snap)).map(({ m }) => ({ sourceTable: 'mitigation_versions', sourceId: m.id, field: 'what' }));
+  const done = listed.filter(({ m }) => !isClosingRecord(m, snap));
+  // The plan's findings list above already says None or holds the findings; an empty list under the same field prints nothing.
+  if (done.length === 0 && plan) return part({ sources, sealIds: [sealed.seal.sealId] });
   const text = done.length === 0 ? NONE : done.map(({ finding, m }, i) => {
     const [what, ...rest] = mitigationLines(m, snap, sources);
     const lines = [`${i + 1}. ${what}`, ...(plan ? [`Finding: ${findingTitle(finding, snap)}`] : []), ...rest];
@@ -487,7 +578,7 @@ function sealsOf(snap: DocumentSnapshot): SealedStage[] {
 function sealLine(s: SealedStage): string {
   const at = utcSecond(s.seal.sealedAt);
   const n = s.seal.enteredByPeople;
-  return `Seal ${s.seal.sealNumber} of ${s.seal.reviewName}: sealed ${at} by ${s.seal.sealedBy.name} (${s.seal.sealedByRole}); decisions entered by ${n} ${n === 1 ? 'person' : 'people'}. Fingerprint ${formatFingerprint(s.seal.fingerprint, 'full')}`;
+  return `Seal ${s.seal.sealNumber} of ${s.seal.reviewName}: sealed ${at} by ${s.seal.sealedBy.name} (${word(REVIEW_COPY.roleWords, s.seal.sealedByRole, 'role')}); decisions entered by ${n} ${n === 1 ? 'person' : 'people'}. Fingerprint ${formatFingerprint(s.seal.fingerprint, 'full')}`;
 }
 
 function resolveMeta(source: Extract<FieldSource, { kind: 'meta' }>, snap: DocumentSnapshot): ResolvedPart {
@@ -627,24 +718,46 @@ export function resolveFields(map: FieldMap, snap: DocumentSnapshot, typed: Read
   }));
 
   const sources = new Map<string, RowRef>();
-  const incomplete = new Set<string>();   // fields where a part of the record reads "Not recorded" (or NOT_RECORDED_AT_ISSUE)
+  const incomplete = new Set<string>();   // fields with a gap the preview marks (FR-DOC-08): see the rules below
   const fields: ResolvedField[] = map.fields.map((e, i) => {
     const own = parts[i] as ResolvedPart[];
-    const all = [...own, ...(typedAdditions[i] === null ? [] : [typedAdditions[i] as ResolvedPart])];
-    // With several sources, each keeps its place: a record source with no decision prints "Not recorded" there, so the preview
-    // shows the gap (FR-DOC-08), instead of the part vanishing from the text.
+    const addition = typedAdditions[i];
+    const all = [...own, ...(addition === null ? [] : [addition])];
+    // Each part with the source it came from; the typed addition is a typed part after the map's sources.
+    const slots: Array<{ p: ResolvedPart; source: FieldSource | { kind: 'typed' } }> = [
+      ...own.map((p, j) => ({ p, source: e.sources[j] })), ...(addition === null ? [] : [{ p: addition, source: { kind: 'typed' as const } }]),
+    ];
+    // A "place" part stands for one thing of the record or the project; the others (findings, mitigations, meta, mapping) print as they are.
+    const isPlace = (s: { kind: string }) => s.kind === 'record' || s.kind === 'record_option' || s.kind === 'project' || s.kind === 'typed';
+    const isValue = (p: ResolvedPart) => p.text !== null && p.text !== NOT_RECORDED_AT_ISSUE;
+    const places = slots.filter((s) => isPlace(s.source));
+    // The owner's decision of 14 November 2026 (walk finding S1), for a field with several parts: beside a value, an empty typed or
+    // project part prints nothing and a question with no decision prints the sentence naming it; with no value in any place part,
+    // the place parts print "Not recorded" once (or the never-sealed line once, in its stead). A single part is printed as it is.
     const several = all.length > 1;
+    const hasValue = places.some((s) => isValue(s.p));
+    const firstPlace = places.length === 0 ? null : places[0];
+    const placeGap = places.some((s) => s.p.text === NOT_RECORDED_AT_ISSUE) ? NOT_RECORDED_AT_ISSUE : NOT_RECORDED;
+    if (places.length > 0 && !hasValue) incomplete.add(e.fieldId);
     let atIssue = false;
-    const texts = own.flatMap((p, j) => {
-      const kind = e.sources[j].kind;
-      // A part with no value reads "Not recorded" in its place; the field counts and the preview shows the gap (FR-DOC-08).
-      const isPlace = kind === 'record' || kind === 'record_option' || kind === 'project' || kind === 'typed';
-      if (isPlace && (p.text === null || p.text === NOT_RECORDED_AT_ISSUE)) incomplete.add(e.fieldId);
-      if (p.text === null) return isPlace && several ? [NOT_RECORDED] : [];
-      if (p.text === NOT_RECORDED_AT_ISSUE) { if (atIssue) return []; atIssue = true; }
-      return [p.text];
+    // The never-sealed line prints once in a field, whichever part brings it.
+    const once = (t: string): string[] => {
+      if (t !== NOT_RECORDED_AT_ISSUE) return [t];
+      if (atIssue) return [];
+      atIssue = true;
+      return [t];
+    };
+    const texts = slots.flatMap((slot): string[] => {
+      const { p, source } = slot;
+      if (several && isPlace(source) && !hasValue) return slot === firstPlace ? once(placeGap) : [];
+      if (p.text === null) {
+        if (!several || !isPlace(source)) return [];
+        if (source.kind === 'record' || source.kind === 'record_option') { incomplete.add(e.fieldId); return [noDecisionLine(source.questionId)]; }
+        return [];   // an empty typed box or project value beside a value
+      }
+      return once(p.text);
     });
-    if (typedAdditions[i] !== null && (typedAdditions[i] as ResolvedPart).text !== null) texts.push((typedAdditions[i] as ResolvedPart).text as string);
+    if (texts.includes(NOT_RECORDED_AT_ISSUE)) incomplete.add(e.fieldId);
     for (const p of all) for (const r of p.sources) sources.set(rowKey(r), r);
     return {
       fieldId: e.fieldId, label: e.label, section: e.section, text: texts.length === 0 ? null : texts.join('\n'),

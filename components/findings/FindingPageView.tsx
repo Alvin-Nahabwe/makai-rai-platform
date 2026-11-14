@@ -15,6 +15,7 @@ import { formatDay } from '@/lib/format/dates';
 import { acceptedByName, overdueLabel, STAGE_NAMES } from '@/lib/findings/labels';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
 import type { FindingPageData, MitigationOnPage } from '@/lib/findings/pageData';
+import type { ClosureCause } from '@/lib/findings/closure';
 import '@/components/ui/pageHeaderStyles';
 import './Findings.css';
 
@@ -92,8 +93,13 @@ function Mitigation({ d, m, controlName }: { d: FindingPageData; m: MitigationOn
   );
 }
 
-/** One line of the history, oldest first (W-5's last region). */
-interface HistoryEntry { seq: number; at: string; by: string; text: ReactElement | string }
+/** R3: the cause sentence of a closure line (rule A decided it in the loader). */
+const CAUSE_TEXT: Record<ClosureCause, string> = {
+  changed: M.closedBecauseDecisionChanged, withdrawn: M.closedBecauseDecisionWithdrawn, no_longer_applies: M.closedBecauseNoLongerApplies,
+};
+
+/** One line of the history, oldest first (W-5's last region). `by` is null for a line that names its person in its text. */
+interface HistoryEntry { seq: number; at: string; by: string | null; text: ReactElement | string }
 
 function historyOf(d: FindingPageData): HistoryEntry[] {
   const f = d.detail;
@@ -108,6 +114,13 @@ function historyOf(d: FindingPageData): HistoryEntry[] {
       out.push({ seq: h.findingSeq, at: h.receivedAt, by: h.enteredBy.name,
         text: <>{h.versionNumber === 1 ? M.added : M.updated(h.versionNumber)}{M.assignedToClause} <bdi>{h.owner.name}</bdi>{M.dueClause(formatDay(h.dueDate))}</> });
     }
+  }
+  // R2: a closing record's line says whether it closed the finding; never "Mitigation added".
+  for (const r of d.closingRecords) {
+    const v = r.current;
+    out.push(r.closedFinding
+      ? { seq: v.findingSeq, at: v.receivedAt, by: null, text: <>{M.findingClosedBy} <bdi>{v.enteredBy.name}</bdi>.</> }
+      : { seq: v.findingSeq, at: v.receivedAt, by: v.enteredBy.name, text: M.pressedWhileOpen });
   }
   for (const r of f.acceptedRisks) {
     out.push({ seq: r.findingSeq, at: r.receivedAt, by: r.enteredBy.name,
@@ -136,10 +149,14 @@ export function FindingPageView({ data }: { data: FindingPageData }): ReactEleme
         <h1 className="ui-page-header__title"><bdi>{d.title}</bdi></h1>
         <p><bdi className="status-label">{d.stateLabel}</bdi></p>
         {acceptedLine === null ? null : <p>{acceptedLine}</p>}
+        {d.closure === null ? null : d.closure.closedBy !== null ? (
+          <p>{F.closedBy} <bdi>{d.closure.closedBy.by}</bdi> {F.on} <LocalTime at={d.closure.closedBy.at} dateOnly />.{d.closure.cause === null ? null : ` ${CAUSE_TEXT[d.closure.cause]}`}</p>
+        ) : d.closure.cause === null ? null : <p>{CAUSE_TEXT[d.closure.cause]}</p>}
         <p>
           {d.sourceLabel}{SEP}{STAGE_NAMES[f.stage]}
           {f.riskArea === null ? null : <>{SEP}{F.riskArea} <bdi>{named(f.riskArea, d.riskAreaName)}</bdi></>}
         </p>
+        {d.questionHref === null ? null : <p><ListLink href={d.questionHref}>{F.openQuestion}</ListLink></p>}
         {d.questionText === null ? null : <p>{F.aboutQuestion} <bdi>{d.questionText}</bdi></p>}
         {f.source === 'shortfall' && d.version !== null
           ? <p>{F.raisedByPlatformOn} <LocalTime at={f.raisedAt} dateOnly />{F.raisedByPlatformWhen} <bdi>{f.raisedBy.name}</bdi> {F.savedDecisionAs(d.version.statusWord)}</p> : null}
@@ -147,7 +164,20 @@ export function FindingPageView({ data }: { data: FindingPageData }): ReactEleme
         {f.description === null ? null : <p className="finding-description"><bdi>{f.description}</bdi></p>}
         <SealMarker seals={f.seals} />
       </header>
-      {closing === null ? null : (
+      {d.closeBlocked ? (
+        // B2 (ruling R1): the finding stays open while a mitigation is Planned or In progress, so no button; the cause, when
+        // a closure is available, then the way on. Not named "Can be closed now": it cannot be.
+        <section className="finding-close-box">
+          {closing === null ? null : (
+            <p>
+              {closing.reason === 'decision_withdrawn' ? F.closeWithdrawnCause
+                : closing.reason === 'gate_no' ? F.closeGateCause
+                  : F.closeChangedCause(closing.statusWord)}
+            </p>
+          )}
+          <p>{F.closeBlocked}</p>
+        </section>
+      ) : closing === null ? null : (
         <section aria-label={F.closeSection} className="finding-close-box">
           <p>
             {closing.reason === 'decision_withdrawn' ? F.closeWithdrawn
@@ -188,7 +218,7 @@ export function FindingPageView({ data }: { data: FindingPageData }): ReactEleme
       <section aria-labelledby="f-history" className="finding-section">
         <h2 id="f-history">{F.history}</h2>
         <ol className="finding-timeline">
-          {historyOf(d).map((h, i) => <li key={i}><LocalTime at={h.at} /> {h.text} <bdi>{h.by}</bdi></li>)}
+          {historyOf(d).map((h, i) => <li key={i}><LocalTime at={h.at} /> {h.text}{h.by === null ? null : <> <bdi>{h.by}</bdi></>}</li>)}
         </ol>
       </section>
     </div>

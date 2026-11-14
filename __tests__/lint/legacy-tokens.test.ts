@@ -20,9 +20,6 @@ import { describe, expect, it } from 'vitest';
 /** Variables defined outside globals.css: name -> [file, text that proves the file still defines it]. */
 const EXTERNAL: Record<string, [string, RegExp]> = {
   '--font-overpass': ['app/layout.tsx', /variable:\s*'--font-overpass'/],
-  '--about-link': ['app/(public)/about/AboutPage.css', /--about-link\s*:/],
-  '--about-hero-text': ['app/(public)/about/AboutPage.css', /--about-hero-text\s*:/],
-  '--stage-color': ['app/(public)/about/page.tsx', /'--stage-color'\s*:/],
   '--decision-save-bar-h': ['components/decision/DecisionForm.tsx', /setProperty\('--decision-save-bar-h'/],
   '--shell-panel-top': ['components/layout/TopBar.tsx', /setProperty\('--shell-panel-top'/],
 };

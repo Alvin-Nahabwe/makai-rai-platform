@@ -16,6 +16,9 @@ import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { claimMatches } from '../lib/claims/pattern';
 import { FINDINGS_COPY } from '../lib/findings/copy';
 import { UI_COPY } from '../lib/ui/copy';
+import { QUESTION_COPY } from '../lib/question/copy';
+import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
+import { FIELD_COPY } from '../lib/ui/field/copy';
 import { expectStatusMarksInk, expectNoCrossStageTotal, expectNoScoreShapes } from './helpers/noScore';
 import { expectTargetsAtLeast24px } from './helpers/targetSize';
 
@@ -322,6 +325,126 @@ test('B1 (ruling L5-4): after a successful send focus goes to something that sta
   await owner.getByRole('button', { name: AR.submit }).click();
   await expect(status(owner)).toHaveText(AR.saved('Ethics committee'));
   await expect(status(owner)).toBeFocused();
+});
+
+test('B2 (walk): a Planned mitigation keeps the finding open with no Close finding; cancelling it brings the button back and pressing it closes the finding', async ({ browser }) => {
+  const content = await testDb.frameworkVersion.findFirstOrThrow({ where: { semver: '0.0.1-fixture' } });
+  const project = await addProject(fx, { name: 'Close while a mitigation is open' });
+  const list = `/orgs/${fx.org.slug}/projects/${project.id}/findings`;
+  const raising = await addDecision(fx, project.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId: content.id, status: 'not_yet' });
+  const f = await addFinding(fx, project.id, { stage: 'pre-processing', source: 'shortfall', questionId: 'Q-PP-01', decisionVersionId: raising.id });
+  await addMitigationVersion(fx, f.id, { status: 'planned', owner: 'assessor', dueDate: '2027-03-20' });
+  await addDecision(fx, project.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId: content.id, status: 'done' });
+  const F = FINDINGS_COPY.finding;
+  const page = await as(browser, 'assessor', 375);
+  failOnDialog(page);
+  // The list: not under "Ready to close", no button on its row.
+  await page.goto(list);
+  await expect(page.getByRole('heading', { name: FINDINGS_COPY.list.decisionDone })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: FINDINGS_COPY.closeByDecision.label })).toHaveCount(0);
+  // The finding page: the cause, then why it stays open, and no Close finding.
+  await page.goto(`${list}/${f.id}`);
+  const box = page.locator('.finding-close-box');
+  await expect(box.locator('p')).toHaveText([F.closeChangedCause('Done'), F.closeBlocked]);
+  await expect(page.getByRole('button', { name: FINDINGS_COPY.closeByDecision.label })).toHaveCount(0);
+  // The way on: cancel the mitigation and say why; the box returns with the button, and pressing it closes the finding.
+  await page.getByRole('button', { name: F.updateMitigation }).click();
+  await page.getByRole('radio', { name: 'Cancelled' }).check();
+  await page.getByLabel(MF.cancelReason).fill('The decision is now Done.');
+  await page.getByRole('button', { name: MF.save }).click();
+  await expect(box.locator('p')).toHaveText([F.closeChanged('Done')]);
+  await page.getByRole('button', { name: FINDINGS_COPY.closeByDecision.label }).click();
+  await expect(page.getByRole('button', { name: ACT.reopenTrigger })).toBeVisible();
+  await expect(box).toHaveCount(0);
+});
+
+test('B2 (stuck): a finding whose close was pressed while a mitigation was Planned says why it stays open, and cancelling the mitigation closes it at once', async ({ browser }) => {
+  const content = await testDb.frameworkVersion.findFirstOrThrow({ where: { semver: '0.0.1-fixture' } });
+  const project = await addProject(fx, { name: 'Stuck close' });
+  const raising = await addDecision(fx, project.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId: content.id, status: 'not_yet' });
+  const f = await addFinding(fx, project.id, { stage: 'pre-processing', source: 'shortfall', questionId: 'Q-PP-01', decisionVersionId: raising.id });
+  const planned = await addMitigationVersion(fx, f.id, { status: 'planned', owner: 'assessor', dueDate: '2027-03-20' });
+  const done = await addDecision(fx, project.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId: content.id, status: 'done' });
+  const page = await as(browser, 'assessor');
+  failOnDialog(page);
+  const url = `/orgs/${fx.org.slug}/projects/${project.id}/findings/${f.id}`;
+  await page.goto(url);
+  // The close an earlier page (v0.6.2) sent while the mitigation was Planned: the server still answers 201 and the finding stays open.
+  const pressed = await page.request.post(`/api/v1${url}/close-by-decision`, {
+    data: { requestId: crypto.randomUUID(), decisionVersionId: done.id }, headers: { origin: new URL(page.url()).origin },
+  });
+  expect(pressed.status()).toBe(201);
+  await page.reload();
+  await expect(page.locator('.finding-close-box p')).toHaveText([FINDINGS_COPY.finding.closeBlocked]);
+  await expect(page.getByRole('button', { name: FINDINGS_COPY.closeByDecision.label })).toHaveCount(0);
+  const card = page.locator(`[data-mitigation-id="${planned.mitigationId}"]`);
+  await card.getByRole('button', { name: FINDINGS_COPY.finding.updateMitigation }).click();
+  await page.getByRole('radio', { name: 'Cancelled' }).check();
+  await page.getByLabel(MF.cancelReason).fill('The decision is now Done.');
+  await page.getByRole('button', { name: MF.save }).click();
+  await expect(page.getByRole('button', { name: ACT.reopenTrigger })).toBeVisible();
+  await expect(page.locator('.finding-close-box')).toHaveCount(0);
+});
+
+/** A project with one shortfall finding on `questionId` from a Not yet decision, then the decision that closes it (R2, R3 paths). */
+async function closablePath(name: string, to: 'done' | 'withdrawn' | 'gate'): Promise<{ url: string; question: string }> {
+  const content = await testDb.frameworkVersion.findFirstOrThrow({ where: { semver: '0.0.1-fixture' } });
+  const project = await addProject(fx, { name });
+  const questionId = to === 'gate' ? 'Q-PP-13' : 'Q-PP-01';
+  const raising = await addDecision(fx, project.id, { stage: 'pre-processing', questionId, contentVersionId: content.id, status: 'not_yet' });
+  const f = await addFinding(fx, project.id, { stage: 'pre-processing', source: 'shortfall', questionId, decisionVersionId: raising.id });
+  if (to === 'withdrawn') await addDecision(fx, project.id, { stage: 'pre-processing', questionId, contentVersionId: content.id, status: 'withdrawn', withdrawalCode: 'entered_in_error' });
+  else if (to === 'gate') await addDecision(fx, project.id, { stage: 'pre-processing', questionId: 'Q-PP-GATE-SENSITIVE', contentVersionId: content.id, scopeAnswer: 'no' });
+  else await addDecision(fx, project.id, { stage: 'pre-processing', questionId, contentVersionId: content.id, status: 'done' });
+  return { url: `/orgs/${fx.org.slug}/projects/${project.id}/findings/${f.id}`, question: `/orgs/${fx.org.slug}/projects/${project.id}/stages/pre-processing/questions/${questionId}` };
+}
+
+for (const [walk, to, heading, cause] of [
+  ['the plain close', 'done', FINDINGS_COPY.list.decisionDone, FINDINGS_COPY.mitigation.closedBecauseDecisionChanged],
+  ['F16 (withdrawn)', 'withdrawn', FINDINGS_COPY.list.decisionWithdrawn, FINDINGS_COPY.mitigation.closedBecauseDecisionWithdrawn],
+  ['F18 (personal data answer No)', 'gate', FINDINGS_COPY.list.gateNo, FINDINGS_COPY.mitigation.closedBecauseNoLongerApplies],
+] as const) {
+  test(`R2 R3 ${walk}: the list heading, Close finding, then "Closed", who and why, no card, and "Finding closed by" in the history`, async ({ browser }) => {
+    const path = await closablePath(`Close: ${walk}`, to);
+    const page = await as(browser, 'assessor', 375);
+    failOnDialog(page);
+    await page.goto(path.url.replace(/\/[^/]+$/, ''));
+    await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible();
+    await page.goto(path.url);
+    await expect(page.getByRole('link', { name: FINDINGS_COPY.finding.openQuestion })).toHaveAttribute('href', path.question);
+    await page.getByRole('button', { name: FINDINGS_COPY.closeByDecision.label }).click();
+    await expect(page.getByRole('button', { name: ACT.reopenTrigger })).toBeVisible();
+    const header = page.locator('header.finding-header');
+    await expect(header.locator('.status-label')).toHaveText(FINDINGS_COPY.labels.closed);
+    await expect(header.getByText(new RegExp(`^${literal(FINDINGS_COPY.finding.closedBy)} ${literal(fx.members.assessor.name)} on \\d{1,2} \\w{3} 20\\d\\d\\. ${literal(cause)}$`))).toBeVisible();
+    await expect(page.locator('.finding-card')).toHaveCount(0);
+    await expect(page.getByText(FINDINGS_COPY.finding.noMitigations)).toBeVisible();
+    await expect(page.locator('.finding-timeline li').last()).toHaveText(new RegExp(`${literal(FINDINGS_COPY.mitigation.findingClosedBy)} ${literal(fx.members.assessor.name)}\\.$`));
+    await expect(page.locator('.finding-timeline')).not.toContainText(FINDINGS_COPY.mitigation.added);
+  });
+}
+
+test('R4: on the question page the line reads that the finding can now be closed after a save, without a reload', async ({ browser }) => {
+  const content = await testDb.frameworkVersion.findFirstOrThrow({ where: { semver: '0.0.1-fixture' } });
+  const project = await addProject(fx, { name: 'Question line after a save' });
+  const raising = await addDecision(fx, project.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId: content.id, status: 'not_yet' });
+  const f = await addFinding(fx, project.id, { stage: 'pre-processing', source: 'shortfall', questionId: 'Q-PP-01', decisionVersionId: raising.id });
+  const page = await as(browser, 'assessor');
+  failOnDialog(page);
+  await page.goto(`/orgs/${fx.org.slug}/projects/${project.id}/stages/pre-processing/questions/Q-PP-01`);
+  await expect(page.locator('#question-heading')).toBeVisible();
+  await page.waitForFunction(() => document.querySelector('[data-region="answer-form"] form')?.getAttribute('data-ready') === 'true');
+  const region = page.locator('[data-region="finding-link"]');
+  await expect(region.getByText(QUESTION_COPY.findingLink.open)).toBeVisible();
+  let loads = 0;
+  page.on('load', () => { loads++; });
+  await page.getByRole('radio', { name: 'Done', exact: true }).check();
+  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`).fill('The labels were checked again.');
+  await page.getByRole('button', { name: 'Today', exact: true }).click();
+  await page.getByRole('button', { name: 'Save decision' }).click();
+  await expect(region.getByText(QUESTION_COPY.findingLink.closable)).toBeVisible();
+  await expect(region.getByRole('link', { name: QUESTION_COPY.findingLink.view })).toHaveAttribute('href', `/orgs/${fx.org.slug}/projects/${project.id}/findings/${f.id}`);
+  expect(loads).toBe(0);
 });
 
 test('B1 (ruling L5-4): a save that removes its own toggle (Done closes the finding; Cancelled ends the card) leaves focus on the mitigations heading', async ({ browser }) => {

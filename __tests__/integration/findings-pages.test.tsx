@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { OrgRole } from '@prisma/client';
@@ -7,6 +8,8 @@ import { AcceptRiskForm } from '@/components/findings/AcceptRiskForm';
 import { FindingPageView } from '@/components/findings/FindingPageView';
 import { MitigationForm } from '@/components/findings/MitigationForm';
 import { loadFindingPage, loadFindingsPage, type FindingPageData } from '@/lib/findings/pageData';
+import { closeByDecision, openShortfallForQuestion } from '@/lib/data/findings';
+import { loadQuestionPanel } from '@/lib/question/panel';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
 import { onlyRolesCanText } from '@/lib/findings/messages';
 import { deciderLabel, OUTSIDE_ROLE_LABELS } from '@/lib/decision/copy';
@@ -75,6 +78,26 @@ async function everyKind() {
   await addFindingEvent(fx, withdrawn.id, { kind: 'withdrawn', by: 'owner' });
   return { p, done, gone, none, late, plain, again, closed, withdrawn };
 }
+
+/** The walk's path (B2): a Not yet decision, its finding, a Planned mitigation, then the decision changed to Done. */
+async function blockedWalk(o: { mitigation?: boolean; status?: 'planned' | 'in_progress'; archived?: boolean; to?: 'done' | 'withdrawn' | 'gate' } = {}) {
+  const p = await addProject(fx, o.archived === true ? { archived: true } : {});
+  const stage = 'pre-processing' as const;
+  const questionId = o.to === 'gate' ? 'Q-PP-13' : 'Q-PP-01';
+  const raising = await addDecision(fx, p.id, { stage, questionId, contentVersionId, status: 'not_yet' });
+  const f = { ...(await addFinding(fx, p.id, { stage, source: 'shortfall', questionId, decisionVersionId: raising.id })), projectId: p.id };
+  const m = o.mitigation === false ? null : await addMitigationVersion(fx, f.id, { status: o.status ?? 'planned', owner: 'assessor', dueDate: '2099-01-01' });
+  const done = o.to === 'withdrawn' ? await addDecision(fx, p.id, { stage, questionId, contentVersionId, status: 'withdrawn', withdrawalCode: 'entered_in_error' })
+    : o.to === 'gate' ? await addDecision(fx, p.id, { stage, questionId: 'Q-PP-GATE-SENSITIVE', contentVersionId, scopeAnswer: 'no' })
+      : await addDecision(fx, p.id, { stage, questionId, contentVersionId, status: 'done' });
+  return { f, m, done };
+}
+
+/** "Close finding" pressed: the service route 11 calls, as an assessor. */
+const pressClose = (w: { f: { id: string; projectId: string }; done: { id: string } }) => closeByDecision(
+  ctxFor(fx, 'assessor'), { userId: fx.members.assessor.userId, role: 'assessor' },
+  { requestId: randomUUID(), decisionVersionId: w.done.id, projectId: w.f.projectId, findingId: w.f.id }, 'd'.repeat(64),
+);
 
 describe('S-14 the findings list (UX-15, UX-06, UX-07, FR-FND-07, FR-FND-08)', () => {
   it('UX-15 FR-FND-07: S-14 shows each kind under its UX-15 heading in order, and withdrawn ones only under Withdrawn', async () => {
@@ -338,6 +361,62 @@ describe('S-15 the finding page and the S-14 raise form (FR-FND-02, FR-FND-03, F
     expect(await renderFinding(f, 'reviewer')).not.toContain(FINDINGS_COPY.closeByDecision.label);
   });
 
+  it('B2 (loader): a finding with a Planned mitigation whose decision is now Done is blocked, and S-14 keeps it in its stage group, not under Ready to close', async () => {
+    const w = await blockedWalk();
+    const data = await pageData('assessor', w.f.projectId, w.f.id);
+    expect(data.closeBlocked).toBe(true);
+    expect(data.closeByDecision).toMatchObject({ reason: 'decision_done', decisionVersionId: w.done.id });
+    const list = await loadPage('assessor', w.f.projectId);
+    expect(list.decisionDone).toEqual([]);
+    expect(list.stages.map((s) => s.other.map((i) => i.id))).toEqual([[w.f.id]]);
+    // An unblocked one is not marked.
+    const free = await blockedWalk({ mitigation: false });
+    expect((await pageData('assessor', free.f.projectId, free.f.id)).closeBlocked).toBe(false);
+  });
+
+  it('B2 (screen): while a mitigation is Planned the box gives the cause and why the finding stays open, with no Close finding button', async () => {
+    const w = await blockedWalk();
+    const html = await renderFinding(w.f, 'assessor');
+    const F = FINDINGS_COPY.finding;
+    expect(html).toMatch(new RegExp(`class="finding-close-box"[^>]*><p>${F.closeChangedCause('Done')}</p><p>${F.closeBlocked}</p></section>`));
+    expect(html).not.toContain(F.closeChanged('Done'));
+    expect(html).not.toContain(FINDINGS_COPY.closeByDecision.label);
+    const list = await renderList('assessor', w.f.projectId);
+    expect(list).not.toContain(`>${FINDINGS_COPY.list.decisionDone}<`);
+    expect(list).not.toContain(FINDINGS_COPY.closeByDecision.label);
+    expect(list.split(`/findings/${w.f.id}"`).length - 1).toBe(1);
+  });
+
+  it('B2 (stuck): after a close pressed while a mitigation was Planned, the box says why it stays open, with no cause and no button; Cancel then closes it', async () => {
+    const w = await blockedWalk();
+    await pressClose(w);
+    expect((await pageData('assessor', w.f.projectId, w.f.id)).closeBlocked).toBe(true);
+    const html = await renderFinding(w.f, 'assessor');
+    const F = FINDINGS_COPY.finding;
+    expect(html).toMatch(new RegExp(`class="finding-close-box"[^>]*><p>${F.closeBlocked}</p></section>`));
+    expect(html).not.toContain(F.closeChangedCause('Done'));
+    expect(html).not.toContain(`>${FINDINGS_COPY.closeByDecision.label}</button>`);   // the history's "Close finding was pressed..." line is not a button
+    await addMitigationVersion(fx, w.f.id, { mitigationId: w.m!.mitigationId, status: 'cancelled', owner: 'assessor', dueDate: '2099-01-01' });
+    const after = await pageData('assessor', w.f.projectId, w.f.id);
+    expect(after.detail.state).toBe('closed_mitigation');
+    expect(renderToStaticMarkup(<FindingPageView data={after} />)).not.toContain('finding-close-box');
+  });
+
+  it('B2 (a way on): marking the mitigation Done closes the finding; cancelling it brings back Close finding, and pressing it closes the finding', async () => {
+    const d = await blockedWalk();
+    await addMitigationVersion(fx, d.f.id, { mitigationId: d.m!.mitigationId, status: 'done', owner: 'assessor', dueDate: '2099-01-01' });
+    expect((await pageData('assessor', d.f.projectId, d.f.id)).detail.state).toBe('closed_mitigation');
+    const c = await blockedWalk();
+    await addMitigationVersion(fx, c.f.id, { mitigationId: c.m!.mitigationId, status: 'cancelled', owner: 'assessor', dueDate: '2099-01-01' });
+    const data = await pageData('assessor', c.f.projectId, c.f.id);
+    expect(data.closeBlocked).toBe(false);
+    const html = renderToStaticMarkup(<FindingPageView data={data} />);
+    expect(html).toContain(FINDINGS_COPY.finding.closeChanged('Done'));
+    expect(html).toContain(`>${FINDINGS_COPY.closeByDecision.label}</button>`);
+    await pressClose(c);
+    expect((await pageData('assessor', c.f.projectId, c.f.id)).detail.state).toBe('closed_mitigation');
+  });
+
   it('FR-FND-02 FR-FND-08 (screen): a viewer gets S-14 without the raise form', async () => {
     const p = await addProject(fx);
     const html = renderToStaticMarkup(<FindingsPageView data={await loadPage('viewer', p.id)} />);
@@ -400,6 +479,8 @@ describe('S-15 mitigations on the page (FR-FUP-05, FR-FND-03, UX-06, NFR-A11Y-05
     const p = await addProject(fx);
     const f = await addFinding(fx, p.id, { stage: 'pre-processing', source: 'team', by: 'owner' });
     const m = await addMitigationVersion(fx, f.id, { status: 'done', kind, owner: 'assessor', dueDate: '2026-12-01' });
+    // R2: a version-1 decision closure is a closing record and has no card; with a second version it is a card (ruling C).
+    if (kind !== 'action') await addMitigationVersion(fx, f.id, { mitigationId: m.mitigationId, status: 'done', kind, owner: 'assessor', dueDate: '2026-12-01' });
     const data = await pageData('owner', p.id, f.id);
     const mit = data.mitigations[0];
     if (what !== 'text') mit.current = { ...mit.current, what: null, erasedFields: what === 'erased' ? ['what'] : [] };
@@ -530,3 +611,200 @@ async function testDbSetName(userId: string, name: string): Promise<void> {
   const { testDb } = await import('../helpers/db');
   await testDb.user.update({ where: { id: userId }, data: { name } });
 }
+
+/** A string as a regular expression that matches it literally. */
+const lit = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const reopen = (f: { id: string }) => addFindingEvent(fx, f.id, { kind: 'reopened', by: 'assessor' });
+
+describe('B2 review notes: the gate on the blocked box and what counts as a closing record (ruling R1, ruling C)', () => {
+  it('B2: the composed close sentences read exactly as before, from one copy of each sentence', () => {
+    const F = FINDINGS_COPY.finding;
+    expect(F.closeChanged('Done')).toBe('The decision on this question is now Done. You can close this finding now.');
+    expect(F.closeWithdrawn).toBe('The decision on this question was withdrawn. You can close this finding now.');
+    expect(F.closeGate).toBe('Your team answered No to the personal data question, so this question does not apply. You can close this finding now.');
+    expect(F.closeChanged('Done')).toBe(`${F.closeChangedCause('Done')} ${F.closeNow}`);
+    expect(F.closeWithdrawn).toBe(`${F.closeWithdrawnCause} ${F.closeNow}`);
+    expect(F.closeGate).toBe(`${F.closeGateCause} ${F.closeNow}`);
+  });
+
+  it('B2: a reviewer, a viewer and an archived project get no box on a blocked finding; an owner and an admin get the blocked box', async () => {
+    const w = await blockedWalk();
+    for (const role of ['reviewer', 'viewer'] as const) {
+      const d = await pageData(role, w.f.projectId, w.f.id);
+      expect([role, d.closeBlocked, d.closeByDecision]).toEqual([role, false, null]);
+      expect(await renderFinding(w.f, role)).not.toContain('finding-close-box');
+    }
+    for (const role of ['owner', 'admin'] as const) expect((await pageData(role, w.f.projectId, w.f.id)).closeBlocked).toBe(true);
+    const a = await blockedWalk({ archived: true });
+    expect(await renderFinding(a.f, 'owner')).not.toContain('finding-close-box');
+  });
+
+  it('B2: a mitigation In progress blocks as Planned does', async () => {
+    const w = await blockedWalk({ status: 'in_progress' });
+    expect((await pageData('assessor', w.f.projectId, w.f.id)).closeBlocked).toBe(true);
+    expect((await loadPage('assessor', w.f.projectId)).decisionDone).toEqual([]);
+  });
+
+  it('B2: a closing record at or below the latest reopen does not count', async () => {
+    const w = await blockedWalk();
+    await pressClose(w);
+    await addMitigationVersion(fx, w.f.id, { mitigationId: w.m!.mitigationId, status: 'cancelled', owner: 'assessor', dueDate: '2099-01-01' });
+    await reopen(w.f);
+    await addMitigationVersion(fx, w.f.id, { status: 'planned', owner: 'assessor', dueDate: '2099-01-01' });
+    const d = await pageData('assessor', w.f.projectId, w.f.id);
+    expect([d.detail.state, d.closeBlocked, d.closeByDecision]).toEqual(['open', false, null]);
+  });
+
+  it('B2 ruling C: a decision closure with two versions is not a closing record: it does not block, and it is shown as a card', async () => {
+    const w = await blockedWalk();
+    await pressClose(w);
+    await addDecision(fx, w.f.projectId, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId, status: 'not_yet' });   // no closure now
+    expect((await pageData('assessor', w.f.projectId, w.f.id)).closeBlocked).toBe(true);    // the record still counts
+    const record = (await pageData('assessor', w.f.projectId, w.f.id)).detail.mitigations.find((m) => m.current.kind !== 'action')!;
+    await addMitigationVersion(fx, w.f.id, { mitigationId: record.mitigationId, kind: 'decision_changed', status: 'done', owner: 'assessor', dueDate: '2099-01-01' });
+    const d = await pageData('assessor', w.f.projectId, w.f.id);
+    expect(d.closeBlocked).toBe(false);
+    expect(d.mitigations.map((m) => m.current.mitigationId).sort()).toEqual([w.m!.mitigationId, record.mitigationId].sort());
+  });
+
+  it('B2: the blocked box gives the withdrawn cause and the personal data cause', async () => {
+    const F = FINDINGS_COPY.finding;
+    const w = await blockedWalk({ to: 'withdrawn' });
+    expect(await renderFinding(w.f, 'assessor')).toMatch(new RegExp(`class="finding-close-box"[^>]*><p>${lit(F.closeWithdrawnCause)}</p><p>${lit(F.closeBlocked)}</p></section>`));
+    const g = await blockedWalk({ to: 'gate' });
+    expect(await renderFinding(g.f, 'assessor')).toMatch(new RegExp(`class="finding-close-box"[^>]*><p>${lit(F.closeGateCause)}</p><p>${lit(F.closeBlocked)}</p></section>`));
+  });
+});
+
+describe('R2 R3: a closing record is not a mitigation, and the cause is true (rulings R2, R3, A, B, C)', () => {
+  const F = FINDINGS_COPY.finding;
+  const M = FINDINGS_COPY.mitigation;
+  const name = () => fx.members.assessor.name;
+  const closureLine = (cause: string | null) => new RegExp(
+    `<p>${lit(F.closedBy)} <bdi>${lit(name())}</bdi> ${F.on} <time[^>]*>\\d{1,2} \\w{3} 20\\d\\d</time>\\.${cause === null ? '' : ` ${lit(cause)}`}</p>`);
+
+  it('R2 R3: a plain close: no card, the label "Closed", the closure line with the changed cause, and "Finding closed by" in the history', async () => {
+    const w = await blockedWalk({ mitigation: false });
+    await pressClose(w);
+    const d = await pageData('assessor', w.f.projectId, w.f.id);
+    expect(d.mitigations).toEqual([]);
+    expect(d.stateLabel).toBe(FINDINGS_COPY.labels.closed);
+    const html = renderToStaticMarkup(<FindingPageView data={d} />);
+    expect(html).toContain(`<bdi class="status-label">${FINDINGS_COPY.labels.closed}</bdi>`);
+    expect(html).toMatch(closureLine(M.closedBecauseDecisionChanged));
+    expect(html).toContain(`<p>${F.noMitigations}</p>`);
+    expect(html).toMatch(new RegExp(`</time> ${lit(M.findingClosedBy)} <bdi>${lit(name())}</bdi>\\.</li>`));
+    expect(html).not.toContain(M.added);
+    expect(html).not.toContain('finding-card');
+    const row = (await loadPage('assessor', w.f.projectId)).closed.find((i) => i.id === w.f.id);
+    expect(row?.stateLabel).toBe(FINDINGS_COPY.labels.closed);
+  });
+
+  it('R3: the withdrawn cause and the no longer applies cause; R3 rule A: no cause it cannot read, and no guessed one', async () => {
+    const wd = await blockedWalk({ mitigation: false, to: 'withdrawn' });
+    await pressClose(wd);
+    expect(await renderFinding(wd.f, 'viewer')).toMatch(closureLine(M.closedBecauseDecisionWithdrawn));
+    const g = await blockedWalk({ mitigation: false, to: 'gate' });
+    await pressClose(g);
+    expect(await renderFinding(g.f, 'viewer')).toMatch(closureLine(M.closedBecauseNoLongerApplies));
+    // A decision_changed record that names no decision version: the line says who and when, and no cause.
+    const p = await addProject(fx);
+    const t = { ...(await addFinding(fx, p.id, { stage: 'pre-processing', source: 'team', by: 'owner' })), projectId: p.id };
+    await addMitigationVersion(fx, t.id, { kind: 'decision_changed', status: 'done', owner: 'assessor', by: 'assessor', dueDate: '2026-11-14' });
+    const html = await renderFinding(t, 'viewer');
+    expect(html).toMatch(closureLine(null));
+    for (const cause of [M.closedBecauseDecisionChanged, M.closedBecauseDecisionWithdrawn, M.closedBecauseNoLongerApplies]) expect(html).not.toContain(cause);
+  });
+
+  it('R2 ruling B (stuck): the notice, one card, no closure line, and the history line that the finding stayed open', async () => {
+    const w = await blockedWalk();
+    await pressClose(w);
+    const d = await pageData('assessor', w.f.projectId, w.f.id);
+    expect(d.mitigations.map((m) => m.current.mitigationId)).toEqual([w.m!.mitigationId]);
+    const html = renderToStaticMarkup(<FindingPageView data={d} />);
+    expect(html).toContain(`<p>${F.closeBlocked}</p>`);
+    expect(html.match(/class="finding-card"/g)).toHaveLength(1);
+    expect(html.split(`>${F.updateMitigation}<`).length - 1).toBe(1);
+    expect(html).not.toContain(`${F.closedBy} <bdi>`);
+    expect(html).toMatch(new RegExp(`</time> ${lit(M.pressedWhileOpen)} <bdi>${lit(name())}</bdi></li>`));
+    expect(html.split(M.added).length - 1).toBe(1);   // the real mitigation only
+  });
+
+  it('R2: after the stuck case is cancelled the label is "Closed" with the cause; after Done it is "Closed by a mitigation" with no closure line', async () => {
+    const c = await blockedWalk();
+    await pressClose(c);   // the assessor presses while the mitigation is Planned
+    await addMitigationVersion(fx, c.f.id, { mitigationId: c.m!.mitigationId, status: 'cancelled', owner: 'assessor', by: 'owner', dueDate: '2099-01-01' });   // the owner cancels
+    const cancelled = await renderFinding(c.f, 'viewer');
+    expect(cancelled).toContain(`<bdi class="status-label">${FINDINGS_COPY.labels.closed}</bdi>`);
+    // Fix 1: the press did not close the finding, so no "Closed by" names its presser or day; the cause stands alone.
+    expect(cancelled).not.toContain(`${F.closedBy} <bdi>`);
+    expect(cancelled).toContain(`<p>${M.closedBecauseDecisionChanged}</p>`);
+    expect(cancelled).toMatch(new RegExp(`</time> ${lit(M.pressedWhileOpen)} <bdi>${lit(name())}</bdi></li>`));
+    expect(cancelled).toMatch(new RegExp(`</time> ${lit(M.updated(2))}[^<]*<bdi>[^<]*</bdi>[^<]*<bdi>${lit(fx.members.owner.name)}</bdi></li>`));
+    const dn = await blockedWalk();
+    await pressClose(dn);
+    await addMitigationVersion(fx, dn.f.id, { mitigationId: dn.m!.mitigationId, status: 'done', owner: 'assessor', dueDate: '2099-01-01' });
+    const done = await renderFinding(dn.f, 'viewer');
+    expect(done).toContain(`<bdi class="status-label">${FINDINGS_COPY.labels.closedByMitigation}</bdi>`);
+    expect(done).not.toContain(`${F.closedBy} <bdi>`);
+    const rows = (await loadPage('viewer', dn.f.projectId)).closed;
+    expect(rows.map((r) => r.stateLabel)).toEqual([FINDINGS_COPY.labels.closedByMitigation]);
+  });
+
+  it('R3: S-14 lists a gate answered No under its own heading, after the changed and the withdrawn ones', async () => {
+    const p = await addProject(fx);
+    const stage = 'pre-processing' as const;
+    const sf = async (questionId: string) => addFinding(fx, p.id, { stage, source: 'shortfall', questionId,
+      decisionVersionId: (await addDecision(fx, p.id, { stage, questionId, contentVersionId, status: 'not_yet' })).id });
+    const changed = await sf('Q-PP-01'); await addDecision(fx, p.id, { stage, questionId: 'Q-PP-01', contentVersionId, status: 'done' });
+    const gone = await sf('Q-PP-02'); await addDecision(fx, p.id, { stage, questionId: 'Q-PP-02', contentVersionId, status: 'withdrawn', withdrawalCode: 'entered_in_error' });
+    const gate = await sf('Q-PP-13'); await addDecision(fx, p.id, { stage, questionId: 'Q-PP-GATE-SENSITIVE', contentVersionId, scopeAnswer: 'no' });
+    const data = await loadPage('assessor', p.id);
+    expect([data.decisionDone.map((i) => i.id), data.decisionWithdrawn.map((i) => i.id), data.gateNo.map((i) => i.id)]).toEqual([[changed.id], [gone.id], [gate.id]]);
+    const html = renderToStaticMarkup(<FindingsPageView data={data} />);
+    const L = FINDINGS_COPY.list;
+    const at = [L.decisionDone, L.decisionWithdrawn, L.gateNo].map((h) => html.indexOf(`>${h}<`));
+    expect(at.every((i) => i >= 0)).toBe(true);
+    expect(at).toEqual([...at].sort((a, b) => a - b));
+    expect(html.split(`aria-label="${FINDINGS_COPY.closeByDecision.ariaLabel('')}`).length - 1).toBe(3);
+  });
+});
+
+describe('R4 R5: the question page line, the link back, and the order of S-14 (rulings R4, R5)', () => {
+  it('R4: S-12 data marks the open finding closable when a decision closure is available and no mitigation is open', async () => {
+    const free = await blockedWalk({ mitigation: false });
+    const ctx = ctxFor(fx, 'viewer');
+    expect(await openShortfallForQuestion(ctx, free.f.projectId, 'Q-PP-01')).toEqual({ findingId: free.f.id, closable: true });
+    const blocked = await blockedWalk();
+    expect(await openShortfallForQuestion(ctx, blocked.f.projectId, 'Q-PP-01')).toEqual({ findingId: blocked.f.id });
+    const p = await addProject(fx);
+    const raising = await addDecision(fx, p.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId, status: 'not_yet' });
+    const plain = await addFinding(fx, p.id, { stage: 'pre-processing', source: 'shortfall', questionId: 'Q-PP-01', decisionVersionId: raising.id });
+    expect(await openShortfallForQuestion(ctx, p.id, 'Q-PP-01')).toEqual({ findingId: plain.id });
+  });
+
+  it('R4 (fix 2): on an archived project S-12 does not say the finding can now be closed', async () => {
+    const live = await blockedWalk({ mitigation: false });
+    const q = (projectId: string) => loadQuestionPanel(ctxFor(fx, 'owner'), identityOf('owner'), { projectId, stage: 'pre-processing', questionId: 'Q-PP-01' });
+    expect((await q(live.f.projectId)).openFinding).toEqual({ findingId: live.f.id, closable: true });
+    const shelved = await blockedWalk({ mitigation: false, archived: true });
+    expect((await q(shelved.f.projectId)).openFinding).toEqual({ findingId: shelved.f.id });
+  });
+
+  it('R4: a finding about a question of the running content links back to it; a team finding with no question does not', async () => {
+    const w = await blockedWalk({ mitigation: false });
+    const html = await renderFinding(w.f, 'viewer');
+    expect(html).toMatch(new RegExp(`<a[^>]*href="/orgs/${fx.org.slug}/projects/${w.f.projectId}/stages/pre-processing/questions/Q-PP-01"[^>]*>${FINDINGS_COPY.finding.openQuestion}</a>`));
+    const p = await addProject(fx);
+    const t = { ...(await addFinding(fx, p.id, { stage: 'pre-processing', source: 'team', by: 'owner' })), projectId: p.id };
+    expect(await renderFinding(t, 'viewer')).not.toContain(FINDINGS_COPY.finding.openQuestion);
+  });
+
+  it('R5: on S-14 the lists come before the raise form, which keeps id="raise"', async () => {
+    const k = await everyKind();
+    const html = await renderList('reviewer', k.p.id);
+    const form = html.indexOf('id="raise"');
+    expect(form).toBeGreaterThan(0);
+    for (const h of [FINDINGS_COPY.list.decisionDone, FINDINGS_COPY.list.closed, FINDINGS_COPY.list.withdrawn]) expect(html.indexOf(`>${h}<`)).toBeLessThan(form);
+  });
+});

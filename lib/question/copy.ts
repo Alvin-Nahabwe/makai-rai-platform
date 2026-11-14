@@ -11,15 +11,25 @@ export const QUESTION_COPY = Object.freeze({
     previous: 'Previous question',
     next: 'Next question',
     position: (n: number, of: number, stage: string): string => `Question ${n} of ${of} in ${stage}`,
-    back: (stage: string): string => `Back to ${stage}`,
+    /** The strip's link to the stage page (design spec 9.3; plan 1C `DECISION_COPY.allQuestionsLink`). */
+    allQuestions: 'All questions',
   }),
   headings: Object.freeze({
-    question: 'Question',
     current: 'Current decision',
     seals: 'Sealed reviews',
     record: 'Record a decision',
     findings: 'Findings',
     suggestions: 'Ways teams address this',
+  }),
+  /**
+   * Under the code line of a question the personal data answer switched off (workshop walk S3). The first sentence of
+   * FINDINGS_COPY.closeGate (lib/findings/copy.ts); question-frame.test.tsx holds the two together.
+   */
+  doesNotApply: 'Your team answered No to the personal data question, so this question does not apply.',
+  /** The way on at the foot of the main column, after the form (workshop walk S9; plan 1C DECISION_COPY.nextQuestion, lastQuestion; design spec 9.3). */
+  foot: Object.freeze({
+    next: (title: string): string => `Next question: ${title}`,
+    last: 'This is the last question in this stage.',
   }),
   reworded: Object.freeze({
     line: "The description of good practice changed after your team's decision.",
@@ -38,6 +48,17 @@ export const QUESTION_COPY = Object.freeze({
     evidence: 'Evidence',
     noEvidence: 'None',
   }),
+  /**
+   * The read-only question page (plan 1C Task 7, decision C12): what a Reviewer, a Viewer or anyone in an archived project
+   * reads in place of the form. CurrentDecision's reading mode and components/question/OpenWorkList.tsx.
+   */
+  reading: Object.freeze({
+    title: 'What the team decided',
+    history: (n: number): string => `History: ${n} ${n === 1 ? 'version' : 'versions'}`,
+    stillOpen: (n: number): string => `Still open on this question: ${n} ${n === 1 ? 'finding' : 'findings'}`,
+    mitigation: (what: string): string => `Mitigation: ${what}`,
+    noMitigationYet: 'No mitigation yet',
+  }),
   /** components/question/QuestionContent.tsx. */
   content: Object.freeze({
     principle: (principle: string): string => `Principle: ${principle}`,
@@ -50,7 +71,16 @@ export const QUESTION_COPY = Object.freeze({
     topics: (titles: readonly string[]): string => titles.join(' · '),
     nothingRecorded: 'Nothing is recorded for this stage yet. Open any question to start. You can work on the stages in any order.',
     reviewName: (name: string): string => `${name}:`,
+    /** The row of marks' label (plan 1C Task 3): the words of the question page's own navigation, nav.label. */
+    routeLabel: 'Questions in this stage',
     showMore: 'Show more' as const,
+    /**
+     * The question page's column: its link to the stage page. The strip's link already reads nav.allQuestions, so this one
+     * reads the words ruled for the project page's link to a stage (spec 9.2; PROJECT_COPY at lib/project/copy.ts,
+     * `allQuestions`), copied here because this module is the question page's own; __tests__/unit/route-column.test.tsx
+     * holds the two equal.
+     */
+    allQuestionsInStage: 'All questions in this stage',
   }),
   /** The history page of a question and components/decision/DecisionHistoryList.tsx (copy audit B rows 21 to 25, 185 to 197). */
   history: Object.freeze({
@@ -72,6 +102,8 @@ export const QUESTION_COPY = Object.freeze({
   /** components/findings/QuestionFindingLink.tsx (answer Q7 (b)). */
   findingLink: Object.freeze({
     open: 'This question has an open finding.',
+    /** R4: the open finding has a decision closure available and no mitigation open. */
+    closable: 'This question has a finding that can now be closed.',
     view: 'View the finding',
     raise: 'Raise a finding about this question',
   }),

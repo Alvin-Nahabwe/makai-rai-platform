@@ -60,22 +60,25 @@ const renderPage = (o: Parameters<typeof overview>[0]) => renderToStaticMarkup(<
 describe('S-10 (Task 5)', () => {
   it('UX-06 FR-PRJ-02: to-do counts come before recorded counts in each stage column', () => {
     const html = renderToStaticMarkup(<StageColumn orgSlug="o" projectId="p" stage="pre-processing" counts={COUNTS}>{null}</StageColumn>);
-    expect(html.indexOf('9 with no decision')).toBeLessThan(html.indexOf('Done 7'));
+    expect(html.indexOf('Still open in this stage')).toBeLessThan(html.indexOf('9 questions with no decision'));
+    expect(html.indexOf('9 questions with no decision')).toBeLessThan(html.indexOf('Recorded so far'));
+    expect(html.indexOf('Recorded so far')).toBeLessThan(html.indexOf('7 done (2 with no evidence attached)'));
     expect(html).toContain('3 open findings'); expect(html).toContain('1 overdue mitigation');
     expect(html).not.toMatch(/%|score|complete/i);
   });
 
-  it('UX-06 (R12-16): each status phrase of a stage column is a status-label element, and none carries the warning class', () => {
+  it('UX-06 (R12-16, spec 7.2): each status phrase of a stage column is the kit\'s mark with its words in ink, and none carries the warning class', () => {
     const html = renderToStaticMarkup(<StageColumn orgSlug="o" projectId="p" stage="pre-processing" counts={COUNTS}>{null}</StageColumn>);
-    const labels = [...html.matchAll(/<[a-z]+ [^>]*class="([^"]*\bstatus-label\b[^"]*)"[^>]*>([^<]*)</g)];
-    expect(labels.map((m) => m[2])).toEqual(['Done 7', expect.stringMatching(/^Partly \d+$/), expect.stringMatching(/^Not yet \d+$/), expect.stringMatching(/^Not applicable \d+$/)]);
-    expect(labels.every((m) => !/status-label--warning/.test(m[1]))).toBe(true);
+    const items = [...html.matchAll(/<li class="stage-column__tally-item">(<svg class="ui-mark__shape"[^>]*aria-hidden="true"[^>]*>[\s\S]*?<\/svg>)<span>([^<]*)<\/span><\/li>/g)];
+    expect(items.map((m) => m[2])).toEqual(['7 done (2 with no evidence attached)', expect.stringMatching(/^\d+ partly$/), expect.stringMatching(/^\d+ not yet$/), expect.stringMatching(/^\d+ not applicable$/), '1 answered']);
+    expect(html).not.toMatch(/status-label|warning/);
   });
 
-  it('FR-PRJ-02: the stage column says how many open findings have no mitigation yet, and counts gated questions as not applicable', () => {
+  it('FR-PRJ-02: the stage column says how many open findings have no mitigation yet, and counts gated questions as not applying, beside those marked not applicable', () => {
     const html = renderToStaticMarkup(<StageColumn orgSlug="o" projectId="p" stage="pre-processing" counts={{ ...COUNTS, notApplicableByGate: 2 }}>{null}</StageColumn>);
-    expect(html).toContain('3 open findings (1 of them with no mitigation yet)');
-    expect(html).toContain('Not applicable 4');
+    expect(html).toContain('3 open findings</a> (1 of them with no mitigation yet)');
+    expect(html).toContain('<span>2 not applicable</span>');
+    expect(html).toContain('<span>2 do not apply</span>');
   });
 
   it('FR-RM-04: no stage column and no page adds the three stages together', () => {
@@ -130,14 +133,17 @@ describe('S-10 (Task 5)', () => {
     expect(owner).toContain('class="archive-control"');
   });
 
-  it('FR-PRJ-02: a new project shows "Nothing recorded yet." in each stage', () => {
-    expect(renderPage({ counts: ZERO }).split('Nothing recorded yet.')).toHaveLength(4);
+  it('FR-PRJ-02: a new project shows "No decisions recorded yet" in each stage', () => {
+    expect(renderPage({ counts: ZERO }).split('<p>No decisions recorded yet</p>')).toHaveLength(4);
   });
 
-  it('UX-36: each stage is a details element, open by default, that names its three to-do counts when collapsed', () => {
+  it('UX-36: each stage is a plain block, named by its heading, that names its three to-do counts', () => {
     const html = renderPage({});
-    expect(html.match(/<details open="" class="stage-column"/g)).toHaveLength(3);
-    expect(html).toContain('Pre-processing: 9 with no decision, 3 open findings, 1 overdue mitigation');
+    expect(html.match(/<section class="stage-column" id="[a-z-]+" data-stage="[a-z-]+" aria-labelledby="[a-z-]+">/g)).toHaveLength(3);
+    expect(html).not.toContain('<details');
+    const pre = html.slice(html.indexOf('<section class="stage-column" id="pre-processing"'), html.indexOf('<section class="stage-column" id="in-processing"'));
+    expect(pre).toMatch(/<h2 id="[a-z-]+">Pre-processing<\/h2>/);
+    for (const count of ['9 questions with no decision', '3 open findings', '1 overdue mitigation']) expect(pre).toContain(count);
   });
 
   it('FR-PRJ-03 UX-29: archive, export and open-review actions follow the role and the archived state', () => {
@@ -256,8 +262,13 @@ describe('S-09 and S-32 (Task 7)', () => {
   it('FR-PRJ-01: the form has a labelled control for each descriptive field', () => {
     const html = renderToStaticMarkup(<ProjectForm mode="create" />);
     for (const label of ['AI system type', 'Sector', 'Dataset type', 'Dataset size', PROJECT_FORM_COPY.labels.processesPersonalData, 'Funding source',
-                         'Regulatory context', PROJECT_FORM_COPY.labels.developmentStage, 'Start date', 'End date'])
+                         'Regulatory context', PROJECT_FORM_COPY.labels.developmentStage])
       expect(html).toMatch(new RegExp(`<label[^>]*for="[^"]+"[^>]*>${label}`));
+    // The two dates are the kit's DateField (plan 1B Task 13): a fieldset named by its legend, and three labelled boxes.
+    for (const [prefix, legend] of [['projectStart', 'Start date'], ['projectEnd', 'End date']]) {
+      expect(html).toMatch(new RegExp(`<fieldset[^>]*>\\s*<legend[^>]*>${legend}</legend>`));
+      for (const part of ['day', 'month', 'year']) expect(html).toMatch(new RegExp(`<label[^>]*for="${prefix}-${part}"[^>]*>[^<]+</label>\\s*<input[^>]*id="${prefix}-${part}"`));
+    }
   });
 
   it('FR-PRJ-01 (B37): the dataset size and personal data options print the words of lib/project/labels.ts, and the form writes none of them', () => {

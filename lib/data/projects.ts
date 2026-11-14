@@ -1,5 +1,5 @@
 import type { OrgContext, TenantTx } from '@/lib/data/tenant';
-import { STAGES, type Actor, type CalendarDate, type DecisionStatus, type ScopeAnswer, type Stage } from '@/types/record';
+import { STAGES, type Actor, type CalendarDate, type DecisionStatus, type ScopeAnswer, type Stage, type StoredDecisionStatus } from '@/types/record';
 import type { OrgRole } from '@prisma/client';
 import type { FollowUpItem, StageCounts, StageReviewView } from '@/types/api';
 import { can } from '@/lib/authz/policy';
@@ -28,6 +28,39 @@ async function documentsIssuedByStage(tx: TenantTx, projectId: string): Promise<
   const out = { 'pre-processing': 0, 'in-processing': 0, 'post-processing': 0 } as Record<Stage, number>;
   for (const r of rows) out[r.stage] = r.n;
   return out;
+}
+
+type OpenRuleInput = {
+  questions: ReadonlyArray<{ id: string; condition?: { questionId: string } }>;
+  current: ReadonlyMap<string, { status: StoredDecisionStatus | null; scopeAnswer: ScopeAnswer | null }>;
+  applies: (questionId: string, gate: ScopeAnswer | null) => boolean;
+};
+
+/** The questions whose gate, as currently answered, makes them not apply (FR-CNT-04). */
+function gatedQuestionIds({ questions, current, applies }: OpenRuleInput): Set<string> {
+  const gated = new Set<string>();
+  for (const q of questions) {
+    if (q.condition === undefined) continue;
+    if (!applies(q.id, current.get(q.condition.questionId)?.scopeAnswer ?? null)) gated.add(q.id);
+  }
+  return gated;
+}
+
+/**
+ * The questions of a stage with no decision: they apply under the gate, and their current version is missing, a
+ * withdrawal, or carries neither a status nor a scope answer (an answered gate is decided). The one rule stageView
+ * counts as `noDecision` and Home's next step chooses from (plan 1B C2).
+ */
+export function openQuestionIds(input: OpenRuleInput): Set<string> {
+  const gated = gatedQuestionIds(input);
+  const open = new Set<string>();
+  for (const q of input.questions) {
+    if (gated.has(q.id)) continue;
+    const row = input.current.get(q.id);
+    if (row !== undefined && row.scopeAnswer !== null) continue;   // an answered gate is decided
+    if (row === undefined || row.status === 'withdrawn' || row.status === null) open.add(q.id);
+  }
+  return open;
 }
 
 /**
@@ -71,25 +104,15 @@ export async function stageView(
     const inContent = new Set(questions.map((q) => q.id));
 
     // Which questions the gate makes not apply: they count only in notApplicableByGate (FR-CNT-04).
-    const gated = new Set<string>();
-    for (const q of questions) {
-      if (q.condition === undefined) continue;
-      const gate: ScopeAnswer | null = current.get(q.condition.questionId)?.scopeAnswer ?? null;
-      if (!questionApplies(content, q.id, gate)) gated.add(q.id);
-    }
+    const rule = { questions, current, applies: (id: string, gate: ScopeAnswer | null) => questionApplies(content, id, gate) };
+    const gated = gatedQuestionIds(rule);
     // The decisions that count: a question of the running content that applies. A decision on a question the content
     // dropped, or on one the gate now excludes, counts nowhere.
     const counted = rows.filter((r) => inContent.has(r.questionId) && !gated.has(r.questionId));
     const byStatus = Object.fromEntries(DECISION_STATUSES.map((st) => [st, 0])) as Record<DecisionStatus, number>;
     for (const r of counted) if (r.status !== null && r.status !== 'withdrawn') byStatus[r.status] += 1;
 
-    let noDecision = 0;
-    for (const q of questions) {
-      if (gated.has(q.id)) continue;
-      const row = current.get(q.id);
-      if (row !== undefined && row.scopeAnswer !== null) continue;   // an answered gate is decided
-      if (row === undefined || row.status === 'withdrawn' || row.status === null) noDecision += 1;
-    }
+    const noDecision = openQuestionIds(rule).size;
 
     const counts = followUp[stage];
     const findings = findingsByStage.get(stage) ?? [];

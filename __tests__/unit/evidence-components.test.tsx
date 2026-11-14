@@ -106,6 +106,14 @@ describe('the evidence block and the version evidence list', () => {
     expect(view({ linkFormOpen: true, linkPending: true })).toMatch(/<button[^>]*disabled=""[^>]*>Add link<\/button>/);
     expect(view({ linkFormOpen: true })).not.toMatch(/<button[^>]*disabled=""[^>]*>Add link<\/button>/);
   });
+  it('B3: while a link is being added the link form says so, in a status region that is there before its words', () => {
+    const region = (html: string) => html.match(/<p[^>]*role="status"[^>]*data-link-adding[^>]*>([^<]*)<\/p>/)?.[1];
+    expect(region(view({ linkFormOpen: true, linkPending: true }))).toBe('Adding the link...');
+    expect(EVIDENCE_COPY.link.adding).toBe('Adding the link...');
+    // Empty, not absent, until then: a live region added with its text is often not announced.
+    expect(region(view({ linkFormOpen: true }))).toBe('');
+    expect(view({})).not.toMatch(/data-link-adding/);
+  });
   it('NFR-A11Y-02: a link error is announced and tied to the address input', () => {
     const html = view({ linkFormOpen: true, linkUrl: 'ftp://x', linkError: 'Enter a web address that starts with http:// or https://.' });
     expect(html).toMatch(/role="alert"[^>]*>(?:(?!<\/div>)[\s\S])*Enter a web address that starts with http:\/\/ or https:\/\/\./);

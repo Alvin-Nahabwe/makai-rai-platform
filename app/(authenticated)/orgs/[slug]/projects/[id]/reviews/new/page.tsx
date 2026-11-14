@@ -46,7 +46,9 @@ export default async function OpenReviewPage({ params, searchParams }: PageProps
   const { slug, id } = await params;
   const { stage } = await searchParams;
   const { identity, ctx, project } = await load(slug, id);
-  const heading = <PageHeader title={REVIEW_COPY.titles.openReview} />;
+  const base = `/orgs/${encodeURIComponent(slug)}/projects/${encodeURIComponent(id)}`;
+  // The breadcrumb leads back to the project, on the refusal view too (workshop walk S5-1).
+  const heading = <PageHeader breadcrumb={[{ label: project.name, href: base }, { label: REVIEW_COPY.titles.openReview }]} title={REVIEW_COPY.titles.openReview} />;
   const remember = <RememberProject userId={identity.userId} orgSlug={slug} projectId={project.id} />;
   if (!can(ctx.role, 'review:open')) {
     return <div className="page-content">{heading}<p>{REVIEW_COPY.open.refusal}</p>{remember}</div>;

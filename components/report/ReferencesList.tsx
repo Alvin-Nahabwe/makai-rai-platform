@@ -1,4 +1,7 @@
+import { GUIDANCE_COPY } from '@/lib/guidance/copy';
 import './ReferencesList.css';
+
+const R = GUIDANCE_COPY.references;
 
 interface Reference {
   citation: string;
@@ -32,7 +35,7 @@ export default function ReferencesList({ references }: ReferencesListProps) {
 
   return (
     <details className="references-list">
-      <summary className="references-list__toggle">{`Research sources (${references.length})`}</summary>
+      <summary className="references-list__toggle">{R.summary(references.length)}</summary>
       <ul className="references-list__items">
         {references.map((ref, i) => {
           const url = getRefUrl(ref);
@@ -54,11 +57,11 @@ export default function ReferencesList({ references }: ReferencesListProps) {
               <span className="references-list__meta">
                 {hasDoiId && (
                   <a href={`https://doi.org/${ref.doi}`} target="_blank" rel="noopener noreferrer" className="references-list__doi-badge">
-                    DOI
+                    {R.doi}
                   </a>
                 )}
-                {ref.doi && ref.doi.startsWith('arXiv') && <span className="references-list__doi-badge">arXiv</span>}
-                {ref.doi && ref.doi.startsWith('ISBN') && <span className="references-list__doi-badge">Book</span>}
+                {ref.doi && ref.doi.startsWith('arXiv') && <span className="references-list__doi-badge">{R.arxiv}</span>}
+                {ref.doi && ref.doi.startsWith('ISBN') && <span className="references-list__doi-badge">{R.book}</span>}
                 {ref.relevance && <span className="references-list__relevance" data-source-note="">{ref.relevance}</span>}
               </span>
             </li>

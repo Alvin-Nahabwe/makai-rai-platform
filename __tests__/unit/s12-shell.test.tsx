@@ -32,6 +32,9 @@ const loadQuestionPanel = vi.fn();
 vi.mock('@/lib/auth/identity', () => ({ requireIdentity: (...a: unknown[]) => requireIdentity(...a) }));
 vi.mock('@/lib/auth/context', () => ({ requireOrgContextFor: (...a: unknown[]) => requireOrgContextFor(...a) }));
 vi.mock('@/lib/question/panel', () => ({ loadQuestionPanel: (...a: unknown[]) => loadQuestionPanel(...a) }));
+// The column's read (the stage page's loader): null here, so these cases see the panel's regions alone.
+const loadStagePage = vi.fn();
+vi.mock('@/lib/question/stagePage', () => ({ loadStagePage: (...a: unknown[]) => loadStagePage(...a) }));
 
 const { default: QuestionPage, QuestionPanelRegions } = await import(
   '@/app/(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]/page'
@@ -64,13 +67,14 @@ beforeEach(() => {
   requireIdentity.mockReset().mockResolvedValue({ userId: 'u1', email: 'a@x.test' });
   requireOrgContextFor.mockReset().mockResolvedValue({ orgId: 'o1', role: 'assessor' });
   loadQuestionPanel.mockReset().mockResolvedValue(PANEL);
+  loadStagePage.mockReset().mockResolvedValue(null);
 });
 
 describe('S-12 shell', () => {
   it('FR-DEC-01 UX-08: S-12 shell regions in order, each but the evidence block labelled by a heading, evidence block inside the answer form', async () => {
     const html = renderToStaticMarkup(await QuestionPanelRegions({ data: PANEL }));
     expect([...html.matchAll(/data-region="([a-z-]+)"/g)].map((m) => m[1]))
-      .toEqual(['question', 'current-decision', 'seal-note', 'answer-form', 'evidence-block', 'finding-link', 'suggestions']);
+      .toEqual(['question', 'current-decision', 'seal-note', 'answer-form', 'evidence-block', 'way-on', 'finding-link', 'suggestions']);
     // The evidence block is named once, by its fieldset legend (evidence-components.test.tsx), not by a heading of its own.
     expect(html.match(/<section[^>]*aria-labelledby=/g)).toHaveLength(6);
     expect(html).toMatch(/<section data-region="evidence-block">/);
@@ -82,7 +86,7 @@ describe('S-12 shell', () => {
     const labelled = [...html.matchAll(/aria-labelledby="([^"]+)"/g)].map((m) => m[1]);
     expect(new Set(labelled).size).toBe(6);
     expect(html).not.toContain('s12-evidence');
-    for (const id of labelled) expect(html, id).toMatch(new RegExp(`<h[23] id="${id}">[^<]+</h[23]>`));
+    for (const id of labelled) expect(html, id).toMatch(new RegExp(`<h([1-3]) id="${id}"[^>]*>[^<]+</h\\1>`));
     expect(html).toMatch(/<section[^>]*data-region="suggestions"[^>]*id="suggestions"|<section[^>]*id="suggestions"[^>]*data-region="suggestions"/);
     expect(html.match(/id="suggestions"/g)).toHaveLength(1);
     // SRS line 1836: the heading has no count (the "(8)" there is a note marker); the slot's line under it gives it.
@@ -144,28 +148,31 @@ describe('S-12 page', () => {
     Promise.resolve({ slug: 'acme-health', id: 'p1', stage: 'pre-processing', questionId: 'Q-PP-01', ...o });
 
   it('NFR-SEC-02 FR-DEC-01: the page asks for record:read in this organisation, then loads the panel for this question', async () => {
-    const html = renderToStaticMarkup(await QuestionPage({ params: params() }));
+    const html = renderToStaticMarkup(await QuestionPage({ params: params(), searchParams: Promise.resolve({}) }));
     expect(requireOrgContextFor).toHaveBeenCalledWith('u1', 'acme-health', 'record:read');
     expect(loadQuestionPanel).toHaveBeenCalledWith({ orgId: 'o1', role: 'assessor' }, { userId: 'u1', email: 'a@x.test' },
       { projectId: 'p1', stage: 'pre-processing', questionId: 'Q-PP-01' });
+    // The column reads the stage with the same context and identity, nothing wider.
+    expect(loadStagePage).toHaveBeenCalledWith({ orgId: 'o1', role: 'assessor' }, 'u1', 'p1', 'pre-processing');
     expect(html).toContain('data-region="answer-form"');
   });
 
   it('NFR-SEC-02: nothing is loaded when the identity or the membership is refused', async () => {
     requireOrgContextFor.mockRejectedValueOnce(new NotFoundError());
-    await expect(QuestionPage({ params: params() })).rejects.toBeInstanceOf(NotFoundError);
+    await expect(QuestionPage({ params: params(), searchParams: Promise.resolve({}) })).rejects.toBeInstanceOf(NotFoundError);
     expect(loadQuestionPanel).not.toHaveBeenCalled();
+    expect(loadStagePage).not.toHaveBeenCalled();
   });
 
   it('NFR-SEC-02: a stage that is not one of the three, and a question the loader does not find, are a 404 page', async () => {
-    await expect(QuestionPage({ params: params({ stage: 'pre-processing/../x' }) })).rejects.toMatchObject({ digest: expect.stringContaining('404') });
+    await expect(QuestionPage({ params: params({ stage: 'pre-processing/../x' }), searchParams: Promise.resolve({}) })).rejects.toMatchObject({ digest: expect.stringContaining('404') });
     expect(loadQuestionPanel).not.toHaveBeenCalled();
     loadQuestionPanel.mockRejectedValueOnce(new NotFoundError());
-    await expect(QuestionPage({ params: params() })).rejects.toMatchObject({ digest: expect.stringContaining('404') });
+    await expect(QuestionPage({ params: params(), searchParams: Promise.resolve({}) })).rejects.toMatchObject({ digest: expect.stringContaining('404') });
   });
 
   it('NFR-MNT-01: until DEC-b fills the loader the page fails loudly with the unit named, not with an empty panel', async () => {
     loadQuestionPanel.mockRejectedValueOnce(new NotImplementedError('DEC-b'));
-    await expect(QuestionPage({ params: params() })).rejects.toMatchObject({ status: 501, extra: { unit: 'DEC-b' } });
+    await expect(QuestionPage({ params: params(), searchParams: Promise.resolve({}) })).rejects.toMatchObject({ status: 501, extra: { unit: 'DEC-b' } });
   });
 });

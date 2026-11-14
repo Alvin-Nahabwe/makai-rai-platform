@@ -49,9 +49,9 @@ const decodeEntities = (s: string) => s.replace(/&#x27;/g, "'").replace(/&amp;/g
 
 describe('S-18 summary line', () => {
   it('UX-20: a document that takes questions says how many fields come from how many questions; one that takes none says only the fields (data card, model card, mitigation plan)', () => {
-    expect(fromRecordLine({ fields: 35, questions: 20, notRecorded: 12 })).toBe('35 fields from 20 questions . 12 fields will read "Not recorded"');   // data card
-    expect(fromRecordLine({ fields: 31, questions: 18, notRecorded: 4 })).toBe('31 fields from 18 questions . 4 fields will read "Not recorded"');     // model card
-    expect(fromRecordLine({ fields: 10, questions: 0, notRecorded: 1 })).toBe('10 fields . 1 field will read "Not recorded"');                          // mitigation plan
+    expect(fromRecordLine({ fields: 35, questions: 20, notRecorded: 12 })).toBe('35 fields from 20 questions\u00a0· 12 fields will read "Not recorded"');   // data card
+    expect(fromRecordLine({ fields: 31, questions: 18, notRecorded: 4 })).toBe('31 fields from 18 questions\u00a0· 4 fields will read "Not recorded"');     // model card
+    expect(fromRecordLine({ fields: 10, questions: 0, notRecorded: 1 })).toBe('10 fields\u00a0· 1 field will read "Not recorded"');                          // mitigation plan
   });
 
   it('UX-20: the real maps agree: only the mitigation plan has no question source', () => {
@@ -267,12 +267,23 @@ describe('S-18 issued list and the S-16 slot', () => {
   it('FR-DOC-01 (S-16 slot): the review lists each document with its seal, date and short SHA-256, and adds no link of its own', () => {
     const withdrawn = { ...doc(), id: 'doc-87654321', documentType: 'model_card' as const, withdrawn: { on: '2026-11-04', reason: 'x' } };
     const html = renderToStaticMarkup(<ReviewDocumentsList orgSlug="o" projectId="p" reviewId="r" documents={[doc(), withdrawn]} />);
-    expect(html).toContain(`Data card . from seal 1 . issued 3 Nov 2026 . Fingerprint ${formatFingerprint(SHA, 'short')}`);
-    expect(html).toContain(`Model card . from seal 1 . issued 3 Nov 2026 . Fingerprint ${formatFingerprint(SHA, 'short')}`);
+    expect(html).toContain(`Data card\u00a0· from seal 1\u00a0· issued 3 Nov 2026\u00a0· Fingerprint ${formatFingerprint(SHA, 'short')}`);
+    expect(html).toContain(`Model card\u00a0· from seal 1\u00a0· issued 3 Nov 2026\u00a0· Fingerprint ${formatFingerprint(SHA, 'short')}`);
     expect(html).toMatch(/Withdrawn/);
     expect(html).toMatch(/Issued/);
     expect(html).not.toContain('Generate a document');   // S-16's own link is the only one (a second would repeat it)
     const empty = renderToStaticMarkup(<ReviewDocumentsList orgSlug="o" projectId="p" reviewId="r" documents={[]} />);
     expect(empty).toBe('');
+  });
+
+  it('FR-DOC-04 (S-16 slot, workshop walk S5-4): each document links its PDF as the S-18 list does: issued and withdrawn yes, erased no', () => {
+    const withdrawn = { ...doc(), id: 'doc-w', withdrawn: { on: '2026-11-04', reason: 'x' } };
+    const erased = { ...doc(), id: 'doc-e', erased: { erasedOn: '2026-11-04' } };
+    const html = renderToStaticMarkup(<ReviewDocumentsList orgSlug="o s" projectId="p" reviewId="r" documents={[doc(), withdrawn, erased]} />);
+    const link = (id: string) => `<a href="/api/v1/orgs/o%20s/documents/${id}/pdf">${DOCUMENTS_COPY.issued.download('84 KB')}</a>`;
+    expect(html).toContain(link('doc-12345678'));
+    expect(html).toContain(link('doc-w'));
+    expect(html).not.toContain('/documents/doc-e/pdf');
+    expect(html.match(/<a /g)).toHaveLength(2);
   });
 });
