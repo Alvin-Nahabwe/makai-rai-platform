@@ -1,10 +1,10 @@
-Subject: MAK-AI RAI platform: console break-glass login
+Subject: MAK-AI RAI Platform: emergency access to the server was used
 
-A root login was made at the platform server's emergency console.
+Someone signed in to the server that runs the MAK-AI RAI Platform. They used the
+emergency access, which is only for when the normal way in has failed.
 
-Event: {EVENT}
 Time (UTC): {TIME_UTC}
-Integrity log entry: {ENTRY_ID}
+Reference: {ENTRY_ID}
 
-This notice is sent to the owners and administrators of every organisation on the
-platform each time the emergency console is used. It carries no other information.
+We send this email to the Owners and Admins of every organisation on the
+platform each time emergency access is used. You do not need to do anything.

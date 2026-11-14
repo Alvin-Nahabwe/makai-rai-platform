@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test';
+import { INVITATION_PAGE_COPY } from '../lib/org/copy';
+import { roleWithArticle } from '../lib/org/copy';
 import fs from 'node:fs';
 import type { OrgRole } from '@prisma/client';
 import { can } from '../lib/authz/policy';
@@ -113,10 +115,10 @@ test.describe('an invitation moves a third person into an org, at the invited ro
     await thirdPage.goto(acceptUrl!);
     await expect(thirdPage.locator('h1')).toHaveText(/^You are invited to \S/);
     await expect(thirdPage.getByLabel(/^Email/)).toHaveValue(thirdEmail);
-    await expect(thirdPage.locator('body')).toContainText('invited you as an assessor');
+    await expect(thirdPage.locator('body')).toContainText(INVITATION_PAGE_COPY.invitedAs(roleWithArticle('assessor')));
 
     await thirdPage.getByLabel('Your name').fill('Two Orgs Third Person');
-    await thirdPage.getByLabel('Password', { exact: true }).fill(thirdPassword);
+    await thirdPage.locator('#new-password').fill(thirdPassword);
     await thirdPage.getByRole('button', { name: 'Continue' }).click();
     for (const box of await thirdPage.getByRole('checkbox').all()) await box.check();
     await thirdPage.getByRole('button', { name: 'Create account' }).click();

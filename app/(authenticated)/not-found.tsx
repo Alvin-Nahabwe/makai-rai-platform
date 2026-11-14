@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
-import { ERRORS_COPY } from '@/lib/errors/copy';
+import { NOT_FOUND_COPY } from '@/lib/errors/not-found/copy';
 import { pageTitle } from '@/lib/ui/title';
 import NotFoundCard from '@/components/layout/NotFoundCard';
 
-export const metadata: Metadata = { title: pageTitle(ERRORS_COPY.titles.notFound) };
+export const metadata: Metadata = { title: pageTitle(NOT_FOUND_COPY.title) };
 
 /**
  * S-31 for the signed-in group (SRS 7.1.5; UX-05; M-27). A notFound() thrown below app/(authenticated)/layout.tsx — today

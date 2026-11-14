@@ -178,7 +178,7 @@ function batchSent(r: Run): Email[] {
 function renderedNotice(time: string, entry: string): { subject: string; text: string } {
   const tpl = readFileSync(NOTICE, 'utf8').replace(/\n+$/, '');
   const [first, , ...body] = tpl.split('\n');
-  const fill = (s: string) => s.replaceAll('{EVENT}', 'break_glass.open').replaceAll('{TIME_UTC}', time).replaceAll('{ENTRY_ID}', entry);
+  const fill = (s: string) => s.replaceAll('{TIME_UTC}', time).replaceAll('{ENTRY_ID}', entry);
   return { subject: fill(first.replace(/^Subject: /, '')), text: fill(body.join('\n')) };
 }
 
@@ -305,7 +305,7 @@ describe('the break-glass session hook at run time', () => {
     // -q first: no ~/.curlrc can add `trace` or `output` and capture the key.
     expect(r.calls.curl[0][0]).toBe('-q');
     const argv = r.calls.curl[0].join(' ');
-    for (const secret of [KEY, ALERT_TO, OWNER, ADMIN, SENDER, 'break-glass login']) {
+    for (const secret of [KEY, ALERT_TO, OWNER, ADMIN, SENDER, 'emergency access']) {
       expect(argv, `${secret} reached curl as an argument`).not.toContain(secret);
     }
     expect(r.calls.curl[0]).toContain('--config');
@@ -462,15 +462,41 @@ describe('the break-glass hook, its notice and the login stack, read as text', (
   /** Executable lines: whole-line comments and blank lines dropped. */
   const code = hook.split('\n').map((l) => l.trim()).filter((l) => l !== '' && !l.startsWith('#'));
 
-  it('notice carries only event, time and entry id', () => {
+  it('notice carries only time and entry id, and no event', () => {
     const tpl = readFileSync(NOTICE, 'utf8');
     const placeholders = new Set([...tpl.matchAll(/\{([^{}]*)\}/g)].map((m) => m[1]));
-    expect([...placeholders].sort()).toEqual(['ENTRY_ID', 'EVENT', 'TIME_UTC']);
+    expect([...placeholders].sort()).toEqual(['ENTRY_ID', 'TIME_UTC']);
+    expect(tpl).not.toContain('{EVENT}');
+    expect(tpl).not.toContain('Event:');
+    expect(Math.max(...tpl.split('\n').map((l) => l.length))).toBeLessThanOrEqual(80);
     // The hook fills {NAME} tokens only; a shell-style reference would be literal text
     // today and a leak the day someone renders it with envsubst.
     expect(tpl).not.toMatch(/[$`]/);
     expect(tpl.split('\n')[0]).toMatch(/^Subject: \S/);
     expect(tpl.split('\n')[1]).toBe('');
+  });
+
+  it('16d: the notice file is exactly the ruled text and has no other placeholder', () => {
+    const tpl = readFileSync(NOTICE, 'utf8');
+    expect(tpl).toBe(
+      [
+        'Subject: MAK-AI RAI Platform: emergency access to the server was used',
+        '',
+        'Someone signed in to the server that runs the MAK-AI RAI Platform. They used the',
+        'emergency access, which is only for when the normal way in has failed.',
+        '',
+        'Time (UTC): {TIME_UTC}',
+        'Reference: {ENTRY_ID}',
+        '',
+        'We send this email to the Owners and Admins of every organisation on the',
+        'platform each time emergency access is used. You do not need to do anything.',
+        '',
+      ].join('\n'),
+    );
+    const r = renderedNotice('2026-11-02T08:00:00Z', 'ENTRY-1');
+    expect(r.subject).toBe('MAK-AI RAI Platform: emergency access to the server was used');
+    expect(r.text).toContain('Time (UTC): 2026-11-02T08:00:00Z\nReference: ENTRY-1');
+    expect(`${r.subject}\n${r.text}`).not.toMatch(/[{}]/);
   });
 
   it('user and tty reach psql only as variables', () => {

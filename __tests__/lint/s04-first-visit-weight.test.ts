@@ -87,6 +87,23 @@ describe('NFR-PERF-02 FIX-15: S-04 downloads nothing it does not use', () => {
     expect(defining).toEqual([]);
   });
 
+  it('NFR-PERF-02 T16-Q11: no file S-04\'s client reaches statically imports next-auth/react or signOutClearingDrafts', () => {
+    // Both are used only after a press (the sign-in after Create account, the two sign-outs), so each is loaded with
+    // import() inside the handler that needs it. importGraph skips packages, so each file of the graph is read here for
+    // the two specifiers; a relative path that resolves to the sign-out module counts too.
+    const signOutModule = join(ROOT, 'lib/client/signOutClearingDrafts.ts');
+    const graph = importGraph(join(ROOT, 'app/(public)/invitations/[token]/AcceptInvitationClient.tsx'));
+    expect(graph).toContain('components/legal/AcceptancesForm.tsx');   // the graph is the real one
+    const found = graph.flatMap((f) => {
+      const source = readFileSync(join(ROOT, f), 'utf8');
+      return [...source.matchAll(/(?:^|\n)\s*(?:import|export)\s(?:[^'"]*?from\s+)?['"]([^'"]+)['"]/g)]
+        .map((m) => m[1])
+        .filter((spec) => spec === 'next-auth/react' || resolveImport(join(ROOT, f), spec) === signOutModule)
+        .map((spec) => `${f}: ${spec}`);
+    });
+    expect(found).toEqual([]);
+  });
+
   it('NFR-PERF-02 FIX-15: S-05 still records acceptances through RecordAcceptances', () => {
     const graph = importGraph(join(ROOT, 'app/(authenticated)/acceptances/page.tsx'));
     expect(graph.filter((f) => /\bexport function RecordAcceptances\b/.test(readFileSync(join(ROOT, f), 'utf8')))).toEqual(['components/legal/RecordAcceptances.tsx']);

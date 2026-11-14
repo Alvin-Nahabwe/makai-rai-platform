@@ -7,6 +7,7 @@ import { buildTwoOrgFixture, FIXTURE_ROLES, type TwoOrgFixture, type FixtureOrg 
 import { sessionFor, clearSession } from '../helpers/authSession';
 import { can, type Action } from '@/lib/authz/policy';
 import { PENDING_ROUTES, ROUTE_ACTIONS, REMOVED_METHODS } from '@/lib/authz/routeActions';
+import { API_COPY } from '@/lib/http/api/copy';
 
 /**
  * Every v0.6.0 route file exists from unit/k0b as a gated stub (contract "Routes"): the cross-origin check
@@ -89,7 +90,7 @@ async function call(
   return mod[method](new NextRequest('http://localhost/probe', { method, headers }), { params: Promise.resolve(params) });
 }
 
-const UNAUTHENTICATED = { error: 'Unauthorized', code: 'unauthenticated' };
+const UNAUTHENTICATED = { error: API_COPY.unauthenticated, code: 'unauthenticated' };
 
 describe('v0.6.0 route stubs', () => {
   let fixture: TwoOrgFixture;
@@ -155,7 +156,7 @@ describe('v0.6.0 route stubs', () => {
           if (denied) {
             sessionFor(seat(orgA, denied));
             const res = await call(file, method, orgA.slug);
-            expect([res.status, await res.json()]).toEqual([403, { error: 'Forbidden', code: 'forbidden' }]);
+            expect([res.status, await res.json()]).toEqual([403, { error: API_COPY.forbidden, code: 'forbidden' }]);
           }
 
           const allowed = FIXTURE_ROLES.find((r) => can(r, action as Action));
@@ -186,7 +187,7 @@ describe('v0.6.0 route stubs', () => {
           expect([anon.status, await anon.json()]).toEqual([401, UNAUTHENTICATED]);
           sessionFor(seat(orgA, 'owner')); // an organisation owner is not a platform administrator
           const notAdmin = await call(file, method, orgA.slug);
-          expect([notAdmin.status, await notAdmin.json()]).toEqual([403, { error: 'Forbidden', code: 'forbidden' }]);
+          expect([notAdmin.status, await notAdmin.json()]).toEqual([403, { error: API_COPY.forbidden, code: 'forbidden' }]);
           sessionFor(platformAdminId);
           await crossOrigin();
           await answers501(await call(file, method, orgA.slug));
@@ -205,11 +206,11 @@ describe('v0.6.0 route stubs', () => {
       it(`FR-AUTHZ-02: ${method} ${file} is an exported handler that answers 404, whoever asks`, async () => {
         clearSession();
         const anon = await call(file, method, orgA.slug);
-        expect([anon.status, await anon.json()]).toEqual([404, { error: 'Not found', code: 'not_found' }]);
+        expect([anon.status, await anon.json()]).toEqual([404, { error: API_COPY.notFound, code: 'not_found' }]);
         for (const role of FIXTURE_ROLES) {
           sessionFor(seat(orgA, role));
           const res = await call(file, method, orgA.slug);
-          expect([role, res.status, await res.json()]).toEqual([role, 404, { error: 'Not found', code: 'not_found' }]);
+          expect([role, res.status, await res.json()]).toEqual([role, 404, { error: API_COPY.notFound, code: 'not_found' }]);
         }
       });
     }

@@ -6,6 +6,8 @@ import { buildOrg } from '../helpers/recordFixture';
 import { sessionFor, clearSession } from '../helpers/authSession';
 import { STUB_LEGAL_TEXTS, currentAcceptances } from '../helpers/legalStub';
 import type { AcceptancesRequest } from '@/types/api';
+import { ACCEPTANCES_COPY } from '@/lib/legal/acceptances/copy';
+import { LEGAL_COPY } from '@/lib/legal/copy';
 
 /**
  * Route 30, POST /api/acceptances (contract Routes row 30; FR-ACC-03, FR-ACC-04): records the
@@ -59,7 +61,8 @@ describe('route 30, POST /api/acceptances', () => {
       { kinds: ['terms', 'privacy', 'cross-border-consent'] }, {}, 'not json', null]) {
       const res = await postAcceptances(body);
       expect(res.status, JSON.stringify(body)).toBe(422);
-      expect(await res.json()).toMatchObject({ code: 'validation', fields: [{ field: 'acceptances' }] });
+      expect(await res.json()).toMatchObject({ code: 'validation', fields: [{ field: 'acceptances', message: LEGAL_COPY.route.tickOne }] });
+      expect(LEGAL_COPY.route.tickOne).toBe('Tick at least one box.');
     }
     expect(await testDb.consentRecord.count({ where: { userId: fx.members.owner.userId } })).toBe(0);
   });
@@ -109,7 +112,7 @@ describe('S-05, the acceptances page (FR-ACC-04)', () => {
       version: '1', textHash: STUB_LEGAL_TEXTS[0].sha256, granted: true }] });
     sessionFor(fx.members.owner.userId);
     const markup = renderToStaticMarkup(await page());
-    expect(markup).toContain('Before you continue');
+    expect(markup).toContain(ACCEPTANCES_COPY.legend);
     expect(markup.match(/type="checkbox"/g)).toHaveLength(2);
     expect(markup).toContain('id="accept-privacy"');
     expect(markup).toContain('id="accept-cross-border-consent"');

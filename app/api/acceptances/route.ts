@@ -4,6 +4,7 @@ import { assertCurrentVersions, recordAcceptances } from '@/lib/data/acceptances
 import { ValidationFailed } from '@/lib/http/errors';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { toResponse } from '@/lib/http/toResponse';
+import { LEGAL_COPY } from '@/lib/legal/copy';
 import { isAcceptancePairs, type AcceptancePair } from '@/lib/legal/kinds';
 
 /**
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest) {
 function acceptancesOf(body: unknown): AcceptancePair[] {
   const acceptances = typeof body === 'object' && body !== null ? (body as { acceptances?: unknown }).acceptances : undefined;
   if (!isAcceptancePairs(acceptances) || acceptances.length === 0) {
-    throw new ValidationFailed([{ field: 'acceptances', message: 'Choose one or more of terms, privacy and cross-border-consent, each with the version shown.' }]);
+    throw new ValidationFailed([{ field: 'acceptances', message: LEGAL_COPY.route.tickOne }]);
   }
   return acceptances;
 }

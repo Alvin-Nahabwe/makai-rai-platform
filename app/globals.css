@@ -939,64 +939,6 @@ h5 { font-size: var(--font-size-body); }
   flex-direction: column;
 }
 
-.auth-card label {
-  display: block;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-body);
-  margin-bottom: var(--space-1);
-  margin-top: var(--space-4);
-}
-
-.auth-card label:first-of-type {
-  margin-top: 0;
-}
-
-.auth-card input[type="text"],
-.auth-card input[type="email"],
-.auth-card input[type="password"] {
-  width: 100%;
-  padding: var(--space-3) var(--space-4);
-  font-family: var(--font-family);
-  font-size: var(--font-size-base);
-  color: var(--text-body);
-  background: var(--surface-card);
-  border: 1px solid var(--form-field-border);
-  border-radius: var(--border-radius-sm);
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
-}
-
-.auth-card input[type="text"]:focus,
-.auth-card input[type="email"]:focus,
-.auth-card input[type="password"]:focus {
-  /* The 3-pixel ring of *:focus-visible stays (D-2); only the border follows it. */
-  border-color: var(--focus-ring);
-}
-
-.auth-card button[type="submit"] {
-  margin-top: var(--space-6);
-}
-
-.auth-error {
-  padding: var(--space-3) var(--space-4);
-  background: var(--tint-critical-bg);
-  color: var(--color-risk-critical);
-  border-radius: var(--border-radius-sm);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  margin-bottom: var(--space-4);
-}
-
-.auth-success {
-  padding: var(--space-3) var(--space-4);
-  background: var(--tint-low-bg);
-  color: var(--tint-low-fg);
-  border-radius: var(--border-radius-sm);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  margin-bottom: var(--space-4);
-}
-
 .auth-footer {
   text-align: center;
   margin-top: var(--space-6);
@@ -1038,41 +980,6 @@ h5 { font-size: var(--font-size-body); }
   margin-top: 3px;
   flex-shrink: 0;
   accent-color: var(--color-primary);
-}
-
-/* ── btn-primary alias (auth pages use non-BEM class name) ── */
-.btn-primary {
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  width: 100%;
-  padding: var(--space-3) var(--space-6);
-  font-family: var(--font-family);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  border: 2px solid transparent;
-  border-radius: 0;
-  cursor: pointer;
-  transition: background-color var(--transition-base), border-color var(--transition-base), color var(--transition-base), box-shadow var(--transition-base), transform var(--transition-base);
-  background-color: var(--color-primary);
-  color: var(--color-white);
-  border-color: var(--color-primary);
-}
-
-.btn-primary:hover:not(:disabled) {
-  background-color: var(--color-primary-dark);
-  border-color: var(--color-primary-dark);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(192, 96, 20, 0.3);
-}
-
-.btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
 }
 
 dialog:modal {

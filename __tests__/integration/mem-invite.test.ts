@@ -8,6 +8,7 @@ import { callRoute, rowCounts, sessionAs } from '../helpers/routeDriver';
 import { captureLogs } from '../helpers/logCapture';
 import { currentAcceptances } from '../helpers/legalStub';
 import { hashInvitationToken } from '../../lib/data/invitationToken';
+import { API_COPY } from '@/lib/http/api/copy';
 
 /**
  * MEM Task 3: invitations through route 25 (FR-MEM-01, NFR-INT-02). The real handler runs behind AUTHZ's route
@@ -293,7 +294,7 @@ describe('route 31 POST: the account-name rule', () => {
     vi.mocked(invitationByToken).mockRejectedValueOnce(Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }));
     const { result, lines } = await captureLogs(() => register(withNameBody('Nakato Sarah')));
     const body = await result.json();
-    expect([result.status, body]).toEqual([503, { error: 'Service unavailable', code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) }]);
+    expect([result.status, body]).toEqual([503, { error: API_COPY.databaseUnavailable, code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) }]);
     expect(lines.filter((l) => l.includes('REQUEST_FAILED') && l.includes(body.reference))).toHaveLength(1);
     expect(await testDb.user.count({ where: { email: invitedEmail } })).toBe(0);
   });

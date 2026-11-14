@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useState, type CSSProperties } from 'react';
-import { LEGAL_KIND_NAMES } from '@/lib/legal/kinds';
+import { useEffect, useState } from 'react';
+import { NOTICE_COPY } from '@/lib/legal/notice/copy';
 import { formatDay } from '@/lib/format/dates';
 import type { AcceptedKind } from '@/types/legal';
+import { Banner } from '@/components/ui/Banner';
+import { Button, ButtonLink } from '@/components/ui/Button';
 
 /**
  * The client half of M-39 (SRS 7.5.7; FR-ACC-04): one notice per newer offered text, with Read and accept (S-05 in
@@ -12,7 +14,8 @@ import type { AcceptedKind } from '@/types/legal';
  * blocked or full only means the notice shows again. NewerLegalTextNotice (the server half) reads what is offered.
  */
 
-export interface OfferedText { kind: AcceptedKind; version: string; publishedOn: string }
+/** `name` is the text's name as running text ("privacy notice"), read on the server so this client file imports no list of names. */
+export interface OfferedText { kind: AcceptedKind; name: string; version: string; publishedOn: string }
 
 /** The sessionStorage key of one Not now choice. */
 export function notNowKey(userId: string, kind: string, version: string): string {
@@ -45,15 +48,6 @@ function sessionStorageOrNull(): Storage | null {
   }
 }
 
-const TARGET: CSSProperties = { minWidth: '24px', minHeight: '24px', display: 'inline-block' };
-const NOTICE: CSSProperties = {
-  marginBottom: 'var(--space-3)', padding: 'var(--space-3) var(--space-4)', background: 'var(--tint-info-bg)', color: 'var(--tint-info-fg)',
-  borderRadius: 'var(--border-radius-sm)', fontSize: 'var(--font-size-sm)',
-};
-const LINK_AS_BUTTON: CSSProperties = {
-  ...TARGET, background: 'none', border: 0, padding: 0, font: 'inherit', color: 'inherit', textDecoration: 'underline', cursor: 'pointer',
-};
-
 /** The notices for a given state: every offer not in `hidden`, each with Read and accept and Not now. */
 export function NewerLegalTextOffersView({ offers, hidden, onNotNow }: {
   offers: OfferedText[]; hidden: ReadonlySet<string>; onNotNow: (offer: OfferedText) => void;
@@ -63,10 +57,15 @@ export function NewerLegalTextOffersView({ offers, hidden, onNotNow }: {
   return (
     <>
       {shown.map((o) => (
-        <div key={`${o.kind}:${o.version}`} role="status" style={NOTICE}>
-          {`A new version of the ${LEGAL_KIND_NAMES[o.kind]} was published on ${formatDay(o.publishedOn)}. `}
-          <a href="/acceptances" style={{ ...TARGET, color: 'inherit' }}>Read and accept</a>{' '}
-          <button type="button" style={LINK_AS_BUTTON} onClick={() => onNotNow(o)}>Not now</button>
+        <div key={`${o.kind}:${o.version}`} role="status">
+          <Banner kind="info" action={(
+            <>
+              <ButtonLink variant="secondary" href="/acceptances">{NOTICE_COPY.readAndAccept}</ButtonLink>{' '}
+              <Button variant="quiet" onClick={() => onNotNow(o)}>{NOTICE_COPY.notNow}</Button>
+            </>
+          )}>
+            {NOTICE_COPY.published(o.name, formatDay(o.publishedOn))}
+          </Banner>
         </div>
       ))}
     </>

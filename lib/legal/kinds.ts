@@ -1,4 +1,5 @@
 import { ACCEPTED_KINDS, type AcceptedKind, type LegalTextKind } from '@/types/legal';
+import { ACCEPTANCES_COPY } from '@/lib/legal/acceptances/copy';
 
 /**
  * The four kinds of legal text and their names in running text (SRS 7.5.7, M-25 and M-39). Kept
@@ -47,7 +48,7 @@ export function isAcceptancePairs(value: unknown): value is AcceptancePair[] {
   });
 }
 
-/** M-25 (SRS 7.5.7) for one text: "To continue, accept the <name>." S-04, S-05 and route 31 say it the same way. */
+/** M-25 (SRS 7.5.7) for one text: "Tick the box for the <name>." S-04, S-05 and route 31 say it the same way; the words are in the acceptances copy module. */
 export function acceptanceError(kind: AcceptedKind): string {
-  return `To continue, accept the ${LEGAL_KIND_NAMES[kind]}.`;
+  return ACCEPTANCES_COPY.tickBoxFor(LEGAL_KIND_NAMES[kind]);
 }

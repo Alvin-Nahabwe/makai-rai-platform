@@ -1,17 +1,22 @@
 'use client';
 
 import { useRef, useState, type CSSProperties, type FormEvent } from 'react';
-import { signOutClearingDrafts } from '@/lib/client/signOutClearingDrafts';
+import { flushSync } from 'react-dom';
 import { LEGAL_KIND_NAMES, acceptanceError, type AcceptancePair } from '@/lib/legal/kinds';
+import { ACCEPT_LABEL, ACCEPTANCES_COPY } from '@/lib/legal/acceptances/copy';
 import { formatDay } from '@/lib/format/dates';
 import { ACCEPTED_KINDS, type AcceptedKind, type LegalTextVersion } from '@/types/legal';
+import { Button } from '@/components/ui/Button';
+import { Checkbox } from '@/components/ui/Checkbox';
+import { ErrorSummary } from '@/components/ui/ErrorSummary';
+import { StatusRegion } from '@/components/ui/StatusRegion';
 
 /**
  * S-05's form (FR-ACC-03, UX-22; W-11 notes 2 and 3, SRS lines 2229-2250): one unticked box per
  * text, each with its version, publication date and a link that opens the text (S-06) in a new
  * tab and says so. A press of the submit button with a box unticked sends nothing: each unticked
- * box gets M-25 ("To continue, accept the <name>."), a summary with role="alert" lists them, and
- * focus moves to the first unticked box. Used by S-05 (modes `required` and `offer`) and by S-04's
+ * box gets its own error ("Tick this box to continue."), the kit's error summary at the top lists
+ * them as M-25 ("Tick the box for the <name>."), and focus moves to the first unticked box. Used by S-05 (modes `required` and `offer`) and by S-04's
  * second step (mode `invitation`).
  */
 
@@ -33,12 +38,8 @@ type AcceptancesFormMode =
 
 export type AcceptancesFormProps = AcceptancesFormBase & AcceptancesFormMode;
 
-/** The sentence each box carries as its label (W-11 note 2). */
-export const ACCEPT_LABEL: Record<AcceptedKind, string> = {
-  terms: 'I accept the terms of service.',
-  privacy: 'I have read the privacy notice.',
-  'cross-border-consent': 'I agree that my data is stored in Finland and handled by Cloudflare, around the world, and Resend, in the United States, as the consent to storage abroad describes.',
-};
+/** The sentence each box carries as its label (W-11 note 2): signed with the legal texts, kept in the acceptances copy module. */
+export { ACCEPT_LABEL };
 
 function acceptedKindOf(text: LegalTextVersion): AcceptedKind {
   const kind = ACCEPTED_KINDS.find((k) => k === text.kind);
@@ -75,20 +76,20 @@ export type SendFailure =
   | { kind: 'signin' }
   | { kind: 'change-password' }
   | { kind: 'reload'; text: string }
-  | { kind: 'message'; text: string }
+  | { kind: 'message'; text: string; link?: { href: string; label: string } }
   | { kind: 'refused' };
 
-/** "wait <n> minutes" from the 429's retryAfterSeconds (contract error codes, rate_limited), at least one. */
-function rateLimitedText(retryAfterSeconds: unknown): string {
-  const n = typeof retryAfterSeconds === 'number' && retryAfterSeconds > 0 ? Math.ceil(retryAfterSeconds / 60) : 1;
-  return `Not created: too many attempts. Nothing was created. Wait ${n} minute${n === 1 ? '' : 's'}, then try again.`;
+/** The 429's `retryAfterSeconds` (contract error codes, rate_limited) in whole minutes rounded up, at least one. */
+function retryAfterMinutes(retryAfterSeconds: unknown): number {
+  return typeof retryAfterSeconds === 'number' && retryAfterSeconds > 0 ? Math.ceil(retryAfterSeconds / 60) : 1;
 }
 
 /**
  * Any answer the caller's own success cases did not take (C4 CR-5 / SFH-9): a 401 goes to sign in;
  * a 403 `must_change_password` (gate 2) to S-29; a 409 `legal_text_changed` reloads with M-39; a
  * 429 says how long to wait; any other 4xx with an `error` text shows that text; only a 5xx (or a
- * 4xx with no text) says the server had a problem. A lost connection never reaches here.
+ * 4xx with no text) is `refused`, which `SendStatus` words by what was being sent (a problem on our
+ * side). A lost connection never reaches here.
  */
 export function failureOutcome(status: number, body: unknown): SendFailure {
   const b = (typeof body === 'object' && body !== null ? body : {}) as { code?: unknown; error?: unknown; retryAfterSeconds?: unknown };
@@ -96,7 +97,7 @@ export function failureOutcome(status: number, body: unknown): SendFailure {
   if (status === 403 && b.code === 'must_change_password') return { kind: 'change-password' };
   const changed = legalTextChanged(status, body);
   if (changed !== null) return { kind: 'reload', text: changed };
-  if (status === 429) return { kind: 'message', text: rateLimitedText(b.retryAfterSeconds) };
+  if (status === 429) return { kind: 'message', text: ACCEPTANCES_COPY.rateLimited(retryAfterMinutes(b.retryAfterSeconds)) };
   if (status >= 400 && status < 500 && typeof b.error === 'string') return { kind: 'message', text: b.error };
   return { kind: 'refused' };
 }
@@ -109,7 +110,7 @@ export function handleFailure(f: SendFailure, a: {
     case 'signin': a.push(`/login?callbackUrl=${encodeURIComponent(a.signInReturn)}`); return;
     case 'change-password': a.push('/change-password'); return;
     case 'reload': a.setSend({ state: 'message', text: f.text }); a.refresh(); return;
-    case 'message': a.setSend({ state: 'message', text: f.text }); return;
+    case 'message': a.setSend(f.link === undefined ? { state: 'message', text: f.text } : { state: 'message', text: f.text, link: f.link }); return;
     case 'refused': a.setSend({ state: 'refused' });
   }
 }
@@ -131,25 +132,17 @@ export function untickedKinds(texts: readonly LegalTextVersion[], ticked: Readon
   return texts.map(acceptedKindOf).filter((k) => !ticked.has(k));
 }
 
-/** "a", "a and b", "a, b and c". */
-function listOf(names: readonly string[]): string {
-  return names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
-}
-
-/** At least 24 by 24 CSS pixels (NFR-A11Y-04, SC 2.5.8). */
-const TARGET: CSSProperties = { minWidth: '24px', minHeight: '24px' };
-const BOX: CSSProperties = { ...TARGET, width: '24px', height: '24px', margin: 0, flexShrink: 0, accentColor: 'var(--color-primary)' };
-const HEADING: CSSProperties = { margin: 0, fontSize: 'var(--font-size-xl)' };
-const ROW: CSSProperties = { display: 'flex', alignItems: 'flex-start', gap: 'var(--space-3)' };
-// Full width by layout: the button stretches in the flex column that holds it (FULL_WIDTH), so no width is written.
+const HEADING: CSSProperties = { margin: 0 };
+// The invitation's second step has the page's h1 and the invited line above it, so its h2 gets room above (the h1 of /acceptances does not).
+const STEP_HEADING: CSSProperties = { margin: 'var(--space-6) 0 0' };
+const FIELDSET: CSSProperties = { border: 0, padding: 0, margin: 0 };
+const LEGEND: CSSProperties = { marginBottom: 'var(--space-2)', padding: 0 };
+// Full width by layout: the button stretches in the flex column that holds it, so no width is written.
 const FULL_WIDTH: CSSProperties = { display: 'flex', flexDirection: 'column' };
-const SECONDARY: CSSProperties = {
-  ...TARGET, alignSelf: 'stretch', marginTop: 'var(--space-3)', padding: 'var(--space-3) var(--space-6)', background: 'transparent',
-  border: '2px solid var(--link)', color: 'var(--link)', font: 'inherit', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer',
-};
-// --link, the colour the shell gives every anchor: --color-primary failed contrast in the dark theme (axe, S-05).
+const LINK_TARGET: CSSProperties = { display: 'inline-block', minHeight: '24px' };
+// "sign out" sits inside a sentence, so it stays a link-styled native button (it takes the colour the shell gives every link).
 const LINK_AS_BUTTON: CSSProperties = {
-  ...TARGET, background: 'none', border: 0, padding: 0, font: 'inherit', color: 'var(--link)',
+  minWidth: '24px', minHeight: '24px', background: 'none', border: 0, padding: 0, font: 'inherit', color: 'var(--color-link)',
   textDecoration: 'underline', cursor: 'pointer',
 };
 
@@ -159,25 +152,98 @@ export type SendState = { state: 'idle' } | { state: 'sending' } | { state: 'los
 
 /**
  * What S-04 and S-05 say about a send: the in-flight text in a status line; a send with no reply
- * (`lost`) or a server fault (`refused`) says nothing was created, with Try again; a refusal the
- * server worded (`message`) shows its words.
+ * (`lost`) or a server fault (`refused`) shows `ACCEPTANCES_COPY.send[what][state]`, with Try again
+ * (for a new account with no reply, that it may already be created); a refusal the server worded
+ * (`message`) shows its words.
  */
-export function SendStatus({ send, sendingText, onRetry }: { send: SendState; sendingText: string; onRetry: () => void }) {
+export function SendStatus({ send, what, sendingText, onRetry }: { send: SendState; what: 'account' | 'choice'; sendingText: string; onRetry: () => void }) {
+  const failure = send.state === 'lost' || send.state === 'refused' ? ACCEPTANCES_COPY.send[what][send.state]
+    : send.state === 'message' ? send.text : null;
   return (
     <>
-      <p role="status" style={{ marginTop: 'var(--space-3)' }}>{send.state === 'sending' ? sendingText : ''}</p>
-      {(send.state === 'lost' || send.state === 'refused') && (
-        <div role="alert" className="auth-error">
-          {send.state === 'lost' ? 'Not created: connection lost. Nothing was created. ' : 'Not created: the server had a problem. Nothing was created. '}
-          <button type="button" style={{ ...LINK_AS_BUTTON, color: 'inherit' }} onClick={onRetry}>Try again</button>
-        </div>
+      <StatusRegion message={send.state === 'sending' ? sendingText : null} />
+      <StatusRegion message={failure} politeness="assertive" tone="error" />
+      {(send.state === 'lost' || send.state === 'refused') && <Button variant="secondary" onClick={onRetry}>{ACCEPTANCES_COPY.tryAgain}</Button>}
+      {send.state === 'message' && send.link !== undefined && (
+        <p style={{ margin: 'var(--space-2) 0 0' }}><a href={send.link.href} style={LINK_TARGET}>{send.link.label}</a></p>
       )}
-      {send.state === 'message' && (
-        <div role="alert" className="auth-error">
-          {send.text}
-          {send.link !== undefined && <>{' '}<a href={send.link.href} style={{ display: 'inline-block', minHeight: '24px' }}>{send.link.label}</a></>}
-        </div>
-      )}
+    </>
+  );
+}
+
+/** Where a sign-out press stands: not pressed, being carried out (until the browser leaves), or failed: still signed in, and said so. */
+export type SignOutPhase = 'idle' | 'working' | 'stillSignedIn';
+
+/** The sign-out module, loaded when a sign out is pressed (ruling T16-Q11); a test passes its own. */
+export type LoadSignOut = () => Promise<Pick<typeof import('@/lib/client/signOutClearingDrafts'), 'signOutClearingDrafts'>>;
+
+/**
+ * NFR-PERF-02: the sign-out module (and next-auth/react with it) is not in S-04's first visit; it is loaded here, at
+ * the press. Written as import() inside the function so the bundler splits it into its own chunk. (On S-05 the
+ * signed-in shell loads next-auth/react anyway, so there it changes where the code arrives, not the page's weight.)
+ */
+const loadSignOutClearingDrafts: LoadSignOut = () => import('@/lib/client/signOutClearingDrafts');
+
+/**
+ * One sign-out press for the two sign out controls of S-04 and S-05 (rulings T16-Q11, T16-30): `show` hears `working`
+ * first (which empties the failure line, so a second identical failure is announced again), then `stillSignedIn` if the load
+ * or the sign-out itself rejects (T16-31). A press while one is working starts nothing: one load, one sign-out request.
+ * Success leaves the phase at `working`, because the browser is leaving the page. There is no fallback: a press that
+ * fails never navigates, so the account's drafts are removed only by signOutClearingDrafts (NFR-PRIV-06).
+ */
+export function signOutPress(load: LoadSignOut, show: (phase: SignOutPhase) => void): (userId: string, callbackUrl: string) => Promise<void> {
+  let working = false;
+  return async (userId, callbackUrl) => {
+    if (working) return;
+    working = true;
+    try {
+      show('working');
+      const { signOutClearingDrafts } = await load();
+      await signOutClearingDrafts(userId, callbackUrl);
+    } catch (err: unknown) {
+      // The person is still signed in and the line says so (ruling T16-31); the control is pressable again. The kind of
+      // error is reported for whoever maintains this, never its message: the callbackUrl can hold an invitation token.
+      console.warn('acceptances: a sign-out press was rejected', err instanceof Error ? err.name : typeof err);
+      working = false;
+      show('stillSignedIn');
+    }
+  };
+}
+
+/** The failure line's words for a phase: the ruled sentence once a press has failed, else nothing (the region stays, empty). */
+export function signOutMessage(phase: SignOutPhase): string | null {
+  return phase === 'stillSignedIn' ? ACCEPTANCES_COPY.stillSignedIn : null;
+}
+
+/** A sign out control's state and press, for S-04's M-24 button and S-05's link-styled button alike (ruling T16-30). */
+export function useSignOutPress(userId: string, callbackUrl: string): { busy: boolean; message: string | null; press: () => void } {
+  const [phase, setPhase] = useState<SignOutPhase>('idle');
+  const pressRef = useRef<ReturnType<typeof signOutPress> | null>(null);
+  function press() {
+    // `working` is committed at once, so the failure line is empty in the page before any later failure fills it again.
+    pressRef.current ??= signOutPress(loadSignOutClearingDrafts, (next) => {
+      if (next === 'working') flushSync(() => setPhase(next)); else setPhase(next);
+    });
+    void pressRef.current(userId, callbackUrl);
+  }
+  return { busy: phase === 'working', message: signOutMessage(phase), press };
+}
+
+/**
+ * Mode `required`'s two ways out (W-11 note 3). "sign out" sits inside the sentence, so it stays a link-styled native
+ * button; while its press is carried out it says `aria-busy` and keeps focus (it is not disabled). The failure line sits
+ * in an alert region directly after the paragraph, empty until a press fails (ruling T16-6).
+ */
+function RequiredAlternatives({ userId }: { userId: string }) {
+  const signOut = useSignOutPress(userId, '/login');
+  return (
+    <>
+      <p style={{ marginTop: 'var(--space-4)' }}>
+        {ACCEPTANCES_COPY.alternativesBefore}<a href="/account" style={LINK_TARGET}>{ACCEPTANCES_COPY.deleteAccount}</a>{ACCEPTANCES_COPY.alternativesOr}
+        <button type="button" style={LINK_AS_BUTTON} aria-busy={signOut.busy ? true : undefined}
+          onClick={signOut.press}>{ACCEPTANCES_COPY.signOut}</button>{ACCEPTANCES_COPY.alternativesAfter}
+      </p>
+      <StatusRegion politeness="assertive" tone="error" message={signOut.message} />
     </>
   );
 }
@@ -187,74 +253,51 @@ export type AcceptancesFormViewProps = Omit<AcceptancesFormBase, 'onAccepted'> &
   errors: readonly AcceptedKind[];
   onToggle: (kind: AcceptedKind, checked: boolean) => void;
   onSubmit: (e: FormEvent<HTMLFormElement>) => void;
-  boxRef?: (kind: AcceptedKind, el: HTMLInputElement | null) => void;
 };
 
 /** The markup of the form for a given state; `AcceptancesForm` holds the state. */
 export function AcceptancesFormView(p: AcceptancesFormViewProps) {
   const names = p.texts.map((t) => LEGAL_KIND_NAMES[acceptedKindOf(t)]);
-  const legend = p.mode === 'offer' ? `A new version of the ${listOf(names)}` : 'Before you continue';
+  const legend = p.mode === 'offer' ? ACCEPTANCES_COPY.offerLegend(names) : ACCEPTANCES_COPY.legend;
   return (
-    <form method="post" noValidate onSubmit={p.onSubmit} aria-describedby={p.errors.length > 0 ? 'acceptances-errors' : undefined}>
-      {p.errors.length > 0 && (
-        <div id="acceptances-errors" role="alert" className="auth-error">
-          <ul style={{ margin: 0, paddingLeft: 'var(--space-4)' }}>
-            {p.errors.map((kind) => (
-              <li key={kind}><a href={`#accept-${kind}`} style={{ color: 'inherit' }}>{acceptanceError(kind)}</a></li>
-            ))}
-          </ul>
-        </div>
-      )}
-      <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
+    <form method="post" noValidate onSubmit={p.onSubmit}>
+      <ErrorSummary title={ACCEPTANCES_COPY.summaryTitle} errors={p.errors.map((kind) => ({ fieldId: `accept-${kind}`, message: acceptanceError(kind) }))} />
+      <fieldset style={FIELDSET}>
         {/* On S-05 the legend is the page's heading (W-11); in S-04's second step the page already has one. */}
-        <legend style={{ marginBottom: 'var(--space-2)' }}>
-          {p.mode === 'invitation' ? <h2 style={HEADING}>{legend}</h2> : <h1 style={HEADING}>{legend}</h1>}
+        <legend style={LEGEND}>
+          {p.mode === 'invitation' ? <h2 style={STEP_HEADING}>{legend}</h2> : <h1 style={HEADING}>{legend}</h1>}
         </legend>
-        <p>Please read and accept each of these. Each is separate; none is ticked for you.</p>
+        <p>{ACCEPTANCES_COPY.lead}</p>
         <div className="consent-group">
           {p.texts.map((text) => {
             const kind = acceptedKindOf(text);
             const name = LEGAL_KIND_NAMES[kind];
-            const invalid = p.errors.includes(kind);
-            const describedBy = [`accept-${kind}-meta`, invalid ? `accept-${kind}-error` : null].filter(Boolean).join(' ');
             return (
-              <div key={kind}>
-                <div style={ROW}>
-                  <input type="checkbox" id={`accept-${kind}`} name="acceptances" value={kind} style={BOX}
-                    checked={p.ticked.has(kind)} onChange={(e) => p.onToggle(kind, e.currentTarget.checked)}
-                    aria-invalid={invalid ? true : undefined} aria-describedby={describedBy}
-                    ref={p.boxRef === undefined ? undefined : (el) => p.boxRef?.(kind, el)} />
-                  <label htmlFor={`accept-${kind}`} style={{ margin: 0, fontWeight: 'var(--font-weight-regular)' }}>{ACCEPT_LABEL[kind]}</label>
-                </div>
-                <p id={`accept-${kind}-meta`} style={{ margin: 'var(--space-1) 0 0 calc(24px + var(--space-3))', fontSize: 'var(--font-size-sm)' }}>
-                  <span>{`Version ${text.version}, published ${formatDay(text.publishedOn)}.`}</span>{' '}
-                  <a href={`/legal/${kind}/${text.version}`} target="_blank" rel="noopener" style={{ display: 'inline-block', minHeight: '24px' }}>
-                    Read the {name}<span> (opens in a new tab)</span>
-                  </a>
-                </p>
-                {invalid && (
-                  <p id={`accept-${kind}-error`} className="field-error" style={{ margin: 'var(--space-1) 0 0 calc(24px + var(--space-3))', color: 'var(--color-risk-critical)', fontSize: 'var(--font-size-sm)' }}>
-                    {acceptanceError(kind)}
-                  </p>
-                )}
-              </div>
+              <Checkbox key={kind} id={`accept-${kind}`} name="acceptances" value={kind} label={ACCEPT_LABEL[kind]}
+                checked={p.ticked.has(kind)} onChange={(e) => p.onToggle(kind, e.currentTarget.checked)}
+                error={p.errors.includes(kind) ? ACCEPTANCES_COPY.tickThis : undefined}
+                hint={(
+                  <>
+                    <span>{ACCEPTANCES_COPY.version(text.version, formatDay(text.publishedOn))}</span>{' '}
+                    <a href={`/legal/${kind}/${text.version}`} target="_blank" rel="noopener" style={LINK_TARGET}>
+                      {ACCEPTANCES_COPY.readLink(name)}<span>{' '}{ACCEPTANCES_COPY.opensInNewTab}</span>
+                    </a>
+                  </>
+                )} />
             );
           })}
         </div>
       </fieldset>
-      <button type="submit" className="btn-primary" disabled={p.busy} style={{ ...TARGET, marginTop: 'var(--space-6)' }}>{p.submitLabel}</button>
-      {p.mode === 'required' && (
-        <p style={{ marginTop: 'var(--space-4)' }}>
-          If you do not want to accept, you can <a href="/account" style={{ display: 'inline-block', minHeight: '24px' }}>delete your account</a> or{' '}
-          <button type="button" style={LINK_AS_BUTTON} onClick={() => void signOutClearingDrafts(p.userId, '/login')}>sign out</button>.
-        </p>
-      )}
+      <div style={{ marginTop: 'var(--space-6)' }}>
+        <Button variant="primary" type="submit" disabled={p.busy}>{p.submitLabel}</Button>
+      </div>
+      {p.mode === 'required' && <RequiredAlternatives userId={p.userId} />}
       {p.mode === 'invitation' && (
-        <p style={{ marginTop: 'var(--space-4)' }}>If you do not want to accept, close this page. Nothing has been created.</p>
+        <p style={{ marginTop: 'var(--space-4)' }}>{ACCEPTANCES_COPY.closePage}</p>
       )}
       {p.mode === 'offer' && (
         <div style={FULL_WIDTH}>
-          <button type="button" style={SECONDARY} onClick={() => window.history.back()}>Not now</button>
+          <Button variant="secondary" onClick={() => window.history.back()}>{ACCEPTANCES_COPY.notNow}</Button>
         </div>
       )}
     </form>
@@ -265,7 +308,6 @@ export function AcceptancesFormView(p: AcceptancesFormViewProps) {
 export function AcceptancesForm(p: AcceptancesFormProps) {
   const [ticked, setTicked] = useState<ReadonlySet<AcceptedKind>>(() => new Set());
   const [errors, setErrors] = useState<readonly AcceptedKind[]>([]);
-  const boxes = useRef(new Map<AcceptedKind, HTMLInputElement>());
 
   function onToggle(kind: AcceptedKind, checked: boolean) {
     setTicked((prev) => {
@@ -280,9 +322,13 @@ export function AcceptancesForm(p: AcceptancesFormProps) {
     e.preventDefault();
     if (p.busy) return;
     const unticked = untickedKinds(p.texts, ticked);
-    setErrors(unticked);
+    const form = e.currentTarget;
+    // The errors are committed before focus moves, so the box focus lands on is already aria-invalid and has
+    // "Tick this box to continue." in its description: that is what a screen reader reads on arrival.
+    flushSync(() => setErrors(unticked));
     if (unticked.length > 0) {
-      boxes.current.get(unticked[0])?.focus();
+      // The kit's Checkbox holds its input; the box is found by its id (`accept-{kind}`, a fixed kind), and focus goes to the first unticked one as ever.
+      form.querySelector<HTMLInputElement>(`#accept-${unticked[0]}`)?.focus();
       return;
     }
     // onAccepted shows its own failures (RecordAcceptances, S-04); a rejection reaching here is a bug, so it is logged.
@@ -290,7 +336,6 @@ export function AcceptancesForm(p: AcceptancesFormProps) {
   }
 
   return (
-    <AcceptancesFormView {...p} ticked={ticked} errors={errors} onToggle={onToggle} onSubmit={onSubmit}
-      boxRef={(kind, el) => { if (el === null) boxes.current.delete(kind); else boxes.current.set(kind, el); }} />
+    <AcceptancesFormView {...p} ticked={ticked} errors={errors} onToggle={onToggle} onSubmit={onSubmit} />
   );
 }

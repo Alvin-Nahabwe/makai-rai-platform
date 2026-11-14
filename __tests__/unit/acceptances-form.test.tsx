@@ -4,6 +4,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { ACCEPTED_KINDS, type AcceptedKind, type LegalTextVersion } from '@/types/legal';
 import { LEGAL_KIND_NAMES } from '@/lib/legal/kinds';
 import { STUB_LEGAL_TEXTS } from '../helpers/legalStub';
+import { escapeRe } from '../helpers/escapeRe';
+import { ACCEPTANCES_COPY } from '@/lib/legal/acceptances/copy';
 
 /**
  * S-05's form (UX-22, FR-ACC-03, M-25; W-11 notes 2 and 3, SRS lines 2229-2250).
@@ -20,7 +22,6 @@ vi.mock('next/navigation', async (importOriginal) => ({
 const { ACCEPT_LABEL, AcceptancesForm, AcceptancesFormView, untickedKinds, acceptanceError, acceptancePairs, textsKey, recordOutcome, failureOutcome, handleFailure } =
   await import('@/components/legal/AcceptancesForm');
 
-const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const TEXTS: LegalTextVersion[] = STUB_LEGAL_TEXTS.slice();
 const html = (el: React.ReactElement) => renderToStaticMarkup(el);
 type ViewProps = Parameters<typeof AcceptancesFormView>[0];
@@ -40,9 +41,9 @@ describe('S-05 acceptances form (UX-22, FR-ACC-03)', () => {
   it('7.4.2 S-04 / S-05: a refusal shows what it is; only a server fault or a lost connection says the server had a problem', () => {
     // CR-5 / SFH-9: a 429 waits retryAfterSeconds, a flagged account goes to S-29, a worded 4xx shows its words.
     expect(failureOutcome(429, { error: 'Too many requests. Please try again later.', code: 'rate_limited', retryAfterSeconds: 120 }))
-      .toEqual({ kind: 'message', text: 'Not created: too many attempts. Nothing was created. Wait 2 minutes, then try again.' });
+      .toEqual({ kind: 'message', text: ACCEPTANCES_COPY.rateLimited(2) });
     expect(failureOutcome(429, { error: 'Too many requests. Please try again later.', code: 'rate_limited', retryAfterSeconds: 30 }))
-      .toEqual({ kind: 'message', text: 'Not created: too many attempts. Nothing was created. Wait 1 minute, then try again.' });
+      .toEqual({ kind: 'message', text: ACCEPTANCES_COPY.rateLimited(1) });
     expect(failureOutcome(403, { error: 'Password change required', code: 'must_change_password' })).toEqual({ kind: 'change-password' });
     expect(failureOutcome(403, { error: 'This request came from another site.', code: 'cross_origin' }))
       .toEqual({ kind: 'message', text: 'This request came from another site.' });
@@ -52,7 +53,7 @@ describe('S-05 acceptances form (UX-22, FR-ACC-03)', () => {
     expect(failureOutcome(500, null)).toEqual({ kind: 'refused' });
     expect(failureOutcome(404, null)).toEqual({ kind: 'refused' });
     expect(recordOutcome(429, { error: 'x', code: 'rate_limited', retryAfterSeconds: 600 })).toEqual({ kind: 'message',
-      text: 'Not created: too many attempts. Nothing was created. Wait 10 minutes, then try again.' });
+      text: ACCEPTANCES_COPY.rateLimited(10) });
   });
 
   it('7.4.2 S-04 / S-05: each refusal is shown or followed as its kind says', () => {
@@ -81,10 +82,12 @@ describe('S-05 acceptances form (UX-22, FR-ACC-03)', () => {
     expect(boxes.filter((b) => /\bchecked\b/.test(b))).toEqual([]);
     for (const kind of ACCEPTED_KINDS) {
       const name = LEGAL_KIND_NAMES[kind];
-      expect(markup).toMatch(new RegExp(`<a[^>]*href="/legal/${kind}/1"[^>]*target="_blank"[^>]*rel="noopener"[^>]*>Read the ${name}<span[^>]*> \\(opens in a new tab\\)</span></a>`));
+      expect(markup).toMatch(new RegExp(`<a[^>]*href="/legal/${kind}/1"[^>]*target="_blank"[^>]*rel="noopener"[^>]*>${escapeRe(ACCEPTANCES_COPY.readLink(name))}<span[^>]*> ${escapeRe(ACCEPTANCES_COPY.opensInNewTab)}</span></a>`));
+      // The version line and the link are the box's hint, which the box names with aria-describedby (the kit's Checkbox).
+      expect(tagOf(markup, `accept-${kind}`)).toMatch(new RegExp(`aria-describedby="[^"]*\\baccept-${kind}-hint\\b[^"]*"`));
     }
-    expect(markup.match(/>Version 1, published 30 Oct 2026\.</g)).toHaveLength(3);
-    expect(markup).toMatch(/<fieldset[^>]*><legend[^>]*><h1[^>]*>Before you continue<\/h1><\/legend><p[^>]*>Please read and accept each of these\. Each is separate; none is ticked for you\.<\/p>/);
+    expect(markup.match(new RegExp(`>${escapeRe(ACCEPTANCES_COPY.version('1', '30 Oct 2026'))}<`, 'g'))).toHaveLength(3);
+    expect(markup).toMatch(new RegExp(`<fieldset[^>]*><legend[^>]*><h1[^>]*>${escapeRe(ACCEPTANCES_COPY.legend)}</h1></legend><p[^>]*>${escapeRe(ACCEPTANCES_COPY.lead)}</p>`));
   });
 
   it('UX-22 (W-11 note 2): each box carries its own sentence as its label', () => {
@@ -92,8 +95,8 @@ describe('S-05 acceptances form (UX-22, FR-ACC-03)', () => {
     for (const kind of ACCEPTED_KINDS) {
       // The label as React writes it into markup: the apostrophe is escaped, and no character of the label is a pattern.
       const label = ACCEPT_LABEL[kind].replace(/'/g, '&#x27;').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      expect(markup).toContain(`<label for="accept-${kind}"`);
-      expect(markup).toMatch(new RegExp(`<label for="accept-${kind}"[^>]*>${label}</label>`));
+      expect(markup).toContain(` for="accept-${kind}"`);
+      expect(markup).toMatch(new RegExp(`<label[^>]* for="accept-${kind}"[^>]*>${label}</label>`));
     }
   });
 
@@ -101,12 +104,14 @@ describe('S-05 acceptances form (UX-22, FR-ACC-03)', () => {
     expect(untickedKinds(TEXTS, new Set<AcceptedKind>(['terms']))).toEqual(['privacy', 'cross-border-consent']);
     expect(untickedKinds(TEXTS, new Set<AcceptedKind>(['terms', 'privacy', 'cross-border-consent']))).toEqual([]);
     // M-25's wording, "To continue, accept the <name>.", with each text's name from the names map.
-    for (const kind of ACCEPTED_KINDS) expect(acceptanceError(kind)).toBe(`To continue, accept the ${LEGAL_KIND_NAMES[kind]}.`);
+    for (const kind of ACCEPTED_KINDS) expect(acceptanceError(kind)).toBe(ACCEPTANCES_COPY.tickBoxFor(LEGAL_KIND_NAMES[kind]));
   });
 
-  it('UX-22 M-25 NFR-A11Y-04: each missing box shows M-25 tied by aria-describedby and aria-invalid, under a role=alert summary', () => {
+  it('UX-22 M-25 NFR-A11Y-04: the summary lists each unticked text with a link to its box, and each unticked box is aria-invalid with its error in its description', () => {
     const markup = view({ ticked: new Set<AcceptedKind>(['terms']), errors: ['privacy', 'cross-border-consent'] });
-    expect(markup).toMatch(new RegExp(`<div[^>]*role="alert"[^>]*>.*${escapeRe(acceptanceError('privacy'))}.*${escapeRe(acceptanceError('cross-border-consent'))}.*</div>`));
+    // The summary (the kit's ErrorSummary) lists the sentence of acceptanceError for each, each a link to its box; the box's own error is the short one.
+    expect(markup).toMatch(new RegExp(`<div class="ui-error-summary"><h2[^>]*>${escapeRe(ACCEPTANCES_COPY.summaryTitle)}</h2><ul[^>]*><li><a href="#accept-privacy">${escapeRe(acceptanceError('privacy'))}</a></li><li><a href="#accept-cross-border-consent">${escapeRe(acceptanceError('cross-border-consent'))}</a></li></ul></div>`));
+    for (const kind of ['privacy', 'cross-border-consent']) expect(markup).toContain(`id="accept-${kind}-error">${ACCEPTANCES_COPY.tickThis}<`);
     for (const kind of ['privacy', 'cross-border-consent']) {
       const box = tagOf(markup, `accept-${kind}`);
       expect(box).toContain('aria-invalid="true"');
@@ -118,39 +123,34 @@ describe('S-05 acceptances form (UX-22, FR-ACC-03)', () => {
     expect(markup).not.toContain('accept-terms-error');
   });
 
-  it('UX-22: with nothing missing there is no alert and no box is invalid', () => {
+  it('UX-22: with nothing missing there is no error summary and no box is invalid', () => {
     const markup = view();
-    expect(markup).not.toContain('role="alert"');
+    expect(markup).not.toContain('ui-error-summary');
     expect(markup).not.toContain('aria-invalid="true"');
   });
 
   it('FR-ACC-04 (W-11 note 3): required mode offers deletion or sign-out; invitation mode says nothing was created; offer mode has Not now', () => {
-    expect(view({ mode: 'required' })).toMatch(/If you do not want to accept, you can <a[^>]*href="\/account"[^>]*>delete your account<\/a> or <button[^>]*type="button"[^>]*>sign out<\/button>\./);
-    expect(view({ mode: 'invitation', submitLabel: 'Create account' })).toContain('If you do not want to accept, close this page. Nothing has been created.');
+    expect(view({ mode: 'required' })).toMatch(new RegExp(`${escapeRe(ACCEPTANCES_COPY.alternativesBefore)}<a[^>]*href="/account"[^>]*>${escapeRe(ACCEPTANCES_COPY.deleteAccount)}</a>${escapeRe(ACCEPTANCES_COPY.alternativesOr)}<button[^>]*type="button"[^>]*>${escapeRe(ACCEPTANCES_COPY.signOut)}</button>${escapeRe(ACCEPTANCES_COPY.alternativesAfter)}`));
+    expect(view({ mode: 'invitation', submitLabel: 'Create account' })).toContain(ACCEPTANCES_COPY.closePage);
     const offer = view({ mode: 'offer', texts: [{ ...TEXTS[1], version: '2', publishedOn: '2026-12-01', acceptance: 'offered' }] });
     expect(offer).toMatch(/<legend[^>]*><h1[^>]*>A new version of the privacy notice<\/h1><\/legend>/);
     // In the second step of S-04 the page has its own h1, so the legend is a level 2 heading.
-    expect(view({ mode: 'invitation' })).toMatch(/<legend[^>]*><h2[^>]*>Before you continue<\/h2><\/legend>/);
-    expect(offer).toMatch(/<button[^>]*type="button"[^>]*>Not now<\/button>/);
-    // Full width by layout, with no number in the style (no workaround for PUB's percentage rule): a flex column stretches it.
-    const notNow = offer.match(/<button[^>]*>Not now<\/button>/)?.[0] ?? '';
-    expect(notNow).toMatch(/align-self:\s*stretch/);
-    expect(notNow).not.toMatch(/(?<!-)width:/);   // min-width is the 24-pixel target, not a width
-    expect(offer).toMatch(/<div[^>]*style="[^"]*display:\s*flex;[^"]*flex-direction:\s*column[^"]*"[^>]*><button[^>]*>Not now<\/button><\/div>/);
-    expect(offer).toContain('Version 2, published 1 Dec 2026.');
+    expect(view({ mode: 'invitation' })).toMatch(new RegExp(`<legend[^>]*><h2[^>]*>${escapeRe(ACCEPTANCES_COPY.legend)}</h2></legend>`));
+    expect(offer).toMatch(new RegExp(`<button[^>]*type="button"[^>]*>${escapeRe(ACCEPTANCES_COPY.notNow)}</button>`));
+    // The button is the kit's secondary Button, in a flex column that stretches it to the form's width.
+    expect(offer).toMatch(new RegExp(`<div[^>]*style="[^"]*display:\\s*flex;[^"]*flex-direction:\\s*column[^"]*"[^>]*><button[^>]*class="ui-button ui-button--secondary"[^>]*>${escapeRe(ACCEPTANCES_COPY.notNow)}</button></div>`));
+    expect(offer).toContain(ACCEPTANCES_COPY.version('2', '1 Dec 2026'));
   });
 
-  it('NFR-A11Y-04 (SC 2.5.8, 3.3.8): every box and button is at least 24 by 24 CSS pixels, and nothing blocks pasting or autofill', () => {
+  it('NFR-A11Y-04 (SC 2.5.8, 3.3.8): every box and button is the kit\'s, whose target size e2e/acceptances.spec.ts measures, and nothing blocks pasting or autofill', () => {
     const markup = view({ mode: 'offer' });
-    for (const tag of markup.match(/<(input|button)[^>]*>/g) ?? []) {
-      expect(tag, tag).toMatch(/min-(height|block-size):\s*24px|height:\s*24px/);
-      expect(tag, tag).toMatch(/min-(width|inline-size):\s*24px|width:\s*24px/);
-    }
+    for (const tag of markup.match(/<input[^>]*>/g) ?? []) expect(tag, tag).toContain('class="ui-checkbox__input"');
+    for (const tag of markup.match(/<button[^>]*>/g) ?? []) expect(tag, tag).toMatch(/class="ui-button /);
     expect(markup).not.toMatch(/onpaste|oncopy|autocomplete="off"/i);
   });
 
   it('UX-22: a busy form disables its submit button and keeps its label', () => {
-    expect(view({ busy: true })).toMatch(/<button[^>]*type="submit"[^>]*disabled=""[^>]*>Accept and continue<\/button>/);
+    expect(view({ busy: true })).toMatch(/<button[^>]*type="submit"[^>]*disabled=""[^>]*>Accept and continue<\/button>/);   // the kit's primary Button
   });
 
   it('FR-ACC-03: textsKey differs when any one kind\'s version differs, and is equal for the same versions in the same order', () => {
@@ -170,5 +170,87 @@ describe('S-05 acceptances form (UX-22, FR-ACC-03)', () => {
     const keyed = all.match(/<AcceptancesForm\s+key=\{textsKey\(/g) ?? [];
     expect(uses.length).toBeGreaterThanOrEqual(3);
     expect(keyed.length).toBe(uses.length);
+  });
+});
+
+const { signOutPress, signOutMessage } = await import('@/components/legal/AcceptancesForm');
+type SignOutPhase = import('@/components/legal/AcceptancesForm').SignOutPhase;
+
+/** A promise the case settles by hand, so a load can be held, then let through or failed. */
+function deferred<T>() {
+  let resolve!: (v: T) => void;
+  let reject!: (e: unknown) => void;
+  const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
+  return { promise, resolve, reject };
+}
+const settle = () => new Promise((r) => setTimeout(r, 0));
+
+describe('NFR-PERF-02 NFR-PRIV-06 T16-Q11: the two sign-out controls load their code when pressed', () => {
+  it('T16-Q11: a slow load leaves the press working, and a second press starts nothing', async () => {
+    const load = deferred<{ signOutClearingDrafts: (u: string, c: string) => Promise<void> }>();
+    const loads = vi.fn(() => load.promise);
+    const signOut = vi.fn(async () => {});
+    const phases: SignOutPhase[] = [];
+    const press = signOutPress(loads, (p) => phases.push(p));
+    void press('u-1', '/login');
+    void press('u-1', '/login');
+    await settle();
+    expect(phases).toEqual(['working']);
+    expect(loads).toHaveBeenCalledTimes(1);
+    load.resolve({ signOutClearingDrafts: signOut });
+    await settle();
+    expect(signOut).toHaveBeenCalledTimes(1);
+    expect(signOut).toHaveBeenCalledWith('u-1', '/login');
+    // Signed out: the browser leaves the page, so the press stays working and a further press still starts nothing.
+    expect(phases).toEqual(['working']);
+    await press('u-1', '/login');
+    expect(loads).toHaveBeenCalledTimes(1);
+  });
+
+  it('T16-Q11 T16-31: a rejected load ends working and shows the line; the next press loads again and signs out', async () => {
+    const signOut = vi.fn(async () => {});
+    const loads = vi.fn()
+      .mockImplementationOnce(() => Promise.reject(new Error('chunk load failed')))
+      .mockImplementationOnce(async () => ({ signOutClearingDrafts: signOut }));
+    const phases: SignOutPhase[] = [];
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const press = signOutPress(loads, (p) => phases.push(p));
+    await press('u-1', '/invitations/t');
+    expect(phases).toEqual(['working', 'stillSignedIn']);
+    expect(signOut).not.toHaveBeenCalled();
+    // The rejection leaves one line for whoever maintains this: fixed words and the error's kind, never its message.
+    expect(warn.mock.calls).toEqual([['acceptances: a sign-out press was rejected', 'Error']]);
+    warn.mockRestore();
+    await press('u-1', '/invitations/t');
+    // The press empties the line (working) before it loads again.
+    expect(phases).toEqual(['working', 'stillSignedIn', 'working']);
+    expect(loads).toHaveBeenCalledTimes(2);
+    expect(signOut).toHaveBeenCalledWith('u-1', '/invitations/t');
+  });
+
+  it('T16-31: a load that works followed by a rejected sign-out shows the line too, and each press empties it first', async () => {
+    const signOut = vi.fn(() => Promise.reject(new TypeError('Failed to fetch')));
+    const phases: SignOutPhase[] = [];
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const press = signOutPress(async () => ({ signOutClearingDrafts: signOut }), (p) => phases.push(p));
+    await press('u-1', '/login');
+    await press('u-1', '/login');
+    expect(warn.mock.calls).toEqual([['acceptances: a sign-out press was rejected', 'TypeError'], ['acceptances: a sign-out press was rejected', 'TypeError']]);
+    warn.mockRestore();
+    expect(phases).toEqual(['working', 'stillSignedIn', 'working', 'stillSignedIn']);
+    expect(signOut).toHaveBeenCalledTimes(2);
+    expect(phases.map(signOutMessage)).toEqual([null, ACCEPTANCES_COPY.stillSignedIn, null, ACCEPTANCES_COPY.stillSignedIn]);
+    expect(signOutMessage('idle')).toBeNull();
+    expect(ACCEPTANCES_COPY.stillSignedIn).toBe('You are still signed in. Check your internet connection and try again. If that does not work, reload the page.');
+  });
+
+  it('T16-Q11: in mode required the sign out control is idle, the alert region after the sentence is there and empty, and the sentence is unchanged', () => {
+    const markup = view({ mode: 'required' });
+    const button = markup.match(new RegExp(`<button[^>]*>${escapeRe(ACCEPTANCES_COPY.signOut)}</button>`))?.[0] ?? '';
+    expect(button).not.toBe('');
+    expect(button).not.toContain('aria-busy');
+    expect(markup).toMatch(new RegExp(`${escapeRe(ACCEPTANCES_COPY.alternativesBefore)}<a[^>]*href="/account"[^>]*>${escapeRe(ACCEPTANCES_COPY.deleteAccount)}</a>${escapeRe(ACCEPTANCES_COPY.alternativesOr)}<button[^>]*type="button"[^>]*>${escapeRe(ACCEPTANCES_COPY.signOut)}</button>${escapeRe(ACCEPTANCES_COPY.alternativesAfter)}</p><div role="alert" class="ui-status ui-status--error"></div>`));
+    // The other modes have no sign out and so no such region.
+    expect(view({ mode: 'invitation' })).not.toContain('role="alert"');
   });
 });

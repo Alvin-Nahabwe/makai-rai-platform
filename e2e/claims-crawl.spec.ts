@@ -12,6 +12,7 @@ import { abortPendingBackgroundRequests, assertNoStalePendingTargets } from './h
 import { reachablePages } from './helpers/reachablePages';
 import { isLegalTextRoute, pageFiles, staticPagesIn, templateRegExp, unaccounted } from './helpers/pageFiles';
 import { ownProject, seedCrawlProject } from './helpers/crawlProject';
+import { ERRORS_COPY } from '../lib/errors/copy';
 
 /**
  * FR-PUB-01 (SRS line 1103, and 12.2 step 5, SRS line 4985): no page shows a claim of compliance, audit
@@ -56,7 +57,7 @@ const MAX_PAGES = 60;
 const RELEASE_CANDIDATE = process.env.RELEASE_CANDIDATE === '1';
 
 /** The heading of `app/error.tsx`, which a page that crashed in the browser shows with status 200. */
-const ERROR_PAGE_HEADING = 'This page could not be loaded';
+const ERROR_PAGE_HEADING = ERRORS_COPY.error.heading;
 
 /**
  * Page files this crawl does not read, by route template (route groups removed), each with why and what

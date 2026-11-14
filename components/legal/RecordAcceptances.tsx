@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AcceptancesForm, SendStatus, acceptancePairs, handleFailure, recordOutcome, textsKey, type SendState } from '@/components/legal/AcceptancesForm';
+import { ACCEPTANCES_COPY } from '@/lib/legal/acceptances/copy';
 import type { LegalTextVersion } from '@/types/legal';
 
 /*
@@ -13,8 +14,8 @@ import type { LegalTextVersion } from '@/types/legal';
 /**
  * S-05's body: posts the ticked kinds, each with the version shown, to route 30
  * (`/api/acceptances`) and, on 204, opens the home page (S-07), whose gate now lets the account
- * through. A send with no reply (fetch rejects) and a server fault each say that nothing was
- * created, with **Try again**, which re-sends the same body; any other refusal is acted on by
+ * through. A send with no reply (fetch rejects) and a server fault each say that the choice was
+ * not saved, with **Try again**, which re-sends the same body; any other refusal is acted on by
  * `failureOutcome` (sign in and back here, S-29, M-39 with a reload, the wait, or its words).
  */
 export function RecordAcceptances({ texts, mode, userId }: { texts: LegalTextVersion[]; mode: 'required' | 'offer'; userId: string }) {
@@ -45,9 +46,9 @@ export function RecordAcceptances({ texts, mode, userId }: { texts: LegalTextVer
 
   return (
     <>
-      <AcceptancesForm key={textsKey(texts)} texts={texts} mode={mode} userId={userId} submitLabel="Accept and continue" busy={send.state === 'sending'}
+      <AcceptancesForm key={textsKey(texts)} texts={texts} mode={mode} userId={userId} submitLabel={ACCEPTANCES_COPY.submit} busy={send.state === 'sending'}
         onAccepted={(kinds) => record(JSON.stringify({ acceptances: acceptancePairs(texts, kinds) }))} />
-      <SendStatus send={send} sendingText="Saving..." onRetry={() => { if (sent.current !== null) void record(sent.current); }} />
+      <SendStatus send={send} what="choice" sendingText={ACCEPTANCES_COPY.saving} onRetry={() => { if (sent.current !== null) void record(sent.current); }} />
     </>
   );
 }

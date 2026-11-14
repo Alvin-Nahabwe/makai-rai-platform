@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { MY_ACCEPTANCES_COPY } from '../lib/legal/copy';
 import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { test, expect, type Browser, type Page } from '@playwright/test';
@@ -9,7 +10,11 @@ import { e2eBaseURL } from './helpers/port';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { expectNoHorizontalScroll } from './helpers/reflow';
+import { AUTH_COPY, AUTH_MESSAGE_COPY, FORGOT_COPY, RESET_COPY, SIGN_IN_COPY } from '../lib/auth/copy';
 import { expectTargetsAtLeast24px } from './helpers/targetSize';
+import { ACCOUNT_COPY, PERSONAL_DATA_COPY, SIGN_OUT_EVERYWHERE_COPY, phraseLabel } from '../lib/account/copy';
+import { DELETE_PHRASE, DELETION_UNCONFIRMED } from '../lib/export/messages';
+import { EMAIL_COPY } from '../lib/email/copy';
 
 /**
  * S-21, S-29 and the session endpoint on a running server (FR-ACC-06 to FR-ACC-09, NFR-SEC-07, UX-01, NFR-A11Y-02,
@@ -117,6 +122,24 @@ async function signInPage(page: Page, account: Pick<FixtureAccount, 'email' | 'p
   await page.waitForURL((url) => url.pathname !== '/login');
 }
 
+/**
+ * Waits for the scroll to stop: `html { scroll-behavior: smooth }` means a box measured right after a focus or a key press is
+ * read on a page in motion (ruling T16-22). From 1024 px the scroller is `main.shell__main`, below it the window. Settled is
+ * the same position on two polls 100 ms apart; the predicate is synchronous because waitForFunction takes a returned Promise
+ * as a truthy answer at once.
+ */
+async function scrollSettled(page: Page): Promise<void> {
+  await page.evaluate(() => { (window as unknown as { lastScrollAt?: number }).lastScrollAt = Number.NaN; });
+  await page.waitForFunction(() => {
+    const w = window as unknown as { lastScrollAt?: number };
+    const main = document.querySelector('.shell__main');
+    const at = window.scrollY + (main ? main.scrollTop : 0);
+    const settled = w.lastScrollAt === at;
+    w.lastScrollAt = at;
+    return settled;
+  }, undefined, { polling: 100 });
+}
+
 /** A live reset token for `m`, written as route 33 would write it (the hash only). */
 async function resetTokenFor(m: FixtureMember): Promise<string> {
   const raw = randomBytes(32).toString('hex');
@@ -136,16 +159,16 @@ test.describe('My account and sessions', () => {
     await signInPage(one, a);
     await signInPage(two, a);
     await one.goto('/account');
-    await expect(one.getByRole('heading', { level: 1, name: 'My account' })).toBeVisible();
-    await expect(one.getByText('Ends every session, including this one.')).toBeVisible();
-    await one.getByRole('button', { name: 'Sign out everywhere' }).click();
+    await expect(one.getByRole('heading', { level: 1, name: ACCOUNT_COPY.page.heading })).toBeVisible();
+    await expect(one.getByText(SIGN_OUT_EVERYWHERE_COPY.explains)).toBeVisible();
+    await one.getByRole('button', { name: SIGN_OUT_EVERYWHERE_COPY.button }).click();
     await one.waitForURL((url) => url.pathname === '/login');
     await two.goto('/account');
     await expect(two).toHaveURL(/\/login/);
     expect((await testDb.user.findUniqueOrThrow({ where: { id: a.userId } })).sessionEpoch).toBe(1);
   });
 
-  test('FR-ACC-04 UX-01: a pre-v1 account loads /account, and the row that no longer counts says so', async ({ browser }) => {
+  test('FR-ACC-04 UX-01: a pre-v1 account loads /account, and its pre-v1 row says it was an older version, with Read and accept to /acceptances', async ({ browser }) => {
     const a = (await buildOrg({ label: 'prev1', acceptances: 'pre-v1' })).members.viewer;
     const page = await newPage(browser);
     await page.goto('/login');
@@ -156,10 +179,77 @@ test.describe('My account and sessions', () => {
     const res = await page.goto('/account');
     expect(res?.status()).toBe(200);
     await expect(page).toHaveURL(/\/account$/);
-    await expect(page.getByRole('heading', { name: 'What I have accepted' })).toBeVisible();
-    await expect(page.getByText(/no longer counts/).first()).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Review' }).first()).toHaveAttribute('href', '/acceptances');
-    await expect(page.getByRole('button', { name: 'Sign out everywhere' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: MY_ACCEPTANCES_COPY.heading })).toBeVisible();
+    await expect(page.getByText(MY_ACCEPTANCES_COPY.olderVersion).first()).toBeVisible();
+    await expect(page.getByRole('link', { name: MY_ACCEPTANCES_COPY.readAndAccept }).first()).toHaveAttribute('href', '/acceptances');
+    await expect(page.getByRole('button', { name: SIGN_OUT_EVERYWHERE_COPY.button })).toBeVisible();
+  });
+
+  test('UX-29 UX-42 FR-EXP-03: Delete my account, opened with the keyboard at 1280 by 720, leaves the password field and both buttons inside the viewport', async ({ browser }) => {
+    // components/ui/InlineConfirm.tsx brings a confirmation that opens wholly into view; the boxes are printed below.
+    // This case measures against the window only. The full check (every clipping ancestor and the scroller's visible
+    // box) is in e2e/inline-confirm-reveal.spec.ts.
+    const a = (await buildOrg({ label: 'delconf' })).members.assessor;
+    const page = await newPage(browser);
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await signInPage(page, a);
+    await page.goto('/account');
+    await expect(page.getByRole('heading', { level: 1, name: ACCOUNT_COPY.page.heading })).toBeVisible();
+    await tabTo(page, page.getByRole('button', { name: PERSONAL_DATA_COPY.deleteTrigger }));
+    await page.keyboard.press('Enter');
+    const password = page.getByLabel(PERSONAL_DATA_COPY.passwordLabel);
+    await expect(password).toBeFocused();
+    await scrollSettled(page);
+    // At 1280 px the scroller is main.shell__main, so a box is placed against the window's viewport, never against the scroller.
+    const view = page.viewportSize()!;
+    const confirm = page.locator('.ui-confirm');
+    const boxes: Array<[string, { x: number; y: number; width: number; height: number }]> = [
+      ['the password field', (await password.boundingBox())!],
+      ['the Cancel button', (await confirm.getByRole('button', { name: 'Cancel', exact: true }).boundingBox())!],
+      ['the Delete my account button', (await confirm.getByRole('button', { name: PERSONAL_DATA_COPY.deleteAction, exact: true }).boundingBox())!],
+    ];
+    const printed = boxes.map(([what, b]) => `${what} ${Math.round(b.x)},${Math.round(b.y)} to ${Math.round(b.x + b.width)},${Math.round(b.y + b.height)}`).join('; ');
+    console.log(`Confirmation boxes in ${view.width}x${view.height}: ${printed}`);
+    for (const [what, b] of boxes) {
+      expect(b.x >= 0 && b.y >= 0 && b.x + b.width <= view.width && b.y + b.height <= view.height, `${what} is wholly inside the viewport (${printed})`).toBe(true);
+    }
+  });
+
+  test('UX-29 FR-EXP-03: a second deletion answer with the same words empties the alert first, so it is said again', async ({ browser }) => {
+    const a = (await buildOrg({ label: 'delagain' })).members.assessor;
+    const page = await newPage(browser);
+    await signInPage(page, a);
+    // Route 39 answers a 500 with an empty JSON body twice: the screen says the outcome is not known, both times.
+    let deletes = 0;
+    await page.route('**/api/users/me', async (route) => {
+      if (route.request().method() !== 'DELETE') return route.continue();
+      deletes += 1;
+      return route.fulfill({ status: 500, contentType: 'application/json', body: '{}' });
+    });
+    await page.goto('/account');
+    await page.getByRole('button', { name: PERSONAL_DATA_COPY.deleteTrigger }).click();
+    // A wrong password, as e2e/inline-confirm-reveal.spec.ts does: the route above answers before any server reads it,
+    // and if it ever stopped matching, no real deletion would run.
+    await page.getByLabel(PERSONAL_DATA_COPY.passwordLabel).fill('not-the-password');
+    await page.getByLabel(phraseLabel(DELETE_PHRASE)).fill(DELETE_PHRASE);
+    const region = page.locator('.ui-confirm [role="alert"]');
+    await expect(region).toHaveText('');
+    // Every text the region holds, in order, recorded from before the first press.
+    await region.evaluate((el) => {
+      const seen: string[] = [];
+      (window as unknown as { alertTexts: string[] }).alertTexts = seen;
+      new MutationObserver(() => {
+        const text = el.textContent ?? '';
+        if (seen[seen.length - 1] !== text) seen.push(text);
+      }).observe(el, { childList: true, characterData: true, subtree: true });
+    });
+    const confirm = page.locator('.ui-confirm').getByRole('button', { name: PERSONAL_DATA_COPY.deleteAction, exact: true });
+    await confirm.click();
+    await expect(region).toHaveText(DELETION_UNCONFIRMED);
+    await confirm.click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { alertTexts: string[] }).alertTexts)).toEqual([DELETION_UNCONFIRMED, '', DELETION_UNCONFIRMED]);
+    await expect(region).toHaveText(DELETION_UNCONFIRMED);
+    expect(deletes).toBe(2);
   });
 
   test('UX-26 FR-ACC-05 B17: signing in on S-01 removes another account\'s drafts from this browser and keeps one\'s own', async ({ browser }) => {
@@ -188,9 +278,9 @@ test.describe('My account and sessions', () => {
     await page.fill('#email', a.email);
     await page.fill('#password', a.password);
     await page.locator('button[type="submit"]').click();
-    await expect(page.getByText('Not signed in: connection lost. Nothing was changed. Try again.')).toBeVisible();
+    await expect(page.getByText(SIGN_IN_COPY.connectionLost)).toBeVisible();
     await expect(page.locator('button[type="submit"]')).toBeEnabled();
-    await expect(page.locator('button[type="submit"]')).toHaveText('Sign In');
+    await expect(page.locator('button[type="submit"]')).toHaveText(SIGN_IN_COPY.submit);
   });
 
   test('FR-ACC-04 FR-ACC-08 (C4 ruling RE-5): a pre-v1 account opens S-29 from S-21', async ({ browser }) => {
@@ -355,6 +445,10 @@ test.describe('My account and sessions', () => {
         await page.emulateMedia({ colorScheme });
         await loadAfresh(page, await path());
         await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+        // The submit button is disabled until hydration and the kit's button changes colour over 150 ms when it is
+        // enabled: wait for the enabled button; the accessibility check itself waits for running transitions to end.
+        const submit = page.locator('form button[type="submit"]');
+        if (await submit.count()) await expect(submit.first()).toBeEnabled();
         await expectNoSeriousA11yViolations(page, `${screen} ${colorScheme} ${width}`);
         await expectTargetsAtLeast24px(page);
       }
@@ -368,7 +462,7 @@ test.describe('My account and sessions', () => {
     await expect(anon.getByLabel('New password')).toBeVisible();
     expect(new URL(anon.url()).hash).toBe('');
     await anon.goto('/reset-password');
-    await expect(anon.locator('.auth-error')).toHaveText(M22);
+    await expect(anon.locator('.ui-status--error')).toHaveText(M22);
   });
 });
 
@@ -401,28 +495,28 @@ test.describe('J-15 with a mail catcher', { tag: '@nginx' }, () => {
 
     const page = await newPage(browser);
     await page.goto('/login');
-    await page.getByRole('link', { name: 'Forgot your password?' }).click();
+    await page.getByRole('link', { name: SIGN_IN_COPY.forgotLink }).click();
     // A client-side navigation: wait for S-02 itself, or the fill can land in S-01's Email field on its way out.
     await page.waitForURL(/\/forgot-password$/);
-    await expect(page.getByRole('heading', { level: 1, name: 'Forgot password' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: AUTH_COPY.resetHeading })).toBeVisible();
     await page.getByLabel('Email').fill(a.email);
-    await page.getByRole('button', { name: 'Send reset link' }).click();
+    await page.getByRole('button', { name: FORGOT_COPY.submit }).click();
     // The page's own status, not the shell's offline banner (also role="status").
-    await expect(page.locator('.auth-success[role="status"]')).toHaveText('If an account exists for this email, we have sent a link. It works once and expires in 30 minutes.');
+    await expect(page.getByRole('status').filter({ hasText: AUTH_MESSAGE_COPY.resetLinkSent })).toHaveText(AUTH_MESSAGE_COPY.resetLinkSent);
     await expect.poll(() => mailedResetToken(a.email), { timeout: 15_000 }).not.toBeNull();
     const token = mailedResetToken(a.email)!;
 
     await page.goto(`/reset-password#token=${token}`);
     await page.getByLabel('New password').fill('j'.repeat(12));
-    await page.getByRole('button', { name: 'Set password' }).click();
+    await page.getByRole('button', { name: RESET_COPY.submit }).click();
     await page.waitForURL(/\/login\?passwordChanged=1$/);
 
     await before.goto('/account');
     await expect(before).toHaveURL(/\/login/);
     await signInPage(page, { email: a.email, password: 'j'.repeat(12) });
     await page.goto('/account');
-    await expect(page.getByRole('heading', { level: 1, name: 'My account' })).toBeVisible();
-    await expect.poll(() => readFileSync(process.env.E2E_MAIL_OUT!, 'utf8').includes('Your MAK-AI RAI Platform password was changed'), { timeout: 15_000 }).toBe(true);
+    await expect(page.getByRole('heading', { level: 1, name: ACCOUNT_COPY.page.heading })).toBeVisible();
+    await expect.poll(() => readFileSync(process.env.E2E_MAIL_OUT!, 'utf8').includes(EMAIL_COPY.passwordChanged.subject), { timeout: 15_000 }).toBe(true);
   });
 
   test('NFR-A11Y-02: J-15 and sign-in complete with the keyboard alone, focus visible and uncovered', async ({ browser }) => {
@@ -431,15 +525,15 @@ test.describe('J-15 with a mail catcher', { tag: '@nginx' }, () => {
     await page.goto('/forgot-password');
     await tabTo(page, page.getByLabel('Email'));
     await page.keyboard.type(a.email);
-    await tabTo(page, page.getByRole('button', { name: 'Send reset link' }));
+    await tabTo(page, page.getByRole('button', { name: FORGOT_COPY.submit }));
     await page.keyboard.press('Enter');
-    await expect(page.locator('.auth-success[role="status"]')).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: AUTH_MESSAGE_COPY.resetLinkSent })).toBeVisible();
     await expect.poll(() => mailedResetToken(a.email), { timeout: 15_000 }).not.toBeNull();
 
     await page.goto(`/reset-password#token=${mailedResetToken(a.email)!}`);
     await tabTo(page, page.getByLabel('New password'));
     await page.keyboard.type('k'.repeat(12));
-    await tabTo(page, page.getByRole('button', { name: 'Set password' }));
+    await tabTo(page, page.getByRole('button', { name: RESET_COPY.submit }));
     await page.keyboard.press('Enter');
     await page.waitForURL(/\/login\?passwordChanged=1$/);
     // The URL can change while S-01 still shows its Suspense fallback (LoginForm's useSearchParams boundary). Since the
@@ -448,7 +542,7 @@ test.describe('J-15 with a mail catcher', { tag: '@nginx' }, () => {
 
     await tabTo(page, page.getByLabel('Email'));
     await page.keyboard.type(a.email);
-    await tabTo(page, page.getByLabel('Password', { exact: true }));
+    await tabTo(page, page.locator('#password'));
     await page.keyboard.type('k'.repeat(12));
     await page.keyboard.press('Enter');
     await page.waitForURL((url) => url.pathname !== '/login');
