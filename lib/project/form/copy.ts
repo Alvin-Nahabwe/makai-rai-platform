@@ -30,6 +30,8 @@ export const PROJECT_FORM_COPY = Object.freeze({
     department: 'Department',
     country: 'Country',
     targetPopulation: 'Target population',
+    /** Shown only while AI system type is Other (defect 21). */
+    aiSystemTypeOther: 'Describe the type of AI system',
   }),
   /** Fields with no entry here have no placeholder (B#123, B#131). */
   placeholders: Object.freeze({
@@ -54,8 +56,12 @@ export const PROJECT_FORM_COPY = Object.freeze({
     { value: 'generative_ai', label: 'Generative AI' },
     { value: 'other', label: 'Other' },
   ] as const),
-  /** The toggle of the optional details; static (the toggling words are plan 1B's defect 22). */
-  moreDetails: 'More details',
+  /** The two sections of the form (plan 1B Task 13). */
+  sectionAbout: 'About the project',
+  sectionDetails: 'More details (optional)',
+  /** The toggle of the optional details, by its state (defect 22): closed, then open. */
+  showDetails: 'Show more details',
+  hideDetails: 'Hide more details',
   optional: 'Optional. You can add these later.',
   cancel: 'Cancel',
   create: CREATE,
@@ -64,6 +70,8 @@ export const PROJECT_FORM_COPY = Object.freeze({
   saving: 'Saving...',
   /** The form's own check before it sends anything. */
   nameRequired: 'Enter a project name.',
+  /** A start or end date that is incomplete or not in the calendar (the ruled sentence of audit C row 431). */
+  dateInvalid: 'Enter a real date, or leave the date empty.',
   slow: 'Still saving. The connection is slow.',
   /**
    * No reply in time, or no usable reply: the outcome is not known (CONSOLIDATED 8 #7, C3 rule 3; replaces B#373 here).

@@ -334,10 +334,9 @@ test('NFR-A11Y-05 (motion): the project form\'s details do not animate on page l
   const details = page.locator('#project-details');
   await expect(details).toBeVisible();
   expect(await details.evaluate((el) => getComputedStyle(el).animationName)).toBe('none');
-  const toggle = page.getByRole('button', { name: PROJECT_FORM_COPY.moreDetails });
-  await toggle.click();
+  await page.getByRole('button', { name: PROJECT_FORM_COPY.hideDetails }).click();
   await expect(details).toBeHidden();
-  await toggle.click();
+  await page.getByRole('button', { name: PROJECT_FORM_COPY.showDetails }).click();
   await expect(details).toBeVisible();
   expect(await details.evaluate((el) => getComputedStyle(el).animationName)).not.toBe('none');
 });
@@ -396,9 +395,9 @@ test('SPEC-2 F8: a 422 on a field in the closed details opens them and shows the
   const owner = await signedIn(browser, fx.members.owner);
   await owner.goto(path('/projects/new'));
   await owner.getByLabel('Project name').fill(`Too long sector ${RUN}`);
-  await owner.getByRole('button', { name: PROJECT_FORM_COPY.moreDetails }).click();
+  await owner.getByRole('button', { name: PROJECT_FORM_COPY.showDetails }).click();
   await owner.getByLabel('Sector').fill('s'.repeat(201));
-  await owner.getByRole('button', { name: PROJECT_FORM_COPY.moreDetails }).click();   // close the section again
+  await owner.getByRole('button', { name: PROJECT_FORM_COPY.hideDetails }).click();   // close the section again
   await owner.getByRole('button', { name: 'Create project' }).click();
   // the kit's error summary is not a live region: its title takes focus after the refused submit, which is how a reader hears it
   await expect(owner.getByRole('heading', { name: PROJECT_WRITE_COPY.summary(1) })).toBeFocused();
@@ -420,7 +419,7 @@ test('FR-PRJ-01: an assessor creates a project with every descriptive field and 
   await page.goto(path('/projects/new'));
   await page.getByLabel('Project name').fill(`Described ${RUN}`);
   await page.getByLabel('AI system type').selectOption('classification');
-  await page.getByRole('button', { name: PROJECT_FORM_COPY.moreDetails }).click();
+  await page.getByRole('button', { name: PROJECT_FORM_COPY.showDetails }).click();
   await page.getByLabel('Sector').fill('health');
   await page.getByLabel('Dataset type').fill('tabular');
   await page.getByLabel('Dataset size').selectOption('medium_1k_100k');
@@ -428,16 +427,128 @@ test('FR-PRJ-01: an assessor creates a project with every descriptive field and 
   await page.getByLabel('Funding source').fill('GIZ');
   await page.getByLabel('Regulatory context').fill('A national data-protection act');
   await page.getByLabel(PROJECT_FORM_COPY.labels.developmentStage).selectOption('development');
-  await page.getByLabel('Start date').fill('2026-09-01');
-  await page.getByLabel('End date').fill('2027-03-31');
+  // the two dates are the kit's DateField: three boxes each (plan 1B Task 13)
+  await page.locator('#projectStart-day').fill('1');
+  await page.locator('#projectStart-month').fill('9');
+  await page.locator('#projectStart-year').fill('2026');
+  await page.locator('#projectEnd-day').fill('31');
+  await page.locator('#projectEnd-month').fill('3');
+  await page.locator('#projectEnd-year').fill('2027');
   await page.getByRole('button', { name: 'Create project' }).click();
   await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
   await expect(page.getByText(['Classification', 'health', PROJECT_COPY.descriptive.usesPersonalData, LIFECYCLE_STAGE_WORDS.development].join(', '))).toBeVisible();
   await page.getByRole('link', { name: 'Edit project' }).click();
+  await expect(page.locator('#projectStart-day')).toHaveValue('1');   // the stored dates come back into the boxes
+  await expect(page.locator('#projectEnd-year')).toHaveValue('2027');
   await page.getByLabel(PROJECT_FORM_COPY.labels.developmentStage).selectOption('testing');
   await page.getByRole('button', { name: 'Save changes' }).click();
   await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
   await expect(page.getByText(['Classification', 'health', PROJECT_COPY.descriptive.usesPersonalData, LIFECYCLE_STAGE_WORDS.testing].join(', '))).toBeVisible();
+});
+
+test('FR-PRJ-01 (defect 21): choosing Other shows its text field, the saved project shows the text, and choosing another type clears it', async ({ browser }) => {
+  const page = await signedIn(browser, fx.members.assessor);
+  await page.goto(path('/projects/new'));
+  await page.getByLabel('Project name').fill(`Other type ${RUN}`);
+  const other = page.getByLabel(PROJECT_FORM_COPY.labels.aiSystemTypeOther);
+  await expect(other).toHaveCount(0);
+  await page.getByLabel('AI system type').selectOption('other');
+  await expect(other).toBeVisible();
+  await expect(other).not.toBeFocused();   // the new field does not take focus
+  await other.fill(`Rules engine ${RUN}`);
+  await page.getByRole('button', { name: 'Create project' }).click();
+  await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
+  await expect(page.getByText(`Rules engine ${RUN}`)).toBeVisible();
+  await page.getByRole('link', { name: 'Edit project' }).click();
+  await expect(page.getByLabel(PROJECT_FORM_COPY.labels.aiSystemTypeOther)).toHaveValue(`Rules engine ${RUN}`);
+  await page.getByLabel('AI system type').selectOption('classification');
+  await expect(page.getByLabel(PROJECT_FORM_COPY.labels.aiSystemTypeOther)).toHaveCount(0);
+  const sent = page.waitForRequest((r) => r.method() === 'PATCH' && /\/api\/v1\/orgs\/[^/]+\/projects\/[0-9a-f-]{36}$/.test(r.url()));
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  expect((await sent).postDataJSON()).toMatchObject({ aiSystemType: 'classification', aiSystemTypeOther: null });
+  await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
+  await expect(page.getByText(`Rules engine ${RUN}`)).toHaveCount(0);
+});
+
+test('FR-PRJ-01 (B row 98): an empty name and an incomplete date are refused before anything is sent, beside each field and in the summary', async ({ browser }) => {
+  const page = await signedIn(browser, fx.members.assessor);
+  await page.goto(path('/projects/new'));
+  const posts: string[] = [];
+  page.on('request', (r) => { if (r.method() === 'POST' && /\/api\/v1\/orgs\/[^/]+\/projects$/.test(r.url())) posts.push(r.url()); });
+  await page.getByRole('button', { name: PROJECT_FORM_COPY.showDetails }).click();
+  await page.locator('#projectStart-day').fill('1');
+  await page.locator('#projectStart-year').fill('2026');
+  await page.getByRole('button', { name: PROJECT_FORM_COPY.hideDetails }).click();   // closed again: the date's error opens it
+  await page.getByRole('button', { name: 'Create project' }).click();
+  await expect(page.getByRole('heading', { name: PROJECT_WRITE_COPY.summary(2) })).toBeFocused();
+  const summary = page.locator('.ui-error-summary');
+  await expect(summary.getByRole('link')).toHaveText([PROJECT_FORM_COPY.nameRequired, PROJECT_FORM_COPY.dateInvalid]);
+  await expect(summary.getByRole('link', { name: PROJECT_FORM_COPY.dateInvalid })).toHaveAttribute('href', '#projectStart-day');
+  await expect(page.locator('#name-error')).toHaveText(PROJECT_FORM_COPY.nameRequired);
+  await expect(page.getByLabel('Project name')).toHaveAttribute('aria-invalid', 'true');
+  await expect(page.getByLabel('Project name')).toHaveAttribute('aria-describedby', 'name-error');
+  await expect(page.locator('#projectStart-error')).toHaveText(PROJECT_FORM_COPY.dateInvalid);
+  await expect(page.locator('#projectStart-day')).toBeVisible();   // the details opened themselves
+  await expect(page.getByRole('button', { name: PROJECT_FORM_COPY.hideDetails })).toHaveAttribute('aria-expanded', 'true');
+  await page.waitForTimeout(300);
+  expect(posts).toHaveLength(0);
+});
+
+test('FR-PRJ-01 (review F1): Team size text that is not a whole number is refused by the server beside the field, not dropped', async ({ browser }) => {
+  const page = await signedIn(browser, fx.members.assessor);
+  await page.goto(path('/projects/new'));
+  await page.getByLabel('Project name').fill(`Team size range ${RUN}`);
+  await page.getByRole('button', { name: PROJECT_FORM_COPY.showDetails }).click();
+  await page.getByLabel(PROJECT_FORM_COPY.labels.teamSize).fill('5-10');
+  await page.getByRole('button', { name: PROJECT_FORM_COPY.hideDetails }).click();   // closed again: the refusal opens it
+  await page.getByRole('button', { name: 'Create project' }).click();
+  await expect(page.getByRole('heading', { name: PROJECT_WRITE_COPY.summary(1) })).toBeFocused();
+  await expect(page.locator('#project-details')).toBeVisible();
+  await expect(page.locator('#teamSize-error')).toHaveText(PROJECT_FIELD_MESSAGES.teamSize);
+  await expect(page.getByLabel(PROJECT_FORM_COPY.labels.teamSize)).toHaveValue('5-10');
+  expect(page.url()).toMatch(/\/projects\/new$/);
+  await page.getByLabel(PROJECT_FORM_COPY.labels.teamSize).fill('12');
+  await page.getByRole('button', { name: 'Create project' }).click();
+  await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
+});
+
+test('Task 13 item 6 (fix round 2): the primary button comes before Cancel at 375 and 1280 px, on screen and for the keyboard', async ({ browser }) => {
+  const page = await signedIn(browser, fx.members.assessor);
+  for (const width of [375, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(path('/projects/new'));
+    const create = page.getByRole('button', { name: PROJECT_FORM_COPY.create });
+    const cancel = page.getByRole('link', { name: PROJECT_FORM_COPY.cancel, exact: true });
+    const a = await create.boundingBox();
+    const b = await cancel.boundingBox();
+    if (a === null || b === null) throw new Error(`no box for the actions at ${width}px`);
+    if (width === 375) expect(a.y + a.height, `Create project above Cancel at ${width}px`).toBeLessThanOrEqual(b.y);
+    else {
+      expect(Math.abs(a.y - b.y), `one row at ${width}px`).toBeLessThan(a.height);
+      expect(a.x + a.width, `Create project left of Cancel at ${width}px`).toBeLessThanOrEqual(b.x);
+    }
+    await page.getByRole('button', { name: PROJECT_FORM_COPY.showDetails }).click();
+    await page.getByLabel(PROJECT_FORM_COPY.labels.targetPopulation).focus();   // the last field
+    await page.keyboard.press('Tab');
+    await expect(create).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(cancel).toBeFocused();
+  }
+});
+
+test('defect 22: the toggle says Show more details while closed and Hide more details while open, and aria-expanded follows', async ({ browser }) => {
+  const page = await signedIn(browser, fx.members.assessor);
+  await page.goto(path('/projects/new'));
+  const show = page.getByRole('button', { name: PROJECT_FORM_COPY.showDetails });
+  await expect(show).toHaveAttribute('aria-expanded', 'false');
+  await expect(show).toHaveAttribute('aria-controls', 'project-details');
+  await expect(page.locator('#project-details')).toBeHidden();
+  await show.click();
+  const hide = page.getByRole('button', { name: PROJECT_FORM_COPY.hideDetails });
+  await expect(hide).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByRole('region', { name: PROJECT_FORM_COPY.sectionDetails })).toBeVisible();
+  await hide.click();
+  await expect(page.getByRole('button', { name: PROJECT_FORM_COPY.showDetails })).toHaveAttribute('aria-expanded', 'false');
 });
 
 test('UX-27 NFR-INT-02: S-32 sends Unarchive with a request id and keeps it across a Retry', async ({ browser }) => {

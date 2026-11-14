@@ -126,7 +126,7 @@ const PROJECTS_LIST_CONTROLS: Control[] = [
 const PROJECTS_NEW_CONTROLS: Control[] = [
   { name: 'Create project', action: 'project:create', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Create project' }) },
   { name: 'Cancel', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Cancel' }) },
-  { name: PROJECT_FORM_COPY.moreDetails, action: null, mode: 'presence', locator: (p) => p.getByRole('button', { name: PROJECT_FORM_COPY.moreDetails }) },
+  { name: PROJECT_FORM_COPY.showDetails, action: null, mode: 'presence', locator: (p) => p.getByRole('button', { name: PROJECT_FORM_COPY.showDetails }) },
   { name: PROJECT_FORM_COPY.back, action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: new RegExp(PROJECT_FORM_COPY.back) }) },
 ];
 

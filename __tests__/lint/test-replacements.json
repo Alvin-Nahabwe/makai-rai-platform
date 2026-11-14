@@ -1942,5 +1942,13 @@
     "property": "With a decision recorded the empty line goes and the row shows the decision's status words followed by its declared date at its precision. The row is now the kit's ItemPlate: the words are the StatusMark's (`ui-mark__words`) and the date opens the plate's one line of state (`ui-plate__state`), after the mark, with no separator before it (plan 1C Task 3, spec 8).",
     "proof": "The regular expression still anchors on the row's data-question-id and requires, in order, the status words \"Partly\" closing their </span> and then the state line starting with \"Oct 2026\" (the declared date at month precision): `class=\"ui-mark__words\">Partly<\\/span>[\\s\\S]*?class=\"ui-plate__state\">Oct 2026<`. The `<` after the date requires it to be the state line's first and only part here. The not-toContain of the empty line is unchanged. Seen failing on the new markup with the old pattern (`>Partly<\\/span> · Oct 2026`), passing with the new one.",
     "task": "plan 1C Task 3 (lane 7 part 1, All questions)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::FR-PRJ-01: the form has a labelled control for each descriptive field",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::FR-PRJ-01: the form has a labelled control for each descriptive field",
+    "property": "Every descriptive field of the project form has a programmatic name. The eight that are single controls keep a <label for> naming them; Start date and End date became the kit's DateField (plan 1B Task 13), a fieldset whose legend names the date and whose three boxes (Day, Month, Year) each have a <label for>, so a <label for> with the words Start date or End date no longer exists and the two names are proved by the legend and the three labels instead",
+    "proof": "__tests__/unit/prj-components.test.tsx::FR-PRJ-01: the form has a labelled control for each descriptive field: the loop over the eight labels is unchanged but for dropping 'Start date' and 'End date'; for projectStart and projectEnd, expect(html).toMatch(<fieldset ...><legend ...>Start date</legend>) (and End date), and for each of day, month and year a <label for=\"{prefix}-{part}\"> with words directly followed by the <input id=\"{prefix}-{part}\">",
+    "task": "1B-13"
   }
 ]
