@@ -151,3 +151,90 @@
   gap: var(--space-2) var(--space-3);
   margin-block-start: var(--space-2);
 }
+
+/* One finding (S-15): the header's lines, the regions, the mitigation cards and the two histories. */
+.finding-header > p {
+  margin: 0;
+  max-inline-size: var(--measure-reading);
+  overflow-wrap: anywhere;
+}
+
+.finding-description {
+  white-space: pre-wrap;
+}
+
+.finding-section {
+  margin-block: var(--space-10);
+}
+
+.finding-section > h2 {
+  margin-block-end: var(--space-4);
+}
+
+/* "Can be closed now": the decision that closes this finding, set apart on the tint. */
+.finding-close-box {
+  max-inline-size: var(--measure-reading);
+  margin-block: var(--space-6);
+  padding: var(--space-4) var(--space-5);
+  background-color: var(--color-tint);
+  border-radius: var(--radius-surface);
+  color: var(--color-ink);
+}
+
+.finding-close-box > p {
+  margin-block: 0 var(--space-2);
+}
+
+.finding-cards {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  list-style: none;
+}
+
+.finding-card {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-container);
+  border-radius: var(--radius-surface);
+  box-shadow: var(--shadow-surface);
+  overflow-wrap: anywhere;
+}
+
+.finding-card > p {
+  margin: 0;
+}
+
+.finding-card__line {
+  color: var(--color-ink);
+}
+
+/* Spec 7.1: the overdue red is for an overdue date and the word "Overdue" only, never a status label or a mark. */
+.finding-overdue {
+  color: var(--color-overdue);
+  font-weight: var(--font-weight-semibold);
+}
+
+.finding-history > summary {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--target-min);
+  cursor: pointer;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-link);
+}
+
+.finding-history > ol,
+.finding-timeline {
+  margin-block: var(--space-2) 0;
+  padding-inline-start: var(--space-6);
+  color: var(--color-ink);
+}
+
+.finding-timeline > li + li,
+.finding-history li + li {
+  margin-block-start: var(--space-2);
+}

@@ -201,7 +201,7 @@ describe('S-15 the finding page and the S-14 raise form (FR-FND-02, FR-FND-03, F
     await addDecision(fx, p.id, { stage: 'pre-processing', questionId: 'Q-PP-12', contentVersionId, status: 'partly' });
     const v2 = await addDecision(fx, p.id, { stage: 'pre-processing', questionId: 'Q-PP-12', contentVersionId, status: 'partly' });
     const f = await team({ project: p, questionId: 'Q-PP-12', decisionVersionId: v2.id });
-    expect(await renderFinding(f)).toContain('About question <bdi>Q-PP-12</bdi> (version 2)');
+    expect(await renderFinding(f)).toContain(`${FINDINGS_COPY.finding.aboutQuestion} <bdi>${questionText('Q-PP-12')}</bdi>`);
   });
 
   it('UX-14 FR-FND-02: the raise form opened from S-12 has the stage and the question\'s first risk area filled in', async () => {
@@ -258,27 +258,27 @@ describe('S-15 the finding page and the S-14 raise form (FR-FND-02, FR-FND-03, F
     sessionFor(stranger.members.owner.userId);
     await expect(renderPage('finding', { slug: fx.org.slug, id: f.projectId, findingId: f.id })).rejects.toMatchObject(NOT_FOUND);
     sessionFor(fx.members.viewer.userId);
-    expect(await renderPage('finding', { slug: fx.org.slug, id: f.projectId, findingId: f.id })).toContain('Mitigations');
+    expect(await renderPage('finding', { slug: fx.org.slug, id: f.projectId, findingId: f.id })).toContain(FINDINGS_COPY.finding.mitigations);
   });
 
   it('FR-SUG-03 UX-08 (screen): S-15 shows one Ways teams address this heading naming the risk area, the names and Show details, and no section without controls', async () => {
     const p = await addProject(fx);
     const withArea = await addFinding(fx, p.id, { stage: 'pre-processing', source: 'team', by: 'reviewer', riskArea: 'IP-05' });
     const html = await renderFinding({ ...withArea, projectId: p.id });
-    expect(html.match(/Ways teams address this/g)).toHaveLength(1);
-    expect(html).toContain('<h2 id="f-ways">Ways teams address this (for risk area IP-05)</h2>');   // SRS W-5, line 1996
+    expect(html.split(FINDINGS_COPY.finding.ways).length - 1).toBe(1);
+    expect(html).toContain(`<h2 id="f-ways">${FINDINGS_COPY.finding.ways}</h2>`);   // CONSOLIDATED 2 ("control"): the heading names no risk area
     expect(html).not.toMatch(/controls? for this question/);
     expect(html).toContain('<summary>Show details</summary>');
     for (const riskArea of [null, 'XX-99']) {
       const f = await addFinding(fx, p.id, { stage: 'pre-processing', source: 'team', by: 'reviewer', riskArea });
       const none = await renderFinding({ ...f, projectId: p.id });
-      expect(none, String(riskArea)).not.toContain('Ways teams address this');
+      expect(none, String(riskArea)).not.toContain(FINDINGS_COPY.finding.ways);
       expect(none, String(riskArea)).not.toContain('f-ways');
     }
   });
 
   it('FR-FND-03 (screen): a finding with no mitigation shows the 7.4.2 S-15 empty line', async () => {
-    expect(await renderFinding(await team())).toContain('No mitigations yet. Add one, or an owner or admin can accept the risk.');
+    expect(await renderFinding(await team())).toContain(FINDINGS_COPY.finding.noMitigations);
   });
 
   it('NFR-SEC-11: hostile titles, descriptions, reasons and notes render as text on S-15', async () => {
@@ -305,18 +305,21 @@ describe('S-15 the finding page and the S-14 raise form (FR-FND-02, FR-FND-03, F
     const ar = await addAcceptedRisk(fx, f.id, { acceptedBy: { kind: 'outside_role', role: 'ethics_committee' }, lookAgainOn: '2027-03-01' });
     expect(ar.id).toBeTruthy();
     const html = await renderFinding(f, 'viewer');
-    expect(html).toMatch(/Closed: risk accepted by <bdi>Ethics committee \(outside role\)<\/bdi> on \d{1,2} \w{3} 20\d\d\. Look at it again on 1 Mar 2027\./);
+    expect(html).toContain(`${FINDINGS_COPY.finding.acceptedHeaderStart}<bdi>Ethics committee (outside role)</bdi>) on `);
+    expect(html).toMatch(/<\/bdi>\) on \d{1,2} \w{3} 20\d\d\. To be checked again on 1 Mar 2027\./);
+    expect(html).toContain(FINDINGS_COPY.finding.checkAgainOn('1 Mar 2027'));
   });
 
   it('FR-FND-07 UX-29: a closed finding offers Reopen to an assessor, the M-26 line to a viewer, and nothing once withdrawn', async () => {
     const f = await team({ by: 'owner' });
     await addMitigationVersion(fx, f.id, { status: 'done', owner: 'assessor', dueDate: '2026-12-01' });
-    expect(await renderFinding(f, 'assessor')).toContain('Reopen this finding');
+    expect(await renderFinding(f, 'assessor')).toContain(FINDINGS_COPY.actions.reopenTrigger);
     const viewer = await renderFinding(f, 'viewer');
-    expect(viewer).not.toContain('Reopen this finding'); expect(viewer).toContain(onlyRolesCanText('finding:reopen'));
+    expect(viewer).not.toContain(FINDINGS_COPY.actions.reopenTrigger); expect(viewer).toContain(onlyRolesCanText('finding:reopen'));
     const w = await team({ by: 'owner' });
     await addFindingEvent(fx, w.id, { kind: 'withdrawn', by: 'owner' });
-    expect(await renderFinding(w, 'owner')).not.toMatch(/Reopen this finding|Withdraw<|Withdraw finding/);
+    const A = FINDINGS_COPY.actions;
+    expect(await renderFinding(w, 'owner')).not.toMatch(new RegExp(`${A.reopenTrigger}|${A.withdrawTrigger}|${A.withdrawAction}`));
   });
 
   it('FR-FND-06 (screen): a shortfall whose decision is now done shows the box with the Close it button', async () => {
@@ -325,9 +328,9 @@ describe('S-15 the finding page and the S-14 raise form (FR-FND-02, FR-FND-03, F
     const f = { ...(await addFinding(fx, p.id, { stage: 'pre-processing', source: 'shortfall', questionId: 'Q-PP-01', decisionVersionId: raising.id })), projectId: p.id };
     await addDecision(fx, p.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId, status: 'done' });
     const html = await renderFinding(f, 'assessor');
-    expect(html).toContain('The decision on Q-PP-01 is now Done (version 2). Close this finding with that decision?');
+    expect(html).toContain(FINDINGS_COPY.finding.closeChanged('Done'));
     expect(html).toContain(`>${FINDINGS_COPY.closeByDecision.label}</button>`);
-    expect(html).toContain('Raised automatically on');
+    expect(html).toContain(FINDINGS_COPY.finding.raisedByPlatformOn);
     expect(await renderFinding(f, 'reviewer')).not.toContain(FINDINGS_COPY.closeByDecision.label);
   });
 
@@ -351,20 +354,29 @@ describe('S-15 mitigations on the page (FR-FUP-05, FR-FND-03, UX-06, NFR-A11Y-05
     const { f, left } = await twoMitigations();
     const data = { ...(await pageData('owner', f.projectId, f.id)), ownerCannotAct: [left.mitigationId] };
     const html = renderToStaticMarkup(<FindingPageView data={data} />);
-    expect(html).toMatch(new RegExp(`data-mitigation-id="${left.mitigationId}"[\\s\\S]*?<span class="[^"]*status-label--warning[^"]*">Owner cannot act</span>: reassign`));
-    expect(html.split('Owner cannot act</span>: reassign').length - 1).toBe(1);
+    // H3: a sentence in plain ink in the mitigation's card, not a status and not tinted.
+    const line = `<p>${FINDINGS_COPY.mitigation.cannotAct}</p>`;
+    const card = html.indexOf(`data-mitigation-id="${left.mitigationId}"`);
+    expect(card).toBeGreaterThanOrEqual(0);
+    expect(html.indexOf(line, card)).toBeGreaterThan(card);
+    expect(html.split(FINDINGS_COPY.mitigation.cannotAct).length - 1).toBe(1);
   });
 
   it('UX-06 (R12-16): on S-15 the overdue line and the owner-cannot-act mark are the only warning elements, and the mitigation status labels are neutral', async () => {
     const { f, left } = await twoMitigations();
     const data = { ...(await pageData('owner', f.projectId, f.id)), ownerCannotAct: [left.mitigationId] };
     const html = renderToStaticMarkup(<FindingPageView data={data} />);
-    const warn = [...html.matchAll(/class="[^"]*status-label--warning[^"]*"[^>]*>([^<]*)</g)].map((m) => m[1]);
-    expect(warn).toHaveLength(2);
-    expect(warn.sort()).toEqual(['Overdue', 'Owner cannot act']);                   // R13-7: exactly the label words UX-06 allowed the warning tint on, never the whole phrase
-    expect(html).toMatch(/>Overdue<\/span>: was due 1 Jan 2020/); expect(html).toMatch(/>Owner cannot act<\/span>: reassign/);
-    expect(html).toMatch(/class="[^"]*\bstatus-label\b(?![^"]*--warning)[^"]*"[^>]*>Planned</);
-    expect(html).toMatch(/class="[^"]*\bstatus-label\b(?![^"]*--warning)[^"]*"[^>]*>In progress</);
+    // Spec 7.1: the overdue red is the word "Overdue" alone, in its own span, never inside a status label; nothing on the
+    // page carries the warning tint; each state and status word is still a status-label.
+    const overdue = [...html.matchAll(/<span class="finding-overdue">([^<]*)<\/span>/g)].map((m) => m[1]);
+    expect(overdue).toEqual([FINDINGS_COPY.labels.overdue]);
+    expect(html).toContain(`<span class="finding-overdue">${FINDINGS_COPY.labels.overdue}</span>${FINDINGS_COPY.labels.wasDue('1 Jan 2020')}`);
+    expect(html).not.toMatch(/status-label--warning|badge--moderate/);
+    expect(html).not.toMatch(/class="[^"]*status-label[^"]*"[^>]*>[^<]*Overdue/);
+    expect(html).toContain(`<p>${FINDINGS_COPY.mitigation.cannotAct}</p>`);
+    expect(html).toMatch(/<bdi class="status-label">Open<\/bdi>/);
+    expect(html).toMatch(/class="status-label"[^>]*>Planned</);
+    expect(html).toMatch(/class="status-label"[^>]*>In progress</);
   });
 
   it('FR-FND-04 (screen): a done mitigation with no evidence reads "Done, no artefact: <note>", and History lists every version', async () => {
@@ -457,8 +469,10 @@ describe('C4 fixes: names in bdi, the accept form after an acceptance, separator
       const data = await pageData('owner', p.id, f.id);
       expect(data.ownerCannotAct).toEqual([m.mitigationId]);
       const html = renderToStaticMarkup(<FindingPageView data={data} />);
-      expect(html.split('Owner cannot act</span>: reassign').length - 1).toBe(1);
-      expect(html).toMatch(new RegExp(`data-mitigation-id="${m.mitigationId}"[\\s\\S]*?Owner cannot act`));
+      expect(html.split(FINDINGS_COPY.mitigation.cannotAct).length - 1).toBe(1);
+      const card = html.indexOf(`data-mitigation-id="${m.mitigationId}"`);
+      expect(card).toBeGreaterThanOrEqual(0);
+      expect(html.indexOf(FINDINGS_COPY.mitigation.cannotAct, card)).toBeGreaterThan(card);
       expect(other.mitigationId).not.toBe(m.mitigationId);
     } finally { spy.mockRestore(); }
   });
