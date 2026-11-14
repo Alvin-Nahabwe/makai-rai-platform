@@ -456,6 +456,20 @@ test.describe('S-22 interactions', () => {
     await page.unrouteAll({ behavior: 'wait' });
   });
 
+  test('SC 2.4.3 NFR-INT-02 (ruling X-4): a second Enter on the busy confirm button of Remove sends no second request, and the button keeps focus', async ({ page }) => {
+    await page.goto(MEMBERS);
+    const sent = await script(page, '**/api/v1/orgs/*/members/*', [{ status: 204, delayMs: 1500 }], { method: 'DELETE' });
+    await page.getByRole('button', { name: C.members.removeName(VIEWER_NAME) }).click();
+    const confirm = page.getByRole('button', { name: C.members.removeAction, exact: true });
+    await confirm.focus();
+    await page.keyboard.press('Enter');
+    await expect(confirm).toHaveAttribute('aria-busy', 'true');
+    await expect(confirm).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(status(page, C.removed(VIEWER_NAME))).toBeVisible();
+    expect(sent).toHaveLength(1);
+  });
+
   test('UX-23 (F4): revoking the invitation whose link is on show takes the link away', async ({ page }) => {
     await page.goto(MEMBERS);
     await script(page, '**/api/v1/orgs/*/members', [{ status: 201, json: { ...INVITED, emailSent: true, acceptUrl: 'https://h/invitations/t' } }]);
@@ -536,10 +550,18 @@ test.describe('S-22 request ids on every row action', () => {
     await script(page, '**/api/v1/orgs/*/members/*', twice({ status: 204 }), { method: 'PATCH', into: sent });
     await script(page, '**/api/v1/orgs/*/members/*', twice({ status: 204 }), { method: 'DELETE', into: sent });
     await script(page, '**/api/v1/orgs/*/members/leave', twice({ status: 204 }), { into: sent });
-    for (const act of [resendVia, revokeVia, changeRoleToReviewerVia, removeVia, leaveVia]) {
+    // Each first send is lost: the status line says so in that action's own words (defect 39, answer Q1).
+    const lost: Array<[(p: Page) => Promise<void>, string]> = [
+      [resendVia, C.lostReply.resend], [revokeVia, C.lostReply.cancel], [changeRoleToReviewerVia, C.lostReply.role],
+      [removeVia, C.lostReply.remove(VIEWER_NAME)], [leaveVia, C.lostReply.leave],
+    ];
+    for (const [act, sentence] of lost) {
+      const before = sent.length;
       await act(page);
-      await expect.poll(() => sent.length).toBeGreaterThan(0);
+      await expect.poll(() => sent.length).toBe(before + 1);
+      await expect(page.locator('.members > [role="status"]'), 'the lost reply in its own words').toHaveText(sentence);
       await act(page);
+      await expect.poll(() => sent.length).toBe(before + 2);
     }
     await expect.poll(() => sent.length).toBe(10);
     for (let i = 0; i < 10; i += 2) {

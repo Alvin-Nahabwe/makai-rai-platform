@@ -167,6 +167,14 @@ describe('S-22 MembersManager', () => {
     expect(buttonsOf(box).map((x) => x.name)).toContain(COPY_LINK_COPY.resend);
   });
 
+  it('FR-MEM-03 (OR21, copy review 7): the role-change sentence takes "an" before a vowel and "a" before a consonant', () => {
+    const words = memberRoleWords();
+    expect(MEMBERS_COPY.roleChanged('Okello James', words.admin.withArticle)).toBe('Okello James is now an Admin. The change takes effect at once.');
+    expect(MEMBERS_COPY.roleChanged('Okello James', words.owner.withArticle)).toBe('Okello James is now an Owner. The change takes effect at once.');
+    expect(MEMBERS_COPY.roleChanged('Okello James', words.assessor.withArticle)).toBe('Okello James is now an Assessor. The change takes effect at once.');
+    expect(MEMBERS_COPY.roleChanged('Okello James', words.reviewer.withArticle)).toBe('Okello James is now a Reviewer. The change takes effect at once.');
+  });
+
   it('FR-MEM-03 (OR28): a member\'s role reads as the vocabulary\'s word, never as the raw value, while the select keeps the raw value', () => {
     const html = renderToStaticMarkup(<MembersManager {...ownerProps} />);
     expect(html).toMatch(/<option value="viewer" selected="">Viewer<\/option>/);

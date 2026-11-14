@@ -72,6 +72,12 @@ describe('S-30 organisation details page', () => {
     }
   });
 
+  it('S-30 (the legal plan\'s words, copy review 7): with no legal name recorded the page reads "Legal name: Not recorded"', async () => {
+    legalName = null;
+    const text = (await renderPage('viewer')).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
+    expect(text).toContain('Legal name: Not recorded');
+  });
+
   it('FR-ORG-09 (RE-3): ?before reaches the reader only as an id; anything else is a first page', async () => {
     const id = '3f6b1c1e-6a52-4d57-9f6a-0b7a3c1d2e45';
     listEvents.mockClear();

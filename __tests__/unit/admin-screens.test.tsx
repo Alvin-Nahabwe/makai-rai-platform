@@ -166,7 +166,8 @@ describe('S-25, accounts', () => {
     expect(field).toMatch(/maxlength="200"/i);
     expect(field).toMatch(/aria-describedby="only-owner-u-2"/);
     const plain = await renderS25([acct()]);
-    expect(plain).not.toContain(ADMIN_COPY.accounts.onlyOwner('Grace Nakato', 'Makerere CAI Lab').replaceAll("'", '&#x27;'));
+    expect(plain).not.toContain('admin-account__warning');   // no warning of any words on a row that needs none
+    expect(plain).not.toMatch(/only active Owner of/);
     expect(plain).not.toContain('name="requestReference"');
   });
 
@@ -204,6 +205,29 @@ describe('S-25, accounts', () => {
     expect(html).not.toMatch(/Promote/);
     expect(html).toContain('Deactivated');
     expect(html).toContain('MAK-AI administrator');
+  });
+});
+
+describe('S-25 and S-24 words no other case pins (copy review 7, answer Q6)', () => {
+  it('FR-ORG-07 (AD10, answer Q6): an account that is not the administrator reads "Team member", and no row reads "Assessor"', async () => {
+    const html = await renderS25([acct({ userId: adminIdentity.userId, name: 'Ada Admin', platformRole: 'admin' }), acct()]);
+    const typeCells = [...html.matchAll(/<td[^>]*><span[^>]*>Account type<\/span>([^<]*)<\/td>/g)].map((m) => m[1]);
+    expect(typeCells).toEqual(['MAK-AI administrator', 'Team member']);
+    expect(html).not.toMatch(/\bAssessor\b/);
+  });
+
+  it('FR-ORG-02 (AD96, answer Q6): an owner invitation line gives the link\'s expiry for a pending invitation only', () => {
+    const base = { id: 'inv-q6', email: 'q6@fixture.test', role: 'owner' as const, kind: 'first_owner' as const,
+      expiresAt: '2026-11-03T09:00:00.000Z', createdAt: '2026-10-27T09:00:00.000Z', linkShown: false };
+    const lineOf = (state: InvitationState) => {
+      const html = renderToStaticMarkup(<OwnerInvitationBox orgId="org-1" hasActiveOwner={state === 'accepted'} invitations={[{ ...base, state }]} />);
+      return /<li>([\s\S]*?)<\/li>/.exec(html)?.[1].replace(/<[^>]*>/g, '') ?? '';
+    };
+    expect(lineOf('pending')).toBe('q6@fixture.test · Pending · link expires 3 Nov 2026');
+    for (const state of ['accepted', 'expired', 'revoked'] as const) {
+      expect(lineOf(state), state).not.toContain('link expires');
+      expect(lineOf(state), state).toMatch(/^q6@fixture\.test · (Accepted|Expired|Cancelled)$/);
+    }
   });
 });
 
@@ -427,11 +451,12 @@ describe('S-24, creating and recovering an organisation', () => {
     expect(html).toMatch(/<button[^>]*type="submit"[^>]*>Create organisation and send invitation<\/button>/);
   });
 
-  it('S-24 create posts name, legalName, ownerEmail and showLink, and has no agreement field', () => {
+  it('S-24 create posts name, legalName, ownerEmail and showLink, and has no agreement field', async () => {
+    const { escapeRe } = await import('../helpers/escapeRe');
     expect(createFields({ name: '  Makerere CAI Lab ', legalName: ' Makerere University  ', ownerEmail: ' head@fixture.test ', showLink: true }))
       .toEqual({ name: 'Makerere CAI Lab', legalName: 'Makerere University', ownerEmail: 'head@fixture.test', showLink: true });
     const html = view({ draft: blank });
-    const labelFor = (label: string) => new RegExp(`<label[^>]*for="([^"]+)"[^>]*>${label}(?: <span[^>]*>[^<]*</span>)?</label>`).exec(html)?.[1];
+    const labelFor = (label: string) => new RegExp(`<label[^>]*for="([^"]+)"[^>]*>${escapeRe(label)}(?: <span[^>]*>[^<]*</span>)?</label>`).exec(html)?.[1];
     for (const label of [ADMIN_FORMS_COPY.create.nameLabel, ADMIN_FORMS_COPY.create.legalNameLabel, ADMIN_FORMS_COPY.create.ownerEmailLabel, ADMIN_FORMS_COPY.create.showLink]) expect(labelFor(label.replaceAll("'", '&#x27;')), label).toBeTruthy();
     // The legal name's hint is the field's description (aria-describedby names the hint's id).
     const legalId = labelFor("Institution&#x27;s legal name")!;
