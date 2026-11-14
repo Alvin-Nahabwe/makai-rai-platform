@@ -136,6 +136,24 @@ describe('case 4: the two dates', () => {
   });
 });
 
+describe('fix round 1 (review F1): Team size keeps the text as typed', () => {
+  it('a whole number is sent as a number; any other text is sent as typed for the server to refuse, never null or left out; blank is no value', () => {
+    expect(bodyOf(submissionOf(create({ teamSize: ' 12 ' }), false)).teamSize).toBe(12);
+    expect(bodyOf(submissionOf(create({ teamSize: '5-10' }), false)).teamSize).toBe('5-10');
+    expect(bodyOf(submissionOf(edit({ teamSize: '5-10' }), true)).teamSize).toBe('5-10');
+    expect(bodyOf(submissionOf(edit({ teamSize: '10+' }), true)).teamSize).toBe('10+');
+    expect(bodyOf(submissionOf(create(), false))).not.toHaveProperty('teamSize');
+    expect(bodyOf(submissionOf(edit(), true)).teamSize).toBeNull();
+  });
+
+  it('the box is a text box with a numeric keyboard, so the browser never empties text it cannot read as a number', () => {
+    const box = renderToStaticMarkup(<ProjectForm mode="create" />).match(/<input[^>]*id="teamSize"[^>]*>/)?.[0] ?? '';
+    expect(box).toContain('type="text"');
+    expect(box).toMatch(/inputMode="numeric"/i);
+    expect(box).not.toMatch(/\smin=/);
+  });
+});
+
 describe('cases 5 and 6, and the actions', () => {
   it('case 5: the heading is "New project", in sentence case', () => {
     expect(renderToStaticMarkup(<ProjectForm mode="create" />)).toMatch(/<h1[^>]*>New project<\/h1>/);

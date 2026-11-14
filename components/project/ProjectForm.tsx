@@ -84,7 +84,9 @@ export function submissionOf(form: FormState, editing: boolean): Submission {
     const v = form[f].trim();
     if (v === '') { if (editing) body[f] = null; continue; }
     if (f === 'processesPersonalData') body[f] = v === 'true';
-    else if (f === 'teamSize') body[f] = Number(v);
+    // A whole number goes as a number; any other text goes as typed, so the server refuses it with its own message beside
+    // the field. Never Number() of other text: NaN is written as null and would clear the field silently (review F1).
+    else if (f === 'teamSize') body[f] = /^\d+$/.test(v) ? Number(v) : v;
     else body[f] = v;
   }
   const other = form.aiSystemTypeOther.trim();
@@ -321,7 +323,7 @@ export default function NewProjectForm(p: Mode) {
             <div className="form-row">
               {select('developmentStage', L.developmentStage, LIFECYCLE_STAGE_WORDS)}
               <Field id="teamSize" label={L.teamSize} error={fieldErrors.teamSize}>
-                <input id="teamSize" className={inputClass('teamSize')} {...fieldA('teamSize')} type="number" min="0" value={form.teamSize} onChange={(e) => updateField('teamSize', e.target.value)} />
+                <input id="teamSize" className={inputClass('teamSize')} {...fieldA('teamSize')} type="text" inputMode="numeric" value={form.teamSize} onChange={(e) => updateField('teamSize', e.target.value)} />
               </Field>
             </div>
 

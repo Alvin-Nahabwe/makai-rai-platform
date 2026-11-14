@@ -493,6 +493,24 @@ test('FR-PRJ-01 (B row 98): an empty name and an incomplete date are refused bef
   expect(posts).toHaveLength(0);
 });
 
+test('FR-PRJ-01 (review F1): Team size text that is not a whole number is refused by the server beside the field, not dropped', async ({ browser }) => {
+  const page = await signedIn(browser, fx.members.assessor);
+  await page.goto(path('/projects/new'));
+  await page.getByLabel('Project name').fill(`Team size range ${RUN}`);
+  await page.getByRole('button', { name: PROJECT_FORM_COPY.showDetails }).click();
+  await page.getByLabel(PROJECT_FORM_COPY.labels.teamSize).fill('5-10');
+  await page.getByRole('button', { name: PROJECT_FORM_COPY.hideDetails }).click();   // closed again: the refusal opens it
+  await page.getByRole('button', { name: 'Create project' }).click();
+  await expect(page.getByRole('heading', { name: PROJECT_WRITE_COPY.summary(1) })).toBeFocused();
+  await expect(page.locator('#project-details')).toBeVisible();
+  await expect(page.locator('#teamSize-error')).toHaveText(PROJECT_FIELD_MESSAGES.teamSize);
+  await expect(page.getByLabel(PROJECT_FORM_COPY.labels.teamSize)).toHaveValue('5-10');
+  expect(page.url()).toMatch(/\/projects\/new$/);
+  await page.getByLabel(PROJECT_FORM_COPY.labels.teamSize).fill('12');
+  await page.getByRole('button', { name: 'Create project' }).click();
+  await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
+});
+
 test('defect 22: the toggle says Show more details while closed and Hide more details while open, and aria-expanded follows', async ({ browser }) => {
   const page = await signedIn(browser, fx.members.assessor);
   await page.goto(path('/projects/new'));
