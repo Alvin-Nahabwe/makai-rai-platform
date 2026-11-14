@@ -22,7 +22,8 @@ export const PROJECT_WRITE_COPY = Object.freeze({
     archiving: 'Archiving...',
     slow: 'Still archiving. The connection is slow.',
     archived: 'Archived. Nothing in this project can be changed until it is unarchived.',
-    lost: 'Not archived. The connection was lost. Select Retry.',
+    /** No reply in time, or no usable reply: the outcome is not known. Retry keeps the request id, which the route answers again. */
+    lost: 'Not archived yet. We did not get a reply in time, so it may already be archived. Select Retry. It will not archive twice.',
     failed: 'Not archived. Something went wrong. Please try again.',
     retry: 'Retry',
   }),
@@ -32,7 +33,8 @@ export const PROJECT_WRITE_COPY = Object.freeze({
     /** The button's accessible name, which names the project. */
     named: (project: string) => `Unarchive ${project}`,
     slow: 'Still unarchiving. The connection is slow.',
-    lost: 'Not unarchived. The connection was lost. Select Retry.',
+    /** No reply in time, or no usable reply: the outcome is not known. Retry keeps the request id, which the route answers again. */
+    lost: 'Not unarchived yet. We did not get a reply in time, so it may already be unarchived. Select Retry. It will not unarchive twice.',
     failed: 'Not unarchived. Something went wrong. Please try again.',
     retry: 'Retry',
   }),

@@ -2,6 +2,9 @@
  * Every word of the project form, S-09 in create and edit mode (audit B rows 90 to 137, as plan 1A Task 17 rules them).
  * Its one client importer is components/project/ProjectForm.tsx (ruling X-2: these words ship with the form only).
  */
+const CREATE = 'Create project';
+const SAVE = 'Save changes';
+
 export const PROJECT_FORM_COPY = Object.freeze({
   /** The same address in both modes; "Back to {project}" needs a new target and is not built in plan 1A. */
   back: 'Back to all projects',
@@ -55,11 +58,20 @@ export const PROJECT_FORM_COPY = Object.freeze({
   moreDetails: 'More details',
   optional: 'Optional. You can add these later.',
   cancel: 'Cancel',
-  create: 'Create project',
-  save: 'Save changes',
+  create: CREATE,
+  save: SAVE,
   creating: 'Creating...',
   saving: 'Saving...',
   /** The form's own check before it sends anything. */
   nameRequired: 'Enter a project name.',
   slow: 'Still saving. The connection is slow.',
+  /**
+   * No reply in time, or no usable reply: the outcome is not known (CONSOLIDATED 8 #7, C3 rule 3; replaces B#373 here).
+   * "It will not ... twice" is true because the same form sent again keeps its request id (lib/client/retrySafeWrite.ts
+   * requestIdFor) and the route answers a repeated id with the first result (lib/data/idempotency.ts receiptWrite).
+   */
+  noReply: Object.freeze({
+    create: `Not created yet. We did not get a reply in time, so the project may already be created. Select ${CREATE} again. It will not be created twice.`,
+    save: `Not saved yet. We did not get a reply in time, so your changes may already be saved. Select ${SAVE} again. It will not be saved twice.`,
+  }),
 });

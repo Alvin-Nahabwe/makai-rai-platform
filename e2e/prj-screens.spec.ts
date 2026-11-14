@@ -179,14 +179,22 @@ test('UX-29 FR-PRJ-03: archiving shows "Archiving..." then the archived line; a 
   expect(ids[1]).toBe(ids[0]);
 });
 
-/** The element that has focus is inside the archive control (its container or a control in it), not the page body. */
-const focusInsideArchiveControl = (page: Page) => page.evaluate(() => document.activeElement?.closest('.archive-control') != null);
+/**
+ * After an answer the archive control's container has focus (not the page body), and keeps it once the refresh that
+ * follows has rendered the archived page: polled, so a focus moved after the commit is waited for, not sampled once.
+ */
+async function expectFocusOnArchiveControl(page: Page): Promise<void> {
+  await expect(page.locator('.archive-control')).toBeFocused();
+  await expect(page.getByText(PROJECT_COPY.archivedBanner)).toBeVisible();
+  await expect(page.locator('.archive-control')).toBeFocused();
+}
 
 test('L5-4 D-398: Archive opens on Cancel; while the request is held the confirm button keeps focus and is aria-busy; after success focus is inside the control', async ({ browser }) => {
   const name = `PRJ focus held ${RUN}`;
   const project = await addProject(fx, { name });
   const page = await signedIn(browser, fx.members.owner);
   await page.goto(path(`/projects/${project.id}`));
+  const ids = requestIdsOf(page, /\/archive$/);
   let release = () => {};
   const held = new Promise<void>((ok) => { release = ok; });
   await page.route('**/archive', async (r) => { await held; await r.continue(); });
@@ -200,9 +208,31 @@ test('L5-4 D-398: Archive opens on Cancel; while the request is held the confirm
   await expect(page.getByText(PROJECT_WRITE_COPY.archive.archiving)).toBeVisible();
   await expect(confirm).toBeFocused();
   await expect(confirm).toHaveAttribute('aria-busy', 'true');
+  await page.keyboard.press('Enter');   // a second press on the busy confirm button sends nothing (register D-386)
   release();
   await expect(page.getByText(PROJECT_WRITE_COPY.archive.archived)).toBeVisible();
-  expect(await focusInsideArchiveControl(page)).toBe(true);
+  await expectFocusOnArchiveControl(page);
+  expect(ids).toHaveLength(1);
+});
+
+test('L5-4 L5-15: while the archive request is held, Cancel does nothing: the confirmation stays open and its button busy', async ({ browser }) => {
+  const name = `PRJ cancel held ${RUN}`;
+  const project = await addProject(fx, { name });
+  const page = await signedIn(browser, fx.members.owner);
+  await page.goto(path(`/projects/${project.id}`));
+  let release = () => {};
+  const held = new Promise<void>((ok) => { release = ok; });
+  await page.route('**/archive', async (r) => { await held; await r.continue(); });
+  await page.getByRole('button', { name: PROJECT_WRITE_COPY.archive.trigger }).click();
+  const confirmation = page.getByRole('group', { name: PROJECT_WRITE_COPY.archive.objectName(name) });
+  const confirm = confirmation.getByRole('button', { name: PROJECT_WRITE_COPY.archive.action });
+  await confirm.click();
+  await expect(confirm).toHaveAttribute('aria-busy', 'true');
+  await confirmation.getByRole('button', { name: UI_COPY.confirm.cancel }).click();
+  await expect(confirmation).toBeVisible();
+  await expect(confirm).toHaveAttribute('aria-busy', 'true');
+  release();
+  await expect(page.getByText(PROJECT_WRITE_COPY.archive.archived)).toBeVisible();
 });
 
 test('L5-4 D-398: after a failed archive focus is on Retry, and stays on Retry, aria-busy, while its own request is held', async ({ browser }) => {
@@ -226,7 +256,7 @@ test('L5-4 D-398: after a failed archive focus is on Retry, and stays on Retry, 
   await expect(retry).toHaveAttribute('aria-busy', 'true');
   release();
   await expect(page.getByText(PROJECT_WRITE_COPY.archive.archived)).toBeVisible();
-  expect(await focusInsideArchiveControl(page)).toBe(true);
+  await expectFocusOnArchiveControl(page);
 });
 
 test('L5-4 D-398: after a failed unarchive focus is on Retry, and stays on Retry, aria-busy, while its own request is held', async ({ browser }) => {
@@ -249,6 +279,66 @@ test('L5-4 D-398: after a failed unarchive focus is on Retry, and stays on Retry
   await expect(retry).toHaveAttribute('aria-busy', 'true');
   release();
   await expect(page.getByRole('button', { name: PROJECT_WRITE_COPY.unarchive.named(name) })).toHaveCount(0);
+  // ruling L5-13: the success after a Retry leaves focus on the Active heading, where the project now is, not on the body
+  await expect(page.locator('section[aria-labelledby="projects-active"] li', { hasText: name })).toBeVisible();
+  await expect(page.locator('#projects-active')).toBeFocused();
+});
+
+test('L5-4 L5-13: after a successful unarchive the row is under Active and focus is on the Active heading, not the page body; the pressed button shows the kit\'s spinner while its request is held', async ({ browser }) => {
+  const name = `PRJ focus unarchived ${RUN}`;
+  await addProject(fx, { name, archived: true });
+  const page = await signedIn(browser, fx.members.owner);
+  await page.goto(path('/projects'));
+  let release = () => {};
+  const held = new Promise<void>((ok) => { release = ok; });
+  await page.route('**/unarchive', async (r) => { await held; await r.continue(); });
+  const button = page.getByRole('button', { name: PROJECT_WRITE_COPY.unarchive.named(name) });
+  await button.focus();
+  await page.keyboard.press('Enter');
+  await expect(button).toHaveAttribute('aria-busy', 'true');
+  await expect(button.locator('.ui-button__spinner[aria-hidden="true"]')).toHaveCount(1);
+  await expect(button).toBeFocused();
+  release();
+  await expect(page.locator('section[aria-labelledby="projects-active"] li', { hasText: name })).toBeVisible();
+  await expect(page.locator('#projects-active')).toBeFocused();
+  expect(await page.evaluate(() => document.activeElement === document.body)).toBe(false);
+});
+
+test('UX-27 L5-14: after a successful create the form stays busy until the new page has loaded, and a second Enter sends nothing', async ({ browser }) => {
+  const page = await signedIn(browser, fx.members.assessor);
+  await page.goto(path('/projects/new'));
+  const ids = requestIdsOf(page, /\/api\/v1\/orgs\/[^/]+\/projects$/);
+  let release = () => {};
+  const held = new Promise<void>((ok) => { release = ok; });
+  // hold the navigation to the new project's page (its server component payload), not the create request itself
+  await page.route((url) => /\/orgs\/[^/]+\/projects\/[0-9a-f-]{36}$/.test(url.pathname), async (r) => { await held; await r.continue(); });
+  await page.getByLabel('Project name').fill(`Held navigation ${RUN}`);
+  await page.getByRole('button', { name: PROJECT_FORM_COPY.create }).click();
+  await expect.poll(() => ids.length).toBe(1);
+  await page.waitForTimeout(500);   // the create has answered; the navigation is held
+  await page.getByLabel('Project name').press('Enter');
+  await page.locator('form button[type="submit"]').click();
+  await page.waitForTimeout(500);
+  expect(ids).toHaveLength(1);
+  await expect(page.getByRole('button', { name: PROJECT_FORM_COPY.creating })).toHaveAttribute('aria-busy', 'true');
+  release();
+  await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
+  expect(ids).toHaveLength(1);
+});
+
+test('NFR-A11Y-05 (motion): the project form\'s details do not animate on page load, and do after the person opens them', async ({ browser }) => {
+  const project = await addProject(fx, { name: `PRJ motion ${RUN}` });
+  const page = await signedIn(browser, fx.members.owner);
+  await page.goto(path(`/projects/${project.id}/edit`));
+  const details = page.locator('#project-details');
+  await expect(details).toBeVisible();
+  expect(await details.evaluate((el) => getComputedStyle(el).animationName)).toBe('none');
+  const toggle = page.getByRole('button', { name: PROJECT_FORM_COPY.moreDetails });
+  await toggle.click();
+  await expect(details).toBeHidden();
+  await toggle.click();
+  await expect(details).toBeVisible();
+  expect(await details.evaluate((el) => getComputedStyle(el).animationName)).not.toBe('none');
 });
 
 test('UX-27 NFR-INT-02: S-09 keeps its request id when the same form is sent again after a lost connection, and takes a new one once a field is edited', async ({ browser }) => {
@@ -259,9 +349,9 @@ test('UX-27 NFR-INT-02: S-09 keeps its request id when the same form is sent aga
   await page.route('**/api/v1/orgs/*/projects', (r) => (r.request().method() === 'POST' && posts++ < 2 ? r.abort('internetdisconnected') : r.continue()));
   await page.getByLabel('Project name').fill('Retry probe');
   await page.getByRole('button', { name: 'Create project' }).click();
-  await expect(page.getByText('Something went wrong. Please try again.')).toBeVisible();
+  await expect(page.getByText(PROJECT_FORM_COPY.noReply.create)).toBeVisible();
   await page.getByRole('button', { name: 'Create project' }).click();
-  await expect(page.getByText('Something went wrong. Please try again.')).toBeVisible();
+  await expect(page.getByText(PROJECT_FORM_COPY.noReply.create)).toBeVisible();
   expect(ids).toHaveLength(2);
   expect(ids[1]).toBe(ids[0]);
   await page.getByLabel('Project name').fill('Retry probe, edited');
@@ -273,7 +363,7 @@ test('UX-27 NFR-INT-02: S-09 keeps its request id when the same form is sent aga
 
 test('UX-27 (M-02): create, archive and unarchive each say "Still saving. The connection is slow." when the server is held past 10 seconds', async ({ browser }) => {
   test.setTimeout(150_000);
-  const SLOW = PROJECT_FORM_COPY.slow;
+  const SLOW = PROJECT_FORM_COPY.slow;   // the form's line; Archive and Unarchive say their own (archive.slow, unarchive.slow)
   const hold = async (route: import('@playwright/test').Route) => { await new Promise((ok) => setTimeout(ok, 11_500)); await route.continue(); };
   const toArchive = await addProject(fx, { name: `PRJ slow archive ${RUN}` });
   const shelvedSlow = await addProject(fx, { name: `PRJ slow unarchive ${RUN}`, archived: true });
@@ -321,6 +411,7 @@ test('SPEC-2 F8: a 422 on a field in the closed details opens them and shows the
   await owner.getByRole('button', { name: 'Archive project' }).last().click();
   await expect(owner.getByRole('status').filter({ hasText: PROJECT_WRITE_COPY.forbidden })).toBeVisible();
   await expect(owner.getByRole('button', { name: 'Archive project' })).toBeDisabled();
+  await expect(owner.locator('.archive-control')).toBeFocused();   // ruling L5-4: the stop path leaves focus on the control's container
 });
 
 test('FR-PRJ-01: an assessor creates a project with every descriptive field and edits one; S-10 shows both', async ({ browser }) => {
