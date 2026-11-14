@@ -47,8 +47,8 @@ describe('review text', () => {
     expect(unsavedDraftsLine(1)).toBe(REVIEW_COPY.confirm.unsavedOne);
     const lines = previewLines(PREVIEW, 2, LABELS);
     expect(lines[0]).toBe(REVIEW_COPY.sealPage.statement(2));
-    expect(lines).toContain('Decisions by status: Done 8 . Partly 3 . Not yet 1 . Not applicable 2');
-    expect(lines).toContain('Not applicable and Not yet by reason: No personal data is involved 2 . Planned for later 1');
+    expect(lines).toContain('Decisions by status: Done 8\u00a0· Partly 3\u00a0· Not yet 1\u00a0· Not applicable 2');
+    expect(lines).toContain('Not applicable and Not yet by reason: No personal data is involved 2\u00a0· Planned for later 1');
     expect(lines).toContain(REVIEW_COPY.sealPage.gateAnswer('Yes'));
     expect(lines).toContain(REVIEW_COPY.sealPage.doneNoEvidence(2));
     expect(lines).toContain('Open findings: 3');

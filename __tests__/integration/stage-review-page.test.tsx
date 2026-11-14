@@ -105,3 +105,16 @@ describe('S-16, S-17 and the open form (workshop walk S5): a way back, no empty 
     }
   });
 });
+
+describe('S-16 separators (workshop walk S12-a)', () => {
+  it('the opened-by line and each seal line join their parts with a no-break space, a middle dot and a space, so no wrapped line starts with the dot', async () => {
+    const project = (await addProject(fxA, { name: 'Walk S12 project' })).id;
+    const review = (await addStageReview(fxA, project, { stage: 'pre-processing' })).id;
+    await sealFixture(fxA, review, { projectId: project });
+    sessionFor(fxA.members.viewer.userId);
+    const html = renderToStaticMarkup(await StageReviewPage({ params: Promise.resolve({ slug: fxA.org.slug, id: project, reviewId: review }) })).replace(/<!-- -->/g, '');
+    expect(html).toMatch(/Stage: Pre-processing · (Prepared for: [^<]* · )?Opened by /);
+    expect(html).toMatch(/Seal 1 · <time[^>]*>[^<]*<\/time> · sealed by /);
+    expect(html).not.toMatch(/ \. /);
+  });
+});

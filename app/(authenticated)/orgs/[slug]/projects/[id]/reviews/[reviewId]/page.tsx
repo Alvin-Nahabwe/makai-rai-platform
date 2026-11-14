@@ -83,7 +83,7 @@ export default async function StageReviewPage({ params }: PageProps) {
     review.preparedForErased !== null ? r.noteErased(formatDay(review.preparedForErased.erasedOn))
       : review.preparedFor !== null ? r.note(review.preparedFor) : null,
     r.openedBy(review.openedBy.name),
-  ].filter((x): x is string => x !== null).join(' . ');
+  ].filter((x): x is string => x !== null).join('\u00a0· ');
 
   return (
     <div className="page-content">

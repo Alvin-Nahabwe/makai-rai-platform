@@ -163,7 +163,7 @@ export const DOCUMENTS_COPY = Object.freeze({
     fromRecord: (r: { fields: number; questions: number; notRecorded: number }): string => {
       const fields = (n: number) => `${n} ${n === 1 ? 'field' : 'fields'}`;
       const from = r.questions === 0 ? fields(r.fields) : `${fields(r.fields)} from ${r.questions} ${r.questions === 1 ? 'question' : 'questions'}`;
-      return `${from} . ${fields(r.notRecorded)} will read "${NOT_RECORDED}"`;
+      return `${from}\u00a0· ${fields(r.notRecorded)} will read "${NOT_RECORDED}"`;
     },
     previewButton: 'Preview document',
     retry: 'Retry',
@@ -201,13 +201,13 @@ export const DOCUMENTS_COPY = Object.freeze({
   }),
   list: Object.freeze({
     empty: 'No documents issued from this review yet.',
-    line: (title: string, sealNumber: number, day: string, by: string, short: string): string => `${title} . seal ${sealNumber} . ${day} . by ${by} . Fingerprint ${short}`,
+    line: (title: string, sealNumber: number, day: string, by: string, short: string): string => `${title}\u00a0· seal ${sealNumber}\u00a0· ${day}\u00a0· by ${by}\u00a0· Fingerprint ${short}`,
     olderSeal: 'Made from an older seal. A newer seal exists.',
     withdrawn: (day: string, reason: string): string => `Withdrawn on ${day}: ${reason}`,
     erased: (day: string): string => `File erased on ${day}`,
     issuedWord: 'Issued ',
     reviewLine: (title: string, sealNumber: number, day: string, short: string, withdrawn: boolean): string =>
-      `${title} . from seal ${sealNumber} . issued ${day} . Fingerprint ${short} . ${withdrawn ? 'Withdrawn' : 'Issued'}`,
+      `${title}\u00a0· from seal ${sealNumber}\u00a0· issued ${day}\u00a0· Fingerprint ${short}\u00a0· ${withdrawn ? 'Withdrawn' : 'Issued'}`,
   }),
   actions: Object.freeze({
     copy: 'Copy as text',

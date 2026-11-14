@@ -167,7 +167,7 @@ describe('S-18', () => {
       expect([role, s18.includes('File erased on ')]).toEqual([role, true]);
       expect([role, s18.includes('/pdf')]).toEqual([role, false]);
       const s16 = renderToStaticMarkup(await StageReviewPage({ params: Promise.resolve({ slug: fxA.org.slug, id: project, reviewId: review }) }));
-      expect([role, s16.includes('Data card . from seal 1')]).toEqual([role, true]);
+      expect([role, s16.includes('Data card\u00a0· from seal 1')]).toEqual([role, true]);
     }
   });
 
