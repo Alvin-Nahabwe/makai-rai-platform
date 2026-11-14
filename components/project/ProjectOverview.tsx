@@ -9,6 +9,7 @@ import { ArchiveProjectControl } from '@/components/project/ArchiveProjectContro
 import { StageFollowUp } from '@/components/followup/StageFollowUp';
 import { StageReviewsSummary } from '@/components/review/StageReviewsSummary';
 import type { ProjectOverviewData } from '@/lib/data/projects';
+import type { ContinueTarget } from '@/lib/home/types';
 import { PROJECT_COPY } from '@/lib/project/copy';
 
 export type { ProjectOverviewData } from '@/lib/data/projects';
@@ -21,9 +22,15 @@ const C = PROJECT_COPY.overview;
  * follow-up under what is still open and its stage reviews after what is recorded. A synchronous view of loaded data (the page file loads it), so it renders the same on the server and in
  * a test.
  */
-export function ProjectOverview({ data, children }: { data: ProjectOverviewData; children?: ReactNode }): ReactElement {
+export function ProjectOverview({ data, continueTo, children }: {
+  data: ProjectOverviewData;
+  /** The page's one primary action (plan 1C C11), from `loadContinueTarget`; absent or `null` renders none. */
+  continueTo?: ContinueTarget | null;
+  children?: ReactNode;
+}): ReactElement {
   const { orgSlug, project, can } = data;
   const base = `/orgs/${orgSlug}/projects/${project.id}`;
+  const primary = continueTo ?? null;
   return (
     <div className="page-content">
       <PageHeader
@@ -37,9 +44,15 @@ export function ProjectOverview({ data, children }: { data: ProjectOverviewData;
         )}
         // No action at all (a viewer): no actions wrapper. Otherwise one fragment whose slots keep their places, so
         // ArchiveProjectControl stays mounted across the refresh that follows an archive (`can.archiveControl` follows the
-        // role alone, lib/projects/can.ts), with its status line. Do not move the control out of this slot.
-        actions={can.update || can.export || can.archiveControl ? (
+        // role alone, lib/projects/can.ts), with its status line. Do not move the control out of this slot. The primary
+        // action comes first, Archive stays last, never next to it (spec 9.2).
+        actions={primary !== null || can.update || can.export || can.archiveControl ? (
           <>
+            {primary !== null ? (
+              <ButtonLink variant="primary" href={primary.questionId === null ? `${base}/stages/${primary.stage}` : `${base}/stages/${primary.stage}/questions/${primary.questionId}`}>
+                {primary.label === 'continue' ? PROJECT_COPY.continue : PROJECT_COPY.start}
+              </ButtonLink>
+            ) : null}
             {can.update ? <ButtonLink variant="secondary" href={`${base}/edit`}>{C.editProject}</ButtonLink> : null}
             {can.export ? <ButtonLink variant="secondary" href={`${base}/export`}>{C.downloadRecords}</ButtonLink> : null}
             {can.archiveControl ? (
