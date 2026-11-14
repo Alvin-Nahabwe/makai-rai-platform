@@ -19,6 +19,12 @@ export const PROJECT_COPY = Object.freeze({
     noArchived: 'No archived projects.',
     showMore: 'Show more',
   }),
+  /** The words of a project's descriptive line (S-08, S-10, S-32; audit B rows 364 to 369). */
+  descriptive: Object.freeze({
+    other: 'Other',
+    usesPersonalData: 'Uses personal data',
+    noPersonalData: 'No personal data',
+  }),
   /** S-10's header, jump links and closing lines. */
   overview: Object.freeze({
     anyOrder: 'You can work on the stages in any order.',

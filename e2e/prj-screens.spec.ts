@@ -12,6 +12,10 @@ import { failOnDialog } from './helpers/dialogs';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { expectCountsAsWholeNumbersPerStage, expectStatusMarksInk } from './helpers/noScore';
 import { PROJECT_COPY } from '../lib/project/copy';
+import { PROJECT_FORM_COPY } from '../lib/project/form/copy';
+import { PROJECT_WRITE_COPY } from '../lib/project/write/copy';
+import { PROJECT_FIELD_MESSAGES } from '../lib/projects/copy';
+import { LIFECYCLE_STAGE_WORDS } from '../lib/project/labels';
 
 /**
  * The project screens in a browser: S-08 (dashboard), S-09 (new and edit project), S-10 (stage view) and S-32 (all
@@ -228,13 +232,14 @@ test('SPEC-2 F8: a 422 on a field in the closed details opens them and shows the
   const owner = await signedIn(browser, fx.members.owner);
   await owner.goto(path('/projects/new'));
   await owner.getByLabel('Project name').fill(`Too long sector ${RUN}`);
-  await owner.getByRole('button', { name: 'Show additional details' }).click();
+  await owner.getByRole('button', { name: PROJECT_FORM_COPY.moreDetails }).click();
   await owner.getByLabel('Sector').fill('s'.repeat(201));
-  await owner.getByRole('button', { name: 'Show additional details' }).click();   // close the section again
+  await owner.getByRole('button', { name: PROJECT_FORM_COPY.moreDetails }).click();   // close the section again
   await owner.getByRole('button', { name: 'Create project' }).click();
-  await expect(owner.getByRole('alert').filter({ hasText: 'There is a problem with this project. What you typed is kept.' })).toBeVisible();
+  // the kit's error summary is not a live region: its title takes focus after the refused submit, which is how a reader hears it
+  await expect(owner.getByRole('heading', { name: PROJECT_WRITE_COPY.summary(1) })).toBeFocused();
   await expect(owner.getByLabel('Sector')).toBeVisible();   // the section was opened for the person
-  await expect(owner.locator('#deploymentSector-error')).toContainText('at most 200 characters');
+  await expect(owner.locator('#deploymentSector-error')).toHaveText(PROJECT_FIELD_MESSAGES.textMax(200));
   await expect(owner.getByLabel('Sector')).toHaveAttribute('aria-describedby', 'deploymentSector-error');
 
   await owner.goto(path(`/projects/${emptyProject.id}`));
@@ -250,24 +255,24 @@ test('FR-PRJ-01: an assessor creates a project with every descriptive field and 
   await page.goto(path('/projects/new'));
   await page.getByLabel('Project name').fill(`Described ${RUN}`);
   await page.getByLabel('AI system type').selectOption('classification');
-  await page.getByRole('button', { name: 'Show additional details' }).click();
+  await page.getByRole('button', { name: PROJECT_FORM_COPY.moreDetails }).click();
   await page.getByLabel('Sector').fill('health');
   await page.getByLabel('Dataset type').fill('tabular');
   await page.getByLabel('Dataset size').selectOption('medium_1k_100k');
-  await page.getByLabel('Personal data').selectOption('true');
+  await page.getByLabel(PROJECT_FORM_COPY.labels.processesPersonalData).selectOption('true');
   await page.getByLabel('Funding source').fill('GIZ');
   await page.getByLabel('Regulatory context').fill('A national data-protection act');
-  await page.getByLabel('Lifecycle stage').selectOption('development');
+  await page.getByLabel(PROJECT_FORM_COPY.labels.developmentStage).selectOption('development');
   await page.getByLabel('Start date').fill('2026-09-01');
   await page.getByLabel('End date').fill('2027-03-31');
   await page.getByRole('button', { name: 'Create project' }).click();
   await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
-  await expect(page.getByText('Classification, health, personal data: yes, lifecycle stage: Development')).toBeVisible();
+  await expect(page.getByText(['Classification', 'health', PROJECT_COPY.descriptive.usesPersonalData, LIFECYCLE_STAGE_WORDS.development].join(', '))).toBeVisible();
   await page.getByRole('link', { name: 'Edit project' }).click();
-  await page.getByLabel('Lifecycle stage').selectOption('testing');
+  await page.getByLabel(PROJECT_FORM_COPY.labels.developmentStage).selectOption('testing');
   await page.getByRole('button', { name: 'Save changes' }).click();
   await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
-  await expect(page.getByText('Classification, health, personal data: yes, lifecycle stage: Testing')).toBeVisible();
+  await expect(page.getByText(['Classification', 'health', PROJECT_COPY.descriptive.usesPersonalData, LIFECYCLE_STAGE_WORDS.testing].join(', '))).toBeVisible();
 });
 
 test('UX-27 NFR-INT-02: S-32 sends Unarchive with a request id and keeps it across a Retry', async ({ browser }) => {

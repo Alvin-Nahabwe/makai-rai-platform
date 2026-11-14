@@ -11,5 +11,14 @@ export const DATASET_SIZE_WORDS: Readonly<Record<'small_lt1k' | 'medium_1k_100k'
   unknown: 'Unknown',
 };
 
+/**
+ * The words of the development status choices (the `DevelopmentStage` enum, in its order), for the form and for the
+ * descriptive line. Here rather than in lib/projects/metadataValues.ts, so the client form does not ship the server's
+ * field messages with them.
+ */
+export const LIFECYCLE_STAGE_WORDS: Readonly<Record<string, string>> = {
+  concept: 'Concept', development: 'Development', testing: 'Testing', deployed: 'Deployed', retired: 'Retired',
+};
+
 /** Whether the project holds personal data, keyed by the boolean written as text: `PERSONAL_DATA_WORDS[`${flag}`]`. */
 export const PERSONAL_DATA_WORDS: Readonly<Record<'true' | 'false', string>> = { true: 'Yes', false: 'No' };

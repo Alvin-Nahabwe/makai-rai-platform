@@ -10,6 +10,8 @@ import { descriptiveLine } from '@/lib/projects/metadataValues';
 import { DATASET_SIZE_WORDS, PERSONAL_DATA_WORDS } from '@/lib/project/labels';
 import { HOME_COPY } from '@/lib/home/copy';
 import { PROJECT_COPY } from '@/lib/project/copy';
+import { PROJECT_FORM_COPY } from '@/lib/project/form/copy';
+import { PROJECT_FIELD_MESSAGES } from '@/lib/projects/copy';
 import type { DashboardData, ProjectOverviewData } from '@/lib/data/projects';
 
 /**
@@ -151,7 +153,8 @@ describe('S-10 (Task 5)', () => {
 
   it('FR-PRJ-01: the descriptive line is built from the fields and shows no score', () => {
     expect(descriptiveLine({ aiSystemType: 'classification', deploymentSector: 'health', processesPersonalData: true, developmentStage: 'testing' }))
-      .toBe('Classification, health, personal data: yes, lifecycle stage: Testing');
+      .toBe(['Classification', 'health', PROJECT_COPY.descriptive.usesPersonalData, 'Testing'].join(', '));
+    expect(descriptiveLine({ processesPersonalData: false })).toBe(PROJECT_COPY.descriptive.noPersonalData);
     expect(descriptiveLine(null)).toBe('');
   });
 });
@@ -245,8 +248,8 @@ describe('S-09 and S-32 (Task 7)', () => {
 
   it('FR-PRJ-01: the form has a labelled control for each descriptive field', () => {
     const html = renderToStaticMarkup(<ProjectForm mode="create" />);
-    for (const label of ['AI system type', 'Sector', 'Dataset type', 'Dataset size', 'Personal data', 'Funding source',
-                         'Regulatory context', 'Lifecycle stage', 'Start date', 'End date'])
+    for (const label of ['AI system type', 'Sector', 'Dataset type', 'Dataset size', PROJECT_FORM_COPY.labels.processesPersonalData, 'Funding source',
+                         'Regulatory context', PROJECT_FORM_COPY.labels.developmentStage, 'Start date', 'End date'])
       expect(html).toMatch(new RegExp(`<label[^>]*for="[^"]+"[^>]*>${label}`));
   });
 
@@ -265,6 +268,22 @@ describe('S-09 and S-32 (Task 7)', () => {
     const edit = renderToStaticMarkup(<ProjectForm mode="edit" projectId="p1" initial={{ name: 'Existing', description: 'd', datasetSize: 'small_lt1k', processesPersonalData: false }} />);
     expect(edit).toContain('>Save changes<');
     expect(edit).toContain('value="Existing"');
+  });
+
+  it('FR-PRJ-01 (X-2): the API answers a bad descriptive value with the ruled field message, and the client form ships none of them', async () => {
+    const { validateProjectMetadataValues } = await import('@/lib/projects/metadataValues');
+    const M = PROJECT_FIELD_MESSAGES;
+    expect(validateProjectMetadataValues({ developmentStage: 'beta' })).toEqual({ field: 'developmentStage', message: M.developmentStage });
+    expect(validateProjectMetadataValues({ datasetSize: 'huge' })).toEqual({ field: 'datasetSize', message: M.datasetSize });
+    expect(validateProjectMetadataValues({ processesPersonalData: 'yes' })).toEqual({ field: 'processesPersonalData', message: M.processesPersonalData });
+    expect(validateProjectMetadataValues({ teamSize: -1 })).toEqual({ field: 'teamSize', message: M.teamSize });
+    expect(validateProjectMetadataValues({ projectStart: '2026-02-30' })).toEqual({ field: 'projectStart', message: M.date });
+    expect(validateProjectMetadataValues({ deploymentSector: 's'.repeat(201) })).toEqual({ field: 'deploymentSector', message: M.textMax(200) });
+    expect(validateProjectMetadataValues({ datasetDescription: 'd'.repeat(2001) })).toEqual({ field: 'datasetDescription', message: M.textMax(2000) });
+    expect(validateProjectMetadataValues({ developmentStage: 'testing', teamSize: 0, projectEnd: '2027-03-31' })).toBeNull();
+    const source = readFileSync('components/project/ProjectForm.tsx', 'utf8');
+    expect(source).not.toMatch(/lib\/projects\/metadataValues|lib\/projects\/copy/);
+    expect(source).toMatch(/\bLIFECYCLE_STAGE_WORDS\b[^;]*from '@\/lib\/project\/labels'/);
   });
 });
 

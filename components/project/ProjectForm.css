@@ -1,0 +1,43 @@
+/* S-09, the project form. .form-container, .form-section-toggle and .form-details moved from app/globals.css (plan 1A
+   Task 17), each legacy alias written as the role it resolved to, so computed values do not change. */
+.form-container {
+  background: var(--color-surface);
+  border-radius: var(--radius-surface);
+  padding: var(--space-8);
+  box-shadow: var(--shadow-surface);
+  max-width: 720px;
+}
+
+.form-section-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-6) 0;
+  padding: var(--space-4) 0;
+  border-top: 1px solid var(--color-border-container);
+  border-bottom: 1px solid var(--color-border-container);
+}
+
+.form-details {
+  padding: var(--space-4) 0;
+}
+
+/* Opening the details is a state change: 200 ms at most, and none when the reader asks for reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .form-details {
+    animation: fadeInUp 0.2s ease-out;
+  }
+}
+
+/* The back link: the kit's chevron beside the words, at least a 24 px target. */
+.project-form__back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-block-size: var(--target-min);
+}
+
+.project-form__optional {
+  font-size: var(--font-size-small);
+}

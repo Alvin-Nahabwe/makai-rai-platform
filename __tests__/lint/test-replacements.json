@@ -982,5 +982,13 @@
     "property": "Home counts archived projects: an organisation whose only project is archived is told it has no active project and where the archived ones are, never that it has no project, and a person who can create still has New project. Audit B#31 rewrote the line to \"No active projects. Your archived projects are in All projects.\" for every role, as plain text, so the creator's second New project link inside the line is gone (coordinator Q4 (a)); the page header's New project stays.",
     "proof": "The case still loads the dashboard of an organisation whose one project is archived (no active project, archivedCount 1, both unchanged) and renders DashboardView for its owner. It requires the sentence HOME_COPY.noActiveProjects as a paragraph of its own, no HOME_COPY.noProjects, exactly one link to /orgs/<slug>/projects/new named HOME_COPY.newProject (the header action a creator sees), and that link before the sentence.",
     "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/prj-components.test.tsx::FR-PRJ-01: the descriptive line is built from the fields and shows no score",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::FR-PRJ-01: the descriptive line is built from the fields and shows no score",
+    "property": "A project's descriptive line is built from its descriptive fields, in their order, each only when set, joined by commas, and shows no score; with no field it is empty. The words of two parts changed (audit B#367, B#368): \"personal data: yes\" became \"Uses personal data\" and \"lifecycle stage: Testing\" became the status word alone, \"Testing\" (\"Lifecycle stage\" is retired by the vocabulary), so the expected line is written from the copy constant and the case also checks the No branch.",
+    "proof": "The case requires descriptiveLine of classification, health, personal data true and testing to equal exactly 'Classification', 'health', PROJECT_COPY.descriptive.usesPersonalData and 'Testing' joined by ', '; descriptiveLine of personal data false alone to equal PROJECT_COPY.descriptive.noPersonalData; and descriptiveLine(null) to be '' (unchanged).",
+    "task": "plan 1A Task 17"
   }
 ]

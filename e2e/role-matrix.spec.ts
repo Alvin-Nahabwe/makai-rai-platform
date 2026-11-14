@@ -6,6 +6,7 @@ import { FIXTURE_ROLES } from '../__tests__/helpers/fixture';
 import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from './fixtures/manifest';
 import { HOME_COPY } from '../lib/home/copy';
 import { PROJECT_COPY } from '../lib/project/copy';
+import { PROJECT_FORM_COPY } from '../lib/project/form/copy';
 
 /**
  * Task 12 Step 1 — O-13: no mutating control is rendered to a role that may
@@ -125,8 +126,8 @@ const PROJECTS_LIST_CONTROLS: Control[] = [
 const PROJECTS_NEW_CONTROLS: Control[] = [
   { name: 'Create project', action: 'project:create', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Create project' }) },
   { name: 'Cancel', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Cancel' }) },
-  { name: 'Show additional details', action: null, mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Show additional details' }) },
-  { name: 'Back to Projects', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: /Back to Projects/ }) },
+  { name: PROJECT_FORM_COPY.moreDetails, action: null, mode: 'presence', locator: (p) => p.getByRole('button', { name: PROJECT_FORM_COPY.moreDetails }) },
+  { name: PROJECT_FORM_COPY.back, action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: new RegExp(PROJECT_FORM_COPY.back) }) },
 ];
 
 const PROJECT_DETAIL_CONTROLS: Control[] = [
