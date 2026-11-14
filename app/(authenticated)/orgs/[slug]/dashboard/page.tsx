@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { requireIdentity } from '@/lib/auth/identity';
 import { requireOrgContextFor } from '@/lib/auth/context';
 import { loadDashboard } from '@/lib/data/projects';
+import { loadNextStep } from '@/lib/home/load';
 import { eatDate } from '@/lib/followup/overdue';
 import { HOME_COPY } from '@/lib/home/copy';
 import { orNotFound } from '@/lib/auth/titleGate';
@@ -22,12 +23,17 @@ const welcomeOf = async (searchParams: Search): Promise<string | null> => ((awai
 const load = cache(async (slug: string, welcome: string | null) => {
   const identity = await requireIdentity();
   const ctx = await requireOrgContextFor(identity.userId, slug, 'project:read');
-  return loadDashboard(ctx, identity, { orgSlug: slug, welcome: welcome === '1', today: eatDate(new Date()) });
+  // The next step is the signed-in person's own, by the session's id, never a query value (T9.2).
+  const [data, next] = await Promise.all([
+    loadDashboard(ctx, identity, { orgSlug: slug, welcome: welcome === '1', today: eatDate(new Date()) }),
+    loadNextStep(ctx, identity.userId),
+  ]);
+  return { data, next };
 });
 
 export async function generateMetadata({ params, searchParams }: { params: Params; searchParams: Search }): Promise<Metadata> {
   const { slug } = await params;
-  const data = await orNotFound(load(slug, await welcomeOf(searchParams)));
+  const { data } = await orNotFound(load(slug, await welcomeOf(searchParams)));
   return { title: pageTitle(HOME_COPY.titles.home, data.orgName) };
 }
 
@@ -38,6 +44,6 @@ export async function generateMetadata({ params, searchParams }: { params: Param
  */
 export default async function DashboardPage({ params, searchParams }: { params: Params; searchParams: Search }) {
   const { slug } = await params;
-  const data = await load(slug, await welcomeOf(searchParams));
-  return <DashboardView data={data} />;
+  const { data, next } = await load(slug, await welcomeOf(searchParams));
+  return <DashboardView data={data} next={next} />;
 }
