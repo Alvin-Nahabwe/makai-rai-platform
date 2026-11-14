@@ -38,6 +38,14 @@ function isAbandonedPrefetch(url: string, headers: Record<string, string>, error
 
 const PUBLIC_BUDGET = 220_000;
 /**
+ * The stylesheets S-04's first visit receives, exactly. The kit's sheets reach S-04 through styles entries
+ * (components/ui/<part>Styles.ts) so the bundler cannot cut their files apart (__tests__/lint/kit-styles-entries.test.ts,
+ * __tests__/lint/invitation-kit-sheets.test.ts); those lints read the source, and this count is what the built page
+ * does: the next/font sheet with Icon.css, globals.css, Button.css, Dialog.css and the four form sheets in one file. An
+ * exact figure, so a join that forms by chance is noticed as well as a split: when it changes, read the files it names.
+ */
+const S04_STYLESHEETS = 5;
+/**
  * Inviter names in three orthographies whose letters sit in the common latin-ext face: Luganda (U+014B), Kikuyu
  * (U+0169, U+0129) and Hausa (U+018A, U+0181). The sign-in rate limit keys on the client address
  * (e2e/fixtures/auth.setup.ts), so each sign-in gets its own.
@@ -101,7 +109,12 @@ for (const { language, inviter, letters, clientIp } of CASES) test(`NFR-PERF-02:
     const received = new Map<string, number>();
     let total = 0;
     cdp.on('Network.requestWillBeSent', (e) => { urls.set(e.requestId, e.request.url); });
-    cdp.on('Network.responseReceived', (e) => { received.set(e.requestId, (received.get(e.requestId) ?? 0) + e.response.encodedDataLength); });
+    /** Every stylesheet response of the visit, by URL (a stylesheet fetched twice counts once). */
+    const stylesheets = new Set<string>();
+    cdp.on('Network.responseReceived', (e) => {
+      received.set(e.requestId, (received.get(e.requestId) ?? 0) + e.response.encodedDataLength);
+      if (e.type === 'Stylesheet') stylesheets.add(e.response.url);
+    });
     cdp.on('Network.dataReceived', (e) => { received.set(e.requestId, (received.get(e.requestId) ?? 0) + e.encodedDataLength); });
     cdp.on('Network.loadingFinished', (e) => { total += e.encodedDataLength; received.delete(e.requestId); });
     // A request that ends without finishing still transferred what it received before it ended.
@@ -121,7 +134,10 @@ for (const { language, inviter, letters, clientIp } of CASES) test(`NFR-PERF-02:
     await expect(page.getByText(inviter)).toBeVisible();
     expect(failed, 'requests that failed').toEqual([]);
     const fonts = [...urls.values()].filter((u) => u.endsWith('.woff2')).map((u) => u.split('/').pop()!);
-    console.log(`route=/invitations/[token] inviter=${language} bytes=${total} budget=${PUBLIC_BUDGET} abandoned_prefetches=${abandonedPrefetches.length} fonts=${fonts.join(',')}`);
+    const sheets = [...stylesheets].map((u) => new URL(u).pathname.split('/').pop()!).sort();
+    console.log(`route=/invitations/[token] inviter=${language} bytes=${total} budget=${PUBLIC_BUDGET} abandoned_prefetches=${abandonedPrefetches.length} fonts=${fonts.join(',')} stylesheets=${sheets.length}:${sheets.join(',')}`);
+    expect(sheets, `S-04 received ${sheets.length} stylesheets, not ${S04_STYLESHEETS}: a kit stylesheet was split, a new one `
+      + 'was added, or two files joined. Find which source sheets each named file holds before changing the figure').toHaveLength(S04_STYLESHEETS);
     // The name's letters come from the small face; the large remainder face is not fetched.
     expect(fonts.some((f) => f.startsWith('overpass_latin_ext_common'))).toBe(true);
     expect(fonts.some((f) => f.startsWith('overpass_latin_ext_rest'))).toBe(false);
