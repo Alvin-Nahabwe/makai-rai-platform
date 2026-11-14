@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactElement } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { ItemPlate } from '@/components/ui/ItemPlate';
+import { Select } from '@/components/ui/Select';
 import type { ScopeAnswer, StatusMarkKind } from '@/components/ui/types';
 import { openDraftStore, type DraftStore } from '@/lib/client/drafts';
 import { requestIdFor, sendWrite } from '@/lib/client/retrySafeWrite';
@@ -26,6 +27,12 @@ export type StageQuestionListProps = {
   marks: Record<string, StatusMarkKind>;
   /** The personal data question's answer, which its mark's words give ("Answer: Yes"). */
   scopeAnswer: ScopeAnswer | null;
+  /** 'page' (the default): the stage page's list. 'column': the question page's column (the filter as a select, topics as disclosures). */
+  variant?: 'page' | 'column';
+  /** The question open on the question page: its plate is "You are here" and its topic's disclosure is open. */
+  currentQuestionId?: string;
+  /** The column's closed topics: each topic's tally in words, by module id, shaped on the server (lib/question/route.ts). */
+  topicTallies?: Record<string, string>;
 };
 
 type DeviceDraft = { keptUntil: CalendarDate; pressed: boolean; value: DecisionDraft; base: number | null; retry: { requestId: string | null; sentBody: string | null } };
@@ -111,6 +118,75 @@ export function StageQuestionList(p: StageQuestionListProps): ReactElement {
   const activeLabel = p.filters.find((f) => f.key === show)?.label ?? L.filters.all;
   // Display only: storage has been read (drafts is set) and this browser keeps no draft store, so no count is shown.
   const noStorage = drafts !== null && store === null;
+  // Display only: a filter's count, or none on "Not saved yet" until storage is read or where there is none (part 1's rule).
+  const countOf = (f: StageFilter): string => (f === 'drafts' && (drafts === null || noStorage) ? '' : String(counts[f]));
+
+  // One question's plate, as each variant lists it (markup only). In the column, the open question's plate is "You are here".
+  const plateOf = (r: StageRow): ReactElement => {
+    const d = drafts?.get(r.questionId);
+    const result = results.get(r.questionId);
+    const mark = p.marks[r.questionId];
+    // The one line of state (spec 8): each part only when it holds, joined, with no separator before the first.
+    const state = [
+      r.declaredDate !== null ? formatDeclaredDate(r.declaredDate) : null,
+      r.inPlace !== null ? L.row.inPlace(r.inPlace.n, r.inPlace.of) : null,
+      r.openFindings > 0 ? L.row.openFindings(r.openFindings) : null,
+      r.changedSinceSeal ? L.row.changedSinceSeal(p.sealNumber) : null,
+      r.reworded ? L.row.reworded : null,
+      d !== undefined ? L.row.notSaved(formatDay(d.keptUntil)) : null,
+    ].filter((part) => part !== null).join(L.row.separator);
+    return (
+      <li key={r.questionId} data-question-id={r.questionId}>
+        <ItemPlate
+          title={r.text} code={r.questionId} href={questionHref(p, r.questionId)} mark={mark}
+          noEvidence={mark === 'done' && r.evidenceCount === 0}
+          scopeAnswer={mark === 'scope_answered' && p.scopeAnswer !== null ? p.scopeAnswer : undefined}
+          state={state === '' ? null : state}
+          current={p.variant === 'column' && r.questionId === p.currentQuestionId}
+        />
+        {result !== undefined ? <p className="stage-route__result">{result.text}</p> : null}
+      </li>
+    );
+  };
+
+  const noMatch = (
+    <p>
+      {L.noMatch(activeLabel)}
+      <a href="?show=all" onClick={(e) => { e.preventDefault(); choose('all'); }}>{L.showAll(p.total)}</a>
+    </p>
+  );
+
+  if (p.variant === 'column') {
+    // The question page's column (plan C2): the filter as the kit's Select, then with "All" one disclosure per topic (the
+    // open question's topic open, from props), with a filter one flat list. No "Save all" card and no results here.
+    const currentModuleId = p.rows.find((r) => r.questionId === p.currentQuestionId)?.moduleId;
+    return (
+      <div className="stage-question-list stage-question-list--column">
+        <form method="get" aria-label={L.form.label} className="route-column__filter">
+          <Select
+            id="route-column-show" name="show" label={L.form.legend} value={show}
+            hint={noStorage ? L.noStorage : undefined} onChange={(e) => choose(e.target.value as StageFilter)}
+            options={p.filters.map((f) => ({ value: f.key, label: `${f.label} ${countOf(f.key)}`.trimEnd() }))}
+          />
+          <noscript><button type="submit" className="btn btn--secondary btn--small">{L.form.submit}</button></noscript>
+        </form>
+        {visible.length === 0 ? noMatch : show === 'all' ? (
+          moduleGroups(p.rows).map((g) => (
+            <details key={g.moduleId} className="route-column__topic" open={g.moduleId === currentModuleId}>
+              <summary>
+                <span className="route-column__topic-name">{g.moduleTitle}</span>{' '}
+                <span className="route-column__topic-tally">{p.topicTallies?.[g.moduleId] ?? ''}</span>
+              </summary>
+              <ul className="stage-route__plates">{g.rows.map(plateOf)}</ul>
+            </details>
+          ))
+        ) : (
+          <ul className="stage-route__plates">{visible.map(plateOf)}</ul>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="stage-question-list">
       <form method="get" aria-label={L.form.label}>
@@ -120,7 +196,7 @@ export function StageQuestionList(p: StageQuestionListProps): ReactElement {
             {p.filters.map((f) => (
               <label key={f.key} className="stage-route__chip">
                 <input type="radio" name="show" value={f.key} checked={show === f.key} onChange={() => choose(f.key)} />
-                {` ${f.label} ${f.key === 'drafts' && (drafts === null || noStorage) ? '' : counts[f.key]}`}
+                {` ${f.label} ${countOf(f.key)}`}
               </label>
             ))}
           </div>
@@ -138,42 +214,13 @@ export function StageQuestionList(p: StageQuestionListProps): ReactElement {
       ) : null}
       <div role="status">{results.size > 0 && !retrying ? retryAllSummary([...results.values()].map((r) => r.id)) : ''}</div>
 
-      {visible.length === 0 ? (
-        <p>
-          {L.noMatch(activeLabel)}
-          <a href="?show=all" onClick={(e) => { e.preventDefault(); choose('all'); }}>{L.showAll(p.total)}</a>
-        </p>
-      ) : (
+      {visible.length === 0 ? noMatch : (
         moduleGroups(p.rows).filter((g) => g.rows.some((r) => visible.includes(r))).map((g) => (
         <section key={g.moduleId} aria-labelledby={`module-${g.moduleId}`}>
           <h2 id={`module-${g.moduleId}`} className="stage-route__topic">{g.moduleTitle}</h2>
           <p className="text-muted stage-route__topic-count">{L.summary(g.rows.length, g.noDecision)}</p>
         <ul className="stage-route__plates">
-          {g.rows.filter((r) => visible.includes(r)).map((r) => {
-            const d = drafts?.get(r.questionId);
-            const result = results.get(r.questionId);
-            const mark = p.marks[r.questionId];
-            // The one line of state (spec 8): each part only when it holds, joined, with no separator before the first.
-            const state = [
-              r.declaredDate !== null ? formatDeclaredDate(r.declaredDate) : null,
-              r.inPlace !== null ? L.row.inPlace(r.inPlace.n, r.inPlace.of) : null,
-              r.openFindings > 0 ? L.row.openFindings(r.openFindings) : null,
-              r.changedSinceSeal ? L.row.changedSinceSeal(p.sealNumber) : null,
-              r.reworded ? L.row.reworded : null,
-              d !== undefined ? L.row.notSaved(formatDay(d.keptUntil)) : null,
-            ].filter((part) => part !== null).join(L.row.separator);
-            return (
-              <li key={r.questionId} data-question-id={r.questionId}>
-                <ItemPlate
-                  title={r.text} code={r.questionId} href={questionHref(p, r.questionId)} mark={mark}
-                  noEvidence={mark === 'done' && r.evidenceCount === 0}
-                  scopeAnswer={mark === 'scope_answered' && p.scopeAnswer !== null ? p.scopeAnswer : undefined}
-                  state={state === '' ? null : state}
-                />
-                {result !== undefined ? <p className="stage-route__result">{result.text}</p> : null}
-              </li>
-            );
-          })}
+          {g.rows.filter((r) => visible.includes(r)).map(plateOf)}
         </ul>
         </section>
         ))

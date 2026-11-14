@@ -1,0 +1,24 @@
+/*
+ * The question page's column (components/question/RouteColumn.tsx). Under 72.5rem it is the short form after the
+ * guidance: the stage's name, the row of marks with its tally, the link to all questions; the list (the filter and the
+ * topics) is its own page there. Its place in the grid is workspace.css's. Design tokens only; no kit class restyled.
+ */
+.route-column__heading {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-h3);
+}
+
+.route-column__list {
+  display: none;
+}
+
+.route-column__all {
+  margin-block: var(--space-4) 0;
+}
+
+@media (width >= 72.5rem) {
+  .route-column__list {
+    display: block;
+    margin-block-start: var(--space-4);
+  }
+}

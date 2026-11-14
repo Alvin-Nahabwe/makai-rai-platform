@@ -14,13 +14,14 @@
   margin-block-end: var(--space-4);
 }
 
-/* One column, in DOM order: the main column, then the guide column. */
+/* One column, in DOM order: the main column, the guide column, then the stage's questions in their short form. */
 .question-workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-areas:
     "main"
-    "guide";
+    "guide"
+    "route";
   gap: var(--space-6);
   align-items: start;
   overflow-wrap: break-word;
@@ -36,6 +37,12 @@
   min-width: 0;
 }
 
+/* The stage's questions (components/question/RouteColumn.tsx): last in the DOM at every width, placed here. */
+.question-workspace__route {
+  grid-area: route;
+  min-width: 0;
+}
+
 /* Each region starts clear of the one above it: the current decision under the question, the form under the current
    decision, and in the guide column the finding link and the suggestions under the guidance. */
 .question-workspace__main > section + section,
@@ -44,17 +51,39 @@
 }
 
 /*
- * Two columns once the main one keeps at least 30rem beside a guide of 16rem and the 1.5rem gap: 47.5rem (760px) of
+ * Two columns once the main one keeps at least 30rem beside a column of 16rem and the 1.5rem gap: 47.5rem (760px) of
  * content. From 1024px the window also holds the rail (248px), the main area's padding (2 x 2rem), the page's padding
  * (2 x 2rem) and, where scroll bars take space, the main area's scroll bar (15px in Chromium on Linux, 17px on
  * Windows): 760 + 248 + 64 + 64 + 17 = 1153px, so 72.5rem (1160px) with a few pixels to spare. Below it, one column in
- * DOM order. e2e/question-frame.spec.ts measures the columns either side of it. QuestionContent.css hides the jump link
- * by the same query. The main column is twice the guide's width above that.
+ * DOM order. e2e/question-frame.spec.ts measures the columns either side of it.
+ *
+ * THE OWNER'S CHOICE, ONE RULE (decision "Route column", 21:51 EAT 14 November 2026): from 72.5rem to under 90rem the
+ * stage's questions are the column on the left, beside the question and its form, and the guidance drops below the
+ * form. The other arrangement, the guidance beside the form and the stage's questions below both, is this one edit:
+ *     grid-template-columns: minmax(0, 2fr) minmax(16rem, 1fr);
+ *     grid-template-areas: "main guide" "route route";
+ * (and QuestionContent.css's jump link query then becomes (width >= 72.5rem)).
  */
-@media (width >= 72.5rem) {
+@media (72.5rem <= width < 90rem) {
   .question-workspace {
-    grid-template-columns: minmax(0, 2fr) minmax(16rem, 1fr);
-    grid-template-areas: "main guide";
+    grid-template-columns: minmax(16rem, 1fr) minmax(0, 2fr);
+    /* A column taller than the form gives its extra height to the guidance's row, never a gap above the guidance. */
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      "route main"
+      "route guide";
+  }
+}
+
+/*
+ * Three columns from 90rem (1440px): the stage's questions, the question with its form, the guidance. 1440 less the rail,
+ * the paddings and a scroll bar leaves 1049px; less two gaps, 1001px, which keeps two side columns of 16rem and the main
+ * one above 30rem.
+ */
+@media (width >= 90rem) {
+  .question-workspace {
+    grid-template-columns: minmax(16rem, 1fr) minmax(0, 2fr) minmax(16rem, 1fr);
+    grid-template-areas: "route main guide";
   }
 }
 
