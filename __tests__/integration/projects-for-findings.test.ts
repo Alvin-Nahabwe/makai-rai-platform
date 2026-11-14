@@ -9,7 +9,8 @@ import { addProject, buildOrg, type OrgFixture } from '../helpers/recordFixture'
 /**
  * The Projects page under `?for=findings` (plan 1A Task 12, ruling L2-65; security obligations S1 to S3): the rail's
  * Findings link. A `last` that is one of the organisation's own projects goes to that project's findings; anything else
- * (another organisation's project, a deleted one, not a UUID, upper case, repeated) gives exactly what no `last` gives.
+ * (another organisation's project, a deleted one, not a UUID, repeated, or an upper-case copy of a real id, which isUuid
+ * accepts but which equals no row's id, as row ids are lower case) gives exactly what no `last` gives.
  * The real page runs against the real database behind the real gates; only the session is mocked.
  */
 vi.mock('next/navigation', async (importOriginal) => ({
@@ -92,11 +93,20 @@ describe('S-32 under ?for=findings', () => {
     const out = await open(fx, { for: 'findings' });
     if (!('html' in out)) throw new Error(JSON.stringify(out));
     expect(PROJECT_COPY.chooseForFindings).toBe('Choose a project to see its findings.');
-    // the line sits directly under the page header and before the Active section
-    expect(out.html).toMatch(/<\/div><p>Choose a project to see its findings\.<\/p><section aria-labelledby="projects-active">/);
+    // the line sits in the page header, under the h1 (F6 b: the header's own bottom margin separates it from Active)
+    expect(out.html).toMatch(/<div class="page-header"><div><h1>All projects<\/h1><p>Choose a project to see its findings\.<\/p><\/div>/);
     for (const p of [one, two, shelved]) expect(out.html).toContain(`href="/orgs/${fx.org.slug}/projects/${p.id}/findings"`);
     expect(out.html).not.toMatch(new RegExp(`href="/orgs/${fx.org.slug}/projects/[0-9a-f-]{36}"`));
     expect(out.html).toContain('<h1>All projects</h1>');
+  });
+
+  it('L2-65 (amended, F7): with no project at all, for=findings renders the page exactly as without it', async () => {
+    const empty = await buildOrg({ label: 'empty' });
+    sessionFor(empty.members.viewer.userId);
+    const plain = await open(empty, {});
+    expect(plain).toHaveProperty('html');
+    expect(await open(empty, { for: 'findings' })).toEqual(plain);
+    expect(await open(empty, { for: 'findings', last: one.id })).toEqual(plain);
   });
 
   it('L2-65: without for=findings (none, or another value), the page is as today and `last` is ignored', async () => {

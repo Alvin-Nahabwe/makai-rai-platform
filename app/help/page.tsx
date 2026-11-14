@@ -27,7 +27,7 @@ export default function HelpPage() {
       <section aria-labelledby="words-used-on-the-platform">
         <h2 id="words-used-on-the-platform">{HELP_COPY.words.heading}</h2>
         {groups.map((group, i) => (
-          <section key={group.name} aria-labelledby={`help-group-${i + 1}`}>
+          <section key={group.name}>
             <h3 id={`help-group-${i + 1}`}>{group.name}</h3>
             <dl className="help__list">
               {group.entries.flatMap((e) => [
@@ -55,10 +55,10 @@ export default function HelpPage() {
         {email === null ? (
           <p>{HELP_COPY.contact.askOwner}</p>
         ) : (
-          <p>{HELP_COPY.contact.writeTo}<a href={`mailto:${email}`}>{email}</a>{HELP_COPY.contact.writeToEnd}</p>
+          <p>{HELP_COPY.contact.writeTo}<a className="help__address" href={`mailto:${email}`}>{email}</a>{HELP_COPY.contact.writeToEnd}</p>
         )}
       </section>
-      <p><Link href="/about">{HELP_COPY.about}</Link></p>
+      <p className="help__about"><Link href="/about">{HELP_COPY.about}</Link></p>
     </div>
   );
 }

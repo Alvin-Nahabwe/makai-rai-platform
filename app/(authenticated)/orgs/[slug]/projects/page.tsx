@@ -44,8 +44,10 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
  * `?for=findings` is the rail's Findings link (plan 1A Task 12, L2-65). It goes to the findings of the project in `last`
  * when that is one of the rows this organisation's own read just returned (S1), else of the organisation's only project;
  * otherwise the page asks the person to choose, and every project links to its findings. A `last` that matches no row,
- * whatever it is, takes exactly the path of no `last` (S2), and the address is built from the row's id and the route's
- * slug, never from the query's text (S3).
+ * whatever it is, takes exactly the path of no `last` (S2): another organisation's id, a deleted one, a malformed or
+ * repeated value, and an upper-case copy of a real id, which isUuid accepts but no row's (lower-case) id equals. The
+ * address is built from the row's id and the route's slug, never from the query's text (S3). With no project at all there
+ * is nothing to choose, so the page is exactly as without `for` (fix round 1, F7).
  */
 export default async function ProjectsPage({
   params, searchParams,
@@ -57,9 +59,9 @@ export default async function ProjectsPage({
   const query = await searchParams;
   const { ctx } = await load(slug);
   const { active, archived } = await listProjectRows(ctx);
-  const forFindings = query.for === 'findings';
+  const all = [...active, ...archived];
+  const forFindings = query.for === 'findings' && all.length > 0;
   if (forFindings) {
-    const all = [...active, ...archived];
     const last = isUuid(query.last) ? query.last : null;
     const target = (last === null ? undefined : all.find((p) => p.id === last)) ?? (all.length === 1 ? all[0] : undefined);
     if (target !== undefined) redirect(`/orgs/${slug}/projects/${target.id}/findings`);

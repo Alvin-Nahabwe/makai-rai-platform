@@ -13,7 +13,10 @@ import './shell.css';
 export default function PublicHeader({ signInHref = '/login' }: { signInHref?: string }) {
   return (
     <header className="shell-public-header">
-      <Link href="/" className="shell-public-header__name">
+      {/* prefetch off on this link only (plan 1A Task 12, fix round 1, F1b; ruling T12-x): SRS 7.6.4 rule 4 names the footer's
+          three site links, not this one, and for a signed-out visitor / only redirects to /login, which Sign in already
+          prefetches. The cost: a signed-in person's press on the product name from a public page is not prefetched. */}
+      <Link href="/" className="shell-public-header__name" prefetch={false}>
         {PRODUCT_NAME}
       </Link>
       <nav aria-label={SHELL_COPY.publicNav} className="shell-public-header__nav">

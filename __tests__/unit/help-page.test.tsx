@@ -13,8 +13,15 @@ import { renderToStaticMarkup } from 'react-dom/server';
 const helpEmail = vi.hoisted(() => ({ value: 'help@makrai.org' as string | null }));
 vi.mock('@/lib/help/contact', () => ({ readHelpEmail: () => helpEmail.value }));
 
-const identityMocks = vi.hoisted(() => ({ tryResolveIdentity: vi.fn(), identityPassesGates: vi.fn() }));
-vi.mock('@/lib/auth/identity', () => identityMocks);
+// The layout runs the REAL identityPassesGates; only the session read and the acceptance read under it are mocked.
+const identityMocks = vi.hoisted(() => ({ tryResolveIdentity: vi.fn() }));
+vi.mock('@/lib/auth/identity', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/auth/identity')>()), tryResolveIdentity: identityMocks.tryResolveIdentity,
+}));
+const missingAcceptances = vi.hoisted(() => vi.fn<(userId: string) => Promise<string[]>>());
+vi.mock('@/lib/data/acceptances', () => ({ missingAcceptances: (userId: string) => missingAcceptances(userId) }));
+vi.mock('@/lib/data/identity', () => ({ identityDb: {} }));
+vi.mock('@/lib/auth', () => ({ auth: () => Promise.resolve(null) }));
 const loadShellData = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/shell/data', () => ({ loadShellData }));
 const readSessionDeadlines = vi.hoisted(() => vi.fn());
@@ -40,7 +47,7 @@ const W1 = [
 const page = (): string => renderToStaticMarkup(HelpPage());
 const text = (html: string): string => html.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&amp;/g, '&').replace(/\s+/g, ' ');
 function section(html: string, id: string): string {
-  const m = new RegExp(`<section aria-labelledby="${id}">([\\s\\S]*?)</section>(?=<section aria-labelledby="(?!help-group)|<p><a|</div>$)`).exec(html);
+  const m = new RegExp(`<section aria-labelledby="${id}">([\\s\\S]*?)</section>(?=<section aria-labelledby=|<p class="help__about"><a|</div>$)`).exec(html);
   if (m === null) throw new Error(`no section ${id}`);
   return m[1];
 }
@@ -56,7 +63,8 @@ function find(node: ReactNode, type: unknown, found: ReactElement[] = []): React
 beforeEach(() => {
   helpEmail.value = 'help@makrai.org';
   identityMocks.tryResolveIdentity.mockReset();
-  identityMocks.identityPassesGates.mockReset();
+  missingAcceptances.mockReset();
+  missingAcceptances.mockResolvedValue([]);
   loadShellData.mockReset();
   readSessionDeadlines.mockReset();
 });
@@ -75,7 +83,10 @@ describe('the Help page', () => {
       ['contact', 'Contact'],
     ]);
     expect(html).toMatch(/^<div class="help">/);
-    expect(html).toMatch(/<p><a href="\/about">About the MAK-AI RAI Platform<\/a><\/p><\/div>$/);
+    expect(html).toMatch(/<p class="help__about"><a href="\/about">About the MAK-AI RAI Platform<\/a><\/p><\/div>$/);
+    // L2-69 (amended, F6): the eight group sections are not named regions; only the four h2 sections are.
+    expect(html.match(/aria-labelledby=/g)).toHaveLength(4);
+    expect(html.match(/<section>/g)).toHaveLength(8);
     expect(HELP_COPY.about).toBe('About the MAK-AI RAI Platform');
     expect(html).not.toMatch(/<main\b/);
   });
@@ -159,7 +170,7 @@ describe('the Help page', () => {
 
   it('L2-69 S8: Contact with the address set is "Write to <address>." with a mailto link, and nothing else', () => {
     const contact = section(page(), 'contact');
-    expect(contact).toBe('<h2 id="contact">Contact</h2><p>Write to <a href="mailto:help@makrai.org">help@makrai.org</a>.</p>');
+    expect(contact).toBe('<h2 id="contact">Contact</h2><p>Write to <a class="help__address" href="mailto:help@makrai.org">help@makrai.org</a>.</p>');
   });
 
   it('L2-69: Contact with no address is the one sentence "For help, ask the Owner of your organisation."', () => {
@@ -172,16 +183,16 @@ describe('the Help page', () => {
     expect(text(page())).not.toMatch(/UNCST|Uganda/);
   });
 
-  it('X-2: no client component imports lib/help/copy.ts or lib/help/vocabulary.ts', () => {
+  it('X-2: the files that import Help\'s modules are exactly these three server files, none of them a client file', () => {
     const files = ['app', 'components', 'lib'].flatMap((root) => readdirSync(root, { recursive: true, encoding: 'utf8' }).map((f) => `${root}/${f}`))
       .filter((f) => /\.(ts|tsx)$/.test(f));
-    for (const f of files) {
-      const src = readFileSync(f, 'utf8');
-      if (/^['"]use client['"]/m.test(src)) expect(src, f).not.toMatch(/@\/lib\/help\//);
-    }
-    for (const f of readdirSync('components/layout').map((x) => `components/layout/${x}`).concat(readdirSync('lib/shell').map((x) => `lib/shell/${x}`))) {
-      expect(readFileSync(f, 'utf8'), f).not.toMatch(/lib\/help\//);
-    }
+    const importers = files.filter((f) => /from '@\/lib\/help\/(copy|vocabulary|contact)'/.test(readFileSync(f, 'utf8'))).sort();
+    expect(importers).toEqual([
+      'app/(authenticated)/orgs/[slug]/projects/[id]/reviews/[reviewId]/page.tsx',
+      'app/(public)/about/page.tsx',
+      'app/help/page.tsx',
+    ]);
+    for (const f of importers) expect(readFileSync(f, 'utf8'), f).not.toMatch(/^['"]use client['"]/m);
   });
 });
 
@@ -198,38 +209,43 @@ describe('the Help layout (L2-68, S5, S7)', () => {
     expect(find(tree, AppShell)).toHaveLength(0);
     expect(find(tree, IdleWarning)).toHaveLength(0);
     expect(loadShellData).not.toHaveBeenCalled();
-    expect(identityMocks.identityPassesGates).not.toHaveBeenCalled();
+    expect(missingAcceptances).not.toHaveBeenCalled();
     const html = renderToStaticMarkup(tree);
     expect(html.match(/<main\b/g)).toHaveLength(1);
     expect(html).toMatch(/<main id="main-content" tabindex="-1" class="public-layout"><p>child<\/p><\/main>/);
     expect(html).toMatch(/<a href="\/login">Sign in<\/a>/);
   });
 
-  for (const [label, who] of [
-    ['a password change due', { ...identity, mustChangePassword: true }],
-    ['an acceptance pending', identity],
-  ] as const) {
-    it(`L2-68 L2-70 S5 S7: with ${label}, the public header with Sign in at /, no AppShell, no shell data read`, async () => {
-      identityMocks.tryResolveIdentity.mockResolvedValue(who);
-      identityMocks.identityPassesGates.mockResolvedValue(false);
-      const tree = await HelpLayout({ children: <p>child</p> });
-      const headers = find(tree, PublicHeader);
-      expect(headers).toHaveLength(1);
-      expect(headers[0].props as unknown).toEqual({ signInHref: '/' });
-      expect(find(tree, AppShell)).toHaveLength(0);
-      expect(find(tree, IdleWarning)).toHaveLength(0);
-      expect(loadShellData).not.toHaveBeenCalled();
-      expect(readSessionDeadlines).not.toHaveBeenCalled();
-      expect(identityMocks.identityPassesGates).toHaveBeenCalledWith(who);
-      const html = renderToStaticMarkup(tree);
-      expect(html).toMatch(/<a href="\/">Sign in<\/a>/);
-      expect(html).not.toContain('a@example.test');
-    });
+  async function expectPublicHeaderForGatedPerson(): Promise<void> {
+    const tree = await HelpLayout({ children: <p>child</p> });
+    const headers = find(tree, PublicHeader);
+    expect(headers).toHaveLength(1);
+    expect(headers[0].props as unknown).toEqual({ signInHref: '/' });
+    expect(find(tree, AppShell)).toHaveLength(0);
+    expect(find(tree, IdleWarning)).toHaveLength(0);
+    expect(loadShellData).not.toHaveBeenCalled();
+    expect(readSessionDeadlines).not.toHaveBeenCalled();
+    const html = renderToStaticMarkup(tree);
+    expect(html).toMatch(/<a href="\/">Sign in<\/a>/);
+    expect(html).not.toContain('a@example.test');
   }
+
+  it('L2-68 L2-70 S5 S7: with a password change due, the public header with Sign in at /, no AppShell, no shell data read', async () => {
+    identityMocks.tryResolveIdentity.mockResolvedValue({ ...identity, mustChangePassword: true });
+    await expectPublicHeaderForGatedPerson();
+    // gate 2 settles a flagged account: no acceptance is read for it
+    expect(missingAcceptances).not.toHaveBeenCalled();
+  });
+
+  it('L2-68 L2-70 S5 S7: with an acceptance pending, the public header with Sign in at /, no AppShell, no shell data read', async () => {
+    identityMocks.tryResolveIdentity.mockResolvedValue(identity);
+    missingAcceptances.mockResolvedValue(['terms']);
+    await expectPublicHeaderForGatedPerson();
+    expect(missingAcceptances).toHaveBeenCalledWith('u1');
+  });
 
   it('L2-68 S5: past the gates, IdleWarning first and then AppShell with the shell data, and no public header', async () => {
     identityMocks.tryResolveIdentity.mockResolvedValue(identity);
-    identityMocks.identityPassesGates.mockResolvedValue(true);
     loadShellData.mockResolvedValue(shell);
     readSessionDeadlines.mockResolvedValue({ idleSecondsLeft: 900, absoluteSecondsLeft: 3600 });
     const tree = await HelpLayout({ children: <p>child</p> });
@@ -243,16 +259,15 @@ describe('the Help layout (L2-68, S5, S7)', () => {
     expect(isValidElement(kids[1]) && kids[1].type === AppShell).toBe(true);
   });
 
-  it('L2-68: past the gates with unreadable deadlines, no warning and no log line', async () => {
+  it('L2-68 (amended, F5): past the gates with unreadable deadlines, no warning and one fixed log line with no other argument', async () => {
     identityMocks.tryResolveIdentity.mockResolvedValue(identity);
-    identityMocks.identityPassesGates.mockResolvedValue(true);
     loadShellData.mockResolvedValue(shell);
     readSessionDeadlines.mockResolvedValue(null);
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     const tree = await HelpLayout({ children: <p>child</p> });
     expect(find(tree, IdleWarning)).toHaveLength(0);
     expect(find(tree, AppShell)).toHaveLength(1);
-    expect(error).not.toHaveBeenCalled();
+    expect(error.mock.calls).toEqual([['idle_deadline_unreadable']]);
     error.mockRestore();
   });
 
@@ -260,7 +275,7 @@ describe('the Help layout (L2-68, S5, S7)', () => {
     identityMocks.tryResolveIdentity.mockRejectedValue(new Error('database down'));
     await expect(HelpLayout({ children: null })).rejects.toThrow('database down');
     identityMocks.tryResolveIdentity.mockResolvedValue(identity);
-    identityMocks.identityPassesGates.mockRejectedValue(new Error('acceptances down'));
+    missingAcceptances.mockRejectedValue(new Error('acceptances down'));
     await expect(HelpLayout({ children: null })).rejects.toThrow('acceptances down');
   });
 

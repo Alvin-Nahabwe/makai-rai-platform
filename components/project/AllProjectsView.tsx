@@ -37,10 +37,10 @@ export function AllProjectsView({ data, children }: {
       <div className="page-header">
         <div>
           <h1>All projects</h1>
+          {forFindings ? <p>{PROJECT_COPY.chooseForFindings}</p> : null}
         </div>
         {data.canCreate === true ? <ListLink href={`/orgs/${data.orgSlug}/projects/new`} className="btn btn--primary">New project</ListLink> : null}
       </div>
-      {forFindings ? <p>{PROJECT_COPY.chooseForFindings}</p> : null}
       <section aria-labelledby="projects-active">
         <h2 id="projects-active">Active</h2>
         <Rows orgSlug={data.orgSlug} rows={data.active} unarchive={false} forFindings={forFindings} />

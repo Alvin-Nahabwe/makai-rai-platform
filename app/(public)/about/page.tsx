@@ -277,14 +277,14 @@ export default function AboutPage() {
             It is not an approval, audit, certification or compliance service, and nothing it
             produces is one.
           </p>
+          <p>
+            <Link href={SEAL_PROOF_HREF}>{HELP_COPY.sealing.heading}</Link>
+          </p>
           <h3>Who can see your records</h3>
           <p>
             Only members of your organisation can see its records, according to their role.
             MAK-AI&apos;s administrator has no access to records in the application, and the
             operator who runs the server has technical access to the database.
-          </p>
-          <p>
-            <Link href={SEAL_PROOF_HREF}>{HELP_COPY.sealing.heading}</Link>
           </p>
         </section>
 

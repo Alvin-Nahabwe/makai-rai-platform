@@ -253,8 +253,27 @@ describe('the rail, ported from the sidebar (UX-02, UX-41)', () => {
   });
 
   it('1A Task 12 P2: the server-rendered Findings link is the plain address, whatever the device holds', () => {
-    const hrefs = [...navOf(rail('/orgs/a/projects/3f2b8c1e-9a4d-4e6f-8b2a-1c3d5e7f9a0b')).matchAll(/<a [^>]*href="([^"]*)"/g)].map((m) => m[1].replace(/&amp;/g, '&'));
-    expect(hrefs).toContain('/orgs/a/projects?for=findings');
+    // A device that holds a last project: a rail that read storage during the server render would put it in the address.
+    const held = '3f2b8c1e-9a4d-4e6f-8b2a-1c3d5e7f9a0b';
+    vi.stubGlobal('localStorage', { getItem: () => held, setItem: () => {}, removeItem: () => {}, key: () => null, length: 1, clear: () => {} });
+    vi.stubGlobal('window', new EventTarget());
+    try {
+      const hrefs = [...navOf(rail(`/orgs/a/projects/${held}`)).matchAll(/<a [^>]*href="([^"]*)"/g)].map((m) => m[1].replace(/&amp;/g, '&'));
+      expect(hrefs).toContain('/orgs/a/projects?for=findings');
+      expect(hrefs.some((h) => h.includes('last='))).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('1A Task 12 F1b: the public header\'s product-name link to / does not prefetch; About, Sign in and the footer keep the default', () => {
+    const header = readFileSync('components/layout/PublicHeader.tsx', 'utf8');
+    const links = [...header.matchAll(/<Link\b[^>]*>/g)].map((m) => m[0]);
+    expect(links).toHaveLength(3);
+    expect(links[0]).toMatch(/href="\/"/);
+    expect(links[0]).toMatch(/prefetch=\{false\}/);
+    for (const l of links.slice(1)) expect(l).not.toMatch(/prefetch=/);
+    expect(readFileSync('components/layout/Footer.tsx', 'utf8')).not.toMatch(/prefetch=/);
   });
 
   it('1A Task 12 L2-66 S4: the rail\'s Sign out clears this person\'s last-project keys before signing out', () => {

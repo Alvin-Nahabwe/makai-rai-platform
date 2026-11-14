@@ -20,7 +20,8 @@ const CHOOSE = 'Choose a project to see its findings.';
 const PREFIX = 'makrai:last-project:';
 
 let ipSeq = 0;
-const nextClientIp = () => `10.47.${Math.floor(++ipSeq / 250)}.${(ipSeq % 250) + 1}`;
+// 10.50.: a range no other spec uses (grep of e2e/ for "10.50."; 10.47. is first-visit-transfer's, 10.49. two others').
+const nextClientIp = () => `10.50.${Math.floor(++ipSeq / 250)}.${(ipSeq % 250) + 1}`;
 
 async function newContext(browser: Browser, opts: Parameters<Browser['newContext']>[0] = {}): Promise<BrowserContext> {
   return browser.newContext({ extraHTTPHeaders: { 'x-forwarded-for': nextClientIp() }, ...opts });
@@ -151,6 +152,8 @@ test.describe('Findings from the rail (P2, L2-64 to L2-66)', () => {
     await page.evaluate(([k, v]) => localStorage.setItem(k, v), [`${PREFIX}${fx.members.owner.userId}:${fx.org.slug}`, p.id]);
     await page.goto(`/orgs/${fx.org.slug}/dashboard`);
     await hydrated(page, '.shell-rail__signout');
+    // The expected address is also the server's, so give the rail two frames after hydration to read the device first.
+    await page.evaluate(() => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
     await expect(railLink(page, 'Findings')).toHaveAttribute('href', `/orgs/${fx.org.slug}/projects?for=findings`);
     await railLink(page, 'Findings').click();
     await page.waitForURL((u) => u.pathname === `/orgs/${fx.org.slug}/projects` && u.searchParams.get('for') === 'findings');
@@ -254,6 +257,12 @@ test.describe('Help, /help (L2-67 to L2-71)', () => {
         // The reading column: no wider than the measure, inside the viewport on both sides.
         const col = await page.locator('.help').boundingBox();
         expect(col !== null && col.x >= 0 && col.x + col.width <= w).toBe(true);
+        if (w === 320) {
+          // F6: a 40-character address, set in the page in place of today's, still causes no horizontal scroll.
+          await page.locator('a.help__address').evaluate((a) => { a.textContent = 'a-much-longer-help-address@makrai.org.ug'; });
+          expect(await page.locator('a.help__address').innerText()).toHaveLength(40);
+          await expectNoHorizontalScroll(page);
+        }
       }
       await context.close();
     });

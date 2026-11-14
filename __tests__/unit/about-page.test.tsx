@@ -195,6 +195,8 @@ describe('S-28 About page', () => {
     expect(html).not.toContain('what-a-seal-proves');
     expect(section(html, 'what-this-is')).toContain('<p><a href="/help#what-sealing-means">What sealing means</a></p>');
     expect(html.match(/What sealing means/g)).toHaveLength(1);
+    // the last paragraph before "Who can see your records", so it does not read as part of that subsection (fix round 1, F6 c)
+    expect(section(html, 'what-this-is')).toMatch(/<p><a href="\/help#what-sealing-means">What sealing means<\/a><\/p><h3>Who can see your records<\/h3>/);
   });
 
   // CONSOLIDATED section 4: the eyebrow repeated the h1; "Free toolkits" became the controls page's introduction

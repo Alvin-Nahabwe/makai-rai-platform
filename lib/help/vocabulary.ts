@@ -20,7 +20,7 @@ export function helpTerm(term: string): string {
   return term.replace(/\{[^{}]*\}/g, '…');
 }
 
-export function helpVocabulary(): readonly HelpGroup[] {
+function buildGroups(): readonly HelpGroup[] {
   const groups: { name: string; entries: HelpEntry[] }[] = [];
   for (const c of (vocabulary as { concepts: Concept[] }).concepts) {
     if (typeof c.definition !== 'string' || c.historical !== undefined) continue;
@@ -32,4 +32,11 @@ export function helpVocabulary(): readonly HelpGroup[] {
     group.entries.push({ id: c.id, term: helpTerm(c.term), definition: c.definition });
   }
   return groups;
+}
+
+/** Built once, when the module loads: the file is part of the build, so the list cannot change while the server runs. */
+const GROUPS = buildGroups();
+
+export function helpVocabulary(): readonly HelpGroup[] {
+  return GROUPS;
 }

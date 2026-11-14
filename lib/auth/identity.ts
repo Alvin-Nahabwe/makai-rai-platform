@@ -346,11 +346,13 @@ export async function requireIdentityForApi(
 
 /**
  * For pages that want identity WHEN PRESENT but must not force a redirect —
- * the invitation-acceptance page is the only caller (Task 8, D-098):
+ * two callers. The invitation-acceptance page (Task 8, D-098):
  * `requireIdentity()` would redirect an anonymous visitor to `/login` before
  * they can see what org/role the link even names, which is the wrong UX for
  * a link whose whole point is to be followed by someone who may not have an
- * account yet.
+ * account yet. And Help's layout (`app/help/layout.tsx`, plan 1A Task 12),
+ * a public page that shows the signed-in shell to a person who passes the
+ * gates (`identityPassesGates`).
  *
  * Returns `null` for "no session" AND for every rejection `resolveIdentity`
  * throws (expired/revoked/deactivated) — from the caller's point of view

@@ -17,7 +17,9 @@ import { MAIN_CONTENT_ID } from '@/components/layout/SkipLink';
  * to the step they owe (ruling L2-70); the value is this fixed string, never input (S7). The shell data and the deadlines
  * are read only after the gates pass, so a gated or signed-out request reads no membership and sends nothing about the
  * person to the browser. No catch: a database error for a signed-in visitor is the error page, as on every signed-in page,
- * never the public header. Unreadable deadlines give no warning and no log line, as on `/`.
+ * never the public header. Unreadable deadlines give no warning and the signed-in layout's one fixed log line: past the
+ * gates the visitor is signed in and inside the shell, which is that layout's case, not `/`'s (fix round 1, F5). So Help
+ * is the second source of `idle_deadline_unreadable`, beside app/(authenticated)/layout.tsx.
  */
 export default async function HelpLayout({ children }: { children: React.ReactNode }) {
   const identity = await tryResolveIdentity();
@@ -33,6 +35,7 @@ export default async function HelpLayout({ children }: { children: React.ReactNo
     );
   }
   const deadlines = await readSessionDeadlines(await headers());
+  if (!deadlines) console.error('idle_deadline_unreadable');
   const shell = await loadShellData(identity);
   return (
     <>

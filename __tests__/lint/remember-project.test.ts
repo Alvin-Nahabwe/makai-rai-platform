@@ -37,6 +37,22 @@ describe('RememberProject on every project page', () => {
     }
   });
 
+  it('1A Task 12 S9 (fix round 1, F4): every return of the page component renders it, except the export page\'s refusal', () => {
+    for (const f of files) {
+      const src = readFileSync(f, 'utf8');
+      const body = /^export default async function[\s\S]*?^}$/m.exec(src)?.[0] ?? '';
+      expect(body, f).toMatch(/= await load\(/);
+      // Each return statement: a one-line `return …;`, or `return (` up to the line that closes it at two spaces.
+      const returns = [...body.matchAll(/^\s*(?:if \([^\n]*\) )?return (?:\(\n[\s\S]*?\n  \);|[^\n]*;)$/gm)].map((m) => m[0]);
+      expect(returns.length, f).toBe((body.match(/\breturn\b/g) ?? []).length);
+      for (const r of returns) {
+        if (r.includes('loaded.refused')) continue; // the refusal, rendered without reading the project (S9)
+        expect(/<RememberProject\b|\{remember\}/.test(r), `${f}: ${r.slice(0, 80)}`).toBe(true);
+      }
+      if (/\{remember\}/.test(body)) expect(body, f).toMatch(/const remember = <RememberProject\b/);
+    }
+  });
+
   it('1A Task 12 S9: the export page\'s refusal, rendered without reading the project, remembers nothing', () => {
     const src = readFileSync(join(ROOT, 'export/page.tsx'), 'utf8');
     const refused = /if \(loaded\.refused\)[^\n]*\n?[^\n]*return[^;]*;/.exec(src)?.[0] ?? '';

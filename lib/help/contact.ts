@@ -5,8 +5,9 @@ import { join } from 'node:path';
  * The Help and contact address, from `data/help-contact.json`: `{ "email": string | null }`.
  * It is null until the owner names the monitored address (13.8 step 4d), and only an
  * explicit null shows the pending sentence. A missing key, an extra key, a value that is
- * not an address, or a file that is not JSON stops the build: a wrong or absent address
- * must not pass for the placeholder. The literal `data` prefix keeps the build's file
+ * not an address, or a file that is not JSON throws: that stops the build of About, which is
+ * prerendered, and is the error page on Help, which is rendered per request. A wrong or absent
+ * address must not pass for the placeholder. The literal `data` prefix keeps the build's file
  * tracing static.
  */
 const HELP_FILE = 'data/help-contact.json';
