@@ -1438,5 +1438,13 @@
     "property": "A filter with no results names the chosen filter in \"No questions match '{filter}'.\" and links to all the questions. The filter done_without_evidence is labelled \"Done, no evidence attached\" (CONSOLIDATED 2, vocabulary term done-no-evidence-attached, which retires \"Done without evidence\").",
     "proof": "The case still renders ?show=done_without_evidence and requires the no-match line naming that filter's label (now 'Done, no evidence attached', escaped as the server writes it) and the anchored link to ?show=all with \"Show all {n}\" (unchanged line).",
     "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/document-resolve.test.ts::FR-DOC-02 (round 10): a dataset size band prints its words, never the enum value",
+    "replacedBy": "__tests__/unit/document-resolve.test.ts::FR-DOC-02 (round 10): a dataset size band prints its words, never the enum value",
+    "property": "Each dataset size band prints its display words in a new document, with the project mark, and never its enum value; a null size prints nothing. The words are audit B rows 350 to 354 as the coordinator's answer Q14 applies them: \"Under 1,000 records\", \"1,000 to 100,000 records\", \"100,000 to 1 million records\", \"Over 1 million records\", \"Not known\" (lib/project/labels.ts). Issued documents are stored bytes and are not re-rendered.",
+    "proof": "Only the five word literals of the band table changed; the loop still requires, for every band, that the resolved part's text contains its words and the project mark and does not contain the enum value, and the null case is unchanged.",
+    "task": "plan 1A Task 17"
   }
 ]
