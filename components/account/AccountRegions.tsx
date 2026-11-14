@@ -10,7 +10,11 @@ import { SignOutEverywhere } from './SignOutEverywhere';
 
 const TARGET: CSSProperties = { display: 'inline-block', minWidth: '24px', minHeight: '24px' };
 // The page's h1, sections and slots in one column, 2rem apart; a heading sits close to its own content.
-const REGIONS: CSSProperties = { display: 'grid', gap: 'var(--space-8)' };
+// One column that may shrink below its content's width (minmax(0, 1fr)): a long unbroken email must wrap or scroll inside its
+// own section, not widen every section of the page on a phone.
+const REGIONS: CSSProperties = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 'var(--space-8)' };
+// A name or an email with no space or hyphen wraps inside its own line box.
+const UNBROKEN: CSSProperties = { overflowWrap: 'anywhere' };
 const SECTION_HEADING: CSSProperties = { marginBottom: 'var(--space-2)' };
 
 export interface AccountRegionsProps {
@@ -35,9 +39,9 @@ export function AccountRegions({ identity, reminderEmails, lastActiveOwnerOf }: 
       <section aria-labelledby="account-details-heading"><h2 id="account-details-heading" style={SECTION_HEADING}>{t.detailsHeading}</h2>
         <dl>
           <dt>{t.name}</dt>
-          <dd>{identity.name}</dd>
+          <dd style={UNBROKEN}>{identity.name}</dd>
           <dt>{t.email}</dt>
-          <dd>{identity.email}</dd>
+          <dd style={UNBROKEN}>{identity.email}</dd>
         </dl>
       </section>
       <section aria-labelledby="account-password-heading"><h2 id="account-password-heading" style={SECTION_HEADING}>{t.passwordHeading}</h2>

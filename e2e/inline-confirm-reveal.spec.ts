@@ -8,6 +8,7 @@ import { testDb } from '../__tests__/helpers/db';
 import {
   addDecision, addFinding, addIssuedDocument, addProject, addSealRow, addStageReview, buildOrg, type OrgFixture,
 } from '../__tests__/helpers/recordFixture';
+import { PERSONAL_DATA_COPY } from '../lib/account/copy';
 import { adminSeat } from './fixtures/manifest';
 import { failOnDialog } from './helpers/dialogs';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
@@ -188,11 +189,14 @@ async function load(page: Page, url: string): Promise<void> {
 
 const SCREENS: Screen[] = [
   {
-    name: 'account deletion (S-21)', who: 'viewer', expect: { wide: 'strip', narrow: 'strip' },
+    // Narrow is 'grown-strip' since plan 1A Task 16 restyled this confirmation with the kit's fields (a label, "(required)" and
+    // the field on separate lines, twice): at 320 wide it is taller than a 568 px window can hold, so the window is grown
+    // (to 618 px on 14 Nov 2026) and the case then proves the repair as before.
+    name: 'account deletion (S-21)', who: 'viewer', expect: { wide: 'strip', narrow: 'grown-strip' },
     open: async (page) => {
       await load(page, '/account');
       const confirmation = page.getByRole('group', { name: 'Your account' });
-      return { trigger: page.getByRole('button', { name: 'Delete my account...' }), confirmation, focus: confirmation.getByLabel('Password', { exact: true }), focusInside: true };
+      return { trigger: page.getByRole('button', { name: 'Delete my account...' }), confirmation, focus: confirmation.getByLabel(PERSONAL_DATA_COPY.passwordLabel), focusInside: true };
     },
   },
   {
@@ -612,14 +616,14 @@ test.describe('the confirm button while the request is sent', () => {
     await load(page, '/account');
     await page.getByRole('button', { name: 'Delete my account...' }).click();
     const confirmation = page.getByRole('group', { name: 'Your account' });
-    await confirmation.getByLabel('Password', { exact: true }).fill('not-the-password');
+    await confirmation.getByLabel(PERSONAL_DATA_COPY.passwordLabel).fill('not-the-password');
     await confirmation.getByLabel('Type DELETE MY ACCOUNT to confirm').fill('DELETE MY ACCOUNT');
     // Answered here with the refusal of a wrong password, so the fixture's account is never deleted and route 39's hourly limit is not spent.
     const held = await hold(page, /\/api\/users\/me$/, 'DELETE', (r) => r.fulfill({
       status: 422, contentType: 'application/json', body: JSON.stringify({ error: 'validation', fields: [{ field: 'password', message: 'The password is not right.' }] }),
     }));
     await busyPress(page, confirmation.getByRole('button', { name: 'Delete my account', exact: true }), held);
-    const field = confirmation.getByLabel('Password', { exact: true });
+    const field = confirmation.getByLabel(PERSONAL_DATA_COPY.passwordLabel);
     await expect(page.getByText('The password is not right.')).toBeVisible();
     await expect(field).toBeFocused();
     await expect(field).toHaveAttribute('aria-invalid', 'true');
