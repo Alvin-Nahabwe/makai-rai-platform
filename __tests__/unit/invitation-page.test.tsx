@@ -164,18 +164,28 @@ describe('S-04, the invitation page (FR-ACC-01)', () => {
     expect(markup).toMatch(/<div[^>]*role="alert"[^>]*>(<span[^>]*>.*?<\/span>)?Your account was created\. Sign in to continue\.<\/div><p[^>]*><a[^>]*href="\/login\?callbackUrl=%2Forgs%2Flab%2Fdashboard%3Fwelcome%3D1"[^>]*>Sign in<\/a>/);
   });
 
-  it('NFR-PERF-02 T16-Q11: when the sign-in library cannot load after the 201, S-04 shows that the account was created, with its sign-in link', async () => {
+  it('NFR-PERF-02 T16-Q11: a sign-in library that cannot load after the 201, a rejected sign-in and a refused one all count as not signed in', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const load = vi.fn(() => Promise.reject(new Error('chunk load failed')));
-    const signedIn = await signInAfterCreated('a@x.test', 'pw-typed', load);
+    expect(await signInAfterCreated('a@x.test', 'pw-typed', load)).toBe(false);
     expect(load).toHaveBeenCalledTimes(1);
-    expect(signedIn).toBe(false);
-    expect(afterCreated(signedIn, 'lab')).toEqual(afterCreated(false, 'lab'));
-    // The library's own answers keep their meaning: ok signs in, anything else (a rejection too) does not.
-    const signIn = vi.fn(async () => ({ ok: true }));
+    // The rejection leaves one line: fixed words and the error's kind, never its message, the email or the password.
+    expect(warn.mock.calls).toEqual([['invitation: the sign-in after account creation was rejected', 'Error']]);
+    // The library's replies, in the shapes node_modules/next-auth/react.js gives with `redirect: false`.
+    const signIn = vi.fn(async () => ({ ok: true, error: undefined, code: undefined, status: 200, url: 'http://localhost/' }));
     expect(await signInAfterCreated('a@x.test', 'pw-typed', async () => ({ signIn }) as never)).toBe(true);
     expect(signIn).toHaveBeenCalledWith('credentials', { email: 'a@x.test', password: 'pw-typed', redirect: false });
-    expect(await signInAfterCreated('a@x.test', 'pw-typed', async () => ({ signIn: async () => ({ ok: false }) }) as never)).toBe(false);
-    expect(await signInAfterCreated('a@x.test', 'pw-typed', async () => ({ signIn: () => Promise.reject(new Error('x')) }) as never)).toBe(false);
+    // Refused credentials come back `ok: true` with an `error`: that is not a sign-in.
+    const refused = async () => ({ ok: true, error: 'CredentialsSignin', code: 'credentials', status: 200, url: null });
+    expect(await signInAfterCreated('a@x.test', 'pw-typed', async () => ({ signIn: refused }) as never)).toBe(false);
+    const limited = async () => ({ ok: false, error: undefined, code: undefined, status: 429, url: 'http://localhost/' });
+    expect(await signInAfterCreated('a@x.test', 'pw-typed', async () => ({ signIn: limited }) as never)).toBe(false);
+    // The library navigates away and answers nothing when it cannot read its providers.
+    expect(await signInAfterCreated('a@x.test', 'pw-typed', async () => ({ signIn: async () => undefined }) as never)).toBe(false);
+    expect(await signInAfterCreated('a@x.test', 'pw-typed', async () => ({ signIn: () => Promise.reject(new TypeError('x')) }) as never)).toBe(false);
+    expect(warn.mock.calls.at(-1)).toEqual(['invitation: the sign-in after account creation was rejected', 'TypeError']);
+    expect(warn).toHaveBeenCalledTimes(2);
+    warn.mockRestore();
   });
 
   it('T16-Q11: the M-24 Sign out is idle, with an empty alert region directly under it', () => {

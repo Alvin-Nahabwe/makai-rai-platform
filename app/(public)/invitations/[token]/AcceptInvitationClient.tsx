@@ -66,12 +66,17 @@ async function loadSignIn(): ReturnType<LoadSignIn> {
  * The automatic sign-in after an account is created. next-auth/react is not in S-04's first visit (NFR-PERF-02): it is
  * loaded here, at the point of use. True only when the sign-in worked; a library that does not load, a sign-in that
  * rejects and one that is refused are all false, which `afterCreated` words as "Your account was created. Sign in to
- * continue." with its link, so no rejection escapes the send.
+ * continue." with its link, so no rejection escapes the send. A refused sign-in is read from `error`, as S-01 reads it:
+ * the library answers `ok: true` with an `error` when the credentials are refused (node_modules/next-auth/react.js,
+ * `signIn` with `redirect: false`). The kind of a rejection is reported, never its message or the password.
  */
 export async function signInAfterCreated(email: string, password: string, load: LoadSignIn = loadSignIn): Promise<boolean> {
   return load()
     .then(({ signIn }) => signIn('credentials', { email, password, redirect: false }))
-    .then((r) => r?.ok === true, () => false);
+    .then((r) => r?.ok === true && !r.error, (err: unknown) => {
+      console.warn('invitation: the sign-in after account creation was rejected', err instanceof Error ? err.name : typeof err);
+      return false;
+    });
 }
 
 /** Step 1's checks (7.4.2 row S-04: "Name required; password rules"), the same as route 31's. */

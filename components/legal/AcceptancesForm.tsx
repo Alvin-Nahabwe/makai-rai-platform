@@ -196,12 +196,14 @@ export function signOutPress(load: LoadSignOut, show: (phase: SignOutPhase) => v
   return async (userId, callbackUrl) => {
     if (working) return;
     working = true;
-    show('working');
     try {
+      show('working');
       const { signOutClearingDrafts } = await load();
       await signOutClearingDrafts(userId, callbackUrl);
-    } catch {
-      // Not swallowed: the person is still signed in and the line says so (ruling T16-31); the control is pressable again.
+    } catch (err: unknown) {
+      // The person is still signed in and the line says so (ruling T16-31); the control is pressable again. The kind of
+      // error is reported for whoever maintains this, never its message: the callbackUrl can hold an invitation token.
+      console.warn('acceptances: a sign-out press was rejected', err instanceof Error ? err.name : typeof err);
       working = false;
       show('stillSignedIn');
     }

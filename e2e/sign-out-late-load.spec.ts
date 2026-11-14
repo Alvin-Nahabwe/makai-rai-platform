@@ -86,16 +86,18 @@ function countSignOutPosts(page: Page): () => number {
 async function wrongAccountPage(browser: Browser, label: string) {
   const issuer = await buildOrg({ label: `${label}i` });
   const b = await buildOrg({ label: `${label}b` });
-  const raw = await invitationFor(issuer, `${label}-someone-else-${Date.now()}@fixture.test`);
+  const invited = `${label}-someone-else-${Date.now()}@fixture.test`;
+  const raw = await invitationFor(issuer, invited);
   const viewer = b.members.viewer;
+  const wrongAccount = INVITATION_COPY.wrongAccount(viewer.email, invited);
   const page = await newPage(browser);
   await signIn(page, viewer);
   await page.goto(`/invitations/${raw}`);
-  await expect(page.getByRole('alert').filter({ hasText: 'this invitation is for' })).toBeVisible();
+  await expect(page.getByRole('alert').filter({ hasText: wrongAccount })).toBeVisible();
   const key = `makrai.draft.v1:${viewer.userId}:${b.org.id}:p:q:Q-PP-01`;
   await page.evaluate((k) => localStorage.setItem(k, '{"reason":"secret"}'), key);
   await page.waitForLoadState('networkidle');
-  return { page, viewer, key, raw };
+  return { page, viewer, key, raw, wrongAccount };
 }
 
 /** An account missing its acceptances, signed in: /acceptances with its "sign out". */
@@ -192,7 +194,7 @@ test.describe('T16-Q11: the sign-out controls load their code when pressed', () 
 
   test('NFR-PRIV-06 T16-Q11 T16-31: a failed load at the invitation page\'s Sign out says the person is still signed in, keeps the drafts, and a second press signs out', async ({ browser }) => {
     test.setTimeout(120_000);
-    const { page, viewer, key, raw } = await wrongAccountPage(browser, 'latefaila');
+    const { page, viewer, key, raw, wrongAccount } = await wrongAccountPage(browser, 'latefaila');
     const posts = countSignOutPosts(page);
     const control = page.getByRole('button', { name: INVITATION_COPY.signOut, exact: true });
     const alert = page.getByRole('alert').filter({ hasText: ACCEPTANCES_COPY.stillSignedIn });
@@ -206,7 +208,7 @@ test.describe('T16-Q11: the sign-out controls load their code when pressed', () 
     expect(posts()).toBe(0);
     expect(await draftKeys(page, viewer.userId)).toEqual([key]);
     await stillSignedInAt(page, `/invitations/${raw}`, async (tab) => {
-      await expect(tab.getByRole('alert').filter({ hasText: 'this invitation is for' })).toBeVisible();
+      await expect(tab.getByRole('alert').filter({ hasText: wrongAccount })).toBeVisible();
     });
 
     await fail.stop();

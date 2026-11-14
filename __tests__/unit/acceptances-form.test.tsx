@@ -213,10 +213,14 @@ describe('NFR-PERF-02 NFR-PRIV-06 T16-Q11: the two sign-out controls load their 
       .mockImplementationOnce(() => Promise.reject(new Error('chunk load failed')))
       .mockImplementationOnce(async () => ({ signOutClearingDrafts: signOut }));
     const phases: SignOutPhase[] = [];
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const press = signOutPress(loads, (p) => phases.push(p));
     await press('u-1', '/invitations/t');
     expect(phases).toEqual(['working', 'stillSignedIn']);
     expect(signOut).not.toHaveBeenCalled();
+    // The rejection leaves one line for whoever maintains this: fixed words and the error's kind, never its message.
+    expect(warn.mock.calls).toEqual([['acceptances: a sign-out press was rejected', 'Error']]);
+    warn.mockRestore();
     await press('u-1', '/invitations/t');
     // The press empties the line (working) before it loads again.
     expect(phases).toEqual(['working', 'stillSignedIn', 'working']);
@@ -227,9 +231,12 @@ describe('NFR-PERF-02 NFR-PRIV-06 T16-Q11: the two sign-out controls load their 
   it('T16-31: a load that works followed by a rejected sign-out shows the line too, and each press empties it first', async () => {
     const signOut = vi.fn(() => Promise.reject(new TypeError('Failed to fetch')));
     const phases: SignOutPhase[] = [];
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const press = signOutPress(async () => ({ signOutClearingDrafts: signOut }), (p) => phases.push(p));
     await press('u-1', '/login');
     await press('u-1', '/login');
+    expect(warn.mock.calls).toEqual([['acceptances: a sign-out press was rejected', 'TypeError'], ['acceptances: a sign-out press was rejected', 'TypeError']]);
+    warn.mockRestore();
     expect(phases).toEqual(['working', 'stillSignedIn', 'working', 'stillSignedIn']);
     expect(signOut).toHaveBeenCalledTimes(2);
     expect(phases.map(signOutMessage)).toEqual([null, ACCEPTANCES_COPY.stillSignedIn, null, ACCEPTANCES_COPY.stillSignedIn]);
