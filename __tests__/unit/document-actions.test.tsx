@@ -4,7 +4,7 @@ import type { IssuedDocumentView } from '@/types/api';
 import { HOSTILE_STRINGS } from '../helpers/hostile';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh() {} }) }));
-const { DocumentActions, CopyFallback, WithdrawConfirm, revealConfirmation, withdrawText, WITHDRAW_LOST, WITHDRAW_OTHER, COPY_LOST } = await import('@/components/documents/DocumentActions');
+const { DocumentActions, CopyFallback, WithdrawConfirm, withdrawText, WITHDRAW_LOST, WITHDRAW_OTHER, COPY_LOST } = await import('@/components/documents/DocumentActions');
 
 const doc = (over: Partial<IssuedDocumentView> = {}): IssuedDocumentView => ({
   id: 'd1', projectId: 'p', reviewId: 'r', documentType: 'data_card', sha256: 'ab'.repeat(32), byteSize: 1000,
@@ -61,33 +61,6 @@ describe('the withdrawal confirmation', () => {
     expect(html).toMatch(/>Cancel</);
     expect(html).not.toContain('Anyone who checks');
     expect(html).not.toMatch(/code/i);
-  });
-
-  /**
-   * Opening the confirmation (SC 2.4.11, NFR-A11Y-02). vitest runs in `node` with no DOM, so the elements are stand-ins that record what is
-   * called on them, in order; that the confirmation and both its buttons then sit inside the viewport is driven in a browser by
-   * e2e/document-actions.spec.ts.
-   */
-  const INSTANT = { block: 'nearest', behavior: 'instant' };
-  const standIn = (name: string, calls: unknown[][], scrolls = true) => ({
-    ...(scrolls ? { scrollIntoView: (o?: unknown) => { calls.push([name, 'scrollIntoView', o]); } } : {}),
-    focus: (o?: unknown) => { calls.push([name, 'focus', o]); },
-  });
-
-  it('SC 2.4.11 NFR-A11Y-02: opening brings the whole confirmation into view first, then focuses the reason without a scroll of its own, then brings the reason into view', () => {
-    const calls: unknown[][] = [];
-    revealConfirmation(standIn('confirmation', calls), standIn('reason', calls));
-    expect(calls).toEqual([
-      ['confirmation', 'scrollIntoView', INSTANT],
-      ['reason', 'focus', { preventScroll: true }],
-      ['reason', 'scrollIntoView', INSTANT],
-    ]);
-  });
-
-  it('SC 2.4.11: where an element has no scrollIntoView (a test DOM), the reason still takes focus', () => {
-    const calls: unknown[][] = [];
-    revealConfirmation(standIn('confirmation', calls, false), standIn('reason', calls, false));
-    expect(calls).toEqual([['reason', 'focus', { preventScroll: true }]]);
   });
 });
 

@@ -118,23 +118,6 @@ export function CopyFallback({ text }: { text: string }): ReactElement {
   );
 }
 
-type Scrolls = { scrollIntoView?: (o?: ScrollIntoViewOptions) => void };
-
-/**
- * Opens the withdrawal confirmation into view (SC 2.4.11, NFR-A11Y-02). focus() does not scroll a field that is already partly visible, so
- * near the end of a short page the confirmation opened with its field cut off and both of its buttons below the fold. So: the whole
- * confirmation is brought into view, the field is focused without a scroll of its own, and then the field itself is brought into view (a
- * no-op once the confirmation is in view; the guarantee for a window shorter than the confirmation). Each scroll is instant rather than the
- * page's smooth scroll (app/globals.css), as in DecisionForm's onFocus, so the confirmation is in view when focus lands. The optional call
- * is the precedent's own form: a test DOM may not implement scrollIntoView, and the field still takes focus.
- */
-export function revealConfirmation(confirmation: Scrolls | null, field: Scrolls & { focus: (o?: FocusOptions) => void }): void {
-  const instant: ScrollIntoViewOptions = { block: 'nearest', behavior: 'instant' };
-  confirmation?.scrollIntoView?.(instant);
-  field.focus({ preventScroll: true });
-  field.scrollIntoView?.(instant);
-}
-
 /**
  * M-36 in place (UX-29): names the document, says what withdrawing does, takes the required reason, and its button repeats the action.
  * The reason is sent once per unchanged text, with one request id (a Retry resends it, UX-27).
@@ -149,8 +132,7 @@ export function WithdrawConfirm(p: {
   const [retry, setRetry] = useState<RetryState>(NO_RETRY);
   const [unknown, setUnknown] = useState(false);
   const box = useRef<HTMLTextAreaElement | null>(null);
-  const wrap = useRef<HTMLDivElement | null>(null);
-  useEffect(() => { if (box.current) revealConfirmation(wrap.current, box.current); }, []);
+  useEffect(() => { box.current!.focus(); }, []);
 
   async function send(): Promise<void> {
     setBusy(true);
@@ -164,7 +146,7 @@ export function WithdrawConfirm(p: {
   }
 
   return (
-    <div data-inline-confirm ref={wrap}>
+    <div data-inline-confirm>
       <InlineConfirm
         objectName={`${DOCUMENT_TITLES[p.document.documentType]} issued ${formatUtcDay(p.document.issuedAt)}`}
         consequence={withdrawText(p.document.documentType, p.today)}
