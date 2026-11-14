@@ -120,7 +120,7 @@ describe('the evidence block and the version evidence list', () => {
     };
     const invalid = (tag: string) => /aria-invalid="true"/.test(tag) && /\bui-input--invalid\b/.test(tag);
     const unmarked = (tag: string) => !/aria-invalid=/.test(tag) && !/\bui-input--invalid\b/.test(tag);
-    const address = inputs(view({ linkFormOpen: true, linkError: EVIDENCE_COPY.link.url }));
+    const address = inputs(view({ linkFormOpen: true, linkError: EVIDENCE_COPY.link.address }));
     expect(invalid(address.url)).toBe(true);
     expect(unmarked(address.name)).toBe(true);
     const name = inputs(view({ linkFormOpen: true, linkError: EVIDENCE_COPY.link.nameTooLong(200) }));

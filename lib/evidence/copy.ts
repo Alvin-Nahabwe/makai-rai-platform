@@ -70,7 +70,7 @@ export const EVIDENCE_COPY = Object.freeze({
   }),
   /** The link's field messages: the server's (lib/evidence/link.ts) and the browser's (lib/client/evidenceLink.ts). */
   link: Object.freeze({
-    url: 'Enter a web address that starts with http:// or https://.',
+    address: 'Enter a web address that starts with http:// or https://.',
     nameTooLong: (max: number): string => `Use ${max} characters or fewer for the name.`,
     requestIdMissing: 'Something went wrong. Reload the page and try again.',
     chooseKind: 'Choose a file or a link.',

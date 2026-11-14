@@ -68,7 +68,7 @@ export function EvidenceBlockView(p: EvidenceBlockViewProps): ReactElement {
   const errorId = `${p.idBase}-link-error`;
   // A field is marked invalid only by its own message; a refusal (signed out, archived, the limiter, a lost connection)
   // is about the request, not a field, and marks neither.
-  const urlInvalid = p.linkError === EVIDENCE_COPY.link.url;
+  const urlInvalid = p.linkError === EVIDENCE_COPY.link.address;
   const nameInvalid = p.linkError === EVIDENCE_COPY.link.nameTooLong(LINK_LABEL_MAX);
   const removable = (item: EvidenceItemView, carried: boolean): ReactElement => (
     <li key={item.id} className="evidence-block__item">
