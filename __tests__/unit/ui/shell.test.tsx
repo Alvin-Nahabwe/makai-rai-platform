@@ -233,17 +233,19 @@ describe('the rail, ported from the sidebar (UX-02, UX-41)', () => {
     expect([...theme.matchAll(/localStorage\.(\w+)\(/g)].map((m) => m[1])).toEqual(['setItem']);
     expect(theme).toContain("localStorage.setItem('theme', next)");
     // The one file under components/layout and lib/shell, besides the theme switch, that names localStorage is
-    // lib/client/lastProject.ts: one getItem, one setItem and the removal loop, each inside a try.
+    // lib/client/lastProject.ts: one getItem, one setItem and two removal loops (this person's keys at sign-out; other
+    // people's keys before a write, ruling L2-75), each storage call inside a try.
     const layoutAndShell = [
       ...readdirSync('components/layout').map((f) => `components/layout/${f}`),
       ...readdirSync('lib/shell').map((f) => `lib/shell/${f}`),
     ].filter((f) => /\.(ts|tsx)$/.test(f) && f !== 'components/layout/ThemeToggle.tsx');
     for (const f of layoutAndShell) expect(readFileSync(f, 'utf8'), f).not.toMatch(/localStorage/);
     const store = readFileSync('lib/client/lastProject.ts', 'utf8');
-    expect([...store.matchAll(/localStorage\.(\w+)\(/g)].map((m) => m[1])).toEqual(['getItem', 'setItem', 'key', 'removeItem']);
-    for (const call of ['localStorage.getItem(', 'localStorage.setItem(', 'localStorage.key(', 'localStorage.removeItem(']) {
-      const before = store.slice(0, store.indexOf(call));
-      expect(before.lastIndexOf('try {'), call).toBeGreaterThan(before.lastIndexOf('}\n'));
+    const calls = [...store.matchAll(/localStorage\.(\w+)\(/g)];
+    expect(calls.map((m) => m[1])).toEqual(['getItem', 'setItem', 'key', 'removeItem', 'key', 'removeItem']);
+    for (const m of calls) {
+      const before = store.slice(0, m.index);
+      expect(before.lastIndexOf('try {'), `${m[1]} at ${m.index}`).toBeGreaterThan(before.lastIndexOf('}\n'));
     }
     // The rail reads it through the store's subscription, after hydration (the server snapshot is null).
     const railSource = readFileSync('components/layout/Rail.tsx', 'utf8');

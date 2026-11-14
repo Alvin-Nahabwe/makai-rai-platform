@@ -141,6 +141,37 @@ describe('lib/client/lastProject', () => {
     warn.mockRestore();
   });
 
+  it('L2-75: remembering removes every other person\'s last-project key, and keeps this person\'s other organisations and every other key', async () => {
+    const { storage, map } = memoryStorage([
+      ['makrai:last-project:u1:a', P1], ['makrai:last-project:u10:b', P1], ['makrai:last-project:u2:other', P1],
+      ['makrai.draft.v1:u1:x', '{}'], ['makrai-theme', 'dark'], ['theme', 'light'],
+    ]);
+    vi.stubGlobal('localStorage', storage);
+    vi.stubGlobal('window', new EventTarget());
+    const m = await load();
+    m.rememberLastProject('u2', 'a', P1);
+    expect([...map.keys()].sort()).toEqual(['makrai-theme', 'makrai.draft.v1:u1:x', 'makrai:last-project:u2:a', 'makrai:last-project:u2:other', 'theme']);
+  });
+
+  it('L2-75: a removeItem or key() that throws neither throws nor stops the write, and says nothing', async () => {
+    for (const broken of ['removeItem', 'key'] as const) {
+      const { storage, map } = memoryStorage([['makrai:last-project:u1:a', P1], ['makrai:last-project:u3:a', P1]]);
+      storage[broken] = (() => { throw new DOMException('denied', 'SecurityError'); }) as never;
+      vi.stubGlobal('localStorage', storage);
+      const target = new EventTarget();
+      const heard = vi.fn();
+      target.addEventListener('makrai:last-project', heard);
+      vi.stubGlobal('window', target);
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const m = await load();
+      expect(() => m.rememberLastProject('u2', 'a', P1), broken).not.toThrow();
+      expect(map.get('makrai:last-project:u2:a'), broken).toBe(P1);
+      expect(heard, broken).toHaveBeenCalledTimes(1);
+      expect(warn, broken).not.toHaveBeenCalled();
+      warn.mockRestore();
+    }
+  });
+
   it('L2-64: the module imports nothing (it is on two public pages through signOutClearingDrafts)', () => {
     const src = readFileSync('lib/client/lastProject.ts', 'utf8');
     expect(src).not.toMatch(/^\s*import\s/m);
@@ -149,10 +180,6 @@ describe('lib/client/lastProject', () => {
 
 describe('L2-66 S4: every person-started sign-out clears this person\'s last-project keys', () => {
   const read = (f: string) => readFileSync(f, 'utf8');
-
-  it('L2-66 (2): the rail\'s Sign out clears them in its own onClick, before signOut (pinned in __tests__/unit/ui/shell.test.tsx)', () => {
-    expect(read('components/layout/Rail.tsx')).toMatch(/clearLastProjects\(shell\.userId\);\s*void signOut\(/);
-  });
 
   it('L2-66 (3): the drafts guard\'s "Delete them and sign out" clears them beside purgeAccount, before signOut', () => {
     expect(read('components/decision/SignOutWithDraftsGuard.tsx')).toMatch(
@@ -172,7 +199,7 @@ describe('L2-66 S4: every person-started sign-out clears this person\'s last-pro
     );
   });
 
-  it('L2-66 (second route): every client file that calls signOut( also calls clearLastProjects, except the password change', () => {
+  it('L2-66 (second route): every client file that calls signOut( also clears the keys, except the password change', () => {
     const files = ['components', 'lib', 'app'].flatMap((root) => readdirSync(root, { recursive: true, encoding: 'utf8' }).map((f) => `${root}/${f}`))
       .filter((f) => /\.(ts|tsx)$/.test(f) && !f.startsWith('app/api/'));
     const callers = files.filter((f) => /\bsignOut\(/.test(read(f))).sort();
@@ -184,8 +211,52 @@ describe('L2-66 S4: every person-started sign-out clears this person\'s last-pro
       'components/layout/Rail.tsx',
       'lib/client/signOutClearingDrafts.ts',
     ]);
-    for (const f of callers.filter((c) => !c.includes('change-password'))) expect(read(f), f).toMatch(/clearLastProjects\(/);
+    for (const f of callers.filter((c) => !c.includes('change-password') && !c.endsWith('signOutClearingDrafts.ts'))) expect(read(f), f).toMatch(/clearLastProjects\(/);
+    // signOutClearingDrafts is on two public pages, so it sweeps the keys itself (fix round 1, F1c), with no import of the store.
+    expect(read('lib/client/signOutClearingDrafts.ts')).toMatch(/sweepLastProjects\(userId\);/);
+    expect(read('lib/client/signOutClearingDrafts.ts')).not.toMatch(/from '@\/lib\/client\/lastProject'/);
     expect(read('app/(authenticated)/change-password/ChangePasswordForm.tsx')).not.toMatch(/clearLastProjects/);
+  });
+});
+
+describe('signOutClearingDrafts sweeps the keys itself (fix round 1, F1c)', () => {
+  async function signOutWith(storage: Storage) {
+    vi.resetModules();
+    const signOut = vi.fn(async () => {});
+    vi.doMock('next-auth/react', () => ({ signOut }));
+    vi.doMock('@/lib/client/drafts', () => ({ openDraftStore: () => null }));
+    vi.stubGlobal('localStorage', storage);
+    const { signOutClearingDrafts } = await import('@/lib/client/signOutClearingDrafts');
+    await signOutClearingDrafts('u1', '/login');
+    vi.doUnmock('next-auth/react');
+    vi.doUnmock('@/lib/client/drafts');
+    return signOut;
+  }
+
+  it('F1c (silent-failure hunt 2, F4): a key() that throws still signs out, silently', async () => {
+    const { storage } = memoryStorage([['makrai:last-project:u1:a', P1]]);
+    storage.key = (() => { throw new DOMException('denied', 'SecurityError'); }) as never;
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(await signOutWith(storage)).toHaveBeenCalledWith({ callbackUrl: '/login' });
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('F1c (silent-failure hunt 2, F4): one refused removal keeps neither the other keys nor the sign-out back, and is said once in fixed words', async () => {
+    const { storage, map } = memoryStorage([['makrai:last-project:u1:a', P1], ['makrai:last-project:u1:b', P1], ['makrai:last-project:u2:a', P1]]);
+    let refused = false;
+    const remove = storage.removeItem;
+    storage.removeItem = (k: string) => {
+      if (!refused) { refused = true; throw new DOMException('denied', 'SecurityError'); }
+      remove(k);
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(await signOutWith(storage)).toHaveBeenCalledWith({ callbackUrl: '/login' });
+    expect([...map.keys()].filter((k) => k.includes(':u1:'))).toHaveLength(1);
+    expect(map.has('makrai:last-project:u2:a')).toBe(true);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).not.toMatch(/u1/);
+    warn.mockRestore();
   });
 });
 
@@ -203,13 +274,5 @@ describe('RememberProject', () => {
     expect(src).toMatch(/rememberLastProject\(userId, orgSlug, projectId\)/);
     expect(src).toMatch(/userId !== '' && orgSlug !== '' && projectId !== ''/);
     expect(src).not.toMatch(/localStorage/);
-  });
-
-  it('Review Focus 1: the effect\'s write does nothing, and throws nothing, when setItem throws', async () => {
-    // The effect body is rememberLastProject (pinned above); here it runs against a storage that refuses writes.
-    vi.stubGlobal('localStorage', throwingStorage());
-    vi.stubGlobal('window', new EventTarget());
-    const m = await load();
-    expect(() => m.rememberLastProject('u1', 'acme', P1)).not.toThrow();
   });
 });

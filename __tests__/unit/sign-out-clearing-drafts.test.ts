@@ -95,6 +95,12 @@ describe('NFR-PRIV-06 CR-1 SFH-4: signOutClearingDrafts', () => {
     }
   });
 
+  it('1A Task 12 F1c: the last-project prefix this file sweeps is lib/client/lastProject.ts\'s own', async () => {
+    const { LAST_PROJECT_PREFIX } = await vi.importActual<typeof import('@/lib/client/lastProject')>('@/lib/client/lastProject');
+    const { LAST_PROJECT_KEY_PREFIX } = await import('@/lib/client/signOutClearingDrafts');
+    expect(LAST_PROJECT_KEY_PREFIX).toBe(LAST_PROJECT_PREFIX);
+  });
+
   it('NFR-PRIV-06 FIX-7: the prefix this file sweeps is the draft store\'s own', async () => {
     const { DRAFT_PREFIX } = await vi.importActual<typeof import('@/lib/client/drafts')>('@/lib/client/drafts');
     const { DRAFT_KEY_PREFIX } = await import('@/lib/client/signOutClearingDrafts');
