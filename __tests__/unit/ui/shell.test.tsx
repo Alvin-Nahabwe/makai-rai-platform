@@ -231,6 +231,9 @@ describe('the rail, ported from the sidebar (UX-02, UX-41)', () => {
   it('S4: no organisation gives no organisation link, and the administrator\'s rail is unchanged, with a home slug or without', () => {
     expect(linkLabels(rail('/account', noOrg))).toEqual(['Guidance', 'Help', 'My account']);
     expect(linkLabels(rail('/account', { ...admin, homeSlug: null }))).toEqual(['Organisations', 'Accounts', 'My account']);
+    // A home slug the server never sends for the administrator: the rail still draws no organisation link.
+    expect(linkLabels(rail('/account', { ...admin, homeSlug: 'a' }))).toEqual(['Organisations', 'Accounts', 'My account']);
+    expect(rail('/account', { ...admin, homeSlug: 'a' })).not.toContain('/orgs/');
   });
 
   it('UX-01 UX-02: the MAK-AI administrator rail links S-23 and S-25, then My account, and has no organisation item', () => {

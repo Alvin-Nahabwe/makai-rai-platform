@@ -585,12 +585,13 @@ test('S4 rule 2: after switching from organisation A to B, My account\'s rail li
     await page.locator('.shell-org__button').click();
     await page.locator('.shell-org__list a').filter({ hasText: p.b.org.name }).click();
     await page.waitForURL((url) => url.pathname === `/orgs/${p.b.org.slug}/dashboard`);
+    // Opening B's page stored B as the last active organisation. Put the stored answer back to A, so that only the
+    // organisation remembered in the mounted shell (rule 2) can give B below: the server's answer alone would give A.
+    await testDb.user.update({ where: { id: p.account.userId }, data: { lastActiveOrgId: p.a.org.id } });
     // A client navigation inside the signed-in layout: the shell (and its ShellData) stays mounted.
     await railLinks(page).filter({ hasText: /^My account$/ }).click();
     await page.waitForURL((url) => url.pathname === '/account');
     expect(withoutLast(await orgLinkHrefs(page)), 'after the switch, without a reload').toEqual(linksFor(p.b.org.slug));
-    await page.reload();
-    expect(withoutLast(await orgLinkHrefs(page)), 'after a reload (B is now the last active)').toEqual(linksFor(p.b.org.slug));
   } finally {
     await context.close();
   }

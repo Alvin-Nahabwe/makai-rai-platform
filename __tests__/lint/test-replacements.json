@@ -1918,5 +1918,29 @@
     "property": "The guidance texts sit under real headings one level below the heading above them, and the slot repeats no id of the page. With the h2 \"Question\" removed (slice 1), that heading is the page's h1, so \"What good looks like\" and \"Why this is asked\" are h2 (they were h3), and the id it must not repeat is question-heading.",
     "proof": "The case renders QuestionContent and requires no id=\"question-heading\", no h1 or h3 to h6, exactly two h2, and the h2 texts 'What good looks like' and 'Why this is asked'. question-frame.test.tsx requires, on the whole page, that the first heading is the h1 and no heading is more than one level below the one before it.",
     "task": "plan 1C Task 4 (cut), slice 1"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/idle-layout.test.tsx::(module)",
+    "replacedBy": "__tests__/unit/idle-layout.test.tsx::UX-02: the layout gives the Sidebar the person's role in each of their organisations, the platform label and no platform role",
+    "property": "The file's module code serves the cases below: the layout is walked as an element tree with every data read mocked, so no case reaches a database.",
+    "proof": "Two module changes, both forced by loadShellData reading the last-active hint for a person in two or more organisations (workshop walk finding S4): @/lib/data/identity is mocked with a findUnique that answers lastActiveOrgId 'org-b', and the two mocked membership rows carry orgId 'org-a' and 'org-b', which resolveOrgDispatch matches the hint against. Nothing is removed; without the mock the case would read the real identity table.",
+    "task": "workshop walk fix S4"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/idle-layout.test.tsx::UX-02: the layout gives the Sidebar the person's role in each of their organisations, the platform label and no platform role",
+    "replacedBy": "__tests__/unit/idle-layout.test.tsx::UX-02: the layout gives the Sidebar the person's role in each of their organisations, the platform label and no platform role",
+    "property": "The layout hands the shell the person's role in each of their organisations and the platform label, asks orgRoleLabel once per organisation and once for the platform, and the account's platform role field never reaches the shell (UX-02, D-10).",
+    "proof": "The exact-equality assertion on the shell prop gains one key, homeSlug: 'b' (the organisation the mocked hint names among the two mocked memberships); every other expected value and every other assertion of the case is unchanged, so the case is stricter, not weaker: a shell carrying any further field of the user or organisation row still fails it.",
+    "task": "workshop walk fix S4"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/admin-screens.test.tsx::UX-01: the administrator sidebar links S-23 and S-25 (SRS line 1514)",
+    "replacedBy": "__tests__/unit/admin-screens.test.tsx::UX-01: the administrator sidebar links S-23 and S-25 (SRS line 1514)",
+    "property": "The administrator's shell links S-23 (/admin/organisations) and S-25 (/admin/accounts), and no Settings or /admin/users link.",
+    "proof": "The shell prop the case renders Rail with gains homeSlug: null, the field ShellData now requires (workshop walk finding S4); the four assertions are unchanged. __tests__/unit/ui/shell.test.tsx::S4: no organisation gives no organisation link, and the administrator's rail is unchanged, with a home slug or without renders the administrator's rail with a home slug too and requires the same three links and no /orgs/ address.",
+    "task": "workshop walk fix S4"
   }
 ]

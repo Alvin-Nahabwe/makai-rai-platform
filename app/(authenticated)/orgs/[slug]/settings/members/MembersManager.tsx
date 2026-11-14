@@ -192,9 +192,9 @@ export default function MembersManager({ slug, currentUserId, currentRole, membe
     if (!idle()) return;
     setMessage('');
     const out = await write<InviteMemberResponse>(`resend:${inv.id}`, `${base}/invitations/${inv.id}/resend`, 'POST', { showLink });
+    revealResult();                                 // as for Invite: the answer, of either kind, is at the top of the page
     if (out.kind !== 'saved') { setMessage(refusal(out, 'resend')); return; }
     received('resend', out.status, out.body, inv.id);
-    revealResult();
   }
 
   async function revoke(inv: InvitationView): Promise<void> {
