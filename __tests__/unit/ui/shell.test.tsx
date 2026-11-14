@@ -329,10 +329,16 @@ describe('the public pages load no shell stylesheet (plan 1A Task 12, fix round 
     expect(start).toBeGreaterThan(0);
     const block = globals.slice(start);
     const shell = readFileSync('components/layout/shell.css', 'utf8');
-    for (const sel of ['.shell-public-header {', '.shell-footer {', '.shell-theme--on-light {', '.shell-theme__to-light {', '.shell-idle__failed {', '@media print {']) {
-      expect(block, sel).toContain(sel);
-      expect(shell, sel).not.toContain(sel);
+    for (const sel of ['.shell-public-header {', '.shell-footer {', '.shell-theme--on-light {', '.shell-theme__to-light {', '.shell-idle__failed {']) {
+      // at the start of a line: the top-level rule, not the print rule's indented selector list
+      expect(block.split('\n'), sel).toContain(sel);
+      expect(shell.split('\n'), sel).not.toContain(sel);
     }
+    // The print rule is in both, byte for byte: globals.css for the public pages, and the end of shell.css so that on a
+    // signed-in page it still comes after shell.css's `@media (min-width: 1024px)` panel rule, as before the move.
+    const print = (css: string) => css.slice(css.lastIndexOf('/* ── Print: the page\'s content only ── */'));
+    expect(print(block)).toMatch(/^\/\* ── Print[\s\S]*@media print \{[\s\S]*\.shell-footer[\s\S]*\}\n$/);
+    expect(print(shell)).toBe(print(block));
   });
 });
 

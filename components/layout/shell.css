@@ -305,3 +305,23 @@
   font-weight: var(--font-weight-semibold);
   text-decoration: none;
 }
+
+/* ── Print: the page's content only ── */
+@media print {
+  .shell-topbar,
+  .shell-topbar__panel,
+  .shell-public-header,
+  .shell-footer {
+    display: none;
+  }
+
+  .shell {
+    display: block;
+  }
+
+  .shell__main {
+    overflow: visible;
+    max-height: none;
+    padding: 0;
+  }
+}
