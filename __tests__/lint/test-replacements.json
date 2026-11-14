@@ -1414,5 +1414,29 @@
     "property": "The file's comment quoted the one sentence of the note; it now says what each role is told (audit D row OR87), and the file imports the copy module that holds the two sentences. Nothing outside the case is asserted.",
     "proof": "Outside its case the file changed only in its header comment, which now describes the two lines instead of quoting the old one, and in the import of AUTHZ_COPY from lib/authz/copy (a copy module); the case's assertions are as the entry above says.",
     "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/integration/decision-pages.test.ts::FR-DEC-06 (screen): a new project's stage shows every question as No decision and the W-2 empty line",
+    "replacedBy": "__tests__/integration/decision-pages.test.ts::FR-DEC-06 (screen): a new project's stage shows every question as No decision and the W-2 empty line",
+    "property": "A new project's stage shows every question as No decision, the stage's question count, each module heading with its own counts, the subtitle naming the stage's modules in module order, and the empty line. Audit B row 3 rewrites the subtitle from \"{Stage}: {module}; {module}\" to \"{module} · {module}\" (C2 retires \"module\"; the stage is already the h1), and row 5 rewrites the empty line (\"You can work on the stages in any order.\"), now read from QUESTION_COPY.stage.nothingRecorded.",
+    "proof": "The case still requires the empty line (now the constant), one \">No decision<\" per question, the question count, the module h2 followed by \"7 questions · 7 with no decision\", and both module titles in module order in one line, now joined by \" · \" without the stage prefix: 'Problem Formulation · Data Collection &amp; Preparation'.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/integration/decision-pages.test.ts::FR-DEC-06 (screen): with a decision recorded the empty line goes and the row shows its status and version",
+    "replacedBy": "__tests__/integration/decision-pages.test.ts::FR-DEC-06 (screen): with a decision recorded the empty line goes and the row shows its status and version",
+    "property": "With a decision recorded the empty line goes and the row shows the decision's status words in their status-label element followed by its declared date. Audit B row 214 removes the \" · v{n}\" marker from the row (C2 retires \"v3\" as a label); the version stays on the question page and in History.",
+    "proof": "The regular expression still anchors on the row's data-question-id and requires the status words \"Partly\" to close their </span> and be followed by \" · Oct 2026\", the declared date at its precision; only the removed \" · v1\" between them is gone. The not-toContain of the empty line is unchanged.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/integration/decision-pages.test.ts::FR-DEC-06 (screen): a filter with no results says so and links to all",
+    "replacedBy": "__tests__/integration/decision-pages.test.ts::FR-DEC-06 (screen): a filter with no results says so and links to all",
+    "property": "A filter with no results names the chosen filter in \"No questions match '{filter}'.\" and links to all the questions. The filter done_without_evidence is labelled \"Done, no evidence attached\" (CONSOLIDATED 2, vocabulary term done-no-evidence-attached, which retires \"Done without evidence\").",
+    "proof": "The case still renders ?show=done_without_evidence and requires the no-match line naming that filter's label (now 'Done, no evidence attached', escaped as the server writes it) and the anchored link to ?show=all with \"Show all {n}\" (unchanged line).",
+    "task": "plan 1A Task 17"
   }
 ]

@@ -295,21 +295,6 @@
     "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
   },
   {
-    "file": "app/(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]/page.tsx",
-    "text": "${…} questions · ${…} with no decision",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "app/(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]/page.tsx",
-    "text": "Nothing is recorded for this stage yet. Open any question to start. Stages can be recorded in any order.",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "app/(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]/page.tsx",
-    "text": "Show more",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
     "file": "app/(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]/history/page.tsx",
     "text": "${…} ${…}, newest first.",
     "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
@@ -837,56 +822,6 @@
   {
     "file": "components/decision/SignOutWithDraftsGuard.tsx",
     "text": "Go to them",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "components/decision/StageQuestionList.tsx",
-    "text": "${…} answers saved on this device have not reached the server.",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "components/decision/StageQuestionList.tsx",
-    "text": "${…} questions · ${…} with no decision",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "components/decision/StageQuestionList.tsx",
-    "text": "No questions match '${…}'.",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "components/decision/StageQuestionList.tsx",
-    "text": "Retry all ${…}",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "components/decision/StageQuestionList.tsx",
-    "text": "Show all ${…}",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "components/decision/StageQuestionList.tsx",
-    "text": "Show questions",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "components/decision/StageQuestionList.tsx",
-    "text": "· ${…} of ${…} in place",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "components/decision/StageQuestionList.tsx",
-    "text": "· Draft on this device, kept until ${…}",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "components/decision/StageQuestionList.tsx",
-    "text": "· changed since seal ${…}",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "components/decision/StageQuestionList.tsx",
-    "text": "· expected practice reworded since the decision",
     "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
   },
   {

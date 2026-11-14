@@ -18,6 +18,8 @@ import { StageSealBanner } from '@/components/review/StageSealBanner';
 import { StageFollowUpCounts } from '@/components/followup/StageFollowUpCounts';
 import { StageQuestionList } from '@/components/decision/StageQuestionList';
 import { ShowMoreLink } from '@/components/ui/ShowMoreLink';
+import { QUESTION_COPY } from '@/lib/question/copy';
+import { STAGE_LIST_COPY } from '@/lib/question/list/copy';
 import { ListLink } from '@/components/ui/ListLink';
 import { STAGES, type ScopeAnswer, type Stage } from '@/types/record';
 import type { ChangedSinceSeal } from '@/types/api';
@@ -132,17 +134,17 @@ export function StageWorkspace({ data, show, shown }: { data: StagePageData; sho
       <ArchivedBanner archived={data.projectArchived} />
       <p><ListLink href={base}>{data.projectName}</ListLink></p>
       <h1>{STAGE_TITLE[data.stage]}</h1>
-      {/* W-2's subtitle: the stage and its modules, in module order. */}
-      <p className="text-muted">{`${STAGE_TITLE[data.stage]}: ${moduleGroups(data.rows).map((g) => g.moduleTitle).join('; ')}`}</p>
-      <p data-stage-summary>{`${data.rows.length} questions · ${noDecision} with no decision`}</p>
+      {/* W-2's subtitle: the stage's topics, in module order. */}
+      <p className="text-muted">{QUESTION_COPY.stage.topics(moduleGroups(data.rows).map((g) => g.moduleTitle))}</p>
+      <p data-stage-summary>{STAGE_LIST_COPY.summary(data.rows.length, noDecision)}</p>
       <StageFollowUpCounts orgSlug={data.orgSlug} projectId={data.projectId} stage={data.stage} counts={data.followUp} />
       {data.nothingRecorded
-        ? <p>Nothing is recorded for this stage yet. Open any question to start. Stages can be recorded in any order.</p>
+        ? <p>{QUESTION_COPY.stage.nothingRecorded}</p>
         : null}
       {data.changed !== null && data.review !== null ? (
         // W-2: "<review name>: changed since seal N in M questions. [Open review >]"; the banner prints all but the name.
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', alignItems: 'baseline' }}>
-          <strong>{`${data.review.name}:`}</strong>
+          <strong>{QUESTION_COPY.stage.reviewName(data.review.name)}</strong>
           <StageSealBanner changed={data.changed} reviewHref={`${base}/reviews/${data.review.id}`} />
         </div>
       ) : null}
@@ -151,7 +153,7 @@ export function StageWorkspace({ data, show, shown }: { data: StagePageData; sho
         rows={page.items} show={show} counts={counts} filters={filters.map((f) => ({ key: f, label: filterLabel(f, sealNumber) }))}
         total={data.rows.length} sealNumber={sealNumber}
       />
-      {page.hasMore ? <ShowMoreLink href={`?show=${show}&shown=${page.nextShown}`} label="Show more" /> : null}
+      {page.hasMore ? <ShowMoreLink href={`?show=${show}&shown=${page.nextShown}`} label={QUESTION_COPY.stage.showMore} /> : null}
     </div>
   );
 }

@@ -5,7 +5,6 @@
   "app/globals.css",
   "components/admin/CreateOrganisationForm.tsx",
   "components/decision/DecisionHistoryList.tsx",
-  "components/decision/StageQuestionList.tsx",
   "components/export/TeamExportPanel.tsx",
   "components/report/ReferencesList.css"
 ]

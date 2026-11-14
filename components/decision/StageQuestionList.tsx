@@ -2,12 +2,14 @@
 
 import { useEffect, useState, type ReactElement } from 'react';
 import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/Button';
 import { ListLink } from '@/components/ui/ListLink';
 import { openDraftStore, type DraftStore } from '@/lib/client/drafts';
 import { requestIdFor, sendWrite } from '@/lib/client/retrySafeWrite';
 import { formatDay, formatDeclaredDate, formatTime } from '@/lib/format/dates';
 import { isDraftValue, questionHref, toSaveBody, type DecisionDraft } from '@/lib/question/draft';
 import { statusForOutcome } from '@/lib/question/saveOutcome';
+import { STAGE_LIST_COPY as L } from '@/lib/question/list/copy';
 import { moduleGroups, retryAllSummary, rowMatches, stageDraftIds, type StageFilter, type StageRow } from '@/lib/question/stageList';
 import type { DecisionVersionView } from '@/types/api';
 import type { CalendarDate, Stage } from '@/types/record';
@@ -26,8 +28,8 @@ type DeviceDraft = { keptUntil: CalendarDate; pressed: boolean; value: DecisionD
 /**
  * S-11's filter group and question list (W-2 notes 2 to 5; UX-26; 7.4.1 "Offline or slow"). The server renders the rows
  * of the chosen filter, so the page works without scripts; here the filter changes without a page load, and this
- * account's drafts on this device are read from storage to mark their rows ("Draft on this device", "kept until
- * <date>"), to fill the "Drafts on this device" filter and, for drafts whose Save was pressed, to offer "Retry all",
+ * account's drafts in this browser are read from storage to mark their rows ("not saved yet", "kept in this browser
+ * until <date>"), to fill the "Not saved yet" filter and, for drafts whose Save was pressed, to offer "Save all n now",
  * which re-sends each draft with its own stored request id (UX-27) and shows each result. Filter addresses carry only
  * the filter key (NFR-PRIV-04). Status words are text in `.status-label`, never colour alone (UX-06).
  */
@@ -99,12 +101,12 @@ export function StageQuestionList(p: StageQuestionListProps): ReactElement {
     router.refresh();
   }
 
-  const activeLabel = p.filters.find((f) => f.key === show)?.label ?? 'All';
+  const activeLabel = p.filters.find((f) => f.key === show)?.label ?? L.filters.all;
   return (
     <div className="stage-question-list">
-      <form method="get" aria-label="Show questions">
+      <form method="get" aria-label={L.form.label}>
         <fieldset className="form-group">
-          <legend>Show</legend>
+          <legend>{L.form.legend}</legend>
           {p.filters.map((f) => (
             <label key={f.key} className="checkbox-label" style={{ marginInlineEnd: '1rem' }}>
               <input type="radio" name="show" value={f.key} checked={show === f.key} onChange={() => choose(f.key)} />
@@ -112,27 +114,28 @@ export function StageQuestionList(p: StageQuestionListProps): ReactElement {
             </label>
           ))}
         </fieldset>
-        <noscript><button type="submit" className="btn btn--secondary btn--small">Show</button></noscript>
+        <noscript><button type="submit" className="btn btn--secondary btn--small">{L.form.submit}</button></noscript>
       </form>
 
       {pressed.length > 0 ? (
         <div className="card" data-retry-all>
-          <p>{`${pressed.length} answers saved on this device have not reached the server.`}</p>
-          <button type="button" className="btn btn--primary" disabled={retrying} onClick={() => { void retryAll(); }}>{`Retry all ${pressed.length}`}</button>
+          <p>{L.unsent(pressed.length)}</p>
+          {/* Busy, never disabled: the button keeps its place and the focus of the person who pressed it (kit Button). */}
+          <Button variant="primary" busy={retrying} onClick={() => { void retryAll(); }}>{L.saveAll(pressed.length)}</Button>
         </div>
       ) : null}
       <div role="status">{results.size > 0 && !retrying ? retryAllSummary([...results.values()].map((r) => r.id)) : ''}</div>
 
       {visible.length === 0 ? (
         <p>
-          {`No questions match '${activeLabel}'. `}
-          <a href="?show=all" onClick={(e) => { e.preventDefault(); choose('all'); }}>{`Show all ${p.total}`}</a>
+          {L.noMatch(activeLabel)}
+          <a href="?show=all" onClick={(e) => { e.preventDefault(); choose('all'); }}>{L.showAll(p.total)}</a>
         </p>
       ) : (
         moduleGroups(p.rows).filter((g) => g.rows.some((r) => visible.includes(r))).map((g) => (
         <section key={g.moduleId} aria-labelledby={`module-${g.moduleId}`}>
           <h2 id={`module-${g.moduleId}`} style={{ fontSize: '1.1rem', marginBlockEnd: 0 }}>{g.moduleTitle}</h2>
-          <p className="text-muted" style={{ marginBlockStart: 0 }}>{`${g.rows.length} questions · ${g.noDecision} with no decision`}</p>
+          <p className="text-muted" style={{ marginBlockStart: 0 }}>{L.summary(g.rows.length, g.noDecision)}</p>
         <ul className="stage-rows" style={{ listStyle: 'none', padding: 0 }}>
           {g.rows.filter((r) => visible.includes(r)).map((r) => {
             const d = drafts?.get(r.questionId);
@@ -145,14 +148,13 @@ export function StageQuestionList(p: StageQuestionListProps): ReactElement {
                   <ListLink href={questionHref(p, r.questionId)}>{r.questionId}</ListLink>{` ${r.text}`}
                 </p>
                 <p style={{ margin: 0 }}>
-                  <span className="status-label" style={{ color: 'var(--text-body)' }}>{r.statusText}</span>
-                  {r.versionNumber !== null ? ` · v${r.versionNumber}` : ''}
+                  <span className="status-label">{r.statusText}</span>
                   {r.declaredDate !== null ? ` · ${formatDeclaredDate(r.declaredDate)}` : ''}
-                  {r.inPlace !== null ? ` · ${r.inPlace.n} of ${r.inPlace.of} in place` : ''}
-                  {r.openFindings > 0 ? ` · ${r.openFindings} open ${r.openFindings === 1 ? 'finding' : 'findings'}` : ''}
-                  {r.changedSinceSeal ? ` · changed since seal ${p.sealNumber ?? ''}` : ''}
-                  {r.reworded ? ' · expected practice reworded since the decision' : ''}
-                  {d !== undefined ? ` · Draft on this device, kept until ${formatDay(d.keptUntil)}` : ''}
+                  {r.inPlace !== null ? L.row.inPlace(r.inPlace.n, r.inPlace.of) : ''}
+                  {r.openFindings > 0 ? L.row.openFindings(r.openFindings) : ''}
+                  {r.changedSinceSeal ? L.row.changedSinceSeal(p.sealNumber) : ''}
+                  {r.reworded ? L.row.reworded : ''}
+                  {d !== undefined ? L.row.notSaved(formatDay(d.keptUntil)) : ''}
                 </p>
                 {result !== undefined ? <p>{result.text}</p> : null}
               </li>
