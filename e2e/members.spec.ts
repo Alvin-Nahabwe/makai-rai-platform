@@ -320,6 +320,7 @@ test.describe('S-22 interactions', () => {
     await expect(status(page, C.replayed.invite)).toBeVisible();
     await expect(status(page, C.sent(replayed.invitation.email))).toHaveCount(0);
     await expect(page.getByText(COPY_LINK_COPY.emailFailed)).toHaveCount(0);
+    await expect(page.getByText(COPY_LINK_COPY.emailFailedNoLink)).toHaveCount(0);
     await expect(page.getByRole('button', { name: COPY_LINK_COPY.copy })).toHaveCount(0);
     await script(page, '**/api/v1/orgs/*/invitations/*/resend', [{ status: 200, json: replayed }]);
     await resendVia(page);
@@ -361,7 +362,7 @@ test.describe('S-22 interactions', () => {
     await page.getByRole('button', { name: COPY_LINK_COPY.copy }).click();
     await expect(status(page, new RegExp(`${escapeRe(COPY_LINK_COPY.copied)}|${escapeRe(COPY_LINK_COPY.copyFailed)}`))).toBeVisible();
     await inviteVia(page, 'second@fixture.test', 'reviewer', { showLink: false });
-    await expect(status(page, COPY_LINK_COPY.emailFailed)).toBeVisible();
+    await expect(status(page, COPY_LINK_COPY.emailFailedNoLink)).toBeVisible();   // no link on the screen: the sentence names the button (answer Q21)
     await expect(status(page, new RegExp(`${escapeRe(COPY_LINK_COPY.copied)}|${escapeRe(COPY_LINK_COPY.copyFailed)}`))).toHaveCount(0);
   });
 
@@ -432,6 +433,29 @@ test.describe('S-22 interactions', () => {
     await expect(page.getByRole('button', { name: C.leave.action, exact: true })).toHaveCount(0);
   });
 
+  test('SC 4.1.2 (ruling L5-25): while a row write is in flight, Invite is disabled, not live, and comes back when the write ends', async ({ page }) => {
+    await page.goto(MEMBERS);
+    const invite = page.getByRole('button', { name: C.invite.submit, exact: true });
+    await expect(invite).toBeEnabled();                                            // hydrated
+    let release: () => void = () => {};
+    const held = new Promise<void>((r) => { release = r; });
+    await page.route('**/api/v1/orgs/*/invitations/*/resend', async (route) => {
+      await held;
+      await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(INVITED) });
+    });
+    try {
+      await resendVia(page);
+      await expect(page.getByRole('button', { name: C.invitations.resendTo(RESEND_EMAIL) })).toHaveAttribute('aria-disabled', 'true');
+      await expect(invite).toBeDisabled();
+      await expect(invite).not.toHaveAttribute('aria-busy', 'true');            // busy belongs to the pressed control only
+    } finally {
+      release();
+    }
+    await expect(status(page, C.sent(INVITED.invitation.email))).toBeVisible();
+    await expect(invite).toBeEnabled();
+    await page.unrouteAll({ behavior: 'wait' });
+  });
+
   test('UX-23 (F4): revoking the invitation whose link is on show takes the link away', async ({ page }) => {
     await page.goto(MEMBERS);
     await script(page, '**/api/v1/orgs/*/members', [{ status: 201, json: { ...INVITED, emailSent: true, acceptUrl: 'https://h/invitations/t' } }]);
@@ -491,7 +515,7 @@ test.describe('S-22 interactions', () => {
     await page.goto(MEMBERS);
     await script(page, '**/api/v1/orgs/*/members', [{ status: 201, json: { ...INVITED, emailSent: false, acceptUrl: null } }]);
     await inviteVia(page, 'reviewer@fixture.test', 'reviewer', { showLink: false });
-    await expect(status(page, COPY_LINK_COPY.emailFailed)).toBeVisible();
+    await expect(status(page, COPY_LINK_COPY.emailFailedNoLink)).toBeVisible();   // no link shown: the sentence names the button below it (answer Q21)
     const resent = await script(page, '**/api/v1/orgs/*/invitations/*/resend', [{ status: 201, json: { ...INVITED, emailSent: false, acceptUrl: 'https://h/invitations/t2' } }]);
     await page.getByRole('button', { name: COPY_LINK_COPY.resend }).click();
     await expect(page.getByRole('textbox', { name: /invitation link/i })).toHaveValue('https://h/invitations/t2');

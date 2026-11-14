@@ -270,7 +270,7 @@ describe('S-24, creating and recovering an organisation', () => {
     expect(ALREADY_RESENT).toBe(ADMIN_FORMS_COPY.invitation.alreadyResent);
     const inv = { ...CREATED.invitation, id: 'inv-11' };
     expect(resendWords({ kind: 'saved', status: 200, body: { invitation: inv, acceptUrl: null, emailSent: false } })).toBe(ALREADY_RESENT);
-    expect(resendWords({ kind: 'saved', status: 201, body: { invitation: inv, acceptUrl: null, emailSent: false } })).toBe(`Resent: the old link no longer works. ${EMAIL_FAILED}`);
+    expect(resendWords({ kind: 'saved', status: 201, body: { invitation: inv, acceptUrl: null, emailSent: false } })).toBe(`Resent: the old link no longer works. ${COPY_LINK_COPY.emailFailedNoLink}`);
     expect(resendWords({ kind: 'saved', status: 201, body: { invitation: inv, acceptUrl: null, emailSent: true } })).toBe(`Resent: the old link no longer works. Invitation sent to ${inv.email}.`);
     const created = createResult({ kind: 'saved', status: 201, body: { ...CREATED, acceptUrl: null } });
     if (created.kind !== 'created') throw new Error('expected created');
@@ -315,7 +315,7 @@ describe('S-24, creating and recovering an organisation', () => {
   it('UX-23 FR-ORG-02: when the email failed and no link was shown, S-24 offers Resend and show link, and the resend shows the new link', () => {
     const noLink = createResult({ kind: 'saved', status: 201, body: { ...CREATED, acceptUrl: null, invitation: { ...CREATED.invitation, linkShown: false } } });
     const html = view({ result: noLink, status: noLink.status, onResendWithLink: vi.fn() });
-    expect(statusText(html)).toBe(`Created. ${EMAIL_FAILED}`);
+    expect(statusText(html)).toBe(`Created. ${COPY_LINK_COPY.emailFailedNoLink}`);
     expect(html).toMatch(new RegExp(`<button[^>]*>${COPY_LINK_COPY.resend}</button>`));
     expect(html).not.toContain(COPY_LINK_COPY.linkLabel);
     if (noLink.kind !== 'created') throw new Error('expected created');
@@ -329,7 +329,71 @@ describe('S-24, creating and recovering an organisation', () => {
     expect(after).not.toContain(COPY_LINK_COPY.resend);
     const refused = resentResult(noLink.response, { kind: 'rejected', status: 409, body: { error: 'x', code: 'invitation_not_pending' } });
     expect(refused.kind).toBe('created');   // the organisation stays created; only the resend was refused
-    expect(refused.status).toBe(ADMIN_FORMS_COPY.invitation.notPending);
+    expect(refused.status).toBe(ADMIN_FORMS_COPY.create.resendRefusals.notPending);
+  });
+
+  it('UX-23 (answer Q21): on the create screen the email-failed sentence names the link when the link is shown, and the button when it is not', () => {
+    const NO_LINK = 'The invitation email could not be sent. Select Send the email again and show the link.';
+    expect(COPY_LINK_COPY.emailFailedNoLink).toBe(NO_LINK);
+    expect(COPY_LINK_COPY.emailFailedNoLink).toContain(`Select ${COPY_LINK_COPY.resend}.`);   // the button's own words
+    // Created, link shown / no link shown.
+    expect(createResult({ kind: 'saved', status: 201, body: CREATED }).status).toBe(`Created. ${COPY_LINK_COPY.emailFailed}`);
+    const noLink = createResult({ kind: 'saved', status: 201, body: { ...CREATED, acceptUrl: null } });
+    expect(noLink.status).toBe(`Created. ${NO_LINK}`);
+    const noLinkHtml = view({ result: noLink, status: noLink.status, onResendWithLink: vi.fn() });
+    expect(noLinkHtml).toMatch(new RegExp(`<button[^>]*>${COPY_LINK_COPY.resend}</button>`));   // the control the sentence names is there
+    expect(noLinkHtml).not.toContain(COPY_LINK_COPY.emailFailed);
+    // Resent from the link box: with the link (the box asks for it) / without one.
+    if (noLink.kind !== 'created') throw new Error('expected created');
+    const inv = { ...CREATED.invitation, id: 'inv-21' };
+    expect(resentResult(noLink.response, { kind: 'saved', status: 201, body: { invitation: inv, acceptUrl: 'https://h/invitations/v', emailSent: false } }).status)
+      .toBe(`Resent: the old link no longer works. ${COPY_LINK_COPY.emailFailed}`);
+    expect(resentResult(noLink.response, { kind: 'saved', status: 201, body: { invitation: inv, acceptUrl: null, emailSent: false } }).status)
+      .toBe(`Resent: the old link no longer works. ${NO_LINK}`);
+  });
+
+  it('UX-23 (answer Q21): in the owner invitation box the email-failed sentence names the link when the link is shown, and the button when it is not', async () => {
+    const { issuedWords } = await import('@/components/admin/OwnerInvitationBox');
+    const inv = { ...CREATED.invitation, id: 'inv-22' };
+    expect(issuedWords({ invitation: inv, acceptUrl: 'https://h/invitations/w', emailSent: false })).toBe(`Invitation created. ${COPY_LINK_COPY.emailFailed}`);
+    expect(issuedWords({ invitation: inv, acceptUrl: null, emailSent: false })).toBe(`Invitation created. ${COPY_LINK_COPY.emailFailedNoLink}`);
+    expect(issuedWords({ invitation: inv, acceptUrl: null, emailSent: true })).toBe(ADMIN_FORMS_COPY.invitation.sent(inv.email));
+    expect(resendWords({ kind: 'saved', status: 201, body: { invitation: inv, acceptUrl: 'https://h/invitations/w', emailSent: false } }))
+      .toBe(`Resent: the old link no longer works. ${COPY_LINK_COPY.emailFailed}`);
+    expect(resendWords({ kind: 'saved', status: 201, body: { invitation: inv, acceptUrl: null, emailSent: false } }))
+      .toBe(`Resent: the old link no longer works. ${COPY_LINK_COPY.emailFailedNoLink}`);
+  });
+
+  it('UX-23 (answer Q22): on the create screen a refused resend points at "Open the organisation", never at a reload', () => {
+    const created = createResult({ kind: 'saved', status: 201, body: { ...CREATED, acceptUrl: null } });
+    if (created.kind !== 'created') throw new Error('expected created');
+    const refusedWith = (out: Parameters<typeof resentResult>[1]) => resentResult(created.response, out).status;
+    const R = ADMIN_FORMS_COPY.create.resendRefusals;
+    expect(refusedWith({ kind: 'not_saved', reason: 'network' })).toBe('The connection was lost, so we do not know if this worked. Open the organisation to check before you try again.');
+    expect(refusedWith({ kind: 'not_saved', reason: 'network' })).toBe(R.lostReply);
+    expect(refusedWith({ kind: 'rejected', status: 500, body: { error: 'x', code: 'internal' } })).toBe('Not done. The server had a problem. Open the organisation and try again.');
+    expect(refusedWith({ kind: 'rejected', status: 409, body: { error: 'x', code: 'invitation_not_pending' } })).toBe('That invitation was already accepted, cancelled or expired. Open the organisation to see its state.');
+    expect(refusedWith({ kind: 'rejected', status: 404, body: { error: 'x', code: 'not_found' } })).toBe('That invitation no longer exists. Open the organisation.');
+    expect(refusedWith({ kind: 'rejected', status: 409, body: { error: 'x', code: 'something_else' } })).toBe('Not done. Open the organisation and try again.');
+    // Each names the link that is on the screen, by its own words.
+    for (const sentence of Object.values(R)) expect(sentence).toContain(ADMIN_FORMS_COPY.create.open);
+    const html = view({ result: resentResult(created.response, { kind: 'not_saved', reason: 'network' }), status: R.lostReply, onResendWithLink: vi.fn() });
+    expect(html).toMatch(new RegExp(`<a[^>]*>${ADMIN_FORMS_COPY.create.open}</a>`));
+    // The other refusals are the same on both screens.
+    expect(refusedWith({ kind: 'rejected', status: 401, body: { error: 'x', code: 'unauthenticated' } })).toBe(ADMIN_FORMS_COPY.invitation.signedOut);
+    expect(refusedWith({ kind: 'rejected', status: 409, body: { error: 'x', code: 'active_owner_exists' } })).toBe(ADMIN_FORMS_COPY.invitation.activeOwner);
+    expect(refusedWith({ kind: 'rejected', status: 409, body: { error: 'x', code: 'pending_owner_invitation_exists' } })).toBe(ADMIN_FORMS_COPY.invitation.pendingExists);
+    expect(refusedWith({ kind: 'rejected', status: 409, body: { error: 'x', code: 'organisation_archived' } })).toBe(ADMIN_FORMS_COPY.invitation.archived);
+    expect(refusedWith({ kind: 'rejected', status: 422, body: { error: 'x', code: 'validation' } })).toBe(ADMIN_FORMS_COPY.invitation.checkFields);
+  });
+
+  it('UX-23 (answer Q22): the organisation page keeps its refusals of an owner invitation write, which say "Reload the page"', async () => {
+    const { invitationRefusal } = await import('@/components/admin/CreateOrganisationForm');
+    expect(invitationRefusal({ kind: 'not_saved', reason: 'network' })).toBe('The connection was lost, so we do not know if this worked. Reload the page to check before you try again.');
+    expect(invitationRefusal({ kind: 'rejected', status: 500, body: { error: 'x', code: 'internal' } })).toBe('Not done. The server had a problem. Reload the page and try again.');
+    expect(invitationRefusal({ kind: 'rejected', status: 409, body: { error: 'x', code: 'invitation_not_pending' } })).toBe('That invitation was already accepted, cancelled or expired. Reload the page to see its state.');
+    expect(invitationRefusal({ kind: 'rejected', status: 404, body: { error: 'x', code: 'not_found' } })).toBe('That invitation no longer exists. Reload the page.');
+    expect(invitationRefusal({ kind: 'rejected', status: 409, body: { error: 'x', code: 'something_else' } })).toBe('Not done. Reload the page and try again.');
   });
 
   it('FR-ORG-01: S-24 shows the 7.4.2 saving, saved and failed texts exactly (SRS line 2387)', () => {

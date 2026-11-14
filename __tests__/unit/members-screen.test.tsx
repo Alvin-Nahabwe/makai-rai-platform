@@ -5,7 +5,7 @@ import { COPY_LINK_COPY } from '@/lib/invitations/link/copy';
 import { MEMBERS_COPY } from '@/lib/org/members/copy';
 import { memberRoleWords } from '@/lib/org/copy';
 import { escapeRe } from '../helpers/escapeRe';
-import MembersManager from '@/app/(authenticated)/orgs/[slug]/settings/members/MembersManager';
+import MembersManager, { invitedWords } from '@/app/(authenticated)/orgs/[slug]/settings/members/MembersManager';
 import type { InvitationView, MemberView } from '@/types/api';
 
 /**
@@ -118,19 +118,53 @@ describe('S-22 MembersManager', () => {
     expect(html).toMatch(new RegExp(`<(p|div)[^>]*id="${box['aria-describedby']}"[^>]*>${escapeRe(MEMBERS_COPY.invite.showLinkHint)}</(p|div)>`));
   });
 
-  it('FR-MEM-01 (OR28, ruling Q11): under the role choice each of the five roles is shown with the vocabulary\'s definition, beside its term, in an element marked as a role choice', () => {
+  /** The invite form's role choice: the marked wrapper, the select inside it and the definition lines under the select. */
+  const roleChoice = (html: string) => {
+    const choice = /<div data-role-choice="">([\s\S]*?)<\/form>/.exec(html)?.[1] ?? '';
+    const select = /<select[^>]*id="invite-role"[^>]*>/.exec(choice)?.[0] ?? '';
+    const afterSelect = choice.slice(choice.indexOf('</select>'));
+    const lines = [...afterSelect.matchAll(/<li>([\s\S]*?)<\/li>/g)].map((x) => x[1]);
+    return { choice, select, afterSelect, lines };
+  };
+  const lineOf = (role: 'owner' | 'admin' | 'assessor' | 'reviewer' | 'viewer') => {
+    const { entry } = memberRoleWords()[role];
+    return `<span data-term="${entry.id}">${entry.term}</span> <span class="ui-definition" data-definition="${entry.id}">${entry.definition}</span>`;
+  };
+
+  it('FR-MEM-01 (OR28, Q11, ruling L5-22 as revised): under an Owner\'s role select, each of the five roles is listed with the vocabulary\'s definition beside its term, in the element marked as a role choice', () => {
     const html = renderToStaticMarkup(<MembersManager {...ownerProps} />);
-    const words = memberRoleWords();
-    const choice = /<div data-role-choice="">([\s\S]*?)<\/select>/.exec(html)?.[1] ?? '';
-    const hintId = /<select[^>]*aria-describedby="([^"]+)"/.exec(choice)?.[1];
-    expect(hintId).toBe('invite-role-hint');
-    for (const role of ['owner', 'admin', 'assessor', 'reviewer', 'viewer'] as const) {
-      const { entry } = words[role];
-      expect(choice).toContain(`<li><span data-term="${entry.id}">${entry.term}</span> <span class="ui-definition" data-definition="${entry.id}">${entry.definition}</span></li>`);
-    }
+    const { select, lines } = roleChoice(html);
+    expect(select).not.toBe('');
+    expect(lines).toEqual((['owner', 'admin', 'assessor', 'reviewer', 'viewer'] as const).map(lineOf));
     // The per-member selects in the table are not a role choice: only the invite form's field is marked.
     expect(html.match(/data-role-choice/g)).toHaveLength(1);
     expect(html.indexOf('data-role-choice')).toBeGreaterThan(html.lastIndexOf('</table>'));
+  });
+
+  it('FR-MEM-01 (OR28, ruling L5-22 as revised): an Admin is read the four roles the select offers, and no Owner line', () => {
+    const { lines, afterSelect } = roleChoice(renderToStaticMarkup(<MembersManager {...adminProps} />));
+    expect(lines).toEqual((['admin', 'assessor', 'reviewer', 'viewer'] as const).map(lineOf));
+    expect(afterSelect).not.toContain('data-term="owner"');
+    expect(afterSelect).not.toContain('data-definition="owner"');
+  });
+
+  it('FR-MEM-01 (react M-3): the role select is described by its error only, never by the list of definitions', () => {
+    const { select, choice } = roleChoice(renderToStaticMarkup(<MembersManager {...ownerProps} />));
+    expect(select).not.toMatch(/aria-describedby="[^"]*hint/);
+    expect(choice).not.toContain('id="invite-role-hint"');
+    const listId = /<ul[^>]*id="([^"]+)"/.exec(choice)?.[1];
+    if (listId !== undefined) expect(select).not.toContain(listId);
+  });
+
+  it('UX-23 (answer Q21): after an invite or a resend whose email failed, the sentence names the link when it is shown, and the button when it is not', () => {
+    const NO_LINK = 'The invitation email could not be sent. Select Send the email again and show the link.';
+    expect(COPY_LINK_COPY.emailFailedNoLink).toBe(NO_LINK);
+    expect(invitedWords({ invitation: pending, acceptUrl: 'https://h/invitations/t', emailSent: false })).toBe(COPY_LINK_COPY.emailFailed);
+    expect(invitedWords({ invitation: pending, acceptUrl: null, emailSent: false })).toBe(NO_LINK);
+    expect(invitedWords({ invitation: pending, acceptUrl: null, emailSent: true })).toBe(MEMBERS_COPY.sent(pending.email));
+    // With no link the box offers the button the sentence names.
+    const box = renderToStaticMarkup(<CopyLinkFallback acceptUrl={null} expiresAt={pending.expiresAt} emailSent={false} noticeShownElsewhere onResendWithLink={() => {}} />);
+    expect(buttonsOf(box).map((x) => x.name)).toContain(COPY_LINK_COPY.resend);
   });
 
   it('FR-MEM-03 (OR28): a member\'s role reads as the vocabulary\'s word, never as the raw value, while the select keeps the raw value', () => {

@@ -38,13 +38,13 @@ export const ORG_COPY = Object.freeze({
     downloadHeading: 'Download records',
     download: "Download all of this organisation's records (every project)",
   }),
-  /** S-30's changes table, `components/org/OrganisationEventsList.tsx` (audit D OR66 to OR85; answers Q4 and Q10). */
+  /** S-30's changes table, `components/org/OrganisationEventsList.tsx` (audit D OR66 to OR85; answers Q4, Q10 and Q23). */
   events: Object.freeze({
     heading: 'Changes to members and the organisation',
     none: 'No changes recorded yet.',
     caption: 'Changes to this organisation and its members, newest first',
     columns: Object.freeze({
-      when: 'When', who: 'Who', what: 'What', concerning: 'Member or invitation', reason: 'Reason', before: 'Before the change',
+      when: 'When', who: 'Who', what: 'What', concerning: 'Member or invitation', reason: 'Reason or request reference', before: 'Before the change',
     }),
     /** The actor's role when it was the platform's administrator; a member's role is the vocabulary's word. */
     administrator: TERM_MAK_AI_ADMINISTRATOR.term,

@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { InlineConfirm } from '@/components/ui/InlineConfirm';
 import { FieldError, TextInput } from '@/components/ui/TextInput';
-import { EMAIL_FAILED, invitationRefusal, resentWords } from '@/components/admin/CreateOrganisationForm';
+import { EMAIL_FAILED, emailFailedWords, invitationRefusal, resentWords } from '@/components/admin/CreateOrganisationForm';
 import { MAX_REQUEST_REFERENCE } from '@/lib/admin/limits';
 import { ADMIN_FORMS_COPY, INVITATION_STATE_WORDS } from '@/lib/admin/forms/copy';
 import { useHydrated } from '@/lib/client/useHydrated';
@@ -28,6 +28,10 @@ export function resendWords(out: Extract<SendOutcome<InviteMemberResponse | unde
   if (out.body === undefined) return `${I.resentPrefix} ${EMAIL_FAILED}`;
   return resentWords(out.body, out.status);
 }
+/** The sentence after "Send invitation" went through: sent, or the email-failed sentence true of the screen (answer Q21). */
+export function issuedWords(r: InviteMemberResponse | undefined): string {
+  return r && r.emailSent ? I.sent(r.invitation.email) : `${I.createdPrefix} ${r ? emailFailedWords(r.acceptUrl) : EMAIL_FAILED}`;
+}
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type Write = (url: string, body: Record<string, unknown> | null) => Promise<SendOutcome<InviteMemberResponse | undefined>>;
@@ -35,6 +39,8 @@ type Write = (url: string, body: Record<string, unknown> | null) => Promise<Send
 export type IssueInvitationFormViewProps = {
   formId: string; draft: { email: string; requestReference: string; showLink: boolean };
   errors: { email?: string; requestReference?: string }; busy: boolean;
+  /** True while another of the box's requests is in flight: the submit is disabled, not busy (ruling L5-25). */
+  unavailable?: boolean;
   /** False until React has hydrated; the submit button is disabled till then (default true for a static render). */
   hydrated?: boolean;
   onDraft: (patch: Partial<{ email: string; requestReference: string; showLink: boolean }>) => void;
@@ -55,7 +61,7 @@ export function IssueInvitationFormView({ emailRef, ...p }: IssueInvitationFormV
         <Checkbox id={`${p.formId}-issue-show`} name="showLink" label={I.showLink} checked={p.draft.showLink} onChange={(e) => p.onDraft({ showLink: e.target.checked })} />
       </div>
       <div className="admin-form__actions">
-        <Button variant="primary" type="submit" disabled={p.hydrated === false} busy={p.busy}>{I.submit}</Button>
+        <Button variant="primary" type="submit" disabled={p.hydrated === false || p.unavailable === true} busy={p.busy}>{I.submit}</Button>
         <Button variant="secondary" onClick={p.onCancel}>{I.cancel}</Button>
       </div>
       {Object.keys(p.errors).length > 0 ? <FieldError id={`${p.formId}-check`} message={I.checkAbove} /> : null}
@@ -74,7 +80,8 @@ export function IssueInvitationFormView({ emailRef, ...p }: IssueInvitationFormV
  * Focus (rulings X-4 and L5-14): it is never dropped to the page body. The cancel confirmation opens on its "Keep
  * invitation" button (it has no field) and "Keep invitation" gives focus back to "Cancel invitation"; the send form
  * opens on its email field and its Cancel gives focus back to "Send a new owner invitation". A pressed button stays,
- * busy, while its own request is in flight; when the answer arrives focus goes to the status line.
+ * busy, while its own request is in flight, and every other control that would start a write is disabled meanwhile
+ * (ruling L5-25); when the answer arrives focus goes to the status line.
  */
 export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, archived = false, write }: {
   orgId: string; hasActiveOwner: boolean; invitations: InvitationView[]; archived?: boolean; write?: Write;
@@ -83,9 +90,9 @@ export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, archive
   const formId = useId();
   const hydrated = useHydrated();
   const [status, setStatus] = useState('');
-  const [busy, setBusy] = useState(false);
   /** The request in flight, so only the button that sent it shows busy. */
   const [pressed, setPressed] = useState<'resend' | 'cancel' | 'send' | null>(null);
+  const busy = pressed !== null;
   const [issued, setIssued] = useState<InviteMemberResponse | null>(null);
   // A replayed resend (200) keeps no link and may have had its email sent: it opens no link box (C4 CR-1).
   const [issuedReplayed, setIssuedReplayed] = useState(false);
@@ -147,7 +154,6 @@ export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, archive
     done: (out: Extract<SendOutcome<InviteMemberResponse | undefined>, { kind: 'saved' }>) => string,
   ): Promise<boolean> {
     if (busy) return false;
-    setBusy(true);
     setPressed(which);
     setStatus(I.sending);
     try {
@@ -162,12 +168,10 @@ export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, archive
       router.refresh();
       return true;
     } finally {
-      setBusy(false);
       setPressed(null);
       setTimeout(() => statusRef.current?.focus(), 0);
     }
   }
-  const sentWords = (r: InviteMemberResponse | undefined) => (r && r.emailSent ? I.sent(r.invitation.email) : `${I.createdPrefix} ${EMAIL_FAILED}`);
 
   async function resend(inv: InvitationView, showLink: boolean = resendShowLink): Promise<void> {
     const key = `resend:${inv.id}`;
@@ -205,7 +209,7 @@ export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, archive
       document.getElementById(`${formId}-${Object.keys(e)[0]}`)?.focus();
       return;
     }
-    const ok = await act('send', base, { email: draft.email.trim(), requestReference: draft.requestReference.trim(), showLink: draft.showLink }, (out) => sentWords(out.body));
+    const ok = await act('send', base, { email: draft.email.trim(), requestReference: draft.requestReference.trim(), showLink: draft.showLink }, (out) => issuedWords(out.body));
     if (ok) { setIssuing(false); setDraft({ email: '', requestReference: '', showLink: false }); }
   }
 
@@ -232,25 +236,26 @@ export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, archive
         <div className="admin-invitation__resend">
           <Checkbox id={`${formId}-resend-show`} name="showLink" label={I.showLink} checked={resendShowLink} onChange={(e) => setResendShowLink(e.target.checked)} />
           <div className="admin-form__actions">
-            <Button variant="secondary" busy={pressed === 'resend'} aria-describedby={`${formId}-resend-hint`}
+            <Button variant="secondary" busy={pressed === 'resend'} disabled={busy && pressed !== 'resend'} aria-describedby={`${formId}-resend-hint`}
               onClick={() => { void resend(pending); }}>{I.resend}</Button>
             <span id={`${formId}-resend-hint`} className="admin-invitation__hint">{I.resendHint}</span>
-            <Button ref={cancelTrigger} variant="secondary" onClick={() => setConfirmRevoke(true)}>{I.cancelTrigger}</Button>
+            <Button ref={cancelTrigger} variant="secondary" disabled={busy && pressed !== 'cancel'} onClick={() => setConfirmRevoke(true)}>{I.cancelTrigger}</Button>
           </div>
           {confirmRevoke ? (
             <div ref={confirmRef}>
               <InlineConfirm objectName={I.confirmObject(pending.email)} consequence={I.confirmConsequence} destructive cancelLabel={I.keep}
-                actionLabel={I.confirmAction} busy={busy} onConfirm={() => revoke(pending)}
+                actionLabel={I.confirmAction} busy={pressed === 'cancel'} onConfirm={() => revoke(pending)}
                 onCancel={() => { setConfirmRevoke(false); focusNext.current = 'cancel-trigger'; }} />
             </div>
           ) : null}
         </div>
       ) : null}
       {mayIssue && !issuing ? (
-        <Button ref={sendTrigger} variant="primary" onClick={() => setIssuing(true)}>{I.sendNew}</Button>
+        <Button ref={sendTrigger} variant="primary" disabled={busy} onClick={() => setIssuing(true)}>{I.sendNew}</Button>
       ) : null}
       {mayIssue && issuing ? (
-        <IssueInvitationFormView formId={formId} draft={draft} errors={errors} busy={busy} hydrated={hydrated} emailRef={emailField}
+        <IssueInvitationFormView formId={formId} draft={draft} errors={errors} busy={pressed === 'send'} unavailable={busy && pressed !== 'send'}
+          hydrated={hydrated} emailRef={emailField}
           onDraft={(patch) => setDraft((d) => ({ ...d, ...patch }))} onSubmit={() => { void issue(); }}
           onCancel={() => { setIssuing(false); setErrors({}); focusNext.current = 'send-trigger'; }} />
       ) : null}

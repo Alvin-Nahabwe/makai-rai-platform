@@ -6,8 +6,8 @@
  * and by the organisations list page (`app/(authenticated)/admin/organisations/page.tsx`, a server page) for the
  * invitation state words, so it holds the administrator's form words and nothing else (ruling X-2: a copy module ships
  * whole to every page whose client code imports it). It imports nothing: a length limit comes in as a number, and the
- * sentence "The invitation email could not be sent. Send this link another way." is `COPY_LINK_COPY.emailFailed`,
- * which the components put after the outcome words here.
+ * email-failed sentences are the copy-link box's (`COPY_LINK_COPY.emailFailed` with the link on the screen,
+ * `emailFailedNoLink` without it; answer Q21), which the components put after the outcome words here.
  */
 
 /** The four invitation states (W-10), as the list and the organisations table show them. */
@@ -17,6 +17,9 @@ export const INVITATION_STATE_WORDS = Object.freeze({
   expired: 'Expired',
   revoked: 'Cancelled',
 });
+
+/** The create screen's link to the organisation it created, whose words its refusals of a resend read (answer Q22). */
+const OPEN_ORGANISATION = 'Open the organisation';
 
 export const ADMIN_FORMS_COPY = Object.freeze({
   /** S-24 create mode. */
@@ -30,7 +33,7 @@ export const ADMIN_FORMS_COPY = Object.freeze({
     note: "Creating the organisation also creates the first Owner's invitation and emails it. If the email cannot be sent, the organisation is still created and you can send the link yourself.",
     submit: 'Create organisation and send invitation',
     retry: 'Retry',
-    open: 'Open the organisation',
+    open: OPEN_ORGANISATION,
     nameMissing: 'Enter the organisation name.',
     legalNameMissing: "Enter the institution's legal name.",
     ownerEmailMissing: "Enter the first Owner's email address.",
@@ -38,7 +41,7 @@ export const ADMIN_FORMS_COPY = Object.freeze({
     creating: 'Creating the organisation...',
     sending: 'Sending...',
     sent: (email: string): string => `Created. Invitation sent to ${email}.`,
-    /** Followed by the copy-link box's email-failed sentence. */
+    /** Followed by the copy-link box's email-failed sentence for the screen (answer Q21). */
     createdPrefix: 'Created.',
     alreadyCreated: 'This organisation was already created. Open it to resend the invitation if the email did not arrive.',
     notCreated: 'Not created yet. We did not get a reply, so the organisation may already be created. Select Retry. It will not be created twice.',
@@ -48,6 +51,17 @@ export const ADMIN_FORMS_COPY = Object.freeze({
     slugTaken: 'Another organisation has a name that is too similar. Change the name a little and try again.',
     notAdmin: 'Not created. This account is not the MAK-AI administrator.',
     other: 'Not created. Reload the page and try again.',
+    /**
+     * The link box's resend refused on this screen (answer Q22): a reload shows an empty form here, so where the
+     * organisation page says "Reload the page", this screen points at its link to the organisation.
+     */
+    resendRefusals: Object.freeze({
+      lostReply: `The connection was lost, so we do not know if this worked. ${OPEN_ORGANISATION} to check before you try again.`,
+      serverProblem: `Not done. The server had a problem. ${OPEN_ORGANISATION} and try again.`,
+      notPending: `That invitation was already accepted, cancelled or expired. ${OPEN_ORGANISATION} to see its state.`,
+      notFound: `That invitation no longer exists. ${OPEN_ORGANISATION}.`,
+      other: `Not done. ${OPEN_ORGANISATION} and try again.`,
+    }),
   }),
   /** The owner invitation box on S-24 detail, and the refusals of an owner invitation write. */
   invitation: Object.freeze({

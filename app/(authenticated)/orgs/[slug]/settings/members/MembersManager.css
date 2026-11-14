@@ -57,11 +57,12 @@
   margin-block-end: 0;
 }
 
-/* The five roles with their definitions under the role choice's label, one per line. */
+/* The roles the person can choose, each with its definition, one per line under the role select. */
 .members-roles {
   display: grid;
   gap: var(--space-1);
-  margin: 0;
+  max-inline-size: var(--measure-reading);
+  margin: var(--space-3) 0 0;
   padding: 0;
   list-style: none;
 }

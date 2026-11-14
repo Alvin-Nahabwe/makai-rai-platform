@@ -177,4 +177,13 @@ describe('the S-30 action rows', () => {
     expect(html).not.toContain('Show older');
     expect(renderToString(createElement(OrganisationEventsList, { events: [adminEvent], hasMore: true }))).toContain('Show older');
   });
+
+  it('FR-ORG-09 (answer Q23): the six column headings, the fifth naming both things its cell may hold', () => {
+    const event: OrgEventView = { id: 'e3', actorName: 'Ada Admin', actorRole: 'platform_admin', action: 'owner_invitation_issued',
+      targetName: null, reason: null, requestReference: 'CTRL-23', previousValue: null, at: '2026-11-02T07:42:00.000Z' };
+    const html = renderToString(createElement(OrganisationEventsList, { events: [event], hasMore: false }));
+    const headings = [...html.matchAll(/<th[^>]*scope="col"[^>]*>([^<]*)<\/th>/g)].map((m) => m[1]);
+    expect(headings).toEqual(['When', 'Who', 'What', 'Member or invitation', 'Reason or request reference', 'Before the change']);
+    expect(headings[4]).toBe(ORG_COPY.events.columns.reason);
+  });
 });

@@ -7,6 +7,7 @@ import { can } from '@/lib/authz/policy';
 import { ALL_ORG_ROLES } from '@/lib/authz/roles';
 import { validateEmail } from '@/lib/validate';
 import { formatDay } from '@/lib/format/dates';
+import { useHydrated } from '@/lib/client/useHydrated';
 import { requestIdFor, sendWrite, type RetryState, type SendOutcome } from '@/lib/client/retrySafeWrite';
 import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
@@ -45,6 +46,15 @@ type Action = 'invite' | 'resend' | 'cancel' | 'role' | 'remove' | 'leave';
 // The classes of the kit's parts on native elements that need an attribute the kit's component does not take (ruling
 // T19-j): their rules arrive with the kit modules this file imports (Button, Select, Checkbox; ruling X-6).
 const ROW_BUTTON = 'ui-button ui-button--secondary ui-button--compact';
+
+/**
+ * The sentence after an invite or a resend went through (201): sent, or the email-failed sentence true of the screen
+ * (answer Q21): with the link shown, send it another way; with none, the copy-link box's button, by its name.
+ */
+export function invitedWords(response: InviteMemberResponse): string {
+  if (response.emailSent) return C.sent(response.invitation.email);
+  return response.acceptUrl !== null ? COPY_LINK_COPY.emailFailed : COPY_LINK_COPY.emailFailedNoLink;
+}
 
 /**
  * S-22, Members (FR-MEM-01 to FR-MEM-05). Every write goes through `sendWrite` with a request id from
@@ -151,7 +161,7 @@ export default function MembersManager({ slug, currentUserId, currentRole, membe
       return;
     }
     setIssued({ response });
-    setMessage(response.emailSent ? C.sent(response.invitation.email) : COPY_LINK_COPY.emailFailed);
+    setMessage(invitedWords(response));
   }
 
   async function resend(inv: InvitationView, showLink: boolean): Promise<void> {
@@ -358,16 +368,23 @@ export default function MembersManager({ slug, currentUserId, currentRole, membe
               { key: 'email', label: C.invitations.columns.email }, { key: 'role', label: C.invitations.columns.role },
               { key: 'expires', label: C.invitations.columns.expires }, { key: 'actions', label: C.invitations.columns.actions },
             ]} />
-          <InviteForm roles={settableRoles} roleWords={roleWords} busy={pressed === 'invite'} onInvite={invite} />
+          <InviteForm roles={settableRoles} roleWords={roleWords} busy={pressed === 'invite'} unavailable={busy && pressed !== 'invite'} onInvite={invite} />
         </>
       )}
     </div>
   );
 }
 
-function InviteForm({ roles, roleWords, busy, onInvite }: {
-  roles: readonly OrgRole[]; roleWords: MemberRoleWords; busy: boolean; onInvite: (email: string, role: OrgRole, showLink: boolean) => Promise<boolean>;
+/**
+ * The invite form. Its submit is busy while its own request is in flight, and disabled while another write is (ruling
+ * L5-25: it does not look live while a press would be dropped) and until React has hydrated: its fields carry names, so
+ * a native submit before then would post the address (fix round 1 of plan 1A Task 19; security review M1).
+ */
+function InviteForm({ roles, roleWords, busy, unavailable, onInvite }: {
+  roles: readonly OrgRole[]; roleWords: MemberRoleWords; busy: boolean; unavailable: boolean;
+  onInvite: (email: string, role: OrgRole, showLink: boolean) => Promise<boolean>;
 }): ReactElement {
+  const hydrated = useHydrated();
   // Fixed ids: there is one invite form on the page, and the e2e specs address its fields by them.
   const ids = { email: 'invite-email', role: 'invite-role', showLink: 'invite-showlink' };
   const [email, setEmail] = useState('');
@@ -393,29 +410,29 @@ function InviteForm({ roles, roleWords, busy, onInvite }: {
     if (await onInvite(email.trim(), role, showLink)) setEmail('');
   }
 
-  // Under the role choice, each role with the vocabulary's definition beside its word (audit D OR28, answer Q11). The
-  // field is marked as a role choice, so the first-use rule reads the role words inside it (lib/vocabulary/firstUse.ts).
-  const definitions = (
-    <ul className="members-roles">
-      {(['owner', 'admin', 'assessor', 'reviewer', 'viewer'] as const).map((r) => (
-        <li key={r}><Term of={roleWords[r].entry} /> <Definition of={roleWords[r].entry} /></li>
-      ))}
-    </ul>
-  );
 
   return (
     <form method="post" className="card members-invite" onSubmit={(e) => { void submit(e); }} noValidate>
       <h2>{C.invite.heading}</h2>
       <TextInput ref={emailRef} id={ids.email} name="email" type="email" label={C.invite.emailLabel} value={email}
         onChange={(e) => setEmail(e.target.value)} error={errors.email} />
+      {/* Under the role select, each role the person can choose there with the vocabulary's definition beside its word
+          (audit D OR28, answer Q11, ruling L5-22 as revised). The list is not the select's description (its error is),
+          and the wrapper marks the field and the list as a role choice, so the first-use rule reads the role words
+          inside it (lib/vocabulary/firstUse.ts). */}
       <div data-role-choice="">
-        <Select id={ids.role} name="role" label={C.invite.roleLabel} hint={definitions} placeholder={C.invite.rolePlaceholder}
+        <Select id={ids.role} name="role" label={C.invite.roleLabel} placeholder={C.invite.rolePlaceholder}
           options={roles.map((r) => ({ value: r, label: roleWords[r].entry.term }))} value={role}
           onChange={(e) => setRole(e.target.value as OrgRole | '')} error={errors.role} />
+        <ul className="members-roles">
+          {roles.map((r) => (
+            <li key={r}><Term of={roleWords[r].entry} /> <Definition of={roleWords[r].entry} /></li>
+          ))}
+        </ul>
       </div>
       <Checkbox id={ids.showLink} name="showLink" label={C.invite.showLink} hint={C.invite.showLinkHint} checked={showLink}
         onChange={(e) => setShowLink(e.target.checked)} />
-      <Button variant="primary" type="submit" busy={busy}>{C.invite.submit}</Button>
+      <Button variant="primary" type="submit" busy={busy} disabled={!hydrated || unavailable}>{C.invite.submit}</Button>
     </form>
   );
 }
