@@ -1,7 +1,7 @@
 import type { ApiErrorBody } from '@/types/api';
 import type { FieldError, CalendarDate } from '@/types/record';
 import type { LegalTextKind } from '@/types/legal';
-import { API_COPY } from '@/lib/http/api/copy';
+import { VALIDATION_COPY } from '@/lib/http/copy';
 
 /**
  * An error a route answers with a known status and code. `toResponse`
@@ -29,7 +29,7 @@ export class AppError extends Error {
 
 export class ValidationFailed extends AppError {
   constructor(fields: FieldError[]) {
-    super(422, 'validation', API_COPY.validationFailed, { fields });
+    super(422, 'validation', VALIDATION_COPY.failed, { fields });
   }
 }
 

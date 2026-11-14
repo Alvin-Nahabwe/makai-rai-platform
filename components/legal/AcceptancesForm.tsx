@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type CSSProperties, type FormEvent } from 'react';
+import { flushSync } from 'react-dom';
 import { signOutClearingDrafts } from '@/lib/client/signOutClearingDrafts';
 import { LEGAL_KIND_NAMES, acceptanceError, type AcceptancePair } from '@/lib/legal/kinds';
 import { ACCEPT_LABEL, ACCEPTANCES_COPY } from '@/lib/legal/acceptances/copy';
@@ -88,7 +89,8 @@ function retryAfterMinutes(retryAfterSeconds: unknown): number {
  * Any answer the caller's own success cases did not take (C4 CR-5 / SFH-9): a 401 goes to sign in;
  * a 403 `must_change_password` (gate 2) to S-29; a 409 `legal_text_changed` reloads with M-39; a
  * 429 says how long to wait; any other 4xx with an `error` text shows that text; only a 5xx (or a
- * 4xx with no text) says the server had a problem. A lost connection never reaches here.
+ * 4xx with no text) is `refused`, which `SendStatus` words by what was being sent (a problem on our
+ * side). A lost connection never reaches here.
  */
 export function failureOutcome(status: number, body: unknown): SendFailure {
   const b = (typeof body === 'object' && body !== null ? body : {}) as { code?: unknown; error?: unknown; retryAfterSeconds?: unknown };
@@ -151,8 +153,9 @@ export type SendState = { state: 'idle' } | { state: 'sending' } | { state: 'los
 
 /**
  * What S-04 and S-05 say about a send: the in-flight text in a status line; a send with no reply
- * (`lost`) or a server fault (`refused`) says nothing was created, with Try again; a refusal the
- * server worded (`message`) shows its words.
+ * (`lost`) or a server fault (`refused`) shows `ACCEPTANCES_COPY.send[what][state]`, with Try again
+ * (for a new account with no reply, that it may already be created); a refusal the server worded
+ * (`message`) shows its words.
  */
 export function SendStatus({ send, what, sendingText, onRetry }: { send: SendState; what: 'account' | 'choice'; sendingText: string; onRetry: () => void }) {
   const failure = send.state === 'lost' || send.state === 'refused' ? ACCEPTANCES_COPY.send[what][send.state]
@@ -215,7 +218,7 @@ export function AcceptancesFormView(p: AcceptancesFormViewProps) {
       {p.mode === 'required' && (
         <p style={{ marginTop: 'var(--space-4)' }}>
           {ACCEPTANCES_COPY.alternativesBefore}<a href="/account" style={LINK_TARGET}>{ACCEPTANCES_COPY.deleteAccount}</a>{ACCEPTANCES_COPY.alternativesOr}
-          <button type="button" style={LINK_AS_BUTTON} onClick={() => void signOutClearingDrafts(p.userId, '/login')}>{ACCEPTANCES_COPY.signOut}</button>.
+          <button type="button" style={LINK_AS_BUTTON} onClick={() => void signOutClearingDrafts(p.userId, '/login')}>{ACCEPTANCES_COPY.signOut}</button>{ACCEPTANCES_COPY.alternativesAfter}
         </p>
       )}
       {p.mode === 'invitation' && (
@@ -248,10 +251,13 @@ export function AcceptancesForm(p: AcceptancesFormProps) {
     e.preventDefault();
     if (p.busy) return;
     const unticked = untickedKinds(p.texts, ticked);
-    setErrors(unticked);
+    const form = e.currentTarget;
+    // The errors are committed before focus moves, so the box focus lands on is already aria-invalid and has
+    // "Tick this box to continue." in its description: that is what a screen reader reads on arrival.
+    flushSync(() => setErrors(unticked));
     if (unticked.length > 0) {
       // The kit's Checkbox holds its input; the box is found by its id (`accept-{kind}`, a fixed kind), and focus goes to the first unticked one as ever.
-      e.currentTarget.querySelector<HTMLInputElement>(`#accept-${unticked[0]}`)?.focus();
+      form.querySelector<HTMLInputElement>(`#accept-${unticked[0]}`)?.focus();
       return;
     }
     // onAccepted shows its own failures (RecordAcceptances, S-04); a rejection reaching here is a bug, so it is logged.

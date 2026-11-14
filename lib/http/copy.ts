@@ -12,4 +12,9 @@ export const VALIDATION_COPY = Object.freeze({
   tooLong: (max: number): string => `Use ${max} characters or fewer.`,
   /** `label` is a plain lower-case name for the field ("project name"), never the field's code key. */
   required: (label: string): string => `Enter the ${label}.`,
+  /**
+   * 422 `validation`, the `error` of every `ValidationFailed` (audit E-API-7). Here, not in `lib/http/api/copy.ts`, because
+   * `lib/http/errors.ts` reads it and client files reach that module.
+   */
+  failed: 'Some answers need fixing.',
 });

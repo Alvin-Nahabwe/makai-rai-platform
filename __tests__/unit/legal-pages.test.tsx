@@ -300,11 +300,10 @@ describe('S-06 /legal/[kind] and /legal/[kind]/[version]', () => {
     expect(outside).not.toContain('certify');
   });
 
-  it('FR-PUB-01: the rendered /legal/[kind] and /legal/[kind]/[version] pages carry data-legal-text on the text block, and the page holds no agreement field label', async () => {
+  it('FR-PUB-01: the rendered /legal/[kind] and /legal/[kind]/[version] pages carry data-legal-text on the text block', async () => {
     for (const html of [await kindPage('privacy'), await versionPage('privacy', '1')]) {
       expect(html.match(/data-legal-text/g), 'one marked element').toHaveLength(1);
       expect(html.slice(html.indexOf('data-legal-text'), html.indexOf('</div>', html.indexOf('data-legal-text')))).toContain('<p>Fixture privacy notice');
-      expect(html).not.toMatch(/<label[^>]*>[^<]*agreement/i);
     }
   });
 

@@ -108,7 +108,7 @@ describe('My acceptances on S-21 (FR-ACC-03, FR-ACC-04)', () => {
     expect(markup).not.toMatch(/<(input|button|select|textarea)\b/);   // a read-only record (7.4.2 S-21)
   });
 
-  it('FR-ACC-03 FR-ACC-04 (S-21): a pre-v1 row that does not count is shown as such, with Review and no Read link', async () => {
+  it('FR-ACC-03 FR-ACC-04 (S-21): a pre-v1 row that does not count is shown as such, with Read and accept and no Read link', async () => {
     // A v0.5.0 row (version '1.0', no hash) is not an acceptance (lib/data/acceptances.ts) and /legal/<kind>/1.0 is a 404.
     vi.mocked(myAcceptances).mockResolvedValue([
       { kind: 'privacy', version: '1.0', sha256: null, acceptedAt: '2026-05-04T09:00:00.000Z' },

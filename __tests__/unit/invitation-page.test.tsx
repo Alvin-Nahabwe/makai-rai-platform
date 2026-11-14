@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { Invitation } from '@prisma/client';
 import { STUB_LEGAL_TEXTS } from '../helpers/legalStub';
+import { escapeRe } from '../helpers/escapeRe';
 
 /**
  * S-04, the invitation page (FR-ACC-01, FR-ACC-03, FR-MEM-01; W-11 and note 1, SRS lines 2214-2227;
@@ -28,9 +29,9 @@ const { invitationByToken } = await import('@/lib/data/preauth');
 const { tryResolveIdentity } = await import('@/lib/auth/identity');
 const { PASSWORD_MIN_LENGTH } = await import('@/lib/validate');
 const { VALIDATION_COPY } = await import('@/lib/http/copy');
-const { INVITATION_COPY, INVITATION_PAGE_COPY } = await import('@/lib/invitations/copy');
+const { INVITATION_COPY } = await import('@/lib/invitations/copy');
 const { ACCEPTANCES_COPY } = await import('@/lib/legal/acceptances/copy');
-const { roleWithArticle } = await import('@/lib/org/copy');
+const { INVITATION_PAGE_COPY, roleWithArticle } = await import('@/lib/org/copy');
 
 const M23 = INVITATION_PAGE_COPY.unusable;
 const TEXTS = STUB_LEGAL_TEXTS.slice();
@@ -97,10 +98,10 @@ describe('S-04, the invitation page (FR-ACC-01)', () => {
     expect(markup).toMatch(/<button[^>]*type="submit"[^>]*disabled=""[^>]*>Create account<\/button>/);
   });
 
-  it('FR-ACC-01 (7.4.2 S-04): a lost connection shows the not-created text with Try again', () => {
+  it('FR-ACC-01 (7.4.2 S-04): a lost reply shows that the account may already be created, with Try again', () => {
     const markup = view({ step: 'acceptances', send: { state: 'lost' } });
     expect(text(markup.match(/<div[^>]*role="alert"[^>]*>.*?<\/div>/)?.[0] ?? '')).toBe(ACCEPTANCES_COPY.send.account.lost);
-    expect(ACCEPTANCES_COPY.send.account.lost).toBe('Your account was not created. Check your internet connection and try again.');
+    expect(ACCEPTANCES_COPY.send.account.lost).toBe('We did not get a reply, so your account may already be created. Select Try again. If the link no longer works, sign in with the password you chose.');
     expect(markup).toMatch(/<button[^>]*type="button"[^>]*>Try again<\/button>/);
     // A server fault on the new-account branch, and both texts on the other kind of send.
     expect(text(html(<SendStatus send={{ state: 'refused' }} what="account" sendingText="x" onRetry={vi.fn()} />))).toContain('Your account was not created because of a problem on our side. Try again.');
@@ -113,14 +114,14 @@ describe('S-04, the invitation page (FR-ACC-01)', () => {
     expect(signUpErrors('   ', 'a'.repeat(PASSWORD_MIN_LENGTH))).toEqual({ name: INVITATION_COPY.nameRequired });
     expect(INVITATION_COPY.nameRequired).toBe('Enter your name.');
     expect(signUpErrors('  Amina  ', 'a'.repeat(PASSWORD_MIN_LENGTH))).toEqual({});
-    const markup = view({ errors: { name: 'Name is required', password: `Password must be at least ${PASSWORD_MIN_LENGTH} characters` } });
+    const markup = view({ errors: { name: INVITATION_COPY.nameRequired, password: VALIDATION_COPY.passwordTooShort(PASSWORD_MIN_LENGTH) } });
     expect(tagOf(markup, 'name')).toContain('aria-invalid="true"');
     expect(tagOf(markup, 'name')).toMatch(/aria-describedby="name-hint name-error"/);
     expect(tagOf(markup, 'name-error')).not.toBe('');
-    expect(markup).toMatch(/id="name-error"[^>]*>Name is required</);
+    expect(markup).toMatch(new RegExp(`id="name-error"[^>]*>${escapeRe(INVITATION_COPY.nameRequired)}<`));
     expect(tagOf(markup, 'new-password')).toContain('aria-invalid="true"');
     expect(tagOf(markup, 'new-password')).toMatch(/aria-describedby="new-password-hint new-password-error"/);
-    expect(markup).toMatch(new RegExp(`id="new-password-error"[^>]*>Password must be at least ${PASSWORD_MIN_LENGTH} characters<`));
+    expect(markup).toMatch(new RegExp(`id="new-password-error"[^>]*>${escapeRe(VALIDATION_COPY.passwordTooShort(PASSWORD_MIN_LENGTH))}<`));
     expect(markup).not.toContain('accept-terms');      // still on step 1: the acceptances are not shown
   });
 

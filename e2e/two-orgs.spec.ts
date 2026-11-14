@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { INVITATION_PAGE_COPY } from '../lib/invitations/copy';
+import { INVITATION_PAGE_COPY } from '../lib/org/copy';
 import { roleWithArticle } from '../lib/org/copy';
 import fs from 'node:fs';
 import type { OrgRole } from '@prisma/client';

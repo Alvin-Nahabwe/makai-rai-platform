@@ -610,9 +610,9 @@
   {
     "kind": "removed",
     "deleted": "__tests__/unit/design-tokens.test.ts::UX-33 NFR-A11Y-05 (D-6): the stale-list notice is moderate-tint text on its tint, never the yellow risk colour",
-    "replacedBy": "__tests__/unit/design-tokens.test.ts::UX-33 NFR-A11Y-05 (D-6): a tinted note on S-06 (the retired text's) is moderate-tint text on its tint, never the yellow risk colour",
+    "replacedBy": "__tests__/unit/design-tokens.test.ts::UX-33 NFR-A11Y-05 (D-6): a tinted note on S-06 (the retired text's) is the kit's Callout, ink on its tint, never the yellow risk colour",
     "property": "A tinted notice on screen is moderate-tint text on its tint, never the yellow risk colour (D-6); the stale-list notice was in the dead EvidenceAttach, so the rule is held on the live tinted note of S-06 (LEGAL_NOTE_STYLE), and the D-6 contrast pair stays pinned in the same file",
-    "proof": "__tests__/unit/design-tokens.test.ts::UX-33 NFR-A11Y-05 (D-6): a tinted note on S-06 (the retired text's) is moderate-tint text on its tint, never the yellow risk colour",
+    "proof": "__tests__/unit/design-tokens.test.ts::UX-33 NFR-A11Y-05 (D-6): a tinted note on S-06 (the retired text's) is the kit's Callout, ink on its tint, never the yellow risk colour",
     "task": "1A-14"
   },
   {
@@ -1061,6 +1061,110 @@
     "replacedBy": "__tests__/unit/support-reference.test.ts::NFR-MNT-01 NFR-OBS-05: any other thrown value answers 500 internal_error with a reference, and the bug stays visible in the log",
     "property": "Any other thrown value answers 500 with code internal_error, exactly the keys code, error, message and reference, a reference of eight hexadecimal characters, and the bug is in one log line under that reference",
     "proof": "The 500 body's error and message used to be the code string; audit E-API-6 gives them the sentence that carries the reference, so the assertion reads API_COPY.internalError(body.reference). The call's argument is the answer's own reference, a variable, which the protected-diff rules do not accept as a constant call argument. `code`, the key list, the status, the reference pattern and the log-line assertions are unchanged.",
+    "task": "1A-16"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/auth-pages.test.tsx::FR-ACC-06: a lost connection or a server fault on S-02 says so and keeps the address",
+    "replacedBy": "__tests__/unit/auth-pages.test.tsx::FR-ACC-06: a lost connection or a server fault on S-02 says so and keeps the address",
+    "property": "A failure on S-02 is shown in the alert region, with its text",
+    "proof": "__tests__/unit/auth-pages.test.tsx::FR-ACC-06: a lost connection or a server fault on S-02 says so and keeps the address: expect(regionText(markup, 'alert')).toBe(FORGOT_COPY.serverProblem); the old bare match of role=\"alert\" was true of an idle page, whose kit StatusRegion is always rendered",
+    "task": "1A-16"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/auth-pages.test.tsx::M-20 FR-ACC-05: every refused sign-in shows one text, and there is no Create account link",
+    "replacedBy": "__tests__/unit/auth-pages.test.tsx::M-20 FR-ACC-05: every refused sign-in shows one text, and there is no Create account link",
+    "property": "The link whose address is /forgot-password is the one that holds the Forgot your password words (one assertion ties the address to the words, as at the base tag); the Show password button's words are matched literally",
+    "proof": "__tests__/unit/auth-pages.test.tsx::M-20 FR-ACC-05: every refused sign-in shows one text, and there is no Create account link: expect(markup).toMatch(new RegExp(`<a [^>]*href=\"/forgot-password\"[^>]*>${escapeRe(SIGN_IN_COPY.forgotLink)}</a>`)), which replaces the separate href match and text toContain; escapeRe(SIGN_IN_COPY.showPassword) in the button pattern",
+    "task": "1A-16"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/auth-pages.test.tsx::M-21 FR-ACC-06: S-02 answers with one text",
+    "replacedBy": "__tests__/unit/auth-pages.test.tsx::M-21 FR-ACC-06: S-02 answers with one text",
+    "property": "Unchanged from the earlier entry; the submit button's words are now matched literally (a regular expression character in the copy can no longer match some other text)",
+    "proof": "__tests__/unit/auth-pages.test.tsx::M-21 FR-ACC-06: S-02 answers with one text: the submit-button pattern reads escapeRe(FORGOT_COPY.submit)",
+    "task": "1A-16"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/auth-pages.test.tsx::NFR-SEC-18 FR-ACC-06: S-03 states the minimum, shows a 422 under the field, and has one new-password field",
+    "replacedBy": "__tests__/unit/auth-pages.test.tsx::NFR-SEC-18 FR-ACC-06: S-03 states the minimum, shows a 422 under the field, and has one new-password field",
+    "property": "Unchanged from the earlier entry; the 422 text under the field, the submit button and the Show password button are matched literally, so the full stop of \"Use at least 12 characters.\" matches only a full stop",
+    "proof": "__tests__/unit/auth-pages.test.tsx::NFR-SEC-18 FR-ACC-06: S-03 states the minimum, shows a 422 under the field, and has one new-password field: escapeRe(tooShort), escapeRe(RESET_COPY.submit) and escapeRe(RESET_COPY.showPassword) in the three patterns",
+    "task": "1A-16"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/auth-pages.test.tsx::(module)",
+    "replacedBy": "__tests__/unit/auth-pages.test.tsx::M-20 FR-ACC-05: every refused sign-in shows one text, and there is no Create account link",
+    "property": "The one module-level line added is the import of escapeRe from __tests__/helpers/escapeRe.ts, the shared helper that escapes a copy constant for a regular expression; it asserts nothing and no case is removed",
+    "proof": "__tests__/unit/auth-pages.test.tsx::M-20 FR-ACC-05: every refused sign-in shows one text, and there is no Create account link: the forgot-password link pattern built with escapeRe",
+    "task": "1A-16"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/acceptances-form.test.tsx::UX-22 M-25 NFR-A11Y-04: each missing box shows M-25 tied by aria-describedby and aria-invalid, under a role=alert summary",
+    "replacedBy": "__tests__/unit/acceptances-form.test.tsx::UX-22 M-25 NFR-A11Y-04: the summary lists each unticked text with a link to its box, and each unticked box is aria-invalid with its error in its description",
+    "property": "Each unticked box is aria-invalid and names its own error in aria-describedby, and the kit's error summary at the top lists M-25 for each unticked text as a link to its box; the summary is not a live region (the kit's ErrorSummary), so the title no longer says role=alert",
+    "proof": "__tests__/unit/acceptances-form.test.tsx::UX-22 M-25 NFR-A11Y-04: the summary lists each unticked text with a link to its box, and each unticked box is aria-invalid with its error in its description: the ui-error-summary pattern with a link per unticked kind, aria-invalid=\"true\" and the aria-describedby pattern on each unticked box; e2e/acceptances.spec.ts records what the box carries when focus arrives",
+    "task": "1A-16"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/acceptances-form.test.tsx::UX-22: with nothing missing there is no alert and no box is invalid",
+    "replacedBy": "__tests__/unit/acceptances-form.test.tsx::UX-22: with nothing missing there is no error summary and no box is invalid",
+    "property": "With no box missing the form shows no error summary and no box is aria-invalid",
+    "proof": "__tests__/unit/acceptances-form.test.tsx::UX-22: with nothing missing there is no error summary and no box is invalid: expect(markup).not.toContain('ui-error-summary') and not.toContain('aria-invalid=\"true\"')",
+    "task": "1A-16"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/acceptances-form.test.tsx::NFR-A11Y-04 (SC 2.5.8, 3.3.8): every box and button is at least 24 by 24 CSS pixels, and nothing blocks pasting or autofill",
+    "replacedBy": "__tests__/unit/acceptances-form.test.tsx::NFR-A11Y-04 (SC 2.5.8, 3.3.8): every box and button is the kit's, whose target size e2e/acceptances.spec.ts measures, and nothing blocks pasting or autofill",
+    "property": "Every box and button of the form is the kit's (ui-checkbox__input, ui-button) and nothing blocks pasting or autofill; the size of the targets is measured in a browser, not in static markup",
+    "proof": "__tests__/unit/acceptances-form.test.tsx::NFR-A11Y-04 (SC 2.5.8, 3.3.8): every box and button is the kit's, whose target size e2e/acceptances.spec.ts measures, and nothing blocks pasting or autofill; the 24 px measure is e2e/acceptances.spec.ts::NFR-A11Y-04 NFR-A11Y-05: S-04, S-05 and S-06 have no serious axe violation in both themes at 1280 and 360 pixels, targets of 24 pixels, and no loss at 320 pixels (expectTargetsAtLeast24px)",
+    "task": "1A-16"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/invitation-page.test.tsx::FR-ACC-01 (7.4.2 S-04): a lost connection shows the not-created text with Try again",
+    "replacedBy": "__tests__/unit/invitation-page.test.tsx::FR-ACC-01 (7.4.2 S-04): a lost reply shows that the account may already be created, with Try again",
+    "property": "A send of the new account with no reply shows ACCEPTANCES_COPY.send.account.lost in the alert region with Try again after it; the text now says the account may already be created (the coordinator's ruling Q7), since a lost reply cannot tell that it was not",
+    "proof": "__tests__/unit/invitation-page.test.tsx::FR-ACC-01 (7.4.2 S-04): a lost reply shows that the account may already be created, with Try again: the alert region's text equals ACCEPTANCES_COPY.send.account.lost, which is pinned word for word, and the Try again button; the three other send texts are unchanged",
+    "task": "1A-16"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/legal-slots.test.tsx::FR-ACC-03 FR-ACC-04 (S-21): a pre-v1 row that does not count is shown as such, with Review and no Read link",
+    "replacedBy": "__tests__/unit/legal-slots.test.tsx::FR-ACC-03 FR-ACC-04 (S-21): a pre-v1 row that does not count is shown as such, with Read and accept and no Read link",
+    "property": "A pre-v1 row that does not count says it was an older version, links to /acceptances with Read and accept, and has no Read link to a version page that does not exist",
+    "proof": "__tests__/unit/legal-slots.test.tsx::FR-ACC-03 FR-ACC-04 (S-21): a pre-v1 row that does not count is shown as such, with Read and accept and no Read link: the olderVersion text, the Read and accept link to /acceptances and no href to /legal/<kind>/1.0",
+    "task": "1A-16"
+  },
+  {
+    "kind": "removed",
+    "deleted": "e2e/acceptances.spec.ts::FR-ACC-01 (7.4.2 S-04): a lost connection on Create account says nothing was created, and Try again sends the same body",
+    "replacedBy": "e2e/acceptances.spec.ts::FR-ACC-01 (7.4.2 S-04): a lost connection on Create account says the account may already be created, and Try again sends the same body",
+    "property": "A Create account send that gets no reply shows the lost text for an account in an alert, creates no user when the request never reached the server, and Try again sends the same body, which creates the account",
+    "proof": "e2e/acceptances.spec.ts::FR-ACC-01 (7.4.2 S-04): a lost connection on Create account says the account may already be created, and Try again sends the same body: the alert has ACCEPTANCES_COPY.send.account.lost, userCount 0, then two bodies equal and userCount 1; the case where the account was created before the reply was lost is the new case beside it",
+    "task": "1A-16"
+  },
+  {
+    "kind": "removed",
+    "deleted": "e2e/acceptances.spec.ts::FR-ACC-04 (7.4.2 S-05): a lost connection on Accept and continue says nothing was created, and Try again sends the same body",
+    "replacedBy": "e2e/acceptances.spec.ts::FR-ACC-04 (7.4.2 S-05): a lost connection on Accept and continue says the choice was not saved, and Try again sends the same body",
+    "property": "An Accept and continue send that gets no reply says the choice was not saved, and Try again sends the same body, which records the three acceptances",
+    "proof": "e2e/acceptances.spec.ts::FR-ACC-04 (7.4.2 S-05): a lost connection on Accept and continue says the choice was not saved, and Try again sends the same body: the alert has ACCEPTANCES_COPY.send.choice.lost, two equal bodies and three consent records",
+    "task": "1A-16"
+  },
+  {
+    "kind": "removed",
+    "deleted": "e2e/account.spec.ts::FR-ACC-04 UX-01: a pre-v1 account loads /account, and the row that no longer counts says so",
+    "replacedBy": "e2e/account.spec.ts::FR-ACC-04 UX-01: a pre-v1 account loads /account, and its pre-v1 row says it was an older version, with Read and accept to /acceptances",
+    "property": "A pre-v1 account loads /account with a 200, and its pre-v1 row says it was an older version with a Read and accept link to /acceptances",
+    "proof": "e2e/account.spec.ts::FR-ACC-04 UX-01: a pre-v1 account loads /account, and its pre-v1 row says it was an older version, with Read and accept to /acceptances: status 200, the MY_ACCEPTANCES_COPY.olderVersion text visible and the Read and accept link's href /acceptances",
     "task": "1A-16"
   }
 ]

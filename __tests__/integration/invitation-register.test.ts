@@ -9,7 +9,8 @@ import { STUB_LEGAL_TEXTS, currentAcceptances } from '../helpers/legalStub';
 import { hashInvitationToken } from '../../lib/data/invitationToken';
 import { ACCEPTED_KINDS } from '../../types/legal';
 import { LEGAL_KIND_NAMES, acceptanceError } from '../../lib/legal/kinds';
-import { INVITATION_COPY, INVITATION_PAGE_COPY } from '../../lib/invitations/copy';
+import { INVITATION_COPY } from '../../lib/invitations/copy';
+import { INVITATION_PAGE_COPY } from '../../lib/org/copy';
 import { API_COPY } from '@/lib/http/api/copy';
 
 /**

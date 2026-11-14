@@ -4,7 +4,7 @@ import { useId, useState } from 'react';
 import type { ReactElement } from 'react';
 import type { UtcInstant } from '@/types/record';
 import { formatDay } from '@/lib/format/dates';
-import { COPY_LINK_COPY } from '@/lib/invitations/copy';
+import { COPY_LINK_COPY } from '@/lib/invitations/link/copy';
 import { Button } from '@/components/ui/Button';
 import { StatusRegion } from '@/components/ui/StatusRegion';
 import { TextInput } from '@/components/ui/TextInput';

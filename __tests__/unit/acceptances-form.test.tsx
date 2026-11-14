@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { ACCEPTED_KINDS, type AcceptedKind, type LegalTextVersion } from '@/types/legal';
 import { LEGAL_KIND_NAMES } from '@/lib/legal/kinds';
 import { STUB_LEGAL_TEXTS } from '../helpers/legalStub';
+import { escapeRe } from '../helpers/escapeRe';
 import { ACCEPTANCES_COPY } from '@/lib/legal/acceptances/copy';
 
 /**
@@ -21,7 +22,6 @@ vi.mock('next/navigation', async (importOriginal) => ({
 const { ACCEPT_LABEL, AcceptancesForm, AcceptancesFormView, untickedKinds, acceptanceError, acceptancePairs, textsKey, recordOutcome, failureOutcome, handleFailure } =
   await import('@/components/legal/AcceptancesForm');
 
-const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const TEXTS: LegalTextVersion[] = STUB_LEGAL_TEXTS.slice();
 const html = (el: React.ReactElement) => renderToStaticMarkup(el);
 type ViewProps = Parameters<typeof AcceptancesFormView>[0];
@@ -107,7 +107,7 @@ describe('S-05 acceptances form (UX-22, FR-ACC-03)', () => {
     for (const kind of ACCEPTED_KINDS) expect(acceptanceError(kind)).toBe(ACCEPTANCES_COPY.tickBoxFor(LEGAL_KIND_NAMES[kind]));
   });
 
-  it('UX-22 M-25 NFR-A11Y-04: each missing box shows M-25 tied by aria-describedby and aria-invalid, under a role=alert summary', () => {
+  it('UX-22 M-25 NFR-A11Y-04: the summary lists each unticked text with a link to its box, and each unticked box is aria-invalid with its error in its description', () => {
     const markup = view({ ticked: new Set<AcceptedKind>(['terms']), errors: ['privacy', 'cross-border-consent'] });
     // The summary (the kit's ErrorSummary) lists the sentence of acceptanceError for each, each a link to its box; the box's own error is the short one.
     expect(markup).toMatch(new RegExp(`<div class="ui-error-summary"><h2[^>]*>${escapeRe(ACCEPTANCES_COPY.summaryTitle)}</h2><ul[^>]*><li><a href="#accept-privacy">${escapeRe(acceptanceError('privacy'))}</a></li><li><a href="#accept-cross-border-consent">${escapeRe(acceptanceError('cross-border-consent'))}</a></li></ul></div>`));
@@ -123,14 +123,14 @@ describe('S-05 acceptances form (UX-22, FR-ACC-03)', () => {
     expect(markup).not.toContain('accept-terms-error');
   });
 
-  it('UX-22: with nothing missing there is no alert and no box is invalid', () => {
+  it('UX-22: with nothing missing there is no error summary and no box is invalid', () => {
     const markup = view();
     expect(markup).not.toContain('ui-error-summary');
     expect(markup).not.toContain('aria-invalid="true"');
   });
 
   it('FR-ACC-04 (W-11 note 3): required mode offers deletion or sign-out; invitation mode says nothing was created; offer mode has Not now', () => {
-    expect(view({ mode: 'required' })).toMatch(new RegExp(`${escapeRe(ACCEPTANCES_COPY.alternativesBefore)}<a[^>]*href="/account"[^>]*>${escapeRe(ACCEPTANCES_COPY.deleteAccount)}</a>${escapeRe(ACCEPTANCES_COPY.alternativesOr)}<button[^>]*type="button"[^>]*>${escapeRe(ACCEPTANCES_COPY.signOut)}</button>\\.`));
+    expect(view({ mode: 'required' })).toMatch(new RegExp(`${escapeRe(ACCEPTANCES_COPY.alternativesBefore)}<a[^>]*href="/account"[^>]*>${escapeRe(ACCEPTANCES_COPY.deleteAccount)}</a>${escapeRe(ACCEPTANCES_COPY.alternativesOr)}<button[^>]*type="button"[^>]*>${escapeRe(ACCEPTANCES_COPY.signOut)}</button>${escapeRe(ACCEPTANCES_COPY.alternativesAfter)}`));
     expect(view({ mode: 'invitation', submitLabel: 'Create account' })).toContain(ACCEPTANCES_COPY.closePage);
     const offer = view({ mode: 'offer', texts: [{ ...TEXTS[1], version: '2', publishedOn: '2026-12-01', acceptance: 'offered' }] });
     expect(offer).toMatch(/<legend[^>]*><h1[^>]*>A new version of the privacy notice<\/h1><\/legend>/);
@@ -142,7 +142,7 @@ describe('S-05 acceptances form (UX-22, FR-ACC-03)', () => {
     expect(offer).toContain(ACCEPTANCES_COPY.version('2', '1 Dec 2026'));
   });
 
-  it('NFR-A11Y-04 (SC 2.5.8, 3.3.8): every box and button is at least 24 by 24 CSS pixels, and nothing blocks pasting or autofill', () => {
+  it('NFR-A11Y-04 (SC 2.5.8, 3.3.8): every box and button is the kit\'s, whose target size e2e/acceptances.spec.ts measures, and nothing blocks pasting or autofill', () => {
     const markup = view({ mode: 'offer' });
     for (const tag of markup.match(/<input[^>]*>/g) ?? []) expect(tag, tag).toContain('class="ui-checkbox__input"');
     for (const tag of markup.match(/<button[^>]*>/g) ?? []) expect(tag, tag).toMatch(/class="ui-button /);

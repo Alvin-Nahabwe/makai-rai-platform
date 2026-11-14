@@ -1,7 +1,9 @@
 /**
- * The words of signing in and passwords. `AUTH_COPY` is read by server components (the pages and the password route);
- * a client component reads its own screen's constant below, never `AUTH_COPY`, so a page's bundle does not carry the
- * words of the others (plan 1A Task 16, ruling T16-8).
+ * The words of signing in and passwords. `AUTH_COPY` is read by server components (the pages); each client component
+ * reads its own screen's constant below. The bundler ships this module whole to every page whose client code imports
+ * it, separate constants included (ruling T16-18), so the constants are for reading, not for weight: every word here
+ * reaches the browser. Words only the server prints do not belong here (the password route's answers are
+ * `PASSWORD_ROUTE_COPY` in `lib/http/api/copy.ts`).
  */
 
 const SHOW_PASSWORD = 'Show password';
@@ -22,16 +24,8 @@ export const AUTH_COPY = Object.freeze({
   resetHeading: 'Reset your password',
   backToSignIn: 'Back to sign in',
   showPassword: SHOW_PASSWORD,
-  showPasswords: 'Show passwords',
   /** The line under the change-password heading (audit A 61). */
   changeLead: 'When you change your password, you are signed out on every device, including this one. Then sign in with your new password.',
-  /** The password route's own answers (route 35). */
-  route: Object.freeze({
-    currentRequired: 'Enter your current password.',
-    accountNotFound: 'We could not find your account. Sign in again.',
-    currentIncorrect: 'Your current password is not correct. Check it and try again.',
-    mustDiffer: 'Choose a new password that is different from your current one.',
-  }),
 });
 
 /**
@@ -58,7 +52,6 @@ export const SIGN_IN_COPY = Object.freeze({
   forgotLink: 'Forgot your password?',
   passwordChanged: PASSWORD_CHANGED,
   signedOut: 'You are signed out. Sign in, then start the download again.',
-  loading: 'Loading...',
   busy: 'Too many people are signing in right now. Wait a minute, then try again.',
   serverProblem: 'We could not sign you in because of a problem on our side. Wait a few minutes, then try again.',
   connectionLost: 'We could not sign you in. Check your internet connection and try again.',

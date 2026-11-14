@@ -5,7 +5,7 @@ import type { Identity } from '@/lib/auth/identity';
 import type { AdminOrganisationRow } from '@/types/api';
 import type { AdminAccountRow } from '@/lib/data/admin';
 import type { InvitationState } from '@/types/record';
-import { COPY_LINK_COPY } from '@/lib/invitations/copy';
+import { COPY_LINK_COPY } from '@/lib/invitations/link/copy';
 import { ORG_COPY } from '@/lib/org/copy';
 
 /**

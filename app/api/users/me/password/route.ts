@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { compare, hash } from '@/lib/auth/passwordHash';
-import { AUTH_COPY } from '@/lib/auth/copy';
+import { PASSWORD_ROUTE_COPY } from '@/lib/http/api/copy';
 import { requireIdentityForApi } from '@/lib/auth/identity';
 import { identityDb } from '@/lib/data/identity';
 import { sendPasswordChangedNotice, voidResetTokens } from '@/lib/data/passwordReset';
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     const { currentPassword, newPassword } = (typeof body === 'object' && body !== null ? body : {}) as Record<string, unknown>;
 
     if (typeof currentPassword !== 'string' || currentPassword.length === 0) {
-      return NextResponse.json({ error: AUTH_COPY.route.currentRequired }, { status: 400 });
+      return NextResponse.json({ error: PASSWORD_ROUTE_COPY.currentRequired }, { status: 400 });
     }
     // NFR-SEC-18: a new password under 12 or over 128 characters is a 422 naming the field.
     const pwError = validatePassword(newPassword);
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
       where: { id: identity.userId },
       select: { passwordHash: true },
     });
-    if (!dbUser) return NextResponse.json({ error: AUTH_COPY.route.accountNotFound }, { status: 404 });
+    if (!dbUser) return NextResponse.json({ error: PASSWORD_ROUTE_COPY.accountNotFound }, { status: 404 });
 
     const currentValid = await compare(currentPassword, dbUser.passwordHash);
     if (!currentValid) {
@@ -55,13 +55,13 @@ export async function POST(request: NextRequest) {
         userId: identity.userId,
         details: { result: 'rejected_wrong_current_password' },
       });
-      return NextResponse.json({ error: AUTH_COPY.route.currentIncorrect }, { status: 400 });
+      return NextResponse.json({ error: PASSWORD_ROUTE_COPY.currentIncorrect }, { status: 400 });
     }
 
     const sameAsOld = await compare(newPassword as string, dbUser.passwordHash);
     if (sameAsOld) {
       return NextResponse.json(
-        { error: AUTH_COPY.route.mustDiffer },
+        { error: PASSWORD_ROUTE_COPY.mustDiffer },
         { status: 400 },
       );
     }

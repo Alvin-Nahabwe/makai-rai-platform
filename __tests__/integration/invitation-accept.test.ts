@@ -8,7 +8,8 @@ import { sessionFor, clearSession } from '../helpers/authSession';
 import { hashInvitationToken } from '../../lib/data/invitationToken';
 import { ACCEPTED_KINDS, type LegalTextKind, type LegalTextVersion } from '../../types/legal';
 import { STUB_LEGAL_TEXTS, currentAcceptances } from '../helpers/legalStub';
-import { INVITATION_PAGE_COPY } from '../../lib/invitations/copy';
+import { INVITATION_PAGE_COPY } from '../../lib/org/copy';
+import { INVITATION_ROUTE_COPY } from '../../lib/http/api/copy';
 
 /**
  * Route 32, POST /api/v1/invitations/[token] (FR-ACC-01, FR-ACC-03; contract Routes row 32): a
@@ -144,7 +145,7 @@ describe('route 32: accept an invitation as a signed-in account (FR-ACC-01)', ()
     const other = fx.members.assessor;
     const { raw } = await invitationRow(fx, { email: invitee.email, role: 'viewer' });
     const wrong = await asUser(other, () => ACCEPT(raw));
-    expect([wrong.status, await wrong.json()]).toEqual([409, { error: INVITATION_PAGE_COPY.wrongAccountRoute, code: 'wrong_account' }]);
+    expect([wrong.status, await wrong.json()]).toEqual([409, { error: INVITATION_ROUTE_COPY.wrongAccount, code: 'wrong_account' }]);
     expect(acceptInvitationViaDefiner).not.toHaveBeenCalled();
     expect((await asUser(invitee, () => ACCEPT(raw))).status).toBe(200);
   });

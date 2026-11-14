@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CopyLinkFallback } from '@/components/invitations/CopyLinkFallback';
-import { COPY_LINK_COPY } from '@/lib/invitations/copy';
+import { COPY_LINK_COPY } from '@/lib/invitations/link/copy';
 import MembersManager from '@/app/(authenticated)/orgs/[slug]/settings/members/MembersManager';
 import type { InvitationView, MemberView } from '@/types/api';
 

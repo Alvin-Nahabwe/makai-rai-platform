@@ -22,7 +22,7 @@ function filesMatching(fixed: string): string[] {
 
 describe('S-04 and S-05 take their shared texts from one place', () => {
   it('M-23: the unusable-invitation text is written in one file', () => {
-    expect(filesMatching('This invitation link does not work.')).toEqual(['lib/invitations/copy.ts']);
+    expect(filesMatching('This invitation link does not work.')).toEqual(['lib/org/copy.ts']);
   });
 
   it('M-25: the missing-acceptance text is written in one file', () => {
@@ -35,7 +35,7 @@ describe('S-04 and S-05 take their shared texts from one place', () => {
     // S-24 (ORG) shows the old 7.4.2 sentence for its own create form (SRS line 2387, the S-23 / S-24 row; plan 1A Task 19 words it);
     // S-04 and S-05 take theirs from the acceptances copy module, one text per kind of send.
     expect(filesMatching('Not created: connection lost. Nothing was created.')).toEqual(['components/admin/CreateOrganisationForm.tsx']);
-    expect(filesMatching('Your account was not created. Check your internet connection and try again.')).toEqual(['lib/legal/acceptances/copy.ts']);
+    expect(filesMatching('We did not get a reply, so your account may already be created.')).toEqual(['lib/legal/acceptances/copy.ts']);
     expect(filesMatching('Your choice was not saved because of a problem on our side. Try again.')).toEqual(['lib/legal/acceptances/copy.ts']);
   });
 });

@@ -4,8 +4,7 @@ import { tryResolveIdentity } from '@/lib/auth/identity';
 import { currentLegalText } from '@/lib/legal/registry';
 import { ACCEPTED_KINDS } from '@/types/legal';
 import { formatDay } from '@/lib/format/dates';
-import { INVITATION_PAGE_COPY } from '@/lib/invitations/copy';
-import { ORG_COPY, roleWithArticle } from '@/lib/org/copy';
+import { INVITATION_PAGE_COPY, ORG_COPY, roleWithArticle } from '@/lib/org/copy';
 import { pageTitle } from '@/lib/ui/title';
 import AcceptInvitationClient from './AcceptInvitationClient';
 

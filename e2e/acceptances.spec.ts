@@ -3,15 +3,16 @@ import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { test, expect, type Browser, type Page } from '@playwright/test';
 import { testDb } from '../__tests__/helpers/db';
+import { escapeRe } from '../__tests__/helpers/escapeRe';
 import { buildOrg, type FixtureAccount, type OrgFixture } from '../__tests__/helpers/recordFixture';
 import { claimMatches } from '../lib/claims/pattern';
 import { currentLegalText } from '../lib/legal/registry';
 import { acceptanceError } from '../lib/legal/kinds';
 import { VALIDATION_COPY } from '../lib/http/copy';
 import { ACCEPT_LABEL } from '../components/legal/AcceptancesForm';
-import { INVITATION_COPY, INVITATION_PAGE_COPY } from '../lib/invitations/copy';
+import { INVITATION_COPY } from '../lib/invitations/copy';
 import { ACCEPTANCES_COPY } from '../lib/legal/acceptances/copy';
-import { roleWithArticle } from '../lib/org/copy';
+import { INVITATION_PAGE_COPY, roleWithArticle } from '../lib/org/copy';
 import { ACCEPTED_KINDS, CONSENT_TYPE_FOR } from '../types/legal';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
@@ -69,6 +70,28 @@ async function tabTo(page: Page, target: ReturnType<Page['locator']>, max = 40):
   throw new Error(`tabTo: ${max} presses of Tab did not reach the target`);
 }
 
+/**
+ * Records, at the moment each box receives focus, what a screen reader reads on arrival: the box's id, its
+ * aria-invalid and the text of the elements its aria-describedby names. A web-first assertion made after the press
+ * retries until it passes, so it cannot tell an error drawn before focus moved from one drawn just after; this can.
+ */
+async function recordFocusArrivals(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const w = window as unknown as { focusArrivals: Array<{ id: string; invalid: string | null; description: string }> };
+    w.focusArrivals = [];
+    document.addEventListener('focusin', (e) => {
+      const el = e.target as HTMLElement;
+      if (!(el instanceof HTMLInputElement) || el.type !== 'checkbox') return;
+      const description = (el.getAttribute('aria-describedby') ?? '').split(/\s+/).filter(Boolean)
+        .map((id) => document.getElementById(id)?.textContent ?? '').join(' ');
+      w.focusArrivals.push({ id: el.id, invalid: el.getAttribute('aria-invalid'), description });
+    });
+  });
+}
+
+const focusArrivals = (page: Page) =>
+  page.evaluate(() => (window as unknown as { focusArrivals: Array<{ id: string; invalid: string | null; description: string }> }).focusArrivals);
+
 test.afterAll(async () => {
   await testDb.$disconnect();
 });
@@ -84,14 +107,14 @@ test.describe('S-04 and S-05 in a browser', () => {
 
     await page.goto(`/invitations/${raw}`);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(INVITATION_PAGE_COPY.heading(fx.org.name));
-    await expect(page.getByText(new RegExp(`^${fx.members.owner.name} ${INVITATION_PAGE_COPY.invitedAs(roleWithArticle('assessor'))}\\. This invitation ends on \\d{1,2} [A-Z][a-z]{2} \\d{4}\\.$`))).toBeVisible();
+    await expect(page.getByText(new RegExp(`^${escapeRe(fx.members.owner.name)} ${escapeRe(INVITATION_PAGE_COPY.invitedAs(roleWithArticle('assessor')))}\\. This invitation ends on \\d{1,2} [A-Z][a-z]{2} \\d{4}\\.$`))).toBeVisible();
     await expect(page.getByLabel(/^Email/)).toHaveValue(email);
 
     // 7.4.2 S-04 validation: Continue with nothing typed stays on step 1 and names both fields.
     await page.getByRole('button', { name: INVITATION_COPY.continue }).click();
     await expect(page.getByLabel(INVITATION_COPY.name)).toHaveAttribute('aria-invalid', 'true');
     await expect(page.getByLabel(INVITATION_COPY.name)).toBeFocused();
-    await expect(page.locator('#new-password')).toHaveAccessibleDescription(new RegExp(VALIDATION_COPY.passwordRequired.replace('.', '\\.')));
+    await expect(page.locator('#new-password')).toHaveAccessibleDescription(new RegExp(escapeRe(VALIDATION_COPY.passwordRequired)));
 
     await page.getByLabel(INVITATION_COPY.name).fill('Jay Three');
     await page.locator('#new-password').fill('J03-password-ok');
@@ -109,7 +132,16 @@ test.describe('S-04 and S-05 in a browser', () => {
     // Two ticks: M-25 names the third, focus moves to it, and nothing is sent.
     await page.getByLabel(ACCEPT_LABEL.terms, { exact: true }).check();
     await page.getByLabel(ACCEPT_LABEL.privacy, { exact: true }).check();
+    await recordFocusArrivals(page);
     await page.getByRole('button', { name: INVITATION_COPY.createAccount }).click();
+    // Focus lands on the unticked box with its error already drawn (R1-1): invalid, and the error in its description.
+    const thirdBox = page.getByLabel(ACCEPT_LABEL['cross-border-consent'], { exact: true });
+    await expect(thirdBox).toBeFocused();
+    await expect(thirdBox).toHaveAttribute('aria-invalid', 'true');
+    await expect(thirdBox).toHaveAccessibleDescription(new RegExp(escapeRe(ACCEPTANCES_COPY.tickThis)));
+    expect(await focusArrivals(page)).toEqual([
+      { id: 'accept-cross-border-consent', invalid: 'true', description: expect.stringContaining(ACCEPTANCES_COPY.tickThis) },
+    ]);
     // The kit's error summary lists the missing box as a link to it; the box carries its own short error.
     const summary = page.locator('.ui-error-summary');
     await expect(summary.getByRole('heading')).toHaveText(ACCEPTANCES_COPY.summaryTitle);
@@ -181,11 +213,19 @@ test.describe('S-04 and S-05 in a browser', () => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(ACCEPTANCES_COPY.legend);
     await expect(page.getByRole('link', { name: /\(opens in a new tab\)$/ })).toHaveCount(3);
     await page.getByLabel(ACCEPT_LABEL.terms, { exact: true }).check();
+    await recordFocusArrivals(page);
     await page.getByRole('button', { name: ACCEPTANCES_COPY.submit }).click();
     const summary = page.locator('.ui-error-summary');
     await expect(summary).toContainText(acceptanceError('privacy'));
     await expect(summary).toContainText(acceptanceError('cross-border-consent'));
-    await expect(page.getByLabel(ACCEPT_LABEL.privacy, { exact: true })).toBeFocused();
+    // Focus lands on the first unticked box with its error already drawn (R1-1): invalid, and the error in its description.
+    const firstUnticked = page.getByLabel(ACCEPT_LABEL.privacy, { exact: true });
+    await expect(firstUnticked).toBeFocused();
+    await expect(firstUnticked).toHaveAttribute('aria-invalid', 'true');
+    await expect(firstUnticked).toHaveAccessibleDescription(new RegExp(escapeRe(ACCEPTANCES_COPY.tickThis)));
+    expect(await focusArrivals(page)).toEqual([
+      { id: 'accept-privacy', invalid: 'true', description: expect.stringContaining(ACCEPTANCES_COPY.tickThis) },
+    ]);
     expect(posts).toEqual([]);
 
     await page.getByLabel(ACCEPT_LABEL.privacy, { exact: true }).check();
@@ -199,7 +239,7 @@ test.describe('S-04 and S-05 in a browser', () => {
     await page.context().close();
   });
 
-  test('FR-ACC-01 (7.4.2 S-04): a lost connection on Create account says nothing was created, and Try again sends the same body', async ({ browser }) => {
+  test('FR-ACC-01 (7.4.2 S-04): a lost connection on Create account says the account may already be created, and Try again sends the same body', async ({ browser }) => {
     const fx = await buildOrg({ label: 'resend' });
     const email = `resend-${Date.now()}@fixture.test`;
     const raw = await invitationFor(fx, email, 'viewer');
@@ -228,7 +268,51 @@ test.describe('S-04 and S-05 in a browser', () => {
     await page.context().close();
   });
 
-  test('FR-ACC-04 (7.4.2 S-05): a lost connection on Accept and continue says nothing was created, and Try again sends the same body', async ({ browser }) => {
+  test('FR-ACC-01 (7.4.2 S-04): when the reply to Create account is lost after the account was created, the screen says it may exist, Try again shows M-23, and the person signs in with the password typed', async ({ browser }) => {
+    const fx = await buildOrg({ label: 'lostreply' });
+    const email = `lostreply-${Date.now()}@fixture.test`;
+    const password = 'Lost-reply-password-ok';
+    const raw = await invitationFor(fx, email, 'viewer');
+    const page = await newPage(browser);
+    const statuses: number[] = [];
+    await page.route('**/api/v1/invitations/*/register', async (route) => {
+      if (statuses.length === 0) {
+        // The request reaches the server, which commits the account; its reply is then dropped, as when the connection fails on the way back.
+        const reply = await route.fetch();
+        statuses.push(reply.status());
+        await route.abort('connectionfailed');
+      } else {
+        const reply = await route.fetch();
+        statuses.push(reply.status());
+        await route.fulfill({ response: reply });
+      }
+    });
+    await page.goto(`/invitations/${raw}`);
+    await page.getByLabel(INVITATION_COPY.name).fill('Lost Reply');
+    await page.locator('#new-password').fill(password);
+    await page.getByRole('button', { name: INVITATION_COPY.continue }).click();
+    for (const box of await page.getByRole('checkbox').all()) await box.check();
+    await page.getByRole('button', { name: INVITATION_COPY.createAccount }).click();
+    const lost = page.getByRole('alert').filter({ hasText: ACCEPTANCES_COPY.send.account.lost });
+    await expect(lost).toHaveText(ACCEPTANCES_COPY.send.account.lost);
+    expect(statuses).toEqual([201]);
+    expect(await userCount(email)).toBe(1);
+
+    // Try again: the link is used now, so route 31 answers 410 and the screen shows M-23.
+    await page.getByRole('button', { name: ACCEPTANCES_COPY.tryAgain }).click();
+    await expect(page.getByRole('alert').filter({ hasText: INVITATION_PAGE_COPY.unusable })).toHaveText(INVITATION_PAGE_COPY.unusable);
+    expect(statuses).toEqual([201, 410]);
+
+    // Sign in with the invited email and the password typed in step 1: the person lands signed in.
+    await signIn(page, { email, password });
+    expect(new URL(page.url()).pathname).not.toBe('/login');
+    const res = await page.goto(`/orgs/${fx.org.slug}/dashboard`);
+    expect(res?.status()).toBe(200);
+    await expect(page).toHaveURL(new RegExp(`/orgs/${escapeRe(fx.org.slug)}/dashboard$`));
+    await page.context().close();
+  });
+
+  test('FR-ACC-04 (7.4.2 S-05): a lost connection on Accept and continue says the choice was not saved, and Try again sends the same body', async ({ browser }) => {
     const fx = await buildOrg({ label: 'resendfive', acceptances: 'pre-v1' });
     const page = await newPage(browser);
     await signIn(page, fx.members.assessor);

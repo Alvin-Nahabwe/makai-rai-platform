@@ -388,7 +388,7 @@ describe('buttons', () => {
 describe('component defects', () => {
   // The stale-list notice D-6 was measured on lived in the dead EvidenceAttach (deleted, defect 25); S-06's note is the
   // live element drawn with the same pair.
-  it("UX-33 NFR-A11Y-05 (D-6): a tinted note on S-06 (the retired text's) is moderate-tint text on its tint, never the yellow risk colour", async () => {
+  it("UX-33 NFR-A11Y-05 (D-6): a tinted note on S-06 (the retired text's) is the kit's Callout, ink on its tint, never the yellow risk colour", async () => {
     const html = renderToStaticMarkup(await LegalKindPage({ params: Promise.resolve({ kind: 'organisation-agreement' }) }));
     // Since plan 1A Task 16 the note is the kit's Callout (ink on the tint panel, Callout.css), kept in a role="note" wrapper.
     const notice = /<div[^>]*role="note"[^>]*>.*?<div class="ui-callout ui-callout--note">/.exec(html)?.[0] ?? '';

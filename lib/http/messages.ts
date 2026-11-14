@@ -1,6 +1,6 @@
 import { AppError } from './errors';
 import { AUTH_MESSAGE_COPY } from '../auth/copy';
-import { INVITATION_PAGE_COPY } from '../invitations/copy';
+import { INVITATION_PAGE_COPY } from '../org/copy';
 
 /**
  * M-23 (SRS 7.5.7): one text for every unusable invitation (expired, used, revoked, replaced or

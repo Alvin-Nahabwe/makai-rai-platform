@@ -6,10 +6,11 @@ import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { expectNoHorizontalScroll } from './helpers/reflow';
 import { testDb } from '../__tests__/helpers/db';
+import { escapeRe } from '../__tests__/helpers/escapeRe';
 import { currentAcceptances } from '../__tests__/helpers/legalStub';
 import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from './fixtures/manifest';
 import type { OrgRole } from '@prisma/client';
-import { COPY_LINK_COPY } from '../lib/invitations/copy';
+import { COPY_LINK_COPY } from '../lib/invitations/link/copy';
 
 /**
  * S-22 Members and S-30 Organisation details (FR-MEM-01 to FR-MEM-04, UX-23, UX-27, UX-29, NFR-INT-02,
@@ -352,10 +353,10 @@ test.describe('S-22 interactions', () => {
     ]);
     await inviteVia(page, 'first@fixture.test', 'reviewer', { showLink: true });
     await page.getByRole('button', { name: COPY_LINK_COPY.copy }).click();
-    await expect(status(page, new RegExp(`${COPY_LINK_COPY.copied}|${COPY_LINK_COPY.copyFailed}`))).toBeVisible();
+    await expect(status(page, new RegExp(`${escapeRe(COPY_LINK_COPY.copied)}|${escapeRe(COPY_LINK_COPY.copyFailed)}`))).toBeVisible();
     await inviteVia(page, 'second@fixture.test', 'reviewer', { showLink: false });
     await expect(status(page, 'The invitation email could not be sent. Send this link another way.')).toBeVisible();
-    await expect(status(page, new RegExp(`${COPY_LINK_COPY.copied}|${COPY_LINK_COPY.copyFailed}`))).toHaveCount(0);
+    await expect(status(page, new RegExp(`${escapeRe(COPY_LINK_COPY.copied)}|${escapeRe(COPY_LINK_COPY.copyFailed)}`))).toHaveCount(0);
   });
 
   test('NFR-A11Y-02 (A11Y-2): a refused submit puts focus on the first invalid field', async ({ page }) => {

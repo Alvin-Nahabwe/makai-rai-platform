@@ -53,7 +53,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
     const emptyName = body.name === undefined || body.name === null || body.name === '' || (name.error === null && name.value.length === 0);
     const blankName = emptyName ? { field: 'name', message: INVITATION_COPY.nameRequired } : null;
     // FR-MEM-01 (obligation M9): a name that reads as a link is shown to colleagues and on S-04, so sign-up refuses it.
-    const linkName = name.error === null && WEB_ADDRESS.test(name.value) ? { field: 'name', message: 'A name cannot contain a web address.' } : null;
+    const linkName = name.error === null && WEB_ADDRESS.test(name.value) ? { field: 'name', message: INVITATION_COPY.nameHasWebAddress } : null;
     const fieldErrors = collectErrors([blankName ?? name.error ?? linkName, validatePassword(body.password)]);
     if (fieldErrors.length > 0) throw new ValidationFailed(fieldErrors);
     const password = body.password as string;

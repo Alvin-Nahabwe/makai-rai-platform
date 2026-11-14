@@ -31,7 +31,7 @@ export const ACCEPTANCES_COPY = Object.freeze({
   tickThis: 'Tick this box to continue.',
   /** In the summary at the top and in route 31's answer (audit A 206); `acceptanceError` in `lib/legal/kinds.ts` is its one reader. */
   tickBoxFor: (name: string): string => `Tick the box for the ${name}.`,
-  /** The title of the error summary: no audit row words it; this is the audited text of E-API-7, for the lead to confirm. */
+  /** The title of the error summary: no audit row words it; it is the audited text of E-API-7, as the coordinator ruled. */
   summaryTitle: 'Some answers need fixing.',
   submit: 'Accept and continue',
   /** While a send is in flight (audit A 198). */
@@ -41,6 +41,7 @@ export const ACCEPTANCES_COPY = Object.freeze({
   deleteAccount: 'delete your account',
   alternativesOr: ' or ',
   signOut: 'sign out',
+  alternativesAfter: '.',
   /** Mode `invitation` (audit A 195). */
   closePage: 'If you do not want to accept, close this page. Your account will not be created.',
   notNow: 'Not now',
@@ -51,7 +52,8 @@ export const ACCEPTANCES_COPY = Object.freeze({
   /** What a send that did not finish says, by what was being sent (audit A 186, 187). */
   send: Object.freeze({
     account: Object.freeze({
-      lost: 'Your account was not created. Check your internet connection and try again.',
+      /** No reply: the account may have been created all the same (the coordinator's ruling Q7). */
+      lost: 'We did not get a reply, so your account may already be created. Select Try again. If the link no longer works, sign in with the password you chose.',
       refused: 'Your account was not created because of a problem on our side. Try again.',
     }),
     choice: Object.freeze({

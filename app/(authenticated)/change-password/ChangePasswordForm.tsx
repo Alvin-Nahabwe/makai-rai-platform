@@ -25,7 +25,9 @@ export async function changePasswordOutcome(res: Response): Promise<ChangeState>
   const field = res.status === 422 ? body?.fields?.find((f) => f.field === 'newPassword') : undefined;
   if (field) return { kind: 'invalid', field: 'newPassword', message: field.message };
   if (res.status >= 500 || !body) {
-    return { kind: 'error', message: CHANGE_PASSWORD_COPY.serverProblem(typeof body?.reference === 'string' ? body.reference : null) };
+    // An empty reference is no reference: it would print "...give this reference: ." (R1-6).
+    const reference = typeof body?.reference === 'string' ? body.reference : '';
+    return { kind: 'error', message: CHANGE_PASSWORD_COPY.serverProblem(reference || null) };
   }
   return { kind: 'error', message: typeof body.error === 'string' && body.error.length > 0 ? body.error : CHANGE_PASSWORD_COPY.serverProblem(null) };
 }

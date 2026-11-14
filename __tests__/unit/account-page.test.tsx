@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { Identity } from '@/lib/auth/identity';
+import { escapeRe } from '../helpers/escapeRe';
 
 /**
  * S-21 My account (W-12, SRS lines 2253-2283; FR-ACC-04, FR-ACC-07, FR-ACC-08, FR-EXP-03) and S-29's form. The four
@@ -45,9 +46,9 @@ describe('S-21 My account', () => {
 
   it('FR-ACC-07 FR-ACC-08: S-21 offers sign out everywhere and change password, and renders every slot with its props', () => {
     const markup = html(<AccountRegions identity={id} reminderEmails={false} lastActiveOwnerOf={[]} />);
-    expect(markup).toMatch(new RegExp(`<button[^>]*type="button"[^>]*>${SIGN_OUT_EVERYWHERE_COPY.button}</button>`));
+    expect(markup).toMatch(new RegExp(`<button[^>]*type="button"[^>]*>${escapeRe(SIGN_OUT_EVERYWHERE_COPY.button)}</button>`));
     expect(markup).toContain(SIGN_OUT_EVERYWHERE_COPY.explains);
-    expect(markup).toMatch(new RegExp(`<a [^>]*href="/change-password"[^>]*>${ACCOUNT_COPY.page.changePassword}</a>`));
+    expect(markup).toMatch(new RegExp(`<a [^>]*href="/change-password"[^>]*>${escapeRe(ACCOUNT_COPY.page.changePassword)}</a>`));
     expect(vi.mocked(MyAcceptances)).toHaveBeenLastCalledWith({ userId: id.userId }, undefined);
     expect(vi.mocked(ReminderEmailsSetting)).toHaveBeenLastCalledWith({ enabled: false }, undefined);
     expect(vi.mocked(DraftsOnThisDevice)).toHaveBeenLastCalledWith({ userId: id.userId }, undefined);
@@ -59,7 +60,7 @@ describe('S-21 My account', () => {
     const headings = [...markup.matchAll(/<section aria-labelledby="([^"]+)"><h2 id="\1">([^<]+)<\/h2>/g)].map((m) => m[2]);
     expect(headings).toEqual([ACCOUNT_COPY.page.detailsHeading, ACCOUNT_COPY.page.passwordHeading, ACCOUNT_COPY.page.devicesHeading]);
     expect(headings).toEqual(['Name and email', 'Password', 'Signed-in devices']); // audit A 78, 81, 83: the h2 no longer repeats the h1
-    expect(markup).toMatch(new RegExp(`<h1[^>]*>${ACCOUNT_COPY.page.heading}</h1>`));
+    expect(markup).toMatch(new RegExp(`<h1[^>]*>${escapeRe(ACCOUNT_COPY.page.heading)}</h1>`));
   });
 
   it('FR-ACC-07: Sign out everywhere ends the sessions, then signs this browser out', async () => {
@@ -119,8 +120,8 @@ describe('S-29 and S-21\'s password change', () => {
     expect(markup).toContain(CHANGE_PASSWORD_COPY.hint(12));
     expect(markup.match(/type="password"/g)).toHaveLength(2);
     expect(markup).not.toMatch(/confirm/i);
-    expect(markup).toMatch(new RegExp(`<button[^>]*type="submit"[^>]*>${CHANGE_PASSWORD_COPY.submit}</button>`));
-    expect(markup).toMatch(new RegExp(`<button[^>]*type="button"[^>]*aria-controls="currentPassword newPassword"[^>]*>${CHANGE_PASSWORD_COPY.showPasswords}</button>`));
+    expect(markup).toMatch(new RegExp(`<button[^>]*type="submit"[^>]*>${escapeRe(CHANGE_PASSWORD_COPY.submit)}</button>`));
+    expect(markup).toMatch(new RegExp(`<button[^>]*type="button"[^>]*aria-controls="currentPassword newPassword"[^>]*>${escapeRe(CHANGE_PASSWORD_COPY.showPasswords)}</button>`));
   });
 
   it('FR-ACC-08 NFR-SEC-18: a 422 is shown under the new password and named by aria-describedby; a 400 is shown at the top', async () => {
@@ -130,7 +131,7 @@ describe('S-29 and S-21\'s password change', () => {
     const markup = html(<ChangePasswordView currentPassword="x" newPassword="y" show={false} state={r422} onCurrent={noop} onNew={noop} onToggleShow={noop} onSubmit={noop} />);
     expect(tagOf(markup, 'newPassword')).toMatch(/aria-describedby="newPassword-hint newPassword-error"/);
     expect(tagOf(markup, 'newPassword')).toMatch(/aria-invalid="true"/);
-    expect(markup).toMatch(new RegExp(`id="newPassword-error"[^>]*>${tooShort}<`));
+    expect(markup).toMatch(new RegExp(`id="newPassword-error"[^>]*>${escapeRe(tooShort)}<`));
     const r400 = await changePasswordOutcome(new Response(JSON.stringify({ error: 'Current password is incorrect' }), { status: 400 }));
     expect(r400).toEqual({ kind: 'error', message: 'Current password is incorrect' });
     expect(regionText(html(<ChangePasswordView currentPassword="x" newPassword="y" show={false} state={r400} onCurrent={noop} onNew={noop} onToggleShow={noop} onSubmit={noop} />), 'alert'))
@@ -140,6 +141,9 @@ describe('S-29 and S-21\'s password change', () => {
     expect(await changePasswordOutcome(new Response('{"error":"Service unavailable","code":"database_unavailable","reference":"0a1b2c3d"}', { status: 503 })))
       .toEqual({ kind: 'error', message: CHANGE_PASSWORD_COPY.serverProblem('0a1b2c3d') });
     expect(await changePasswordOutcome(new Response('<html>Bad gateway</html>', { status: 502 })))
+      .toEqual({ kind: 'error', message: CHANGE_PASSWORD_COPY.serverProblem(null) });
+    // An empty reference is said as no reference, never as "give this reference: .".
+    expect(await changePasswordOutcome(new Response('{"error":"x","code":"internal_error","reference":""}', { status: 500 })))
       .toEqual({ kind: 'error', message: CHANGE_PASSWORD_COPY.serverProblem(null) });
   });
 });

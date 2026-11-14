@@ -9,8 +9,9 @@ import { expectNoHorizontalScroll } from './helpers/reflow';
 import { abortPendingBackgroundRequests } from './helpers/pendingLinks';
 import { testDb } from '../__tests__/helpers/db';
 import { buildOrg } from '../__tests__/helpers/recordFixture';
-import { COPY_LINK_COPY, INVITATION_COPY, INVITATION_PAGE_COPY } from '../lib/invitations/copy';
-import { ORG_COPY } from '../lib/org/copy';
+import { INVITATION_COPY } from '../lib/invitations/copy';
+import { COPY_LINK_COPY } from '../lib/invitations/link/copy';
+import { INVITATION_PAGE_COPY, ORG_COPY } from '../lib/org/copy';
 
 /**
  * J-01, the MAK-AI administrator's journey (units/ORG.md Task 9): create an organisation with its institution's legal

@@ -68,31 +68,31 @@ export interface ResetPasswordViewProps {
 export function ResetPasswordView(v: ResetPasswordViewProps) {
   // Checked before the token: the token is forgotten once the password is set, and that must not read as a dead link.
   if (v.state.kind === 'done') return <StatusRegion message={RESET_COPY.passwordChanged} />;
-  if (v.token === null || v.state.kind === 'unusable') {
-    return (
-      <>
-        <StatusRegion message={AUTH_MESSAGE_COPY.resetLinkUnusable} politeness="assertive" tone="error" />
-        <p className="auth-footer">
-          <Link href="/forgot-password" style={{ display: 'inline-block', minHeight: '24px' }}>{RESET_COPY.askNewLink}</Link>
-        </p>
-      </>
-    );
-  }
+  // The assertive region is the first child in both branches below, so React keeps the one element when a 410 turns the
+  // form into M-22: the region exists before its text (ruling T16-6), and only its words change.
+  const unusable = v.token === null || v.state.kind === 'unusable';
+  const alert = unusable ? AUTH_MESSAGE_COPY.resetLinkUnusable : v.state.kind === 'error' ? v.state.message : null;
   const invalid = v.state.kind === 'invalid' ? v.state.message : null;
   return (
     <>
-      <StatusRegion message={v.state.kind === 'error' ? v.state.message : null} politeness="assertive" tone="error" />
-      <form method="post" onSubmit={v.onSubmit} noValidate>
-        <TextInput id="new-password" name="new-password" label={RESET_COPY.newPassword} type={v.showPassword ? 'text' : 'password'} required
-          autoComplete="new-password" value={v.password} onChange={(e) => v.onPassword(e.currentTarget.value)}
-          hint={RESET_COPY.hint(PASSWORD_MIN_LENGTH)} error={invalid ?? undefined} />
-        {/* The kit's Button cannot carry aria-pressed or aria-controls (ruling T16-5), so this is a native button in the kit's classes. */}
-        <p style={{ margin: 'calc(-1 * var(--space-4)) 0 var(--space-6)' }}>
-          <button type="button" className="ui-button ui-button--quiet ui-button--compact" aria-controls="new-password"
-            aria-pressed={v.showPassword} onClick={v.onToggleShow}>{RESET_COPY.showPassword}</button>
+      <StatusRegion message={alert} politeness="assertive" tone="error" />
+      {unusable ? (
+        <p className="auth-footer">
+          <Link href="/forgot-password" style={{ display: 'inline-block', minHeight: '24px' }}>{RESET_COPY.askNewLink}</Link>
         </p>
-        <Button variant="primary" type="submit" disabled={v.state.kind === 'sending' || v.hydrated === false}>{RESET_COPY.submit}</Button>
-      </form>
+      ) : (
+        <form method="post" onSubmit={v.onSubmit} noValidate>
+          <TextInput id="new-password" name="new-password" label={RESET_COPY.newPassword} type={v.showPassword ? 'text' : 'password'} required
+            autoComplete="new-password" value={v.password} onChange={(e) => v.onPassword(e.currentTarget.value)}
+            hint={RESET_COPY.hint(PASSWORD_MIN_LENGTH)} error={invalid ?? undefined} />
+          {/* The kit's Button cannot carry aria-pressed or aria-controls (ruling T16-5), so this is a native button in the kit's classes. */}
+          <p style={{ margin: 'calc(-1 * var(--space-4)) 0 var(--space-6)' }}>
+            <button type="button" className="ui-button ui-button--quiet ui-button--compact" aria-controls="new-password"
+              aria-pressed={v.showPassword} onClick={v.onToggleShow}>{RESET_COPY.showPassword}</button>
+          </p>
+          <Button variant="primary" type="submit" disabled={v.state.kind === 'sending' || v.hydrated === false}>{RESET_COPY.submit}</Button>
+        </form>
+      )}
     </>
   );
 }

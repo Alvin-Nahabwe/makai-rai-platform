@@ -166,7 +166,7 @@ test.describe('My account and sessions', () => {
     expect((await testDb.user.findUniqueOrThrow({ where: { id: a.userId } })).sessionEpoch).toBe(1);
   });
 
-  test('FR-ACC-04 UX-01: a pre-v1 account loads /account, and the row that no longer counts says so', async ({ browser }) => {
+  test('FR-ACC-04 UX-01: a pre-v1 account loads /account, and its pre-v1 row says it was an older version, with Read and accept to /acceptances', async ({ browser }) => {
     const a = (await buildOrg({ label: 'prev1', acceptances: 'pre-v1' })).members.viewer;
     const page = await newPage(browser);
     await page.goto('/login');
@@ -408,11 +408,9 @@ test.describe('My account and sessions', () => {
         await loadAfresh(page, await path());
         await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
         // The submit button is disabled until hydration and the kit's button changes colour over 150 ms when it is
-        // enabled: axe reads a colour mid-way if it runs in that window, so wait for the enabled button and for every
-        // transition to end.
+        // enabled: wait for the enabled button; the accessibility check itself waits for running transitions to end.
         const submit = page.locator('form button[type="submit"]');
         if (await submit.count()) await expect(submit.first()).toBeEnabled();
-        await page.waitForFunction(() => document.getAnimations().length === 0);
         await expectNoSeriousA11yViolations(page, `${screen} ${colorScheme} ${width}`);
         await expectTargetsAtLeast24px(page);
       }

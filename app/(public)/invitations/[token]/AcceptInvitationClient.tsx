@@ -267,8 +267,8 @@ export function NewAccountView(v: NewAccountViewProps) {
 /**
  * Signed out: step 1 takes the name and one password (the email is the invitation's, shown and
  * read-only); step 2 is the three acceptances, whose Create account posts route 31. On 201 the
- * person is signed in and lands on S-08 with the welcome. A lost reply says nothing was created
- * and Try again resends the same body.
+ * person is signed in and lands on S-08 with the welcome. A lost reply says the account may
+ * already be created and Try again resends the same body.
  */
 function NewAccount(p: Props) {
   const router = useRouter();

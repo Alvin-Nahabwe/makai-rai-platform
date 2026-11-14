@@ -6,7 +6,7 @@ import { hashInvitationToken } from '@/lib/data/invitationToken';
 import { invitationByToken } from '@/lib/data/preauth';
 import { AcceptancesRequiredError, AppError } from '@/lib/http/errors';
 import { invitationUnusable as unusable } from '@/lib/http/messages';
-import { INVITATION_PAGE_COPY } from '@/lib/invitations/copy';
+import { INVITATION_ROUTE_COPY } from '@/lib/http/api/copy';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { toResponse } from '@/lib/http/toResponse';
 
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
     const invitation = await invitationByToken(token);
     if (invitation === null) throw unusable();
     if (invitation.email.toLowerCase() !== identity.email.toLowerCase()) {
-      throw new AppError(409, 'wrong_account', INVITATION_PAGE_COPY.wrongAccountRoute);
+      throw new AppError(409, 'wrong_account', INVITATION_ROUTE_COPY.wrongAccount);
     }
     // FR-ACC-03: a membership from an invitation waits for the current version of each text, even one
     // that is only offered (it would not block the gate): 403 with those kinds, which S-04 turns into the form.

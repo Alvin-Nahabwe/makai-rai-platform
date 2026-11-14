@@ -4,6 +4,7 @@ import { UnauthenticatedError, PasswordChangeRequiredError } from '@/lib/auth/id
 import { AppError, ValidationFailed } from '@/lib/http/errors';
 import { toResponse } from '@/lib/http/toResponse';
 import { API_COPY } from '@/lib/http/api/copy';
+import { VALIDATION_COPY } from '@/lib/http/copy';
 
 /**
  * Plan 1A Task 16c (audit E-API-1 to E-API-7): the fixed texts of the API's answers, word for word, and the answers that carry
@@ -18,7 +19,7 @@ describe('the fixed texts of API answers (E-API-1 to E-API-7)', () => {
     expect(API_COPY.forbidden).toBe('Your role does not allow this. Ask an Owner or Admin.');
     expect(API_COPY.databaseUnavailable).toBe('The platform is not answering. Try again in a few minutes.');
     expect(API_COPY.internalError('0a1b2c3d')).toBe('Something went wrong on our side. Try again. If it happens again, give us this reference: 0a1b2c3d');
-    expect(API_COPY.validationFailed).toBe('Some answers need fixing.');
+    expect(VALIDATION_COPY.failed).toBe('Some answers need fixing.');
   });
 
   it('the answers carry the texts under the same code and status as before', async () => {
@@ -42,9 +43,9 @@ describe('the fixed texts of API answers (E-API-1 to E-API-7)', () => {
 
   it('the validation answer says the new text, with its 422, its code and its fields', async () => {
     const e = new ValidationFailed([{ field: 'name', message: 'Enter the name.' }]);
-    expect(e.message).toBe(API_COPY.validationFailed);
+    expect(e.message).toBe(VALIDATION_COPY.failed);
     const r = toResponse(e);
-    expect([r.status, await r.json()]).toEqual([422, { fields: [{ field: 'name', message: 'Enter the name.' }], error: API_COPY.validationFailed, code: 'validation' }]);
+    expect([r.status, await r.json()]).toEqual([422, { fields: [{ field: 'name', message: 'Enter the name.' }], error: VALIDATION_COPY.failed, code: 'validation' }]);
   });
 
   it('the texts nobody reworded are as they were (no audit row or a KEEP row)', async () => {
