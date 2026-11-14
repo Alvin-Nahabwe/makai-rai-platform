@@ -15,8 +15,8 @@ import { formatDay, formatDeclaredDate } from '@/lib/format/dates';
 import { DATASET_SIZE_WORDS, PERSONAL_DATA_WORDS } from '@/lib/project/labels';
 import { formatFingerprint } from '@/lib/seal/format';
 import {
-  ETHICS_APPROVED, ETHICS_NOT_REQUIRED, ETHICS_SUBMITTED, FILE_NAME_ERASED, GATE_DERIVED_NA, assignedToLine, checkAgainLine, decidedByLine, decisionSource,
-  doneEvidenceLine, evidenceFileLine, fileErasedLine, findingStatusLine, formatUtcDay, fromQuestion, lastCheckNoteLine, outsideRoleLine, personalDataAnswerLine,
+  ETHICS_APPROVED, ETHICS_NOT_REQUIRED, ETHICS_SUBMITTED, FILE_NAME_ERASED, GATE_DERIVED_NA, assignedToLine, checkAgainLine, decidedByLine, decidedInLine, decisionSource,
+  doneEvidenceLine, evidenceFileLine, fileErasedLine, findingStatusLine, formatUtcDay, fromQuestion, lastCheckNoteLine, outsideOtherBodyLine, outsideRoleLine, personalDataAnswerLine,
   reviewLineText, textErasedLine, utcSecond,
 } from './copy';
 import type { ResolvedField } from './render';
@@ -110,7 +110,8 @@ function textOf(snap: DocumentSnapshot, table: keyof DocumentSnapshot['erasures'
   return textErasedLine(on);
 }
 /** FR-DOC-02 / D7: the sentence that stops a team's entry reading as the outside body's own record. */
-export const outsideRoleSentence = (member: string, role: OutsideRole): string => outsideRoleLine(member, ROLE_LABEL[role]);
+export const outsideRoleSentence = (member: string, role: OutsideRole): string =>
+  role === 'other' ? outsideOtherBodyLine(member) : outsideRoleLine(member, ROLE_LABEL[role]);
 
 const runningOf = new WeakMap<DocumentSnapshot, LoadedContent>();
 /** The running content, read once per snapshot. */
@@ -163,7 +164,10 @@ function deciderText(d: SealedDecision): string | null {
 function provenanceOf(d: SealedDecision): string {
   const who = deciderText(d);
   const when = declaredText(d.row);
-  return who === null ? decisionSource(d.row.questionId, d.row.versionNumber) : `${decisionSource(d.row.questionId, d.row.versionNumber)} ${decidedByLine(who, when)}`;
+  if (who === null) return decisionSource(d.row.questionId, d.row.versionNumber);
+  // A date known only to the month or the year is decided "in" it, a whole day "on" it (the precision is the row's, never read from the text).
+  const decided = when !== null && (d.row.declaredPrecision === 'month' || d.row.declaredPrecision === 'year') ? decidedInLine(who, when) : decidedByLine(who, when);
+  return `${decisionSource(d.row.questionId, d.row.versionNumber)} ${decided}`;
 }
 
 /** A link item's address as text. Read by key: the redirect-origin lint reads any `.url` as a request address, and this one is stored text. */

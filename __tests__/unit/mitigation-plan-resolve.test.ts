@@ -327,6 +327,25 @@ describe('the ruled words a new document prints (plan 1A Task 18c)', () => {
   });
 });
 
+describe('the two lines the coordinator ruled after the review of part (b) (14 Nov 2026, 19:14)', () => {
+  it('FR-DOC-02: a decision dated by day is decided "on" it; one dated by month or year is decided "in" it', () => {
+    const at = (precision: 'day' | 'month' | 'year') => {
+      const snap = snapshot({ notApplicable: { 'Q-PP-18': ['na_no_personal_data', 'Whole register used.'] } });
+      (snap.chosen.decisions.get('Q-PP-18') as SealedDecision).row.declaredPrecision = precision;
+      return provenance(resolveFields(mpMap, snap, {}), 'MP-08');
+    };
+    expect(at('day')).toBe('Source: question Q-PP-18, version 1 of the decision. Decided by Amina N. on 12 Oct 2026.');
+    expect(at('month')).toBe('Source: question Q-PP-18, version 1 of the decision. Decided by Amina N. in Oct 2026.');
+    expect(at('year')).toBe('Source: question Q-PP-18, version 1 of the decision. Decided by Amina N. in 2026.');
+  });
+
+  it('FR-DOC-02 D7: an outside role of "other" is "another body"; every other role keeps its name', () => {
+    const risk = (role: 'other' | 'supervisor') => text(resolve({ findings: [{ state: 'closed_accepted_risk', risk: { acceptedBy: { kind: 'outside_role', role } } }] }), 'MP-06') as string;
+    expect(risk('other')).toContain('Recorded by Owen O. as a decision of another body. That body did not enter it in the platform.');
+    expect(risk('supervisor')).toContain('Recorded by Owen O. as a decision of the supervisor. The supervisor did not enter it in the platform.');
+  });
+});
+
 describe('a stage that was never sealed', () => {
   it('FR-DOC-05: the chosen stage is always sealed, so a mitigation plan never prints the not-recorded-at-issue line', () => {
     const r = resolve({});

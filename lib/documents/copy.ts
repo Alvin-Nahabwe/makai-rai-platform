@@ -58,8 +58,10 @@ export const GATE_DERIVED_NA = 'Does not apply: the team answered No to the pers
 // The lines a document prints around the record (C2; C8 #4; rulings G-c3 and G-c5 (a), which keep FR-DOC-02's four items).
 /** A decision's source, first sentence of its provenance: "Source: question <Q-id>, version <n> of the decision." */
 export const decisionSource = (questionId: string, version: number): string => `Source: question ${questionId}, version ${version} of the decision.`;
-/** The second sentence of a decision's provenance, when it has a decider. */
+/** The second sentence of a decision's provenance, when it has a decider and its date is a whole day (or it has no date). */
 export const decidedByLine = (who: string, on: string | null): string => `Decided by ${who}${on === null ? '' : ` on ${on}`}.`;
+/** The same sentence for a decision dated only by month or by year (the coordinator's ruling, 14 Nov 2026 19:14): "in", not "on". */
+export const decidedInLine = (who: string, period: string): string => `Decided by ${who} in ${period}.`;
 /** The short source of a finding or of a gate-derived line: "From question <Q-id> (decision version <n>)". */
 export const fromQuestion = (questionId: string, version?: number): string =>
   `From question ${questionId}${version === undefined ? '' : ` (decision version ${version})`}`;
@@ -72,6 +74,9 @@ export const doneEvidenceLine = (items: string): string => `Evidence that it is 
 /** FR-DOC-02 / D7 (C#328): the sentence that stops a team's entry reading as the outside body's own record. `role` is the role's label. */
 export const outsideRoleLine = (member: string, role: string): string =>
   `Recorded by ${member} as a decision of the ${role.toLowerCase()}. The ${role.toLowerCase()} did not enter it in the platform.`;
+/** The same sentence for the outside role `other` (the coordinator's ruling, 14 Nov 2026 19:14): it names no body. */
+export const outsideOtherBodyLine = (member: string): string =>
+  `Recorded by ${member} as a decision of another body. That body did not enter it in the platform.`;
 /** An evidence file, with the short form of its fingerprint (C#331). */
 export const evidenceFileLine = (name: string, fingerprint: string | null): string => `file ${name}${fingerprint === null ? '' : ` (fingerprint ${fingerprint})`}`;
 /** A finding's state, in its block (C#347). */
