@@ -217,10 +217,14 @@
   font-weight: var(--font-weight-semibold);
 }
 
+/* The disclosure keeps its marker (a summary's ::marker exists only as display: list-item) and is a 24 px target by its
+   own height, sized to its text so the target is the words and the marker. */
 .finding-history > summary {
-  display: inline-flex;
-  align-items: center;
+  display: list-item;
+  inline-size: fit-content;
+  max-inline-size: 100%;
   min-block-size: var(--target-min);
+  padding-block: var(--space-1);
   cursor: pointer;
   font-weight: var(--font-weight-semibold);
   color: var(--color-link);
