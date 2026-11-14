@@ -16,6 +16,13 @@
   margin-block: var(--space-4) 0;
 }
 
+/* A link on a line of its own, near the row of marks' stops: a target of at least 24 by 24 (spec 7.5, SC 2.5.8). */
+.route-column__all a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--target-min);
+}
+
 @media (width >= 72.5rem) {
   .route-column__list {
     display: block;
