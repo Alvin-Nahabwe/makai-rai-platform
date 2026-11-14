@@ -1104,6 +1104,50 @@ dialog::backdrop {
   background: rgba(15, 19, 28, 0.6);
 }
 
+/* Moved from components/ui/Banner.css (plan 1A Task 6), unchanged, by follow-up B of plan 1A (deferral register D-383):
+   the kit Banner's rules. The root layout renders the offline banner, so Banner.css was a stylesheet of its own on every
+   page's first visit: one more response, about 870 bytes of transfer, for rules that compress to 299 (NFR-PERF-02).
+   Here they ride in the stylesheet every page loads anyway, after its last rule of its own and before the block moved
+   from shell.css, which stays the end of the file. Only their order against this file's rules changed (they were linked
+   before it), and no declaration changes its winner: that takes a rule of equal specificity, and the only rule here with
+   one class's specificity that can match a banner's own element is :focus-visible, which sets nothing these rules set.
+   Every kind is drawn alike: the tint, ink, and a 1 px rule below; the icon and the words tell the kinds apart, so forced
+   colours, which drop the tint and keep the rule, lose nothing. Plain flow content: nothing fixed or sticky can cover a
+   focused control (WCAG 2.4.11). The action wraps below the words on a narrow screen. */
+.ui-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border-control);
+  background-color: var(--color-tint);
+  color: var(--color-ink);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+}
+
+.ui-banner__icon {
+  display: inline-flex;
+  flex: none;
+  padding-block-start: 0.125rem;
+}
+
+.ui-banner__body {
+  flex: 1 1 12rem;
+  min-inline-size: 0;
+  max-inline-size: 75ch;
+}
+
+.ui-banner__title {
+  margin: 0;
+  font-weight: var(--font-weight-bold);
+}
+
+.ui-banner__action {
+  flex: none;
+}
+
 /* Moved from components/layout/shell.css (plan 1A Task 11), unchanged, by plan 1A Task 12 (fix round 1, F1a; ruling
    T12-x): the rules a public page uses (the theme switch, with the rail's Sign out that shares its rule; the public header;
    the footer; their print rule) and the idle warning's. A root-layout stylesheet reaches every public page anyway;

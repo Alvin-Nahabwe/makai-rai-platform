@@ -1,6 +1,6 @@
 import type { ChangeEventHandler, HTMLAttributes, ReactElement, ReactNode, Ref } from 'react';
 import { Icon } from '@/components/ui/Icon';
-import { UI_COPY } from '@/lib/ui/copy';
+import { FIELD_COPY } from '@/lib/ui/field/copy';
 import './TextInput.css';
 
 /**
@@ -55,7 +55,7 @@ export function FieldLabel({ htmlFor, label, required = false }: { htmlFor: stri
   return (
     <label className="ui-field__label" htmlFor={htmlFor}>
       {label}
-      {required ? <> <span className="ui-field__required">{UI_COPY.field.required}</span></> : null}
+      {required ? <> <span className="ui-field__required">{FIELD_COPY.required}</span></> : null}
     </label>
   );
 }
@@ -75,7 +75,7 @@ export function FieldError({ id, message }: { id: string; message: string }): Re
   return (
     <p className="ui-field__error">
       <Icon name="triangle-alert" size={20} />
-      <span><span className="visually-hidden">{UI_COPY.field.errorPrefix} </span><span id={id}>{message}</span></span>
+      <span><span className="visually-hidden">{FIELD_COPY.errorPrefix} </span><span id={id}>{message}</span></span>
     </p>
   );
 }

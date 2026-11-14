@@ -1,4 +1,5 @@
 import type { ScopeAnswer, SortWords, StatusMarkKind } from '@/components/ui/types';
+import { FIELD_COPY } from '@/lib/ui/field/copy';
 import type { Tally } from '@/lib/ui/marks';
 
 /**
@@ -61,12 +62,8 @@ export const UI_COPY = {
   date: { day: 'Day', month: 'Month', year: 'Year', today: 'Today' },
   /** InlineConfirm's cancel button, unless the caller names it. */
   confirm: { cancel: 'Cancel' },
-  field: {
-    /** After a required field's label: "Reason (required)". */
-    required: '(required)',
-    /** Read before every field error, visually hidden: the error icon beside it is hidden from assistive technology. */
-    errorPrefix: 'Error:',
-  },
+  /** The form fields' words live in lib/ui/field/copy.ts so a page with a form does not download this whole list. */
+  field: FIELD_COPY,
   /** Table's visually hidden sort line: "Sorted by Opened, latest first" (phrases: SORT_WORDS or the column's own). */
   table: { sorted: (column: string, phrase: string) => `Sorted by ${column}, ${phrase}` },
   breadcrumbLabel: 'Breadcrumb',
