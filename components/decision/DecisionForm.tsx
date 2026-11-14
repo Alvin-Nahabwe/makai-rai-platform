@@ -187,11 +187,26 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
     root.style.setProperty('--decision-save-bar-h', `${h}px`);
     const focused = document.activeElement;
     if (h < was || !(focused instanceof HTMLElement) || bar.contains(focused) || !(bar.closest('form')?.contains(focused) ?? false)) return;
-    if (getComputedStyle(bar).position === 'fixed' && focused.getBoundingClientRect().bottom > bar.getBoundingClientRect().top) {
+    // Covered: its lower edge under the bar's top, and it is on the screen at all (one the person scrolled away from stays).
+    const r = focused.getBoundingClientRect();
+    if (getComputedStyle(bar).position === 'fixed' && r.bottom > bar.getBoundingClientRect().top && r.top < document.documentElement.clientHeight) {
       focused.scrollIntoView({ block: 'nearest', behavior: 'instant' });
     }
   }, []);
   useLayoutEffect(applyBarHeight);
+
+  /**
+   * Brings what took focus wholly into view, unless it already is: between the screen's top and the fixed bar's top (or
+   * the screen's foot when the bar is in the flow). A press on a control that is in view must not move the page, or the
+   * press ends on whatever slid under it and is lost.
+   */
+  const reveal = useCallback((el: Element): void => {
+    const r = el.getBoundingClientRect();
+    const bar = saveBar.current;
+    const foot = bar !== null && getComputedStyle(bar).position === 'fixed' ? bar.getBoundingClientRect().top : document.documentElement.clientHeight;
+    if (r.top >= 0 && r.bottom <= foot) return;
+    el.scrollIntoView?.({ block: 'nearest', behavior: 'instant' });
+  }, []);
   useEffect(() => {
     const bar = saveBar.current;
     if (bar === null || typeof ResizeObserver === 'undefined') return;
@@ -381,7 +396,8 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
     // wins and leaves the box 2 px below the fold at <= 768 px, where the document and not .app-main scrolls. An instant
     // scroll lands first, and the browser's if-needed reveal then finds the caret already in view. When the error
     // summary's first line takes focus, the whole summary is brought into view, so its list is not left under the bar.
-    <form method="post" noValidate onSubmit={onSubmit} onFocus={(e) => { const t: Element = e.target; (t === summary.current ? t.parentElement ?? t : t).scrollIntoView?.({ block: 'nearest', behavior: 'instant' }); }} data-region-form="answer-form" data-ready={ready ? 'true' : undefined} aria-labelledby="s12-answer-form">
+    // A control already wholly in view is left where it is (reveal).
+    <form method="post" noValidate onSubmit={onSubmit} onFocus={(e) => { const t: Element = e.target; reveal(t === summary.current ? t.parentElement ?? t : t); }} data-region-form="answer-form" data-ready={ready ? 'true' : undefined} aria-labelledby="s12-answer-form">
       {conflict !== null ? (
         <ConflictView
           current={conflict} mine={value} viewerId={data.viewer.userId}

@@ -64,8 +64,8 @@ test('NFR-A11Y-02: J-05 by keyboard alone: status, reason, decided by, Today, Sa
   await expect(saveStatus(page)).toHaveText(/^Saved at .+ as version 1\./);
 });
 
-test('SPEC-2 W-3 NFR-A11Y-02 SC 2.4.11: at 320 px Save and its status sit in a bar fixed to the bottom, and no field reached by keyboard hides behind it', async ({ page, baseURL }) => {
-  await page.setViewportSize({ width: 320, height: 800 });
+for (const height of [800, 568]) test(`SPEC-2 W-3 NFR-A11Y-02 SC 2.4.11: at 320 px Save and its status sit in a bar fixed to the bottom, and no field reached by keyboard hides behind it${height === 800 ? '' : ' (320 by 568)'}`, async ({ page, baseURL }) => {
+  await page.setViewportSize({ width: 320, height });
   await openQuestion(page, 'assessor', Q, baseURL!);
   const bar = page.locator('.decision-save-bar');
   expect(await bar.evaluate((el) => getComputedStyle(el).position)).toBe('fixed');
@@ -97,16 +97,18 @@ test('SPEC-2 W-3 NFR-A11Y-02 SC 2.4.11: at 320 px Save and its status sit in a b
   expect(await bar.evaluate((el) => getComputedStyle(el).position)).not.toBe('fixed');
 });
 
-test('SPEC-2 W-3 NFR-A11Y-02 SC 2.4.11: at 320 px a refused save shows its whole summary above the fixed bar, and each of its links lands with the field\'s label and error in view', async ({ page, baseURL }) => {
-  await page.setViewportSize({ width: 320, height: 800 });
+for (const height of [800, 568]) test(`SPEC-2 W-3 NFR-A11Y-02 SC 2.4.11: at 320 px a refused save shows its whole summary above the fixed bar, and each of its links lands with the field's label and error in view${height === 800 ? '' : ' (320 by 568, a status chosen first)'}`, async ({ page, baseURL }) => {
+  await page.setViewportSize({ width: 320, height });
   await openQuestion(page, 'assessor', Q, baseURL!);
+  // The likeliest refusal in the room: a status chosen, the rest left. The edit grows the bar with the unsaved line.
+  if (height !== 800) await page.getByRole('radio', { name: 'Not yet', exact: true }).check();
   await page.locator('.decision-save-bar').getByRole('button', { name: 'Save decision' }).focus();
   await page.keyboard.press('Enter');
   const summary = page.locator('[data-error-summary]');
   await expect(summary.locator('> p')).toBeFocused();
   /**
-   * Whether the summary (no href) or the field a link names (its group's legend or label, and its error) lies wholly
-   * between the screen's top and the bar's top: "clear", or what is not.
+   * Whether the summary (no href) or the field a link names (the control itself, its group's legend or label, and its
+   * error) lies wholly between the screen's top and the bar's top: "clear", or what is not.
    */
   const placed = (href?: string) => page.evaluate(async (id) => {
     // Read at rest: a link's jump scrolls smoothly, and a box passing through view on the way does not count.
@@ -118,7 +120,7 @@ test('SPEC-2 W-3 NFR-A11Y-02 SC 2.4.11: at 320 px a refused save shows its whole
     if (id === undefined) boxes = [['the summary', document.querySelector('[data-error-summary]')]];
     else {
       const group = document.getElementById(id.slice(1))?.closest('fieldset, .ui-field') ?? null;
-      boxes = [['its label', group?.querySelector(':scope > legend, :scope > label') ?? null], ['its error', group?.querySelector('[id$="-error"]') ?? null]];
+      boxes = [['the control', document.getElementById(id.slice(1))], ['its label', group?.querySelector(':scope > legend, :scope > label') ?? null], ['its error', group?.querySelector('[id$="-error"]') ?? null]];
     }
     const bad = boxes.map(([what, e]) => {
       if (e === null) return `${what} missing`;
@@ -130,13 +132,42 @@ test('SPEC-2 W-3 NFR-A11Y-02 SC 2.4.11: at 320 px a refused save shows its whole
   // The whole summary with its list, not its first line alone, sits above the bar (the page scrolls smoothly: polled).
   await expect.poll(() => placed()).toBe('clear');
   const hrefs = await summary.locator('a').evaluateAll((as) => as.map((a) => a.getAttribute('href')!));
-  expect(hrefs.length).toBeGreaterThan(1);
+  expect(hrefs.length).toBeGreaterThan(height === 800 ? 2 : 1);
   for (const href of hrefs) {
     await summary.locator(`a[href="${href}"]`).click();
     await expect(page.locator(href)).toBeFocused();
     // Not the box alone at the top edge with the field's name and error above the screen.
     await expect.poll(() => placed(href), { message: href }).toBe('clear');
     await summary.locator('> p').focus();
+  }
+});
+
+for (const [width, height] of [[320, 568], [1280, 800]] as const) test(`NFR-A11Y-02 W-3: at ${width} by ${height} a press on a question's first choice near the top of the screen chooses it and does not move the page`, async ({ page, baseURL }) => {
+  await page.setViewportSize({ width, height });
+  const projectId = await newProject(baseURL!);
+  await actAsSeat(page, 'assessor');
+  for (const [questionId, id] of [[Q, 'decision-status-done'], ['Q-PP-GATE-SENSITIVE', 'decision-scope-yes']] as const) {
+    await page.goto(questionPath(projectId, questionId));
+    await waitForQuestionPage(page);
+    const choice = page.locator(`#${id}`);
+    // Scroll its scrolling box (the document at 320, the main region at 1280) until the choice is 80 px from the top,
+    // where a person who scrolled the group into view finds it; nothing has focus.
+    await choice.evaluate((el) => {
+      let box: Element | null = el.parentElement;
+      while (box !== null && box !== document.body && !(/(auto|scroll)/.test(getComputedStyle(box).overflowY) && box.scrollHeight > box.clientHeight + 1)) box = box.parentElement;
+      const scroller = box === null || box === document.body ? document.scrollingElement! : box;
+      const top0 = scroller === document.scrollingElement ? 0 : scroller.getBoundingClientRect().top;
+      scroller.scrollTo({ top: scroller.scrollTop + el.getBoundingClientRect().top - top0 - 80, behavior: 'instant' });
+      (document.activeElement as HTMLElement | null)?.blur();
+    });
+    const topOf = () => choice.evaluate((el) => Math.round(el.getBoundingClientRect().top));
+    const before = await topOf();
+    expect(before, `${id} placed near the top`).toBeLessThan(120);
+    const at = (await choice.boundingBox())!;
+    await page.mouse.click(at.x + at.width / 2, at.y + at.height / 2);
+    await expect(choice, `${questionId}: the press chose ${id}`).toBeChecked();
+    await page.waitForTimeout(300);
+    expect(await topOf(), `${questionId}: the page did not move under the press`).toBe(before);
   }
 });
 
@@ -237,6 +268,9 @@ test('D-398 item 1: at 320 by 568 the open withdrawal confirmation, its focused 
   await page.getByRole('button', { name: 'Cancel' }).press('Enter');   // by keyboard, so the trigger shows its focus ring
   await expect(page.getByRole('button', { name: WITHDRAW_COPY.trigger })).toBeFocused();
   expect(await bar.evaluate((el) => getComputedStyle(el).position)).toBe('fixed');
+  // WithdrawDecision brings the trigger into view on the next animation frame, after the layout that closing makes: the
+  // check reads after that frame, not before it (read at once it found the trigger above the screen in 3 runs of 23, 14 Nov 2026).
+  await page.evaluate(() => new Promise((done) => { requestAnimationFrame(() => done(null)); }));
   await expectFocusVisibleAndUncovered(page);   // SC 2.4.11: the trigger that took focus back is not under the bar fixed again
   await page.getByRole('button', { name: WITHDRAW_COPY.trigger }).click();
   const field = await placeOf(page, '#withdraw-code');
