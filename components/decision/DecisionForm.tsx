@@ -71,8 +71,14 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
   const [errors, setErrors] = useState<FieldError[]>([]);
   const [saving, setSaving] = useState(false);
   const [conflict, setConflict] = useState<DecisionVersionView | null>(null);
-  const [uploads, setUploads] = useState<{ uploading: string[]; failed: string[] }>({ uploading: [], failed: [] });
+  const [uploads, setUploads] = useState<{ uploading: string[]; failed: string[]; linkAdding: boolean }>({ uploading: [], failed: [], linkAdding: false });
   const [waiting, setWaiting] = useState(false);
+  // Walk finding B3. Whether a link's request is out, as the evidence block last reported it (it reports the start inside
+  // the press of "Add link"), and whether a Save is waiting: refs beside the two states, because Save reads the first at
+  // its own press and the block's report reads the second inside an effect flush, and in both places the state can be a
+  // render behind.
+  const linkAdding = useRef(false);
+  const waitingNow = useRef(false);
   const [leftOut, setLeftOut] = useState<string[]>([]);
   const [draftSavedAt, setDraftSavedAt] = useState<UtcInstant | null>(null);
   const [storageUnavailable, setStorageUnavailable] = useState(false);
@@ -312,6 +318,12 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
     return () => window.removeEventListener('online', onOnline);
   }, [data, send]);
 
+  /** Starts or ends the wait of a pressed Save, for the callout and for the block's next report. */
+  function hold(on: boolean): void {
+    waitingNow.current = on;
+    setWaiting(on);
+  }
+
   function save(withoutUploads: boolean, files: { uploading: string[]; failed: string[] } = uploads, saveBase: number | null = base, fromRetry = false): void {
     if (saving) return;
     // The wait path runs inside the evidence block's effect flush, before this form re-renders, so the render's `value` can be one edit behind.
@@ -320,20 +332,36 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
     if (errs.length > 0) {
       setErrors(errs);
       setStatus(null);
-      setWaiting(false);
+      hold(false);
       focusSummary.current = true;
       return;
     }
     const pendingFiles = [...files.uploading, ...files.failed];
-    if (pendingFiles.length > 0 && !withoutUploads) { setWaiting(true); return; }
-    setWaiting(false);
+    // A link whose request is out is not in the answer yet: the save waits for it as for a file, "Save without" included,
+    // because nothing would say the link was left out (B3).
+    if (linkAdding.current || (pendingFiles.length > 0 && !withoutUploads)) { hold(true); return; }
+    hold(false);
     void send(answer, saveBase, retry, withoutUploads ? pendingFiles : [], false, fromRetry);
   }
 
-  // UX-30: a Save that waited is sent once every chosen file has finished (the block reports each change of its uploads).
-  const afterUploads = useRef<(s: { uploading: string[]; failed: string[] }) => void>(() => {});
+  // UX-30: a Save that waited is sent once every chosen file has finished and no link's request is out (the block reports
+  // each change of its uploads and of its link). A link that was not added while the Save waited ends the wait unsent:
+  // the decision is never saved without it by itself (B3).
+  const afterUploads = useRef<(s: { uploading: string[]; failed: string[]; linkAdding: boolean; linkNotAdded: boolean }) => void>(() => {});
   useLayoutEffect(() => {
-    afterUploads.current = (s) => { if (waiting && s.uploading.length === 0 && s.failed.length === 0) save(false, s); };
+    afterUploads.current = (s) => {
+      const linkEnded = linkAdding.current && !s.linkAdding;
+      linkAdding.current = s.linkAdding;
+      if (!waitingNow.current || s.linkAdding) return;
+      if (linkEnded && s.linkNotAdded) {
+        hold(false);
+        setErrors([{ field: 'form', message: F.linkNotAdded }]);
+        setStatus(null);
+        focusSummary.current = true;
+        return;
+      }
+      if (s.uploading.length === 0 && s.failed.length === 0) save(false, s);
+    };
   });
 
   function onSubmit(e: FormEvent<HTMLFormElement>): void {
@@ -352,6 +380,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
   })();
 
   const signInHref = signInAgainHref(value.href, '');
+  const waitingFiles = [...uploads.uploading, ...uploads.failed];
 
   return (
     // SC 2.4.11: a control that takes focus anywhere in the answer form, the evidence block included, is brought wholly
@@ -412,7 +441,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
               edit({ ...now, evidenceIds: all });
             }}
             onUploadState={(s) => {
-              setUploads(s);
+              setUploads({ uploading: s.uploading, failed: s.failed, linkAdding: s.linkAdding });
               const now = latest.current.value;
               // The draft names the files moving now, so a reload can say which did not finish (M-18).
               if (!sameIds(s.uploading, now.notUploaded)) edit({ ...now, notUploaded: [...s.uploading] });
@@ -441,10 +470,12 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
         {waiting ? (
           <div className="decision-form__box" data-upload-wait>
             <Callout kind="note">
-              <p>{F.waiting.before}<bdi>{fileList([...uploads.uploading, ...uploads.failed])}</bdi>{F.waiting.after}</p>
+              {waitingFiles.length > 0 ? <p>{F.waiting.before}<bdi>{fileList(waitingFiles)}</bdi>{F.waiting.after}</p> : null}
+              {/* With no file to wait for, the wait is for a link, whether or not its report has been rendered yet. */}
+              {uploads.linkAdding || waitingFiles.length === 0 ? <p>{F.waitingLink}</p> : null}
               <div className="form-actions">
-                <Button variant="secondary" onClick={() => save(true)}>{F.saveWithout(uploads.uploading.length + uploads.failed.length)}</Button>
-                <Button variant="secondary" onClick={() => setWaiting(false)}>{F.cancel}</Button>
+                {waitingFiles.length > 0 ? <Button variant="secondary" onClick={() => save(true)}>{F.saveWithout(waitingFiles.length)}</Button> : null}
+                <Button variant="secondary" onClick={() => hold(false)}>{F.cancel}</Button>
               </div>
             </Callout>
           </div>

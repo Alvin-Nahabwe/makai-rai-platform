@@ -76,3 +76,13 @@
 .evidence-block__error {
   margin-block-start: var(--space-3);
 }
+
+/* "Adding the link...", under Add link. The element is always there for the announcement; empty, it takes no room. */
+.evidence-block__adding {
+  margin: var(--space-3) 0 0;
+  color: var(--color-ink-muted);
+}
+
+.evidence-block__adding:empty {
+  margin: 0;
+}
