@@ -187,7 +187,7 @@ async function findUnclassifiedControls(page: Page, knownNames: readonly string[
   return page.evaluate((names: readonly string[]) => {
     function isIgnored(el: Element): boolean {
       if (el.closest('.project-card')) return true;
-      if (el.closest('.ui-table')) return true;
+      if (el.closest('.members .ui-table')) return true;
       // S-32's project links, S-10's breadcrumb and its stage jump row are read-only navigation, the same for every role.
       // The buttons in S-32's rows (Unarchive) are not: they stay in the census.
       if (el.matches('a[href]') && el.closest('.projects-list')) return true;
