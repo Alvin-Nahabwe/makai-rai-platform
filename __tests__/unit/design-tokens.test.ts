@@ -242,13 +242,6 @@ describe('design tokens', () => {
     expect(readFileSync('app/globals.css', 'utf8')).toContain('/* LEGACY ALIASES: deleted by Task 21 */');
   });
 
-  it('UX-33 NFR-A11Y-05 (legacy, until Task 19): the About hero eyebrow colour holds 4.5:1 on the navy in every theme', () => {
-    // AboutPage.css reads --color-primary-light as text on the navy hero; orange text on navy was 2.66:1.
-    for (const theme of THEMES) {
-      expect(contrast(theme, 'color-primary-light', 'color-shell'), `eyebrow on the hero, ${theme}`).toBeGreaterThanOrEqual(4.5);
-    }
-  });
-
   it('UX-33 NFR-A11Y-05 (legacy, until Task 21): the legacy names the rules still read hold the minimums the SRS 7.6.3 pairs set', () => {
     // The 35 role pairs test the new roles; these tie each old name to a role that was tested.
     const pairs: Array<[string, string, string, number]> = [

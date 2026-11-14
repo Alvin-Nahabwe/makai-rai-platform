@@ -623,12 +623,12 @@ h5 { font-size: var(--font-size-body); }
   }
 
   /* Hide non-essential UI */
-  .footer, .skip-link, .page-hero__bg, .page-hero__grid-overlay, .page-hero__accent-line {
+  .footer, .skip-link {
     display: none !important;
   }
 
   /* Hero simplification */
-  .page-hero, .page-hero--animated {
+  .page-hero {
     background: var(--color-navy) !important;
     padding: 1cm 0 !important;
     min-height: auto !important;
