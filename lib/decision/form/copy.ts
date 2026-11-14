@@ -32,10 +32,11 @@ export const DECISION_FORM_COPY = Object.freeze({
   removeKept: (n: number): string => (n === 1 ? 'Remove it from this decision' : 'Remove them from this decision'),
   /** "Waiting for {files} to finish uploading.": the names sit between the two parts, in their own element. */
   waiting: Object.freeze({ before: 'Waiting for ', after: ' to finish uploading.' }),
-  /** Walk finding B3: Save was pressed while a link's request was out; the save is sent when the link is in the answer. */
-  waitingLink: 'Waiting for the link to be added.',
-  /** Walk finding B3: the link's request ended without the link while Save waited. Nothing was sent; the summary shows this. */
-  linkNotAdded: 'Not saved. The link was not added. Add it again, or select Save decision to save without it.',
+  /**
+   * Walk finding B3: the link's request ended without the link while Save waited. Nothing was sent; the summary shows this.
+   * "or clear the box": an address left in the box holds the next Save back too (lib/evidence/copy.ts, `typedNotAdded`).
+   */
+  linkNotAdded: 'Not saved. The link was not added. Select Add link again, or clear the box, then save.',
   saveWithout: (n: number): string => (n === 1 ? 'Save without this file' : 'Save without these files'),
   cancel: 'Cancel',
   save: 'Save decision',

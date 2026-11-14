@@ -6,6 +6,7 @@ import {
   evidenceUploadUrl, failureOf, postEvidenceLink, requestIdForFile, uploadEvidenceFile, type UploadOutcome,
 } from '@/lib/client/evidenceUpload';
 import { createLinkAdder } from '@/lib/client/evidenceLink';
+import { EVIDENCE_COPY } from '@/lib/evidence/copy';
 import { appendOnce, attachedItems, failedChange, uploadState, type UploadItem } from '@/lib/evidence/uploadQueue';
 import type { EvidenceItemView } from '@/types/api';
 
@@ -16,16 +17,21 @@ export type EvidenceBlockProps = {
   disabled: boolean;
   onChange: (evidenceIds: string[]) => void;
   /**
-   * The files still moving or failed, and the link's request: `linkAdding` while it is out, `linkNotAdded` once it has
-   * ended without the link (until the next one is sent). A parent that holds its Save for uploads holds it for a link too.
+   * The files still moving or failed, and the link: `linkAdding` while its request is out, `linkNotAdded` once it has
+   * ended without the link (until the next one is sent), `linkTyped` while the open link form holds an address that is
+   * not in the answer. A parent that holds its Save for uploads holds it for a link too.
    */
-  onUploadState: (s: { uploading: string[]; failed: string[]; linkAdding: boolean; linkNotAdded: boolean }) => void;
+  onUploadState: (s: { uploading: string[]; failed: string[]; linkAdding: boolean; linkNotAdded: boolean; linkTyped: boolean }) => void;
   /** W-4's evidence names in "your answer". */
   onItemsChange?: (items: EvidenceItemView[]) => void;
   /** M-18: files still uploading when the page closed, kept by the parent's per-account draft. */
   notUploaded?: readonly string[];
   /** W-3's "from version N". */
   fromVersionNumber?: number | null;
+  /** The parent's own save is out: no link is added until it is back (the save may replace this block, and the link with it). */
+  saveOut?: boolean;
+  /** How many times the parent refused a save because `linkTyped` was true. Each new refusal is said at the address box. */
+  unaddedLinkRefusals?: number;
 };
 
 /** The server's limit (lib/evidence/inspect.ts MAX_BYTES, which cannot load in a browser): a larger file is not sent. */
@@ -49,6 +55,15 @@ export function EvidenceBlock(props: EvidenceBlockProps): ReactElement {
   // The last link request ended without adding the link (a refusal, a lost connection, no reply in time).
   const [linkNotAdded, setLinkNotAdded] = useState(false);
   const linkAddedByRequest = useRef(false);
+  const linkTyped = linkFormOpen && linkUrl.trim() !== '';
+  // The parent refused a save for the address in the box: its sentence shows at the box, until the box is edited or the
+  // link is sent, as any other line there. Compared while rendering, as a changed prop is (no effect, no extra paint).
+  const refusals = props.unaddedLinkRefusals ?? 0;
+  const [seenRefusals, setSeenRefusals] = useState(refusals);
+  if (refusals !== seenRefusals) {
+    setSeenRefusals(refusals);
+    setLinkError(EVIDENCE_COPY.link.typedNotAdded);
+  }
   // The parent's callbacks change identity on every render; the latest ones are read, never depended on.
   const latest = useRef(props);
   const uploadsRef = useRef<UploadItem[]>([]);
@@ -69,7 +84,7 @@ export function EvidenceBlock(props: EvidenceBlockProps): ReactElement {
           linkAddedByRequest.current = false;
           // Said to the parent in the press itself, with the uploads as it last heard them, and again by the effect below
           // after the render: a Save pressed straight after "Add link" finds the request out, whenever React renders.
-          latest.current.onUploadState({ ...uploadState(uploadsRef.current), linkAdding: true, linkNotAdded: false });
+          latest.current.onUploadState({ ...uploadState(uploadsRef.current), linkAdding: true, linkNotAdded: false, linkTyped: true });
         }
         setLinkNotAdded(!pending && !linkAddedByRequest.current);
         setLinkPending(pending);
@@ -93,8 +108,8 @@ export function EvidenceBlock(props: EvidenceBlockProps): ReactElement {
   // After the effect above, in the same flush: when a link's request ends, the parent has the link's id before it hears
   // that the request is over, so a Save it held for the link is sent with it.
   useEffect(() => {
-    latest.current.onUploadState({ ...uploadState(uploads), linkAdding: linkPending, linkNotAdded });
-  }, [uploads, linkPending, linkNotAdded]);
+    latest.current.onUploadState({ ...uploadState(uploads), linkAdding: linkPending, linkNotAdded, linkTyped });
+  }, [uploads, linkPending, linkNotAdded, linkTyped]);
   // Uploads still moving when the block goes away are cancelled with it.
   useEffect(() => {
     const live = controllers.current;
@@ -167,12 +182,13 @@ export function EvidenceBlock(props: EvidenceBlockProps): ReactElement {
       orgSlug={props.orgSlug} idBase={idBase} items={carried} added={added} fromVersionNumber={props.fromVersionNumber}
       uploads={uploads} notUploaded={props.notUploaded ?? []} disabled={props.disabled}
       linkFormOpen={linkFormOpen} linkUrl={linkUrl} linkLabel={linkLabel} linkError={linkError} linkPending={linkPending}
+      held={props.saveOut === true}
       onChooseFiles={chooseFiles}
       onOpenFilePicker={() => { fileInput.current?.click(); }}
       onOpenLink={() => setLinkFormOpen((o) => !o)}
       onLinkUrlChange={(v) => { setLinkUrl(v); setLinkError(null); }}
       onLinkLabelChange={setLinkLabel}
-      onAddLink={() => { void addLinkRef.current?.({ address: linkUrl, label: linkLabel }); }}
+      onAddLink={() => { if (props.saveOut !== true) void addLinkRef.current?.({ address: linkUrl, label: linkLabel }); }}
       onRemoveItem={removeItem}
       onCancelUpload={(key) => controllers.current.get(key)?.abort()}
       onRetryUpload={(key) => { void start(key); }}

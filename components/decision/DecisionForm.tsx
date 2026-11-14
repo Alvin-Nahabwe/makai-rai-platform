@@ -14,6 +14,7 @@ import { openDraftStore, type DraftStore, type StoredDraft } from '@/lib/client/
 import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafeWrite';
 import { OUTSIDE_ROLE_LABELS, problemSummary } from '@/lib/decision/copy';
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
+import { EVIDENCE_COPY } from '@/lib/evidence/copy';
 import { formatTime } from '@/lib/format/dates';
 import { draftErrors, draftFromCurrent, draftHeldForGate, draftKeyFor, isDecision, isDraftValue, keptEvidenceLine, toSaveBody, type DecisionDraft } from '@/lib/question/draft';
 import type { QuestionPanelData } from '@/lib/question/panel';
@@ -28,6 +29,9 @@ export type DecisionFormProps = { data: QuestionPanelData };
 const NO_RETRY: RetryState = { requestId: null, sentBody: null };
 const F = DECISION_FORM_COPY;
 const sameIds = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((x, i) => x === b[i]);
+
+/** The summary's two lines about the link form: a link that was not added while Save waited, an address typed and never added. */
+const isLinkLine = (e: FieldError): boolean => e.message === F.linkNotAdded || e.message === EVIDENCE_COPY.link.typedNotAdded;
 
 /** The names of files still moving or failed, joined for a sentence. */
 const fileList = (names: readonly string[]) => names.join(', ');
@@ -79,6 +83,13 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
   // render behind.
   const linkAdding = useRef(false);
   const waitingNow = useRef(false);
+  // The open link form holds an address that was never added (the block reports it), and how often a save was refused for
+  // it: the block shows each refusal at the box.
+  const linkTyped = useRef(false);
+  const [linkRefusals, setLinkRefusals] = useState(0);
+  // The version this form's last save made, from its reply until the page has taken a new current version: the form is
+  // then replaced, and the evidence block with it, so nothing is added to the block in between (as while the save is out).
+  const [savedAwaited, setSavedAwaited] = useState<string | null>(null);
   const [leftOut, setLeftOut] = useState<string[]>([]);
   const [draftSavedAt, setDraftSavedAt] = useState<UtcInstant | null>(null);
   const [storageUnavailable, setStorageUnavailable] = useState(false);
@@ -120,6 +131,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
   // A new current version arrived (a save, or someone else's, after router.refresh): open from it, as on a new page.
   if ((data.current?.id ?? null) !== seenCurrentId) {
     setSeenCurrentId(data.current?.id ?? null);
+    setSavedAwaited(null);
     // Only when the field holds nothing of the person's that the new version lacks.
     if (conflict === null && !typedSinceCurrent) {
       setValue(draftFromCurrent(data));
@@ -252,6 +264,8 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
         setDraftSavedAt(null);
         setExtraEvidenceIds([]);
         setTypedSinceCurrent(false);
+        // Only a version the page does not show yet: a replayed save of the current version brings no new one.
+        if (outcome.body.id !== (data.current?.id ?? null)) setSavedAwaited(outcome.body.id);
       }
       router.refresh();
       return;
@@ -306,7 +320,8 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
   useEffect(() => {
     const onOnline = () => {
       const pending = pendingAuto.current;
-      if (pending === null || sending.current) return;
+      // Not while a pressed Save waits for a file or a link: that Save is the newer answer, and it disarms this one when it is sent.
+      if (pending === null || sending.current || waitingNow.current) return;
       pendingAuto.current = null;
       const { value: v, base: b } = latest.current;
       const body = toSaveBody(v, data, b) as unknown as Record<string, unknown>;
@@ -328,7 +343,13 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
     if (saving) return;
     // The wait path runs inside the evidence block's effect flush, before this form re-renders, so the render's `value` can be one edit behind.
     const answer = latest.current.value;
-    const errs = draftErrors(answer, data, new Date());
+    const fieldErrs = draftErrors(answer, data, new Date());
+    // An address typed in the link box and never added is not in the answer, and the save would discard it without a word:
+    // the save does not go, and the link is not added for the person. Not while the link's request is out: the box then
+    // holds the address that is being added, and the save waits for it below.
+    const unadded = linkTyped.current && !linkAdding.current;
+    const errs = unadded ? [...fieldErrs, { field: 'form', message: EVIDENCE_COPY.link.typedNotAdded }] : fieldErrs;
+    if (unadded) setLinkRefusals((n) => n + 1);
     if (errs.length > 0) {
       setErrors(errs);
       setStatus(null);
@@ -347,11 +368,15 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
   // UX-30: a Save that waited is sent once every chosen file has finished and no link's request is out (the block reports
   // each change of its uploads and of its link). A link that was not added while the Save waited ends the wait unsent:
   // the decision is never saved without it by itself (B3).
-  const afterUploads = useRef<(s: { uploading: string[]; failed: string[]; linkAdding: boolean; linkNotAdded: boolean }) => void>(() => {});
+  const afterUploads = useRef<(s: { uploading: string[]; failed: string[]; linkAdding: boolean; linkNotAdded: boolean; linkTyped: boolean }) => void>(() => {});
   useLayoutEffect(() => {
     afterUploads.current = (s) => {
       const linkEnded = linkAdding.current && !s.linkAdding;
       linkAdding.current = s.linkAdding;
+      linkTyped.current = s.linkTyped;
+      // The summary's lines about the link form are true of the form as it was at the press. Once a link is being sent, or
+      // the box is empty, they are not, and they go; a field's own line stays until the next Save, as it always has.
+      if (s.linkAdding || !s.linkTyped) setErrors((e) => (e.some(isLinkLine) ? e.filter((x) => !isLinkLine(x)) : e));
       if (!waitingNow.current || s.linkAdding) return;
       if (linkEnded && s.linkNotAdded) {
         hold(false);
@@ -451,6 +476,8 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
             onItemsChange={setEvidenceItems}
             notUploaded={restoredNotUploaded}
             fromVersionNumber={isDecision(data.current) ? data.current.versionNumber : null}
+            saveOut={saving || (savedAwaited !== null && !typedSinceCurrent)}
+            unaddedLinkRefusals={linkRefusals}
           />
         </section>
 
@@ -467,12 +494,14 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
           </div>
         ) : null}
 
+        {/* A status region that is on the page before the wait, so the card put into it is announced, once (one added with its words often is not). */}
+        <div role="status" data-wait-status>
         {waiting ? (
           <div className="decision-form__box" data-upload-wait>
             <Callout kind="note">
               {waitingFiles.length > 0 ? <p>{F.waiting.before}<bdi>{fileList(waitingFiles)}</bdi>{F.waiting.after}</p> : null}
               {/* With no file to wait for, the wait is for a link, whether or not its report has been rendered yet. */}
-              {uploads.linkAdding || waitingFiles.length === 0 ? <p>{F.waitingLink}</p> : null}
+              {uploads.linkAdding || waitingFiles.length === 0 ? <p>{EVIDENCE_COPY.link.waiting}</p> : null}
               <div className="form-actions">
                 {waitingFiles.length > 0 ? <Button variant="secondary" onClick={() => save(true)}>{F.saveWithout(waitingFiles.length)}</Button> : null}
                 <Button variant="secondary" onClick={() => hold(false)}>{F.cancel}</Button>
@@ -480,6 +509,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
             </Callout>
           </div>
         ) : null}
+        </div>
 
         {/* tabIndex -1: after a Retry's answer removes the Retry, focus comes here, beside the status line, not to the page. */}
         <div className="decision-save-bar" ref={saveBar} tabIndex={-1}>

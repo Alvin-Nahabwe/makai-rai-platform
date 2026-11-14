@@ -86,3 +86,8 @@
 .evidence-block__adding:empty {
   margin: 0;
 }
+
+/* "Add link" while the form's save is out: it keeps its colours and its focus, as a busy button of the kit does. */
+.evidence-block__link .ui-button[aria-disabled='true'] {
+  cursor: progress;
+}

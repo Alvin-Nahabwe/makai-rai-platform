@@ -71,8 +71,16 @@ describe('DecisionForm -- EvidenceBlock wiring', () => {
 
   it('FR-DEC-07: passes only the contract\'s props to EvidenceBlock', () => {
     const { props } = renderForm();
-    const allowed = ['orgSlug', 'projectId', 'initial', 'disabled', 'onChange', 'onUploadState', 'onItemsChange', 'notUploaded', 'fromVersionNumber'];
+    // `saveOut` and `unaddedLinkRefusals` joined the contract on 14 November 2026: the form tells the block that its save is
+    // out (nothing is added meanwhile) and that it refused a save for an address typed and not added (the block says so at the box).
+    const allowed = ['orgSlug', 'projectId', 'initial', 'disabled', 'onChange', 'onUploadState', 'onItemsChange', 'notUploaded', 'fromVersionNumber', 'saveOut', 'unaddedLinkRefusals'];
     expect(Object.keys(props).filter((k) => !allowed.includes(k))).toEqual([]);
+  });
+
+  it('on open no save is out and no save has been refused for an address typed and not added', () => {
+    const { props } = renderForm();
+    expect(props.saveOut).toBe(false);
+    expect(props.unaddedLinkRefusals).toBe(0);
   });
 
   it('UX-14: a role that cannot record a decision gets no form and so no evidence block to change', () => {

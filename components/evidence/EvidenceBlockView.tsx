@@ -29,6 +29,8 @@ export interface EvidenceBlockViewProps {
   linkError: string | null;
   /** A link is being sent: its button is disabled, so a second press sends nothing. */
   linkPending?: boolean;
+  /** The parent form's own save is out: "Add link" says to wait and does nothing, and the two boxes take no text. */
+  held?: boolean;
   onChooseFiles?: (files: FileList | null) => void;
   onOpenFilePicker?: () => void;
   onOpenLink?: () => void;
@@ -50,8 +52,8 @@ function NamedText({ line }: { line: NamedLine }): ReactElement {
 
 /**
  * The kit's compact secondary button, worn by the native buttons that need an `aria-label` the kit's Button cannot
- * carry (Remove, Cancel upload, Retry upload) or `aria-expanded` (Add a link). Button.css is loaded by this file's
- * own kit Buttons (Add a file, Add link), never imported here directly (ruling X-6).
+ * carry (Remove, Cancel upload, Retry upload), `aria-expanded` (Add a link) or `aria-disabled` (Add link). Button.css
+ * is loaded by this file's own kit Button (Add a file), never imported here directly (ruling X-6).
  */
 const NAMED_BUTTON = 'ui-button ui-button--secondary ui-button--compact';
 
@@ -66,9 +68,13 @@ export function EvidenceBlockView(p: EvidenceBlockViewProps): ReactElement {
   const urlId = `${p.idBase}-link-url`;
   const labelId = `${p.idBase}-link-label`;
   const errorId = `${p.idBase}-link-error`;
+  const heldId = `${p.idBase}-link-held`;
+  const held = p.held === true;
+  /** The ids a link box is described by: the help, then what applies now. */
+  const describedBy = (...ids: Array<string | false>): string => [helpId, ...ids.filter((id) => id !== false)].join(' ');
   // A field is marked invalid only by its own message; a refusal (signed out, archived, the limiter, a lost connection)
   // is about the request, not a field, and marks neither.
-  const urlInvalid = p.linkError === EVIDENCE_COPY.link.address;
+  const urlInvalid = p.linkError === EVIDENCE_COPY.link.address || p.linkError === EVIDENCE_COPY.link.typedNotAdded;
   const nameInvalid = p.linkError === EVIDENCE_COPY.link.nameTooLong(LINK_LABEL_MAX);
   const removable = (item: EvidenceItemView, carried: boolean): ReactElement => (
     <li key={item.id} className="evidence-block__item">
@@ -151,18 +157,21 @@ export function EvidenceBlockView(p: EvidenceBlockViewProps): ReactElement {
                 <FieldLabel htmlFor={urlId} label={EVIDENCE_COPY.webAddress} />
                 <input id={urlId} type="text" inputMode="url" autoComplete="off" value={p.linkUrl}
                   className={urlInvalid ? 'ui-input ui-input--invalid' : 'ui-input'}
-                  aria-describedby={p.linkError === null ? helpId : `${helpId} ${errorId}`} aria-invalid={urlInvalid ? true : undefined}
-                  onChange={(e) => p.onLinkUrlChange?.(e.target.value)} onKeyDown={onEnter} />
+                  aria-describedby={describedBy(p.linkError !== null && errorId, held && heldId)} aria-invalid={urlInvalid ? true : undefined}
+                  readOnly={held ? true : undefined} onChange={(e) => p.onLinkUrlChange?.(e.target.value)} onKeyDown={onEnter} />
               </div>
               <div className="ui-field">
                 <FieldLabel htmlFor={labelId} label={EVIDENCE_COPY.linkName} />
                 <input id={labelId} type="text" autoComplete="off" value={p.linkLabel} className={nameInvalid ? 'ui-input ui-input--invalid' : 'ui-input'}
-                  aria-describedby={nameInvalid ? `${helpId} ${errorId}` : helpId} aria-invalid={nameInvalid ? true : undefined}
-                  onChange={(e) => p.onLinkLabelChange?.(e.target.value)} onKeyDown={onEnter} />
+                  aria-describedby={describedBy(nameInvalid && errorId, held && heldId)} aria-invalid={nameInvalid ? true : undefined}
+                  readOnly={held ? true : undefined} onChange={(e) => p.onLinkLabelChange?.(e.target.value)} onKeyDown={onEnter} />
               </div>
-              <Button variant="secondary" disabled={p.linkPending === true} onClick={() => p.onAddLink?.()}>{EVIDENCE_COPY.addLink}</Button>
+              {/* Held is aria-disabled, never disabled: the button keeps its focus and says why it does nothing. The block does not add while held. */}
+              <button type="button" className="ui-button ui-button--secondary" disabled={p.linkPending === true}
+                aria-disabled={held ? true : undefined} aria-describedby={held ? heldId : undefined} onClick={() => p.onAddLink?.()}>{EVIDENCE_COPY.addLink}</button>
               {/* In the markup from the moment the link form opens and empty until a link is sent, so its words are announced. */}
               <p role="status" data-link-adding className="evidence-block__adding">{p.linkPending === true ? EVIDENCE_COPY.link.adding : ''}</p>
+              {held ? <p id={heldId} className="evidence-block__adding">{EVIDENCE_COPY.link.waitForSave}</p> : null}
               {/* Where the line was before the kit: after the button, so a refusal that is not about the address still reads in order. */}
               {p.linkError === null ? null : <div className="evidence-block__error" role="alert"><FieldError id={errorId} message={p.linkError} /></div>}
             </div>
