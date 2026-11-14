@@ -413,3 +413,26 @@ it("Home's next step (plan 1B Task 9, slice 3): lastSavedBy and loadNextStep und
   expect(namesB(saved)).toBe(false);
   expect(namesB(next)).toBe(false);
 });
+
+it("The project page's primary action (plan 1C C11, cut): lastSavedIn and loadContinueTarget under ctx A for B's project return null and no id of B's", async () => {
+  await resetDb();
+  const { useFixtureContent } = await import('../helpers/content');
+  const { addDecision, addProject, buildOrg } = await import('../helpers/recordFixture');
+  const { lastSavedIn } = await import('../../lib/home/queries');
+  const { loadContinueTarget } = await import('../../lib/home/load');
+  const cv = (await useFixtureContent('0.0.1-fixture')).contentVersionId;
+  const a = await buildOrg({ label: 'iso-cont-a' });
+  const b = await buildOrg({ label: 'iso-cont-b' });
+  const u = a.members.assessor;
+  await testDb.membership.create({ data: { orgId: b.org.id, userId: u.userId, role: 'assessor' } });
+  const asUInB = { ...b, members: { ...b.members, assessor: { ...u, orgId: b.org.id, orgSlug: b.org.slug } } };
+  const pb = await addProject(b, { name: 'Continue isolation project of B' });
+  await addDecision(asUInB, pb.id, { stage: 'in-processing', questionId: 'Q-IP-01', contentVersionId: cv, status: 'done' });
+  // Under B the person's save is found: the row exists, so A's null below is the policy's doing.
+  expect(await lastSavedIn(ctx(b.org.id, 'assessor'), pb.id, u.userId)).toEqual({ stage: 'in-processing', questionId: 'Q-IP-01' });
+  expect(await lastSavedIn(ctx(a.org.id, 'assessor'), pb.id, u.userId)).toBeNull();
+  const target = await loadContinueTarget(ctx(a.org.id, 'assessor'), u.userId, { id: pb.id, archived: false });
+  expect(target?.label).not.toBe('continue');
+  expect(JSON.stringify(target ?? null)).not.toContain(pb.id);
+  expect(JSON.stringify(target ?? null)).not.toContain(b.org.id);
+});
