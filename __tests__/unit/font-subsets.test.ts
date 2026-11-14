@@ -394,9 +394,7 @@ function restOnlyCopy(entries: Array<[string, string]>): string[] {
  * maps them, so they render in the fallback font today, as before. Each is pinned to stay outside the old ranges, so
  * this list can never excuse a character this change stopped covering.
  */
-const NEVER_COVERED: Record<string, string> = {
-  [hex(0x2713)]: "app/(public)/about/AboutPage.css: content: '✓ ' before a list item",
-};
+const NEVER_COVERED: Record<string, string> = {};
 
 // ---------------------------------------------------------------------------------------------- the tests
 

@@ -1974,5 +1974,29 @@
     "property": "The administrator's shell links S-23 (/admin/organisations) and S-25 (/admin/accounts), and no Settings or /admin/users link.",
     "proof": "The shell prop the case renders Rail with gains homeSlug: null, the field ShellData now requires (workshop walk finding S4); the four assertions are unchanged. __tests__/unit/ui/shell.test.tsx::S4: no organisation gives no organisation link, and the administrator's rail is unchanged, with a home slug or without renders the administrator's rail with a home slug too and requires the same three links and no /orgs/ address.",
     "task": "workshop walk fix S4"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/about-page.test.tsx::FR-PUB-01: a model-score sentence holds no banned word besides \"accuracy score\" and \"60% confidence score\"",
+    "replacedBy": "__tests__/unit/about-page.test.tsx::FR-PUB-01: a model-score sentence holds no banned word besides \"60% likely\"",
+    "property": "A sentence the about-model-scores marker exempts holds no claim word other than the model figure it is marked for, so the marker shelters nothing else.",
+    "proof": "The renamed case finds exactly one about-model-scores span (AB37i's first sentence; AB30's ruled text names no score, so its marker went) and asserts isClaim(...) is false on its text with \"60% likely\" removed.",
+    "task": "1A-19"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/about-page.test.tsx::FR-PUB-04: the About page says the platform never runs evaluations, models, notebooks or uploaded files and never computes metrics from a team's data",
+    "replacedBy": "__tests__/unit/about-page.test.tsx::FR-PUB-04: the section \"What the platform does\" says the platform does not test your model or calculate anything from your data",
+    "property": "About states, in its section what-this-is, that the platform does not test your model or calculate anything from your data. Only the section's heading changed (AB5, \"What the platform does\"); the 1A-14 entry for this title named the case under the old heading.",
+    "proof": "__tests__/unit/about-page.test.tsx::FR-PUB-04: the section \"What the platform does\" says the platform does not test your model or calculate anything from your data: the same assertion on section(html, 'what-this-is'), byte for byte",
+    "task": "1A-19"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/about-page.test.tsx::FR-PUB-05: the allowed elements are the section \"Why there is no score\" and the two sentences about a model's own scores",
+    "replacedBy": "__tests__/unit/about-page.test.tsx::FR-PUB-05: the allowed elements are the not-an-approval sentence and the one sentence about a model's own score",
+    "property": "The About page's data-claims-allowed elements are exactly the not-an-approval sentence and the model-score sentence. Narrowed from two model-score markers to one: AB30's ruled text names no score, so its marker went (lead's 19d block).",
+    "proof": "__tests__/unit/about-page.test.tsx::FR-PUB-05: the allowed elements are the not-an-approval sentence and the one sentence about a model's own score: reasons sorted equal ['about-model-scores', 'not-an-approval-service'] and the marked element holds \"60% likely\"",
+    "task": "1A-19"
   }
 ]
