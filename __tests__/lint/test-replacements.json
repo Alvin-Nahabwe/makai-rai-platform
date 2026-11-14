@@ -1566,5 +1566,29 @@
     "property": "Each dataset size band prints its display words in a new document, with the project mark, and never its enum value; a null size prints nothing. The words are audit B rows 350 to 354 as the coordinator's answer Q14 applies them: \"Under 1,000 records\", \"1,000 to 100,000 records\", \"100,000 to 1 million records\", \"Over 1 million records\", \"Not known\" (lib/project/labels.ts). Issued documents are stored bytes and are not re-rendered.",
     "proof": "Only the five word literals of the band table changed; the loop still requires, for every band, that the resolved part's text contains its words and the project mark and does not contain the enum value, and the null case is unchanged.",
     "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "structure",
+    "changed": "e2e/role-matrix.spec.ts::(module)",
+    "replacedBy": "e2e/role-matrix.spec.ts::dashboard, projects, projects/new, project detail and members render only the controls this role may use",
+    "property": "O-13: for the owner, the census of Home classifies every visible button and link in main, leaving out only regions that are navigation varying with data. Home's next step (components/home/NextStepCard.tsx, a section of class next-step) is two navigation links, to one question and to its stage's questions, shown only when the person has a next step; it joins the project cards as such a region. A role that records no decisions never gets it, and that is now asserted in this case for the Reviewer and the Viewer.",
+    "proof": "In findUnclassifiedControls, isIgnored's new line `if (el.closest('.next-step')) return true;` leaves out a control only when it sits inside an element of class next-step, which only NextStepCard.tsx writes (on its root section); the exclusion is by that element, never by link text, so New project, All projects and any other control of Home outside the card stay counted against DASHBOARD_CONTROLS. Seen RED then GREEN on the remote machine: with the owner seat of organisation A holding a saved decision, the unfixed census failed 'dashboard: unclassified control(s) ... Continue recording, Choose another question'; with the line, all ten role cases passed.",
+    "task": "plan 1B Tasks 9 and 10 (slice 3, Home's next step)"
+  },
+  {
+    "kind": "structure",
+    "changed": "e2e/role-matrix.spec.ts::O-13: org ",
+    "replacedBy": "e2e/role-matrix.spec.ts::dashboard, projects, projects/new, project detail and members render only the controls this role may use",
+    "property": "Each role of each fixture organisation walks Home, Projects, New project, a project and Members and sees only the controls its role may use; on Home, a role without decision:write (Reviewer, Viewer) is never shown the next step or its Continue recording link, whatever the data.",
+    "proof": "The describe block holds the one case below unchanged in title; its body only gains, after the dashboard's two existing checks, `if (!can(role, 'decision:write'))` with two soft assertions: page.locator('.next-step') toHaveCount(0) and the link named HOME_COPY.continueRecording toHaveCount(0). can() is policy.ts's own (false for reviewer and viewer only), so the assertions run for exactly those two roles in both organisations.",
+    "task": "plan 1B Tasks 9 and 10 (slice 3, Home's next step)"
+  },
+  {
+    "kind": "structure",
+    "changed": "e2e/role-matrix.spec.ts::dashboard, projects, projects/new, project detail and members render only the controls this role may use",
+    "replacedBy": "e2e/role-matrix.spec.ts::dashboard, projects, projects/new, project detail and members render only the controls this role may use",
+    "property": "O-13 as before, plus Home's next-step role rule: a Reviewer or Viewer never sees the next step or a Continue recording link on Home. Presence for the roles that record depends on their saves and is not asserted here.",
+    "proof": "Every existing line of the case is unchanged; the added lines are the `if (!can(role, 'decision:write'))` block with `expect.soft(page.locator('.next-step'), ...).toHaveCount(0)` and `expect.soft(page.getByRole('link', { name: HOME_COPY.continueRecording }), ...).toHaveCount(0)`, run on the dashboard page the case has just loaded. The same rule is held by e2e/home-next-step.spec.ts 'T9.5: a viewer sees no next step and no Continue recording' and by __tests__/integration/home-load.test.ts 'T9.5: a viewer and a reviewer get null, also when rows exist that they did not enter' (null even for versions entered under their own id).",
+    "task": "plan 1B Tasks 9 and 10 (slice 3, Home's next step)"
   }
 ]
