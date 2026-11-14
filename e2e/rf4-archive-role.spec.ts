@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { expect, request, test, type APIRequestContext, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { testDb } from '../__tests__/helpers/db';
 import { buildOrg, type FixtureMember, type OrgFixture } from '../__tests__/helpers/recordFixture';
+import { FINDINGS_COPY } from '../lib/findings/copy';
 import { failOnDialog } from './helpers/dialogs';
 import { fillValid, saveAlert, signInWith, waitForQuestionPage } from './helpers/session';
 
@@ -98,7 +99,7 @@ test.afterAll(async () => {
 type OpenPages = { context: BrowserContext; s12: Page; s15: Page; s17: Page; s18: Page };
 
 /** S-15's mitigation region (it also holds the accept-risk form, whose date fields share the labels). */
-const mitigations = (page: Page) => page.getByRole('region', { name: 'Mitigations' });
+const mitigations = (page: Page) => page.getByRole('region', { name: FINDINGS_COPY.finding.mitigations });
 
 /** B's four pages, opened and filled before A changes anything. */
 async function openPages(browser: Browser): Promise<OpenPages> {
@@ -115,13 +116,13 @@ async function openPages(browser: Browser): Promise<OpenPages> {
   await s15.goto(`${root}/findings/${findingId}`);
   // S-15 also holds the accept-risk form, with its own date fields: everything here is scoped to the mitigation region.
   const mit = mitigations(s15);
-  await mit.getByRole('button', { name: 'Add a mitigation' }).click();
-  await mit.getByRole('combobox', { name: 'Owner (required)' }).selectOption({ label: fx.members.admin.name });
+  await mit.getByRole('button', { name: FINDINGS_COPY.finding.addMitigation }).click();
+  await mit.getByRole('combobox', { name: FINDINGS_COPY.mitigationForm.assignedLabel }).selectOption({ label: fx.members.admin.name });
   await mit.getByLabel('Day', { exact: true }).fill('15'); await mit.getByLabel('Month', { exact: true }).fill('3'); await mit.getByLabel('Year', { exact: true }).fill('2027');
-  await mit.getByLabel('What will be done').fill(TYPED);
+  await mit.getByLabel(FINDINGS_COPY.mitigationForm.what).fill(TYPED);
   await mit.getByRole('radio', { name: 'Done' }).check();
-  await mit.getByLabel('There is no artefact').check();
-  await mit.getByLabel('Say why (required)').fill('No artefact for this fixture');
+  await mit.getByLabel(FINDINGS_COPY.mitigationForm.noArtefact).check();
+  await mit.getByLabel(FINDINGS_COPY.mitigationForm.noArtefactWhy).fill('No artefact for this fixture');
 
   const s17 = await page();
   await s17.goto(`${root}/reviews/${reviewId}/seal`);
@@ -135,7 +136,7 @@ async function openPages(browser: Browser): Promise<OpenPages> {
 }
 
 /** B presses the controls: Save decision, the file upload, Save mitigation, Seal, and Issue; each page shows its refusal. */
-async function pressAll(p: OpenPages, text: { save: string; seal: string; issue: string }): Promise<void> {
+async function pressAll(p: OpenPages, text: { save: string; mitigation: string; seal: string; issue: string }): Promise<void> {
   await p.s12.getByRole('button', { name: 'Save decision' }).click();
   await expect(saveAlert(p.s12)).toHaveText(text.save);
 
@@ -147,7 +148,7 @@ async function pressAll(p: OpenPages, text: { save: string; seal: string; issue:
   // The failed upload holds the save for a choice (MitigationForm's gate); saving without it is the press that reaches the server.
   await mit.getByRole('button', { name: 'Save without it' }).click();
   // The refused upload keeps its own alert with the same sentence; this is the save's refusal, the form's own paragraph.
-  await expect(mit.locator('form > p[role="alert"]')).toHaveText(text.save);
+  await expect(mit.locator('form > p[role="alert"]')).toHaveText(text.mitigation);
 
   await p.s17.getByRole('button', { name: 'Seal as seal 2' }).click();
   await expect(p.s17.locator('main').getByRole('alert')).toContainText(text.seal);   // Next's route announcer is a second alert, outside <main>
@@ -161,7 +162,7 @@ test('FR-PRJ-03 RF-4: archiving refuses Save, upload, Seal and Generate on pages
   const pages = await openPages(browser);
   const before = await countRows();
   await expectOk(await ownerApi.post(`/api/v1/orgs/${fx.org.slug}/projects/${projectId}/archive`, { data: { requestId: randomUUID() } }), 'route 21');
-  await pressAll(pages, { save: M12, seal: SEAL_ARCHIVED, issue: M12 });
+  await pressAll(pages, { save: M12, mitigation: FINDINGS_COPY.failures.archived, seal: SEAL_ARCHIVED, issue: M12 });
   expect(await countRows()).toEqual(before);
   await expect(pages.s12.getByLabel('Reason (required)')).toHaveValue(TYPED);   // 7.4.1: the typed answer stays
   await pages.context.close();
@@ -177,7 +178,7 @@ test('FR-MEM-03 RF-4: lowering the role to viewer refuses the same four writes o
   const before = await countRows();
   const res = await ownerApi.patch(`/api/v1/orgs/${fx.org.slug}/members/${fx.members.admin.userId}`, { data: { requestId: randomUUID(), role: 'viewer' } });
   expect(res.ok(), `route 26: ${res.status()} ${await res.text()}`).toBe(true);
-  await pressAll(pages, { save: M09, seal: SEAL_ROLE, issue: ISSUE_ROLE });
+  await pressAll(pages, { save: M09, mitigation: FINDINGS_COPY.failures.forbidden(FINDINGS_COPY.failures.keptInBrowser), seal: SEAL_ROLE, issue: ISSUE_ROLE });
   expect(await countRows()).toEqual(before);
   await pages.context.close();
 });

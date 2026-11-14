@@ -9,6 +9,7 @@ import {
   conflictAction, emptyMitigationValue, isNewerVersion, mitigationDraftKey, mitigationDraftTarget, restoreMitigationDraft, shouldWriteDraft, writeMitigationDraft,
 } from '@/lib/findings/formRules';
 import type { MitigationVersionView } from '@/types/api';
+import { FINDINGS_COPY } from '@/lib/findings/copy';
 
 /**
  * UX-26 (draft read-back), 7.4.4 (the conflict view) and obligation B6. vitest runs in `node` with no jsdom (an install is a
@@ -97,17 +98,17 @@ describe('draft read-back and the conflict (UX-26, 7.4.4)', () => {
   it('7.4.4 / 7.5.8 (CR-3): the conflict view names the three actions, who saved the newer version, and writes dates as "10 Nov 2026"', () => {
     const html = renderToStaticMarkup(<MitigationConflictView newer={V(3)} mine={MINE} userId="u1" busy={false} alert={null} status={null}
       onSaveMine={() => {}} onEditFirst={() => {}} onDiscard={() => {}} />);
-    for (const b of ['Save mine as version 4', 'Edit mine first', 'Discard mine']) expect(html).toMatch(new RegExp(`<button[^>]*>${b}</button>`));
-    expect(html).toContain('Version 3 was saved by <bdi>Grace A.</bdi>');
-    expect(html).toContain('Review it, then save yours as version 4 or discard it.');
+    for (const b of [FINDINGS_COPY.mitigationForm.saveMine, FINDINGS_COPY.mitigationForm.editMine, FINDINGS_COPY.mitigationForm.discardMine]) expect(html).toMatch(new RegExp(`<button[^>]*>${b}</button>`));
+    expect(html).toContain('<bdi>Grace A.</bdi> saved version 3 at');
+    expect(html).toContain(FINDINGS_COPY.mitigationForm.conflictOtherRest(4));
     expect(html).toContain('10 Nov 2026'); expect(html).toContain('20 Nov 2026'); expect(html).not.toContain('2026-11-10');
   });
 
   it('7.4.4 (CR-3): the same account reads the earlier-attempt text, and a version with no wording leaves the clause out', () => {
     const html = renderToStaticMarkup(<MitigationConflictView newer={V(3, { what: null, enteredBy: { userId: 'u1', name: 'Me', formerMember: false } })} mine={MINE}
       userId="u1" busy={false} alert={null} status={null} onSaveMine={() => {}} onEditFirst={() => {}} onDiscard={() => {}} />);
-    expect(html).toContain('saved by you');
-    expect(html).toContain('probably by an earlier attempt from this device or another device');
+    expect(html).toContain(FINDINGS_COPY.mitigationForm.conflictYouSaved(3));
+    expect(html).toContain(FINDINGS_COPY.mitigationForm.conflictYouRest(4));
     expect(html).not.toContain('The newer version: <bdi></bdi>');
   });
 
@@ -129,8 +130,8 @@ describe('names in sentences (SFH-3, I-2, M-4)', () => {
     const name = 'Ev\u202Eil';
     const names = new Map([['u-x', name]]);
     expect(renderToStaticMarkup(<AcceptedSentence choice={{ kind: 'member', userId: 'u-x' }} names={names} />))
-      .toBe(`The finding will show as &quot;Closed: risk accepted by <bdi>${name}</bdi>&quot;.`);
-    expect(renderToStaticMarkup(<AcceptedSaved choice={{ kind: 'member', userId: 'u-x' }} names={names} />)).toBe(`Closed: risk accepted by <bdi>${name}</bdi>.`);
+      .toBe(`The finding will show as &quot;Closed by an accepted risk (<bdi>${name}</bdi>)&quot;.`);
+    expect(renderToStaticMarkup(<AcceptedSaved choice={{ kind: 'member', userId: 'u-x' }} names={names} />)).toBe(`Closed by an accepted risk (<bdi>${name}</bdi>).`);
     expect(renderToStaticMarkup(<AcceptedSentence choice={null} names={names} />)).toBe('');
   });
 
@@ -158,6 +159,6 @@ describe('B6 and the status line (UX-26, NFR-PRIV-06, UX-30)', () => {
   it('FR-PUB-01: the status words carry no data-claims-allowed marker (the claims allow-list names "In progress" in this file), and a note stays in <bdi>', () => {
     expect(renderToStaticMarkup(<MitigationStatusWord status="in_progress" />)).toBe('<span class="status-label">In progress</span>');
     for (const status of ['planned', 'done', 'cancelled'] as const) expect(renderToStaticMarkup(<MitigationStatusWord status={status} />)).not.toContain('data-claims-allowed');
-    expect(renderToStaticMarkup(<MitigationStatusWord status="done" noArtefactNote="Deployment stopped" />)).toContain('Done, no artefact: <bdi>Deployment stopped</bdi>');
+    expect(renderToStaticMarkup(<MitigationStatusWord status="done" noArtefactNote="Deployment stopped" />)).toContain('Done, nothing attached: <bdi>Deployment stopped</bdi>');
   });
 });

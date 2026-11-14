@@ -12,6 +12,7 @@ import { PERSONAL_DATA_COPY } from '../lib/account/copy';
 import { ADMIN_FORMS_COPY } from '../lib/admin/forms/copy';
 import { MEMBERS_COPY } from '../lib/org/members/copy';
 import { adminSeat } from './fixtures/manifest';
+import { FINDINGS_COPY } from '../lib/findings/copy';
 import { failOnDialog } from './helpers/dialogs';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { signInWith } from './helpers/session';
@@ -233,12 +234,11 @@ const SCREENS: Screen[] = [
     },
   },
   {
-    name: 'findings (S-15)', who: 'owner', expect: { wide: 'no-strip', narrow: 'no-strip' },
-    passesWithoutRepair: { wide: 'the focus target opens hidden past the end of the page, and the browser\'s own focus scroll brings it in' },
+    name: 'findings (S-15)', who: 'owner', expect: { wide: 'strip', narrow: 'strip' },
     open: async (page) => {
       await load(page, (await findingPage()).url);
       const confirmation = page.getByRole('group', { name: /^Finding: / });
-      return { trigger: page.getByRole('button', { name: 'Withdraw', exact: true }), confirmation, focus: confirmation.getByRole('button', { name: 'Withdraw finding' }), focusInside: true };
+      return { trigger: page.getByRole('button', { name: FINDINGS_COPY.actions.withdrawTrigger, exact: true }), confirmation, focus: confirmation.getByLabel(FINDINGS_COPY.actions.reason), focusInside: true };
     },
   },
   {
@@ -617,7 +617,7 @@ test.describe('the confirm button while the request is sent', () => {
     const page = await pageAs(browser, 'owner', WIDE);
     const f = await findingPage();
     await load(page, f.url);
-    await page.getByRole('button', { name: 'Withdraw', exact: true }).click();
+    await page.getByRole('button', { name: FINDINGS_COPY.actions.withdrawTrigger, exact: true }).click();
     const confirmation = page.getByRole('group', { name: /^Finding: / });
     await confirmation.getByLabel('Reason (required)').fill('Raised twice by mistake.');
     const held = await hold(page, `/findings/${f.findingId}/withdrawal`, 'POST', (r) => r.continue());

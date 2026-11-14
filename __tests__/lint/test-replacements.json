@@ -1294,5 +1294,29 @@
     "property": "When the email failed and no link was shown, S-24 says so in its status region, offers the link box's resend button and no link field; the resend that went through shows the new link, keeps the organisation and its id; a refused resend keeps the organisation created and says why. The coordinator's answers Q21 and Q22 (plan 1A Task 19 fix round 1) change two sentences on this screen: the no-link email-failed sentence names the button (COPY_LINK_COPY.emailFailedNoLink), and a refused resend here points at \"Open the organisation\" in place of a reload (ADMIN_FORMS_COPY.create.resendRefusals).",
     "proof": "In this case: expect(statusText(html)).toBe(`Created. ${COPY_LINK_COPY.emailFailedNoLink}`) requires the region's whole text for the no-link state; expect(refused.status).toBe(ADMIN_FORMS_COPY.create.resendRefusals.notPending) requires the create screen's own refusal; the resend button, no link field, the resent status with the link shown (`Resent: the old link no longer works. ${EMAIL_FAILED}`), the response's orgId, slug, acceptUrl and invitation id, the new link in the view and refused.kind 'created' are unchanged. The new cases 'UX-23 (answer Q21): on the create screen the email-failed sentence names the link when the link is shown, and the button when it is not' and 'UX-23 (answer Q22): on the create screen a refused resend points at \"Open the organisation\", never at a reload' pin each state's literal words.",
     "task": "1A-19"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/mitigation-draft.test.tsx::7.4.4 / 7.5.8 (CR-3): the conflict view names the three actions, who saved the newer version, and writes dates as \"10 Nov 2026\"",
+    "replacedBy": "__tests__/unit/mitigation-draft.test.tsx::7.4.4 / 7.5.8 (CR-3): the conflict view names the three actions, who saved the newer version, and writes dates as \"10 Nov 2026\"",
+    "property": "The conflict view of 7.4.4 names its three actions as buttons, names who saved the newer version with that name inside <bdi> (NFR-SEC-11), tells the person what to do next with the next version number, and writes dates as \"10 Nov 2026\". Only the words change, to copy audit C rows C#115 and C#118 to C#120 with CONSOLIDATED 8 #6 (\"Version numbers leave the buttons\"): \"Version 3 was saved by <name>\" becomes \"<name> saved version 3 at\", the buttons become \"Save my version\", \"Edit my version\", \"Discard my version\".",
+    "proof": "The same case: each of the three button labels, now FINDINGS_COPY.mitigationForm.saveMine, editMine and discardMine, is matched as a whole <button> text; toContain('<bdi>Grace A.</bdi> saved version 3 at') keeps the name inside <bdi> before the verb (the old literal 'Version 3 was saved by <bdi>Grace A.</bdi>' asserted the same <bdi> around the same name); FINDINGS_COPY.mitigationForm.conflictOtherRest(4) carries the next version number 4 as the old sentence did; the three date assertions are byte for byte unchanged.",
+    "task": "plan 1A Task 18"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/mitigation-draft.test.tsx::NFR-SEC-11 (M-4): the accepter in the two acceptance sentences sits inside <bdi>",
+    "replacedBy": "__tests__/unit/mitigation-draft.test.tsx::NFR-SEC-11 (M-4): the accepter in the two acceptance sentences sits inside <bdi>",
+    "property": "In the sentence that says what the finding will show, and in the saved line, the accepter's name sits inside <bdi> (NFR-SEC-11, M-4), so a U+202E in the name cannot reorder the sentence; with nothing chosen the sentence is empty. Only the words change, to copy audit C#148 and C#149 quoting C#411's new state label: \"Closed: risk accepted by <who>\" becomes \"Closed by an accepted risk (<who>)\".",
+    "proof": "The same case: the exact markup `The finding will show as &quot;Closed by an accepted risk (<bdi>${name}</bdi>)&quot;.` and `Closed by an accepted risk (<bdi>${name}</bdi>).` with name 'Ev\\u202Eil', each a toBe on the whole rendered string as before, so the name is still the only text inside the <bdi> and nothing of it is outside; the empty-choice toBe('') is unchanged.",
+    "task": "plan 1A Task 18"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/mitigation-draft.test.tsx::FR-PUB-01: the status words carry no data-claims-allowed marker (the claims allow-list names \"In progress\" in this file), and a note stays in <bdi>",
+    "replacedBy": "__tests__/unit/mitigation-draft.test.tsx::FR-PUB-01: the status words carry no data-claims-allowed marker (the claims allow-list names \"In progress\" in this file), and a note stays in <bdi>",
+    "property": "The mitigation status words carry no data-claims-allowed marker and keep the exact markup <span class=\"status-label\">In progress</span>, and a done mitigation's note stays inside <bdi>. Only the words before the note change, to copy audit C#111 (\"artefact\" is retired, CONSOLIDATED 2): \"Done, no artefact:\" becomes \"Done, nothing attached:\".",
+    "proof": "The same case: toBe('<span class=\"status-label\">In progress</span>') and the not.toContain('data-claims-allowed') loop are byte for byte unchanged; toContain('Done, nothing attached: <bdi>Deployment stopped</bdi>') asserts the note inside <bdi> right after the words, as the old literal did with the old words.",
+    "task": "plan 1A Task 18"
   }
 ]

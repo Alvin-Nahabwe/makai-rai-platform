@@ -11,6 +11,7 @@ import { resetDb, testDb } from '../helpers/db';
 import { captureLogs, scanLines } from '../helpers/logCapture';
 import { markerFor } from '../helpers/markers';
 import { addEvidence, addFinding, addMitigationVersion, addProject, buildOrg, ctxFor, type OrgFixture } from '../helpers/recordFixture';
+import { FINDINGS_COPY } from '@/lib/findings/copy';
 
 let fx: OrgFixture;
 let p: { id: string };
@@ -70,7 +71,7 @@ describe('addMitigation, updateMitigation and mitigationOwnerCandidates (FR-FND-
     const removedMember = await removedMemberOf('assessor');
     const stranger = (await buildOrg()).members.owner.userId;
     for (const owner of [fx.members.viewer.userId, fx.members.reviewer.userId, removedMember, stranger, 'no-such-user'])
-      await expect(add({ ownerUserId: owner })).rejects.toMatchObject({ status: 422, extra: { fields: [{ field: 'ownerUserId', message: 'Choose an owner.' }] } });
+      await expect(add({ ownerUserId: owner })).rejects.toMatchObject({ status: 422, extra: { fields: [{ field: 'ownerUserId', message: FINDINGS_COPY.fields.ownerUserId }] } });
     expect(await testDb.mitigationVersion.count()).toBe(0);
   });
 
@@ -141,7 +142,7 @@ describe('addMitigation, updateMitigation and mitigationOwnerCandidates (FR-FND-
 
   it('FR-FND-04: done with no evidence and no note answers 422; with a note it saves and the note is kept', async () => {
     await expect(add({ status: 'done', evidenceIds: [], closureNote: null })).rejects.toMatchObject({
-      status: 422, extra: { fields: [{ field: 'closureNote', message: 'Add closure evidence, or say why there is none.' }] } });
+      status: 422, extra: { fields: [{ field: 'closureNote', message: FINDINGS_COPY.fields.closureNote }] } });
     expect((await add({ status: 'done', evidenceIds: [], closureNote: 'Deployment stopped' })).value).toMatchObject({ status: 'done', closureNote: 'Deployment stopped', evidence: [] });
   });
 
@@ -206,6 +207,6 @@ describe('addMitigation, updateMitigation and mitigationOwnerCandidates (FR-FND-
   it('FR-FND-03 F12: a padded text is stored trimmed, as the length it was checked at; a NUL owner id answers 422, not 500', async () => {
     const m = await add({ what: 'x'.repeat(3990) + ' '.repeat(1010) });
     expect((await testDb.mitigationVersion.findUniqueOrThrow({ where: { id: m.value.id } })).what).toHaveLength(3990);
-    await expect(add({ ownerUserId: 'a\u0000b' })).rejects.toMatchObject({ status: 422, extra: { fields: [{ field: 'ownerUserId', message: 'Choose an owner.' }] } });
+    await expect(add({ ownerUserId: 'a\u0000b' })).rejects.toMatchObject({ status: 422, extra: { fields: [{ field: 'ownerUserId', message: FINDINGS_COPY.fields.ownerUserId }] } });
   });
 });
