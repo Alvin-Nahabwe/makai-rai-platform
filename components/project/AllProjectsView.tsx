@@ -41,7 +41,7 @@ export function AllProjectsView({ data, children }: {
     <div className="page-content">
       <PageHeader
         title={C.heading}
-        lead={forFindings ? PROJECT_COPY.chooseForFindings : null}
+        lead={forFindings ? <p>{PROJECT_COPY.chooseForFindings}</p> : null}
         actions={data.canCreate === true ? <ButtonLink variant="primary" href={`/orgs/${data.orgSlug}/projects/new`}>{C.newProject}</ButtonLink> : null}
       />
       <section aria-labelledby="projects-active">
