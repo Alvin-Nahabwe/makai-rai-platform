@@ -3,6 +3,11 @@
  * 'use client' imports it (ruling X-2). The follow-up words Home shares with the project page (Overdue, the due lines,
  * the erased text, "View the finding") are the project page's, in lib/project/copy.ts.
  */
+
+/** A project card's line per stage in its two parts around the findings count (R5). */
+const cardLineStart = (stage: string): string => `${stage}: `;
+const cardLineEnd = (mitigations: string): string => `, ${mitigations}`;
+
 export const HOME_COPY = Object.freeze({
   titles: Object.freeze({ home: 'Home' }),
   heading: 'Home',
@@ -30,6 +35,9 @@ export const HOME_COPY = Object.freeze({
     openFindings: 'open findings',
     overdueMitigation: 'overdue mitigation',
     overdueMitigations: 'overdue mitigations',
-    line: (stage: string, findings: string, mitigations: string) => `${stage}: ${findings}, ${mitigations}`,
+    line: (stage: string, findings: string, mitigations: string) => `${cardLineStart(stage)}${findings}${cardLineEnd(mitigations)}`,
+    /** R5: the line in its parts, so the findings count can be a link: `lineStart` + findings + `lineEnd`. */
+    lineStart: cardLineStart,
+    lineEnd: cardLineEnd,
   }),
 });

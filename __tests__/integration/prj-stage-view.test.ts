@@ -179,7 +179,7 @@ describe('S-10 and S-32 pages (Task 5, Task 7)', () => {
     expect(renderToStaticMarkup(createElement(AllProjectsView, { data: { orgSlug: fx.org.slug, canUnarchive: true, active, archived } }))).toContain('Unarchive');
     const dash = await renderDashboard(fx, 'viewer', '2026-11-02');
     expect(dash).toContain('Counted project'); expect(dash).not.toContain('Shelved project');
-    expect(dash).toMatch(/Pre-processing: \d+ open findings?, \d+ overdue mitigations?/);
+    expect(dash.replace(/<[^>]+>/g, '')).toMatch(/Pre-processing: \d+ open findings?, \d+ overdue mitigations?/);   // R5: the count may be a link
     expect(dash).not.toMatch(/score|%|maturity/i);
   });
 
