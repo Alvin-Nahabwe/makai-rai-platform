@@ -1246,5 +1246,13 @@
     "property": "An erased finding title and description, an erased accepted-risk reason and an erased note of the risk's last check each print the SRS 7.5.6 erasure line in place of the text, and a finding text that is null with no tombstone throws. Only the words before the erased note change, to copy audit C#360: \"Note: <text>\" becomes \"Notes from the last check: <text>\".",
     "proof": "The same case: toContain(`Notes from the last check: ${erased}`) with the same erased line asserts the note's place as `Note: ${erased}` did (it keeps the local erased, so it cannot become a copy call); the title, description and reason assertions and the toThrow(/findings f9 has no title and no tombstone/) are byte for byte unchanged.",
     "task": "plan 1A Task 18"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/integration/document-text.test.ts::FR-DOC-07 NFR-A11Y-06: the %s copy holds the marking and every field of the PDF, and the PDF every line of the copy",
+    "replacedBy": "__tests__/integration/document-text.test.ts::FR-DOC-07 NFR-A11Y-06: the %s copy holds the marking and every field of the PDF, and the PDF every line of the copy",
+    "property": "The plain-text copy starts with the marking, holds every field label of the document, and agrees with the PDF both ways: no line of the copy is missing from the PDF and no text run of the PDF is missing from the copy. What changed is where the page footer may sit in the PDF text: the footer is printed on every page, so when a line of the body runs over a page break the PDF text holds the footer between the two halves of that line. With the shorter field labels of part 18c (copy audit C#377 to C#382) the mitigation plan fixture has such a line (MP-07, Q-PP-04).",
+    "proof": "The same case: the copy ends with the three footer lines, once; the case asserts that the PDF text holds that footer whole (toContain(footer)), then seeks every body line of the copy in the PDF text with the footer taken out (expect(body, line).toContain(squeeze(line))) and each footer line in the PDF text as it is. A body line missing from the PDF, or a footer line missing from it, still fails. The marking, blank second line, field-label loop and the PDF-run-in-copy loop are byte for byte unchanged.",
+    "task": "plan 1A Task 18"
   }
 ]

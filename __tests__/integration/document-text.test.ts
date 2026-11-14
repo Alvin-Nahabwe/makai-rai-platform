@@ -80,7 +80,14 @@ describe('the plain-text copy (route 18)', () => {
     const pdf = squeeze(pdfTextRuns((await readDocumentPdf(ctxFor(fx, 'viewer'), value.id)).bytes).join(' '));
     const copy = squeeze(text);
     // Both ways: no line of the copy is missing from the PDF (the marking aside), and no run of the PDF is missing from the copy.
-    for (const line of text.split('\n').slice(2).filter((l) => l.trim() !== '')) expect(pdf, line).toContain(squeeze(line));
+    // The copy ends with the three footer lines, once. The PDF prints that footer on every page, so its text holds the footer
+    // INSIDE a line that runs over a page break: the body's lines are sought with the footer taken out, the footer's own with it in.
+    const lines = text.split('\n').slice(2).filter((l) => l.trim() !== '');
+    const footer = squeeze(lines.slice(-3).join(' '));
+    expect(pdf, 'the footer, whole, on at least one page').toContain(footer);
+    const body = pdf.split(footer).join('');
+    for (const line of lines.slice(0, -3)) expect(body, line).toContain(squeeze(line));
+    for (const line of lines.slice(-3)) expect(pdf, line).toContain(squeeze(line));
     for (const run of pdfTextRuns((await readDocumentPdf(ctxFor(fx, 'viewer'), value.id)).bytes).filter((r) => r.trim() !== '')) expect(copy, run).toContain(squeeze(run));
   });
 
