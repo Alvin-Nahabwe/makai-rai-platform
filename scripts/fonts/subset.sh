@@ -93,30 +93,98 @@ PY
 # Every file is written to a temporary directory first, so a failed run replaces none of the committed files.
 out="$(mktemp -d)"
 trap 'rm -rf "$out"' EXIT
-src=fonts/source/overpass-latin.woff2
-for part in core rest; do
-  if [ "$part" = core ]; then range="$CORE"; else range="$REST"; fi
-  # Every layout feature and every name record is kept, so the subset shapes and names itself as the original did.
-  python3 -m fontTools.subset "$src" \
-    --unicodes="$range" \
-    --layout-features='*' \
-    --name-IDs='*' \
-    --name-languages='*' \
-    --notdef-outline \
-    --flavor=woff2 \
-    --output-file="$out/overpass-latin-${part}.woff2"
-done
-for part in common rest; do
-  if [ "$part" = common ]; then range="$EXT_COMMON"; else range="$EXT_REST"; fi
-  python3 -m fontTools.subset fonts/source/overpass-latin-ext.woff2 \
-    --unicodes="$range" \
-    --layout-features='*' \
-    --name-IDs='*' \
-    --name-languages='*' \
-    --notdef-outline \
-    --flavor=woff2 \
-    --output-file="$out/overpass-latin-ext-${part}.woff2"
-done
+# Upstream Overpass has a fault that this step repairs. Its latin and latin-ext files, as Google serves them
+# (fonts/source/), class ten mapped spacing glyphs as marks: the middle dot U+00B7, the backtick U+0060 and the spacing
+# accents U+00A8, U+00AF, U+00B4, U+00B8, U+02C6, U+02C7, U+02C9, U+02DA, U+02DC and U+02DD. Each has GDEF glyph class 3
+# and sits in the mark coverage of GPOS mark-positioning lookups, and a text shaper gives a mark no advance, so the " · "
+# separator drew its dot on top of the space after it. Each file therefore gets the rule "a mapped glyph that Unicode
+# does not class as a combining mark is not a mark" after fontTools.subset and before it is written. Never subset from
+# upstream without it: __tests__/unit/font-subsets.test.ts checks that the rule is here and that no served file has
+# such a glyph.
+CORE="$CORE" REST="$REST" EXT_COMMON="$EXT_COMMON" EXT_REST="$EXT_REST" python3 - "$out" <<'PY'
+import os, sys, unicodedata
+from fontTools import subset
+from fontTools.ttLib import TTFont
+
+def mark_subtables(font):
+    """Each GPOS subtable that positions marks, with its lookup type: MarkBasePos 4, MarkLigPos 5, MarkMarkPos 6."""
+    for lookup in font['GPOS'].table.LookupList.Lookup:
+        for st in lookup.SubTable:
+            kind = lookup.LookupType
+            if kind == 9:
+                st, kind = st.ExtSubTable, st.ExtensionLookupType
+            if kind in (4, 5, 6):
+                yield kind, st
+
+def unicode_points(font):
+    """The code points each glyph is mapped from, over every Unicode cmap subtable."""
+    points = {}
+    for table in font['cmap'].tables:
+        if table.isUnicode():
+            for cp, glyph in table.cmap.items():
+                points.setdefault(glyph, set()).add(cp)
+    return points
+
+def spacing_not_marks(font):
+    """A mapped glyph whose code points are not all Unicode combining marks (Mn, Mc, Me) is made a base glyph: GDEF
+    class 3 becomes 1, and it leaves every GPOS mark coverage together with its MarkArray record, so the indices still
+    agree. A glyph no code point maps is left as it is. Returns the glyphs changed."""
+    classes = font['GDEF'].table.GlyphClassDef.classDefs
+    in_coverage = set()
+    for kind, st in mark_subtables(font):
+        in_coverage.update((st.Mark1Coverage if kind == 6 else st.MarkCoverage).glyphs)
+    changed = sorted(glyph for glyph, cps in unicode_points(font).items()
+                     if (classes.get(glyph) == 3 or glyph in in_coverage)
+                     and not all(unicodedata.category(chr(cp)) in ('Mn', 'Mc', 'Me') for cp in cps))
+    for glyph in changed:
+        if classes.get(glyph) == 3:
+            classes[glyph] = 1
+    for kind, st in mark_subtables(font):
+        if kind == 6:
+            # A MarkMarkPos attaches its Mark1 to the mark before it, its Mark2; a glyph made a base cannot be a Mark2.
+            if set(changed) & set(st.Mark2Coverage.glyphs):
+                sys.exit(f'{sorted(set(changed) & set(st.Mark2Coverage.glyphs))} are in a Mark2Coverage, which the rule does not cover')
+            coverage, array, records = st.Mark1Coverage, st.Mark1Array, st.Mark1Array.MarkRecord
+        else:
+            coverage, array, records = st.MarkCoverage, st.MarkArray, st.MarkArray.MarkRecord
+        keep = [i for i, glyph in enumerate(coverage.glyphs) if glyph not in changed]
+        coverage.glyphs = [coverage.glyphs[i] for i in keep]
+        array.MarkRecord = [records[i] for i in keep]
+        array.MarkCount = len(keep)
+    return changed
+
+def check_written(path):
+    """Re-reads a written file and refuses it when a code point outside Mn, Mc and Me maps a glyph of GDEF class 3 or a
+    glyph in a GPOS mark coverage."""
+    font = TTFont(path)
+    classes = font['GDEF'].table.GlyphClassDef.classDefs
+    marks = set()
+    for kind, st in mark_subtables(font):
+        marks.update((st.Mark1Coverage if kind == 6 else st.MarkCoverage).glyphs)
+    bad = sorted('U+%04X %s' % (cp, glyph) for glyph, cps in unicode_points(font).items() for cp in cps
+                 if unicodedata.category(chr(cp)) not in ('Mn', 'Mc', 'Me') and (classes.get(glyph) == 3 or glyph in marks))
+    if bad:
+        sys.exit(f'{path}: spacing characters with a mark glyph: {bad}')
+
+out = sys.argv[1]
+latin, ext = 'fonts/source/overpass-latin.woff2', 'fonts/source/overpass-latin-ext.woff2'
+for src, rng, name in ((latin, 'CORE', 'latin-core'), (latin, 'REST', 'latin-rest'),
+                       (ext, 'EXT_COMMON', 'latin-ext-common'), (ext, 'EXT_REST', 'latin-ext-rest')):
+    # The steps of `python3 -m fontTools.subset` (fontTools.subset.main), with the rule between subsetting and writing.
+    # Every layout feature and every name record is kept, so the subset shapes and names itself as the original did.
+    options = subset.Options()
+    options.parse_opts(['--layout-features=*', '--name-IDs=*', '--name-languages=*', '--notdef-outline', '--flavor=woff2'])
+    font = subset.load_font(src, options, dontLoadGlyphNames=not options.glyph_names, lazy=options.lazy)
+    subsetter = subset.Subsetter(options=options)
+    subsetter.populate(unicodes=subset.parse_unicodes(os.environ[rng]))
+    subsetter.subset(font)
+    changed = spacing_not_marks(font)
+    path = f'{out}/overpass-{name}.woff2'
+    subset.save_font(font, path, options)
+    font.close()
+    print(f'overpass-{name}.woff2: spacing glyphs no longer marks: {", ".join(changed) or "none"}')
+    check_written(path)
+PY
 for f in "$out"/*.woff2; do
   mv "$f" app/fonts/
   echo "app/fonts/$(basename "$f") $(wc -c < "app/fonts/$(basename "$f")") bytes"

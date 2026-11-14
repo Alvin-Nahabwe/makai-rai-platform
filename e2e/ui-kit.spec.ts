@@ -286,6 +286,56 @@ test.describe('SavedMark', () => {
   });
 });
 
+test.describe('the app font', () => {
+  /**
+   * The middle dot of the " · " separator (SavedMark, and every other screen that has one), the backtick and the spacing
+   * accents take their own width. Upstream Overpass classes these glyphs as marks (GDEF class 3, and GPOS mark
+   * coverage), and the shaper gives a mark no advance, so the dot was drawn on top of the space after it;
+   * scripts/fonts/subset.sh makes them plain spacing glyphs. Advances in units of 2000 at the default weight, 400
+   * (fontTools, hmtx of app/fonts/*.woff2): a 1052, b 1124, space 470, middle dot 450, the backtick and the accents 736.
+   */
+  test('the middle dot, the backtick and the spacing accents each take their own advance, and "a · b" is as wide as its parts', async ({ page }) => {
+    await openKit(page);
+    const px = (units: number) => (units * 16) / 2000;
+    const measured = await page.evaluate(async () => {
+      const font = '16px overpass';
+      const texts = ['·', '`', '´', 'ˇ', 'a', 'b', ' ', 'a · b', 'a·b'];
+      // Each text loads the face whose unicode-range holds it; an empty answer means it would draw in a fallback font.
+      const faces = await Promise.all(texts.map(async (t) => (await document.fonts.load(font, t)).length));
+      const ctx = document.createElement('canvas').getContext('2d');
+      if (ctx === null) throw new Error('no 2d canvas context');
+      ctx.font = font;
+      const m = (t: string) => ctx.measureText(t);
+      const dot = m('a·b');
+      return {
+        faces,
+        width: Object.fromEntries(texts.map((t) => [t, m(t).width])),
+        // The dot's ink in "a·b", from the start of the text: it lies inside its own advance, after the a's.
+        dotInk: { left: -dot.actualBoundingBoxLeft, right: dot.actualBoundingBoxRight },
+        aDotInk: { left: -m('a·').actualBoundingBoxLeft, right: m('a·').actualBoundingBoxRight, a: m('a').actualBoundingBoxRight },
+        // A glyph still in a GPOS mark coverage is attached to the a's anchor even with its own advance: the backtick
+        // was then drawn on top of the a.
+        aGraveInk: m('a`').actualBoundingBoxRight,
+      };
+    });
+    console.log(`font widths at 16px: ${JSON.stringify(measured)}`);
+    expect(measured.faces.every((n) => n > 0), 'every text has an overpass face').toBe(true);
+    const w = measured.width;
+    expect(Math.abs(w['·'] - px(450)), `"·" is ${w['·']} px, its advance ${px(450)} px`).toBeLessThan(1);
+    expect(Math.abs(w['`'] - px(736)), `"\`" is ${w['`']} px, its advance ${px(736)} px`).toBeLessThan(1);
+    expect(Math.abs(w['´'] - px(736)), `"´" (rest file) is ${w['´']} px, its advance ${px(736)} px`).toBeLessThan(1);
+    expect(Math.abs(w['ˇ'] - px(736)), `"ˇ" (ext-rest file) is ${w['ˇ']} px, its advance ${px(736)} px`).toBeLessThan(1);
+    const parts = w.a + w[' '] + w['·'] + w[' '] + w.b;
+    expect(Math.abs(w['a · b'] - parts), `"a · b" is ${w['a · b']} px, its parts ${parts} px`).toBeLessThan(1);
+    expect(Math.abs(w['a·b'] - (w.a + w['·'] + w.b)), `"a·b" is ${w['a·b']} px`).toBeLessThan(1);
+    // In "a·", the dot's ink starts after the a's ink and ends within the a's and the dot's advances: not moved onto the a.
+    expect(measured.aDotInk.right, 'the dot ink ends after the a ink').toBeGreaterThan(measured.aDotInk.a + 0.5);
+    expect(measured.aDotInk.right, 'the dot ink ends inside its own advance').toBeLessThanOrEqual(w.a + w['·'] + 0.5);
+    expect(measured.aGraveInk, 'the backtick ink in "a`" ends after the a ink').toBeGreaterThan(measured.aDotInk.a + 0.5);
+    expect(measured.aGraveInk, 'the backtick ink ends inside its own advance').toBeLessThanOrEqual(w.a + w['`'] + 0.5);
+  });
+});
+
 test.describe('LocalTime', () => {
   test.use({ timezoneId: 'Africa/Nairobi' });
 

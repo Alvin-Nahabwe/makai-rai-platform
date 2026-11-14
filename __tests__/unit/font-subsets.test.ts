@@ -107,15 +107,17 @@ function callsOf(family: (typeof FAMILIES)[number]): { core: Call; rest: Call; e
   return { core: core[0], rest: rest[0], ext };
 }
 
-// ---------------------------------------------------------------------------------------------- WOFF2 cmap reader
+// ---------------------------------------------------------------------------------------------- WOFF2 reader
 
-/** The code points a WOFF2 file maps to a glyph (its cmap's format 4 or 12 subtable). */
-function woff2CodePoints(path: string): Set<number> {
+/** A WOFF2 file's tables, decompressed, by tag (glyf and loca stay in their WOFF2 transform; nothing here reads them). */
+function woff2Tables(path: string): Map<string, Buffer> {
   const buf = readFileSync(path);
   if (buf.toString('latin1', 0, 4) !== 'wOF2') throw new Error(`${path} is not a WOFF2 file`);
+  if (buf.toString('latin1', 4, 8) === 'ttcf') throw new Error(`${path} is a font collection, which this reader does not read`);
   const numTables = buf.readUInt16BE(12);
   const totalCompressedSize = buf.readUInt32BE(20);
-  const KNOWN: Record<number, string> = { 0: 'cmap', 10: 'glyf', 11: 'loca' };
+  // The WOFF2 known-tag indices this file reads (W3C WOFF2, section 5.1).
+  const KNOWN: Record<number, string> = { 0: 'cmap', 10: 'glyf', 11: 'loca', 26: 'GDEF', 27: 'GPOS' };
   let pos = 48;
   const base128 = () => {
     let v = 0;
@@ -127,7 +129,7 @@ function woff2CodePoints(path: string): Set<number> {
     throw new Error(`${path}: bad UIntBase128`);
   };
   let offset = 0;
-  let cmap: { at: number; length: number } | undefined;
+  const at = new Map<string, { at: number; length: number }>();
   for (let t = 0; t < numTables; t++) {
     const flags = buf[pos++];
     const index = flags & 0x3f;
@@ -140,15 +142,19 @@ function woff2CodePoints(path: string): Set<number> {
     const origLength = base128();
     const transformed = tag === 'glyf' || tag === 'loca' ? version === 0 : version !== 0;
     const length = transformed ? base128() : origLength;
-    if (tag === 'cmap') cmap = { at: offset, length };
+    at.set(tag, { at: offset, length });
     offset += length;
   }
-  if (!cmap) throw new Error(`${path} has no cmap table`);
-  if (buf.toString('latin1', 4, 8) === 'ttcf') throw new Error(`${path} is a font collection, which this reader does not read`);
   const stream = brotliDecompressSync(buf.subarray(pos, pos + totalCompressedSize));
   if (stream.length !== offset) throw new Error(`${path}: the table data is ${stream.length} bytes, the directory says ${offset}`);
-  const data = stream.subarray(cmap.at, cmap.at + cmap.length);
-  const out = new Set<number>();
+  return new Map([...at].map(([tag, t]) => [tag, stream.subarray(t.at, t.at + t.length)]));
+}
+
+/** The glyph id each code point of a WOFF2 file maps to (its cmap's format 4 and 12 subtables), glyph 0 left out. */
+function woff2Cmap(path: string): Map<number, number> {
+  const data = woff2Tables(path).get('cmap');
+  if (!data) throw new Error(`${path} has no cmap table`);
+  const out = new Map<number, number>();
   const numSub = data.readUInt16BE(2);
   let read = 0;
   for (let i = 0; i < numSub; i++) {
@@ -173,7 +179,7 @@ function woff2CodePoints(path: string): Set<number> {
             const g = data.readUInt16BE(rangeOffsets + s * 2 + ro + (c - start) * 2);
             glyph = g === 0 ? 0 : (g + delta) & 0xffff;
           }
-          if (glyph !== 0) out.add(c);
+          if (glyph !== 0) out.set(c, glyph);
         }
       }
     } else if (format === 12) {
@@ -183,12 +189,74 @@ function woff2CodePoints(path: string): Set<number> {
         const start = data.readUInt32BE(at);
         const end = data.readUInt32BE(at + 4);
         const glyph = data.readUInt32BE(at + 8);
-        for (let c = start; c <= end; c++) if (glyph + (c - start) !== 0) out.add(c);
+        for (let c = start; c <= end; c++) if (glyph + (c - start) !== 0) out.set(c, glyph + (c - start));
       }
     }
   }
   if (read === 0 || out.size === 0) throw new Error(`${path}: no format 4 or 12 cmap subtable with any mapping`);
   return out;
+}
+
+/** The code points a WOFF2 file maps to a glyph. */
+function woff2CodePoints(path: string): Set<number> {
+  return new Set(woff2Cmap(path).keys());
+}
+
+/** The glyph ids of an OpenType Coverage table at `at` (format 1, a list; format 2, ranges). */
+function coverage(data: Buffer, at: number): number[] {
+  const format = data.readUInt16BE(at);
+  const count = data.readUInt16BE(at + 2);
+  const out: number[] = [];
+  for (let i = 0; i < count; i++) {
+    if (format === 1) out.push(data.readUInt16BE(at + 4 + i * 2));
+    else if (format === 2) for (let g = data.readUInt16BE(at + 4 + i * 6); g <= data.readUInt16BE(at + 6 + i * 6); g++) out.push(g);
+    else throw new Error(`Coverage format ${format}`);
+  }
+  return out;
+}
+
+/**
+ * What makes a glyph a mark to the text shaper: its GDEF glyph class 3, and the mark coverages of the GPOS lookups that
+ * position marks (MarkBasePos 4, MarkLigPos 5: MarkCoverage; MarkMarkPos 6: Mark1Coverage; each the subtable's second
+ * field), extension lookups (9) followed. `marks` maps each glyph in a mark coverage to the lookups that hold it.
+ */
+function woff2MarkGlyphs(path: string): { class3: Set<number>; marks: Map<number, number[]> } {
+  const tables = woff2Tables(path);
+  const gdef = tables.get('GDEF');
+  const gpos = tables.get('GPOS');
+  if (!gdef || !gpos) throw new Error(`${path} has no GDEF or no GPOS table`);
+  const class3 = new Set<number>();
+  const classDef = gdef.readUInt16BE(4);
+  if (classDef !== 0) {
+    const format = gdef.readUInt16BE(classDef);
+    if (format === 1) {
+      const start = gdef.readUInt16BE(classDef + 2);
+      const count = gdef.readUInt16BE(classDef + 4);
+      for (let i = 0; i < count; i++) if (gdef.readUInt16BE(classDef + 6 + i * 2) === 3) class3.add(start + i);
+    } else if (format === 2) {
+      for (let i = 0; i < gdef.readUInt16BE(classDef + 2); i++) {
+        const r = classDef + 4 + i * 6;
+        if (gdef.readUInt16BE(r + 4) === 3) for (let g = gdef.readUInt16BE(r); g <= gdef.readUInt16BE(r + 2); g++) class3.add(g);
+      }
+    } else throw new Error(`${path}: GDEF ClassDef format ${format}`);
+  }
+  const marks = new Map<number, number[]>();
+  const lookupList = gpos.readUInt16BE(8);
+  for (let l = 0; l < gpos.readUInt16BE(lookupList); l++) {
+    const lookup = lookupList + gpos.readUInt16BE(lookupList + 2 + l * 2);
+    const lookupType = gpos.readUInt16BE(lookup);
+    for (let s = 0; s < gpos.readUInt16BE(lookup + 4); s++) {
+      let sub = lookup + gpos.readUInt16BE(lookup + 6 + s * 2);
+      let type = lookupType;
+      if (type === 9) {
+        type = gpos.readUInt16BE(sub + 2);
+        sub += gpos.readUInt32BE(sub + 4);
+      }
+      if (type < 4 || type > 6) continue;
+      for (const g of coverage(gpos, sub + gpos.readUInt16BE(sub + 2))) marks.set(g, [...(marks.get(g) ?? []), l]);
+    }
+  }
+  return { class3, marks };
 }
 
 // ---------------------------------------------------------------------------------------------- the pages' copy
@@ -632,5 +700,91 @@ describe('NFR-PERF-02: the preloaded font files hold printable ASCII and the pag
     expect(decoded(uncommented("const a = <p>&copy; '\\u00e9' {'//x'} {\"/*\"} &#8212;</p>; // \u00ff", 'x.tsx'), 'x.tsx')).toMatch(/\u00a9 '\u00e9' \{'\/\/x'\} \{"\/\*"\} \u2014/);
     expect(() => decoded('&bogus;', 'x.tsx')).toThrow(/bogus/);
     expect(decoded(".a::before { content: '\\2019 x\\00a0'; }", 'a.css')).toBe(".a::before { content: '\u2019x\u00a0'; }");
+  });
+});
+
+/**
+ * Upstream Overpass (fonts/source/, as Google serves it) classes ten mapped spacing glyphs as marks: the middle dot
+ * U+00B7, the backtick U+0060 and the spacing accents (´ ¸ ¨ ¯ ˆ ˚ ˜ in the latin file, ˇ ˉ ˝ in latin-ext). They have
+ * GDEF glyph class 3 and sit in the GPOS mark coverages, and the text shaper gives a mark no advance: the " · "
+ * separator drew its dot on top of the space after it. scripts/fonts/subset.sh applies the rule "a mapped glyph that
+ * Unicode does not class as a combining mark is not a mark" to the four files it writes. A glyph no code point maps
+ * (the .dnom figures, the .case marks) is outside the rule and keeps its class.
+ */
+describe('the served font files: a character Unicode does not class as a combining mark is not a mark in the font', () => {
+  const SERVED = ['core', 'rest', 'ext-common', 'ext-rest'].map((p) => `app/fonts/overpass-latin-${p}.woff2`);
+  /** Unicode general category Mn, Mc or Me (Python's unicodedata.category, which subset.sh uses, agrees for these). */
+  const isCombining = (cp: number) => /^\p{M}$/u.test(String.fromCodePoint(cp));
+
+  /** Each mapped code point outside Mn, Mc and Me whose glyph has GDEF class 3 or is in a GPOS mark coverage. */
+  function spacingMarks(path: string): string[] {
+    const { class3, marks } = woff2MarkGlyphs(path);
+    const out: string[] = [];
+    for (const [cp, glyph] of woff2Cmap(path)) {
+      if (isCombining(cp)) continue;
+      if (class3.has(glyph)) out.push(`${hex(cp)} glyph ${glyph} has GDEF class 3`);
+      if (marks.has(glyph)) out.push(`${hex(cp)} glyph ${glyph} is in the mark coverage of GPOS lookup ${marks.get(glyph)!.join(', ')}`);
+    }
+    return out;
+  }
+
+  for (const file of SERVED) {
+    it(`${file}: no character outside Mn, Mc and Me has a mark glyph (GDEF class 3, or a GPOS mark coverage)`, () => {
+      expect(spacingMarks(file)).toEqual([]);
+    });
+  }
+
+  for (const [cp, name] of [[0xb7, 'the middle dot'], [0x60, 'the backtick']] as const) {
+    it(`${hex(cp)}, ${name}, is a spacing glyph in the core file: not GDEF class 3, in no GPOS mark coverage`, () => {
+      const file = 'app/fonts/overpass-latin-core.woff2';
+      const glyph = woff2Cmap(file).get(cp);
+      expect(glyph, `${file} maps ${hex(cp)}`).toBeDefined();
+      const { class3, marks } = woff2MarkGlyphs(file);
+      expect({ class3: class3.has(glyph!), markLookups: marks.get(glyph!) ?? [] }).toEqual({ class3: false, markLookups: [] });
+    });
+  }
+
+  it('the combining marks the core and rest files map stay marks: GDEF class 3, and in a GPOS mark coverage', () => {
+    const kept: string[] = [];
+    for (const file of SERVED.slice(0, 2)) {
+      const { class3, marks } = woff2MarkGlyphs(file);
+      for (const [cp, glyph] of woff2Cmap(file)) {
+        if (isCombining(cp)) kept.push(`${hex(cp)} ${class3.has(glyph) && marks.has(glyph)}`);
+      }
+    }
+    expect(kept.sort()).toEqual(['U+0300 true', 'U+0301 true', 'U+0303 true', 'U+0304 true', 'U+0308 true', 'U+0309 true', 'U+0323 true']);
+  });
+
+  it('(harness) the GDEF and GPOS reader reads what fontTools reads, and finds the fault in the upstream file', () => {
+    // fontTools 4.46.0 on fonts/source/overpass-latin.woff2: 32 glyphs of GDEF class 3, the same 32 in the GPOS mark
+    // coverages; U+00B7 maps glyph 208, in lookup 1's MarkCoverage; U+0060 in lookup 1's and lookup 3's (Mark1Coverage).
+    const upstream = 'fonts/source/overpass-latin.woff2';
+    const { class3, marks } = woff2MarkGlyphs(upstream);
+    expect({ class3: class3.size, marks: marks.size }).toEqual({ class3: 32, marks: 32 });
+    const cmap = woff2Cmap(upstream);
+    expect(cmap.get(0xb7)).toBe(208);
+    expect(marks.get(cmap.get(0xb7)!)).toEqual([1]);
+    expect(marks.get(cmap.get(0x60)!)).toEqual([1, 3]);
+    expect(spacingMarks(upstream).filter((l) => l.includes('class 3')).map((l) => l.slice(0, 6)).sort()).toEqual(
+      ['U+0060', 'U+00A8', 'U+00AF', 'U+00B4', 'U+00B7', 'U+00B8', 'U+02C6', 'U+02DA', 'U+02DC'],
+    );
+    expect(spacingMarks('fonts/source/overpass-latin-ext.woff2').filter((l) => l.includes('class 3')).map((l) => l.slice(0, 6)).sort()).toEqual(
+      ['U+02C7', 'U+02C9', 'U+02DD'],
+    );
+  });
+
+  it('scripts/fonts/subset.sh applies the rule to each file between fontTools.subset and the write, and checks what it wrote', () => {
+    const script = readFileSync('scripts/fonts/subset.sh', 'utf8');
+    // The rule: GDEF class 3 to 1, and out of the mark coverages with the MarkArray records, for every mapped glyph
+    // whose code points are not all Mn, Mc or Me.
+    const rule = /^def spacing_not_marks\(font\):\n([\s\S]*?)\n(?=\S)/m.exec(script)?.[1] ?? '';
+    for (const part of ["unicodedata.category", "('Mn', 'Mc', 'Me')", 'GlyphClassDef', '= 1', 'MarkCoverage', 'Mark1Coverage', 'MarkArray.MarkRecord', 'Mark1Array.MarkRecord']) {
+      expect(rule, `the rule holds ${part}`).toContain(part);
+    }
+    const order = ['subsetter.subset(font)', '= spacing_not_marks(font)', 'subset.save_font(font', '\n    check_written(path)\n'].map((s) => script.indexOf(s));
+    expect(order.every((i, k) => i > 0 && (k === 0 || i > order[k - 1])), `subset, rule, write, check in that order: ${order}`).toBe(true);
+    // Each written file is re-read and refused if a spacing glyph is still a mark, before any replaces a committed one.
+    expect(script.indexOf('def check_written(path):')).toBeGreaterThan(0);
+    expect(order[3]).toBeLessThan(script.indexOf('mv "$f" app/fonts/'));
   });
 });
