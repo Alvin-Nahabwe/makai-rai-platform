@@ -15,7 +15,7 @@ import { formatDay } from '@/lib/format/dates';
 import { overdueLabel, STAGE_NAMES } from '@/lib/findings/labels';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
 import type { FindingPageData, MitigationOnPage } from '@/lib/findings/pageData';
-import '@/components/ui/PageHeader.css';
+import '@/components/ui/pageHeaderStyles';
 import './Findings.css';
 
 /**

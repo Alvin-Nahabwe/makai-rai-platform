@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import type { ReactElement } from 'react';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
 import { FailureText, useFindingWrite } from '@/components/findings/FindingActions';
-import '@/components/ui/Button.css';
+import '@/components/ui/buttonStyles';
 
 export type CloseByDecisionButtonProps = {
   orgSlug: string; projectId: string; findingId: string; decisionVersionId: string;

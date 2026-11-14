@@ -9,7 +9,7 @@ import { STAGE_NAMES } from '@/lib/findings/labels';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
 import type { FindingListItem, FindingsPageData } from '@/lib/findings/pageData';
 import { STAGES, type Stage } from '@/types/record';
-import '@/components/ui/PageHeader.css';
+import '@/components/ui/pageHeaderStyles';
 import './Findings.css';
 
 /**
