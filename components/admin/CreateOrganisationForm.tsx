@@ -2,38 +2,43 @@
 
 import { useId, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
-import Link from 'next/link';
 import { requestIdFor, sendWrite, type RetryState, type SendOutcome } from '@/lib/client/retrySafeWrite';
 import { CopyLinkFallback } from '@/components/invitations/CopyLinkFallback';
+import { Button } from '@/components/ui/Button';
+import { Checkbox } from '@/components/ui/Checkbox';
+import { ListLink } from '@/components/ui/ListLink';
+import { StatusRegion } from '@/components/ui/StatusRegion';
+import { TextInput } from '@/components/ui/TextInput';
 import { useHydrated } from '@/lib/client/useHydrated';
 import { MAX_LEGAL_NAME, MAX_ORG_NAME } from '@/lib/admin/limits';
+import { ADMIN_FORMS_COPY } from '@/lib/admin/forms/copy';
+import { COPY_LINK_COPY } from '@/lib/invitations/link/copy';
+import './AdminForms.css';
 import type { CreateOrganisationResponse, InviteMemberResponse } from '@/types/api';
 import type { FieldError } from '@/types/record';
 
 export type CreateDraft = { name: string; legalName: string; ownerEmail: string; showLink: boolean };
 export type FieldErrors = Partial<Record<keyof CreateDraft, string>>;
 
-export const EMAIL_FAILED = 'The invitation email could not be sent. Send this link another way.';
-/** A replayed create (route 41 answers 200): the first call may have sent the email (owner copy; C4 ORG fix round 1). */
-export const ALREADY_CREATED = 'This organisation was already created. If the email did not arrive, use Resend.';
-/** A replayed resend (route 45 answers 200): the first call may have sent the email (owner copy, after S-22's; C4 CR-1). */
-export const ALREADY_RESENT = 'This invitation was already resent. If the email did not arrive, use Resend again.';
-const CREATING = 'Creating the organisation...';
-const NOT_CREATED = 'Not created: connection lost. Nothing was created.';
-const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const C = ADMIN_FORMS_COPY.create;
+const I = ADMIN_FORMS_COPY.invitation;
 
-/** Hint and error text under a field (globals.css has no field-level classes; the critical tint pair passes contrast in both themes). */
-export const HINT_STYLE = { color: 'var(--text-muted)', fontSize: 'var(--font-size-sm)', margin: 0 } as const;
-export const ERROR_STYLE = { color: 'var(--tint-critical-fg)', fontSize: 'var(--font-size-sm)', fontWeight: 600, margin: 0 } as const;
+/** The one sentence for an invitation email that could not be sent (the copy-link box's own words). */
+export const EMAIL_FAILED = COPY_LINK_COPY.emailFailed;
+/** A replayed create (route 41 answers 200): the first call may have sent the email (C4 ORG fix round 1; audit AD35). */
+export const ALREADY_CREATED = C.alreadyCreated;
+/** A replayed resend (route 45 answers 200): the first call may have sent the email (C4 CR-1; coordinator's answer Q2). */
+export const ALREADY_RESENT = I.alreadyResent;
+const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Every field's error of the create form. */
 export function createErrors(d: CreateDraft): FieldErrors {
   const e: FieldErrors = {};
-  if (d.name.trim() === '') e.name = 'Enter the organisation name.';
-  else if (d.name.trim().length > MAX_ORG_NAME) e.name = `Use ${MAX_ORG_NAME} characters or fewer.`;
-  if (d.legalName.trim() === '') e.legalName = 'Enter the institution\'s legal name.';
-  else if (d.legalName.trim().length > MAX_LEGAL_NAME) e.legalName = `Use ${MAX_LEGAL_NAME} characters or fewer.`;
-  if (!EMAIL_SHAPE.test(d.ownerEmail.trim())) e.ownerEmail = 'Enter the first owner\'s email address.';
+  if (d.name.trim() === '') e.name = C.nameMissing;
+  else if (d.name.trim().length > MAX_ORG_NAME) e.name = C.tooLong(MAX_ORG_NAME);
+  if (d.legalName.trim() === '') e.legalName = C.legalNameMissing;
+  else if (d.legalName.trim().length > MAX_LEGAL_NAME) e.legalName = C.tooLong(MAX_LEGAL_NAME);
+  if (!EMAIL_SHAPE.test(d.ownerEmail.trim())) e.ownerEmail = C.ownerEmailMissing;
   return e;
 }
 
@@ -53,19 +58,19 @@ export function serverFieldErrors(fields: readonly FieldError[] | undefined): Fi
   return e;
 }
 
-/** The sentence for a first-owner invitation write that did not succeed (7.4.1 patterns; the definer's 409s in words). */
+/** The sentence for an owner invitation write that did not succeed (7.4.1 patterns; the definer's 409s in words). */
 export function invitationRefusal(out: Exclude<SendOutcome<unknown>, { kind: 'saved' }>): string {
-  if (out.kind === 'not_saved') return 'Not done: connection lost. It may have arrived. Reload the page before trying again.';
-  if (out.status === 401) return 'Not done: you have been signed out. Sign in again.';
-  if (out.status >= 500) return 'Not done: the server had a problem. Reload the page and try again.';
+  if (out.kind === 'not_saved') return I.lostReply;
+  if (out.status === 401) return I.signedOut;
+  if (out.status >= 500) return I.serverProblem;
   switch (out.body.code) {
-    case 'invitation_not_pending': return 'That invitation is no longer pending. Reload the page.';
-    case 'active_owner_exists': return 'This organisation has an active owner. A first-owner invitation is not needed.';
-    case 'pending_owner_invitation_exists': return 'A first-owner invitation is already pending. Resend or revoke it instead.';
-    case 'not_found': return 'That invitation is no longer here. Reload the page.';
-    case 'organisation_archived': return 'This organisation is archived.';
-    case 'validation': return 'Not done: check the fields marked below.';
-    default: return 'Not done. Reload the page and try again.';
+    case 'invitation_not_pending': return I.notPending;
+    case 'active_owner_exists': return I.activeOwner;
+    case 'pending_owner_invitation_exists': return I.pendingExists;
+    case 'not_found': return I.notFound;
+    case 'organisation_archived': return I.archived;
+    case 'validation': return I.checkFields;
+    default: return I.other;
   }
 }
 
@@ -75,7 +80,7 @@ export function invitationRefusal(out: Exclude<SendOutcome<unknown>, { kind: 'sa
  */
 export function resentWords(r: InviteMemberResponse, status: number = 201): string {
   if (status === 200) return ALREADY_RESENT;
-  return `Resent: the old link no longer works. ${r.emailSent ? `Invitation sent to ${r.invitation.email}.` : EMAIL_FAILED}`;
+  return `${I.resentPrefix} ${r.emailSent ? I.sentTo(r.invitation.email) : EMAIL_FAILED}`;
 }
 
 /** What the page says after a send: the 7.4.2 S-24 texts, and the link box for a created organisation. */
@@ -87,18 +92,18 @@ export function createResult(out: SendOutcome<CreateOrganisationResponse>): Crea
   if (out.kind === 'saved') {
     const r = out.body;
     if (out.status === 200) return { kind: 'created', response: r, status: ALREADY_CREATED, replayed: true };
-    return { kind: 'created', response: r, status: r.emailSent ? `Created. Invitation sent to ${r.invitation.email}.` : `Created. ${EMAIL_FAILED}` };
+    return { kind: 'created', response: r, status: r.emailSent ? C.sent(r.invitation.email) : `${C.createdPrefix} ${EMAIL_FAILED}` };
   }
-  if (out.kind === 'not_saved') return { kind: 'not_created', status: NOT_CREATED, retry: true, fields: {} };
-  if (out.status === 401) return { kind: 'not_created', status: 'Not created: you have been signed out. Sign in again.', retry: false, fields: {} };
-  if (out.status >= 500) return { kind: 'not_created', status: 'Not created: the server had a problem, so nothing was created. Retry.', retry: true, fields: {} };
+  if (out.kind === 'not_saved') return { kind: 'not_created', status: C.notCreated, retry: true, fields: {} };
+  if (out.status === 401) return { kind: 'not_created', status: C.signedOut, retry: false, fields: {} };
+  if (out.status >= 500) return { kind: 'not_created', status: C.serverProblem, retry: true, fields: {} };
   switch (out.body.code) {
-    case 'validation': return { kind: 'not_created', status: 'Not created: check the fields marked below.', retry: false, fields: serverFieldErrors(out.body.fields) };
+    case 'validation': return { kind: 'not_created', status: C.checkFields, retry: false, fields: serverFieldErrors(out.body.fields) };
     // The slug comes from the name: a second organisation whose name gives the same address is refused. After a lost
     // reply, the first attempt may be the one that took it.
-    case 'slug_taken': return { kind: 'not_created', status: 'Another organisation already uses this web address. Change the name slightly and try again.', retry: false, fields: {} };
-    case 'not_platform_admin': return { kind: 'not_created', status: 'Not created: this account is not the MAK-AI administrator.', retry: false, fields: {} };
-    default: return { kind: 'not_created', status: 'Not created. Reload the page and try again.', retry: false, fields: {} };
+    case 'slug_taken': return { kind: 'not_created', status: C.slugTaken, retry: false, fields: {} };
+    case 'not_platform_admin': return { kind: 'not_created', status: C.notAdmin, retry: false, fields: {} };
+    default: return { kind: 'not_created', status: C.other, retry: false, fields: {} };
   }
 }
 
@@ -115,23 +120,6 @@ export function resentResult(created: CreateOrganisationResponse, out: SendOutco
   };
 }
 
-type FieldProps = { id: string; label: string; hint?: string; error?: string; children: (a: { id: string; describedBy: string | undefined; invalid: true | undefined }) => ReactElement };
-
-/** A labelled field with its hint and error, joined by aria-describedby (NFR-A11Y-02). */
-export function Field({ id, label, hint, error, children }: FieldProps): ReactElement {
-  const hintId = hint ? `${id}-hint` : undefined;
-  const errorId = error ? `${id}-error` : undefined;
-  const describedBy = [hintId, errorId].filter(Boolean).join(' ') || undefined;
-  return (
-    <div className="form-group">
-      <label htmlFor={id}>{label}</label>
-      {hint ? <p id={hintId} style={HINT_STYLE}>{hint}</p> : null}
-      {children({ id, describedBy, invalid: error ? true : undefined })}
-      {error ? <p id={errorId} style={ERROR_STYLE}>{error}</p> : null}
-    </div>
-  );
-}
-
 export type CreateOrganisationFormViewProps = {
   draft: CreateDraft; errors: FieldErrors;
   status: string; busy: boolean; result: CreateResult | null;
@@ -146,7 +134,8 @@ export type CreateOrganisationFormViewProps = {
  * S-24's create form as markup, from its state (vitest has no DOM library; the e2e drives the real one). The
  * status region is mounted from the first render and keeps its place, so each text put in it is announced
  * (4.1.3); the email-failure sentence goes there, and the link box is told so (`noticeShownElsewhere`) and keyed by
- * the invitation, so a copy result never carries over.
+ * the invitation, so a copy result never carries over. The fields are the kit's (plan 1A Task 19, ruling L5-3), in the
+ * order name, legal name, first Owner's email, show link, with no fieldset (a second group breaks the specs' locators).
  */
 export function CreateOrganisationFormView(p: CreateOrganisationFormViewProps): ReactElement {
   const formId = useId();
@@ -154,41 +143,30 @@ export function CreateOrganisationFormView(p: CreateOrganisationFormViewProps): 
   const created = p.result?.kind === 'created' ? p.result.response : null;
   return (
     <div>
-      <div role="status" id={`${formId}-status`}>{p.status}</div>
+      <StatusRegion id={`${formId}-status`} message={p.status} />
       {p.result?.kind === 'not_created' && p.result.retry
-        ? <button type="button" className="btn btn--secondary" onClick={p.onRetry} aria-disabled={p.busy || undefined}>Retry</button> : null}
+        ? <Button variant="secondary" busy={p.busy} onClick={p.onRetry}>{C.retry}</Button> : null}
       {created !== null ? (
         <>
           {!(p.result?.kind === 'created' && p.result.replayed) && (created.acceptUrl !== null || !created.emailSent) ? (
             <CopyLinkFallback key={created.invitation.id} noticeShownElsewhere onResendWithLink={p.onResendWithLink} acceptUrl={created.acceptUrl}
               expiresAt={created.invitation.expiresAt} emailSent={created.emailSent} />
           ) : null}
-          <p><Link href={`/admin/organisations/${encodeURIComponent(created.orgId)}`} prefetch={false}>Open the organisation</Link></p>
+          <p><ListLink href={`/admin/organisations/${encodeURIComponent(created.orgId)}`}>{C.open}</ListLink></p>
         </>
       ) : (
         <form method="post" noValidate onSubmit={(e) => { e.preventDefault(); p.onSubmit(); }}>
-          <Field id={`${formId}-name`} label="Organisation name"
-            hint="Create one organisation for each team whose members may read each other's records. An institution with several teams gets one organisation for each."
-            error={p.errors.name}>
-            {(a) => <input id={a.id} name="name" type="text" required maxLength={MAX_ORG_NAME} autoComplete="off" value={d.name}
-              aria-describedby={a.describedBy} aria-invalid={a.invalid} onChange={(e) => p.onChange({ name: e.target.value })} />}
-          </Field>
-          <Field id={`${formId}-legal-name`} label="Institution's legal name"
-            hint="The registered name of the university, hospital or institute the team belongs to."
-            error={p.errors.legalName}>
-            {(a) => <input id={a.id} name="legalName" type="text" required maxLength={MAX_LEGAL_NAME} autoComplete="off" value={d.legalName}
-              aria-describedby={a.describedBy} aria-invalid={a.invalid} onChange={(e) => p.onChange({ legalName: e.target.value })} />}
-          </Field>
-          <Field id={`${formId}-owner`} label="First owner's email" error={p.errors.ownerEmail}>
-            {(a) => <input id={a.id} name="ownerEmail" type="email" required autoComplete="off" spellCheck={false} value={d.ownerEmail}
-              aria-describedby={a.describedBy} aria-invalid={a.invalid} onChange={(e) => p.onChange({ ownerEmail: e.target.value })} />}
-          </Field>
-          <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', marginBottom: 'var(--space-5)' }}>
-            <input id={`${formId}-show`} name="showLink" type="checkbox" checked={d.showLink} onChange={(e) => p.onChange({ showLink: e.target.checked })} />
-            <label htmlFor={`${formId}-show`}>Show link (to send it yourself if the email does not arrive)</label>
+          <TextInput id={`${formId}-name`} name="name" label={C.nameLabel} hint={C.nameHint} error={p.errors.name} required
+            maxLength={MAX_ORG_NAME} autoComplete="off" value={d.name} onChange={(e) => p.onChange({ name: e.target.value })} />
+          <TextInput id={`${formId}-legal-name`} name="legalName" label={C.legalNameLabel} hint={C.legalNameHint} error={p.errors.legalName} required
+            maxLength={MAX_LEGAL_NAME} autoComplete="off" value={d.legalName} onChange={(e) => p.onChange({ legalName: e.target.value })} />
+          <TextInput id={`${formId}-owner`} name="ownerEmail" type="email" label={C.ownerEmailLabel} error={p.errors.ownerEmail} required
+            autoComplete="off" spellCheck={false} value={d.ownerEmail} onChange={(e) => p.onChange({ ownerEmail: e.target.value })} />
+          <div className="admin-form__check">
+            <Checkbox id={`${formId}-show`} name="showLink" label={C.showLink} checked={d.showLink} onChange={(e) => p.onChange({ showLink: e.target.checked })} />
           </div>
-          <p>Creating the organisation also sends an invitation to the first owner. If either part does not go through, nothing is created.</p>
-          <button type="submit" className="btn btn--primary" disabled={p.hydrated === false} aria-disabled={p.busy || undefined}>Create organisation and send invitation</button>
+          <p className="admin-form__note">{C.note}</p>
+          <Button variant="primary" type="submit" disabled={p.hydrated === false} busy={p.busy}>{C.submit}</Button>
         </form>
       )}
     </div>
@@ -213,11 +191,11 @@ export function CreateOrganisationForm({ send, resend }: { send?: Send; resend?:
   const lastBody = useRef<Record<string, unknown> | null>(null);
   const resendRetry = useRef(new Map<string, RetryState>());
   const createRetry = useRef<RetryState>({ requestId: null, sentBody: null });
-  const doSend: Send = send ?? ((body) => sendWrite<CreateOrganisationResponse>('/api/admin/organisations', 'POST', body, { onSlow: () => setStatus(CREATING) }));
+  const doSend: Send = send ?? ((body) => sendWrite<CreateOrganisationResponse>('/api/admin/organisations', 'POST', body, { onSlow: () => setStatus(C.creating) }));
 
   async function run(body: Record<string, unknown>): Promise<void> {
     setBusy(true);
-    setStatus(CREATING);
+    setStatus(C.creating);
     try {
       const r = createResult(await doSend(body));
       setResult(r);
@@ -258,10 +236,10 @@ export function CreateOrganisationForm({ send, resend }: { send?: Send; resend?:
     const { requestId, state } = requestIdFor(resendRetry.current.get(key) ?? { requestId: null, sentBody: null }, body);
     resendRetry.current.set(key, state);
     setBusy(true);
-    setStatus('Sending...');
+    setStatus(C.sending);
     try {
       const url = `/api/admin/organisations/${encodeURIComponent(created.orgId)}/owner-invitations/${encodeURIComponent(key)}/resend`;
-      const out = await (resend ?? ((u: string, b: Record<string, unknown>) => sendWrite<InviteMemberResponse>(u, 'POST', b, { onSlow: () => setStatus('Sending...') })))(url, { ...body, requestId });
+      const out = await (resend ?? ((u: string, b: Record<string, unknown>) => sendWrite<InviteMemberResponse>(u, 'POST', b, { onSlow: () => setStatus(C.sending) })))(url, { ...body, requestId });
       const r = resentResult(created, out);
       if (out.kind === 'saved') resendRetry.current.delete(key);
       setResult(r);

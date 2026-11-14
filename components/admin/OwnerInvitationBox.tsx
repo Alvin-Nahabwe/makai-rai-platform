@@ -1,25 +1,31 @@
 'use client';
 
-import { useId, useLayoutEffect, useRef, useState } from 'react';
-import type { ReactElement } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import type { ReactElement, Ref } from 'react';
 import { useRouter } from 'next/navigation';
 import { requestIdFor, sendWrite, type RetryState, type SendOutcome } from '@/lib/client/retrySafeWrite';
 import { CopyLinkFallback } from '@/components/invitations/CopyLinkFallback';
+import { Button } from '@/components/ui/Button';
+import { Checkbox } from '@/components/ui/Checkbox';
 import { InlineConfirm } from '@/components/ui/InlineConfirm';
-import { EMAIL_FAILED, ERROR_STYLE, Field, HINT_STYLE, invitationRefusal, resentWords } from '@/components/admin/CreateOrganisationForm';
+import { FieldError, TextInput } from '@/components/ui/TextInput';
+import { EMAIL_FAILED, invitationRefusal, resentWords } from '@/components/admin/CreateOrganisationForm';
 import { MAX_REQUEST_REFERENCE } from '@/lib/admin/limits';
+import { ADMIN_FORMS_COPY, INVITATION_STATE_WORDS } from '@/lib/admin/forms/copy';
 import { useHydrated } from '@/lib/client/useHydrated';
 import { formatDay } from '@/lib/format/dates';
 import type { InvitationView, InviteMemberResponse } from '@/types/api';
 import type { InvitationState } from '@/types/record';
+import './AdminForms.css';
 
-/** W-10's four invitation states (SRS lines 2166-2210). */
-export const STATE_WORDS: Readonly<Record<InvitationState, string>> = { pending: 'Pending', accepted: 'Accepted', expired: 'Expired', revoked: 'Revoked' };
-const SENDING = 'Sending...';
+const I = ADMIN_FORMS_COPY.invitation;
+
+/** W-10's four invitation states (SRS lines 2166-2210), in the words of the copy module (one map, read by S-23 too). */
+export const STATE_WORDS: Readonly<Record<InvitationState, string>> = INVITATION_STATE_WORDS;
 
 /** The sentence after a resend went through: 201 is a new invitation, 200 a replay of one already resent (C4 CR-1). */
 export function resendWords(out: Extract<SendOutcome<InviteMemberResponse | undefined>, { kind: 'saved' }>): string {
-  if (out.body === undefined) return `Resent: the old link no longer works. ${EMAIL_FAILED}`;
+  if (out.body === undefined) return `${I.resentPrefix} ${EMAIL_FAILED}`;
   return resentWords(out.body, out.status);
 }
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -33,39 +39,42 @@ export type IssueInvitationFormViewProps = {
   hydrated?: boolean;
   onDraft: (patch: Partial<{ email: string; requestReference: string; showLink: boolean }>) => void;
   onSubmit: () => void; onCancel: () => void;
+  /** The email field, which takes focus when the form opens (ruling L5-14). */
+  emailRef?: Ref<HTMLInputElement>;
 };
 
-/** The form that issues a new first-owner invitation (FR-ORG-01 recovery). */
-export function IssueInvitationFormView(p: IssueInvitationFormViewProps): ReactElement {
+/** The form that sends a new owner invitation (FR-ORG-01 recovery). */
+export function IssueInvitationFormView({ emailRef, ...p }: IssueInvitationFormViewProps): ReactElement {
   return (
     <form method="post" noValidate onSubmit={(e) => { e.preventDefault(); p.onSubmit(); }}>
-      <Field id={`${p.formId}-email`} label="New first owner's email" error={p.errors.email}>
-        {(a) => <input id={a.id} name="email" type="email" required autoComplete="off" spellCheck={false} value={p.draft.email}
-          aria-describedby={a.describedBy} aria-invalid={a.invalid} onChange={(e) => p.onDraft({ email: e.target.value })} />}
-      </Field>
-      <Field id={`${p.formId}-requestReference`} label="Reference of the controller's written request" error={p.errors.requestReference}>
-        {(a) => <input id={a.id} name="requestReference" type="text" required maxLength={MAX_REQUEST_REFERENCE} autoComplete="off" value={p.draft.requestReference}
-          aria-describedby={a.describedBy} aria-invalid={a.invalid} onChange={(e) => p.onDraft({ requestReference: e.target.value })} />}
-      </Field>
-      <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', marginBottom: 'var(--space-5)' }}>
-        <input id={`${p.formId}-issue-show`} type="checkbox" checked={p.draft.showLink} onChange={(e) => p.onDraft({ showLink: e.target.checked })} />
-        <label htmlFor={`${p.formId}-issue-show`}>Show link</label>
+      <TextInput ref={emailRef} id={`${p.formId}-email`} name="email" type="email" label={I.emailLabel} error={p.errors.email} required
+        autoComplete="off" spellCheck={false} value={p.draft.email} onChange={(e) => p.onDraft({ email: e.target.value })} />
+      <TextInput id={`${p.formId}-requestReference`} name="requestReference" label={I.referenceLabel} error={p.errors.requestReference} required
+        maxLength={MAX_REQUEST_REFERENCE} autoComplete="off" value={p.draft.requestReference} onChange={(e) => p.onDraft({ requestReference: e.target.value })} />
+      <div className="admin-form__check">
+        <Checkbox id={`${p.formId}-issue-show`} name="showLink" label={I.showLink} checked={p.draft.showLink} onChange={(e) => p.onDraft({ showLink: e.target.checked })} />
       </div>
-      <div className="form-actions">
-        <button type="submit" className="btn btn--primary" disabled={p.hydrated === false} aria-disabled={p.busy || undefined}>Issue invitation</button>
-        <button type="button" className="btn btn--secondary" onClick={p.onCancel}>Cancel</button>
+      <div className="admin-form__actions">
+        <Button variant="primary" type="submit" disabled={p.hydrated === false} busy={p.busy}>{I.submit}</Button>
+        <Button variant="secondary" onClick={p.onCancel}>{I.cancel}</Button>
       </div>
-      {Object.keys(p.errors).length > 0 ? <p style={ERROR_STYLE}>Check the fields marked above.</p> : null}
+      {Object.keys(p.errors).length > 0 ? <FieldError id={`${p.formId}-check`} message={I.checkAbove} /> : null}
     </form>
   );
 }
 
 /**
- * S-24's first-owner invitation box (FR-ORG-02, FR-ACC-10; W-10 note 3). Every first-owner invitation with its state;
- * Resend (a new link, the old one stops working) and Revoke for the pending one; "Issue a new first-owner invitation"
- * only when the organisation has no active owner and none pending, with the reference of the controller's written
- * request. The status region is mounted from the first render and the email-failure sentence goes there, so it is
- * announced; the link box is keyed by the invitation and told the sentence is shown elsewhere (MEM's CopyLinkFallback).
+ * S-24's owner invitation box (FR-ORG-02, FR-ACC-10; W-10 note 3). Every owner invitation with its state, and for a
+ * pending one when its link expires; Resend (a new link, the old one stops working) and Cancel for the pending one;
+ * "Send a new owner invitation" only when the organisation has no active Owner and none pending, with the reference of
+ * the organisation's written request. The status region is mounted from the first render and the email-failure
+ * sentence goes there, so it is announced; the link box is keyed by the invitation and told the sentence is shown
+ * elsewhere (MEM's CopyLinkFallback).
+ *
+ * Focus (rulings X-4 and L5-14): it is never dropped to the page body. The cancel confirmation opens on its "Keep
+ * invitation" button (it has no field) and "Keep invitation" gives focus back to "Cancel invitation"; the send form
+ * opens on its email field and its Cancel gives focus back to "Send a new owner invitation". A pressed button stays,
+ * busy, while its own request is in flight; when the answer arrives focus goes to the status line.
  */
 export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, archived = false, write }: {
   orgId: string; hasActiveOwner: boolean; invitations: InvitationView[]; archived?: boolean; write?: Write;
@@ -75,6 +84,8 @@ export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, archive
   const hydrated = useHydrated();
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
+  /** The request in flight, so only the button that sent it shows busy. */
+  const [pressed, setPressed] = useState<'resend' | 'cancel' | 'send' | null>(null);
   const [issued, setIssued] = useState<InviteMemberResponse | null>(null);
   // A replayed resend (200) keeps no link and may have had its email sent: it opens no link box (C4 CR-1).
   const [issuedReplayed, setIssuedReplayed] = useState(false);
@@ -86,6 +97,12 @@ export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, archive
   const retry = useRef(new Map<string, RetryState>());
   const statusRef = useRef<HTMLDivElement>(null);
   const boxRef = useRef<HTMLElement>(null);
+  const confirmRef = useRef<HTMLDivElement>(null);
+  const cancelTrigger = useRef<HTMLButtonElement>(null);
+  const sendTrigger = useRef<HTMLButtonElement>(null);
+  const emailField = useRef<HTMLInputElement>(null);
+  /** Where focus goes after the next render, once: the control a closed form or confirmation hands focus back to. */
+  const focusNext = useRef<'cancel-trigger' | 'send-trigger' | null>(null);
 
   // SC 2.4.11: the refresh after a resend or an issue adds the new invitation's row some hundreds of milliseconds later,
   // above the buttons. By then focus may already be on a button near the bottom of the window (the revoke
@@ -98,8 +115,26 @@ export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, archive
     if (focused instanceof HTMLElement && boxRef.current?.contains(focused)) focused.scrollIntoView({ block: 'nearest', behavior: 'instant' });
   }, [invitations]);
 
+  // X-4: the confirmation has no field, so focus goes to its first button, "Keep invitation".
+  useEffect(() => {
+    if (confirmRevoke) confirmRef.current?.querySelector<HTMLButtonElement>('.ui-confirm__actions button')?.focus();
+  }, [confirmRevoke]);
+
+  // L5-14: the send form opens on its email field.
+  useEffect(() => {
+    if (issuing) emailField.current?.focus();
+  }, [issuing]);
+
+  // After the render that closed a form or a confirmation, focus goes back to the control that opened it.
+  useEffect(() => {
+    const target = focusNext.current;
+    if (target === null) return;
+    focusNext.current = null;
+    (target === 'cancel-trigger' ? cancelTrigger : sendTrigger).current?.focus();
+  });
+
   const base = `/api/admin/organisations/${encodeURIComponent(orgId)}/owner-invitations`;
-  const doWrite: Write = write ?? ((url, body) => sendWrite<InviteMemberResponse | undefined>(url, 'POST', body ?? {}, { onSlow: () => setStatus(SENDING) }));
+  const doWrite: Write = write ?? ((url, body) => sendWrite<InviteMemberResponse | undefined>(url, 'POST', body ?? {}, { onSlow: () => setStatus(I.sending) }));
   // The page's list arrives with the next refresh; until then the box knows better what it has just done: an invitation
   // it resent or revoked is no longer pending, and the one it just issued or resent is.
   const [gone, setGone] = useState<ReadonlySet<string>>(new Set());
@@ -108,12 +143,13 @@ export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, archive
   const mayIssue = !archived && !hasActiveOwner && pending === null;
 
   async function act(
-    url: string, body: Record<string, unknown> | null,
+    which: 'resend' | 'cancel' | 'send', url: string, body: Record<string, unknown> | null,
     done: (out: Extract<SendOutcome<InviteMemberResponse | undefined>, { kind: 'saved' }>) => string,
   ): Promise<boolean> {
     if (busy) return false;
     setBusy(true);
-    setStatus(SENDING);
+    setPressed(which);
+    setStatus(I.sending);
     try {
       const out = await doWrite(url, body);
       if (out.kind !== 'saved') {
@@ -127,17 +163,18 @@ export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, archive
       return true;
     } finally {
       setBusy(false);
+      setPressed(null);
       setTimeout(() => statusRef.current?.focus(), 0);
     }
   }
-  const sentWords = (r: InviteMemberResponse | undefined) => (r && r.emailSent ? `Invitation sent to ${r.invitation.email}.` : EMAIL_FAILED);
+  const sentWords = (r: InviteMemberResponse | undefined) => (r && r.emailSent ? I.sent(r.invitation.email) : `${I.createdPrefix} ${EMAIL_FAILED}`);
 
   async function resend(inv: InvitationView, showLink: boolean = resendShowLink): Promise<void> {
     const key = `resend:${inv.id}`;
     const body = { showLink };
     const { requestId, state } = requestIdFor(retry.current.get(key) ?? { requestId: null, sentBody: null }, body);
     retry.current.set(key, state);
-    if (await act(`${base}/${encodeURIComponent(inv.id)}/resend`, { ...body, requestId }, resendWords)) {
+    if (await act('resend', `${base}/${encodeURIComponent(inv.id)}/resend`, { ...body, requestId }, resendWords)) {
       retry.current.delete(key);
       setGone((g) => new Set(g).add(inv.id));
     }
@@ -151,7 +188,7 @@ export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, archive
   async function revoke(inv: InvitationView): Promise<void> {
     // `issued` is cleared only once the revoke went through: a failed one keeps the box on the invitation it was
     // tracking, so it does not offer a new one beside a pending one (C4 CR-2).
-    if (await act(`${base}/${encodeURIComponent(inv.id)}/revoke`, null, () => `Revoked. The invitation to ${inv.email} no longer works.`)) {
+    if (await act('cancel', `${base}/${encodeURIComponent(inv.id)}/revoke`, null, () => I.cancelled(inv.email))) {
       setIssued(null);
       setConfirmRevoke(false);
       setGone((g) => new Set(g).add(inv.id));
@@ -160,61 +197,62 @@ export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, archive
 
   async function issue(): Promise<void> {
     const e: typeof errors = {};
-    if (!EMAIL_SHAPE.test(draft.email.trim())) e.email = 'Enter the new first owner\'s email address.';
-    if (draft.requestReference.trim() === '') e.requestReference = 'Enter the reference of the controller\'s written request.';
-    else if (draft.requestReference.trim().length > MAX_REQUEST_REFERENCE) e.requestReference = `Use ${MAX_REQUEST_REFERENCE} characters or fewer.`;
+    if (!EMAIL_SHAPE.test(draft.email.trim())) e.email = I.emailMissing;
+    if (draft.requestReference.trim() === '') e.requestReference = I.referenceMissing;
+    else if (draft.requestReference.trim().length > MAX_REQUEST_REFERENCE) e.requestReference = I.tooLong(MAX_REQUEST_REFERENCE);
     setErrors(e);
     if (Object.keys(e).length > 0) {
       document.getElementById(`${formId}-${Object.keys(e)[0]}`)?.focus();
       return;
     }
-    const ok = await act(base, { email: draft.email.trim(), requestReference: draft.requestReference.trim(), showLink: draft.showLink }, (out) => `Issued. ${sentWords(out.body)}`);
+    const ok = await act('send', base, { email: draft.email.trim(), requestReference: draft.requestReference.trim(), showLink: draft.showLink }, (out) => sentWords(out.body));
     if (ok) { setIssuing(false); setDraft({ email: '', requestReference: '', showLink: false }); }
   }
 
   return (
-    <section ref={boxRef} aria-labelledby={`${formId}-heading`}>
-      <h2 id={`${formId}-heading`}>First-owner invitation</h2>
-      <div role="status" tabIndex={-1} ref={statusRef}>{status}</div>
+    <section ref={boxRef} aria-labelledby={`${formId}-heading`} className="admin-block">
+      <h2 id={`${formId}-heading`}>{I.heading}</h2>
+      <div role="status" tabIndex={-1} ref={statusRef} className="ui-status">{status}</div>
       {issued !== null && !issuedReplayed && (issued.acceptUrl !== null || !issued.emailSent) ? (
         <CopyLinkFallback key={issued.invitation.id} noticeShownElsewhere onResendWithLink={resendIssuedWithLink} acceptUrl={issued.acceptUrl} expiresAt={issued.invitation.expiresAt} emailSent={issued.emailSent} />
       ) : null}
-      {invitations.length === 0 ? <p>No first-owner invitation has been issued.</p> : (
-        <ul>
+      {invitations.length === 0 ? <p>{I.none}</p> : (
+        <ul className="admin-invitations">
           {invitations.map((i) => (
             <li key={i.id}>
-              {`${i.email} · owner · ${STATE_WORDS[i.state]} · expires ${formatDay(i.expiresAt, 'Africa/Kampala')}`}
-              {i.state === 'accepted' && i.createdFromShownLink ? <span> · account created from a copied link</span> : null}
+              {I.line(i.email, STATE_WORDS[i.state])}
+              {i.state === 'pending' ? I.expires(formatDay(i.expiresAt, 'Africa/Kampala')) : null}
+              {i.state === 'accepted' && i.createdFromShownLink ? <span>{I.copiedLink}</span> : null}
             </li>
           ))}
         </ul>
       )}
-      {archived ? <p>This organisation is archived.</p> : null}
+      {archived ? <p>{I.archived}</p> : null}
       {pending !== null && !archived ? (
-        <div>
-          <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
-            <input id={`${formId}-resend-show`} type="checkbox" checked={resendShowLink} onChange={(e) => setResendShowLink(e.target.checked)} />
-            <label htmlFor={`${formId}-resend-show`}>Show link</label>
-          </div>
-          <div className="form-actions">
-            <button type="button" className="btn btn--secondary" aria-disabled={busy || undefined} aria-describedby={`${formId}-resend-hint`}
-              onClick={() => { void resend(pending); }}>Resend invitation</button>
-            <span id={`${formId}-resend-hint`} style={HINT_STYLE}>(makes a new link; the old one stops working)</span>
-            <button type="button" className="btn btn--secondary" aria-disabled={busy || undefined} onClick={() => setConfirmRevoke(true)}>Revoke invitation</button>
+        <div className="admin-invitation__resend">
+          <Checkbox id={`${formId}-resend-show`} name="showLink" label={I.showLink} checked={resendShowLink} onChange={(e) => setResendShowLink(e.target.checked)} />
+          <div className="admin-form__actions">
+            <Button variant="secondary" busy={pressed === 'resend'} aria-describedby={`${formId}-resend-hint`}
+              onClick={() => { void resend(pending); }}>{I.resend}</Button>
+            <span id={`${formId}-resend-hint`} className="admin-invitation__hint">{I.resendHint}</span>
+            <Button ref={cancelTrigger} variant="secondary" onClick={() => setConfirmRevoke(true)}>{I.cancelTrigger}</Button>
           </div>
           {confirmRevoke ? (
-            <InlineConfirm objectName={`Invitation to ${pending.email}`} consequence="Its link stops working at once. You can issue a new first-owner invitation afterwards."
-              actionLabel="Revoke invitation" busy={busy} onConfirm={() => revoke(pending)} onCancel={() => setConfirmRevoke(false)} />
+            <div ref={confirmRef}>
+              <InlineConfirm objectName={I.confirmObject(pending.email)} consequence={I.confirmConsequence} destructive cancelLabel={I.keep}
+                actionLabel={I.confirmAction} busy={busy} onConfirm={() => revoke(pending)}
+                onCancel={() => { setConfirmRevoke(false); focusNext.current = 'cancel-trigger'; }} />
+            </div>
           ) : null}
         </div>
       ) : null}
       {mayIssue && !issuing ? (
-        <button type="button" className="btn btn--primary" onClick={() => setIssuing(true)}>Issue a new first-owner invitation</button>
+        <Button ref={sendTrigger} variant="primary" onClick={() => setIssuing(true)}>{I.sendNew}</Button>
       ) : null}
       {mayIssue && issuing ? (
-        <IssueInvitationFormView formId={formId} draft={draft} errors={errors} busy={busy} hydrated={hydrated}
+        <IssueInvitationFormView formId={formId} draft={draft} errors={errors} busy={busy} hydrated={hydrated} emailRef={emailField}
           onDraft={(patch) => setDraft((d) => ({ ...d, ...patch }))} onSubmit={() => { void issue(); }}
-          onCancel={() => { setIssuing(false); setErrors({}); }} />
+          onCancel={() => { setIssuing(false); setErrors({}); focusNext.current = 'send-trigger'; }} />
       ) : null}
     </section>
   );

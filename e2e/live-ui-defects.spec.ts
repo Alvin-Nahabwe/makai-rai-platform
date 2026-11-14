@@ -7,6 +7,7 @@ import { testDb } from '../__tests__/helpers/db';
 import { actAsSeat, fixtureOrgSlug, newProject, questionPath, seatOf, seatRequest, stageOf } from './helpers/session';
 import { API_COPY } from '../lib/http/api/copy';
 import { ORG_COPY } from '../lib/org/copy';
+import { ADMIN_COPY } from '../lib/admin/copy';
 
 /**
  * v0.6.1 U12 rows (a), (b), (d) and (e): four defects that were broken for people on v0.6.0, each checked at the
@@ -126,7 +127,7 @@ test.describe('U12 (c): at phone width the members and accounts tables keep ever
 
   /**
    * Every row action whose box is not wholly inside the viewport AND inside the visible box of every ancestor that
-   * scrolls or clips sideways (`.admin-table-wrapper` is `overflow-x: auto`: an action scrolled past its right edge is
+   * scrolls or clips sideways (the table's wrapper is `overflow-x: auto`: an action scrolled past its right edge is
    * inside the viewport by coordinates and still not on the screen). Also the page's own widths.
    */
   async function offScreenActions(page: Page, actions: string): Promise<{ outside: string[]; scrollWidth: number; clientWidth: number }> {
@@ -157,7 +158,13 @@ test.describe('U12 (c): at phone width the members and accounts tables keep ever
     }, actions);
   }
 
-  const pages: Array<{ name: string; path: () => string; seat: 'owner' | 'admin'; actions: string; expected: RegExp[]; widths: number[] }> = [
+  /**
+   * Each page's own selectors: the table, its column headings, its cells and the narrow layout's label in a cell. Members
+   * draws the label with CSS (`td[data-label]`, `::before`); Accounts is the kit's Table (plan 1A Task 19), which writes
+   * the label as a span hidden from assistive technology (`.ui-table__cell-label`), and names each row with a row header.
+   */
+  type Selectors = { table: string; columnHeadings: string; rowHeadings: string | null; cells: string; cellLabels: (page: Page) => Promise<string[]>; spoken: string[] };
+  const pages: Array<{ name: string; path: () => string; seat: 'owner' | 'admin'; actions: string; expected: RegExp[]; widths: number[]; s: Selectors }> = [
     {
       name: 'members',
       path: () => `/orgs/${fixtureOrgSlug()}/settings/members`,
@@ -165,15 +172,26 @@ test.describe('U12 (c): at phone width the members and accounts tables keep ever
       actions: '.admin-table button',
       expected: [/^Remove /, /^Resend invitation to /, /^Revoke invitation for /],
       widths: [320, 390],
+      s: {
+        table: '.admin-table', columnHeadings: '.admin-table th', rowHeadings: null, cells: '.admin-table td',
+        cellLabels: (page) => page.locator('.admin-table td[data-label]').evaluateAll((els) => [...new Set(els.map((e) => `${e.getAttribute('data-label')}: `))]),
+        spoken: ['StaticText', 'cell'],
+      },
     },
     {
       name: 'accounts',
       path: () => '/admin/accounts',
       seat: 'admin',
-      actions: '.admin-table button',
+      actions: '.ui-table button',
       expected: [/^Deactivate /],
       // 1024: laptop and tablet landscape, where the card is wider than the stacking threshold but narrower than the table.
       widths: [320, 390, 1024],
+      s: {
+        table: '.ui-table', columnHeadings: '.ui-table thead th', rowHeadings: '.ui-table tbody th', cells: '.ui-table td',
+        cellLabels: (page) => page.locator('.ui-table .ui-table__cell-label').evaluateAll((els) => [...new Set(els.map((e) => e.textContent ?? ''))]),
+        // The label has no colon, so only the cells' own names are read: a column heading's text is the label itself.
+        spoken: ['cell'],
+      },
     },
   ];
 
@@ -185,7 +203,7 @@ test.describe('U12 (c): at phone width the members and accounts tables keep ever
         const page = await ctx.newPage();
         try {
           await page.goto(p.path());
-          await expect(page.locator('.admin-table').first()).toBeVisible();
+          await expect(page.locator(p.s.table).first()).toBeVisible();
           // Each kind of action this check is about is present, so an empty table cannot pass it.
           const labels = await page.locator(p.actions).evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? ''));
           for (const re of p.expected) expect(labels.some((l) => re.test(l)), `${p.name}: an action matching ${re}`).toBe(true);
@@ -197,18 +215,20 @@ test.describe('U12 (c): at phone width the members and accounts tables keep ever
           const cdp = await ctx.newCDPSession(page);
           const { nodes } = await cdp.send('Accessibility.getFullAXTree');
           const exposed = (role: string) => nodes.filter((n) => !n.ignored && n.role?.value === role).length;
-          const domRows = await page.locator('.admin-table tr').count();
-          const domCells = await page.locator('.admin-table td').count();
-          const domHeadings = await page.locator('.admin-table th').count();
-          expect(exposed('table'), `${p.name} at ${width}: tables exposed`).toBe(await page.locator('.admin-table').count());
+          const domRows = await page.locator(`${p.s.table} tr`).count();
+          const domCells = await page.locator(p.s.cells).count();
+          const domHeadings = await page.locator(p.s.columnHeadings).count();
+          expect(exposed('table'), `${p.name} at ${width}: tables exposed`).toBe(await page.locator(p.s.table).count());
           expect(exposed('row'), `${p.name} at ${width}: rows exposed`).toBe(domRows);
           expect(exposed('columnheader'), `${p.name} at ${width}: column headings exposed`).toBe(domHeadings);
+          if (p.s.rowHeadings !== null) expect(exposed('rowheader'), `${p.name} at ${width}: row headings exposed`).toBe(await page.locator(p.s.rowHeadings).count());
           expect(exposed('cell'), `${p.name} at ${width}: cells exposed`).toBe(domCells);
-          // The label is drawn by ::before with empty alternative text, so the cell's accessible text does not start with it
-          // (the column heading already names the column).
+          // The narrow layout's label is hidden from assistive technology (drawn by ::before with empty alternative text, or
+          // a span marked aria-hidden), so the cell's accessible text does not start with it (the column heading already
+          // names the column).
           if (width < 600) {
-            const labels = await page.locator('.admin-table td[data-label]').evaluateAll((els) => [...new Set(els.map((e) => `${e.getAttribute('data-label')}: `))]);
-            const spoken = nodes.filter((n) => !n.ignored && (n.role?.value === 'StaticText' || n.role?.value === 'cell')).map((n) => String(n.name?.value ?? ''));
+            const labels = await p.s.cellLabels(page);
+            const spoken = nodes.filter((n) => !n.ignored && p.s.spoken.includes(String(n.role?.value))).map((n) => String(n.name?.value ?? ''));
             expect(spoken.filter((t) => labels.some((l) => t.startsWith(l))), `${p.name} at ${width}: accessible text that starts with its label`).toEqual([]);
           }
         } finally {
@@ -269,7 +289,7 @@ test.describe('U12 (e): a refused download address does not leave raw JSON on th
         form.submit();
       }, targetId);
       await page.waitForURL((u) => u.pathname === '/admin/accounts' && u.searchParams.has('error'));
-      await expect(page.locator('#accounts-refusal')).toHaveText('That change could not be made. Reload the page and try again.');
+      await expect(page.locator('#accounts-refusal')).toHaveText(ADMIN_COPY.accounts.refusals.invalid_request);
     } finally {
       await ctx.close();
     }

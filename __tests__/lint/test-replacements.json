@@ -1198,5 +1198,61 @@
     "property": "The platform says publicly, on a page anyone can open, what a seal does not show. The bold sentence \"Sealed by the platform; not independently time-stamped.\" left the public pages with About's seal section (plan 1A Task 12, ruling R10); its substance is carried on Help by \"The platform keeps this seal. No outside body has time-stamped it.\" (DESIGN-SPEC.md:424, the owner's decision of 14 November 2026), and it stays on the documents (lib/documents/copy.ts:10).",
     "proof": "The Help case renders the real Help page and requires the section with id what-sealing-means to hold exactly the two W1 paragraphs: the second begins \"A seal does not show that the decisions are correct or that the evidence supports them.\" and ends \"The platform keeps this seal. No outside body has time-stamped it.\"; the page must hold no \"not independently time-stamped\". That the page is public is shown in a browser by e2e/help-and-findings.spec.ts::L2-69 R7: signed out, the public header, the four headings in order, the footer link lands on Terms and privacy in view, Sign in goes to /login, which opens /help with no session and reads the four headings, \"What sealing means\" among them.",
     "task": "1A Task 12"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/admin-screens.test.tsx::FR-ORG-06 FR-ORG-07: S-23 flags a missing legal name and a missing active owner, in words",
+    "replacedBy": "__tests__/unit/admin-screens.test.tsx::FR-ORG-06 FR-ORG-07: S-23 flags a missing legal name and a missing active owner, in words",
+    "property": "S-23 lists each organisation in a table whose column headings are the ruled ones, shows each organisation's legal name in its row and flags a missing legal name and a missing active Owner in words. Plan 1A Task 19 (ruling L5-2) put the table on the kit's Table, which writes role=\"columnheader\" before scope=\"col\" on each heading and starts each body cell with its column's label in a span hidden from assistive technology, so the bare '<th scope=\"col\"' and '<td>Makerere University</td>' pins no longer match; the fifth heading's words are now \"Owner invitation\" (audit row AD24, vocabulary: \"first-owner invitation\" is retired).",
+    "proof": "In this case: for each of the five values of ADMIN_COPY.organisations.columns, expect(html).toMatch(new RegExp(`<th[^>]*scope=\"col\"[^>]*>${col}</th>`)) still requires a column heading element holding exactly those words; expect(html).toMatch(/<td[^>]*><span[^>]*>Legal name<\\/span>Makerere University<\\/td>/) requires the other row's legal name as the whole of a body cell after the Legal name column's label; '<strong>Legal name not recorded</strong>', ADMIN_COPY.organisations.noActiveOwner, 'Expired', '<caption' and the row link are asserted as before.",
+    "task": "1A-19"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/admin-screens.test.tsx::FR-ORG-07: S-25 warns before deactivating an only active owner, naming the organisation",
+    "replacedBy": "__tests__/unit/admin-screens.test.tsx::FR-ORG-07: S-25 warns before deactivating an only active owner, naming the organisation",
+    "property": "Before deactivating the only active Owner of an organisation, S-25 names the organisation and says what deactivating does, and a row for an account that is not such an Owner says nothing of it. The sentence was reworded (audit row AD15, ruling L5-10: \"If you deactivate this account, {orgs} will have no active Owner. Enter the reference of the organisation's written request first.\"), and its apostrophe is escaped in the markup, so the regex of the old words became the copy function with the entity substituted.",
+    "proof": "In this case: expect(html).toContain(ADMIN_COPY.accounts.onlyOwner('Grace Nakato', 'Makerere CAI Lab').replaceAll(\"'\", '&#x27;')) requires the whole ruled sentence with the account's and the organisation's names; expect(plain).not.toContain(the same) requires it absent for an account that is no such Owner (the old not.toContain('only active owner') would have passed vacuously once the word took its capital). The field's required, maxlength=\"200\" and aria-describedby=\"only-owner-u-2\" pins are unchanged.",
+    "task": "1A-19"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/admin-screens.test.tsx::FR-ORG-07 NFR-SEC-19: S-25 lives at /admin/accounts and shows one banner per refusal code",
+    "replacedBy": "__tests__/unit/admin-screens.test.tsx::FR-ORG-07 NFR-SEC-19: S-25 lives at /admin/accounts and shows one banner per refusal code",
+    "property": "S-25 shows exactly one banner, an alert, per known refusal code, with that code's sentence, and none for an unknown code or no code. Plan 1A Task 19 put the accounts list on the kit's Table, which always renders a visually hidden p role=\"status\" of its own (ruling L5-18), so /role=\"alert\"|role=\"status\"/ would have passed with no banner at all; the assertion is tightened to the banner element itself.",
+    "proof": "In this case: for each of the four codes, expect(html, code).toMatch(/<div role=\"alert\" id=\"accounts-refusal\"/) requires the banner, by its id, with role alert; each code's sentence is asserted through ADMIN_COPY.accounts.refusals; expect(...).not.toMatch(/role=\"alert\"/) for 'something-else' and for no code are unchanged.",
+    "task": "1A-19"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/admin-screens.test.tsx::FR-ORG-01: the create form validates every field",
+    "replacedBy": "__tests__/unit/admin-screens.test.tsx::FR-ORG-01: the create form validates every field",
+    "property": "The create form's submit button is a submit button named \"Create organisation and send invitation\". The kit's Button (plan 1A Task 19, ruling L5-3) writes its class before its type, so the pin that required type to be the button's first attribute no longer matches; the button is the same element with the same type and words.",
+    "proof": "In this case: expect(html).toMatch(/<button[^>]*type=\"submit\"[^>]*>Create organisation and send invitation<\\/button>/) requires a button element of type submit whose whole content is those words; the aria-invalid and aria-describedby pins on the three inputs, the maxLength pins, the hint and the note (ADMIN_FORMS_COPY.create.note, the owner's sentence of 14 November 2026, its apostrophe escaped) are asserted as before.",
+    "task": "1A-19"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/admin-screens.test.tsx::S-24 create posts name, legalName, ownerEmail and showLink, and has no agreement field",
+    "replacedBy": "__tests__/unit/admin-screens.test.tsx::S-24 create posts name, legalName, ownerEmail and showLink, and has no agreement field",
+    "property": "The create form asks for the organisation's name, the institution's legal name and the first Owner's email, and the show-link box, each with a visible label tied to its control, the legal name described by its hint, its named controls in that order and nothing about an agreement. The kit's fields (plan 1A Task 19, ruling L5-3) write a class before for on each label, add \"(required)\" to a required field's label (ruling T16-16) and draw the hint as a div; the owner's email label takes its capital and the checkbox its audited words (rows AD77, AD78).",
+    "proof": "In this case: labelFor matches `<label[^>]*for=\"([^\"]+)\"[^>]*>${label}(?: <span[^>]*>[^<]*</span>)?</label>` and must find a label for each of ADMIN_FORMS_COPY.create.nameLabel, legalNameLabel, ownerEmailLabel and showLink (apostrophes escaped), so each control still has a label whose words are the ruled ones; the legal name's hint is required as an element with id `${legalId}-hint` and the input's aria-describedby must be exactly that id; the named-controls order ['name', 'legalName', 'ownerEmail', 'showLink'] and the no-agreement regex are unchanged.",
+    "task": "1A-19"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/admin-screens.test.tsx::FR-ORG-10: S-24 offers the legal-name correction and posts { legalName }",
+    "replacedBy": "__tests__/unit/admin-screens.test.tsx::FR-ORG-10: S-24 offers the legal-name correction and posts { legalName }",
+    "property": "The legal-name change has a visible label tied to its input, the input described by its hint and its error, the error's words beside the input, an announced status region, and the page offers both the name and the legal-name changes as buttons. The kit's TextInput (ruling L5-3) writes a class before for and adds \"(required)\" to the label, and puts the error's id on the message's own span; the two buttons' words changed (coordinator's answer Q4: \"Change the name\", \"Change the legal name\"), and the saved sentences now read as two sentences (row AD120's shape).",
+    "proof": "In this case: expect(html).toMatch(/<label[^>]*for=\"f-legal-name\"[^>]*>Institution&#x27;s legal name <span[^>]*>\\(required\\)<\\/span><\\/label>/) requires the label for the input; aria-describedby=\"f-legal-name-hint f-legal-name-error\" is unchanged; expect(html).toMatch(/<span id=\"f-legal-name-error\">Enter the institution&#x27;s legal name\\.<\\/span>/) requires the element the input points at to hold exactly the error's words; the three button pins are new RegExp(`>${ADMIN_FORMS_COPY.name.change}</button>`) and new RegExp(`>${ADMIN_FORMS_COPY.legalName.change}</button>`), a button whose whole label is the ruled words; the saved sentences are ADMIN_FORMS_COPY.legalName.saved and savedFirst called with the case's literals.",
+    "task": "1A-19"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/admin-screens.test.tsx::FR-ORG-03 FR-ORG-07: the S-24 detail shows the name, legal name, date, member count, flags and invitations, and nothing else",
+    "replacedBy": "__tests__/unit/admin-screens.test.tsx::FR-ORG-03 FR-ORG-07: the S-24 detail shows the name, legal name, date, member count, flags and invitations, and nothing else",
+    "property": "The organisation page's one h1 is the organisation's name and the create page's is \"Create an organisation\"; the detail shows the date, member count, flags, the send control and the legal name, and no record word. The kit's PageHeader (plan 1A Task 19) writes a class on the h1, so the bare '<h1>' pins no longer match.",
+    "proof": "In this case: expect(html).toMatch(/<h1[^>]*>Makerere CAI Lab<\\/h1>/) and expect(created).toMatch(/<h1[^>]*>Create an organisation<\\/h1>/) require an h1 whose whole content is the name; the other lines read ADMIN_COPY.organisations.noActiveOwner, ADMIN_FORMS_COPY.invitation.sendNew and ADMIN_COPY.organisation.legalName('Makerere University'), and not.toMatch(/project|finding|decision|seal/i) and the agreement pins are unchanged.",
+    "task": "1A-19"
   }
 ]

@@ -851,21 +851,6 @@ h5 { font-size: var(--font-size-body); }
   background: var(--color-off-white);
 }
 
-.admin-table__name {
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-}
-
-.admin-table__email {
-  color: var(--text-muted);
-}
-
-.admin-table__actions {
-  display: flex;
-  gap: var(--space-2);
-  align-items: center;
-}
-
 /* Tables that carry row actions (members, invitations, accounts) stack each row in a narrow card, so the actions
    stay on the screen instead of past the wrapper's scrolling edge. The column headings stay in the accessibility
    tree (clipped, not display:none) and each cell shows its own heading as a label.
@@ -904,85 +889,12 @@ h5 { font-size: var(--font-size-body); }
     font-weight: var(--font-weight-semibold);
     color: var(--text-muted);
   }
-  .admin-table--stack .admin-table__actions {
-    display: flex;
-    flex-wrap: wrap;
-  }
-}
-
-@container (width < 800px) {
-  .admin-table--stack-wide,
-  .admin-table--stack-wide tbody,
-  .admin-table--stack-wide tr,
-  .admin-table--stack-wide td {
-    display: block;
-  }
-  .admin-table--stack-wide caption {
-    display: block;
-  }
-  .admin-table--stack-wide thead {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-  .admin-table--stack-wide tr {
-    border-bottom: 1px solid var(--color-gray-300);
-    padding-block: var(--space-2);
-  }
-  .admin-table--stack-wide td {
-    border-bottom: 0;
-    padding-block: var(--space-1);
-    overflow-wrap: anywhere;
-  }
-  .admin-table--stack-wide td[data-label]::before {
-    content: attr(data-label) ": ";
-    content: attr(data-label) ": " / "";
-    font-weight: var(--font-weight-semibold);
-    color: var(--text-muted);
-  }
-  .admin-table--stack-wide .admin-table__actions {
-    display: flex;
-    flex-wrap: wrap;
-  }
 }
 
 /* ── Small buttons for admin actions ── */
 .btn--small {
   padding: var(--space-1) var(--space-3);
   font-size: var(--font-size-xs);
-}
-
-.btn--outline {
-  background: transparent;
-  border: 1px solid var(--color-gray-400);
-  color: var(--color-gray-700);
-  cursor: pointer;
-  border-radius: var(--border-radius-sm);
-  font-weight: var(--font-weight-semibold);
-  transition: all var(--transition-fast);
-}
-
-.btn--outline:hover {
-  border-color: var(--color-primary);
-  color: var(--link);
-}
-
-.btn--danger-outline {
-  background: transparent;
-  border: 1px solid var(--color-gray-400);
-  color: var(--color-gray-700);
-  cursor: pointer;
-  border-radius: var(--border-radius-sm);
-  font-weight: var(--font-weight-semibold);
-  transition: all var(--transition-fast);
-}
-
-.btn--danger-outline:hover {
-  border-color: var(--color-risk-critical);
-  color: var(--color-risk-critical);
 }
 
 .sidebar-nav {

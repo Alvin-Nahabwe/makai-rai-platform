@@ -7,6 +7,8 @@ import type { AdminAccountRow } from '@/lib/data/admin';
 import type { InvitationState } from '@/types/record';
 import { COPY_LINK_COPY } from '@/lib/invitations/link/copy';
 import { ORG_COPY } from '@/lib/org/copy';
+import { ADMIN_COPY } from '@/lib/admin/copy';
+import { ADMIN_FORMS_COPY } from '@/lib/admin/forms/copy';
 
 /**
  * The administrator's screens S-23 (`/admin/organisations`) and S-25 (`/admin/accounts`), the landing page
@@ -127,13 +129,13 @@ describe('S-23, organisations', () => {
   it('FR-ORG-06 FR-ORG-07: S-23 flags a missing legal name and a missing active owner, in words', async () => {
     const html = await renderS23([row({ orgId: 'o-a', name: 'No Legal Name Lab', legalName: null }), row({ orgId: 'o-b', name: 'No Owner Lab', hasActiveOwner: false, ownerInvitationState: 'expired' })]);
     expect(html).toContain('<strong>Legal name not recorded</strong>');
-    expect(html).toContain('<td>Makerere University</td>');   // the other row's value
+    expect(html).toMatch(/<td[^>]*><span[^>]*>Legal name<\/span>Makerere University<\/td>/);   // the other row's value, in its cell
     expect(html).not.toContain('Current agreement');
-    expect(html).toContain('No active owner');
+    expect(html).toContain(ADMIN_COPY.organisations.noActiveOwner);
     expect(html).toContain('Expired');
     expect(html).toContain('<caption');
-    for (const col of ['Organisation', 'Created', 'Legal name', 'Members', 'First-owner invitation'])
-      expect(html).toMatch(new RegExp(`<th scope="col"[^>]*>${col}</th>`));
+    for (const col of Object.values(ADMIN_COPY.organisations.columns))
+      expect(html).toMatch(new RegExp(`<th[^>]*scope="col"[^>]*>${col}</th>`));
     expect(html).toContain('href="/admin/organisations/o-a"');
     expect(html).toContain('30 Oct 2026');
   });
@@ -147,7 +149,7 @@ describe('S-23, organisations', () => {
     for (const page of [renderS23Page, renderS25Page]) {
       listOrganisationsMock.mockClear(); accountsMock.mockClear();
       const html = await page(assessorIdentity);
-      expect(html).toContain('This page is for MAK-AI administrators.');
+      expect(html).toContain(ADMIN_COPY.refusal.line);
       expect(html).not.toContain('<table');
       expect(listOrganisationsMock).not.toHaveBeenCalled();
       expect(accountsMock).not.toHaveBeenCalled();
@@ -158,13 +160,13 @@ describe('S-23, organisations', () => {
 describe('S-25, accounts', () => {
   it('FR-ORG-07: S-25 warns before deactivating an only active owner, naming the organisation', async () => {
     const html = await renderS25([acct({ onlyActiveOwnerOf: ['Makerere CAI Lab'] })]);
-    expect(html).toMatch(/Grace Nakato is the only active owner of Makerere CAI Lab\. Deactivating needs the reference of the controller&#x27;s written request\./);
+    expect(html).toContain(ADMIN_COPY.accounts.onlyOwner('Grace Nakato', 'Makerere CAI Lab').replaceAll("'", '&#x27;'));
     const field = /<input[^>]*name="requestReference"[^>]*>/.exec(html)?.[0] ?? '';
     expect(field).toMatch(/\brequired\b/);
     expect(field).toMatch(/maxlength="200"/i);
     expect(field).toMatch(/aria-describedby="only-owner-u-2"/);
     const plain = await renderS25([acct()]);
-    expect(plain).not.toContain('only active owner');
+    expect(plain).not.toContain(ADMIN_COPY.accounts.onlyOwner('Grace Nakato', 'Makerere CAI Lab').replaceAll("'", '&#x27;'));
     expect(plain).not.toContain('name="requestReference"');
   });
 
@@ -175,13 +177,13 @@ describe('S-25, accounts', () => {
     const banners = new Map<string, string>();
     for (const code of ['self', 'request_reference_required', 'has_membership', 'single_admin']) {
       const html = await renderS25([acct()], { error: code });
-      expect(html, code).toMatch(/role="alert"|role="status"/);
+      expect(html, code).toMatch(/<div role="alert" id="accounts-refusal"/);   // the banner itself: the kit table has a status line of its own
       banners.set(code, html);
     }
-    expect(banners.get('self')).toContain('You cannot change your own role or deactivate your own account.');
-    expect(banners.get('request_reference_required')).toContain('Enter the reference of the controller&#x27;s written request to deactivate the only active owner.');
-    expect(banners.get('has_membership')).toContain('This account belongs to an organisation, so it cannot be a MAK-AI administrator.');
-    expect(banners.get('single_admin')).toContain('The platform keeps one MAK-AI administrator. This account stays an assessor.');
+    expect(banners.get('self')).toContain(ADMIN_COPY.accounts.refusals.self);
+    expect(banners.get('request_reference_required')).toContain(ADMIN_COPY.accounts.refusals.request_reference_required);
+    expect(banners.get('has_membership')).toContain(ADMIN_COPY.accounts.refusals.has_membership);
+    expect(banners.get('single_admin')).toContain(ADMIN_COPY.accounts.refusals.single_admin);
     expect(await renderS25([acct()], { error: 'something-else' })).not.toMatch(/role="alert"/);
     expect(await renderS25([acct()])).not.toMatch(/role="alert"/);
   });
@@ -265,7 +267,7 @@ describe('S-24, creating and recovering an organisation', () => {
   });
 
   it('UX-23 NFR-INT-02 (C4 CR-1): a replayed resend (200) says it was already resent, not that the email failed, and opens no link box', () => {
-    expect(ALREADY_RESENT).toBe('This invitation was already resent. If the email did not arrive, use Resend again.');
+    expect(ALREADY_RESENT).toBe(ADMIN_FORMS_COPY.invitation.alreadyResent);
     const inv = { ...CREATED.invitation, id: 'inv-11' };
     expect(resendWords({ kind: 'saved', status: 200, body: { invitation: inv, acceptUrl: null, emailSent: false } })).toBe(ALREADY_RESENT);
     expect(resendWords({ kind: 'saved', status: 201, body: { invitation: inv, acceptUrl: null, emailSent: false } })).toBe(`Resent: the old link no longer works. ${EMAIL_FAILED}`);
@@ -281,7 +283,7 @@ describe('S-24, creating and recovering an organisation', () => {
   });
 
   it('UX-23 NFR-INT-02: a replayed create (200) says the organisation was already created, not that the email failed, and opens no link box', () => {
-    expect(ALREADY_CREATED).toBe('This organisation was already created. If the email did not arrive, use Resend.');
+    expect(ALREADY_CREATED).toBe(ADMIN_FORMS_COPY.create.alreadyCreated);
     const replay = createResult({ kind: 'saved', status: 200, body: { ...CREATED, acceptUrl: null, emailSent: false } });
     expect(replay.status).toBe(ALREADY_CREATED);
     const html = view({ result: replay, status: replay.status, onResendWithLink: vi.fn() });
@@ -294,7 +296,7 @@ describe('S-24, creating and recovering an organisation', () => {
   it('FR-ORG-10 (C4 ORG-SF-4): the name correction refuses the name the organisation already has', () => {
     expect(correctNameError('Makerere CAI Lab', 'Makerere CAI Lab')).toBe("This is already the organisation's name.");
     expect(correctNameError('  Makerere CAI Lab ', 'Makerere CAI Lab')).toBe("This is already the organisation's name.");
-    expect(correctNameError('', 'Makerere CAI Lab')).toBe('Enter the corrected name.');
+    expect(correctNameError('', 'Makerere CAI Lab')).toBe(ADMIN_FORMS_COPY.name.missing);
     expect(correctNameError('x'.repeat(101), 'Makerere CAI Lab')).toBe('Use 100 characters or fewer.');
     expect(correctNameError('Makerere CAI Laboratory', 'Makerere CAI Lab')).toBeUndefined();
   });
@@ -302,11 +304,11 @@ describe('S-24, creating and recovering an organisation', () => {
   it('FR-ORG-02 FR-ORG-04 (C4 ORG-SF-5): for an archived organisation S-24 offers no Issue, Resend or Revoke and says it is archived', () => {
     const inv = { ...CREATED.invitation, id: 'inv-12' };
     const live = renderToStaticMarkup(<OwnerInvitationBox orgId="org-1" hasActiveOwner={false} invitations={[inv]} archived={false} />);
-    expect(live).toContain('Resend invitation');
+    expect(live).toContain(ADMIN_FORMS_COPY.invitation.resend);
     for (const invitations of [[inv], []]) {
       const html = renderToStaticMarkup(<OwnerInvitationBox orgId="org-1" hasActiveOwner={false} invitations={invitations} archived />);
-      expect(html).toContain('This organisation is archived.');
-      for (const action of ['Resend invitation', 'Revoke invitation', 'Issue a new first-owner invitation']) expect(html).not.toContain(action);
+      expect(html).toContain(ADMIN_FORMS_COPY.invitation.archived);
+      for (const action of [ADMIN_FORMS_COPY.invitation.resend, ADMIN_FORMS_COPY.invitation.cancelTrigger, ADMIN_FORMS_COPY.invitation.sendNew]) expect(html).not.toContain(action);
     }
   });
 
@@ -327,19 +329,19 @@ describe('S-24, creating and recovering an organisation', () => {
     expect(after).not.toContain(COPY_LINK_COPY.resend);
     const refused = resentResult(noLink.response, { kind: 'rejected', status: 409, body: { error: 'x', code: 'invitation_not_pending' } });
     expect(refused.kind).toBe('created');   // the organisation stays created; only the resend was refused
-    expect(refused.status).toBe('That invitation is no longer pending. Reload the page.');
+    expect(refused.status).toBe(ADMIN_FORMS_COPY.invitation.notPending);
   });
 
   it('FR-ORG-01: S-24 shows the 7.4.2 saving, saved and failed texts exactly (SRS line 2387)', () => {
-    expect(statusText(view({ status: 'Creating the organisation...', busy: true }))).toBe('Creating the organisation...');
-    expect(createResult({ kind: 'saved', status: 201, body: { ...CREATED, emailSent: true, acceptUrl: null } }).status).toBe('Created. Invitation sent to head@fixture.test.');
+    expect(statusText(view({ status: ADMIN_FORMS_COPY.create.creating, busy: true }))).toBe(ADMIN_FORMS_COPY.create.creating);
+    expect(createResult({ kind: 'saved', status: 201, body: { ...CREATED, emailSent: true, acceptUrl: null } }).status).toBe(ADMIN_FORMS_COPY.create.sent('head@fixture.test'));
     const failed = createResult({ kind: 'not_saved', reason: 'network' });
-    expect(failed.status).toBe('Not created: connection lost. Nothing was created.');
+    expect(failed.status).toBe(ADMIN_FORMS_COPY.create.notCreated);
     const html = view({ result: failed, status: failed.status });
-    expect(statusText(html)).toBe('Not created: connection lost. Nothing was created.');
+    expect(statusText(html)).toBe(ADMIN_FORMS_COPY.create.notCreated);
     expect(html).toMatch(/<button[^>]*>Retry<\/button>/);
     expect(createResult({ kind: 'rejected', status: 409, body: { error: 'x', code: 'slug_taken' } }).status)
-      .toBe('Another organisation already uses this web address. Change the name slightly and try again.');   // owner copy (ruling 3)
+      .toBe(ADMIN_FORMS_COPY.create.slugTaken);   // owner copy (ruling 3)
   });
 
   it('FR-ORG-01: the create form validates every field', () => {
@@ -357,19 +359,19 @@ describe('S-24, creating and recovering an organisation', () => {
     expect(inputNamed('name')).toContain(`maxLength="${MAX_ORG_NAME}"`);
     expect(inputNamed('legalName')).toContain(`maxLength="${MAX_LEGAL_NAME}"`);
     expect(html).toContain('Create one organisation for each team whose members may read each other&#x27;s records. An institution with several teams gets one organisation for each.');
-    expect(html).toContain('Creating the organisation also sends an invitation to the first owner. If either part does not go through, nothing is created.');
-    expect(html).toMatch(/<button type="submit"[^>]*>Create organisation and send invitation<\/button>/);
+    expect(html).toContain(ADMIN_FORMS_COPY.create.note.replaceAll("'", '&#x27;'));
+    expect(html).toMatch(/<button[^>]*type="submit"[^>]*>Create organisation and send invitation<\/button>/);
   });
 
   it('S-24 create posts name, legalName, ownerEmail and showLink, and has no agreement field', () => {
     expect(createFields({ name: '  Makerere CAI Lab ', legalName: ' Makerere University  ', ownerEmail: ' head@fixture.test ', showLink: true }))
       .toEqual({ name: 'Makerere CAI Lab', legalName: 'Makerere University', ownerEmail: 'head@fixture.test', showLink: true });
     const html = view({ draft: blank });
-    const labelFor = (label: string) => new RegExp(`<label for="([^"]+)">${label}</label>`).exec(html)?.[1];
-    for (const label of ['Organisation name', "Institution&#x27;s legal name", "First owner&#x27;s email", 'Show link \\(to send it yourself if the email does not arrive\\)']) expect(labelFor(label), label).toBeTruthy();
+    const labelFor = (label: string) => new RegExp(`<label[^>]*for="([^"]+)"[^>]*>${label}(?: <span[^>]*>[^<]*</span>)?</label>`).exec(html)?.[1];
+    for (const label of [ADMIN_FORMS_COPY.create.nameLabel, ADMIN_FORMS_COPY.create.legalNameLabel, ADMIN_FORMS_COPY.create.ownerEmailLabel, ADMIN_FORMS_COPY.create.showLink]) expect(labelFor(label.replaceAll("'", '&#x27;')), label).toBeTruthy();
     // The legal name's hint is the field's description (aria-describedby names the hint's id).
     const legalId = labelFor("Institution&#x27;s legal name")!;
-    expect(html).toContain(`<p id="${legalId}-hint"`);
+    expect(html).toMatch(new RegExp(`<div[^>]*id="${legalId}-hint"`));
     expect(html).toContain('The registered name of the university, hospital or institute the team belongs to.');
     expect(new RegExp(`<input[^>]*id="${legalId}"[^>]*aria-describedby="${legalId}-hint"`).test(html)).toBe(true);
     expect([...html.matchAll(/<(?:input|select|textarea)[^>]*\sname="([^"]+)"/g)].map((m) => m[1])).toEqual(['name', 'legalName', 'ownerEmail', 'showLink']);
@@ -386,11 +388,11 @@ describe('S-24, creating and recovering an organisation', () => {
     const inv = { ...CREATED.invitation, id: 'inv-1' };
     const renderBox = (p: { hasActiveOwner: boolean; invitations: (typeof inv & { createdFromShownLink?: boolean })[] }) =>
       renderToStaticMarkup(<OwnerInvitationBox orgId="org-1" {...p} />);
-    expect(renderBox({ hasActiveOwner: true, invitations: [] })).not.toContain('Issue a new first-owner invitation');
-    expect(renderBox({ hasActiveOwner: false, invitations: [] })).toContain('Issue a new first-owner invitation');
+    expect(renderBox({ hasActiveOwner: true, invitations: [] })).not.toContain(ADMIN_FORMS_COPY.invitation.sendNew);
+    expect(renderBox({ hasActiveOwner: false, invitations: [] })).toContain(ADMIN_FORMS_COPY.invitation.sendNew);
     const pending = renderBox({ hasActiveOwner: false, invitations: [inv] });
-    expect(pending).not.toContain('Issue a new first-owner invitation');
-    for (const text of ['Resend invitation', '(makes a new link; the old one stops working)', 'Revoke invitation', 'Pending']) expect(pending).toContain(text);
+    expect(pending).not.toContain(ADMIN_FORMS_COPY.invitation.sendNew);
+    for (const text of [ADMIN_FORMS_COPY.invitation.resend, ADMIN_FORMS_COPY.invitation.resendHint, ADMIN_FORMS_COPY.invitation.cancelTrigger, 'Pending']) expect(pending).toContain(text);
     expect(statusText(pending)).toBe('');   // the box's region is mounted before any result
     const accepted = renderBox({ hasActiveOwner: true, invitations: [{ ...inv, state: 'accepted', linkShown: true, createdFromShownLink: true }] });
     expect(accepted).toContain('account created from a copied link');
@@ -438,9 +440,9 @@ describe('S-24, creating and recovering an organisation', () => {
     const send = vi.fn(async (body: Record<string, unknown>) => { sent.push(body); return { kind: 'saved' as const, status: 200, body: { previousLegalName: 'Old University' } }; });
     const done = await correctLegalName('  Makerere University ', 'Old University', send);
     expect(sent).toEqual([{ legalName: 'Makerere University' }]);   // exactly one key: never { name }
-    expect(done).toEqual({ kind: 'done', status: 'Saved. The legal name is now Makerere University; it was Old University.', saved: true });
+    expect(done).toEqual({ kind: 'done', status: ADMIN_FORMS_COPY.legalName.saved('Makerere University', 'Old University'), saved: true });
     const first = await correctLegalName('Makerere University', null, async () => ({ kind: 'saved' as const, status: 200, body: { previousLegalName: null } }));
-    expect(first).toEqual({ kind: 'done', status: 'Saved. The legal name is now Makerere University; none was recorded before.', saved: true });
+    expect(first).toEqual({ kind: 'done', status: ADMIN_FORMS_COPY.legalName.savedFirst('Makerere University'), saved: true });
     expect(await correctLegalName('Makerere University', 'Makerere University', send)).toMatchObject({ kind: 'invalid' });
     expect(send).toHaveBeenCalledTimes(1);   // the unchanged value was not sent
     // The parser's "one at a time" error arrives on field `name` whichever key was wrong: it is shown at form level, not at the input.
@@ -453,19 +455,19 @@ describe('S-24, creating and recovering an organisation', () => {
     // The view: label, hint tied by aria-describedby, announced status region, and the error beside the input it belongs to.
     const html = renderToStaticMarkup(<CorrectLegalNameView formId="f" open value="Old" error="Enter the institution's legal name." status="" busy={false}
       onOpen={vi.fn()} onValue={vi.fn()} onSubmit={vi.fn()} onCancel={vi.fn()} />);
-    expect(html).toMatch(/<label for="f-legal-name">Institution&#x27;s legal name<\/label>/);
+    expect(html).toMatch(/<label[^>]*for="f-legal-name"[^>]*>Institution&#x27;s legal name <span[^>]*>\(required\)<\/span><\/label>/);
     expect(html).toMatch(/<input[^>]*id="f-legal-name"[^>]*aria-describedby="f-legal-name-hint f-legal-name-error"/);
     expect(html).toContain('The registered name of the university, hospital or institute the team belongs to.');
-    expect(html).toMatch(/<p id="f-legal-name-error"[^>]*>Enter the institution&#x27;s legal name\.<\/p>/);   // the error paragraph the input points at
+    expect(html).toMatch(/<span id="f-legal-name-error">Enter the institution&#x27;s legal name\.<\/span>/);   // the error message the input points at
     expect(html).toMatch(/<div role="status"/);
     expect(renderToStaticMarkup(<CorrectLegalNameView formId="f" open={false} value="" error={undefined} status="" busy={false}
-      onOpen={vi.fn()} onValue={vi.fn()} onSubmit={vi.fn()} onCancel={vi.fn()} />)).toContain('>Correct the legal name</button>');
+      onOpen={vi.fn()} onValue={vi.fn()} onSubmit={vi.fn()} onCancel={vi.fn()} />)).toMatch(new RegExp(`>${ADMIN_FORMS_COPY.legalName.change}</button>`));
     // Beside today's name correction on the page.
     requireIdentityMock.mockResolvedValue(adminIdentity);
     organisationMock.mockResolvedValue({ row: row(), agreements: [], ownerInvitations: [] });
     const page = renderToStaticMarkup(await OrganisationPage({ params: Promise.resolve({ id: 'org-1' }) }));
-    expect(page).toContain('>Correct the name</button>');
-    expect(page).toContain('>Correct the legal name</button>');
+    expect(page).toMatch(new RegExp(`>${ADMIN_FORMS_COPY.name.change}</button>`));
+    expect(page).toMatch(new RegExp(`>${ADMIN_FORMS_COPY.legalName.change}</button>`));
   });
 
   it('FR-ORG-10: a legal name already corrected elsewhere (the route answers 200 with the same value) says it is already the name, not that it was saved', async () => {
@@ -483,7 +485,7 @@ describe('S-24, creating and recovering an organisation', () => {
   it('FR-ORG-03: the S-24 pages give a non-administrator only the refusal line, and an unknown organisation S-31', async () => {
     requireIdentityMock.mockResolvedValue(assessorIdentity);
     for (const html of [renderToStaticMarkup(await NewOrganisationPage()), renderToStaticMarkup(await OrganisationPage({ params: Promise.resolve({ id: 'org-1' }) }))]) {
-      expect(html).toContain('This page is for MAK-AI administrators.');
+      expect(html).toContain(ADMIN_COPY.refusal.line);
       expect(html).not.toContain('<form');
     }
     expect(organisationMock).not.toHaveBeenCalled();
@@ -496,18 +498,39 @@ describe('S-24, creating and recovering an organisation', () => {
     requireIdentityMock.mockResolvedValue(adminIdentity);
     organisationMock.mockResolvedValue({ row: row({ orgId: 'org-1', hasActiveOwner: false, memberCount: 4 }), agreements: [], ownerInvitations: [] });
     const html = renderToStaticMarkup(await OrganisationPage({ params: Promise.resolve({ id: 'org-1' }) }));
-    expect(html).toContain('<h1>Makerere CAI Lab</h1>');
+    expect(html).toMatch(/<h1[^>]*>Makerere CAI Lab<\/h1>/);
     expect(html).toContain('Created 30 Oct 2026 · 4 members');
-    expect(html).toContain('No active owner');
-    expect(html).toContain('Issue a new first-owner invitation');
-    expect(html).toContain('Legal name: Makerere University');
+    expect(html).toContain(ADMIN_COPY.organisations.noActiveOwner);
+    expect(html).toContain(ADMIN_FORMS_COPY.invitation.sendNew);
+    expect(html).toContain(ADMIN_COPY.organisation.legalName('Makerere University'));
     expect(html).not.toMatch(/project|finding|decision|seal/i);
     organisationMock.mockResolvedValue({ row: row({ legalName: null }), agreements: [], ownerInvitations: [] });
     expect(renderToStaticMarkup(await OrganisationPage({ params: Promise.resolve({ id: 'org-1' }) }))).toContain('Legal name not recorded');
     requireIdentityMock.mockResolvedValue(adminIdentity);
     const created = renderToStaticMarkup(await NewOrganisationPage());
-    expect(created).toContain('<h1>Create an organisation</h1>');
+    expect(created).toMatch(/<h1[^>]*>Create an organisation<\/h1>/);
     expect(created).not.toContain('Only do this after');
     expect(created).not.toMatch(/agreement/i);
+  });
+
+  it('FR-ORG-03 (ruling L5-13): the organisation page\'s title names the organisation for the administrator only, after the same gate as the page', async () => {
+    const { generateMetadata } = await import('@/app/(authenticated)/admin/organisations/[id]/page');
+    const titleOf = async (id: string) => (await generateMetadata({ params: Promise.resolve({ id }) })).title;
+    // The administrator, an organisation that exists: the thing, the organisation's name, the product.
+    requireIdentityMock.mockResolvedValue(adminIdentity);
+    organisationMock.mockResolvedValue({ row: row({ name: 'Makerere CAI Lab' }), agreements: [], ownerInvitations: [] });
+    expect(await titleOf('org-1')).toBe(`${ADMIN_COPY.titles.organisation} · Makerere CAI Lab · MAK-AI RAI Platform`);
+    // Not the administrator: the static title, and the organisation is never read.
+    organisationMock.mockClear();
+    requireIdentityMock.mockResolvedValue(assessorIdentity);
+    expect(await titleOf('org-1')).toBe(`${ADMIN_COPY.titles.organisation} · MAK-AI RAI Platform`);
+    expect(organisationMock).not.toHaveBeenCalled();
+    // The administrator, an unknown id: the same static title, with no name and no error.
+    requireIdentityMock.mockResolvedValue(adminIdentity);
+    organisationMock.mockRejectedValue(new NotFoundError());
+    expect(await titleOf('nope')).toBe(`${ADMIN_COPY.titles.organisation} · MAK-AI RAI Platform`);
+    // Any other failure of the read is not turned into a title: it propagates as the page's own read would.
+    organisationMock.mockRejectedValue(new Error('database down'));
+    await expect(titleOf('org-1')).rejects.toThrow('database down');
   });
 });
