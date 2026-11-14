@@ -148,7 +148,7 @@ test('UX-17 FR-FND-05: the admin accepts a risk and the sentence follows the cho
   await expect(page.getByText('The finding will show as "Closed: risk accepted by Ethics committee (outside role)".')).toBeVisible();
   await page.getByLabel('Why the risk is accepted (required)').fill('Minutes of 30 Oct 2026, item 4.');
   await page.getByRole('button', { name: 'Accept the risk' }).click();
-  await expect(page.getByText(/^Closed: risk accepted by Ethics committee \(outside role\) on /)).toBeVisible();
+  await expect(page.getByText(/^Closed: risk accepted by Ethics committee \(no platform account\) on /)).toBeVisible();
 });
 
 test('FR-FND-07 (screen): reopening a closed finding with a reason shows Reopened.', async ({ browser }) => {

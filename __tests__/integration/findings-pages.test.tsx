@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { OrgRole } from '@prisma/client';
 import type { Identity } from '@/lib/auth/identity';
+import { deciderLabel } from '@/lib/decision/copy';
 import { FindingsPageView } from '@/components/findings/FindingsPageView';
 import { AcceptRiskForm } from '@/components/findings/AcceptRiskForm';
 import { FindingPageView } from '@/components/findings/FindingPageView';
@@ -89,7 +90,7 @@ describe('S-14 the findings list (UX-15, UX-06, UX-07, FR-FND-07, FR-FND-08)', (
     const k = await everyKind();
     const html = await renderList('reviewer', k.p.id);
     const states = [...html.matchAll(/<[a-z]+ [^>]*class="([^"]*\bstatus-label\b[^"]*)"[^>]*>([^<]*)</g)];
-    expect(states.map((m) => m[2])).toEqual(expect.arrayContaining(['Open', 'Closed by mitigation', 'Withdrawn', 'Closed: risk accepted by Ethics committee (outside role)']));
+    expect(states.map((m) => m[2])).toEqual(expect.arrayContaining(['Open', 'Closed by mitigation', 'Withdrawn', `Closed: risk accepted by ${deciderLabel({ kind: 'outside_role', role: 'ethics_committee' }, '', 'record')}`]));
     expect(states.every((m) => !/status-label--warning/.test(m[1]))).toBe(true);
   });
 
@@ -292,7 +293,7 @@ describe('S-15 the finding page and the S-14 raise form (FR-FND-02, FR-FND-03, F
     const ar = await addAcceptedRisk(fx, f.id, { acceptedBy: { kind: 'outside_role', role: 'ethics_committee' }, lookAgainOn: '2027-03-01' });
     expect(ar.id).toBeTruthy();
     const html = await renderFinding(f, 'viewer');
-    expect(html).toMatch(/Closed: risk accepted by <bdi>Ethics committee \(outside role\)<\/bdi> on \d{1,2} \w{3} 20\d\d\. Look at it again on 1 Mar 2027\./);
+    expect(html).toMatch(/Closed: risk accepted by <bdi>Ethics committee \(no platform account\)<\/bdi> on \d{1,2} \w{3} 20\d\d\. Look at it again on 1 Mar 2027\./);
   });
 
   it('FR-FND-07 UX-29: a closed finding offers Reopen to an assessor, the M-26 line to a viewer, and nothing once withdrawn', async () => {
