@@ -103,8 +103,18 @@ test('U12 (d): a viewer sees the current decision\'s reason and evidence names o
 
 test.describe('U12 (c): at phone width the members and accounts tables keep every row action on the screen', () => {
   const PENDING_EMAIL = `u12c-pending-${Date.now()}@fixture.test`;
+  /**
+   * An account whose name holds one long word with no break in it, dated before every other so it is on the accounts
+   * page's first 50 rows. Such a word made the table wider than its wrapper between the card threshold and the table's
+   * natural width, and the wrapper scrolled the row actions out of sight (plan 1A Task 19 fix round 1, item A6).
+   */
+  const LONG_NAME_EMAIL = `u12c-long-name-${Date.now()}@fixture.test`;
 
   test.beforeAll(async ({ baseURL }) => {
+    await testDb.user.create({ data: {
+      email: LONG_NAME_EMAIL, name: 'U12c Nakawunguaverylongsurnamewithnobreakatall', passwordHash: 'not-a-login',
+      createdAt: new Date('2001-01-01T00:00:00.000Z'),
+    } });
     // A pending invitation, so the invitations table has a row with Resend and Revoke.
     const owner = await seatRequest(baseURL!, 'owner');
     try {
@@ -120,6 +130,7 @@ test.describe('U12 (c): at phone width the members and accounts tables keep ever
   test.afterAll(async () => {
     try {
       await testDb.invitation.deleteMany({ where: { email: { startsWith: 'u12c-pending-' } } });
+      await testDb.user.deleteMany({ where: { email: { startsWith: 'u12c-long-name-' } } });
     } finally {
       await testDb.$disconnect();
     }
@@ -159,11 +170,17 @@ test.describe('U12 (c): at phone width the members and accounts tables keep ever
   }
 
   /**
-   * Each page's own selectors: the table, its column headings, its cells and the narrow layout's label in a cell. Both
-   * pages are the kit's Table (plan 1A Task 19), which writes the label as a span hidden from assistive technology
-   * (`.ui-table__cell-label`), and names each row with a row header.
+   * The selectors of both pages, which are the kit's Table (plan 1A Task 19): the table, its column headings, its cells
+   * and the narrow layout's label in a cell, which the kit writes as a span hidden from assistive technology
+   * (`.ui-table__cell-label`); each row is named by a row header.
    */
   type Selectors = { table: string; columnHeadings: string; rowHeadings: string | null; cells: string; cellLabels: (page: Page) => Promise<string[]>; spoken: string[] };
+  const KIT_TABLE: Selectors = {
+    table: '.ui-table', columnHeadings: '.ui-table thead th', rowHeadings: '.ui-table tbody th', cells: '.ui-table td',
+    cellLabels: (page) => page.locator('.ui-table .ui-table__cell-label').evaluateAll((els) => [...new Set(els.map((e) => e.textContent ?? ''))]),
+    // The label has no colon, so only the cells' own names are read: a column heading's text is the label itself.
+    spoken: ['cell'],
+  };
   const pages: Array<{ name: string; path: () => string; seat: 'owner' | 'admin'; actions: string; expected: RegExp[]; widths: number[]; s: Selectors }> = [
     {
       name: 'members',
@@ -172,12 +189,7 @@ test.describe('U12 (c): at phone width the members and accounts tables keep ever
       actions: '.ui-table button',
       expected: [/^Remove /, /^Resend invitation to /, /^Cancel invitation to /],
       widths: [320, 390],
-      s: {
-        table: '.ui-table', columnHeadings: '.ui-table thead th', rowHeadings: '.ui-table tbody th', cells: '.ui-table td',
-        cellLabels: (page) => page.locator('.ui-table .ui-table__cell-label').evaluateAll((els) => [...new Set(els.map((e) => e.textContent ?? ''))]),
-        // The label has no colon, so only the cells' own names are read: a column heading's text is the label itself.
-        spoken: ['cell'],
-      },
+      s: KIT_TABLE,
     },
     {
       name: 'accounts',
@@ -185,14 +197,10 @@ test.describe('U12 (c): at phone width the members and accounts tables keep ever
       seat: 'admin',
       actions: '.ui-table button',
       expected: [/^Deactivate /],
-      // 1024: laptop and tablet landscape, where the card is wider than the stacking threshold but narrower than the table.
-      widths: [320, 390, 1024],
-      s: {
-        table: '.ui-table', columnHeadings: '.ui-table thead th', rowHeadings: '.ui-table tbody th', cells: '.ui-table td',
-        cellLabels: (page) => page.locator('.ui-table .ui-table__cell-label').evaluateAll((els) => [...new Set(els.map((e) => e.textContent ?? ''))]),
-        // The label has no colon, so only the cells' own names are read: a column heading's text is the label itself.
-        spoken: ['cell'],
-      },
+      // 768, 900 and 1024: a tablet, a small laptop and a tablet in landscape, where the table's wrapper is wider than the
+      // kit's 640 px card threshold, so the six columns must fit it (fix round 1, item A6).
+      widths: [320, 390, 768, 900, 1024],
+      s: KIT_TABLE,
     },
   ];
 
@@ -211,6 +219,9 @@ test.describe('U12 (c): at phone width the members and accounts tables keep ever
           const m = await offScreenActions(page, p.actions);
           expect(m.outside, `${p.name} at ${width}: row actions outside the viewport`).toEqual([]);
           expect(m.scrollWidth, `${p.name} at ${width}: document scrollWidth`).toBeLessThanOrEqual(m.clientWidth);
+          // No table's wrapper scrolls sideways: every column is on the screen, not only the actions.
+          const wraps = await page.locator('.ui-table-wrap').evaluateAll((els) => els.map((e) => ({ scroll: e.scrollWidth, client: e.clientWidth })));
+          for (const w of wraps) expect(w.scroll, `${p.name} at ${width}: a table wrapper scrolls sideways`).toBeLessThanOrEqual(w.client);
           // The stacked layout keeps the table's semantics. Playwright's own role queries read the tag, not what the
           // browser exposes, so the browser's accessibility tree is read through the protocol.
           const cdp = await ctx.newCDPSession(page);

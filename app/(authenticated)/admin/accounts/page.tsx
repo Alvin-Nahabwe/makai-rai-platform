@@ -64,7 +64,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
     return {
       key: a.userId,
       cells: {
-        name: <>{a.name}{isSelf ? <span className="admin-account__you">{A.you}</span> : null}</>,
+        name: <><span className="admin-account__name">{a.name}</span>{isSelf ? <span className="admin-account__you">{A.you}</span> : null}</>,
         email: <span className="admin-account__email">{a.email}</span>,
         type: a.platformRole === 'admin' ? A.typeAdmin : A.typeMember,
         status: a.isActive ? A.active : A.deactivated,

@@ -71,9 +71,19 @@
   color: var(--color-ink-muted);
 }
 
-/* S-25's cells: the "(you)" mark, a long email that may break anywhere, and the action form's warning, field and button. */
+/* S-25's cells: the "(you)" mark, a long name or email that may break anywhere, and the action form's warning, field and
+   button. Every cell that holds what people typed (a name, an email, the organisations' names in the warning) may break
+   anywhere, so no such word sets the table's narrowest width: the six columns then fit the wrapper at every width the kit
+   draws them as a table (640 px of wrapper and up), and the row actions never scroll out of sight. The name keeps room
+   for an ordinary word (7em, inside that sum), so only a word longer than its column breaks. */
 .admin-account__you {
   color: var(--color-ink-muted);
+}
+
+.admin-account__name {
+  display: inline-block;
+  min-inline-size: 7em;
+  overflow-wrap: anywhere;
 }
 
 .admin-account__email {
@@ -93,6 +103,7 @@
 .admin-account__warning {
   max-inline-size: var(--measure-reading);
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 /* S-23's flags in a cell, under the organisation's name. */
