@@ -19,15 +19,15 @@ const CANNOT_20_NOV = item('m-cannot', '2026-11-20', { ownerCanAct: false });
 describe('reminder emails setting (S-21)', () => {
   it('FR-FUP-06: turning reminders off says "Reminder emails turned off."', () => {   // 7.4.2 row S-21, SRS line 2389
     expect(reminderSettingSaved(false)).toBe('Reminder emails turned off.');
-    expect(reminderSettingSaved(true)).toBe('Saved.');
+    expect(reminderSettingSaved(true)).toBe('Reminder emails turned on.');
     expect(REMINDER_SETTING_COPY.turnedOff).toBe('Reminder emails turned off.');
   });
 
   it('FR-FUP-06 NFR-A11Y-02: the setting is a labelled checkbox with its note', () => {
     const html = renderToStaticMarkup(<ReminderEmailsSetting enabled />);
     expect(html).toMatch(/<input[^>]*type="checkbox"[^>]*checked/);
-    expect(html).toMatch(/<label[^>]*>[^<]*Email me when a mitigation I own is due/);
-    expect(html).toContain('The lists on the dashboard and project pages do not change.');
+    expect(html).toMatch(/<label[^>]*>[^<]*Email me when a mitigation assigned to me is due or overdue/);
+    expect(html).toContain('This only turns the emails on or off. Your mitigations still show on Home.');
   });
 });
 

@@ -67,7 +67,7 @@ describe('The three writers when the outcome is not known (CONSOLIDATED 8 #7; th
   });
 
   it('UX-27: the project form names its own button, and says the project or the changes may already be saved', () => {
-    expect(PROJECT_FORM_COPY.noReply.create).toBe('Not created yet. We did not get a reply in time, so the project may already be created. Select Create project again. It will not be created twice.');
+    expect(PROJECT_FORM_COPY.noReply.create).toBe('Not created yet. We did not get a reply in time, so the project may already be created. Select Create project again.');
     expect(PROJECT_FORM_COPY.noReply.save).toBe('Not saved yet. We did not get a reply in time, so your changes may already be saved. Select Save changes again. It will not be saved twice.');
   });
 });

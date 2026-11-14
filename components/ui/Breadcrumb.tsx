@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { ListLink } from '@/components/ui/ListLink';
 import type { BreadcrumbItem } from '@/components/ui/types';
 import { UI_COPY } from '@/lib/ui/copy';
-import './Breadcrumb.css';
+import './pageHeaderStyles';
 
 export type BreadcrumbProps = {
   /** The last item is the current page. Each `href` is an application path, passed to the link as given. */

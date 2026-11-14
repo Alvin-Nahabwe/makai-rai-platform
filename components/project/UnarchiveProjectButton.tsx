@@ -8,6 +8,7 @@ import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafe
 import { signInAgainHref } from '@/lib/auth/idle';
 import { refusalOf } from '@/lib/projects/writeRefusal';
 import { PROJECT_WRITE_COPY } from '@/lib/project/write/copy';
+import '@/components/ui/buttonStyles';
 
 const FRESH: RetryState = { requestId: null, sentBody: null };
 const C = PROJECT_WRITE_COPY.unarchive;

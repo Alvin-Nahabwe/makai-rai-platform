@@ -5,6 +5,7 @@ import { failOnDialog } from './helpers/dialogs';
 import { draftKeys, fixtureOrgId, openQuestion, openQuestionIn, questionPath, seatOf, signInAs, waitForQuestionPage } from './helpers/session';
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
 import { FIELD_COPY } from '../lib/ui/field/copy';
+import { DRAFTS_COPY } from '../lib/decision/drafts/copy';
 
 /**
  * Drafts across accounts and sign-out (UX-26, NFR-PRIV-06, M-41; preventive obligations B2 and B4). Q is a fixture id.
@@ -61,7 +62,7 @@ test('UX-26 M-41 B4: signing out with a draft warns, and Delete them and sign ou
   await openQuestion(page, 'assessor', Q, baseURL!);
   await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`).fill('x');
   await page.getByRole('button', { name: 'Sign out' }).click();
-  await expect(page.getByText('You have 1 answers on this device that are not saved. If you sign out, they are deleted from this device.')).toBeVisible();
+  await expect(page.getByText(DRAFTS_COPY.signOut.warning(1))).toBeVisible();
   await expect(page.getByRole('alertdialog')).toBeFocused();
   await expect(page.getByRole('link', { name: 'Go to them' })).toHaveAttribute('href', '/account#drafts-on-this-device');
   await page.getByRole('button', { name: 'Delete them and sign out' }).click();
@@ -93,8 +94,8 @@ test('UX-26: S-21 shows Drafts on this device: 1 and Delete removes it', async (
   await openQuestion(page, 'assessor', Q, baseURL!);
   await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`).fill('kept');
   await page.goto('/account');
-  await expect(page.locator('#drafts-on-this-device').getByRole('status')).toHaveText('Drafts on this device: 1');
-  await page.locator('#drafts-on-this-device').getByRole('button', { name: 'Delete' }).click();
-  await expect(page.locator('#drafts-on-this-device').getByRole('status')).toHaveText('Drafts on this device: 0');
+  await expect(page.locator('#drafts-on-this-device').getByRole('status')).toHaveText(DRAFTS_COPY.list.count(1));
+  await page.locator('#drafts-on-this-device').getByRole('button', { name: DRAFTS_COPY.list.deleteAll }).click();
+  await expect(page.locator('#drafts-on-this-device').getByRole('status')).toHaveText(DRAFTS_COPY.list.count(0));
   expect(await draftKeys(page)).toEqual([]);
 });

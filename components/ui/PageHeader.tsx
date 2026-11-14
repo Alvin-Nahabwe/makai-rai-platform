@@ -1,8 +1,7 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Breadcrumb } from '@/components/ui/Breadcrumb';
 import type { BreadcrumbItem } from '@/components/ui/types';
-import './Breadcrumb.css';
-import './PageHeader.css';
+import './pageHeaderStyles';
 
 export type PageHeaderProps = {
   breadcrumb?: readonly BreadcrumbItem[];

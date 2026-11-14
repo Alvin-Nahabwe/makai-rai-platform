@@ -67,11 +67,13 @@ export const PROJECT_FORM_COPY = Object.freeze({
   slow: 'Still saving. The connection is slow.',
   /**
    * No reply in time, or no usable reply: the outcome is not known (CONSOLIDATED 8 #7, C3 rule 3; replaces B#373 here).
-   * "It will not ... twice" is true because the same form sent again keeps its request id (lib/client/retrySafeWrite.ts
-   * requestIdFor) and the route answers a repeated id with the first result (lib/data/idempotency.ts receiptWrite).
+   * Save's "It will not be saved twice" is true because the same form sent again keeps its request id
+   * (lib/client/retrySafeWrite.ts requestIdFor) and the route answers a repeated id with the first result
+   * (lib/data/idempotency.ts receiptWrite). Create makes no such promise: a create form edited before it is sent
+   * again gets a new request id (the coordinator's rule; review finding I-2).
    */
   noReply: Object.freeze({
-    create: `Not created yet. We did not get a reply in time, so the project may already be created. Select ${CREATE} again. It will not be created twice.`,
+    create: `Not created yet. We did not get a reply in time, so the project may already be created. Select ${CREATE} again.`,
     save: `Not saved yet. We did not get a reply in time, so your changes may already be saved. Select ${SAVE} again. It will not be saved twice.`,
   }),
 });

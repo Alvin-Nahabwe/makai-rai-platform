@@ -4,11 +4,11 @@
  * it. The dataset size keys are the `DatasetSize` enum's values, in the enum's order (prisma/schema.prisma:58-64).
  */
 export const DATASET_SIZE_WORDS: Readonly<Record<'small_lt1k' | 'medium_1k_100k' | 'large_100k_1m' | 'very_large_gt1m' | 'unknown', string>> = {
-  small_lt1k: 'Under 1,000',
-  medium_1k_100k: '1,000 to 100,000',
-  large_100k_1m: '100,000 to 1 million',
-  very_large_gt1m: 'Over 1 million',
-  unknown: 'Unknown',
+  small_lt1k: 'Under 1,000 records',
+  medium_1k_100k: '1,000 to 100,000 records',
+  large_100k_1m: '100,000 to 1 million records',
+  very_large_gt1m: 'Over 1 million records',
+  unknown: 'Not known',
 };
 
 /**

@@ -3,9 +3,6 @@
   "app/(authenticated)/explore/framework/FrameworkMapPage.css",
   "app/(public)/about/AboutPage.css",
   "app/globals.css",
-  "components/admin/CreateOrganisationForm.tsx",
-  "components/decision/DecisionHistoryList.tsx",
-  "components/decision/StageQuestionList.tsx",
   "components/export/TeamExportPanel.tsx",
   "components/report/ReferencesList.css"
 ]

@@ -5,11 +5,12 @@ import { requireOrgContextFor } from '@/lib/auth/context';
 import { can } from '@/lib/authz/policy';
 import { withOrg } from '@/lib/data/tenant';
 import { listInvitations, listMembers } from '@/lib/data/members';
-import { ORG_COPY } from '@/lib/org/copy';
+import { memberRoleWords, ORG_COPY } from '@/lib/org/copy';
 import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
 import { LIST_PAGE_SIZE, pageOf } from '@/lib/ui/showMore';
 import { ShowMoreLink } from '@/components/ui/ShowMoreLink';
+import { PageHeader } from '@/components/ui/PageHeader';
 import MembersManager from './MembersManager';
 
 type Params = Promise<{ slug: string }>;
@@ -52,18 +53,16 @@ export default async function MembersSettingsPage({
   const { identity, ctx } = await load(slug);
 
   const members = pageOf(await listMembers(ctx), shown, LIST_PAGE_SIZE);
-  const invitations = can(ctx.role, 'member:invite') ? await listInvitations(ctx, new Date()) : [];
+  const mayInvite = can(ctx.role, 'member:invite');
+  const invitations = mayInvite ? await listInvitations(ctx, new Date()) : [];
 
+  // The line under the heading says what Owners and Admins do here; other roles get none (audit D OR3).
   return (
     <div className="page-content">
-      <div className="page-header">
-        <div>
-          <h1>Members</h1>
-          <p className="text-muted">Manage who belongs to this organisation and at what role.</p>
-        </div>
-      </div>
-      <MembersManager slug={slug} currentUserId={identity.userId} currentRole={ctx.role} members={members.items} invitations={invitations} />
-      {members.hasMore && <ShowMoreLink href={'?shown=' + members.nextShown} label="Show more" />}
+      <PageHeader title={ORG_COPY.titles.members} lead={mayInvite && <p>{ORG_COPY.members.lead}</p>} />
+      <MembersManager slug={slug} currentUserId={identity.userId} currentRole={ctx.role} members={members.items} invitations={invitations}
+        roleWords={memberRoleWords()} />
+      {members.hasMore && <ShowMoreLink href={'?shown=' + members.nextShown} label={ORG_COPY.members.showMore} />}
     </div>
   );
 }

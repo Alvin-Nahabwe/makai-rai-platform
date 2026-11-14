@@ -1,0 +1,329 @@
+/* The findings list (S-14) and one finding (S-15), plan 1A Task 18, part 18a. The kit draws the fields, the buttons and
+   the summaries; this file draws what the kit has no component for: the back link, the stage filter, the finding rows,
+   the mitigation cards, the history, the forms' spacing and the one red word, "Overdue". Colour roles only (no legacy
+   alias), weights 400, 600 and 700, motion on state changes only and none under reduced motion. */
+
+/* The link back to the project or to the list: small, muted, underlined, a 24 px target. Inline-block, not flex: a flex
+   box would drop the space between "Back to" and the project's name. */
+.finding-back {
+  display: inline-block;
+  padding-block: var(--space-1);
+  line-height: var(--line-height-body);
+  margin-block-end: var(--space-2);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-ink-muted);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.finding-back:hover {
+  color: var(--color-link);
+}
+
+/* The stage filter: one row of links that wraps, the current one marked by weight and an ink underline bar. */
+.finding-filter ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: 0 0 var(--space-6);
+  padding: 0;
+  list-style: none;
+}
+
+.finding-filter a {
+  display: inline-block;
+  padding-block: var(--space-1);
+  color: var(--color-link);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.finding-filter a[aria-current='page'] {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-ink);
+  text-decoration-thickness: 2px;
+}
+
+/* A group of findings and its list of rows. */
+.finding-group {
+  margin-block: var(--space-8);
+}
+
+.finding-group > h2 {
+  margin-block-end: var(--space-3);
+}
+
+.finding-subgroup {
+  margin-block: var(--space-4) var(--space-6);
+}
+
+.finding-subgroup > h3 {
+  margin-block-end: var(--space-2);
+  color: var(--color-ink);
+}
+
+.finding-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-block-start: 1px solid var(--color-border-container);
+}
+
+.finding-row {
+  display: grid;
+  gap: var(--space-1);
+  padding-block: var(--space-3);
+  border-block-end: 1px solid var(--color-border-container);
+}
+
+.finding-row__title {
+  justify-self: start;
+  min-block-size: var(--target-min);
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.finding-row__meta {
+  margin: 0;
+  color: var(--color-ink-muted);
+  font-size: var(--font-size-small);
+  overflow-wrap: anywhere;
+}
+
+.finding-empty {
+  max-inline-size: var(--measure-reading);
+  color: var(--color-ink);
+}
+
+/* A form of these screens: the raise form, the mitigation form, the acceptance, the reopen form. */
+.finding-form {
+  max-inline-size: 40rem;
+  margin-block: var(--space-6);
+  padding: var(--space-6);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-container);
+  border-radius: var(--radius-surface);
+}
+
+.finding-form > h2,
+.finding-form > h3 {
+  margin-block: 0 var(--space-4);
+}
+
+.finding-form fieldset {
+  min-inline-size: 0;
+  margin: 0 0 var(--space-6);
+  padding: 0;
+  border: 0;
+}
+
+.finding-form legend {
+  margin-block-end: var(--space-2);
+  padding: 0;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-ink);
+}
+
+/* The buttons of a form or a confirmation, in one row that wraps and keeps its order at every width. */
+.finding-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-block: var(--space-4);
+}
+
+/* A sentence that says what went wrong: ink on the surface, never red (red is the overdue date's alone). */
+.finding-alert {
+  max-inline-size: var(--measure-reading);
+  margin-block: var(--space-3);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-ink);
+}
+
+/* The close button and its status, in one row that wraps. */
+.finding-close {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin-block-start: var(--space-2);
+}
+
+/* One finding (S-15): the header's lines, the regions, the mitigation cards and the two histories. */
+.finding-header > p {
+  margin: 0;
+  max-inline-size: var(--measure-reading);
+  overflow-wrap: anywhere;
+}
+
+.finding-description {
+  white-space: pre-wrap;
+}
+
+.finding-section {
+  margin-block: var(--space-10);
+}
+
+.finding-section > h2 {
+  margin-block-end: var(--space-4);
+}
+
+/* "Can be closed now": the decision that closes this finding, set apart on the tint. */
+.finding-close-box {
+  max-inline-size: var(--measure-reading);
+  margin-block: var(--space-6);
+  padding: var(--space-4) var(--space-5);
+  background-color: var(--color-tint);
+  border-radius: var(--radius-surface);
+  color: var(--color-ink);
+}
+
+.finding-close-box > p {
+  margin-block: 0 var(--space-2);
+}
+
+.finding-cards {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  list-style: none;
+}
+
+.finding-card {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-container);
+  border-radius: var(--radius-surface);
+  box-shadow: var(--shadow-surface);
+  overflow-wrap: anywhere;
+}
+
+.finding-card > p {
+  margin: 0;
+}
+
+.finding-card__line {
+  color: var(--color-ink);
+}
+
+/* Spec 7.1: the overdue red is for an overdue date and the word "Overdue" only, never a status label or a mark. */
+.finding-overdue {
+  color: var(--color-overdue);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* The disclosure keeps its marker (a summary's ::marker exists only as display: list-item) and is a 24 px target by its
+   own height, sized to its text so the target is the words and the marker. */
+.finding-history > summary {
+  display: list-item;
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  min-block-size: var(--target-min);
+  padding-block: var(--space-1);
+  cursor: pointer;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-link);
+}
+
+.finding-history > ol,
+.finding-timeline {
+  margin-block: var(--space-2) 0;
+  padding-inline-start: var(--space-6);
+  color: var(--color-ink);
+}
+
+.finding-timeline > li + li,
+.finding-history li + li {
+  margin-block-start: var(--space-2);
+}
+
+/* The mitigation's status, four radios in a row that wraps; each label is a 24 px target and the native radio is kept. */
+.finding-radios > legend {
+  margin-block-end: var(--space-2);
+}
+
+.finding-radios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-6);
+}
+
+.finding-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: var(--target-min);
+  color: var(--color-ink);
+  cursor: pointer;
+}
+
+.finding-radio > input {
+  inline-size: 20px;
+  block-size: 20px;
+  margin: 0;
+  accent-color: var(--color-ink);
+}
+
+/* A file still uploading holds the save: the line and its two choices, set apart on the tint. */
+.finding-held {
+  margin-block: var(--space-4);
+  padding: var(--space-4);
+  background-color: var(--color-tint);
+  border-radius: var(--radius-surface);
+  color: var(--color-ink);
+}
+
+.finding-held > p {
+  margin: 0;
+}
+
+.finding-unsaved {
+  flex-basis: 100%;
+  max-inline-size: var(--measure-reading);
+  font-size: var(--font-size-small);
+  color: var(--color-ink-muted);
+}
+
+/* The line that says which roles can act, where the action is absent. */
+.finding-note {
+  max-inline-size: var(--measure-reading);
+  color: var(--color-ink-muted);
+}
+
+.finding-confirm {
+  max-inline-size: 40rem;
+  margin-block: var(--space-4);
+}
+
+/* The legacy error summary these forms keep (FindingActions.tsx ErrorSummary, its markup unchanged): its links are 24 px
+   targets with room between them (WCAG 2.5.8). */
+.finding-form .form-error ul {
+  display: grid;
+  gap: var(--space-2);
+  margin-block: var(--space-2) 0;
+}
+
+.finding-form .form-error a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--target-min);
+}
+
+/* A sentence directly in a form or a region keeps room before the control that follows it. */
+.finding-form > p,
+.finding-section > p {
+  max-inline-size: var(--measure-reading);
+  margin-block: 0 var(--space-4);
+}
+
+/* At phone width the form panel gives its padding back to the fields. */
+@media (max-width: 30rem) {
+  .finding-form {
+    padding: var(--space-4);
+  }
+}

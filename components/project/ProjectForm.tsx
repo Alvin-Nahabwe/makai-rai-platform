@@ -1,8 +1,6 @@
 'use client';
 
 import './ProjectForm.css';
-import '@/components/ui/TextArea.css';
-import '@/components/ui/Select.css';
 import { useEffect, useRef, useState } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 import { useRouter, useParams } from 'next/navigation';
@@ -20,6 +18,9 @@ import { signInAgainHref } from '@/lib/auth/idle';
 import { formRefusalOf } from '@/lib/projects/writeRefusal';
 import type { FieldError as ApiFieldError } from '@/types/record';
 import type { PROJECT_METADATA_FIELDS } from '@/lib/validate';
+import '@/components/ui/textAreaStyles';
+import '@/components/ui/selectStyles';
+import '@/components/ui/buttonStyles';
 
 const C = PROJECT_FORM_COPY;
 

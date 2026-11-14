@@ -4,9 +4,12 @@ import { Button } from '@/components/ui/Button';
 import { FieldError, FieldLabel } from '@/components/ui/TextInput';
 import { EVIDENCE_COPY } from '@/lib/evidence/copy';
 import { stripBidiControls } from '@/lib/evidence/format';
+import { LINK_LABEL_MAX } from '@/lib/evidence/link';
 import { largeFileNote, notUploadedLine, statusLine, type NamedLine, type UploadItem } from '@/lib/evidence/uploadQueue';
 import type { EvidenceItemView } from '@/types/api';
 import './EvidenceBlock.css';
+import '@/components/ui/formStyles';
+import '@/components/ui/buttonStyles';
 
 export interface EvidenceBlockViewProps {
   orgSlug: string;
@@ -63,6 +66,10 @@ export function EvidenceBlockView(p: EvidenceBlockViewProps): ReactElement {
   const urlId = `${p.idBase}-link-url`;
   const labelId = `${p.idBase}-link-label`;
   const errorId = `${p.idBase}-link-error`;
+  // A field is marked invalid only by its own message; a refusal (signed out, archived, the limiter, a lost connection)
+  // is about the request, not a field, and marks neither.
+  const urlInvalid = p.linkError === EVIDENCE_COPY.link.address;
+  const nameInvalid = p.linkError === EVIDENCE_COPY.link.nameTooLong(LINK_LABEL_MAX);
   const removable = (item: EvidenceItemView, carried: boolean): ReactElement => (
     <li key={item.id} className="evidence-block__item">
       <span className="evidence-block__name">
@@ -143,13 +150,14 @@ export function EvidenceBlockView(p: EvidenceBlockViewProps): ReactElement {
               <div className="ui-field">
                 <FieldLabel htmlFor={urlId} label={EVIDENCE_COPY.webAddress} />
                 <input id={urlId} type="text" inputMode="url" autoComplete="off" value={p.linkUrl}
-                  className={p.linkError === null ? 'ui-input' : 'ui-input ui-input--invalid'}
-                  aria-describedby={p.linkError === null ? helpId : `${helpId} ${errorId}`} aria-invalid={p.linkError === null ? undefined : true}
+                  className={urlInvalid ? 'ui-input ui-input--invalid' : 'ui-input'}
+                  aria-describedby={p.linkError === null ? helpId : `${helpId} ${errorId}`} aria-invalid={urlInvalid ? true : undefined}
                   onChange={(e) => p.onLinkUrlChange?.(e.target.value)} onKeyDown={onEnter} />
               </div>
               <div className="ui-field">
                 <FieldLabel htmlFor={labelId} label={EVIDENCE_COPY.linkName} />
-                <input id={labelId} type="text" autoComplete="off" value={p.linkLabel} className="ui-input" aria-describedby={helpId}
+                <input id={labelId} type="text" autoComplete="off" value={p.linkLabel} className={nameInvalid ? 'ui-input ui-input--invalid' : 'ui-input'}
+                  aria-describedby={nameInvalid ? `${helpId} ${errorId}` : helpId} aria-invalid={nameInvalid ? true : undefined}
                   onChange={(e) => p.onLinkLabelChange?.(e.target.value)} onKeyDown={onEnter} />
               </div>
               <Button variant="secondary" disabled={p.linkPending === true} onClick={() => p.onAddLink?.()}>{EVIDENCE_COPY.addLink}</Button>

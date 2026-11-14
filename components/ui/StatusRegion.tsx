@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import { Icon } from '@/components/ui/Icon';
-import './StatusRegion.css';
+import './formStyles';
 
 export type StatusRegionProps = {
   /** The sentence to announce; null while there is nothing to say. */

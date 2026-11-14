@@ -143,7 +143,7 @@ test('NFR-A11Y-02 FR-FUP-06: the reminder setting on S-21 toggles by keyboard an
   const page = await signedIn(browser, fx.members.assessor);
   requireWired('ReminderEmailsSetting', 'ACC-b, S-21');
   await page.goto('/account');
-  await tabUntil(page, /Email me when a mitigation I own is due/);
+  await tabUntil(page, /Email me when a mitigation assigned to me is due or overdue/);
   await page.keyboard.press('Space'); await expect(page.getByRole('status').filter({ hasText: 'Reminder emails' })).toHaveText('Reminder emails turned off.');   // 7.4.2 row S-21
-  await page.keyboard.press('Space'); await expect(page.getByRole('status').filter({ hasText: 'Saved.' })).toHaveText('Saved.');
+  await page.keyboard.press('Space'); await expect(page.getByRole('status').filter({ hasText: 'Reminder emails turned on.' })).toHaveText('Reminder emails turned on.');
 });

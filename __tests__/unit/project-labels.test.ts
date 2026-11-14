@@ -6,8 +6,8 @@ import { DATASET_SIZE_WORDS, PERSONAL_DATA_WORDS } from '@/lib/project/labels';
 describe('lib/project/labels (owner default B37, FR-DOC-02)', () => {
   it('FR-DOC-02 (helper): the dataset size words are the contract\'s, in order', () => {
     expect(Object.entries(DATASET_SIZE_WORDS)).toEqual([
-      ['small_lt1k', 'Under 1,000'], ['medium_1k_100k', '1,000 to 100,000'], ['large_100k_1m', '100,000 to 1 million'],
-      ['very_large_gt1m', 'Over 1 million'], ['unknown', 'Unknown'],
+      ['small_lt1k', 'Under 1,000 records'], ['medium_1k_100k', '1,000 to 100,000 records'], ['large_100k_1m', '100,000 to 1 million records'],
+      ['very_large_gt1m', 'Over 1 million records'], ['unknown', 'Not known'],
     ]);
   });
 

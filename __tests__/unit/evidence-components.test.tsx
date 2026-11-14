@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { EvidenceBlockView, type EvidenceBlockViewProps } from '@/components/evidence/EvidenceBlockView';
 import { VersionEvidenceList } from '@/components/evidence/VersionEvidenceList';
 import { attachedItems, type UploadItem } from '@/lib/evidence/uploadQueue';
-import { CONNECTION_LOST_TEXT, EVIDENCE_COPY } from '@/lib/evidence/copy';
+import { CONNECTION_LOST_TEXT, EVIDENCE_COPY, LINK_REFUSAL_COPY } from '@/lib/evidence/copy';
 import { HOSTILE_FILE_NAMES } from '../helpers/hostile';
 import type { EvidenceItemView } from '@/types/api';
 
@@ -112,6 +112,25 @@ describe('the evidence block and the version evidence list', () => {
     expect(html).toMatch(/aria-describedby="evidence-help evidence-link-error"/);
     expect(html).toMatch(/id="evidence-link-error">Enter a web address/);
     expect(html).toMatch(/aria-invalid="true"/);
+  });
+  it('17c review: only the field its message is about is marked invalid; a refusal marks neither', () => {
+    const inputs = (html: string) => {
+      const tag = (id: string) => html.match(new RegExp(`<input[^>]*id="${id}"[^>]*>`))![0];
+      return { url: tag('evidence-link-url'), name: tag('evidence-link-label') };
+    };
+    const invalid = (tag: string) => /aria-invalid="true"/.test(tag) && /\bui-input--invalid\b/.test(tag);
+    const unmarked = (tag: string) => !/aria-invalid=/.test(tag) && !/\bui-input--invalid\b/.test(tag);
+    const address = inputs(view({ linkFormOpen: true, linkError: EVIDENCE_COPY.link.address }));
+    expect(invalid(address.url)).toBe(true);
+    expect(unmarked(address.name)).toBe(true);
+    const name = inputs(view({ linkFormOpen: true, linkError: EVIDENCE_COPY.link.nameTooLong(200) }));
+    expect(unmarked(name.url)).toBe(true);
+    expect(invalid(name.name)).toBe(true);
+    for (const refusal of [LINK_REFUSAL_COPY.signedOut, LINK_REFUSAL_COPY.archived, LINK_REFUSAL_COPY.rateLimited, LINK_REFUSAL_COPY.connectionLost]) {
+      const r = inputs(view({ linkFormOpen: true, linkError: refusal }));
+      expect(unmarked(r.url), refusal).toBe(true);
+      expect(unmarked(r.name), refusal).toBe(true);
+    }
   });
   it('UX-31 FR-PRJ-03: a disabled block renders items with no control', () => {
     expect(view({ items: [FILE_VIEW], disabled: true })).not.toMatch(/<button|<input/);
