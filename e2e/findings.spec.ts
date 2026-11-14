@@ -283,6 +283,87 @@ test('X-4 (register D-398): the pressed Retry stays, busy and focused, while its
   expect(ids[1], 'a Retry sends the same request id').toBe(ids[0]);
 });
 
+test('B1 (ruling L5-4): after a successful send focus goes to something that stays, never to the page body', async ({ browser }) => {
+  const project = await addProject(fx, { name: 'Focus after a send' });
+  const url = (id: string) => `/orgs/${fx.org.slug}/projects/${project.id}/findings/${id}`;
+  const forMitigation = await addFinding(fx, project.id, { stage: 'pre-processing', source: 'team', by: 'owner' });
+  const toReopen = await addFinding(fx, project.id, { stage: 'pre-processing', source: 'team', by: 'owner' });
+  await addMitigationVersion(fx, toReopen.id, { status: 'done', owner: 'assessor', dueDate: '2026-12-01' });
+  const toWithdraw = await addFinding(fx, project.id, { stage: 'pre-processing', source: 'team', by: 'owner' });
+  const toAccept = await addFinding(fx, project.id, { stage: 'pre-processing', source: 'team', by: 'owner' });
+  const assessor = await as(browser, 'assessor');
+  // A mitigation: the toggle's trigger comes back and takes focus.
+  await assessor.goto(url(forMitigation.id));
+  await assessor.getByRole('button', { name: FINDINGS_COPY.finding.addMitigation }).click();
+  await assessor.getByRole('combobox', { name: MF.assignedLabel }).selectOption({ label: fx.members.assessor.name });
+  await assessor.getByLabel(UI_COPY.date.day).fill('20'); await assessor.getByLabel(UI_COPY.date.month).fill('3'); await assessor.getByLabel(UI_COPY.date.year).fill('2027');
+  await assessor.getByLabel(MF.what).fill('Relabel the minority class.');
+  await assessor.getByRole('button', { name: MF.save }).click();
+  await expect(assessor.getByRole('button', { name: FINDINGS_COPY.finding.addMitigation, exact: true })).toBeFocused();
+  // Reopen: the status line that holds "Reopened." takes focus.
+  await assessor.goto(url(toReopen.id));
+  await assessor.getByRole('button', { name: ACT.reopenTrigger }).click();
+  await assessor.getByLabel(ACT.reason).fill('The memo was withdrawn.');
+  await assessor.getByRole('button', { name: ACT.reopenSubmit }).click();
+  await expect(status(assessor)).toHaveText(ACT.reopenedDone);
+  await expect(status(assessor)).toBeFocused();
+  const owner = await as(browser, 'owner');
+  // Withdraw: the same status line.
+  await owner.goto(url(toWithdraw.id));
+  await owner.getByRole('button', { name: ACT.withdrawTrigger }).click();
+  await owner.getByLabel(ACT.reason).fill('Raised twice.');
+  await owner.getByRole('button', { name: ACT.withdrawAction }).click();
+  await expect(status(owner)).toHaveText(ACT.withdrawnDone);
+  await expect(status(owner)).toBeFocused();
+  // Accept the risk: the same status line, holding the saved line.
+  await owner.goto(url(toAccept.id));
+  await owner.getByLabel(AR.acceptedBy).selectOption({ label: AR.outsideWho('Ethics committee') });
+  await owner.getByLabel(AR.reason).fill('Minutes of 30 Oct 2026, item 4.');
+  await owner.getByRole('button', { name: AR.submit }).click();
+  await expect(status(owner)).toHaveText(AR.saved('Ethics committee'));
+  await expect(status(owner)).toBeFocused();
+});
+
+test('B1 B2: a Retry that fails again is announced again with no "Saving..." under it, and a Retry refused for good puts focus on the alert', async ({ browser }) => {
+  const page = await as(browser, 'assessor');
+  const project = await addProject(fx, { name: 'Retry answers' });
+  const f = await addFinding(fx, project.id, { stage: 'pre-processing', source: 'team', by: 'owner' });
+  await page.goto(`/orgs/${fx.org.slug}/projects/${project.id}/findings/${f.id}`);
+  await page.getByRole('button', { name: FINDINGS_COPY.finding.addMitigation }).click();
+  await page.getByRole('combobox', { name: MF.assignedLabel }).selectOption({ label: fx.members.assessor.name });
+  await page.getByLabel(UI_COPY.date.day).fill('20'); await page.getByLabel(UI_COPY.date.month).fill('3'); await page.getByLabel(UI_COPY.date.year).fill('2027');
+  await page.getByLabel(MF.what).fill('Relabel the minority class.');
+  let n = 0;
+  let release!: () => void;
+  const held = new Promise<void>((res) => { release = res; });
+  await page.route('**/mitigations', async (r) => {
+    if (r.request().method() !== 'POST') return r.continue();
+    n++;
+    if (n === 1) return r.abort('connectionreset');
+    if (n === 2) { await held; return r.abort('connectionreset'); }
+    return r.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ error: 'forbidden', code: 'forbidden' }) });
+  });
+  await page.getByRole('button', { name: MF.save }).click();
+  const alert = page.locator('main [role="alert"].finding-alert');
+  await expect(alert).toContainText(FINDINGS_COPY.failures.connectionLost(FINDINGS_COPY.failures.keptInBrowser));
+  // Mark the failure's text node, then Retry: while it is held no stale "Not saved" line sits above "Saving...".
+  await alert.evaluate((el) => { (el.firstChild as Node & { __old?: boolean }).__old = true; });
+  const retry = page.getByRole('button', { name: MF.retry, exact: true });
+  await retry.focus(); await page.keyboard.press('Enter');
+  await expect.poll(() => n).toBe(2);
+  await expect(alert).not.toContainText(FINDINGS_COPY.failures.connectionLost(FINDINGS_COPY.failures.keptInBrowser));
+  await expect(retry).toBeFocused();
+  release();
+  // The same failure comes back in a new node, so a screen reader reads it again.
+  await expect(alert).toContainText(FINDINGS_COPY.failures.connectionLost(FINDINGS_COPY.failures.keptInBrowser));
+  expect(await alert.evaluate((el) => (el.firstChild as Node & { __old?: boolean }).__old === true)).toBe(false);
+  await expect(retry).toBeFocused();
+  // A refusal Retry cannot fix removes the Retry button: focus goes to the alert, not to the body.
+  await page.keyboard.press('Enter');
+  await expect(alert).toContainText(FINDINGS_COPY.failures.forbidden(FINDINGS_COPY.failures.keptInBrowser));
+  await expect(alert).toBeFocused();
+});
+
 test('NFR-A11Y-05: S-14 and S-15 at 320 px lose no content, state is in text, and axe finds no serious violation', async ({ browser }) => {
   const page = await as(browser, 'assessor', 320);
   for (const [url, state] of [[s14, 'S-14 groups at 320 px'], [s15.shortfall, 'S-15 shortfall at 320 px']] as const) {

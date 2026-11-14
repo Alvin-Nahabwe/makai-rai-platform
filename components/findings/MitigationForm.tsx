@@ -126,6 +126,11 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [evidenceKey, setEvidenceKey] = useState(0);
+  // Each answer's text is a new node (B2), so a Retry that fails the same way is announced again.
+  const [answers, setAnswers] = useState(0);
+  // A Retry answered by a refusal Retry cannot fix removes the focused Retry: focus goes to the alert (B1, ruling L5-4).
+  const [focusAlert, setFocusAlert] = useState(0);
+  const alertBox = useRef<HTMLParagraphElement>(null);
   const upload = useMemo(() => activeUpload(value.status, rawUpload), [value.status, rawUpload]);   // the evidence block is gone, with its uploads, unless the status is Done
   const store = useRef<DraftStore | null>(null);
   const retry = useRef<RetryState>(NO_RETRY);
@@ -161,6 +166,10 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
     if (kept !== null) setCannotKeep(!kept);
   }, [value, dirty, key, base, upload, conflict]);
 
+  useEffect(() => {
+    if (focusAlert > 0) alertBox.current?.focus();
+  }, [focusAlert]);
+
   const change = useCallback((patch: Partial<MitigationFormValue>) => {
     setValue((v) => ({ ...v, ...patch })); setDirty(true); setErrors([]); setHeld(false);
   }, []);
@@ -168,11 +177,14 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
   const kept = cannotKeep ? KEPT_IN_FORM : KEPT_ON_DEVICE;
   /**
    * Sends route 6 or 7. A Retry keeps the alert, and so the Retry button itself, mounted while its own request is in
-   * flight (busy, with its focus), until the answer replaces the alert or, on a save, removes it (ruling X-4).
+   * flight (busy, with its focus), until the answer replaces the alert or, on a save, removes it (ruling X-4). While a
+   * Retry is in flight the alert says "Saving..." in place of the failure it answers, so no stale "Not saved" line sits
+   * on the page (B2); the answer is a new text node, so the same failure again is announced again.
    */
   const post = async (body: Record<string, unknown>, usingBase: MitigationVersionView | null, left: string[], retrying = false) => {
     if (inFlight.current) return;
-    inFlight.current = true; setBusy(true); if (!retrying) setAlert(null); setStatus(MF.saving);
+    inFlight.current = true; setBusy(true);
+    if (retrying) { setAlert({ text: MF.saving, retry: true }); setAnswers((n) => n + 1); } else { setAlert(null); setStatus(MF.saving); }
     try {
       const next = requestIdFor(retry.current, body);
       retry.current = next.state;
@@ -183,7 +195,7 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
       }
       const url = `/api/v1/orgs/${encodeURIComponent(p.orgSlug)}/projects/${encodeURIComponent(p.projectId)}/findings/${encodeURIComponent(p.findingId)}/mitigations${usingBase === null ? '' : `/${encodeURIComponent(usingBase.mitigationId)}`}`;
       const outcome = await sendWrite<MitigationVersionView>(url, 'POST', { requestId: next.requestId, ...body }, {
-        onSlow: () => setStatus(MF.slow(kept)),
+        onSlow: () => (retrying ? setAlert({ text: MF.slow(kept), retry: true }) : setStatus(MF.slow(kept))),
       });
       const failed = writeFailure(outcome, kept);
       if (failed === null && outcome.kind === 'saved') {
@@ -200,16 +212,19 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
       if (failed?.conflict?.code === 'base_version_moved' && isNewerVersion(failed.conflict.current)) {
         setConflict(failed.conflict.current);
       } else if (failed?.conflict?.code === 'base_version_moved') {
-        setAlert({ text: MF.newerFirst, retry: false });
+        setAlert({ text: MF.newerFirst, retry: false }); setAnswers((n) => n + 1);
+        if (retrying) setFocusAlert((n) => n + 1);
       } else if (failed !== null && failed.fields.length > 0) {
         setConflict(null); setErrors(failed.fields); setAttempt((n) => n + 1);
       } else if (failed !== null) {
-        setAlert({ text: failed.text, retry: failed.retry, name: failed.nameInText });
+        setAlert({ text: failed.text, retry: failed.retry, name: failed.nameInText }); setAnswers((n) => n + 1);
+        if (retrying && !failed.retry) setFocusAlert((n) => n + 1);
       }
     } catch (e) {
       // A fault in this page's own code after a reply: the person must not be left on "Saving...".
       setStatus('');
-      setAlert({ text: MF.replyNotShown(kept), retry: false });
+      setAlert({ text: MF.replyNotShown(kept), retry: false }); setAnswers((n) => n + 1);
+      if (retrying) setFocusAlert((n) => n + 1);
       console.error('MitigationForm: the reply to a save could not be shown', e);   // reported, not rethrown: every caller is a floating promise
     } finally {
       inFlight.current = false; setBusy(false);
@@ -327,8 +342,8 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
       </div>
       {cannotKeep ? <p>{MF.cannotKeep}</p> : null}
       {alert === null ? null : (
-        <p role="alert" className="finding-alert">
-          <FailureText text={alert.text} name={alert.name} />
+        <p role="alert" className="finding-alert" ref={alertBox} tabIndex={-1}>
+          <span key={answers}><FailureText text={alert.text} name={alert.name} /></span>
           {alert.retry ? <>{' '}<Button variant="secondary" size="compact" busy={busy} onClick={() => save({ skipGate: upload.uploading.length + upload.failed.length > 0, retrying: true })}>{MF.retry}</Button></> : null}
         </p>
       )}
@@ -341,7 +356,7 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
  * The button that opens the form ("Add a mitigation" or "Update this mitigation") and keeps the saved line after the form
  * closes. A draft in this browser opens the form at once, so nothing typed is lost. Used by `FindingPageView`.
  * The form replaces the button, so a press puts focus on the form's first field, the chosen status (ruling X-4: focus
- * is never left on the page body); Close puts it back on the button.
+ * is never left on the page body); Close, and a save, put it back on the button (B1, ruling L5-4).
  */
 export function MitigationFormToggle(p: MitigationFormProps & { label: 'Add a mitigation' | 'Update this mitigation' }): ReactElement | null {
   const [open, setOpen] = useState(false);
@@ -367,7 +382,7 @@ export function MitigationFormToggle(p: MitigationFormProps & { label: 'Add a mi
   return (
     <div ref={box}>
       {open ? (
-        <MitigationForm {...p} onSaved={(t) => { setSaved(t); setOpen(false); }} onClose={() => { setOpen(false); requestAnimationFrame(() => trigger.current?.focus()); }} />
+        <MitigationForm {...p} onSaved={(t) => { setSaved(t); setOpen(false); requestAnimationFrame(() => trigger.current?.focus()); }} onClose={() => { setOpen(false); requestAnimationFrame(() => trigger.current?.focus()); }} />
       ) : (
         <Button variant="secondary" ref={trigger} onClick={() => { pressed.current = true; setOpen(true); }}>{p.label}</Button>
       )}

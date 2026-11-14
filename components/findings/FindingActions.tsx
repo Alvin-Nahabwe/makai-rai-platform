@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { cloneElement, isValidElement, useCallback, useEffect, useId, useRef, useState, type ReactElement, type ReactNode } from 'react';
+import { cloneElement, isValidElement, useCallback, useEffect, useId, useRef, useState, type ReactElement, type ReactNode, type Ref } from 'react';
 import { Button } from '@/components/ui/Button';
 import { ErrorSummary as KitErrorSummary } from '@/components/ui/ErrorSummary';
 import { InlineConfirm } from '@/components/ui/InlineConfirm';
@@ -68,11 +68,12 @@ export function FailureText({ text, name }: { text: string; name?: string }): Re
 
 /**
  * A polite live region that keeps its place in the page: the element is always there so the screen reader has registered
- * it, and it takes `role="status"` only while it holds text (so a page shows one status at a time).
+ * it, and it takes `role="status"` only while it holds text (so a page shows one status at a time). Given a `ref`, it can
+ * take focus from script (`tabIndex={-1}`), for an outcome that replaces the control that was pressed.
  */
-export function StatusLine({ children }: { children?: ReactNode }): ReactElement {
+export function StatusLine({ children, ref }: { children?: ReactNode; ref?: Ref<HTMLDivElement> }): ReactElement {
   const has = children !== undefined && children !== null && children !== false && children !== '';
-  return <div aria-live="polite" role={has ? 'status' : undefined}>{has ? children : null}</div>;
+  return <div aria-live="polite" role={has ? 'status' : undefined} ref={ref} tabIndex={ref === undefined ? undefined : -1}>{has ? children : null}</div>;
 }
 
 /** The summary a failed Save shows and takes focus (WCAG 3.3.1; the forms guide: "Block and route focus"): one link per field. */
@@ -184,6 +185,13 @@ export function FindingActions(p: FindingActionsProps): ReactElement {
   const [errors, setErrors] = useState<FieldError[]>([]);
   const [attempt, setAttempt] = useState(0);
   const withdrawTrigger = useRef<HTMLButtonElement>(null);
+  // After a reopen, a withdrawal or an acceptance the pressed control is gone: the status line that holds the outcome takes
+  // focus (B1, ruling L5-4), once it holds it. It stays in place through the refresh.
+  const statusLine = useRef<HTMLDivElement>(null);
+  const [focusStatus, setFocusStatus] = useState(0);
+  useEffect(() => {
+    if (focusStatus > 0) statusLine.current?.focus();
+  }, [focusStatus]);
   const reopenTrigger = useRef<HTMLButtonElement>(null);
   const reasonBox = useRef<HTMLTextAreaElement>(null);
   const summaryTitle = useRef<HTMLHeadingElement>(null);
@@ -193,7 +201,7 @@ export function FindingActions(p: FindingActionsProps): ReactElement {
   const w = open === 'reopen' ? reopen : withdraw;
   // The accept form reports its saved line here, so it survives the refresh that remounts the form behind its trigger (CR-1).
   const accept = isValidElement(p.acceptForm)
-    ? cloneElement(p.acceptForm as ReactElement<{ onAccepted?: (t: ReactNode) => void }>, { onAccepted: (t: ReactNode) => setMessage(t) })
+    ? cloneElement(p.acceptForm as ReactElement<{ onAccepted?: (t: ReactNode) => void }>, { onAccepted: (t: ReactNode) => { setMessage(t); setFocusStatus((n) => n + 1); } })
     : p.acceptForm;
 
   // Opening the confirmation or the reopen form puts focus on its first field, the reason (X-4); Cancel puts it back on what opened it.
@@ -217,7 +225,7 @@ export function FindingActions(p: FindingActionsProps): ReactElement {
     const sent = await hook.send({ reason: reason.trim(), eventCode: null });
     if (sent === null) return;
     setMessage(kind === 'withdraw' ? C.withdrawnDone : C.reopenedDone);
-    setOpen(null); setReason('');
+    setOpen(null); setReason(''); setFocusStatus((n) => n + 1);
     router.refresh();
   };
 
@@ -276,7 +284,7 @@ export function FindingActions(p: FindingActionsProps): ReactElement {
         </>
       )}
       {w.failure === null ? null : <p role="alert" className="finding-alert"><FailureText text={w.failure.text} name={w.failure.nameInText} /></p>}
-      <StatusLine>{w.phase === 'saving' ? C.saving : w.phase === 'slow' ? C.slow : message}</StatusLine>
+      <StatusLine ref={statusLine}>{w.phase === 'saving' ? C.saving : w.phase === 'slow' ? C.slow : message}</StatusLine>
     </div>
   );
 }
