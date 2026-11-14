@@ -101,7 +101,8 @@ describe('All questions: the stage as a row of marks', () => {
   it('the row of marks is labelled with the stage\'s questions and its stops link to each question; the answered stop says the answer', () => {
     const h = render(data(ROWS, { scopeAnswer: 'yes' }));
     expect(h).toMatch(/<ol class="ui-route-row__stops" role="list" aria-label="Questions in this stage">/);
-    expect(h).toContain(`Question Q-PP-GATE-SENSITIVE in words?: ${STATUS_MARK_COPY.scope_answered('yes')}`);
+    // The kit writes a stop's title in an element of its own, then ": " and the status words (RouteRow).
+    expect(h).toContain(`<span>Question Q-PP-GATE-SENSITIVE in words?</span>: ${STATUS_MARK_COPY.scope_answered('yes')}`);
     expect(h).toMatch(/<a[^>]*href="\/orgs\/org-a\/projects\/p1\/stages\/pre-processing\/questions\/Q-PP-01"[^>]*class="ui-route-row__point"|<a[^>]*class="ui-route-row__point"[^>]*href="\/orgs\/org-a\/projects\/p1\/stages\/pre-processing\/questions\/Q-PP-01"/);
   });
 
