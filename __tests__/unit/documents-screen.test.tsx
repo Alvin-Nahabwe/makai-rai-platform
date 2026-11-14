@@ -275,4 +275,15 @@ describe('S-18 issued list and the S-16 slot', () => {
     const empty = renderToStaticMarkup(<ReviewDocumentsList orgSlug="o" projectId="p" reviewId="r" documents={[]} />);
     expect(empty).toBe('');
   });
+
+  it('FR-DOC-04 (S-16 slot, workshop walk S5-4): each document links its PDF as the S-18 list does: issued and withdrawn yes, erased no', () => {
+    const withdrawn = { ...doc(), id: 'doc-w', withdrawn: { on: '2026-11-04', reason: 'x' } };
+    const erased = { ...doc(), id: 'doc-e', erased: { erasedOn: '2026-11-04' } };
+    const html = renderToStaticMarkup(<ReviewDocumentsList orgSlug="o s" projectId="p" reviewId="r" documents={[doc(), withdrawn, erased]} />);
+    const link = (id: string) => `<a href="/api/v1/orgs/o%20s/documents/${id}/pdf">${DOCUMENTS_COPY.issued.download('84 KB')}</a>`;
+    expect(html).toContain(link('doc-12345678'));
+    expect(html).toContain(link('doc-w'));
+    expect(html).not.toContain('/documents/doc-e/pdf');
+    expect(html.match(/<a /g)).toHaveLength(2);
+  });
 });

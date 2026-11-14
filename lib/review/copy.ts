@@ -60,6 +60,8 @@ export const REVIEW_COPY = Object.freeze({
     note: (note: string): string => `Prepared for: ${note}`,
     openedBy: (name: string): string => `Opened by ${name} on`,
     statusHeading: 'Status',
+    /** After "Not sealed yet." while the review has no seal: who may seal it (lib/authz/policy.ts, `review:seal`). */
+    whoSeals: 'An Owner, an Admin or a Reviewer seals this review.',
     questionsChanged: (n: number): string => `Questions changed since the last seal (${n}): `,
     noLongerInContent: ' (no longer in the current questions)',
     findingsChanged: (n: number): string => `Findings changed since the last seal (${n}): `,

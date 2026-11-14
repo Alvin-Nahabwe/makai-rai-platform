@@ -1942,5 +1942,13 @@
     "property": "The administrator's shell links S-23 (/admin/organisations) and S-25 (/admin/accounts), and no Settings or /admin/users link.",
     "proof": "The shell prop the case renders Rail with gains homeSlug: null, the field ShellData now requires (workshop walk finding S4); the four assertions are unchanged. __tests__/unit/ui/shell.test.tsx::S4: no organisation gives no organisation link, and the administrator's rail is unchanged, with a home slug or without renders the administrator's rail with a home slug too and requires the same three links and no /orgs/ address.",
     "task": "workshop walk fix S4"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/integration/documents-page.test.tsx::S-16: the seal explanation link sits under the Seals heading, and the time-stamp sentence is not on screen",
+    "replacedBy": "__tests__/integration/documents-page.test.tsx::S-16: the seal explanation link sits in the Status section after the state line, and the time-stamp sentence is not on screen",
+    "property": "S-16 shows the \"What sealing means\" link exactly once, and the time-stamp sentence not at all. The link moved from under the Seals heading into the Status section, directly after the state line, because the Seals heading is now drawn only when the review has a seal (workshop walk finding S5-2: no heading with nothing under it).",
+    "proof": "For a sealed and an unsealed review the case takes the Status section's markup and requires it to start with <h2 id=\"review-state\">Status</h2>, then the state line's paragraph, then <p><a href=\"/help#what-sealing-means\">What sealing means</a></p>; the count of 'What sealing means' on the page stays exactly 1 and 'independently time-stamped' stays absent. __tests__/integration/stage-review-page.test.tsx requires that a review with no seal draws no Seals heading and a sealed one does.",
+    "task": "workshop walk fix S5"
   }
 ]

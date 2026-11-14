@@ -75,6 +75,8 @@ export default async function StageReviewPage({ params }: PageProps) {
   const archived = project.archivedAt !== null;
   const base = `/orgs/${encodeURIComponent(slug)}/projects/${encodeURIComponent(id)}`;
   const canSeal = can(ctx.role, 'review:seal') && !archived;
+  // A heading is drawn only with something under it (workshop walk S5-2): Seals with a seal, Documents with a document or this link.
+  const canCreateDocument = can(ctx.role, 'document:generate') && !archived && seals.length > 0;
   const contentLine = contentChangedLine(review.latestSeal, runningContent().semver);
   const opened = [
     r.stage(REVIEW_COPY.stageNames[review.stage]),
@@ -86,11 +88,12 @@ export default async function StageReviewPage({ params }: PageProps) {
   return (
     <div className="page-content">
       <ArchivedBanner archived={archived} />
-      <PageHeader title={review.name} lead={<p>{opened} <DeviceDateTime iso={review.openedAt} form="day" serverText={formatDay(review.openedAt)} /></p>} />
+      <PageHeader breadcrumb={[{ label: project.name, href: base }, { label: review.name }]} title={review.name} lead={<p>{opened} <DeviceDateTime iso={review.openedAt} form="day" serverText={formatDay(review.openedAt)} /></p>} />
 
       <section aria-labelledby="review-state" className="review-block">
         <h2 id="review-state">{r.statusHeading}</h2>
-        <p><ReviewStateLine view={review} serverText={reviewStateLine(review)} /></p>
+        <p><ReviewStateLine view={review} serverText={reviewStateLine(review)} />{review.latestSeal === null ? ` ${r.whoSeals}` : null}</p>
+        <p><a href={SEAL_PROOF_HREF}>{HELP_COPY.sealing.heading}</a></p>
         {contentLine !== null ? <p>{contentLine}</p> : null}
         {review.changed !== null ? (
           <>
@@ -118,10 +121,9 @@ export default async function StageReviewPage({ params }: PageProps) {
         ) : null}
       </section>
 
-      <section aria-labelledby="review-seals" className="review-block">
-        <h2 id="review-seals">{r.sealsHeading}</h2>
-        <p><a href={SEAL_PROOF_HREF}>{HELP_COPY.sealing.heading}</a></p>
-        {seals.length === 0 ? null : (
+      {seals.length === 0 ? null : (
+        <section aria-labelledby="review-seals" className="review-block">
+          <h2 id="review-seals">{r.sealsHeading}</h2>
           <ul className="review-seals">
             {seals.map((s) => (
               <li key={s.id}>
@@ -132,16 +134,18 @@ export default async function StageReviewPage({ params }: PageProps) {
               </li>
             ))}
           </ul>
-        )}
-      </section>
+        </section>
+      )}
 
-      <section aria-labelledby="review-documents" className="review-block">
-        <h2 id="review-documents">{r.documentsHeading}</h2>
-        <ReviewDocumentsList orgSlug={slug} projectId={id} reviewId={review.id} documents={documents} />
-        {can(ctx.role, 'document:generate') && !archived && seals.length > 0 ? (
-          <p><a href={`${base}/reviews/${encodeURIComponent(review.id)}/documents`}>{r.createDocument}</a></p>
-        ) : null}
-      </section>
+      {documents.length > 0 || canCreateDocument ? (
+        <section aria-labelledby="review-documents" className="review-block">
+          <h2 id="review-documents">{r.documentsHeading}</h2>
+          <ReviewDocumentsList orgSlug={slug} projectId={id} reviewId={review.id} documents={documents} />
+          {canCreateDocument ? (
+            <p><a href={`${base}/reviews/${encodeURIComponent(review.id)}/documents`}>{r.createDocument}</a></p>
+          ) : null}
+        </section>
+      ) : null}
       <RememberProject userId={identity.userId} orgSlug={slug} projectId={project.id} />
     </div>
   );

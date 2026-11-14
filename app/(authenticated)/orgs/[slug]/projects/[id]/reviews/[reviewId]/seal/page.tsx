@@ -57,7 +57,13 @@ export default async function SealConfirmationPage({ params }: PageProps) {
   const archived = project.archivedAt !== null;
   const sealNumber = nextSealNumber(review);
   const base = `/orgs/${encodeURIComponent(slug)}/projects/${encodeURIComponent(id)}`;
-  const heading = <PageHeader title={REVIEW_COPY.titles.seal(review.name, sealNumber)} />;
+  // The breadcrumb leads back to the project and the review, on the refusal view too (workshop walk S5-1).
+  const breadcrumb = [
+    { label: project.name, href: base },
+    { label: review.name, href: `${base}/reviews/${encodeURIComponent(review.id)}` },
+    { label: REVIEW_COPY.titles.seal(review.name, sealNumber) },
+  ];
+  const heading = <PageHeader breadcrumb={breadcrumb} title={REVIEW_COPY.titles.seal(review.name, sealNumber)} />;
   const remember = <RememberProject userId={identity.userId} orgSlug={slug} projectId={project.id} />;
 
   if (!can(ctx.role, 'review:seal')) {

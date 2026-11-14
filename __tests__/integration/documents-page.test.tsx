@@ -171,12 +171,13 @@ describe('S-18', () => {
     }
   });
 
-  it('S-16: the seal explanation link sits under the Seals heading, and the time-stamp sentence is not on screen', async () => {
+  it('S-16: the seal explanation link sits in the Status section after the state line, and the time-stamp sentence is not on screen', async () => {
     const { SEAL_PROOF_HREF } = await import('../../components/review/reviewText');
     for (const review of [reviewOfA, unsealedReviewOfA]) {
       const html = renderToStaticMarkup(await StageReviewPage({ params: Promise.resolve({ slug: fxA.org.slug, id: projectOfA, reviewId: review }) }));
       expect(html).not.toContain('independently time-stamped');
-      expect(html).toContain(`<h2 id="review-seals">Seals</h2><p><a href="${SEAL_PROOF_HREF}">What sealing means</a></p>`);
+      const status = html.slice(html.indexOf('<h2 id="review-state">'), html.indexOf('</section>', html.indexOf('<h2 id="review-state">')));
+      expect(status).toMatch(new RegExp(`^<h2 id="review-state">Status</h2><p>(?:[^<]|<!-- -->)*</p><p><a href="${SEAL_PROOF_HREF}">What sealing means</a></p>`));
       expect(html.match(/What sealing means/g)).toHaveLength(1);
     }
   });
