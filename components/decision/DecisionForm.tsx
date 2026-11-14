@@ -21,6 +21,7 @@ import { conflictCurrent, gateStatus, navigationForOutcome, savingStatus, status
 import './DecisionForm.css';
 import type { DecisionVersionView, EvidenceItemView } from '@/types/api';
 import type { FieldError, UtcInstant } from '@/types/record';
+import '@/components/ui/buttonStyles';
 
 export type DecisionFormProps = { data: QuestionPanelData };
 

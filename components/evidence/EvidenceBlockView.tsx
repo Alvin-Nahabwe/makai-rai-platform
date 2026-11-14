@@ -7,6 +7,8 @@ import { stripBidiControls } from '@/lib/evidence/format';
 import { largeFileNote, notUploadedLine, statusLine, type NamedLine, type UploadItem } from '@/lib/evidence/uploadQueue';
 import type { EvidenceItemView } from '@/types/api';
 import './EvidenceBlock.css';
+import '@/components/ui/formStyles';
+import '@/components/ui/buttonStyles';
 
 export interface EvidenceBlockViewProps {
   orgSlug: string;

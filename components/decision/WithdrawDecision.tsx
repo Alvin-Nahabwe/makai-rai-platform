@@ -12,8 +12,9 @@ import { reasonFieldError } from '@/lib/decision/rules';
 import { WITHDRAW_TEXT, withdrawOutcome } from '@/lib/question/saveOutcome';
 import type { DecisionVersionView } from '@/types/api';
 import type { FieldError, Stage, WithdrawalCode } from '@/types/record';
-import '@/components/ui/TextArea.css';
 import './WithdrawDecision.css';
+import '@/components/ui/textAreaStyles';
+import '@/components/ui/buttonStyles';
 
 export type WithdrawDecisionProps = {
   orgSlug: string; projectId: string; stage: Stage; questionId: string; current: DecisionVersionView; canWithdraw: boolean;
