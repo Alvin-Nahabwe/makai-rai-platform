@@ -51,9 +51,9 @@ test.describe('S-20 and S-21 by keyboard', () => {
     const admin = await newPage(browser);
     await signInPage(admin, fx.members.admin);
     await admin.goto(`/orgs/${fx.org.slug}/projects/${projectId}/export`);
-    await expect(admin.getByRole('heading', { level: 1, name: 'Team export' })).toBeVisible();
-    await expect(admin.getByText('Export Keyboard export: about 1 KB as one ZIP file.')).toBeVisible();
-    const link = admin.getByRole('link', { name: 'Download export' });
+    await expect(admin.getByRole('heading', { level: 1, name: 'Download records' })).toBeVisible();
+    await expect(admin.getByText('Records of Keyboard export: about 1 KB, as one ZIP file.')).toBeVisible();
+    const link = admin.getByRole('link', { name: 'Download records' });
     await tabTo(admin, link);
     const [download] = await Promise.all([admin.waitForEvent('download'), admin.keyboard.press('Enter')]);
     expect(download.suggestedFilename()).toBe(`makrai-export-${fx.org.slug}-${projectId.slice(0, 8)}-${new Date().toISOString().slice(0, 10)}.zip`);

@@ -276,7 +276,7 @@ describe('writeTeamExport', () => {
       } });
       await testDb.issuedDocumentSeal.create({ data: { orgId: b.org.org.id, documentId: doc.id, sealId: seal.id } });
       const { lines } = await captureLogs(async () => {
-        await expect(writeTeamExport(b.ctx, b.actor, { projectId: b.projectId })).rejects.toMatchObject({ status: 500, code: 'integrity_failure' });
+        await expect(writeTeamExport(b.ctx, b.actor, { projectId: b.projectId })).rejects.toMatchObject({ status: 500, code: 'integrity_failure', message: 'The export stopped because a stored file failed its safety check. Nothing was downloaded. Write to MAK-AI and give the reference shown with this message.' });
       });
       const events = lines.filter((l) => l.includes('DOCUMENT_INTEGRITY_FAILURE')).map((l) => JSON.parse(l));
       expect(events).toHaveLength(1);
@@ -306,7 +306,7 @@ describe('writeTeamExport', () => {
       const real = zip.openZipFile;
       vi.spyOn(zip, 'openZipFile').mockImplementationOnce((path) => real(path, { maxEntries: 2, maxBytes: zip.zipLimits.maxBytes }));
       const { lines } = await captureLogs(async () => {
-        await expect(writeTeamExport(ctx, admin, { projectId: null })).rejects.toMatchObject({ status: 500, code: 'export_entry_limit' });
+        await expect(writeTeamExport(ctx, admin, { projectId: null })).rejects.toMatchObject({ status: 500, code: 'export_entry_limit', message: 'This export is too large to make as one file. Export one project at a time.' });
       });
       const logged = lines.filter((l) => l.includes('export_entry_limit')).map((l) => JSON.parse(l));
       expect(logged).toHaveLength(1);

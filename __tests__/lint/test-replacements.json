@@ -1318,5 +1318,109 @@
     "property": "The mitigation status words carry no data-claims-allowed marker and keep the exact markup <span class=\"status-label\">In progress</span>, and a done mitigation's note stays inside <bdi>. Only the words before the note change, to copy audit C#111 (\"artefact\" is retired, CONSOLIDATED 2): \"Done, no artefact:\" becomes \"Done, nothing attached:\".",
     "proof": "The same case: toBe('<span class=\"status-label\">In progress</span>') and the not.toContain('data-claims-allowed') loop are byte for byte unchanged; toContain('Done, nothing attached: <bdi>Deployment stopped</bdi>') asserts the note inside <bdi> right after the words, as the old literal did with the old words.",
     "task": "plan 1A Task 18"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/export-screens.test.tsx::M-37 FR-EXP-01: S-20 says what will be exported, about how big, as one ZIP file, and says it is preparing after the click",
+    "replacedBy": "__tests__/unit/export-screens.test.tsx::M-37 FR-EXP-01: S-20 says what will be exported, about how big, as one ZIP file, and says it is preparing after the click",
+    "property": "S-20's panel names the scope and its approximate size as one ZIP file, offers one link to route 20 at the given href, keeps an empty role=\"status\" region that holds nothing before the press, carries no alert, and PREPARING keeps its words. Only the words change, to the 18d brief's ruled table (copy audit, S-20 rows): the retired \"Team export\" heading becomes \"Download records\" (the page title, EXPORT_COPY.titles.downloadRecords), the link \"Download export\" becomes \"Download records\", and the panel sentence \"Export <name>: about <size> as one ZIP file.\" becomes \"Records of <name>: about <size>, as one ZIP file.\".",
+    "proof": "The same case: toContain('Records of Maternal-risk triage: about 2.4 MB, as one ZIP file.') pins the new sentence literally with the same name and the same formatted size; the <a ... href=\"/api/v1/orgs/o/export\" ...>Download records</a> match still ties the link's whole text to the route; the role=\"status\", not.toContain(PREPARING), the PREPARING toBe literal and the not role=\"alert\" lines are byte for byte unchanged.",
+    "task": "plan 1A Task 18, part 18d"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/export-screens.test.tsx::S-20: the panel has no heading of its own and no label pointing at a missing heading",
+    "replacedBy": "__tests__/unit/export-screens.test.tsx::S-20: the panel has no heading of its own and no label pointing at a missing heading",
+    "property": "The panel draws no heading and no aria-labelledby, and still offers its link. Only the words change, to the 18d brief's ruled table (copy audit, S-20 rows): the retired \"Team export\" heading becomes \"Download records\" (the page title, EXPORT_COPY.titles.downloadRecords), the link \"Download export\" becomes \"Download records\", and the panel sentence \"Export <name>: about <size> as one ZIP file.\" becomes \"Records of <name>: about <size>, as one ZIP file.\".",
+    "proof": "The same case: the not <h1-6> and not aria-labelledby lines are byte for byte unchanged; only the link's whole-text match changes from >Download export</a> to >Download records</a>.",
+    "task": "plan 1A Task 18, part 18d"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/export-screens.test.tsx::FR-EXP-01 (owner question B4): S-20 says why an export was refused, for two running and for the hourly limit",
+    "replacedBy": "__tests__/unit/export-screens.test.tsx::FR-EXP-01 (owner question B4): S-20 says why an export was refused, for two running and for the hourly limit",
+    "property": "For ?refused=export_busy and rate_limited the panel shows the matching sentence as the direct text of a role=\"alert\" element and still offers the link; refusedFrom accepts the two values only. Only the words change, to the 18d brief's ruled table (copy audit, S-20 rows): the retired \"Team export\" heading becomes \"Download records\" (the page title, EXPORT_COPY.titles.downloadRecords), the link \"Download export\" becomes \"Download records\", and the panel sentence \"Export <name>: about <size> as one ZIP file.\" becomes \"Records of <name>: about <size>, as one ZIP file.\".",
+    "proof": "The same case: the REFUSED_TEXT toEqual literal, the role=\"alert\"[^>]*>${text}< pin and the refusedFrom toEqual are byte for byte unchanged (the alert is now a native <p role=\"alert\"> inside a kit Callout, so the pin still proves the sentence is the alert's direct text); only the link's whole-text match becomes >Download records</a>.",
+    "task": "plan 1A Task 18, part 18d"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/integration/export-pages.test.tsx::FR-EXP-01 (owner question B4, contract row 20): S-20 renders the refusal text for ?refused=export_busy and ?refused=rate_limited, and none for another value",
+    "replacedBy": "__tests__/integration/export-pages.test.tsx::FR-EXP-01 (owner question B4, contract row 20): S-20 renders the refusal text for ?refused=export_busy and ?refused=rate_limited, and none for another value",
+    "property": "The organisation page shows the refusal sentence for the two refused values only, and offers the link whatever the value. Only the words change, to the 18d brief's ruled table (copy audit, S-20 rows): the retired \"Team export\" heading becomes \"Download records\" (the page title, EXPORT_COPY.titles.downloadRecords), the link \"Download export\" becomes \"Download records\", and the panel sentence \"Export <name>: about <size> as one ZIP file.\" becomes \"Records of <name>: about <size>, as one ZIP file.\".",
+    "proof": "The same case: every REFUSED_TEXT assertion is byte for byte unchanged; only the link's whole-text match becomes >Download records</a>.",
+    "task": "plan 1A Task 18, part 18d"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/integration/export-pages.test.tsx::M-37 FR-EXP-01: the organisation page names the organisation, its size, and links to route 20 for the whole organisation",
+    "replacedBy": "__tests__/integration/export-pages.test.tsx::M-37 FR-EXP-01: the organisation page names the organisation, its size, and links to route 20 for the whole organisation",
+    "property": "The organisation page names the organisation and the size of its whole export, links to route 20 without a projectId, and has one <h1> with the page's words. Only the words change, to the 18d brief's ruled table (copy audit, S-20 rows): the retired \"Team export\" heading becomes \"Download records\" (the page title, EXPORT_COPY.titles.downloadRecords), the link \"Download export\" becomes \"Download records\", and the panel sentence \"Export <name>: about <size> as one ZIP file.\" becomes \"Records of <name>: about <size>, as one ZIP file.\".",
+    "proof": "The same case: toContain(`Records of ${fxA.org.name}: about 2.4 MB, as one ZIP file.`) pins the new sentence with the same name and size; the href line is byte for byte unchanged; the <h1> match now pins Download records.",
+    "task": "plan 1A Task 18, part 18d"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/integration/export-pages.test.tsx::M-37 FR-EXP-01: the project page names the project and links to route 20 for that project",
+    "replacedBy": "__tests__/integration/export-pages.test.tsx::M-37 FR-EXP-01: the project page names the project and links to route 20 for that project",
+    "property": "The project page names the project and its size and links to route 20 with that project's id. Only the words change, to the 18d brief's ruled table (copy audit, S-20 rows): the retired \"Team export\" heading becomes \"Download records\" (the page title, EXPORT_COPY.titles.downloadRecords), the link \"Download export\" becomes \"Download records\", and the panel sentence \"Export <name>: about <size> as one ZIP file.\" becomes \"Records of <name>: about <size>, as one ZIP file.\".",
+    "proof": "The same case: toContain('Records of Maternal-risk triage: about 2.4 MB, as one ZIP file.') pins the new sentence; the href line with ?projectId= is byte for byte unchanged.",
+    "task": "plan 1A Task 18, part 18d"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/integration/export-pages.test.tsx::UX-31: the project export page shows the archived banner for an archived project, and still offers the export",
+    "replacedBy": "__tests__/integration/export-pages.test.tsx::UX-31: the project export page shows the archived banner for an archived project, and still offers the export",
+    "property": "An archived project's export page shows the archived banner and still offers the link; a live project's page shows no banner. Only the words change, to the 18d brief's ruled table (copy audit, S-20 rows): the retired \"Team export\" heading becomes \"Download records\" (the page title, EXPORT_COPY.titles.downloadRecords), the link \"Download export\" becomes \"Download records\", and the panel sentence \"Export <name>: about <size> as one ZIP file.\" becomes \"Records of <name>: about <size>, as one ZIP file.\".",
+    "proof": "The same case: both banner assertions are byte for byte unchanged; only the link's whole-text match becomes >Download records</a>.",
+    "task": "plan 1A Task 18, part 18d"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/integration/export-pages.test.tsx::FR-EXP-01 FR-AUTHZ-01 (contract Q9, B21): assessor, reviewer and viewer see M-26 on S-20 with no panel, and nothing of the project",
+    "replacedBy": "__tests__/integration/export-pages.test.tsx::FR-EXP-01 FR-AUTHZ-01 (contract Q9, B21): assessor, reviewer and viewer see M-26 on S-20 with no panel, and nothing of the project",
+    "property": "A role without team:export sees M-26 as a bare <p>, the page's <h1>, no download link and nothing of the project or the organisation; owners and admins are still the only roles holding team:export, and an admin is offered the link. The words change to the ruled table: M-26 (EXPORT_NOT_ALLOWED) becomes \"Only Owners and Admins can download the team's records.\", the <h1> becomes Download records, and the link Download records.",
+    "proof": "The same case: the GRANTS filter, the bare <p>${EXPORT_NOT_ALLOWED}</p> pin and the two not.toContain lines are byte for byte unchanged; EXPORT_NOT_ALLOWED's toBe pins the new sentence literally; the <h1> match pins Download records. The old not.toMatch(/Download export/) cannot stay as a substring check, because the heading now holds the link's words: it becomes not.toMatch(/>Download records<\\/a>|\\/api\\/v1\\/orgs\\/[^\"]*\\/export/), which fails if a link with those words or any href to route 20 (with or without projectId) is in the refused page, so it still proves no link is offered; the admin's toMatch(/>Download records<\\/a>/) proves that pattern would see a link.",
+    "task": "plan 1A Task 18, part 18d"
+  },
+  {
+    "kind": "wording",
+    "changed": "e2e/export-and-deletion.spec.ts::S-20 and S-21 by keyboard",
+    "replacedBy": "e2e/export-and-deletion.spec.ts::S-20 and S-21 by keyboard",
+    "property": "An admin reaches the project's export page, sees its <h1> and the panel sentence, reaches the link by Tab alone with a visible, uncovered focus, downloads the ZIP with Enter under the day's file name holding export.json and README.txt, and sees the Preparing status; then S-21's deletion by keyboard as before. Only the words change, to the 18d brief's ruled table (copy audit, S-20 rows): the retired \"Team export\" heading becomes \"Download records\" (the page title, EXPORT_COPY.titles.downloadRecords), the link \"Download export\" becomes \"Download records\", and the panel sentence \"Export <name>: about <size> as one ZIP file.\" becomes \"Records of <name>: about <size>, as one ZIP file.\".",
+    "proof": "The same lines: the heading's accessible name is now 'Download records', getByText pins 'Records of Keyboard export: about 1 KB, as one ZIP file.' literally, and getByRole('link', { name: 'Download records' }) is the link tabbed to; the download, file name, unzip, status and the whole S-21 half are byte for byte unchanged. (The checker lists the test.describe title as a case of its own, so it has its own entry with the same change.)",
+    "task": "plan 1A Task 18, part 18d"
+  },
+  {
+    "kind": "wording",
+    "changed": "e2e/export-and-deletion.spec.ts::FR-EXP-01 FR-EXP-03 UX-29 NFR-A11Y-02: export a project and delete an account with the keyboard alone",
+    "replacedBy": "e2e/export-and-deletion.spec.ts::FR-EXP-01 FR-EXP-03 UX-29 NFR-A11Y-02: export a project and delete an account with the keyboard alone",
+    "property": "An admin reaches the project's export page, sees its <h1> and the panel sentence, reaches the link by Tab alone with a visible, uncovered focus, downloads the ZIP with Enter under the day's file name holding export.json and README.txt, and sees the Preparing status; then S-21's deletion by keyboard as before. Only the words change, to the 18d brief's ruled table (copy audit, S-20 rows): the retired \"Team export\" heading becomes \"Download records\" (the page title, EXPORT_COPY.titles.downloadRecords), the link \"Download export\" becomes \"Download records\", and the panel sentence \"Export <name>: about <size> as one ZIP file.\" becomes \"Records of <name>: about <size>, as one ZIP file.\".",
+    "proof": "The same lines: the heading's accessible name is now 'Download records', getByText pins 'Records of Keyboard export: about 1 KB, as one ZIP file.' literally, and getByRole('link', { name: 'Download records' }) is the link tabbed to; the download, file name, unzip, status and the whole S-21 half are byte for byte unchanged. (The checker lists the test.describe title as a case of its own, so it has its own entry with the same change.)",
+    "task": "plan 1A Task 18, part 18d"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/integration/team-export-route.test.ts::FR-EXP-01 SRS 6.2: a blob that fails its SHA-256 answers 500 integrity_failure with a reference, before any byte is streamed",
+    "replacedBy": "__tests__/integration/team-export-route.test.ts::FR-EXP-01 SRS 6.2: a blob that fails its SHA-256 answers 500 integrity_failure with a reference, before any byte is streamed",
+    "property": "A blob whose bytes do not match its SHA-256 makes route 20 answer 500 integrity_failure as JSON with a support reference, before any byte is streamed. Added, not reworded: the answer's error text, ruled in the 18d brief (L4d-1) in place of \"Integrity failure\", which nothing pinned.",
+    "proof": "The same case: status 500, the json content-type and code/reference are unchanged; the toMatchObject now also holds error: 'The export stopped because a stored file failed its safety check. Nothing was downloaded. Write to MAK-AI and give the reference shown with this message.', so the sentence a person is shown is pinned literally at the HTTP layer, beside its reference field.",
+    "task": "plan 1A Task 18, part 18d"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/integration/team-export.test.ts::FR-EXP-01 FR-DOC-04: an issued PDF whose bytes do not match its stored SHA-256 fails the export closed, logs DOCUMENT_INTEGRITY_FAILURE with ids only, and leaves no file",
+    "replacedBy": "__tests__/integration/team-export.test.ts::FR-EXP-01 FR-DOC-04: an issued PDF whose bytes do not match its stored SHA-256 fails the export closed, logs DOCUMENT_INTEGRITY_FAILURE with ids only, and leaves no file",
+    "property": "An issued PDF whose bytes do not match its stored SHA-256 fails the export closed with 500 integrity_failure, one ids-only DOCUMENT_INTEGRITY_FAILURE line, no EXPORT_MADE and no file. Added: the error's message, ruled in the 18d brief (L4d-1), pinned for the document path (lib/data/export.ts, the second integrity_failure).",
+    "proof": "The same case: the rejects.toMatchObject now also holds message: 'The export stopped because a stored file failed its safety check. Nothing was downloaded. Write to MAK-AI and give the reference shown with this message.'; every other line is byte for byte unchanged.",
+    "task": "plan 1A Task 18, part 18d"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/integration/team-export.test.ts::FR-EXP-01 ADR-C7: an export past the ZIP entry limit fails closed with export_entry_limit, logs the code with ids only, and leaves no file",
+    "replacedBy": "__tests__/integration/team-export.test.ts::FR-EXP-01 ADR-C7: an export past the ZIP entry limit fails closed with export_entry_limit, logs the code with ids only, and leaves no file",
+    "property": "An export past the ZIP entry limit fails closed with 500 export_entry_limit, logs the code with ids only, leaves no file and frees its slot. Added: the error's message, ruled in the 18d brief in place of \"Export too large\".",
+    "proof": "The same case: the rejects.toMatchObject now also holds message: 'This export is too large to make as one file. Export one project at a time.'; every other line is byte for byte unchanged.",
+    "task": "plan 1A Task 18, part 18d"
   }
 ]

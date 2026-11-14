@@ -19,8 +19,8 @@ const M38 = 'You are the only owner of Makerere CAI Lab with an active account. 
 describe('S-20 TeamExportPanel', () => {
   it('M-37 FR-EXP-01: S-20 says what will be exported, about how big, as one ZIP file, and says it is preparing after the click', () => {
     const html = renderToStaticMarkup(<TeamExportPanel href="/api/v1/orgs/o/export" scopeName="Maternal-risk triage" aboutBytes={2_400_000} refused={null} />);
-    expect(html).toContain('Export Maternal-risk triage: about 2.4 MB as one ZIP file.');
-    expect(html).toMatch(/<a[^>]*href="\/api\/v1\/orgs\/o\/export"[^>]*>Download export<\/a>/);
+    expect(html).toContain('Records of Maternal-risk triage: about 2.4 MB, as one ZIP file.');
+    expect(html).toMatch(/<a[^>]*href="\/api\/v1\/orgs\/o\/export"[^>]*>Download records<\/a>/);
     expect(html).toMatch(/role="status"/); // the region PREPARING is written into on click
     expect(html).not.toContain(PREPARING); // not before the click
     expect(PREPARING).toBe('Preparing the export. Large projects can take a few minutes.');
@@ -32,7 +32,7 @@ describe('S-20 TeamExportPanel', () => {
     const html = renderToStaticMarkup(<TeamExportPanel href="/api/v1/orgs/o/export" scopeName="Maternal-risk triage" aboutBytes={2_400_000} refused={null} />);
     expect(html).not.toMatch(/<h[1-6][\s>]/);
     expect(html).not.toContain('aria-labelledby');
-    expect(html).toMatch(/>Download export<\/a>/);
+    expect(html).toMatch(/>Download records<\/a>/);
   });
 
   it('FR-EXP-01 (owner question B4): S-20 says why an export was refused, for two running and for the hourly limit', () => {
@@ -40,7 +40,7 @@ describe('S-20 TeamExportPanel', () => {
     for (const r of ['export_busy', 'rate_limited'] as const) {
       const html = renderToStaticMarkup(<TeamExportPanel href="/api/v1/orgs/o/export" scopeName="Maternal-risk triage" aboutBytes={2_400_000} refused={r} />);
       expect(html).toMatch(new RegExp(`role="alert"[^>]*>${REFUSED_TEXT[r]}<`));
-      expect(html).toMatch(/>Download export<\/a>/);
+      expect(html).toMatch(/>Download records<\/a>/);
     }
     expect([refusedFrom({ refused: 'export_busy' }), refusedFrom({ refused: 'rate_limited' }), refusedFrom({ refused: '<script>' }),
       refusedFrom({ refused: ['export_busy', 'x'] }), refusedFrom({})]).toEqual(['export_busy', 'rate_limited', null, null, null]);
