@@ -378,3 +378,38 @@ describe('T4 — composite same-org FK blocks cross-tenant references', () => {
     ).rejects.toThrow(/foreign key/i);
   });
 });
+
+it("Home's next step (plan 1B Task 9, slice 3): lastSavedBy and loadNextStep under ctx A return no row or name of B when B holds the newer save", async () => {
+  // U is an assessor of A and of B and saves in B after A. Imports are local so the cases above keep theirs unchanged.
+  await resetDb();
+  const { useFixtureContent } = await import('../helpers/content');
+  const { addDecision, addProject, buildOrg } = await import('../helpers/recordFixture');
+  const { lastSavedBy } = await import('../../lib/home/queries');
+  const { loadNextStep } = await import('../../lib/home/load');
+  const cv = (await useFixtureContent('0.0.1-fixture')).contentVersionId;
+  const a = await buildOrg({ label: 'iso-home-a' });
+  const b = await buildOrg({ label: 'iso-home-b' });
+  const u = a.members.assessor;
+  await testDb.membership.create({ data: { orgId: b.org.id, userId: u.userId, role: 'assessor' } });
+  const asUInB = { ...b, members: { ...b.members, assessor: { ...u, orgId: b.org.id, orgSlug: b.org.slug } } };
+  const pa = await addProject(a, { name: 'Home isolation project of A' });
+  const pb = await addProject(b, { name: 'Home isolation project of B' });
+  const namesB = (value: unknown) => [pb.id, 'Home isolation project of B', b.org.id].some((s) => JSON.stringify(value).includes(s));
+
+  // Saves only in B: under ctx A there is no last save, and the next step stays in A.
+  await addDecision(asUInB, pb.id, { stage: 'pre-processing', questionId: 'Q-PP-05', contentVersionId: cv, status: 'done' });
+  expect(await lastSavedBy(ctx(a.org.id, 'assessor'), u.userId)).toBeNull();
+  const onlyB = await loadNextStep(ctx(a.org.id, 'assessor'), u.userId);
+  expect(onlyB).toMatchObject({ projectId: pa.id, rule: 'first-open', lastSavedOn: null });
+  expect(namesB(onlyB)).toBe(false);
+
+  // A save in A, then a newer one in B: under ctx A, A's row and A's project only.
+  await addDecision(a, pa.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId: cv, status: 'done' });
+  await addDecision(asUInB, pb.id, { stage: 'pre-processing', questionId: 'Q-PP-06', contentVersionId: cv, status: 'done' });
+  const saved = await lastSavedBy(ctx(a.org.id, 'assessor'), u.userId);
+  const next = await loadNextStep(ctx(a.org.id, 'assessor'), u.userId);
+  expect(saved).toMatchObject({ projectId: pa.id, questionId: 'Q-PP-01' });
+  expect(next).toMatchObject({ projectId: pa.id, projectName: 'Home isolation project of A' });
+  expect(namesB(saved)).toBe(false);
+  expect(namesB(next)).toBe(false);
+});

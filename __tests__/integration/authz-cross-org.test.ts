@@ -199,3 +199,21 @@ describe('objects of another organisation answer 404 (NFR-SEC-02)', () => {
       expect({ unknown: true, ...(await notFound('no-such-organisation')) }).toEqual({ unknown: true, status: 404, code: 'not_found' });
     });
 });
+
+it("NFR-SEC-02 Home's next step (plan 1B Task 9, slice 3): a member of B naming A's Home, and an unknown organisation, are not found", async () => {
+  // The next step is a read with no route of its own, so ROUTE_ACTIONS cannot hold it; its one door is Home's page. This
+  // file's non-member case, applied to that page: every role of B naming A's slug, and an unknown organisation, are refused
+  // as not found before any of A's records is read. Imports are local so the cases above keep theirs unchanged.
+  const { NotFoundError } = await import('../../lib/data/tenant');
+  const page = (await import('../../app/(authenticated)/orgs/[slug]/dashboard/page')).default;
+  const a = await buildOrg({ label: 'xorg-home-a' });
+  const b = await buildOrg({ label: 'xorg-home-b' });
+  const open = (slug: string) => page({ params: Promise.resolve({ slug }), searchParams: Promise.resolve({}) });
+  for (const role of ALL_ORG_ROLES) {
+    sessionAs(b.members[role].userId);
+    await expect(open(a.org.slug), role).rejects.toBeInstanceOf(NotFoundError);
+  }
+  await expect(open('no-such-organisation')).rejects.toBeInstanceOf(NotFoundError);
+  sessionAs(a.members.assessor.userId);
+  await expect(open(a.org.slug)).resolves.toBeDefined();
+});

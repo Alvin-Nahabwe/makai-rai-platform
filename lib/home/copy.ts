@@ -17,6 +17,13 @@ export const HOME_COPY = Object.freeze({
   myMitigations: 'Mitigations assigned to me',
   noMitigations: 'No mitigations are assigned to you.',
   projectOf: (name: string) => `Project: ${name}`,
+  /** "Your next step" (spec 9.1; plan 1B Task 10's words, rule C2): the reason line says which rule chose the question. */
+  nextStepHeading: 'Your next step',
+  reasonNextOpen: (stage: string, day: string) => `You last saved in ${stage} on ${day}. This is the next question there with no decision.`,
+  reasonLastSaved: (day: string) => `You last saved here on ${day}.`,
+  reasonFirstOpen: 'You have not saved a decision in this organisation yet. This is the first question with no decision.',
+  continueRecording: 'Continue recording',
+  chooseAnother: 'Choose another question',
   /** A project card's line per stage, through StageColumn's `plural`: "Pre-processing: 1 open finding, 0 overdue mitigations". */
   card: Object.freeze({
     openFinding: 'open finding',
