@@ -9,6 +9,7 @@ import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
 import { DECISION_OUTCOME_COPY } from '@/lib/decision/outcome/copy';
 import { deciderLabel, FINDING_NOTE } from '@/lib/decision/copy';
 import { QUESTION_COPY } from '@/lib/question/copy';
+import { AUTHZ_COPY } from '@/lib/authz/copy';
 
 /**
  * The S-12 regions DEC-b fills (W-3, W-4; UX-09 to UX-12, UX-25, UX-28; NFR-A11Y-03, NFR-A11Y-04), rendered as
@@ -205,7 +206,7 @@ describe('S-12 status line and conflict view', () => {
 describe('S-12 regions', () => {
   it('FR-DEC-01 UX-31 UX-14: a viewer and an archived project get no form', async () => {
     const viewer = renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, canWrite: false, viewer: { ...PANEL.viewer, role: 'viewer' } } }));
-    expect(viewer).toContain('Only owners, admins and assessors record decisions.');
+    expect(viewer).toContain(AUTHZ_COPY.decisionFormNote.viewer);
     expect(viewer).not.toMatch(/Save decision/);
     expect(viewer).not.toMatch(/<form/);
     expect(renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, canWrite: false, projectArchived: true } }))).not.toMatch(/<form/);

@@ -1398,5 +1398,21 @@
     "property": "The suggestions slot states the number of controls once. The count line and its helper controlCountLine are removed (copy audit B#279, plan 1A Task 17 part 17c); the number is the content region's link \"Ways teams address this (n)\", from suggestionCount.",
     "proof": "The new case renders the slot for Q-PP-01 and for Q-PP-17 with a ticked option and requires no suggested-controls__count element and no \"n control(s) for this question\" text; suggestionCount stays pinned by the two cases on the count, and the link's number by question-content.test.tsx and decision-pages.test.ts.",
     "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/permission-notes.test.ts::UX-14: decisionFormNote names the roles and is null when archived or allowed",
+    "replacedBy": "__tests__/unit/permission-notes.test.ts::UX-14: decisionFormNote names the roles and is null when archived or allowed",
+    "property": "A role that records no decision (Reviewer, Viewer) is told in one line who records decisions; the note is null for a role that may record one and in an archived project. Audit D row OR87 (the coordinator's ruling OR87, role names capitalised) adds what each role can do instead, so the one sentence both roles read became two: the Reviewer's (\"... You can read them and raise a finding.\") and the Viewer's (\"... You can read them.\"), held in lib/authz/copy.ts.",
+    "proof": "The case requires decisionFormNote('reviewer', false) to be AUTHZ_COPY.decisionFormNote.reviewer and decisionFormNote('viewer', false) to be AUTHZ_COPY.decisionFormNote.viewer (the loop over the two roles with one literal is unrolled, one line per role and text); owner, admin and assessor still get null, and viewer and owner on an archived project still get null (unchanged lines).",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/permission-notes.test.ts::(module)",
+    "replacedBy": "__tests__/unit/permission-notes.test.ts::UX-14: decisionFormNote names the roles and is null when archived or allowed",
+    "property": "The file's comment quoted the one sentence of the note; it now says what each role is told (audit D row OR87), and the file imports the copy module that holds the two sentences. Nothing outside the case is asserted.",
+    "proof": "Outside its case the file changed only in its header comment, which now describes the two lines instead of quoting the old one, and in the import of AUTHZ_COPY from lib/authz/copy (a copy module); the case's assertions are as the entry above says.",
+    "task": "plan 1A Task 17"
   }
 ]

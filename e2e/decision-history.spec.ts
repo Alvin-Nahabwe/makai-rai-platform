@@ -6,6 +6,7 @@ import { actAsSeat, fillValid, fixtureOrgSlug, historyPath, newProject, question
 import { REQUEST_MESSAGES, WITHDRAW_COPY, deciderLabel } from '../lib/decision/copy';
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
 import { FIELD_COPY } from '../lib/ui/field/copy';
+import { AUTHZ_COPY } from '../lib/authz/copy';
 
 /**
  * S-13 and the withdrawal (FR-DEC-04, FR-DEC-08, FR-CNT-07, UX-14, UX-29, UX-40, UX-42, NFR-SEC-11; owner question B21).
@@ -137,7 +138,7 @@ test('UX-14 FR-DEC-01 (owner question B21): S-12 and S-13 opened by address as a
   const s12 = await page.goto(questionPath(projectId, Q));
   expect(s12!.status()).toBe(200);
   await waitForQuestionPage(page);
-  await expect(page.getByText('Only owners, admins and assessors record decisions.')).toBeVisible();
+  await expect(page.getByText(AUTHZ_COPY.decisionFormNote.viewer)).toBeVisible();
   await expect(page.locator('[data-region="answer-form"] form')).toHaveCount(0);
   await expect(page.getByRole('group', { name: 'Status' })).toHaveCount(0);
   const s13 = await openHistory(page, 'viewer', projectId);
