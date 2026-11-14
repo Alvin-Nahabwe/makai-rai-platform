@@ -158,7 +158,7 @@ export type FindingActionsProps = {
   canReopen: boolean; canWithdraw: boolean;
   /** M-26: shown where an action is absent for the role (UX-17); null where the role holds it. */
   cannotAccept: string | null; cannotReopen: string | null;
-  /** The accepted-risk form (a client component), rendered here so it sits in "Other ways to close this finding". */
+  /** The accepted-risk form (a client component), rendered here so it sits in "Accept the risk, withdraw or reopen". */
   acceptForm: ReactNode;
 };
 

@@ -3,11 +3,12 @@
    the mitigation cards, the history, the forms' spacing and the one red word, "Overdue". Colour roles only (no legacy
    alias), weights 400, 600 and 700, motion on state changes only and none under reduced motion. */
 
-/* The link back to the project or to the list: small, muted, underlined, a 24 px target. */
+/* The link back to the project or to the list: small, muted, underlined, a 24 px target. Inline-block, not flex: a flex
+   box would drop the space between "Back to" and the project's name. */
 .finding-back {
-  display: inline-flex;
-  align-items: center;
-  min-block-size: var(--target-min);
+  display: inline-block;
+  padding-block: var(--space-1);
+  line-height: var(--line-height-body);
   margin-block-end: var(--space-2);
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-semibold);
@@ -31,9 +32,7 @@
 }
 
 .finding-filter a {
-  display: inline-flex;
-  align-items: center;
-  min-block-size: var(--target-min);
+  display: inline-block;
   padding-block: var(--space-1);
   color: var(--color-link);
   text-decoration: underline;
@@ -295,4 +294,32 @@
 .finding-confirm {
   max-inline-size: 40rem;
   margin-block: var(--space-4);
+}
+
+/* The legacy error summary these forms keep (FindingActions.tsx ErrorSummary, its markup unchanged): its links are 24 px
+   targets with room between them (WCAG 2.5.8). */
+.finding-form .form-error ul {
+  display: grid;
+  gap: var(--space-2);
+  margin-block: var(--space-2) 0;
+}
+
+.finding-form .form-error a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--target-min);
+}
+
+/* A sentence directly in a form or a region keeps room before the control that follows it. */
+.finding-form > p,
+.finding-section > p {
+  max-inline-size: var(--measure-reading);
+  margin-block: 0 var(--space-4);
+}
+
+/* At phone width the form panel gives its padding back to the fields. */
+@media (max-width: 30rem) {
+  .finding-form {
+    padding: var(--space-4);
+  }
 }
