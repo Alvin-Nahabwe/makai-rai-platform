@@ -10,6 +10,7 @@ import { addDecision, addProject, addSealRow, addStageReview, buildOrg, ctxFor, 
 import { FIXTURE_QUESTION_IDS } from '../helpers/content';
 import type { StageFilter } from '@/lib/question/stageList';
 import { HOSTILE_STRINGS } from '../helpers/hostile';
+import { SUGGESTIONS_COPY } from '@/lib/suggestions/copy';
 
 /**
  * S-11, S-12 and S-13 rendered from real panel data on the fixture bundle (contract "Content bundle"). The router is the
@@ -46,7 +47,7 @@ describe('S-12 page', () => {
     const h = renderToStaticMarkup(createElement(QuestionPanelRegions, { data: await panelData('assessor', 'Q-PP-01') }));
     expect(h).toContain('href="#suggestions">Ways teams address this (3)</a>');
     expect(h).toContain('<h2 id="s12-suggestions">Ways teams address this</h2>');
-    expect(h).toContain('3 controls for this question&#x27;s risk area');
+    expect(h).toContain(SUGGESTIONS_COPY.intro);
     expect(h).toMatch(/<section[^>]*id="suggestions"/);
   });
 

@@ -1382,5 +1382,21 @@
     "property": "Each region's component gets the props its contract row names, from the panel data. CurrentDecision now also gets gated and isScopeQuestion, which the page computes from the panel data (the personal data question's recorded answer and the question's condition; the question's type), so the current decision shows the kit's status mark (plan 1A Task 17, brief section 5).",
     "proof": "The case requires CurrentDecision's props to equal exactly orgSlug, current, historyCount, seals, historyHref as before plus gated: false and isScopeQuestion: false for this panel (no gate answer; a likert question); the other regions' expectations are unchanged.",
     "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/integration/decision-pages.test.ts::UX-08 FR-CNT-02 (screen): QuestionContent gets the suggestion count and the suggestions section carries id=\"suggestions\"",
+    "replacedBy": "__tests__/integration/decision-pages.test.ts::UX-08 FR-CNT-02 (screen): QuestionContent gets the suggestion count and the suggestions section carries id=\"suggestions\"",
+    "property": "On the question page the content region's link carries the number of suggestions (\"Ways teams address this (3)\"), the suggestions section has its h2 and id=\"suggestions\", and the suggestions slot is rendered in it. The slot's own count line (\"3 controls for this question's risk area\") is removed (copy audit B#279, plan 1A Task 17 part 17c): the number is stated once, in the link.",
+    "proof": "The case still requires href=\"#suggestions\">Ways teams address this (3)</a> (the number, from suggestionCount), <h2 id=\"s12-suggestions\">Ways teams address this</h2> and <section … id=\"suggestions\">; the removed count-line assertion is replaced by the slot's introduction (SUGGESTIONS_COPY.intro), which SuggestedControls renders only when it has at least one card, so the slot's presence is still proven. The count line's absence is pinned in __tests__/unit/suggestion-slots.test.tsx.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/suggestion-slots.test.tsx::UX-08: the count line says \"1 control\" for one and \"n controls\" otherwise",
+    "replacedBy": "__tests__/unit/suggestion-slots.test.tsx::UX-08 (copy audit B#279): the slot has no count line; the count stays in the content region's link",
+    "property": "The suggestions slot states the number of controls once. The count line and its helper controlCountLine are removed (copy audit B#279, plan 1A Task 17 part 17c); the number is the content region's link \"Ways teams address this (n)\", from suggestionCount.",
+    "proof": "The new case renders the slot for Q-PP-01 and for Q-PP-17 with a ticked option and requires no suggested-controls__count element and no \"n control(s) for this question\" text; suggestionCount stays pinned by the two cases on the count, and the link's number by question-content.test.tsx and decision-pages.test.ts.",
+    "task": "plan 1A Task 17"
   }
 ]

@@ -3,15 +3,12 @@ import { statSync } from 'node:fs';
 import { join } from 'node:path';
 import { DownloadLink } from '@/components/ui/DownloadLink';
 import { formatDay } from '@/lib/format/dates';
+import { SUGGESTIONS_COPY } from '@/lib/suggestions/copy';
 import type { ContentArea, ContentControl, ResourceLink, ResourcesFile } from '@/types/content';
 import type { Stage } from '@/types/record';
 import './ControlCard.css';
 
-const TYPE_WORDS: Record<string, string> = { technical: 'Technical', procedural: 'Procedural', informational: 'Informational' };
-const STAGE_WORDS: Record<Stage, string> = {
-  'pre-processing': 'Pre-processing', 'in-processing': 'In-processing', 'post-processing': 'Post-processing',
-};
-const RESOURCE_TYPE_WORDS: Record<string, string> = { framework: 'Framework', tool: 'Tool', paper: 'Paper', guidance: 'Guidance' };
+const WORDS = SUGGESTIONS_COPY.card;
 /** A resource is a link only when its address is https (G1); anything else, or an address that does not parse, is text. */
 function isHttps(url: string): boolean {
   try {
@@ -33,20 +30,20 @@ function sizeOfServedFile(urlPath: string): number {
 }
 
 function Resource({ r }: { r: ResourceLink }): ReactElement {
-  const word = r.type === undefined ? undefined : RESOURCE_TYPE_WORDS[r.type];
+  const word = r.type === undefined ? undefined : WORDS.resourceTypeWords[r.type];
   // The release check refuses any other type; a bare "Resource" would hide that the type is missing (UX-13 wants it in words).
   if (word === undefined) throw new RangeError(`resource ${r.title} has type ${String(r.type)}, which the card has no word for`);
-  if (!isHttps(r.url)) return <li>{`${r.title} (${word})`}</li>;
+  if (!isHttps(r.url)) return <li>{WORDS.resource(r.title, word)}</li>;
   return (
     <li>
-      <a href={r.url} rel="noopener noreferrer">{`${r.title} (${word}, opens another site)`}</a>
+      <a href={r.url} rel="noopener noreferrer">{WORDS.resourceElsewhere(r.title, word)}</a>
     </li>
   );
 }
 
 /** The control's type in words. A type with none is a content error (the release check refuses it), not text to print. */
 function typeWord(control: ContentControl): string {
-  const word = TYPE_WORDS[control.type];
+  const word = WORDS.typeWords[control.type];
   if (word === undefined) throw new RangeError(`control ${control.id} has type ${control.type}, which the card has no word for`);
   return word;
 }
@@ -71,36 +68,36 @@ export function ControlCard({ control, resources, alsoAddresses = [], usuallyApp
   return (
     <article className="ctl-card" data-control={control.id}>
       <Heading className="ctl-card__title">{control.name}</Heading>
-      <p className="ctl-card__type">{typeWord(control)}</p>
+      <p className="ctl-card__type">{WORDS.type(typeWord(control))}</p>
       <p className="ctl-card__desc">{control.description}</p>
       {alsoAddresses.length > 0 && (
-        <p className="ctl-card__note">{`Also addresses: ${alsoAddresses.map((a) => `${a.id} ${a.name}`).join(', ')}`}</p>
+        <p className="ctl-card__note">{WORDS.alsoHelps(alsoAddresses.map((a) => a.name))}</p>
       )}
-      {usuallyAppliedIn && <p className="ctl-card__note">{`Usually applied in ${STAGE_WORDS[usuallyAppliedIn]}`}</p>}
+      {usuallyAppliedIn && <p className="ctl-card__note">{WORDS.usuallyApplied(usuallyAppliedIn)}</p>}
       {template && (
         <p className="ctl-card__download">
-          <DownloadLink href={template.file} label={`Template: ${control.name}`} kind={template.kind} bytes={template.bytes} />
+          <DownloadLink href={template.file} label={WORDS.template(control.name)} kind={template.kind} bytes={template.bytes} />
         </p>
       )}
       {notebook && (
         <div className="ctl-card__notebook">
-          <p className="ctl-card__notebook-title">Notebook: how to apply this with a free tool to your own data</p>
+          <p className="ctl-card__notebook-title">{WORDS.notebookTitle}</p>
           <ul className="ctl-card__list">
-            <li><DownloadLink href={notebook.file} label="Download notebook" kind=".ipynb" bytes={notebook.bytes} /></li>
+            <li><DownloadLink href={notebook.file} label={WORDS.downloadNotebook} kind=".ipynb" bytes={notebook.bytes} /></li>
             <li>
               <DownloadLink
-                href={notebook.requirementsFile} label="Download requirements.txt" kind=".txt"
+                href={notebook.requirementsFile} label={WORDS.downloadRequirements} kind=".txt"
                 bytes={sizeOfServedFile(notebook.requirementsFile)}
               />
             </li>
           </ul>
-          <p className="ctl-card__note">Runs on your own computer or notebook service. The platform never runs it.</p>
-          <p className="ctl-card__note">{`Reviewed by ${notebook.review.reviewer} on ${formatDay(notebook.review.date)}.`}</p>
+          <p className="ctl-card__note">{WORDS.runsOn}</p>
+          <p className="ctl-card__note">{WORDS.reviewed(notebook.review.reviewer, formatDay(notebook.review.date))}</p>
         </div>
       )}
       {free.length > 0 && (
         <div className="ctl-card__resources">
-          <p className="ctl-card__resources-title">{`Free resources (${free.length}):`}</p>
+          <p className="ctl-card__resources-title">{WORDS.freeResources}</p>
           <ul className="ctl-card__list">
             {free.map((r, i) => <Resource key={`${i}-${r.url}`} r={r} />)}
           </ul>
