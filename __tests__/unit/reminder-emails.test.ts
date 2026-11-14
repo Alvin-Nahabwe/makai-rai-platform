@@ -1,9 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { mitigationDueEmail } from '@/lib/email/templates/mitigationDue';
 import { mitigationOverdueEmail } from '@/lib/email/templates/mitigationOverdue';
 import { MARKER_PATTERN } from '../helpers/markers';
 import { EMAIL_COPY } from '@/lib/email/copy';
 import { escapeHtml } from '@/lib/email/escape';
+import { invitationEmail } from '@/lib/email/templates';
+import { accountCreatedEmail } from '@/lib/email/templates/accountCreated';
+import { passwordResetEmail } from '@/lib/email/templates/passwordReset';
+import { passwordChangedEmail } from '@/lib/email/templates/passwordChanged';
+import { lintText } from '../lint/helpers/vocabulary-scan';
 
 const IN = { orgName: 'Makerere CAI Lab', dueDate: '2026-11-02', dashboardUrl: 'https://makrai.org/orgs/makerere-cai/dashboard' };
 
@@ -41,6 +46,24 @@ describe('E-04 and E-05', () => {
   it('16d: no line of either text part holds the link followed by another character', () => {
     for (const e of [mitigationDueEmail(IN), mitigationOverdueEmail(IN)]) {
       expect(e.text.split('\n').filter((l) => l.includes('https://'))).toEqual([URL_]);
+    }
+  });
+
+  it('16d: the text part of each of the six changed emails, rendered with real inputs, holds no retired phrase', () => {
+    vi.stubEnv('NEXTAUTH_URL', 'https://makrai.org');
+    try {
+      const texts = {
+        invitation: invitationEmail({ orgName: IN.orgName, role: 'assessor', acceptUrl: 'https://makrai.org/invitations/abc', expiresAt: new Date('2026-11-04T09:00:00Z') }).text,
+        accountCreated: accountCreatedEmail({ orgName: IN.orgName, createdAt: new Date('2026-11-02T08:00:00Z') }).text,
+        passwordReset: passwordResetEmail({ resetUrl: 'https://makrai.org/reset-password#abc' }).text,
+        passwordChanged: passwordChangedEmail({ changedAt: new Date('2026-11-02T08:00:00Z') }).text,
+        mitigationDue: mitigationDueEmail(IN).text,
+        mitigationOverdue: mitigationOverdueEmail(IN).text,
+      };
+      // The vocabulary lint's own scanner, the function it runs over every string it reads.
+      expect(Object.entries(texts).flatMap(([name, text]) => lintText(name, text).map((h) => `${h.where}: ${h.match}`))).toEqual([]);
+    } finally {
+      vi.unstubAllEnvs();
     }
   });
 

@@ -6,6 +6,7 @@ import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
 import { expectNoMarkersOrEmails, startServerLogCapture } from './helpers/logs';
 import { outageContainer } from './helpers/outage';
 import { API_COPY } from '../lib/http/api/copy';
+import { ERRORS_COPY } from '../lib/errors/copy';
 
 /**
  * NFR-AVL-04 (fault harness, SRS line 3254) and NFR-OBS-05. With the database stopped, a page shows the support
@@ -86,8 +87,8 @@ test('NFR-AVL-04 NFR-OBS-05: with the database stopped, pages show the reference
     const shown = page.getByText(/^Support reference: \S+$/);
     await expect(shown).toBeVisible({ timeout: 60_000 });
     pageReference = ((await shown.textContent()) ?? '').replace('Support reference: ', '').trim();
-    await expect(page.getByRole('heading', { name: 'This page could not be loaded' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: ERRORS_COPY.error.heading })).toBeVisible();
+    await expect(page.getByRole('button', { name: ERRORS_COPY.error.tryAgain })).toBeVisible();
     // No error text on the page. `next dev` forwards the error's message to the browser in its page data, for debugging
     // (Next 16, error.md: "During development ... include the `message` of the original error"), so the whole document
     // is held to this only on the production build CI serves; what a person sees is held to it everywhere.

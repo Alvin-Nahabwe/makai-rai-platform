@@ -12,7 +12,9 @@ import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { expectNoHorizontalScroll } from './helpers/reflow';
 import { AUTH_COPY, AUTH_MESSAGE_COPY, FORGOT_COPY, RESET_COPY, SIGN_IN_COPY } from '../lib/auth/copy';
 import { expectTargetsAtLeast24px } from './helpers/targetSize';
-import { ACCOUNT_COPY, PERSONAL_DATA_COPY, SIGN_OUT_EVERYWHERE_COPY } from '../lib/account/copy';
+import { ACCOUNT_COPY, PERSONAL_DATA_COPY, SIGN_OUT_EVERYWHERE_COPY, phraseLabel } from '../lib/account/copy';
+import { DELETE_PHRASE, DELETION_UNCONFIRMED } from '../lib/export/messages';
+import { EMAIL_COPY } from '../lib/email/copy';
 
 /**
  * S-21, S-29 and the session endpoint on a running server (FR-ACC-06 to FR-ACC-09, NFR-SEC-07, UX-01, NFR-A11Y-02,
@@ -183,11 +185,8 @@ test.describe('My account and sessions', () => {
     await expect(page.getByRole('button', { name: SIGN_OUT_EVERYWHERE_COPY.button })).toBeVisible();
   });
 
-  test('UX-29 UX-42 FR-EXP-03 (register D-386): Delete my account, opened with the keyboard at 1280 by 720, leaves the password field and both buttons inside the viewport', async ({ browser }) => {
-    // Fails today: the confirmation opens with its two buttons below the fold (boxes printed below, measured 14 Nov 2026 as
-    // password 329,654 to 1199,698 and both buttons from y 838 in a 1280 by 720 window). The repair is register D-386's, in
-    // components/ui/InlineConfirm.tsx, which this task does not touch; this case turns into a plain pass when it lands.
-    test.fail(true, 'register D-386: InlineConfirm does not bring its buttons into view when it opens');
+  test('UX-29 UX-42 FR-EXP-03: Delete my account, opened with the keyboard at 1280 by 720, leaves the password field and both buttons inside the viewport', async ({ browser }) => {
+    // components/ui/InlineConfirm.tsx brings a confirmation that opens wholly into view; the boxes are printed below.
     const a = (await buildOrg({ label: 'delconf' })).members.assessor;
     const page = await newPage(browser);
     await page.setViewportSize({ width: 1280, height: 720 });
@@ -208,10 +207,45 @@ test.describe('My account and sessions', () => {
       ['the Delete my account button', (await confirm.getByRole('button', { name: PERSONAL_DATA_COPY.deleteAction, exact: true }).boundingBox())!],
     ];
     const printed = boxes.map(([what, b]) => `${what} ${Math.round(b.x)},${Math.round(b.y)} to ${Math.round(b.x + b.width)},${Math.round(b.y + b.height)}`).join('; ');
-    console.log(`D-386 boxes in ${view.width}x${view.height}: ${printed}`);
+    console.log(`Confirmation boxes in ${view.width}x${view.height}: ${printed}`);
     for (const [what, b] of boxes) {
       expect(b.x >= 0 && b.y >= 0 && b.x + b.width <= view.width && b.y + b.height <= view.height, `${what} is wholly inside the viewport (${printed})`).toBe(true);
     }
+  });
+
+  test('UX-29 FR-EXP-03: a second deletion answer with the same words empties the alert first, so it is said again', async ({ browser }) => {
+    const a = (await buildOrg({ label: 'delagain' })).members.assessor;
+    const page = await newPage(browser);
+    await signInPage(page, a);
+    // Route 39 answers a 500 with an empty JSON body twice: the screen says the outcome is not known, both times.
+    let deletes = 0;
+    await page.route('**/api/users/me', async (route) => {
+      if (route.request().method() !== 'DELETE') return route.continue();
+      deletes += 1;
+      return route.fulfill({ status: 500, contentType: 'application/json', body: '{}' });
+    });
+    await page.goto('/account');
+    await page.getByRole('button', { name: PERSONAL_DATA_COPY.deleteTrigger }).click();
+    await page.getByLabel(PERSONAL_DATA_COPY.passwordLabel).fill(a.password);
+    await page.getByLabel(phraseLabel(DELETE_PHRASE)).fill(DELETE_PHRASE);
+    const region = page.locator('.ui-confirm [role="alert"]');
+    await expect(region).toHaveText('');
+    // Every text the region holds, in order, recorded from before the first press.
+    await region.evaluate((el) => {
+      const seen: string[] = [];
+      (window as unknown as { alertTexts: string[] }).alertTexts = seen;
+      new MutationObserver(() => {
+        const text = el.textContent ?? '';
+        if (seen[seen.length - 1] !== text) seen.push(text);
+      }).observe(el, { childList: true, characterData: true, subtree: true });
+    });
+    const confirm = page.locator('.ui-confirm').getByRole('button', { name: PERSONAL_DATA_COPY.deleteAction, exact: true });
+    await confirm.click();
+    await expect(region).toHaveText(DELETION_UNCONFIRMED);
+    await confirm.click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { alertTexts: string[] }).alertTexts)).toEqual([DELETION_UNCONFIRMED, '', DELETION_UNCONFIRMED]);
+    await expect(region).toHaveText(DELETION_UNCONFIRMED);
+    expect(deletes).toBe(2);
   });
 
   test('UX-26 FR-ACC-05 B17: signing in on S-01 removes another account\'s drafts from this browser and keeps one\'s own', async ({ browser }) => {
@@ -478,7 +512,7 @@ test.describe('J-15 with a mail catcher', { tag: '@nginx' }, () => {
     await signInPage(page, { email: a.email, password: 'j'.repeat(12) });
     await page.goto('/account');
     await expect(page.getByRole('heading', { level: 1, name: ACCOUNT_COPY.page.heading })).toBeVisible();
-    await expect.poll(() => readFileSync(process.env.E2E_MAIL_OUT!, 'utf8').includes('Your MAK-AI RAI Platform password was changed'), { timeout: 15_000 }).toBe(true);
+    await expect.poll(() => readFileSync(process.env.E2E_MAIL_OUT!, 'utf8').includes(EMAIL_COPY.passwordChanged.subject), { timeout: 15_000 }).toBe(true);
   });
 
   test('NFR-A11Y-02: J-15 and sign-in complete with the keyboard alone, focus visible and uncovered', async ({ browser }) => {

@@ -1,6 +1,7 @@
 /**
- * The words of the error page and the not-found card, and nothing else: `app/error.tsx` is a client file that every page loads
- * (ruling T16-18), so a word that only one screen needs does not belong here. The fixed texts of API answers are in
+ * The words of the error page, and nothing else: `app/error.tsx` is a client file that every page loads (ruling T16-18),
+ * so a word that only one screen needs does not belong here. The not-found card's words are in
+ * `lib/errors/not-found/copy.ts`, which only server components read; the fixed texts of API answers are in
  * `lib/http/api/copy.ts`.
  */
 
@@ -8,15 +9,10 @@
 const KEPT = 'If you were typing a decision or a mitigation, your text is kept in this browser.';
 
 export const ERRORS_COPY = Object.freeze({
-  titles: Object.freeze({ error: 'This page could not be loaded', notFound: 'Page not found' }),
+  titles: Object.freeze({ error: 'This page could not be loaded' }),
   error: Object.freeze({
     heading: 'This page could not be loaded',
     tryAgain: 'Try again',
-  }),
-  notFound: Object.freeze({
-    heading: 'Page not found',
-    body: 'We cannot find this page, or you do not have access to it. If someone sent you this link, ask them to check it or to invite you.',
-    home: 'Go to your home page',
   }),
 });
 

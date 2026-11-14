@@ -12,6 +12,7 @@ import { LEGAL_KIND_NAMES, acceptanceError } from '../../lib/legal/kinds';
 import { INVITATION_COPY } from '../../lib/invitations/copy';
 import { INVITATION_PAGE_COPY } from '../../lib/org/copy';
 import { API_COPY } from '@/lib/http/api/copy';
+import { EMAIL_COPY } from '@/lib/email/copy';
 
 /**
  * Route 31, POST /api/v1/invitations/[token]/register (FR-ACC-01, FR-ACC-03, FR-ACC-10; contract
@@ -210,8 +211,10 @@ describe('route 31: an account only from an invitation, with its acceptances (FR
       const { raw } = await invitationRow(fx, { email, role: 'viewer', linkShownAt: shown });
       expect((await register(raw, bodyA)).status).toBe(201);
       expect(sendEmail).toHaveBeenLastCalledWith(expect.objectContaining({ to: email, from: 'MAK-AI <noreply@fixture.test>',
-        subject: 'An account was created for this address' }));
-      expect(vi.mocked(sendEmail).mock.lastCall![0].text).toContain(`in ${fx.org.name} on `);
+        subject: EMAIL_COPY.accountCreated.subject }));
+      const text = vi.mocked(sendEmail).mock.lastCall![0].text;
+      expect(text).toContain(`It is a member of ${fx.org.name}.`);
+      expect(text).toContain(EMAIL_COPY.accountCreated.closing(fx.org.name));
     }
     expect(sendEmail).toHaveBeenCalledTimes(2);
   });

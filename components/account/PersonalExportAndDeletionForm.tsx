@@ -72,6 +72,7 @@ export function DeleteConfirm({ userId, onCancel }: { userId: string; onCancel: 
   }, [outcome]);
 
   async function onConfirm() {
+    setOutcome(null);
     setBusy(true);
     let next: DeletionOutcome;
     try {
@@ -140,7 +141,7 @@ export function PersonalExportAndDeletionForm({ userId, lastActiveOwnerOf }: { u
         <h2 id="account-delete-heading" style={SECTION_HEADING}>{PERSONAL_DATA_COPY.deleteHeading}</h2>
         {!open && <p>{PERSONAL_DATA_COPY.deleteConsequence}</p>}{/* once open, the confirmation says it (UX-29: object and consequence) */}
         {lastActiveOwnerOf.length > 0
-          ? lastActiveOwnerOf.map((org) => <Callout key={org} kind="note">{m38(org)}</Callout>)
+          ? lastActiveOwnerOf.map((org) => <div key={org} role="note"><Callout kind="note">{m38(org)}</Callout></div>)
           : open
             ? <DeleteConfirm userId={userId} onCancel={() => { closedOnce.current = true; setOpen(false); }} />
             : <Button ref={triggerRef} variant="secondary" onClick={() => setOpen(true)}>{PERSONAL_DATA_COPY.deleteTrigger}</Button>}

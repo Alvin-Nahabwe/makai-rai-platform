@@ -27,7 +27,7 @@ export const SIGN_OUT_EVERYWHERE_COPY = Object.freeze({
   /**
    * A 401: this browser's session had already ended and nothing says the others did (A 85). The row says "on this device", which
    * the vocabulary retires (unsaved-changes-draft); "in this browser" is the vocabulary's own word for where this browser's
-   * session is, and the sentence this one replaces said "signed out of this browser". A ruling to confirm.
+   * session is, and the sentence this one replaces said "signed out of this browser". The coordinator confirmed it (ruling Q6).
    */
   signedOutHere: 'You are signed out in this browser. You may still be signed in on other devices. Sign in again, then select Sign out everywhere.',
 });

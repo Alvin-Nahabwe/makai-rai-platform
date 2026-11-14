@@ -62,7 +62,7 @@ export function SignOutEverywhere({ userId }: { userId: string }) {
   return (
     <>
       <Button variant="secondary" onClick={onClick} disabled={state.kind === 'sending'}>{SIGN_OUT_EVERYWHERE_COPY.button}</Button>
-      {' '}{SIGN_OUT_EVERYWHERE_COPY.explains}
+      <p style={{ margin: 'var(--space-2) 0 0' }}>{SIGN_OUT_EVERYWHERE_COPY.explains}</p>
       <StatusRegion message={state.kind === 'error' ? state.message : null} politeness="assertive" tone="error" />
     </>
   );

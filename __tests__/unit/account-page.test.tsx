@@ -24,6 +24,7 @@ const { PersonalExportAndDeletion } = await import('@/components/account/Persona
 const { DraftsOnThisDevice } = await import('@/components/decision/DraftsOnThisDevice');
 const { AccountRegions } = await import('@/components/account/AccountRegions');
 const { signOutEverywhere } = await import('@/components/account/SignOutEverywhere');
+const { DeleteConfirm, PersonalExportAndDeletionForm } = await import('@/components/account/PersonalExportAndDeletionForm');
 const { ChangePasswordView, changePasswordOutcome } = await import('@/app/(authenticated)/change-password/ChangePasswordForm');
 const { CHANGE_PASSWORD_COPY } = await import('@/lib/auth/copy');
 const { ACCOUNT_COPY, SIGN_OUT_EVERYWHERE_COPY, PERSONAL_DATA_COPY, phraseLabel } = await import('@/lib/account/copy');
@@ -170,6 +171,19 @@ describe('1A-16c: the words of My data and Delete my account, word for word (aud
     expect(PERSONAL_DATA_COPY.deleteConsequence).toBe('Your name and email are removed and you are signed out everywhere. Records you entered stay with your organisations, shown as entered by "Deleted account". This cannot be undone.');
     expect(PERSONAL_DATA_COPY.passwordLabel).toBe('Your current password');
     expect(PERSONAL_DATA_COPY.download).toBe('Download my data');
+  });
+
+  it('A 89, 94: the confirm button is destructive, the typed phrase keeps its input attributes, and the download sentence comes before the link', () => {
+    const confirm = html(<DeleteConfirm userId="u1" onCancel={noop} />);
+    expect(confirm).toMatch(new RegExp(`<button[^>]*class="[^"]*\\bui-button--destructive\\b[^"]*"[^>]*>${escapeRe(PERSONAL_DATA_COPY.deleteAction)}</button>`));
+    // React writes these three names in camel case (autoCapitalize=…); HTML attribute names ignore case.
+    const phraseInput = confirm.match(/<input[^>]*name="phrase"[^>]*>/)?.[0] ?? '';
+    expect(phraseInput).toMatch(/autocapitalize="characters"/i);
+    expect(phraseInput).toMatch(/autocomplete="off"/i);
+    expect(phraseInput).toMatch(/spellcheck="false"/i);
+    const data = html(<PersonalExportAndDeletionForm userId="u1" lastActiveOwnerOf={[]} />);
+    expect(data.indexOf(`<p>${PERSONAL_DATA_COPY.downloadIntro}</p>`)).toBeGreaterThan(-1);
+    expect(data.indexOf(`<p>${PERSONAL_DATA_COPY.downloadIntro}</p>`)).toBeLessThan(data.indexOf('href="/api/users/me/export"'));
   });
 
   it('A 91: the typed phrase label is built from the phrase, which stays in lib/export/messages', () => {

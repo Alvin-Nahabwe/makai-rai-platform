@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { test, expect } from '@playwright/test';
 import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
-import { ERRORS_COPY } from '../lib/errors/copy';
+import { NOT_FOUND_COPY } from '../lib/errors/not-found/copy';
 import { pageTitle } from '../lib/ui/title';
 
 /**
@@ -45,5 +45,5 @@ test('UX-05 FR-AUTHZ-01: non-member, missing record and unknown organisation get
   expect(new Set(mains).size).toBe(1);   // one page for all three (M-27's text is pinned by UI and ORG)
   // Spec 7.5 (Task 10): the same non-empty tab title for all three, so the title says no more than the page.
   console.log(`not-found-parity titles: ${JSON.stringify(titles)}`);
-  expect(titles).toEqual(pages.map(() => pageTitle(ERRORS_COPY.titles.notFound)));
+  expect(titles).toEqual(pages.map(() => pageTitle(NOT_FOUND_COPY.title)));
 });

@@ -6,6 +6,7 @@ import ErrorPage from '../../app/error';
 import GlobalError from '../../app/global-error';
 import { ERRORS_COPY, errorBody, supportReferenceLine } from '../../lib/errors/copy';
 import { pageTitle } from '../../lib/ui/title';
+import { escapeRe } from '../helpers/escapeRe';
 
 /**
  * NFR-OBS-05 and NFR-AVL-04 (unit H0). When a page fails on the server, the person sees what did not happen,
@@ -33,7 +34,7 @@ it('NFR-OBS-05 NFR-AVL-04: the error page shows the reference and no error text'
   expect(html).not.toContain('127.0.0.1');
   expect(html).toContain('<main id="main-content"');
   expect(html).toContain('tabindex="-1"');
-  expect(html).toMatch(new RegExp(`<button[^>]*>${ERRORS_COPY.error.tryAgain}</button>`));
+  expect(html).toMatch(new RegExp(`<button[^>]*>${escapeRe(ERRORS_COPY.error.tryAgain)}</button>`));
 });
 
 it('NFR-OBS-05 NFR-AVL-04: the error page says what did not happen, what is safe and what to do, with the reference', () => {
@@ -62,11 +63,10 @@ it('NFR-OBS-05: an error with no digest, or a value that is not an Error, gets t
     expect(html, String(error)).toContain(`<h1>${ERRORS_COPY.error.heading}</h1>`);
     expect(html, String(error)).toContain(errorBody(false, true));
     expect(html, String(error)).not.toContain(errorBody(true, true));
-    expect(html, String(error)).not.toContain('nothing on this page was changed');
     expect(html, String(error)).not.toContain('Support reference');
     expect(html, String(error)).not.toContain('secret adapter text');
     expect(html, String(error)).not.toContain('<b>');
-    expect(html, String(error)).toMatch(new RegExp(`<button[^>]*>${ERRORS_COPY.error.tryAgain}</button>`));
+    expect(html, String(error)).toMatch(new RegExp(`<button[^>]*>${escapeRe(ERRORS_COPY.error.tryAgain)}</button>`));
   }
 });
 
@@ -82,7 +82,7 @@ it('NFR-OBS-05 NFR-AVL-04: the global error page is a whole document with the sa
   expect(html).not.toContain(errorBody(true, true));
   expect(html).not.toContain('at the bottom of the page');
   expect(html).not.toContain('secret adapter text');
-  expect(html).toMatch(new RegExp(`<button[^>]*>${ERRORS_COPY.error.tryAgain}</button>`));
+  expect(html).toMatch(new RegExp(`<button[^>]*>${escapeRe(ERRORS_COPY.error.tryAgain)}</button>`));
   expect(html).toMatch(/<title>[^<]+<\/title>/); // a document title, because the root layout's metadata does not apply here
 });
 

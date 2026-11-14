@@ -62,10 +62,10 @@ describe('S-21 PersonalExportAndDeletion', () => {
     const html = renderToStaticMarkup(<PersonalExportAndDeletionForm userId="u1" lastActiveOwnerOf={[]} />);
     expect(html).toMatch(new RegExp(`<a[^>]*href="/api/users/me/export"[^>]*>${PERSONAL_DATA_COPY.download}</a>`));
     expect(html).toContain(PERSONAL_DATA_COPY.downloadIntro);
-    expect(html).toMatch(/<h2[^>]*>My data<\/h2>/);
-    expect(html).toMatch(/<h2[^>]*>Delete my account<\/h2>/);
+    expect(html).toMatch(new RegExp(`<h2[^>]*>${PERSONAL_DATA_COPY.dataHeading}</h2>`));
+    expect(html).toMatch(new RegExp(`<h2[^>]*>${PERSONAL_DATA_COPY.deleteHeading}</h2>`));
     expect(html).toContain(PERSONAL_DATA_COPY.deleteConsequence.replace(/"/g, '&quot;'));
-    expect(html).toMatch(/<button[^>]*>Delete my account\.\.\.<\/button>/);
+    expect(html).toMatch(new RegExp(`<button[^>]*>${PERSONAL_DATA_COPY.deleteTrigger}</button>`));
   });
 
   it('UX-29 FR-EXP-03: Delete my account confirms inline with a password and the typed phrase, both pasteable, and a button that repeats the action', () => {
@@ -74,7 +74,7 @@ describe('S-21 PersonalExportAndDeletion', () => {
     expect(html).not.toMatch(/onpaste|readonly/i);
     expect(html).toContain(phraseLabel('DELETE MY ACCOUNT'));
     expect(html).toMatch(new RegExp(`<label[^>]*for="[^"]+"[^>]*>${PERSONAL_DATA_COPY.passwordLabel}`));
-    expect(html).toMatch(/<button[^>]*>Delete my account<\/button>/);
+    expect(html).toMatch(new RegExp(`<button[^>]*>${PERSONAL_DATA_COPY.deleteAction}</button>`));
     expect(html).toMatch(/<button[^>]*>Cancel<\/button>/);
     expect(html).toContain(PERSONAL_DATA_COPY.objectName);
   });

@@ -178,7 +178,7 @@ function batchSent(r: Run): Email[] {
 function renderedNotice(time: string, entry: string): { subject: string; text: string } {
   const tpl = readFileSync(NOTICE, 'utf8').replace(/\n+$/, '');
   const [first, , ...body] = tpl.split('\n');
-  const fill = (s: string) => s.replaceAll('{EVENT}', 'break_glass.open').replaceAll('{TIME_UTC}', time).replaceAll('{ENTRY_ID}', entry);
+  const fill = (s: string) => s.replaceAll('{TIME_UTC}', time).replaceAll('{ENTRY_ID}', entry);
   return { subject: fill(first.replace(/^Subject: /, '')), text: fill(body.join('\n')) };
 }
 
@@ -462,7 +462,7 @@ describe('the break-glass hook, its notice and the login stack, read as text', (
   /** Executable lines: whole-line comments and blank lines dropped. */
   const code = hook.split('\n').map((l) => l.trim()).filter((l) => l !== '' && !l.startsWith('#'));
 
-  it('notice carries only event, time and entry id', () => {
+  it('notice carries only time and entry id, and no event', () => {
     const tpl = readFileSync(NOTICE, 'utf8');
     const placeholders = new Set([...tpl.matchAll(/\{([^{}]*)\}/g)].map((m) => m[1]));
     expect([...placeholders].sort()).toEqual(['ENTRY_ID', 'TIME_UTC']);
@@ -476,7 +476,7 @@ describe('the break-glass hook, its notice and the login stack, read as text', (
     expect(tpl.split('\n')[1]).toBe('');
   });
 
-  it('16d: the notice file is exactly the ruled text, and the hook fills it: no token is left over', () => {
+  it('16d: the notice file is exactly the ruled text and has no other placeholder', () => {
     const tpl = readFileSync(NOTICE, 'utf8');
     expect(tpl).toBe(
       [

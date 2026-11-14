@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { NotFoundError, ForbiddenError } from '@/lib/data/tenant';
 import { UnauthenticatedError, PasswordChangeRequiredError } from '@/lib/auth/identity';
-import { AppError, ValidationFailed } from '@/lib/http/errors';
+import {
+  AcceptancesRequiredError, ConflictError, ErasedError, NotImplementedError, RateLimitedError, ValidationFailed,
+} from '@/lib/http/errors';
 import { toResponse } from '@/lib/http/toResponse';
 import { API_COPY } from '@/lib/http/api/copy';
 import { VALIDATION_COPY } from '@/lib/http/copy';
@@ -49,7 +51,12 @@ describe('the fixed texts of API answers (E-API-1 to E-API-7)', () => {
   });
 
   it('the texts nobody reworded are as they were (no audit row or a KEEP row)', async () => {
-    const r = toResponse(new AppError(409, 'x', 'Conflict'));
-    expect((await r.json()).error).toBe('Conflict');
+    // Each class's text before Task 16 (git show ba32b84d:lib/http/errors.ts), written out.
+    expect(new ConflictError('moved').message).toBe('Conflict');
+    expect(new ErasedError('2026-11-02').message).toBe('Erased');
+    expect(new NotImplementedError('x').message).toBe('Not implemented');
+    expect(new AcceptancesRequiredError(['terms']).message).toBe('Acceptances required');
+    expect(new RateLimitedError(30).message).toBe('Too many requests. Please try again later.');
+    expect((await toResponse(new ConflictError('moved')).json()).error).toBe('Conflict');
   });
 });

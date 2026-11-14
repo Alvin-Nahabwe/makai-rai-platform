@@ -3,6 +3,7 @@ import { invitationEmail } from '../../lib/email/templates';
 import { EMAIL_COPY } from '../../lib/email/copy';
 import { roleWithArticle } from '../../lib/org/copy';
 import { escapeHtml } from '../../lib/email/escape';
+import { formatDay } from '../../lib/format/dates';
 
 /**
  * Task 9: `lib/email/templates.ts` holds the invitation body as a pure
@@ -57,6 +58,8 @@ describe('invitationEmail', () => {
     expect(c.subject).toBe(EMAIL_COPY.invitation.subject('Lab <A>'));
     expect(c.subject).toBe('You are invited to Lab <A> on the MAK-AI RAI Platform');
     expect(c.html).toContain('Lab &lt;A&gt;');
+    expect(c.text).toContain(roleWithArticle('reviewer'));
+    expect(c.text).toContain(formatDay(new Date('2026-11-04T09:00:00Z')));
     expect(c.text).not.toMatch(/invited by/i);
   });
 

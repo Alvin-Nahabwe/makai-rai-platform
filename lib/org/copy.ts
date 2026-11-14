@@ -2,7 +2,10 @@ import type { OrgRole } from '@prisma/client';
 import type { VocabularyEntry } from '@/lib/vocabulary/types';
 import { TERM_ADMIN, TERM_ASSESSOR, TERM_OWNER, TERM_REVIEWER, TERM_VIEWER } from '@/lib/vocabulary/terms';
 
-/** The words of the organisation screens. Titles only for now; later tasks add the rest. */
+/**
+ * The words of the organisation screens: their titles, the organisation chooser, the invitation page's own words, the role
+ * names with their articles and the welcome line. Only server code reads this module; no client file imports it.
+ */
 export const ORG_COPY = Object.freeze({
   titles: Object.freeze({
     chooser: 'Choose an organisation',
