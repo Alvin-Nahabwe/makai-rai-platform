@@ -4,6 +4,7 @@ import { expect, request, test, type APIRequestContext, type Browser, type Brows
 import { testDb } from '../__tests__/helpers/db';
 import { buildOrg, type FixtureMember, type OrgFixture } from '../__tests__/helpers/recordFixture';
 import { FINDINGS_COPY } from '../lib/findings/copy';
+import { DOCUMENTS_COPY } from '../lib/documents/copy';
 import { failOnDialog } from './helpers/dialogs';
 import { fillValid, saveAlert, signInWith, waitForQuestionPage } from './helpers/session';
 
@@ -29,8 +30,9 @@ const M09 = 'Not saved: your role in this organisation no longer allows this. Yo
  */
 const SEAL_ARCHIVED = 'Not sealed: this project is archived.';
 const SEAL_ROLE = 'Not sealed: your role changed. Ask an owner or admin.';
-/** S-18's refusal for a lowered role is DOC-a's own sentence (lib/documents/copy.ts:81), not M-09; its archived one is M-12. */
-const ISSUE_ROLE = 'Not generated: your role in this organisation no longer allows this. Ask an owner or admin.';
+/** S-18's refusals at Issue are its own sentences (lib/documents/copy.ts, DOCUMENTS_COPY.refusal), not M-09 or M-12. */
+const ISSUE_ROLE = DOCUMENTS_COPY.refusal.role('issuing');
+const ISSUE_ARCHIVED = DOCUMENTS_COPY.refusal.archived('issuing');
 const TYPED = 'Typed before the project changed';
 const TABLES = ['decision_versions', 'evidence', 'seals', 'issued_documents', 'mitigation_versions'] as const;
 
@@ -130,7 +132,7 @@ async function openPages(browser: Browser): Promise<OpenPages> {
 
   const s18 = await page();
   await s18.goto(`${root}/reviews/${reviewId}/documents`);
-  await s18.getByRole('button', { name: 'Generate document' }).click();
+  await s18.getByRole('button', { name: DOCUMENTS_COPY.form.previewButton }).click();
   await expect(s18.getByRole('heading', { name: /^Preview: / })).toBeVisible();
   return { context, s12, s15, s17, s18 };
 }
@@ -162,7 +164,7 @@ test('FR-PRJ-03 RF-4: archiving refuses Save, upload, Seal and Generate on pages
   const pages = await openPages(browser);
   const before = await countRows();
   await expectOk(await ownerApi.post(`/api/v1/orgs/${fx.org.slug}/projects/${projectId}/archive`, { data: { requestId: randomUUID() } }), 'route 21');
-  await pressAll(pages, { save: M12, mitigation: FINDINGS_COPY.failures.archived, seal: SEAL_ARCHIVED, issue: M12 });
+  await pressAll(pages, { save: M12, mitigation: FINDINGS_COPY.failures.archived, seal: SEAL_ARCHIVED, issue: ISSUE_ARCHIVED });
   expect(await countRows()).toEqual(before);
   await expect(pages.s12.getByLabel('Reason (required)')).toHaveValue(TYPED);   // 7.4.1: the typed answer stays
   await pages.context.close();

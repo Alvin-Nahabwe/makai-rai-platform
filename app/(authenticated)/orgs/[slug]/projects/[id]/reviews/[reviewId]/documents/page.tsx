@@ -96,14 +96,14 @@ export default async function DocumentsPage({ params }: PageProps) {
   return (
     <div className="page-content">
       <ArchivedBanner archived={archived} />
-      <h1>Generate a document</h1>
+      <h1>{DOCUMENTS_COPY.page.heading}</h1>
       <p>{review.name}</p>
       {seals.length === 0 ? <NeverSealed orgSlug={slug} projectId={id} reviewId={reviewId} /> : (
         <>
-          {form !== null ? <section aria-labelledby="documents-generate"><h2 id="documents-generate">Documents</h2>{form}</section> : null}
-          {sealsFailed ? <section aria-labelledby="documents-generate"><h2 id="documents-generate">Documents</h2><p>{MSG_SEAL_CHECK_FAILED}</p></section> : null}
+          {form !== null ? <section aria-labelledby="documents-generate"><h2 id="documents-generate">{DOCUMENTS_COPY.page.chooseHeading}</h2>{form}</section> : null}
+          {sealsFailed ? <section aria-labelledby="documents-generate"><h2 id="documents-generate">{DOCUMENTS_COPY.page.chooseHeading}</h2><p>{MSG_SEAL_CHECK_FAILED}</p></section> : null}
           <section aria-labelledby="documents-issued">
-            <h2 id="documents-issued">Issued documents</h2>
+            <h2 id="documents-issued">{DOCUMENTS_COPY.page.issuedHeading}</h2>
             <IssuedDocumentsList orgSlug={slug} documents={documents} latestSealNumber={latestNumber} canWithdraw={canWithdraw} />
           </section>
         </>

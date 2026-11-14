@@ -26,7 +26,7 @@ import { eatDate, isOverdue } from '@/lib/followup/overdue';
 import { manifestIds } from '@/lib/seal/ids';
 import { stageReviewName } from '@/lib/seal/reviewName';
 import { SEAL_SOURCE_SQL, checkSealRows, trustedManifest, type SealSourceRows, type TombstoneRow } from '@/lib/integrity/sealCheck.mjs';
-import { ERASABLE_FIELDS, ETHICS_STATES, METADATA_KEYS, MSG_SEAL_CHECK_FAILED, DOCUMENT_TITLES, formatUtcDay } from '@/lib/documents/copy';
+import { DOCUMENTS_COPY, ERASABLE_FIELDS, ETHICS_STATES, METADATA_KEYS, MSG_SEAL_CHECK_FAILED, DOCUMENT_TITLES, formatUtcDay } from '@/lib/documents/copy';
 import { readStageRows } from '@/lib/seal/manifest';
 import type { DocumentSnapshot, SealedDecision, SealedFinding, SealedStage } from '@/lib/documents/resolve';
 
@@ -156,10 +156,10 @@ export async function readDocumentSnapshot(
   const chosenRow = await tx.seal.findFirst({ where: { id: a.sealId }, select: SEAL_SELECT });
   if (chosenRow === null) throw new NotFoundError();
   if (chosenRow.stageReviewId !== review.id || chosenRow.stageReview.projectId !== a.projectId) {
-    throw new ValidationFailed([{ field: 'sealId', message: 'This seal is not from this review.' }]);
+    throw new ValidationFailed([{ field: 'sealId', message: DOCUMENTS_COPY.fieldMessages.sealNotOfReview }]);
   }
   const chosenManifest = trusted(chosenRow, true);
-  if (chosenManifest === null) throw new ValidationFailed([{ field: 'sealId', message: 'This seal cannot be used: its check failed.' }]);
+  if (chosenManifest === null) throw new ValidationFailed([{ field: 'sealId', message: MSG_SEAL_CHECK_FAILED }]);
   const reviewStage = chosenRow.stageReview.stage as Stage;
 
   const sealed = new Map<Stage, { row: SealRow; manifest: SealManifestV1 }>([[reviewStage, { row: chosenRow, manifest: chosenManifest }]]);
@@ -407,7 +407,7 @@ export function parseDocumentRequest(body: unknown, keyed: boolean): PreviewDocu
   if (extra.length > 0) throw new ValidationFailed(extra.map((field) => ({ field, message: 'This field cannot be sent.' })));
   const { documentType, sealId, typedFields, requestId } = body as Record<string, unknown>;
   if (keyed && !isRequestId(requestId)) throw new ValidationFailed([{ field: 'requestId', message: 'requestId must be a UUID (8-4-4-4-12 hexadecimal).' }]);
-  if (typeof sealId !== 'string' || sealId === '') throw new ValidationFailed([{ field: 'sealId', message: 'Choose a seal.' }]);
+  if (typeof sealId !== 'string' || sealId === '') throw new ValidationFailed([{ field: 'sealId', message: DOCUMENTS_COPY.fieldMessages.chooseSeal }]);
   return {
     documentType: documentType as PreviewDocumentRequest['documentType'], sealId,
     typedFields: (typedFields === undefined ? {} : typedFields) as Record<string, string>,
@@ -438,10 +438,10 @@ function checkTyped(map: FieldMap, typedFields: unknown): Record<string, string>
   const kept: Record<string, string> = {};
   for (const [id, value] of Object.entries(typedFields)) {
     const field = `typedFields.${id}`;
-    if (!allowed.has(id)) errors.push({ field, message: 'This is not a field you can type into for this document.' });
-    else if (typeof value !== 'string') errors.push({ field, message: 'This must be text.' });
-    else if (value.length > TYPED_VALUE_MAX) errors.push({ field, message: `Use at most ${TYPED_VALUE_MAX} characters.` });
-    else if (id.endsWith(':state') && value.trim() !== '' && !ETHICS_STATE_VALUES.includes(value.trim())) errors.push({ field, message: 'Choose approved, submitted or not required.' });
+    if (!allowed.has(id)) errors.push({ field, message: DOCUMENTS_COPY.fieldMessages.notTypeable });
+    else if (typeof value !== 'string') errors.push({ field, message: DOCUMENTS_COPY.fieldMessages.mustBeText });
+    else if (value.length > TYPED_VALUE_MAX) errors.push({ field, message: DOCUMENTS_COPY.fieldMessages.tooLong(TYPED_VALUE_MAX) });
+    else if (id.endsWith(':state') && value.trim() !== '' && !ETHICS_STATE_VALUES.includes(value.trim())) errors.push({ field, message: DOCUMENTS_COPY.fieldMessages.chooseEthics });
     else if (value.trim() !== '') kept[id] = value;
   }
   // The ethics review (CG-10) prints through its state: a sub-value with no state, or one that state does not use, would be stored and never printed.
@@ -452,8 +452,8 @@ function checkTyped(map: FieldMap, typedFields: unknown): Record<string, string>
     for (const sub of ['committee', 'reference', 'date', 'why', 'decidedBy']) {
       const id = `${e.fieldId}:${sub}`;
       if (kept[id] === undefined || errors.some((x) => x.field === `typedFields.${id}`)) continue;
-      if (state === '') errors.push({ field: `typedFields.${e.fieldId}:state`, message: 'Choose approved, submitted or not required.' });
-      else if (!usedBy[state].includes(sub)) errors.push({ field: `typedFields.${id}`, message: 'This does not belong to the state you chose.' });
+      if (state === '') errors.push({ field: `typedFields.${e.fieldId}:state`, message: DOCUMENTS_COPY.fieldMessages.chooseEthics });
+      else if (!usedBy[state].includes(sub)) errors.push({ field: `typedFields.${id}`, message: DOCUMENTS_COPY.fieldMessages.notOfState });
     }
   }
   if (errors.length > 0) throw new ValidationFailed(errors);
@@ -462,7 +462,7 @@ function checkTyped(map: FieldMap, typedFields: unknown): Record<string, string>
 
 function checkType(documentType: unknown): DocumentType {
   if (typeof documentType !== 'string' || !(DOCUMENT_TYPES as readonly string[]).includes(documentType)) {
-    throw new ValidationFailed([{ field: 'documentType', message: 'Choose a data card, a model card or a mitigation plan.' }]);
+    throw new ValidationFailed([{ field: 'documentType', message: DOCUMENTS_COPY.fieldMessages.chooseDocument }]);
   }
   return documentType as DocumentType;
 }

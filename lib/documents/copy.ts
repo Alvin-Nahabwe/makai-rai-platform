@@ -35,8 +35,8 @@ export const ETHICS_SUBMITTED = 'submitted';
 export const ETHICS_NOT_REQUIRED = 'not_required';
 export const ETHICS_STATES: ReadonlyArray<[value: string, word: string]> = [[ETHICS_APPROVED, 'Approval granted'], [ETHICS_SUBMITTED, 'Submitted, awaiting decision'], [ETHICS_NOT_REQUIRED, 'Not required']];
 
-/** S-18's label on a seal whose stored bytes no longer match its fingerprint (NFR-INT-05); the seal cannot be chosen. */
-export const SEAL_CHECK_FAILED = 'Seal check failed';
+/** S-18's word for a seal whose stored bytes no longer match its fingerprint (NFR-INT-05, C#279); the seal cannot be chosen. */
+export const SEAL_CHECK_FAILED = 'Cannot be used';
 
 /** The `ProjectMetadata` columns a document can print, in schema order (ids and `updatedAt` are not fields). */
 export const METADATA_KEYS = [
@@ -106,19 +106,138 @@ export const ERASABLE_FIELDS: ReadonlyArray<readonly [table: string, key: string
 ];
 
 /** The words of the S-18 failure lines (queued for the owner; used as written until the owner rules). Free of any claim about the device. */
-export const MSG_PREVIEW_SERVER = 'Not generated: the server had a problem. Try again.';
+export const MSG_PREVIEW_SERVER = 'Preview not shown. The server had a problem. Try again.';
 export const MSG_ISSUE_NO_REPLY = 'Not issued yet: no reply from the server. It may have arrived. Retry is safe: it will not issue twice.';
-export const MSG_ROLE_CHANGED = 'Not generated: your role in this organisation no longer allows this. Ask an owner or admin.';
-export const MSG_SEAL_CHECK_FAILED = 'This seal cannot be used: its check failed.';
+export const MSG_ROLE_CHANGED = 'Preview not shown. Your role in this organisation no longer allows this. Ask an Owner or Admin.';
+export const MSG_SEAL_CHECK_FAILED = 'This seal cannot be used because it no longer matches the record. Contact MAK-AI through Help and contact.';
 
 /** One "<day> hh:mm:ss UTC" for an instant (FR-DOC-02: UTC, to the second). */
 export function utcSecond(iso: string): string {
   return `${formatUtcDay(iso)} ${new Date(iso).toISOString().slice(11, 19)} UTC`;
 }
 
-/** Page titles of the documents screen (spec 7.5; "Documents" is the review page's step, spec section 4). */
+/** The two phases of S-18 a failure can happen in: making the preview, or issuing. */
+export type DocumentPhase = 'generating' | 'issuing';
+/** A failure's first words: "Preview not shown." before anything is issued, "Not issued." while issuing (the lead's ruling, part 18c (c)). */
+const failed = (phase: DocumentPhase): string => (phase === 'issuing' ? 'Not issued.' : 'Preview not shown.');
+
+/**
+ * The words of S-18 and of its S-16 slot (plan 1A Task 18c (c)): the copy audit's RULED TEXT (task-18-map-copy.md, 18c table) with the
+ * lead's rulings ("Generate" is retired on this screen; S-Q2: a full stop then a capital; "Owner or Admin"). Page titles first.
+ */
 export const DOCUMENTS_COPY = Object.freeze({
   titles: Object.freeze({
     documentsOf: (reviewName: string): string => `Documents of ${reviewName}`,
+  }),
+  page: Object.freeze({
+    heading: 'Create a document',
+    chooseHeading: 'Choose a document',
+    issuedHeading: 'Issued documents',
+  }),
+  form: Object.freeze({
+    neverSealed: 'Seal this review first. Documents are made from a sealed review.',
+    sealThisReview: 'Seal this review',
+    legend: 'Choose a document',
+    /** The stages are display names ("In-processing"); one stage keeps the singular sentence. */
+    neverSealedStages: (names: readonly string[]): string => (names.length === 1
+      ? `Part of this document comes from the ${names[0]} stage, which has not been sealed. Those fields will read "${NOT_RECORDED_AT_ISSUE}".`
+      : `Part of this document comes from the ${names.slice(0, -1).join(', ')} and ${names[names.length - 1]} stages, which have not been sealed. Those fields will read "${NOT_RECORDED_AT_ISSUE}".`),
+    sealLabel: 'Make it from seal',
+    sealOption: (n: number, day: string, latest: boolean): string => `Seal ${n}, ${day}${latest ? ' (latest)' : ''}`,
+    sealOptionUnusable: (n: number, day: string): string => `Seal ${n}, ${day}: ${SEAL_CHECK_FAILED.toLowerCase()}`,
+    olderSeal: (chosen: number, latest: number): string => `Seal ${latest} is newer. This document will list seal ${chosen} as its source.`,
+    typedHeading: (title: string): string => `${title}: fields to type in`,
+    typedNote: `Type these for this document only. They are not part of the sealed record. The platform keeps what you type for next time. Leave a field empty to print "${NOT_RECORDED}".`,
+    printNotRecorded: `Print "${NOT_RECORDED}"`,
+    committee: 'Committee',
+    reference: 'Reference',
+    approvalDate: 'Date of approval',
+    whyNotRequired: 'Why approval is not required',
+    whoDecided: 'Who decided it is not required',
+    /** C#268, kept in 1A with the singular at one. */
+    fromRecord: (r: { fields: number; questions: number; notRecorded: number }): string => {
+      const fields = (n: number) => `${n} ${n === 1 ? 'field' : 'fields'}`;
+      const from = r.questions === 0 ? fields(r.fields) : `${fields(r.fields)} from ${r.questions} ${r.questions === 1 ? 'question' : 'questions'}`;
+      return `${from} . ${fields(r.notRecorded)} will read "${NOT_RECORDED}"`;
+    },
+    previewButton: 'Preview document',
+    retry: 'Retry',
+  }),
+  preview: Object.freeze({
+    heading: (title: string): string => `Preview: ${title}`,
+    nothingSaved: 'Nothing is saved until you select Issue this document.',
+    notRecordedCount: (n: number): string => `${n} ${n === 1 ? 'field reads' : 'fields read'} "${NOT_RECORDED}" or "${NOT_RECORDED_AT_ISSUE}".`,
+    issue: 'Issue this document',
+    back: 'Back to edit',
+  }),
+  issued: Object.freeze({
+    /** M-35 with "Fingerprint" for "SHA-256" (C#250). */
+    status: (short: string): string => `Issued. Fingerprint ${short}.`,
+    download: (size: string): string => `Download PDF (${size})`,
+    another: 'Create another document',
+  }),
+  status: Object.freeze({
+    making: 'Making the preview...',
+    issuing: 'Issuing the document...',
+    stillMaking: 'Still making the preview.',
+    stillIssuing: 'Still issuing the document.',
+  }),
+  refusal: Object.freeze({
+    lost: 'Preview not shown. Connection lost. Nothing was issued.',
+    archived: (phase: DocumentPhase): string => `${failed(phase)} This project is archived. Owners and Admins can unarchive it.`,
+    role: (phase: DocumentPhase): string => `${failed(phase)} Your role in this organisation no longer allows this. Ask an Owner or Admin.`,
+    signedOut: (phase: DocumentPhase): string => `${failed(phase)} You are signed out. Sign in again, then come back. Nothing was issued.`,
+    other: (phase: DocumentPhase): string => `${failed(phase)} Something went wrong. Nothing was issued. Please try again.`,
+    tooMany: (phase: DocumentPhase, minutes: number): string => `${failed(phase)} Too many attempts. Try again in ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}.`,
+    /** A server field message the screen knows, after the phase's first words. */
+    field: (phase: DocumentPhase, message: string): string => `${failed(phase)} ${message}`,
+    /** A server field message the screen does not know: never shown (the lead's ruling, G-c4). */
+    unknownField: (phase: DocumentPhase): string => `${failed(phase)} Reload the page and try again.`,
+  }),
+  list: Object.freeze({
+    empty: 'No documents issued from this review yet.',
+    line: (title: string, sealNumber: number, day: string, by: string, short: string): string => `${title} . seal ${sealNumber} . ${day} . by ${by} . Fingerprint ${short}`,
+    olderSeal: 'Made from an older seal. A newer seal exists.',
+    withdrawn: (day: string, reason: string): string => `Withdrawn on ${day}: ${reason}`,
+    erased: (day: string): string => `File erased on ${day}`,
+    issuedWord: 'Issued ',
+    reviewLine: (title: string, sealNumber: number, day: string, short: string, withdrawn: boolean): string =>
+      `${title} . from seal ${sealNumber} . issued ${day} . Fingerprint ${short} . ${withdrawn ? 'Withdrawn' : 'Issued'}`,
+  }),
+  actions: Object.freeze({
+    copy: 'Copy as text',
+    copied: 'Copied.',
+    copyLost: 'Not copied. Connection lost.',
+    copySignedOut: 'Not copied. You are signed out. Sign in again, then come back.',
+    copyErased: "Not copied. This document's text was erased.",
+    copyTooMany: 'Not copied. Too many requests. Wait a minute, then try again.',
+    copyOther: 'Not copied. Reload the page and try again.',
+    selectAll: 'Select all and copy',
+    withdraw: 'Withdraw document',
+    reasonLabel: 'Reason (required)',
+    objectName: (title: string, day: string): string => `${title} issued ${day}`,
+    /** M-36 as C#311 rules it; `document` is the lower-case name ("data card"). */
+    withdrawConsequence: (document: string): string => `Withdraw this ${document}? It will be marked Withdrawn in the list, with your reason. The PDF is kept and can still be downloaded.`,
+    withdrawn: 'Withdrawn.',
+    withdrawTaken: 'Not withdrawn by you. Someone else withdrew it first. Their reason is shown.',
+    withdrawLost: 'Not withdrawn yet: no reply from the server. It may have arrived. Retry is safe: it will not withdraw twice.',
+    withdrawOther: 'Not withdrawn. Reload the page and try again.',
+    withdrawSignedOut: 'Not withdrawn. You are signed out. Sign in again, then come back.',
+    withdrawEarlier: 'Withdrawn. Your earlier request may have done it. The reason shown is the one recorded.',
+    withdrawUnconfirmed: 'Not confirmed. It may already have been withdrawn. Reload the page to see.',
+    withdrawForbidden: 'Not withdrawn. Your role in this organisation no longer allows this. Ask an Owner or Admin.',
+    withdrawArchived: 'Not withdrawn. This project is archived. Owners and Admins can unarchive it.',
+    retry: 'Retry',
+  }),
+  /** The server's field messages for a document request (lib/data/documents.ts), one copy each, so S-18 can tell a known one. */
+  fieldMessages: Object.freeze({
+    sealNotOfReview: 'This seal is not from this review.',
+    chooseSeal: 'Choose a seal.',
+    notTypeable: 'This is not a field you can type into for this document.',
+    mustBeText: 'This must be text.',
+    tooLong: (max: number): string => `Use at most ${max} characters.`,
+    chooseEthics: 'Choose Approval granted, Submitted or Not required.',
+    notOfState: 'This does not belong to the state you chose.',
+    chooseDocument: 'Choose a data card, a model card or a mitigation plan.',
   }),
 });

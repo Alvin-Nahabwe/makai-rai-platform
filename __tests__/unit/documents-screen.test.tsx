@@ -11,7 +11,7 @@ import { IssuedDocumentsList } from '@/components/documents/IssuedDocumentsList'
 import { ReviewDocumentsList } from '@/components/documents/ReviewDocumentsList';
 import { typedToSend } from '@/lib/documents/generate';
 import { SLOW_MS, type SendOutcome, type sendWrite } from '@/lib/client/retrySafeWrite';
-import { NOT_RECORDED_AT_ISSUE, SEALED_NOTE, STATEMENT, TYPED_MARK } from '@/lib/documents/copy';
+import { DOCUMENTS_COPY, MSG_PREVIEW_SERVER, NOT_RECORDED_AT_ISSUE, SEALED_NOTE, STATEMENT } from '@/lib/documents/copy';
 import { formatFingerprint } from '@/lib/seal/format';
 import { loadFieldMap } from '@/lib/documents/fieldMaps';
 import { HOSTILE_STRINGS } from '../helpers/hostile';
@@ -51,7 +51,7 @@ describe('S-18 summary line', () => {
   it('UX-20: a document that takes questions says how many fields come from how many questions; one that takes none says only the fields (data card, model card, mitigation plan)', () => {
     expect(fromRecordLine({ fields: 35, questions: 20, notRecorded: 12 })).toBe('35 fields from 20 questions . 12 fields will read "Not recorded"');   // data card
     expect(fromRecordLine({ fields: 31, questions: 18, notRecorded: 4 })).toBe('31 fields from 18 questions . 4 fields will read "Not recorded"');     // model card
-    expect(fromRecordLine({ fields: 10, questions: 0, notRecorded: 1 })).toBe('10 fields . 1 fields will read "Not recorded"');                          // mitigation plan
+    expect(fromRecordLine({ fields: 10, questions: 0, notRecorded: 1 })).toBe('10 fields . 1 field will read "Not recorded"');                          // mitigation plan
   });
 
   it('UX-20: the real maps agree: only the mitigation plan has no question source', () => {
@@ -75,7 +75,7 @@ describe('S-18 form', () => {
 
   it('UX-20 FR-DOC-03: typed fields carry the mark and the draft values, and the summary says how many fields read Not recorded', () => {
     const html = renderToStaticMarkup(<GenerateDocumentForm {...props({ draft: { 'DC-25': 'CC BY 4.0' }, notRecorded: 3 })} />);
-    expect(html).toContain(TYPED_MARK);
+    expect(html).toContain('Type these for this document only. They are not part of the sealed record.');
     expect(html).toContain('value="CC BY 4.0"');
     expect(html).toMatch(/3 fields will read &quot;Not recorded&quot;/);
     expect(html).toMatch(/35 fields from 20 questions/);
@@ -83,11 +83,11 @@ describe('S-18 form', () => {
 
   it('UX-20: the radio group is a fieldset with a legend, each radio is described by its help line, and the ethics review has its sub-fields', () => {
     const html = renderToStaticMarkup(<GenerateDocumentForm {...props()} />);
-    expect(html).toMatch(/<fieldset[^>]*>\s*<legend[^>]*>Documents<\/legend>/);
+    expect(html).toMatch(/<fieldset[^>]*>\s*<legend[^>]*>Choose a document<\/legend>/);
     expect(html.match(/type="radio"/g)).toHaveLength(3);
     expect(html.match(/<input[^>]*type="radio"[^>]*aria-describedby="[^"]+"/g)).toHaveLength(3);
     expect(html).toMatch(/<select[^>]*>[\s\S]*Approval granted[\s\S]*<\/select>/);
-    expect(html).toContain('Leave empty to print &quot;Not recorded&quot;');
+    expect(html).toContain('Leave a field empty to print &quot;Not recorded&quot;');
   });
 
   it('FR-DOC-05 UX-20: a document needing a stage never sealed says so before generating', () => {
@@ -119,13 +119,13 @@ describe('S-18 form', () => {
     const typed = { 'DC-25': 'CC BY 4.0' };
     const start: GenerateState = { phase: 'editing', typed, message: null, retry: false };
     const sent = generateReducer(start, { kind: 'send' });
-    expect([sent.phase, sent.message]).toEqual(['generating', 'Generating the document...']);
-    expect(generateReducer(sent, { kind: 'slow' }).message).toBe('Still generating.');
+    expect([sent.phase, sent.message]).toEqual(['generating', DOCUMENTS_COPY.status.making]);
+    expect(generateReducer(sent, { kind: 'slow' }).message).toBe(DOCUMENTS_COPY.status.stillMaking);
     expect(SLOW_MS).toBe(10_000);
     const cases: Array<[SendOutcome<unknown>, string]> = [
-      [{ kind: 'not_saved', reason: 'network' }, 'Not generated: connection lost. Nothing was issued.'],
-      [{ kind: 'rejected', status: 409, body: { error: 'x', code: 'project_archived' } }, 'Not saved: this project is archived. Owners and admins can unarchive it.'],
-      [{ kind: 'rejected', status: 403, body: { error: 'x', code: 'forbidden' } }, 'Not generated: your role in this organisation no longer allows this. Ask an owner or admin.'],
+      [{ kind: 'not_saved', reason: 'network' }, DOCUMENTS_COPY.refusal.lost],
+      [{ kind: 'rejected', status: 409, body: { error: 'x', code: 'project_archived' } }, DOCUMENTS_COPY.refusal.archived('generating')],
+      [{ kind: 'rejected', status: 403, body: { error: 'x', code: 'forbidden' } }, DOCUMENTS_COPY.refusal.role('generating')],
     ];
     for (const [outcome, text] of cases) {
       const after = generateReducer(sent, { kind: 'outcome', outcome });
@@ -136,16 +136,16 @@ describe('S-18 form', () => {
     }
     const lost = generateReducer(sent, { kind: 'outcome', outcome: { kind: 'not_saved', reason: 'network' } });
     expect(lost.retry).toBe(true);
-    expect(generateReducer(lost, { kind: 'retry' })).toMatchObject({ phase: 'generating', message: 'Generating the document...', typed, retry: false });
+    expect(generateReducer(lost, { kind: 'retry' })).toMatchObject({ phase: 'generating', message: DOCUMENTS_COPY.status.making, typed, retry: false });
     expect(generateReducer(start, { kind: 'retry' })).toEqual(start);
   });
 
   it('UX-20: a refused field shows the first message the server gave for it, and an unknown refusal says nothing was issued', () => {
     const sent = generateReducer({ phase: 'editing', typed: {}, message: null, retry: false }, { kind: 'send' });
     const invalid = generateReducer(sent, { kind: 'outcome', outcome: { kind: 'rejected', status: 422, body: { error: 'Validation failed', code: 'validation', fields: [{ field: 'typedFields.DC-25', message: 'Use at most 2000 characters.' }] } } });
-    expect(invalid.message).toBe('Not generated: Use at most 2000 characters.');
+    expect(invalid.message).toBe(DOCUMENTS_COPY.refusal.field('generating', 'Use at most 2000 characters.'));
     const other = generateReducer(sent, { kind: 'outcome', outcome: { kind: 'rejected', status: 409, body: { error: 'x', code: 'something_else' } } });
-    expect(other.message).toBe('Not generated: something went wrong. Nothing was issued. Please try again.');
+    expect(other.message).toBe(DOCUMENTS_COPY.refusal.other('generating'));
     expect(other.retry).toBe(false);
   });
 
@@ -159,12 +159,12 @@ describe('S-18 form', () => {
       expect([after.message, after.retry, after.failedIn]).toEqual([NO_REPLY, true, 'issuing']);
     }
     const preview = generateReducer(previewing, { kind: 'outcome', outcome: rejected(500, 'internal_error') });
-    expect([preview.message, preview.retry]).toEqual(['Not generated: the server had a problem. Try again.', true]);
-    expect(generateReducer(previewing, { kind: 'outcome', outcome: { kind: 'not_saved', reason: 'network' } }).message).toBe('Not generated: connection lost. Nothing was issued.');
+    expect([preview.message, preview.retry]).toEqual([MSG_PREVIEW_SERVER, true]);
+    expect(generateReducer(previewing, { kind: 'outcome', outcome: { kind: 'not_saved', reason: 'network' } }).message).toBe(DOCUMENTS_COPY.refusal.lost);
     const refusal = generateReducer(issuing, { kind: 'outcome', outcome: rejected(422, 'validation') });
-    expect(refusal.message).toBe('Not generated: something went wrong. Nothing was issued. Please try again.');
+    expect(refusal.message).toBe(DOCUMENTS_COPY.refusal.other('issuing'));
     expect(refusal.retry).toBe(false);
-    const all = [NO_REPLY, 'Not generated: the server had a problem. Try again.', 'Not generated: your role in this organisation no longer allows this. Ask an owner or admin.'];
+    const all = [NO_REPLY, MSG_PREVIEW_SERVER, DOCUMENTS_COPY.refusal.role('generating')];
     for (const line of all) expect(line).not.toMatch(/kept on this device|Retry\.$/);
   });
 
@@ -218,7 +218,7 @@ describe('S-18 form', () => {
   });
 
   it('FR-DOC-05 UX-20 (7.4.2 S-18): a review never sealed shows the line and the link to seal it, and no form', () => {
-    expect(NEVER_SEALED_LINE).toBe('This review has not been sealed yet. Documents come from a seal.');
+    expect(NEVER_SEALED_LINE).toBe(DOCUMENTS_COPY.form.neverSealed);
     const html = renderToStaticMarkup(<NeverSealed orgSlug="o" projectId="p" reviewId="r" />);
     expect(html).toContain(NEVER_SEALED_LINE);
     expect(html).toMatch(/<a[^>]*href="\/orgs\/o\/projects\/p\/reviews\/r\/seal"[^>]*>Seal this review<\/a>/);
@@ -226,11 +226,11 @@ describe('S-18 form', () => {
 
   it('NFR-INT-05 UX-20: a seal whose check failed reads Seal check failed and cannot be chosen', () => {
     const html = renderToStaticMarkup(<GenerateDocumentForm {...props({ seals: [seal(1, { bytesMatch: false }), seal(2, { latest: true })] })} />);
-    expect(html).toMatch(/<option[^>]*disabled[^>]*>[^<]*Seal 1[^<]*Seal check failed[^<]*<\/option>/);
+    expect(html).toMatch(/<option[^>]*disabled[^>]*>[^<]*Seal 1[^<]*cannot be used[^<]*<\/option>/);
   });
 
   it('M-35: after issue the form says Issued with the short SHA-256', () => {
-    expect(issuedMessage({ sha256: SHA, byteSize: 84000 })).toBe(`Issued. SHA-256 ${formatFingerprint(SHA, 'short')}.`);
+    expect(issuedMessage({ sha256: SHA, byteSize: 84000 })).toBe(`Issued. Fingerprint ${formatFingerprint(SHA, 'short')}.`);
   });
 });
 
@@ -240,9 +240,9 @@ describe('S-18 issued list and the S-16 slot', () => {
     expect(html).toContain(formatFingerprint(SHA, 'short'));
     expect(html).toContain('Download PDF (84 KB)');
     expect(html).toMatch(/Issued <a[^>]*>Download PDF \(84 KB\)<\/a>/);   // W-9: the word before the download
-    expect(html).toContain('A later seal exists');
+    expect(html).toContain(DOCUMENTS_COPY.list.olderSeal);
     expect(html).toContain('href="/api/v1/orgs/o/documents/doc-12345678/pdf"');
-    expect(renderToStaticMarkup(<IssuedDocumentsList orgSlug="o" documents={[doc({ sealNumber: 2 })]} latestSealNumber={2} canWithdraw />)).not.toContain('A later seal exists');
+    expect(renderToStaticMarkup(<IssuedDocumentsList orgSlug="o" documents={[doc({ sealNumber: 2 })]} latestSealNumber={2} canWithdraw />)).not.toContain(DOCUMENTS_COPY.list.olderSeal);
   });
 
   it('FR-DOC-04 (7.4.2 S-18): an empty issued list says No documents issued from this review yet.', () => {
@@ -254,7 +254,7 @@ describe('S-18 issued list and the S-16 slot', () => {
     const withdrawn = { ...doc(), withdrawn: { on: '2026-11-04', reason: 'Sent to the wrong committee.' } };
     expect(renderToStaticMarkup(<IssuedDocumentsList orgSlug="o" documents={[withdrawn]} latestSealNumber={1} canWithdraw />)).toContain('Withdrawn on 4 Nov 2026: Sent to the wrong committee.');
     const erased = renderToStaticMarkup(<IssuedDocumentsList orgSlug="o" documents={[{ ...doc(), erased: { erasedOn: '2026-11-04' } }]} latestSealNumber={1} canWithdraw />);
-    expect(erased).toContain('Erased on 4 Nov 2026');
+    expect(erased).toContain(DOCUMENTS_COPY.list.erased('4 Nov 2026'));
     expect(erased).not.toContain('Download PDF');
   });
 
@@ -267,8 +267,8 @@ describe('S-18 issued list and the S-16 slot', () => {
   it('FR-DOC-01 (S-16 slot): the review lists each document with its seal, date and short SHA-256, and adds no link of its own', () => {
     const withdrawn = { ...doc(), id: 'doc-87654321', documentType: 'model_card' as const, withdrawn: { on: '2026-11-04', reason: 'x' } };
     const html = renderToStaticMarkup(<ReviewDocumentsList orgSlug="o" projectId="p" reviewId="r" documents={[doc(), withdrawn]} />);
-    expect(html).toContain(`Data card . from seal 1 . issued 3 Nov 2026 . SHA-256 ${formatFingerprint(SHA, 'short')}`);
-    expect(html).toContain(`Model card . from seal 1 . issued 3 Nov 2026 . SHA-256 ${formatFingerprint(SHA, 'short')}`);
+    expect(html).toContain(`Data card . from seal 1 . issued 3 Nov 2026 . Fingerprint ${formatFingerprint(SHA, 'short')}`);
+    expect(html).toContain(`Model card . from seal 1 . issued 3 Nov 2026 . Fingerprint ${formatFingerprint(SHA, 'short')}`);
     expect(html).toMatch(/Withdrawn/);
     expect(html).toMatch(/Issued/);
     expect(html).not.toContain('Generate a document');   // S-16's own link is the only one (a second would repeat it)

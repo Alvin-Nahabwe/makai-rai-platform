@@ -6,7 +6,7 @@ import { documentDraft, documentViews, issueDocument, listDocuments, previewDocu
 import { requestDigest } from '@/lib/data/idempotency';
 import { withOrg } from '@/lib/data/tenant';
 import { RENDERERS, type Renderer } from '@/lib/documents/render';
-import { NOT_RECORDED_AT_ISSUE, textErasedLine } from '@/lib/documents/copy';
+import { MSG_SEAL_CHECK_FAILED, NOT_RECORDED_AT_ISSUE, textErasedLine } from '@/lib/documents/copy';
 import { resetDb, testDb } from '../helpers/db';
 // Aliased: the name starts with "use", and react-hooks/rules-of-hooks reads any such call as a React hook.
 import { useFixtureContent as publishFixtureContent } from '../helpers/content';
@@ -360,7 +360,7 @@ describe('the seal is checked against its rows before anything is rendered (M13)
       previewDocument(ctx(), admin(), { ...body(), projectId: s.projectId, reviewId: s.reviewId, sealId: s.sealId }).then(() => 'ok', (e: unknown) => e),
       issue({ projectId: s.projectId, reviewId: s.reviewId, sealId: s.sealId }).then(() => 'ok', (e: unknown) => e),
     ]));
-    for (const r of result) expect(r).toMatchObject({ status: 422, code: 'validation', extra: { fields: [{ field: 'sealId', message: 'This seal cannot be used: its check failed.' }] } });
+    for (const r of result) expect(r).toMatchObject({ status: 422, code: 'validation', extra: { fields: [{ field: 'sealId', message: MSG_SEAL_CHECK_FAILED }] } });
     const failed = lines.filter((l) => l.includes('SEAL_CHECK_FAILED'));
     expect(failed.length).toBeGreaterThanOrEqual(2);
     for (const l of failed) expect(JSON.parse(l)).toMatchObject({ level: 'error', details: { sealId: s.sealId, chosen: true } });

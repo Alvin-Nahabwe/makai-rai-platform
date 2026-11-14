@@ -6,7 +6,7 @@ import type { OrgRole } from '@prisma/client';
 import { testDb } from '../__tests__/helpers/db';
 import { expectNoSeriousA11yViolations, settleHover } from './helpers/a11y';
 import { expectMainDoesNotScroll, org, seat, signIn, tabTo } from './helpers/s18';
-import { formatUtcDay } from '../lib/documents/copy';
+import { DOCUMENTS_COPY, formatUtcDay } from '../lib/documents/copy';
 import { failOnDialog } from './helpers/dialogs';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { expectNoHorizontalScroll } from './helpers/reflow';
@@ -93,7 +93,7 @@ test('FR-DOC-06 FR-DOC-07 UX-29 NFR-A11Y-02 NFR-A11Y-05: copy and withdraw a doc
     expect(b.x >= 0 && b.y >= 0 && b.x + b.width <= view.width && b.y + b.height <= view.height, `the confirmation's ${name} button is inside the viewport (box ${box})`).toBe(true);
   }
   const today = formatUtcDay(new Date().toISOString());
-  await expect(confirm).toContainText(`Withdraw data card? It will show 'Withdrawn by the team on ${today}'. The document stays stored.`);
+  await expect(confirm).toContainText(DOCUMENTS_COPY.actions.withdrawConsequence('data card'));
   await expect(confirm).toContainText(`Data card issued ${formatUtcDay(row.issuedAt.toISOString())}`);
   await expect(confirm.getByRole('button', { name: 'Withdraw document' })).toBeDisabled();
   expect(await testDb.documentEvent.count({ where: { documentId } })).toBe(0);
@@ -140,7 +140,7 @@ test('FR-DOC-06 FR-DOC-07 UX-29 NFR-A11Y-02 NFR-A11Y-05: copy and withdraw a doc
 
   // The document stays: the PDF still downloads and hashes to the SHA-256 S-18 shows.
   const short = `${row.sha256.slice(0, 4)} ${row.sha256.slice(4, 8)} ... ${row.sha256.slice(60)}`;
-  await expect(page.getByText(`SHA-256 ${short}`)).toBeVisible();
+  await expect(page.getByText(`Fingerprint ${short}`)).toBeVisible();
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: /^Download PDF \(\d+ KB\)$/ }).click()]);
   expect(createHash('sha256').update(readFileSync((await download.path()) as string)).digest('hex')).toBe(row.sha256);
 
@@ -209,7 +209,7 @@ test('FR-DOC-06: a 409 already_withdrawn says someone else withdrew it first, an
   await page.getByRole('button', { name: 'Withdraw document' }).click();
   await page.getByLabel('Reason (required)').fill('First try.');
   await page.getByRole('button', { name: 'Withdraw document' }).click();
-  await expect(page.getByRole('status').filter({ hasText: 'Not withdrawn by you: someone else withdrew it first. Their reason is shown.' })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: DOCUMENTS_COPY.actions.withdrawTaken })).toBeVisible();
   expect(await testDb.documentEvent.count({ where: { documentId: card.documentId } })).toBe(0);
 
   // The same box after a send with no reply: the 409 may be this person's own request.
@@ -255,6 +255,6 @@ test('FR-DOC-07 FR-REV-08: a 410 on Copy as text says the text was erased and re
   await page.route(textRoute(card.documentId), (route) => route.fulfill({ status: 410, contentType: 'application/json', body: JSON.stringify({ error: 'erased', code: 'erased', erasedOn: '2026-11-04' }) }));
   const refreshed = page.waitForRequest((r) => r.url().includes('/documents') && r.url().includes('_rsc='));
   await page.getByRole('button', { name: 'Copy as text' }).click();
-  await expect(page.getByRole('alert').filter({ hasText: "Not copied: this document's text was erased." })).toBeVisible();
+  await expect(page.getByRole('alert').filter({ hasText: DOCUMENTS_COPY.actions.copyErased })).toBeVisible();
   await refreshed;
 });

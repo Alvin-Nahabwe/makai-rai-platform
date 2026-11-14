@@ -13,7 +13,7 @@ import * as documents from '../../lib/data/documents';
 import { NO_DOCUMENTS_LINE } from '../../components/documents/GenerateDocumentForm';
 import { captureLogs } from '../helpers/logCapture';
 import { can } from '../../lib/authz/policy';
-import { TYPED_MARK } from '../../lib/documents/copy';
+import { DOCUMENTS_COPY, MSG_SEAL_CHECK_FAILED } from '../../lib/documents/copy';
 
 vi.setConfig({ testTimeout: 60_000 });
 vi.mock('next/navigation', async (orig) => ({ ...(await orig<typeof import('next/navigation')>()), useRouter: () => ({ refresh() {} }) }));
@@ -63,10 +63,10 @@ describe('S-18', () => {
 
   it('FR-DOC-01 FR-DOC-03 UX-20: a sealed review shows the form with the documents that have a generator, the draft and the summary, and the empty issued list', async () => {
     const html = await render(reviewOfA);
-    expect(html).toMatch(/<h1[^>]*>Generate a document<\/h1>/);
+    expect(html).toMatch(/<h1[^>]*>Create a document<\/h1>/);
     expect(['>Data card<', '>Model card<'].map((t) => html.indexOf(t)).every((x) => x > 0)).toBe(true);
     expect(html).toContain('value="Draft licence text"');
-    expect(html).toContain(TYPED_MARK);
+    expect(html).toContain('They are not part of the sealed record.');
     expect(html).toMatch(/\d+ fields from \d+ questions/);
     expect(html).toContain(NO_DOCUMENTS_LINE);
     expect(html).toContain('Seal 1,');
@@ -74,7 +74,7 @@ describe('S-18', () => {
 
   it('FR-DOC-05 UX-20 (7.4.2 S-18): a review never sealed shows the line and the link to seal it, and no form', async () => {
     const html = await render(unsealedReviewOfA);
-    expect(html).toContain('This review has not been sealed yet. Documents come from a seal.');
+    expect(html).toContain(DOCUMENTS_COPY.form.neverSealed);
     expect(html).toContain('Seal this review');
     expect(html).not.toContain('type="radio"');
   });
@@ -128,7 +128,7 @@ describe('S-18', () => {
     vi.spyOn(documents, 'documentSummaries').mockRejectedValue(new AppError(500, 'integrity_failure', 'Document integrity check failed'));
     const { result: html, lines } = await captureLogs(() => render(reviewOfA));
     expect(lines.filter((l) => l.includes('SEAL_CHECK_FAILED')).map((l) => JSON.parse(l))).toEqual([expect.objectContaining({ level: 'error', details: expect.objectContaining({ sealId: sealOfA }) })]);
-    expect(html).toContain('This seal cannot be used: its check failed.');
+    expect(html).toContain(MSG_SEAL_CHECK_FAILED);
     expect(html).not.toContain('type="radio"');
     expect(html).toContain(`/documents/${issued.id}/pdf`);
     vi.restoreAllMocks();
@@ -141,7 +141,7 @@ describe('S-18', () => {
     await withTriggersDisabled('seals', () => testDb.$executeRaw`UPDATE seals SET manifest = manifest || '\x20'::bytea WHERE id = ${seal.id}`);
     const { result: html, lines } = await captureLogs(() => render(review, otherProjectOfA));
     expect(lines.filter((l) => l.includes('SEAL_CHECK_FAILED')).map((l) => JSON.parse(l))).toEqual([expect.objectContaining({ level: 'error', details: expect.objectContaining({ sealId: seal.id }) })]);
-    expect(html).toContain('This seal cannot be used: its check failed.');
+    expect(html).toContain(MSG_SEAL_CHECK_FAILED);
     expect(html).not.toContain('type="radio"');
     expect(html).toContain(`/documents/${issued.id}/pdf`);
   });
@@ -163,7 +163,7 @@ describe('S-18', () => {
     for (const role of ['owner', 'admin', 'reviewer', 'assessor', 'viewer'] as const) {
       sessionFor(fxA.members[role].userId);
       const s18 = await render(review, project);
-      expect([role, s18.includes('Erased on ')]).toEqual([role, true]);
+      expect([role, s18.includes('File erased on ')]).toEqual([role, true]);
       expect([role, s18.includes('/pdf')]).toEqual([role, false]);
       const s16 = renderToStaticMarkup(await StageReviewPage({ params: Promise.resolve({ slug: fxA.org.slug, id: project, reviewId: review }) }));
       expect([role, s16.includes('Data card . from seal 1')]).toEqual([role, true]);
@@ -186,7 +186,7 @@ describe('S-18', () => {
       sessionFor(fxA.members[role].userId);
       for (const review of [reviewOfA, unsealedReviewOfA]) {
         const html = await render(review);
-        expect(html, role).toMatch(/<h1[^>]*>Generate a document<\/h1>/);   // not vacuous: the page rendered
+        expect(html, role).toMatch(/<h1[^>]*>Create a document<\/h1>/);   // not vacuous: the page rendered
         expect(html, role).not.toMatch(/UNCST|AI protocol|<table[\s>]/i);
       }
       const sealed = await render(reviewOfA);

@@ -8,7 +8,8 @@ import type { UtcInstant } from '@/types/record';
 import { requestIdFor, sendWrite, type RetryState, type SendOutcome } from '@/lib/client/retrySafeWrite';
 import { useRouter } from 'next/navigation';
 import { generateReducer, isFailed, typedToSend, type GenerateState } from '@/lib/documents/generate';
-import { ETHICS_APPROVED, ETHICS_NOT_REQUIRED, ETHICS_STATES, NOT_RECORDED, SEAL_CHECK_FAILED, NOT_RECORDED_AT_ISSUE, STATEMENT, TYPED_MARK, formatUtcDay } from '@/lib/documents/copy';
+import { DOCUMENTS_COPY, ETHICS_APPROVED, ETHICS_NOT_REQUIRED, ETHICS_STATES, STATEMENT, formatUtcDay } from '@/lib/documents/copy';
+import { FINDINGS_COPY } from '@/lib/findings/copy';
 import { formatFingerprint } from '@/lib/seal/format';
 import { formatSize } from '@/lib/format/size';
 
@@ -21,8 +22,9 @@ import { formatSize } from '@/lib/format/size';
  * back to the Generate button, and to the "Issued" status (UX-42). Team text is only ever rendered as React text.
  */
 
-export const NEVER_SEALED_LINE = 'This review has not been sealed yet. Documents come from a seal.';
-export const NO_DOCUMENTS_LINE = 'No documents issued from this review yet.';
+const C = DOCUMENTS_COPY;
+export const NEVER_SEALED_LINE = C.form.neverSealed;
+export const NO_DOCUMENTS_LINE = C.list.empty;
 export { generateReducer, type GenerateEvent, type GenerateState } from '@/lib/documents/generate';
 
 /** The failure line in an assertive region, and [Retry] only after a lost connection. */
@@ -31,7 +33,7 @@ export function GenerateStatus({ state, onRetry }: { state: GenerateState; onRet
   return (
     <p role="alert">
       {state.message}
-      {state.retry ? <> <button type="button" className="btn btn--secondary" onClick={onRetry}>Retry</button></> : null}
+      {state.retry ? <> <button type="button" className="btn btn--secondary" onClick={onRetry}>{C.form.retry}</button></> : null}
     </p>
   );
 }
@@ -50,12 +52,12 @@ export async function submitIssue(a: {
 
 /** W-9 note 1 (owner question B3): choosing an older seal says which one the document will list. */
 export function olderSealLine(chosen: number, latest: number): string | null {
-  return chosen < latest ? `Seal ${latest} is newer. This document will list seal ${chosen} as its source.` : null;
+  return chosen < latest ? C.form.olderSeal(chosen, latest) : null;
 }
 
 /** M-35's status text; the download link follows it. */
 export function issuedMessage(d: { sha256: string; byteSize: number }): string {
-  return `Issued. SHA-256 ${formatFingerprint(d.sha256, 'short')}.`;
+  return C.issued.status(formatFingerprint(d.sha256, 'short'));
 }
 
 /** The review has no seal: only this line and the way to make one. */
@@ -63,7 +65,7 @@ export function NeverSealed({ orgSlug, projectId, reviewId }: { orgSlug: string;
   return (
     <div>
       <p>{NEVER_SEALED_LINE}</p>
-      <p><a href={`/orgs/${encodeURIComponent(orgSlug)}/projects/${encodeURIComponent(projectId)}/reviews/${encodeURIComponent(reviewId)}/seal`}>Seal this review</a></p>
+      <p><a href={`/orgs/${encodeURIComponent(orgSlug)}/projects/${encodeURIComponent(projectId)}/reviews/${encodeURIComponent(reviewId)}/seal`}>{C.form.sealThisReview}</a></p>
     </div>
   );
 }
@@ -106,8 +108,8 @@ export function TypedGroup({ doc, values, set, hidden, refused }: { doc: Generat
   );
   return (
     <div hidden={hidden} role="group" aria-labelledby={`typed-heading-${doc.type}`}>
-      <h3 id={`typed-heading-${doc.type}`}>{`${doc.title}: fields the record cannot hold`}</h3>
-      <p id={markId}>{`${TYPED_MARK}. Kept as a draft for next time. Leave empty to print "${NOT_RECORDED}".`}</p>
+      <h3 id={`typed-heading-${doc.type}`}>{C.form.typedHeading(doc.title)}</h3>
+      <p id={markId}>{C.form.typedNote}</p>
       {doc.typedFields.map((f) => {
         if (f.structured !== 'ethics_approval') return input(f.fieldId, f.label);
         const state = values[`${f.fieldId}:state`] ?? '';
@@ -117,13 +119,13 @@ export function TypedGroup({ doc, values, set, hidden, refused }: { doc: Generat
               <label htmlFor={`typed-${f.fieldId}:state`}>{f.label}</label>
               <select id={`typed-${f.fieldId}:state`} value={state} onChange={(e) => set(`${f.fieldId}:state`, e.target.value)}
                 aria-invalid={refused.has(`${f.fieldId}:state`) ? true : undefined} aria-describedby={refused.has(`${f.fieldId}:state`) ? `${markId} typed-error-${f.fieldId}:state` : markId}>
-                <option value="">{`Print "${NOT_RECORDED}"`}</option>
+                <option value="">{C.form.printNotRecorded}</option>
                 {ETHICS_STATES.map(([v, word]) => <option key={v} value={v}>{word}</option>)}
               </select>
               {refused.has(`${f.fieldId}:state`) ? <p id={`typed-error-${f.fieldId}:state`} className="field-error">{refused.get(`${f.fieldId}:state`)}</p> : null}
             </div>
-            {state === ETHICS_APPROVED ? <>{input(`${f.fieldId}:committee`, 'Committee')}{input(`${f.fieldId}:reference`, 'Reference')}{input(`${f.fieldId}:date`, 'Date of approval')}</> : null}
-            {state === ETHICS_NOT_REQUIRED ? <>{input(`${f.fieldId}:why`, 'Why approval is not required')}{input(`${f.fieldId}:decidedBy`, 'Who decided it is not required')}</> : null}
+            {state === ETHICS_APPROVED ? <>{input(`${f.fieldId}:committee`, C.form.committee)}{input(`${f.fieldId}:reference`, C.form.reference)}{input(`${f.fieldId}:date`, C.form.approvalDate)}</> : null}
+            {state === ETHICS_NOT_REQUIRED ? <>{input(`${f.fieldId}:why`, C.form.whyNotRequired)}{input(`${f.fieldId}:decidedBy`, C.form.whoDecided)}</> : null}
           </div>
         );
       })}
@@ -213,8 +215,8 @@ export function GenerateDocumentForm(props: GenerateDocumentFormProps): ReactEle
     return (
       <div>
         <p role="status" tabIndex={-1} ref={issuedRef}>{issuedMessage(issued)}</p>
-        <p><a href={`/api/v1/orgs/${encodeURIComponent(props.orgSlug)}/documents/${encodeURIComponent(issued.id)}/pdf`}>{`Download PDF (${formatSize(issued.byteSize)})`}</a></p>
-        <p><a href={`/orgs/${encodeURIComponent(props.orgSlug)}/projects/${encodeURIComponent(props.projectId)}/reviews/${encodeURIComponent(props.reviewId)}/documents`}>Generate another document</a></p>
+        <p><a href={`/api/v1/orgs/${encodeURIComponent(props.orgSlug)}/documents/${encodeURIComponent(issued.id)}/pdf`}>{C.issued.download(formatSize(issued.byteSize))}</a></p>
+        <p><a href={`/orgs/${encodeURIComponent(props.orgSlug)}/projects/${encodeURIComponent(props.projectId)}/reviews/${encodeURIComponent(props.reviewId)}/documents`}>{C.issued.another}</a></p>
       </div>
     );
   }
@@ -222,12 +224,13 @@ export function GenerateDocumentForm(props: GenerateDocumentFormProps): ReactEle
   if (inPreview && preview !== null) {
     return (
       <div>
-        <h2 tabIndex={-1} ref={headingRef}>{`Preview: ${doc.title} (not issued yet; nothing is stored until you press Issue)`}</h2>
+        <h2 tabIndex={-1} ref={headingRef}>{C.preview.heading(doc.title)}</h2>
+        <p>{C.preview.nothingSaved}</p>
         <PreviewPane text={preview.text} />
-        {preview.notRecordedFields.length > 0 ? <p>{`${preview.notRecordedFields.length} ${preview.notRecordedFields.length === 1 ? 'field reads' : 'fields read'} "${NOT_RECORDED}" or "${NOT_RECORDED_AT_ISSUE}".`}</p> : null}
+        {preview.notRecordedFields.length > 0 ? <p>{C.preview.notRecordedCount(preview.notRecordedFields.length)}</p> : null}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3)', alignItems: 'center' }}>
-          <button type="button" className="btn btn--primary" aria-disabled={busy || undefined} onClick={() => { void issue(); }}>Issue this document</button>
-          <button type="button" className="btn btn--secondary" aria-disabled={busy || undefined} onClick={() => { if (!busy) backToEdit(); }}>Back to edit</button>
+          <button type="button" className="btn btn--primary" aria-disabled={busy || undefined} onClick={() => { void issue(); }}>{C.preview.issue}</button>
+          <button type="button" className="btn btn--secondary" aria-disabled={busy || undefined} onClick={() => { if (!busy) backToEdit(); }}>{C.preview.back}</button>
         </div>
         <p role="status">{busy ? state.message : ''}</p>
         <GenerateStatus state={state} onRetry={onRetry} />
@@ -238,25 +241,25 @@ export function GenerateDocumentForm(props: GenerateDocumentFormProps): ReactEle
   return (
     <form method="post" onSubmit={(e: FormEvent<HTMLFormElement>) => { e.preventDefault(); void generate(); }} noValidate>
       <fieldset>
-        <legend>Documents</legend>
+        <legend>{C.form.legend}</legend>
         {props.documents.map((d) => (
           <div key={d.type} className="form-field">
             <input type="radio" name="document-type" id={`doc-${d.type}`} value={d.type} checked={selected === d.type} onChange={() => setSelected(d.type)} aria-describedby={`help-${d.type}`} />
             <label htmlFor={`doc-${d.type}`}>{d.title}</label>
             <p id={`help-${d.type}`}>{d.help}</p>
             {d.neverSealedStages.length > 0 ? (
-              <p>{`Part of this document comes from the ${d.neverSealedStages.join(' and ')} stage, which has not been sealed. Those fields will read "${NOT_RECORDED_AT_ISSUE}".`}</p>
+              <p>{C.form.neverSealedStages(d.neverSealedStages.map((st) => FINDINGS_COPY.stages[st]))}</p>
             ) : null}
           </div>
         ))}
       </fieldset>
 
       <div className="form-field">
-        <label htmlFor="document-seal">Seal to generate from</label>
+        <label htmlFor="document-seal">{C.form.sealLabel}</label>
         <select id="document-seal" value={sealId} onChange={(e) => setSealId(e.target.value)} aria-describedby={older === null ? undefined : 'document-seal-note'}>
           {props.seals.map((s) => (
             <option key={s.sealId} value={s.sealId} disabled={!s.bytesMatch}>
-              {`Seal ${s.sealNumber}, ${formatUtcDay(s.sealedAt)}${s.latest ? ' (latest)' : ''}${s.bytesMatch ? '' : `. ${SEAL_CHECK_FAILED}`}`}
+              {s.bytesMatch ? C.form.sealOption(s.sealNumber, formatUtcDay(s.sealedAt), s.latest) : C.form.sealOptionUnusable(s.sealNumber, formatUtcDay(s.sealedAt))}
             </option>
           ))}
         </select>
@@ -272,7 +275,7 @@ export function GenerateDocumentForm(props: GenerateDocumentFormProps): ReactEle
       {doc.fromRecord === null ? null : (
         <p>{fromRecordLine(doc.fromRecord)}</p>
       )}
-      <button type="submit" ref={generateRef} className="btn btn--primary" aria-disabled={busy || chosen === undefined || !chosen.bytesMatch || undefined}>Generate document</button>
+      <button type="submit" ref={generateRef} className="btn btn--primary" aria-disabled={busy || chosen === undefined || !chosen.bytesMatch || undefined}>{C.form.previewButton}</button>
       <p role="status">{busy ? state.message : ''}</p>
       <GenerateStatus state={state} onRetry={onRetry} />
     </form>
@@ -284,6 +287,5 @@ export function GenerateDocumentForm(props: GenerateDocumentFormProps): ReactEle
  * whose fields take no question (the mitigation plan reads findings and mitigations) says "<n> fields" and leaves the questions out.
  */
 export function fromRecordLine(r: { fields: number; questions: number; notRecorded: number }): string {
-  const from = r.questions === 0 ? `${r.fields} fields` : `${r.fields} fields from ${r.questions} questions`;
-  return `${from} . ${r.notRecorded} fields will read "${NOT_RECORDED}"`;
+  return C.form.fromRecord(r);
 }
