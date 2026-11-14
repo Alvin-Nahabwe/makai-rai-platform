@@ -271,6 +271,10 @@ for (const width of [1023, 375]) {
       await page.waitForURL((url) =>
         (url.pathname === `/orgs/${slug}/projects` && url.searchParams.get('for') === 'findings')
         || new RegExp(`^/orgs/${slug}/projects/[0-9a-f-]{36}/findings$`).test(url.pathname));
+      // When the organisation has exactly one project (as it can in a whole-suite run, where other specs add projects),
+      // the press first commits ?for=findings with no page heading and the redirect to the project's findings lands tens of
+      // ms later, closing a panel reopened in between. The arrived page's heading means no redirect is still pending.
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
       await expect(panel).toBeHidden();
       await expect(menu).toHaveAttribute('aria-expanded', 'false');
       await menu.click();
