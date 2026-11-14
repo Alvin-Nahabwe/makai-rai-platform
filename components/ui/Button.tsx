@@ -4,7 +4,7 @@ import Link from 'next/link';
 import type { MouseEvent, MouseEventHandler, ReactElement, ReactNode, Ref } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import type { IconName } from '@/components/ui/types';
-import './Button.css';
+import './buttonStyles';
 
 type Variant = 'primary' | 'secondary' | 'quiet' | 'destructive';
 

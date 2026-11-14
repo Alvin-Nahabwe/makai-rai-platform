@@ -2,8 +2,7 @@ import type { ChangeEventHandler, ReactElement, ReactNode } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { describedBy, FieldError, FieldHint, FieldLabel, given } from '@/components/ui/TextInput';
 import type { FieldOption } from '@/components/ui/types';
-import './TextInput.css';
-import './Select.css';
+import './selectStyles';
 
 export type SelectProps = {
   id: string;
