@@ -27,3 +27,10 @@
 .export-panel .ui-callout p {
   margin: 0;
 }
+
+/* The project page's intro, which follows the archived banner rather than sitting in the page header (the regions keep
+   their order): set apart from the banner above and the panel below. */
+.export-intro {
+  max-inline-size: var(--measure-reading);
+  margin-block: var(--space-4) var(--space-6);
+}

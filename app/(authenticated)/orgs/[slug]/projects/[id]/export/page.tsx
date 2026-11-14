@@ -13,6 +13,7 @@ import { pageTitle } from '@/lib/ui/title';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { ArchivedBanner } from '@/components/project/ArchivedBanner';
 import RememberProject from '@/components/layout/RememberProject';
+import '@/components/export/TeamExportPanel.css';
 
 type Params = Promise<{ slug: string; id: string }>;
 
@@ -62,7 +63,7 @@ export default async function ProjectExportPage({ params, searchParams }: {
     <div className="page-content">
       <PageHeader title={EXPORT_COPY.titles.downloadRecords} />
       <ArchivedBanner archived={project.archivedAt !== null} />
-      <p>{EXPORT_COPY.intro.project}</p>
+      <p className="export-intro">{EXPORT_COPY.intro.project}</p>
       <TeamExportPanel href={`/api/v1/orgs/${slug}/export?projectId=${encodeURIComponent(project.id)}`} scopeName={project.name}
         aboutBytes={aboutBytes} refused={refusedFrom(await searchParams)} />
       <RememberProject userId={userId} orgSlug={slug} projectId={project.id} />
