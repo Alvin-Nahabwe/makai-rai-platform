@@ -2,7 +2,7 @@ import type { ReactElement, ReactNode } from 'react';
 import { MarkShape } from '@/components/ui/StatusMark';
 import { describedBy, FieldError, given } from '@/components/ui/TextInput';
 import type { StatusMarkKind } from '@/components/ui/types';
-import './TextInput.css';
+import './formStyles';
 import './RadioCards.css';
 
 export type RadioCardsProps = {

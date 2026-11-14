@@ -1,5 +1,5 @@
 import type { ReactElement, Ref } from 'react';
-import './ErrorSummary.css';
+import './formStyles';
 
 export type ErrorSummaryProps = {
   title: string;

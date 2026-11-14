@@ -1,8 +1,7 @@
 import type { ChangeEventHandler, ReactElement, ReactNode } from 'react';
 import { describedBy, FieldError, given } from '@/components/ui/TextInput';
 import type { FieldOption } from '@/components/ui/types';
-import './TextInput.css';
-import './Checkbox.css';
+import './formStyles';
 
 export type CheckboxProps = {
   id: string;

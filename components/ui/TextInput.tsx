@@ -1,7 +1,7 @@
 import type { ChangeEventHandler, HTMLAttributes, ReactElement, ReactNode, Ref } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { FIELD_COPY } from '@/lib/ui/field/copy';
-import './TextInput.css';
+import './formStyles';
 
 /**
  * A labelled text box (plan 1A Task 4), and the field parts every form control of the kit shares: the label, the hint
