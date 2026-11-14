@@ -159,9 +159,9 @@ test.describe('U12 (c): at phone width the members and accounts tables keep ever
   }
 
   /**
-   * Each page's own selectors: the table, its column headings, its cells and the narrow layout's label in a cell. Members
-   * draws the label with CSS (`td[data-label]`, `::before`); Accounts is the kit's Table (plan 1A Task 19), which writes
-   * the label as a span hidden from assistive technology (`.ui-table__cell-label`), and names each row with a row header.
+   * Each page's own selectors: the table, its column headings, its cells and the narrow layout's label in a cell. Both
+   * pages are the kit's Table (plan 1A Task 19), which writes the label as a span hidden from assistive technology
+   * (`.ui-table__cell-label`), and names each row with a row header.
    */
   type Selectors = { table: string; columnHeadings: string; rowHeadings: string | null; cells: string; cellLabels: (page: Page) => Promise<string[]>; spoken: string[] };
   const pages: Array<{ name: string; path: () => string; seat: 'owner' | 'admin'; actions: string; expected: RegExp[]; widths: number[]; s: Selectors }> = [
@@ -169,13 +169,14 @@ test.describe('U12 (c): at phone width the members and accounts tables keep ever
       name: 'members',
       path: () => `/orgs/${fixtureOrgSlug()}/settings/members`,
       seat: 'owner',
-      actions: '.admin-table button',
-      expected: [/^Remove /, /^Resend invitation to /, /^Revoke invitation for /],
+      actions: '.ui-table button',
+      expected: [/^Remove /, /^Resend invitation to /, /^Cancel invitation to /],
       widths: [320, 390],
       s: {
-        table: '.admin-table', columnHeadings: '.admin-table th', rowHeadings: null, cells: '.admin-table td',
-        cellLabels: (page) => page.locator('.admin-table td[data-label]').evaluateAll((els) => [...new Set(els.map((e) => `${e.getAttribute('data-label')}: `))]),
-        spoken: ['StaticText', 'cell'],
+        table: '.ui-table', columnHeadings: '.ui-table thead th', rowHeadings: '.ui-table tbody th', cells: '.ui-table td',
+        cellLabels: (page) => page.locator('.ui-table .ui-table__cell-label').evaluateAll((els) => [...new Set(els.map((e) => e.textContent ?? ''))]),
+        // The label has no colon, so only the cells' own names are read: a column heading's text is the label itself.
+        spoken: ['cell'],
       },
     },
     {

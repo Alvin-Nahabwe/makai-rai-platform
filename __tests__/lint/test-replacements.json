@@ -1254,5 +1254,29 @@
     "property": "The organisation page's one h1 is the organisation's name and the create page's is \"Create an organisation\"; the detail shows the date, member count, flags, the send control and the legal name, and no record word. The kit's PageHeader (plan 1A Task 19) writes a class on the h1, so the bare '<h1>' pins no longer match.",
     "proof": "In this case: expect(html).toMatch(/<h1[^>]*>Makerere CAI Lab<\\/h1>/) and expect(created).toMatch(/<h1[^>]*>Create an organisation<\\/h1>/) require an h1 whose whole content is the name; the other lines read ADMIN_COPY.organisations.noActiveOwner, ADMIN_FORMS_COPY.invitation.sendNew and ADMIN_COPY.organisation.legalName('Makerere University'), and not.toMatch(/project|finding|decision|seal/i) and the agreement pins are unchanged.",
     "task": "1A-19"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/organisation-page.test.tsx::S-30 shows the legal name or Not recorded, and no agreement",
+    "replacedBy": "__tests__/unit/organisation-page.test.tsx::S-30 shows the legal name or Not recorded, and no agreement",
+    "property": "Every role reads the organisation's name as a line of its own at the top of S-30, then the legal name or \"Not recorded\", and no agreement, controller or data-protection contact anywhere on the page. The kit's PageHeader (plan 1A Task 19) puts the name in its lead as a bare paragraph, so the pin on '<p class=\"text-muted\">' no longer matches.",
+    "proof": "In this case, for every role: expect(html).toContain(`<div class=\"ui-page-header__lead\"><p>${ORG_NAME}</p>`) requires the header's lead to open with a paragraph whose whole content is the name; ORG_COPY.organisation.legalName('Fixture University') and ORG_COPY.organisation.legalName(null) are the two legal-name lines; not.toMatch(/agreement|controller|data-protection contact/i) and not.toMatch(/agreement/i) are unchanged.",
+    "task": "1A-19"
+  },
+  {
+    "kind": "structure",
+    "changed": "e2e/role-matrix.spec.ts::(module)",
+    "replacedBy": "e2e/role-matrix.spec.ts::dashboard, projects, projects/new, project detail and members render only the controls this role may use",
+    "property": "The census of S-22's controls classifies every button and link in main for the owner, leaving out only the members and pending-invitations tables' row actions, which MembersManager.tsx gates by can() itself (D-118). Plan 1A Task 19 moved both tables onto the kit's Table, which writes the class ui-table on the table element in place of admin-table.",
+    "proof": "In findUnclassifiedControls, isIgnored's line `if (el.closest('.ui-table')) return true;` leaves out exactly the buttons inside S-22's two tables (the only kit tables on the screens this spec visits at this commit: git grep shows components/ui/Table imported by the two administrator list pages and the kit page only); Invite and Leave this organisation are outside both tables and stay in MEMBERS_CONTROLS, so the census still fails on any other unclassified control of S-22.",
+    "task": "1A-19"
+  },
+  {
+    "kind": "wording",
+    "changed": "e2e/members.spec.ts::NFR-INT-02 (owner default B32): a 200 replay of an invite or of a resend shows \"This invitation was already created. If the email did not arrive, use Resend.\" and no copy-link box",
+    "replacedBy": "e2e/members.spec.ts::NFR-INT-02 (owner default B32): a 200 replay of an invite says the invitation was already created, a 200 replay of a resend that it was already resent, and neither shows a copy-link box",
+    "property": "A 200 answer to an invite or a resend (a replay) tells the person it had already been done and opens no copy-link box. The coordinator's answer Q2 (plan 1A Task 19) gives the replayed resend its own sentence, so the old title, which quoted one sentence for both, is no longer true.",
+    "proof": "In the new case: status(page, C.replayed.invite) visible after the replayed invite and status(page, C.replayed.resend) visible after the replayed resend; the Copy link button counted 0 after each; no sent sentence and no email-failed sentence after the invite.",
+    "task": "1A-19"
   }
 ]
