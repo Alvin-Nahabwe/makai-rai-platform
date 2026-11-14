@@ -8,6 +8,7 @@ import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { toResponse } from '@/lib/http/toResponse';
 import { STAGES, type FieldError, type Stage } from '@/types/record';
 import type { OpenReviewRequest } from '@/types/api';
+import { REVIEW_COPY } from '@/lib/review/copy';
 
 const KEYS = ['requestId', 'stage', 'preparedFor'] as const;
 
@@ -25,8 +26,8 @@ function parseOpenReviewRequest(body: unknown): OpenReviewRequest {
   const { requestId, stage, preparedFor } = body as Record<string, unknown>;
   const errors: FieldError[] = [];
   if (!isRequestId(requestId)) errors.push({ field: 'requestId', message: 'requestId must be a UUID (8-4-4-4-12 hexadecimal).' });
-  if (!(STAGES as readonly unknown[]).includes(stage)) errors.push({ field: 'stage', message: 'stage must be pre-processing, in-processing or post-processing.' });
-  if (preparedFor !== null && typeof preparedFor !== 'string') errors.push({ field: 'preparedFor', message: 'preparedFor must be text or null.' });
+  if (!(STAGES as readonly unknown[]).includes(stage)) errors.push({ field: 'stage', message: REVIEW_COPY.open.stageInvalid });
+  if (preparedFor !== null && typeof preparedFor !== 'string') errors.push({ field: 'preparedFor', message: REVIEW_COPY.open.noteInvalid });
   if (errors.length > 0) throw new ValidationFailed(errors);
   return { requestId: requestId as string, stage: stage as Stage, preparedFor: preparedFor as string | null };
 }

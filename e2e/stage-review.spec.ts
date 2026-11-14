@@ -7,6 +7,7 @@ import { testDb } from '../__tests__/helpers/db';
 import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
+import { REVIEW_COPY } from '../lib/review/copy';
 
 /**
  * J-08 and the S-16 / S-17 states (FR-REV-01, 02, 03, 05; UX-18, UX-31, M-28; NFR-A11Y-02, NFR-A11Y-05). The fixture
@@ -70,25 +71,25 @@ test('FR-REV-01 FR-REV-02 FR-REV-03 FR-REV-05 M-28 NFR-A11Y-02: J-08 by keyboard
   const urls: string[] = [];
   page.on('request', (req) => urls.push(req.url()));
   await page.goto(`/orgs/${org.slug}/projects/${p.id}/reviews/new?stage=pre-processing`);
-  await tabTo(page, page.getByLabel('Prepared for (optional)'));
+  await tabTo(page, page.getByLabel(REVIEW_COPY.open.noteLabel));
   await page.keyboard.type('Ethics board submission 1');
-  await expect(page.getByText('25 of 120')).toBeVisible();
+  await expect(page.getByText(REVIEW_COPY.open.count(25, 120))).toBeVisible();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Pre-processing review 1');
   await expect(page.getByText('Prepared for: Ethics board submission 1')).toBeVisible();
-  await expect(page.getByText('Never sealed.')).toBeVisible();
+  await expect(page.getByText(REVIEW_COPY.state.notSealed)).toBeVisible();
   const s16 = page.url();
   expect(urls.length).toBeGreaterThan(1);
   expect(urls.filter((u) => /Ethics|board(%20|\+| )submission/i.test(u))).toEqual([]);
 
   await signIn(page, 'reviewer');
   await page.goto(s16);
-  await tabTo(page, page.getByRole('link', { name: 'Seal this review' }));
+  await tabTo(page, page.getByRole('link', { name: REVIEW_COPY.review.sealThis }));
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Seal "Pre-processing review 1" as seal 1');
-  await expect(page.getByText(/^A seal fixes what the record says right now, gaps included\./)).toBeVisible();
-  await expect(page.getByText(/^No decision \(\d+\)/)).toBeVisible();
-  await tabTo(page, page.getByRole('button', { name: 'Seal as seal 1' }));
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(REVIEW_COPY.titles.seal('Pre-processing review 1'));
+  await expect(page.getByText(REVIEW_COPY.sealPage.statement(1))).toBeVisible();
+  await expect(page.getByText(REVIEW_COPY.sealPage.noDecision(0).replace('(0)', '('))).toBeVisible();
+  await tabTo(page, page.getByRole('button', { name: REVIEW_COPY.confirm.sealNow }));
   await page.keyboard.press('Enter');
   await expect(sealedStatus(page)).toHaveText(/^Sealed as seal 1 on \d{1,2} [A-Z][a-z]{2} 2026 at .+\. Fingerprint [0-9a-f]{4} [0-9a-f]{4} \.\.\. [0-9a-f]{4}\.$/);
   await expect(sealedStatus(page)).toBeFocused();
@@ -100,7 +101,7 @@ test('FR-REV-01 FR-REV-02 FR-REV-03 FR-REV-05 M-28 NFR-A11Y-02: J-08 by keyboard
   await expect(page.getByRole('link', { name: 'Q-PP-01' })).toBeVisible();
   await tabTo(page, page.getByRole('button', { name: 'Check this seal' }));
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('status').filter({ hasText: 'Matches the record.' })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: REVIEW_COPY.check.valid })).toBeVisible();
 });
 
 test('UX-18: one draft of the stage on this device shows the unsaved-answers line first on S-17', async ({ page, baseURL }) => {
@@ -117,8 +118,8 @@ test('UX-18: one draft of the stage on this device shows the unsaved-answers lin
     localStorage.setItem(`makrai.draft.v1:${userId}:${orgId}:${projectId}:q:Q-IP-01`, draft);   // another stage
   }, { userId: seat('reviewer').userId, other: seat('assessor').userId, orgId: orgRow.id, projectId: p.id });
   await page.goto(`/orgs/${org.slug}/projects/${p.id}/reviews/${r.id}/seal`);
-  await expect(page.locator('main').getByText(/^You have 1 unsaved answers in this stage on this device\. They will not be in the seal\./)).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Go to them' })).toHaveAttribute('href', `/orgs/${org.slug}/projects/${p.id}/stages/pre-processing?show=drafts`);
+  await expect(page.locator('main').getByText(REVIEW_COPY.confirm.unsavedOne)).toBeVisible();
+  await expect(page.getByRole('link', { name: REVIEW_COPY.confirm.unsavedLink })).toHaveAttribute('href', `/orgs/${org.slug}/projects/${p.id}/stages/pre-processing?show=drafts`);
 });
 
 test('UX-18 FR-DEC-07 (owner question B5): a slow seal says Sealing... then Still sealing, a lost reply shows the retry line, and Retry returns the first seal', async ({ page, baseURL }) => {
@@ -136,14 +137,14 @@ test('UX-18 FR-DEC-07 (owner question B5): a slow seal says Sealing... then Stil
     await route.fetch();                    // the server commits seal 1
     await route.abort('connectionreset');   // and the reply is lost
   });
-  await page.getByRole('button', { name: 'Seal as seal 1' }).click();
+  await page.getByRole('button', { name: REVIEW_COPY.confirm.sealNow }).click();
   await expect(page.getByRole('status').filter({ hasText: /Sealing/ })).toHaveText('Sealing...');
   await expect(page.getByRole('status').filter({ hasText: /sealing/i })).toHaveText('Still sealing. The connection is slow.', { timeout: 15_000 });
-  await expect(page.locator('main').getByRole('alert')).toContainText('Not sealed yet: no reply from the server. It may have arrived. Retry is safe: it will not seal twice.', { timeout: 20_000 });
+  await expect(page.locator('main').getByRole('alert')).toContainText(REVIEW_COPY.confirm.lost, { timeout: 20_000 });
   await page.unroute(sealRoute);
   const retried = page.waitForRequest((req) => req.url().endsWith(`/reviews/${r.id}/seals`) && req.method() === 'POST');
   const replied = page.waitForResponse((res) => res.url().endsWith(`/reviews/${r.id}/seals`));
-  await page.getByRole('button', { name: 'Retry' }).click();
+  await page.getByRole('button', { name: REVIEW_COPY.confirm.retry }).click();
   expect(JSON.parse((await retried).postData() ?? '{}').requestId).toBe(JSON.parse(sent[0]).requestId);
   expect((await replied).status()).toBe(200);
   await expect(sealedStatus(page)).toContainText(/^Sealed as seal 1 on /);
@@ -166,13 +167,13 @@ test('FR-DEC-07 NFR-INT-02 (C4 ruling on hunter H1): after a lost reply, a reloa
     await route.fetch();                    // the server commits seal 1
     await route.abort('connectionreset');   // and the reply is lost
   });
-  await page.getByRole('button', { name: 'Seal as seal 1' }).click();
-  await expect(page.locator('main').getByRole('alert')).toContainText('Not sealed yet: no reply from the server. It may have arrived. Retry is safe: it will not seal twice.');
+  await page.getByRole('button', { name: REVIEW_COPY.confirm.sealNow }).click();
+  await expect(page.locator('main').getByRole('alert')).toContainText(REVIEW_COPY.confirm.lost);
   await page.unroute(sealRoute);
   await page.reload();
   const again = page.waitForRequest((req) => req.url().endsWith(`/reviews/${r.id}/seals`) && req.method() === 'POST');
   const answer = page.waitForResponse((res) => res.url().endsWith(`/reviews/${r.id}/seals`));
-  await page.getByRole('button', { name: /^Seal as seal \d$/ }).click();
+  await page.getByRole('button', { name: REVIEW_COPY.confirm.sealNow }).click();
   expect(JSON.parse((await again).postData() ?? '{}').requestId).toBe(JSON.parse(sent[0]).requestId);
   expect((await answer).status()).toBe(200);
   await expect(sealedStatus(page)).toContainText(/^Sealed as seal 1 on /);
@@ -185,8 +186,8 @@ test('FR-REV-03 UX-18: S-17 by address as an assessor shows the refusal line and
   await signIn(page, 'assessor');
   const res = await page.goto(`/orgs/${org.slug}/projects/${p.id}/reviews/${r.id}/seal`);
   expect(res?.status()).toBe(200);   // owner question B21 default
-  await expect(page.getByText('Only owners, admins and reviewers can seal a stage review.')).toBeVisible();
-  await expect(page.getByRole('button', { name: /Seal as seal/ })).toHaveCount(0);
+  await expect(page.getByText(REVIEW_COPY.sealPage.refusal)).toBeVisible();
+  await expect(page.getByRole('button', { name: REVIEW_COPY.confirm.sealNow })).toHaveCount(0);
 });
 
 test('UX-31 NFR-A11Y-05: S-16 and S-17 have no serious axe violation at 1280 and 320 pixels in both themes, and no form when archived', async ({ page, baseURL }) => {
@@ -204,7 +205,7 @@ test('UX-31 NFR-A11Y-05: S-16 and S-17 have no serious axe violation at 1280 and
   await testDb.project.update({ where: { id: p.id }, data: { archivedAt: new Date() } });
   await page.goto(s17Url);
   await expect(page.getByText('This project is archived. Nothing in it can be changed. Owners and admins can unarchive it from All projects.')).toBeVisible();
-  await expect(page.getByRole('button', { name: /Seal as seal/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: REVIEW_COPY.confirm.sealNow })).toHaveCount(0);
 });
 
 test('NFR-SEC-02 FR-AUTHZ-01 (C4 SO-2): S-16 of another organisation\'s review is not found, and a reviewer gets the open form\'s refusal line', async ({ page, baseURL }) => {
@@ -225,8 +226,8 @@ test('NFR-SEC-02 FR-AUTHZ-01 (C4 SO-2): S-16 of another organisation\'s review i
   const p = await newProject(baseURL!, `Open refusal ${randomUUID().slice(0, 8)}`);
   await signIn(page, 'reviewer');
   expect((await page.goto(`/orgs/${org.slug}/projects/${p.id}/reviews/new`))?.status()).toBe(200);
-  await expect(page.getByText('Only owners, admins and assessors can open a stage review.')).toBeVisible();
-  await expect(page.getByLabel('Prepared for (optional)')).toHaveCount(0);
+  await expect(page.getByText(REVIEW_COPY.open.refusal)).toBeVisible();
+  await expect(page.getByLabel(REVIEW_COPY.open.noteLabel)).toHaveCount(0);
 });
 
 test.afterAll(async () => {

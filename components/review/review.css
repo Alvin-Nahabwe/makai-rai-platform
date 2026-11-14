@@ -1,0 +1,148 @@
+/* Layout of the review and seal screens (plan 1A Task 18, part 18b): only what the kit has no part for. Headers,
+   buttons, fields and status lines are the kit's (components/ui); this file spaces the screens' blocks, sets the
+   fingerprint, and reads the role tokens only. Status marks are ink: no colour carries a state. */
+
+/* One block of a page (the state, the seals, the documents), set apart from the next. */
+.review-block {
+  margin-block-end: var(--space-8);
+}
+
+.review-block > h2 {
+  margin-block: 0 var(--space-3);
+}
+
+/* Controls side by side, wrapping on a narrow screen. */
+.review-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.review-form {
+  max-width: var(--measure-reading);
+}
+
+.review-form > .ui-field {
+  margin-block-end: var(--space-6);
+}
+
+/* The open form's note: the kit's input with its hint and count below it. */
+.review-form .ui-field__hint,
+.review-form .ui-count {
+  margin-block: var(--space-2) 0;
+}
+
+/* A seal in the list of seals. */
+.review-seals {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.review-seals > li {
+  padding-block: var(--space-4);
+  border-block-start: 1px solid var(--color-border-container);
+}
+
+.review-seals > li > p {
+  margin-block: 0 var(--space-3);
+  overflow-wrap: anywhere;
+}
+
+.review-seal-damaged {
+  font-weight: var(--font-weight-bold);
+}
+
+/* The fingerprint: groups of four, kept together, wrapping between groups only. */
+.review-fingerprint {
+  display: grid;
+  gap: var(--space-2);
+  margin-block-end: var(--space-3);
+}
+
+.review-wrap {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.review-code {
+  font-size: var(--font-size-body);
+  color: var(--color-ink);
+}
+
+.review-inline-status {
+  margin: 0;
+}
+
+/* The seal check: the button, its help, and the result with its technical details. */
+.review-check {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.review-help {
+  margin: 0;
+  color: var(--color-ink-muted);
+  font-size: var(--font-size-small);
+}
+
+.review-status {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.review-details {
+  margin-block-start: var(--space-2);
+}
+
+.review-details > summary {
+  cursor: pointer;
+  color: var(--color-link);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.review-details > summary:focus-visible {
+  outline: var(--focus-width) solid var(--color-focus);
+  outline-offset: var(--focus-offset);
+}
+
+.review-details > p {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-small);
+}
+
+/* The seal page: the preview list, then the seal's buttons and its status lines. */
+.review-seal > ul {
+  margin-block: 0 var(--space-6);
+  padding-inline-start: var(--space-6);
+}
+
+.review-seal > ul > li {
+  margin-block-end: var(--space-2);
+  overflow-wrap: anywhere;
+}
+
+.review-alert {
+  margin: 0;
+}
+
+.review-sealed:focus-visible {
+  outline: var(--focus-width) solid var(--color-focus);
+  outline-offset: var(--focus-offset);
+}
+
+.review-seal > h2 {
+  margin-block: var(--space-8) var(--space-3);
+}
+
+/* The questions with no decision, one per line under their count. */
+.review-questions {
+  margin-block: var(--space-2) 0;
+  padding-inline-start: var(--space-6);
+}
+
+.review-questions > li {
+  margin-block-end: var(--space-1);
+}

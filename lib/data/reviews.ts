@@ -20,6 +20,7 @@ import { trustedManifest } from '@/lib/integrity/sealCheck.mjs';
 import { stageReviewName } from '@/lib/seal/reviewName';
 // A NUL or a lone surrogate cannot be stored as sent; the one rule, shared with findings text (C4 SI-1).
 import { FINDING_MESSAGES, NOT_STORABLE } from '@/lib/findings/validate';
+import { REVIEW_COPY } from '@/lib/review/copy';
 
 /** Open a review, list reviews, changed since seal, seal preview (FR-REV-01, 02, 05). */
 
@@ -87,7 +88,7 @@ export async function openStageReview(
   ctx: OrgContext, actor: Actor, a: OpenReviewRequest & { projectId: string }, digest: string,
 ): Promise<WriteOutcome<StageReviewView>> {
   assertCan(ctx, 'review:open');
-  if (!STAGES.includes(a.stage)) throw new ValidationFailed([{ field: 'stage', message: 'stage must be pre-processing, in-processing or post-processing.' }]);
+  if (!STAGES.includes(a.stage)) throw new ValidationFailed([{ field: 'stage', message: REVIEW_COPY.open.stageInvalid }]);
   const preparedFor = storedNote(a.preparedFor);
   try {
     return await idempotentWrite<StageReviewView>(ctx, {

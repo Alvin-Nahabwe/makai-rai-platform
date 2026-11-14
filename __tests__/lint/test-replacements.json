@@ -1294,5 +1294,29 @@
     "property": "When the email failed and no link was shown, S-24 says so in its status region, offers the link box's resend button and no link field; the resend that went through shows the new link, keeps the organisation and its id; a refused resend keeps the organisation created and says why. The coordinator's answers Q21 and Q22 (plan 1A Task 19 fix round 1) change two sentences on this screen: the no-link email-failed sentence names the button (COPY_LINK_COPY.emailFailedNoLink), and a refused resend here points at \"Open the organisation\" in place of a reload (ADMIN_FORMS_COPY.create.resendRefusals).",
     "proof": "In this case: expect(statusText(html)).toBe(`Created. ${COPY_LINK_COPY.emailFailedNoLink}`) requires the region's whole text for the no-link state; expect(refused.status).toBe(ADMIN_FORMS_COPY.create.resendRefusals.notPending) requires the create screen's own refusal; the resend button, no link field, the resent status with the link shown (`Resent: the old link no longer works. ${EMAIL_FAILED}`), the response's orgId, slug, acceptUrl and invitation id, the new link in the view and refused.kind 'created' are unchanged. The new cases 'UX-23 (answer Q21): on the create screen the email-failed sentence names the link when the link is shown, and the button when it is not' and 'UX-23 (answer Q22): on the create screen a refused resend points at \"Open the organisation\", never at a reload' pin each state's literal words.",
     "task": "1A-19"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/review-components.test.tsx::UX-31: SealNote says before saving what saving will do, once per review, for the highest seal",
+    "replacedBy": "__tests__/unit/review-components.test.tsx::UX-31: SealNote says before saving what saving will do, once per review, for the highest seal",
+    "property": "Before a person saves a decision that a seal holds, SealNote says, once per review and for that review's highest seal, that the seal keeps what it holds and that the review will then show \"changed since seal N\"; with no seal it renders nothing. Task 18 answer Q9 (G-b4) rewords the sentence (C#244): it no longer names version numbers.",
+    "proof": "In this case: expect(html).toContain(REVIEW_COPY.mounted.sealNote(2).replaceAll('\"', '&quot;')) requires the sentence for seal 2, the highest of the review's two seals, as React renders it (the quotes escaped, as the old literal wrote them); expect(html.match(/This decision is in seal/g)).toHaveLength(1) still requires one sentence per review; toBe('') for no seal is unchanged.",
+    "task": "1A-18"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/review-components.test.tsx::FR-REV-05 NFR-A11Y-05: StageSealBanner names the review, the seal and the changed count in text",
+    "replacedBy": "__tests__/unit/review-components.test.tsx::FR-REV-05 NFR-A11Y-05: StageSealBanner names the review, the seal and the changed count in text",
+    "property": "The changed-since-seal banner says the seal number and the changed counts in text, links the review by its address when one is given, and renders nothing when nothing changed. Task 18 (C#243, C2) renames the link from the retired \"Open review\" to \"View review\".",
+    "proof": "In this case the same regex /<a [^>]*href=\"\\/orgs\\/o\\/projects\\/p\\/reviews\\/r\"[^>]*>View review<\\/a>/ requires a native link to the same address with the new words; the count assertions and toBe('') are unchanged. The words are a regex with markup, which the protected-test rule cannot express as a copy constant.",
+    "task": "1A-18"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/review-components.test.tsx::FR-REV-01 FR-REV-05: StageReviewsSummary lists each review with its note and state, and offers Open a stage review only when allowed",
+    "replacedBy": "__tests__/unit/review-components.test.tsx::FR-REV-01 FR-REV-05: StageReviewsSummary lists each review with its note and state, and offers Open a stage review only when allowed",
+    "property": "StageReviewsSummary lists each review with its name, its note and its state in words, links each review by its address, and offers \"Open a stage review\" only when allowed. Task 18 (C#240, C2) renames the per-review link from the retired \"Open review\" to \"View review\", and C#239 rewords the erased note.",
+    "proof": "In this case the same regex /<a [^>]*href=\"\\/orgs\\/o\\/projects\\/p\\/reviews\\/r\"[^>]*>View review<\\/a>/ requires a native link to the review's address with the new words; expect(erased).toContain(REVIEW_COPY.mounted.noteErased('3 Nov 2026')) requires the erased note with its date; the name, note, state and the Open a stage review link assertions are unchanged.",
+    "task": "1A-18"
   }
 ]
