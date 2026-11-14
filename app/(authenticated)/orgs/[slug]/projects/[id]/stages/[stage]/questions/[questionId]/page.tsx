@@ -11,6 +11,7 @@ import { eatDate } from '@/lib/followup/overdue';
 import { decisionFormNote } from '@/lib/authz/permissionNotes';
 import { OpenWorkList } from '@/components/question/OpenWorkList';
 import { STAGES, type Stage } from '@/types/record';
+import { questionApplies, runningContent } from '@/lib/content/loader';
 import { ArchivedBanner } from '@/components/project/ArchivedBanner';
 import { QuestionContent } from '@/components/question/QuestionContent';
 import { CurrentDecision } from '@/components/decision/CurrentDecision';
@@ -31,6 +32,16 @@ import RememberProject from '@/components/layout/RememberProject';
 import '@/components/question/workspace.css';
 
 const Q = QUESTION_COPY;
+
+/**
+ * The running text of the question the foot's "Next question" names. The panel took `nextId` from this same running
+ * content, so an id it lacks is a defect, not a question to skip.
+ */
+function nextQuestionText(nextId: string): string {
+  const next = runningContent().questions.get(nextId);
+  if (next === undefined) throw new Error(`QuestionPanelRegions: the next question ${nextId} is not in the running content`);
+  return next.text;
+}
 
 /** n in the in-page link "Ways teams address this (n)": SUG's `suggestionCount`. At 0 (the gate) there is no link and no section. */
 function countFor(data: QuestionPanelData): number {
@@ -89,6 +100,11 @@ function readingRegions(data: QuestionPanelData, openWork: QuestionOpenWork | nu
  * evidence block is rendered by the answer form, a client component, so its callbacks are the form's and no function
  * crosses from this server component to a client one (EVD RE-1). Exported so a unit test renders the markup without
  * the loader.
+ *
+ * A question the personal data answer switched off (FR-CNT-04) says so under its code line; its form is unchanged. At
+ * the foot of the main column, after the form, the way on: "Next question: {its words}" (or, on the stage's last
+ * question, a sentence saying so) and All questions (workshop walk S3, S9). The Findings section is there only when it
+ * has something to show: an open finding, or a person who may raise one.
  */
 export function QuestionPanelRegions({ data, openWork }: { data: QuestionPanelData; openWork?: QuestionOpenWork | null }) {
   const question = data.question;
@@ -97,9 +113,11 @@ export function QuestionPanelRegions({ data, openWork }: { data: QuestionPanelDa
   const reworded = data.current !== null && data.current.status !== 'withdrawn' && isReworded(question, data.runningQuestion);
   const { index, total, previousId, nextId } = data.position;
   const historyHref = `${base}/stages/${data.stage}/questions/${question.id}/history`;
+  const stageHref = `${base}/stages/${data.stage}`;
+  const doesNotApply = data.gateAnswer === 'no' && !questionApplies(runningContent(), data.runningQuestion.id, data.gateAnswer);
   // Only a reader is shown the finding link without the right to raise one when there is something to view (R4); a
   // person who may record keeps the section as before.
-  const findingLink = data.canWrite || data.canRaiseFinding;
+  const showFindings = data.canWrite ? data.openFinding !== null || data.canRaiseFinding : data.canRaiseFinding;
   const reading = data.canWrite ? null : readingRegions(data, openWork ?? null, historyHref);
   // Only a question in a seal has something to say here: SealNote renders nothing for one in none.
   const sealNote = data.seals.length > 0 ? (
@@ -115,7 +133,7 @@ export function QuestionPanelRegions({ data, openWork }: { data: QuestionPanelDa
         {previousId !== null ? <Link href={questionHref(data, previousId)}>{Q.nav.previous}</Link> : null}
         <span>{Q.nav.position(index + 1, total, STAGE_TITLE[data.stage])}</span>
         {nextId !== null ? <Link href={questionHref(data, nextId)}>{Q.nav.next}</Link> : null}
-        <Link href={`${base}/stages/${data.stage}`}>{Q.nav.allQuestions}</Link>
+        <Link href={stageHref}>{Q.nav.allQuestions}</Link>
       </nav>
       <div className="question-workspace">
         <div className="question-workspace__main">
@@ -123,6 +141,7 @@ export function QuestionPanelRegions({ data, openWork }: { data: QuestionPanelDa
             <h1 id="question-heading" tabIndex={-1} className="question-frame__title">{data.runningQuestion.text}</h1>
             <FocusOnArrival targetId="question-heading" />
             <p className="question-frame__code">{DECISION_COPY.titles.question(question.id, question.moduleTitle)}</p>
+            {doesNotApply ? <p data-does-not-apply>{Q.doesNotApply}</p> : null}
             {/* FR-CNT-07: the disclosure holds the wording the current decision was answered against. */}
             {reworded ? (
               <div data-reworded>
@@ -164,11 +183,19 @@ export function QuestionPanelRegions({ data, openWork }: { data: QuestionPanelDa
               ) : null}
             </section>
           ) : sealNote}
+          {/* The way on after a save at the foot of a long page (workshop walk S9): a paragraph, so the page keeps one navigation landmark. */}
+          <p className="question-foot" data-region="way-on">
+            {nextId !== null
+              ? <Link href={questionHref(data, nextId)}>{Q.foot.next(nextQuestionText(nextId))}</Link>
+              : <span>{Q.foot.last}</span>}
+            <Link href={stageHref}>{Q.nav.allQuestions}</Link>
+          </p>
         </div>
         <div className="question-workspace__guide">
           {/* The guidance of the running wording (FR-CNT-08, ruling on SPEC-1), as an aside (plan 1C decision C1, cut). */}
           <QuestionContent question={data.runningQuestion} suggestionCount={count} />
-          {findingLink ? (
+          {/* Exactly when QuestionFindingLink renders something, so no heading stands over nothing. */}
+          {showFindings ? (
             <section data-region="finding-link" aria-labelledby="s12-finding-link">
               <h2 id="s12-finding-link">{Q.headings.findings}</h2>
               <QuestionFindingLink

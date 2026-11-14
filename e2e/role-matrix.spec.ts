@@ -126,11 +126,12 @@ const PROJECTS_LIST_CONTROLS: Control[] = [
 const PROJECTS_NEW_CONTROLS: Control[] = [
   { name: 'Create project', action: 'project:create', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Create project' }) },
   { name: 'Cancel', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Cancel' }) },
-  { name: PROJECT_FORM_COPY.moreDetails, action: null, mode: 'presence', locator: (p) => p.getByRole('button', { name: PROJECT_FORM_COPY.moreDetails }) },
+  { name: PROJECT_FORM_COPY.showDetails, action: null, mode: 'presence', locator: (p) => p.getByRole('button', { name: PROJECT_FORM_COPY.showDetails }) },
   { name: PROJECT_FORM_COPY.back, action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: new RegExp(PROJECT_FORM_COPY.back) }) },
 ];
 
 const PROJECT_DETAIL_CONTROLS: Control[] = [
+  { name: PROJECT_COPY.start, action: 'decision:write', mode: 'presence', locator: (p) => p.getByRole('link', { name: PROJECT_COPY.start, exact: true }) },
   { name: 'Edit project', action: 'project:update', mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Edit project' }) },
   { name: PROJECT_COPY.overview.downloadRecords, action: 'team:export', mode: 'presence', locator: (p) => p.getByRole('link', { name: PROJECT_COPY.overview.downloadRecords }) },
   { name: 'Archive project', action: 'project:archive', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Archive project', exact: true }) },

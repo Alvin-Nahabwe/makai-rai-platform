@@ -88,3 +88,30 @@
   font-size: var(--font-size-small);
   color: var(--color-ink-muted);
 }
+
+/*
+ * The way on at the foot of the main column, after the form (workshop walk S9): "Next question: {its words}" (or the
+ * sentence that this is the stage's last question), then All questions. Clear of the form above it; the two items apart
+ * and wrapping at 320px; each link a target of at least 24 by 24 CSS px (SC 2.5.8). At 768px and below the page reserves
+ * the fixed save bar's height under its content (DecisionForm.css), so the foot scrolls clear of the bar.
+ */
+.question-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-6);
+  margin: var(--space-8) 0 0;
+  overflow-wrap: anywhere;
+}
+
+.question-foot > * {
+  min-width: 0;
+}
+
+.question-foot a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--target-min);
+  min-inline-size: var(--target-min);
+  padding-block: 2px;
+}

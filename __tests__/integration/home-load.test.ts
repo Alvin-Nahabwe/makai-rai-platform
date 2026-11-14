@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { OrgRole } from '@prisma/client';
-import { loadNextStep } from '@/lib/home/load';
+import { loadContinueTarget, loadNextStep } from '@/lib/home/load';
 import { openQuestionIds, stageView } from '@/lib/data/projects';
 import { currentDecisionRows } from '@/lib/data/decisions';
 import { withOrg } from '@/lib/data/tenant';
@@ -165,5 +165,76 @@ describe('loadNextStep', () => {
     await save(fx, archived.id, { stage: IP, questionId: 'Q-IP-05' });
     await testDb.project.update({ where: { id: archived.id }, data: { archivedAt: new Date() } });
     expect(await next('assessor')).toMatchObject({ projectId: active.id, stage: PP, rule: 'next-open' });
+  });
+});
+
+/** Plan 1C C11 (cut), step 3: `loadContinueTarget`, the project page's primary action, on Home's rule. */
+describe('loadContinueTarget', () => {
+  const target = (role: OrgRole, p: { id: string; archived?: boolean }, f: OrgFixture = fx) =>
+    loadContinueTarget(ctxFor(f, role), f.members[role].userId, { id: p.id, archived: p.archived ?? false });
+
+  it('S4: a Reviewer and a Viewer get null, also when rows exist, their own included', async () => {
+    const p = await addProject(fx);
+    await save(fx, p.id, { stage: PP, questionId: 'Q-PP-01' });
+    await save(fx, p.id, { stage: PP, questionId: 'Q-PP-03', by: 'viewer' });
+    await save(fx, p.id, { stage: PP, questionId: 'Q-PP-04', by: 'reviewer' });
+    expect(await target('viewer', p)).toBeNull();
+    expect(await target('reviewer', p)).toBeNull();
+    expect(await target('assessor', p)).not.toBeNull();
+  });
+
+  it('S4: an archived project gives null, whatever rows exist', async () => {
+    const p = await addProject(fx, { archived: true });
+    await save(fx, p.id, { stage: PP, questionId: 'Q-PP-01' });
+    for (const role of ['owner', 'admin', 'assessor'] as const) expect(await target(role, { id: p.id, archived: true })).toBeNull();
+  });
+
+  it('no save: start, with the first open question of the first stage that has one', async () => {
+    const p = await addProject(fx);
+    expect(await target('owner', p)).toEqual({ stage: PP, questionId: ids(PP)[0], label: 'start' });
+    // Pre-processing fully decided by the team: the first open question of In-processing.
+    for (const id of ids(PP)) await save(fx, p.id, { stage: PP, questionId: id, by: 'assessor', status: id === 'Q-PP-GATE-SENSITIVE' ? null : 'done', ...(id === 'Q-PP-GATE-SENSITIVE' ? { scopeAnswer: 'yes' } : {}) });
+    expect(await target('owner', p)).toEqual({ stage: IP, questionId: ids(IP)[0], label: 'start' });
+  });
+
+  it('a save: continue, with the next open question after it, wrapping round', async () => {
+    const p = await addProject(fx);
+    const q = ids(IP);
+    await save(fx, p.id, { stage: IP, questionId: q[1], by: 'owner' });
+    await save(fx, p.id, { stage: IP, questionId: q[0] });
+    expect(await target('assessor', p)).toEqual({ stage: IP, questionId: q[2], label: 'continue' });
+    for (const id of q.slice(2)) await save(fx, p.id, { stage: IP, questionId: id, by: 'owner' });
+    await save(fx, p.id, { stage: IP, questionId: q[1], status: 'withdrawn', withdrawalCode: 'entered_in_error', by: 'owner' });
+    await save(fx, p.id, { stage: IP, questionId: q[q.length - 1] });
+    expect(await target('assessor', p)).toEqual({ stage: IP, questionId: q[1], label: 'continue' });
+  });
+
+  it('a fully decided stage gives the last-saved question', async () => {
+    const p = await addProject(fx);
+    const q = ids(IP);
+    for (const id of q) await save(fx, p.id, { stage: IP, questionId: id, by: 'owner' });
+    await save(fx, p.id, { stage: IP, questionId: q[4] });
+    expect(await target('assessor', p)).toEqual({ stage: IP, questionId: q[4], label: 'continue' });
+  });
+
+  it("another member's saves do not move the viewer's target but do close questions", async () => {
+    const p = await addProject(fx);
+    const q = ids(IP);
+    await save(fx, p.id, { stage: IP, questionId: q[0] });
+    await save(fx, p.id, { stage: PP, questionId: ids(PP)[3], by: 'owner' });
+    expect(await target('assessor', p)).toEqual({ stage: IP, questionId: q[1], label: 'continue' });
+    await save(fx, p.id, { stage: IP, questionId: q[1], by: 'owner' });
+    expect(await target('assessor', p)).toEqual({ stage: IP, questionId: q[2], label: 'continue' });
+  });
+
+  it('M1: for a person whose newest save is in this project, loadNextStep and loadContinueTarget name the same stage and question', async () => {
+    const p = await addProject(fx);
+    const q = ids(IP);
+    await save(fx, p.id, { stage: IP, questionId: q[2], by: 'owner' });
+    await save(fx, p.id, { stage: IP, questionId: q[1] });
+    const home = await next('assessor');
+    const page = await target('assessor', p);
+    expect(page).toEqual({ stage: home?.stage, questionId: home?.questionId, label: 'continue' });
+    expect(home).toMatchObject({ projectId: p.id, stage: IP, questionId: q[3] });
   });
 });

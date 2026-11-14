@@ -84,7 +84,7 @@ test('FR-RM-04 UX-06 UX-07: S-08, S-10, S-11 and S-14 print the stage counts as 
     // The helpers refuse a sentinel set with an empty stage (e2e/helpers/noScore.ts:149-153), so a one-stage page is checked
     // as e2e/stage-workspace.spec.ts checks S-11, with the count read from its own words ("<n> open findings",
     // components/followup/StageFollowUpCounts.tsx:16): question ids such as Q-IP-23 also carry the digits.
-    expect(await page.locator('main .status-label').count(), `S-11 ${stage}: one label per question row`).toBe(questionsIn(stage));
+    expect(await page.locator('main [data-question-id] .ui-mark').count(), `S-11 ${stage}: one status mark per question row`).toBe(questionsIn(stage));
     await expectStatusMarksInk(page);
     await expect(page.locator('main').getByRole('link', { name: `${COUNTS[stage]} open findings`, exact: true })).toBeVisible();
     const text = (await page.locator('main').innerText()).replace(/\s+/g, ' ');

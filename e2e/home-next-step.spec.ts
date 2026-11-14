@@ -78,7 +78,8 @@ test('spec 9.1: an assessor who saved sees the next step above Active projects; 
   expect(code).not.toBe('Q-IP-02');   // the next question with no decision, not the saved one
   await card.getByRole('link', { name: HOME_COPY.continueRecording }).click();
   await page.waitForURL(`**/stages/in-processing/questions/${code}`);
-  await expect(page.locator('#question-heading')).toContainText(code);
+  // The question page's heading is the question in words; its code is the line under it (the frame of slice 1).
+  await expect(page.locator('.question-frame__code')).toContainText(code);
 });
 
 test('spec 9.1: Choose another question opens that stage\'s All questions', async ({ browser }) => {
