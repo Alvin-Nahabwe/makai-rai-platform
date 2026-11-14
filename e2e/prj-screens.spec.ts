@@ -511,6 +511,30 @@ test('FR-PRJ-01 (review F1): Team size text that is not a whole number is refuse
   await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
 });
 
+test('Task 13 item 6 (fix round 2): the primary button comes before Cancel at 375 and 1280 px, on screen and for the keyboard', async ({ browser }) => {
+  const page = await signedIn(browser, fx.members.assessor);
+  for (const width of [375, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(path('/projects/new'));
+    const create = page.getByRole('button', { name: PROJECT_FORM_COPY.create });
+    const cancel = page.getByRole('link', { name: PROJECT_FORM_COPY.cancel, exact: true });
+    const a = await create.boundingBox();
+    const b = await cancel.boundingBox();
+    if (a === null || b === null) throw new Error(`no box for the actions at ${width}px`);
+    if (width === 375) expect(a.y + a.height, `Create project above Cancel at ${width}px`).toBeLessThanOrEqual(b.y);
+    else {
+      expect(Math.abs(a.y - b.y), `one row at ${width}px`).toBeLessThan(a.height);
+      expect(a.x + a.width, `Create project left of Cancel at ${width}px`).toBeLessThanOrEqual(b.x);
+    }
+    await page.getByRole('button', { name: PROJECT_FORM_COPY.showDetails }).click();
+    await page.getByLabel(PROJECT_FORM_COPY.labels.targetPopulation).focus();   // the last field
+    await page.keyboard.press('Tab');
+    await expect(create).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(cancel).toBeFocused();
+  }
+});
+
 test('defect 22: the toggle says Show more details while closed and Hide more details while open, and aria-expanded follows', async ({ browser }) => {
   const page = await signedIn(browser, fx.members.assessor);
   await page.goto(path('/projects/new'));

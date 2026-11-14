@@ -50,3 +50,12 @@
   font-size: var(--font-size-h3);
   margin: 0 0 var(--space-4);
 }
+
+/* The actions keep their order on a narrow screen: the primary button, then Cancel (plan 1B Task 13 item 6). The shared
+   rule in app/globals.css reverses .form-actions into a column at 768 px and narrower, which drew Cancel above the
+   primary button; two classes win over that rule whatever the order of the stylesheets. */
+@media (max-width: 768px) {
+  .form-actions.project-form__actions {
+    flex-direction: column;
+  }
+}

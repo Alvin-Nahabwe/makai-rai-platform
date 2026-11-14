@@ -349,7 +349,7 @@ export default function NewProjectForm(p: Mode) {
             </div>
           </section>
 
-          <div className="form-actions">
+          <div className="form-actions project-form__actions">
             <Button variant="primary" type="submit" busy={loading}>
               {loading ? (editing ? C.saving : C.creating) : editing ? C.save : C.create}
             </Button>
