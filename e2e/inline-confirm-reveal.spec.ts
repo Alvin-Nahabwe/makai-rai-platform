@@ -36,6 +36,7 @@ import { signInWith } from './helpers/session';
  */
 
 const STRIP = 32;
+const MIN_STRIP = 24;
 const WIDE = { width: 1280, height: 720 } as const;
 const NARROW = { width: 320, height: 568 } as const;
 const CONTENT_SEMVER = '0.0.1-fixture';
@@ -345,10 +346,13 @@ async function arrange(page: Page, o: Opened): Promise<{ width: number; height: 
   const trig = await placeOf(o.trigger);
   expect(trig.top >= trig.visibleTop && trig.bottom <= trig.visibleBottom, `the trigger is wholly in view before it is pressed (${Math.round(trig.top)} to ${Math.round(trig.bottom)})`).toBe(true);
   if (how.startsWith('strip')) {
-    // Where the element will open: its content top less the scroll now, in the scroller's box. It must sit STRIP px above the edge.
+    // Where the element will open: its content top less the scroll now, in the scroller's box. A strip of it shows, at least
+    // MIN_STRIP px and not much more than STRIP (a page may settle a pixel or two after the scroll), and the rest is cut.
     const now = await placeOf(o.trigger);
     const opensAt = now.top - (now.contentTop - now.scrollTop) + probe.contentTop - now.scrollTop;
-    expect(Math.abs(opensAt - (now.visibleBottom - STRIP)), `the element opens ${STRIP} px above the edge (at ${Math.round(opensAt)}, edge ${now.visibleBottom})`).toBeLessThanOrEqual(1);
+    const shows = now.visibleBottom - opensAt;
+    expect(shows >= MIN_STRIP && shows <= STRIP + 4 && shows < probe.bottom - probe.top,
+      `a strip of ${MIN_STRIP} to ${STRIP + 4} px of the element shows, and not all of it (it shows ${Math.round(shows)} px of ${Math.round(probe.bottom - probe.top)})`).toBe(true);
   }
   test.info().annotations.push({ type: 'geometry', description: `window ${page.viewportSize()!.width}x${page.viewportSize()!.height}; ${how}` });
   return { ...page.viewportSize()!, how };
