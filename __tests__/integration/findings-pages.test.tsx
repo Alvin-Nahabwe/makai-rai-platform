@@ -2,11 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { OrgRole } from '@prisma/client';
 import type { Identity } from '@/lib/auth/identity';
-import { deciderLabel } from '@/lib/decision/copy';
 import { FindingsPageView } from '@/components/findings/FindingsPageView';
 import { AcceptRiskForm } from '@/components/findings/AcceptRiskForm';
 import { FindingPageView } from '@/components/findings/FindingPageView';
+import { MitigationForm } from '@/components/findings/MitigationForm';
 import { loadFindingPage, loadFindingsPage, type FindingPageData } from '@/lib/findings/pageData';
+import { FINDINGS_COPY } from '@/lib/findings/copy';
+import { onlyRolesCanText } from '@/lib/findings/messages';
+import { deciderLabel, OUTSIDE_ROLE_LABELS } from '@/lib/decision/copy';
+import { runningContent } from '@/lib/content/loader';
 import { resetDb } from '../helpers/db';
 import { useFixtureContent } from '../helpers/content';
 import { sessionFor } from '../helpers/authSession';
@@ -76,8 +80,9 @@ describe('S-14 the findings list (UX-15, UX-06, UX-07, FR-FND-07, FR-FND-08)', (
   it('UX-15 FR-FND-07: S-14 shows each kind under its UX-15 heading in order, and withdrawn ones only under Withdrawn', async () => {
     const k = await everyKind();
     const html = await renderList('reviewer', k.p.id);
-    const order: Array<string | RegExp> = ['Decision now done: close it', 'Decision withdrawn: close it', /Pre-processing: \d+ findings?/, 'Open, no mitigation yet',
-      'Open, with overdue mitigations', 'Accepted risks to look at again', 'Closed', 'Withdrawn'];   // the stage heading carries its count (R13-9)
+    const L = FINDINGS_COPY.list;
+    const order: Array<string | RegExp> = [L.decisionDone, L.decisionWithdrawn, /Pre-processing: \d+ findings?/, L.noMitigation,
+      L.overdue, L.lookAgain, L.closed, L.withdrawn];   // the stage heading carries its count (R13-9)
     const at = (h: string | RegExp) => html.search(typeof h === 'string' ? new RegExp(`>${h}<`) : new RegExp(`>${h.source}<`));
     expect(order.map(at).every((i) => i >= 0)).toBe(true);
     expect(order.map(at)).toEqual([...order.map(at)].sort((a, b) => a - b));
@@ -90,7 +95,7 @@ describe('S-14 the findings list (UX-15, UX-06, UX-07, FR-FND-07, FR-FND-08)', (
     const k = await everyKind();
     const html = await renderList('reviewer', k.p.id);
     const states = [...html.matchAll(/<[a-z]+ [^>]*class="([^"]*\bstatus-label\b[^"]*)"[^>]*>([^<]*)</g)];
-    expect(states.map((m) => m[2])).toEqual(expect.arrayContaining(['Open', 'Closed by mitigation', 'Withdrawn', `Closed: risk accepted by ${deciderLabel({ kind: 'outside_role', role: 'ethics_committee' }, '', 'record')}`]));
+    expect(states.map((m) => m[2])).toEqual(expect.arrayContaining([FINDINGS_COPY.labels.open, FINDINGS_COPY.labels.closedByMitigation, FINDINGS_COPY.labels.withdrawn, FINDINGS_COPY.labels.closedByAcceptedRiskBy(OUTSIDE_ROLE_LABELS.ethics_committee)]));
     expect(states.every((m) => !/status-label--warning/.test(m[1]))).toBe(true);
   });
 
@@ -117,15 +122,17 @@ describe('S-14 the findings list (UX-15, UX-06, UX-07, FR-FND-07, FR-FND-08)', (
   it('FR-FND-06 UX-15: a to-close finding carries its Close it button when the role can mitigate, and none for a reviewer', async () => {
     const k = await everyKind();
     const asAssessor = await renderList('assessor', k.p.id);
-    expect(asAssessor).toContain('Close it: decision changed'); expect(asAssessor).toContain('Close it: decision withdrawn');
-    expect(await renderList('reviewer', k.p.id)).not.toContain('Close it:');
+    // One button each for the decision now done and the decision withdrawn, named with the finding's title.
+    expect(asAssessor.split(`aria-label="${FINDINGS_COPY.closeByDecision.ariaLabel('')}`).length - 1).toBe(2);
+    expect(asAssessor).toContain(`>${FINDINGS_COPY.closeByDecision.label}</button>`);
+    expect(await renderList('reviewer', k.p.id)).not.toContain(FINDINGS_COPY.closeByDecision.label);
   });
 
   it('FR-FND-01 (screen): a shortfall is titled by its question text and sourced from its version; a team finding is "Raised by the team"', async () => {
     const k = await everyKind();
     const html = await renderList('viewer', k.p.id);
-    expect(html).toMatch(/From question Q-PP-01 \(version 1, status Not yet\)/);
-    expect(html).toContain('Raised by the team');
+    expect(html).toContain(FINDINGS_COPY.labels.fromDecisionWith('Not yet'));
+    expect(html).toContain(FINDINGS_COPY.labels.raisedByTeam);
   });
 
   it('FR-FND-02 FR-FND-08: members see their findings on S-14, and a non-member gets 404', async () => {
@@ -161,15 +168,22 @@ describe('S-14 the findings list (UX-15, UX-06, UX-07, FR-FND-07, FR-FND-08)', (
     await addFinding(fx, archived.id, { stage: 'pre-processing', source: 'team' });
     const html = await renderList('owner', archived.id);
     expect(html).toContain('This project is archived. Nothing in it can be changed.');
-    expect(html).not.toMatch(/<form|Close it:/);
+    expect(html).not.toMatch(new RegExp(`<form|${FINDINGS_COPY.closeByDecision.label}`));
     expect(k.p.id).not.toBe(archived.id);
   });
 
   it('FR-FND-02 FR-FND-08 (screen): a project with no finding shows the S-14 empty text', async () => {
     const p = await addProject(fx);
-    expect(await renderList('viewer', p.id)).toContain('No findings in this project. A finding opens when a decision is saved as Partly or Not yet, or when someone raises one.');
+    expect(await renderList('viewer', p.id)).toContain(FINDINGS_COPY.list.emptyProject);
   });
 });
+
+/** A question's text in the content the pages run on (the fixture content). */
+function questionText(id: string): string {
+  const q = runningContent().questions.get(id);
+  if (q === undefined) throw new Error(`no question ${id} in the fixture content`);
+  return q.text;
+}
 
 function buildHostileOrg(): Promise<OrgFixture> {
   return buildOrg({ label: 'h', text: hostileText });
@@ -189,7 +203,7 @@ describe('S-15 the finding page and the S-14 raise form (FR-FND-02, FR-FND-03, F
     await addDecision(fx, p.id, { stage: 'pre-processing', questionId: 'Q-PP-12', contentVersionId, status: 'partly' });
     const v2 = await addDecision(fx, p.id, { stage: 'pre-processing', questionId: 'Q-PP-12', contentVersionId, status: 'partly' });
     const f = await team({ project: p, questionId: 'Q-PP-12', decisionVersionId: v2.id });
-    expect(await renderFinding(f)).toContain('About question <bdi>Q-PP-12</bdi> (version 2)');
+    expect(await renderFinding(f)).toContain(`${FINDINGS_COPY.finding.aboutQuestion} <bdi>${questionText('Q-PP-12')}</bdi>`);
   });
 
   it('UX-14 FR-FND-02: the raise form opened from S-12 has the stage and the question\'s first risk area filled in', async () => {
@@ -198,32 +212,32 @@ describe('S-15 the finding page and the S-14 raise form (FR-FND-02, FR-FND-03, F
     const html = renderToStaticMarkup(<FindingsPageView data={await loadPage('reviewer', p.id, null, { stage: 'pre-processing', questionId: 'Q-PP-12', versionId: v.id })} />);
     expect(html).toMatch(/<option[^>]*value="pre-processing"[^>]*selected/);
     expect(html).toMatch(/<option[^>]*value="PP-07"[^>]*selected/);          // Q-PP-12's gaps in the fixture content are ['PP-07']
-    expect(html).toContain('About question <bdi>Q-PP-12</bdi> (version 1)');
+    expect(html).toContain(`${FINDINGS_COPY.raise.aboutQuestion} <bdi>${questionText('Q-PP-12')}</bdi>`);
   });
 
   it('UX-14: a hand-made raise address naming a question of another stage fills nothing in', async () => {
     const p = await addProject(fx);
     const html = renderToStaticMarkup(<FindingsPageView data={await loadPage('reviewer', p.id, null, { stage: 'in-processing', questionId: 'Q-PP-12', versionId: null })} />);
-    expect(html).not.toContain('About question');
+    expect(html).not.toContain(FINDINGS_COPY.raise.aboutQuestion);
   });
 
   it('UX-16 UX-17 M-26: an assessor sees no accept form and the M-26 line; a viewer sees no form at all', async () => {
     const f = await team();
     const a = await renderFinding(f, 'assessor');
-    expect(a).not.toContain('Accept the risk</button>'); expect(a).toContain('Only owners and admins can accept a risk.');
+    expect(a).not.toContain(`${FINDINGS_COPY.acceptRisk.submit}</button>`); expect(a).toContain(onlyRolesCanText('risk:accept'));
     expect(await renderFinding(f, 'viewer')).not.toMatch(/<form|<button[^>]*>(Add a mitigation|Update this mitigation|Accept the risk)/);
   });
 
   it('UX-17 FR-FND-05: an admin sees the accept form with its sentence slot, an owner of an accepted risk sees keep-accepted, a reviewer neither', async () => {
     const f = await team({ by: 'owner' });
     const admin = await renderFinding(f, 'admin');
-    expect(admin).toContain('Accept the risk</button>'); expect(admin).toContain('Accepting a risk closes this finding without a mitigation.');
-    expect(admin).toContain('Ethics committee (outside role)');
+    expect(admin).toContain(`${FINDINGS_COPY.acceptRisk.submit}</button>`); expect(admin).toContain(FINDINGS_COPY.acceptRisk.intro);
+    expect(admin).toContain(FINDINGS_COPY.acceptRisk.outsideWho('Ethics committee'));
     expect(admin).toMatch(/<button[^>]*>Cancel<\/button>/);   // W-6: Accept the risk and Cancel
-    expect(await renderFinding(f, 'reviewer')).not.toContain('Accept the risk</button>');
+    expect(await renderFinding(f, 'reviewer')).not.toContain(`${FINDINGS_COPY.acceptRisk.submit}</button>`);
     const g = await team({ by: 'owner' });
     await addAcceptedRisk(fx, g.id, { lookAgainOn: '2020-01-01' });
-    expect(await renderFinding(g, 'owner')).toContain('Looked at again: keep accepted');
+    expect(await renderFinding(g, 'owner')).toContain(FINDINGS_COPY.acceptRisk.keepTrigger);
   });
 
   it('UX-29 FR-FND-07: withdraw appears only on a team finding, for its raiser, owners and admins', async () => {
@@ -246,27 +260,27 @@ describe('S-15 the finding page and the S-14 raise form (FR-FND-02, FR-FND-03, F
     sessionFor(stranger.members.owner.userId);
     await expect(renderPage('finding', { slug: fx.org.slug, id: f.projectId, findingId: f.id })).rejects.toMatchObject(NOT_FOUND);
     sessionFor(fx.members.viewer.userId);
-    expect(await renderPage('finding', { slug: fx.org.slug, id: f.projectId, findingId: f.id })).toContain('Mitigations');
+    expect(await renderPage('finding', { slug: fx.org.slug, id: f.projectId, findingId: f.id })).toContain(FINDINGS_COPY.finding.mitigations);
   });
 
   it('FR-SUG-03 UX-08 (screen): S-15 shows one Ways teams address this heading naming the risk area, the names and Show details, and no section without controls', async () => {
     const p = await addProject(fx);
     const withArea = await addFinding(fx, p.id, { stage: 'pre-processing', source: 'team', by: 'reviewer', riskArea: 'IP-05' });
     const html = await renderFinding({ ...withArea, projectId: p.id });
-    expect(html.match(/Ways teams address this/g)).toHaveLength(1);
-    expect(html).toContain('<h2 id="f-ways">Ways teams address this (for risk area IP-05)</h2>');   // SRS W-5, line 1996
+    expect(html.split(FINDINGS_COPY.finding.ways).length - 1).toBe(1);
+    expect(html).toContain(`<h2 id="f-ways">${FINDINGS_COPY.finding.ways}</h2>`);   // CONSOLIDATED 2 ("control"): the heading names no risk area
     expect(html).not.toMatch(/controls? for this question/);
     expect(html).toContain('<summary>Show details</summary>');
     for (const riskArea of [null, 'XX-99']) {
       const f = await addFinding(fx, p.id, { stage: 'pre-processing', source: 'team', by: 'reviewer', riskArea });
       const none = await renderFinding({ ...f, projectId: p.id });
-      expect(none, String(riskArea)).not.toContain('Ways teams address this');
+      expect(none, String(riskArea)).not.toContain(FINDINGS_COPY.finding.ways);
       expect(none, String(riskArea)).not.toContain('f-ways');
     }
   });
 
   it('FR-FND-03 (screen): a finding with no mitigation shows the 7.4.2 S-15 empty line', async () => {
-    expect(await renderFinding(await team())).toContain('No mitigations yet. Add one, or an owner or admin can accept the risk.');
+    expect(await renderFinding(await team())).toContain(FINDINGS_COPY.finding.noMitigations);
   });
 
   it('NFR-SEC-11: hostile titles, descriptions, reasons and notes render as text on S-15', async () => {
@@ -285,7 +299,7 @@ describe('S-15 the finding page and the S-14 raise form (FR-FND-02, FR-FND-03, F
     const f = await team({ project: archived, by: 'owner' });
     const html = await renderFinding(f, 'owner');
     expect(html).toContain('This project is archived. Nothing in it can be changed.');
-    expect(html).not.toMatch(/<form|<button|Close it:/);
+    expect(html).not.toMatch(new RegExp(`<form|<button|${FINDINGS_COPY.closeByDecision.label}`));
   });
 
   it('FR-FND-05: an accepted risk reads "Closed: risk accepted by <who> on <date>. Look at it again on <date>."', async () => {
@@ -293,18 +307,23 @@ describe('S-15 the finding page and the S-14 raise form (FR-FND-02, FR-FND-03, F
     const ar = await addAcceptedRisk(fx, f.id, { acceptedBy: { kind: 'outside_role', role: 'ethics_committee' }, lookAgainOn: '2027-03-01' });
     expect(ar.id).toBeTruthy();
     const html = await renderFinding(f, 'viewer');
-    expect(html).toMatch(/Closed: risk accepted by <bdi>Ethics committee \(no platform account\)<\/bdi> on \d{1,2} \w{3} 20\d\d\. Look at it again on 1 Mar 2027\./);
+    // A3: the header's label names the role alone; the history line keeps deciderLabel's record form (Task 17's words).
+    expect(html).toContain(`${FINDINGS_COPY.finding.acceptedHeaderStart}<bdi>${OUTSIDE_ROLE_LABELS.ethics_committee}</bdi>) on `);
+    expect(html).toContain(`${FINDINGS_COPY.mitigation.riskAcceptedBy} <bdi>${deciderLabel({ kind: 'outside_role', role: 'ethics_committee' }, '', 'record')}</bdi>`);
+    expect(html).toMatch(/<\/bdi>\) on \d{1,2} \w{3} 20\d\d\. To be checked again on 1 Mar 2027\./);
+    expect(html).toContain(FINDINGS_COPY.finding.checkAgainOn('1 Mar 2027'));
   });
 
   it('FR-FND-07 UX-29: a closed finding offers Reopen to an assessor, the M-26 line to a viewer, and nothing once withdrawn', async () => {
     const f = await team({ by: 'owner' });
     await addMitigationVersion(fx, f.id, { status: 'done', owner: 'assessor', dueDate: '2026-12-01' });
-    expect(await renderFinding(f, 'assessor')).toContain('Reopen this finding');
+    expect(await renderFinding(f, 'assessor')).toContain(FINDINGS_COPY.actions.reopenTrigger);
     const viewer = await renderFinding(f, 'viewer');
-    expect(viewer).not.toContain('Reopen this finding'); expect(viewer).toContain('Only owners, admins and assessors can reopen a finding.');
+    expect(viewer).not.toContain(FINDINGS_COPY.actions.reopenTrigger); expect(viewer).toContain(onlyRolesCanText('finding:reopen'));
     const w = await team({ by: 'owner' });
     await addFindingEvent(fx, w.id, { kind: 'withdrawn', by: 'owner' });
-    expect(await renderFinding(w, 'owner')).not.toMatch(/Reopen this finding|Withdraw<|Withdraw finding/);
+    const A = FINDINGS_COPY.actions;
+    expect(await renderFinding(w, 'owner')).not.toMatch(new RegExp(`${A.reopenTrigger}|${A.withdrawTrigger}|${A.withdrawAction}`));
   });
 
   it('FR-FND-06 (screen): a shortfall whose decision is now done shows the box with the Close it button', async () => {
@@ -313,10 +332,10 @@ describe('S-15 the finding page and the S-14 raise form (FR-FND-02, FR-FND-03, F
     const f = { ...(await addFinding(fx, p.id, { stage: 'pre-processing', source: 'shortfall', questionId: 'Q-PP-01', decisionVersionId: raising.id })), projectId: p.id };
     await addDecision(fx, p.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId, status: 'done' });
     const html = await renderFinding(f, 'assessor');
-    expect(html).toContain('The decision on Q-PP-01 is now Done (version 2). Close this finding with that decision?');
-    expect(html).toContain('Close it: decision changed');
-    expect(html).toContain('Raised automatically on');
-    expect(await renderFinding(f, 'reviewer')).not.toContain('Close it:');
+    expect(html).toContain(FINDINGS_COPY.finding.closeChanged('Done'));
+    expect(html).toContain(`>${FINDINGS_COPY.closeByDecision.label}</button>`);
+    expect(html).toContain(FINDINGS_COPY.finding.raisedByPlatformOn);
+    expect(await renderFinding(f, 'reviewer')).not.toContain(FINDINGS_COPY.closeByDecision.label);
   });
 
   it('FR-FND-02 FR-FND-08 (screen): a viewer gets S-14 without the raise form', async () => {
@@ -339,20 +358,29 @@ describe('S-15 mitigations on the page (FR-FUP-05, FR-FND-03, UX-06, NFR-A11Y-05
     const { f, left } = await twoMitigations();
     const data = { ...(await pageData('owner', f.projectId, f.id)), ownerCannotAct: [left.mitigationId] };
     const html = renderToStaticMarkup(<FindingPageView data={data} />);
-    expect(html).toMatch(new RegExp(`data-mitigation-id="${left.mitigationId}"[\\s\\S]*?<span class="[^"]*status-label--warning[^"]*">Owner cannot act</span>: reassign`));
-    expect(html.split('Owner cannot act</span>: reassign').length - 1).toBe(1);
+    // H3: a sentence in plain ink in the mitigation's card, not a status and not tinted.
+    const line = `<p>${FINDINGS_COPY.mitigation.cannotAct}</p>`;
+    const card = html.indexOf(`data-mitigation-id="${left.mitigationId}"`);
+    expect(card).toBeGreaterThanOrEqual(0);
+    expect(html.indexOf(line, card)).toBeGreaterThan(card);
+    expect(html.split(FINDINGS_COPY.mitigation.cannotAct).length - 1).toBe(1);
   });
 
   it('UX-06 (R12-16): on S-15 the overdue line and the owner-cannot-act mark are the only warning elements, and the mitigation status labels are neutral', async () => {
     const { f, left } = await twoMitigations();
     const data = { ...(await pageData('owner', f.projectId, f.id)), ownerCannotAct: [left.mitigationId] };
     const html = renderToStaticMarkup(<FindingPageView data={data} />);
-    const warn = [...html.matchAll(/class="[^"]*status-label--warning[^"]*"[^>]*>([^<]*)</g)].map((m) => m[1]);
-    expect(warn).toHaveLength(2);
-    expect(warn.sort()).toEqual(['Overdue', 'Owner cannot act']);                   // R13-7: exactly the label words UX-06 allowed the warning tint on, never the whole phrase
-    expect(html).toMatch(/>Overdue<\/span>: was due 1 Jan 2020/); expect(html).toMatch(/>Owner cannot act<\/span>: reassign/);
-    expect(html).toMatch(/class="[^"]*\bstatus-label\b(?![^"]*--warning)[^"]*"[^>]*>Planned</);
-    expect(html).toMatch(/class="[^"]*\bstatus-label\b(?![^"]*--warning)[^"]*"[^>]*>In progress</);
+    // Spec 7.1: the overdue red is the word "Overdue" alone, in its own span, never inside a status label; nothing on the
+    // page carries the warning tint; each state and status word is still a status-label.
+    const overdue = [...html.matchAll(/<span class="finding-overdue">([^<]*)<\/span>/g)].map((m) => m[1]);
+    expect(overdue).toEqual([FINDINGS_COPY.labels.overdue]);
+    expect(html).toContain(`<span class="finding-overdue">${FINDINGS_COPY.labels.overdue}</span>${FINDINGS_COPY.labels.wasDue('1 Jan 2020')}`);
+    expect(html).not.toMatch(/status-label--warning|badge--moderate/);
+    expect(html).not.toMatch(/class="[^"]*status-label[^"]*"[^>]*>[^<]*Overdue/);
+    expect(html).toContain(`<p>${FINDINGS_COPY.mitigation.cannotAct}</p>`);
+    expect(html).toMatch(/<bdi class="status-label">Open<\/bdi>/);
+    expect(html).toMatch(/class="status-label"[^>]*>Planned</);
+    expect(html).toMatch(/class="status-label"[^>]*>In progress</);
   });
 
   it('FR-FND-04 (screen): a done mitigation with no evidence reads "Done, no artefact: <note>", and History lists every version', async () => {
@@ -361,8 +389,52 @@ describe('S-15 mitigations on the page (FR-FUP-05, FR-FND-03, UX-06, NFR-A11Y-05
     const first = await addMitigationVersion(fx, f.id, { status: 'planned', owner: 'assessor', dueDate: '2026-12-01' });
     await addMitigationVersion(fx, f.id, { mitigationId: first.mitigationId, status: 'done', owner: 'assessor', dueDate: '2026-12-01' });
     const html = await renderFinding({ ...f, projectId: p.id }, 'owner');
-    expect(html).toMatch(/Done, no artefact: <bdi>Fixture closureNote \d+<\/bdi>/);
-    expect(html).toContain('History: 2 versions');
+    expect(html).toMatch(new RegExp(`${FINDINGS_COPY.mitigationForm.doneNothingAttached} <bdi>Fixture closureNote \\d+</bdi>`));
+    expect(html).toContain(FINDINGS_COPY.mitigation.historySummary(2));
+  });
+
+  // F1 (the owner's decision, 14 Nov 2026): a mitigation a "close by decision" wrote has a null text that was never erased;
+  // the card shows the sentence for its kind in the text's place. Only those two kinds; an erased text and an action's
+  // null text keep the empty line they had; an action's text is unchanged. The stored rows are not touched.
+  const firstLineOf = async (kind: 'decision_changed' | 'decision_withdrawn' | 'action', what: 'null' | 'erased' | 'text') => {
+    const p = await addProject(fx);
+    const f = await addFinding(fx, p.id, { stage: 'pre-processing', source: 'team', by: 'owner' });
+    const m = await addMitigationVersion(fx, f.id, { status: 'done', kind, owner: 'assessor', dueDate: '2026-12-01' });
+    const data = await pageData('owner', p.id, f.id);
+    const mit = data.mitigations[0];
+    if (what !== 'text') mit.current = { ...mit.current, what: null, erasedFields: what === 'erased' ? ['what'] : [] };
+    const html = renderToStaticMarkup(<FindingPageView data={data} />);
+    const card = html.indexOf(`data-mitigation-id="${m.mitigationId}"`);
+    expect(card).toBeGreaterThanOrEqual(0);
+    return html.slice(html.indexOf('>', card) + 1, html.indexOf('</p>', card) + 4);
+  };
+
+  it('F1: a decision_changed mitigation with a null, unerased text reads "Closed because the decision changed."', async () => {
+    expect(await firstLineOf('decision_changed', 'null')).toBe(`<p>${FINDINGS_COPY.mitigation.closedBecauseDecisionChanged}</p>`);
+  });
+
+  it('F1: a decision_withdrawn mitigation with a null, unerased text reads "Closed because the decision was withdrawn."', async () => {
+    expect(await firstLineOf('decision_withdrawn', 'null')).toBe(`<p>${FINDINGS_COPY.mitigation.closedBecauseDecisionWithdrawn}</p>`);
+  });
+
+  it('F1: an erased text keeps its empty line, and an action with a null text keeps the empty line it had', async () => {
+    expect(await firstLineOf('decision_changed', 'erased')).toBe('<p></p>');
+    expect(await firstLineOf('decision_withdrawn', 'erased')).toBe('<p></p>');
+    expect(await firstLineOf('action', 'null')).toBe('<p></p>');
+  });
+
+  it('B10 (ruling L5-10): the follows-a-control option reads "<name> (<id>)", as its sibling rows do', async () => {
+    const p = await addProject(fx);
+    const f = await addFinding(fx, p.id, { stage: 'pre-processing', source: 'team', by: 'owner' });
+    const d = await pageData('owner', p.id, f.id);
+    const html = renderToStaticMarkup(<MitigationForm orgSlug={d.orgSlug} projectId={d.projectId} findingId={f.id} base={null} owners={d.owners}
+      controls={[{ id: 'CTRL-01', name: 'Bias audit' }]} userId={d.viewer.userId} orgId={d.orgId} />);
+    expect(html).toMatch(/<option value="CTRL-01"[^>]*>Bias audit \(CTRL-01\)<\/option>/);
+  });
+
+  it('F1: an action with a text shows its text, not a decision sentence', async () => {
+    const line = await firstLineOf('action', 'text');
+    expect(line).toMatch(/^<p><bdi>Fixture what \d+<\/bdi><\/p>$/);
   });
 });
 
@@ -391,7 +463,7 @@ describe('C4 fixes: names in bdi, the accept form after an acceptance, separator
     const f = await addFinding(fx, p.id, { stage: 'pre-processing', source: 'team', by: 'owner' });
     await addAcceptedRisk(fx, f.id, { lookAgainOn: '2020-01-01' });
     const html = await renderFinding({ ...f, projectId: p.id }, 'admin');
-    expect(html).toContain('Looked at again: keep accepted');
+    expect(html).toContain(FINDINGS_COPY.acceptRisk.keepTrigger);
     expect(html).not.toMatch(/<textarea|Accepted by \(required\)|Why the risk is/);
   });
 
@@ -445,8 +517,10 @@ describe('C4 fixes: names in bdi, the accept form after an acceptance, separator
       const data = await pageData('owner', p.id, f.id);
       expect(data.ownerCannotAct).toEqual([m.mitigationId]);
       const html = renderToStaticMarkup(<FindingPageView data={data} />);
-      expect(html.split('Owner cannot act</span>: reassign').length - 1).toBe(1);
-      expect(html).toMatch(new RegExp(`data-mitigation-id="${m.mitigationId}"[\\s\\S]*?Owner cannot act`));
+      expect(html.split(FINDINGS_COPY.mitigation.cannotAct).length - 1).toBe(1);
+      const card = html.indexOf(`data-mitigation-id="${m.mitigationId}"`);
+      expect(card).toBeGreaterThanOrEqual(0);
+      expect(html.indexOf(FINDINGS_COPY.mitigation.cannotAct, card)).toBeGreaterThan(card);
       expect(other.mitigationId).not.toBe(m.mitigationId);
     } finally { spy.mockRestore(); }
   });

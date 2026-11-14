@@ -9,6 +9,7 @@ import type { FieldMap, FieldMapEntry, FieldSource, RecordPart, SourceStage } fr
 import type { SealManifestV1, SealRef } from '@/types/seal';
 import { loadContent, runningContent } from '@/lib/content/loader';
 import { controlsForArea } from '@/lib/content/suggestions';
+import { FINDINGS_COPY } from '@/lib/findings/copy';
 import { isOverdue } from '@/lib/followup/overdue';
 import { formatDay, formatDeclaredDate } from '@/lib/format/dates';
 import { DATASET_SIZE_WORDS, PERSONAL_DATA_WORDS } from '@/lib/project/labels';
@@ -357,10 +358,27 @@ function resolveFindings(source: Extract<FieldSource, { kind: 'findings' }>, sna
 
 const MITIGATION_STATUS_WORD: Readonly<Record<string, string>> = { planned: 'Planned', in_progress: 'In progress', done: 'Done', cancelled: 'Cancelled' };
 
+/** The owner's sentence for a done mitigation that closed its finding because of a decision (register row D-408). */
+const CLOSED_BY_DECISION: Readonly<Record<string, string>> = {
+  decision_changed: FINDINGS_COPY.mitigation.closedBecauseDecisionChanged,
+  decision_withdrawn: FINDINGS_COPY.mitigation.closedBecauseDecisionWithdrawn,
+};
+
+/**
+ * What a mitigation did, as a document prints it. A done mitigation of a decision kind that never had text and was never erased
+ * (`closeByDecision` writes it so) prints the owner's sentence (D-408); every other row goes through `textOf`, so any other null
+ * with no tombstone still throws.
+ */
+function mitigationWhat(m: MitigationVersionView, snap: DocumentSnapshot): string {
+  const sentence = Object.hasOwn(CLOSED_BY_DECISION, m.kind) ? CLOSED_BY_DECISION[m.kind] : undefined;
+  if (m.what === null && m.status === 'done' && sentence !== undefined && erasedAt(snap, 'mitigation_versions', m.id, 'what') === null) return sentence;
+  return textOf(snap, 'mitigation_versions', m.id, 'what', m.what);
+}
+
 /** One mitigation as a document prints it: what, owner, due date, then the control it follows. `sources` takes the rows the text came from. */
 function mitigationLines(m: MitigationVersionView, snap: DocumentSnapshot, sources: RowRef[]): string[] {
   sources.push({ sourceTable: 'mitigation_versions', sourceId: m.id, field: 'what' });
-  const lines = [textOf(snap, 'mitigation_versions', m.id, 'what', m.what), `Owner: ${m.owner.name}`, `Due: ${formatDay(m.dueDate)}`];
+  const lines = [mitigationWhat(m, snap), `Owner: ${m.owner.name}`, `Due: ${formatDay(m.dueDate)}`];
   if (m.followsControl !== null) {
     const control = running(snap).controls.get(m.followsControl);
     lines.push(`Control followed: ${m.followsControl}${control === undefined ? '' : ` ${control.name}`}`);

@@ -3,8 +3,13 @@
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { EvidenceBlock } from '@/components/evidence/EvidenceBlock';
-import { ErrorSummary, FailureText, Field, StatusLine } from '@/components/findings/FindingActions';
+import { DateBoxes, ErrorSummary, FailureText, Field, SelectBox, StatusLine } from '@/components/findings/FindingActions';
+import { Button } from '@/components/ui/Button';
+import { Checkbox } from '@/components/ui/Checkbox';
 import { LocalTime } from '@/components/ui/LocalTime';
+import { Select } from '@/components/ui/Select';
+import { FieldError as KitFieldError } from '@/components/ui/TextInput';
+import { FINDINGS_COPY } from '@/lib/findings/copy';
 import { openDraftStore, type DraftKey, type DraftStore } from '@/lib/client/drafts';
 import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafeWrite';
 import {
@@ -15,6 +20,9 @@ import {
 import { formatDay, formatTime } from '@/lib/format/dates';
 import type { FieldError, MitigationStatus } from '@/types/record';
 import type { MitigationVersionView, UserRef } from '@/types/api';
+import './Findings.css';
+
+const MF = FINDINGS_COPY.mitigationForm;
 
 export type MitigationFormProps = {
   orgSlug: string; projectId: string; findingId: string; base: MitigationVersionView | null;
@@ -25,7 +33,7 @@ export type MitigationFormProps = {
 };
 
 /**
- * A mitigation's status word (7.5.6): "Planned", "In progress", "Done", "Cancelled", and "Done, no artefact: <note>" for a done
+ * A mitigation's status word (7.5.6): "Planned", "In progress", "Done", "Cancelled", and "Done, nothing attached: <note>" for a done
  * version with no evidence (`noArtefactNote`). This is the one place the words are written: the mitigation form's radios use it
  * too (`plain`: no `status-label` class, because a radio's label is not a status shown in a list). "In progress" is exempt from the
  * claims lint (FR-PUB-01 flags "progress" in any form) by its entry in __tests__/lint/claim-allowlist.json: it is the status
@@ -38,14 +46,14 @@ export function MitigationStatusWord({ status, noArtefactNote = null, plain = fa
         : status === 'in_progress'
           ? 'In progress'
         : status === 'cancelled' ? 'Cancelled'
-        : noArtefactNote !== null ? <>Done, no artefact: <bdi>{noArtefactNote}</bdi></> : 'Done'}
+        : noArtefactNote !== null ? <>{MF.doneNothingAttached} <bdi>{noArtefactNote}</bdi></> : 'Done'}
     </span>
   );
 }
 
 /** "Not attached: a.pdf, b.pdf." with each file name inside <bdi>, so a name with direction controls cannot reorder the sentence (UX-30). */
 export function NotAttached({ names }: { names: readonly string[] }): ReactElement {
-  return <>Not attached: {names.map((n, i) => <span key={i}>{i > 0 ? ', ' : ''}<bdi>{n}</bdi></span>)}.</>;
+  return <>{MF.notAttached} {names.map((n, i) => <span key={i}>{i > 0 ? ', ' : ''}<bdi>{n}</bdi></span>)}.</>;
 }
 
 /** The saved line, with the files left out when the person chose "Save without it". */
@@ -67,26 +75,29 @@ export function MitigationConflictView(p: {
   const same = p.newer.enteredBy.userId === p.userId;
   const mineDue = dueDateOf(p.mine.due);
   return (
-    <section aria-labelledby={headingId} className="card">
-      <h3 id={headingId} tabIndex={-1} ref={headingRef}>Someone saved a newer version of this mitigation</h3>
+    <section aria-labelledby={headingId} className="finding-form">
+      <h3 id={headingId} tabIndex={-1} ref={headingRef}>{MF.conflictHeading}</h3>
       <p role="alert">
-        Version {p.newer.versionNumber} was saved by {same ? 'you' : <bdi>{p.newer.enteredBy.name}</bdi>} at <LocalTime at={p.newer.receivedAt} />
-        {same ? ', probably by an earlier attempt from this device or another device' : ' after you started'}. Review it, then save yours as version {p.newer.versionNumber + 1} or discard it.
+        {same
+          ? <>{`${MF.conflictYouSaved(p.newer.versionNumber)} `}<LocalTime at={p.newer.receivedAt} />{MF.conflictYouRest(p.newer.versionNumber + 1)}</>
+          : <><bdi>{p.newer.enteredBy.name}</bdi>{` ${MF.conflictOtherSaved(p.newer.versionNumber)} `}<LocalTime at={p.newer.receivedAt} />{MF.conflictOtherRest(p.newer.versionNumber + 1)}</>}
       </p>
-      <p>The newer version: {p.newer.what === null ? null : <><bdi>{p.newer.what}</bdi>, </>}owner <bdi>{p.newer.owner.name}</bdi>, due {formatDay(p.newer.dueDate)}.</p>
-      <p>Yours: <bdi>{p.mine.what}</bdi>{mineDue === null ? '' : `, due ${formatDay(mineDue)}`}.</p>
-      <div className="form-actions">
-        <button type="button" className="btn btn--primary" aria-disabled={p.busy ? true : undefined} onClick={p.onSaveMine}>Save mine as version {p.newer.versionNumber + 1}</button>
-        <button type="button" className="btn btn--secondary" onClick={p.onEditFirst}>Edit mine first</button>
-        <button type="button" className="btn btn--secondary" onClick={p.onDiscard}>Discard mine</button>
+      <p>{MF.newerVersion} {p.newer.what === null ? null : <><bdi>{p.newer.what}</bdi>, </>}{MF.assignedTo} <bdi>{p.newer.owner.name}</bdi>{MF.dueClause(formatDay(p.newer.dueDate))}</p>
+      <p>{MF.yours} <bdi>{p.mine.what}</bdi>{mineDue === null ? '' : MF.yoursDue(formatDay(mineDue))}.</p>
+      <div className="finding-actions">
+        <Button variant="primary" busy={p.busy} onClick={p.onSaveMine}>{MF.saveMine}</Button>
+        <Button variant="secondary" onClick={p.onEditFirst}>{MF.editMine}</Button>
+        <Button variant="secondary" onClick={p.onDiscard}>{MF.discardMine}</Button>
       </div>
-      {p.alert === null ? null : <p role="alert"><FailureText text={p.alert.text} name={p.alert.name} /></p>}
+      {p.alert === null ? null : <p role="alert" className="finding-alert"><FailureText text={p.alert.text} name={p.alert.name} /></p>}
       <StatusLine>{p.status}</StatusLine>
     </section>
   );
 }
 
 const STATUSES: readonly MitigationStatus[] = ['planned', 'in_progress', 'done', 'cancelled'];
+/** A textarea in the kit's class, with the kit's invalid border while its field has an error. */
+const textareaClass = (error: string | null): string => (error ? 'ui-textarea ui-textarea--invalid' : 'ui-textarea');
 const NO_RETRY: RetryState = { requestId: null, sentBody: null };
 
 /**
@@ -115,6 +126,11 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [evidenceKey, setEvidenceKey] = useState(0);
+  // Each answer's text is a new node (B2), so a Retry that fails the same way is announced again.
+  const [answers, setAnswers] = useState(0);
+  // A Retry answered by a refusal Retry cannot fix removes the focused Retry: focus goes to the alert (B1, ruling L5-4).
+  const [focusAlert, setFocusAlert] = useState(0);
+  const alertBox = useRef<HTMLParagraphElement>(null);
   const upload = useMemo(() => activeUpload(value.status, rawUpload), [value.status, rawUpload]);   // the evidence block is gone, with its uploads, unless the status is Done
   const store = useRef<DraftStore | null>(null);
   const retry = useRef<RetryState>(NO_RETRY);
@@ -150,14 +166,25 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
     if (kept !== null) setCannotKeep(!kept);
   }, [value, dirty, key, base, upload, conflict]);
 
+  useEffect(() => {
+    if (focusAlert > 0) alertBox.current?.focus();
+  }, [focusAlert]);
+
   const change = useCallback((patch: Partial<MitigationFormValue>) => {
     setValue((v) => ({ ...v, ...patch })); setDirty(true); setErrors([]); setHeld(false);
   }, []);
 
   const kept = cannotKeep ? KEPT_IN_FORM : KEPT_ON_DEVICE;
-  const post = async (body: Record<string, unknown>, usingBase: MitigationVersionView | null, left: string[]) => {
+  /**
+   * Sends route 6 or 7. A Retry keeps the alert, and so the Retry button itself, mounted while its own request is in
+   * flight (busy, with its focus), until the answer replaces the alert or, on a save, removes it (ruling X-4). While a
+   * Retry is in flight the alert says "Saving..." in place of the failure it answers, so no stale "Not saved" line sits
+   * on the page (B2); the answer is a new text node, so the same failure again is announced again.
+   */
+  const post = async (body: Record<string, unknown>, usingBase: MitigationVersionView | null, left: string[], retrying = false) => {
     if (inFlight.current) return;
-    inFlight.current = true; setBusy(true); setAlert(null); setStatus('Saving...');
+    inFlight.current = true; setBusy(true);
+    if (retrying) { setAlert({ text: MF.saving, retry: true }); setAnswers((n) => n + 1); } else { setAlert(null); setStatus(MF.saving); }
     try {
       const next = requestIdFor(retry.current, body);
       retry.current = next.state;
@@ -168,32 +195,36 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
       }
       const url = `/api/v1/orgs/${encodeURIComponent(p.orgSlug)}/projects/${encodeURIComponent(p.projectId)}/findings/${encodeURIComponent(p.findingId)}/mitigations${usingBase === null ? '' : `/${encodeURIComponent(usingBase.mitigationId)}`}`;
       const outcome = await sendWrite<MitigationVersionView>(url, 'POST', { requestId: next.requestId, ...body }, {
-        onSlow: () => setStatus(`Still saving. The connection is slow. ${kept}`),
+        onSlow: () => (retrying ? setAlert({ text: MF.slow(kept), retry: true }) : setStatus(MF.slow(kept))),
       });
       const failed = writeFailure(outcome, kept);
       if (failed === null && outcome.kind === 'saved') {
         store.current?.remove(key); retry.current = NO_RETRY; savePressedAt.current = null;
         const line = savedLine(mitigationSavedText(outcome.body, formatTime(outcome.body.receivedAt)), left);
-        setDirty(false); setConflict(null); setHeld(false); setValue(emptyMitigationValue(null)); setEvidenceKey((n) => n + 1);
+        setDirty(false); setConflict(null); setHeld(false); setAlert(null); setValue(emptyMitigationValue(null)); setEvidenceKey((n) => n + 1);
         setStatus(line);
         p.onSaved?.(line);
         router.refresh();
         return;
       }
       setStatus('');
+      if (retrying) setAlert(null);   // the answer to a Retry replaces the alert it was pressed in
       if (failed?.conflict?.code === 'base_version_moved' && isNewerVersion(failed.conflict.current)) {
         setConflict(failed.conflict.current);
       } else if (failed?.conflict?.code === 'base_version_moved') {
-        setAlert({ text: 'Someone saved a newer version first. Reload this page.', retry: false });
+        setAlert({ text: MF.newerFirst, retry: false }); setAnswers((n) => n + 1);
+        if (retrying) setFocusAlert((n) => n + 1);
       } else if (failed !== null && failed.fields.length > 0) {
         setConflict(null); setErrors(failed.fields); setAttempt((n) => n + 1);
       } else if (failed !== null) {
-        setAlert({ text: failed.text, retry: failed.retry, name: failed.nameInText });
+        setAlert({ text: failed.text, retry: failed.retry, name: failed.nameInText }); setAnswers((n) => n + 1);
+        if (retrying && !failed.retry) setFocusAlert((n) => n + 1);
       }
     } catch (e) {
       // A fault in this page's own code after a reply: the person must not be left on "Saving...".
       setStatus('');
-      setAlert({ text: `The reply could not be shown. Reload this page to see whether it saved. ${kept}`, retry: false });
+      setAlert({ text: MF.replyNotShown(kept), retry: false }); setAnswers((n) => n + 1);
+      if (retrying) setFocusAlert((n) => n + 1);
       console.error('MitigationForm: the reply to a save could not be shown', e);   // reported, not rethrown: every caller is a floating promise
     } finally {
       inFlight.current = false; setBusy(false);
@@ -212,7 +243,8 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
     void post(mitigationRequestBody(act.value, act.base), act.base, [...upload.uploading, ...upload.failed]);
   };
 
-  const save = (opts: { skipGate?: boolean } = {}) => {
+  const save = (opts: { skipGate?: boolean; retrying?: boolean } = {}) => {
+    if (inFlight.current) return;   // a press while a send is in flight changes nothing
     savePressedAt.current = new Date().toISOString();
     const problems = mitigationFormErrors(value, base);
     setErrors(problems); setAttempt((n) => n + 1);
@@ -220,7 +252,7 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
     const gate = saveGate(upload);
     if (!gate.send && opts.skipGate !== true) { setHeld(true); return; }
     setHeld(false);
-    void post(mitigationRequestBody(value, base), base, opts.skipGate === true ? [...upload.uploading, ...upload.failed] : []);
+    void post(mitigationRequestBody(value, base), base, opts.skipGate === true ? [...upload.uploading, ...upload.failed] : [], opts.retrying === true);
   };
 
   if (p.base?.status === 'cancelled') return null;   // a cancelled mitigation cannot be changed again (5.3 item 11)
@@ -241,87 +273,79 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
   }
 
   return (
-    <form method="post" onSubmit={(e) => { e.preventDefault(); save(); }} noValidate aria-labelledby={id('h')}>
-      <h3 id={id('h')}>{base === null ? 'Add a mitigation' : 'Update this mitigation'}</h3>
+    <form method="post" className="finding-form" onSubmit={(e) => { e.preventDefault(); save(); }} noValidate aria-labelledby={id('h')}>
+      <h3 id={id('h')}>{base === null ? MF.addHeading : MF.updateHeading}</h3>
       <ErrorSummary summary={formSummary('mitigation', errors.length, kept)} errors={errors} focusKey={attempt} prefix={`${idBase}-`} />
-      <fieldset>
-        <legend>Status (required)</legend>
+      <fieldset className="finding-radios">
+        <legend>{MF.status}</legend>
         {STATUSES.map((s) => (
-          <label key={s}>
-            <input type="radio" name={id('status')} value={s} checked={value.status === s} onChange={() => change({ status: s })} />{' '}
-            <MitigationStatusWord status={s} plain />{' '}
+          <label key={s} className="finding-radio">
+            <input type="radio" name={id('status')} value={s} checked={value.status === s} onChange={() => change({ status: s })} />
+            <MitigationStatusWord status={s} plain />
           </label>
         ))}
       </fieldset>
-      <Field id={id('ownerUserId')} label="Owner (required)" error={err('ownerUserId')} help="Only members who can update mitigations are listed (owners, admins, assessors)."
+      <Field id={id('ownerUserId')} label={MF.assignedLabel} error={err('ownerUserId')} help={MF.assignedHelp}
         render={(a) => (
-          <select {...a} name="ownerUserId" value={value.ownerUserId} onChange={(e) => change({ ownerUserId: e.target.value })}>
-            <option value="">Choose an owner</option>
-            {p.owners.map((o) => <option key={o.userId} value={o.userId}>{o.name}</option>)}
-          </select>
+          <SelectBox>
+            <select {...a} className={err('ownerUserId') ? 'ui-select ui-select--invalid' : 'ui-select'} name="ownerUserId" value={value.ownerUserId} onChange={(e) => change({ ownerUserId: e.target.value })}>
+              <option value="">{MF.chooseAssigned}</option>
+              {p.owners.map((o) => <option key={o.userId} value={o.userId}>{o.name}</option>)}
+            </select>
+          </SelectBox>
         )} />
-      <fieldset id={id('dueDate')} aria-describedby={err('dueDate') ? id('due-error') : undefined}>
-        <legend>Due date (required)</legend>
-        {([['day', 'Day', 2], ['month', 'Month', 2], ['year', 'Year', 4]] as const).map(([part, label, size]) => (
-          <span key={part}>
-            <label htmlFor={id(part)}>{label}</label>{' '}
-            <input id={id(part)} name={part} type="text" inputMode="numeric" size={size + 1} maxLength={size} value={value.due[part]}
-              aria-invalid={err('dueDate') ? true : undefined} onChange={(e) => change({ due: { ...value.due, [part]: e.target.value } })} />{' '}
-          </span>
-        ))}
-        {err('dueDate') ? <p id={id('due-error')} className="form-error">{err('dueDate')}</p> : null}
-      </fieldset>
+      <DateBoxes id={id('dueDate')} boxId={(part) => id(part)} legend={MF.dueLegend} value={value.due}
+        onChange={(part, v) => change({ due: { ...value.due, [part]: v } })} error={err('dueDate')} errorId={id('due-error')} />
       {later ? (
-        <Field id={id('changeNote')} label="Why the date changed (required when the due date moves later)" error={err('changeNote')}
-          render={(a) => <textarea {...a} name="changeNote" rows={2} value={value.changeNote} onChange={(e) => change({ changeNote: e.target.value })} />} />
+        <Field id={id('changeNote')} label={MF.changeNote} error={err('changeNote')}
+          render={(a) => <textarea {...a} className={textareaClass(err('changeNote'))} name="changeNote" rows={2} value={value.changeNote} onChange={(e) => change({ changeNote: e.target.value })} />} />
       ) : null}
-      <Field id={id('what')} label="What will be done" error={err('what')}
-        render={(a) => <textarea {...a} name="what" rows={3} value={value.what} onChange={(e) => change({ what: e.target.value })} />} />
-      <p className="text-muted">{characterCount(charCount(value.what), TEXT_MAX)}</p>
-      <Field id={id('followsControl')} label="Follows a control (optional)" error={err('followsControl')}
-        render={(a) => (
-          <select {...a} name="followsControl" value={value.followsControl ?? ''} onChange={(e) => change({ followsControl: e.target.value === '' ? null : e.target.value })}>
-            <option value="">No control</option>
-            {p.controls.map((c) => <option key={c.id} value={c.id}>{c.id} {c.name}</option>)}
-          </select>
-        )} />
+      <Field id={id('what')} label={MF.what} error={err('what')}
+        render={(a) => <textarea {...a} className={textareaClass(err('what'))} name="what" rows={3} value={value.what} onChange={(e) => change({ what: e.target.value })} />}
+        after={<p className="ui-count">{characterCount(charCount(value.what), TEXT_MAX)}</p>} />
+      <Select id={id('followsControl')} name="followsControl" label={MF.follows} error={err('followsControl') ?? undefined} value={value.followsControl ?? ''}
+        placeholder={MF.noControl} options={p.controls.map((c) => ({ value: c.id, label: FINDINGS_COPY.finding.namedId(c.name, c.id) }))}
+        onChange={(e) => change({ followsControl: e.target.value === '' ? null : e.target.value })} />
       {value.status === 'done' ? (
         <fieldset id={id('closureNote')} aria-describedby={err('closureNote') ? id('closure-error') : undefined}>
-          <legend>Closure evidence (required for Done)</legend>
+          <legend>{MF.evidenceLegend}</legend>
           <EvidenceBlock
             key={evidenceKey} orgSlug={p.orgSlug} projectId={p.projectId} initial={value.evidence} disabled={busy} notUploaded={notUploaded}
             onChange={() => {}} onItemsChange={(items) => { setValue((v) => (v.evidence.length === items.length && v.evidence.every((e, i) => e.id === items[i].id) ? v : { ...v, evidence: items })); }}
             onUploadState={(s) => { setUpload(s); }}
           />
-          <label>
-            <input type="checkbox" name="noArtefact" checked={value.noArtefact} onChange={(e) => change({ noArtefact: e.target.checked })} /> There is no artefact
-          </label>
+          <Checkbox id={id('noArtefact')} name="noArtefact" label={MF.noArtefact} checked={value.noArtefact} onChange={(e) => change({ noArtefact: e.target.checked })} />
           {value.noArtefact ? (
-            <Field id={id('closureNoteText')} label="Say why (required)" error={null}
-              render={(a) => <textarea {...a} name="closureNote" rows={2} value={value.closureNote} onChange={(e) => change({ closureNote: e.target.value })} />} />
+            <Field id={id('closureNoteText')} label={MF.noArtefactWhy} error={null}
+              render={(a) => <textarea {...a} className="ui-textarea" name="closureNote" rows={2} value={value.closureNote} onChange={(e) => change({ closureNote: e.target.value })} />} />
           ) : null}
-          {err('closureNote') ? <p id={id('closure-error')} className="form-error">{err('closureNote')}</p> : null}
+          {err('closureNote') ? <KitFieldError id={id('closure-error')} message={err('closureNote') as string} /> : null}
         </fieldset>
       ) : null}
       {value.status === 'cancelled' ? (
-        <Field id={id('cancelReason')} label="Why it is cancelled (required)" error={err('cancelReason')}
-          render={(a) => <textarea {...a} name="cancelReason" rows={2} value={value.cancelReason} onChange={(e) => change({ cancelReason: e.target.value })} />} />
+        <Field id={id('cancelReason')} label={MF.cancelReason} error={err('cancelReason')}
+          render={(a) => <textarea {...a} className={textareaClass(err('cancelReason'))} name="cancelReason" rows={2} value={value.cancelReason} onChange={(e) => change({ cancelReason: e.target.value })} />} />
       ) : null}
       {held && !gate.send ? (
-        <div role="alert">
-          <p>Waiting for {wait.map((n, i) => <span key={n + i}>{i > 0 ? ', ' : ''}<bdi>{n}</bdi></span>)} to finish uploading.</p>
-          <button type="button" className="btn btn--secondary" onClick={() => save({ skipGate: true })}>Save without it</button>{' '}
-          <button type="button" className="btn btn--secondary" onClick={() => setHeld(false)}>Cancel</button>
+        <div role="alert" className="finding-held">
+          <p>{MF.waitingFor} {wait.map((n, i) => <span key={n + i}>{i > 0 ? ', ' : ''}<bdi>{n}</bdi></span>)} {MF.toFinishUploading}</p>
+          <div className="finding-actions">
+            <Button variant="secondary" onClick={() => save({ skipGate: true })}>{MF.saveWithout}</Button>
+            <Button variant="secondary" onClick={() => setHeld(false)}>{MF.cancel}</Button>
+          </div>
         </div>
       ) : null}
-      <div className="form-actions">
-        <button type="submit" className="btn btn--primary" aria-disabled={busy ? true : undefined}>Save mitigation</button>
-        {p.onClose ? <button type="button" className="btn btn--secondary" disabled={busy} onClick={p.onClose}>Close</button> : null}
-        {dirty ? <span>Draft on this device, not saved yet</span> : null}
+      <div className="finding-actions">
+        <Button variant="primary" type="submit" busy={busy}>{MF.save}</Button>
+        {p.onClose ? <Button variant="secondary" disabled={busy} onClick={p.onClose}>{MF.close}</Button> : null}
+        {dirty ? <span className="finding-unsaved">{MF.unsaved}</span> : null}
       </div>
-      {cannotKeep ? <p>This browser cannot keep drafts. Save before leaving this page.</p> : null}
+      {cannotKeep ? <p>{MF.cannotKeep}</p> : null}
       {alert === null ? null : (
-        <p role="alert"><FailureText text={alert.text} name={alert.name} />{alert.retry ? <>{' '}<button type="button" className="btn btn--secondary btn--small" disabled={busy} onClick={() => save({ skipGate: upload.uploading.length + upload.failed.length > 0 })}>Retry</button></> : null}</p>
+        <p role="alert" className="finding-alert" ref={alertBox} tabIndex={-1}>
+          <span key={answers}><FailureText text={alert.text} name={alert.name} /></span>
+          {alert.retry ? <>{' '}<Button variant="secondary" size="compact" busy={busy} onClick={() => save({ skipGate: upload.uploading.length + upload.failed.length > 0, retrying: true })}>{MF.retry}</Button></> : null}
+        </p>
       )}
       <StatusLine>{status}</StatusLine>
     </form>
@@ -330,12 +354,28 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
 
 /**
  * The button that opens the form ("Add a mitigation" or "Update this mitigation") and keeps the saved line after the form
- * closes. A draft on this device opens the form at once, so nothing typed is lost. Used by `FindingPageView`.
+ * closes. A draft in this browser opens the form at once, so nothing typed is lost. Used by `FindingPageView`.
+ * The form replaces the button, so a press puts focus on the form's first field, the chosen status (ruling X-4: focus
+ * is never left on the page body); Close, and a save, put it back on the button (B1, ruling L5-4).
  */
 export function MitigationFormToggle(p: MitigationFormProps & { label: 'Add a mitigation' | 'Update this mitigation' }): ReactElement | null {
   const [open, setOpen] = useState(false);
   const [saved, setSaved] = useState<ReactNode>('');
   const trigger = useRef<HTMLButtonElement>(null);
+  const box = useRef<HTMLDivElement>(null);
+  const pressed = useRef(false);
+  // A save answers outside any event, so React may render the button after the next frame: focus goes to it in an
+  // effect, once it is there (B1, ruling L5-4). A frame callback found no button on a production build, two runs in three.
+  const [savedCount, setSavedCount] = useState(0);
+  useEffect(() => {
+    if (savedCount > 0) trigger.current?.focus();
+  }, [savedCount]);
+  useEffect(() => {
+    if (!open || !pressed.current) return;
+    pressed.current = false;
+    const form = box.current;
+    (form?.querySelector<HTMLElement>('input[type="radio"]:checked') ?? form?.querySelector<HTMLElement>('input, select, textarea'))?.focus();
+  }, [open]);
   useEffect(() => {
     const draft = openDraftStore()?.read(
       mitigationDraftTarget({ userId: p.userId, orgId: p.orgId, projectId: p.projectId, findingId: p.findingId, mitigationId: p.base?.mitigationId ?? null }),
@@ -346,11 +386,11 @@ export function MitigationFormToggle(p: MitigationFormProps & { label: 'Add a mi
   }, [p.userId, p.orgId, p.projectId, p.findingId, p.base?.mitigationId]);
   if (p.base?.status === 'cancelled') return null;
   return (
-    <div>
+    <div ref={box}>
       {open ? (
-        <MitigationForm {...p} onSaved={(t) => { setSaved(t); setOpen(false); }} onClose={() => { setOpen(false); requestAnimationFrame(() => trigger.current?.focus()); }} />
+        <MitigationForm {...p} onSaved={(t) => { setSaved(t); setOpen(false); setSavedCount((n) => n + 1); }} onClose={() => { setOpen(false); requestAnimationFrame(() => trigger.current?.focus()); }} />
       ) : (
-        <button type="button" ref={trigger} className="btn btn--secondary" onClick={() => setOpen(true)}>{p.label}</button>
+        <Button variant="secondary" ref={trigger} onClick={() => { pressed.current = true; setOpen(true); }}>{p.label}</Button>
       )}
       <StatusLine>{saved}</StatusLine>
     </div>

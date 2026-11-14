@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { CSSProperties, ReactElement } from 'react';
+import { ORG_COPY } from '@/lib/org/copy';
 
 /** A target of at least 24 by 24 px (WCAG 2.5.8, UX-34), as AccountRegions' links. */
 const TARGET: CSSProperties = { display: 'inline-block', minWidth: '24px', minHeight: '24px' };
@@ -13,5 +14,5 @@ export type TeamExportLinkProps = { orgSlug: string; canExport: boolean };
  */
 export function TeamExportLink({ orgSlug, canExport }: TeamExportLinkProps): ReactElement | null {
   if (!canExport) return null;
-  return <p><Link href={`/orgs/${orgSlug}/export`} style={TARGET}>Export the organisation&apos;s records</Link></p>;
+  return <p><Link href={`/orgs/${orgSlug}/export`} style={TARGET}>{ORG_COPY.organisation.download}</Link></p>;
 }

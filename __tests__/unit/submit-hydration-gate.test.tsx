@@ -79,3 +79,22 @@ describe('containers pass the hydration state to their view (NFR-SEC)', () => {
     });
   }
 });
+
+/**
+ * S-22's invite form names its fields (the kit's TextInput, Select and Checkbox require `name`), so a native submit
+ * before hydration would post a third person's email address and role to the page (plan 1A Task 19 fix round 1;
+ * security review M1). A server render is the pre-hydration state: the manager, rendered whole, must show its submit
+ * button disabled. The browser specs press Invite after hydration (e2e/members.spec.ts).
+ */
+describe('S-22 invite form waits for hydration (NFR-SEC)', () => {
+  it('NFR-SEC: S-22 MembersManager: rendered whole, the invite form is method="post" and its submit button is disabled', async () => {
+    const { default: MembersManager } = await import('@/app/(authenticated)/orgs/[slug]/settings/members/MembersManager');
+    const { memberRoleWords } = await import('@/lib/org/copy');
+    const html = renderToStaticMarkup(<MembersManager slug="acme" currentUserId="u-1" currentRole="owner" invitations={[]} roleWords={memberRoleWords()}
+      members={[{ userId: 'u-1', name: 'Nakato Sarah', role: 'owner', joinedAt: '2026-10-01T00:00:00.000Z', createdFromShownLink: false }]} />);
+    const form = /<form[^>]*>[\s\S]*?<\/form>/.exec(html)?.[0] ?? '';
+    expect(form).toContain('name="email"');
+    expect(formTag(form)).toMatch(/\smethod="post"/);
+    expect(submitTag(form)).toMatch(/\sdisabled(=""|\s|>)/);
+  });
+});

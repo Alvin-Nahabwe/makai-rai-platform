@@ -1,6 +1,8 @@
 import type { OrgRole } from '@prisma/client';
-import type { VocabularyEntry } from '@/lib/vocabulary/types';
-import { TERM_ADMIN, TERM_ASSESSOR, TERM_OWNER, TERM_REVIEWER, TERM_VIEWER } from '@/lib/vocabulary/terms';
+import type { DefinedEntry, VocabularyEntry } from '@/lib/vocabulary/types';
+import type { OrgEventAction } from '@/types/record';
+import type { MemberRoleWords } from '@/lib/org/members/copy';
+import { TERM_ADMIN, TERM_ASSESSOR, TERM_MAK_AI_ADMINISTRATOR, TERM_OWNER, TERM_REVIEWER, TERM_VIEWER } from '@/lib/vocabulary/terms';
 
 /**
  * The words of the organisation screens: their titles, the organisation chooser, the invitation page's own words, the role
@@ -12,7 +14,8 @@ export const ORG_COPY = Object.freeze({
     projects: 'Projects',
     newProject: 'New project',
     members: 'Members',
-    organisation: 'Organisation',
+    /** Also the page's heading (audit D OR54, OR55). */
+    organisation: 'Organisation details',
     invitation: 'Invitation',
   }),
   /** The organisation chooser, `/` (audit A 3 to 6). Server code only. */
@@ -21,6 +24,48 @@ export const ORG_COPY = Object.freeze({
     listLabel: 'Your organisations',
     emptyHeading: 'Welcome',
     emptyBody: "You are not a member of any organisation yet. Ask the Owner of your team's organisation to invite you. You will get the invitation by email.",
+  }),
+  /** S-22 Members, the page's own words (audit D OR3, OR4); the manager's are `MEMBERS_COPY` (lib/org/members/copy.ts). */
+  members: Object.freeze({
+    /** Shown only to a role that may invite (Owners and Admins). */
+    lead: 'Owners and Admins: invite people, change roles and remove members here.',
+    showMore: 'Show more',
+  }),
+  /** S-30 Organisation details (audit D OR56 to OR58, OR86; the legal plan's legal-name line). */
+  organisation: Object.freeze({
+    legalName: (legalName: string | null): string => `Legal name: ${legalName ?? 'Not recorded'}`,
+    /** The heading over the download link, shown only to a role that can download (ruling L5-12). */
+    downloadHeading: 'Download records',
+    download: "Download all of this organisation's records (every project)",
+  }),
+  /** S-30's changes table, `components/org/OrganisationEventsList.tsx` (audit D OR66 to OR85; answers Q4, Q10 and Q23). */
+  events: Object.freeze({
+    heading: 'Changes to members and the organisation',
+    none: 'No changes recorded yet.',
+    caption: 'Changes to this organisation and its members, newest first',
+    columns: Object.freeze({
+      when: 'When', who: 'Who', what: 'What', concerning: 'Member or invitation', reason: 'Reason or request reference', before: 'Before the change',
+    }),
+    /** The actor's role when it was the platform's administrator; a member's role is the vocabulary's word. */
+    administrator: TERM_MAK_AI_ADMINISTRATOR.term,
+    /** Each action in plain words (SRS 7.5). The new role of a role change is defect 43, stage 3's. */
+    actions: Object.freeze({
+      organisation_created: 'Created the organisation',
+      agreement_recorded: 'Recorded the organisation agreement',
+      owner_invitation_issued: 'Invited an Owner',
+      owner_invitation_resent: 'Resent the owner invitation',
+      owner_invitation_revoked: 'Cancelled the owner invitation',
+      organisation_name_corrected: 'Changed the organisation name',
+      organisation_legal_name_corrected: "Changed the institution's legal name",
+      account_deactivated: 'Deactivated an account',
+      account_reactivated: 'Reactivated an account',
+      member_invited: 'Invited a member',
+      member_joined: 'Joined the organisation',
+      member_role_changed: "Changed a member's role",
+      member_removed: 'Removed a member',
+      member_left: 'Left the organisation',
+    } satisfies Record<OrgEventAction, string>),
+    showOlder: 'Show older',
   }),
 });
 
@@ -43,7 +88,7 @@ export const INVITATION_PAGE_COPY = Object.freeze({
     `${inviter} ${INVITED_AS(roleWithArticle)}. This invitation ends on ${date}.`,
 });
 
-const ROLE_TERMS: Readonly<Record<OrgRole, VocabularyEntry>> = Object.freeze({
+const ROLE_TERMS: Readonly<Record<OrgRole, DefinedEntry>> = Object.freeze({
   owner: TERM_OWNER,
   admin: TERM_ADMIN,
   assessor: TERM_ASSESSOR,
@@ -63,6 +108,17 @@ export function roleTerm(role: OrgRole): VocabularyEntry {
 export function roleWithArticle(role: OrgRole): string {
   const term = roleTerm(role).term;
   return `${/^[AEIOU]/.test(term) ? 'an' : 'a'} ${term}`;
+}
+
+/**
+ * The five roles' words for S-22's client manager (ruling L5-9): each role's vocabulary entry (its word and the
+ * definition shown under the invite form's role choice) and its article form, read from the one map above and passed
+ * as a prop, so the client file imports neither this module nor the vocabulary. Words only: the screen decides nothing
+ * from it. Server code only.
+ */
+export function memberRoleWords(): MemberRoleWords {
+  const word = (role: OrgRole) => Object.freeze({ entry: ROLE_TERMS[role], withArticle: roleWithArticle(role) });
+  return Object.freeze({ owner: word('owner'), admin: word('admin'), assessor: word('assessor'), reviewer: word('reviewer'), viewer: word('viewer') });
 }
 
 /**

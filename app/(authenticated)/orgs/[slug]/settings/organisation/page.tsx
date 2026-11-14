@@ -10,6 +10,8 @@ import { TeamExportLink } from '@/components/org/TeamExportLink';
 import { ORG_COPY } from '@/lib/org/copy';
 import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
+import { PageHeader } from '@/components/ui/PageHeader';
+import '@/components/org/OrgDetails.css';
 
 const EVENTS_PAGE_SIZE = 50;
 
@@ -56,16 +58,10 @@ export default async function OrganisationSettingsPage({
 
   return (
     <div className="page-content">
-      <div className="page-header">
-        <div>
-          <h1>Organisation details</h1>
-          <p className="text-muted">{org.name}</p>
-          <p className="text-muted">{`Legal name: ${org.legalName ?? 'Not recorded'}`}</p>
-        </div>
-      </div>
+      <PageHeader title={ORG_COPY.titles.organisation} lead={<><p>{org.name}</p><p>{ORG_COPY.organisation.legalName(org.legalName)}</p></>} />
       {canExport && (
-        <section aria-labelledby="export-heading">
-          <h2 id="export-heading">Team export</h2>
+        <section aria-labelledby="export-heading" className="org-block">
+          <h2 id="export-heading">{ORG_COPY.organisation.downloadHeading}</h2>
           <TeamExportLink orgSlug={slug} canExport={canExport} />
         </section>
       )}
