@@ -21,6 +21,16 @@ export const QUESTION_COPY = Object.freeze({
     findings: 'Findings',
     suggestions: 'Ways teams address this',
   }),
+  /**
+   * Under the code line of a question the personal data answer switched off (workshop walk S3). The first sentence of
+   * FINDINGS_COPY.closeGate (lib/findings/copy.ts); question-frame.test.tsx holds the two together.
+   */
+  doesNotApply: 'Your team answered No to the personal data question, so this question does not apply.',
+  /** The way on at the foot of the main column, after the form (workshop walk S9; plan 1C DECISION_COPY.nextQuestion, lastQuestion; design spec 9.3). */
+  foot: Object.freeze({
+    next: (title: string): string => `Next question: ${title}`,
+    last: 'This is the last question in this stage.',
+  }),
   reworded: Object.freeze({
     line: "The description of good practice changed after your team's decision.",
     summary: 'See the earlier description',

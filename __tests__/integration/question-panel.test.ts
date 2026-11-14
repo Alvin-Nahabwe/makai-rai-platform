@@ -94,12 +94,45 @@ describe('loadQuestionPanel', () => {
     expect(d.position).toMatchObject({ index: 0, total: 24, previousId: null, nextId: 'Q-PP-02' });
   });
 
-  it('FR-CNT-04 (screen) owner question B13: with the gate at no, Q-PP-13 and Q-PP-14 leave the position; unanswered, they count', async () => {
+  it('FR-CNT-04 (screen) workshop walk S3: with the gate at no, the position still counts all 24 questions of the stage while Next skips Q-PP-13 and Q-PP-14; unanswered, they are next', async () => {
     expect((await panel('assessor', 'Q-PP-GATE-SENSITIVE')).position.nextId).toBe('Q-PP-13');
     await addDecision(fx, project.id, { stage: 'pre-processing', questionId: 'Q-PP-GATE-SENSITIVE', contentVersionId: c1.contentVersionId, scopeAnswer: 'no' });
     const d = await panel('assessor', 'Q-PP-GATE-SENSITIVE');
     expect(d.gateAnswer).toBe('no');
-    expect(d.position.total).toBe(22);
+    expect(d.position.total).toBe(24);
     expect(d.position.nextId).toBe('Q-PP-15');
+  });
+
+  it('workshop walk S3: with the gate at no, Q-PP-13 and Q-PP-14 hold their own places of 24, and Q-PP-13 leads to its nearest applying neighbours', async () => {
+    await addDecision(fx, project.id, { stage: 'pre-processing', questionId: 'Q-PP-GATE-SENSITIVE', contentVersionId: c1.contentVersionId, scopeAnswer: 'no' });
+    const { questionsInStage, runningContent } = await import('@/lib/content/loader');
+    const order = questionsInStage(runningContent(), 'pre-processing').map((q) => q.id);
+    const q13 = await panel('assessor', 'Q-PP-13');
+    const q14 = await panel('assessor', 'Q-PP-14');
+    expect(q13.gateAnswer).toBe('no');
+    expect(q13.position).toEqual({ index: order.indexOf('Q-PP-13'), total: 24, previousId: 'Q-PP-GATE-SENSITIVE', nextId: 'Q-PP-15' });
+    expect(q14.position).toEqual({ index: order.indexOf('Q-PP-14'), total: 24, previousId: 'Q-PP-GATE-SENSITIVE', nextId: 'Q-PP-15' });
+    expect(q13.position.index).not.toBe(q14.position.index);
+    // The applying neighbours skip the switched-off pair from either side.
+    expect((await panel('assessor', 'Q-PP-15')).position.previousId).toBe('Q-PP-GATE-SENSITIVE');
+  });
+
+  it('workshop walk S3: with the gate at no, the 24 questions of the stage take the places 0 to 23, none repeated, in the stage\'s order', async () => {
+    await addDecision(fx, project.id, { stage: 'pre-processing', questionId: 'Q-PP-GATE-SENSITIVE', contentVersionId: c1.contentVersionId, scopeAnswer: 'no' });
+    const { questionsInStage, runningContent } = await import('@/lib/content/loader');
+    const order = questionsInStage(runningContent(), 'pre-processing').map((q) => q.id);
+    expect(order).toHaveLength(24);
+    const positions = await Promise.all(order.map((id) => panel('assessor', id).then((d) => d.position)));
+    expect(positions.map((p) => p.index)).toEqual(order.map((_, i) => i));
+    expect(new Set(positions.map((p) => p.total))).toEqual(new Set([24]));
+  });
+
+  it('workshop walk S3: the position total is the number of rows All questions lists for the stage, gate at no or not', async () => {
+    const { loadStagePage } = await import('@/app/(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]/page');
+    const rows = async () => (await loadStagePage(ctxFor(fx, 'assessor'), fx.members.assessor.userId, project.id, 'pre-processing'))!.rows.length;
+    expect((await panel('assessor', 'Q-PP-13')).position.total).toBe(await rows());
+    await addDecision(fx, project.id, { stage: 'pre-processing', questionId: 'Q-PP-GATE-SENSITIVE', contentVersionId: c1.contentVersionId, scopeAnswer: 'no' });
+    expect((await panel('assessor', 'Q-PP-13')).position.total).toBe(await rows());
+    expect(await rows()).toBe(24);
   });
 });

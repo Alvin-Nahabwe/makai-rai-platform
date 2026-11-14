@@ -30,25 +30,30 @@ export async function loadNextStep(ctx: OrgContext, userId: string): Promise<Nex
   return stepIn(ctx, { projectId: project.id, projectName: project.name, stage: 'pre-processing' }, null, null);
 }
 
-/** The step in one project and stage: `nextStep` over the stage's applicable questions, in the question page's order. */
+/**
+ * The step in one project and stage: `nextStep` over the stage's applicable questions, in the question page's order. Its
+ * position is the question page's (`loadQuestionPanel`): the place among EVERY question of the stage, switched off by the
+ * personal data answer or not, of that many (workshop walk S3), so "Question n of m" reads the same on Home and on the page.
+ */
 async function stepIn(
   ctx: OrgContext, where: { projectId: string; projectName: string; stage: Stage }, after: string | null, lastSavedOn: UtcInstant | null,
 ): Promise<NextStep | null> {
   const { questions, open } = await withOrg(ctx, (tx) => stageInputs(tx, where.projectId, where.stage));
   const chosen = nextStep({ questions, open, after });
   if (chosen === null) return null;
-  const n = questions.findIndex((q) => q.id === chosen.questionId) + 1;
-  const question = questions[n - 1];
+  const inStage = questionsInStage(runningContent(), where.stage);
+  const n = inStage.findIndex((q) => q.id === chosen.questionId) + 1;
+  const question = inStage[n - 1];
   return {
     projectId: where.projectId, projectName: where.projectName, stage: where.stage, questionId: chosen.questionId,
-    questionText: question.text, position: { n, of: questions.length }, rule: chosen.rule, lastSavedOn,
+    questionText: question.text, position: { n, of: inStage.length }, rule: chosen.rule, lastSavedOn,
   };
 }
 
 /**
  * The two inputs `nextStep` takes for one stage, computed in ONE place so Home and the project page cannot differ (plan 1C
- * C11, ruling L5): the questions that apply under the gate's current scope answer, in question order (the list the question
- * page counts "Question n of m" over), and the open set from `openQuestionIds`. Reads the stage's current rows on `tx`.
+ * C11, ruling L5): the questions that apply under the gate's current scope answer, in question order (the list Previous
+ * and Next walk on the question page), and the open set from `openQuestionIds`. Reads the stage's current rows on `tx`.
  */
 async function stageInputs(tx: TenantTx, projectId: string, stage: Stage): Promise<StageInputs> {
   const content = runningContent();

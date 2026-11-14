@@ -4,6 +4,9 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import type { QuestionPanelData } from '@/lib/question/panel';
 import type { LoadedQuestion } from '@/types/content';
 import type { DecisionVersionView } from '@/types/api';
+import { runningContent } from '@/lib/content/loader';
+import { QUESTION_COPY } from '@/lib/question/copy';
+import { FINDINGS_COPY } from '@/lib/findings/copy';
 
 /**
  * The question page's frame (plan 1C Task 4, cut to slice 1; decision C1 cut): the running question is the page's
@@ -60,10 +63,10 @@ const strip = (html: string): string => html.match(/<nav aria-label="Questions i
 const stripTexts = (html: string): string[] => [...strip(html).matchAll(/<(?:a|span)\b[^>]*>([^<]*)<\/(?:a|span)>/g)].map((m) => m[1]);
 
 describe('the question page frame (slice 1)', () => {
-  it('C1 (cut): DOM order is the strip, the h1, current decision, seal note, the form, the guidance aside, the finding link, the suggestions', async () => {
+  it('C1 (cut): DOM order is the strip, the h1, current decision, seal note, the form, the way on, the guidance aside, the finding link, the suggestions', async () => {
     const html = await render();
     expect([...html.matchAll(/data-region="([a-z-]+)"/g)].map((m) => m[1]))
-      .toEqual(['question', 'current-decision', 'seal-note', 'answer-form', 'evidence-block', 'guidance', 'finding-link', 'suggestions']);
+      .toEqual(['question', 'current-decision', 'seal-note', 'answer-form', 'evidence-block', 'way-on', 'guidance', 'finding-link', 'suggestions']);
     const at = (s: string) => html.indexOf(s);
     expect(inOrder([
       at('<nav aria-label="Questions in this stage"'), at('<h1 id="question-heading"'), at('data-region="current-decision"'),
@@ -134,5 +137,76 @@ describe('the question page frame (slice 1)', () => {
     expect(stripTexts(first)).toEqual(['Question 1 of 22 in Pre-processing', 'Next question', 'All questions']);
     const last = await render({ ...PANEL, position: { index: 21, total: 22, previousId: 'Q-PP-21', nextId: null } });
     expect(stripTexts(last)).toEqual(['Previous question', 'Question 22 of 22 in Pre-processing', 'All questions']);
+  });
+});
+
+describe('three faults every recorder meets (workshop walk S3, S9)', () => {
+  const running = runningContent();
+  const Q13 = running.questions.get('Q-PP-13')!;
+  const Q01 = running.questions.get('Q-PP-01')!;
+  const stagePage = '/orgs/acme-health/projects/p1/stages/pre-processing';
+  const sentence = 'Your team answered No to the personal data question, so this question does not apply.';
+  /** Q-PP-13, a question with the personal data condition, with the gate at `gateAnswer`. */
+  const q13 = (gateAnswer: QuestionPanelData['gateAnswer']): QuestionPanelData =>
+    ({ ...PANEL, question: Q13, runningQuestion: Q13, gateAnswer, current: null, historyCount: 0, seals: [] });
+  const main = (html: string): string => html.match(/<div class="question-workspace__main">([\s\S]*?)<div class="question-workspace__guide">/)![1];
+
+  it('S3 R1: with the gate at No, a question with the condition says it does not apply, under the code line and before the form; the form is still rendered', async () => {
+    expect(Q13.condition, 'Q-PP-13 is conditional in the fixture').toBeDefined();
+    const html = await render(q13('no'));
+    expect(html.split(sentence)).toHaveLength(2);
+    expect(html).toMatch(new RegExp(`<p class="question-frame__code">Q-PP-13 · [^<]*</p><p data-does-not-apply="true">${sentence}</p>`));
+    const at = (s: string) => html.indexOf(s);
+    expect(inOrder([at('class="question-frame__code"'), at('data-does-not-apply'), at('data-region="current-decision"'), at('data-region="answer-form"')]), html).toBe(true);
+    expect(html).toContain('<section data-region="answer-form"');
+    expect(html).toMatch(/<form\b/);
+  });
+
+  it('S3 R1: the sentence is absent for a question without the condition, for an unanswered gate, and for Yes', async () => {
+    expect(Q01.condition).toBeUndefined();
+    expect(await render({ ...PANEL, question: Q01, runningQuestion: Q01, gateAnswer: 'no' })).not.toContain('data-does-not-apply');
+    for (const gate of [null, 'yes', 'not_sure'] as const) {
+      const html = await render(q13(gate));
+      expect(html, String(gate)).not.toContain('data-does-not-apply');
+      expect(html, String(gate)).not.toContain(sentence);
+    }
+  });
+
+  it('S3 R1: the finding page\'s closeGate starts with the question page\'s sentence, so the two cannot drift', () => {
+    expect(QUESTION_COPY.doesNotApply).toBe(sentence);
+    expect(FINDINGS_COPY.finding.closeGate.startsWith(QUESTION_COPY.doesNotApply)).toBe(true);
+  });
+
+  it('S9 R3: the foot is the last child of the main column, after the answer form: "Next question: {running text}" to that question, then All questions to the stage page', async () => {
+    const html = await render();
+    const m = main(html);
+    const foot = m.match(/<p class="question-foot" data-region="way-on">([\s\S]*?)<\/p><\/div>$/);
+    expect(foot, m.slice(-600)).not.toBeNull();
+    expect(m.indexOf('data-region="answer-form"')).toBeLessThan(m.indexOf('data-region="way-on"'));
+    const next = running.questions.get('Q-PP-05')!.text;
+    expect(foot![1]).toBe(`<a href="${stagePage}/questions/Q-PP-05">Next question: ${next}</a><a href="${stagePage}">All questions</a>`);
+    // One navigation landmark: the foot is a paragraph.
+    expect(html.match(/<nav\b/g)).toHaveLength(1);
+  });
+
+  it('S9 R3: on the last question of the stage the foot says so, with no next link, then All questions', async () => {
+    const html = await render({ ...PANEL, position: { index: 21, total: 22, previousId: 'Q-PP-21', nextId: null } });
+    const foot = main(html).match(/<p class="question-foot" data-region="way-on">([\s\S]*?)<\/p><\/div>$/)![1];
+    expect(foot).toBe(`<span>This is the last question in this stage.</span><a href="${stagePage}">All questions</a>`);
+  });
+
+  it('S9 R3: a nextId the running content lacks is a defect: the page throws naming it', async () => {
+    await expect(render({ ...PANEL, position: { index: 3, total: 22, previousId: 'Q-PP-03', nextId: 'Q-NOPE-99' } })).rejects.toThrow(/Q-NOPE-99/);
+  });
+
+  it('S9 R4: the Findings section and heading are absent when there is no open finding and the person cannot raise one; present otherwise', async () => {
+    const none = await render({ ...PANEL, openFinding: null, canRaiseFinding: false });
+    expect(none).not.toContain('data-region="finding-link"');
+    expect(none).not.toContain('s12-finding-link');
+    expect(none).not.toMatch(/<h2[^>]*>Findings<\/h2>/);
+    for (const over of [{ openFinding: { findingId: 'f1' }, canRaiseFinding: false }, { openFinding: null, canRaiseFinding: true }]) {
+      const html = await render({ ...PANEL, ...over });
+      expect(html).toContain('<section data-region="finding-link" aria-labelledby="s12-finding-link"><h2 id="s12-finding-link">Findings</h2>');
+    }
   });
 });
