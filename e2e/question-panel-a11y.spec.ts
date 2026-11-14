@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { failOnDialog } from './helpers/dialogs';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
@@ -33,6 +33,21 @@ async function tabTo(page: Page, what: string, match: (el: { tag: string; type: 
     if (match(el)) return;
   }
   throw new Error(`no element "${what}" took focus within 80 Tab presses`);
+}
+
+/**
+ * Scrolls the control's scrolling box (the document at 320 px, the main region at 1280) until the control's top is `top`
+ * px from the screen's top, as a person who scrolled there would leave it, and takes focus off whatever has it.
+ */
+async function placeAt(control: Locator, top: number): Promise<void> {
+  await control.evaluate((el, want) => {
+    let box: Element | null = el.parentElement;
+    while (box !== null && box !== document.body && !(/(auto|scroll)/.test(getComputedStyle(box).overflowY) && box.scrollHeight > box.clientHeight + 1)) box = box.parentElement;
+    const scroller = box === null || box === document.body ? document.scrollingElement! : box;
+    const top0 = scroller === document.scrollingElement ? 0 : scroller.getBoundingClientRect().top;
+    scroller.scrollTo({ top: scroller.scrollTop + el.getBoundingClientRect().top - top0 - want, behavior: 'instant' });
+    (document.activeElement as HTMLElement | null)?.blur();
+  }, top);
 }
 
 test('UX-42 NFR-A11Y-02: keyboard-only Next moves focus to the new question heading', async ({ page, baseURL }) => {
@@ -150,16 +165,8 @@ for (const [width, height] of [[320, 568], [1280, 800]] as const) test(`NFR-A11Y
     await page.goto(questionPath(projectId, questionId));
     await waitForQuestionPage(page);
     const choice = page.locator(`#${id}`);
-    // Scroll its scrolling box (the document at 320, the main region at 1280) until the choice is 80 px from the top,
-    // where a person who scrolled the group into view finds it; nothing has focus.
-    await choice.evaluate((el) => {
-      let box: Element | null = el.parentElement;
-      while (box !== null && box !== document.body && !(/(auto|scroll)/.test(getComputedStyle(box).overflowY) && box.scrollHeight > box.clientHeight + 1)) box = box.parentElement;
-      const scroller = box === null || box === document.body ? document.scrollingElement! : box;
-      const top0 = scroller === document.scrollingElement ? 0 : scroller.getBoundingClientRect().top;
-      scroller.scrollTo({ top: scroller.scrollTop + el.getBoundingClientRect().top - top0 - 80, behavior: 'instant' });
-      (document.activeElement as HTMLElement | null)?.blur();
-    });
+    // 80 px from the top, where a person who scrolled the group into view finds it; nothing has focus.
+    await placeAt(choice, 80);
     const topOf = () => choice.evaluate((el) => Math.round(el.getBoundingClientRect().top));
     const before = await topOf();
     expect(before, `${id} placed near the top`).toBeLessThan(120);
@@ -168,6 +175,29 @@ for (const [width, height] of [[320, 568], [1280, 800]] as const) test(`NFR-A11Y
     await expect(choice, `${questionId}: the press chose ${id}`).toBeChecked();
     await page.waitForTimeout(300);
     expect(await topOf(), `${questionId}: the page did not move under the press`).toBe(before);
+  }
+});
+
+for (const [width, height] of [[320, 568], [1280, 800]] as const) test(`NFR-A11Y-02 W-3: at ${width} by ${height}, after the summary's link to the status and a change of mind, a press on Done's words or on its circle at the top edge chooses it and does not move the page`, async ({ page, baseURL }) => {
+  await page.setViewportSize({ width, height });
+  await openQuestion(page, 'assessor', Q, baseURL!);
+  await page.locator('.decision-save-bar').getByRole('button', { name: 'Save decision' }).focus();
+  await page.keyboard.press('Enter');
+  // The room's likeliest path: a refused save, the link to the status, another choice, then back to Done.
+  await page.locator('[data-error-summary] a[href="#decision-status-done"]').click();
+  const done = page.locator('#decision-status-done');
+  await expect(done).toBeFocused();
+  const topOf = () => done.evaluate((el) => Math.round(el.getBoundingClientRect().top));
+  for (const [where, top] of [['its words', 104], ['its circle, clipped at the top edge', -8]] as const) {
+    await page.getByRole('radio', { name: 'Not yet', exact: true }).check();
+    await placeAt(done, top);
+    const before = await topOf();
+    const at = (await (top < 0 ? done : page.locator('label[for="decision-status-done"]')).boundingBox())!;
+    await page.mouse.click(at.x + at.width / 2, at.y + at.height / 2);
+    await expect(done, `a press on ${where} chose Done`).toBeChecked();
+    await page.waitForTimeout(300);
+    // A control clipped at the top edge is brought wholly into view: by the clipped 8 px, no more.
+    expect(Math.abs((await topOf()) - before), `a press on ${where} moved the page`).toBeLessThanOrEqual(top < 0 ? 8 : 0);
   }
 });
 

@@ -43,21 +43,6 @@
   color: var(--color-link);
 }
 
-/* M-11: an error summary link lands on its field's first control (DecisionFields FIELD_TARGET). The jump stops below the
-   top so the field's name and error show with it, not above the screen. Only on the control the address names
-   (:target): on every control, the form's scroll on focus moved the page under a press and the press was lost.
-   A group's first option or box sits under its legend, hint and error: at 320 px the most is 204 px (the date). A single
-   field has its label one line above it and its error below. In rem, so it grows with the text; never more than the room
-   above the fixed bar leaves for the control itself (3rem for an option or a box, 10rem for the reason box), so a short
-   screen does not land the control under the bar. */
-:is(#decision-status-done, #decision-scope-yes, #decision-option-0, #decision-day):target {
-  scroll-margin-block-start: max(0px, min(14rem, 100vh - var(--decision-save-bar-h, 8rem) - 3rem));
-}
-
-:is(#decision-reason-code, #decision-reason, #decision-decided-by):target {
-  scroll-margin-block-start: max(0px, min(3rem, 100vh - var(--decision-save-bar-h, 8rem) - 10rem));
-}
-
 /* The save bar takes focus after a send removed its focused control (D-398 item 4): a programmatic focus shows no
    :focus-visible ring, so the bar draws one, as the summary's first line does. */
 .decision-save-bar:focus {

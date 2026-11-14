@@ -200,13 +200,31 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
    * the screen's foot when the bar is in the flow). A press on a control that is in view must not move the page, or the
    * press ends on whatever slid under it and is lost.
    */
+  const footOfView = useCallback((): number => {
+    const bar = saveBar.current;
+    return bar !== null && getComputedStyle(bar).position === 'fixed' ? bar.getBoundingClientRect().top : document.documentElement.clientHeight;
+  }, []);
   const reveal = useCallback((el: Element): void => {
     const r = el.getBoundingClientRect();
-    const bar = saveBar.current;
-    const foot = bar !== null && getComputedStyle(bar).position === 'fixed' ? bar.getBoundingClientRect().top : document.documentElement.clientHeight;
-    if (r.top >= 0 && r.bottom <= foot) return;
+    if (r.top >= 0 && r.bottom <= footOfView()) return;
     el.scrollIntoView?.({ block: 'nearest', behavior: 'instant' });
-  }, []);
+  }, [footOfView]);
+
+  /**
+   * M-11: a summary link brings its field into view, the field's group (legend or label, hint and error) from its top,
+   * or, when the group does not fit above the bar, the control itself just above it; then focuses the control without a
+   * scroll of its own. Nothing is left in the address: a fragment would keep the control the :target, and a later press
+   * on it would scroll by the target's margin and be lost (review T1). The link keeps its href for a page without
+   * JavaScript. False when the control is not on the page, so the browser follows the href.
+   */
+  const land = useCallback((id: string): boolean => {
+    const el = document.getElementById(id);
+    if (el === null) return false;
+    (el.closest('fieldset, .ui-field') ?? el).scrollIntoView({ block: 'start', behavior: 'instant' });
+    if (el.getBoundingClientRect().bottom > footOfView()) el.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+    el.focus({ preventScroll: true });
+    return true;
+  }, [footOfView]);
   useEffect(() => {
     const bar = saveBar.current;
     if (bar === null || typeof ResizeObserver === 'undefined') return;
@@ -425,7 +443,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
               {errors.map((e) => (
                 <li key={`${e.field}:${e.message}`}>
                   {FIELD_TARGET[e.field] !== undefined
-                    ? <a href={`#${FIELD_TARGET[e.field]}`}>{`${FIELD_LABEL[e.field]}: ${e.message}`}</a>
+                    ? <a href={`#${FIELD_TARGET[e.field]}`} onClick={(ev) => { if (land(FIELD_TARGET[e.field])) ev.preventDefault(); }}>{`${FIELD_LABEL[e.field]}: ${e.message}`}</a>
                     : e.message}
                 </li>
               ))}
