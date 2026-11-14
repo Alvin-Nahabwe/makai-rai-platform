@@ -139,7 +139,7 @@ test('a Viewer sees the same frame with no form controls', async ({ page, baseUR
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(LONGEST_FIXTURE);
   await expect(page.locator('#question-heading + .question-frame__code')).toHaveText(/^Q-PP-01 · /);
   await expect(page.getByRole('complementary', { name: QUESTION_COPY.content.goodPractice })).toBeVisible();
-  await expect(page.getByRole('link', { name: QUESTION_COPY.nav.allQuestions, exact: true })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: QUESTION_COPY.nav.label }).getByRole('link', { name: QUESTION_COPY.nav.allQuestions, exact: true })).toBeVisible();
   const answer = form(page);
   await expect(answer.locator('[data-permission-note]')).toBeVisible();
   await expect(answer.locator('input, select, textarea, button')).toHaveCount(0);
