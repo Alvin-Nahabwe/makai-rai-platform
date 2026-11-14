@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { failOnDialog } from './helpers/dialogs';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
@@ -40,6 +40,21 @@ async function tabTo(page: Page, what: string, match: (el: { tag: string; type: 
   throw new Error(`no element "${what}" took focus within 80 Tab presses`);
 }
 
+/**
+ * Scrolls the control's scrolling box (the document at 320 px, the main region at 1280) until the control's top is `top`
+ * px from the screen's top, as a person who scrolled there would leave it, and takes focus off whatever has it.
+ */
+async function placeAt(control: Locator, top: number): Promise<void> {
+  await control.evaluate((el, want) => {
+    let box: Element | null = el.parentElement;
+    while (box !== null && box !== document.body && !(/(auto|scroll)/.test(getComputedStyle(box).overflowY) && box.scrollHeight > box.clientHeight + 1)) box = box.parentElement;
+    const scroller = box === null || box === document.body ? document.scrollingElement! : box;
+    const top0 = scroller === document.scrollingElement ? 0 : scroller.getBoundingClientRect().top;
+    scroller.scrollTo({ top: scroller.scrollTop + el.getBoundingClientRect().top - top0 - want, behavior: 'instant' });
+    (document.activeElement as HTMLElement | null)?.blur();
+  }, top);
+}
+
 test('UX-42 NFR-A11Y-02: keyboard-only Next moves focus to the new question heading', async ({ page, baseURL }) => {
   await openQuestion(page, 'assessor', Q, baseURL!);
   await page.getByRole('link', { name: 'Next question', exact: true }).focus();
@@ -72,8 +87,8 @@ test('NFR-A11Y-02: J-05 by keyboard alone: status, reason, decided by, Today, Sa
   await expect(saveStatus(page)).toHaveText(/^Saved at .+ as version 1\./);
 });
 
-test('SPEC-2 W-3 NFR-A11Y-02 SC 2.4.11: at 320 px Save and its status sit in a bar fixed to the bottom, and no field reached by keyboard hides behind it', async ({ page, baseURL }) => {
-  await page.setViewportSize({ width: 320, height: 800 });
+for (const height of [800, 568]) test(`SPEC-2 W-3 NFR-A11Y-02 SC 2.4.11: at 320 px Save and its status sit in a bar fixed to the bottom, and no field reached by keyboard hides behind it${height === 800 ? '' : ' (320 by 568)'}`, async ({ page, baseURL }) => {
+  await page.setViewportSize({ width: 320, height });
   await openQuestion(page, 'assessor', Q, baseURL!);
   const bar = page.locator('.decision-save-bar');
   expect(await bar.evaluate((el) => getComputedStyle(el).position)).toBe('fixed');
@@ -93,7 +108,8 @@ test('SPEC-2 W-3 NFR-A11Y-02 SC 2.4.11: at 320 px Save and its status sit in a b
   for (const [what, match] of stops) {
     await tabTo(page, what, match);
     await expectFocusVisibleAndUncovered(page);
-    if (what === 'the first status radio') await page.keyboard.press('Space');
+    // The first edit adds the unsaved line to the bar, which grows over the field that has focus: it must be scrolled clear.
+    if (what === 'the first status radio') { await page.keyboard.press('Space'); await expectFocusVisibleAndUncovered(page); }
     if (what === 'the reason') await page.keyboard.type('Compared a rule-based alert with the model, at 320 px.');
     if (what === 'Today') await page.keyboard.press('Enter');
   }
@@ -102,6 +118,95 @@ test('SPEC-2 W-3 NFR-A11Y-02 SC 2.4.11: at 320 px Save and its status sit in a b
   // At a wide width the bar is part of the page, not fixed (W-3 wide).
   await page.setViewportSize({ width: 1280, height: 800 });
   expect(await bar.evaluate((el) => getComputedStyle(el).position)).not.toBe('fixed');
+});
+
+for (const height of [800, 568]) test(`SPEC-2 W-3 NFR-A11Y-02 SC 2.4.11: at 320 px a refused save shows its whole summary above the fixed bar, and each of its links lands with the field's label and error in view${height === 800 ? '' : ' (320 by 568, a status chosen first)'}`, async ({ page, baseURL }) => {
+  await page.setViewportSize({ width: 320, height });
+  await openQuestion(page, 'assessor', Q, baseURL!);
+  // The likeliest refusal in the room: a status chosen, the rest left. The edit grows the bar with the unsaved line.
+  if (height !== 800) await page.getByRole('radio', { name: 'Not yet', exact: true }).check();
+  await page.locator('.decision-save-bar').getByRole('button', { name: 'Save decision' }).focus();
+  await page.keyboard.press('Enter');
+  const summary = page.locator('[data-error-summary]');
+  await expect(summary.locator('> p')).toBeFocused();
+  /**
+   * Whether the summary (no href) or the field a link names (the control itself, its group's legend or label, and its
+   * error) lies wholly between the screen's top and the bar's top: "clear", or what is not.
+   */
+  const placed = (href?: string) => page.evaluate(async (id) => {
+    // Read at rest: a link's jump scrolls smoothly, and a box passing through view on the way does not count.
+    const y = window.scrollY;
+    await new Promise((done) => setTimeout(done, 150));
+    if (window.scrollY !== y) return 'still scrolling';
+    const barTop = document.querySelector('.decision-save-bar')!.getBoundingClientRect().top;
+    let boxes: Array<[string, Element | null]>;
+    if (id === undefined) boxes = [['the summary', document.querySelector('[data-error-summary]')]];
+    else {
+      const group = document.getElementById(id.slice(1))?.closest('fieldset, .ui-field') ?? null;
+      boxes = [['the control', document.getElementById(id.slice(1))], ['its label', group?.querySelector(':scope > legend, :scope > label') ?? null], ['its error', group?.querySelector('[id$="-error"]') ?? null]];
+    }
+    const bad = boxes.map(([what, e]) => {
+      if (e === null) return `${what} missing`;
+      const r = e.getBoundingClientRect();
+      return r.top >= -0.5 && r.bottom <= barTop + 0.5 ? '' : `${what} at ${Math.round(r.top)}-${Math.round(r.bottom)}, bar at ${Math.round(barTop)}`;
+    }).filter(Boolean);
+    return bad.length === 0 ? 'clear' : bad.join('; ');
+  }, href);
+  // The whole summary with its list, not its first line alone, sits above the bar (the page scrolls smoothly: polled).
+  await expect.poll(() => placed()).toBe('clear');
+  const hrefs = await summary.locator('a').evaluateAll((as) => as.map((a) => a.getAttribute('href')!));
+  expect(hrefs.length).toBeGreaterThan(height === 800 ? 2 : 1);
+  for (const href of hrefs) {
+    await summary.locator(`a[href="${href}"]`).click();
+    await expect(page.locator(href)).toBeFocused();
+    // Not the box alone at the top edge with the field's name and error above the screen.
+    await expect.poll(() => placed(href), { message: href }).toBe('clear');
+    await summary.locator('> p').focus();
+  }
+});
+
+for (const [width, height] of [[320, 568], [1280, 800]] as const) test(`NFR-A11Y-02 W-3: at ${width} by ${height} a press on a question's first choice near the top of the screen chooses it and does not move the page`, async ({ page, baseURL }) => {
+  await page.setViewportSize({ width, height });
+  const projectId = await newProject(baseURL!);
+  await actAsSeat(page, 'assessor');
+  for (const [questionId, id] of [[Q, 'decision-status-done'], ['Q-PP-GATE-SENSITIVE', 'decision-scope-yes']] as const) {
+    await page.goto(questionPath(projectId, questionId));
+    await waitForQuestionPage(page);
+    const choice = page.locator(`#${id}`);
+    // 80 px from the top, where a person who scrolled the group into view finds it; nothing has focus.
+    await placeAt(choice, 80);
+    const topOf = () => choice.evaluate((el) => Math.round(el.getBoundingClientRect().top));
+    const before = await topOf();
+    expect(before, `${id} placed near the top`).toBeLessThan(120);
+    const at = (await choice.boundingBox())!;
+    await page.mouse.click(at.x + at.width / 2, at.y + at.height / 2);
+    await expect(choice, `${questionId}: the press chose ${id}`).toBeChecked();
+    await page.waitForTimeout(300);
+    expect(await topOf(), `${questionId}: the page did not move under the press`).toBe(before);
+  }
+});
+
+for (const [width, height] of [[320, 568], [1280, 800]] as const) test(`NFR-A11Y-02 W-3: at ${width} by ${height}, after the summary's link to the status and a change of mind, a press on Done's words or on its circle at the top edge chooses it and does not move the page`, async ({ page, baseURL }) => {
+  await page.setViewportSize({ width, height });
+  await openQuestion(page, 'assessor', Q, baseURL!);
+  await page.locator('.decision-save-bar').getByRole('button', { name: 'Save decision' }).focus();
+  await page.keyboard.press('Enter');
+  // The room's likeliest path: a refused save, the link to the status, another choice, then back to Done.
+  await page.locator('[data-error-summary] a[href="#decision-status-done"]').click();
+  const done = page.locator('#decision-status-done');
+  await expect(done).toBeFocused();
+  const topOf = () => done.evaluate((el) => Math.round(el.getBoundingClientRect().top));
+  for (const [where, top] of [['its words', 104], ['its circle, clipped at the top edge', -8]] as const) {
+    await page.getByRole('radio', { name: 'Not yet', exact: true }).check();
+    await placeAt(done, top);
+    const before = await topOf();
+    const at = (await (top < 0 ? done : page.locator('label[for="decision-status-done"]')).boundingBox())!;
+    await page.mouse.click(at.x + at.width / 2, at.y + at.height / 2);
+    await expect(done, `a press on ${where} chose Done`).toBeChecked();
+    await page.waitForTimeout(300);
+    // A control clipped at the top edge is brought wholly into view: by the clipped 8 px, no more.
+    expect(Math.abs((await topOf()) - before), `a press on ${where} moved the page`).toBeLessThanOrEqual(top < 0 ? 8 : 0);
+  }
 });
 
 test('NFR-A11Y-04 NFR-A11Y-05: targets of 24 px, no horizontal scroll at 320 px, and no serious axe violation in either theme at 1280 and 360', async ({ page, baseURL }) => {

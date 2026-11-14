@@ -8,7 +8,7 @@ import type { LoadedContent, LoadedQuestion } from '@/types/content';
 import type { FieldMap, FieldMapEntry, FieldSource, RecordPart, SourceStage } from '@/types/documents';
 import type { SealManifestV1, SealRef } from '@/types/seal';
 import { loadContent, runningContent } from '@/lib/content/loader';
-import { controlsForArea } from '@/lib/content/suggestions';
+import { controlsForArea, controlsForQuestion, questionAreaIds, type ControlGroup } from '@/lib/content/suggestions';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
 import { isOverdue } from '@/lib/followup/overdue';
 import { formatDay, formatDeclaredDate } from '@/lib/format/dates';
@@ -647,15 +647,28 @@ function notApplicableList(snap: DocumentSnapshot): ResolvedPart {
   });
 }
 
-/** MP-04: the controls the framework suggests for the risk area of each open finding, read from the content the seal was made on. */
+/**
+ * MP-04: the controls the framework suggests for the risk areas of each open finding, read from the content the seal was made on
+ * (SRS 10.3.4). A finding with a risk area lists that area's controls. One without, but on a question (every finding raised from a
+ * decision, FR-FND-01), lists its question's risk areas and the controls they reach: the set its question page suggests, every
+ * control once (FR-SUG-01; workshop walk 2, N3). A finding with neither is not listed.
+ */
 function mappedControls(snap: DocumentSnapshot): ResolvedPart {
   const s = snap.chosen;
   const c = loadContent(s.manifest.content.semver);
   const sources: RowRef[] = [];
-  const blocks = s.findings.filter(({ finding }) => finding.state === 'open' && finding.riskArea !== null).map(({ finding }) => {
+  const listed = ({ finding }: SealedFinding) => finding.state === 'open' && (finding.riskArea !== null || finding.questionId !== null);
+  const blocks = s.findings.filter(listed).map(({ finding }) => {
     sources.push({ sourceTable: 'findings', sourceId: finding.id, field: 'title' });
-    const controls = controlsForArea(c, finding.riskArea as string).flatMap((g) => g.controls.map((x) => `${x.control.id} ${x.control.name}`));
-    return [findingTitle(finding, snap), `Risk area: ${areaText(snap, finding.riskArea)}`, `Controls: ${controls.length === 0 ? NONE : controls.join('; ')}`];
+    const names = (groups: ControlGroup[]) => groups.flatMap((g) => g.controls.map((x) => `${x.control.id} ${x.control.name}`));
+    const listOf = (xs: string[]) => (xs.length === 0 ? NONE : xs.join('; '));
+    if (finding.riskArea !== null) {
+      return [findingTitle(finding, snap), `Risk area: ${areaText(snap, finding.riskArea)}`, `Controls: ${listOf(names(controlsForArea(c, finding.riskArea)))}`];
+    }
+    const q = finding.questionId as string;
+    const { first, rest } = controlsForQuestion(c, q, []);
+    const areas = questionAreaIds(c, q).map((a) => areaText(snap, a));
+    return [findingTitle(finding, snap), `Risk areas of question ${q}: ${listOf(areas)}`, `Controls: ${listOf(names([...first, ...rest]))}`];
   });
   const text = blocks.length === 0 ? NONE : blocks.map((b, i) => [`${i + 1}. ${b[0]}`, ...b.slice(1)].join('\n')).join('\n\n');
   return part({ text, sources, sealIds: [s.seal.sealId] });

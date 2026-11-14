@@ -48,6 +48,17 @@ function group(
   return groups;
 }
 
+/**
+ * The risk areas a question reaches through the mapping: its `gaps`, then the areas of its options' `optionGapMap`, each once.
+ * None for the gate or a question the content lacks (as `controlsForQuestion` shows none for them).
+ */
+export function questionAreaIds(c: LoadedContent, questionId: string): string[] {
+  const q = c.questions.get(questionId);
+  if (!q || q.type === 'gate') return [];
+  const map = q.optionGapMap ?? {};
+  return unique([...q.gaps, ...(q.options ?? []).flatMap((o) => (map[o] ?? []).map(areaOfEntry))]);
+}
+
 export function controlsForQuestion(
   c: LoadedContent, questionId: string, tickedOptions: readonly string[],
 ): { first: ControlGroup[]; rest: ControlGroup[] } {
@@ -57,7 +68,7 @@ export function controlsForQuestion(
   const options = q.options ?? [];
   const map = q.optionGapMap ?? {};
   const areasOfOption = (o: string): string[] => (map[o] ?? []).map(areaOfEntry);
-  const all = unique([...q.gaps, ...options.flatMap(areasOfOption)]);
+  const all = questionAreaIds(c, questionId);
 
   let firstIds = all;
   let restIds: string[] = [];

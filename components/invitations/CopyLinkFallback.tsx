@@ -27,7 +27,9 @@ export interface CopyLinkFallbackProps {
  * copy result: a live region inserted together with its text is often not announced (4.1.3). A copy result belongs to
  * one link: it is remembered with the link it was made for, so a later invitation never shows an earlier "copied".
  */
-export function CopyLinkFallback(p: CopyLinkFallbackProps): ReactElement {
+export function CopyLinkFallback({ ref, ...p }: CopyLinkFallbackProps): ReactElement {
+  // The ref is taken out of the props so the rest are plain values: reading a props object that holds a ref during
+  // render is what react-hooks/refs refuses.
   const fieldId = useId();
   const [copy, setCopy] = useState<{ url: string; result: 'done' | 'blocked' } | null>(null);
   async function copyLink(): Promise<void> {
@@ -44,7 +46,7 @@ export function CopyLinkFallback(p: CopyLinkFallbackProps): ReactElement {
     : copy.result === 'done' ? COPY_LINK_COPY.copied
     : COPY_LINK_COPY.copyFailed;
   return (
-    <div className="card" ref={p.ref}>
+    <div className="card" ref={ref}>
       <StatusRegion message={message} />
       {!p.emailSent && !p.noticeShownElsewhere && <p>{COPY_LINK_COPY.emailFailed}</p>}
       {p.acceptUrl !== null && (

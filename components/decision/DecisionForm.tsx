@@ -14,6 +14,7 @@ import { openDraftStore, type DraftStore, type StoredDraft } from '@/lib/client/
 import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafeWrite';
 import { OUTSIDE_ROLE_LABELS, problemSummary } from '@/lib/decision/copy';
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
+import { EVIDENCE_COPY } from '@/lib/evidence/copy';
 import { formatTime } from '@/lib/format/dates';
 import { draftErrors, draftFromCurrent, draftHeldForGate, draftKeyFor, isDecision, isDraftValue, keptEvidenceLine, toSaveBody, type DecisionDraft } from '@/lib/question/draft';
 import type { QuestionPanelData } from '@/lib/question/panel';
@@ -28,6 +29,9 @@ export type DecisionFormProps = { data: QuestionPanelData };
 const NO_RETRY: RetryState = { requestId: null, sentBody: null };
 const F = DECISION_FORM_COPY;
 const sameIds = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((x, i) => x === b[i]);
+
+/** The summary's two lines about the link form: a link that was not added while Save waited, an address typed and never added. */
+const isLinkLine = (e: FieldError): boolean => e.message === F.linkNotAdded || e.message === EVIDENCE_COPY.link.typedNotAdded;
 
 /** The names of files still moving or failed, joined for a sentence. */
 const fileList = (names: readonly string[]) => names.join(', ');
@@ -79,6 +83,13 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
   // render behind.
   const linkAdding = useRef(false);
   const waitingNow = useRef(false);
+  // The open link form holds an address that was never added (the block reports it), and how often a save was refused for
+  // it: the block shows each refusal at the box.
+  const linkTyped = useRef(false);
+  const [linkRefusals, setLinkRefusals] = useState(0);
+  // The link boxes as last typed: when a new version replaces the evidence block, an address typed and not added goes
+  // into the new block's boxes, not away.
+  const [typedLink, setTypedLink] = useState({ url: '', label: '' });
   const [leftOut, setLeftOut] = useState<string[]>([]);
   const [draftSavedAt, setDraftSavedAt] = useState<UtcInstant | null>(null);
   const [storageUnavailable, setStorageUnavailable] = useState(false);
@@ -120,8 +131,9 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
   // A new current version arrived (a save, or someone else's, after router.refresh): open from it, as on a new page.
   if ((data.current?.id ?? null) !== seenCurrentId) {
     setSeenCurrentId(data.current?.id ?? null);
-    // Only when the field holds nothing of the person's that the new version lacks.
-    if (conflict === null && !typedSinceCurrent) {
+    // Only when the field holds nothing of the person's that the new version lacks, and no link's request is out: the
+    // block that sent it would be replaced, and the link lost with it (as a file that is uploading edits the answer).
+    if (conflict === null && !typedSinceCurrent && !uploads.linkAdding) {
       setValue(draftFromCurrent(data));
       setBase(currentNumber);
       setRetry(NO_RETRY);
@@ -177,14 +189,68 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
   });
 
   // W-3 narrow: the fixed save bar's height is the space the page reserves under its content (DecisionForm.css).
+  // Measured after every render too, not only by the observer below: a render that grows the bar (the unsaved line
+  // appearing on the first edit) is followed at once by the next key, and the observer reports only at the next
+  // rendering frame, so a Tab before that frame scrolled the next field into view above the bar's old height and the
+  // bar covered it (SC 2.4.11). A layout effect runs inside the same event, before the next key is handled.
+  // When the bar has grown over the control that has focus (the radio whose Space made the first edit), that control
+  // is scrolled clear once, above the new height; nothing moves when nothing is covered or focus is outside the form.
+  const applyBarHeight = useCallback((): void => {
+    const bar = saveBar.current;
+    if (bar === null) return;
+    const root = document.documentElement;
+    const was = parseFloat(root.style.getPropertyValue('--decision-save-bar-h')) || 0;
+    const h = bar.offsetHeight;
+    if (h === was) return;
+    root.style.setProperty('--decision-save-bar-h', `${h}px`);
+    const focused = document.activeElement;
+    if (h < was || !(focused instanceof HTMLElement) || bar.contains(focused) || !(bar.closest('form')?.contains(focused) ?? false)) return;
+    // Covered: its lower edge under the bar's top, and it is on the screen at all (one the person scrolled away from stays).
+    const r = focused.getBoundingClientRect();
+    if (getComputedStyle(bar).position === 'fixed' && r.bottom > bar.getBoundingClientRect().top && r.top < document.documentElement.clientHeight) {
+      focused.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+    }
+  }, []);
+  useLayoutEffect(applyBarHeight);
+
+  /**
+   * Brings what took focus wholly into view, unless it already is: between the screen's top and the fixed bar's top (or
+   * the screen's foot when the bar is in the flow). A press on a control that is in view must not move the page, or the
+   * press ends on whatever slid under it and is lost.
+   */
+  const footOfView = useCallback((): number => {
+    const bar = saveBar.current;
+    return bar !== null && getComputedStyle(bar).position === 'fixed' ? bar.getBoundingClientRect().top : document.documentElement.clientHeight;
+  }, []);
+  const reveal = useCallback((el: Element): void => {
+    const r = el.getBoundingClientRect();
+    if (r.top >= 0 && r.bottom <= footOfView()) return;
+    el.scrollIntoView?.({ block: 'nearest', behavior: 'instant' });
+  }, [footOfView]);
+
+  /**
+   * M-11: a summary link brings its field into view, the field's group (legend or label, hint and error) from its top,
+   * or, when the group does not fit above the bar, the control itself just above it; then focuses the control without a
+   * scroll of its own. Nothing is left in the address: a fragment would keep the control the :target, and a later press
+   * on it would scroll by the target's margin and be lost (review T1). The link keeps its href for a page without
+   * JavaScript. False when the control is not on the page, so the browser follows the href.
+   */
+  const land = useCallback((id: string): boolean => {
+    const el = document.getElementById(id);
+    if (el === null) return false;
+    (el.closest('fieldset, .ui-field') ?? el).scrollIntoView({ block: 'start', behavior: 'instant' });
+    if (el.getBoundingClientRect().bottom > footOfView()) el.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+    el.focus({ preventScroll: true });
+    return true;
+  }, [footOfView]);
   useEffect(() => {
     const bar = saveBar.current;
     if (bar === null || typeof ResizeObserver === 'undefined') return;
     const root = document.documentElement;
-    const observer = new ResizeObserver(() => { root.style.setProperty('--decision-save-bar-h', `${bar.offsetHeight}px`); });
+    const observer = new ResizeObserver(applyBarHeight);
     observer.observe(bar);
     return () => { observer.disconnect(); root.style.removeProperty('--decision-save-bar-h'); };
-  }, []);
+  }, [applyBarHeight]);
 
   /** Keeps the draft on this device; false when there is no store or the browser refused it. */
   const keep = useCallback((d: StoredDraft<DecisionDraft>): boolean => {
@@ -306,7 +372,8 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
   useEffect(() => {
     const onOnline = () => {
       const pending = pendingAuto.current;
-      if (pending === null || sending.current) return;
+      // Not while a pressed Save waits for a file or a link: that Save is the newer answer, and it disarms this one when it is sent.
+      if (pending === null || sending.current || waitingNow.current) return;
       pendingAuto.current = null;
       const { value: v, base: b } = latest.current;
       const body = toSaveBody(v, data, b) as unknown as Record<string, unknown>;
@@ -328,7 +395,13 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
     if (saving) return;
     // The wait path runs inside the evidence block's effect flush, before this form re-renders, so the render's `value` can be one edit behind.
     const answer = latest.current.value;
-    const errs = draftErrors(answer, data, new Date());
+    const fieldErrs = draftErrors(answer, data, new Date());
+    // An address typed in the link box and never added is not in the answer, and the save would discard it without a word:
+    // the save does not go, and the link is not added for the person. Not while the link's request is out: the box then
+    // holds the address that is being added, and the save waits for it below.
+    const unadded = linkTyped.current && !linkAdding.current;
+    const errs = unadded ? [...fieldErrs, { field: 'form', message: EVIDENCE_COPY.link.typedNotAdded }] : fieldErrs;
+    if (unadded) setLinkRefusals((n) => n + 1);
     if (errs.length > 0) {
       setErrors(errs);
       setStatus(null);
@@ -347,11 +420,15 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
   // UX-30: a Save that waited is sent once every chosen file has finished and no link's request is out (the block reports
   // each change of its uploads and of its link). A link that was not added while the Save waited ends the wait unsent:
   // the decision is never saved without it by itself (B3).
-  const afterUploads = useRef<(s: { uploading: string[]; failed: string[]; linkAdding: boolean; linkNotAdded: boolean }) => void>(() => {});
+  const afterUploads = useRef<(s: { uploading: string[]; failed: string[]; linkAdding: boolean; linkNotAdded: boolean; linkTyped: boolean }) => void>(() => {});
   useLayoutEffect(() => {
     afterUploads.current = (s) => {
       const linkEnded = linkAdding.current && !s.linkAdding;
       linkAdding.current = s.linkAdding;
+      linkTyped.current = s.linkTyped;
+      // The summary's lines about the link form are true of the form as it was at the press. Once a link is being sent, or
+      // the box is empty, they are not, and they go; a field's own line stays until the next Save, as it always has.
+      if (s.linkAdding || !s.linkTyped) setErrors((e) => (e.some(isLinkLine) ? e.filter((x) => !isLinkLine(x)) : e));
       if (!waitingNow.current || s.linkAdding) return;
       if (linkEnded && s.linkNotAdded) {
         hold(false);
@@ -387,8 +464,10 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
     // into view, instantly rather than with the page's smooth scroll (app/globals.css:225): the browser reveals a focused
     // text control's caret, not its box, in a scroll it issues after this handler, and when both animate the browser's
     // wins and leaves the box 2 px below the fold at <= 768 px, where the document and not .app-main scrolls. An instant
-    // scroll lands first, and the browser's if-needed reveal then finds the caret already in view.
-    <form method="post" noValidate onSubmit={onSubmit} onFocus={(e) => { e.target.scrollIntoView?.({ block: 'nearest', behavior: 'instant' }); }} data-region-form="answer-form" data-ready={ready ? 'true' : undefined} aria-labelledby="s12-answer-form">
+    // scroll lands first, and the browser's if-needed reveal then finds the caret already in view. When the error
+    // summary's first line takes focus, the whole summary is brought into view, so its list is not left under the bar.
+    // A control already wholly in view is left where it is (reveal).
+    <form method="post" noValidate onSubmit={onSubmit} onFocus={(e) => { const t: Element = e.target; reveal(t === summary.current ? t.parentElement ?? t : t); }} data-region-form="answer-form" data-ready={ready ? 'true' : undefined} aria-labelledby="s12-answer-form">
       {conflict !== null ? (
         <ConflictView
           current={conflict} mine={value} viewerId={data.viewer.userId}
@@ -416,7 +495,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
               {errors.map((e) => (
                 <li key={`${e.field}:${e.message}`}>
                   {FIELD_TARGET[e.field] !== undefined
-                    ? <a href={`#${FIELD_TARGET[e.field]}`}>{`${FIELD_LABEL[e.field]}: ${e.message}`}</a>
+                    ? <a href={`#${FIELD_TARGET[e.field]}`} onClick={(ev) => { if (land(FIELD_TARGET[e.field])) ev.preventDefault(); }}>{`${FIELD_LABEL[e.field]}: ${e.message}`}</a>
                     : e.message}
                 </li>
               ))}
@@ -451,6 +530,10 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
             onItemsChange={setEvidenceItems}
             notUploaded={restoredNotUploaded}
             fromVersionNumber={isDecision(data.current) ? data.current.versionNumber : null}
+            saveOut={saving}
+            unaddedLinkRefusals={linkRefusals}
+            initialLink={typedLink}
+            onLinkInput={(l) => setTypedLink((o) => (o.url === l.url && o.label === l.label ? o : l))}
           />
         </section>
 
@@ -467,12 +550,14 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
           </div>
         ) : null}
 
+        {/* A status region that is on the page before the wait, so the card put into it is announced, once (one added with its words often is not). */}
+        <div role="status" data-wait-status>
         {waiting ? (
           <div className="decision-form__box" data-upload-wait>
             <Callout kind="note">
               {waitingFiles.length > 0 ? <p>{F.waiting.before}<bdi>{fileList(waitingFiles)}</bdi>{F.waiting.after}</p> : null}
               {/* With no file to wait for, the wait is for a link, whether or not its report has been rendered yet. */}
-              {uploads.linkAdding || waitingFiles.length === 0 ? <p>{F.waitingLink}</p> : null}
+              {uploads.linkAdding || waitingFiles.length === 0 ? <p>{EVIDENCE_COPY.link.waiting}</p> : null}
               <div className="form-actions">
                 {waitingFiles.length > 0 ? <Button variant="secondary" onClick={() => save(true)}>{F.saveWithout(waitingFiles.length)}</Button> : null}
                 <Button variant="secondary" onClick={() => hold(false)}>{F.cancel}</Button>
@@ -480,6 +565,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
             </Callout>
           </div>
         ) : null}
+        </div>
 
         {/* tabIndex -1: after a Retry's answer removes the Retry, focus comes here, beside the status line, not to the page. */}
         <div className="decision-save-bar" ref={saveBar} tabIndex={-1}>
