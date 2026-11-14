@@ -26,7 +26,7 @@ const C = FINDINGS_COPY.closeByDecision;
 export function CloseByDecisionButton(p: CloseByDecisionButtonProps): ReactElement {
   const router = useRouter();
   const url = `/api/v1/orgs/${encodeURIComponent(p.orgSlug)}/projects/${encodeURIComponent(p.projectId)}/findings/${encodeURIComponent(p.findingId)}/close-by-decision`;
-  const w = useFindingWrite(url, '');
+  const w = useFindingWrite(url, '', C.label);
   const busy = w.phase !== 'idle';
   return (
     <div className="finding-close">

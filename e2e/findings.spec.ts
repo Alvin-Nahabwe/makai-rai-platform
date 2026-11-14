@@ -158,11 +158,11 @@ test('UX-17 FR-FND-05: the admin accepts a risk and the sentence follows the cho
   const page = await as(browser, 'admin');
   await page.goto(s15.open);
   await page.getByLabel(AR.acceptedBy).selectOption({ label: AR.outsideWho('Ethics committee') });
-  await expect(page.getByText(AR.willShow(AR.outsideWho('Ethics committee')))).toBeVisible();
+  await expect(page.getByText(AR.willShow('Ethics committee'))).toBeVisible();
   await page.getByLabel(AR.reason).fill('Minutes of 30 Oct 2026, item 4.');
   await page.getByRole('button', { name: AR.submit }).click();
-  // The header names the accepter with deciderLabel's record form (lib/decision/copy.ts, Task 17's words).
-  await expect(page.getByText(new RegExp(`^${literal(FINDINGS_COPY.finding.acceptedHeaderStart)}Ethics committee .+\\) on `))).toBeVisible();
+  // A3: the header names the role alone, exactly as the form's sentence said it would.
+  await expect(page.getByText(new RegExp(`^${literal(FINDINGS_COPY.finding.acceptedHeaderStart)}Ethics committee\\) on `))).toBeVisible();
 });
 
 test('FR-FND-07 (screen): reopening a closed finding with a reason shows Reopened.', async ({ browser }) => {

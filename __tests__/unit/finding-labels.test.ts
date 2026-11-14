@@ -11,9 +11,10 @@ const TEAM = { id: 'f2', source: 'team', questionId: 'Q-PP-12' } as FindingView;
 
 describe('finding labels (7.5.6, 7.5.8)', () => {
   it('FR-FND-05: state labels follow 7.5.6, naming the accepter', () => {
-    expect(findingStateLabel('closed_accepted_risk', { ...AR, acceptedBy: { kind: 'outside_role', role: 'ethics_committee' } })).toBe(FINDINGS_COPY.labels.closedByAcceptedRiskBy('Ethics committee (outside role)'));
+    // A3 (the coordinator, 14 Nov 2026): the label names the role or the person alone, with no marker and no nested parentheses.
+    expect(findingStateLabel('closed_accepted_risk', { ...AR, acceptedBy: { kind: 'outside_role', role: 'ethics_committee' } })).toBe('Closed by an accepted risk (Ethics committee)');
     expect(findingStateLabel('closed_accepted_risk', AR)).toBe(FINDINGS_COPY.labels.closedByAcceptedRiskBy('Anna K.'));
-    expect(findingStateLabel('closed_accepted_risk', { ...AR, acceptedBy: { kind: 'member', user: { ...ANNA, formerMember: true } } })).toBe(FINDINGS_COPY.labels.closedByAcceptedRiskBy('Anna K. (former member)'));
+    expect(findingStateLabel('closed_accepted_risk', { ...AR, acceptedBy: { kind: 'member', user: { ...ANNA, formerMember: true } } })).toBe(FINDINGS_COPY.labels.closedByAcceptedRiskBy('Anna K.'));
     expect(findingStateLabel('closed_mitigation', null)).toBe(FINDINGS_COPY.labels.closedByMitigation);
     expect(findingStateLabel('open', null)).toBe(FINDINGS_COPY.labels.open);
     expect(findingStateLabel('withdrawn', null)).toBe(FINDINGS_COPY.labels.withdrawn);

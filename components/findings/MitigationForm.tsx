@@ -289,7 +289,7 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
         render={(a) => <textarea {...a} className={textareaClass(err('what'))} name="what" rows={3} value={value.what} onChange={(e) => change({ what: e.target.value })} />}
         after={<p className="ui-count">{characterCount(charCount(value.what), TEXT_MAX)}</p>} />
       <Select id={id('followsControl')} name="followsControl" label={MF.follows} error={err('followsControl') ?? undefined} value={value.followsControl ?? ''}
-        placeholder={MF.noControl} options={p.controls.map((c) => ({ value: c.id, label: `${c.id} ${c.name}` }))}
+        placeholder={MF.noControl} options={p.controls.map((c) => ({ value: c.id, label: FINDINGS_COPY.finding.namedId(c.name, c.id) }))}
         onChange={(e) => change({ followsControl: e.target.value === '' ? null : e.target.value })} />
       {value.status === 'done' ? (
         <fieldset id={id('closureNote')} aria-describedby={err('closureNote') ? id('closure-error') : undefined}>

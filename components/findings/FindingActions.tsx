@@ -25,7 +25,8 @@ import type { FieldError } from '@/types/record';
  * while one is in flight does nothing. After a save the retry state is cleared, so the same action later (reopening again)
  * is a new request and not a replay of the first.
  */
-export function useFindingWrite(url: string, kept: string): {
+/** `again` is the label of the button that sends this write: its failure lines say "Select <again> again." (ruling L5-5). */
+export function useFindingWrite(url: string, kept: string, again: string): {
   phase: 'idle' | 'saving' | 'slow'; failure: WriteFailure | null;
   send: <T>(body: Record<string, unknown>) => Promise<{ status: number; body: T } | null>;
   clearFailure: () => void;
@@ -43,7 +44,7 @@ export function useFindingWrite(url: string, kept: string): {
       const next = requestIdFor(retry.current, body);
       retry.current = next.state;
       const outcome = await sendWrite<T>(url, 'POST', { requestId: next.requestId, ...body }, { onSlow: () => setPhase('slow') });
-      const failed = writeFailure(outcome, kept);
+      const failed = writeFailure(outcome, kept, undefined, again);
       if (failed !== null || outcome.kind !== 'saved') {
         setFailure(failed);
         return null;
@@ -54,7 +55,7 @@ export function useFindingWrite(url: string, kept: string): {
       busy.current = false;
       setPhase('idle');
     }
-  }, [url, kept]);
+  }, [url, kept, again]);
   return { phase, failure, send, clearFailure: () => setFailure(null) };
 }
 
@@ -187,8 +188,8 @@ export function FindingActions(p: FindingActionsProps): ReactElement {
   const reasonBox = useRef<HTMLTextAreaElement>(null);
   const summaryTitle = useRef<HTMLHeadingElement>(null);
   const rid = `act-${useId().replace(/:/g, '')}`;
-  const withdraw = useFindingWrite(`${base}/withdrawal`, KEPT_IN_FORM);
-  const reopen = useFindingWrite(`${base}/reopen`, KEPT_IN_FORM);
+  const withdraw = useFindingWrite(`${base}/withdrawal`, KEPT_IN_FORM, C.withdrawAction);
+  const reopen = useFindingWrite(`${base}/reopen`, KEPT_IN_FORM, C.reopenSubmit);
   const w = open === 'reopen' ? reopen : withdraw;
   // The accept form reports its saved line here, so it survives the refresh that remounts the form behind its trigger (CR-1).
   const accept = isValidElement(p.acceptForm)

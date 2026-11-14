@@ -12,7 +12,7 @@ import { ListLink } from '@/components/ui/ListLink';
 import { onlyRolesCanText } from '@/lib/findings/messages';
 import { deciderLabel } from '@/lib/decision/copy';
 import { formatDay } from '@/lib/format/dates';
-import { overdueLabel, STAGE_NAMES } from '@/lib/findings/labels';
+import { acceptedByName, overdueLabel, STAGE_NAMES } from '@/lib/findings/labels';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
 import type { FindingPageData, MitigationOnPage } from '@/lib/findings/pageData';
 import '@/components/ui/pageHeaderStyles';
@@ -121,7 +121,7 @@ export function FindingPageView({ data }: { data: FindingPageData }): ReactEleme
   const closed = f.state === 'closed_mitigation' || f.state === 'closed_accepted_risk';
   const closing = d.closeByDecision;
   const acceptedLine = f.state === 'closed_accepted_risk' && f.acceptedRisk !== null
-    ? <>{F.acceptedHeaderStart}<bdi>{deciderLabel(f.acceptedRisk.acceptedBy, '', 'record')}</bdi>{F.acceptedHeaderOn(formatDay(f.acceptedRisk.receivedAt))}{f.acceptedRisk.lookAgainOn === null ? '' : F.checkAgainOn(formatDay(f.acceptedRisk.lookAgainOn))}</>
+    ? <>{F.acceptedHeaderStart}<bdi>{acceptedByName(f.acceptedRisk.acceptedBy)}</bdi>{F.acceptedHeaderOn(formatDay(f.acceptedRisk.receivedAt))}{f.acceptedRisk.lookAgainOn === null ? '' : F.checkAgainOn(formatDay(f.acceptedRisk.lookAgainOn))}</>
     : null;
   return (
     <div className="page-content finding-page">

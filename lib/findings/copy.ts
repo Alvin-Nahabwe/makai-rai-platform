@@ -20,6 +20,11 @@ function sentences(...parts: readonly string[]): string {
   return parts.filter((p) => p !== '').join(' ');
 }
 
+/** How to try again: "Select Retry." where a Retry button exists, else "Select <the action's own button label> again." (L5-5). */
+function selectAgain(again: string | undefined): string {
+  return again === undefined ? 'Select Retry.' : `Select ${again} again.`;
+}
+
 /** "There is a problem with this <thing>." or "There are <n> problems with this <thing>.", then where the words are. */
 function problems(thing: string, n: number, kept: string): string {
   return sentences(n === 1 ? `There is a problem with this ${thing}.` : `There are ${n} problems with this ${thing}.`, kept);
@@ -108,12 +113,15 @@ export const FINDINGS_COPY = Object.freeze({
     onlyRolesCan: (roles: readonly string[], action: string): string => `Only ${joinAnd(roles)} can ${action}.`,
   }),
 
-  /** What a write that did not save says (M-05 to M-09, M-12, 7.4.4). `kept` says where the person's words are, or is empty. */
+  /**
+   * What a write that did not save says (M-05 to M-09, M-12, 7.4.4). `kept` says where the person's words are, or is empty.
+   * `again` is the action's own button label where no Retry button exists (ruling L5-5): "Select <label> again.".
+   */
   failures: Object.freeze({
     keptInBrowser: 'Your text is kept in this browser.',
     keptInForm: 'What you typed is still in the form.',
-    noReply: (kept: string): string => sentences('Not saved yet. We did not get a reply in time, so it may already be saved.', kept, 'Select Retry. It will not save twice.'),
-    connectionLost: (kept: string): string => sentences('Not saved. Connection lost.', kept, 'Select Retry.'),
+    noReply: (kept: string, again?: string): string => sentences('Not saved yet. We did not get a reply in time, so it may already be saved.', kept, `${selectAgain(again)} It will not save twice.`),
+    connectionLost: (kept: string, again?: string): string => sentences('Not saved. Connection lost.', kept, selectAgain(again)),
     signedOut: (kept: string): string => sentences('Not saved. You have been signed out.', kept, 'Sign in again to save it.'),
     forbidden: (kept: string): string => sentences('Not saved. Your role in this organisation no longer allows this.', kept, 'Ask an Owner or Admin.'),
     archived: 'Not saved. This project is archived. Owners and Admins can unarchive it.',
@@ -125,9 +133,9 @@ export const FINDINGS_COPY = Object.freeze({
     cannotWithdrawShortfall: 'A finding raised from a decision cannot be withdrawn. Withdraw the decision instead.',
     entry: (n: number): string => problems('entry', n, TYPED_IS_KEPT),
     outOfDate: 'Not saved. This page is out of date, or you no longer have access to it. Reload the page.',
-    tooMany: (kept: string): string => sentences('Not saved. Too many requests.', kept, 'Wait a minute, then select Retry.'),
+    tooMany: (kept: string, again?: string): string => sentences('Not saved. Too many requests.', kept, again === undefined ? 'Wait a minute, then select Retry.' : `Wait a minute, then select ${again} again.`),
     refused: (kept: string): string => sentences('Not saved.', kept, 'Reload the page and try again.'),
-    server: (kept: string): string => sentences('Not saved. The server had a problem.', kept, 'Select Retry.'),
+    server: (kept: string, again?: string): string => sentences('Not saved. The server had a problem.', kept, selectAgain(again)),
   }),
 
   /** S-14, the findings list. */

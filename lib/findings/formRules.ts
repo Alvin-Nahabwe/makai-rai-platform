@@ -59,14 +59,15 @@ export function closedByText(c: FindingClosedConflict, timeZone?: string): strin
  * The failure a write's outcome shows, or `null` when it saved. `kept` is the sentence that says where the words are
  * (`KEPT_ON_DEVICE` for a form with a draft, `KEPT_IN_FORM` for the others). The texts are M-05 to M-09 and M-12 (SRS
  * 7.5.7), 7.4.4's closed-finding sentence, and, for the refusals the SRS words no text for, one plain sentence each.
+ * `again` is the action's own button label for a form with no Retry button (ruling L5-5); omitted, the lines say "Select Retry.".
  */
-export function writeFailure(outcome: SendOutcome<unknown>, kept: string, timeZone?: string): WriteFailure | null {
+export function writeFailure(outcome: SendOutcome<unknown>, kept: string, timeZone?: string, again?: string): WriteFailure | null {
   if (outcome.kind === 'saved') return null;
   const base = { fields: [] as FieldError[], conflict: null, retry: false };
   if (outcome.kind === 'not_saved') {
     return outcome.reason === 'timeout'
-      ? { ...base, retry: true, text: FINDINGS_COPY.failures.noReply(kept) }
-      : { ...base, retry: true, text: FINDINGS_COPY.failures.connectionLost(kept) };
+      ? { ...base, retry: true, text: FINDINGS_COPY.failures.noReply(kept, again) }
+      : { ...base, retry: true, text: FINDINGS_COPY.failures.connectionLost(kept, again) };
   }
   const { status, body } = outcome;
   if (status === 401) return { ...base, text: FINDINGS_COPY.failures.signedOut(kept) };
@@ -88,9 +89,9 @@ export function writeFailure(outcome: SendOutcome<unknown>, kept: string, timeZo
     return { ...base, fields, text: FINDINGS_COPY.failures.entry(fields.length) };
   }
   if (status === 404) return { ...base, text: FINDINGS_COPY.failures.outOfDate };
-  if (status === 429) return { ...base, retry: true, text: FINDINGS_COPY.failures.tooMany(kept) };
+  if (status === 429) return { ...base, retry: true, text: FINDINGS_COPY.failures.tooMany(kept, again) };
   if (status >= 400 && status < 500) return { ...base, text: FINDINGS_COPY.failures.refused(kept) };
-  return { ...base, retry: true, text: FINDINGS_COPY.failures.server(kept) };
+  return { ...base, retry: true, text: FINDINGS_COPY.failures.server(kept, again) };
 }
 
 // ─── Raising a team finding (S-14) and the reason of a reopen or a withdrawal (S-15) ────────────
@@ -312,9 +313,12 @@ export function acceptRiskFormErrors(v: {
   return errors;
 }
 
-/** "<name>" for a member, "<Role> (no platform account)" for someone without a platform account (7.5.8; CONSOLIDATED 8 #5). */
+/**
+ * The accepter as the finding's label will name them: the person or the role alone (A3), exactly as `acceptedByName`
+ * (lib/findings/labels.ts) prints it on the page. The form's option keeps "<Role> (no platform account)" (`outsideWho`).
+ */
 function whoText(choice: Decider, names: ReadonlyMap<string, string>): string {
-  return choice.kind === 'member' ? names.get(choice.userId) ?? FINDINGS_COPY.acceptRisk.aMember : FINDINGS_COPY.acceptRisk.outsideWho(OUTSIDE_ROLE_LABELS[choice.role]);
+  return choice.kind === 'member' ? names.get(choice.userId) ?? FINDINGS_COPY.acceptRisk.aMember : OUTSIDE_ROLE_LABELS[choice.role];
 }
 
 /** 7.4.2 S-15 row, with C#411's label: "Closed by an accepted risk (<who>)." */
@@ -351,7 +355,7 @@ export function activeUpload(status: MitigationStatus, upload: { uploading: stri
   return status === 'done' ? upload : { uploading: [], failed: [] };
 }
 
-/** The accepter as a sentence names them: a member's name, or "<Role> (no platform account)" (7.5.8). A view wraps this in <bdi>. */
+/** The accepter as the label names them: a member's name, or the role alone (A3). A view wraps this in <bdi>. */
 export function acceptedWho(choice: Decider, names: ReadonlyMap<string, string>): string {
   return whoText(choice, names);
 }

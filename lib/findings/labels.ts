@@ -1,6 +1,6 @@
 import type { AcceptedRiskView, FindingView } from '@/types/api';
 import type { CalendarDate, FindingState, Stage, StoredDecisionStatus } from '@/types/record';
-import { deciderLabel, STATUS_OPTIONS } from '@/lib/decision/copy';
+import { OUTSIDE_ROLE_LABELS, STATUS_OPTIONS } from '@/lib/decision/copy';
 import { formatDay } from '@/lib/format/dates';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
 
@@ -18,14 +18,23 @@ export { OUTSIDE_ROLE_LABELS } from '@/lib/decision/copy';
 /** The stage as the pages write it. */
 export const STAGE_NAMES: Readonly<Record<Stage, string>> = FINDINGS_COPY.stages;
 
-/** C#411: "Open", "Closed by a mitigation", "Closed by an accepted risk (<who>)", "Withdrawn". `<who>` is `deciderLabel`'s record form (7.5.8). */
+/**
+ * The accepter as the label names them (A3, the coordinator, 14 Nov 2026): the role or the person ALONE, with no marker, so
+ * the label never nests parentheses. The marker ("(former member)", the outside role's) stays on the history line, which
+ * keeps `deciderLabel(…, 'record')` (lib/decision/copy.ts). The accept form quotes this same form (`acceptedWho`).
+ */
+export function acceptedByName(d: AcceptedRiskView['acceptedBy']): string {
+  return d.kind === 'outside_role' ? OUTSIDE_ROLE_LABELS[d.role] : d.user.name;
+}
+
+/** C#411: "Open", "Closed by a mitigation", "Closed by an accepted risk (<who>)", "Withdrawn". `<who>` is `acceptedByName`. */
 export function findingStateLabel(state: FindingState, accepted: Pick<AcceptedRiskView, 'acceptedBy'> | null): string {
   switch (state) {
     case 'open': return FINDINGS_COPY.labels.open;
     case 'closed_mitigation': return FINDINGS_COPY.labels.closedByMitigation;
     case 'withdrawn': return FINDINGS_COPY.labels.withdrawn;
     case 'closed_accepted_risk':
-      return accepted === null ? FINDINGS_COPY.labels.closedByAcceptedRisk : FINDINGS_COPY.labels.closedByAcceptedRiskBy(deciderLabel(accepted.acceptedBy, '', 'record'));
+      return accepted === null ? FINDINGS_COPY.labels.closedByAcceptedRisk : FINDINGS_COPY.labels.closedByAcceptedRiskBy(acceptedByName(accepted.acceptedBy));
   }
 }
 

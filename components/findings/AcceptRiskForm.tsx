@@ -67,7 +67,7 @@ export function AcceptRiskForm(p: AcceptRiskFormProps): ReactElement {
     pressed.current = false;
     document.getElementById(`${id}-acceptedBy`)?.focus();
   }, [open, id]);
-  const w = useFindingWrite(`/api/v1/orgs/${encodeURIComponent(p.orgSlug)}/projects/${encodeURIComponent(p.projectId)}/findings/${encodeURIComponent(p.findingId)}/accepted-risks`, KEPT_IN_FORM);
+  const w = useFindingWrite(`/api/v1/orgs/${encodeURIComponent(p.orgSlug)}/projects/${encodeURIComponent(p.projectId)}/findings/${encodeURIComponent(p.findingId)}/accepted-risks`, KEPT_IN_FORM, p.mode === 'keep_accepted' ? AR.submitKeep : AR.submit);
   const names = new Map([[p.viewer.userId, p.viewer.name], ...p.members.map((m) => [m.userId, m.name] as const)]);
   const decider = decode(choice);
   const err = (f: string) => errors.find((e) => e.field === f)?.message ?? w.failure?.fields.find((e) => e.field === f)?.message ?? null;

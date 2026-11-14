@@ -140,7 +140,8 @@ describe('the accepted-risk form (FR-FND-05, UX-17, W-6)', () => {
     expect(acceptRiskFormErrors({ acceptedBy: null, reason: '  ' })).toEqual([
       { field: 'acceptedBy', message: FINDINGS_COPY.fields.acceptedBy }, { field: 'reason', message: FINDINGS_COPY.fields.acceptReason }]);
     expect(acceptRiskFormErrors({ acceptedBy: { kind: 'member', userId: 'u-grace' }, reason: 'Minutes of 30 Oct.' })).toEqual([]);
-    expect(acceptedSavedText({ kind: 'outside_role', role: 'ethics_committee' }, NAMES)).toBe(FINDINGS_COPY.acceptRisk.saved(FINDINGS_COPY.acceptRisk.outsideWho('Ethics committee')));
+    // A3: the saved line quotes the label the page shows, the role alone.
+    expect(acceptedSavedText({ kind: 'outside_role', role: 'ethics_committee' }, NAMES)).toBe('Closed by an accepted risk (Ethics committee).');
   });
 
   it('FR-FND-05: a look-again date that is not a real date, and a keep-accepted without its note, are field errors', () => {
@@ -151,7 +152,7 @@ describe('the accepted-risk form (FR-FND-05, UX-17, W-6)', () => {
   });
 
   it('UX-17: the sentence names the choice and updates when it changes', () => {
-    expect(acceptedLabelSentence({ kind: 'outside_role', role: 'ethics_committee' }, NAMES)).toBe(FINDINGS_COPY.acceptRisk.willShow(FINDINGS_COPY.acceptRisk.outsideWho('Ethics committee')));
+    expect(acceptedLabelSentence({ kind: 'outside_role', role: 'ethics_committee' }, NAMES)).toBe('The finding will show as "Closed by an accepted risk (Ethics committee)".');
     expect(acceptedLabelSentence({ kind: 'member', userId: 'u-grace' }, NAMES)).toBe(FINDINGS_COPY.acceptRisk.willShow('Grace A.'));
     expect(acceptedLabelSentence(null, NAMES)).toBe('');
   });
@@ -229,5 +230,19 @@ describe('one copy of the field messages (plan 1A Task 18, part 18a)', () => {
       'Not saved yet. We did not get a reply in time, so it may already be saved. Your text is kept in this browser. Select Retry. It will not save twice.');
     expect(FINDINGS_COPY.failures.connectionLost('')).toBe('Not saved. Connection lost. Select Retry.');
     expect(KEPT_ON_DEVICE).toBe('Your text is kept in this browser.');
+  });
+
+  it('A4 (ruling L5-5): an action with no Retry button names its own button in the retryable lines', () => {
+    const again = 'Withdraw finding';
+    expect(writeFailure({ kind: 'not_saved', reason: 'timeout' }, KEPT_IN_FORM, undefined, again)?.text).toBe(
+      'Not saved yet. We did not get a reply in time, so it may already be saved. What you typed is still in the form. Select Withdraw finding again. It will not save twice.');
+    expect(writeFailure({ kind: 'not_saved', reason: 'network' }, KEPT_IN_FORM, undefined, again)?.text).toBe(
+      'Not saved. Connection lost. What you typed is still in the form. Select Withdraw finding again.');
+    expect(writeFailure(rejected(429, 'rate_limited'), KEPT_IN_FORM, undefined, again)?.text).toBe(
+      'Not saved. Too many requests. What you typed is still in the form. Wait a minute, then select Withdraw finding again.');
+    expect(writeFailure(rejected(500, 'internal_error'), '', undefined, again)?.text).toBe(
+      'Not saved. The server had a problem. Select Withdraw finding again.');
+    // The mitigation form has a Retry button and keeps "Select Retry.".
+    expect(writeFailure(rejected(500, 'internal_error'), '')?.text).toBe('Not saved. The server had a problem. Select Retry.');
   });
 });

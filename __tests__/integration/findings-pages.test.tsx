@@ -5,9 +5,11 @@ import type { Identity } from '@/lib/auth/identity';
 import { FindingsPageView } from '@/components/findings/FindingsPageView';
 import { AcceptRiskForm } from '@/components/findings/AcceptRiskForm';
 import { FindingPageView } from '@/components/findings/FindingPageView';
+import { MitigationForm } from '@/components/findings/MitigationForm';
 import { loadFindingPage, loadFindingsPage, type FindingPageData } from '@/lib/findings/pageData';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
 import { onlyRolesCanText } from '@/lib/findings/messages';
+import { deciderLabel, OUTSIDE_ROLE_LABELS } from '@/lib/decision/copy';
 import { runningContent } from '@/lib/content/loader';
 import { resetDb } from '../helpers/db';
 import { useFixtureContent } from '../helpers/content';
@@ -93,7 +95,7 @@ describe('S-14 the findings list (UX-15, UX-06, UX-07, FR-FND-07, FR-FND-08)', (
     const k = await everyKind();
     const html = await renderList('reviewer', k.p.id);
     const states = [...html.matchAll(/<[a-z]+ [^>]*class="([^"]*\bstatus-label\b[^"]*)"[^>]*>([^<]*)</g)];
-    expect(states.map((m) => m[2])).toEqual(expect.arrayContaining([FINDINGS_COPY.labels.open, FINDINGS_COPY.labels.closedByMitigation, FINDINGS_COPY.labels.withdrawn, FINDINGS_COPY.labels.closedByAcceptedRiskBy('Ethics committee (outside role)')]));
+    expect(states.map((m) => m[2])).toEqual(expect.arrayContaining([FINDINGS_COPY.labels.open, FINDINGS_COPY.labels.closedByMitigation, FINDINGS_COPY.labels.withdrawn, FINDINGS_COPY.labels.closedByAcceptedRiskBy(OUTSIDE_ROLE_LABELS.ethics_committee)]));
     expect(states.every((m) => !/status-label--warning/.test(m[1]))).toBe(true);
   });
 
@@ -305,7 +307,9 @@ describe('S-15 the finding page and the S-14 raise form (FR-FND-02, FR-FND-03, F
     const ar = await addAcceptedRisk(fx, f.id, { acceptedBy: { kind: 'outside_role', role: 'ethics_committee' }, lookAgainOn: '2027-03-01' });
     expect(ar.id).toBeTruthy();
     const html = await renderFinding(f, 'viewer');
-    expect(html).toContain(`${FINDINGS_COPY.finding.acceptedHeaderStart}<bdi>Ethics committee (outside role)</bdi>) on `);
+    // A3: the header's label names the role alone; the history line keeps deciderLabel's record form (Task 17's words).
+    expect(html).toContain(`${FINDINGS_COPY.finding.acceptedHeaderStart}<bdi>${OUTSIDE_ROLE_LABELS.ethics_committee}</bdi>) on `);
+    expect(html).toContain(`${FINDINGS_COPY.mitigation.riskAcceptedBy} <bdi>${deciderLabel({ kind: 'outside_role', role: 'ethics_committee' }, '', 'record')}</bdi>`);
     expect(html).toMatch(/<\/bdi>\) on \d{1,2} \w{3} 20\d\d\. To be checked again on 1 Mar 2027\./);
     expect(html).toContain(FINDINGS_COPY.finding.checkAgainOn('1 Mar 2027'));
   });
@@ -417,6 +421,15 @@ describe('S-15 mitigations on the page (FR-FUP-05, FR-FND-03, UX-06, NFR-A11Y-05
     expect(await firstLineOf('decision_changed', 'erased')).toBe('<p></p>');
     expect(await firstLineOf('decision_withdrawn', 'erased')).toBe('<p></p>');
     expect(await firstLineOf('action', 'null')).toBe('<p></p>');
+  });
+
+  it('B10 (ruling L5-10): the follows-a-control option reads "<name> (<id>)", as its sibling rows do', async () => {
+    const p = await addProject(fx);
+    const f = await addFinding(fx, p.id, { stage: 'pre-processing', source: 'team', by: 'owner' });
+    const d = await pageData('owner', p.id, f.id);
+    const html = renderToStaticMarkup(<MitigationForm orgSlug={d.orgSlug} projectId={d.projectId} findingId={f.id} base={null} owners={d.owners}
+      controls={[{ id: 'CTRL-01', name: 'Bias audit' }]} userId={d.viewer.userId} orgId={d.orgId} />);
+    expect(html).toMatch(/<option value="CTRL-01"[^>]*>Bias audit \(CTRL-01\)<\/option>/);
   });
 
   it('F1: an action with a text shows its text, not a decision sentence', async () => {

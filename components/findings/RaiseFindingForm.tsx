@@ -35,7 +35,7 @@ export function RaiseFindingForm({ orgSlug, projectId, data }: RaiseFindingFormP
   const [errors, setErrors] = useState<FieldError[]>([]);
   const [attempt, setAttempt] = useState(0);
   const [raised, setRaised] = useState<string | null>(null);
-  const w = useFindingWrite(`/api/v1/orgs/${encodeURIComponent(orgSlug)}/projects/${encodeURIComponent(projectId)}/findings`, KEPT_IN_FORM);
+  const w = useFindingWrite(`/api/v1/orgs/${encodeURIComponent(orgSlug)}/projects/${encodeURIComponent(projectId)}/findings`, KEPT_IN_FORM, C.submit);
   const stage = (STAGES as readonly string[]).includes(v.stage) ? (v.stage as keyof RaiseFormData['areas']) : null;
   // The question link holds only while the stage is still the question's own.
   const linked = prefill !== null && prefill.stage === v.stage;
