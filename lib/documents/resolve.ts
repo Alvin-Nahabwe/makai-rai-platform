@@ -17,7 +17,7 @@ import { PROJECT_FORM_COPY } from '@/lib/project/form/copy';
 import { REVIEW_COPY } from '@/lib/review/copy';
 import { formatFingerprint } from '@/lib/seal/format';
 import {
-  ETHICS_APPROVED, ETHICS_NOT_REQUIRED, ETHICS_SUBMITTED, FILE_NAME_ERASED, GATE_DERIVED_NA, assignedToLine, checkAgainLine, decidedByLine, decidedInLine, decisionSource,
+  ETHICS_APPROVED, ETHICS_NOT_REQUIRED, ETHICS_SUBMITTED, FILE_NAME_ERASED, GATE_DERIVED_NA, assignedToLine, noDecisionLine, checkAgainLine, decidedByLine, decidedInLine, decisionSource,
   doneEvidenceLine, evidenceFileLine, fileErasedLine, findingStatusLine, formatUtcDay, fromQuestion, lastCheckNoteLine, outsideOtherBodyLine, outsideRoleLine, personalDataAnswerLine,
   reviewLineText, textErasedLine, utcSecond,
 } from './copy';
@@ -634,24 +634,46 @@ export function resolveFields(map: FieldMap, snap: DocumentSnapshot, typed: Read
   }));
 
   const sources = new Map<string, RowRef>();
-  const incomplete = new Set<string>();   // fields where a part of the record reads "Not recorded" (or NOT_RECORDED_AT_ISSUE)
+  const incomplete = new Set<string>();   // fields with a gap the preview marks (FR-DOC-08): see the rules below
   const fields: ResolvedField[] = map.fields.map((e, i) => {
     const own = parts[i] as ResolvedPart[];
-    const all = [...own, ...(typedAdditions[i] === null ? [] : [typedAdditions[i] as ResolvedPart])];
-    // With several sources, each keeps its place: a record source with no decision prints "Not recorded" there, so the preview
-    // shows the gap (FR-DOC-08), instead of the part vanishing from the text.
+    const addition = typedAdditions[i];
+    const all = [...own, ...(addition === null ? [] : [addition])];
+    // Each part with the source it came from; the typed addition is a typed part after the map's sources.
+    const slots: Array<{ p: ResolvedPart; source: FieldSource | { kind: 'typed' } }> = [
+      ...own.map((p, j) => ({ p, source: e.sources[j] })), ...(addition === null ? [] : [{ p: addition, source: { kind: 'typed' as const } }]),
+    ];
+    // A "place" part stands for one thing of the record or the project; the others (findings, mitigations, meta, mapping) print as they are.
+    const isPlace = (s: { kind: string }) => s.kind === 'record' || s.kind === 'record_option' || s.kind === 'project' || s.kind === 'typed';
+    const isValue = (p: ResolvedPart) => p.text !== null && p.text !== NOT_RECORDED_AT_ISSUE;
+    const places = slots.filter((s) => isPlace(s.source));
+    // The owner's decision of 14 November 2026 (walk finding S1), for a field with several parts: beside a value, an empty typed or
+    // project part prints nothing and a question with no decision prints the sentence naming it; with no value in any place part,
+    // the place parts print "Not recorded" once (or the never-sealed line once, in its stead). A single part is printed as it is.
     const several = all.length > 1;
+    const hasValue = places.some((s) => isValue(s.p));
+    const firstPlace = places.length === 0 ? null : places[0];
+    const placeGap = places.some((s) => s.p.text === NOT_RECORDED_AT_ISSUE) ? NOT_RECORDED_AT_ISSUE : NOT_RECORDED;
+    if (places.length > 0 && !hasValue) incomplete.add(e.fieldId);
     let atIssue = false;
-    const texts = own.flatMap((p, j) => {
-      const kind = e.sources[j].kind;
-      // A part with no value reads "Not recorded" in its place; the field counts and the preview shows the gap (FR-DOC-08).
-      const isPlace = kind === 'record' || kind === 'record_option' || kind === 'project' || kind === 'typed';
-      if (isPlace && (p.text === null || p.text === NOT_RECORDED_AT_ISSUE)) incomplete.add(e.fieldId);
-      if (p.text === null) return isPlace && several ? [NOT_RECORDED] : [];
-      if (p.text === NOT_RECORDED_AT_ISSUE) { if (atIssue) return []; atIssue = true; }
-      return [p.text];
+    // The never-sealed line prints once in a field, whichever part brings it.
+    const once = (t: string): string[] => {
+      if (t !== NOT_RECORDED_AT_ISSUE) return [t];
+      if (atIssue) return [];
+      atIssue = true;
+      return [t];
+    };
+    const texts = slots.flatMap((slot): string[] => {
+      const { p, source } = slot;
+      if (several && isPlace(source) && !hasValue) return slot === firstPlace ? once(placeGap) : [];
+      if (p.text === null) {
+        if (!several || !isPlace(source)) return [];
+        if (source.kind === 'record' || source.kind === 'record_option') { incomplete.add(e.fieldId); return [noDecisionLine(source.questionId)]; }
+        return [];   // an empty typed box or project value beside a value
+      }
+      return once(p.text);
     });
-    if (typedAdditions[i] !== null && (typedAdditions[i] as ResolvedPart).text !== null) texts.push((typedAdditions[i] as ResolvedPart).text as string);
+    if (texts.includes(NOT_RECORDED_AT_ISSUE)) incomplete.add(e.fieldId);
     for (const p of all) for (const r of p.sources) sources.set(rowKey(r), r);
     return {
       fieldId: e.fieldId, label: e.label, section: e.section, text: texts.length === 0 ? null : texts.join('\n'),

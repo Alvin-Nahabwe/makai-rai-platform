@@ -1926,5 +1926,21 @@
     "property": "A project value of other prints its companion text, and Other when the companion is empty; a project value that is a form option prints that option. Walk finding S1 (item 1) changes what the option prints: the AI system type prints the option's words as the project form shows them (PROJECT_FORM_COPY.aiSystemTypes in lib/project/form/copy.ts), so the stored key classification now prints Classification. The old last line pinned the stored key, which is the fault the walk found.",
     "proof": "Only the last line changed: toContain('classification') became toBe(`Classification\\n${PROJECT_MARK}`), which requires the whole field text, the option word with its capital and the project mark, so it checks the new print at least as hard as the old line checked the old one. The companion and Other assertions are byte for byte unchanged. __tests__/unit/document-resolve-words.test.ts checks every option, other with and without companion text, and an unknown stored value.",
     "task": "walk-documents S1, item 1"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/document-resolve.test.ts::FR-DOC-08 (H3): in a field with several sources, an undecided record source prints \"Not recorded\" in its place and the field counts",
+    "replacedBy": "__tests__/unit/document-resolve.test.ts::FR-DOC-08 (H3): in a field with several sources, an undecided record source beside a value prints \"No decision is recorded for question <id>.\" in its place and the field counts",
+    "property": "In a field with several sources, a record source with no decision is shown in its place, after the parts the map puts before it, and the field counts as having a gap; once the question is decided the gap is gone and the field does not count. The owner's decision of 14 November 2026 (walk finding S1, item 2) changes the words shown in that place when the field has another value: \"No decision is recorded for question <Q-id>.\" (noDecisionLine in lib/documents/copy.ts) instead of a bare \"Not recorded\" printed beside the value.",
+    "proof": "The same case on the same snapshots (DC-16, gate answered Yes, Q-PP-13 undecided, then decided). Three lines changed, each NOT_RECORDED to noDecisionLine('Q-PP-13'): the line is in the field, it comes after the gate line, and it is absent once Q-PP-13 is decided. The sentence names the question, so it is a stricter match than the bare \"Not recorded\" it replaces. Both notRecordedFields assertions are byte for byte unchanged. __tests__/unit/document-resolve-words.test.ts covers the same rule on DC-13, DC-19 style fields and DC-23.",
+    "task": "walk-documents S1, item 2"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/document-resolve.test.ts::FR-DOC-08 (F5): an empty project or typed part of a multi-source field prints Not recorded in its place and the field counts",
+    "replacedBy": "__tests__/unit/document-resolve.test.ts::FR-DOC-08 (F5): an empty project or typed part beside a value prints nothing and the field does not count; a multi-source field with no value prints Not recorded and counts",
+    "property": "An empty project or typed part of a multi-source field is handled so the preview and the summary count show a real gap and only a real gap. The owner's decision of 14 November 2026 (walk finding S1, item 2): an empty typed box (and, in the lead's reading, an empty project value) beside a value prints nothing, and the documents screen stops counting such a field; a field with nothing at all prints \"Not recorded\" once and counts.",
+    "proof": "The same case on the same snapshots. Two lines changed for DC-02 (typed The MCH unit, institution Makerere, no department): toContain(NOT_RECORDED) became toEqual(['The MCH unit', TYPED_MARK, 'Makerere', PROJECT_MARK]), which pins every line of the field, so the empty department can print nothing at all; toContain('DC-02') became not.toContain('DC-02'). The DC-35 lines (no value in any part: Not recorded, and the field counts) and the full DC-02 line are byte for byte unchanged.",
+    "task": "walk-documents S1, item 2"
   }
 ]

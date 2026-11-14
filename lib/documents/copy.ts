@@ -12,6 +12,8 @@ export const STATEMENT = 'Made from this team\'s own records in the MAK-AI RAI P
 export const SEALED_NOTE = 'The platform keeps this seal. No outside body has time-stamped it.';
 export const NOT_RECORDED = 'Not recorded';                                           // FR-DOC-02, D1
 export const NOT_RECORDED_AT_ISSUE = 'Not recorded: this stage had no seal when the document was issued'; // FR-DOC-05, D3; C#273
+/** A question with no decision inside a field that has another value (the owner's decision of 14 November 2026, walk finding S1). */
+export const noDecisionLine = (questionId: string): string => `No decision is recorded for question ${questionId}.`;
 export const PROJECT_MARK = 'From the project details on the day of issue. Not part of the sealed record.'; // FR-DOC-02; C#274
 export const TYPED_MARK = 'Typed for this document; not part of the sealed record';   // FR-DOC-03
 export const NO_EVIDENCE = 'Evidence: none attached';                                 // FR-DOC-02, D9
