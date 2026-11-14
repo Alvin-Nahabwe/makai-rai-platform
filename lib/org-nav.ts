@@ -30,7 +30,16 @@ export function currentOrgSlug(pathname: string): string | undefined {
  * to the old unprefixed path (e.g. `/dashboard`), which no longer exists.
  */
 export function resolveOrgHref(pathname: string, path: string): string {
-  const slug = currentOrgSlug(pathname);
+  return orgHref(currentOrgSlug(pathname) ?? null, path);
+}
+
+/**
+ * The one place an organisation's address is built from a slug: `/orgs/{slug}{path}`, or `/` (the dispatcher) when there
+ * is no organisation. The slug is used as it is given (an address's segment arrives already encoded). Callers decide where
+ * the slug comes from: resolveOrgHref takes it from the address; the rail (lib/shell/nav.ts railOrgSlug) also from the
+ * person's own organisations.
+ */
+export function orgHref(slug: string | null, path: string): string {
   return slug ? `/orgs/${slug}${path}` : '/';
 }
 

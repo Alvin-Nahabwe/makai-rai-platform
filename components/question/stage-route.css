@@ -1,0 +1,96 @@
+/* All questions, the stage page (plan 1C Task 3, spec 7.2 and 8): the row of marks under the count line, the "Show"
+   filter as chips, and the question plates in their topic lists. Kit classes are not restyled here; these are the page's
+   own wrappers. Nothing here depends on script or storage, so nothing moves on load. */
+
+.stage-route__marks {
+  margin-block: var(--space-4) var(--space-6);
+}
+
+/* The filter group: a native fieldset of native radios, one chip each. */
+.stage-route__filters {
+  min-inline-size: 0;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  border: 0;
+}
+
+.stage-route__legend {
+  margin-block-end: var(--space-2);
+  padding: 0;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-ink);
+}
+
+.stage-route__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* A chip is the radio's label, so the whole chip chooses (a target of at least 24 by 24, spec 7.5). The radio stays
+   visible: its filled dot shows the chosen chip without colour, and the chosen chip's 2 px border (its WIDTH, which forced
+   colours keep) shows it again. A resting chip's outline is an inset box-shadow, which forced colours drop, so there only
+   the chosen chip has a border. The chosen chip gives the extra pixel back in its padding, so nothing moves on a choice. */
+.stage-route__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  box-sizing: border-box;
+  min-block-size: var(--target-min);
+  padding: var(--space-1) var(--space-3);
+  border: 0 solid;
+  border-radius: var(--radius-pill);
+  background-color: var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-border-control);
+  color: var(--color-ink);
+  cursor: pointer;
+  transition: background-color var(--duration-state) var(--easing-state);
+}
+
+.stage-route__chip:hover:not(:has(:checked)) {
+  background-color: var(--color-tint);
+}
+
+.stage-route__chip:has(:checked) {
+  padding: calc(var(--space-1) - 2px) calc(var(--space-3) - 2px);
+  border: 2px solid var(--color-selected);
+  box-shadow: none;
+}
+
+/* The focus ring is drawn on the chip when its radio has keyboard focus, so it surrounds the whole target. */
+.stage-route__chip:has(:focus-visible) {
+  outline: var(--focus-width) solid var(--color-focus);
+  outline-offset: var(--focus-offset);
+}
+
+.stage-route__chip input {
+  margin: 0;
+  accent-color: var(--color-selected);
+}
+
+.stage-route__note {
+  margin-block: var(--space-2) 0;
+  color: var(--color-ink);
+}
+
+/* A topic: its heading, its count line directly under it, then its plates. */
+.stage-route__topic {
+  margin-block: var(--space-6) 0;
+  font-size: var(--font-size-h3);
+}
+
+.stage-route__topic-count {
+  margin-block: 0 var(--space-2);
+}
+
+.stage-route__plates {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  list-style: none;
+}
+
+.stage-route__result {
+  margin-block: var(--space-1) 0;
+}

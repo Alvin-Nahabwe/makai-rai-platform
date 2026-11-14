@@ -1928,6 +1928,78 @@
     "task": "plan 1C C11, cut (lane 5, Continue recording on the project page)"
   },
   {
+    "kind": "structure",
+    "deleted": "__tests__/integration/decision-pages.test.ts::UX-06 (screen, R12-16): every S-11 row's status words sit in a status-label element, and none carries the warning class",
+    "replacedBy": "__tests__/unit/stage-route.test.tsx::each row shows its StatusMark with words and its code after the question in words; no \"v3\" or other version number",
+    "property": "Every S-11 question row shows its status as words in a status element of its own, never colour alone (UX-06, R12-16), and no row's status carries the warning style. Plan 1C Task 3 rebuilds each row as the kit's ItemPlate, whose status is the kit's StatusMark (shape plus words in ink, spec 7.2); the legacy .status-label element is gone from this page, so the property is now held on the mark.",
+    "proof": "The new case renders StageWorkspace from fixture rows of five kinds (done without and with evidence, the personal data question answered, partly, no decision) and, for each row's <li data-question-id> markup, requires exactly one `class=\"ui-mark ui-mark--` element, a `ui-mark__words` span holding letters, the question's code after its text, no version number, and no `status-label` class at all (so no warning class). Seen RED (0 marks per row, 'expected [] to have a length of 1') before the list used ItemPlate, GREEN after. The ink of the mark (no colour per status, no warning colour) is held in a browser by expectStatusMarksInk in e2e/stage-workspace.spec.ts 'FR-RM-04 UX-06 UX-07 (S-11, R12-16) ...', which now counts one `.ui-mark` per row in each stage before running it. The deleted case was seen failing on the new markup ('expected +0 to be 24').",
+    "task": "plan 1C Task 3 (lane 7 part 1, All questions)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/integration/decision-pages.test.ts::FR-DEC-06 (screen): with a decision recorded the empty line goes and the row shows its status and version",
+    "replacedBy": "__tests__/integration/decision-pages.test.ts::FR-DEC-06 (screen): with a decision recorded the empty line goes and the row shows its status and version",
+    "property": "With a decision recorded the empty line goes and the row shows the decision's status words followed by its declared date at its precision. The row is now the kit's ItemPlate: the words are the StatusMark's (`ui-mark__words`) and the date opens the plate's one line of state (`ui-plate__state`), after the mark, with no separator before it (plan 1C Task 3, spec 8).",
+    "proof": "The regular expression still anchors on the row's data-question-id and requires, in order, the status words \"Partly\" closing their </span> and then the state line starting with \"Oct 2026\" (the declared date at month precision): `class=\"ui-mark__words\">Partly<\\/span>[\\s\\S]*?class=\"ui-plate__state\">Oct 2026<`. The `<` after the date requires it to be the state line's first and only part here. The not-toContain of the empty line is unchanged. Seen failing on the new markup with the old pattern (`>Partly<\\/span> · Oct 2026`), passing with the new one.",
+    "task": "plan 1C Task 3 (lane 7 part 1, All questions)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::FR-PRJ-01: the form has a labelled control for each descriptive field",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::FR-PRJ-01: the form has a labelled control for each descriptive field",
+    "property": "Every descriptive field of the project form has a programmatic name. The eight that are single controls keep a <label for> naming them; Start date and End date became the kit's DateField (plan 1B Task 13), a fieldset whose legend names the date and whose three boxes (Day, Month, Year) each have a <label for>, so a <label for> with the words Start date or End date no longer exists and the two names are proved by the legend and the three labels instead",
+    "proof": "__tests__/unit/prj-components.test.tsx::FR-PRJ-01: the form has a labelled control for each descriptive field: the loop over the eight labels is unchanged but for dropping 'Start date' and 'End date'; for projectStart and projectEnd, expect(html).toMatch(<fieldset ...><legend ...>Start date</legend>) (and End date), and for each of day, month and year a <label for=\"{prefix}-{part}\"> with words directly followed by the <input id=\"{prefix}-{part}\">",
+    "task": "1B-13"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/idle-layout.test.tsx::(module)",
+    "replacedBy": "__tests__/unit/idle-layout.test.tsx::UX-02: the layout gives the Sidebar the person's role in each of their organisations, the platform label and no platform role",
+    "property": "The file's module code serves the cases below: the layout is walked as an element tree with every data read mocked, so no case reaches a database.",
+    "proof": "Two module changes, both forced by loadShellData reading the last-active hint for a person in two or more organisations (workshop walk finding S4): @/lib/data/identity is mocked with a findUnique that answers lastActiveOrgId 'org-b', and the two mocked membership rows carry orgId 'org-a' and 'org-b', which resolveOrgDispatch matches the hint against. Nothing is removed; without the mock the case would read the real identity table.",
+    "task": "workshop walk fix S4"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/idle-layout.test.tsx::UX-02: the layout gives the Sidebar the person's role in each of their organisations, the platform label and no platform role",
+    "replacedBy": "__tests__/unit/idle-layout.test.tsx::UX-02: the layout gives the Sidebar the person's role in each of their organisations, the platform label and no platform role",
+    "property": "The layout hands the shell the person's role in each of their organisations and the platform label, asks orgRoleLabel once per organisation and once for the platform, and the account's platform role field never reaches the shell (UX-02, D-10).",
+    "proof": "The exact-equality assertion on the shell prop gains one key, homeSlug: 'b' (the organisation the mocked hint names among the two mocked memberships); every other expected value and every other assertion of the case is unchanged, so the case is stricter, not weaker: a shell carrying any further field of the user or organisation row still fails it.",
+    "task": "workshop walk fix S4"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/admin-screens.test.tsx::UX-01: the administrator sidebar links S-23 and S-25 (SRS line 1514)",
+    "replacedBy": "__tests__/unit/admin-screens.test.tsx::UX-01: the administrator sidebar links S-23 and S-25 (SRS line 1514)",
+    "property": "The administrator's shell links S-23 (/admin/organisations) and S-25 (/admin/accounts), and no Settings or /admin/users link.",
+    "proof": "The shell prop the case renders Rail with gains homeSlug: null, the field ShellData now requires (workshop walk finding S4); the four assertions are unchanged. __tests__/unit/ui/shell.test.tsx::S4: no organisation gives no organisation link, and the administrator's rail is unchanged, with a home slug or without renders the administrator's rail with a home slug too and requires the same three links and no /orgs/ address.",
+    "task": "workshop walk fix S4"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/about-page.test.tsx::FR-PUB-01: a model-score sentence holds no banned word besides \"accuracy score\" and \"60% confidence score\"",
+    "replacedBy": "__tests__/unit/about-page.test.tsx::FR-PUB-01: a model-score sentence holds no banned word besides \"60% likely\"",
+    "property": "A sentence the about-model-scores marker exempts holds no claim word other than the model figure it is marked for, so the marker shelters nothing else.",
+    "proof": "The renamed case finds exactly one about-model-scores span (AB37i's first sentence; AB30's ruled text names no score, so its marker went) and asserts isClaim(...) is false on its text with \"60% likely\" removed.",
+    "task": "1A-19"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/about-page.test.tsx::FR-PUB-04: the About page says the platform never runs evaluations, models, notebooks or uploaded files and never computes metrics from a team's data",
+    "replacedBy": "__tests__/unit/about-page.test.tsx::FR-PUB-04: the section \"What the platform does\" says the platform does not test your model or calculate anything from your data",
+    "property": "About states, in its section what-this-is, that the platform does not test your model or calculate anything from your data. Only the section's heading changed (AB5, \"What the platform does\"); the 1A-14 entry for this title named the case under the old heading.",
+    "proof": "__tests__/unit/about-page.test.tsx::FR-PUB-04: the section \"What the platform does\" says the platform does not test your model or calculate anything from your data: the same assertion on section(html, 'what-this-is'), byte for byte",
+    "task": "1A-19"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/about-page.test.tsx::FR-PUB-05: the allowed elements are the section \"Why there is no score\" and the two sentences about a model's own scores",
+    "replacedBy": "__tests__/unit/about-page.test.tsx::FR-PUB-05: the allowed elements are the not-an-approval sentence and the one sentence about a model's own score",
+    "property": "The About page's data-claims-allowed elements are exactly the not-an-approval sentence and the model-score sentence. Narrowed from two model-score markers to one: AB30's ruled text names no score, so its marker went (lead's 19d block).",
+    "proof": "__tests__/unit/about-page.test.tsx::FR-PUB-05: the allowed elements are the not-an-approval sentence and the one sentence about a model's own score: reasons sorted equal ['about-model-scores', 'not-an-approval-service'] and the marked element holds \"60% likely\"",
+    "task": "1A-19"
+  },
+  {
     "kind": "rule",
     "changed": "__tests__/integration/question-panel.test.ts::FR-CNT-04 (screen) owner question B13: with the gate at no, Q-PP-13 and Q-PP-14 leave the position; unanswered, they count",
     "replacedBy": "__tests__/integration/question-panel.test.ts::FR-CNT-04 (screen) workshop walk S3: with the gate at no, the position still counts all 24 questions of the stage while Next skips Q-PP-13 and Q-PP-14; unanswered, they are next",

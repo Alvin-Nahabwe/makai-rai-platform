@@ -1,7 +1,7 @@
 'use client';
 
 import { useId, useState } from 'react';
-import type { ReactElement } from 'react';
+import type { ReactElement, Ref } from 'react';
 import type { UtcInstant } from '@/types/record';
 import { formatDay } from '@/lib/format/dates';
 import { COPY_LINK_COPY } from '@/lib/invitations/link/copy';
@@ -17,6 +17,8 @@ export interface CopyLinkFallbackProps {
   onResendWithLink?: () => void;
   /** The screen announces the email-failure sentence in its own persistent status region, so the box does not print it. */
   noticeShownElsewhere?: boolean;
+  /** The box itself, for a screen that brings it into view after the answer that showed it (Members, finding S6). */
+  ref?: Ref<HTMLDivElement>;
 }
 
 /**
@@ -42,7 +44,7 @@ export function CopyLinkFallback(p: CopyLinkFallbackProps): ReactElement {
     : copy.result === 'done' ? COPY_LINK_COPY.copied
     : COPY_LINK_COPY.copyFailed;
   return (
-    <div className="card">
+    <div className="card" ref={p.ref}>
       <StatusRegion message={message} />
       {!p.emailSent && !p.noticeShownElsewhere && <p>{COPY_LINK_COPY.emailFailed}</p>}
       {p.acceptUrl !== null && (

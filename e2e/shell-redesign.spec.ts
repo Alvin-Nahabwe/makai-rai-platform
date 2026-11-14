@@ -271,6 +271,10 @@ for (const width of [1023, 375]) {
       await page.waitForURL((url) =>
         (url.pathname === `/orgs/${slug}/projects` && url.searchParams.get('for') === 'findings')
         || new RegExp(`^/orgs/${slug}/projects/[0-9a-f-]{36}/findings$`).test(url.pathname));
+      // When the organisation has exactly one project (as it can in a whole-suite run, where other specs add projects),
+      // the press first commits ?for=findings with no page heading and the redirect to the project's findings lands tens of
+      // ms later, closing a panel reopened in between. The arrived page's heading means no redirect is still pending.
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
       await expect(panel).toBeHidden();
       await expect(menu).toHaveAttribute('aria-expanded', 'false');
       await menu.click();
@@ -531,6 +535,67 @@ test('1A Task 11 (5) F3: a hovered organisation in the open switcher keeps the s
       expect(colour, colorScheme).toBe(await resolved(page, '--color-shell-ink'));
     }
     await expectNoSeriousA11yViolations(page, 'switcher open, a link hovered');
+  } finally {
+    await context.close();
+  }
+});
+
+/** The addresses of the rail's five organisation links (Home, Projects, Findings, Members, Organisation details). */
+async function orgLinkHrefs(page: Page): Promise<string[]> {
+  const out: string[] = [];
+  for (const label of ['Home', 'Projects', 'Findings', 'Members', 'Organisation details']) {
+    out.push((await railLinks(page).filter({ hasText: new RegExp(`^${label}$`) }).getAttribute('href')) ?? 'MISSING');
+  }
+  return out;
+}
+const linksFor = (slug: string) => [
+  `/orgs/${slug}/dashboard`, `/orgs/${slug}/projects`, `/orgs/${slug}/projects?for=findings`, `/orgs/${slug}/settings/members`,
+  `/orgs/${slug}/settings/organisation`,
+];
+/** The Findings link may carry the last project opened on this device (`&last=<uuid>`); the rest of it is fixed. */
+const withoutLast = (hrefs: string[]) => hrefs.map((h) => h.replace(/&last=[0-9a-f-]{36}$/i, ''));
+
+test('S4: on Help, My account and Guidance the rail\'s organisation links go to the person\'s organisation, and Projects lands on its Projects page', async ({ browser }) => {
+  const { slug, seat: owner } = seat('owner');
+  expect(await testDb.membership.count({ where: { userId: owner.userId, status: 'active' } }), 'the owner seat is in one organisation').toBe(1);
+  const context = await contextAs(browser, owner.storageStatePath, { viewport: { width: 1280, height: 800 } });
+  try {
+    const page = await context.newPage();
+    for (const path of ['/help', '/account', '/explore/framework']) {
+      await page.goto(path);
+      expect(withoutLast(await orgLinkHrefs(page)), path).toEqual(linksFor(slug));
+    }
+    await page.goto('/help');
+    await hydrated(page, '.shell-rail__signout');
+    await railLinks(page).filter({ hasText: /^Projects$/ }).click();
+    await page.waitForURL((url) => url.pathname === `/orgs/${slug}/projects`);
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
+
+test('S4 rule 2: after switching from organisation A to B, My account\'s rail links go to B, not to the shell\'s older answer', async ({ browser }) => {
+  const p = await twoOrgPerson(browser);
+  // The server's answer when the shell is first drawn is A.
+  await testDb.user.update({ where: { id: p.account.userId }, data: { lastActiveOrgId: p.a.org.id } });
+  const context = await contextAs(browser, p.state, { viewport: { width: 1280, height: 800 } });
+  try {
+    const page = await context.newPage();
+    await page.goto('/account');
+    expect(withoutLast(await orgLinkHrefs(page)), 'drawn with the hint naming A').toEqual(linksFor(p.a.org.slug));
+    await page.goto(`/orgs/${p.a.org.slug}/dashboard`);
+    await hydrated(page, '.shell-org__button');
+    await page.locator('.shell-org__button').click();
+    await page.locator('.shell-org__list a').filter({ hasText: p.b.org.name }).click();
+    await page.waitForURL((url) => url.pathname === `/orgs/${p.b.org.slug}/dashboard`);
+    // Opening B's page stored B as the last active organisation. Put the stored answer back to A, so that only the
+    // organisation remembered in the mounted shell (rule 2) can give B below: the server's answer alone would give A.
+    await testDb.user.update({ where: { id: p.account.userId }, data: { lastActiveOrgId: p.a.org.id } });
+    // A client navigation inside the signed-in layout: the shell (and its ShellData) stays mounted.
+    await railLinks(page).filter({ hasText: /^My account$/ }).click();
+    await page.waitForURL((url) => url.pathname === '/account');
+    expect(withoutLast(await orgLinkHrefs(page)), 'after the switch, without a reload').toEqual(linksFor(p.b.org.slug));
   } finally {
     await context.close();
   }

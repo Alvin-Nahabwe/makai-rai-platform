@@ -14,10 +14,11 @@ export const metadata = { title: pageTitle(GUIDANCE_COPY.titles.controls) };
  * is linked only when `data/resources.json` says it passed review or was released (FR-SUG-05, FR-SUG-06). The wrapper
  * of each card carries the control's id, because S-26 and old links use `/explore/controls#C-01`.
  */
+const C = GUIDANCE_COPY.controls;
 const TYPES = [
-  { type: 'technical', label: 'Technical' },
-  { type: 'procedural', label: 'Procedural' },
-  { type: 'informational', label: 'Informational' },
+  { type: 'technical', ...C.types.technical },
+  { type: 'procedural', ...C.types.procedural },
+  { type: 'informational', ...C.types.informational },
 ] as const;
 
 export default function ControlsPage() {
@@ -33,23 +34,21 @@ export default function ControlsPage() {
     <div className="controls-page page-content" id="controls-library-page">
       <header className="controls-page__header">
         <h1>Controls</h1>
-        <p className="controls-page__intro">
-          A control is a practice that lowers a risk. When your team closes a finding with a mitigation, it can follow
-          one of these. Each control links to free guidance.
-        </p>
-        <p className="controls-page__counts">{`${controls.length} controls`}</p>
+        <p className="controls-page__intro">{C.intro}</p>
+        <p className="controls-page__counts">{C.count(controls.length)}</p>
       </header>
-      {TYPES.map(({ type, label }) => {
+      {TYPES.map(({ type, label, line }) => {
         const ofType = controls.filter((k) => k.type === type);
         return (
           <section key={type} className="controls-page__section" aria-labelledby={`controls-${type}`}>
-            <h2 id={`controls-${type}`}>{`${label} (${ofType.length})`}</h2>
+            <h2 id={`controls-${type}`}>{C.section(label, ofType.length)}</h2>
+            <p className="controls-page__type-line">{line}</p>
             <div className="controls-page__grid">
               {ofType.map((k) => (
                 <div key={k.id} id={k.id} className="controls-page__item">
                   <ControlCard control={k} resources={resources} headingLevel={3} />
                   <p className="controls-page__areas">
-                    <span>Risk areas:</span>{' '}
+                    <span>{C.riskAreas}</span>{' '}
                     {areasOf(k.id).map((a, i) => (
                       <span key={a.id}>
                         {i > 0 ? ', ' : ''}

@@ -35,7 +35,7 @@ test('FR-RM-04 UX-06 UX-07 (S-11, R12-16): each stage page prints its own questi
   const projectId = await newProject(baseURL!);
   for (const stage of ['pre-processing', 'in-processing', 'post-processing'] as const) {
     await openStage(page, 'assessor', stage, baseURL!, projectId);
-    expect(await page.locator('main .status-label').count()).toBe(sentinels[stage][0]);   // one label per row, so the helper below does not pass over zero labels
+    expect(await page.locator('main [data-question-id] .ui-mark').count()).toBe(sentinels[stage][0]);   // one mark per row, so the helper below does not pass over zero marks
     expect(await page.locator('main').innerText()).toMatch(new RegExp(`\\b${sentinels[stage][0]}\\b`));
     await expectStatusMarksInk(page);
     // RM's expectNoCrossStageTotal needs all three stages' sentinels on the page (e2e/helpers/noScore.ts:172-181), which
