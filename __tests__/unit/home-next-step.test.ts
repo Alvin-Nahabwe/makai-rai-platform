@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { nextStep } from '@/lib/home/nextStep';
+import { continueTarget, nextStep } from '@/lib/home/nextStep';
 import { openQuestionIds } from '@/lib/data/projects';
-import type { ScopeAnswer, StoredDecisionStatus } from '@/types/record';
+import type { ScopeAnswer, Stage, StoredDecisionStatus } from '@/types/record';
 
 /** Plan 1B Task 9 step 1 (rule C2): the next question with no decision after the last-saved one, wrapping round. */
 const Q = ['q1', 'q2', 'q3', 'q4', 'q5'].map((id) => ({ id, text: `Text of ${id}` }));
@@ -63,5 +63,61 @@ describe('openQuestionIds', () => {
   });
   it('a row with neither status nor scope answer is open', () => {
     expect(open({ b: { status: null, scopeAnswer: null } })).toEqual(new Set([GATE, 'a', 'b', 'c']));
+  });
+});
+
+/** Plan 1C C11 (cut): the project page's primary action delegates to nextStep and has no rule of its own (case at plan line 372). */
+type StageIn = { questions: ReadonlyArray<{ id: string; text: string }>; open: ReadonlySet<string> };
+const qs = (prefix: string) => ['1', '2', '3', '4'].map((n) => ({ id: `${prefix}${n}`, text: `Text of ${prefix}${n}` }));
+const stages = (open: Partial<Record<Stage, string[]>>): Record<Stage, StageIn> => ({
+  'pre-processing': { questions: qs('pre'), open: new Set(open['pre-processing'] ?? []) },
+  'in-processing': { questions: qs('in'), open: new Set(open['in-processing'] ?? []) },
+  'post-processing': { questions: qs('post'), open: new Set(open['post-processing'] ?? []) },
+});
+
+describe('continueTarget (C11)', () => {
+  it('a save: the next open question after it in the last-saved stage, label continue, exactly what nextStep returns', () => {
+    const s = stages({ 'pre-processing': ['pre1'], 'in-processing': ['in1', 'in3'] });
+    const got = continueTarget(s, { stage: 'in-processing', questionId: 'in2' });
+    expect(got).toEqual({ stage: 'in-processing', questionId: 'in3', label: 'continue' });
+    expect(got?.questionId).toBe(nextStep({ ...s['in-processing'], after: 'in2' })?.questionId);
+  });
+  it('a save: wraps round past the end of the stage, exactly what nextStep returns', () => {
+    const s = stages({ 'in-processing': ['in1'] });
+    const got = continueTarget(s, { stage: 'in-processing', questionId: 'in3' });
+    expect(got).toEqual({ stage: 'in-processing', questionId: 'in1', label: 'continue' });
+    expect(got?.questionId).toBe(nextStep({ ...s['in-processing'], after: 'in3' })?.questionId);
+  });
+  it('a save in a fully decided stage: the last-saved question itself (rule last-saved), exactly what nextStep returns', () => {
+    const s = stages({ 'pre-processing': ['pre2'] });
+    const got = continueTarget(s, { stage: 'in-processing', questionId: 'in2' });
+    expect(got).toEqual({ stage: 'in-processing', questionId: 'in2', label: 'continue' });
+    expect(got?.questionId).toBe(nextStep({ ...s['in-processing'], after: 'in2' })?.questionId);
+  });
+  it('a save whose question no longer applies, nothing open: only then the stage with no question (All questions)', () => {
+    const s = stages({ 'pre-processing': ['pre1'] });
+    expect(nextStep({ ...s['in-processing'], after: 'in-dropped' })).toBeNull();
+    expect(continueTarget(s, { stage: 'in-processing', questionId: 'in-dropped' })).toEqual({ stage: 'in-processing', questionId: null, label: 'continue' });
+  });
+  it('a last save in In-processing never yields a question of another stage', () => {
+    const s = stages({ 'pre-processing': ['pre1', 'pre2'], 'post-processing': ['post1'] });
+    for (const after of ['in1', 'in4', 'in-dropped']) {
+      const got = continueTarget(s, { stage: 'in-processing', questionId: after });
+      expect(got?.stage).toBe('in-processing');
+      expect(got?.questionId === null || got?.questionId.startsWith('in')).toBe(true);
+    }
+  });
+  it('no save: the first open question of the first stage that has one, label start, exactly what nextStep returns', () => {
+    const s = stages({ 'pre-processing': ['pre3', 'pre4'], 'in-processing': ['in1'] });
+    const got = continueTarget(s, null);
+    expect(got).toEqual({ stage: 'pre-processing', questionId: 'pre3', label: 'start' });
+    expect(got?.questionId).toBe(nextStep({ ...s['pre-processing'], after: null })?.questionId);
+  });
+  it('no save and Pre-processing fully decided: the first open question of In-processing', () => {
+    const s = stages({ 'in-processing': ['in2', 'in4'], 'post-processing': ['post1'] });
+    expect(continueTarget(s, null)).toEqual({ stage: 'in-processing', questionId: 'in2', label: 'start' });
+  });
+  it('no save and nothing open anywhere: null', () => {
+    expect(continueTarget(stages({}), null)).toBeNull();
   });
 });
