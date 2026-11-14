@@ -22,10 +22,13 @@
   gap: var(--space-4);
 }
 
+/* A block is narrow when the three sit side by side: a long unbroken string (a pasted address in a mitigation, a name)
+   breaks inside it and never spills over the next block. */
 .stage-column {
   border: 1px solid var(--color-border-container);
   border-radius: var(--radius-control);
   padding: var(--space-4);
+  overflow-wrap: anywhere;
 }
 
 .stage-column > h2 {
