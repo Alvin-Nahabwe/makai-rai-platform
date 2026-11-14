@@ -23,8 +23,6 @@
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-semibold);
   color: var(--color-ink);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 .ctl-card__desc,
 .ctl-card__note,
