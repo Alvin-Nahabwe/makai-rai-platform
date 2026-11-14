@@ -24,6 +24,7 @@ import { QUESTION_COPY } from '@/lib/question/copy';
 import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
 import RememberProject from '@/components/layout/RememberProject';
+import '@/components/question/workspace.css';
 
 const Q = QUESTION_COPY;
 
@@ -33,16 +34,18 @@ function countFor(data: QuestionPanelData): number {
 }
 
 /**
- * The regions of S-12, in this DOM order: the question, the current decision, the seal note, the answer
- * form with the evidence block inside it, the finding link and the suggestions (contract "The S-12
- * shell"). Each is a `<section>` named by its heading; `finding-link` and `suggestions` come last so that
- * on a narrow screen they follow the form, and the grid puts them beside it on a wide one (W-3).
+ * The regions of S-12, in this DOM order (plan 1C decision C1, cut to slice 1): the question, the current decision,
+ * the seal note (only for a question in a seal), the answer form with the evidence block inside it, then the
+ * guidance aside, the finding link and the suggestions. Each region is named by its heading. workspace.css puts the
+ * guidance column to the right of the form once the main column can keep 30rem beside it, and below it, in this
+ * order, before that; nothing is reordered by CSS.
  *
- * Above them: the page's one `h1`, the question id and module ("{Q-ID} · {module}", the page title's own words), which
- * takes focus on arrival (UX-42), and
- * Previous and Next over the questions that apply in this stage. The evidence block is rendered by the
- * answer form, a client component, so its callbacks are the form's and no function crosses from this
- * server component to a client one (EVD RE-1). Exported so a unit test renders the markup without the loader.
+ * The page's one `h1` is the running question's text (FR-CNT-08: the wording a new save re-confirms against), which
+ * takes focus on arrival (UX-42); the code line "{Q-ID} · {module}" (the page title's own words) follows it in small
+ * type. Above them, the strip: Previous and Next over the questions that apply in this stage, and All questions. The
+ * evidence block is rendered by the answer form, a client component, so its callbacks are the form's and no function
+ * crosses from this server component to a client one (EVD RE-1). Exported so a unit test renders the markup without
+ * the loader.
  */
 export function QuestionPanelRegions({ data }: { data: QuestionPanelData }) {
   const question = data.question;
@@ -53,21 +56,19 @@ export function QuestionPanelRegions({ data }: { data: QuestionPanelData }) {
   return (
     <div className="page-content">
       <ArchivedBanner archived={data.projectArchived} />
-      <nav aria-label={Q.nav.label} style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center', marginBottom: '1rem' }}>
+      <nav aria-label={Q.nav.label} className="question-strip">
         {previousId !== null ? <Link href={questionHref(data, previousId)}>{Q.nav.previous}</Link> : null}
         <span>{Q.nav.position(index + 1, total, STAGE_TITLE[data.stage])}</span>
         {nextId !== null ? <Link href={questionHref(data, nextId)}>{Q.nav.next}</Link> : null}
-        <Link href={`${base}/stages/${data.stage}`}>{Q.nav.back(STAGE_TITLE[data.stage])}</Link>
+        <Link href={`${base}/stages/${data.stage}`}>{Q.nav.allQuestions}</Link>
       </nav>
-      <div style={{ display: 'grid', gap: '1.5rem', alignItems: 'start', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 24rem), 1fr))' }}>
-        <div>
-          <section data-region="question" aria-labelledby="s12-question">
-            <h1 id="question-heading" tabIndex={-1}>{DECISION_COPY.titles.question(question.id, question.moduleTitle)}</h1>
+      <div className="question-workspace">
+        <div className="question-workspace__main">
+          <section data-region="question" aria-labelledby="question-heading">
+            <h1 id="question-heading" tabIndex={-1} className="question-frame__title">{data.runningQuestion.text}</h1>
             <FocusOnArrival targetId="question-heading" />
-            <h2 id="s12-question">{Q.headings.question}</h2>
-            {/* FR-CNT-08, ruling on SPEC-1: the region shows the running wording, the one a new save re-confirms against; the
-                disclosure below holds the wording the current decision was answered against (FR-CNT-07). */}
-            <QuestionContent question={data.runningQuestion} suggestionCount={count} />
+            <p className="question-frame__code">{DECISION_COPY.titles.question(question.id, question.moduleTitle)}</p>
+            {/* FR-CNT-07: the disclosure holds the wording the current decision was answered against. */}
             {reworded ? (
               <div data-reworded>
                 <p>{Q.reworded.line}</p>
@@ -89,10 +90,13 @@ export function QuestionPanelRegions({ data }: { data: QuestionPanelData }) {
               isScopeQuestion={question.type === 'gate'}
             />
           </section>
-          <section data-region="seal-note" aria-labelledby="s12-seal-note">
-            <h2 id="s12-seal-note">{Q.headings.seals}</h2>
-            <SealNote seals={data.seals} nextVersionNumber={(data.current?.versionNumber ?? 0) + 1} />
-          </section>
+          {/* Only a question in a seal has something to say here: SealNote renders nothing for one in none. */}
+          {data.seals.length > 0 ? (
+            <section data-region="seal-note" aria-labelledby="s12-seal-note">
+              <h2 id="s12-seal-note">{Q.headings.seals}</h2>
+              <SealNote seals={data.seals} nextVersionNumber={(data.current?.versionNumber ?? 0) + 1} />
+            </section>
+          ) : null}
           <section data-region="answer-form" aria-labelledby="s12-answer-form">
             <h2 id="s12-answer-form">{Q.headings.record}</h2>
             <DecisionForm key={`${data.projectId}:${question.id}`} data={data} />
@@ -106,7 +110,9 @@ export function QuestionPanelRegions({ data }: { data: QuestionPanelData }) {
             ) : null}
           </section>
         </div>
-        <div>
+        <div className="question-workspace__guide">
+          {/* The guidance of the running wording (FR-CNT-08, ruling on SPEC-1), as an aside (plan 1C decision C1, cut). */}
+          <QuestionContent question={data.runningQuestion} suggestionCount={count} />
           <section data-region="finding-link" aria-labelledby="s12-finding-link">
             <h2 id="s12-finding-link">{Q.headings.findings}</h2>
             <QuestionFindingLink

@@ -82,7 +82,7 @@ describe('S-12 shell', () => {
     const labelled = [...html.matchAll(/aria-labelledby="([^"]+)"/g)].map((m) => m[1]);
     expect(new Set(labelled).size).toBe(6);
     expect(html).not.toContain('s12-evidence');
-    for (const id of labelled) expect(html, id).toMatch(new RegExp(`<h[23] id="${id}">[^<]+</h[23]>`));
+    for (const id of labelled) expect(html, id).toMatch(new RegExp(`<h([1-3]) id="${id}"[^>]*>[^<]+</h\\1>`));
     expect(html).toMatch(/<section[^>]*data-region="suggestions"[^>]*id="suggestions"|<section[^>]*id="suggestions"[^>]*data-region="suggestions"/);
     expect(html.match(/id="suggestions"/g)).toHaveLength(1);
     // SRS line 1836: the heading has no count (the "(8)" there is a note marker); the slot's line under it gives it.
