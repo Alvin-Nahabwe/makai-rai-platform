@@ -147,7 +147,20 @@ export function FindingPageView({ data }: { data: FindingPageData }): ReactEleme
         {f.description === null ? null : <p className="finding-description"><bdi>{f.description}</bdi></p>}
         <SealMarker seals={f.seals} />
       </header>
-      {closing === null ? null : (
+      {d.closeBlocked ? (
+        // B2 (ruling R1): the finding stays open while a mitigation is Planned or In progress, so no button; the cause, when
+        // a closure is available, then the way on. Not named "Can be closed now": it cannot be.
+        <section className="finding-close-box">
+          {closing === null ? null : (
+            <p>
+              {closing.reason === 'decision_withdrawn' ? F.closeWithdrawnCause
+                : closing.reason === 'gate_no' ? F.closeGateCause
+                  : F.closeChangedCause(closing.statusWord)}
+            </p>
+          )}
+          <p>{F.closeBlocked}</p>
+        </section>
+      ) : closing === null ? null : (
         <section aria-label={F.closeSection} className="finding-close-box">
           <p>
             {closing.reason === 'decision_withdrawn' ? F.closeWithdrawn

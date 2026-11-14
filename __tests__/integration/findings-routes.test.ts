@@ -135,6 +135,19 @@ describe('finding routes 6 to 11 end to end (FR-DEC-07, NFR-INT-02, FR-PRJ-03, F
     expect(refused).toBe(12);   // viewer and reviewer x 3 mitigation:write routes, + 3 for risk:accept, + 2 for reopen, + 1 for withdraw
   });
 
+  it('B2 (the server as it stands): a close while a mitigation is Planned answers 201, writes the record, and the finding stays open', async () => {
+    // The pages no longer send this close (B2); the server's refusal is listed for after the workshop.
+    const p = await addProject(fx);
+    const raising = await addDecision(fx, p.id, { stage, questionId: 'Q-PP-01', contentVersionId, status: 'not_yet' });
+    const f = await addFinding(fx, p.id, { stage, source: 'shortfall', questionId: 'Q-PP-01', decisionVersionId: raising.id });
+    await addMitigationVersion(fx, f.id, { status: 'planned', owner: 'assessor', dueDate: '2099-01-01' });
+    const done = await addDecision(fx, p.id, { stage, questionId: 'Q-PP-01', contentVersionId, status: 'done' });
+    const res = await call('close-by-decision/route.ts', 'assessor', { id: p.id, findingId: f.id }, { requestId: randomUUID(), decisionVersionId: done.id });
+    expect(res.status).toBe(201);
+    expect(await count('mitigation_versions')).toBe(2);
+    expect(await openShortfallForQuestion(ctxFor(fx, 'assessor'), p.id, 'Q-PP-01')).toEqual({ findingId: f.id });
+  });
+
   it('FR-FND-01 UX-09 NFR-OBS-01: a "not yet" saved through DEC-a opens one finding, logs FINDING_RAISED once, and S-12 data names it', async () => {
     const p = await addProject(fx);
     const ctx = ctxFor(fx, 'assessor'); const assessor = { userId: fx.members.assessor.userId, role: 'assessor' as const };
