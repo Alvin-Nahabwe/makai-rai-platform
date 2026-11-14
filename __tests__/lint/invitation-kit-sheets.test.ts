@@ -55,7 +55,6 @@ function importers(roots: readonly string[]): Map<string, Set<string>> {
 /** Kit sheets S-04 may reach other than through a styles entry, each with its reason. */
 const PINNED: Readonly<Record<string, string>> = {
   'components/ui/Icon.css': 'the root layout reaches it (OfflineBanner, Banner, Icon), so every entry loads it, and it shares the next/font sheet\'s file',
-  'components/ui/Dialog.css': 'app/not-found.tsx reaches it on every route; its own file (experiment BD, a Button and Dialog entry, was not taken)',
 };
 
 /** Every kit sheet S-04's first visit loads today. A change here is a decision: put the sheet in a styles entry, or pin it. */

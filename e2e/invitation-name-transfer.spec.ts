@@ -41,10 +41,10 @@ const PUBLIC_BUDGET = 220_000;
  * The stylesheets S-04's first visit receives, exactly. The kit's sheets reach S-04 through styles entries
  * (components/ui/<part>Styles.ts) so the bundler cannot cut their files apart (__tests__/lint/kit-styles-entries.test.ts,
  * __tests__/lint/invitation-kit-sheets.test.ts); those lints read the source, and this count is what the built page
- * does: the next/font sheet with Icon.css, globals.css, Button.css, Dialog.css and the four form sheets in one file. An
+ * does: the next/font sheet with Icon.css, globals.css, Button.css with Dialog.css, and the four form sheets in one file. An
  * exact figure, so a join that forms by chance is noticed as well as a split: when it changes, read the files it names.
  */
-const S04_STYLESHEETS = 5;
+const S04_STYLESHEETS = 4;
 /**
  * Inviter names in three orthographies whose letters sit in the common latin-ext face: Luganda (U+014B), Kikuyu
  * (U+0169, U+0129) and Hausa (U+018A, U+0181). The sign-in rate limit keys on the client address

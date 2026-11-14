@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useLayoutEffect, useRef } from 'react';
 import type { ReactElement, ReactNode, SyntheticEvent } from 'react';
-import './Dialog.css';
+import './buttonStyles';
 
 export type DialogProps = {
   open: boolean;
