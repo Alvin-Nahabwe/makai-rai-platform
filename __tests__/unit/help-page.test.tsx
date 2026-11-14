@@ -41,7 +41,7 @@ import { SEAL_PROOF_HREF } from '@/components/review/reviewText';
 
 const W1 = [
   'When your team seals a stage review, the platform saves the decisions and evidence in it at that moment. After that, nobody can change what was sealed. If a file must be deleted later (for example for privacy), the platform shows that it was deleted.',
-  "A seal does not show that the decisions are correct or that the evidence supports them. It is your team's record, not a check by MAK-AI.",
+  "A seal does not show that the decisions are correct or that the evidence supports them. It is your team's record, not a check by MAK-AI. The platform keeps this seal. No outside body has time-stamped it.",
 ];
 
 const page = (): string => renderToStaticMarkup(HelpPage());
