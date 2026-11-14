@@ -32,9 +32,26 @@
   margin-block-start: 0;
 }
 
+/* The parts of a block ("Still open in this stage", "Recorded so far", the stage reviews) each start with a heading: space
+   above it, so the parts read as parts whether the part before ends in a list or in a sentence. */
+.stage-column h3 {
+  margin-block: var(--space-4) var(--space-1);
+}
+
+/* The follow-up's heading sits inside "Still open in this stage": one step below that part's heading. */
+.stage-column h4 {
+  margin-block: var(--space-2) var(--space-1);
+  font-size: var(--font-size-body);
+}
+
 .stage-column ul {
   margin: 0 0 var(--space-3);
   padding-left: var(--space-5);
+}
+
+/* The block's last line, the link to the stage's questions. */
+.stage-column > p:last-child {
+  margin-block-start: var(--space-3);
 }
 
 /* "Recorded so far": each item is the kit's shape (hidden from assistive technology) and the tally's words. The shape is
@@ -56,7 +73,9 @@
   color: var(--color-mark);
 }
 
-@container (min-width: 60rem) {
+/* Side by side from a 1280 px window (spec 9.2): beside the rail the list is then about 56rem wide. Narrower, a column
+   would be too narrow to read, so the stages stack. */
+@container (min-width: 52rem) {
   .stage-list__columns {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     align-items: start;
