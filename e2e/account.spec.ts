@@ -12,6 +12,7 @@ import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { expectNoHorizontalScroll } from './helpers/reflow';
 import { AUTH_COPY, AUTH_MESSAGE_COPY, FORGOT_COPY, RESET_COPY, SIGN_IN_COPY } from '../lib/auth/copy';
 import { expectTargetsAtLeast24px } from './helpers/targetSize';
+import { ACCOUNT_COPY, PERSONAL_DATA_COPY, SIGN_OUT_EVERYWHERE_COPY } from '../lib/account/copy';
 
 /**
  * S-21, S-29 and the session endpoint on a running server (FR-ACC-06 to FR-ACC-09, NFR-SEC-07, UX-01, NFR-A11Y-02,
@@ -119,6 +120,24 @@ async function signInPage(page: Page, account: Pick<FixtureAccount, 'email' | 'p
   await page.waitForURL((url) => url.pathname !== '/login');
 }
 
+/**
+ * Waits for the scroll to stop: `html { scroll-behavior: smooth }` means a box measured right after a focus or a key press is
+ * read on a page in motion (ruling T16-22). From 1024 px the scroller is `main.shell__main`, below it the window. Settled is
+ * the same position on two polls 100 ms apart; the predicate is synchronous because waitForFunction takes a returned Promise
+ * as a truthy answer at once.
+ */
+async function scrollSettled(page: Page): Promise<void> {
+  await page.evaluate(() => { (window as unknown as { lastScrollAt?: number }).lastScrollAt = Number.NaN; });
+  await page.waitForFunction(() => {
+    const w = window as unknown as { lastScrollAt?: number };
+    const main = document.querySelector('.shell__main');
+    const at = window.scrollY + (main ? main.scrollTop : 0);
+    const settled = w.lastScrollAt === at;
+    w.lastScrollAt = at;
+    return settled;
+  }, undefined, { polling: 100 });
+}
+
 /** A live reset token for `m`, written as route 33 would write it (the hash only). */
 async function resetTokenFor(m: FixtureMember): Promise<string> {
   const raw = randomBytes(32).toString('hex');
@@ -138,9 +157,9 @@ test.describe('My account and sessions', () => {
     await signInPage(one, a);
     await signInPage(two, a);
     await one.goto('/account');
-    await expect(one.getByRole('heading', { level: 1, name: 'My account' })).toBeVisible();
-    await expect(one.getByText('Ends every session, including this one.')).toBeVisible();
-    await one.getByRole('button', { name: 'Sign out everywhere' }).click();
+    await expect(one.getByRole('heading', { level: 1, name: ACCOUNT_COPY.page.heading })).toBeVisible();
+    await expect(one.getByText(SIGN_OUT_EVERYWHERE_COPY.explains)).toBeVisible();
+    await one.getByRole('button', { name: SIGN_OUT_EVERYWHERE_COPY.button }).click();
     await one.waitForURL((url) => url.pathname === '/login');
     await two.goto('/account');
     await expect(two).toHaveURL(/\/login/);
@@ -161,7 +180,38 @@ test.describe('My account and sessions', () => {
     await expect(page.getByRole('heading', { name: MY_ACCEPTANCES_COPY.heading })).toBeVisible();
     await expect(page.getByText(MY_ACCEPTANCES_COPY.olderVersion).first()).toBeVisible();
     await expect(page.getByRole('link', { name: MY_ACCEPTANCES_COPY.readAndAccept }).first()).toHaveAttribute('href', '/acceptances');
-    await expect(page.getByRole('button', { name: 'Sign out everywhere' })).toBeVisible();
+    await expect(page.getByRole('button', { name: SIGN_OUT_EVERYWHERE_COPY.button })).toBeVisible();
+  });
+
+  test('UX-29 UX-42 FR-EXP-03 (register D-386): Delete my account, opened with the keyboard at 1280 by 720, leaves the password field and both buttons inside the viewport', async ({ browser }) => {
+    // Fails today: the confirmation opens with its two buttons below the fold (boxes printed below, measured 14 Nov 2026 as
+    // password 329,654 to 1199,698 and both buttons from y 838 in a 1280 by 720 window). The repair is register D-386's, in
+    // components/ui/InlineConfirm.tsx, which this task does not touch; this case turns into a plain pass when it lands.
+    test.fail(true, 'register D-386: InlineConfirm does not bring its buttons into view when it opens');
+    const a = (await buildOrg({ label: 'delconf' })).members.assessor;
+    const page = await newPage(browser);
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await signInPage(page, a);
+    await page.goto('/account');
+    await expect(page.getByRole('heading', { level: 1, name: ACCOUNT_COPY.page.heading })).toBeVisible();
+    await tabTo(page, page.getByRole('button', { name: PERSONAL_DATA_COPY.deleteTrigger }));
+    await page.keyboard.press('Enter');
+    const password = page.getByLabel(PERSONAL_DATA_COPY.passwordLabel);
+    await expect(password).toBeFocused();
+    await scrollSettled(page);
+    // At 1280 px the scroller is main.shell__main, so a box is placed against the window's viewport, never against the scroller.
+    const view = page.viewportSize()!;
+    const confirm = page.locator('.ui-confirm');
+    const boxes: Array<[string, { x: number; y: number; width: number; height: number }]> = [
+      ['the password field', (await password.boundingBox())!],
+      ['the Cancel button', (await confirm.getByRole('button', { name: 'Cancel', exact: true }).boundingBox())!],
+      ['the Delete my account button', (await confirm.getByRole('button', { name: PERSONAL_DATA_COPY.deleteAction, exact: true }).boundingBox())!],
+    ];
+    const printed = boxes.map(([what, b]) => `${what} ${Math.round(b.x)},${Math.round(b.y)} to ${Math.round(b.x + b.width)},${Math.round(b.y + b.height)}`).join('; ');
+    console.log(`D-386 boxes in ${view.width}x${view.height}: ${printed}`);
+    for (const [what, b] of boxes) {
+      expect(b.x >= 0 && b.y >= 0 && b.x + b.width <= view.width && b.y + b.height <= view.height, `${what} is wholly inside the viewport (${printed})`).toBe(true);
+    }
   });
 
   test('UX-26 FR-ACC-05 B17: signing in on S-01 removes another account\'s drafts from this browser and keeps one\'s own', async ({ browser }) => {
@@ -429,7 +479,7 @@ test.describe('J-15 with a mail catcher', { tag: '@nginx' }, () => {
     await expect(before).toHaveURL(/\/login/);
     await signInPage(page, { email: a.email, password: 'j'.repeat(12) });
     await page.goto('/account');
-    await expect(page.getByRole('heading', { level: 1, name: 'My account' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: ACCOUNT_COPY.page.heading })).toBeVisible();
     await expect.poll(() => readFileSync(process.env.E2E_MAIL_OUT!, 'utf8').includes('Your MAK-AI RAI Platform password was changed'), { timeout: 15_000 }).toBe(true);
   });
 

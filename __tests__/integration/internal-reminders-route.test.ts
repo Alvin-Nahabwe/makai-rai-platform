@@ -4,6 +4,7 @@ import { runReminders } from '@/lib/reminders/job';
 import { POST } from '@/app/api/internal/reminders/route';
 import { captureLogs } from '../helpers/logCapture';
 import { shText } from '../helpers/spawnText';
+import { API_COPY } from '@/lib/http/api/copy';
 
 /**
  * FR-OPS-02, NFR-SEC-13, NFR-SEC-14 (SRS line 1149): route 40 runs the reminder job for a caller that holds
@@ -34,7 +35,7 @@ describe('route 40, POST /api/internal/reminders', () => {
     process.env.REMINDER_JOB_TOKEN = TOKEN;
     for (const auth of [undefined, 'Bearer ' + 'b'.repeat(64), 'Basic ' + TOKEN, TOKEN]) {
       const res = await callRoute(auth);
-      expect([auth, res.status, await res.json()]).toEqual([auth, 401, { error: 'Unauthorized', code: 'unauthenticated' }]);
+      expect([auth, res.status, await res.json()]).toEqual([auth, 401, { error: API_COPY.unauthenticated, code: 'unauthenticated' }]);
     }
     delete process.env.REMINDER_JOB_TOKEN;
     expect((await callRoute('Bearer ' + TOKEN)).status).toBe(401);

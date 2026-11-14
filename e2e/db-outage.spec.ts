@@ -5,6 +5,7 @@ import { draftKey } from '../lib/client/drafts';
 import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
 import { expectNoMarkersOrEmails, startServerLogCapture } from './helpers/logs';
 import { outageContainer } from './helpers/outage';
+import { API_COPY } from '../lib/http/api/copy';
 
 /**
  * NFR-AVL-04 (fault harness, SRS line 3254) and NFR-OBS-05. With the database stopped, a page shows the support
@@ -118,7 +119,7 @@ test('NFR-AVL-04 NFR-OBS-05: with the database stopped, pages show the reference
   }
 
   expect(writeStatus).toBe(503);
-  expect(writeBody).toMatchObject({ error: 'Service unavailable', code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) });
+  expect(writeBody).toMatchObject({ error: API_COPY.databaseUnavailable, code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) });
   expect(Object.keys(writeBody).sort()).toEqual(['code', 'error', 'reference']);
 
   // The write's reference is in exactly one log line, with the fixed name of what failed and no host or port.

@@ -12,6 +12,13 @@ export const ORG_COPY = Object.freeze({
     organisation: 'Organisation',
     invitation: 'Invitation',
   }),
+  /** The organisation chooser, `/` (audit A 3 to 6). Server code only. */
+  chooser: Object.freeze({
+    heading: 'Choose an organisation',
+    listLabel: 'Your organisations',
+    emptyHeading: 'Welcome',
+    emptyBody: "You are not a member of any organisation yet. Ask the Owner of your team's organisation to invite you. You will get the invitation by email.",
+  }),
 });
 
 const ROLE_TERMS: Readonly<Record<OrgRole, VocabularyEntry>> = Object.freeze({
@@ -34,4 +41,12 @@ export function roleTerm(role: OrgRole): VocabularyEntry {
 export function roleWithArticle(role: OrgRole): string {
   const term = roleTerm(role).term;
   return `${/^[AEIOU]/.test(term) ? 'an' : 'a'} ${term}`;
+}
+
+/**
+ * The welcome line on the dashboard after joining (audit A 100): `roleSentence` is `roleWithArticle(role)`, never a raw role
+ * value. The sentence that says what the role can do is plan 1B's.
+ */
+export function welcomeLine(organisationName: string, roleSentence: string): string {
+  return `Welcome to ${organisationName}. You are ${roleSentence}.`;
 }

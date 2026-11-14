@@ -1,11 +1,13 @@
 'use client';
 
-import { useState, type CSSProperties } from 'react';
+import { useState } from 'react';
 import { signOut } from 'next-auth/react';
 import { openDraftStore } from '@/lib/client/drafts';
+import { Button } from '@/components/ui/Button';
+import { StatusRegion } from '@/components/ui/StatusRegion';
+import { SIGN_OUT_EVERYWHERE_COPY } from '@/lib/account/copy';
 
-const TARGET: CSSProperties = { minWidth: '24px', minHeight: '24px' };
-const NOT_DONE = 'Not done: the request did not reach the server, so your other sessions are still open. Try again.';
+const NOT_DONE = SIGN_OUT_EVERYWHERE_COPY.notDone;
 
 export type SignOutEverywhereState = { kind: 'idle' } | { kind: 'sending' } | { kind: 'done' } | { kind: 'error'; message: string };
 
@@ -17,7 +19,7 @@ export type SignOutEverywhereState = { kind: 'idle' } | { kind: 'sending' } | { 
  * out. Before each sign-out it makes, `purge` clears this account's drafts from this device (NFR-PRIV-06): the other
  * sessions end, and this browser's reason text must not outlive its session.
  */
-const NOT_EVERYWHERE = 'Not signed out everywhere: you have been signed out of this browser. Sign in again and choose Sign out everywhere.';
+const NOT_EVERYWHERE = SIGN_OUT_EVERYWHERE_COPY.signedOutHere;
 
 export async function signOutEverywhere(
   fetchImpl: typeof fetch,
@@ -59,9 +61,9 @@ export function SignOutEverywhere({ userId }: { userId: string }) {
   }
   return (
     <>
-      <button type="button" className="btn btn--secondary" onClick={onClick} disabled={state.kind === 'sending'} style={TARGET}>Sign out everywhere</button>
-      {' '}Ends every session, including this one.
-      {state.kind === 'error' && <div role="alert" className="auth-error">{state.message}</div>}
+      <Button variant="secondary" onClick={onClick} disabled={state.kind === 'sending'}>{SIGN_OUT_EVERYWHERE_COPY.button}</Button>
+      {' '}{SIGN_OUT_EVERYWHERE_COPY.explains}
+      <StatusRegion message={state.kind === 'error' ? state.message : null} politeness="assertive" tone="error" />
     </>
   );
 }

@@ -10,6 +10,7 @@ import { abortPendingBackgroundRequests } from './helpers/pendingLinks';
 import { testDb } from '../__tests__/helpers/db';
 import { buildOrg } from '../__tests__/helpers/recordFixture';
 import { COPY_LINK_COPY, INVITATION_COPY, INVITATION_PAGE_COPY } from '../lib/invitations/copy';
+import { ORG_COPY } from '../lib/org/copy';
 
 /**
  * J-01, the MAK-AI administrator's journey (units/ORG.md Task 9): create an organisation with its institution's legal
@@ -349,7 +350,7 @@ test('NFR-A11Y-02 NFR-A11Y-05: J-01 by keyboard; S-07 and S-23 to S-25 pass axe 
   await lonePage.fill('#password', lone.password);
   await lonePage.locator('button[type="submit"]').click();
   await lonePage.waitForURL((url) => url.pathname === '/');
-  await expect(lonePage.getByText('You are not in an organisation yet: ask its owner for an invitation.')).toBeVisible();
+  await expect(lonePage.getByText(ORG_COPY.chooser.emptyBody)).toBeVisible();
   for (const width of [1280, 360]) for (const colorScheme of ['light', 'dark'] as const) {
     await lonePage.setViewportSize({ width, height: 900 });
     await lonePage.emulateMedia({ colorScheme });

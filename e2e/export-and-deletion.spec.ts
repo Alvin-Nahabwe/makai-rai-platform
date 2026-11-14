@@ -8,6 +8,7 @@ import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { expectNoHorizontalScroll } from './helpers/reflow';
 import { expectTargetsAtLeast24px } from './helpers/targetSize';
+import { PERSONAL_DATA_COPY } from '../lib/account/copy';
 
 /**
  * S-20 and S-21's data actions on a running server, by keyboard alone (FR-EXP-01, FR-EXP-03, UX-29,
@@ -107,7 +108,7 @@ test.describe('S-20 and S-21 by keyboard', () => {
     await page.goto('/account');
     await expect(page.getByText(`You are the only owner of ${fx.org.name} with an active account. Make someone else an owner first, then delete your account.`)).toBeVisible();
     await expect(page.getByRole('button', { name: 'Delete my account...' })).toHaveCount(0);
-    await expect(page.getByRole('link', { name: 'Export my data' })).toBeVisible();
+    await expect(page.getByRole('link', { name: PERSONAL_DATA_COPY.download })).toBeVisible();
   });
 
   test('NFR-A11Y-04 NFR-A11Y-05: S-20 and the S-21 confirmation have no serious axe violation in both themes at 1280 and 360 pixels, 24-pixel targets, no loss at 320 pixels', async ({ browser }) => {

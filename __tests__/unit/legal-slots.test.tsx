@@ -6,6 +6,7 @@ import { STUB_LEGAL_TEXTS } from '../helpers/legalStub';
 import { HOSTILE_STRINGS } from '../helpers/hostile';
 import { NOTICE_COPY } from '@/lib/legal/notice/copy';
 import { MY_ACCEPTANCES_COPY } from '@/lib/legal/copy';
+import { roleWithArticle, welcomeLine } from '@/lib/org/copy';
 
 /**
  * ACC-a Task 12: the three slots ACC-a fills (contract "Screens and slots": the shell's NewerLegalTextNotice, S-21's
@@ -138,7 +139,9 @@ describe('My acceptances on S-21 (FR-ACC-03, FR-ACC-04)', () => {
 describe('the welcome on S-08 (FR-ACC-01)', () => {
   it('FR-ACC-01 (7.4.2 S-04 / S-05): the welcome names the organisation and the role, as text', () => {
     const markup = html(<WelcomeNotice orgName="Makerere CAI Lab" role="assessor" />);
-    expect(markup).toMatch(/<[a-z]+[^>]*role="status"[^>]*>Welcome to Makerere CAI Lab\. Your role is assessor\.<\/[a-z]+>/);
+    expect(markup).toMatch(new RegExp(`<[a-z]+[^>]*role="status"[^>]*>${welcomeLine('Makerere CAI Lab', roleWithArticle('assessor'))}</[a-z]+>`));
+    expect(welcomeLine('Makerere CAI Lab', roleWithArticle('assessor'))).toBe('Welcome to Makerere CAI Lab. You are an Assessor.');
+    expect(welcomeLine('Lab Two', roleWithArticle('viewer'))).toBe('Welcome to Lab Two. You are a Viewer.');
     for (const hostile of HOSTILE_STRINGS) {
       const m = html(<WelcomeNotice orgName={hostile} role="viewer" />);
       expect(m, hostile).not.toMatch(/<script|<img/i);   // the name is escaped text (it may read "onerror=" as words)

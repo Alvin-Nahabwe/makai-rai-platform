@@ -10,6 +10,7 @@ import { hashInvitationToken } from '../../lib/data/invitationToken';
 import { ACCEPTED_KINDS } from '../../types/legal';
 import { LEGAL_KIND_NAMES, acceptanceError } from '../../lib/legal/kinds';
 import { INVITATION_COPY, INVITATION_PAGE_COPY } from '../../lib/invitations/copy';
+import { API_COPY } from '@/lib/http/api/copy';
 
 /**
  * Route 31, POST /api/v1/invitations/[token]/register (FR-ACC-01, FR-ACC-03, FR-ACC-10; contract
@@ -315,7 +316,7 @@ describe('route 31: an account only from an invitation, with its acceptances (FR
     vi.mocked(invitationByToken).mockRejectedValueOnce(Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }));
     const { result, lines } = await captureLogs(() => register(raw, { name: 'Out Age', password: 'a'.repeat(12), acceptances: currentAcceptances() }));
     const body = await result.json();
-    expect([result.status, body]).toEqual([503, { error: 'Service unavailable', code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) }]);
+    expect([result.status, body]).toEqual([503, { error: API_COPY.databaseUnavailable, code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) }]);
     expect(lines.filter((l) => l.includes('REQUEST_FAILED') && l.includes(body.reference))).toHaveLength(1);
     expect(lines.join('\n')).not.toContain('Internal server error');
     expect(await counts('outage@fixture.test')).toEqual({ users: 0, memberships: 0, consent_records: 0 });

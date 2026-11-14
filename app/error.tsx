@@ -1,6 +1,7 @@
 'use client';
 
-import { ERRORS_COPY } from '@/lib/errors/copy';
+import { Button } from '@/components/ui/Button';
+import { ERRORS_COPY, errorBody, supportReferenceLine } from '@/lib/errors/copy';
 import { pageTitle } from '@/lib/ui/title';
 
 /**
@@ -11,8 +12,8 @@ import { pageTitle } from '@/lib/ui/title';
  * failure Next hands this component an error whose message is generic and whose `digest` matches the server's own
  * log line, but a value thrown in a client component arrives as it was thrown. The reference is `error.digest`,
  * shown only when it is a short string of letters, digits, `-` and `_`. An error with none is a failure in the
- * browser, where "the server had a problem" would be untrue, so it gets its own words and no reference (owner
- * default B41).
+ * browser, where "something went wrong on our side" would be untrue, so it gets its own words and no reference (owner
+ * default B41). The words are `lib/errors/copy.ts`'s.
  *
  * Next 16 passes `retry` (re-fetch and re-render the children) in place of the earlier `reset`
  * (node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/error.md). The main landmark is
@@ -24,29 +25,23 @@ function supportReferenceOf(error: unknown): string | null {
   return typeof digest === 'string' && /^[\w-]{1,64}$/.test(digest) ? digest : null;
 }
 
-export default function ErrorPage({ error, retry }: { error: unknown; retry: () => void }) {
+/**
+ * `footer` is true on every page that has the layout and so a footer with "Help and contact"; the global error page has
+ * neither, passes false, and its sentence points at Help and contact without saying where.
+ */
+export default function ErrorPage({ error, retry, footer = true }: { error: unknown; retry: () => void; footer?: boolean }) {
   const reference = supportReferenceOf(error);
   return (
     <main id="main-content" tabIndex={-1} className="public-layout">
       {/* React 19 hoists this into the head: a failed page's own metadata never resolved, so the tab still names the screen. */}
       <title>{pageTitle(ERRORS_COPY.titles.error)}</title>
       <div className="auth-card" style={{ maxWidth: 520, margin: '3rem auto' }}>
-        <h1>This page could not be loaded</h1>
-        {reference === null ? (
-          <p>
-            {'Something went wrong while showing this page. Answers you typed on this device are kept. Try again. If it keeps happening, write to MAK-AI through Help and contact.'}
-          </p>
-        ) : (
-          <>
-            <p>
-              {`The server had a problem, so nothing on this page was changed. Answers you typed on this device are kept. Try again in a minute. If it keeps happening, write to MAK-AI through Help and contact and give this support reference: ${reference}.`}
-            </p>
-            <p>{`Support reference: ${reference}`}</p>
-          </>
-        )}
-        <button type="button" className="btn btn--primary" onClick={() => retry()}>
-          Try again
-        </button>
+        <h1>{ERRORS_COPY.error.heading}</h1>
+        <p>{errorBody(reference !== null, footer)}</p>
+        {reference === null ? null : <p>{supportReferenceLine(reference)}</p>}
+        <Button variant="primary" onClick={() => retry()}>
+          {ERRORS_COPY.error.tryAgain}
+        </Button>
       </div>
     </main>
   );

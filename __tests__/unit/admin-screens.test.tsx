@@ -6,6 +6,7 @@ import type { AdminOrganisationRow } from '@/types/api';
 import type { AdminAccountRow } from '@/lib/data/admin';
 import type { InvitationState } from '@/types/record';
 import { COPY_LINK_COPY } from '@/lib/invitations/copy';
+import { ORG_COPY } from '@/lib/org/copy';
 
 /**
  * The administrator's screens S-23 (`/admin/organisations`) and S-25 (`/admin/accounts`), the landing page
@@ -99,7 +100,7 @@ describe('S-07, the landing page', () => {
     await expect(renderLanding(adminIdentity)).rejects.toMatchObject({ digest: expect.stringMatching(/NEXT_REDIRECT;.*\/admin\/organisations/) });
     expect(membershipsMock).not.toHaveBeenCalled();   // gate 4 comes before the membership dispatch
     const html = await renderLanding(noOrgIdentity);
-    expect(html).toContain('You are not in an organisation yet: ask its owner for an invitation.');
+    expect(html).toContain(ORG_COPY.chooser.emptyBody.replace("'", '&#x27;'));
     expect(html).not.toMatch(/Create (a new|an) organi[sz]ation/);
     expect(html).not.toContain('/orgs/new');
   });

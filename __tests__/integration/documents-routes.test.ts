@@ -9,6 +9,7 @@ import { withTriggersDisabled } from '../helpers/triggers';
 import { sealFixture } from '../helpers/sealFixture';
 import { callRoute, sessionAs } from '../helpers/routeDriver';
 import { captureLogs } from '../helpers/logCapture';
+import { API_COPY } from '@/lib/http/api/copy';
 
 vi.setConfig({ testTimeout: 60_000 });
 
@@ -135,7 +136,7 @@ describe('preview, issue and download routes', () => {
     const b = await buildOrg({ label: 'drt-b' });
     sessionAs(b.members.admin.userId);
     const r = await get(doc.id, b.org.slug);
-    expect([r.status, await r.json()]).toEqual([404, { error: 'Not found', code: 'not_found' }]);
+    expect([r.status, await r.json()]).toEqual([404, { error: API_COPY.notFound, code: 'not_found' }]);
     sessionAs(fx.members.admin.userId);
     const r2 = await get(doc.id, b.org.slug);
     expect(r2.status).toBe(404);

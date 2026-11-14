@@ -1051,16 +1051,6 @@ h5 { font-size: var(--font-size-body); }
   flex-direction: column;
 }
 
-.auth-error {
-  padding: var(--space-3) var(--space-4);
-  background: var(--tint-critical-bg);
-  color: var(--color-risk-critical);
-  border-radius: var(--border-radius-sm);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  margin-bottom: var(--space-4);
-}
-
 .auth-footer {
   text-align: center;
   margin-top: var(--space-6);

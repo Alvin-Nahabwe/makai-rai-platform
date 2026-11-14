@@ -7,6 +7,7 @@ import {
 import { PersonalExportAndDeletion } from '../../components/account/PersonalExportAndDeletion';
 import { TeamExportLink } from '../../components/org/TeamExportLink';
 import { DELETION_UNCONFIRMED } from '../../lib/export/messages';
+import { PERSONAL_DATA_COPY, phraseLabel } from '../../lib/account/copy';
 
 /**
  * S-20 (TeamExportPanel), the S-21 slot (PersonalExportAndDeletion) and the S-30 slot (TeamExportLink):
@@ -59,11 +60,11 @@ describe('S-21 PersonalExportAndDeletion', () => {
 
   it('FR-EXP-02: S-21 offers Export my data with what it does and does not include', () => {
     const html = renderToStaticMarkup(<PersonalExportAndDeletionForm userId="u1" lastActiveOwnerOf={[]} />);
-    expect(html).toMatch(/<a[^>]*href="\/api\/users\/me\/export"[^>]*>Export my data<\/a>/);
-    expect(html).toContain('A JSON file with your account, memberships, acceptances, reminder setting and a list of the records you entered or were named in. It does not include your teams&#x27; record text, which belongs to each organisation.');
+    expect(html).toMatch(new RegExp(`<a[^>]*href="/api/users/me/export"[^>]*>${PERSONAL_DATA_COPY.download}</a>`));
+    expect(html).toContain(PERSONAL_DATA_COPY.downloadIntro);
     expect(html).toMatch(/<h2[^>]*>My data<\/h2>/);
     expect(html).toMatch(/<h2[^>]*>Delete my account<\/h2>/);
-    expect(html).toContain('Your name and email are removed and you are signed out everywhere. Records you entered stay with your organisations, shown as entered by &quot;Deleted user&quot;. This cannot be undone.');
+    expect(html).toContain(PERSONAL_DATA_COPY.deleteConsequence.replace(/"/g, '&quot;'));
     expect(html).toMatch(/<button[^>]*>Delete my account\.\.\.<\/button>/);
   });
 
@@ -71,18 +72,18 @@ describe('S-21 PersonalExportAndDeletion', () => {
     const html = renderToStaticMarkup(<DeleteConfirm userId="u1" onCancel={() => {}} />);
     expect(html).toMatch(/<input[^>]*type="password"[^>]*autoComplete="current-password"|<input[^>]*autoComplete="current-password"[^>]*type="password"/i);
     expect(html).not.toMatch(/onpaste|readonly/i);
-    expect(html).toContain('Type DELETE MY ACCOUNT to confirm');
-    expect(html).toMatch(/<label[^>]*for="[^"]+"[^>]*>Password<\/label>/);
+    expect(html).toContain(phraseLabel('DELETE MY ACCOUNT'));
+    expect(html).toMatch(new RegExp(`<label[^>]*for="[^"]+"[^>]*>${PERSONAL_DATA_COPY.passwordLabel}`));
     expect(html).toMatch(/<button[^>]*>Delete my account<\/button>/);
     expect(html).toMatch(/<button[^>]*>Cancel<\/button>/);
-    expect(html).toContain('Your account');
+    expect(html).toContain(PERSONAL_DATA_COPY.objectName);
   });
 
   it('M-38 FR-EXP-03: for a last owner the delete button is replaced by the message naming the organisation', () => {
     const html = renderToStaticMarkup(<PersonalExportAndDeletionForm userId="u1" lastActiveOwnerOf={['Makerere CAI Lab']} />);
     expect(html).toContain(M38);
     expect(html).not.toMatch(/>Delete my account\.\.\.</);
-    expect(html).toMatch(/>Export my data<\/a>/); // the export stays offered
+    expect(html).toMatch(new RegExp(`>${PERSONAL_DATA_COPY.download}</a>`)); // the export stays offered
   });
 
   it('M-38 FR-EXP-03: the server slot renders the form with its contract props', () => {
