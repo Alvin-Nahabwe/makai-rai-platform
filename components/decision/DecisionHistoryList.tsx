@@ -1,10 +1,12 @@
 import type { ReactElement } from 'react';
 import { SealMarker } from '@/components/review/SealMarker';
 import { VersionEvidenceList } from '@/components/evidence/VersionEvidenceList';
+import { StatusMark } from '@/components/ui/StatusMark';
 import { WITHDRAWAL_CODE_LABELS, deciderLabel } from '@/lib/decision/copy';
 import { textErasedLine } from '@/lib/documents/copy';
 import { formatDay, formatDeclaredDate, formatTime } from '@/lib/format/dates';
-import { statusText } from '@/lib/question/stageList';
+import { QUESTION_COPY } from '@/lib/question/copy';
+import { markKindOf } from '@/lib/ui/marks';
 import type { DecisionVersionView } from '@/types/api';
 import type { SealRef } from '@/types/seal';
 
@@ -22,29 +24,35 @@ export type HistoryEntry = {
  * evidence (EVD's slot) and its seals (REV-b's slot). A server component: every record text is a React child, so it
  * is shown as text and never as markup (NFR-SEC-11). Each entry carries `data-version-number`.
  */
-export function DecisionHistoryList({ orgSlug, entries }: { orgSlug: string; entries: HistoryEntry[] }): ReactElement {
+export function DecisionHistoryList({ orgSlug, entries, isScopeQuestion = false }: {
+  orgSlug: string; entries: HistoryEntry[];
+  /** Whether the question is the personal data question, whose versions show the answer mark (as CurrentDecision). */
+  isScopeQuestion?: boolean;
+}): ReactElement {
+  const H = QUESTION_COPY.history;
   return (
     <ol className="decision-history" style={{ listStyle: 'none', padding: 0 }}>
       {entries.map(({ version: v, wording, seals }) => (
         <li key={v.id} data-version-number={v.versionNumber} className="card" style={{ marginBottom: '0.75rem' }}>
-          <h2 style={{ fontSize: '1.1rem' }}>{`Version ${v.versionNumber}`}</h2>
+          <h2 style={{ fontSize: '1.1rem' }}>{H.version(v.versionNumber)}</h2>
           <SealMarker seals={seals} />
           <dl>
-            <dt>Status</dt>
-            <dd><span className="status-label" style={{ color: 'var(--text-body)' }}>
-              {v.status === 'withdrawn' ? `Withdrawn: ${v.withdrawalCode === null ? '' : WITHDRAWAL_CODE_LABELS[v.withdrawalCode]}` : statusText(v)}
-            </span></dd>
-            <dt>Reason</dt>
+            <dt>{H.status}</dt>
+            {/* A withdrawn version keeps its words and no mark; any other shows the kit's mark with its words (spec 7.2). */}
+            <dd>{v.status === 'withdrawn'
+              ? <span className="status-label">{H.withdrawn(v.withdrawalCode === null ? '' : WITHDRAWAL_CODE_LABELS[v.withdrawalCode])}</span>
+              : <StatusMark kind={markKindOf({ status: v.status, scopeAnswer: v.scopeAnswer, gated: false, isScopeQuestion })} scopeAnswer={v.scopeAnswer ?? undefined} />}</dd>
+            <dt>{H.reason}</dt>
             <dd>{v.reasonErased !== null ? textErasedLine(v.reasonErased.erasedOn) : (v.reason ?? '')}</dd>
-            {v.decidedBy !== null ? (<><dt>Decided by</dt><dd>{`${deciderLabel(v.decidedBy, '', 'record')}${v.declaredDate === null ? '' : `, ${formatDeclaredDate(v.declaredDate)}`}`}</dd></>) : null}
-            <dt>Entered by</dt>
+            {v.decidedBy !== null ? (<><dt>{H.decidedBy}</dt><dd>{`${deciderLabel(v.decidedBy, '', 'record')}${v.declaredDate === null ? '' : `, ${formatDeclaredDate(v.declaredDate)}`}`}</dd></>) : null}
+            <dt>{H.enteredBy}</dt>
             <dd>
-              {`${v.enteredBy.formerMember ? `${v.enteredBy.name} (former member)` : v.enteredBy.name}, `}
+              {`${v.enteredBy.formerMember ? QUESTION_COPY.current.formerMember(v.enteredBy.name) : v.enteredBy.name}, `}
               <time dateTime={v.receivedAt}>{`${formatDay(v.receivedAt)} ${formatTime(v.receivedAt)}`}</time>
             </dd>
-            {wording !== null ? (<><dt>Question in that version</dt><dd>{wording.text}</dd><dt>What good looked like</dt><dd>{wording.expectedPractice}</dd></>) : null}
-            <dt>Evidence</dt>
-            <dd>{v.evidence.length === 0 ? 'None' : <VersionEvidenceList orgSlug={orgSlug} items={v.evidence} />}</dd>
+            {wording !== null ? (<><dt>{H.questionThen}</dt><dd>{wording.text}</dd><dt>{H.goodPracticeThen}</dt><dd>{wording.expectedPractice}</dd></>) : null}
+            <dt>{H.evidence}</dt>
+            <dd>{v.evidence.length === 0 ? H.noEvidence : <VersionEvidenceList orgSlug={orgSlug} items={v.evidence} />}</dd>
           </dl>
         </li>
       ))}

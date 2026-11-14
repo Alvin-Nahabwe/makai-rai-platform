@@ -20,6 +20,7 @@ import { STAGES, type Stage } from '@/types/record';
 import type { DecisionVersionView } from '@/types/api';
 import type { OrgRole } from '@prisma/client';
 import { DECISION_COPY } from '@/lib/decision/copy';
+import { QUESTION_COPY } from '@/lib/question/copy';
 import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
 import RememberProject from '@/components/layout/RememberProject';
@@ -114,20 +115,21 @@ export function HistoryView({ data, shown }: { data: HistoryPageData; shown: str
   const current = data.versions[0] ?? null;
   const questionHref = questionHrefOf(data, data.questionId);
   const n = data.versions.length;
+  const H = QUESTION_COPY.history;
   return (
     <div className="page-content">
       <ArchivedBanner archived={data.projectArchived} />
-      <p><ListLink href={questionHref}>{`Back to ${data.questionId}`}</ListLink></p>
-      <h1>{`History of ${data.questionId}`}</h1>
-      <p>{n === 0 ? 'No decision has been recorded for this question yet.' : `${n} ${n === 1 ? 'version' : 'versions'}, newest first.`}</p>
+      <p><ListLink href={questionHref}>{H.back(data.questionId)}</ListLink></p>
+      <h1>{DECISION_COPY.titles.history(data.questionId)}</h1>
+      <p>{n === 0 ? H.none : H.count(n)}</p>
       {current !== null ? (
         <WithdrawDecision
           orgSlug={data.orgSlug} projectId={data.projectId} stage={data.stage} questionId={data.questionId} current={current}
           canWithdraw={canWithdrawVersion(data.viewer.role, data.viewer.userId, current, data.projectArchived)}
         />
       ) : null}
-      <DecisionHistoryList orgSlug={data.orgSlug} entries={page.items} />
-      {page.hasMore ? <ShowMoreLink href={`?shown=${page.nextShown}`} label="Show older" /> : null}
+      <DecisionHistoryList orgSlug={data.orgSlug} entries={page.items} isScopeQuestion={runningContent().questions.get(data.questionId)?.type === 'gate'} />
+      {page.hasMore ? <ShowMoreLink href={`?shown=${page.nextShown}`} label={H.showOlder} /> : null}
     </div>
   );
 }
