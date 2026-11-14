@@ -1,12 +1,47 @@
-import { currentOrgSlug, isNavActive, resolveOrgHref } from '@/lib/org-nav';
+import { currentOrgSlug, isNavActive, orgHref } from '@/lib/org-nav';
 import { SHELL_COPY } from '@/lib/shell/copy';
-import type { RailItem } from '@/lib/shell/types';
+import type { RailItem, ShellOrg } from '@/lib/shell/types';
 
 /**
  * The rail's items and the role under the person's name (plan 1A Task 11, ruling L2-49), as pure functions of the address and
- * the person's own data: no React, no data access, no storage. Every address is a fixed application path or is built from the
- * current pathname's slug through resolveOrgHref (security obligation T5).
+ * the person's own data: no React, no data access, no storage. Every address is a fixed application path or is built from one
+ * slug through orgHref (lib/org-nav.ts) (security obligation T5). That slug is railOrgSlug's: the address's own slug, or else
+ * (S4) one of the person's own organisations, matched by slug against ShellData.orgs (their active memberships): the last
+ * one seen in an address while the shell stayed mounted, or the server's homeSlug. Nothing else is a source of a slug, and
+ * every organisation address still passes requireOrgContext at the /orgs/[slug] layout: a link grants nothing.
  */
+
+/** Whether a slug is one of the person's own organisations: an array match, never a property lookup (`__proto__`, T3). */
+function isOwn(slug: string | null, orgs: readonly ShellOrg[]): slug is string {
+  return slug !== null && orgs.some((o) => o.slug === slug);
+}
+
+/**
+ * S4 rule 2: the last of the person's own organisations seen in an address. An address in one of them replaces what was
+ * remembered; any other address (Help, My account, Guidance, an organisation the person is not in) keeps it.
+ */
+export function rememberOrgSlug(previous: string | null, pathname: string, orgs: readonly ShellOrg[]): string | null {
+  const slug = currentOrgSlug(pathname) ?? null;
+  return isOwn(slug, orgs) ? slug : previous;
+}
+
+/**
+ * The organisation the rail links to (S4), in this order: the address's slug (as before; the /orgs/[slug] layout decides
+ * whether the person may be there); else the last of their own organisations seen while the shell stayed mounted; else the
+ * server's homeSlug (the organisation `/` would send them to); else none, and the organisation links stay `/` (the
+ * chooser). The last two are used only when they are among the person's own organisations (T1).
+ */
+export function railOrgSlug(
+  pathname: string,
+  lastSeen: string | null,
+  shell: { orgs: readonly ShellOrg[]; homeSlug: string | null },
+): string | null {
+  const fromAddress = currentOrgSlug(pathname);
+  if (fromAddress !== undefined) return fromAddress;
+  if (isOwn(lastSeen, shell.orgs)) return lastSeen;
+  if (isOwn(shell.homeSlug, shell.orgs)) return shell.homeSlug;
+  return null;
+}
 
 /**
  * Where the last project a person opened in an organisation is kept. Read and written only by lib/client/lastProject.ts
@@ -24,11 +59,11 @@ const FINDINGS_PAGE = /^\/orgs\/[^/]+\/projects\/[^/]+\/findings(\/|$)/;
 
 /**
  * Findings: the organisation's projects, chosen for their findings, with the last project the person opened when it is a
- * UUID. Anything else is dropped as if there were none, so nothing but an id reaches the address. The slug comes from the
- * pathname, already encoded, and is not encoded again.
+ * UUID. Anything else is dropped as if there were none, so nothing but an id reaches the address. The slug is railOrgSlug's
+ * and the address is built by orgHref, which does not encode it again.
  */
 export function findingsHref(orgSlug: string, lastProjectId: string | null): string {
-  const base = `/orgs/${orgSlug}/projects?for=findings`;
+  const base = orgHref(orgSlug, '/projects?for=findings');
   return isUuid(lastProjectId) ? `${base}&last=${lastProjectId}` : base;
 }
 
@@ -41,8 +76,15 @@ type Draft = Omit<RailItem, 'label' | 'current'>;
  * Help (plan 1A Task 12, L2-48) follows Guidance for a person in an organisation and for an account in none; the
  * administrator's rail has none (answer iv). At most one item is current.
  */
-export function railItems(input: { pathname: string; isPlatformAdmin: boolean; hasOrganisation: boolean; findingsHref: string }): RailItem[] {
-  const { pathname } = input;
+export function railItems(input: {
+  pathname: string;
+  /** railOrgSlug's answer: the organisation the organisation items link to, or null for `/`. */
+  orgSlug: string | null;
+  isPlatformAdmin: boolean;
+  hasOrganisation: boolean;
+  findingsHref: string;
+}): RailItem[] {
+  const { pathname, orgSlug } = input;
   const account: Draft = { key: 'account', href: '/account', icon: 'user', group: 'lower' };
   const guidance: Draft = { key: 'guidance', href: '/explore/framework', icon: 'book-open', group: 'main' };
   const help: Draft = { key: 'help', href: '/help', icon: 'circle-help', group: 'main' };
@@ -55,13 +97,13 @@ export function railItems(input: { pathname: string; isPlatformAdmin: boolean; h
     ];
   } else if (input.hasOrganisation) {
     drafts = [
-      { key: 'home', href: resolveOrgHref(pathname, '/dashboard'), icon: 'home', group: 'main' },
-      { key: 'projects', href: resolveOrgHref(pathname, '/projects'), icon: 'folder', group: 'main' },
+      { key: 'home', href: orgHref(orgSlug, '/dashboard'), icon: 'home', group: 'main' },
+      { key: 'projects', href: orgHref(orgSlug, '/projects'), icon: 'folder', group: 'main' },
       { key: 'findings', href: input.findingsHref, icon: 'flag', group: 'main' },
       guidance,
       help,
-      { key: 'members', href: resolveOrgHref(pathname, '/settings/members'), icon: 'users', group: 'lower' },
-      { key: 'organisation', href: resolveOrgHref(pathname, '/settings/organisation'), icon: 'building-2', group: 'lower' },
+      { key: 'members', href: orgHref(orgSlug, '/settings/members'), icon: 'users', group: 'lower' },
+      { key: 'organisation', href: orgHref(orgSlug, '/settings/organisation'), icon: 'building-2', group: 'lower' },
       account,
     ];
   } else {

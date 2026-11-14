@@ -1950,5 +1950,29 @@
     "property": "Every descriptive field of the project form has a programmatic name. The eight that are single controls keep a <label for> naming them; Start date and End date became the kit's DateField (plan 1B Task 13), a fieldset whose legend names the date and whose three boxes (Day, Month, Year) each have a <label for>, so a <label for> with the words Start date or End date no longer exists and the two names are proved by the legend and the three labels instead",
     "proof": "__tests__/unit/prj-components.test.tsx::FR-PRJ-01: the form has a labelled control for each descriptive field: the loop over the eight labels is unchanged but for dropping 'Start date' and 'End date'; for projectStart and projectEnd, expect(html).toMatch(<fieldset ...><legend ...>Start date</legend>) (and End date), and for each of day, month and year a <label for=\"{prefix}-{part}\"> with words directly followed by the <input id=\"{prefix}-{part}\">",
     "task": "1B-13"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/idle-layout.test.tsx::(module)",
+    "replacedBy": "__tests__/unit/idle-layout.test.tsx::UX-02: the layout gives the Sidebar the person's role in each of their organisations, the platform label and no platform role",
+    "property": "The file's module code serves the cases below: the layout is walked as an element tree with every data read mocked, so no case reaches a database.",
+    "proof": "Two module changes, both forced by loadShellData reading the last-active hint for a person in two or more organisations (workshop walk finding S4): @/lib/data/identity is mocked with a findUnique that answers lastActiveOrgId 'org-b', and the two mocked membership rows carry orgId 'org-a' and 'org-b', which resolveOrgDispatch matches the hint against. Nothing is removed; without the mock the case would read the real identity table.",
+    "task": "workshop walk fix S4"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/idle-layout.test.tsx::UX-02: the layout gives the Sidebar the person's role in each of their organisations, the platform label and no platform role",
+    "replacedBy": "__tests__/unit/idle-layout.test.tsx::UX-02: the layout gives the Sidebar the person's role in each of their organisations, the platform label and no platform role",
+    "property": "The layout hands the shell the person's role in each of their organisations and the platform label, asks orgRoleLabel once per organisation and once for the platform, and the account's platform role field never reaches the shell (UX-02, D-10).",
+    "proof": "The exact-equality assertion on the shell prop gains one key, homeSlug: 'b' (the organisation the mocked hint names among the two mocked memberships); every other expected value and every other assertion of the case is unchanged, so the case is stricter, not weaker: a shell carrying any further field of the user or organisation row still fails it.",
+    "task": "workshop walk fix S4"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/admin-screens.test.tsx::UX-01: the administrator sidebar links S-23 and S-25 (SRS line 1514)",
+    "replacedBy": "__tests__/unit/admin-screens.test.tsx::UX-01: the administrator sidebar links S-23 and S-25 (SRS line 1514)",
+    "property": "The administrator's shell links S-23 (/admin/organisations) and S-25 (/admin/accounts), and no Settings or /admin/users link.",
+    "proof": "The shell prop the case renders Rail with gains homeSlug: null, the field ShellData now requires (workshop walk finding S4); the four assertions are unchanged. __tests__/unit/ui/shell.test.tsx::S4: no organisation gives no organisation link, and the administrator's rail is unchanged, with a home slug or without renders the administrator's rail with a home slug too and requires the same three links and no /orgs/ address.",
+    "task": "workshop walk fix S4"
   }
 ]
