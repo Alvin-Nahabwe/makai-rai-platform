@@ -4,8 +4,8 @@ import { useEffect, useId, useRef, useState, type ReactElement } from 'react';
 import { useRouter } from 'next/navigation';
 import { InlineConfirm } from '@/components/ui/InlineConfirm';
 import { requestIdFor, sendWrite, type RetryState, type SendOutcome } from '@/lib/client/retrySafeWrite';
-import { DOCUMENT_TITLES, formatUtcDay } from '@/lib/documents/copy';
-import { MSG_ARCHIVED } from '@/lib/documents/generate';
+import { DOCUMENTS_COPY, DOCUMENT_TITLES, formatUtcDay } from '@/lib/documents/copy';
+import { isKnownWithdrawMessage } from '@/lib/documents/generate';
 import type { IssuedDocumentView } from '@/types/api';
 import type { CalendarDate, DocumentType } from '@/types/record';
 
@@ -15,20 +15,22 @@ const NO_RETRY: RetryState = { requestId: null, sentBody: null };
 const documentUrl = (orgSlug: string, id: string, leaf: 'text' | 'withdrawal') => `/api/v1/orgs/${encodeURIComponent(orgSlug)}/documents/${encodeURIComponent(id)}/${leaf}`;
 
 /** The lines of this slot. The withdrawal question is M-36 as owner question B2's default (no code, no checking sentence); the rest are queued for the owner. */
-export const COPY_DONE = 'Copied.';
-export const COPY_LOST = 'Not copied: connection lost.';
-export const COPY_SIGNED_OUT = 'Not copied: you are signed out. Sign in again, then come back.';
-export const COPY_ERASED = "Not copied: this document's text was erased.";
-export const COPY_TOO_MANY = 'Not copied: too many requests. Wait a minute, then try again.';
-export const COPY_OTHER = 'Not copied. Reload the page and try again.';
-export const WITHDRAW_DONE = 'Withdrawn.';
-export const WITHDRAW_TAKEN = 'Not withdrawn by you: someone else withdrew it first. Their reason is shown.';
-export const WITHDRAW_LOST = 'Not withdrawn yet: no reply from the server. It may have arrived. Retry is safe: it will not withdraw twice.';   // M-06 pattern; the route replays on the request id
-export const WITHDRAW_OTHER = 'Not withdrawn. Reload the page and try again.';
-export const WITHDRAW_SIGNED_OUT = 'Not withdrawn: you are signed out. Sign in again, then come back.';
-export const WITHDRAW_EARLIER = 'Withdrawn. Your earlier request may have done it; the reason shown is the one recorded.';
-export const WITHDRAW_UNCONFIRMED = 'Not confirmed: it may already have been withdrawn. Reload the page to see.';
-export const WITHDRAW_FORBIDDEN = 'Not withdrawn: your role in this organisation no longer allows this. Ask an owner or admin.';
+const W = DOCUMENTS_COPY.actions;
+export const COPY_DONE = W.copied;
+export const COPY_LOST = W.copyLost;
+export const COPY_SIGNED_OUT = W.copySignedOut;
+export const COPY_ERASED = W.copyErased;
+export const COPY_TOO_MANY = W.copyTooMany;
+export const COPY_OTHER = W.copyOther;
+export const WITHDRAW_DONE = W.withdrawn;
+export const WITHDRAW_TAKEN = W.withdrawTaken;
+export const WITHDRAW_LOST = W.withdrawLost;   // M-06 pattern; the route replays on the request id
+export const WITHDRAW_OTHER = W.withdrawOther;
+export const WITHDRAW_SIGNED_OUT = W.withdrawSignedOut;
+export const WITHDRAW_EARLIER = W.withdrawEarlier;
+export const WITHDRAW_UNCONFIRMED = W.withdrawUnconfirmed;
+export const WITHDRAW_FORBIDDEN = W.withdrawForbidden;
+export const WITHDRAW_ARCHIVED = W.withdrawArchived;
 
 export type WithdrawResult = { kind: 'done' } | { kind: 'taken' } | { kind: 'earlier' } | { kind: 'refused'; line: string; retry: boolean };
 
@@ -45,10 +47,11 @@ function withdrawResult(outcome: SendOutcome<unknown>, unknown: boolean): Withdr
   if (status >= 500) return { kind: 'refused', line: WITHDRAW_LOST, retry: true };
   if (status === 409 && body.code === 'already_withdrawn') return { kind: unknown ? 'earlier' : 'taken' };
   if (unknown && (status === 401 || status === 403)) return { kind: 'refused', line: WITHDRAW_UNCONFIRMED, retry: false };
-  if (status === 409 && body.code === 'project_archived') return { kind: 'refused', line: MSG_ARCHIVED, retry: false };
+  if (status === 409 && body.code === 'project_archived') return { kind: 'refused', line: WITHDRAW_ARCHIVED, retry: false };
   if (status === 401) return { kind: 'refused', line: WITHDRAW_SIGNED_OUT, retry: false };
   if (status === 403 && body.code === 'forbidden') return { kind: 'refused', line: WITHDRAW_FORBIDDEN, retry: false };
-  if (status === 422 && body.fields !== undefined && body.fields.length > 0) return { kind: 'refused', line: body.fields[0].message, retry: false };
+  // A field message the screen knows is shown; any other is never shown (the lead's ruling, G-c4).
+  if (status === 422 && body.fields !== undefined && body.fields.length > 0 && isKnownWithdrawMessage(body.fields[0].message)) return { kind: 'refused', line: body.fields[0].message, retry: false };
   return { kind: 'refused', line: WITHDRAW_OTHER, retry: false };
 }
 
@@ -95,9 +98,8 @@ export async function copyDocumentText(a: { orgSlug: string; documentId: string;
   }
 }
 
-/** M-36: what withdrawing says it will do. `today` is the UTC day of the withdrawal (documents print UTC, SRS 5.3 item 5). */
-export const withdrawText = (type: DocumentType, today: CalendarDate): string =>
-  `Withdraw ${DOCUMENT_TITLES[type].toLowerCase()}? It will show 'Withdrawn by the team on ${formatUtcDay(today)}'. The document stays stored.`;
+/** M-36 as C#311 rules it: what withdrawing does. `_today` is no longer in the words (the lists show the date); the signature is kept for its callers. */
+export const withdrawText = (type: DocumentType, _today: CalendarDate): string => W.withdrawConsequence(DOCUMENT_TITLES[type].toLowerCase());
 
 /**
  * The copy when the clipboard is unavailable or refuses (an insecure page, a denied permission): the text in a read-only box, selected and
@@ -112,7 +114,7 @@ export function CopyFallback({ text }: { text: string }): ReactElement {
   }, []);
   return (
     <div className="form-group">
-      <label htmlFor={id}>Select all and copy</label>
+      <label htmlFor={id}>{W.selectAll}</label>
       <textarea id={id} ref={box} readOnly rows={8} value={text} onFocus={(e) => e.currentTarget.select()} />
     </div>
   );
@@ -148,22 +150,22 @@ export function WithdrawConfirm(p: {
   return (
     <div data-inline-confirm>
       <InlineConfirm
-        objectName={`${DOCUMENT_TITLES[p.document.documentType]} issued ${formatUtcDay(p.document.issuedAt)}`}
+        objectName={W.objectName(DOCUMENT_TITLES[p.document.documentType], formatUtcDay(p.document.issuedAt))}
         consequence={withdrawText(p.document.documentType, p.today)}
-        actionLabel="Withdraw document"
+        actionLabel={W.withdraw}
         busy={busy}
         canConfirm={reason.trim() !== ''}
         onConfirm={send}
         onCancel={p.onCancel}
       >
         <div className="form-group">
-          <label htmlFor={`withdraw-reason-${p.document.id}`}>Reason (required)</label>
+          <label htmlFor={`withdraw-reason-${p.document.id}`}>{W.reasonLabel}</label>
           <textarea id={`withdraw-reason-${p.document.id}`} ref={box} rows={3} required value={reason} onChange={(e) => setReason(e.target.value)} />
         </div>
       </InlineConfirm>
       <p role="alert">{failure}</p>
       {failure !== '' && canRetry
-        ? <button type="button" className="btn btn--secondary" disabled={busy} onClick={() => { void send(); }}>Retry</button>
+        ? <button type="button" className="btn btn--secondary" disabled={busy} onClick={() => { void send(); }}>{W.retry}</button>
         : null}
     </div>
   );
@@ -218,8 +220,8 @@ export function DocumentActions(p: DocumentActionsProps): ReactElement {
         />
       ) : (
         <div className="form-actions">
-          {p.document.erased === null ? <button type="button" ref={copyButton} className="btn btn--secondary" disabled={copying} onClick={() => { void copy(); }}>Copy as text</button> : null}
-          {canWithdraw ? <button type="button" ref={trigger} className="btn btn--secondary" onClick={() => { setToday(new Date().toISOString().slice(0, 10)); setStatus(''); setOpen(true); }}>Withdraw document</button> : null}
+          {p.document.erased === null ? <button type="button" ref={copyButton} className="btn btn--secondary" disabled={copying} onClick={() => { void copy(); }}>{W.copy}</button> : null}
+          {canWithdraw ? <button type="button" ref={trigger} className="btn btn--secondary" onClick={() => { setToday(new Date().toISOString().slice(0, 10)); setStatus(''); setOpen(true); }}>{W.withdraw}</button> : null}
         </div>
       )}
       <p role="status">{status}</p>

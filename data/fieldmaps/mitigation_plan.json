@@ -5,7 +5,7 @@
   "fields": [
     {
       "fieldId": "MP-01",
-      "label": "Stage, stage review name and the review's \"Prepared for\" note",
+      "label": "Stage and review",
       "section": "Scope",
       "sources": [
         {"kind": "meta", "item": "review"}
@@ -14,7 +14,7 @@
     },
     {
       "fieldId": "MP-02",
-      "label": "Counts (whole numbers): open findings; closed by mitigation; closed by accepted risk; mitigations planned, in progress, done, cancelled, overdue",
+      "label": "Number of findings and mitigations",
       "section": "Scope",
       "sources": [
         {"kind": "findings", "stage": "review", "filter": "counts"},
@@ -24,7 +24,7 @@
     },
     {
       "fieldId": "MP-03",
-      "label": "Open findings, each with source, risk area, title, description, date raised and its mitigations (what, owner, due date, status, overdue, control followed)",
+      "label": "Open findings and their mitigations",
       "section": "Remaining risks: open findings and accepted risks",
       "sources": [
         {"kind": "findings", "stage": "review", "filter": "open"},
@@ -43,7 +43,7 @@
     },
     {
       "fieldId": "MP-06",
-      "label": "Risks accepted: who accepted, why, date to look again",
+      "label": "Accepted risks",
       "section": "Remaining risks: open findings and accepted risks",
       "sources": [
         {"kind": "accepted_risks", "stage": "review"}
@@ -52,7 +52,7 @@
     },
     {
       "fieldId": "MP-05",
-      "label": "Findings closed by a mitigation, with closure evidence or closure note",
+      "label": "Findings closed, with their evidence",
       "section": "Findings closed by a mitigation",
       "sources": [
         {"kind": "findings", "stage": "review", "filter": "closed_by_mitigation"},
@@ -71,7 +71,7 @@
     },
     {
       "fieldId": "MP-08",
-      "label": "Questions marked not applicable, with reason code and reason",
+      "label": "Questions marked Not applicable, and why",
       "section": "Gaps the reader should know about",
       "sources": [
         {"kind": "meta", "item": "not_applicable"}

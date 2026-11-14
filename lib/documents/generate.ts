@@ -1,17 +1,30 @@
 import type { SendOutcome } from '@/lib/client/retrySafeWrite';
-import { ETHICS_APPROVED, ETHICS_NOT_REQUIRED, MSG_ISSUE_NO_REPLY, MSG_PREVIEW_SERVER, MSG_ROLE_CHANGED } from './copy';
+import { DOCUMENTS_COPY, ETHICS_APPROVED, ETHICS_NOT_REQUIRED, MSG_ISSUE_NO_REPLY, MSG_PREVIEW_SERVER, MSG_SEAL_CHECK_FAILED, type DocumentPhase } from './copy';
+import { FINDINGS_COPY } from '@/lib/findings/copy';
 
 /**
  * The state of S-18's generate form (FR-DOC-08, UX-20): a pure reducer and the failure lines of 7.4.2, kept out of the component so
  * the words and the phase names are plain code, tested without React. Client-safe: it imports types only.
  */
 
-export const MSG_GENERATING = 'Generating the document...';
-export const MSG_STILL = 'Still generating.';
-export const MSG_LOST = 'Not generated: connection lost. Nothing was issued.';
-export const MSG_ARCHIVED = 'Not saved: this project is archived. Owners and admins can unarchive it.';
-export const MSG_SIGNED_OUT = 'Not generated: you are signed out. Sign in again, then come back. Nothing was issued.';
-export const MSG_OTHER = 'Not generated: something went wrong. Nothing was issued. Please try again.';
+const S = DOCUMENTS_COPY.status;
+const R = DOCUMENTS_COPY.refusal;
+const F = DOCUMENTS_COPY.fieldMessages;
+
+/** The status while a request is out, and the line once it is slow, for each phase. */
+const sendingLine = (phase: DocumentPhase): string => (phase === 'issuing' ? S.issuing : S.making);
+const slowLine = (phase: DocumentPhase): string => (phase === 'issuing' ? S.stillIssuing : S.stillMaking);
+
+/** The server's field messages S-18 knows (lib/data/documents.ts); any other is never shown (the lead's ruling, G-c4). */
+const KNOWN_FIELD_MESSAGES: ReadonlySet<string> = new Set([
+  F.sealNotOfReview, F.chooseSeal, F.notTypeable, F.mustBeText, F.chooseEthics, F.notOfState, F.chooseDocument, MSG_SEAL_CHECK_FAILED,
+]);
+const TOO_LONG = /^Use at most \d+ characters\.$/;
+export const isKnownFieldMessage = (message: string): boolean => KNOWN_FIELD_MESSAGES.has(message) || TOO_LONG.test(message);
+/** A withdrawal's field messages S-18 knows: the reason's, from the findings words the route uses (lib/data/documents.ts). */
+const WITHDRAW_TOO_LONG = /^This is [\d,]+ characters\. The limit is [\d,]+\.$/;
+export const isKnownWithdrawMessage = (message: string): boolean =>
+  message === FINDINGS_COPY.fields.eventReason || message === FINDINGS_COPY.fields.notStorable || WITHDRAW_TOO_LONG.test(message);
 
 export type GenerateState = {
   phase: 'editing' | 'generating' | 'slow' | 'preview' | 'issuing' | 'issued' | 'failed';
@@ -32,19 +45,22 @@ export type GenerateEvent =
  * nothing). After an Issue that got no reply, or a 5xx, the client cannot know: that line says the document may have been issued and
  * that Retry is safe, which holds because Issue replays on its request id (idempotentWrite).
  */
-function refusalMessage(outcome: Exclude<SendOutcome<unknown>, { kind: 'saved' }>, inPhase: 'generating' | 'issuing'): string {
-  if (outcome.kind === 'not_saved') return inPhase === 'issuing' ? MSG_ISSUE_NO_REPLY : MSG_LOST;
+function refusalMessage(outcome: Exclude<SendOutcome<unknown>, { kind: 'saved' }>, inPhase: DocumentPhase): string {
+  if (outcome.kind === 'not_saved') return inPhase === 'issuing' ? MSG_ISSUE_NO_REPLY : R.lost;
   const { status, body } = outcome;
-  if (status === 409 && body.code === 'project_archived') return MSG_ARCHIVED;
-  if (status === 403 && body.code === 'forbidden') return MSG_ROLE_CHANGED;
-  if (status === 401) return MSG_SIGNED_OUT;
+  if (status === 409 && body.code === 'project_archived') return R.archived(inPhase);
+  if (status === 403 && body.code === 'forbidden') return R.role(inPhase);
+  if (status === 401) return R.signedOut(inPhase);
   if (status >= 500) return inPhase === 'issuing' ? MSG_ISSUE_NO_REPLY : MSG_PREVIEW_SERVER;
-  if (status === 422 && body.fields !== undefined && body.fields.length > 0) return `Not generated: ${body.fields[0].message}`;
+  if (status === 422 && body.fields !== undefined && body.fields.length > 0) {
+    const message = body.fields[0].message;
+    return isKnownFieldMessage(message) ? R.field(inPhase, message) : R.unknownField(inPhase);
+  }
   if (status === 429) {
     const minutes = Math.max(1, Math.ceil((body.retryAfterSeconds ?? 60) / 60));
-    return `Not generated: too many attempts. Try again in ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}.`;
+    return R.tooMany(inPhase, minutes);
   }
-  return MSG_OTHER;
+  return R.other(inPhase);
 }
 
 const TYPED_PREFIX = 'typedFields.';
@@ -53,17 +69,17 @@ export function generateReducer(s: GenerateState, e: GenerateEvent): GenerateSta
   switch (e.kind) {
     case 'send': {
       const phase = e.to === 'issuing' ? 'issuing' : 'generating';
-      return { phase, typed: e.typed ?? s.typed, message: MSG_GENERATING, retry: false };
+      return { phase, typed: e.typed ?? s.typed, message: sendingLine(phase), retry: false };
     }
-    case 'slow': return s.phase === 'generating' || s.phase === 'issuing' ? { ...s, phase: 'slow', message: MSG_STILL, failedIn: s.phase } : s;
+    case 'slow': return s.phase === 'generating' || s.phase === 'issuing' ? { ...s, phase: 'slow', message: slowLine(s.phase), failedIn: s.phase } : s;
     case 'back': return { phase: 'editing', typed: s.typed, message: null, retry: false };
     case 'retry':
-      return s.retry && s.failedIn !== undefined ? { phase: s.failedIn, typed: s.typed, message: MSG_GENERATING, retry: false } : s;
+      return s.retry && s.failedIn !== undefined ? { phase: s.failedIn, typed: s.typed, message: sendingLine(s.failedIn), retry: false } : s;
     case 'outcome': {
       const inPhase = s.phase === 'slow' ? (s.failedIn ?? 'generating') : s.phase === 'issuing' ? 'issuing' : 'generating';
       if (e.outcome.kind === 'saved') return { phase: inPhase === 'issuing' ? 'issued' : 'preview', typed: s.typed, message: null, retry: false };
       const refused = e.outcome.kind === 'rejected' && e.outcome.status === 422
-        ? (e.outcome.body.fields ?? []).filter((f) => f.field.startsWith(TYPED_PREFIX)).map((f) => ({ fieldId: f.field.slice(TYPED_PREFIX.length), message: f.message }))
+        ? (e.outcome.body.fields ?? []).filter((f) => f.field.startsWith(TYPED_PREFIX) && isKnownFieldMessage(f.message)).map((f) => ({ fieldId: f.field.slice(TYPED_PREFIX.length), message: f.message }))
         : [];
       return { phase: 'failed', typed: s.typed, message: refusalMessage(e.outcome, inPhase), ...(refused.length > 0 ? { refused } : {}), retry: e.outcome.kind === 'not_saved' || e.outcome.status >= 500, failedIn: inPhase };
     }

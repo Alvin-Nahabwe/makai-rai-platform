@@ -1318,5 +1318,101 @@
     "property": "The mitigation status words carry no data-claims-allowed marker and keep the exact markup <span class=\"status-label\">In progress</span>, and a done mitigation's note stays inside <bdi>. Only the words before the note change, to copy audit C#111 (\"artefact\" is retired, CONSOLIDATED 2): \"Done, no artefact:\" becomes \"Done, nothing attached:\".",
     "proof": "The same case: toBe('<span class=\"status-label\">In progress</span>') and the not.toContain('data-claims-allowed') loop are byte for byte unchanged; toContain('Done, nothing attached: <bdi>Deployment stopped</bdi>') asserts the note inside <bdi> right after the words, as the old literal did with the old words.",
     "task": "plan 1A Task 18"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/document-resolve.test.ts::FR-DOC-02 (B38): a gate question prints \"Scope answer: <Yes, No or Not sure>\" in its first field, and its second field reads See",
+    "replacedBy": "__tests__/unit/document-resolve.test.ts::FR-DOC-02 (B38): a gate question prints \"Scope answer: <Yes, No or Not sure>\" in its first field, and its second field reads See",
+    "property": "A gate question prints the team's answer (Yes, No or Not sure) in its first field, its reason too, and its second field reads See <first field>. Only the words before the answer change, to the five ruled lines of part 18c (C2: the personal data question; G-b3 retires \"scope answer\"): \"Scope answer: <answer>\" becomes \"Answer to the personal data question: <answer>\".",
+    "proof": "The same case: toContain(personalDataAnswerLine('Not sure')) for the not_sure decision, and for yes and no the template `Answer to the personal data question: ${word}` (it keeps the loop's local word, so it cannot become a copy call); toContain('Not yet checked.') and toContain('See DC-16') are byte for byte unchanged.",
+    "task": "plan 1A Task 18"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/document-resolve.test.ts::FR-DOC-02: a decided record field prints its reason with \"Q-PP-12 v1\", and an empty licence prints Not recorded",
+    "replacedBy": "__tests__/unit/document-resolve.test.ts::FR-DOC-02: a decided record field prints its reason with \"Q-PP-12 v1\", and an empty licence prints Not recorded",
+    "property": "A decided record field prints its reason and a provenance that names the question and the decision's version; an empty licence prints Not recorded. Only the provenance's words change, to ruling G-c5 (a), which keeps FR-DOC-02's four items (question id, version, decided by, declared date) and drops the content version: \"From Q-PP-12 v1 (content 0.0.1-fixture). Decided by Amina N.; declared 12 Oct 2026.\" becomes \"Source: question Q-PP-12, version 1 of the decision. Decided by Amina N. on 12 Oct 2026.\". The content version is no longer printed, so the old assertion of 'content 0.0.1-fixture' now asserts the decided-by sentence instead (a copy call in its place, recorded here so the change of what that line checks is visible).",
+    "proof": "The same case: toContain(decisionSource('Q-PP-12', 1)) asserts the question and version; toContain(decidedByLine('Amina N.', '12 Oct 2026')) asserts who decided and the declared date; the reason, toBe(null) and notRecordedFields assertions are byte for byte unchanged.",
+    "task": "plan 1A Task 18"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/document-resolve.test.ts::FR-REV-08 (H1, M7, M8): erased finding, mitigation and risk text reads the SRS line; a null with no tombstone throws",
+    "replacedBy": "__tests__/unit/document-resolve.test.ts::FR-REV-08 (H1, M7, M8): erased finding, mitigation and risk text reads the SRS line; a null with no tombstone throws",
+    "property": "An erased finding title and description, an erased accepted-risk reason and an erased note of the risk's last check each print the SRS 7.5.6 erasure line in place of the text, and a finding text that is null with no tombstone throws. Only the words before the erased note change, to copy audit C#360: \"Note: <text>\" becomes \"Notes from the last check: <text>\".",
+    "proof": "The same case: toContain(`Notes from the last check: ${erased}`) with the same erased line asserts the note's place as `Note: ${erased}` did (it keeps the local erased, so it cannot become a copy call); the title, description and reason assertions and the toThrow(/findings f9 has no title and no tombstone/) are byte for byte unchanged.",
+    "task": "plan 1A Task 18"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/integration/document-text.test.ts::FR-DOC-07 NFR-A11Y-06: the %s copy holds the marking and every field of the PDF, and the PDF every line of the copy",
+    "replacedBy": "__tests__/integration/document-text.test.ts::FR-DOC-07 NFR-A11Y-06: the %s copy holds the marking and every field of the PDF, and the PDF every line of the copy",
+    "property": "The plain-text copy starts with the marking, holds every field label of the document, and agrees with the PDF both ways: no line of the copy is missing from the PDF and no text run of the PDF is missing from the copy. What changed is where the page footer may sit in the PDF text: the footer is printed on every page, so when a line of the body runs over a page break the PDF text holds the footer between the two halves of that line. With the shorter field labels of part 18c (copy audit C#377 to C#382) the mitigation plan fixture has such a line (MP-07, Q-PP-04).",
+    "proof": "The same case: the copy ends with the three footer lines, once; the case asserts that the PDF text holds that footer whole (toContain(footer)), then seeks every body line of the copy in the PDF text with the footer taken out (expect(body, line).toContain(squeeze(line))) and each footer line in the PDF text as it is. A body line missing from the PDF, or a footer line missing from it, still fails. The marking, blank second line, field-label loop and the PDF-run-in-copy loop are byte for byte unchanged.",
+    "task": "plan 1A Task 18"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/integration/documents-page.test.tsx::FR-DOC-01 FR-DOC-03 UX-20: a sealed review shows the form with the documents that have a generator, the draft and the summary, and the empty issued list",
+    "replacedBy": "__tests__/integration/documents-page.test.tsx::FR-DOC-01 FR-DOC-03 UX-20: a sealed review shows the form with the documents that have a generator, the draft and the summary, and the empty issued list",
+    "property": "S-18 for a sealed review renders its h1, the data card choice, the draft value, the typed-field note, the summary line and the seal option. Only the words change, to part 18c (c): the h1 \"Generate a document\" becomes \"Create a document\" (the lead's ruling: \"Generate\" is retired on this screen), and the note that carried TYPED_MARK becomes C#253's \"Type these for this document only. They are not part of the sealed record. …\", which no longer quotes TYPED_MARK.",
+    "proof": "The same case: toMatch(/<h1[^>]*>Create a document<\\/h1>/) asserts the h1 as before with the new words; toContain('They are not part of the sealed record.') asserts the typed-field note is on the page, as toContain(TYPED_MARK) did; the >Data card<, draft value, summary and 'Seal 1,' assertions are byte for byte unchanged.",
+    "task": "plan 1A Task 18"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/integration/documents-page.test.tsx::FR-REV-08 (C4 RE-1): after erase_text_field on the file name a document printed, S-16 and S-18 still render for every role and list the document as erased",
+    "replacedBy": "__tests__/integration/documents-page.test.tsx::FR-REV-08 (C4 RE-1): after erase_text_field on the file name a document printed, S-16 and S-18 still render for every role and list the document as erased",
+    "property": "After an operator erases a file name a document printed, S-16 and S-18 still render for every role, and S-18 lists the document as erased. Only the words of the erased line change, to C#321: \"Erased on <date>\" becomes \"File erased on <date>\".",
+    "proof": "The same case: s18.includes('File erased on ') for every role asserts the erased line as s18.includes('Erased on ') did; the S-16 assertion and the erasure call are byte for byte unchanged.",
+    "task": "plan 1A Task 18"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/documents-screen.test.tsx::UX-20: a document that takes questions says how many fields come from how many questions; one that takes none says only the fields (data card, model card, mitigation plan)",
+    "replacedBy": "__tests__/unit/documents-screen.test.tsx::UX-20: a document that takes questions says how many fields come from how many questions; one that takes none says only the fields (data card, model card, mitigation plan)",
+    "property": "The summary line says how many fields come from how many questions, and a document with no question source says only the fields. Only the words at one change, to the brief's stage 1 (C#268 kept in 1A with its plural fixed): \"1 fields will read\" becomes \"1 field will read\".",
+    "proof": "The same case: the data card and model card toBe lines are byte for byte unchanged; the mitigation plan line is toBe('10 fields . 1 field will read \"Not recorded\"').",
+    "task": "plan 1A Task 18"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/documents-screen.test.tsx::UX-20 FR-DOC-03: typed fields carry the mark and the draft values, and the summary says how many fields read Not recorded",
+    "replacedBy": "__tests__/unit/documents-screen.test.tsx::UX-20 FR-DOC-03: typed fields carry the mark and the draft values, and the summary says how many fields read Not recorded",
+    "property": "The typed fields carry a note that they are not part of the sealed record, the draft values, and the summary's Not recorded count. Only the note's words change, to C#253: the line \"<TYPED_MARK>. Kept as a draft for next time. …\" becomes \"Type these for this document only. They are not part of the sealed record. The platform keeps what you type for next time. …\".",
+    "proof": "The same case: toContain('Type these for this document only. They are not part of the sealed record.') asserts the note, as toContain(TYPED_MARK) did; the draft value and the two summary assertions are byte for byte unchanged.",
+    "task": "plan 1A Task 18"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/documents-screen.test.tsx::UX-20: the radio group is a fieldset with a legend, each radio is described by its help line, and the ethics review has its sub-fields",
+    "replacedBy": "__tests__/unit/documents-screen.test.tsx::UX-20: the radio group is a fieldset with a legend, each radio is described by its help line, and the ethics review has its sub-fields",
+    "property": "The radio group is a fieldset whose first child is its legend, each of the three radios is described by its help line, the ethics review is a select holding Approval granted, and the \"leave empty\" sentence is shown. Only the words change, to C#263 (\"Documents\" becomes \"Choose a document\") and C#253 (\"Leave empty to print\" becomes \"Leave a field empty to print\").",
+    "proof": "The same case: toMatch(/<fieldset[^>]*>\\s*<legend[^>]*>Choose a document<\\/legend>/) keeps the fieldset-then-legend markup; toContain('Leave a field empty to print &quot;Not recorded&quot;'); the radio, aria-describedby and select assertions are byte for byte unchanged.",
+    "task": "plan 1A Task 18"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/documents-screen.test.tsx::NFR-INT-05 UX-20: a seal whose check failed reads Seal check failed and cannot be chosen",
+    "replacedBy": "__tests__/unit/documents-screen.test.tsx::NFR-INT-05 UX-20: a seal whose check failed reads Seal check failed and cannot be chosen",
+    "property": "A seal whose stored bytes no longer match is a disabled option that says it cannot be used. Only the words change, to C#266: \"Seal <n>, <date> (latest). Seal check failed\" becomes \"Seal <n>, <date>: cannot be used\".",
+    "proof": "The same case: toMatch(/<option[^>]*disabled[^>]*>[^<]*Seal 1[^<]*cannot be used[^<]*<\\/option>/) asserts the same disabled option with its new words.",
+    "task": "plan 1A Task 18"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/documents-screen.test.tsx::M-35: after issue the form says Issued with the short SHA-256",
+    "replacedBy": "__tests__/unit/documents-screen.test.tsx::M-35: after issue the form says Issued with the short SHA-256",
+    "property": "After issue the status says Issued with the short form of the document's fingerprint. Only the word changes, to C#250 (\"SHA-256\" on screen becomes \"Fingerprint\").",
+    "proof": "The same case: toBe(`Issued. Fingerprint ${formatFingerprint(SHA, 'short')}.`) with the same short form.",
+    "task": "plan 1A Task 18"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/documents-screen.test.tsx::FR-DOC-01 (S-16 slot): the review lists each document with its seal, date and short SHA-256, and adds no link of its own",
+    "replacedBy": "__tests__/unit/documents-screen.test.tsx::FR-DOC-01 (S-16 slot): the review lists each document with its seal, date and short SHA-256, and adds no link of its own",
+    "property": "The S-16 slot lists each document with its type, seal, issue date and short fingerprint, says Withdrawn or Issued, adds no link of its own, and is empty for no documents. Only the word changes, to C#323 (\"SHA-256\" becomes \"Fingerprint\").",
+    "proof": "The same case: the two toContain templates hold 'Fingerprint ${formatFingerprint(SHA, 'short')}' in place of 'SHA-256 …'; the Withdrawn, Issued, no-link and empty assertions are byte for byte unchanged.",
+    "task": "plan 1A Task 18"
   }
 ]

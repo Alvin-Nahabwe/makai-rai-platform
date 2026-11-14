@@ -356,14 +356,34 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
  * The button that opens the form ("Add a mitigation" or "Update this mitigation") and keeps the saved line after the form
  * closes. A draft in this browser opens the form at once, so nothing typed is lost. Used by `FindingPageView`.
  * The form replaces the button, so a press puts focus on the form's first field, the chosen status (ruling X-4: focus
- * is never left on the page body); Close, and a save, put it back on the button (B1, ruling L5-4).
+ * is never left on the page body); Close, and a save, put it back on the button (B1, ruling L5-4). A save can also remove
+ * the button: Done closes the finding and Cancelled ends the card, and the refresh then renders no toggle. When the button
+ * leaves the page while it holds focus (and not because it was pressed to open the form), focus goes to the element whose
+ * id is `leaveFocusTo`, the page's mitigations heading, so it never falls to the page body.
  */
-export function MitigationFormToggle(p: MitigationFormProps & { label: 'Add a mitigation' | 'Update this mitigation' }): ReactElement | null {
+export function MitigationFormToggle(p: MitigationFormProps & { label: 'Add a mitigation' | 'Update this mitigation'; leaveFocusTo?: string }): ReactElement | null {
   const [open, setOpen] = useState(false);
   const [saved, setSaved] = useState<ReactNode>('');
   const trigger = useRef<HTMLButtonElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const pressed = useRef(false);
+  const leaveFocusTo = p.leaveFocusTo;
+  // The ref's cleanup runs while the button is still in the document, so `document.activeElement` still says whether it
+  // held focus. The move waits for the end of that commit (a microtask, not a timer): only a button that really left the
+  // document, with focus fallen to the body, moves it. Strict Mode's extra cleanup in development leaves the button in
+  // place, and a person who has already moved on keeps their focus.
+  const triggerRef = useCallback((el: HTMLButtonElement | null) => {
+    trigger.current = el;
+    if (el === null) return undefined;
+    return () => {
+      if (trigger.current === el) trigger.current = null;
+      if (pressed.current || leaveFocusTo === undefined || document.activeElement !== el) return;
+      queueMicrotask(() => {
+        const now = document.activeElement;
+        if (!el.isConnected && (now === null || now === document.body)) document.getElementById(leaveFocusTo)?.focus();
+      });
+    };
+  }, [leaveFocusTo]);
   // A save answers outside any event, so React may render the button after the next frame: focus goes to it in an
   // effect, once it is there (B1, ruling L5-4). A frame callback found no button on a production build, two runs in three.
   const [savedCount, setSavedCount] = useState(0);
@@ -390,7 +410,7 @@ export function MitigationFormToggle(p: MitigationFormProps & { label: 'Add a mi
       {open ? (
         <MitigationForm {...p} onSaved={(t) => { setSaved(t); setOpen(false); setSavedCount((n) => n + 1); }} onClose={() => { setOpen(false); requestAnimationFrame(() => trigger.current?.focus()); }} />
       ) : (
-        <Button variant="secondary" ref={trigger} onClick={() => { pressed.current = true; setOpen(true); }}>{p.label}</Button>
+        <Button variant="secondary" ref={triggerRef} onClick={() => { pressed.current = true; setOpen(true); }}>{p.label}</Button>
       )}
       <StatusLine>{saved}</StatusLine>
     </div>

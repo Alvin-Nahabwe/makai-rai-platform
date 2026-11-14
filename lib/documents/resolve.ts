@@ -14,7 +14,11 @@ import { isOverdue } from '@/lib/followup/overdue';
 import { formatDay, formatDeclaredDate } from '@/lib/format/dates';
 import { DATASET_SIZE_WORDS, PERSONAL_DATA_WORDS } from '@/lib/project/labels';
 import { formatFingerprint } from '@/lib/seal/format';
-import { ETHICS_APPROVED, ETHICS_NOT_REQUIRED, ETHICS_SUBMITTED, FILE_NAME_ERASED, GATE_DERIVED_NA, fileErasedLine, formatUtcDay, textErasedLine, utcSecond } from './copy';
+import {
+  ETHICS_APPROVED, ETHICS_NOT_REQUIRED, ETHICS_SUBMITTED, FILE_NAME_ERASED, GATE_DERIVED_NA, assignedToLine, checkAgainLine, decidedByLine, decidedInLine, decisionSource,
+  doneEvidenceLine, evidenceFileLine, fileErasedLine, findingStatusLine, formatUtcDay, fromQuestion, lastCheckNoteLine, outsideOtherBodyLine, outsideRoleLine, personalDataAnswerLine,
+  reviewLineText, textErasedLine, utcSecond,
+} from './copy';
 import type { ResolvedField } from './render';
 
 /**
@@ -107,7 +111,7 @@ function textOf(snap: DocumentSnapshot, table: keyof DocumentSnapshot['erasures'
 }
 /** FR-DOC-02 / D7: the sentence that stops a team's entry reading as the outside body's own record. */
 export const outsideRoleSentence = (member: string, role: OutsideRole): string =>
-  `Recorded by ${member} as decided by ${ROLE_LABEL[role]}. The ${ROLE_LABEL[role]} did not record this in the platform.`;
+  role === 'other' ? outsideOtherBodyLine(member) : outsideRoleLine(member, ROLE_LABEL[role]);
 
 const runningOf = new WeakMap<DocumentSnapshot, LoadedContent>();
 /** The running content, read once per snapshot. */
@@ -160,8 +164,10 @@ function deciderText(d: SealedDecision): string | null {
 function provenanceOf(d: SealedDecision): string {
   const who = deciderText(d);
   const when = declaredText(d.row);
-  const decided = who === null ? '' : ` Decided by ${who}${when === null ? '' : `; declared ${when}`}.`;
-  return `From ${d.row.questionId} v${d.row.versionNumber} (content ${d.content.semver}).${decided}`;
+  if (who === null) return decisionSource(d.row.questionId, d.row.versionNumber);
+  // A date known only to the month or the year is decided "in" it, a whole day "on" it (the precision is the row's, never read from the text).
+  const decided = when !== null && (d.row.declaredPrecision === 'month' || d.row.declaredPrecision === 'year') ? decidedInLine(who, when) : decidedByLine(who, when);
+  return `${decisionSource(d.row.questionId, d.row.versionNumber)} ${decided}`;
 }
 
 /** A link item's address as text. Read by key: the redirect-origin lint reads any `.url` as a request address, and this one is stored text. */
@@ -181,7 +187,7 @@ function evidenceItem(e: EvidenceItemView, snap: DocumentSnapshot): string {
   }
   const name = e.fileName ?? (erasedAt(snap, 'evidence', e.id, 'fileName') !== null ? FILE_NAME_ERASED : textOf(snap, 'evidence', e.id, 'fileName', null));
   if (e.erased !== null) return fileErasedLine(name, e.erased.erasedOn);
-  return `file ${name}${e.sha256 === null ? '' : ` (SHA-256 ${formatFingerprint(e.sha256, 'short')})`}`;
+  return evidenceFileLine(name, e.sha256 === null ? null : formatFingerprint(e.sha256, 'short'));
 }
 
 /** D2: "Not applicable (<the code's label>). Reason: '<reason>'", the reason read from the decision's own content; an erased reason prints the SRS 7.5.6 line without quotes. */
@@ -229,7 +235,7 @@ function extract(d: SealedDecision, snap: DocumentSnapshot, parts: ReadonlySet<P
       sources.push({ sourceTable: 'decision_versions', sourceId: d.row.id, field: 'reason' });
     }
   }
-  if (parts.has('scope') && d.row.scopeAnswer !== null) lines.push(`Scope answer: ${word(SCOPE_WORD, d.row.scopeAnswer, 'scope answer')}`);
+  if (parts.has('scope') && d.row.scopeAnswer !== null) lines.push(personalDataAnswerLine(word(SCOPE_WORD, d.row.scopeAnswer, 'scope answer')));
   // A whole decision lists the options of a checklist question; any other question has none to list.
   if (parts.has('options') && (own.type === 'checklist' || option !== undefined)) {
     if (option === undefined && own.options === undefined) throw new Error(`documents: checklist ${d.row.questionId} has no options in content ${content.semver}`);
@@ -254,7 +260,7 @@ function recordPart(questionId: string, parts: ReadonlySet<PartName>, option: st
     if (first !== undefined && first !== entry.fieldId) return part({ text: `See ${first}`, sealIds });
     const from = [...sealed.decisions.values()].find((x) => x.row.id === gate);
     if (from === undefined) throw new Error(`documents: question ${questionId} is derived from decision version ${gate}, which the seal does not hold`);
-    return part({ text: GATE_DERIVED_NA, provenance: `From ${from.row.questionId} v${from.row.versionNumber} (content ${from.content.semver}).`, sealIds });
+    return part({ text: GATE_DERIVED_NA, provenance: `${fromQuestion(from.row.questionId, from.row.versionNumber)}.`, sealIds });
   }
   if (d === undefined || d.row.status === 'withdrawn') return part({ sealIds });              // D1
   if (first !== undefined && first !== entry.fieldId) return part({ text: `See ${first}`, sealIds });   // D4, later field
@@ -345,13 +351,13 @@ function resolveFindings(source: Extract<FieldSource, { kind: 'findings' }>, sna
   const sources: RowRef[] = [];
   const text = items.length === 0 ? NONE : items.map(({ finding: f }, i) => {
     const version = f.decisionVersionId === null ? undefined : versions.get(f.decisionVersionId);
-    const origin = f.source === 'team' || f.questionId === null ? 'Raised by the team' : `From ${f.questionId}${version === undefined ? '' : ` v${version}`}`;
+    const origin = f.source === 'team' || f.questionId === null ? 'Raised by the team' : fromQuestion(f.questionId, version);
     sources.push({ sourceTable: 'findings', sourceId: f.id, field: 'title' }, { sourceTable: 'findings', sourceId: f.id, field: 'description' });
     const shortfall = f.source === 'shortfall' && f.questionId !== null;
     return [`${i + 1}. ${findingTitle(f, snap)}`, `Source: ${origin}`, `Risk area: ${areaText(snap, f.riskArea)}`,
       ...(f.description === null && shortfall ? [] : [`Description: ${textOf(snap, 'findings', f.id, 'description', f.description)}`]),
       ...(source.filter === 'open' ? [`Raised on: ${formatUtcDay(f.raisedAt)}`] : []),
-      `State: ${word(FINDING_STATE_WORD, f.state, 'finding state')}`].join('\n');
+      findingStatusLine(word(FINDING_STATE_WORD, f.state, 'finding state'))].join('\n');
   }).join('\n\n');
   return part({ text, sources, sealIds: [sealed.seal.sealId] });
 }
@@ -378,7 +384,7 @@ function mitigationWhat(m: MitigationVersionView, snap: DocumentSnapshot): strin
 /** One mitigation as a document prints it: what, owner, due date, then the control it follows. `sources` takes the rows the text came from. */
 function mitigationLines(m: MitigationVersionView, snap: DocumentSnapshot, sources: RowRef[]): string[] {
   sources.push({ sourceTable: 'mitigation_versions', sourceId: m.id, field: 'what' });
-  const lines = [mitigationWhat(m, snap), `Owner: ${m.owner.name}`, `Due: ${formatDay(m.dueDate)}`];
+  const lines = [mitigationWhat(m, snap), assignedToLine(m.owner.name), `Due: ${formatDay(m.dueDate)}`];
   if (m.followsControl !== null) {
     const control = running(snap).controls.get(m.followsControl);
     lines.push(`Control followed: ${m.followsControl}${control === undefined ? '' : ` ${control.name}`}`);
@@ -438,7 +444,7 @@ function resolveMitigations(source: Extract<FieldSource, { kind: 'mitigations' }
       sources.push({ sourceTable: 'mitigation_versions', sourceId: m.id, field: 'closureNote' });
     }
     if (m.evidence.length > 0) {
-      lines.push(`Closure evidence: ${m.evidence.map((e) => evidenceItem(e, snap)).join('; ')}`);
+      lines.push(doneEvidenceLine(m.evidence.map((e) => evidenceItem(e, snap)).join('; ')));
       sources.push(...evidenceRows(m.evidence));
     }
     return lines.join('\n');
@@ -461,9 +467,9 @@ function resolveAcceptedRisks(source: Extract<FieldSource, { kind: 'accepted_ris
     if (r.acceptedBy.kind === 'outside_role') lines.push(outsideRoleSentence(r.enteredBy.name, r.acceptedBy.role));
     lines.push(`Reason: ${textOf(snap, 'accepted_risks', r.id, 'reason', r.reason)}`);
     sources.push({ sourceTable: 'accepted_risks', sourceId: r.id, field: 'reason' });
-    if (r.lookAgainOn !== null) lines.push(`Look again on: ${formatDay(r.lookAgainOn)}`);
+    if (r.lookAgainOn !== null) lines.push(checkAgainLine(formatDay(r.lookAgainOn)));
     if (r.lookAgainNote !== null || erasedAt(snap, 'accepted_risks', r.id, 'lookAgainNote') !== null) {
-      lines.push(`Note: ${textOf(snap, 'accepted_risks', r.id, 'lookAgainNote', r.lookAgainNote)}`);
+      lines.push(lastCheckNoteLine(textOf(snap, 'accepted_risks', r.id, 'lookAgainNote', r.lookAgainNote)));
       sources.push({ sourceTable: 'accepted_risks', sourceId: r.id, field: 'lookAgainNote' });
     }
     return lines.join('\n');
@@ -508,7 +514,7 @@ function reviewLine(s: SealedStage, snap: DocumentSnapshot): ResolvedPart {
   const note = s.preparedFor !== null && s.preparedFor.trim() !== '' ? s.preparedFor : erasedOn !== null ? textErasedLine(erasedOn) : null;
   // The note is team text that an operator may erase, so its row is a source of this document (D13).
   const sources: RowRef[] = note === null ? [] : [{ sourceTable: 'stage_reviews', sourceId: s.seal.reviewId, field: 'preparedFor' }];
-  return part({ text: `Stage: ${s.stage}. ${s.seal.reviewName}.${note === null ? '' : ` Prepared for: ${note}`}`, sources, sealIds: [s.seal.sealId] });
+  return part({ text: reviewLineText(FINDINGS_COPY.stages[s.stage], s.seal.reviewName, note), sources, sealIds: [s.seal.sealId] });
 }
 
 /** MP-07: the chosen seal's questions that hold no decision, each with its stem from the content the seal was made on (as MP-04 reads it). */
@@ -542,7 +548,7 @@ function notApplicableList(snap: DocumentSnapshot): ResolvedPart {
     const from = [...s.decisions.values()].find((x) => x.row.id === gate);
     if (from === undefined) throw new Error(`documents: question ${question} is derived from decision version ${gate}, which the seal does not hold`);
     lines.push(`${question}: ${GATE_DERIVED_NA}`);
-    provenance.push(`From ${from.row.questionId} v${from.row.versionNumber} (content ${from.content.semver}).`);
+    provenance.push(`${fromQuestion(from.row.questionId, from.row.versionNumber)}.`);
   }
   return part({
     text: lines.length === 0 ? NONE : lines.join('\n'), provenance: provenance.join('\n'), sources, sealIds: [s.seal.sealId],
@@ -621,7 +627,7 @@ export function resolveFields(map: FieldMap, snap: DocumentSnapshot, typed: Read
   }));
 
   const sources = new Map<string, RowRef>();
-  const incomplete = new Set<string>();   // fields where a part of the record reads "Not recorded" (or "Not recorded at the time of issue")
+  const incomplete = new Set<string>();   // fields where a part of the record reads "Not recorded" (or NOT_RECORDED_AT_ISSUE)
   const fields: ResolvedField[] = map.fields.map((e, i) => {
     const own = parts[i] as ResolvedPart[];
     const all = [...own, ...(typedAdditions[i] === null ? [] : [typedAdditions[i] as ResolvedPart])];

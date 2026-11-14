@@ -324,6 +324,40 @@ test('B1 (ruling L5-4): after a successful send focus goes to something that sta
   await expect(status(owner)).toBeFocused();
 });
 
+test('B1 (ruling L5-4): a save that removes its own toggle (Done closes the finding; Cancelled ends the card) leaves focus on the mitigations heading', async ({ browser }) => {
+  const project = await addProject(fx, { name: 'Focus when the toggle goes' });
+  const url = (id: string) => `/orgs/${fx.org.slug}/projects/${project.id}/findings/${id}`;
+  const toClose = await addFinding(fx, project.id, { stage: 'pre-processing', source: 'team', by: 'owner' });
+  const toCancel = await addFinding(fx, project.id, { stage: 'pre-processing', source: 'team', by: 'owner' });
+  await addMitigationVersion(fx, toCancel.id, { status: 'planned', owner: 'assessor', dueDate: '2027-03-20' });
+  const page = await as(browser, 'assessor');
+  const heading = page.getByRole('heading', { name: FINDINGS_COPY.finding.mitigations, level: 2 });
+  const onBody = () => page.evaluate(() => document.activeElement === null || document.activeElement === document.body);
+  // (a) Done on an open finding with no other mitigation closes it: both toggles leave the page.
+  await page.goto(url(toClose.id));
+  await page.getByRole('button', { name: FINDINGS_COPY.finding.addMitigation }).click();
+  await page.getByRole('combobox', { name: MF.assignedLabel }).selectOption({ label: fx.members.assessor.name });
+  await page.getByLabel(UI_COPY.date.day).fill('20'); await page.getByLabel(UI_COPY.date.month).fill('3'); await page.getByLabel(UI_COPY.date.year).fill('2027');
+  await page.getByLabel(MF.what).fill('Relabel the minority class.');
+  await page.getByRole('radio', { name: 'Done' }).check();
+  await page.getByLabel(MF.noArtefact).check();
+  await page.getByLabel(MF.noArtefactWhy).fill('Deployment stopped');
+  await page.getByRole('button', { name: MF.save }).click();
+  await expect(page.getByRole('button', { name: ACT.reopenTrigger })).toBeVisible();   // the refresh has landed: the finding is closed
+  await expect(page.getByRole('button', { name: FINDINGS_COPY.finding.addMitigation })).toHaveCount(0);
+  await expect(heading).toBeFocused();
+  expect(await onBody()).toBe(false);
+  // (b) An update to Cancelled removes that card's toggle.
+  await page.goto(url(toCancel.id));
+  await page.getByRole('button', { name: FINDINGS_COPY.finding.updateMitigation }).click();
+  await page.getByRole('radio', { name: 'Cancelled' }).check();
+  await page.getByLabel(MF.cancelReason).fill('The memo was withdrawn.');
+  await page.getByRole('button', { name: MF.save }).click();
+  await expect(page.getByRole('button', { name: FINDINGS_COPY.finding.updateMitigation })).toHaveCount(0);
+  await expect(heading).toBeFocused();
+  expect(await onBody()).toBe(false);
+});
+
 test('B1 B2: a Retry that fails again is announced again with no "Saving..." under it, and a Retry refused for good puts focus on the alert', async ({ browser }) => {
   const page = await as(browser, 'assessor');
   const project = await addProject(fx, { name: 'Retry answers' });

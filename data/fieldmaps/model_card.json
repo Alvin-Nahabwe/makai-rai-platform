@@ -176,7 +176,7 @@
     },
     {
       "fieldId": "MC-19",
-      "label": "Disaggregated performance (subgroup x metric table)",
+      "label": "Performance for each group",
       "section": "Performance",
       "sources": [
         {"kind": "typed"},
@@ -282,7 +282,7 @@
     },
     {
       "fieldId": "MC-29",
-      "label": "Model card held by the team",
+      "label": "Does the team keep its own model card? Where?",
       "section": "Record and sign-off",
       "sources": [
         {"kind": "record", "questionId": "Q-IP-12", "parts": ["status", "evidence"]}
