@@ -6,7 +6,7 @@ import { requestDigest } from '@/lib/data/idempotency';
 import { withOrg } from '@/lib/data/tenant';
 import { loadFieldMap } from '@/lib/documents/fieldMaps';
 import { RENDERERS } from '@/lib/documents/render';
-import { SEALED_NOTE, STATEMENT, textErasedLine } from '@/lib/documents/copy';
+import { SEALED_NOTE, STATEMENT, checkAgainLine, textErasedLine } from '@/lib/documents/copy';
 import { claimMatches } from '@/lib/claims/pattern';
 import { resetDb, testDb } from '../helpers/db';
 // Aliased: the name starts with "use", and react-hooks/rules-of-hooks reads any such call as a React hook.
@@ -126,7 +126,7 @@ describe('the mitigation plan renderer', () => {
   it('FR-DOC-01 (MP-06): a risk accepted is listed with who accepted it and the date to look again', async () => {
     const text = squash(await runsOf((await issueMp()).id));
     expect(text).toContain(`Accepted by: ${fx.members.owner.name}`);
-    expect(text).toContain('Look again on: 15 Jan 2027');
+    expect(text).toContain(checkAgainLine('15 Jan 2027'));
   });
 
   it('FR-DOC-01 (MP-09, MP-10): the typed note is marked as typed, and the seal is listed', async () => {

@@ -9,7 +9,7 @@ import { controlsForArea } from '@/lib/content/suggestions';
 import { loadFieldMap } from '@/lib/documents/fieldMaps';
 import {
   GATE_DERIVED_NA, textErasedLine, NOT_RECORDED_AT_ISSUE, SEALED_NOTE, STATEMENT,
-  decisionSource, fromQuestion, personalDataAnswerLine,
+  PROJECT_MARK, decisionSource, fromQuestion, outsideRoleLine, personalDataAnswerLine,
 } from '@/lib/documents/copy';
 import { SOURCE_RESOLVERS, resolveFields, type DocumentSnapshot, type SealedDecision, type SealedFinding, type SealedStage } from '@/lib/documents/resolve';
 
@@ -115,8 +115,8 @@ const provenance = (r: Resolved, id: string): string => (r.fields.find((f) => f.
 
 describe('the mitigation plan resolvers', () => {
   it('FR-DOC-01 (MP-01): stage, review name and the Prepared-for note; no note line when the note is empty', () => {
-    expect(text(resolve({ preparedFor: 'ethics submission' }), 'MP-01')).toBe('Stage: pre-processing. Pre-processing review 1. Prepared for: ethics submission');
-    expect(text(resolve({ preparedFor: null }), 'MP-01')).toBe('Stage: pre-processing. Pre-processing review 1.');
+    expect(text(resolve({ preparedFor: 'ethics submission' }), 'MP-01')).toBe('Stage: Pre-processing. Review: Pre-processing review 1. Prepared for: ethics submission');
+    expect(text(resolve({ preparedFor: null }), 'MP-01')).toBe('Stage: Pre-processing. Review: Pre-processing review 1.');
   });
 
   it('FR-DOC-01 FR-RM-04 (MP-02): whole-number counts of findings and mitigations, overdue by East Africa Time', () => {
@@ -252,9 +252,9 @@ describe('the mitigation plan records what it prints, so an erasure reaches it (
 
   it('FR-REV-08 (SRS 7.5.6): a Prepared-for note erased before issue prints the erasure line, still as a source row, and an empty note still prints no line', () => {
     const erased = resolve({ preparedFor: null, erasures: { stage_reviews: new Map([['review-pp', new Map([['preparedFor', '2026-11-04']])]]) } });
-    expect(text(erased, 'MP-01')).toBe(`Stage: pre-processing. Pre-processing review 1. Prepared for: ${textErasedLine('2026-11-04')}`);
+    expect(text(erased, 'MP-01')).toBe(`Stage: Pre-processing. Review: Pre-processing review 1. Prepared for: ${textErasedLine('2026-11-04')}`);
     expect(erased.sources).toContainEqual({ sourceTable: 'stage_reviews', sourceId: 'review-pp', field: 'preparedFor' });
-    expect(text(resolve({ preparedFor: null }), 'MP-01')).toBe('Stage: pre-processing. Pre-processing review 1.');
+    expect(text(resolve({ preparedFor: null }), 'MP-01')).toBe('Stage: Pre-processing. Review: Pre-processing review 1.');
   });
 
   it('FR-REV-08: a finding text that is null with no tombstone is a broken row and throws', () => {
@@ -296,6 +296,34 @@ describe('the ruled words a new document prints (plan 1A Task 18c)', () => {
     expect(fromQuestion('Q-PP-12', 3)).toBe('From question Q-PP-12 (decision version 3)');
     expect(fromQuestion('Q-PP-12')).toBe('From question Q-PP-12');
     expect(decisionSource('Q-PP-12', 3)).toBe('Source: question Q-PP-12, version 3 of the decision.');
+  });
+
+  it('FR-DOC-02 FR-DOC-05 (C#273, C#274, C#328, C#331, C#347, C#359, C#360, C#362): the other settled lines of a new document', () => {
+    expect(NOT_RECORDED_AT_ISSUE).toBe('Not recorded: this stage had no seal when the document was issued');
+    expect(PROJECT_MARK).toBe('From the project details on the day of issue. Not part of the sealed record.');
+    expect(outsideRoleLine('Amina N.', 'Ethics committee')).toBe('Recorded by Amina N. as a decision of the ethics committee. The ethics committee did not enter it in the platform.');
+    const r = resolve({
+      findings: [
+        { title: 'Open one' },
+        { state: 'closed_accepted_risk', title: 'Accepted one', risk: {
+          lookAgainOn: '2027-01-15', lookAgainNote: 'Check the new register.',
+          acceptedBy: { kind: 'outside_role', role: 'data_access_committee' },
+        } },
+        { state: 'closed_mitigation', mitigations: [{ status: 'done', evidence: [{
+          id: 'ev-2', kind: 'file', fileName: 'audit.pdf', mimeType: 'application/pdf', byteSize: 100, sha256: 'ab'.repeat(32), url: null, label: null,
+          uploadedBy: null, uploadedAt: '2026-10-30T09:00:00.000Z', erased: null,
+        }] }] },
+      ],
+    });
+    expect(text(r, 'MP-03')).toContain('1. Open one\nSource: Raised by the team\nRisk area: PP-02');
+    expect(text(r, 'MP-03')).toContain('\nStatus: Open');
+    expect(text(r, 'MP-03')).not.toContain('State:');
+    const mp6 = text(r, 'MP-06') as string;
+    expect(mp6).toContain('To be checked again on: 15 Jan 2027');
+    expect(mp6).toContain('Notes from the last check: Check the new register.');
+    expect(mp6).toContain('Recorded by Owen O. as a decision of the data-access committee. The data-access committee did not enter it in the platform.');
+    expect(mp6).not.toMatch(/Look again on|\nNote:/);
+    expect(text(r, 'MP-05')).toContain('Evidence that it is done: file audit.pdf (fingerprint abab abab ... abab)');
   });
 });
 

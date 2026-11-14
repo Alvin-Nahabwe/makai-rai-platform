@@ -15,8 +15,9 @@ import { formatDay, formatDeclaredDate } from '@/lib/format/dates';
 import { DATASET_SIZE_WORDS, PERSONAL_DATA_WORDS } from '@/lib/project/labels';
 import { formatFingerprint } from '@/lib/seal/format';
 import {
-  ETHICS_APPROVED, ETHICS_NOT_REQUIRED, ETHICS_SUBMITTED, FILE_NAME_ERASED, GATE_DERIVED_NA, assignedToLine, decidedByLine, decisionSource, doneEvidenceLine,
-  fileErasedLine, formatUtcDay, fromQuestion, personalDataAnswerLine, textErasedLine, utcSecond,
+  ETHICS_APPROVED, ETHICS_NOT_REQUIRED, ETHICS_SUBMITTED, FILE_NAME_ERASED, GATE_DERIVED_NA, assignedToLine, checkAgainLine, decidedByLine, decisionSource,
+  doneEvidenceLine, evidenceFileLine, fileErasedLine, findingStatusLine, formatUtcDay, fromQuestion, lastCheckNoteLine, outsideRoleLine, personalDataAnswerLine,
+  reviewLineText, textErasedLine, utcSecond,
 } from './copy';
 import type { ResolvedField } from './render';
 
@@ -109,8 +110,7 @@ function textOf(snap: DocumentSnapshot, table: keyof DocumentSnapshot['erasures'
   return textErasedLine(on);
 }
 /** FR-DOC-02 / D7: the sentence that stops a team's entry reading as the outside body's own record. */
-export const outsideRoleSentence = (member: string, role: OutsideRole): string =>
-  `Recorded by ${member} as decided by ${ROLE_LABEL[role]}. The ${ROLE_LABEL[role]} did not record this in the platform.`;
+export const outsideRoleSentence = (member: string, role: OutsideRole): string => outsideRoleLine(member, ROLE_LABEL[role]);
 
 const runningOf = new WeakMap<DocumentSnapshot, LoadedContent>();
 /** The running content, read once per snapshot. */
@@ -183,7 +183,7 @@ function evidenceItem(e: EvidenceItemView, snap: DocumentSnapshot): string {
   }
   const name = e.fileName ?? (erasedAt(snap, 'evidence', e.id, 'fileName') !== null ? FILE_NAME_ERASED : textOf(snap, 'evidence', e.id, 'fileName', null));
   if (e.erased !== null) return fileErasedLine(name, e.erased.erasedOn);
-  return `file ${name}${e.sha256 === null ? '' : ` (SHA-256 ${formatFingerprint(e.sha256, 'short')})`}`;
+  return evidenceFileLine(name, e.sha256 === null ? null : formatFingerprint(e.sha256, 'short'));
 }
 
 /** D2: "Not applicable (<the code's label>). Reason: '<reason>'", the reason read from the decision's own content; an erased reason prints the SRS 7.5.6 line without quotes. */
@@ -353,7 +353,7 @@ function resolveFindings(source: Extract<FieldSource, { kind: 'findings' }>, sna
     return [`${i + 1}. ${findingTitle(f, snap)}`, `Source: ${origin}`, `Risk area: ${areaText(snap, f.riskArea)}`,
       ...(f.description === null && shortfall ? [] : [`Description: ${textOf(snap, 'findings', f.id, 'description', f.description)}`]),
       ...(source.filter === 'open' ? [`Raised on: ${formatUtcDay(f.raisedAt)}`] : []),
-      `State: ${word(FINDING_STATE_WORD, f.state, 'finding state')}`].join('\n');
+      findingStatusLine(word(FINDING_STATE_WORD, f.state, 'finding state'))].join('\n');
   }).join('\n\n');
   return part({ text, sources, sealIds: [sealed.seal.sealId] });
 }
@@ -463,9 +463,9 @@ function resolveAcceptedRisks(source: Extract<FieldSource, { kind: 'accepted_ris
     if (r.acceptedBy.kind === 'outside_role') lines.push(outsideRoleSentence(r.enteredBy.name, r.acceptedBy.role));
     lines.push(`Reason: ${textOf(snap, 'accepted_risks', r.id, 'reason', r.reason)}`);
     sources.push({ sourceTable: 'accepted_risks', sourceId: r.id, field: 'reason' });
-    if (r.lookAgainOn !== null) lines.push(`Look again on: ${formatDay(r.lookAgainOn)}`);
+    if (r.lookAgainOn !== null) lines.push(checkAgainLine(formatDay(r.lookAgainOn)));
     if (r.lookAgainNote !== null || erasedAt(snap, 'accepted_risks', r.id, 'lookAgainNote') !== null) {
-      lines.push(`Note: ${textOf(snap, 'accepted_risks', r.id, 'lookAgainNote', r.lookAgainNote)}`);
+      lines.push(lastCheckNoteLine(textOf(snap, 'accepted_risks', r.id, 'lookAgainNote', r.lookAgainNote)));
       sources.push({ sourceTable: 'accepted_risks', sourceId: r.id, field: 'lookAgainNote' });
     }
     return lines.join('\n');
@@ -510,7 +510,7 @@ function reviewLine(s: SealedStage, snap: DocumentSnapshot): ResolvedPart {
   const note = s.preparedFor !== null && s.preparedFor.trim() !== '' ? s.preparedFor : erasedOn !== null ? textErasedLine(erasedOn) : null;
   // The note is team text that an operator may erase, so its row is a source of this document (D13).
   const sources: RowRef[] = note === null ? [] : [{ sourceTable: 'stage_reviews', sourceId: s.seal.reviewId, field: 'preparedFor' }];
-  return part({ text: `Stage: ${s.stage}. ${s.seal.reviewName}.${note === null ? '' : ` Prepared for: ${note}`}`, sources, sealIds: [s.seal.sealId] });
+  return part({ text: reviewLineText(FINDINGS_COPY.stages[s.stage], s.seal.reviewName, note), sources, sealIds: [s.seal.sealId] });
 }
 
 /** MP-07: the chosen seal's questions that hold no decision, each with its stem from the content the seal was made on (as MP-04 reads it). */
@@ -623,7 +623,7 @@ export function resolveFields(map: FieldMap, snap: DocumentSnapshot, typed: Read
   }));
 
   const sources = new Map<string, RowRef>();
-  const incomplete = new Set<string>();   // fields where a part of the record reads "Not recorded" (or "Not recorded at the time of issue")
+  const incomplete = new Set<string>();   // fields where a part of the record reads "Not recorded" (or NOT_RECORDED_AT_ISSUE)
   const fields: ResolvedField[] = map.fields.map((e, i) => {
     const own = parts[i] as ResolvedPart[];
     const all = [...own, ...(typedAdditions[i] === null ? [] : [typedAdditions[i] as ResolvedPart])];

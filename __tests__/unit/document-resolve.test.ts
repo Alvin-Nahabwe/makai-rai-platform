@@ -103,7 +103,7 @@ describe('record fields', () => {
 
   it('FR-DOC-02 (D7, D9): an outside-role decision names the member and the role, and no evidence prints the line', () => {
     const r = resolveFields(dataCardMap, snapWith({ 'Q-PP-13': decision({ v: 1, status: 'done', decidedBy: { kind: 'outside_role', role: 'ethics_committee' }, enteredBy: 'Amina N.', evidence: [] }) }), {});
-    expect(text(r, 'DC-16')).toContain('Recorded by Amina N. as decided by Ethics committee. The Ethics committee did not record this in the platform.');
+    expect(text(r, 'DC-16')).toContain(outsideRoleLine('Amina N.', 'Ethics committee'));
     expect(text(r, 'DC-16')).toContain(NO_EVIDENCE);
   });
 
@@ -371,7 +371,7 @@ describe('findings, mitigations and accepted risks', () => {
     const a = text(r, 'MC-25') as string;
     expect(a).toContain('Low impact.');
     expect(a).toContain('15 Jan 2027');
-    expect(a).toContain('Recorded by Joan K. as decided by Supervisor. The Supervisor did not record this in the platform.');
+    expect(a).toContain(outsideRoleLine('Joan K.', 'Supervisor'));
     expect(r.sources).toEqual(expect.arrayContaining([{ sourceTable: 'accepted_risks', sourceId: 'ar1', field: 'reason' }]));
   });
 
@@ -415,7 +415,7 @@ describe('gaps, gate-derived questions and erasure lines', () => {
     const r = resolveFields(dataCardMap, snapshotWith({ 'Q-PP-13': decision({ v: 1, evidence: items }) }, erasures), {});
     const t = text(r, 'DC-16') as string;
     expect(t).toContain(`link ${line} ${line}`);
-    expect(t).toContain('file File name erased (SHA-256');
+    expect(t).toContain(evidenceFileLine('File name erased', 'abab abab ... abab'));
     expect(t).not.toMatch(/undefined|null/);
   });
 
@@ -456,7 +456,7 @@ describe('gaps, gate-derived questions and erasure lines', () => {
     expect(text(r, 'MC-23')).toContain(`1. ${erased}`);
     expect(text(r, 'MC-23')).toContain(`Description: ${erased}`);
     expect(text(r, 'MC-25')).toContain(`Reason: ${erased}`);
-    expect(text(r, 'MC-25')).toContain(`Note: ${erased}`);
+    expect(text(r, 'MC-25')).toContain(`Notes from the last check: ${erased}`);
         const noTombstone = snapshot({}, { reviewStage: 'in-processing' });
     (noTombstone.stages['in-processing'] as { findings: unknown }).findings = [{ finding: { ...base, id: 'f9', source: 'team', title: null, description: 'D', state: 'open' }, mitigations: [], acceptedRisk: null, events: [] }];
     expect(() => resolveFields(modelCardMap, noTombstone, {})).toThrow(/findings f9 has no title and no tombstone/);
@@ -556,4 +556,4 @@ describe('boundaries', () => {
   });
 });
 
-import { GATE_DERIVED_NA, decidedByLine, decisionSource, fromQuestion, personalDataAnswerLine } from '@/lib/documents/copy';
+import { GATE_DERIVED_NA, decidedByLine, decisionSource, evidenceFileLine, fromQuestion, outsideRoleLine, personalDataAnswerLine } from '@/lib/documents/copy';

@@ -11,7 +11,7 @@ import { IssuedDocumentsList } from '@/components/documents/IssuedDocumentsList'
 import { ReviewDocumentsList } from '@/components/documents/ReviewDocumentsList';
 import { typedToSend } from '@/lib/documents/generate';
 import { SLOW_MS, type SendOutcome, type sendWrite } from '@/lib/client/retrySafeWrite';
-import { SEALED_NOTE, STATEMENT, TYPED_MARK } from '@/lib/documents/copy';
+import { NOT_RECORDED_AT_ISSUE, SEALED_NOTE, STATEMENT, TYPED_MARK } from '@/lib/documents/copy';
 import { formatFingerprint } from '@/lib/seal/format';
 import { loadFieldMap } from '@/lib/documents/fieldMaps';
 import { HOSTILE_STRINGS } from '../helpers/hostile';
@@ -91,7 +91,7 @@ describe('S-18 form', () => {
   });
 
   it('FR-DOC-05 UX-20: a document needing a stage never sealed says so before generating', () => {
-    expect(renderToStaticMarkup(<GenerateDocumentForm {...props({ neverSealed: ['in-processing'] })} />)).toContain('Not recorded at the time of issue');
+    expect(renderToStaticMarkup(<GenerateDocumentForm {...props({ neverSealed: ['in-processing'] })} />)).toContain(NOT_RECORDED_AT_ISSUE);
   });
 
   it('NFR-SEC-11 UX-20: the preview shows hostile text as text', () => {

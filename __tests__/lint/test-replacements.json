@@ -1238,5 +1238,13 @@
     "property": "A decided record field prints its reason and a provenance that names the question and the decision's version; an empty licence prints Not recorded. Only the provenance's words change, to ruling G-c5 (a), which keeps FR-DOC-02's four items (question id, version, decided by, declared date) and drops the content version: \"From Q-PP-12 v1 (content 0.0.1-fixture). Decided by Amina N.; declared 12 Oct 2026.\" becomes \"Source: question Q-PP-12, version 1 of the decision. Decided by Amina N. on 12 Oct 2026.\". The content version is no longer printed, so the old assertion of 'content 0.0.1-fixture' now asserts the decided-by sentence instead (a copy call in its place, recorded here so the change of what that line checks is visible).",
     "proof": "The same case: toContain(decisionSource('Q-PP-12', 1)) asserts the question and version; toContain(decidedByLine('Amina N.', '12 Oct 2026')) asserts who decided and the declared date; the reason, toBe(null) and notRecordedFields assertions are byte for byte unchanged.",
     "task": "plan 1A Task 18"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/document-resolve.test.ts::FR-REV-08 (H1, M7, M8): erased finding, mitigation and risk text reads the SRS line; a null with no tombstone throws",
+    "replacedBy": "__tests__/unit/document-resolve.test.ts::FR-REV-08 (H1, M7, M8): erased finding, mitigation and risk text reads the SRS line; a null with no tombstone throws",
+    "property": "An erased finding title and description, an erased accepted-risk reason and an erased note of the risk's last check each print the SRS 7.5.6 erasure line in place of the text, and a finding text that is null with no tombstone throws. Only the words before the erased note change, to copy audit C#360: \"Note: <text>\" becomes \"Notes from the last check: <text>\".",
+    "proof": "The same case: toContain(`Notes from the last check: ${erased}`) with the same erased line asserts the note's place as `Note: ${erased}` did (it keeps the local erased, so it cannot become a copy call); the title, description and reason assertions and the toThrow(/findings f9 has no title and no tombstone/) are byte for byte unchanged.",
+    "task": "plan 1A Task 18"
   }
 ]

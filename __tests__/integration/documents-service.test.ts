@@ -6,7 +6,7 @@ import { documentDraft, documentViews, issueDocument, listDocuments, previewDocu
 import { requestDigest } from '@/lib/data/idempotency';
 import { withOrg } from '@/lib/data/tenant';
 import { RENDERERS, type Renderer } from '@/lib/documents/render';
-import { textErasedLine } from '@/lib/documents/copy';
+import { NOT_RECORDED_AT_ISSUE, textErasedLine } from '@/lib/documents/copy';
 import { resetDb, testDb } from '../helpers/db';
 // Aliased: the name starts with "use", and react-hooks/rules-of-hooks reads any such call as a React hook.
 import { useFixtureContent as publishFixtureContent } from '../helpers/content';
@@ -126,7 +126,7 @@ describe('preview and issue', () => {
     const seal = await sealFixture(lone, review, { projectId: loneProject });
     const lctx = ctxFor(lone, 'admin');
     const p = await previewDocument(lctx, { userId: lone.members.admin.userId, role: 'admin' }, { projectId: loneProject, reviewId: review, sealId: seal.id, documentType: 'model_card', typedFields: {} });
-    expect(p.text).toContain('Not recorded at the time of issue');
+    expect(p.text).toContain(NOT_RECORDED_AT_ISSUE);
     const out = await issueDocument(lctx, { userId: lone.members.admin.userId, role: 'admin' }, { projectId: loneProject, reviewId: review, sealId: seal.id, documentType: 'model_card', typedFields: {}, requestId: randomUUID() },
       requestDigest({ path: { id: loneProject, reviewId: review }, body: {} }));
     expect(out.value.seals.map((s) => s.sealId)).toEqual([seal.id]);

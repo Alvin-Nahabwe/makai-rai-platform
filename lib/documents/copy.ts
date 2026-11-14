@@ -11,8 +11,8 @@ export const STATEMENT = 'Made from this team\'s own records in the MAK-AI RAI P
 /** The design spec's sentence (DESIGN-SPEC.md:424, the owner's decision of 14 November 2026) over 6.5, D8, R-56. */
 export const SEALED_NOTE = 'The platform keeps this seal. No outside body has time-stamped it.';
 export const NOT_RECORDED = 'Not recorded';                                           // FR-DOC-02, D1
-export const NOT_RECORDED_AT_ISSUE = 'Not recorded at the time of issue';             // FR-DOC-05, D3
-export const PROJECT_MARK = 'From the project description when this document was issued; not part of the sealed record'; // FR-DOC-02
+export const NOT_RECORDED_AT_ISSUE = 'Not recorded: this stage had no seal when the document was issued'; // FR-DOC-05, D3; C#273
+export const PROJECT_MARK = 'From the project details on the day of issue. Not part of the sealed record.'; // FR-DOC-02; C#274
 export const TYPED_MARK = 'Typed for this document; not part of the sealed record';   // FR-DOC-03
 export const NO_EVIDENCE = 'Evidence: none attached';                                 // FR-DOC-02, D9
 
@@ -69,6 +69,19 @@ export const personalDataAnswerLine = (answer: string): string => `Answer to the
 export const assignedToLine = (name: string): string => `Assigned to: ${name}`;
 /** The evidence of a done mitigation (C2 "Evidence that it is done", over "Closure evidence"). */
 export const doneEvidenceLine = (items: string): string => `Evidence that it is done: ${items}`;
+/** FR-DOC-02 / D7 (C#328): the sentence that stops a team's entry reading as the outside body's own record. `role` is the role's label. */
+export const outsideRoleLine = (member: string, role: string): string =>
+  `Recorded by ${member} as a decision of the ${role.toLowerCase()}. The ${role.toLowerCase()} did not enter it in the platform.`;
+/** An evidence file, with the short form of its fingerprint (C#331). */
+export const evidenceFileLine = (name: string, fingerprint: string | null): string => `file ${name}${fingerprint === null ? '' : ` (fingerprint ${fingerprint})`}`;
+/** A finding's state, in its block (C#347). */
+export const findingStatusLine = (word: string): string => `Status: ${word}`;
+/** An accepted risk's check date and the note of its last check (C#359, C#360). */
+export const checkAgainLine = (day: string): string => `To be checked again on: ${day}`;
+export const lastCheckNoteLine = (note: string): string => `Notes from the last check: ${note}`;
+/** MP-01 (C#362): the stage's name, the review's name, and its "Prepared for" note when there is one. */
+export const reviewLineText = (stageName: string, reviewName: string, note: string | null): string =>
+  `Stage: ${stageName}. Review: ${reviewName}.${note === null ? '' : ` Prepared for: ${note}`}`;
 
 /**
  * The erasable text fields as erase_text_field names them: [table, key, column] (migration 20261030000500_v060_05_functions, the VALUES
