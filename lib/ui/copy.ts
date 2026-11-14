@@ -1,4 +1,4 @@
-import type { ScopeAnswer, StatusMarkKind } from '@/components/ui/types';
+import type { ScopeAnswer, SortWords, StatusMarkKind } from '@/components/ui/types';
 import type { Tally } from '@/lib/ui/marks';
 
 /**
@@ -67,7 +67,23 @@ export const UI_COPY = {
     /** Read before every field error, visually hidden: the error icon beside it is hidden from assistive technology. */
     errorPrefix: 'Error:',
   },
+  /** Table's visually hidden sort line: "Sorted by Opened, latest first" (phrases: SORT_WORDS or the column's own). */
+  table: { sorted: (column: string, phrase: string) => `Sorted by ${column}, ${phrase}` },
+  breadcrumbLabel: 'Breadcrumb',
+  plate: { youAreHere: 'You are here' },
+  /** After a done step's name, visually hidden. */
+  stepper: { done: '(done)' },
 } as const;
+
+/**
+ * The owner's decision of 13 November 2026, "Words that fit the column": a sorted column is announced in its own words,
+ * never "ascending"/"descending". Keys are aria-sort's two values; the values are what a person hears.
+ */
+export const SORT_WORDS: Readonly<Record<'date' | 'name' | 'number', SortWords>> = {
+  date: { ascending: 'earliest first', descending: 'latest first' },
+  name: { ascending: 'A to Z', descending: 'Z to A' },
+  number: { ascending: 'lowest first', descending: 'highest first' },
+};
 
 /**
  * A tally in words (spec 7.2): "9 done (2 with no evidence attached), 6 partly, 2 not yet, 1 no decision". Kinds with

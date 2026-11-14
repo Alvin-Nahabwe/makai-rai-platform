@@ -197,20 +197,21 @@ test('UX-20 (accessibility audit): a refused typed value is marked aria-invalid,
   expect(await testDb.issuedDocument.count({ where: { stageReviewId: reviewId } })).toBe(0);
 });
 
-test('NFR-A11Y-05 (Task 10): at 769, 800 and 820 px wide .app-main has no horizontal overflow on S-18', async ({ page, baseURL }) => {
+test('NFR-A11Y-05 (Task 10): at 769, 800, 820 and 1024 px wide the main landmark has no horizontal overflow on S-18', async ({ page, baseURL }) => {
   test.setTimeout(120_000);
   failOnDialog(page);
   const { projectId, reviewId } = await sealedReview(baseURL!);
   await signIn(page, 'reviewer');   // the generate form is on the page too; GETs do not spend the documents budget
-  for (const width of [769, 800, 820]) {
+  // 1024 px: the narrowest main beside the rail's column.
+  for (const width of [769, 800, 820, 1024]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto(`/orgs/${org.slug}/projects/${projectId}/reviews/${reviewId}/documents`);
     await expect(page.getByRole('heading', { name: 'Issued documents', level: 2 })).toBeVisible();
     const m = await page.evaluate(() => {
-      const main = document.querySelector('.app-main') as HTMLElement;
+      const main = document.querySelector('.shell__main') as HTMLElement;
       return { mainScroll: main.scrollWidth, mainClient: main.clientWidth };
     });
-    expect(m.mainScroll, `.app-main at ${width}`).toBeLessThanOrEqual(m.mainClient);
+    expect(m.mainScroll, `.shell__main at ${width}`).toBeLessThanOrEqual(m.mainClient);
     await expectNoHorizontalScroll(page);
   }
 });

@@ -4,13 +4,16 @@ import { notFound } from 'next/navigation';
 import { connection } from 'next/server';
 import type { ReactElement, ReactNode } from 'react';
 import { Banner } from '@/components/ui/Banner';
+import { Breadcrumb } from '@/components/ui/Breadcrumb';
 import { Button, ButtonLink } from '@/components/ui/Button';
 import { Callout } from '@/components/ui/Callout';
 import { Checkbox, CheckboxGroup } from '@/components/ui/Checkbox';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Icon } from '@/components/ui/Icon';
+import { ItemPlate } from '@/components/ui/ItemPlate';
 import { ICONS } from '@/components/ui/icons';
 import { LocalTime } from '@/components/ui/LocalTime';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { RadioCards } from '@/components/ui/RadioCards';
 import { RouteRow, type RouteRowStop } from '@/components/ui/RouteRow';
 import { SavedMark } from '@/components/ui/SavedMark';
@@ -18,6 +21,9 @@ import { Select } from '@/components/ui/Select';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { StatusMark } from '@/components/ui/StatusMark';
 import { StatusRegion } from '@/components/ui/StatusRegion';
+import { Stepper } from '@/components/ui/Stepper';
+import { TabNav } from '@/components/ui/TabNav';
+import { Table, type TableColumn } from '@/components/ui/Table';
 import { TextInput } from '@/components/ui/TextInput';
 import type { IconName, StatusMarkKind } from '@/components/ui/types';
 import { tallyOf } from '@/lib/ui/marks';
@@ -27,6 +33,7 @@ import { PRODUCT_NAME } from '@/lib/ui/title';
 import { BusySubmitDemo, DateStates, DecidedOnDemo, ErrorSummaryDemo, InPlaceDemo, ReasonDemo, StatusDemo, TextAreaStates } from './FormDemos';
 import { DialogDemo, InlineConfirmDemo, LongDialogDemo, StatusRegionDemo } from './FeedbackDemos';
 import { SavedDemo } from './SavedDemo';
+import { SortableTableDemo } from './StructureDemos';
 
 /**
  * The development gallery (plan 1A Task 3): every components/ui component in every state, for the browser spec
@@ -45,6 +52,10 @@ const ROUTE: readonly RouteRowStop[] = Array.from({ length: 22 }, (_, i) => {
   const kind: StatusMarkKind = i === 0 ? 'scope_answered' : (['done', 'done', 'partly', 'not_yet', 'not_applicable', 'does_not_apply', 'no_decision'] as const)[i % 7];
   return { id: `q${i + 1}`, kind, title: `Sample question ${i + 1}`, href: `#q${i + 1}`, current: i === 3, scopeAnswer: i === 0 ? 'yes' : undefined };
 });
+
+const MEMBER_COLUMNS: readonly TableColumn[] = [
+  { key: 'name', label: 'Name' }, { key: 'role', label: 'Role' }, { key: 'joined', label: 'Joined' },
+];
 
 const VARIANTS = ['primary', 'secondary', 'quiet', 'destructive'] as const;
 const PEOPLE = [{ value: 'u1', label: 'Amina Namusoke' }, { value: 'u2', label: 'Joseph Okello' }];
@@ -80,8 +91,9 @@ export default async function UiKitPage(): Promise<ReactElement> {
   const iconNames = Object.keys(ICONS) as IconName[];
   return (
     <main id={MAIN_CONTENT_ID} tabIndex={-1} className="container">
-      <h1>UI kit</h1>
-      <p>Every interface component in every state. Development only: this page is not served in production.</p>
+      <PageHeader breadcrumb={[{ label: 'Development', href: '#main-content' }, { label: 'UI kit' }]} title="UI kit" code="DEV-UI"
+        lead={<p>Every interface component in every state. Development only: this page is not served in production.</p>}
+        actions={<ButtonLink variant="secondary" href="#table">Go to the table</ButtonLink>} />
 
       <KitSection id="icons" title="Icons">
         <StateTable caption="Each icon at 20 px beside its name" rows={iconNames.map((name) => [name, <span key={name} data-icon={name}><Icon name={name} /> {name}</span>])} />
@@ -236,6 +248,71 @@ export default async function UiKitPage(): Promise<ReactElement> {
       <KitSection id="dialog" title="Dialog">
         <DialogDemo />
         <LongDialogDemo />
+      </KitSection>
+
+      <KitSection id="table" title="Table">
+        <p>Under 640 px of its own width the table becomes cards, each cell under its column&rsquo;s label.</p>
+        <h3>Sortable, nothing sorted until a header is pressed</h3>
+        <SortableTableDemo />
+        <h3>Nothing sortable, caption hidden</h3>
+        <Table caption="Sample members" captionHidden columns={MEMBER_COLUMNS} rowHeaderKey="name" rows={[
+          { key: 'm1', cells: { name: 'Amina Namusoke', role: 'Owner', joined: '2 Feb 2026' } },
+          { key: 'm2', cells: { name: 'Joseph Okello', role: 'Assessor', joined: '9 Mar 2026' } },
+        ]} />
+        <h3>No rows</h3>
+        <Table caption="Sample invitations" columns={MEMBER_COLUMNS} rowHeaderKey="name" rows={[]}
+          empty={<p>No invitations are waiting. Invited people appear here until they accept.</p>} />
+      </KitSection>
+
+      <KitSection id="tab-nav" title="Tab navigation">
+        <TabNav label="Sample findings" items={[
+          { href: '/dev/ui-kit?tab=open', label: 'Open', count: 13, current: true },
+          { href: '/dev/ui-kit?tab=closed', label: 'Closed', count: 4, current: false },
+          { href: '/dev/ui-kit?tab=accepted', label: 'Accepted risk', current: false },
+        ]} />
+        <h3>More tabs than fit: the row scrolls inside itself</h3>
+        <TabNav label="Sample guidance" items={[
+          { href: '/dev/ui-kit?guide=overview', label: 'Overview', current: false },
+          { href: '/dev/ui-kit?guide=pre', label: 'Pre-processing', current: false },
+          { href: '/dev/ui-kit?guide=in', label: 'In processing', current: true },
+          { href: '/dev/ui-kit?guide=post', label: 'Post-processing', current: false },
+          { href: '/dev/ui-kit?guide=cross', label: 'Cross-cutting questions', current: false },
+        ]} />
+      </KitSection>
+
+      <KitSection id="breadcrumb" title="Breadcrumb">
+        <StateTable caption="States" rows={[
+          ['three levels', <Breadcrumb key="3" items={[{ label: 'Projects', href: '#breadcrumb' }, { label: 'Maternal health triage', href: '#breadcrumb' }, { label: 'Pre-processing' }]} />],
+          ['a long organisation name', <Breadcrumb key="l" items={[{ label: 'Makerere University Department of Paediatrics and Child Health Research', href: '#breadcrumb' }, { label: 'Members' }]} />],
+          ['the current page as a link', <Breadcrumb key="c" items={[{ label: 'Projects', href: '#breadcrumb' }, { label: 'Settings', href: '#breadcrumb' }]} />],
+          ['one item', <Breadcrumb key="1" items={[{ label: 'Projects' }]} />],
+        ]} />
+      </KitSection>
+
+      <KitSection id="page-header" title="Page header">
+        <p>The header at the top of this page is the page header, with every part: breadcrumb, title, code, lead and an action. A page has one, so it is shown once.</p>
+      </KitSection>
+
+      <KitSection id="item-plate" title="Item plate">
+        <ul role="list" style={{ display: 'grid', gap: 'var(--space-2)', listStyle: 'none' }}>
+          <li><ItemPlate title="Consent covers the secondary use of the sample data" code="PO-03.2" mark="partly" state="Decided 11 Feb 2026" href="#item-plate" headingLevel={3} /></li>
+          <li><ItemPlate title="A data protection impact assessment exists" code="PO-04.1" mark="not_yet" state="No decision recorded" href="#item-plate" current headingLevel={3} /></li>
+          <li><ItemPlate title="Retention is set, read only" code="PO-05.1" mark="done" noEvidence state="Decided 2 Mar 2026" headingLevel={3} /></li>
+          <li><ItemPlate title="Does the sample model use personal data from patients, carers or health workers collected for another purpose, and was each group told how it would be reused?" code="PO-01.1" mark="scope_answered" scopeAnswer="yes" state="Recorded 4 Feb 2026" href="#item-plate" headingLevel={3} /></li>
+          <li><ItemPlate title="A plate with the name alone" /></li>
+        </ul>
+      </KitSection>
+
+      <KitSection id="stepper" title="Stepper">
+        <Stepper label="Sample stage documents" steps={[
+          { label: 'Data card', href: '#stepper', state: 'done' },
+          { label: 'Model card', href: '#stepper', state: 'done' },
+          { label: 'Mitigation plan', href: '#stepper', state: 'current' },
+          { label: 'Stage review', state: 'upcoming' },
+          { label: 'Seal', state: 'upcoming' },
+        ]} />
+        <h3>Nothing started</h3>
+        <Stepper label="Sample steps, none started" steps={[{ label: 'Data card', state: 'upcoming' }, { label: 'Model card', state: 'upcoming' }]} />
       </KitSection>
 
       <KitSection id="local-time" title="Local time">

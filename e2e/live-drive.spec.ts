@@ -22,8 +22,8 @@ test('live drive: viewer seat, role under the name, dark link colour, M-40 offli
   try {
     const page = await context.newPage();
     await page.goto(`/orgs/${slug}/dashboard`);
-    seen.role = (await page.locator('.sidebar-user-role').textContent()) ?? '';
-    expect(seen.role).toBe('viewer');
+    seen.role = (await page.locator('.shell-rail__role').textContent()) ?? '';
+    expect(seen.role).toBe('Viewer');
     await page.screenshot({ path: path.join(DIR!, '1-viewer-dark-dashboard.png') });
 
     await page.goto('/about');

@@ -154,15 +154,17 @@ test.describe('S-04 and S-05 in a browser', () => {
     await expect(page).toHaveURL(/\/acceptances$/);
     expect((await page.goto('/legal/terms'))?.status()).toBe(200);
 
-    // C4 CR-1 / SE-1: a click in the sidebar is a client-side navigation, which does not re-render the
+    // C4 CR-1 / SE-1: a click in the rail is a client-side navigation, which does not re-render the
     // shared (authenticated) layout; each destination must still send the account back to S-05.
-    const nav = page.getByRole('navigation', { name: 'Main navigation' });
-    // Every link of UI's sidebar, by href (several org items fall back to / outside an organisation). A public page
+    const nav = page.getByRole('navigation', { name: 'Main', exact: true });
+    // Every link of the shell's rail, by href (several org items fall back to / outside an organisation). A public page
     // (PUB's /about) is open to anyone, so it is not behind the gate and the click lands there.
     await page.goto('/acceptances');
     await expect(nav).toBeVisible();
     const hrefs = [...new Set(await nav.getByRole('link').evaluateAll((els) => els.map((e) => e.getAttribute('href') ?? '')))];
-    expect(hrefs, 'the sidebar has links to try').toEqual(expect.arrayContaining(['/explore/framework', '/explore/controls']));
+    expect(hrefs, 'the rail has links to try').toEqual(expect.arrayContaining(['/explore/framework', '/account']));
+    // Guidance is the rail's one entry to the framework pages; Controls is reached from it, not from the rail.
+    expect(hrefs).not.toContain('/explore/controls');
     const PUBLIC = /^\/(about|legal\/)/;
     for (const href of hrefs) {
       await page.goto('/acceptances');

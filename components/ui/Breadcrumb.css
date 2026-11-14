@@ -1,0 +1,54 @@
+/* Breadcrumb (plan 1A Task 5). The items wrap onto further lines rather than scroll or truncate (long organisation and
+   project names, Review Focus 2). The separator is a small chevron drawn from two borders of an empty generated box, in
+   currentColor: no text character, nothing read aloud, and forced colours keep it. Links are underlined (decision B4). */
+.ui-breadcrumb {
+  margin-block-end: var(--space-3);
+}
+
+.ui-breadcrumb__list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--font-size-small);
+}
+
+.ui-breadcrumb__item {
+  display: flex;
+  align-items: center;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-ink-muted);
+}
+
+.ui-breadcrumb__item + .ui-breadcrumb__item::before {
+  content: '';
+  flex: none;
+  inline-size: 0.4em;
+  block-size: 0.4em;
+  margin-inline: var(--space-2) var(--space-3);
+  border-block-start: 2px solid currentColor;
+  border-inline-end: 2px solid currentColor;
+  rotate: 45deg;
+}
+
+.ui-breadcrumb__item a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--target-min);
+  color: var(--color-link);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.ui-breadcrumb__current {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-ink);
+}
+
+.ui-breadcrumb__item a.ui-breadcrumb__current {
+  color: var(--color-ink);
+}

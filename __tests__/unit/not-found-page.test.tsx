@@ -83,7 +83,8 @@ describe('S-31 not-found page', () => {
     const requestHeaders = new Headers({ cookie: 'authjs.session-token=x' });
     headersMock.mockResolvedValue(requestHeaders);
     const html = renderToStaticMarkup(await NotFound());
-    expect([...html.matchAll(/<dialog[^>]*class="idle-warning"[^>]*>/g)]).toHaveLength(1);
+    expect([...html.matchAll(/<div class="shell-idle" data-seconds-left="\d+">/g)]).toHaveLength(1);
+    expect([...html.matchAll(/<dialog[^>]*class="ui-dialog"[^>]*>/g)]).toHaveLength(1);
     expect(html).toContain('data-seconds-left="600"');
     expect(html).toContain(M27);
     expect(html).toMatch(/<a[^>]*href="\/"[^>]*>Go to your home page<\/a>/);
@@ -105,7 +106,7 @@ describe('S-31 not-found page', () => {
     expect(html).toMatch(/<a[^>]*href="\/"[^>]*>Go to your home page<\/a>/);
     expect(html).toMatch(/<h1[^>]*>[^<]+<\/h1>/);
     // the group's layout supplies the one main (and, after the shell work, the one id) and the one dialog
-    expect(html).not.toMatch(/<main|<dialog|idle-warning|id="main-content"/);
+    expect(html).not.toMatch(/<main|<dialog|shell-idle|id="main-content"/);
   });
 
   it('FR-RM-03 UX-05 (S-31 part): the two not-found pages show the same card and the same title', async () => {

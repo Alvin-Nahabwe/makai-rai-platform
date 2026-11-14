@@ -32,6 +32,8 @@ function screenCss(source: string): string {
 }
 
 const css = screenCss(readFileSync('app/globals.css', 'utf8'));
+/** The shell's own stylesheet (plan 1A Task 11): the rail, the top bar and its Menu button are drawn there. */
+const shellCss = screenCss(readFileSync('components/layout/shell.css', 'utf8'));
 
 // ── minimal CSS reading ─────────────────────────────────────────────────
 
@@ -236,9 +238,8 @@ describe('design tokens', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('1A: the legacy block is in :root, is marked for deletion, and keeps the phone-menu bar alias on the shell-ink role', () => {
+  it('1A: the legacy block is in :root and is marked for deletion', () => {
     expect(readFileSync('app/globals.css', 'utf8')).toContain('/* LEGACY ALIASES: deleted by Task 21 */');
-    expect(ROOT['--sidebar-toggle-bar']).toBe('var(--color-shell-ink)');
   });
 
   it('UX-33 NFR-A11Y-05 (legacy, until Task 19): the About hero eyebrow colour holds 4.5:1 on the navy in every theme', () => {
@@ -298,15 +299,22 @@ describe('design tokens', () => {
     expect(rule['display']).toBeUndefined();
   });
 
-  it('UX-33 NFR-A11Y-05 (legacy, until Task 11): the phone menu button bars hold 3:1 on the navy in every theme', () => {
+  it('UX-33 NFR-A11Y-05: the Menu button\'s text, shell ink on the shell navy, holds 4.5:1 in every theme', () => {
     for (const theme of THEMES) {
-      expect(contrast(theme, 'sidebar-toggle-bar', 'color-navy'), `menu button bars, ${theme}`).toBeGreaterThanOrEqual(3);
+      expect(contrast(theme, 'color-shell-ink', 'color-shell'), `Menu button text, ${theme}`).toBeGreaterThanOrEqual(4.5);
     }
   });
 
-  it('UX-33: the phone menu button draws its bars with the token tested above, on the navy it tests against', () => {
-    expect(ruleFor(css, '.sidebar-toggle__bar')).toMatch(/background:\s*var\(--sidebar-toggle-bar\)/);
-    expect(ruleFor(css, '.sidebar-toggle')).toMatch(/background:\s*var\(--color-navy\)/);
+  it('UX-33 1A Task 11: the Menu button draws its text with the shell ink, on the shell navy tested above (components/layout/shell.css)', () => {
+    const rule = ruleFor(shellCss, '.shell-topbar__menu-button');
+    expect(rule).toMatch(/(?<![-\w])color:\s*var\(--color-shell-ink\)/);
+    expect(rule).toMatch(/background-color:\s*var\(--color-shell\)/);
+    // No later rule for the button paints it in another colour.
+    for (const r of rules(shellCss).filter((x) => x.selectors.some((sel) => sel.startsWith('.shell-topbar__menu-button')))) {
+      for (const m of r.body.matchAll(/(?<![-\w])(color|background-color|background):\s*([^;]+);/g)) {
+        expect(['var(--color-shell-ink)', 'var(--color-shell)', 'var(--color-shell-hover)'], `${r.selectors.join(', ')} ${m[1]}`).toContain(m[2].trim());
+      }
+    }
   });
 
   it('UX-33 (D-1, D-3, D-5): the rules that draw fields, links, the ring and stage labels read the tokens tested above', () => {
@@ -354,9 +362,11 @@ describe('design tokens', () => {
       expect(ruleFor(css, selector), selector).toMatch(/text-decoration:\s*underline/);
     }
     // Navigation and buttons are the exception SRS 7.6.3 D-4 names.
-    for (const selector of ['.sidebar-link', '.btn']) {
+    for (const selector of ['.btn']) {
       expect(ruleFor(css, selector), selector).toMatch(/text-decoration:\s*none/);
     }
+    // The rail's items are navigation (components/layout/shell.css, plan 1A Task 11).
+    expect(ruleFor(shellCss, '.shell-rail__item'), '.shell-rail__item').toMatch(/text-decoration:\s*none/);
     expect(css).not.toMatch(/html\s*\{\s*font-size:\s*14px/);
     expect(ruleFor(css, 'html')).toMatch(/font-size:\s*16px/);
   });

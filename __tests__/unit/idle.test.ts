@@ -281,8 +281,9 @@ describe('IdleWarning', () => {
 
   it('UX-43: IdleWarning renders a native dialog that carries the session deadline in its markup', () => {
     const html = renderToStaticMarkup(createElement(IdleWarning, { idleSeconds: 43200, secondsLeft: 600, absoluteSecondsLeft: 100000 }));
-    expect(html).toMatch(/^<dialog[^>]*class="idle-warning"/);
-    expect(html).toContain('data-seconds-left="600"');
+    // The seconds are on the wrapper (one per page), and the warning is the kit's native dialog inside it.
+    expect(html).toMatch(/^<div class="shell-idle" data-seconds-left="600"><dialog class="ui-dialog"/);
+    expect([...html.matchAll(/<dialog\b/g)]).toHaveLength(1);
     expect(html).toContain('You will be signed out in 2 minutes because nothing has happened for a while.');
     expect(html).toContain('Stay signed in');
     expect(html).not.toMatch(/\brole=|aria-modal|\bopen(=|>|\s)/); // the platform keeps those; the dialog is closed in the server markup
@@ -312,8 +313,15 @@ describe('IdleWarning', () => {
 
   it('UX-43: the warning meets the dialog guide: a cancel listener that keeps the platform behaviour, no key handler', () => {
     const src = stripComments(readFileSync('components/layout/IdleWarning.tsx', 'utf8'));
-    expect(src).toMatch(/['"]cancel['"]|onCancel/);
+    // The warning is the kit's Dialog, which listens for the native cancel (Esc, the back gesture) and reports it as onClose;
+    // IdleWarning passes an onClose that counts it as Stay signed in. Neither file prevents the event or handles a key.
+    expect(src).toMatch(/<Dialog\b[\s\S]*?\bonClose=\{onBrowserClose\}/);
+    expect(src).toMatch(/function onBrowserClose\(\)\s*\{[\s\S]*?void stay\(\);/);
     expect(src).not.toMatch(/preventDefault|keydown|onKeyDown|role="dialog"|aria-modal|focus-trap/i);
+    expect(src).not.toContain('<dialog');
+    const dialog = stripComments(readFileSync('components/ui/Dialog.tsx', 'utf8'));
+    expect(dialog).toMatch(/onCancel=/);
+    expect(dialog).not.toMatch(/preventDefault|keydown|onKeyDown|role="dialog"|aria-modal|focus-trap/i);
   });
 
   it('UX-43: the warning re-checks on a 15 s tick and on visibilitychange, pageshow, focus and online (source level; the e2e clock-jump case proves it works)', () => {

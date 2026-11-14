@@ -38,7 +38,7 @@ vi.mock('next-auth/react', () => ({ signOut: vi.fn() }));
 const { default: LandingPage } = await import('@/app/page');
 const { default: OrganisationsPage } = await import('@/app/(authenticated)/admin/organisations/page');
 const { default: AccountsPage } = await import('@/app/(authenticated)/admin/accounts/page');
-const { default: Sidebar } = await import('@/components/layout/Sidebar');
+const { default: Rail } = await import('@/components/layout/Rail');
 const { default: NewOrganisationPage } = await import('@/app/(authenticated)/admin/organisations/new/page');
 const { default: OrganisationPage } = await import('@/app/(authenticated)/admin/organisations/[id]/page');
 const { CreateOrganisationFormView, createErrors, createFields, createResult, resentResult, EMAIL_FAILED, ALREADY_RESENT, ALREADY_CREATED } = await import('@/components/admin/CreateOrganisationForm');
@@ -228,10 +228,10 @@ describe('S-23 and S-25 in pages of 50 (UX-40)', () => {
 describe('the administrator sidebar', () => {
   it('UX-01: the administrator sidebar links S-23 and S-25 (SRS line 1514)', () => {
     pathnameMock.mockReturnValue('/admin/organisations');
-    const html = renderToStaticMarkup(<Sidebar userName="A" userId="a-1" roleLabels={{}} platformLabel="MAK-AI administrator" orgCount={0} />);
-    expect(html).toMatch(/<a [^>]*href="\/admin\/organisations"[^>]*>Organisations<\/a>/);
-    expect(html).toMatch(/<a [^>]*href="\/admin\/accounts"[^>]*>Accounts<\/a>/);
-    expect(html).not.toMatch(/>Settings<\/a>/);
+    const html = renderToStaticMarkup(<Rail shell={{ userName: 'A', userId: 'a-1', roleLabels: {}, platformLabel: 'MAK-AI administrator', orgs: [] }} />);
+    expect(html).toMatch(/<a [^>]*href="\/admin\/organisations"[^>]*>(?:<svg[\s\S]*?<\/svg>)?<span>Organisations<\/span><\/a>/);
+    expect(html).toMatch(/<a [^>]*href="\/admin\/accounts"[^>]*>(?:<svg[\s\S]*?<\/svg>)?<span>Accounts<\/span><\/a>/);
+    expect(html).not.toMatch(/>Settings<\/(?:span|a)>/);
     expect(html).not.toContain('/admin/users');
   });
 });
