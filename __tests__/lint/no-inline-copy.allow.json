@@ -1,95 +1,5 @@
 [
   {
-    "file": "app/(authenticated)/explore/controls/page.tsx",
-    "text": "A control is a practice that lowers a risk. When your team closes a finding with a mitigation, it can follow one of these. Each control links to free guidance.",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "app/(authenticated)/explore/controls/page.tsx",
-    "text": "Risk areas:",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "app/(authenticated)/explore/framework/page.tsx",
-    "text": "${…} stages, ${…} modules, ${…} risk areas, ${…} controls",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "app/(authenticated)/explore/framework/page.tsx",
-    "text": "(models that classify cases, put them in order, or estimate a value). Generative systems raise questions this framework does not yet ask, so what a team records here says nothing about a generative deployment.",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "app/(authenticated)/explore/framework/page.tsx",
-    "text": ", who chose the problem, who benefits from the system existing, whose priorities set the objective. Those questions matter and are simply out of scope here.",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "app/(authenticated)/explore/framework/page.tsx",
-    "text": ": who is in the data, how labels were produced, how error is distributed across groups. It does not assess",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "app/(authenticated)/explore/framework/page.tsx",
-    "text": "ISO/IEC 42001 clauses 6.1.4 and 8.4 and Annex A objective A.5 describe an AI system impact assessment. This framework is a separate tool and does",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "app/(authenticated)/explore/framework/page.tsx",
-    "text": "On the eight principles.",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "app/(authenticated)/explore/framework/page.tsx",
-    "text": "On the standards.",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "app/(authenticated)/explore/framework/page.tsx",
-    "text": "Risk areas",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "app/(authenticated)/explore/framework/page.tsx",
-    "text": "The bias it assesses is",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "app/(authenticated)/explore/framework/page.tsx",
-    "text": "These 21 areas were written for",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "app/(authenticated)/explore/framework/page.tsx",
-    "text": "UNESCO&apos;s Recommendation states ten. Two, privacy and human oversight, are covered as assessment areas rather than as principles, and one is renamed. The reasoning is recorded in ADR 0004 in the repository, so the difference is visible rather than implied.",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "app/(authenticated)/explore/framework/page.tsx",
-    "text": "What this framework covers, and what it does not",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "app/(authenticated)/explore/framework/page.tsx",
-    "text": "institutional bias",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "app/(authenticated)/explore/framework/page.tsx",
-    "text": "predictive machine-learning systems",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "app/(authenticated)/explore/framework/page.tsx",
-    "text": "replace that standard, which applies to an organisation&apos;s management system rather than a single AI system. EU AI Act articles appear as reference context on individual controls; showing one is not a determination that the Act applies to your system, which depends on its risk tier.",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "app/(authenticated)/explore/framework/page.tsx",
-    "text": "statistical and dataset bias",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
     "file": "app/(public)/about/page.tsx",
     "text": "A clinician who treats a model&apos;s 60% confidence score as certainty will make worse decisions than one who understands the margin of error.",
     "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
@@ -277,11 +187,6 @@
   {
     "file": "components/layout/IdleWarning.tsx",
     "text": "Stay signed in",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "components/report/ReferencesList.tsx",
-    "text": "Research sources (${…})",
     "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
   }
 ]

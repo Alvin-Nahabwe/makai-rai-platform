@@ -7,6 +7,7 @@ import { principleSlugMap, stageLabels } from '@/data/constants';
 import { STAGES } from '@/types/record';
 import { HOSTILE_STRINGS } from '../helpers/hostile';
 import { claimMatches, isClaim } from '@/lib/claims/pattern';
+import { GUIDANCE_COPY } from '@/lib/guidance/copy';
 
 /**
  * S-26, the framework reference page (FR-CNT-01, UX-36; contract Screens row S-26): a server component that lists
@@ -32,7 +33,8 @@ describe('S-26 framework page', () => {
     for (const s of STAGES) expect(html).toContain(stageLabels[s].label);
     for (const a of c.areas.values()) { expect(html).toContain(`id="area-card-${a.id}"`); expect(html).toContain(escape(a.name)); }
     for (const k of c.controls.values()) expect(html).toContain(`href="/explore/controls#${k.id}"`);
-    expect(html).toContain('3 stages, 6 modules, 21 risk areas, 28 controls');
+    expect(html).toContain(GUIDANCE_COPY.framework.counts(3, 6, 21, 28));
+    expect(html).toContain(GUIDANCE_COPY.framework.lead(3, 6));
   });
 
   it('FR-CNT-01 FR-PUB-01 (7.5.1, 7.5.3): S-26\'s own copy says none of the never-said words, and has no emoji, curly quote or dash', async () => {
@@ -78,14 +80,14 @@ describe('S-26 framework page', () => {
       const byModule = new Map<string, { title: string; n: number }>();
       for (const q of questionsInStage(c, s)) byModule.set(q.moduleId, { title: q.moduleTitle, n: (byModule.get(q.moduleId)?.n ?? 0) + 1 });
       expect(byModule.size).toBeGreaterThan(0);
-      for (const { title, n } of byModule.values()) expect(section, `${s} ${title}`).toContain(`${escape(title)}, ${n} questions`);
+      for (const { title, n } of byModule.values()) expect(section, `${s} ${title}`).toContain(escape(GUIDANCE_COPY.framework.topicLine(title, n)));
       for (const a of c.areas.values()) if (a.stage === s) expect(section).toContain(`id="area-card-${a.id}"`);
     }
   });
 
   it('FR-CNT-01 NFR-A11Y-02: one h1 "Framework", an h2 per stage, and every area card names its principle as text with its controls as links', () => {
     expect(html.match(/<h1\b/g)).toHaveLength(1);
-    expect(html).toMatch(/<h1[^>]*>Framework<\/h1>/);
+    expect(html).toMatch(new RegExp(`<h1[^>]*>${GUIDANCE_COPY.framework.heading}</h1>`));
     for (const s of STAGES) expect(html).toMatch(new RegExp(`<h2[^>]*id="stage-${s}"[^>]*>${stageLabels[s].label}</h2>`));
     const c = runningContent();
     const area = [...c.areas.values()][0];
@@ -109,7 +111,7 @@ describe('S-26 framework page', () => {
     for (const a of c.areas.values()) {
       const card = html.slice(html.indexOf(`id="area-card-${a.id}"`), html.indexOf('</li>', html.indexOf('references-list__items', html.indexOf(`id="area-card-${a.id}"`))));
       for (const r of a.references ?? []) expect(html, `${a.id} ${r.citation}`).toContain(escape(r.citation));
-      if ((a.references ?? []).length > 0) expect(card).toMatch(new RegExp(`<details class="references-list"><summary class="references-list__toggle">Research sources \\(${a.references!.length}\\)</summary>`));
+      if ((a.references ?? []).length > 0) expect(card).toMatch(new RegExp(`<details class="references-list"><summary class="references-list__toggle">${GUIDANCE_COPY.references.summary(a.references!.length).replace(/[()]/g, '\\$&')}</summary>`));
     }
   });
 
@@ -143,6 +145,23 @@ describe('S-26 framework page', () => {
     expect(closed).toMatch(/border-inline-start:[^;]*currentColor/);
     expect(css).toMatch(/\.references-list\[open\]\s*>\s*\.references-list__toggle::before\s*\{[^}]*transform:\s*rotate\(90deg\)/);
     expect(css).toMatch(/prefers-reduced-motion:\s*reduce/);
+  });
+
+  it('FR-CNT-01 (Task 19): the scope disclosure and the area cards say the ruled words', () => {
+    const F = GUIDANCE_COPY.framework;
+    const scope = html.slice(html.indexOf('id="framework-scope"'), html.indexOf('id="stage-'));
+    expect(scope).toContain(`<summary><strong>${F.scope.summary}</strong></summary>`);
+    const [a, b, c, d, e] = F.scope.predictive;
+    expect(scope).toContain(`<p>${escape(a)}<strong>${b}</strong>${escape(c)}<strong>${d}</strong>${escape(e)}</p>`);
+    expect(scope).toContain(`<p>${escape(F.scope.bias)}</p>`);
+    for (const { label, text } of [F.scope.standards, F.scope.principles]) expect(scope).toContain(`<p><strong>${label}</strong> ${escape(text)}</p>`);
+    expect(scope).not.toMatch(/21|ADR|assessment areas/);
+    const withExamples = [...runningContent().areas.values()].find((x) => x.context);
+    expect(withExamples, 'the fixture has an area with examples').toBeDefined();
+    expect(html).toContain(`<strong>${F.examples}</strong> `);
+    expect(html).not.toContain('Context:');
+    expect(html).not.toMatch(/\bmodules?\b|Modules/);
+    expect(F.topicLine('T', 1)).toBe('T, 1 question');
   });
 
   it('UX-36 FR-CNT-01: S-26 is a server component that reads content only through the loader', () => {
