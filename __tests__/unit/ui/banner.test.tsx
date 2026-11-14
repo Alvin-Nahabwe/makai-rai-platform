@@ -59,16 +59,21 @@ describe('Banner', () => {
   it('NFR-PERF-02: its rules are one block of app/globals.css, after that file\'s own rules and before the block moved from shell.css, and it has no stylesheet of its own', () => {
     expect(BLOCK_START).toBeGreaterThan(0);
     expect(BLOCK_END).toBeGreaterThan(BLOCK_START);
-    // Everything between the two comments is the banner's, so no rule of the file's own follows the block.
-    expect(CSS.split('\n').filter((line) => line.endsWith('{')))
-      .toEqual(['.ui-banner {', '.ui-banner__icon {', '.ui-banner__body {', '.ui-banner__title {', '.ui-banner__action {']);
+    // Everything between the two comments is the banner's, so no rule of the file's own follows the block: every
+    // selector or at-rule that opens a `{` there, however it is laid out, is one of the five.
+    expect([...CSS.matchAll(/([^{}]+)\{/g)].map((m) => m[1].trim()))
+      .toEqual(['.ui-banner', '.ui-banner__icon', '.ui-banner__body', '.ui-banner__title', '.ui-banner__action']);
     // And nothing before or after the block styles a banner.
     expect(withoutComments(GLOBALS.slice(0, BLOCK_START) + GLOBALS.slice(BLOCK_END))).not.toContain('ui-banner');
-    // A stylesheet of its own would be one more response on every page's first visit: the root layout renders the offline banner.
-    expect(existsSync('components/ui/Banner.css')).toBe(false);
+    // A stylesheet of its own, under any name, would be one more response on every page's first visit (the root layout
+    // renders the offline banner): the component imports none, no other stylesheet styles a banner, and the old file
+    // is gone and named by nothing.
     const sources = ['app', 'components', 'lib'].flatMap((root) => readdirSync(root, { recursive: true, encoding: 'utf8' }).map((f) => `${root}/${f}`))
       .filter((f) => /\.(tsx?|css)$/.test(f));
     expect(sources.length).toBeGreaterThan(100);
+    expect(readFileSync('components/ui/Banner.tsx', 'utf8')).not.toMatch(/\.css['"]/);
+    expect(sources.filter((f) => f.endsWith('.css') && f !== 'app/globals.css' && readFileSync(f, 'utf8').includes('ui-banner'))).toEqual([]);
+    expect(existsSync('components/ui/Banner.css')).toBe(false);
     expect(sources.filter((f) => /Banner\.css/.test(readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '')))).toEqual([]);
   });
 

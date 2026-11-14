@@ -114,7 +114,15 @@ function resolveImport(from: string, spec: string): string | null {
   throw new Error(`${relative(ROOT, from)}: cannot resolve ${spec}`);
 }
 
-/** Every repository file `entry` reaches through static imports and re-exports; only .ts and .tsx files are followed. */
+/** The ways a module names another: `import … from` and `export … from`, a bare `import '…'`, `import('…')` and `require('…')`. */
+const IMPORT_FORMS = [
+  /(?:^|\n)\s*(?:import|export)\s[^'"]*?from\s+['"]([^'"]+)['"]/g,
+  /(?:^|\n)\s*import\s+['"]([^'"]+)['"]/g,
+  /\bimport\(\s*['"]([^'"]+)['"]\s*\)/g,
+  /\brequire\(\s*['"]([^'"]+)['"]\s*\)/g,
+];
+
+/** Every repository file `entry` reaches through the forms above, type-only imports included; only .ts and .tsx files are followed. */
 function reached(entry: string): Set<string> {
   const seen = new Set<string>();
   const queue = [join(ROOT, entry)];
@@ -123,20 +131,27 @@ function reached(entry: string): Set<string> {
     if (seen.has(file)) continue;
     seen.add(file);
     if (!/\.tsx?$/.test(file)) continue;
-    for (const m of readFileSync(file, 'utf8').matchAll(/(?:^|\n)\s*(?:import|export)\s[^'"]*?from\s+['"]([^'"]+)['"]/g)) {
-      const target = resolveImport(file, m[1]);
-      if (target !== null) queue.push(target);
+    const source = readFileSync(file, 'utf8');
+    for (const form of IMPORT_FORMS) {
+      for (const m of source.matchAll(form)) {
+        const target = resolveImport(file, m[1]);
+        if (target !== null) queue.push(target);
+      }
     }
   }
   return new Set([...seen].map((f) => relative(ROOT, f)));
 }
 
-describe('the form fields\' import weight', () => {
-  // RadioCards and DateField are left out on purpose: each needs other words of UI_COPY (RadioCards draws StatusMark's
-  // shapes, and StatusMark.tsx imports the marks' words; DateField has its own date words), so they reach lib/ui/copy.ts.
-  it("NFR-PERF-02: the kit's text field and the fields built on its parts do not load the kit's whole word list", () => {
+describe('the form parts\' import weight', () => {
+  // RadioCards and DateField are left out on purpose: both reach lib/ui/copy.ts. DateField reads its own date words from
+  // it. RadioCards reads no word of it: it draws MarkShape, and StatusMark.tsx, the module MarkShape lives in, imports
+  // the marks' words (MarkShape in a module of its own would free RadioCards).
+  it("NFR-PERF-02: the kit's form parts do not load the kit's whole word list", () => {
     const roots = ['TextInput', 'TextArea', 'Checkbox', 'Select', 'ErrorSummary', 'StatusRegion', 'Button'].map((n) => `components/ui/${n}.tsx`);
     expect(roots.filter((root) => reached(root).has('lib/ui/copy.ts'))).toEqual([]);
-    expect(reached('components/ui/TextInput.tsx').has('lib/ui/field/copy.ts')).toBe(true);
+    // The walker follows what it claims to: an `import … from` and a bare `import '…'`.
+    const textInput = reached('components/ui/TextInput.tsx');
+    expect(textInput.has('lib/ui/field/copy.ts')).toBe(true);
+    expect(textInput.has('components/ui/TextInput.css')).toBe(true);
   });
 });
