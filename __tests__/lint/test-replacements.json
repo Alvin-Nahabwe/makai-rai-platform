@@ -1934,5 +1934,37 @@
     "property": "With a decision recorded the empty line goes and the row shows the decision's status words followed by its declared date at its precision. The row is now the kit's ItemPlate: the words are the StatusMark's (`ui-mark__words`) and the date opens the plate's one line of state (`ui-plate__state`), after the mark, with no separator before it (plan 1C Task 3, spec 8).",
     "proof": "The regular expression still anchors on the row's data-question-id and requires, in order, the status words \"Partly\" closing their </span> and then the state line starting with \"Oct 2026\" (the declared date at month precision): `class=\"ui-mark__words\">Partly<\\/span>[\\s\\S]*?class=\"ui-plate__state\">Oct 2026<`. The `<` after the date requires it to be the state line's first and only part here. The not-toContain of the empty line is unchanged. Seen failing on the new markup with the old pattern (`>Partly<\\/span> · Oct 2026`), passing with the new one.",
     "task": "plan 1C Task 3 (lane 7 part 1, All questions)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::NFR-SEC-02 FR-DEC-01: the page asks for record:read in this organisation, then loads the panel for this question",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::NFR-SEC-02 FR-DEC-01: the page asks for record:read in this organisation, then loads the panel for this question",
+    "property": "The page asks for record:read in the URL's organisation, then loads the panel for this question with that context and identity; and now also that the column's read, loadStagePage, is called with the same context, the same user and the same project and stage, nothing wider.",
+    "proof": "The existing toHaveBeenCalledWith on requireOrgContextFor and loadQuestionPanel are unchanged; one expectation is added: `expect(loadStagePage).toHaveBeenCalledWith({ orgId: 'o1', role: 'assessor' }, 'u1', 'p1', 'pre-processing')`. The page now also takes `searchParams` (it reads `?show` for the column, as the stage page does), so every call passes `searchParams: Promise.resolve({})`; `@/lib/question/stagePage` is mocked (`loadStagePage`, resolving null by default) so the page's second read, the column's, does not reach a database. No expectation of the case was removed or loosened.",
+    "task": "lane 7 part 2 (the route column on the question page)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::NFR-SEC-02: nothing is loaded when the identity or the membership is refused",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::NFR-SEC-02: nothing is loaded when the identity or the membership is refused",
+    "property": "When the membership is refused nothing is loaded: the panel's loader and now also the column's loader are never called.",
+    "proof": "The rejection with NotFoundError and `loadQuestionPanel` not called are unchanged; `expect(loadStagePage).not.toHaveBeenCalled()` is added. Seen RED (loadStagePage called once with the context) while the page started the column's read beside the panel's gate under React cache(), which does not memoise outside a request; the page now awaits the gate first, then starts both reads, and the case is GREEN. The page now also takes `searchParams` (it reads `?show` for the column, as the stage page does), so every call passes `searchParams: Promise.resolve({})`; `@/lib/question/stagePage` is mocked (`loadStagePage`, resolving null by default) so the page's second read, the column's, does not reach a database. No expectation of the case was removed or loosened.",
+    "task": "lane 7 part 2 (the route column on the question page)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::NFR-SEC-02: a stage that is not one of the three, and a question the loader does not find, are a 404 page",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::NFR-SEC-02: a stage that is not one of the three, and a question the loader does not find, are a 404 page",
+    "property": "A stage that is not one of the three, and a question the loader does not find, are a 404 page, with nothing loaded for the bad stage.",
+    "proof": "Both expectations are unchanged; only the page call gains `searchParams`. The page now also takes `searchParams` (it reads `?show` for the column, as the stage page does), so every call passes `searchParams: Promise.resolve({})`; `@/lib/question/stagePage` is mocked (`loadStagePage`, resolving null by default) so the page's second read, the column's, does not reach a database. No expectation of the case was removed or loosened.",
+    "task": "lane 7 part 2 (the route column on the question page)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::NFR-MNT-01: until DEC-b fills the loader the page fails loudly with the unit named, not with an empty panel",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::NFR-MNT-01: until DEC-b fills the loader the page fails loudly with the unit named, not with an empty panel",
+    "property": "Until DEC-b fills the loader the page fails with status 501 naming the unit, not with an empty panel.",
+    "proof": "The expectation is unchanged; only the page call gains `searchParams`. The page now also takes `searchParams` (it reads `?show` for the column, as the stage page does), so every call passes `searchParams: Promise.resolve({})`; `@/lib/question/stagePage` is mocked (`loadStagePage`, resolving null by default) so the page's second read, the column's, does not reach a database. No expectation of the case was removed or loosened.",
+    "task": "lane 7 part 2 (the route column on the question page)"
   }
 ]
