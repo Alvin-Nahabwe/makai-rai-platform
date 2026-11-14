@@ -1,53 +1,61 @@
 import { describe, expect, it } from 'vitest';
 import { repoFiles } from './helpers/repo-files';
 import {
-  KIT, SOURCE_EXT, entryBody, entryFiles, insteadOf, isKitSheet, read, resolveSpec, sheetsOfEntries, specifiers,
+  KIT, bundledFiles, isBundled, entryBody, entryFiles, insteadOf, isKitSheet, read, resolveOf, resolveSpec, sheetsOfEntries,
+  specifiers,
 } from './helpers/kit-styles';
 
 /**
- * NFR-PERF-02 (SRS line 3195): the kit's stylesheets cannot be cut into more files than they are (the lane rulings X-6
- * and L6-2 of follow-up C). Turbopack's default CSS chunking keeps two stylesheets in one built file only while exactly
- * the same entries (layouts, pages, not-found pages) load both, so a page that loads one sheet of a joined pair without
- * the other splits the file for every page: one more request on S-04's first visit.
+ * NFR-PERF-02 (SRS line 3195), the lane rulings X-6 and L6-2 of follow-up C: the kit's stylesheets reach pages through
+ * styles entries (components/ui/<part>Styles.ts), so that sheets the bundler serves as one file keep the same
+ * importers. Measured, not derived: in every build so far a page that loaded one sheet of a joined pair without the
+ * other split the file in two for every page (one more request on S-04's first visit), and sheets that arrive only
+ * through one entry were one file (components/ui/formStyles.ts). The built page is checked by
+ * e2e/invitation-name-transfer.spec.ts (its stylesheet count and contents) and by the byte limits of that spec and
+ * e2e/first-visit-transfer.spec.ts.
  *
  *  (a) X-6: no file outside components/ui/ imports a kit stylesheet. It imports the styles entry instead
- *      (`import '@/components/ui/formStyles';`), or the kit component. Scanned: every .ts, .tsx, .js, .jsx, .mjs and
- *      .cjs file under app/, components/ (but components/ui/), lib/ and scripts/, and the root's own; every import form
- *      (`from '…'`, a bare `import '…'`, `import('…')`, `require('…')`) by alias, by relative path, or any path naming
- *      components/ui/; and every stylesheet outside the kit for an `@import` of a kit sheet.
- *  (b) L6-2: a styles entry, `components/ui/<part>Styles.ts`, holds only imports of stylesheets and of other styles
- *      entries, and comments; each sheet it names exists and has exactly one importer in the repository's source, that
- *      entry; so no kit component imports a sheet an entry names.
+ *      (`import '@/components/ui/formStyles';`), or the kit component. Scanned: every file a bundle can include outside
+ *      the kit (each .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts and .css file the repository holds, wherever it is, but
+ *      __tests__/ and e2e/); every import form (`from '…'`, a bare `import '…'`, `import('…')` with any arguments,
+ *      `require('…')`, a comment allowed before the string, a `?query` or `#fragment` allowed after it) by alias, by
+ *      relative path, or any path naming components/ui/; and every stylesheet's `@import`, in any spelling.
+ *  (b) L6-2: a styles entry holds only imports of stylesheets and of other styles entries, and comments; each sheet it
+ *      names exists and has exactly one importer in the same files, that entry; every entry is imported.
+ *  A relative or `@/` import that names no file fails the scan ("cannot resolve"), unless it sits inside a comment
+ *  or a string (scripts/vocabulary/generate.mjs writes one out as text).
+ *  Out of reach: a specifier built at run time (helpers/kit-styles.ts says which).
  *
- * The importer scan reads the repository's files (tracked and untracked, .gitignore applied) except __tests__/ and e2e/,
- * which are not bundled and which hold the fixture strings below.
+ * __tests__/ and e2e/ are not bundled, and they hold the fixture strings below.
  */
 
-const SCANNED_DIRS = ['app/', 'components/', 'lib/', 'scripts/'];
+/** The files X-6 governs: every file a bundle can include, outside the kit. */
+const outsideKitFiles = (files: readonly string[]) => files.filter((f) => !f.startsWith(`${KIT}/`));
 
-/** The files X-6 governs: source outside the kit, and stylesheets outside the kit. */
-function outsideKitFiles(files: readonly string[]): string[] {
-  return files.filter((f) => !f.startsWith(`${KIT}/`) && (
-    (SOURCE_EXT.test(f) && (SCANNED_DIRS.some((d) => f.startsWith(d)) || !f.includes('/'))) || f.endsWith('.css')
-  ));
-}
+type Text = { path: string; src: string };
 
 /** Each X-6 offence in `files` (path and text), with the line to write instead. */
-function x6Offences(files: ReadonlyArray<{ path: string; src: string }>, sheetEntry: Map<string, string>): string[] {
+function x6Offences(files: readonly Text[], sheetEntry: Map<string, string>): string[] {
   return files.flatMap(({ path, src }) => specifiers(path, src)
-    .map((s) => ({ ...s, target: resolveSpec(path, s.spec) }))
+    .map((s) => ({ ...s, target: resolveOf(path, s) }))
     .filter((s) => isKitSheet(s.target))
     .map((s) => `${path}: ${s.form} '${s.spec}' imports ${s.target}; ${insteadOf(s.target as string, sheetEntry)}`));
 }
 
-/** The files whose import of any form, or `@import`, resolves to `sheet`. */
-function importersOf(sheet: string, files: ReadonlyArray<{ path: string; src: string }>): string[] {
-  return files.filter(({ path, src }) => specifiers(path, src).some((s) => resolveSpec(path, s.spec) === sheet)).map((f) => f.path);
+/** For every path any of `files` imports, in any form, the files that import it. One pass. */
+function importIndex(files: readonly Text[]): Map<string, string[]> {
+  const index = new Map<string, string[]>();
+  for (const { path, src } of files) {
+    for (const target of new Set(specifiers(path, src).map((s) => resolveOf(path, s)))) {
+      if (target !== null) index.set(target, [...(index.get(target) ?? []), path]);
+    }
+  }
+  return index;
 }
 
-const withText = (paths: readonly string[]) => paths.map((path) => ({ path, src: read(path) }));
-const bundledSource = () => withText(repoFiles().filter((f) => (SOURCE_EXT.test(f) || f.endsWith('.css'))
-  && !f.startsWith('__tests__/') && !f.startsWith('e2e/') && !f.startsWith('node_modules/')));
+const withText = (paths: readonly string[]): Text[] => paths.map((path) => ({ path, src: read(path) }));
+/** Every file a bundle can include, the kit's own among them, with its text. */
+const bundledSource = () => withText(bundledFiles());
 
 describe('NFR-PERF-02 X-6: no file outside components/ui/ imports a kit stylesheet', () => {
   it('(lint self-test) every import form and path form is caught, a stylesheet @import too, and the message names the entry', () => {
@@ -64,8 +72,18 @@ describe('NFR-PERF-02 X-6: no file outside components/ui/ imports a kit styleshe
       ['components/x/B.tsx', `import 'components/ui/PageHeader.css';`],
       ['app/x/x.css', `@import '../../components/ui/Breadcrumb.css';`],
       ['app/x/x.css', `@import url(../../components/ui/Dialog.css);`],
+      // Fix round 1 (F2): a comment before the string, a second argument or a trailing comma, a query or a fragment,
+      // and CSS's @import with no space or in capitals.
+      ['components/x/B.tsx', `const m = await import(/* webpackChunkName: "x" */ '@/components/ui/Callout.css');`],
+      ['scripts/x.mjs', `require(/* c */ '../components/ui/Table.css');`],
+      ['components/x/B.tsx', `await import('@/components/ui/Callout.css', { with: { type: 'css' } });`],
+      ['components/x/B.tsx', `await import('@/components/ui/Callout.css',);`],
+      ['components/x/B.tsx', `import '@/components/ui/Checkbox.css?v=1';`],
+      ['components/x/B.tsx', `import '@/components/ui/Checkbox.css#x';`],
+      ['app/x/x.css', `@import"../../components/ui/Callout.css";`],
+      ['app/x/x.css', `@IMPORT '../../components/ui/Callout.css';`],
     ];
-    for (const [path, src] of caught) expect(x6Offences([{ path, src }], sheetEntry), `${path}: ${src}`).toHaveLength(1);
+    expect(caught.filter(([path, src]) => x6Offences([{ path, src }], sheetEntry).length !== 1).map(([, src]) => src), 'forms not caught').toEqual([]);
     expect(x6Offences([{ path: 'components/findings/A.tsx', src: `import '@/components/ui/TextInput.css';` }], sheetEntry)[0])
       .toMatch(/write import '@\/components\/ui\/formStyles'; instead$/);
     expect(x6Offences([{ path: 'components/x/B.tsx', src: `import '@/components/ui/PageHeader.css';` }], sheetEntry)[0])
@@ -75,17 +93,33 @@ describe('NFR-PERF-02 X-6: no file outside components/ui/ imports a kit styleshe
       ['components/findings/A.tsx', `import '@/components/ui/formStyles';`],
       ['components/findings/A.tsx', `import { TextInput } from '@/components/ui/TextInput';`],
       ['components/layout/A.tsx', `import './shell.css';`],
-      ['components/x/A.tsx', `import '@/components/uiextra/Button.css';`],
+      ['components/x/A.tsx', `import 'some-package/components/uiextra/Button.css';`],
     ] as const) expect(x6Offences([{ path, src }], sheetEntry), src).toEqual([]);
   });
 
-  it('(lint, not vacuous) the scan reads app, components outside the kit, lib, scripts, the root, and the stylesheets outside the kit', () => {
-    const files = outsideKitFiles(repoFiles());
+  it('(lint, not vacuous) the scan reads app, components outside the kit, lib, scripts, types, data, the root, and the stylesheets outside the kit', () => {
+    const files = outsideKitFiles(bundledFiles());
     for (const f of ['app/layout.tsx', 'components/layout/Rail.tsx', 'lib/ui/copy.ts', 'proxy.ts', 'app/globals.css', 'components/layout/shell.css']) {
       expect(files, f).toContain(f);
     }
-    expect(files.some((f) => f.startsWith('scripts/'))).toBe(true);
-    expect(files.filter((f) => f.startsWith(`${KIT}/`))).toEqual([]);
+    for (const dir of ['scripts/', 'types/', 'data/']) expect(files.some((f) => f.startsWith(dir)), dir).toBe(true);
+    expect(files.filter((f) => f.startsWith(`${KIT}/`) || f.startsWith('__tests__/') || f.startsWith('e2e/'))).toEqual([]);
+  });
+
+  it('(fix round 1, F1) a source file in a folder nobody listed is read, and so are .mts and .cts files', () => {
+    const picked = outsideKitFiles(['hooks/x.ts', 'types/legal.ts', 'data/x.mjs', 'lib/a.mts', 'lib/b.cts', 'app/x.css',
+      'components/ui/Button.tsx', 'docs/x.md', '__tests__/lint/x.test.ts', 'e2e/x.spec.ts'].filter(isBundled));
+    expect(picked.sort()).toEqual(['app/x.css', 'data/x.mjs', 'hooks/x.ts', 'lib/a.mts', 'lib/b.cts', 'types/legal.ts']);
+  });
+
+  it('(fix round 1, F3) a relative or @/ import that names no file fails loudly, unless it is inside a comment or a string', () => {
+    expect(() => x6Offences([{ path: 'app/x/page.tsx', src: `import './Missing';` }], sheetsOfEntries()))
+      .toThrow('app/x/page.tsx: cannot resolve ./Missing');
+    expect(() => x6Offences([{ path: 'app/x/page.tsx', src: `import '@/lib/nothing-here';` }], sheetsOfEntries()))
+      .toThrow('app/x/page.tsx: cannot resolve @/lib/nothing-here');
+    const src = "// import './Missing';\n/* import '@/gone'; */\nconst code = `import type { X } from './types';`;\nimport './layout';";
+    expect(x6Offences([{ path: 'app/page.tsx', src }], sheetsOfEntries())).toEqual([]);
+    expect(resolveSpec('app/layout.tsx', './globals.css?inline')).toBe('app/globals.css');
   });
 
   it('a planted import of a kit sheet in a page is found', () => {
@@ -96,7 +130,16 @@ describe('NFR-PERF-02 X-6: no file outside components/ui/ imports a kit styleshe
   });
 
   it('X-6: no file outside components/ui/ imports a kit stylesheet', () => {
-    expect(x6Offences(withText(outsideKitFiles(repoFiles())), sheetsOfEntries())).toEqual([]);
+    expect(x6Offences(withText(outsideKitFiles(bundledFiles())), sheetsOfEntries())).toEqual([]);
+  });
+});
+
+describe('NFR-PERF-02: the bundler may not drop a styles entry', () => {
+  it('package.json declares no sideEffects field', () => {
+    const pkg = JSON.parse(read('package.json')) as Record<string, unknown>;
+    expect('sideEffects' in pkg, 'package.json must not declare "sideEffects": a styles entry exports nothing, so a bundler '
+      + 'told the package has no side effects may drop it and its stylesheets; and follow-up B measured that such a hint '
+      + 'already breaks the latin-ext font').toBe(false);
   });
 });
 
@@ -118,13 +161,14 @@ describe('NFR-PERF-02 L6-2: each styles entry is the one importer of the sheets 
 
   it('a styles entry holds only imports of sheets that exist and of other styles entries, and comments', () => {
     const entries = new Set(entryFiles());
+    const files = new Set(repoFiles());
     const wrong = [...entries].flatMap((entry) => {
       const body = entryBody(read(entry));
       return [
         ...body.other.map((line) => `${entry}: holds more than imports: ${line}`),
         ...body.imports.flatMap((spec) => {
-          const target = resolveSpec(entry, spec) as string;
-          if (spec.endsWith('.css')) return repoFiles().includes(target) ? [] : [`${entry}: names ${spec}, which does not exist`];
+          const target = resolveSpec(entry, spec, true) as string;
+          if (spec.endsWith('.css')) return files.has(target) ? [] : [`${entry}: names ${spec}, which does not exist`];
           return entries.has(target) ? [] : [`${entry}: imports ${spec}, which is not a styles entry`];
         }),
       ];
@@ -132,34 +176,31 @@ describe('NFR-PERF-02 L6-2: each styles entry is the one importer of the sheets 
     expect(wrong).toEqual([]);
   });
 
-  it('a planted second importer of an entry\'s sheet is found', () => {
-    const sheet = 'components/ui/Checkbox.css';
-    const planted = [...bundledSource(), { path: 'components/ui/Checkbox.tsx', src: `import './Checkbox.css';\n` }];
-    expect(importersOf(sheet, planted).sort()).toEqual(['components/ui/Checkbox.tsx', 'components/ui/formStyles.ts']);
-  });
-
-  it('every sheet a styles entry names has exactly one importer in the repository\'s source, that entry', () => {
-    const source = bundledSource();
-    const sheetEntry = sheetsOfEntries();
-    expect(sheetEntry.size).toBeGreaterThanOrEqual(9);   // the entries name the sheets, so the check is not vacuous
-    const wrong = [...sheetEntry].flatMap(([sheet, entry]) => {
-      const importers = importersOf(sheet, source);
-      return importers.length === 1 && importers[0] === entry ? [] : [`${sheet}: imported by ${importers.join(', ') || 'nothing'}; only ${entry} may import it`];
+  /** Each entry sheet whose importers are not exactly its entry, with what to write instead. */
+  function secondImporters(source: readonly Text[]): string[] {
+    const index = importIndex(source);
+    return [...sheetsOfEntries()].flatMap(([sheet, entry]) => {
+      const importers = index.get(sheet) ?? [];
+      if (importers.length === 1 && importers[0] === entry) return [];
+      return [`${sheet}: imported by ${importers.join(', ') || 'nothing'}; only ${entry} may import it: in each other file, `
+        + `${insteadOf(sheet, sheetsOfEntries())}`];
     });
-    expect(wrong).toEqual([]);
+  }
+
+  it('a planted second importer of an entry\'s sheet is found, and the message names the entry to import', () => {
+    const planted = [...bundledSource().filter((f) => f.path !== 'components/ui/Checkbox.tsx'),
+      { path: 'components/ui/Checkbox.tsx', src: `import './Checkbox.css';\n` }];
+    expect(secondImporters(planted)).toEqual(["components/ui/Checkbox.css: imported by components/ui/formStyles.ts, "
+      + "components/ui/Checkbox.tsx; only components/ui/formStyles.ts may import it: in each other file, write import "
+      + "'@/components/ui/formStyles'; instead"]);
   });
 
-  it('no kit component imports a sheet a styles entry names, and every entry has an importer', () => {
-    const source = bundledSource();
-    const sheetEntry = sheetsOfEntries();
-    const kitParts = source.filter((f) => f.path.startsWith(`${KIT}/`) && !sheetEntry.has(f.path) && !/Styles\.ts$/.test(f.path));
-    const offences = kitParts.flatMap(({ path, src }) => specifiers(path, src)
-      .map((s) => resolveSpec(path, s.spec))
-      .filter((t): t is string => t !== null && sheetEntry.has(t))
-      .map((t) => `${path} imports ${t}; ${insteadOf(t, sheetEntry)}`));
-    expect(offences).toEqual([]);
-    const unused = entryFiles().filter((entry) => !source.some(({ path, src }) => path !== entry
-      && specifiers(path, src).some((s) => resolveSpec(path, s.spec) === entry)));
-    expect(unused).toEqual([]);
+  it('every sheet a styles entry names has exactly one importer in the files a bundle can include, that entry', () => {
+    expect(secondImporters(bundledSource())).toEqual([]);
+  });
+
+  it('every styles entry is imported by a file other than itself', () => {
+    const index = importIndex(bundledSource());
+    expect(entryFiles().filter((entry) => !(index.get(entry) ?? []).some((f) => f !== entry))).toEqual([]);
   });
 });

@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useLayoutEffect, useRef } from 'react';
 import type { ReactElement, ReactNode, SyntheticEvent } from 'react';
-import './buttonStyles';
+import './buttonStyles'; // the dialog's rules travel with the button's: one file on every page (buttonStyles.ts)
 
 export type DialogProps = {
   open: boolean;

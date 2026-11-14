@@ -1,8 +1,7 @@
 /**
- * Styles entry: the date field's rules, after the kit's form rules.
- * A styles entry holds only stylesheet imports, and the sheets it names have it as their one importer, so the bundler
- * cannot serve them in separate files (components/ui/formStyles.ts says why). A file outside components/ui/ that needs
- * these rules imports this module, never the sheets (ruling X-6).
+ * Styles entry: the date field's rules, after the kit's form rules. It names one sheet of its own and exists so that
+ * a file outside components/ui/ has a module to import for .ui-date (ruling X-6).
+ * What a styles entry is, and why the kit has them: components/ui/formStyles.ts.
  */
 import './formStyles';
 import './DateField.css';
