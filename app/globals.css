@@ -415,17 +415,6 @@ h5 { font-size: var(--font-size-body); }
   letter-spacing: 0.05em;
 }
 
-.badge--moderate {
-  background-color: var(--tint-moderate-bg);
-  color: var(--tint-moderate-fg);
-}
-
-/* The warning tint of UX-06: "Overdue", "Owner cannot act" and "Legal name not recorded" only (the label word, never the phrase). */
-.status-label--warning {
-  background-color: var(--tint-moderate-bg);
-  color: var(--tint-moderate-fg);
-}
-
 /* ── Stage indicators ── */
 .stage-indicator {
   display: inline-flex;
