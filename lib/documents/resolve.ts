@@ -17,7 +17,8 @@ import { PROJECT_FORM_COPY } from '@/lib/project/form/copy';
 import { REVIEW_COPY } from '@/lib/review/copy';
 import { formatFingerprint } from '@/lib/seal/format';
 import {
-  ETHICS_APPROVED, ETHICS_NOT_REQUIRED, ETHICS_SUBMITTED, FILE_NAME_ERASED, GATE_DERIVED_NA, assignedToLine, noDecisionLine, checkAgainLine, decidedByLine, decidedInLine, decisionSource,
+  CLOSED_NO_LONGER_APPLIES, ETHICS_APPROVED, ETHICS_NOT_REQUIRED, ETHICS_SUBMITTED, FILE_NAME_ERASED, FINDING_CLOSED, GATE_DERIVED_NA, assignedToLine, closedByLine,
+  noDecisionLine, checkAgainLine, decidedByLine, decidedInLine, decisionSource,
   doneEvidenceLine, evidenceFileLine, fileErasedLine, findingStatusLine, formatUtcDay, fromQuestion, lastCheckNoteLine, outsideOtherBodyLine, outsideRoleLine, personalDataAnswerLine,
   reviewLineText, textErasedLine, utcSecond,
 } from './copy';
@@ -335,18 +336,92 @@ function findingTitle(f: FindingView, snap: DocumentSnapshot): string {
   return f.title ?? (shortfall ? `Finding on ${f.questionId}` : textOf(snap, 'findings', f.id, 'title', null));
 }
 
-function findingCounts(sealed: SealedStage): ResolvedPart {
-  const n = (state: FindingView['state']) => sealed.findings.filter(({ finding }) => finding.state === state).length;
+/**
+ * MP-02's first line. A finding the platform holds as closed by a mitigation is counted as "Closed by a mitigation" only when its
+ * status line says so (a real one closed it); the others are counted as "Closed", an item added only when there is one (the lane
+ * lead's reading 5 of the coordinator's ruling of 14 November 2026), so a document with none prints what it always printed.
+ */
+function findingCounts(sealed: SealedStage, snap: DocumentSnapshot): ResolvedPart {
+  const words = sealed.findings.map((sf) => findingStateWord(sf, snap));
+  const n = (w: string) => words.filter((x) => x === w).length;
+  const byMitigation = FINDING_STATE_WORD.closed_mitigation;
+  const closed = n(FINDING_CLOSED);
   return part({
-    text: `Open findings: ${n('open')}. Closed by a mitigation: ${n('closed_mitigation')}. Closed by an accepted risk: ${n('closed_accepted_risk')}.`,
+    text: `Open findings: ${n(FINDING_STATE_WORD.open)}. Closed by a mitigation: ${n(byMitigation)}. Closed by an accepted risk: ${n(FINDING_STATE_WORD.closed_accepted_risk)}.${closed === 0 ? '' : ` ${FINDING_CLOSED}: ${closed}.`}`,
     sealIds: [sealed.seal.sealId],
+  });
+}
+
+/** The `findingSeq` of the finding's latest reopen, or 0: R of `deriveFindingState` (lib/findings/state.mjs, lines 33 to 36). */
+function reopenedAt(sf: SealedFinding): number {
+  return Math.max(0, ...sf.events.filter((e) => e.kind === 'reopened').map((e) => e.findingSeq));
+}
+
+/**
+ * A closing record: the row `closeByDecision` writes when a decision closes a finding (kind decision_changed or decision_withdrawn,
+ * version 1, done, no text and no tombstone on its text). It is not a mitigation (the coordinator's ruling of 14 November 2026):
+ * documents print it as a line under its finding, never as a mitigation, and do not count it. Any other row of a decision kind (a
+ * later version, one not done, one with text, one whose text was erased) takes the ordinary mitigation path.
+ */
+function isClosingRecord(m: MitigationVersionView, snap: DocumentSnapshot): boolean {
+  return (m.kind === 'decision_changed' || m.kind === 'decision_withdrawn') && m.versionNumber === 1 && m.status === 'done' && m.what === null
+    && erasedAt(snap, 'mitigation_versions', m.id, 'what') === null;
+}
+
+/**
+ * A finding's status word. One the platform holds as closed by a mitigation says so only when a real (kind action) mitigation is
+ * done after its latest reopen, by the rule `deriveFindingState` uses for which done mitigations count (lib/findings/state.mjs,
+ * line 41: a current version done with `findingSeq` above R); otherwise a decision closed it, and it says "Closed".
+ */
+function findingStateWord(sf: SealedFinding, snap: DocumentSnapshot): string {
+  const f = sf.finding;
+  if (f.state !== 'closed_mitigation') return word(FINDING_STATE_WORD, f.state, 'finding state');
+  const r = reopenedAt(sf);
+  const real = sf.mitigations.some((m) => m.kind === 'action' && m.status === 'done' && m.findingSeq > r && !isClosingRecord(m, snap));
+  return real ? FINDING_STATE_WORD.closed_mitigation : FINDING_CLOSED;
+}
+
+/** Every sealed decision version of the snapshot with this id, in any stage, or undefined. */
+function sealedVersion(snap: DocumentSnapshot, id: string): SealedDecision | undefined {
+  for (const stage of STAGES) {
+    const s = snap.stages[stage];
+    if (s === null) continue;
+    for (const d of s.decisions.values()) if (d.row.id === id) return d;
+  }
+  return undefined;
+}
+
+/**
+ * The cause a closing record supports, or null. A withdrawal says so by its kind. A change names the version that closed it: one of
+ * the finding's own question says the decision changed; one of another question answering No is the personal data question's
+ * answer; a version the snapshot does not hold, or of another question answering anything else, states no cause (never a guess).
+ */
+function closingCause(m: MitigationVersionView, f: FindingView, snap: DocumentSnapshot): string | null {
+  if (m.kind === 'decision_withdrawn') return FINDINGS_COPY.mitigation.closedBecauseDecisionWithdrawn;
+  const d = m.closureDecisionVersionId === null ? undefined : sealedVersion(snap, m.closureDecisionVersionId);
+  if (d === undefined) return null;
+  if (d.row.questionId === f.questionId) return FINDINGS_COPY.mitigation.closedBecauseDecisionChanged;
+  return d.row.scopeAnswer === 'no' ? CLOSED_NO_LONGER_APPLIES : null;
+}
+
+/**
+ * The lines under a closed finding's status line: for each closing record entered after its latest reopen, oldest first, who entered
+ * it and the UTC day it was received (as "Raised on:" prints a day), then its cause when the record supports one. A finding that is
+ * open, withdrawn or closed by an accepted risk prints none.
+ */
+function closingLines(sf: SealedFinding, snap: DocumentSnapshot): string[] {
+  if (sf.finding.state !== 'closed_mitigation') return [];
+  const r = reopenedAt(sf);
+  return sf.mitigations.filter((m) => isClosingRecord(m, snap) && m.findingSeq > r).sort((x, y) => x.findingSeq - y.findingSeq).flatMap((m) => {
+    const cause = closingCause(m, sf.finding, snap);
+    return [closedByLine(m.enteredBy.name, formatUtcDay(m.receivedAt)), ...(cause === null ? [] : [cause])];
   });
 }
 
 function resolveFindings(source: Extract<FieldSource, { kind: 'findings' }>, snap: DocumentSnapshot): ResolvedPart {
   const sealed = stageSource(source.stage, snap);
   if (sealed === null) return part({ text: NOT_RECORDED_AT_ISSUE });
-  if (source.filter === 'counts') return findingCounts(sealed);
+  if (source.filter === 'counts') return findingCounts(sealed, snap);
   const versions = new Map([...sealed.decisions.values()].map((d) => [d.row.id, d.row.versionNumber]));
   const wanted = (state: FindingView['state']): boolean => {
     if (source.filter === 'open') return state === 'open';
@@ -356,7 +431,8 @@ function resolveFindings(source: Extract<FieldSource, { kind: 'findings' }>, sna
   const items = sealed.findings.filter(({ finding: f }) =>
     wanted(f.state) && (source.areas === undefined || (f.riskArea !== null && source.areas.includes(f.riskArea))));
   const sources: RowRef[] = [];
-  const text = items.length === 0 ? NONE : items.map(({ finding: f }, i) => {
+  const text = items.length === 0 ? NONE : items.map((sf, i) => {
+    const f = sf.finding;
     const version = f.decisionVersionId === null ? undefined : versions.get(f.decisionVersionId);
     const origin = f.source === 'team' || f.questionId === null ? 'Raised by the team' : fromQuestion(f.questionId, version);
     sources.push({ sourceTable: 'findings', sourceId: f.id, field: 'title' }, { sourceTable: 'findings', sourceId: f.id, field: 'description' });
@@ -364,7 +440,7 @@ function resolveFindings(source: Extract<FieldSource, { kind: 'findings' }>, sna
     return [`${i + 1}. ${findingTitle(f, snap)}`, `Source: ${origin}`, `Risk area: ${areaText(snap, f.riskArea)}`,
       ...(f.description === null && shortfall ? [] : [`Description: ${textOf(snap, 'findings', f.id, 'description', f.description)}`]),
       ...(source.filter === 'open' ? [`Raised on: ${formatUtcDay(f.raisedAt)}`] : []),
-      findingStatusLine(word(FINDING_STATE_WORD, f.state, 'finding state'))].join('\n');
+      findingStatusLine(findingStateWord(sf, snap)), ...closingLines(sf, snap)].join('\n');
   }).join('\n\n');
   return part({ text, sources, sealIds: [sealed.seal.sealId] });
 }
@@ -402,7 +478,8 @@ function mitigationLines(m: MitigationVersionView, snap: DocumentSnapshot, sourc
 /** The current mitigation versions of the sealed stage, counted by status; those of withdrawn findings are not counted. */
 function mitigationCounts(sealed: SealedStage, snap: DocumentSnapshot): ResolvedPart {
   const counted = sealed.findings.filter(({ finding }) => finding.state !== 'withdrawn');
-  const all = counted.flatMap(({ finding, mitigations }) => mitigations.map((m) => ({ m, state: finding.state })));
+  // A closing record is not a mitigation, so it is not counted (the coordinator's ruling of 14 November 2026).
+  const all = counted.flatMap(({ finding, mitigations }) => mitigations.filter((m) => !isClosingRecord(m, snap)).map((m) => ({ m, state: finding.state })));
   const n = (status: string) => all.filter(({ m }) => m.status === status).length;
   const overdue = all.filter(({ m, state }) => isOverdue({ status: m.status, dueDate: m.dueDate }, state, snap.today)).length;
   return part({
@@ -418,7 +495,9 @@ function currentMitigations(sealed: SealedStage, snap: DocumentSnapshot): Resolv
   const sources: RowRef[] = [];
   const text = open.map(({ finding, mitigations }, i) => {
     sources.push({ sourceTable: 'findings', sourceId: finding.id, field: 'title' });
-    const blocks = mitigations.map((m, j) => {
+    // A closing record prints nothing here; its row stays a source of the document, as it was when it printed (reading 7).
+    for (const m of mitigations) if (isClosingRecord(m, snap)) sources.push({ sourceTable: 'mitigation_versions', sourceId: m.id, field: 'what' });
+    const blocks = mitigations.filter((m) => !isClosingRecord(m, snap)).map((m, j) => {
       const status = word(MITIGATION_STATUS_WORD, m.status, 'mitigation status');
       const late = isOverdue({ status: m.status, dueDate: m.dueDate }, finding.state, snap.today) ? ' (overdue)' : '';
       const [what, ...rest] = mitigationLines(m, snap, sources);
@@ -436,12 +515,14 @@ function resolveMitigations(source: Extract<FieldSource, { kind: 'mitigations' }
   if (source.filter === 'current') return currentMitigations(sealed, snap);
   // A mitigation plan lists the done mitigations of the findings it calls closed by a mitigation, each with its finding; the cards list every done one.
   const plan = snap.documentType === 'mitigation_plan';
-  const done = sealed.findings
+  const listed = sealed.findings
     .filter(({ finding }) => !plan || finding.state === 'closed_mitigation')
     .flatMap(({ finding, mitigations }) => mitigations.filter((m) => m.status === 'done').map((m) => ({ finding, m })));
-  // The plan's findings list above already says None; a second None under the same field would only repeat it.
-  if (done.length === 0 && plan) return part({ sealIds: [sealed.seal.sealId] });
-  const sources: RowRef[] = [];
+  // A closing record prints under its finding, not here; its row stays a source of the document, as it was when it printed (reading 7).
+  const sources: RowRef[] = listed.filter(({ m }) => isClosingRecord(m, snap)).map(({ m }) => ({ sourceTable: 'mitigation_versions', sourceId: m.id, field: 'what' }));
+  const done = listed.filter(({ m }) => !isClosingRecord(m, snap));
+  // The plan's findings list above already says None or holds the findings; an empty list under the same field prints nothing.
+  if (done.length === 0 && plan) return part({ sources, sealIds: [sealed.seal.sealId] });
   const text = done.length === 0 ? NONE : done.map(({ finding, m }, i) => {
     const [what, ...rest] = mitigationLines(m, snap, sources);
     const lines = [`${i + 1}. ${what}`, ...(plan ? [`Finding: ${findingTitle(finding, snap)}`] : []), ...rest];

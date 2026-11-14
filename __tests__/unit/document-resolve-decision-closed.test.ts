@@ -10,8 +10,10 @@ import { FINDINGS_COPY } from '@/lib/findings/copy';
 
 /**
  * Register row D-408: a done mitigation that closed its finding because the decision changed or was withdrawn has no text and
- * no tombstone; the mitigation plan (MP-05) and the model card (MC-24) print the owner's sentence for it. Every other null text
- * with no tombstone still fails loudly, with the message the resolver has always thrown. Snapshots by hand, fixture ids only.
+ * no tombstone. By the coordinator's ruling of 14 November 2026 (21:45 EAT) such a version 1 row is a closing record, not a
+ * mitigation: the mitigation plan prints it under its finding (MP-05) as who closed it, on which day, and the owner's sentence,
+ * and neither the plan nor the model card (MC-24) lists it as a mitigation. Every other null text with no tombstone still fails
+ * loudly, with the message the resolver has always thrown. Snapshots by hand, fixture ids only.
  */
 
 const content = loadContent('0.0.1-fixture');
@@ -41,7 +43,8 @@ function snap(docType: DocumentSnapshot['documentType'], stage: Stage, s: Spec):
       sealedAt: '2026-11-01T09:30:15.000Z', sealedBy: user('Sealer S.'), sealedByRole: 'owner', enteredByPeople: 2,
     },
     preparedFor: null, manifest: { format: 'makrai.seal/1', content: { semver: '0.0.1-fixture', contentHash: 'h' }, decisions: [] } as never,
-    decisions: new Map(), derived: new Map(), findings: [{ finding: f, mitigations: [m], acceptedRisk: null, events: [] }],
+    // dv-2, the version that closed the finding, is a version of the finding's own question Q-PP-01.
+    decisions: new Map([['Q-PP-01', { row: { id: 'dv-2', questionId: 'Q-PP-01', scopeAnswer: null, status: 'done' }, decidedBy: null, evidence: [] } as never]]), derived: new Map(), findings: [{ finding: f, mitigations: [m], acceptedRisk: null, events: [] }],
   };
   const stages = Object.fromEntries(STAGES.map((x) => [x, x === stage ? chosen : null])) as DocumentSnapshot['stages'];
   const tombstones = new Map(s.erasedOn === undefined ? [] : [['mv-1', new Map([['what', s.erasedOn]])]]);
@@ -59,18 +62,20 @@ const plan = (s: Spec) => resolveFields(mp, snap('mitigation_plan', 'pre-process
 const card = (s: Spec) => resolveFields(mc, snap('model_card', 'in-processing', s), {});
 
 describe('a mitigation closed by a decision, as a document prints it (D-408)', () => {
-  it('FR-FND-06 FR-DOC-01: MP-05 prints "Closed because the decision changed." for a done decision_changed with no text and no tombstone', () => {
+  it('FR-FND-06 FR-DOC-01: MP-05 prints "Closed because the decision changed." under the finding for a done decision_changed with no text and no tombstone', () => {
     const text = fieldText(plan({ what: null, kind: 'decision_changed' }), 'MP-05');
-    expect(text).toContain(`1. ${CHANGED}\nFinding: Labels drift\nAssigned to: Amina N.`);
+    expect(text).toBe(`1. Labels drift\nSource: From question Q-PP-01\nRisk area: none\nDescription: Coders disagree.\nStatus: Closed\nClosed by Amina N. on 30 Oct 2026.\n${CHANGED}`);
   });
 
-  it('FR-FND-06 FR-DOC-01: MP-05 prints "Closed because the decision was withdrawn." for a done decision_withdrawn', () => {
-    expect(fieldText(plan({ what: null, kind: 'decision_withdrawn' }), 'MP-05')).toContain(`1. ${WITHDRAWN}\nFinding: Labels drift`);
+  it('FR-FND-06 FR-DOC-01: MP-05 prints "Closed because the decision was withdrawn." under the finding for a done decision_withdrawn', () => {
+    expect(fieldText(plan({ what: null, kind: 'decision_withdrawn' }), 'MP-05'))
+      .toBe(`1. Labels drift\nSource: From question Q-PP-01\nRisk area: none\nDescription: Coders disagree.\nStatus: Closed\nClosed by Amina N. on 30 Oct 2026.\n${WITHDRAWN}`);
   });
 
-  it('FR-FND-06 FR-DOC-01: MC-24 of the model card prints the sentence for both decision kinds', () => {
-    expect(fieldText(card({ what: null, kind: 'decision_changed' }), 'MC-24')).toContain(`1. ${CHANGED}\nAssigned to: Amina N.`);
-    expect(fieldText(card({ what: null, kind: 'decision_withdrawn' }), 'MC-24')).toContain(`1. ${WITHDRAWN}\nAssigned to: Amina N.`);
+  it('FR-FND-06 FR-DOC-01: MC-24 of the model card lists neither decision kind as a done mitigation', () => {
+    // MC-24 is the done mitigations, then question Q-IP-15 (undecided here): no mitigation is left to list.
+    expect(fieldText(card({ what: null, kind: 'decision_changed' }), 'MC-24')).toBe('None\nNot recorded');
+    expect(fieldText(card({ what: null, kind: 'decision_withdrawn' }), 'MC-24')).toBe('None\nNot recorded');
   });
 
   it('FR-REV-08 (SRS 7.5.6): a decision-kind row with a tombstone prints the erased line, not the sentence', () => {
