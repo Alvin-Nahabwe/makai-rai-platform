@@ -1870,5 +1870,13 @@
     "property": "O-13 as before, plus Home's next-step role rule: a Reviewer or Viewer never sees the next step or a Continue recording link on Home. Presence for the roles that record depends on their saves and is not asserted here.",
     "proof": "Every existing line of the case is unchanged; the added lines are the `if (!can(role, 'decision:write'))` block with `expect.soft(page.locator('.next-step'), ...).toHaveCount(0)` and `expect.soft(page.getByRole('link', { name: HOME_COPY.continueRecording }), ...).toHaveCount(0)`, run on the dashboard page the case has just loaded. The same rule is held by e2e/home-next-step.spec.ts 'T9.5: a viewer sees no next step and no Continue recording' and by __tests__/integration/home-load.test.ts 'T9.5: a viewer and a reviewer get null, also when rows exist that they did not enter' (null even for versions entered under their own id).",
     "task": "plan 1B Tasks 9 and 10 (slice 3, Home's next step)"
+  },
+  {
+    "kind": "structure",
+    "changed": "e2e/role-matrix.spec.ts::(module)",
+    "replacedBy": "e2e/role-matrix.spec.ts::dashboard, projects, projects/new, project detail and members render only the controls this role may use",
+    "property": "O-13 on the project page: the page's one primary action (plan 1C C11) is a registered control, not an exclusion. For all five roles the link named PROJECT_COPY.start shows exactly where can(role, 'decision:write') (Owner, Admin, Assessor) and nowhere else (Reviewer, Viewer), and the owner's census of the page counts it.",
+    "proof": "PROJECT_DETAIL_CONTROLS gains one entry, first: { name: PROJECT_COPY.start, action: 'decision:write', mode: 'presence', locator: getByRole('link', { name: PROJECT_COPY.start, exact: true }) }; every other line is unchanged. The fixture's project is fresh, so the label there is Start recording. Seen RED then GREEN on the remote machine: without the entry the owner census failed 'project detail: unclassified control(s) — add to the registry in e2e/role-matrix.spec.ts: Start recording' (org A and org B owner); with it the case passes for every role. The role rule whatever the data is held by __tests__/integration/home-load.test.ts 'S4: a Reviewer and a Viewer get null, also when rows exist, their own included', which fails when the decision:write check in loadContinueTarget is removed (shown by mutation: Tests 1 failed | 17 passed).",
+    "task": "plan 1C C11, cut (lane 5, Continue recording on the project page)"
   }
 ]
