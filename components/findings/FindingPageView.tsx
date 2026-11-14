@@ -42,12 +42,24 @@ function formProps(d: FindingPageData) {
   };
 }
 
+/**
+ * F1 (the owner's decision, 14 Nov 2026): a mitigation written by "close by decision" stores no text. In the text's place
+ * the card says why it closed, for those two kinds only and only when the text was never erased. An erased text, and an
+ * action's null text, keep the empty line they had. Nothing stored changes.
+ */
+function decisionClosureText(v: MitigationOnPage['current']): string | null {
+  if (v.erasedFields.includes('what')) return null;
+  if (v.kind === 'decision_changed') return M.closedBecauseDecisionChanged;
+  if (v.kind === 'decision_withdrawn') return M.closedBecauseDecisionWithdrawn;
+  return null;
+}
+
 function Mitigation({ d, m, controlName }: { d: FindingPageData; m: MitigationOnPage; controlName: (id: string) => string }): ReactElement {
   const v = m.current;
   const overdue = overdueLabel(v.dueDate);
   return (
     <li data-mitigation-id={v.mitigationId} className="finding-card">
-      <p>{v.what === null ? null : <bdi>{v.what}</bdi>}</p>
+      <p>{v.what === null ? decisionClosureText(v) : <bdi>{v.what}</bdi>}</p>
       <p className="finding-card__line">
         {M.assignedTo} <bdi>{v.owner.name}</bdi>{v.owner.formerMember ? M.formerMember : ''}{SEP}{M.due(formatDay(v.dueDate))}{SEP}
         {m.overdue ? <><span className="finding-overdue">{overdue.label}</span>{overdue.rest}{SEP}</> : null}

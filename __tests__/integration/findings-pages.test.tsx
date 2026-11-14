@@ -388,6 +388,41 @@ describe('S-15 mitigations on the page (FR-FUP-05, FR-FND-03, UX-06, NFR-A11Y-05
     expect(html).toMatch(new RegExp(`${FINDINGS_COPY.mitigationForm.doneNothingAttached} <bdi>Fixture closureNote \\d+</bdi>`));
     expect(html).toContain(FINDINGS_COPY.mitigation.historySummary(2));
   });
+
+  // F1 (the owner's decision, 14 Nov 2026): a mitigation a "close by decision" wrote has a null text that was never erased;
+  // the card shows the sentence for its kind in the text's place. Only those two kinds; an erased text and an action's
+  // null text keep the empty line they had; an action's text is unchanged. The stored rows are not touched.
+  const firstLineOf = async (kind: 'decision_changed' | 'decision_withdrawn' | 'action', what: 'null' | 'erased' | 'text') => {
+    const p = await addProject(fx);
+    const f = await addFinding(fx, p.id, { stage: 'pre-processing', source: 'team', by: 'owner' });
+    const m = await addMitigationVersion(fx, f.id, { status: 'done', kind, owner: 'assessor', dueDate: '2026-12-01' });
+    const data = await pageData('owner', p.id, f.id);
+    const mit = data.mitigations[0];
+    if (what !== 'text') mit.current = { ...mit.current, what: null, erasedFields: what === 'erased' ? ['what'] : [] };
+    const html = renderToStaticMarkup(<FindingPageView data={data} />);
+    const card = html.indexOf(`data-mitigation-id="${m.mitigationId}"`);
+    expect(card).toBeGreaterThanOrEqual(0);
+    return html.slice(html.indexOf('>', card) + 1, html.indexOf('</p>', card) + 4);
+  };
+
+  it('F1: a decision_changed mitigation with a null, unerased text reads "Closed because the decision changed."', async () => {
+    expect(await firstLineOf('decision_changed', 'null')).toBe(`<p>${FINDINGS_COPY.mitigation.closedBecauseDecisionChanged}</p>`);
+  });
+
+  it('F1: a decision_withdrawn mitigation with a null, unerased text reads "Closed because the decision was withdrawn."', async () => {
+    expect(await firstLineOf('decision_withdrawn', 'null')).toBe(`<p>${FINDINGS_COPY.mitigation.closedBecauseDecisionWithdrawn}</p>`);
+  });
+
+  it('F1: an erased text keeps its empty line, and an action with a null text keeps the empty line it had', async () => {
+    expect(await firstLineOf('decision_changed', 'erased')).toBe('<p></p>');
+    expect(await firstLineOf('decision_withdrawn', 'erased')).toBe('<p></p>');
+    expect(await firstLineOf('action', 'null')).toBe('<p></p>');
+  });
+
+  it('F1: an action with a text shows its text, not a decision sentence', async () => {
+    const line = await firstLineOf('action', 'text');
+    expect(line).toMatch(/^<p><bdi>Fixture what \d+<\/bdi><\/p>$/);
+  });
 });
 
 describe('C4 fixes: names in bdi, the accept form after an acceptance, separators, the loader mapping (SFH-3, CR-1, CR-7, SI-1)', () => {
