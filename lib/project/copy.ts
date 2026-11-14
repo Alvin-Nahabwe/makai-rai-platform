@@ -47,7 +47,7 @@ export const PROJECT_COPY = Object.freeze({
     'in-processing': 'Model development and training; evaluation, fairness, documentation',
     'post-processing': 'Deployment and monitoring; governance and community engagement',
   } satisfies Record<Stage, string>),
-  /** A stage column's counts, through StageColumn's `plural` where a word has a singular and a plural. */
+  /** A stage block's counts, through StageColumn's `plural` where a word has a singular and a plural. */
   stage: Object.freeze({
     question: 'question',
     questions: 'questions',
@@ -59,21 +59,17 @@ export const PROJECT_COPY = Object.freeze({
     acceptedRisks: 'accepted risks',
     document: 'document',
     documents: 'documents',
-    noDecision: (n: number) => `${n} with no decision`,
-    /** The summary line a collapsed column shows: "Pre-processing: 9 with no decision, 3 open findings, 1 overdue mitigation". */
-    todoLine: (stage: string, noDecision: number, findings: string, mitigations: string) => `${stage}: ${noDecision} with no decision, ${findings}, ${mitigations}`,
+    /** The first line of "Still open in this stage". */
+    noDecisionQuestions: (n: number) => (n === 1 ? '1 question with no decision' : `${n} questions with no decision`),
+    /** Plain text after the linked open-findings count. */
     withoutMitigation: (k: number) => ` (${k} of them with no mitigation yet)`,
-    doneNoEvidence: (n: number) => `${n} done, no evidence attached`,
-    todo: 'To do',
-    recorded: 'Recorded',
-    nothingRecorded: 'Nothing recorded yet.',
-    done: (n: number) => `Done ${n}`,
-    partly: (n: number) => `Partly ${n}`,
-    notYet: (n: number) => `Not yet ${n}`,
-    notApplicable: (n: number) => `Not applicable ${n}`,
+    stillOpen: 'Still open in this stage',
+    nothingOpen: 'Nothing is open in this stage.',
+    /** The tally's heading; the tally's own words are the kit's (tallyWords, lib/ui/copy.ts). */
+    recorded: 'Recorded so far',
     issued: (risks: string, documents: string) => `${risks}, ${documents} issued`,
-    /** The link to the stage page; it prints the stage's address segment, as before (defect 18 is plan 1C's). */
-    open: (segment: string) => `Open ${segment}`,
+    /** The link to the stage page; three on the page share these words, so each is described by its stage's heading. */
+    allQuestions: 'All questions in this stage',
   }),
   /** The stage page's two count links (S-11). */
   followUpCounts: Object.freeze({

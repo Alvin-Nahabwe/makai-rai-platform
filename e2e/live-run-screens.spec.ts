@@ -52,8 +52,9 @@ test.beforeAll(async () => {
     for (let i = 0; i < plain; i += 1) await addFinding(fx, projectId, { stage, source: 'team' });
   }
   await addMitigationVersion(fx, (await addFinding(fx, projectId, { stage: 'in-processing', source: 'team' })).id, { status: 'planned', owner: 'owner', dueDate: '2099-01-01' });
-  // One accepted risk, on a finding that is then closed, gives S-10 something recorded, so it has status labels to check
-  // (FIX-6). A closed finding is in no open count.
+  // One accepted risk, on a finding that is then closed, gives S-10's "Recorded so far" its accepted-risk line (FIX-6). A
+  // closed finding is in no open count. The status label S-10's ink check reads here is the planned mitigation's above
+  // (this project has no decisions, so no tally shapes); the tally's shapes are checked on S-10 in prj-screens.spec.ts.
   await addAcceptedRisk(fx, (await addFinding(fx, projectId, { stage: 'pre-processing', source: 'team' })).id, {});
 });
 
@@ -73,8 +74,8 @@ test('FR-RM-04 UX-06 UX-07: S-08, S-10, S-11 and S-14 print the stage counts as 
     await expectNoCrossStageTotal(page, sentinels);
     await expectStatusMarksInk(page);
     await expectNoOtherSums(page, path);
-    if (path.endsWith(projectId)) {                                                // S-10's to-do line reads the open count itself
-      await expect(page.locator('[data-stage="pre-processing"] .stage-column__todo-line')).toContainText('37 open findings');
+    if (path.endsWith(projectId)) {                                                // S-10's "Still open" reads the open count itself, as a link
+      await expect(page.locator('[data-stage="pre-processing"]').getByRole('link', { name: '37 open findings', exact: true })).toBeVisible();
     }
   }
 

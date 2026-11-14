@@ -1798,5 +1798,53 @@
     "property": "An export past the ZIP entry limit fails closed with 500 export_entry_limit, logs the code with ids only, leaves no file and frees its slot. Added: the error's message, ruled in the 18d brief in place of \"Export too large\".",
     "proof": "The same case: the rejects.toMatchObject now also holds message: 'This export is too large to make as one file. Export one project at a time.'; every other line is byte for byte unchanged.",
     "task": "plan 1A Task 18, part 18d"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::UX-06 FR-PRJ-02: to-do counts come before recorded counts in each stage column",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::UX-06 FR-PRJ-02: to-do counts come before recorded counts in each stage column",
+    "property": "In each stage block the to-do counts come before the recorded counts, and no count is a percentage, a score or \"complete\". The block is now plain (slice 2): the to-do counts sit under \"Still open in this stage\" (\"9 questions with no decision\"), the recorded counts under \"Recorded so far\" in the kit's tally words (\"7 done (2 with no evidence attached)\"), so the old words \"9 with no decision\" and \"Done 7\" no longer exist to be compared.",
+    "proof": "The case renders StageColumn with COUNTS and requires the index of \"Still open in this stage\" before \"9 questions with no decision\", that before \"Recorded so far\", and that before \"7 done (2 with no evidence attached)\"; the \"3 open findings\", \"1 overdue mitigation\" and no-%/score/complete lines are unchanged. Swapping the two sections, or printing a recorded count before the no-decision count, fails it.",
+    "task": "plan 1C Task 8 (cut), slice 2"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::UX-06 (R12-16): each status phrase of a stage column is a status-label element, and none carries the warning class",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::UX-06 (R12-16, spec 7.2): each status phrase of a stage column is the kit's mark with its words in ink, and none carries the warning class",
+    "property": "Each recorded status of a stage block is shown as words in ink with a neutral mark, never a warning style. The status-label spans (\"Done 7\") became the kit's tally (spec 7.2): one item per kind above zero, each the kit's MarkShape (hidden from assistive technology) followed by the kind's words from tallyWords.",
+    "proof": "The case renders StageColumn with COUNTS and requires the tally items, each matched as <li class=\"stage-column__tally-item\"> holding <svg class=\"ui-mark__shape\" … aria-hidden=\"true\"> then <span> with the words, to read exactly \"7 done (2 with no evidence attached)\", \"n partly\", \"n not yet\", \"n not applicable\", \"1 answered\", in that order; and the whole column to contain no status-label and no \"warning\". The ink itself is checked in the browser by expectStatusMarksInk in e2e/prj-screens.spec.ts.",
+    "task": "plan 1C Task 8 (cut), slice 2"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::FR-PRJ-02: the stage column says how many open findings have no mitigation yet, and counts gated questions as not applicable",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::FR-PRJ-02: the stage column says how many open findings have no mitigation yet, and counts gated questions as not applying, beside those marked not applicable",
+    "property": "The stage block says how many open findings have no mitigation yet, and questions the personal data answer gates are counted. Under the kit's tally (spec 7.2) gated questions are their own kind, \"does not apply\", beside \"not applicable\", where the old column added the two into \"Not applicable 4\".",
+    "proof": "The case renders StageColumn with COUNTS plus notApplicableByGate: 2 and requires \"3 open findings</a> (1 of them with no mitigation yet)\" (the count now a link to the findings page, the bracket plain text after it), \"<span>2 not applicable</span>\" and \"<span>2 do not apply</span>\". Dropping the gated count, or folding it back into not applicable, fails it.",
+    "task": "plan 1C Task 8 (cut), slice 2"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::FR-PRJ-02: a new project shows \"Nothing recorded yet.\" in each stage",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::FR-PRJ-02: a new project shows \"No decisions recorded yet\" in each stage",
+    "property": "A new project's page says in each of its three stages that nothing is recorded. The words are now the kit's empty tally, UI_COPY.tally.none, \"No decisions recorded yet\", shown when no tally kind is above zero.",
+    "proof": "The case renders the page with ZERO counts in every stage and requires \"<p>No decisions recorded yet</p>\" exactly three times (the split has length 4).",
+    "task": "plan 1C Task 8 (cut), slice 2"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::UX-36: each stage is a details element, open by default, that names its three to-do counts when collapsed",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::UX-36: each stage is a plain block, named by its heading, that names its three to-do counts",
+    "property": "Each of the three stages is one block that a person can find and that states its three to-do counts. The block is no longer a collapsible <details> with a summary line (slice 2): it is a <section> named by its <h2>, which states the counts in its \"Still open\" list.",
+    "proof": "The case renders the page and requires three <section class=\"stage-column\" id=… data-stage=… aria-labelledby=…> elements, no <details>, and in the pre-processing block an <h2 id=…>Pre-processing</h2> and the texts \"9 questions with no decision\", \"3 open findings\" and \"1 overdue mitigation\".",
+    "task": "plan 1C Task 8 (cut), slice 2"
+  },
+  {
+    "kind": "structure",
+    "changed": "e2e/role-matrix.spec.ts::(module)",
+    "replacedBy": "e2e/role-matrix.spec.ts::dashboard, projects, projects/new, project detail and members render only the controls this role may use",
+    "property": "The project page's three links to the stage pages are classified controls that every role sees. Slice 2 renamed them: each stage block ends in one link \"All questions in this stage\" (three on the page share these words, each described by its stage's heading) where the old column ended in \"Open pre-processing\" and its two siblings. The registry entries are rewritten for the new words.",
+    "proof": "PROJECT_DETAIL_CONTROLS now holds three presence entries named \"All questions in this stage\" (action null, so every role must see them), each located inside its own stage block, [data-stage=\"pre-processing\"], [data-stage=\"in-processing\"] and [data-stage=\"post-processing\"], by role link and exact name; a missing link in any one stage fails that entry. The name is the link's text, which findUnclassifiedControls matches by includes. The block's other new link, \"N open findings\", has no registry entry: the spec's project is created with no finding, so the link is not rendered there and the owner's census does not meet it; it leads to the findings page, which \"Findings for this project\" already classifies as a control every role sees.",
+    "task": "plan 1C Task 8 (cut), slice 2"
   }
 ]

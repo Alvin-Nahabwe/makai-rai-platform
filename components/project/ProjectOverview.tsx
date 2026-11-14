@@ -17,8 +17,8 @@ const C = PROJECT_COPY.overview;
 
 /**
  * S-10, the stage view (FR-PRJ-02, FR-PRJ-03; SRS W-1): the kit's page header (breadcrumb, the project's name, one
- * descriptive line, the actions the role may take), then the three stages side by side with each stage's follow-up and
- * stage reviews. A synchronous view of loaded data (the page file loads it), so it renders the same on the server and in
+ * descriptive line, the actions the role may take), then the three stages side by side, each a plain block with its
+ * follow-up under what is still open and its stage reviews after what is recorded. A synchronous view of loaded data (the page file loads it), so it renders the same on the server and in
  * a test.
  */
 export function ProjectOverview({ data, children }: { data: ProjectOverviewData; children?: ReactNode }): ReactElement {
@@ -55,9 +55,11 @@ export function ProjectOverview({ data, children }: { data: ProjectOverviewData;
         </nav>
         <div className="stage-list__columns">
           {STAGES.map((s) => (
-            <StageColumn key={s} orgSlug={orgSlug} projectId={project.id} stage={s} counts={data.counts[s]}>
+            <StageColumn
+              key={s} orgSlug={orgSlug} projectId={project.id} stage={s} counts={data.counts[s]}
+              reviews={<StageReviewsSummary orgSlug={orgSlug} projectId={project.id} stage={s} reviews={data.reviews[s]} canOpen={can.openReview} />}
+            >
               <StageFollowUp orgSlug={orgSlug} projectId={project.id} stage={s} items={data.followUp[s].items} cannotAct={data.followUp[s].cannotAct} />
-              <StageReviewsSummary orgSlug={orgSlug} projectId={project.id} stage={s} reviews={data.reviews[s]} canOpen={can.openReview} />
             </StageColumn>
           ))}
         </div>
