@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import Link from 'next/link';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -10,7 +10,15 @@ import { textOf } from '@/__tests__/helpers/markup';
 
 /** Plan 1A Task 6: Banner, a page-wide notice (offline, archived, session, information). */
 
-const CSS = readFileSync('components/ui/Banner.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+/**
+ * The banner's rules are a block of app/globals.css (follow-up B of plan 1A, NFR-PERF-02): from its own comment to the
+ * comment that opens the block moved from shell.css, which stays the end of that file (__tests__/unit/ui/shell.test.tsx).
+ */
+const GLOBALS = readFileSync('app/globals.css', 'utf8');
+const BLOCK_START = GLOBALS.indexOf('/* Moved from components/ui/Banner.css');
+const BLOCK_END = GLOBALS.indexOf('/* Moved from components/layout/shell.css');
+const withoutComments = (css: string): string => css.replace(/\/\*[\s\S]*?\*\//g, '');
+const CSS = withoutComments(GLOBALS.slice(BLOCK_START, BLOCK_END));
 const ICON_OF: Readonly<Record<BannerProps['kind'], IconName>> = { offline: 'wifi-off', archived: 'archive', session: 'clock', info: 'info' };
 
 describe('Banner', () => {
@@ -46,6 +54,27 @@ describe('Banner', () => {
   it('is ordinary flow content in ink: nothing fixed or sticky, no orange and no red', () => {
     expect(CSS).not.toMatch(/position:\s*(fixed|sticky)/);
     expect(CSS).not.toMatch(/--color-overdue|--color-action/);
+  });
+
+  it('NFR-PERF-02: its rules are one block of app/globals.css, after that file\'s own rules and before the block moved from shell.css, and it has no stylesheet of its own', () => {
+    expect(BLOCK_START).toBeGreaterThan(0);
+    expect(BLOCK_END).toBeGreaterThan(BLOCK_START);
+    // Everything between the two comments is the banner's, so no rule of the file's own follows the block: every
+    // selector or at-rule that opens a `{` there, however it is laid out, is one of the five.
+    expect([...CSS.matchAll(/([^{}]+)\{/g)].map((m) => m[1].trim()))
+      .toEqual(['.ui-banner', '.ui-banner__icon', '.ui-banner__body', '.ui-banner__title', '.ui-banner__action']);
+    // And nothing before or after the block styles a banner.
+    expect(withoutComments(GLOBALS.slice(0, BLOCK_START) + GLOBALS.slice(BLOCK_END))).not.toContain('ui-banner');
+    // A stylesheet of its own, under any name, would be one more response on every page's first visit (the root layout
+    // renders the offline banner): the component imports none, no other stylesheet styles a banner, and the old file
+    // is gone and named by nothing.
+    const sources = ['app', 'components', 'lib'].flatMap((root) => readdirSync(root, { recursive: true, encoding: 'utf8' }).map((f) => `${root}/${f}`))
+      .filter((f) => /\.(tsx?|css)$/.test(f));
+    expect(sources.length).toBeGreaterThan(100);
+    expect(readFileSync('components/ui/Banner.tsx', 'utf8')).not.toMatch(/\.css['"]/);
+    expect(sources.filter((f) => f.endsWith('.css') && f !== 'app/globals.css' && readFileSync(f, 'utf8').includes('ui-banner'))).toEqual([]);
+    expect(existsSync('components/ui/Banner.css')).toBe(false);
+    expect(sources.filter((f) => /Banner\.css/.test(readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '')))).toEqual([]);
   });
 
   it('an action that renders nothing (null, false) and an empty title leave no empty wrapper', () => {

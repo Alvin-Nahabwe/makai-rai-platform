@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { FIELD_COPY } from '@/lib/ui/field/copy';
 import { SORT_WORDS, STATUS_MARK_COPY, UI_COPY, positionWords, tallyWords } from '@/lib/ui/copy';
 
 /** Plan 1A Task 3, spec 7.2: the words of the marks, the tally and the position. */
@@ -74,5 +75,16 @@ describe('the structure components\' words (plan 1A Task 5)', () => {
     expect(UI_COPY.breadcrumbLabel).toBe('Breadcrumb');
     expect(UI_COPY.plate.youAreHere).toBe('You are here');
     expect(UI_COPY.stepper.done).toBe('(done)');
+  });
+});
+
+describe('the form fields\' words (NFR-PERF-02: a module of their own)', () => {
+  it('FIELD_COPY holds the two words every form field shares', () => {
+    expect(FIELD_COPY.required).toBe('(required)');
+    expect(FIELD_COPY.errorPrefix).toBe('Error:');
+  });
+
+  it('UI_COPY.field is FIELD_COPY itself: one object, so the two cannot drift', () => {
+    expect(UI_COPY.field).toBe(FIELD_COPY);
   });
 });
