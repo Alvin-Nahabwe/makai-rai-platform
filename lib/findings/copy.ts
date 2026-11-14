@@ -219,6 +219,13 @@ export const FINDINGS_COPY = Object.freeze({
     added: 'Mitigation added',
     updated: (n: number): string => `Mitigation updated to version ${n}`,
     riskAcceptedBy: 'Risk accepted by',
+    /**
+     * Shown and printed in place of the text of a done mitigation the platform wrote when it closed a finding
+     * because of a decision (kinds `decision_changed` and `decision_withdrawn`): such a row never had text.
+     * The finding page shows them; the mitigation plan and the model card print them (register row D-408).
+     */
+    closedBecauseDecisionChanged: 'Closed because the decision changed.',
+    closedBecauseDecisionWithdrawn: 'Closed because the decision was withdrawn.',
   }),
 
   /** "Accept the risk, withdraw or reopen": withdraw and reopen. */
