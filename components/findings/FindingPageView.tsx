@@ -35,10 +35,15 @@ const M = FINDINGS_COPY.mitigation;
 /** "<name> (<id>)", or the id alone when the content has no name for it. */
 const named = (id: string, name: string | null): string => (name === null || name === '' ? id : F.namedId(name, id));
 
+/** The mitigations section's heading: it stays on the page in every state, so a save that removes its toggle sends focus here (B1). */
+const MITIGATIONS_HEADING = 'f-mitigations';
+
 /** What every mitigation form needs from the page (the draft key's account and organisation, the owners who can act, the controls). */
 function formProps(d: FindingPageData) {
   return {
     orgSlug: d.orgSlug, projectId: d.projectId, findingId: d.detail.id, owners: d.owners, controls: d.controls, userId: d.viewer.userId, orgId: d.orgId,
+    // Where focus goes when a save removes the toggle that held it (Done closes the finding; Cancelled ends the card).
+    leaveFocusTo: MITIGATIONS_HEADING,
   };
 }
 
@@ -152,8 +157,8 @@ export function FindingPageView({ data }: { data: FindingPageData }): ReactEleme
           <CloseByDecisionButton orgSlug={d.orgSlug} projectId={d.projectId} findingId={f.id} decisionVersionId={closing.decisionVersionId} reason={closing.reason} findingTitle={d.title} />
         </section>
       )}
-      <section aria-labelledby="f-mitigations" className="finding-section">
-        <h2 id="f-mitigations">{F.mitigations}</h2>
+      <section aria-labelledby={MITIGATIONS_HEADING} className="finding-section">
+        <h2 id={MITIGATIONS_HEADING} tabIndex={-1}>{F.mitigations}</h2>
         {d.mitigations.length === 0 ? (
           <p>{F.noMitigations}</p>
         ) : (
