@@ -1414,5 +1414,13 @@
     "property": "The S-16 slot lists each document with its type, seal, issue date and short fingerprint, says Withdrawn or Issued, adds no link of its own, and is empty for no documents. Only the word changes, to C#323 (\"SHA-256\" becomes \"Fingerprint\").",
     "proof": "The same case: the two toContain templates hold 'Fingerprint ${formatFingerprint(SHA, 'short')}' in place of 'SHA-256 …'; the Withdrawn, Issued, no-link and empty assertions are byte for byte unchanged.",
     "task": "plan 1A Task 18"
+  },
+  {
+    "task": "release 0.7.0",
+    "kind": "wording",
+    "changed": "__tests__/unit/release-waivers.test.ts::SFH-11: the committed file names no release but 0.6.0, 0.6.1 and 0.6.2",
+    "replacedBy": "__tests__/unit/release-waivers.test.ts::SFH-11: the committed file names no release but 0.6.0, 0.6.1, 0.6.2 and 0.7.0",
+    "property": "The committed waiver file names only the releases the test lists, so a mistyped release cannot waive nothing in silence. Release 0.7.0 records a waiver (the owner deferred the screen-reader walk on 14 November 2026), so the list and the title gain 0.7.0.",
+    "proof": "The same case with one more version in its toEqual list; a release outside the list still fails it. The 0.7.0 entry has a case of its own above it."
   }
 ]
