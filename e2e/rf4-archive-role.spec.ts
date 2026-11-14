@@ -8,6 +8,7 @@ import { fillValid, saveAlert, signInWith, waitForQuestionPage } from './helpers
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
 import { FIELD_COPY } from '../lib/ui/field/copy';
 import { DECISION_OUTCOME_COPY } from '../lib/decision/outcome/copy';
+import { ARCHIVED_TEXT, ROLE_CHANGED_TEXT } from '../lib/evidence/copy';
 
 /**
  * Review Focus RF-4 (FR-PRJ-03, FR-MEM-03): a write refused on a page that was already open is refused on the server too,
@@ -141,18 +142,18 @@ async function openPages(browser: Browser): Promise<OpenPages> {
 }
 
 /** B presses the controls: Save decision, the file upload, Save mitigation, Seal, and Issue; each page shows its refusal. */
-async function pressAll(p: OpenPages, text: { s12: string; save: string; seal: string; issue: string }): Promise<void> {
+async function pressAll(p: OpenPages, text: { s12: string; upload: string; save: string; seal: string; issue: string }): Promise<void> {
   await p.s12.getByRole('button', { name: 'Save decision' }).click();
   await expect(saveAlert(p.s12)).toHaveText(text.s12);
 
   // The upload starts when the file is chosen.
   const mit = mitigations(p.s15);
   await mit.locator('input[type="file"]').setInputFiles({ name: 'rf4.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%rf4\n%%EOF\n') });
-  await expect(mit.getByText(text.save).first()).toBeVisible();
+  await expect(mit.getByText(text.upload).first()).toBeVisible();
   await mit.getByRole('button', { name: 'Save mitigation' }).click();
   // The failed upload holds the save for a choice (MitigationForm's gate); saving without it is the press that reaches the server.
   await mit.getByRole('button', { name: 'Save without it' }).click();
-  // The refused upload keeps its own alert with the same sentence; this is the save's refusal, the form's own paragraph.
+  // The refused upload keeps its own alert (the evidence block's line); this is the save's refusal, the form's own paragraph.
   await expect(mit.locator('form > p[role="alert"]')).toHaveText(text.save);
 
   await p.s17.getByRole('button', { name: 'Seal as seal 2' }).click();
@@ -167,7 +168,7 @@ test('FR-PRJ-03 RF-4: archiving refuses Save, upload, Seal and Generate on pages
   const pages = await openPages(browser);
   const before = await countRows();
   await expectOk(await ownerApi.post(`/api/v1/orgs/${fx.org.slug}/projects/${projectId}/archive`, { data: { requestId: randomUUID() } }), 'route 21');
-  await pressAll(pages, { s12: S12_M12, save: M12, seal: SEAL_ARCHIVED, issue: M12 });
+  await pressAll(pages, { s12: S12_M12, upload: ARCHIVED_TEXT, save: M12, seal: SEAL_ARCHIVED, issue: M12 });
   expect(await countRows()).toEqual(before);
   await expect(pages.s12.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`)).toHaveValue(TYPED);   // 7.4.1: the typed answer stays
   await pages.context.close();
@@ -183,7 +184,7 @@ test('FR-MEM-03 RF-4: lowering the role to viewer refuses the same four writes o
   const before = await countRows();
   const res = await ownerApi.patch(`/api/v1/orgs/${fx.org.slug}/members/${fx.members.admin.userId}`, { data: { requestId: randomUUID(), role: 'viewer' } });
   expect(res.ok(), `route 26: ${res.status()} ${await res.text()}`).toBe(true);
-  await pressAll(pages, { s12: S12_M09, save: M09, seal: SEAL_ROLE, issue: ISSUE_ROLE });
+  await pressAll(pages, { s12: S12_M09, upload: ROLE_CHANGED_TEXT, save: M09, seal: SEAL_ROLE, issue: ISSUE_ROLE });
   expect(await countRows()).toEqual(before);
   await pages.context.close();
 });
