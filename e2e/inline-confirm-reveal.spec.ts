@@ -19,7 +19,7 @@ import { signInWith } from './helpers/session';
  *   - a confirmation opened with the keyboard is wholly in view: inside the window, inside every clipping ancestor and inside
  *     the scroller's visible box less its scroll padding (a bar fixed over the window's edge reserves that padding); its two
  *     buttons are not covered; and the element the screen moves focus to has it and is wholly in view;
- *   - an element that takes focus inside an open confirmation, cut by the window's edge, is brought wholly into view;
+ *   - a text field that takes focus inside an open confirmation, cut by the window's edge, is brought wholly into view;
  *   - the confirm button keeps keyboard focus while its request is held, and a second Enter sends nothing;
  *   - a pointer press on a partly visible control inside an open confirmation still acts on that control.
  *
@@ -351,6 +351,7 @@ async function cutAtBottom(page: Page, el: Locator, shown: number): Promise<Plac
 async function arrange(page: Page, o: Opened, expected: Geometry): Promise<{ width: number; height: number }> {
   await o.trigger.click();
   await expect(o.confirmation).toBeVisible();
+  await settled(page, o.confirmation);
   const stripOf = o.focus === 'trigger' ? o.confirmation : o.focus;
   const probe = await placeOf(stripOf);
   const whole = await placeOf(o.confirmation);
@@ -381,7 +382,9 @@ async function arrange(page: Page, o: Opened, expected: Geometry): Promise<{ wid
       found = grown ? 'grown-strip' : 'strip';
     } else {
       const size = page.viewportSize()!;
-      const height = Math.max(least, size.height + want);
+      // Within 8 px of the least height the window is held there: a page that settles a few pixels differently from run to
+      // run must not flip a case between 'strip' and 'held'.
+      const height = size.height + want - least < 8 ? least : size.height + want;
       if (height === size.height) {
         found = 'held';
         detail = `the element shows ${Math.round(now.visibleBottom - (boxTop + probe.contentTop))} px`;
@@ -622,32 +625,29 @@ const refusePassword = (r: Route) => r.fulfill({
   status: 422, contentType: 'application/json', body: JSON.stringify({ error: 'validation', fields: [{ field: 'password', message: 'The password is not right.' }] }),
 });
 
-test('SC 2.4.11 NFR-A11Y-02: a text field that takes focus inside an open confirmation while cut by the window\'s edge is brought wholly into view (account deletion, 1280 wide)', async ({ browser }) => {
-  // The on-focus reveal's own case. The screen focuses its password field when the server refuses the password
-  // (PersonalExportAndDeletionForm.tsx); a text field, because Chromium's focus() reveals only a text control's caret and
-  // brings any other control wholly into view by itself. Before the refusal arrives the field is cut by the edge with a strip
-  // showing, and the layout effect has long run, so only the on-focus reveal can bring it in.
+test('SC 2.4.11 NFR-A11Y-02: a text field that takes focus inside an open confirmation while cut by the window\'s edge is brought wholly into view (documents, 1280 wide)', async ({ browser }) => {
+  // A text field that takes focus inside an already open confirmation (its layout effect has run) while cut by the bottom
+  // edge with 12 px showing: the documents page's reason, a textarea, blurred, cut, and focused again by a script, as a later
+  // script focus by a screen would be. It proves the property, not the on-focus reveal alone: with that handler removed it
+  // still passes in Chromium, where focus() on a settled page brings this field wholly into view by itself (so did account
+  // deletion's password field, focused by the screen on a refused password, the first form of this case). Register D-386.
   test.setTimeout(120_000);
-  const page = await pageAs(browser, 'viewer', WIDE);
-  await load(page, '/account');
-  await page.getByRole('button', { name: 'Delete my account...' }).click();
-  const confirmation = page.getByRole('group', { name: 'Your account' });
-  const field = confirmation.getByLabel('Password', { exact: true });
-  await field.fill('not-the-password');
-  await confirmation.getByLabel('Type DELETE MY ACCOUNT to confirm').fill('DELETE MY ACCOUNT');
-  const held = await hold(page, /\/api\/users\/me$/, 'DELETE', refusePassword);
-  await confirmation.getByRole('button', { name: 'Delete my account', exact: true }).focus();
-  await page.keyboard.press('Enter');
-  await expect.poll(held.routed, { message: 'the request reached the route' }).toBe(1);
+  const page = await pageAs(browser, 'owner', WIDE);
+  await load(page, (await documentPage()).url);
+  await page.getByRole('button', { name: 'Withdraw document' }).click();
+  const confirmation = page.getByRole('group', { name: /^Data card issued / });
+  const field = confirmation.getByLabel('Reason (required)');
+  await expect(field).toBeFocused();
+  await settled(page, confirmation);
+  await field.evaluate((el) => (el as HTMLElement).blur());
   await cutAtBottom(page, field, 12);
-  await held.release();
+  await field.evaluate((el) => (el as HTMLElement).focus());
   await expect(field).toBeFocused();
   await settled(page, field);
   const place = await placeOf(field);
   expect(place.top >= place.visibleTop - 0.5 && place.bottom <= place.visibleBottom + 0.5,
-    `the password field is wholly in view (${Math.round(place.top)} to ${Math.round(place.bottom)}, visible ${Math.round(place.visibleTop)} to ${Math.round(place.visibleBottom)})`).toBe(true);
+    `the reason field is wholly in view (${Math.round(place.top)} to ${Math.round(place.bottom)}, visible ${Math.round(place.visibleTop)} to ${Math.round(place.visibleBottom)})`).toBe(true);
   await expectFocusVisibleAndUncovered(page);
-  await held.done();
 });
 
 test('SC 2.4.11 UX-29: a pointer press on the visible strip of a Cancel button cut by the window\'s edge still cancels (documents, 1280 wide)', async ({ browser }) => {
