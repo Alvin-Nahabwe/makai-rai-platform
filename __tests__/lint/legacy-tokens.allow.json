@@ -7,7 +7,6 @@
   "components/decision/DecisionHistoryList.tsx",
   "components/decision/StageQuestionList.tsx",
   "components/export/TeamExportPanel.tsx",
-  "components/question/QuestionContent.css",
   "components/report/ReferencesList.css",
   "components/suggestions/ControlCard.css"
 ]

@@ -1,7 +1,8 @@
 /**
- * The question page's own words (copy audit B rows 7 to 20 and 179 to 184, plan 1A Task 17): its navigation, its region
- * headings, the earlier-wording disclosure and the current decision. SERVER ONLY: the page and CurrentDecision, both server
- * components, import it; no 'use client' file does (ruling X-2), so these words are not shipped to the browser.
+ * The question page's own words (copy audit B rows 7 to 20, 179 to 184 and 249 to 251, audit C rows 172 to 174, plan 1A
+ * Task 17): its navigation, its region headings, the earlier-wording disclosure, the current decision, the question's
+ * content and the finding link. SERVER ONLY: the page, CurrentDecision, QuestionContent and QuestionFindingLink, all
+ * server components, import it; no 'use client' file does (ruling X-2), so these words are not shipped to the browser.
  */
 export const QUESTION_COPY = Object.freeze({
   nav: Object.freeze({
@@ -35,5 +36,18 @@ export const QUESTION_COPY = Object.freeze({
     reason: 'Reason',
     evidence: 'Evidence',
     noEvidence: 'None',
+  }),
+  /** components/question/QuestionContent.tsx. */
+  content: Object.freeze({
+    principle: (principle: string): string => `Principle: ${principle}`,
+    jump: (n: number): string => `Ways teams address this (${n})`,
+    goodPractice: 'What good looks like',
+    whyAsked: 'Why this is asked',
+  }),
+  /** components/findings/QuestionFindingLink.tsx (answer Q7 (b)). */
+  findingLink: Object.freeze({
+    open: 'This question has an open finding.',
+    view: 'View the finding',
+    raise: 'Raise a finding about this question',
   }),
 });

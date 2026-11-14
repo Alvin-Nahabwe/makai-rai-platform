@@ -1,5 +1,6 @@
 import type { LoadedQuestion } from '@/types/content';
 import type { ReactElement } from 'react';
+import { QUESTION_COPY } from '@/lib/question/copy';
 import './QuestionContent.css';
 
 export type QuestionContentProps = { question: LoadedQuestion; suggestionCount: number };
@@ -18,16 +19,16 @@ export type QuestionContentProps = { question: LoadedQuestion; suggestionCount: 
 export function QuestionContent({ question, suggestionCount }: QuestionContentProps): ReactElement {
   return (
     <div className="question-content">
-      <p className="question-content__principle">{`Principle: ${question.principle}`}</p>
+      <p className="question-content__principle">{QUESTION_COPY.content.principle(question.principle)}</p>
       <h3 className="question-content__text">{question.text}</h3>
       {suggestionCount > 0 ? (
         <p className="question-content__jump-line">
-          <a className="question-content__jump" href="#suggestions">{`Ways teams address this (${suggestionCount})`}</a>
+          <a className="question-content__jump" href="#suggestions">{QUESTION_COPY.content.jump(suggestionCount)}</a>
         </p>
       ) : null}
-      <h3 className="question-content__heading">What good looks like</h3>
+      <h3 className="question-content__heading">{QUESTION_COPY.content.goodPractice}</h3>
       <p className="question-content__body">{question.expectedPractice}</p>
-      <h3 className="question-content__heading">Why this is asked</h3>
+      <h3 className="question-content__heading">{QUESTION_COPY.content.whyAsked}</h3>
       <p className="question-content__body">{question.whyAsked}</p>
     </div>
   );
