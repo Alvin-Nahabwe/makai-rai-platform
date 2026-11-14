@@ -241,7 +241,7 @@ describe('NFR-PERF-02 NFR-PRIV-06 T16-Q11: the two sign-out controls load their 
     expect(signOut).toHaveBeenCalledTimes(2);
     expect(phases.map(signOutMessage)).toEqual([null, ACCEPTANCES_COPY.stillSignedIn, null, ACCEPTANCES_COPY.stillSignedIn]);
     expect(signOutMessage('idle')).toBeNull();
-    expect(ACCEPTANCES_COPY.stillSignedIn).toBe('You are still signed in. Check your internet connection and try again.');
+    expect(ACCEPTANCES_COPY.stillSignedIn).toBe('You are still signed in. Check your internet connection and try again. If that does not work, reload the page.');
   });
 
   it('T16-Q11: in mode required the sign out control is idle, the alert region after the sentence is there and empty, and the sentence is unchanged', () => {
