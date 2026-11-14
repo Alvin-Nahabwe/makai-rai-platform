@@ -183,6 +183,12 @@ test.describe('Findings from the rail (P2, L2-64 to L2-66)', () => {
     await page.waitForURL((u) => u.pathname === `/orgs/${fx.org.slug}/projects` && u.searchParams.get('for') === 'findings');
     const main = page.getByRole('main');
     await expect(main.getByText(CHOOSE, { exact: true })).toBeVisible();
+    // F6 (b): clear space between the line and the Active heading.
+    const below = await page.evaluate((text) => {
+      const line = [...document.querySelectorAll('main p')].find((p) => p.textContent === text)!;
+      return document.getElementById('projects-active')!.getBoundingClientRect().top - line.getBoundingClientRect().bottom;
+    }, CHOOSE);
+    expect(below).toBeGreaterThanOrEqual(16);
     for (const p of [a, b]) await expect(main.locator(`a[href="/orgs/${fx.org.slug}/projects/${p.id}/findings"]`)).toHaveCount(1);
     expect(errors).toEqual([]);
     await context.close();
@@ -236,6 +242,19 @@ test.describe('Help, /help (L2-67 to L2-71)', () => {
     await expect(page.locator('.shell-rail')).toHaveCount(0);
     await expect(page.getByRole('main')).toHaveCount(1);
     await expect(page.getByRole('main').locator('h2')).toHaveText(['Words used on the platform', 'What sealing means', 'Terms and privacy', 'Contact']);
+    // F6 (a): the About link stands apart from Contact by a section's space (48 px), not a paragraph's.
+    const aboutGap = await page.evaluate(() => {
+      const about = document.querySelector('.help__about')!.getBoundingClientRect().top;
+      const contact = document.getElementById('contact')!.parentElement!.getBoundingClientRect().bottom;
+      return about - contact;
+    });
+    expect(aboutGap).toBeGreaterThanOrEqual(48);
+    // F6 (b) is on Projects; F6's computed type: the ramp and the body text as globals.css gives them.
+    const type = await page.evaluate(() => Object.fromEntries(['.help h1', '.help h2', '.help h3', '.help__list dt', '.help__list dd'].map((s) => {
+      const cs = getComputedStyle(document.querySelector(s)!);
+      return [s, `${cs.fontSize}/${cs.fontWeight}`];
+    })));
+    expect(type).toEqual({ '.help h1': '30px/700', '.help h2': '22px/700', '.help h3': '18px/700', '.help__list dt': '16px/600', '.help__list dd': '16px/400' });
     // Where the header sits: above main, its bottom edge at or above main's top.
     const header = await page.locator('.shell-public-header').boundingBox();
     const main = await page.getByRole('main').boundingBox();

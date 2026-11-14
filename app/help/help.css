@@ -62,8 +62,9 @@
   gap: var(--space-2);
 }
 
-/* The About link closes the page as its own part: the space above it is a section's (an h2's top margin). */
-.help__about {
+/* The About link closes the page as its own part: the space above it is a section's (an h2's top margin). Written with
+   .help in front so it outranks `.help p`'s margin. */
+.help .help__about {
   margin-block-start: var(--space-12);
 }
 
