@@ -175,21 +175,31 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
   // appearing on the first edit) is followed at once by the next key, and the observer reports only at the next
   // rendering frame, so a Tab before that frame scrolled the next field into view above the bar's old height and the
   // bar covered it (SC 2.4.11). A layout effect runs inside the same event, before the next key is handled.
-  useLayoutEffect(() => {
+  // When the bar has grown over the control that has focus (the radio whose Space made the first edit), that control
+  // is scrolled clear once, above the new height; nothing moves when nothing is covered or focus is outside the form.
+  const applyBarHeight = useCallback((): void => {
     const bar = saveBar.current;
     if (bar === null) return;
     const root = document.documentElement;
-    const h = `${bar.offsetHeight}px`;
-    if (root.style.getPropertyValue('--decision-save-bar-h') !== h) root.style.setProperty('--decision-save-bar-h', h);
-  });
+    const was = parseFloat(root.style.getPropertyValue('--decision-save-bar-h')) || 0;
+    const h = bar.offsetHeight;
+    if (h === was) return;
+    root.style.setProperty('--decision-save-bar-h', `${h}px`);
+    const focused = document.activeElement;
+    if (h < was || !(focused instanceof HTMLElement) || bar.contains(focused) || !(bar.closest('form')?.contains(focused) ?? false)) return;
+    if (getComputedStyle(bar).position === 'fixed' && focused.getBoundingClientRect().bottom > bar.getBoundingClientRect().top) {
+      focused.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+    }
+  }, []);
+  useLayoutEffect(applyBarHeight);
   useEffect(() => {
     const bar = saveBar.current;
     if (bar === null || typeof ResizeObserver === 'undefined') return;
     const root = document.documentElement;
-    const observer = new ResizeObserver(() => { root.style.setProperty('--decision-save-bar-h', `${bar.offsetHeight}px`); });
+    const observer = new ResizeObserver(applyBarHeight);
     observer.observe(bar);
     return () => { observer.disconnect(); root.style.removeProperty('--decision-save-bar-h'); };
-  }, []);
+  }, [applyBarHeight]);
 
   /** Keeps the draft on this device; false when there is no store or the browser refused it. */
   const keep = useCallback((d: StoredDraft<DecisionDraft>): boolean => {
@@ -369,8 +379,9 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
     // into view, instantly rather than with the page's smooth scroll (app/globals.css:225): the browser reveals a focused
     // text control's caret, not its box, in a scroll it issues after this handler, and when both animate the browser's
     // wins and leaves the box 2 px below the fold at <= 768 px, where the document and not .app-main scrolls. An instant
-    // scroll lands first, and the browser's if-needed reveal then finds the caret already in view.
-    <form method="post" noValidate onSubmit={onSubmit} onFocus={(e) => { e.target.scrollIntoView?.({ block: 'nearest', behavior: 'instant' }); }} data-region-form="answer-form" data-ready={ready ? 'true' : undefined} aria-labelledby="s12-answer-form">
+    // scroll lands first, and the browser's if-needed reveal then finds the caret already in view. When the error
+    // summary's first line takes focus, the whole summary is brought into view, so its list is not left under the bar.
+    <form method="post" noValidate onSubmit={onSubmit} onFocus={(e) => { const t: Element = e.target; (t === summary.current ? t.parentElement ?? t : t).scrollIntoView?.({ block: 'nearest', behavior: 'instant' }); }} data-region-form="answer-form" data-ready={ready ? 'true' : undefined} aria-labelledby="s12-answer-form">
       {conflict !== null ? (
         <ConflictView
           current={conflict} mine={value} viewerId={data.viewer.userId}

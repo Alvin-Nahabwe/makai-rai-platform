@@ -43,6 +43,15 @@
   color: var(--color-link);
 }
 
+/* M-11: an error summary link lands on its field's first control (DecisionFields FIELD_TARGET), which sits under the
+   field's legend or label, hint and error. The jump stops this far below the top so they show with it, not above the
+   screen: at 320 px the most is 204 px (the date: legend, three-line hint, error, part labels). In rem, so it grows with
+   the text it makes room for. */
+:is(#decision-status-done, #decision-scope-yes, #decision-option-0, #decision-reason-code, #decision-reason,
+  #decision-decided-by, #decision-day) {
+  scroll-margin-block-start: 14rem;
+}
+
 /* The save bar takes focus after a send removed its focused control (D-398 item 4): a programmatic focus shows no
    :focus-visible ring, so the bar draws one, as the summary's first line does. */
 .decision-save-bar:focus {

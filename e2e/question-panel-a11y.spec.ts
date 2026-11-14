@@ -85,7 +85,8 @@ test('SPEC-2 W-3 NFR-A11Y-02 SC 2.4.11: at 320 px Save and its status sit in a b
   for (const [what, match] of stops) {
     await tabTo(page, what, match);
     await expectFocusVisibleAndUncovered(page);
-    if (what === 'the first status radio') await page.keyboard.press('Space');
+    // The first edit adds the unsaved line to the bar, which grows over the field that has focus: it must be scrolled clear.
+    if (what === 'the first status radio') { await page.keyboard.press('Space'); await expectFocusVisibleAndUncovered(page); }
     if (what === 'the reason') await page.keyboard.type('Compared a rule-based alert with the model, at 320 px.');
     if (what === 'Today') await page.keyboard.press('Enter');
   }
@@ -94,6 +95,49 @@ test('SPEC-2 W-3 NFR-A11Y-02 SC 2.4.11: at 320 px Save and its status sit in a b
   // At a wide width the bar is part of the page, not fixed (W-3 wide).
   await page.setViewportSize({ width: 1280, height: 800 });
   expect(await bar.evaluate((el) => getComputedStyle(el).position)).not.toBe('fixed');
+});
+
+test('SPEC-2 W-3 NFR-A11Y-02 SC 2.4.11: at 320 px a refused save shows its whole summary above the fixed bar, and each of its links lands with the field\'s label and error in view', async ({ page, baseURL }) => {
+  await page.setViewportSize({ width: 320, height: 800 });
+  await openQuestion(page, 'assessor', Q, baseURL!);
+  await page.locator('.decision-save-bar').getByRole('button', { name: 'Save decision' }).focus();
+  await page.keyboard.press('Enter');
+  const summary = page.locator('[data-error-summary]');
+  await expect(summary.locator('> p')).toBeFocused();
+  /**
+   * Whether the summary (no href) or the field a link names (its group's legend or label, and its error) lies wholly
+   * between the screen's top and the bar's top: "clear", or what is not.
+   */
+  const placed = (href?: string) => page.evaluate(async (id) => {
+    // Read at rest: a link's jump scrolls smoothly, and a box passing through view on the way does not count.
+    const y = window.scrollY;
+    await new Promise((done) => setTimeout(done, 150));
+    if (window.scrollY !== y) return 'still scrolling';
+    const barTop = document.querySelector('.decision-save-bar')!.getBoundingClientRect().top;
+    let boxes: Array<[string, Element | null]>;
+    if (id === undefined) boxes = [['the summary', document.querySelector('[data-error-summary]')]];
+    else {
+      const group = document.getElementById(id.slice(1))?.closest('fieldset, .ui-field') ?? null;
+      boxes = [['its label', group?.querySelector(':scope > legend, :scope > label') ?? null], ['its error', group?.querySelector('[id$="-error"]') ?? null]];
+    }
+    const bad = boxes.map(([what, e]) => {
+      if (e === null) return `${what} missing`;
+      const r = e.getBoundingClientRect();
+      return r.top >= -0.5 && r.bottom <= barTop + 0.5 ? '' : `${what} at ${Math.round(r.top)}-${Math.round(r.bottom)}, bar at ${Math.round(barTop)}`;
+    }).filter(Boolean);
+    return bad.length === 0 ? 'clear' : bad.join('; ');
+  }, href);
+  // The whole summary with its list, not its first line alone, sits above the bar (the page scrolls smoothly: polled).
+  await expect.poll(() => placed()).toBe('clear');
+  const hrefs = await summary.locator('a').evaluateAll((as) => as.map((a) => a.getAttribute('href')!));
+  expect(hrefs.length).toBeGreaterThan(1);
+  for (const href of hrefs) {
+    await summary.locator(`a[href="${href}"]`).click();
+    await expect(page.locator(href)).toBeFocused();
+    // Not the box alone at the top edge with the field's name and error above the screen.
+    await expect.poll(() => placed(href), { message: href }).toBe('clear');
+    await summary.locator('> p').focus();
+  }
 });
 
 test('NFR-A11Y-04 NFR-A11Y-05: targets of 24 px, no horizontal scroll at 320 px, and no serious axe violation in either theme at 1280 and 360', async ({ page, baseURL }) => {
