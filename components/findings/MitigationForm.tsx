@@ -120,8 +120,12 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
   const [status, setStatus] = useState<ReactNode>('');
   const [alert, setAlert] = useState<{ text: string; retry: boolean; name?: string } | null>(null);
   const [conflict, setConflict] = useState<MitigationVersionView | null>(null);
-  const [rawUpload, setUpload] = useState<{ uploading: string[]; failed: string[]; linkAdding?: boolean; linkTyped?: boolean }>({ uploading: [], failed: [] });
+  const [rawUpload, setUpload] = useState<{ uploading: string[]; failed: string[]; linkAdding?: boolean; linkNotAdded?: boolean; linkTyped?: boolean }>({ uploading: [], failed: [] });
   const [held, setHeld] = useState(false);
+  // The press that is held was held for a link: once the link is added, the card says what to do next.
+  const [heldForLink, setHeldForLink] = useState(false);
+  // How many saves were refused for an address typed and never added: the evidence block opens its link form and says so at the box.
+  const [linkRefusals, setLinkRefusals] = useState(0);
   const [notUploaded, setNotUploaded] = useState<string[]>([]);
   const [cannotKeep, setCannotKeep] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -135,7 +139,7 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
   const upload = useMemo(() => activeUpload(value.status, rawUpload), [value.status, rawUpload]);   // the evidence block is gone, with its uploads, unless the status is Done
   // A link whose request is out is not in `value.evidence` yet, and a save remounts the block and loses it: the save is held for it, as for a file.
   const linkOut = value.status === 'done' && rawUpload.linkAdding === true;
-  // An address typed in the open link box and never added is not in `value.evidence` either: the save does not go, and does not add it.
+  // An address typed in the link box (open or folded) and never added is not in `value.evidence` either: the save does not go, and does not add it.
   const linkUnadded = value.status === 'done' && rawUpload.linkTyped === true && !linkOut;
   const store = useRef<DraftStore | null>(null);
   const retry = useRef<RetryState>(NO_RETRY);
@@ -251,13 +255,18 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
   const save = (opts: { skipGate?: boolean; retrying?: boolean } = {}) => {
     if (inFlight.current) return;   // a press while a send is in flight changes nothing
     savePressedAt.current = new Date().toISOString();
+    // Before the field rules: a link on its way is evidence that is not in `value` yet, and "Attach evidence" would be false.
+    // "Save without it" leaves out a file, never a link on its way.
+    if (linkOut) { setHeld(true); setHeldForLink(true); return; }
     const found = mitigationFormErrors(value, base);
     // One line for the evidence group: the unadded address, in place of "nothing attached" when both hold (adding the link answers both).
     const problems = linkUnadded ? [...found.filter((e) => e.field !== 'closureNote'), { field: 'closureNote', message: EVIDENCE_COPY.link.typedNotAdded }] : found;
     setErrors(problems); setAttempt((n) => n + 1);
+    if (linkUnadded) setLinkRefusals((n) => n + 1);
     if (problems.length > 0) return;
     const gate = saveGate(upload);
-    if (linkOut || (!gate.send && opts.skipGate !== true)) { setHeld(true); return; }   // "Save without it" leaves out a file, never a link on its way
+    setHeldForLink(false);
+    if (!gate.send && opts.skipGate !== true) { setHeld(true); return; }
     setHeld(false);
     void post(mitigationRequestBody(value, base), base, opts.skipGate === true ? [...upload.uploading, ...upload.failed] : [], opts.retrying === true);
   };
@@ -266,10 +275,14 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
   // The line about an unadded address is true only while the box holds it: once the link is sent or the box is cleared, it is not shown.
   const shown = linkUnadded ? errors : errors.filter((e) => e.message !== EVIDENCE_COPY.link.typedNotAdded);
   const err = (f: string) => shown.find((e) => e.field === f)?.message ?? null;
+  // The unadded address is said at its box, inside the evidence group, by the evidence block: not a second time under the group.
+  const closureError = err('closureNote') === EVIDENCE_COPY.link.typedNotAdded ? null : err('closureNote');
   const due = dueDateOf(value.due);
   const later = base !== null && due !== null && due > base.dueDate;
   const gate = saveGate(upload);
   const wait = [...upload.uploading, ...upload.failed];
+  // The link a held press waited for is in, and nothing else is waited for: the press was not sent by itself.
+  const linkAdded = held && heldForLink && !linkOut && gate.send && rawUpload.linkNotAdded !== true;
   const id = (n: string) => `${idBase}-${n}`;
 
   if (conflict !== null) {
@@ -316,33 +329,35 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
         placeholder={MF.noControl} options={p.controls.map((c) => ({ value: c.id, label: FINDINGS_COPY.finding.namedId(c.name, c.id) }))}
         onChange={(e) => change({ followsControl: e.target.value === '' ? null : e.target.value })} />
       {value.status === 'done' ? (
-        <fieldset id={id('closureNote')} aria-describedby={err('closureNote') ? id('closure-error') : undefined}>
+        <fieldset id={id('closureNote')} aria-describedby={closureError ? id('closure-error') : undefined}>
           <legend>{MF.evidenceLegend}</legend>
           <EvidenceBlock
             key={evidenceKey} orgSlug={p.orgSlug} projectId={p.projectId} initial={value.evidence} disabled={busy} notUploaded={notUploaded}
             onChange={() => {}} onItemsChange={(items) => { setValue((v) => (v.evidence.length === items.length && v.evidence.every((e, i) => e.id === items[i].id) ? v : { ...v, evidence: items })); }}
-            onUploadState={(s) => { setUpload(s); }}
+            onUploadState={(s) => { setUpload(s); }} unaddedLinkRefusals={linkRefusals}
           />
           <Checkbox id={id('noArtefact')} name="noArtefact" label={MF.noArtefact} checked={value.noArtefact} onChange={(e) => change({ noArtefact: e.target.checked })} />
           {value.noArtefact ? (
             <Field id={id('closureNoteText')} label={MF.noArtefactWhy} error={null}
               render={(a) => <textarea {...a} className="ui-textarea" name="closureNote" rows={2} value={value.closureNote} onChange={(e) => change({ closureNote: e.target.value })} />} />
           ) : null}
-          {err('closureNote') ? <KitFieldError id={id('closure-error')} message={err('closureNote') as string} /> : null}
+          {closureError ? <KitFieldError id={id('closure-error')} message={closureError} /> : null}
         </fieldset>
       ) : null}
       {value.status === 'cancelled' ? (
         <Field id={id('cancelReason')} label={MF.cancelReason} error={err('cancelReason')}
           render={(a) => <textarea {...a} className={textareaClass(err('cancelReason'))} name="cancelReason" rows={2} value={value.cancelReason} onChange={(e) => change({ cancelReason: e.target.value })} />} />
       ) : null}
-      {held && (!gate.send || linkOut) ? (
+      {held && (!gate.send || linkOut || linkAdded) ? (
         <div role="alert" className="finding-held">
           {wait.length > 0 ? <p>{MF.waitingFor} {wait.map((n, i) => <span key={n + i}>{i > 0 ? ', ' : ''}<bdi>{n}</bdi></span>)} {MF.toFinishUploading}</p> : null}
           {linkOut ? <p>{EVIDENCE_COPY.link.waiting}</p> : null}
-          <div className="finding-actions">
-            {wait.length > 0 ? <Button variant="secondary" onClick={() => save({ skipGate: true })}>{MF.saveWithout}</Button> : null}
-            <Button variant="secondary" onClick={() => setHeld(false)}>{MF.cancel}</Button>
-          </div>
+          {linkAdded ? <p>{MF.linkAddedSave}</p> : (
+            <div className="finding-actions">
+              {wait.length > 0 ? <Button variant="secondary" onClick={() => save({ skipGate: true })}>{MF.saveWithout}</Button> : null}
+              <Button variant="secondary" onClick={() => setHeld(false)}>{MF.cancel}</Button>
+            </div>
+          )}
         </div>
       ) : null}
       <div className="finding-actions">

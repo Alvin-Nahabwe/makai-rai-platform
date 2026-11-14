@@ -27,6 +27,8 @@ export interface EvidenceBlockViewProps {
   linkUrl: string;
   linkLabel: string;
   linkError: string | null;
+  /** The parent form refused a save for the address in the box: said after the box's own line, never in its place. */
+  linkRefused?: boolean;
   /** A link is being sent: its button is disabled, so a second press sends nothing. */
   linkPending?: boolean;
   /** The parent form's own save is out: "Add link" says to wait and does nothing, and the two boxes take no text. */
@@ -69,12 +71,14 @@ export function EvidenceBlockView(p: EvidenceBlockViewProps): ReactElement {
   const labelId = `${p.idBase}-link-label`;
   const errorId = `${p.idBase}-link-error`;
   const heldId = `${p.idBase}-link-held`;
+  const refusedId = `${p.idBase}-link-refused`;
   const held = p.held === true;
+  const refused = p.linkRefused === true;
   /** The ids a link box is described by: the help, then what applies now. */
   const describedBy = (...ids: Array<string | false>): string => [helpId, ...ids.filter((id) => id !== false)].join(' ');
   // A field is marked invalid only by its own message; a refusal (signed out, archived, the limiter, a lost connection)
   // is about the request, not a field, and marks neither.
-  const urlInvalid = p.linkError === EVIDENCE_COPY.link.address || p.linkError === EVIDENCE_COPY.link.typedNotAdded;
+  const urlInvalid = p.linkError === EVIDENCE_COPY.link.address || refused;
   const nameInvalid = p.linkError === EVIDENCE_COPY.link.nameTooLong(LINK_LABEL_MAX);
   const removable = (item: EvidenceItemView, carried: boolean): ReactElement => (
     <li key={item.id} className="evidence-block__item">
@@ -157,7 +161,7 @@ export function EvidenceBlockView(p: EvidenceBlockViewProps): ReactElement {
                 <FieldLabel htmlFor={urlId} label={EVIDENCE_COPY.webAddress} />
                 <input id={urlId} type="text" inputMode="url" autoComplete="off" value={p.linkUrl}
                   className={urlInvalid ? 'ui-input ui-input--invalid' : 'ui-input'}
-                  aria-describedby={describedBy(p.linkError !== null && errorId, held && heldId)} aria-invalid={urlInvalid ? true : undefined}
+                  aria-describedby={describedBy(p.linkError !== null && errorId, refused && refusedId, held && heldId)} aria-invalid={urlInvalid ? true : undefined}
                   readOnly={held ? true : undefined} onChange={(e) => p.onLinkUrlChange?.(e.target.value)} onKeyDown={onEnter} />
               </div>
               <div className="ui-field">
@@ -173,7 +177,12 @@ export function EvidenceBlockView(p: EvidenceBlockViewProps): ReactElement {
               <p role="status" data-link-adding className="evidence-block__adding">{p.linkPending === true ? EVIDENCE_COPY.link.adding : ''}</p>
               {held ? <p id={heldId} className="evidence-block__adding">{EVIDENCE_COPY.link.waitForSave}</p> : null}
               {/* Where the line was before the kit: after the button, so a refusal that is not about the address still reads in order. */}
-              {p.linkError === null ? null : <div className="evidence-block__error" role="alert"><FieldError id={errorId} message={p.linkError} /></div>}
+              {p.linkError === null && !refused ? null : (
+                <div className="evidence-block__error" role="alert">
+                  {p.linkError === null ? null : <FieldError id={errorId} message={p.linkError} />}
+                  {refused ? <FieldError id={refusedId} message={EVIDENCE_COPY.link.typedNotAdded} /> : null}
+                </div>
+              )}
             </div>
           ) : null}
         </div>

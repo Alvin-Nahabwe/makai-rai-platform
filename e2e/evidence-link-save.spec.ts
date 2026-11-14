@@ -288,12 +288,12 @@ test('B3 neighbour: a web address typed and never added: after the refusal, Add 
   expect(await historyText(page, projectId)).toContain(LINK);
 });
 
-test('B3 neighbour: while a save is out, and until the page shows the new version, Add link does not start and the link boxes take no text', async ({ page, baseURL }, info) => {
+test('B3 neighbour: while a save is out, Add link does not start and the link boxes take no text; from its reply they are the person\'s again', async ({ page, baseURL }, info) => {
   const [role, index] = seatFor(info, 17);
   await openQuestion(page, role, Q, baseURL!, undefined, index); await fillValid(page);
   // The page's own refresh after a save is slowed, so the time between "Saved" and the new version on the page is long enough to look at.
   await page.route((url) => url.pathname.endsWith(`/questions/${Q}`), async (route) => {
-    if (route.request().method() === 'GET') await new Promise((r) => setTimeout(r, 1500));
+    if (route.request().method() === 'GET') await new Promise((r) => setTimeout(r, 4000));
     await route.continue();
   });
   const posts = decisionPosts(page);
@@ -321,11 +321,11 @@ test('B3 neighbour: while a save is out, and until the page shows the new versio
   release();
   await expect(saveStatus(page)).toHaveText(SAVED_V1, { timeout: 15_000 });
   expect(posts).toHaveLength(1);
-  // "Saved", and the form is about to be replaced by the new version: the hold goes on until it has been.
-  await expect(addLink(page)).toHaveAttribute('aria-disabled', 'true');
-  await expect(address).not.toBeEditable();
-  await addLink(page).focus();
-  await page.keyboard.press('Enter');
+  // "Saved": the hold ends with the save's reply (third commit, J1), before the page shows the new version. The form is
+  // not replaced under a link that is on its way (the R3 J1 cases).
+  await expect(addLink(page)).not.toHaveAttribute('aria-disabled');
+  await expect(address).toBeEditable();
+  await expect(page.getByText(EVIDENCE_COPY.link.waitForSave)).toHaveCount(0);
   await expect(page.getByText(DECISION_FORM_COPY.startingNote)).toBeVisible({ timeout: 15_000 });
   await expect(page.getByLabel(EVIDENCE_COPY.webAddress)).toHaveCount(0);   // the new version's form: the link form is closed
   expect(evidencePosts).toBe(0);
@@ -409,9 +409,10 @@ test('B3 neighbour: the mitigation form: Save mitigation pressed while a link is
   await expect(holdCard.getByRole('button')).toHaveText([MF.cancel]);
   expect(sent).toEqual([]);
   const second = ((await (await secondReply).json()) as { id: string }).id;
-  // The link is in: the hold is over, nothing was sent by itself, and the next press saves with both links.
+  // The link is in: the hold is over, nothing was sent by itself, the card says what to do next (third commit, N3), and the
+  // next press saves with both links.
   await expect(page.getByRole('button', { name: EVIDENCE_COPY.removeNamed(LINK) })).toBeVisible();
-  await expect(holdCard).toHaveCount(0);
+  await expect(holdCard).toHaveText(MF.linkAddedSave);
   expect(sent).toEqual([]);
   await form.getByRole('button', { name: MF.save }).click();
   await expect(page.getByText(/^Saved as version 1 of this mitigation at /)).toBeVisible({ timeout: 15_000 });
@@ -488,4 +489,229 @@ test('B3 neighbour: the mitigation form: an address typed and never added stops 
   await expect(page.getByText(/^Saved as version 1 of this mitigation at /)).toBeVisible({ timeout: 15_000 });
   expect(sent).toHaveLength(1);
   expect(sent[0].evidenceIds).toEqual([id]);
+});
+
+// Third commit (review of 142c083d, K1, J1, J2, N2, N3). The reviewer's probe cases P1, P2, P5 and P6 are here as cases.
+const toggle = (page: Page) => page.getByRole('button', { name: EVIDENCE_COPY.addLinkToggle });
+const blockAlert = (page: Page) => page.locator('[data-region="evidence-block"] [role="alert"]');
+const escaped = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** The question page's own GET (the refresh after a save) is held until the case lets it go, or for ever. */
+async function holdRefresh(page: Page, ms: number | null): Promise<void> {
+  await page.route((url) => url.pathname.endsWith(`/questions/${Q}`), async (route) => {
+    if (route.request().method() === 'GET') await new Promise((r) => { if (ms !== null) setTimeout(r, ms); });
+    await route.continue();
+  });
+}
+const isRefresh = (r: { request(): { method(): string }; url(): string }) => r.request().method() === 'GET' && new URL(r.url()).pathname.endsWith(`/questions/${Q}`);
+/** A link the server is not asked to store (the account's upload budget is for the cases that save what they add). */
+async function fakeLinkReply(page: Page, delayMs: number): Promise<string> {
+  const id = crypto.randomUUID();
+  await page.route('**/evidence', async (route) => {
+    if (route.request().method() !== 'POST') { await route.continue(); return; }
+    await new Promise((r) => setTimeout(r, delayMs));
+    await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({
+      id, kind: 'link', fileName: null, mimeType: null, byteSize: null, sha256: null, url: LINK, label: null, uploadedBy: null, uploadedAt: new Date().toISOString(), erased: null,
+    }) });
+  });
+  return id;
+}
+/** The finding page's mitigation form, filled but for its status and evidence. */
+async function openMitigationForm(page: Page, baseURL: string, role: OrgRole, index: 0 | 1) {
+  const MF = FINDINGS_COPY.mitigationForm;
+  const projectId = await newProject(baseURL);
+  await actAsSeat(page, role, index);
+  const base = `/orgs/${fixtureOrgSlug()}/projects/${projectId}/findings`;
+  const raised = await page.request.post(`/api/v1${base}`, { data: {
+    requestId: crypto.randomUUID(), stage: 'pre-processing', title: 'Labels disagree', description: 'Two annotators label the same record differently.',
+    riskArea: null, questionId: null, decisionVersionId: null,
+  } });
+  expect(raised.status()).toBe(201);
+  const { id: findingId } = (await raised.json()) as { id: string };
+  await page.goto(`${base}/${findingId}`);
+  await page.getByRole('button', { name: FINDINGS_COPY.finding.addMitigation }).click();
+  const form = page.locator('form.finding-form', { has: page.getByRole('heading', { name: MF.addHeading }) });
+  await form.getByRole('combobox', { name: MF.assignedLabel }).selectOption({ index: 1 });
+  await form.getByLabel(UI_COPY.date.day).fill('15'); await form.getByLabel(UI_COPY.date.month).fill('3'); await form.getByLabel(UI_COPY.date.year).fill('2027');
+  await form.getByLabel(MF.what).fill('Relabel the disputed records.');
+  await form.getByRole('radio', { name: 'Done' }).check();
+  const sent: Array<{ evidenceIds: string[] }> = [];
+  page.on('request', (r) => { if (r.method() === 'POST' && /\/mitigations/.test(new URL(r.url()).pathname)) sent.push(r.postDataJSON() as { evidenceIds: string[] }); });
+  return { form, sent };
+}
+
+test('R3 K1 (probe P1): an address typed and folded away with "Add a link" still stops Save decision, and the link form opens again with it', async ({ page, baseURL }, info) => {
+  const [role, index] = seatFor(info, 12);
+  await openQuestion(page, role, Q, baseURL!, undefined, index); await fillValid(page);
+  const posts = decisionPosts(page);
+  await typeLink(page);
+  await toggle(page).click();   // the person takes the toggle for the add button: the box folds, the address stays
+  await expect(page.getByLabel(EVIDENCE_COPY.webAddress)).toHaveCount(0);
+  await saveDecision(page).click();
+  await expect(summary(page)).toContainText(EVIDENCE_COPY.link.typedNotAdded);
+  await expect(summary(page).locator('p').first()).toBeFocused();
+  // The box the summary talks about is on screen again, with the address in it and the line beside it.
+  await expect(toggle(page)).toHaveAttribute('aria-expanded', 'true');
+  const address = page.getByLabel(EVIDENCE_COPY.webAddress);
+  await expect(address).toHaveValue(LINK);
+  await expect(address).toBeEditable();
+  await expect(address).toHaveAttribute('aria-invalid', 'true');
+  await expect(blockAlert(page)).toContainText(EVIDENCE_COPY.link.typedNotAdded);
+  expect(posts).toEqual([]);
+  await expect(saveStatus(page)).toHaveText('');
+});
+
+test('R3 K1: the mitigation form: an address folded away stops Save mitigation, and the link form opens again with it', async ({ page, baseURL }, info) => {
+  const [role, index] = seatFor(info, 13);
+  const { form, sent } = await openMitigationForm(page, baseURL!, role, index);
+  await form.getByRole('button', { name: EVIDENCE_COPY.addLinkToggle }).click();
+  await form.getByLabel(EVIDENCE_COPY.webAddress).fill(LINK);
+  await form.getByRole('button', { name: EVIDENCE_COPY.addLinkToggle }).click();
+  await expect(form.getByLabel(EVIDENCE_COPY.webAddress)).toHaveCount(0);
+  await form.getByRole('button', { name: FINDINGS_COPY.mitigationForm.save }).click();
+  const problems = form.locator('.form-error');
+  await expect(problems.getByRole('link')).toHaveText([EVIDENCE_COPY.link.typedNotAdded]);
+  await expect(form.getByLabel(EVIDENCE_COPY.webAddress)).toHaveValue(LINK);
+  await expect(form.getByLabel(EVIDENCE_COPY.webAddress)).toBeEditable();
+  // Once in the summary and once at the box.
+  await expect(form.getByText(EVIDENCE_COPY.link.typedNotAdded)).toHaveCount(2);
+  expect(sent).toEqual([]);
+});
+
+test('R3 J1 (probe P2): after "Saved", Add link and the boxes are the person\'s again even when the page\'s refresh never comes', async ({ page, baseURL }, info) => {
+  const [role, index] = seatFor(info, 14);
+  await openQuestion(page, role, Q, baseURL!, undefined, index); await fillValid(page);
+  const posts = decisionPosts(page);
+  await holdRefresh(page, null);
+  await toggle(page).click();
+  await saveDecision(page).click();
+  await expect(saveStatus(page)).toHaveText(SAVED_V1, { timeout: 15_000 });
+  const address = page.getByLabel(EVIDENCE_COPY.webAddress);
+  await expect(addLink(page)).not.toHaveAttribute('aria-disabled');
+  await expect(address).toBeEditable();
+  await expect(page.getByText(EVIDENCE_COPY.link.waitForSave)).toHaveCount(0);
+  // A link added now is kept in the form, and the form says it is not saved.
+  const id = await fakeLinkReply(page, 0);
+  await address.fill(LINK);
+  await addLink(page).click();
+  await expect(page.getByRole('button', { name: EVIDENCE_COPY.removeNamed(LINK) })).toBeVisible();
+  await expect(page.locator('[data-region="answer-form"] .save-status')).toContainText(DECISION_FORM_COPY.unsaved);
+  const stored = (await draftValues(page)).map((t) => JSON.parse(t) as { baseVersionNumber: number | null; value: { evidenceIds: string[] } });
+  expect(stored).toHaveLength(1);
+  expect(stored[0]).toMatchObject({ baseVersionNumber: 1, value: { evidenceIds: [id] } });
+  expect(posts).toHaveLength(1);
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
+test('R3 J1: a link added after "Saved" and still on its way when the page shows the new version is kept, and the form says it is not saved', async ({ page, baseURL }, info) => {
+  const [role, index] = seatFor(info, 15);
+  await openQuestion(page, role, Q, baseURL!, undefined, index); await fillValid(page);
+  await holdRefresh(page, 3000);
+  await saveDecision(page).click();
+  await expect(saveStatus(page)).toHaveText(SAVED_V1, { timeout: 15_000 });
+  const id = await fakeLinkReply(page, 6000);
+  const refreshed = page.waitForResponse(isRefresh);
+  await typeLink(page);
+  await addLink(page).click();
+  await expect(page.getByText(EVIDENCE_COPY.link.adding)).toBeVisible();
+  await refreshed;
+  await expect(page.getByText(DECISION_FORM_COPY.startingNote)).toBeVisible({ timeout: 15_000 });
+  // The new version is on the page and the form was not replaced under the link: its request is still out, in its box.
+  await expect(page.getByText(EVIDENCE_COPY.link.adding)).toBeVisible();
+  await expect(page.getByLabel(EVIDENCE_COPY.webAddress)).toHaveValue(LINK);
+  await expect(page.getByRole('button', { name: EVIDENCE_COPY.removeNamed(LINK) })).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('[data-region="answer-form"] .save-status')).toContainText(DECISION_FORM_COPY.unsaved);
+  const stored = (await draftValues(page)).map((t) => JSON.parse(t) as { baseVersionNumber: number | null; value: { evidenceIds: string[] } });
+  expect(stored).toHaveLength(1);
+  expect(stored[0]).toMatchObject({ baseVersionNumber: 1, value: { evidenceIds: [id] } });
+});
+
+test('R3 J1: an address typed after "Saved" and not added yet stays in its box when the page shows the new version', async ({ page, baseURL }, info) => {
+  const [role, index] = seatFor(info, 16);
+  await openQuestion(page, role, Q, baseURL!, undefined, index); await fillValid(page);
+  await holdRefresh(page, 2000);
+  await saveDecision(page).click();
+  await expect(saveStatus(page)).toHaveText(SAVED_V1, { timeout: 15_000 });
+  const refreshed = page.waitForResponse(isRefresh);
+  await toggle(page).click();
+  const address = page.getByLabel(EVIDENCE_COPY.webAddress);
+  await expect(address).toBeEditable();
+  await address.fill(LINK);
+  await page.getByLabel(EVIDENCE_COPY.linkName).fill('Labelling guide');
+  await refreshed;
+  await expect(page.getByText(DECISION_FORM_COPY.startingNote)).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('[data-region="evidence-block"]')).not.toContainText(EVIDENCE_COPY.fromCurrent);   // the version saved had none
+  await expect(page.getByLabel(EVIDENCE_COPY.webAddress)).toHaveValue(LINK);
+  await expect(page.getByLabel(EVIDENCE_COPY.linkName)).toHaveValue('Labelling guide');
+  await expect(addLink(page)).not.toHaveAttribute('aria-disabled');
+});
+
+test('R3 J2 (probe P5): the mitigation form: Done with one link as its only evidence, Save pressed while it is on its way, waits for it and then saves with it', async ({ page, baseURL }, info) => {
+  const MF = FINDINGS_COPY.mitigationForm;
+  const [role, index] = seatFor(info, 19);
+  const { form, sent } = await openMitigationForm(page, baseURL!, role, index);
+  await page.route('**/evidence', async (route) => {
+    if (route.request().method() === 'POST') await new Promise((r) => setTimeout(r, 2000));
+    await route.continue();
+  });
+  await form.getByRole('button', { name: EVIDENCE_COPY.addLinkToggle }).click();
+  await form.getByLabel(EVIDENCE_COPY.webAddress).fill(LINK);
+  const reply = page.waitForResponse(isEvidencePost);
+  await addLink(page).click();
+  await form.getByRole('button', { name: MF.save }).click();
+  const holdCard = form.locator('.finding-held');
+  await expect(holdCard).toContainText(EVIDENCE_COPY.link.waiting);
+  // No problem is claimed for a link that is on its way.
+  await expect(form.getByText(FINDINGS_COPY.fields.closureNote)).toHaveCount(0);
+  await expect(form.locator('.form-error')).toHaveCount(0);
+  expect(sent).toEqual([]);
+  const { id } = (await (await reply).json()) as { id: string };
+  await expect(form.getByRole('button', { name: EVIDENCE_COPY.removeNamed(LINK) })).toBeVisible();
+  // N3: where the hold card was, what to do next; nothing is sent by itself.
+  await expect(holdCard).toHaveText(MF.linkAddedSave);
+  await expect(form.getByText(FINDINGS_COPY.fields.closureNote)).toHaveCount(0);
+  expect(sent).toEqual([]);
+  await form.getByRole('button', { name: MF.save }).click();
+  await expect(page.getByText(/^Saved as version 1 of this mitigation at /)).toBeVisible({ timeout: 15_000 });
+  expect(sent).toHaveLength(1);
+  expect(sent[0].evidenceIds).toEqual([id]);
+});
+
+test('R3 K1 J1 (probe P6): an address folded away while the refresh hangs: Save is refused, the box is open and editable, and clearing it saves', async ({ page, baseURL }, info) => {
+  const [role, index] = seatFor(info, 20);
+  await openQuestion(page, role, Q, baseURL!, undefined, index); await fillValid(page);
+  const posts = decisionPosts(page);
+  await holdRefresh(page, null);
+  await typeLink(page);
+  await toggle(page).click();
+  await saveDecision(page).click();
+  await expect(summary(page)).toContainText(EVIDENCE_COPY.link.typedNotAdded);
+  expect(posts).toEqual([]);
+  const address = page.getByLabel(EVIDENCE_COPY.webAddress);
+  await expect(address).toHaveValue(LINK);
+  await expect(address).toBeEditable();
+  await expect(addLink(page)).not.toHaveAttribute('aria-disabled');
+  await address.fill('');
+  await saveDecision(page).click();
+  await expect(saveStatus(page)).toHaveText(SAVED_V1, { timeout: 15_000 });
+  expect(posts).toHaveLength(1);
+  expect(posts[0].evidenceIds).toEqual([]);
+  // The refresh never comes; the link form is still the person's.
+  await expect(address).toBeEditable();
+  await expect(addLink(page)).not.toHaveAttribute('aria-disabled');
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
+test('R3 N2: a save refused for an address the box has already refused shows both lines, the box\'s own first', async ({ page, baseURL }, info) => {
+  const [role, index] = seatFor(info, 21);
+  await openQuestion(page, role, Q, baseURL!, undefined, index); await fillValid(page);
+  const posts = decisionPosts(page);
+  await toggle(page).click();
+  await page.getByLabel(EVIDENCE_COPY.webAddress).fill('example.org/review');
+  await addLink(page).click();
+  await expect(blockAlert(page)).toContainText(EVIDENCE_COPY.link.address);
+  await saveDecision(page).click();
+  await expect(summary(page)).toContainText(EVIDENCE_COPY.link.typedNotAdded);
+  await expect(blockAlert(page)).toHaveText(new RegExp(`${escaped(EVIDENCE_COPY.link.address)}[\\s\\S]*${escaped(EVIDENCE_COPY.link.typedNotAdded)}`));
+  await expect(page.getByLabel(EVIDENCE_COPY.webAddress)).toHaveAttribute('aria-invalid', 'true');
+  expect(posts).toEqual([]);
 });

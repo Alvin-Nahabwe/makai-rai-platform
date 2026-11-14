@@ -6,7 +6,6 @@ import {
   evidenceUploadUrl, failureOf, postEvidenceLink, requestIdForFile, uploadEvidenceFile, type UploadOutcome,
 } from '@/lib/client/evidenceUpload';
 import { createLinkAdder } from '@/lib/client/evidenceLink';
-import { EVIDENCE_COPY } from '@/lib/evidence/copy';
 import { appendOnce, attachedItems, failedChange, uploadState, type UploadItem } from '@/lib/evidence/uploadQueue';
 import type { EvidenceItemView } from '@/types/api';
 
@@ -18,8 +17,8 @@ export type EvidenceBlockProps = {
   onChange: (evidenceIds: string[]) => void;
   /**
    * The files still moving or failed, and the link: `linkAdding` while its request is out, `linkNotAdded` once it has
-   * ended without the link (until the next one is sent), `linkTyped` while the open link form holds an address that is
-   * not in the answer. A parent that holds its Save for uploads holds it for a link too.
+   * ended without the link (until the next one is sent), `linkTyped` while the link box holds an address that is not in
+   * the answer, whether the link form is open or folded. A parent that holds its Save for uploads holds it for a link too.
    */
   onUploadState: (s: { uploading: string[]; failed: string[]; linkAdding: boolean; linkNotAdded: boolean; linkTyped: boolean }) => void;
   /** W-4's evidence names in "your answer". */
@@ -30,8 +29,12 @@ export type EvidenceBlockProps = {
   fromVersionNumber?: number | null;
   /** The parent's own save is out: no link is added until it is back (the save may replace this block, and the link with it). */
   saveOut?: boolean;
-  /** How many times the parent refused a save because `linkTyped` was true. Each new refusal is said at the address box. */
+  /** How many times the parent refused a save because `linkTyped` was true. Each new refusal opens the link form and is said at the address box. */
   unaddedLinkRefusals?: number;
+  /** The link boxes of the block this one replaces (the parent took a new version): what was typed and not added is kept. */
+  initialLink?: { url: string; label: string };
+  /** Each change of the two link boxes, so a parent that replaces the block can hand them to the next one. */
+  onLinkInput?: (link: { url: string; label: string }) => void;
 };
 
 /** The server's limit (lib/evidence/inspect.ts MAX_BYTES, which cannot load in a browser): a larger file is not sent. */
@@ -47,22 +50,26 @@ export function EvidenceBlock(props: EvidenceBlockProps): ReactElement {
   const [carried, setCarried] = useState<EvidenceItemView[]>(props.initial);
   const [added, setAdded] = useState<EvidenceItemView[]>([]);
   const [uploads, setUploads] = useState<UploadItem[]>([]);
-  const [linkFormOpen, setLinkFormOpen] = useState(false);
-  const [linkUrl, setLinkUrl] = useState('');
-  const [linkLabel, setLinkLabel] = useState('');
+  const [linkUrl, setLinkUrl] = useState(props.initialLink?.url ?? '');
+  const [linkLabel, setLinkLabel] = useState(props.initialLink?.label ?? '');
+  const [linkFormOpen, setLinkFormOpen] = useState(linkUrl !== '' || linkLabel !== '');
   const [linkError, setLinkError] = useState<string | null>(null);
   const [linkPending, setLinkPending] = useState(false);
   // The last link request ended without adding the link (a refusal, a lost connection, no reply in time).
   const [linkNotAdded, setLinkNotAdded] = useState(false);
   const linkAddedByRequest = useRef(false);
-  const linkTyped = linkFormOpen && linkUrl.trim() !== '';
-  // The parent refused a save for the address in the box: its sentence shows at the box, until the box is edited or the
-  // link is sent, as any other line there. Compared while rendering, as a changed prop is (no effect, no extra paint).
+  // Folded or open: "Add a link" folds the form and keeps the address, and a save must not discard it without a word.
+  const linkTyped = linkUrl.trim() !== '';
+  // The parent refused a save for the address in the box: the link form opens, so the box is on screen, and the sentence
+  // shows there after the box's own line, if any, until the box is edited or Add link is pressed. Compared while rendering,
+  // as a changed prop is (no effect, no extra paint).
   const refusals = props.unaddedLinkRefusals ?? 0;
   const [seenRefusals, setSeenRefusals] = useState(refusals);
+  const [linkRefused, setLinkRefused] = useState(false);
   if (refusals !== seenRefusals) {
     setSeenRefusals(refusals);
-    setLinkError(EVIDENCE_COPY.link.typedNotAdded);
+    setLinkRefused(true);
+    setLinkFormOpen(true);
   }
   // The parent's callbacks change identity on every render; the latest ones are read, never depended on.
   const latest = useRef(props);
@@ -110,6 +117,9 @@ export function EvidenceBlock(props: EvidenceBlockProps): ReactElement {
   useEffect(() => {
     latest.current.onUploadState({ ...uploadState(uploads), linkAdding: linkPending, linkNotAdded, linkTyped });
   }, [uploads, linkPending, linkNotAdded, linkTyped]);
+  useEffect(() => {
+    latest.current.onLinkInput?.({ url: linkUrl, label: linkLabel });
+  }, [linkUrl, linkLabel]);
   // Uploads still moving when the block goes away are cancelled with it.
   useEffect(() => {
     const live = controllers.current;
@@ -181,14 +191,14 @@ export function EvidenceBlock(props: EvidenceBlockProps): ReactElement {
     <EvidenceBlockView
       orgSlug={props.orgSlug} idBase={idBase} items={carried} added={added} fromVersionNumber={props.fromVersionNumber}
       uploads={uploads} notUploaded={props.notUploaded ?? []} disabled={props.disabled}
-      linkFormOpen={linkFormOpen} linkUrl={linkUrl} linkLabel={linkLabel} linkError={linkError} linkPending={linkPending}
+      linkFormOpen={linkFormOpen} linkUrl={linkUrl} linkLabel={linkLabel} linkError={linkError} linkRefused={linkRefused} linkPending={linkPending}
       held={props.saveOut === true}
       onChooseFiles={chooseFiles}
       onOpenFilePicker={() => { fileInput.current?.click(); }}
       onOpenLink={() => setLinkFormOpen((o) => !o)}
-      onLinkUrlChange={(v) => { setLinkUrl(v); setLinkError(null); }}
+      onLinkUrlChange={(v) => { setLinkUrl(v); setLinkError(null); setLinkRefused(false); }}
       onLinkLabelChange={setLinkLabel}
-      onAddLink={() => { if (props.saveOut !== true) void addLinkRef.current?.({ address: linkUrl, label: linkLabel }); }}
+      onAddLink={() => { if (props.saveOut !== true) { setLinkRefused(false); void addLinkRef.current?.({ address: linkUrl, label: linkLabel }); } }}
       onRemoveItem={removeItem}
       onCancelUpload={(key) => controllers.current.get(key)?.abort()}
       onRetryUpload={(key) => { void start(key); }}

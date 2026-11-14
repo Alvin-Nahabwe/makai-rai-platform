@@ -87,9 +87,9 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
   // it: the block shows each refusal at the box.
   const linkTyped = useRef(false);
   const [linkRefusals, setLinkRefusals] = useState(0);
-  // The version this form's last save made, from its reply until the page has taken a new current version: the form is
-  // then replaced, and the evidence block with it, so nothing is added to the block in between (as while the save is out).
-  const [savedAwaited, setSavedAwaited] = useState<string | null>(null);
+  // The link boxes as last typed: when a new version replaces the evidence block, an address typed and not added goes
+  // into the new block's boxes, not away.
+  const [typedLink, setTypedLink] = useState({ url: '', label: '' });
   const [leftOut, setLeftOut] = useState<string[]>([]);
   const [draftSavedAt, setDraftSavedAt] = useState<UtcInstant | null>(null);
   const [storageUnavailable, setStorageUnavailable] = useState(false);
@@ -131,9 +131,9 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
   // A new current version arrived (a save, or someone else's, after router.refresh): open from it, as on a new page.
   if ((data.current?.id ?? null) !== seenCurrentId) {
     setSeenCurrentId(data.current?.id ?? null);
-    setSavedAwaited(null);
-    // Only when the field holds nothing of the person's that the new version lacks.
-    if (conflict === null && !typedSinceCurrent) {
+    // Only when the field holds nothing of the person's that the new version lacks, and no link's request is out: the
+    // block that sent it would be replaced, and the link lost with it (as a file that is uploading edits the answer).
+    if (conflict === null && !typedSinceCurrent && !uploads.linkAdding) {
       setValue(draftFromCurrent(data));
       setBase(currentNumber);
       setRetry(NO_RETRY);
@@ -264,8 +264,6 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
         setDraftSavedAt(null);
         setExtraEvidenceIds([]);
         setTypedSinceCurrent(false);
-        // Only a version the page does not show yet: a replayed save of the current version brings no new one.
-        if (outcome.body.id !== (data.current?.id ?? null)) setSavedAwaited(outcome.body.id);
       }
       router.refresh();
       return;
@@ -476,8 +474,10 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
             onItemsChange={setEvidenceItems}
             notUploaded={restoredNotUploaded}
             fromVersionNumber={isDecision(data.current) ? data.current.versionNumber : null}
-            saveOut={saving || (savedAwaited !== null && !typedSinceCurrent)}
+            saveOut={saving}
             unaddedLinkRefusals={linkRefusals}
+            initialLink={typedLink}
+            onLinkInput={(l) => setTypedLink((o) => (o.url === l.url && o.label === l.label ? o : l))}
           />
         </section>
 

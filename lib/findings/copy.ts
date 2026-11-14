@@ -333,6 +333,8 @@ export const FINDINGS_COPY = Object.freeze({
     waitingFor: 'Waiting for',
     toFinishUploading: 'to finish uploading.',
     waiting: (names: readonly string[]): string => `Waiting for ${names.join(', ')} to finish uploading.`,
+    /** Where the hold card was, once the link a Save mitigation waited for is added: the save is not sent by itself. */
+    linkAddedSave: 'The link is added. Select Save mitigation.',
     saveWithout: 'Save without it',
     cancel: 'Cancel',
     save: 'Save mitigation',
