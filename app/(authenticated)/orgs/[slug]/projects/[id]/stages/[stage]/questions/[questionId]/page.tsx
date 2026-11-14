@@ -6,6 +6,10 @@ import { requireIdentity } from '@/lib/auth/identity';
 import { requireOrgContextFor } from '@/lib/auth/context';
 import { NotFoundError } from '@/lib/data/tenant';
 import { loadQuestionPanel, type QuestionPanelData } from '@/lib/question/panel';
+import { loadQuestionOpenWork, type QuestionOpenWork } from '@/lib/question/openWork';
+import { eatDate } from '@/lib/followup/overdue';
+import { decisionFormNote } from '@/lib/authz/permissionNotes';
+import { OpenWorkList } from '@/components/question/OpenWorkList';
 import { STAGES, type Stage } from '@/types/record';
 import { ArchivedBanner } from '@/components/project/ArchivedBanner';
 import { QuestionContent } from '@/components/question/QuestionContent';
@@ -34,6 +38,45 @@ function countFor(data: QuestionPanelData): number {
 }
 
 /**
+ * What a person who may not record reads after the question (plan 1C Task 7, decision C12: a Reviewer, a Viewer, anyone
+ * in an archived project): "What the team decided" (CurrentDecision's reading mode), then what is still open on the
+ * question (only when something is) and the one line that says why there is no form (none in an archived project, whose
+ * banner says it). The seal note follows as for everyone. No form, no evidence controls, no withdraw: no role without
+ * `decision:write` holds `decision:withdraw`, and nobody withdraws in an archived project.
+ */
+function readingRegions(data: QuestionPanelData, openWork: QuestionOpenWork | null, historyHref: string) {
+  const note = decisionFormNote(data.viewer.role, data.projectArchived);
+  const open = openWork?.findings.length ?? 0;
+  return {
+    decision: (
+      <section data-region="current-decision" aria-labelledby="s12-current-decision">
+        <h2 id="s12-current-decision">{Q.reading.title}</h2>
+        <CurrentDecision
+          orgSlug={data.orgSlug}
+          current={data.current}
+          historyCount={data.historyCount}
+          historyHref={historyHref}
+          seals={data.seals}
+          isScopeQuestion={data.question.type === 'gate'}
+          mode="reading"
+        />
+      </section>
+    ),
+    openWorkAndNote: (
+      <>
+        {openWork !== null && open > 0 ? (
+          <section data-region="open-work" aria-labelledby="s12-open-work">
+            <h2 id="s12-open-work">{Q.reading.stillOpen(open)}</h2>
+            <OpenWorkList work={openWork} orgSlug={data.orgSlug} projectId={data.projectId} />
+          </section>
+        ) : null}
+        {note !== null ? <p data-permission-note>{note}</p> : null}
+      </>
+    ),
+  };
+}
+
+/**
  * The regions of S-12, in this DOM order (plan 1C decision C1, cut to slice 1): the question, the current decision,
  * the seal note (only for a question in a seal), the answer form with the evidence block inside it, then the
  * guidance aside, the finding link and the suggestions. Each region is named by its heading. workspace.css puts the
@@ -47,12 +90,24 @@ function countFor(data: QuestionPanelData): number {
  * crosses from this server component to a client one (EVD RE-1). Exported so a unit test renders the markup without
  * the loader.
  */
-export function QuestionPanelRegions({ data }: { data: QuestionPanelData }) {
+export function QuestionPanelRegions({ data, openWork }: { data: QuestionPanelData; openWork?: QuestionOpenWork | null }) {
   const question = data.question;
   const count = countFor(data);
   const base = `/orgs/${data.orgSlug}/projects/${data.projectId}`;
   const reworded = data.current !== null && data.current.status !== 'withdrawn' && isReworded(question, data.runningQuestion);
   const { index, total, previousId, nextId } = data.position;
+  const historyHref = `${base}/stages/${data.stage}/questions/${question.id}/history`;
+  // Only a reader is shown the finding link without the right to raise one when there is something to view (R4); a
+  // person who may record keeps the section as before.
+  const findingLink = data.canWrite || data.canRaiseFinding;
+  const reading = data.canWrite ? null : readingRegions(data, openWork ?? null, historyHref);
+  // Only a question in a seal has something to say here: SealNote renders nothing for one in none.
+  const sealNote = data.seals.length > 0 ? (
+    <section data-region="seal-note" aria-labelledby="s12-seal-note">
+      <h2 id="s12-seal-note">{Q.headings.seals}</h2>
+      <SealNote seals={data.seals} nextVersionNumber={(data.current?.versionNumber ?? 0) + 1} />
+    </section>
+  ) : null;
   return (
     <div className="page-content">
       <ArchivedBanner archived={data.projectArchived} />
@@ -79,52 +134,54 @@ export function QuestionPanelRegions({ data }: { data: QuestionPanelData }) {
               </div>
             ) : null}
           </section>
-          <section data-region="current-decision" aria-labelledby="s12-current-decision">
-            <h2 id="s12-current-decision">{Q.headings.current}</h2>
-            <CurrentDecision
-              orgSlug={data.orgSlug}
-              current={data.current}
-              historyCount={data.historyCount}
-              historyHref={`${base}/stages/${data.stage}/questions/${question.id}/history`}
-              seals={data.seals}
-              isScopeQuestion={question.type === 'gate'}
-            />
-          </section>
-          {/* Only a question in a seal has something to say here: SealNote renders nothing for one in none. */}
-          {data.seals.length > 0 ? (
-            <section data-region="seal-note" aria-labelledby="s12-seal-note">
-              <h2 id="s12-seal-note">{Q.headings.seals}</h2>
-              <SealNote seals={data.seals} nextVersionNumber={(data.current?.versionNumber ?? 0) + 1} />
-            </section>
-          ) : null}
-          <section data-region="answer-form" aria-labelledby="s12-answer-form">
-            <h2 id="s12-answer-form">{Q.headings.record}</h2>
-            <DecisionForm key={`${data.projectId}:${question.id}`} data={data} />
-            {/* Mounted whenever there is a current version, with the permission as a prop, so after a withdrawal it stays to
-                say "Withdrawn..." and to take focus (F12); it shows the More menu only while it can act. */}
-            {data.current !== null ? (
-              <WithdrawDecision
-                key={question.id} orgSlug={data.orgSlug} projectId={data.projectId} stage={data.stage} questionId={question.id}
-                current={data.current} canWithdraw={canWithdrawVersion(data.viewer.role, data.viewer.userId, data.current, data.projectArchived)} inMoreMenu
+          {/* A person who may record sees the regions as before; a reader, the reading regions (R4). The main column keeps
+              four children in both, each in the writer's place, so React's ids inside the form (useId) stay as they were. */}
+          {reading === null ? (
+            <section data-region="current-decision" aria-labelledby="s12-current-decision">
+              <h2 id="s12-current-decision">{Q.headings.current}</h2>
+              <CurrentDecision
+                orgSlug={data.orgSlug}
+                current={data.current}
+                historyCount={data.historyCount}
+                historyHref={historyHref}
+                seals={data.seals}
+                isScopeQuestion={question.type === 'gate'}
               />
-            ) : null}
-          </section>
+            </section>
+          ) : reading.decision}
+          {reading === null ? sealNote : reading.openWorkAndNote}
+          {reading === null ? (
+            <section data-region="answer-form" aria-labelledby="s12-answer-form">
+              <h2 id="s12-answer-form">{Q.headings.record}</h2>
+              <DecisionForm key={`${data.projectId}:${question.id}`} data={data} />
+              {/* Mounted whenever there is a current version, with the permission as a prop, so after a withdrawal it stays to
+                  say "Withdrawn..." and to take focus (F12); it shows the More menu only while it can act. */}
+              {data.current !== null ? (
+                <WithdrawDecision
+                  key={question.id} orgSlug={data.orgSlug} projectId={data.projectId} stage={data.stage} questionId={question.id}
+                  current={data.current} canWithdraw={canWithdrawVersion(data.viewer.role, data.viewer.userId, data.current, data.projectArchived)} inMoreMenu
+                />
+              ) : null}
+            </section>
+          ) : sealNote}
         </div>
         <div className="question-workspace__guide">
           {/* The guidance of the running wording (FR-CNT-08, ruling on SPEC-1), as an aside (plan 1C decision C1, cut). */}
           <QuestionContent question={data.runningQuestion} suggestionCount={count} />
-          <section data-region="finding-link" aria-labelledby="s12-finding-link">
-            <h2 id="s12-finding-link">{Q.headings.findings}</h2>
-            <QuestionFindingLink
-              orgSlug={data.orgSlug}
-              projectId={data.projectId}
-              stage={data.stage}
-              questionId={question.id}
-              currentVersionId={data.current?.id ?? null}
-              openFinding={data.openFinding}
-              canRaise={data.canRaiseFinding}
-            />
-          </section>
+          {findingLink ? (
+            <section data-region="finding-link" aria-labelledby="s12-finding-link">
+              <h2 id="s12-finding-link">{Q.headings.findings}</h2>
+              <QuestionFindingLink
+                orgSlug={data.orgSlug}
+                projectId={data.projectId}
+                stage={data.stage}
+                questionId={question.id}
+                currentVersionId={data.current?.id ?? null}
+                openFinding={data.openFinding}
+                canRaise={data.canRaiseFinding}
+              />
+            </section>
+          ) : null}
           {count > 0 ? (
             <section data-region="suggestions" id="suggestions" aria-labelledby="s12-suggestions">
               <h2 id="s12-suggestions">{Q.headings.suggestions}</h2>
@@ -153,7 +210,12 @@ const load = cache(async (slug: string, id: string, stage: string, questionId: s
   if (!(STAGES as readonly string[]).includes(stage)) notFound();
 
   try {
-    return await loadQuestionPanel(ctx, identity, { projectId: id, stage: stage as Stage, questionId });
+    const panel = await loadQuestionPanel(ctx, identity, { projectId: id, stage: stage as Stage, questionId });
+    // Only a reader sees what is still open (plan 1C Task 7, R1): read after the panel, which has already refused another
+    // organisation's project or a question outside the stage.
+    const openWork = panel.canWrite ? null
+      : await loadQuestionOpenWork(ctx, { projectId: id, stage: stage as Stage, questionId, today: eatDate(new Date()) });
+    return { panel, openWork };
   } catch (e) {
     if (e instanceof NotFoundError) notFound();
     throw e;
@@ -163,7 +225,7 @@ const load = cache(async (slug: string, id: string, stage: string, questionId: s
 /** The question's own heading, then the project. */
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { slug, id, stage, questionId } = await params;
-  const data = await orNotFound(load(slug, id, stage, questionId));
+  const { panel: data } = await orNotFound(load(slug, id, stage, questionId));
   return { title: pageTitle(DECISION_COPY.titles.question(data.question.id, data.question.moduleTitle), data.projectName) };
 }
 
@@ -180,10 +242,11 @@ export default async function QuestionPage({
 }) {
   const { slug, id, stage, questionId } = await params;
   // The project's name is for the title only; the regions (and the client form inside them) get the panel as before.
-  const { projectName: _projectName, ...data } = await load(slug, id, stage, questionId);
+  const { panel, openWork } = await load(slug, id, stage, questionId);
+  const { projectName: _projectName, ...data } = panel;
   return (
     <>
-      <QuestionPanelRegions data={data} />
+      <QuestionPanelRegions data={data} openWork={openWork} />
       <RememberProject userId={data.viewer.userId} orgSlug={slug} projectId={data.projectId} />
     </>
   );

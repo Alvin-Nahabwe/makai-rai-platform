@@ -1,0 +1,32 @@
+/*
+ * What is still open on a question, on the read-only question page (components/question/OpenWorkList.tsx): each open
+ * finding as a link, its open mitigations under it. Role tokens and spaces only, so both themes hold; long words wrap
+ * inside the column at 320px.
+ */
+.open-work,
+.open-work__mitigations {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+
+.open-work__finding + .open-work__finding {
+  margin-block-start: var(--space-4);
+}
+
+.open-work__finding > p,
+.open-work__mitigations {
+  margin: var(--space-1) 0 0;
+}
+
+.open-work__mitigations > li + li {
+  margin-block-start: var(--space-1);
+}
+
+/* The word "Overdue" alone (spec 7.1: red on the word only, never a status label, a name or a title); the same role as
+   the project page's .followup-overdue. */
+.open-work__overdue {
+  color: var(--color-overdue);
+  font-weight: var(--font-weight-semibold);
+}

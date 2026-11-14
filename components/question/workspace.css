@@ -43,6 +43,22 @@
   margin-block-start: var(--space-6);
 }
 
+/* The read-only view (plan 1C Task 7): the one line that says why there is no form sits between the open work and the
+   seal note, clear of both. */
+.question-workspace__main > section + [data-permission-note],
+.question-workspace__main > [data-permission-note] + section {
+  margin-block-start: var(--space-6);
+}
+
+/* The reason in the read-only view is a quotation of what the team wrote. */
+.current-decision__reason {
+  margin: var(--space-2) 0;
+  padding-inline-start: var(--space-4);
+  border-inline-start: 3px solid var(--color-border-container);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
 /*
  * Two columns once the main one keeps at least 30rem beside a guide of 16rem and the 1.5rem gap: 47.5rem (760px) of
  * content. From 1024px the window also holds the rail (248px), the main area's padding (2 x 2rem), the page's padding

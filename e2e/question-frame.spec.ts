@@ -3,7 +3,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { failOnDialog } from './helpers/dialogs';
 import { expectNoHorizontalScroll } from './helpers/reflow';
-import { newProject, openQuestion } from './helpers/session';
+import { newProject, openQuestion, saveViaApi } from './helpers/session';
 import { QUESTION_COPY } from '../lib/question/copy';
 
 /**
@@ -140,10 +140,45 @@ test('a Viewer sees the same frame with no form controls', async ({ page, baseUR
   await expect(page.locator('#question-heading + .question-frame__code')).toHaveText(/^Q-PP-01 · /);
   await expect(page.getByRole('complementary', { name: QUESTION_COPY.content.goodPractice })).toBeVisible();
   await expect(page.getByRole('link', { name: QUESTION_COPY.nav.allQuestions, exact: true })).toBeVisible();
-  const answer = form(page);
-  await expect(answer.locator('[data-permission-note]')).toBeVisible();
-  await expect(answer.locator('input, select, textarea, button')).toHaveCount(0);
-  const f = await box(answer);
+  // The read-only view (plan 1C Task 7): no answer-form region; the one line sits in the main column, which holds no control.
+  const main = page.locator('.question-workspace__main');
+  await expect(form(page)).toHaveCount(0);
+  await expect(main.locator('[data-permission-note]')).toBeVisible();
+  await expect(main.locator('input, select, textarea, button')).toHaveCount(0);
+  const f = await box(page.locator('section[data-region="current-decision"]'));
   const a = await box(aside(page));
   expect(a.x).toBeGreaterThanOrEqual(f.x + f.width);
 });
+
+/**
+ * Plan 1C Task 7 (decision C12): a Reviewer and a Viewer read what the team decided and what is still open on the question.
+ * An Assessor saves Q-PP-01 as Partly with a reason, so the platform raises a finding for it.
+ */
+for (const role of ['viewer', 'reviewer'] as const) {
+  test(`C12: a ${role} reads What the team decided, the reason, and the one finding still open, with no form, at every width`, async ({ page, baseURL }) => {
+    const reason = `Only a rules baseline was compared (${role}).`;
+    const projectId = await newProject(baseURL!);
+    expect((await saveViaApi(baseURL!, 'assessor', projectId, Q, { status: 'partly', reason })).status).toBe(201);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openQuestion(page, role, Q, baseURL!, projectId);
+    await expect(page.getByRole('heading', { level: 2, name: QUESTION_COPY.reading.title })).toBeVisible();
+    await expect(page.locator('blockquote.current-decision__reason')).toHaveText(reason);
+    const open = page.locator('section[data-region="open-work"]');
+    await expect(open.getByRole('heading', { level: 2 })).toHaveText(QUESTION_COPY.reading.stillOpen(1));
+    await expect(page.locator('form')).toHaveCount(0);
+    await expect(page.locator('.decision-save-bar')).toHaveCount(0);
+    const raise = page.getByRole('link', { name: QUESTION_COPY.findingLink.raise });
+    await expect(raise).toHaveCount(role === 'reviewer' ? 1 : 0);
+    for (const [width, height] of [[1280, 900], [375, 812], [320, 640]] as const) {
+      await page.setViewportSize({ width, height });
+      await expectNoHorizontalScroll(page);
+      await expectNoSeriousA11yViolations(page, `read-only question page, ${role}, ${width}`);
+    }
+    const link = open.getByRole('link');
+    await expect(link).toHaveCount(1);
+    const href = await link.getAttribute('href');
+    expect(href).toMatch(new RegExp(`/projects/${projectId}/findings/[^/]+$`));
+    const res = await page.goto(href!);
+    expect(res!.status()).toBe(200);
+  });
+}
