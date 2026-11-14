@@ -6,6 +6,8 @@ import { FindingsPageView } from '@/components/findings/FindingsPageView';
 import { AcceptRiskForm } from '@/components/findings/AcceptRiskForm';
 import { FindingPageView } from '@/components/findings/FindingPageView';
 import { loadFindingPage, loadFindingsPage, type FindingPageData } from '@/lib/findings/pageData';
+import { FINDINGS_COPY } from '@/lib/findings/copy';
+import { onlyRolesCanText } from '@/lib/findings/messages';
 import { resetDb } from '../helpers/db';
 import { useFixtureContent } from '../helpers/content';
 import { sessionFor } from '../helpers/authSession';
@@ -89,7 +91,7 @@ describe('S-14 the findings list (UX-15, UX-06, UX-07, FR-FND-07, FR-FND-08)', (
     const k = await everyKind();
     const html = await renderList('reviewer', k.p.id);
     const states = [...html.matchAll(/<[a-z]+ [^>]*class="([^"]*\bstatus-label\b[^"]*)"[^>]*>([^<]*)</g)];
-    expect(states.map((m) => m[2])).toEqual(expect.arrayContaining(['Open', 'Closed by mitigation', 'Withdrawn', 'Closed: risk accepted by Ethics committee (outside role)']));
+    expect(states.map((m) => m[2])).toEqual(expect.arrayContaining([FINDINGS_COPY.labels.open, FINDINGS_COPY.labels.closedByMitigation, FINDINGS_COPY.labels.withdrawn, FINDINGS_COPY.labels.closedByAcceptedRiskBy('Ethics committee (outside role)')]));
     expect(states.every((m) => !/status-label--warning/.test(m[1]))).toBe(true);
   });
 
@@ -123,8 +125,8 @@ describe('S-14 the findings list (UX-15, UX-06, UX-07, FR-FND-07, FR-FND-08)', (
   it('FR-FND-01 (screen): a shortfall is titled by its question text and sourced from its version; a team finding is "Raised by the team"', async () => {
     const k = await everyKind();
     const html = await renderList('viewer', k.p.id);
-    expect(html).toMatch(/From question Q-PP-01 \(version 1, status Not yet\)/);
-    expect(html).toContain('Raised by the team');
+    expect(html).toContain(FINDINGS_COPY.labels.fromDecisionWith('Not yet'));
+    expect(html).toContain(FINDINGS_COPY.labels.raisedByTeam);
   });
 
   it('FR-FND-02 FR-FND-08: members see their findings on S-14, and a non-member gets 404', async () => {
@@ -209,7 +211,7 @@ describe('S-15 the finding page and the S-14 raise form (FR-FND-02, FR-FND-03, F
   it('UX-16 UX-17 M-26: an assessor sees no accept form and the M-26 line; a viewer sees no form at all', async () => {
     const f = await team();
     const a = await renderFinding(f, 'assessor');
-    expect(a).not.toContain('Accept the risk</button>'); expect(a).toContain('Only owners and admins can accept a risk.');
+    expect(a).not.toContain('Accept the risk</button>'); expect(a).toContain(onlyRolesCanText('risk:accept'));
     expect(await renderFinding(f, 'viewer')).not.toMatch(/<form|<button[^>]*>(Add a mitigation|Update this mitigation|Accept the risk)/);
   });
 
@@ -300,7 +302,7 @@ describe('S-15 the finding page and the S-14 raise form (FR-FND-02, FR-FND-03, F
     await addMitigationVersion(fx, f.id, { status: 'done', owner: 'assessor', dueDate: '2026-12-01' });
     expect(await renderFinding(f, 'assessor')).toContain('Reopen this finding');
     const viewer = await renderFinding(f, 'viewer');
-    expect(viewer).not.toContain('Reopen this finding'); expect(viewer).toContain('Only owners, admins and assessors can reopen a finding.');
+    expect(viewer).not.toContain('Reopen this finding'); expect(viewer).toContain(onlyRolesCanText('finding:reopen'));
     const w = await team({ by: 'owner' });
     await addFindingEvent(fx, w.id, { kind: 'withdrawn', by: 'owner' });
     expect(await renderFinding(w, 'owner')).not.toMatch(/Reopen this finding|Withdraw<|Withdraw finding/);

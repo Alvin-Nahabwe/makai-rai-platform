@@ -2,6 +2,7 @@ import { draftKey, type DraftKey, type DraftStore } from '@/lib/client/drafts';
 import type { RetryState, SendOutcome } from '@/lib/client/retrySafeWrite';
 import { formatTime } from '@/lib/format/dates';
 import { OUTSIDE_ROLE_LABELS } from '@/lib/decision/copy';
+import { FINDINGS_COPY } from '@/lib/findings/copy';
 import { STAGES, type CalendarDate, type Decider, type FieldError, type MitigationStatus } from '@/types/record';
 import type { EvidenceItemView, FindingClosedConflict, MitigationVersionView } from '@/types/api';
 
@@ -15,25 +16,17 @@ import type { EvidenceItemView, FindingClosedConflict, MitigationVersionView } f
 // ─── What a write answered ───────────────────────────────────────────────────────────────────────
 
 /** The sentence after an unsaved write that says where the person's words are. M-05 to M-09 end with these. */
-export const KEPT_ON_DEVICE = 'Your answer is kept on this device.';
-export const KEPT_IN_FORM = 'What you typed is still in the form.';
+export const KEPT_ON_DEVICE = FINDINGS_COPY.failures.keptInBrowser;
+export const KEPT_IN_FORM = FINDINGS_COPY.failures.keptInForm;
 
 /** The one sentence a field shows when the server's text for it is not one of ours (FND-a RE-2): never a raw API string. */
-export const GENERIC_FIELD_TEXT = 'This entry cannot be saved. Check it and try again.';
+export const GENERIC_FIELD_TEXT = FINDINGS_COPY.genericField;
 
-/** The field texts a form may show, which are the server's own (7.4.2 S-14 and S-15 rows; `lib/findings/validate.ts`; route 5). */
-export const FIELD_TEXTS: ReadonlySet<string> = new Set([
-  'Write a title.', 'Write a description.', 'Choose a stage.', 'Choose a risk area of this stage, or none.',
-  'Choose a question of this stage, or none.', 'Choose a decision version of this question, or none.',
-  'Write what will be done.', 'Choose an owner.', 'Enter a due date.', 'Choose a status.',
-  'Choose a control from the suggested controls, or none.', 'Add closure evidence, or say why there is none.',
-  'Say why it is cancelled.', 'Say why the date changed.', 'Choose who accepted the risk.', 'Write why the risk is accepted.',
-  'Enter a real date to look at it again, or none.', 'Write what was looked at again.', 'Write a reason.',
-  'Choose the decision version that closes this finding.', 'A cancelled mitigation cannot be changed.',
-  'Only a done mitigation has a closure note.', 'Only a cancelled mitigation has a cancel reason.',
-  'Attach each evidence item once, and at most 100.',
-  'This contains a character that cannot be stored. Remove it and save again.',
-]);
+/**
+ * The field texts a form may show, which are the server's own (7.4.2 S-14 and S-15 rows; `lib/findings/validate.ts`; route 5):
+ * every text of `FINDINGS_COPY.fields`, the one group the server's messages and the forms' own checks read.
+ */
+export const FIELD_TEXTS: ReadonlySet<string> = new Set(Object.values(FINDINGS_COPY.fields));
 const TOO_LONG = /^This is [\d,]+ characters\. The limit is [\d,]+\.$/;
 
 /** The text a field shows for the server's message on it: the message when it is one of ours, else the fixed sentence. */
@@ -59,7 +52,7 @@ const isClosed = (v: unknown): v is FindingClosedConflict =>
 
 /** 7.4.4: "This finding was closed by <who> at <time>." The time is in the device's zone. */
 export function closedByText(c: FindingClosedConflict, timeZone?: string): string {
-  return `This finding was closed by ${c.by.name} at ${formatTime(c.at, timeZone)}.`;
+  return FINDINGS_COPY.failures.closedBy(c.by.name, formatTime(c.at, timeZone));
 }
 
 /**
@@ -72,32 +65,32 @@ export function writeFailure(outcome: SendOutcome<unknown>, kept: string, timeZo
   const base = { fields: [] as FieldError[], conflict: null, retry: false };
   if (outcome.kind === 'not_saved') {
     return outcome.reason === 'timeout'
-      ? { ...base, retry: true, text: `Not saved: no reply from the server after 30 seconds. It may have arrived. ${kept} Retry is safe: it will not save twice.` }
-      : { ...base, retry: true, text: `Not saved: connection lost. ${kept} Retry.` };
+      ? { ...base, retry: true, text: FINDINGS_COPY.failures.noReply(kept) }
+      : { ...base, retry: true, text: FINDINGS_COPY.failures.connectionLost(kept) };
   }
   const { status, body } = outcome;
-  if (status === 401) return { ...base, text: `Not saved: you have been signed out. ${kept} Sign in again to save it.` };
-  if (status === 403) return { ...base, text: `Not saved: your role in this organisation no longer allows this. ${kept} Ask an owner or admin.` };
+  if (status === 401) return { ...base, text: FINDINGS_COPY.failures.signedOut(kept) };
+  if (status === 403) return { ...base, text: FINDINGS_COPY.failures.forbidden(kept) };
   if (status === 409) {
-    if (body.code === 'project_archived') return { ...base, text: 'Not saved: this project is archived. Owners and admins can unarchive it.' };
+    if (body.code === 'project_archived') return { ...base, text: FINDINGS_COPY.failures.archived };
     if (body.code === 'finding_not_open') {
       return isClosed(body.current)
         ? { ...base, text: closedByText(body.current, timeZone), nameInText: body.current.by.name }
-        : { ...base, text: 'This finding is closed.' };
+        : { ...base, text: FINDINGS_COPY.failures.closed };
     }
-    if (body.code === 'base_version_moved') return { ...base, text: 'Someone saved a newer version first.', conflict: { code: body.code, current: body.current } };
-    if (body.code === 'finding_already_open') return { ...base, text: 'This finding is already open.' };
-    if (body.code === 'finding_withdrawn') return { ...base, text: 'This finding was withdrawn, so it cannot be changed.' };
-    if (body.code === 'cannot_withdraw_shortfall') return { ...base, text: 'A finding raised from a decision cannot be withdrawn. Withdraw the decision instead.' };
+    if (body.code === 'base_version_moved') return { ...base, text: FINDINGS_COPY.failures.newerFirst, conflict: { code: body.code, current: body.current } };
+    if (body.code === 'finding_already_open') return { ...base, text: FINDINGS_COPY.failures.alreadyOpen };
+    if (body.code === 'finding_withdrawn') return { ...base, text: FINDINGS_COPY.failures.withdrawn };
+    if (body.code === 'cannot_withdraw_shortfall') return { ...base, text: FINDINGS_COPY.failures.cannotWithdrawShortfall };
   }
   if (status === 422 && body.fields !== undefined && body.fields.length > 0) {
     const fields = body.fields.map((f) => ({ field: f.field, message: fieldText(f.message) }));
-    return { ...base, fields, text: fields.length === 1 ? 'There is a problem with this entry. What you typed is kept.' : `There are ${fields.length} problems with this entry. What you typed is kept.` };
+    return { ...base, fields, text: FINDINGS_COPY.failures.entry(fields.length) };
   }
-  if (status === 404) return { ...base, text: 'Not saved: this page is out of date, or you no longer have access to it. Reload the page.' };
-  if (status === 429) return { ...base, retry: true, text: `Not saved: too many requests. ${kept} Wait a minute, then Retry.` };
-  if (status >= 400 && status < 500) return { ...base, text: `Not saved: the request was refused. ${kept} Reload the page and try again.` };
-  return { ...base, retry: true, text: `Not saved: the server had a problem. ${kept} Retry.` };
+  if (status === 404) return { ...base, text: FINDINGS_COPY.failures.outOfDate };
+  if (status === 429) return { ...base, retry: true, text: FINDINGS_COPY.failures.tooMany(kept) };
+  if (status >= 400 && status < 500) return { ...base, text: FINDINGS_COPY.failures.refused(kept) };
+  return { ...base, retry: true, text: FINDINGS_COPY.failures.server(kept) };
 }
 
 // ─── Raising a team finding (S-14) and the reason of a reopen or a withdrawal (S-15) ────────────
@@ -109,7 +102,7 @@ export function charCount(s: string): number {
 }
 
 /** The server's text for a text over its limit (`FINDING_MESSAGES.tooLong`). */
-export const tooLongText = (n: number, max: number): string => `This is ${n.toLocaleString('en-GB')} characters. The limit is ${max.toLocaleString('en-GB')}.`;
+export const tooLongText = (n: number, max: number): string => FINDINGS_COPY.tooLong(n, max);
 
 export const TITLE_MAX = 200;
 export const TEXT_MAX = 4000;
@@ -120,24 +113,24 @@ export interface RaiseFormValue { title: string; description: string; stage: str
 export function raiseFormErrors(v: RaiseFormValue): FieldError[] {
   const errors: FieldError[] = [];
   const title = charCount(v.title);
-  if (title === 0) errors.push({ field: 'title', message: 'Write a title.' });
+  if (title === 0) errors.push({ field: 'title', message: FINDINGS_COPY.fields.title });
   else if (title > TITLE_MAX) errors.push({ field: 'title', message: tooLongText(title, TITLE_MAX) });
   const description = charCount(v.description);
-  if (description === 0) errors.push({ field: 'description', message: 'Write a description.' });
+  if (description === 0) errors.push({ field: 'description', message: FINDINGS_COPY.fields.description });
   else if (description > TEXT_MAX) errors.push({ field: 'description', message: tooLongText(description, TEXT_MAX) });
-  if (!(STAGES as readonly string[]).includes(v.stage)) errors.push({ field: 'stage', message: 'Choose a stage.' });
+  if (!(STAGES as readonly string[]).includes(v.stage)) errors.push({ field: 'stage', message: FINDINGS_COPY.fields.stage });
   return errors;
 }
 
 /** A reopen's or a withdrawal's reason: 1 to 4,000 characters (routes 9 and 10). */
 export function reasonErrors(reason: string): FieldError[] {
   const n = charCount(reason);
-  if (n === 0) return [{ field: 'reason', message: 'Write a reason.' }];
+  if (n === 0) return [{ field: 'reason', message: FINDINGS_COPY.fields.eventReason }];
   return n > TEXT_MAX ? [{ field: 'reason', message: tooLongText(n, TEXT_MAX) }] : [];
 }
 
 /** The live count under a long text: "96 / 4,000 characters" (UX-12's form; W-6). */
-export const characterCount = (n: number, max = TEXT_MAX): string => `${n.toLocaleString('en-GB')} / ${max.toLocaleString('en-GB')} characters`;
+export const characterCount = (n: number, max = TEXT_MAX): string => FINDINGS_COPY.count(n, max);
 
 // ─── The mitigation form (S-15; FR-FND-03, FR-FND-04, UX-16, UX-26, UX-30) ─────────────────────
 
@@ -187,17 +180,17 @@ export function mitigationFormErrors(v: MitigationFormValue, base: MitigationVer
     if (n === 0) errors.push({ field, message: missing });
     else if (n > max) errors.push({ field, message: tooLongText(n, max) });
   };
-  text('what', v.what, 'Write what will be done.', TEXT_MAX);
-  if (v.ownerUserId === '') errors.push({ field: 'ownerUserId', message: 'Choose an owner.' });
+  text('what', v.what, FINDINGS_COPY.fields.what, TEXT_MAX);
+  if (v.ownerUserId === '') errors.push({ field: 'ownerUserId', message: FINDINGS_COPY.fields.ownerUserId });
   const due = dueDateOf(v.due);
-  if (due === null) errors.push({ field: 'dueDate', message: 'Enter a due date.' });
+  if (due === null) errors.push({ field: 'dueDate', message: FINDINGS_COPY.fields.dueDate });
   if (v.status === 'done' && v.evidence.length === 0 && !(v.noArtefact && charCount(v.closureNote) > 0)) {
-    errors.push({ field: 'closureNote', message: 'Add closure evidence, or say why there is none.' });
+    errors.push({ field: 'closureNote', message: FINDINGS_COPY.fields.closureNote });
   } else if (v.status === 'done' && v.noArtefact && charCount(v.closureNote) > TEXT_MAX) {
     errors.push({ field: 'closureNote', message: tooLongText(charCount(v.closureNote), TEXT_MAX) });
   }
-  if (v.status === 'cancelled') text('cancelReason', v.cancelReason, 'Say why it is cancelled.', TEXT_MAX);
-  if (base !== null && due !== null && due > base.dueDate) text('changeNote', v.changeNote, 'Say why the date changed.', CHANGE_NOTE_MAX);
+  if (v.status === 'cancelled') text('cancelReason', v.cancelReason, FINDINGS_COPY.fields.cancelReason, TEXT_MAX);
+  if (base !== null && due !== null && due > base.dueDate) text('changeNote', v.changeNote, FINDINGS_COPY.fields.changeNote, CHANGE_NOTE_MAX);
   return errors;
 }
 
@@ -207,7 +200,7 @@ export const CHANGE_NOTE_MAX = 1000;
 export function saveGate(s: { uploading: readonly string[]; failed: readonly string[] }): { send: boolean; text: string | null; actions: string[] } {
   const waiting = [...s.uploading, ...s.failed];
   if (waiting.length === 0) return { send: true, text: null, actions: [] };
-  return { send: false, text: `Waiting for ${waiting.join(', ')} to finish uploading.`, actions: ['Save without it', 'Cancel'] };
+  return { send: false, text: FINDINGS_COPY.mitigationForm.waiting(waiting), actions: [FINDINGS_COPY.mitigationForm.saveWithout, FINDINGS_COPY.mitigationForm.cancel] };
 }
 
 /** UX-26: where the mitigation form's draft lives: the account, organisation, project, finding and mitigation (or "new"). */
@@ -280,7 +273,7 @@ export function conflictAction(choice: ConflictChoice, newer: MitigationVersionV
 
 /** 7.4.2 S-15 row: "Saved as version N of this mitigation at <time>." The time is the device's (`formatTime`). */
 export function mitigationSavedText(v: Pick<MitigationVersionView, 'versionNumber'>, timeText: string): string {
-  return `Saved as version ${v.versionNumber} of this mitigation at ${timeText}.`;
+  return FINDINGS_COPY.mitigationForm.savedAs(v.versionNumber, timeText);
 }
 
 /**
@@ -307,38 +300,41 @@ export function acceptRiskFormErrors(v: {
   acceptedBy: Decider | null; reason: string; lookAgain?: { day: string; month: string; year: string }; note?: string; requireNote?: boolean;
 }): FieldError[] {
   const errors: FieldError[] = [];
-  if (v.acceptedBy === null) errors.push({ field: 'acceptedBy', message: 'Choose who accepted the risk.' });
+  if (v.acceptedBy === null) errors.push({ field: 'acceptedBy', message: FINDINGS_COPY.fields.acceptedBy });
   const n = charCount(v.reason);
-  if (n === 0) errors.push({ field: 'reason', message: 'Write why the risk is accepted.' });
+  if (n === 0) errors.push({ field: 'reason', message: FINDINGS_COPY.fields.acceptReason });
   else if (n > TEXT_MAX) errors.push({ field: 'reason', message: tooLongText(n, TEXT_MAX) });
   const l = v.lookAgain;
   if (l !== undefined && (l.day !== '' || l.month !== '' || l.year !== '') && dueDateOf(l) === null) {
-    errors.push({ field: 'lookAgainOn', message: 'Enter a real date to look at it again, or none.' });
+    errors.push({ field: 'lookAgainOn', message: FINDINGS_COPY.fields.lookAgainOn });
   }
-  if (v.requireNote === true && charCount(v.note ?? '') === 0) errors.push({ field: 'lookAgainNote', message: 'Write what was looked at again.' });
+  if (v.requireNote === true && charCount(v.note ?? '') === 0) errors.push({ field: 'lookAgainNote', message: FINDINGS_COPY.fields.lookAgainNote });
   return errors;
 }
 
-/** "<name>" for a member, "<Role> (outside role)" for an outside role (7.5.8). */
+/** "<name>" for a member, "<Role> (no platform account)" for someone without a platform account (7.5.8; CONSOLIDATED 8 #5). */
 function whoText(choice: Decider, names: ReadonlyMap<string, string>): string {
-  return choice.kind === 'member' ? names.get(choice.userId) ?? 'a member' : `${OUTSIDE_ROLE_LABELS[choice.role]} (outside role)`;
+  return choice.kind === 'member' ? names.get(choice.userId) ?? FINDINGS_COPY.acceptRisk.aMember : FINDINGS_COPY.acceptRisk.outsideWho(OUTSIDE_ROLE_LABELS[choice.role]);
 }
 
-/** 7.4.2 S-15 row: "Closed: risk accepted by <who>." */
+/** 7.4.2 S-15 row, with C#411's label: "Closed by an accepted risk (<who>)." */
 export function acceptedSavedText(choice: Decider, names: ReadonlyMap<string, string>): string {
-  return `Closed: risk accepted by ${whoText(choice, names)}.`;
+  return FINDINGS_COPY.acceptRisk.saved(whoText(choice, names));
 }
 
 /** UX-17, W-6: the label the finding will show, said before the button; none while nothing is chosen. */
 export function acceptedLabelSentence(choice: Decider | null, names: ReadonlyMap<string, string>): string {
-  return choice === null ? '' : `The finding will show as "Closed: risk accepted by ${whoText(choice, names)}".`;
+  return choice === null ? '' : FINDINGS_COPY.acceptRisk.willShow(whoText(choice, names));
 }
 
 // ─── Small rules the forms share ───────────────────────────────────────────────────────────────
 
-/** The sentence over an error summary: how many problems, and where the person's words are (`KEPT_ON_DEVICE` only when a draft is kept). */
+/**
+ * The sentence over an error summary: how many problems, and where the person's words are (`KEPT_ON_DEVICE` only when a
+ * draft is kept). An acceptance's summary names "this form" (C#154).
+ */
 export function formSummary(what: 'mitigation' | 'finding' | 'acceptance', n: number, kept: string): string {
-  return n === 1 ? `There is a problem with this ${what}. ${kept}` : `There are ${n} problems with this ${what}. ${kept}`;
+  return FINDINGS_COPY.summary(what === 'acceptance' ? 'form' : what, n, kept);
 }
 
 /** Route 5's body (without `requestId`): the texts trimmed and in NFC as the server digests them, so an edit of whitespace alone keeps the request id (UX-27). */
@@ -355,7 +351,7 @@ export function activeUpload(status: MitigationStatus, upload: { uploading: stri
   return status === 'done' ? upload : { uploading: [], failed: [] };
 }
 
-/** The accepter as a sentence names them: a member's name, or "<Role> (outside role)" (7.5.8). A view wraps this in <bdi>. */
+/** The accepter as a sentence names them: a member's name, or "<Role> (no platform account)" (7.5.8). A view wraps this in <bdi>. */
 export function acceptedWho(choice: Decider, names: ReadonlyMap<string, string>): string {
   return whoText(choice, names);
 }
