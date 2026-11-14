@@ -120,14 +120,15 @@ test('UX-36 FR-PRJ-02: S-10 delivers its headings and counts with JavaScript off
   const page = await context.newPage();
   await page.goto(path(`/projects/${main.id}`));
   for (const h of ['Pre-processing', 'In-processing', 'Post-processing']) await expect(page.getByRole('heading', { name: h })).toBeVisible();
-  await expect(page.getByRole('listitem').filter({ hasText: /\d+ with no decision/ }).first()).toBeVisible();   // the collapsed-heading copy of the count is hidden while the stage is open
+  await expect(page.getByRole('listitem').filter({ hasText: /\d+ questions? with no decision/ }).first()).toBeVisible();
 });
 
 test('UX-06: to-do counts come before recorded counts; status is words in ink, with no tick and no green (S-10 and S-08)', async ({ browser }) => {
   const page = await signedIn(browser, fx.members.owner);
   await page.goto(path(`/projects/${main.id}`));
   const text = await page.locator('[data-stage="pre-processing"]').innerText();
-  expect(text.indexOf('with no decision')).toBeLessThan(text.indexOf('Recorded'));
+  expect(text.indexOf('with no decision')).toBeGreaterThan(-1);
+  expect(text.indexOf('with no decision')).toBeLessThan(text.indexOf('Recorded so far'));
   for (const p of [path(`/projects/${main.id}`), path('/dashboard')]) {
     await page.goto(p);
     await expectStatusMarksInk(page);
@@ -468,7 +469,7 @@ test('FR-PRJ-02: a new project\'s S-10 shows the 7.4.2 empty texts in each stage
   const empty = await addProject(fx, { name: `PRJ fresh ${RUN}` });
   const page = await signedIn(browser, fx.members.owner);
   await page.goto(path(`/projects/${empty.id}`));
-  await expect(page.getByText('Nothing recorded yet.')).toHaveCount(3);
+  await expect(page.getByText('No decisions recorded yet', { exact: true })).toHaveCount(3);
   await expect(page.getByText(PROJECT_COPY.followUp.none)).toHaveCount(3);
   await expect(page.getByText('No stage review yet.')).toHaveCount(3);
 });

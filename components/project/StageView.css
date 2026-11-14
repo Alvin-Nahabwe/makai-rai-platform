@@ -28,28 +28,32 @@
   padding: var(--space-4);
 }
 
-.stage-column > summary {
-  cursor: pointer;
-}
-
-.stage-column > summary h2 {
-  display: inline;
-  margin: 0;
-}
-
-.stage-column__todo-line {
-  display: block;
-  font-size: var(--font-size-small);
-  color: var(--color-ink-muted);
-}
-
-.stage-column[open] > summary .stage-column__todo-line {
-  display: none;
+.stage-column > h2 {
+  margin-block-start: 0;
 }
 
 .stage-column ul {
   margin: 0 0 var(--space-3);
   padding-left: var(--space-5);
+}
+
+/* "Recorded so far": each item is the kit's shape (hidden from assistive technology) and the tally's words. The shape is
+   not inside a .ui-mark here, so it takes the mark ink itself; its words stay in the body ink. */
+/* No bullet beside the shape; the list keeps role="list" in the markup, since Safari drops the role of a list styled so. */
+.stage-column ul.stage-column__tally {
+  list-style: none;
+  padding-left: 0;
+}
+
+.stage-column__tally-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.stage-column__tally-item > .ui-mark__shape {
+  flex: none;
+  color: var(--color-mark);
 }
 
 @container (min-width: 60rem) {

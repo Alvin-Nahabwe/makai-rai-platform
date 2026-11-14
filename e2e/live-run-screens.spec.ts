@@ -73,8 +73,8 @@ test('FR-RM-04 UX-06 UX-07: S-08, S-10, S-11 and S-14 print the stage counts as 
     await expectNoCrossStageTotal(page, sentinels);
     await expectStatusMarksInk(page);
     await expectNoOtherSums(page, path);
-    if (path.endsWith(projectId)) {                                                // S-10's to-do line reads the open count itself
-      await expect(page.locator('[data-stage="pre-processing"] .stage-column__todo-line')).toContainText('37 open findings');
+    if (path.endsWith(projectId)) {                                                // S-10's "Still open" reads the open count itself, as a link
+      await expect(page.locator('[data-stage="pre-processing"]').getByRole('link', { name: '37 open findings', exact: true })).toBeVisible();
     }
   }
 

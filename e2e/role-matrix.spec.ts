@@ -135,9 +135,9 @@ const PROJECT_DETAIL_CONTROLS: Control[] = [
   { name: PROJECT_COPY.overview.downloadRecords, action: 'team:export', mode: 'presence', locator: (p) => p.getByRole('link', { name: PROJECT_COPY.overview.downloadRecords }) },
   { name: 'Archive project', action: 'project:archive', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Archive project', exact: true }) },
   { name: 'Findings for this project', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Findings for this project' }) },
-  { name: 'Open pre-processing', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Open pre-processing' }) },
-  { name: 'Open in-processing', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Open in-processing' }) },
-  { name: 'Open post-processing', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Open post-processing' }) },
+  { name: 'All questions in this stage', action: null, mode: 'presence', locator: (p) => p.locator('[data-stage="pre-processing"]').getByRole('link', { name: 'All questions in this stage', exact: true }) },
+  { name: 'All questions in this stage', action: null, mode: 'presence', locator: (p) => p.locator('[data-stage="in-processing"]').getByRole('link', { name: 'All questions in this stage', exact: true }) },
+  { name: 'All questions in this stage', action: null, mode: 'presence', locator: (p) => p.locator('[data-stage="post-processing"]').getByRole('link', { name: 'All questions in this stage', exact: true }) },
   { name: 'Open a stage review', action: 'review:open', mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Open a stage review' }).first() },
 ];
 
