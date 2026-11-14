@@ -15,6 +15,8 @@ import { COPY_LINK_COPY } from '@/lib/invitations/link/copy';
 import './AdminForms.css';
 import type { CreateOrganisationResponse, InviteMemberResponse } from '@/types/api';
 import type { FieldError } from '@/types/record';
+// The kit's styles entries for the native elements below that wear kit classes (rulings X-6, X-7).
+import '@/components/ui/formStyles';
 
 export type CreateDraft = { name: string; legalName: string; ownerEmail: string; showLink: boolean };
 export type FieldErrors = Partial<Record<keyof CreateDraft, string>>;

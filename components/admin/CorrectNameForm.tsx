@@ -9,6 +9,8 @@ import { TextInput } from '@/components/ui/TextInput';
 import { MAX_ORG_NAME } from '@/lib/admin/limits';
 import { ADMIN_FORMS_COPY } from '@/lib/admin/forms/copy';
 import './AdminForms.css';
+// The kit's styles entries for the native elements below that wear kit classes (rulings X-6, X-7).
+import '@/components/ui/formStyles';
 
 const N = ADMIN_FORMS_COPY.name;
 

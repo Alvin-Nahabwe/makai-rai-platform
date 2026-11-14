@@ -16,6 +16,8 @@ import { useHydrated } from '@/lib/client/useHydrated';
 import { formatDay } from '@/lib/format/dates';
 import type { InvitationView, InviteMemberResponse } from '@/types/api';
 import './AdminForms.css';
+// The kit's styles entries for the native elements below that wear kit classes (rulings X-6, X-7).
+import '@/components/ui/formStyles';
 
 const I = ADMIN_FORMS_COPY.invitation;
 

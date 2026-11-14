@@ -22,6 +22,10 @@ import { COPY_LINK_COPY } from '@/lib/invitations/link/copy';
 import { MEMBERS_COPY, type MemberRoleWords } from '@/lib/org/members/copy';
 import type { InvitationView, InviteMemberResponse, MemberView } from '@/types/api';
 import './MembersManager.css';
+// The kit's styles entries for the native elements below that wear kit classes (rulings X-6, X-7).
+import '@/components/ui/formStyles';
+import '@/components/ui/selectStyles';
+import '@/components/ui/buttonStyles';
 
 const C = MEMBERS_COPY;
 

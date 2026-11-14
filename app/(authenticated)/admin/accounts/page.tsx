@@ -12,6 +12,9 @@ import { AdminRefusal } from '@/components/admin/AdminRefusal';
 import { ADMIN_COPY } from '@/lib/admin/copy';
 import { pageTitle } from '@/lib/ui/title';
 import '@/components/admin/AdminForms.css';
+// The kit's styles entries for the native elements below that wear kit classes (rulings X-6, X-7).
+import '@/components/ui/formStyles';
+import '@/components/ui/buttonStyles';
 
 export const metadata = { title: pageTitle(ADMIN_COPY.titles.accounts) };
 
@@ -34,8 +37,7 @@ const one = (v: string | string[] | undefined): string | undefined => (Array.isA
  * The table is the kit's (plan 1A Task 19, ruling L5-2). The action cell keeps its native form, with a native input
  * and button in the kit's classes: the input is described by the warning sentence outside it, and the button carries
  * an accessible name with the account's name, which the kit's TextInput and Button cannot take (ruling T19-j).
- * No kit stylesheet is imported here (ruling X-6): the field's rules arrive with `FieldLabel`'s module and the
- * button's with the kit Button the signed-in layout loads (`components/layout/IdleWarning.tsx`).
+ * Their styles come from the kit's styles entries imported above, never from a kit stylesheet (rulings X-6, X-7).
  *
  * A signed-in account without the platform role gets only the refusal line, with status 200 (owner default
  * B21, as S-23).
