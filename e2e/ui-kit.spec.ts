@@ -713,7 +713,7 @@ test.describe('Dialog', () => {
 });
 
 test.describe('InlineConfirm', () => {
-  test('Cancel comes first on screen at every width, the destructive variant is the kit\'s, and a busy confirm is disabled', async ({ page }) => {
+  test('Cancel comes first on screen at every width, the destructive variant is the kit\'s, and a busy confirm is aria-busy, not disabled, keeps focus and does nothing when pressed', async ({ page }) => {
     await openKit(page);
     const groups = section(page, 'inline-confirm').getByRole('group');
     await expect(groups).toHaveCount(3);
@@ -728,8 +728,35 @@ test.describe('InlineConfirm', () => {
     }
     await expect(groups.nth(1).getByRole('button', { name: 'Archive project' })).toHaveClass(/ui-button--destructive/);
     await expect(groups.nth(1).getByRole('button', { name: 'Keep it open' })).toBeVisible();
-    await expect(groups.nth(2).getByRole('button', { name: 'Revoke invitation' })).toBeDisabled();
+    // SC 2.4.3 (D-386): busy is the kit's Button busy state, not disabled, so a focused confirm button keeps focus while its
+    // request is sent, and a press on it confirms nothing.
+    const busy = groups.nth(2).getByRole('button', { name: 'Revoke invitation' });
+    await expect(busy).toHaveAttribute('aria-busy', 'true');
+    await expect(busy).toBeEnabled();
+    await busy.focus();
+    await expect(busy).toBeFocused();
+    await page.keyboard.press('Enter');
+    await busy.click();
+    await expect(busy).toBeFocused();
+    await expect(page.locator('[data-demo-output="confirm"]')).toHaveText('Pressed: nothing yet.');
     await expect(groups.nth(2).getByRole('button', { name: 'Cancel' })).toBeEnabled();
+  });
+
+  test('SC 2.4.11 (D-386): the kit page loads at the top: the confirmations that come with its HTML do not scroll it on hydration', async ({ page }) => {
+    for (const viewport of [VIEWPORTS[0], VIEWPORTS[2]]) {
+      await page.setViewportSize(viewport);
+      await openKit(page);
+      await scrollSettled(page);
+      // Every vertical scroller on the page, the document included, is still at its top (a sideways scroll, such
+      // as the tab row bringing its current tab into view, is not this case's).
+      const moved = await page.evaluate(() => Array.from(document.querySelectorAll('*'))
+        .filter((el) => el.scrollTop !== 0)
+        .map((el) => `${el.tagName.toLowerCase()}.${Array.from(el.classList).join('.')} at ${el.scrollTop}`));
+      expect(moved, `${viewport.width} px: nothing scrolled`).toEqual([]);
+      // The case can fail: the kit's confirmations start below the fold, so a reveal on hydration would have scrolled.
+      const lastTop = await section(page, 'inline-confirm').getByRole('group').last().evaluate((el) => el.getBoundingClientRect().top);
+      expect(lastTop, `${viewport.width} px: the last kit confirmation starts below the window`).toBeGreaterThan(viewport.height);
+    }
   });
 
   test('Enter on Cancel cancels and never confirms; the confirm runs only from its own button', async ({ page }) => {
