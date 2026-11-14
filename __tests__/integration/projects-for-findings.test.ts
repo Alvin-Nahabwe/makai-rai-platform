@@ -93,11 +93,11 @@ describe('S-32 under ?for=findings', () => {
     const out = await open(fx, { for: 'findings' });
     if (!('html' in out)) throw new Error(JSON.stringify(out));
     expect(PROJECT_COPY.chooseForFindings).toBe('Choose a project to see its findings.');
-    // the line sits in the page header, under the h1 (F6 b: the header's own bottom margin separates it from Active)
-    expect(out.html).toMatch(/<div class="page-header"><div><h1>All projects<\/h1><p>Choose a project to see its findings\.<\/p><\/div>/);
+    // the line is the lead of the kit's page header, right under the h1 (F6 b: the header's own bottom margin separates it from Active)
+    expect(out.html).toContain(`<h1 class="ui-page-header__title">${PROJECT_COPY.allProjects.heading}</h1></div><div class="ui-page-header__lead">${PROJECT_COPY.chooseForFindings}</div>`);
     for (const p of [one, two, shelved]) expect(out.html).toContain(`href="/orgs/${fx.org.slug}/projects/${p.id}/findings"`);
     expect(out.html).not.toMatch(new RegExp(`href="/orgs/${fx.org.slug}/projects/[0-9a-f-]{36}"`));
-    expect(out.html).toContain('<h1>All projects</h1>');
+    expect(out.html).toContain(`>${PROJECT_COPY.allProjects.heading}</h1>`);
   });
 
   it('L2-65 (amended, F7): with no project at all, for=findings renders the page exactly as without it', async () => {

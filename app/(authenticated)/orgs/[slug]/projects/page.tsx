@@ -12,6 +12,7 @@ import { pageTitle } from '@/lib/ui/title';
 import { pageOf, LIST_PAGE_SIZE } from '@/lib/ui/showMore';
 import { ShowMoreLink } from '@/components/ui/ShowMoreLink';
 import { AllProjectsView } from '@/components/project/AllProjectsView';
+import { PROJECT_COPY } from '@/lib/project/copy';
 import { isUuid } from '@/lib/shell/nav';
 
 type Params = Promise<{ slug: string }>;
@@ -74,7 +75,7 @@ export default async function ProjectsPage({
     <AllProjectsView
       data={{ orgSlug: slug, canCreate: can(ctx.role, 'project:create'), canUnarchive: can(ctx.role, 'project:archive'), active: a.items, archived: b.items, forFindings }}
     >
-      {more !== null ? <ShowMoreLink href={`?${forFindings ? 'for=findings&' : ''}shown=${more.nextShown}`} label="Show more" /> : null}
+      {more !== null ? <ShowMoreLink href={`?${forFindings ? 'for=findings&' : ''}shown=${more.nextShown}`} label={PROJECT_COPY.allProjects.showMore} /> : null}
     </AllProjectsView>
   );
 }

@@ -8,6 +8,7 @@ import { NotFoundError } from '@/lib/data/tenant';
 import { myMitigations, openMitigationsByStage, stageFollowUpCounts } from '@/lib/data/followup';
 import { DashboardView } from '@/components/project/DashboardView';
 import { AllProjectsView } from '@/components/project/AllProjectsView';
+import { HOME_COPY } from '@/lib/home/copy';
 import { resetDb, testDb } from '../helpers/db';
 import { sessionFor } from '../helpers/authSession';
 import { useFixtureContent } from '../helpers/content';
@@ -208,9 +209,9 @@ describe('follow-up reads on S-08 and S-10 (Task 9: FUP\'s real bodies)', () => 
     const f = await addFinding(fx, q.id, { stage: 'pre-processing', source: 'team' });
     await addMitigationVersion(fx, f.id, { status: 'planned', owner: 'assessor', dueDate: '2026-10-28' });
     const html = await renderDashboard(fx, 'assessor', '2026-11-02');
-    expect(html).toContain('My open and overdue mitigations');
+    expect(html).toContain(HOME_COPY.myMitigations);
     expect(html).toMatch(/>Overdue<\/span>: was due 28 Oct 2026/);
-    expect(html).not.toContain('You own no open mitigations.');
+    expect(html).not.toContain(HOME_COPY.noMitigations);
   });
 
   it('FR-PRJ-04 NFR-SEC-02: my mitigations lists only the signed-in person\'s, and is not empty', async () => {
@@ -255,7 +256,7 @@ describe('page wiring (C4 round 1)', () => {
     });
     const html = renderToStaticMarkup(element);
     expect(html).not.toContain('Due 1 Jan 2099');   // the assessor's mitigation
-    expect(html).toContain('You own no open mitigations.');
+    expect(html).toContain(HOME_COPY.noMitigations);
   });
 
   it('FR-PRJ-03 (P1): S-32 gives Unarchive to owner and admin and to no other role', async () => {
@@ -275,8 +276,9 @@ describe('page wiring (C4 round 1)', () => {
     expect(data.projects).toHaveLength(0);
     expect(data.archivedCount).toBe(1);
     const html = renderToStaticMarkup(createElement(DashboardView, { data }));
-    expect(html).toContain('No active projects.');
-    expect(html).not.toContain('No projects yet.');
-    expect(html).toMatch(/No active projects\.\s*<a[^>]*>New project<\/a>/);
+    expect(html).toContain(`<p>${HOME_COPY.noActiveProjects}</p>`);   // plain text: the page's All projects link follows it
+    expect(html).not.toContain(HOME_COPY.noProjects);
+    expect(html.match(new RegExp(`<a[^>]*href="/orgs/${only.org.slug}/projects/new"[^>]*>${HOME_COPY.newProject}</a>`, 'g'))).toHaveLength(1);   // the header's New project, for a creator
+    expect(html.indexOf(HOME_COPY.newProject)).toBeLessThan(html.indexOf(HOME_COPY.noActiveProjects));
   });
 });

@@ -1,0 +1,5 @@
+/* The word "Overdue" in a follow-up line (spec 7.1: overdue red on the word only, never a status label or a mark). */
+.followup-overdue {
+  color: var(--color-overdue);
+  font-weight: var(--font-weight-semibold);
+}

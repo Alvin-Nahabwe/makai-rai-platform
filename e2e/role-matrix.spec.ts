@@ -4,6 +4,7 @@ import type { OrgRole } from '@prisma/client';
 import { can, type Action } from '../lib/authz/policy';
 import { FIXTURE_ROLES } from '../__tests__/helpers/fixture';
 import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from './fixtures/manifest';
+import { HOME_COPY } from '../lib/home/copy';
 
 /**
  * Task 12 Step 1 — O-13: no mutating control is rendered to a role that may
@@ -108,7 +109,7 @@ interface Control {
 
 const DASHBOARD_CONTROLS: Control[] = [
   { name: 'New project', action: 'project:create', mode: 'presence', locator: (p) => p.getByRole('link', { name: 'New project' }) },
-  { name: 'Archived projects', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Archived projects' }) },
+  { name: HOME_COPY.allProjects, action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: HOME_COPY.allProjects }) },
 ];
 
 const PROJECTS_LIST_CONTROLS: Control[] = [
