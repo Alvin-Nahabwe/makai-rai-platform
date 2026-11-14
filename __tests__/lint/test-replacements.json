@@ -1966,5 +1966,21 @@
     "property": "Until DEC-b fills the loader the page fails with status 501 naming the unit, not with an empty panel.",
     "proof": "The expectation is unchanged; only the page call gains `searchParams`. The page now also takes `searchParams` (it reads `?show` for the column, as the stage page does), so every call passes `searchParams: Promise.resolve({})`; `@/lib/question/stagePage` is mocked (`loadStagePage`, resolving null by default) so the page's second read, the column's, does not reach a database. No expectation of the case was removed or loosened.",
     "task": "lane 7 part 2 (the route column on the question page)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::(module)",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::NFR-SEC-02 FR-DEC-01: the page asks for record:read in this organisation, then loads the panel for this question",
+    "property": "The S-12 page is rendered in a unit test with its auth and its loaders mocked, so no case reaches a database; every slot records its props.",
+    "proof": "Four lines are added and none removed: `const loadStagePage = vi.fn();`, a `vi.mock('@/lib/question/stagePage', ...)` that forwards to it, the comment above them, and `loadStagePage.mockReset().mockResolvedValue(null);` in beforeEach. The page now reads the stage's list for the route column through loadStagePage (lane 7 part 2); without the mock the page cases would open a database connection. Resolving null renders the page without the column, so the regions these cases check are the ones they checked before; the case 'NFR-SEC-02 FR-DEC-01 ...' asserts the mock's call with the gate's context and identity.",
+    "task": "lane 7 part 2 (the route column on the question page)"
+  },
+  {
+    "kind": "structure",
+    "deleted": "__tests__/unit/question-content.test.tsx::UX-08 NFR-A11Y-05 (UX-34): the jump link is shown only below the two-column width, is at least 24 by 24 pixels, and keeps a visible focus ring",
+    "replacedBy": "__tests__/unit/question-content.test.tsx::UX-08 NFR-A11Y-05 (UX-34): the jump link is shown only while the guidance is not beside the form, is at least 24 by 24 pixels, and keeps a visible focus ring",
+    "property": "The in-page link down to the suggestions shows exactly while the guidance (and the suggestions in it) is not beside the form, is a target of at least 24 by 24 pixels, and keeps a visible focus ring; it is hidden by the same media query that puts the guidance beside the form in components/question/workspace.css.",
+    "proof": "With the route column (owner's decision of 14 November 2026) the guidance sits beside the form only from 90rem; from 72.5rem to under 90rem it is below the form. The case now requires `@media (width >= 90rem) { .question-content__jump { display: none;` in QuestionContent.css and the same query in workspace.css opening the three-column grid (`grid-template-columns: minmax(16rem, 1fr) minmax(0, 2fr) minmax(16rem, 1fr); grid-template-areas: \"route main guide\";`), in place of the 72.5rem pair; the 24 px, focus-ring, colour-role and no-75rem expectations are unchanged. Seen RED on the old pattern after the CSS moved to 90rem, GREEN with the new one; e2e/question-frame.spec.ts sees the link visible at 1160 and hidden at 1440.",
+    "task": "lane 7 part 2 (the route column on the question page)"
   }
 ]

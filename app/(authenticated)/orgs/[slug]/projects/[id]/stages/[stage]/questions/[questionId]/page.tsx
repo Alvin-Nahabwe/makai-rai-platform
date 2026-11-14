@@ -193,13 +193,11 @@ export default async function QuestionPage({
   const sp = await searchParams;
   const show = isStageFilter(sp.show) ? sp.show : 'all';
   // The gate first (load reads the same one, cache()); then the stage's list for the column, with that context and
-  // identity, in parallel with the panel.
+  // identity, in parallel with the panel. The second `load` is the same cached promise, not a second read.
   const { identity, ctx } = await gate(slug, stage);
+  const [, stageData] = await Promise.all([load(slug, id, stage, questionId), loadStagePage(ctx, identity.userId, id, stage as Stage)]);
   // The project's name is for the title only; the regions (and the client form inside them) get the panel as before.
-  const [{ projectName: _projectName, ...data }, stageData] = await Promise.all([
-    load(slug, id, stage, questionId),
-    loadStagePage(ctx, identity.userId, id, stage as Stage),
-  ]);
+  const { projectName: _projectName, ...data } = await load(slug, id, stage, questionId);
   // The project and stage the panel just found: null only where the panel's own load has already refused (notFound).
   const route = stageData === null ? undefined : <RouteColumn data={stageData} currentQuestionId={data.question.id} show={show} />;
   return (
