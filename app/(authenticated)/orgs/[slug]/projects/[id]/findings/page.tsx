@@ -10,6 +10,7 @@ import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
 import { FindingsPageView } from '@/components/findings/FindingsPageView';
 import { STAGES, type Stage } from '@/types/record';
+import RememberProject from '@/components/layout/RememberProject';
 
 const first = (v: string | string[] | undefined): string | null => (typeof v === 'string' && v !== '' ? v : Array.isArray(v) && v[0] ? v[0] : null);
 const asStage = (v: string | null): Stage | null => ((STAGES as readonly (string | null)[]).includes(v) ? (v as Stage) : null);
@@ -64,5 +65,10 @@ export async function generateMetadata({ params, searchParams }: { params: Param
 export default async function FindingsPage({ params, searchParams }: { params: Params; searchParams: Search }) {
   const { slug, id } = await params;
   const data = await load(slug, id, ...(await queryOf(searchParams)));
-  return <FindingsPageView data={data} />;
+  return (
+    <>
+      <FindingsPageView data={data} />
+      <RememberProject userId={data.userId} orgSlug={slug} projectId={data.projectId} />
+    </>
+  );
 }

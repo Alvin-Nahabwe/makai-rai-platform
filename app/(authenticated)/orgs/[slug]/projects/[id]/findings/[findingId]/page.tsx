@@ -8,6 +8,7 @@ import { loadFindingPage, type FindingPageData } from '@/lib/findings/pageData';
 import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
 import { FindingPageView } from '@/components/findings/FindingPageView';
+import RememberProject from '@/components/layout/RememberProject';
 
 type Params = Promise<{ slug: string; id: string; findingId: string }>;
 
@@ -43,5 +44,11 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
  */
 export default async function FindingPage({ params }: { params: Params }) {
   const { slug, id, findingId } = await params;
-  return <FindingPageView data={await load(slug, id, findingId)} />;
+  const data = await load(slug, id, findingId);
+  return (
+    <>
+      <FindingPageView data={data} />
+      <RememberProject userId={data.viewer.userId} orgSlug={slug} projectId={data.projectId} />
+    </>
+  );
 }

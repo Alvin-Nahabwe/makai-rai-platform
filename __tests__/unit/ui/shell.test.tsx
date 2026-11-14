@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 const pathnameMock = vi.hoisted(() => vi.fn());
@@ -188,12 +189,12 @@ describe('the rail, ported from the sidebar (UX-02, UX-41)', () => {
     }
   });
 
-  it('1A Task 11 L2-49: the organisation rail lists Home, Projects, Findings, Guidance, Members, Organisation details, My account at their addresses', () => {
+  it('1A Task 12 L2-48: the organisation rail lists Home, Projects, Findings, Guidance, Help, Members, Organisation details, My account at their addresses', () => {
     const html = rail('/orgs/a/dashboard');
-    expect(linkLabels(html)).toEqual(['Home', 'Projects', 'Findings', 'Guidance', 'Members', 'Organisation details', 'My account']);
+    expect(linkLabels(html)).toEqual(['Home', 'Projects', 'Findings', 'Guidance', 'Help', 'Members', 'Organisation details', 'My account']);
     const hrefs = [...navOf(html).matchAll(/<a [^>]*href="([^"]*)"/g)].map((m) => m[1].replace(/&amp;/g, '&'));
     expect(hrefs).toEqual([
-      '/orgs/a/dashboard', '/orgs/a/projects', '/orgs/a/projects?for=findings', '/explore/framework',
+      '/orgs/a/dashboard', '/orgs/a/projects', '/orgs/a/projects?for=findings', '/explore/framework', '/help',
       '/orgs/a/settings/members', '/orgs/a/settings/organisation', '/account',
     ]);
     // Members and Organisation details, then the person, then My account, in the lower list.
@@ -208,8 +209,8 @@ describe('the rail, ported from the sidebar (UX-02, UX-41)', () => {
     expect(stripTags(html)).toContain('MAK-AI administrator');
   });
 
-  it('UX-02 (SRS 7.1.1): an account in no organisation sees only Guidance and My account', () => {
-    expect(linkLabels(rail('/explore/framework', noOrg))).toEqual(['Guidance', 'My account']);
+  it('UX-02 (SRS 7.1.1) 1A Task 12 L2-48: an account in no organisation sees only Guidance, Help and My account', () => {
+    expect(linkLabels(rail('/explore/framework', noOrg))).toEqual(['Guidance', 'Help', 'My account']);
   });
 
   it('UX-02: the rail says "Switch organisation" in British spelling', () => {
@@ -224,7 +225,7 @@ describe('the rail, ported from the sidebar (UX-02, UX-41)', () => {
     expect(rail('/orgs/a/dashboard')).toMatch(/<button type="button" class="shell-rail__signout">[\s\S]*?Sign out<\/button>/);
   });
 
-  it('1A Task 11 T6: the shell reads and writes no storage but the theme key, and builds no address from storage or a query', () => {
+  it('1A Task 12 L2-64: the shell touches no storage but the theme key and lib/client/lastProject.ts, and builds no address from a query', () => {
     for (const file of ['components/layout/Rail.tsx', 'components/layout/TopBar.tsx', 'components/layout/OrgSwitcher.tsx', 'components/layout/AppShell.tsx', 'lib/shell/nav.ts', 'lib/shell/data.ts']) {
       const source = readFileSync(file, 'utf8');
       expect(source, file).not.toMatch(/localStorage|sessionStorage|indexedDB|useSearchParams|searchParams|document\.cookie/);
@@ -232,6 +233,133 @@ describe('the rail, ported from the sidebar (UX-02, UX-41)', () => {
     const theme = readFileSync('components/layout/ThemeToggle.tsx', 'utf8');
     expect([...theme.matchAll(/localStorage\.(\w+)\(/g)].map((m) => m[1])).toEqual(['setItem']);
     expect(theme).toContain("localStorage.setItem('theme', next)");
+    // The one file under components/layout and lib/shell, besides the theme switch, that names localStorage is
+    // lib/client/lastProject.ts: one getItem, one setItem and two removal loops (this person's keys at sign-out; other
+    // people's keys before a write, ruling L2-75), each storage call inside a try.
+    const layoutAndShell = [
+      ...readdirSync('components/layout').map((f) => `components/layout/${f}`),
+      ...readdirSync('lib/shell').map((f) => `lib/shell/${f}`),
+    ].filter((f) => /\.(ts|tsx)$/.test(f) && f !== 'components/layout/ThemeToggle.tsx');
+    for (const f of layoutAndShell) expect(readFileSync(f, 'utf8'), f).not.toMatch(/localStorage/);
+    const store = readFileSync('lib/client/lastProject.ts', 'utf8');
+    const calls = [...store.matchAll(/localStorage\.(\w+)\(/g)];
+    expect(calls.map((m) => m[1])).toEqual(['getItem', 'setItem', 'key', 'removeItem', 'key', 'removeItem']);
+    for (const m of calls) {
+      const before = store.slice(0, m.index);
+      expect(before.lastIndexOf('try {'), `${m[1]} at ${m.index}`).toBeGreaterThan(before.lastIndexOf('}\n'));
+    }
+    // The rail reads it through the store's subscription, after hydration (the server snapshot is null).
+    const railSource = readFileSync('components/layout/Rail.tsx', 'utf8');
+    expect(railSource).toMatch(/useSyncExternalStore\(\s*subscribeLastProject,\s*\(\) => \(slug \? readLastProject\(shell\.userId, slug\) : null\),\s*\(\) => null,?\s*\)/);
+  });
+
+  it('1A Task 12 P2: the server-rendered Findings link is the plain address, whatever the device holds', () => {
+    // A device that holds a last project: a rail that read storage during the server render would put it in the address.
+    const held = '3f2b8c1e-9a4d-4e6f-8b2a-1c3d5e7f9a0b';
+    vi.stubGlobal('localStorage', { getItem: () => held, setItem: () => {}, removeItem: () => {}, key: () => null, length: 1, clear: () => {} });
+    vi.stubGlobal('window', new EventTarget());
+    try {
+      const hrefs = [...navOf(rail(`/orgs/a/projects/${held}`)).matchAll(/<a [^>]*href="([^"]*)"/g)].map((m) => m[1].replace(/&amp;/g, '&'));
+      expect(hrefs).toContain('/orgs/a/projects?for=findings');
+      expect(hrefs.some((h) => h.includes('last='))).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('1A Task 12 F1b: the public header\'s product-name link to / does not prefetch; About, Sign in and the footer keep the default', () => {
+    const header = readFileSync('components/layout/PublicHeader.tsx', 'utf8');
+    const links = [...header.matchAll(/<Link\b[^>]*>/g)].map((m) => m[0]);
+    expect(links).toHaveLength(3);
+    expect(links[0]).toMatch(/href="\/"/);
+    expect(links[0]).toMatch(/prefetch=\{false\}/);
+    for (const l of links.slice(1)) expect(l).not.toMatch(/prefetch=/);
+    expect(readFileSync('components/layout/Footer.tsx', 'utf8')).not.toMatch(/prefetch=/);
+  });
+
+  it('1A Task 12 L2-66 S4: the rail\'s Sign out clears this person\'s last-project keys before signing out', () => {
+    const source = readFileSync('components/layout/Rail.tsx', 'utf8');
+    expect(source).toMatch(/onClick=\{\(\) => \{\s*clearLastProjects\(shell\.userId\);\s*void signOut\(\{ callbackUrl: '\/login' \}\);\s*\}\}/);
+  });
+});
+
+describe('the public pages load no shell stylesheet (plan 1A Task 12, fix round 1, F1a)', () => {
+  /** The files a module imports, resolved: `@/` and relative specifiers to .ts, .tsx or .css files that exist. */
+  function importsOf(file: string): string[] {
+    const src = readFileSync(file, 'utf8');
+    const out: string[] = [];
+    for (const m of src.matchAll(/(?:^|\n)\s*(?:import|export)\s[^;]*?from\s+'([^']+)'|(?:^|\n)\s*import\s+'([^']+)'/g)) {
+      const spec = m[1] ?? m[2];
+      if (!spec.startsWith('@/') && !spec.startsWith('.')) continue;
+      const base = spec.startsWith('@/') ? spec.slice(2) : join(dirname(file), spec);
+      const found = [base, `${base}.ts`, `${base}.tsx`, `${base}/index.ts`, `${base}/index.tsx`].find((c) => existsSync(c) && statSync(c).isFile());
+      if (found !== undefined) out.push(found.replace(/\\/g, '/'));
+    }
+    return out;
+  }
+  function closure(roots: string[]): Set<string> {
+    const seen = new Set<string>();
+    const queue = [...roots];
+    while (queue.length > 0) {
+      const f = queue.pop()!;
+      if (seen.has(f)) continue;
+      seen.add(f);
+      if (/\.(ts|tsx)$/.test(f)) queue.push(...importsOf(f));
+    }
+    return seen;
+  }
+
+  it('F1a: nothing the root layout, the not-found page, the public layout, any public page, the footer, the public header, the theme switch or the idle warning imports reaches shell.css', () => {
+    // Every page.tsx under app/(public)/ is walked from disk, so a new public page is covered without an edit.
+    const publicPages = readdirSync('app/(public)', { recursive: true, encoding: 'utf8' })
+      .filter((f) => f === 'page.tsx' || f.endsWith('/page.tsx')).map((f) => `app/(public)/${f}`);
+    expect(publicPages.length).toBeGreaterThanOrEqual(8);
+    const roots = ['app/layout.tsx', 'app/not-found.tsx', 'app/(public)/layout.tsx', ...publicPages, 'components/layout/Footer.tsx',
+      'components/layout/PublicHeader.tsx', 'components/layout/ThemeToggle.tsx', 'components/layout/IdleWarning.tsx'];
+    const reached = closure(roots);
+    expect(reached.size).toBeGreaterThan(roots.length);
+    expect([...reached].filter((f) => f.endsWith('components/layout/shell.css'))).toEqual([]);
+  });
+
+  it('F1a: the importers of shell.css and of the four signed-in shell files, across app and components, are exactly these', () => {
+    const files = ['app', 'components'].flatMap((root) => readdirSync(root, { recursive: true, encoding: 'utf8' }).map((f) => `${root}/${f}`))
+      .filter((f) => /\.tsx?$/.test(f));
+    const importersOf = (target: string) => files.filter((f) => importsOf(f).includes(target)).sort();
+    // A new importer fails here and is looked at: a public page that reached any of these would load the rail's rules.
+    expect({
+      shellCss: importersOf('components/layout/shell.css'),
+      appShell: importersOf('components/layout/AppShell.tsx'),
+      topBar: importersOf('components/layout/TopBar.tsx'),
+      rail: importersOf('components/layout/Rail.tsx'),
+      orgSwitcher: importersOf('components/layout/OrgSwitcher.tsx'),
+    }).toEqual({
+      shellCss: ['components/layout/AppShell.tsx', 'components/layout/OrgSwitcher.tsx', 'components/layout/Rail.tsx', 'components/layout/TopBar.tsx'],
+      // Help's layout renders the shell only past the gates (S5); /help's signed-out first visit, with whatever its layout's
+      // module graph loads, is measured by e2e/first-visit-transfer.spec.ts.
+      appShell: ['app/(authenticated)/layout.tsx', 'app/help/layout.tsx'],
+      topBar: ['components/layout/AppShell.tsx'],
+      rail: ['components/layout/TopBar.tsx'],
+      orgSwitcher: ['components/layout/Rail.tsx'],
+    });
+  });
+
+  it('F1a: the public shell\'s and the idle warning\'s rules are one block at the very end of app/globals.css, and gone from shell.css', () => {
+    const globals = readFileSync('app/globals.css', 'utf8');
+    const start = globals.indexOf('/* Moved from components/layout/shell.css');
+    expect(start).toBeGreaterThan(0);
+    const block = globals.slice(start);
+    const shell = readFileSync('components/layout/shell.css', 'utf8');
+    for (const sel of ['.shell-public-header {', '.shell-footer {', '.shell-theme--on-light {', '.shell-theme__to-light {', '.shell-idle__failed {']) {
+      // at the start of a line: the top-level rule, not the print rule's indented selector list
+      expect(block.split('\n'), sel).toContain(sel);
+      expect(shell.split('\n'), sel).not.toContain(sel);
+    }
+    // The print rule is in both, byte for byte: globals.css for the public pages, and the end of shell.css for the signed-in
+    // pages. shell.css used to be linked before globals.css and now follows it there, so without the copy the top bar's own
+    // `display: flex` (below 1024 px) and the panel's `display: block` (from 1024 px) would beat the print rule at every width.
+    const print = (css: string) => css.slice(css.lastIndexOf('/* ── Print: the page\'s content only ── */'));
+    expect(print(block)).toMatch(/^\/\* ── Print[\s\S]*@media print \{[\s\S]*\.shell-footer[\s\S]*\}\n$/);
+    expect(print(shell)).toBe(print(block));
   });
 });
 

@@ -175,8 +175,8 @@ describe('S-18', () => {
     for (const review of [reviewOfA, unsealedReviewOfA]) {
       const html = renderToStaticMarkup(await StageReviewPage({ params: Promise.resolve({ slug: fxA.org.slug, id: projectOfA, reviewId: review }) }));
       expect(html).not.toContain('independently time-stamped');
-      expect(html).toContain(`<h2 id="review-seals">Seals</h2><p><a href="${SEAL_PROOF_HREF}">What a seal proves</a></p>`);
-      expect(html.match(/What a seal proves/g)).toHaveLength(1);
+      expect(html).toContain(`<h2 id="review-seals">Seals</h2><p><a href="${SEAL_PROOF_HREF}">What sealing means</a></p>`);
+      expect(html.match(/What sealing means/g)).toHaveLength(1);
     }
   });
 

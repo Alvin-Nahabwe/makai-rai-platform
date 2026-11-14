@@ -191,10 +191,12 @@ describe('S-28 About page', () => {
     expect(reasons).toContain('not-an-approval-service');
   });
 
-  it('FR-PUB-04 UX-03: the seal section says what a seal does not prove and keeps the exact timestamp sentence', () => {
-    const s = plain(section(html, 'what-a-seal-proves'));
-    expect(s).toContain('Sealed by the platform; not independently time-stamped.');
-    expect(s).toMatch(/does not prove/);
+  it('1A Task 12 R10: what a seal shows is on Help; About keeps one link to it, with its words, in the section on what this is', () => {
+    expect(html).not.toContain('what-a-seal-proves');
+    expect(section(html, 'what-this-is')).toContain('<p><a href="/help#what-sealing-means">What sealing means</a></p>');
+    expect(html.match(/What sealing means/g)).toHaveLength(1);
+    // the last paragraph before "Who can see your records", so it does not read as part of that subsection (fix round 1, F6 c)
+    expect(section(html, 'what-this-is')).toMatch(/<p><a href="\/help#what-sealing-means">What sealing means<\/a><\/p><h3>Who can see your records<\/h3>/);
   });
 
   // CONSOLIDATED section 4: the eyebrow repeated the h1; "Free toolkits" became the controls page's introduction

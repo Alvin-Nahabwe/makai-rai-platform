@@ -259,6 +259,8 @@ export async function requireIdentity(): Promise<Identity> {
     throw e;
   }
 
+  if (await identityPassesGates(identity)) return identity;
+
   if (identity.mustChangePassword) {
     if ((await requestPathname()) !== CHANGE_PASSWORD_PATH) {
       redirect(CHANGE_PASSWORD_PATH);
@@ -269,14 +271,25 @@ export async function requireIdentity(): Promise<Identity> {
   }
 
   // THIRD gate (FR-ACC-04, SRS 7.1.2 gate 3): an account without a first
-  // acceptance of each of the three texts reaches only S-05 and S-21. A
-  // database error propagates, never as "nothing missing".
-  const missing = await missingAcceptances(identity.userId);
-  if (missing.length > 0 && !isAcceptanceExempt(await requestPathname())) {
+  // acceptance of each of the three texts reaches only S-05 and S-21. Reached
+  // only with an acceptance missing: identityPassesGates read them, and a
+  // database error there propagated, never as "nothing missing".
+  if (!isAcceptanceExempt(await requestPathname())) {
     redirect(ACCEPTANCES_PATH);
   }
 
   return identity;
+}
+
+/**
+ * True when this identity would pass requireIdentity()'s second and third gates on a page that exempts nothing (plan 1A
+ * Task 12, ruling L2-67). A flagged account fails at gate 2 without an acceptance read: gate 2 settles it. Otherwise it
+ * passes only when no acceptance is missing; a database error propagates, never as "nothing missing".
+ * requireIdentity() calls it first; the Help layout calls it to choose between the signed-in shell and the public header.
+ */
+export async function identityPassesGates(identity: Identity): Promise<boolean> {
+  if (identity.mustChangePassword) return false;
+  return (await missingAcceptances(identity.userId)).length === 0;
 }
 
 /**
@@ -333,11 +346,13 @@ export async function requireIdentityForApi(
 
 /**
  * For pages that want identity WHEN PRESENT but must not force a redirect —
- * the invitation-acceptance page is the only caller (Task 8, D-098):
+ * two callers. The invitation-acceptance page (Task 8, D-098):
  * `requireIdentity()` would redirect an anonymous visitor to `/login` before
  * they can see what org/role the link even names, which is the wrong UX for
  * a link whose whole point is to be followed by someone who may not have an
- * account yet.
+ * account yet. And Help's layout (`app/help/layout.tsx`, plan 1A Task 12),
+ * a public page that shows the signed-in shell to a person who passes the
+ * gates (`identityPassesGates`).
  *
  * Returns `null` for "no session" AND for every rejection `resolveIdentity`
  * throws (expired/revoked/deactivated) — from the caller's point of view

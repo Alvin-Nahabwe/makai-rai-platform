@@ -76,8 +76,12 @@ export function draftsHref(orgSlug: string, projectId: string, stage: Stage): st
   return `/orgs/${encodeURIComponent(orgSlug)}/projects/${encodeURIComponent(projectId)}/stages/${stage}?show=drafts`;
 }
 
-/** "What a seal proves" (AL-2's link; PUB's About anchor, contract G050). */
-export const SEAL_PROOF_HREF = '/about#what-a-seal-proves';
+/**
+ * "What sealing means" (AL-2's link, contract G050): Help's section of that name (plan 1A Task 12, W2). The link's words are
+ * HELP_COPY.sealing.heading, imported by the server pages that print it; this module is imported by client components, so
+ * it does not import the Help copy itself (ruling X-2).
+ */
+export const SEAL_PROOF_HREF = '/help#what-sealing-means';
 
 /**
  * The question-set line (controller ruling on RE-5, owner copy): shown when the content running now is not the one the

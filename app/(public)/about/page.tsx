@@ -1,18 +1,20 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { readCreditLine } from '@/lib/credit';
 import { ABOUT_COPY } from '@/lib/about/copy';
 import { PRODUCT_NAME, pageTitle } from '@/lib/ui/title';
+import { readHelpEmail } from '@/lib/help/contact';
+import { HELP_COPY } from '@/lib/help/copy';
+import { SEAL_PROOF_HREF } from '@/components/review/reviewText';
 import './AboutPage.css';
 
 /**
- * S-28, the public About page. It says what the platform is and is not and
- * what a seal does and does not prove, credits GIZ, and gives Help and contact.
+ * S-28, the public About page. It says what the platform is and is not,
+ * credits GIZ, and gives Help and contact. What a seal does and does not show
+ * is on Help (plan 1A Task 12, ruling R10); this page links there.
  *
  * Section ids are linked from other pages and are part of the contract:
- * `what-a-seal-proves`, `credit`, `help-and-contact` and `principle-<slug>`.
+ * `credit`, `help-and-contact` and `principle-<slug>`.
  *
  * `data-claims-allowed` marks the few places that must name a score or a claim
  * word, so the phrase test (`__tests__/lint/no-product-claims.test.ts`) and the
@@ -231,39 +233,6 @@ const STAGES: Array<[name: string, summary: string]> = [
   ],
 ];
 
-/**
- * The Help and contact address, from `data/help-contact.json`: `{ "email": string | null }`.
- * It is null until the owner names the monitored address (13.8 step 4d), and only an
- * explicit null shows the pending sentence. A missing key, an extra key, a value that is
- * not an address, or a file that is not JSON stops the build: a wrong or absent address
- * must not pass for the placeholder. The literal `data` prefix keeps the build's file
- * tracing static.
- */
-const HELP_FILE = 'data/help-contact.json';
-const EMAIL_SHAPE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/;
-
-function readHelpEmail(): string | null {
-  const text = readFileSync(join(process.cwd(), 'data', 'help-contact.json'), 'utf8');
-  let raw: unknown;
-  try {
-    raw = JSON.parse(text);
-  } catch (cause) {
-    throw new Error(`${HELP_FILE}: not valid JSON`, { cause });
-  }
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-    throw new Error(`${HELP_FILE}: expected an object with one key, "email"`);
-  }
-  if (Object.keys(raw).join() !== 'email') {
-    throw new Error(`${HELP_FILE}: the only key allowed is "email"`);
-  }
-  const email: unknown = (raw as { email: unknown }).email;
-  if (email === null) return null;
-  if (typeof email !== 'string' || !EMAIL_SHAPE.test(email) || /^mailto:/i.test(email)) {
-    throw new Error(`${HELP_FILE}: "email" must be an address such as name@host.tld, or null`);
-  }
-  return email;
-}
-
 export default function AboutPage() {
   const credit = readCreditLine();
   const helpEmail = readHelpEmail();
@@ -308,32 +277,15 @@ export default function AboutPage() {
             It is not an approval, audit, certification or compliance service, and nothing it
             produces is one.
           </p>
+          <p>
+            <Link href={SEAL_PROOF_HREF}>{HELP_COPY.sealing.heading}</Link>
+          </p>
           <h3>Who can see your records</h3>
           <p>
             Only members of your organisation can see its records, according to their role.
             MAK-AI&apos;s administrator has no access to records in the application, and the
             operator who runs the server has technical access to the database.
           </p>
-        </section>
-
-        <section className="about-section" aria-labelledby="what-a-seal-proves">
-          <h2 id="what-a-seal-proves">What a seal proves, and what it does not</h2>
-          <p>
-            A seal fixes the content of one stage review at one moment. It proves that the
-            platform, at the sealed time, recorded exactly these decision versions and these
-            evidence file fingerprints for that stage, and that none of them has changed since,
-            unless the platform reports an erasure.
-          </p>
-          <p>
-            It does not prove that your team made each decision on the date it declared, that the
-            evidence supports the decision, or that nobody with control of the database and the
-            server could rewrite both the record and the stored seal. The platform holds the
-            fingerprints itself, and there is no outside timestamp.
-          </p>
-          <p>
-            <strong>Sealed by the platform; not independently time-stamped.</strong>
-          </p>
-          <p className="about-note">Technical note: each fingerprint is a SHA-256 hash.</p>
         </section>
 
         <section

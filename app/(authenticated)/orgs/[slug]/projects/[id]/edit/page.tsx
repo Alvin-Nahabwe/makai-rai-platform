@@ -9,6 +9,7 @@ import type { ProjectFormValues } from '@/components/project/ProjectForm';
 import { PROJECT_COPY } from '@/lib/project/copy';
 import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
+import RememberProject from '@/components/layout/RememberProject';
 
 const day = (d: Date | null): string | null => (d === null ? null : d.toISOString().slice(0, 10));
 
@@ -29,12 +30,12 @@ const load = cache(async (slug: string, id: string) => {
   }
   const project = await withOrg(ctx, (tx) => tx.project.findUnique({ where: { id }, include: { metadata: true } }));
   if (project === null) notFound();
-  return project;
+  return { project, userId: identity.userId };
 });
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { slug, id } = await params;
-  return { title: pageTitle(PROJECT_COPY.titles.editProject, (await orNotFound(load(slug, id))).name) };
+  return { title: pageTitle(PROJECT_COPY.titles.editProject, (await orNotFound(load(slug, id))).project.name) };
 }
 
 /**
@@ -44,7 +45,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
  */
 export default async function EditProjectPage({ params }: { params: Params }) {
   const { slug, id } = await params;
-  const project = await load(slug, id);
+  const { project, userId } = await load(slug, id);
   const m = project.metadata;
   const initial: ProjectFormValues = {
     name: project.name, description: project.description ?? '',
@@ -55,5 +56,10 @@ export default async function EditProjectPage({ params }: { params: Params }) {
     datasetDescription: m?.datasetDescription ?? null, teamSize: m?.teamSize ?? null, fundingSource: m?.fundingSource ?? null,
     regulatoryContext: m?.regulatoryContext ?? null, projectStart: day(m?.projectStart ?? null), projectEnd: day(m?.projectEnd ?? null),
   };
-  return <EditProjectView data={{ orgSlug: slug, projectId: id, archived: project.archivedAt !== null, initial }} />;
+  return (
+    <>
+      <EditProjectView data={{ orgSlug: slug, projectId: id, archived: project.archivedAt !== null, initial }} />
+      <RememberProject userId={userId} orgSlug={slug} projectId={project.id} />
+    </>
+  );
 }

@@ -20,6 +20,7 @@ import { logSecurityEvent } from '@/lib/security-logger';
 import { ArchivedBanner } from '@/components/project/ArchivedBanner';
 import { GenerateDocumentForm, NeverSealed, type GenerateDocumentFormProps } from '@/components/documents/GenerateDocumentForm';
 import { IssuedDocumentsList } from '@/components/documents/IssuedDocumentsList';
+import RememberProject from '@/components/layout/RememberProject';
 
 interface PageProps {
   params: Promise<{ slug: string; id: string; reviewId: string }>;
@@ -37,7 +38,7 @@ const load = cache(async (slug: string, id: string, reviewId: string) => {
   if (project === null) notFound();
   const review = (await listStageReviews(ctx, id)).find((r) => r.id === reviewId);
   if (review === undefined) notFound();
-  return { ctx, project, review };
+  return { identity, ctx, project, review };
 });
 
 /** The review's documents, then the project. */
@@ -55,7 +56,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
  */
 export default async function DocumentsPage({ params }: PageProps) {
   const { slug, id, reviewId } = await params;
-  const { ctx, project, review } = await load(slug, id, reviewId);
+  const { identity, ctx, project, review } = await load(slug, id, reviewId);
 
   const archived = project.archivedAt !== null;
   const [seals, documents] = await Promise.all([listSeals(ctx, reviewId), listDocuments(ctx, { projectId: id, reviewId })]);
@@ -107,6 +108,7 @@ export default async function DocumentsPage({ params }: PageProps) {
           </section>
         </>
       )}
+      <RememberProject userId={identity.userId} orgSlug={slug} projectId={project.id} />
     </div>
   );
 }

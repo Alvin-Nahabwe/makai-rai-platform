@@ -37,6 +37,8 @@ const SIGNED_IN_BUDGET_KB = 190;
 // S-05 and keeps 190 KB.
 const PUBLIC_OUTSIDE_PUBLIC_GROUP = [
   '(authenticated)/acceptances',
+  // Help (plan 1A Task 12): a public page outside (public) that shows the whole shell to a signed-in person, as S-05 does.
+  'help',
 ];
 const MANIFEST_NAME = 'page_client-reference-manifest.js';
 

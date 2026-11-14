@@ -276,7 +276,8 @@ test.describe('the public budget', () => {
     const files = execFileSync('git', ['ls-files', '-co', '--exclude-standard', 'app/(public)/**/page.tsx'], { encoding: 'utf8' })
       .split('\n').filter(Boolean);
     if (files.length === 0) throw new Error('git ls-files found no page under app/(public)');
-    return files;
+    // Help (plan 1A Task 12): a public page outside the route group, measured signed out like the others (ruling T12-xi).
+    return [...files, 'app/help/page.tsx'];
   }
 
   function pathFor(file: string): string {

@@ -35,11 +35,11 @@
     { "route": "^/reset-password$", "screen": "Set a new password (08-12)", "restyled": "1A", "restructured": "1B" },
     { "route": "^/terms$", "screen": "Redirect to the legal page (no markup to restyle)", "restyled": "1A", "restructured": "none" },
     { "route": "^/$", "screen": "Organisation chooser (14)", "restyled": "1A", "restructured": "1B" },
+    { "route": "^/help$", "screen": "Help (new)", "restyled": "1A", "restructured": "1A (new page, Task 12)" },
     { "route": "^\\[not-found\\] /$", "listFiles": true, "screen": "Error and not-found pages (72-74)", "restyled": "1A", "restructured": "1B" },
     { "route": "^\\[(global-)?error\\] /$", "oneRow": true, "screen": "Error and not-found pages (72-74)", "restyled": "1A", "restructured": "1B" }
   ],
   "appended": [
-    { "route": "`/help` (to be created)", "screen": "Help (new)", "restyled": "1A", "restructured": "1A (new page, Task 12)" },
     { "route": "Integrity-check failure (spec 9.7 \"Records failed an integrity check\"): today no page of its own; shown inside `/orgs/[slug]/projects/[id]/reviews/[reviewId]/documents` and as a 500 `integrity_failure` from `app/api/v1/orgs/[slug]/documents/[documentId]/pdf/route.ts` and `app/api/v1/orgs/[slug]/evidence/[evidenceId]/route.ts`", "screen": "Integrity-check failure", "restyled": "1A (reworded and restyled, Task 18)", "restructured": "2 (becomes its own page with the documents work; controller ruling)" }
   ]
 }

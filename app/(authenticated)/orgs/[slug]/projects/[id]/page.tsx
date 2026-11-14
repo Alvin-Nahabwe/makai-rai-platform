@@ -9,6 +9,7 @@ import { PROJECT_COPY } from '@/lib/project/copy';
 import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
 import { ProjectOverview } from '@/components/project/ProjectOverview';
+import RememberProject from '@/components/layout/RememberProject';
 
 interface PageProps {
   params: Promise<{ slug: string; id: string }>;
@@ -23,12 +24,12 @@ const load = cache(async (slug: string, id: string) => {
   const ctx = await requireOrgContextFor(identity.userId, slug, 'project:read');
   const data = await loadProjectOverview(ctx, { orgSlug: slug, projectId: id, today: eatDate(new Date()) });
   if (data === null) notFound();
-  return data;
+  return { data, userId: identity.userId };
 });
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug, id } = await params;
-  return { title: pageTitle(PROJECT_COPY.titles.project, (await orNotFound(load(slug, id))).project.name) };
+  return { title: pageTitle(PROJECT_COPY.titles.project, (await orNotFound(load(slug, id))).data.project.name) };
 }
 
 /**
@@ -38,5 +39,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
  */
 export default async function ProjectDetailPage({ params }: PageProps) {
   const { slug, id } = await params;
-  return <ProjectOverview data={await load(slug, id)} />;
+  const { data, userId } = await load(slug, id);
+  return (
+    <ProjectOverview data={data}>
+      <RememberProject userId={userId} orgSlug={slug} projectId={data.project.id} />
+    </ProjectOverview>
+  );
 }

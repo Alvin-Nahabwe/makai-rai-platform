@@ -23,6 +23,7 @@ import { STAGES, type ScopeAnswer, type Stage } from '@/types/record';
 import type { ChangedSinceSeal } from '@/types/api';
 import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
+import RememberProject from '@/components/layout/RememberProject';
 
 
 export interface StagePageData {
@@ -108,7 +109,12 @@ export default async function StagePage({
   const sp = await searchParams;
   const show = isStageFilter(sp.show) ? sp.show : 'all';
   const shown = typeof sp.shown === 'string' ? sp.shown : null;
-  return <StageWorkspace data={data} show={show} shown={shown} />;
+  return (
+    <>
+      <StageWorkspace data={data} show={show} shown={shown} />
+      <RememberProject userId={data.viewerId} orgSlug={slug} projectId={data.projectId} />
+    </>
+  );
 }
 
 /** The markup of S-11, exported so a test renders it from real data without the request. */

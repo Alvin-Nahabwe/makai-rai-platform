@@ -3,6 +3,7 @@
 import { useState, type CSSProperties } from 'react';
 import { signOut } from 'next-auth/react';
 import { openDraftStore } from '@/lib/client/drafts';
+import { clearLastProjects } from '@/lib/client/lastProject';
 
 const TARGET: CSSProperties = { minWidth: '24px', minHeight: '24px' };
 const NOT_DONE = 'Not done: the request did not reach the server, so your other sessions are still open. Try again.';
@@ -55,7 +56,10 @@ export function SignOutEverywhere({ userId }: { userId: string }) {
         // The sessions have already ended on the server; a plain navigation finishes this browser's sign-out.
         if (o.callbackUrl) window.location.assign(o.callbackUrl);
       }
-    }, () => openDraftStore()?.purgeAccount(userId)));
+    }, () => {
+      openDraftStore()?.purgeAccount(userId);
+      clearLastProjects(userId);
+    }));
   }
   return (
     <>

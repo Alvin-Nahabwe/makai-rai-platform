@@ -158,7 +158,7 @@ async function checkShell(page: import('@playwright/test').Page, url: string): P
   const credit = readCreditLine();
   const footer = page.locator('body > footer');
   await expect(footer, url).toContainText(credit.text);
-  await expect(footer.locator('a'), url).toHaveText([credit.licence, 'Legal texts', 'About', 'Help and contact']);
+  await expect(footer.locator('a'), url).toHaveText([credit.licence, 'Terms and privacy', 'About', 'Help and contact']);
 }
 
 function seatWithRole(role: string): { slug: string; seat: FixtureManifestUser } {

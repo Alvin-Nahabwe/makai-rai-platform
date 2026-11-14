@@ -65,9 +65,9 @@ describe('review text', () => {
     expect(sealAgainLabel(3)).toBe('Seal again as seal 3');
   });
 
-  it('UX-18 (G023, G050): Go to them opens S-11 with its drafts filter, and What a seal proves opens its About anchor', () => {
+  it('UX-18 (G023, G050): Go to them opens S-11 with its drafts filter, and the seal link opens What sealing means on Help', () => {
     expect(draftsHref('o', 'p', 'pre-processing')).toBe('/orgs/o/projects/p/stages/pre-processing?show=drafts');
-    expect(SEAL_PROOF_HREF).toBe('/about#what-a-seal-proves');
+    expect(SEAL_PROOF_HREF).toBe('/help#what-sealing-means');
   });
 
   it('FR-REV-05 (ruling on RE-5): the question-set line shows only when the running content differs from the seal\'s', () => {
