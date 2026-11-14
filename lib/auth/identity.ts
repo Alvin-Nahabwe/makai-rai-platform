@@ -259,8 +259,6 @@ export async function requireIdentity(): Promise<Identity> {
     throw e;
   }
 
-  if (await identityPassesGates(identity)) return identity;
-
   if (identity.mustChangePassword) {
     if ((await requestPathname()) !== CHANGE_PASSWORD_PATH) {
       redirect(CHANGE_PASSWORD_PATH);
@@ -271,10 +269,10 @@ export async function requireIdentity(): Promise<Identity> {
   }
 
   // THIRD gate (FR-ACC-04, SRS 7.1.2 gate 3): an account without a first
-  // acceptance of each of the three texts reaches only S-05 and S-21. Reached
-  // only with an acceptance missing: identityPassesGates read them, and a
-  // database error there propagated, never as "nothing missing".
-  if (!isAcceptanceExempt(await requestPathname())) {
+  // acceptance of each of the three texts reaches only S-05 and S-21. A
+  // database error propagates, never as "nothing missing".
+  const missing = await missingAcceptances(identity.userId);
+  if (missing.length > 0 && !isAcceptanceExempt(await requestPathname())) {
     redirect(ACCEPTANCES_PATH);
   }
 
@@ -285,7 +283,10 @@ export async function requireIdentity(): Promise<Identity> {
  * True when this identity would pass requireIdentity()'s second and third gates on a page that exempts nothing (plan 1A
  * Task 12, ruling L2-67). A flagged account fails at gate 2 without an acceptance read: gate 2 settles it. Otherwise it
  * passes only when no acceptance is missing; a database error propagates, never as "nothing missing".
- * requireIdentity() calls it first; the Help layout calls it to choose between the signed-in shell and the public header.
+ * requireIdentity() does not call it: the page gate reads and branches on the acceptances in its own body, and
+ * __tests__/integration/trigger-enumeration.test.ts pins that read and that branch. Only the Help layout calls this, to
+ * choose between the signed-in shell and the public header. __tests__/unit/identity-passes-gates.test.ts holds it to a
+ * written copy of the gate's two conditions, not to the gate: a change to gate 2 or gate 3 must be made here too.
  */
 export async function identityPassesGates(identity: Identity): Promise<boolean> {
   if (identity.mustChangePassword) return false;
