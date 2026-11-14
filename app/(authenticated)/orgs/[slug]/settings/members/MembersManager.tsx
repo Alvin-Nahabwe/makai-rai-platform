@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { FormEvent, ReactElement } from 'react';
 import type { OrgRole } from '@prisma/client';
 import { can } from '@/lib/authz/policy';
@@ -14,6 +14,7 @@ import { Checkbox } from '@/components/ui/Checkbox';
 import { Definition, Term } from '@/components/ui/Definition';
 import { Icon } from '@/components/ui/Icon';
 import { InlineConfirm } from '@/components/ui/InlineConfirm';
+import { NEAREST_INSTANT } from '@/components/ui/revealInView';
 import { Select } from '@/components/ui/Select';
 import { Table } from '@/components/ui/Table';
 import { TextInput } from '@/components/ui/TextInput';
@@ -83,6 +84,7 @@ export default function MembersManager({ slug, currentUserId, currentRole, membe
   const [showLinkFor, setShowLinkFor] = useState<Record<string, boolean>>({});
   const retry = useRef(new Map<string, RetryState>());
   const statusRef = useRef<HTMLDivElement>(null);
+  const linkBoxRef = useRef<HTMLDivElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
   const confirmBox = useRef<HTMLDivElement>(null);
   const inFlight = useRef(false);
@@ -134,6 +136,23 @@ export default function MembersManager({ slug, currentUserId, currentRole, membe
   const idle = () => !inFlight.current;
   /** The row or box that held focus is gone: the result takes it. */
   const focusResult = () => { setTimeout(() => statusRef.current?.focus(), 0); };
+  /**
+   * After the answer to Invite or Resend (workshop walk finding S6): the status line takes focus, and it and the copy-link
+   * box under it, when one is shown, are brought wholly into view. The form and the invitation rows sit far below them, so a
+   * plain focus() left the box off the screen. Focus is moved without the browser's own scroll; then the box and the status
+   * line are each brought in by the shortest instant scroll (components/ui/revealInView.ts), the box first, so that both end
+   * in view together. It runs in a layout effect of the render that drew the answer, so the box a first invitation brings
+   * is already in the page; the count only says that a new answer has arrived.
+   */
+  const [answers, setAnswers] = useState(0);
+  const revealResult = () => setAnswers((n) => n + 1);
+  useLayoutEffect(() => {
+    const status = statusRef.current;
+    if (answers === 0 || status === null) return;   // no answer yet; the status line is always drawn while mounted
+    status.focus({ preventScroll: true });
+    linkBoxRef.current?.scrollIntoView(NEAREST_INSTANT);
+    status.scrollIntoView(NEAREST_INSTANT);
+  }, [answers]);
   /** Opens an inline confirmation, remembering the control to return to on Cancel. */
   function openConfirm(c: NonNullable<Confirming>, opener: HTMLElement): void {
     if (!idle()) return;
@@ -150,6 +169,7 @@ export default function MembersManager({ slug, currentUserId, currentRole, membe
     if (!idle()) return false;
     setMessage('');
     const out = await write<InviteMemberResponse>('invite', `${base}/members`, 'POST', { email, role, showLink });
+    revealResult();                                 // the answer, of either kind, is at the top of the page and the form at its foot
     if (out.kind !== 'saved') { setMessage(refusal(out, 'invite')); return false; }
     received('invite', out.status, out.body);
     return true;
@@ -174,7 +194,7 @@ export default function MembersManager({ slug, currentUserId, currentRole, membe
     const out = await write<InviteMemberResponse>(`resend:${inv.id}`, `${base}/invitations/${inv.id}/resend`, 'POST', { showLink });
     if (out.kind !== 'saved') { setMessage(refusal(out, 'resend')); return; }
     received('resend', out.status, out.body, inv.id);
-    focusResult();
+    revealResult();
   }
 
   async function revoke(inv: InvitationView): Promise<void> {
@@ -333,6 +353,7 @@ export default function MembersManager({ slug, currentUserId, currentRole, membe
 
       {issued !== null && (issued.response.acceptUrl !== null || !issued.response.emailSent) && (
         <CopyLinkFallback
+          ref={linkBoxRef}
           key={issued.response.invitation.id}
           noticeShownElsewhere
           acceptUrl={issued.response.acceptUrl}
