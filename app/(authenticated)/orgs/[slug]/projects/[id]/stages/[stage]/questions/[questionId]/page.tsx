@@ -195,6 +195,7 @@ export default async function QuestionPage({
   // The gate first (load reads the same one, cache()); then the stage's list for the column, with that context and
   // identity, in parallel with the panel.
   const { identity, ctx } = await gate(slug, stage);
+  // The project's name is for the title only; the regions (and the client form inside them) get the panel as before.
   const [{ projectName: _projectName, ...data }, stageData] = await Promise.all([
     load(slug, id, stage, questionId),
     loadStagePage(ctx, identity.userId, id, stage as Stage),
