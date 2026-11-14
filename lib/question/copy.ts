@@ -48,6 +48,17 @@ export const QUESTION_COPY = Object.freeze({
     evidence: 'Evidence',
     noEvidence: 'None',
   }),
+  /**
+   * The read-only question page (plan 1C Task 7, decision C12): what a Reviewer, a Viewer or anyone in an archived project
+   * reads in place of the form. CurrentDecision's reading mode and components/question/OpenWorkList.tsx.
+   */
+  reading: Object.freeze({
+    title: 'What the team decided',
+    history: (n: number): string => `History: ${n} ${n === 1 ? 'version' : 'versions'}`,
+    stillOpen: (n: number): string => `Still open on this question: ${n} ${n === 1 ? 'finding' : 'findings'}`,
+    mitigation: (what: string): string => `Mitigation: ${what}`,
+    noMitigationYet: 'No mitigation yet',
+  }),
   /** components/question/QuestionContent.tsx. */
   content: Object.freeze({
     principle: (principle: string): string => `Principle: ${principle}`,

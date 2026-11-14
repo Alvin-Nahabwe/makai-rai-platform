@@ -10,6 +10,11 @@
     "reason": "The mitigation status word (SRS 7.5.6, 5.3 item 11): a mitigation is Planned, In progress, Done or Cancelled. It says nothing about the progress of a stage or project, which is what the claim pattern bans."
   },
   {
+    "path": "components/question/OpenWorkList.tsx",
+    "text": "In progress",
+    "reason": "The mitigation status word (SRS 5.3 item 11), the same as StageFollowUp.tsx's, on the read-only question page's open mitigations (plan 1C Task 7), inside .status-label. It says nothing about the progress of a stage or project, which is what the claim pattern bans."
+  },
+  {
     "id": "Q-IP-20",
     "reason": "AL-7: the question asks about the team's own practice (whether it wrote down the model's known limits and failure modes); 'failure' names what the team documents, not a judgement the platform gives. Owner, 5 Nov 2026 12:24 EAT, sitting 1 N1: \"Keep both\"."
   },
