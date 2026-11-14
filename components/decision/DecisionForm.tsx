@@ -189,14 +189,68 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
   });
 
   // W-3 narrow: the fixed save bar's height is the space the page reserves under its content (DecisionForm.css).
+  // Measured after every render too, not only by the observer below: a render that grows the bar (the unsaved line
+  // appearing on the first edit) is followed at once by the next key, and the observer reports only at the next
+  // rendering frame, so a Tab before that frame scrolled the next field into view above the bar's old height and the
+  // bar covered it (SC 2.4.11). A layout effect runs inside the same event, before the next key is handled.
+  // When the bar has grown over the control that has focus (the radio whose Space made the first edit), that control
+  // is scrolled clear once, above the new height; nothing moves when nothing is covered or focus is outside the form.
+  const applyBarHeight = useCallback((): void => {
+    const bar = saveBar.current;
+    if (bar === null) return;
+    const root = document.documentElement;
+    const was = parseFloat(root.style.getPropertyValue('--decision-save-bar-h')) || 0;
+    const h = bar.offsetHeight;
+    if (h === was) return;
+    root.style.setProperty('--decision-save-bar-h', `${h}px`);
+    const focused = document.activeElement;
+    if (h < was || !(focused instanceof HTMLElement) || bar.contains(focused) || !(bar.closest('form')?.contains(focused) ?? false)) return;
+    // Covered: its lower edge under the bar's top, and it is on the screen at all (one the person scrolled away from stays).
+    const r = focused.getBoundingClientRect();
+    if (getComputedStyle(bar).position === 'fixed' && r.bottom > bar.getBoundingClientRect().top && r.top < document.documentElement.clientHeight) {
+      focused.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+    }
+  }, []);
+  useLayoutEffect(applyBarHeight);
+
+  /**
+   * Brings what took focus wholly into view, unless it already is: between the screen's top and the fixed bar's top (or
+   * the screen's foot when the bar is in the flow). A press on a control that is in view must not move the page, or the
+   * press ends on whatever slid under it and is lost.
+   */
+  const footOfView = useCallback((): number => {
+    const bar = saveBar.current;
+    return bar !== null && getComputedStyle(bar).position === 'fixed' ? bar.getBoundingClientRect().top : document.documentElement.clientHeight;
+  }, []);
+  const reveal = useCallback((el: Element): void => {
+    const r = el.getBoundingClientRect();
+    if (r.top >= 0 && r.bottom <= footOfView()) return;
+    el.scrollIntoView?.({ block: 'nearest', behavior: 'instant' });
+  }, [footOfView]);
+
+  /**
+   * M-11: a summary link brings its field into view, the field's group (legend or label, hint and error) from its top,
+   * or, when the group does not fit above the bar, the control itself just above it; then focuses the control without a
+   * scroll of its own. Nothing is left in the address: a fragment would keep the control the :target, and a later press
+   * on it would scroll by the target's margin and be lost (review T1). The link keeps its href for a page without
+   * JavaScript. False when the control is not on the page, so the browser follows the href.
+   */
+  const land = useCallback((id: string): boolean => {
+    const el = document.getElementById(id);
+    if (el === null) return false;
+    (el.closest('fieldset, .ui-field') ?? el).scrollIntoView({ block: 'start', behavior: 'instant' });
+    if (el.getBoundingClientRect().bottom > footOfView()) el.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+    el.focus({ preventScroll: true });
+    return true;
+  }, [footOfView]);
   useEffect(() => {
     const bar = saveBar.current;
     if (bar === null || typeof ResizeObserver === 'undefined') return;
     const root = document.documentElement;
-    const observer = new ResizeObserver(() => { root.style.setProperty('--decision-save-bar-h', `${bar.offsetHeight}px`); });
+    const observer = new ResizeObserver(applyBarHeight);
     observer.observe(bar);
     return () => { observer.disconnect(); root.style.removeProperty('--decision-save-bar-h'); };
-  }, []);
+  }, [applyBarHeight]);
 
   /** Keeps the draft on this device; false when there is no store or the browser refused it. */
   const keep = useCallback((d: StoredDraft<DecisionDraft>): boolean => {
@@ -410,8 +464,10 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
     // into view, instantly rather than with the page's smooth scroll (app/globals.css:225): the browser reveals a focused
     // text control's caret, not its box, in a scroll it issues after this handler, and when both animate the browser's
     // wins and leaves the box 2 px below the fold at <= 768 px, where the document and not .app-main scrolls. An instant
-    // scroll lands first, and the browser's if-needed reveal then finds the caret already in view.
-    <form method="post" noValidate onSubmit={onSubmit} onFocus={(e) => { e.target.scrollIntoView?.({ block: 'nearest', behavior: 'instant' }); }} data-region-form="answer-form" data-ready={ready ? 'true' : undefined} aria-labelledby="s12-answer-form">
+    // scroll lands first, and the browser's if-needed reveal then finds the caret already in view. When the error
+    // summary's first line takes focus, the whole summary is brought into view, so its list is not left under the bar.
+    // A control already wholly in view is left where it is (reveal).
+    <form method="post" noValidate onSubmit={onSubmit} onFocus={(e) => { const t: Element = e.target; reveal(t === summary.current ? t.parentElement ?? t : t); }} data-region-form="answer-form" data-ready={ready ? 'true' : undefined} aria-labelledby="s12-answer-form">
       {conflict !== null ? (
         <ConflictView
           current={conflict} mine={value} viewerId={data.viewer.userId}
@@ -439,7 +495,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
               {errors.map((e) => (
                 <li key={`${e.field}:${e.message}`}>
                   {FIELD_TARGET[e.field] !== undefined
-                    ? <a href={`#${FIELD_TARGET[e.field]}`}>{`${FIELD_LABEL[e.field]}: ${e.message}`}</a>
+                    ? <a href={`#${FIELD_TARGET[e.field]}`} onClick={(ev) => { if (land(FIELD_TARGET[e.field])) ev.preventDefault(); }}>{`${FIELD_LABEL[e.field]}: ${e.message}`}</a>
                     : e.message}
                 </li>
               ))}
