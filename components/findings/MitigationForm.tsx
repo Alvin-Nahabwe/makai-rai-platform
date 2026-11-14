@@ -364,6 +364,12 @@ export function MitigationFormToggle(p: MitigationFormProps & { label: 'Add a mi
   const trigger = useRef<HTMLButtonElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const pressed = useRef(false);
+  // A save answers outside any event, so React may render the button after the next frame: focus goes to it in an
+  // effect, once it is there (B1, ruling L5-4). A frame callback found no button on a production build, two runs in three.
+  const [savedCount, setSavedCount] = useState(0);
+  useEffect(() => {
+    if (savedCount > 0) trigger.current?.focus();
+  }, [savedCount]);
   useEffect(() => {
     if (!open || !pressed.current) return;
     pressed.current = false;
@@ -382,7 +388,7 @@ export function MitigationFormToggle(p: MitigationFormProps & { label: 'Add a mi
   return (
     <div ref={box}>
       {open ? (
-        <MitigationForm {...p} onSaved={(t) => { setSaved(t); setOpen(false); requestAnimationFrame(() => trigger.current?.focus()); }} onClose={() => { setOpen(false); requestAnimationFrame(() => trigger.current?.focus()); }} />
+        <MitigationForm {...p} onSaved={(t) => { setSaved(t); setOpen(false); setSavedCount((n) => n + 1); }} onClose={() => { setOpen(false); requestAnimationFrame(() => trigger.current?.focus()); }} />
       ) : (
         <Button variant="secondary" ref={trigger} onClick={() => { pressed.current = true; setOpen(true); }}>{p.label}</Button>
       )}
