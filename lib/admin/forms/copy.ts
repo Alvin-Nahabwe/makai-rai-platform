@@ -21,6 +21,14 @@ export const INVITATION_STATE_WORDS = Object.freeze({
 /** The create screen's link to the organisation it created, whose words its refusals of a resend read (answer Q22). */
 const OPEN_ORGANISATION = 'Open the organisation';
 
+// Words several forms share, written once so they stay in step.
+const TOO_LONG = (max: number): string => `Use ${max} characters or fewer.`;
+const SENDING = 'Sending...';
+const SAVING = 'Saving...';
+const CANCEL = 'Cancel';
+const NOT_SAVED_SIGNED_OUT = 'Not saved. You have been signed out. Sign in again.';
+const NOT_SAVED_OTHER = 'Not saved. Reload the page and try again.';
+
 export const ADMIN_FORMS_COPY = Object.freeze({
   /** S-24 create mode. */
   create: Object.freeze({
@@ -37,9 +45,9 @@ export const ADMIN_FORMS_COPY = Object.freeze({
     nameMissing: 'Enter the organisation name.',
     legalNameMissing: "Enter the institution's legal name.",
     ownerEmailMissing: "Enter the first Owner's email address.",
-    tooLong: (max: number): string => `Use ${max} characters or fewer.`,
+    tooLong: TOO_LONG,
     creating: 'Creating the organisation...',
-    sending: 'Sending...',
+    sending: SENDING,
     sent: (email: string): string => `Created. Invitation sent to ${email}.`,
     /** Followed by the copy-link box's email-failed sentence for the screen (answer Q21). */
     createdPrefix: 'Created.',
@@ -84,12 +92,12 @@ export const ADMIN_FORMS_COPY = Object.freeze({
     emailLabel: "New Owner's email",
     referenceLabel: "Reference of the organisation's written request",
     submit: 'Send invitation',
-    cancel: 'Cancel',
+    cancel: CANCEL,
     checkAbove: 'Check the fields marked above.',
     emailMissing: "Enter the new Owner's email address.",
     referenceMissing: "Enter the reference of the organisation's written request.",
-    tooLong: (max: number): string => `Use ${max} characters or fewer.`,
-    sending: 'Sending...',
+    tooLong: TOO_LONG,
+    sending: SENDING,
     sent: (email: string): string => `Sent to ${email}.`,
     /** Followed by the copy-link box's email-failed sentence, after "Send invitation". */
     createdPrefix: 'Invitation created.',
@@ -112,15 +120,15 @@ export const ADMIN_FORMS_COPY = Object.freeze({
     change: 'Change the name',
     label: 'Organisation name',
     save: 'Save name',
-    cancel: 'Cancel',
-    saving: 'Saving...',
+    cancel: CANCEL,
+    saving: SAVING,
     missing: 'Enter the new name.',
-    tooLong: (max: number): string => `Use ${max} characters or fewer.`,
+    tooLong: TOO_LONG,
     unchanged: "This is already the organisation's name.",
     saved: (next: string, old: string): string => `Saved. The name is now ${next}. It was ${old}. Documents made before this change still show the old name.`,
     lostReply: 'The connection was lost, so we do not know if the new name was saved. Reload the page to check before you try again.',
-    signedOut: 'Not saved. You have been signed out. Sign in again.',
-    other: 'Not saved. Reload the page and try again.',
+    signedOut: NOT_SAVED_SIGNED_OUT,
+    other: NOT_SAVED_OTHER,
   }),
   /** The institution's legal name on S-24 detail. */
   legalName: Object.freeze({
@@ -128,16 +136,16 @@ export const ADMIN_FORMS_COPY = Object.freeze({
     label: "Institution's legal name",
     hint: 'The registered name of the university, hospital or institute the team belongs to.',
     save: 'Save legal name',
-    cancel: 'Cancel',
-    saving: 'Saving...',
+    cancel: CANCEL,
+    saving: SAVING,
     missing: "Enter the institution's legal name.",
-    tooLong: (max: number): string => `Use ${max} characters or fewer.`,
+    tooLong: TOO_LONG,
     unchanged: "This is already the institution's legal name.",
     fieldMarked: 'Not saved. Check the field marked below.',
     saved: (next: string, old: string): string => `Saved. The legal name is now ${next}. It was ${old}.`,
     savedFirst: (next: string): string => `Saved. The legal name is now ${next}. None was recorded before.`,
     lostReply: 'The connection was lost, so we do not know if the new legal name was saved. Reload the page to check before you try again.',
-    signedOut: 'Not saved. You have been signed out. Sign in again.',
-    other: 'Not saved. Reload the page and try again.',
+    signedOut: NOT_SAVED_SIGNED_OUT,
+    other: NOT_SAVED_OTHER,
   }),
 });

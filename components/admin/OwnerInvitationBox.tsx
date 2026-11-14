@@ -15,13 +15,9 @@ import { ADMIN_FORMS_COPY, INVITATION_STATE_WORDS } from '@/lib/admin/forms/copy
 import { useHydrated } from '@/lib/client/useHydrated';
 import { formatDay } from '@/lib/format/dates';
 import type { InvitationView, InviteMemberResponse } from '@/types/api';
-import type { InvitationState } from '@/types/record';
 import './AdminForms.css';
 
 const I = ADMIN_FORMS_COPY.invitation;
-
-/** W-10's four invitation states (SRS lines 2166-2210), in the words of the copy module (one map, read by S-23 too). */
-export const STATE_WORDS: Readonly<Record<InvitationState, string>> = INVITATION_STATE_WORDS;
 
 /** The sentence after a resend went through: 201 is a new invitation, 200 a replay of one already resent (C4 CR-1). */
 export function resendWords(out: Extract<SendOutcome<InviteMemberResponse | undefined>, { kind: 'saved' }>): string {
@@ -224,7 +220,7 @@ export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, archive
         <ul className="admin-invitations">
           {invitations.map((i) => (
             <li key={i.id}>
-              {I.line(i.email, STATE_WORDS[i.state])}
+              {I.line(i.email, INVITATION_STATE_WORDS[i.state])}
               {i.state === 'pending' ? I.expires(formatDay(i.expiresAt, 'Africa/Kampala')) : null}
               {i.state === 'accepted' && i.createdFromShownLink ? <span>{I.copiedLink}</span> : null}
             </li>
@@ -238,7 +234,7 @@ export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, archive
           <div className="admin-form__actions">
             <Button variant="secondary" busy={pressed === 'resend'} disabled={busy && pressed !== 'resend'} aria-describedby={`${formId}-resend-hint`}
               onClick={() => { void resend(pending); }}>{I.resend}</Button>
-            <span id={`${formId}-resend-hint`} className="admin-invitation__hint">{I.resendHint}</span>
+            <span id={`${formId}-resend-hint`} className="ui-field__hint">{I.resendHint}</span>
             <Button ref={cancelTrigger} variant="secondary" disabled={busy && pressed !== 'cancel'} onClick={() => setConfirmRevoke(true)}>{I.cancelTrigger}</Button>
           </div>
           {confirmRevoke ? (

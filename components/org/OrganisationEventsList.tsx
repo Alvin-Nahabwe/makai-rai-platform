@@ -9,18 +9,18 @@ import './OrgDetails.css';
 
 export type OrganisationEventsListProps = { events: OrgEventView[]; hasMore: boolean };
 
-/**
- * Each action of FR-ORG-09 in plain words (SRS 7.5: no internal names, no dashes, no curly quotes), from the organisation
- * screens' copy module. Its type makes a new `OrgEventAction` an error there until it has words; the test compares the
- * keys with the database's CHECK list of `organisation_events.action`.
- */
-const ACTION_WORDS: Readonly<Record<OrgEventAction, string>> = ORG_COPY.events.actions;
 const E = ORG_COPY.events;
 
-export const ALL_ORG_EVENT_ACTIONS: readonly OrgEventAction[] = Object.keys(ACTION_WORDS) as OrgEventAction[];
+/**
+ * Each action of FR-ORG-09 in plain words (SRS 7.5: no internal names, no dashes, no curly quotes) is `E.actions`, from
+ * the organisation screens' copy module, which `satisfies Record<OrgEventAction, string>`: a new `OrgEventAction` is an
+ * error there until it has words; the test compares the keys with the database's CHECK list of
+ * `organisation_events.action`.
+ */
+export const ALL_ORG_EVENT_ACTIONS: readonly OrgEventAction[] = Object.keys(E.actions) as OrgEventAction[];
 
 export function actionWords(action: OrgEventAction): string {
-  return ACTION_WORDS[action];
+  return E.actions[action];
 }
 
 /** The actor's role at the time, as 7.5.2 names it: the platform role is "MAK-AI administrator", a member's role the vocabulary's word. */

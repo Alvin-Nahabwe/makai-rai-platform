@@ -67,10 +67,6 @@
   margin-block-end: var(--space-4);
 }
 
-.admin-invitation__hint {
-  color: var(--color-ink-muted);
-}
-
 /* S-25's cells: the "(you)" mark, a long name or email that may break anywhere, and the action form's warning, field and
    button. Every cell that holds what people typed (a name, an email, the organisations' names in the warning) may break
    anywhere, so no such word sets the table's narrowest width: the six columns then fit the wrapper at every width the kit

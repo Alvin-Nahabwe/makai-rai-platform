@@ -16,7 +16,6 @@ import '@/components/admin/AdminForms.css';
 export const metadata = { title: pageTitle(ADMIN_COPY.titles.accounts) };
 
 const A = ADMIN_COPY.accounts;
-const REFUSALS: Readonly<Record<string, string>> = A.refusals;
 
 /** The longest request reference route 47 accepts. */
 const MAX_REQUEST_REFERENCE = 200;
@@ -46,7 +45,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
   if (identity.platformRole !== 'admin') return <AdminRefusal />;
   const query = await searchParams;
   const error = one(query.error);
-  const refusal = error !== undefined && Object.hasOwn(REFUSALS, error) ? REFUSALS[error] : null;
+  const refusal = error !== undefined && Object.hasOwn(A.refusals, error) ? A.refusals[error as keyof typeof A.refusals] : null;
   const missingReferenceFor = error === 'request_reference_required' ? one(query.user) : undefined;
   const page = pageOf(await accountsForAdmin(), one(query.shown) ?? null, LIST_PAGE_SIZE);   // UX-40: 50 at a time
   const columns = [
