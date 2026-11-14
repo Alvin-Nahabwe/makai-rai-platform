@@ -79,8 +79,8 @@ test('FR-DEC-06 NFR-REL-05: Retry all re-sends each pressed draft with its own r
   await openStage(page, 'assessor', 'pre-processing', baseURL!, projectId);
   await expect(page.getByText('2 answers saved on this device have not reached the server.')).toBeVisible();
   await page.getByRole('button', { name: 'Retry all 2' }).click();
-  await expect(page.locator('[data-question-id="Q-PP-01"]')).toContainText(/as version 1\./);
-  await expect(page.locator('[data-question-id="Q-PP-02"]')).toContainText(/as version 1\./);
+  await expect(page.locator('[data-question-id="Q-PP-01"]')).toContainText(/Saved at .+ as version 1\./);
+  await expect(page.locator('[data-question-id="Q-PP-02"]')).toContainText(/Saved at .+ as version 1\./);
   expect(sent.sort()).toEqual(stored);
   expect(await draftKeys(page)).toHaveLength(0);
 });

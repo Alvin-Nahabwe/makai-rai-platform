@@ -57,15 +57,10 @@ export function draftFromCurrent(data: QuestionPanelData): DecisionDraft {
   };
 }
 
-/** The three date fields of a declared date at its precision (Today, Same as my last save, Same as version N). */
+/** The three date fields of a declared date at its precision (the form's two date shortcuts). */
 export function dateParts(d: DeclaredDate): DateParts {
   const [year, month, day] = d.split('-');
   return { year: year ?? '', month: month === undefined ? '' : String(Number(month)), day: day === undefined ? '' : String(Number(day)) };
-}
-
-/** Today's date on this device, as the three fields (UX-10's Today). */
-export function todayParts(now: Date): DateParts {
-  return { day: String(now.getDate()), month: String(now.getMonth() + 1), year: String(now.getFullYear()) };
 }
 
 /**

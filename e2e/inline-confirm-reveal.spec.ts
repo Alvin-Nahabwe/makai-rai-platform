@@ -222,7 +222,7 @@ const SCREENS: Screen[] = [
     passesWithoutRepair: { wide: 'the focus target opens hidden past the end of the page, and the browser\'s own focus scroll brings it in' },
     open: async (page) => {
       await load(page, questionPath(await decided('Q-PP-01'), 'Q-PP-01'));
-      await page.locator('summary', { hasText: new RegExp(`^${WITHDRAW_COPY.more}$`) }).click();
+      await page.locator('summary', { hasText: new RegExp(`^${WITHDRAW_COPY.more.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`) }).click();
       const confirmation = page.getByRole('group', { name: WITHDRAW_COPY.objectName(1, 'Q-PP-01') });
       return { trigger: page.getByRole('button', { name: WITHDRAW_COPY.trigger }), confirmation, focus: confirmation.getByLabel(`${WITHDRAW_COPY.codeLabel} ${FIELD_COPY.required}`), focusInside: true };
     },

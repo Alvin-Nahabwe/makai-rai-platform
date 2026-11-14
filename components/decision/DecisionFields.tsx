@@ -10,6 +10,7 @@ import {
   FINDING_NOTE, OUTSIDE_ROLE_LABELS, REASON_HELP, SCOPE_OPTIONS, STATUS_OPTIONS, reasonCount,
 } from '@/lib/decision/copy';
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
+import { REASON_MAX } from '@/lib/decision/rules';
 import { formatDeclaredDate } from '@/lib/format/dates';
 import { dateParts, isDecision, type DecisionDraft } from '@/lib/question/draft';
 import type { QuestionPanelData } from '@/lib/question/panel';
@@ -126,7 +127,7 @@ export function DecisionFields({ data, value, errors, disabled, onChange }: Deci
       <div className="decision-fields__reason">
         <TextArea
           id="decision-reason" name="reason" label={F.fields.reason} required value={value.reason} disabled={disabled}
-          maxLength={4000} count={(n) => reasonCount(n)} describedBy={['decision-reason-help']} error={err('reason')}
+          maxLength={REASON_MAX} count={(n) => reasonCount(n)} describedBy={['decision-reason-help']} error={err('reason')}
           onChange={(e) => set({ reason: e.target.value })}
         />
         <p id="decision-reason-help" className="decision-fields__help">{REASON_HELP}</p>
