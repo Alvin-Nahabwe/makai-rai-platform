@@ -990,5 +990,29 @@
     "property": "A project's descriptive line is built from its descriptive fields, in their order, each only when set, joined by commas, and shows no score; with no field it is empty. The words of two parts changed (audit B#367, B#368): \"personal data: yes\" became \"Uses personal data\" and \"lifecycle stage: Testing\" became the status word alone, \"Testing\" (\"Lifecycle stage\" is retired by the vocabulary), so the expected line is written from the copy constant and the case also checks the No branch.",
     "proof": "The case requires descriptiveLine of classification, health, personal data true and testing to equal exactly 'Classification', 'health', PROJECT_COPY.descriptive.usesPersonalData and 'Testing' joined by ', '; descriptiveLine of personal data false alone to equal PROJECT_COPY.descriptive.noPersonalData; and descriptiveLine(null) to be '' (unchanged).",
     "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/decision-components.test.tsx::F4 UX-26: when the browser cannot keep drafts, the failure the screen reader hears says so too",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::F4 UX-26: when the browser cannot keep drafts, the failure the screen reader hears says so too",
+    "property": "When the browser cannot keep drafts, the one assertive announcement of a failed save carries the no-storage sentence after the failure, once. The no-storage sentence was reworded (copy audit B#149 with the owner's decision D2: \"This browser cannot keep a copy of your text. Save before you leave this page.\"), so the pinned regular expression is built from the copy constant.",
+    "proof": "The case renders SaveStatus with the same M-05 failure and storageUnavailable, and requires the role=\"alert\" element to hold exactly the failure text followed by a space and DECISION_FORM_COPY.noStorage (a RegExp built from the constant; the sentence holds no regular-expression metacharacter other than the full stops, which match themselves), and that sentence to occur exactly once in the markup (RegExp of the constant with the g flag).",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/decision-components.test.tsx::UX-28 M-10: the conflict view shows both reasons, who saved, and the three actions",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::UX-28 M-10: the conflict view shows both reasons, who saved, and the three actions",
+    "property": "The conflict view shows both reasons, names who saved the newer version and when, takes focus on its heading (tabindex -1), and offers exactly three actions as plain buttons in this order: save mine, edit mine, discard mine. The words were reworded by ruled texts: the sentence is copy audit B#414 with \"your version\" (the lead, gap G-b8: \"{name} saved a newer version at {time}. Compare it with your version, then choose what to keep.\"), the heading B#165 in the coordinator's Q2 form (\"Not saved. A newer version was saved while you worked.\"), and the buttons CONSOLIDATED 8 #6 (\"Save my version\", \"Edit my version\", \"Discard my version\").",
+    "proof": "The case renders ConflictView with a newer version by Joseph K. and the reader's own reason, and requires both reasons, a paragraph holding exactly \"Joseph K. saved a newer version at {hh:mm zone}. Compare it with your version, then choose what to keep.\", the h3 with tabindex=\"-1\" whose whole text is DECISION_FORM_COPY.conflict.heading, and the text of every <button>…</button> in order to equal DECISION_FORM_COPY.conflict.saveMine, editMine and discardMine (no icon or wrapper inside a button).",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/decision-components.test.tsx::FR-DEC-01 FR-DEC-03 (screen): with no version, Current decision reads \"No decision yet.\"",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::FR-DEC-01 FR-DEC-03 (screen): with no version, Current decision reads \"No decision yet.\"",
+    "property": "With no version the current decision reads \"No decision yet.\"; with a version it shows the status, the version number, who decided with the declared date, who entered it with the day and time it was received, and a link to the history with the number of versions. The words were reworded (copy audit B#180, B#184, and CONSOLIDATED 8 #5 for a decider without a platform account): \"See all versions ({n})\", \"Entered by: {name} on {day} at {time}\", \"{role} (no platform account)\".",
+    "proof": "The case renders CurrentDecision with no version and requires QUESTION_COPY.current.none; with version 2 (Partly, decided by the principal investigator role on 12 Oct 2026, entered by Joseph K.) it requires no QUESTION_COPY.current.none, the status words Partly, QUESTION_COPY.current.version(2), \"Decided by: \" followed by deciderLabel of that role in the record form and \", 12 Oct 2026.\", \"Entered by: Joseph K. on 12 Oct 2026 at {hh:mm zone}\", and a link to /h whose whole text is QUESTION_COPY.current.history(2).",
+    "task": "plan 1A Task 17"
   }
 ]

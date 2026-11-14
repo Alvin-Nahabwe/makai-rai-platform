@@ -1,11 +1,12 @@
 import { problemSummary, savedMessage } from '@/lib/decision/copy';
+import { DECISION_OUTCOME_COPY } from '@/lib/decision/outcome/copy';
 import type { SendOutcome } from '@/lib/client/retrySafeWrite';
 import type { DecisionVersionView } from '@/types/api';
 import type { FieldError } from '@/types/record';
 
 /**
  * The save status line of S-12 (7.4.1, 7.4.3, UX-25): what one outcome of `sendWrite` says, in the exact
- * texts M-01 to M-12 (SRS 7.5.7, lines 2548-2559), how it is announced (progress and success politely,
+ * messages M-01 to M-12 (SRS 7.5.7, lines 2548-2559; their words are DECISION_OUTCOME_COPY's), how it is announced (progress and success politely,
  * every failure assertively) and what the person can do next. Plain TypeScript, so the form imports it.
  */
 
@@ -17,15 +18,16 @@ export interface SaveStatus {
   action?: { label: string; href: string };
 }
 
+const S = DECISION_OUTCOME_COPY.save;
 const M = {
-  'M-01': 'Saving...',
-  'M-02': 'Still saving. The connection is slow. Your answer is kept on this device.',
-  'M-05': 'Not saved: connection lost. Your answer is kept on this device. Retry.',
-  'M-06': 'Not saved: no reply from the server after 30 seconds. It may have arrived. Your answer is kept on this device. Retry is safe: it will not save twice.',
-  'M-07': 'Not saved: the server had a problem. Your answer is kept on this device. Retry.',
-  'M-08': 'Not saved: you have been signed out. Your answer is kept on this device. Sign in again to save it.',
-  'M-09': 'Not saved: your role in this organisation no longer allows this. Your answer is kept on this device. Ask an owner or admin.',
-  'M-12': 'Not saved: this project is archived. Owners and admins can unarchive it.',
+  'M-01': S.saving,
+  'M-02': S.slow,
+  'M-05': S.connection,
+  'M-06': S.noReply,
+  'M-07': S.server,
+  'M-08': S.signedOut,
+  'M-09': S.forbidden,
+  'M-12': S.archived,
 } as const;
 
 const failure = (id: keyof typeof M, next: SaveStatus['next']): SaveStatus => ({ id: id as SaveMessageId, text: M[id], live: 'assertive', next });
@@ -65,7 +67,7 @@ export function statusForOutcome(o: SendOutcome<DecisionVersionView>, ctx: { vie
     if (!isVersionView(v)) return failure('M-07', 'retry');
     return o.status === 201
       ? { id: 'M-03', text: savedMessage(v, ctx.timeText(v.receivedAt), ctx.viewerId), live: 'polite', next: 'none' }
-      : { id: 'M-04', text: `Already saved as version ${v.versionNumber} at ${ctx.timeText(v.receivedAt)}.`, live: 'polite', next: 'none' };
+      : { id: 'M-04', text: DECISION_OUTCOME_COPY.alreadySaved(ctx.timeText(v.receivedAt), v.versionNumber), live: 'polite', next: 'none' };
   }
   if (o.kind === 'not_saved') return o.reason === 'timeout' ? failure('M-06', 'retry') : failure('M-05', 'retry');
   const { status } = o;
@@ -105,39 +107,29 @@ export function navigationForOutcome(o: SendOutcome<DecisionVersionView>, questi
  */
 export function gateStatus(nav: { kind: 'go'; href: string }): SaveStatus {
   const terms = nav.href.startsWith('/acceptances');
+  const G = DECISION_OUTCOME_COPY.gate;
   return {
     id: 'GATE', live: 'assertive', next: 'go',
-    text: terms ? 'Not saved: accept the updated terms first. Copy your answer before you go: this browser cannot keep it.' : 'Not saved: change your password first. Copy your answer before you go: this browser cannot keep it.',
-    action: { label: terms ? 'Go to the terms' : 'Change password', href: nav.href },
+    text: terms ? G.terms : G.password,
+    action: { label: terms ? G.termsLink : G.passwordLink, href: nav.href },
   };
 }
 
 /** M-10, both variants: another person, or the same account (an earlier attempt from this or another device). */
 export function conflictText(current: DecisionVersionView, viewerId: string, timeText: (iso: string) => string): string {
-  const n = current.versionNumber;
   const at = timeText(current.receivedAt);
-  const who = current.enteredBy.userId === viewerId
-    ? `you at ${at}, probably by an earlier attempt from this device or another device.`
-    : `${current.enteredBy.name} at ${at} after you started.`;
-  return `Version ${n} was saved by ${who} Review it, then save yours as version ${n + 1} or discard it.`;
+  return current.enteredBy.userId === viewerId
+    ? DECISION_OUTCOME_COPY.conflict.own(at)
+    : DECISION_OUTCOME_COPY.conflict.other(current.enteredBy.name, at);
 }
 
 /**
  * The withdrawal's lines (7.4.2 S-13 row: "Withdrawing..." then "Withdrawn. The question has no current decision.";
  * failures follow the 7.4.1 pattern). `maybeArrived` is the owner's line for every outcome where the withdrawal may have
  * been recorded (no reply, a lost reply, a 2xx that is not a version): route 2 replays a repeated request id (FR-DEC-07),
- * so Retry cannot withdraw twice. The other failure lines are builder copy on the owner-copy list.
+ * so Retry cannot withdraw twice. The words are DECISION_OUTCOME_COPY.withdraw's.
  */
-export const WITHDRAW_TEXT = Object.freeze({
-  withdrawing: 'Withdrawing...',
-  withdrawn: 'Withdrawn. The question has no current decision.',
-  maybeArrived: 'Not withdrawn yet: no reply from the server. It may have arrived. Retry is safe: it will not withdraw twice.',
-  moved: 'Not withdrawn: someone saved a newer version. Reload the page to see it.',
-  forbidden: 'Not withdrawn: your role in this organisation no longer allows this.',
-  archived: 'Not withdrawn: this project is archived. Owners and admins can unarchive it.',
-  signedOut: 'Not withdrawn: you have been signed out. Sign in again to withdraw it.',
-  server: 'Not withdrawn: the server had a problem. Retry.',
-});
+export const WITHDRAW_TEXT = DECISION_OUTCOME_COPY.withdraw;
 
 export type WithdrawResult = { kind: 'withdrawn' } | { kind: 'fix'; fields: FieldError[] } | { kind: 'failed'; text: string; retry: boolean };
 

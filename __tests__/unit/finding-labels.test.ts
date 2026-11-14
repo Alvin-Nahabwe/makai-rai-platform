@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AcceptedRiskView, FindingView, UserRef } from '@/types/api';
+import { deciderLabel } from '@/lib/decision/copy';
 import { findingSourceLabel, findingStateLabel, OUTSIDE_ROLE_LABELS, overdueLabel, stageCountHeading, STAGE_NAMES } from '@/lib/findings/labels';
 
 const ANNA: UserRef = { userId: 'u-anna', name: 'Anna K.', formerMember: false };
@@ -10,7 +11,7 @@ const TEAM = { id: 'f2', source: 'team', questionId: 'Q-PP-12' } as FindingView;
 
 describe('finding labels (7.5.6, 7.5.8)', () => {
   it('FR-FND-05: state labels follow 7.5.6, naming the accepter', () => {
-    expect(findingStateLabel('closed_accepted_risk', { ...AR, acceptedBy: { kind: 'outside_role', role: 'ethics_committee' } })).toBe('Closed: risk accepted by Ethics committee (outside role)');
+    expect(findingStateLabel('closed_accepted_risk', { ...AR, acceptedBy: { kind: 'outside_role', role: 'ethics_committee' } })).toBe(`Closed: risk accepted by ${deciderLabel({ kind: 'outside_role', role: 'ethics_committee' }, '', 'record')}`);
     expect(findingStateLabel('closed_accepted_risk', AR)).toBe('Closed: risk accepted by Anna K.');
     expect(findingStateLabel('closed_accepted_risk', { ...AR, acceptedBy: { kind: 'member', user: { ...ANNA, formerMember: true } } })).toBe('Closed: risk accepted by Anna K. (former member)');
     expect(findingStateLabel('closed_mitigation', null)).toBe('Closed by mitigation');

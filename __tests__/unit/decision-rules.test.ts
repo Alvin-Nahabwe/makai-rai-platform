@@ -73,7 +73,8 @@ describe('lib/decision/rules.ts', () => {
       const specifiers = [/\bfrom\s+['"]([^'"]+)['"]/g, /\bimport\s*\(?\s*['"]([^'"]+)['"]/g, /\brequire\s*\(\s*['"]([^'"]+)['"]/g]
         .flatMap((re) => [...src.matchAll(re)].map((m) => m[1]));
       expect(specifiers.length, file).toBeGreaterThan(0);
-      expect(specifiers.filter((s) => !/^(@\/types\/|\.\.\/\.\.\/types\/|\.\/copy$)/.test(s)), file).toEqual([]);
+      // copy.ts also reads the vocabulary's definitions (plan line 926's status help), plain data a copy module may import.
+      expect(specifiers.filter((s) => !/^(@\/types\/|\.\.\/\.\.\/types\/|\.\/copy$|@\/lib\/vocabulary\/terms$)/.test(s)), file).toEqual([]);
     }
   });
 });

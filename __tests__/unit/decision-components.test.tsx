@@ -5,6 +5,9 @@ import type { DecisionDraft } from '@/lib/question/draft';
 import type { LoadedQuestion } from '@/types/content';
 import type { DecisionVersionView } from '@/types/api';
 import { gateStatus } from '@/lib/question/saveOutcome';
+import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
+import { DECISION_OUTCOME_COPY } from '@/lib/decision/outcome/copy';
+import { deciderLabel, FINDING_NOTE } from '@/lib/decision/copy';
 
 /**
  * The S-12 regions DEC-b fills (W-3, W-4; UX-09 to UX-12, UX-25, UX-28; NFR-A11Y-03, NFR-A11Y-04), rendered as
@@ -55,7 +58,7 @@ describe('S-12 decision fields', () => {
     const h = html();
     expect(h).toMatch(/<fieldset[^>]*>\s*<legend[^>]*>Status<\/legend>/);
     expect([...h.matchAll(/<input[^>]*type="radio"[^>]*value="([a-z_]+)"/g)].map((m) => m[1])).toEqual(['done', 'partly', 'not_yet', 'not_applicable']);
-    expect(h).toContain("Saving &#x27;Partly&#x27; or &#x27;Not yet&#x27; keeps a finding open for this question, or opens one.");
+    expect(h).toContain(FINDING_NOTE);
     expect(h).not.toContain('Reason code (required)');
     const ny = html({}, { status: 'not_yet' });
     expect(ny).toContain('Reason code (required)');
@@ -120,7 +123,7 @@ describe('S-12 status line and conflict view', () => {
     const h = renderToStaticMarkup(<SaveStatus status={null} draftSavedAt={null} storageUnavailable={false} />);
     expect(h).toMatch(/role="status"[^>]*><\/[a-z]+>/);
     expect(h).toMatch(/role="alert"[^>]*><\/[a-z]+>/);
-    expect(renderToStaticMarkup(<SaveStatus status={null} draftSavedAt={null} storageUnavailable />)).toContain('This browser cannot keep drafts. Save before leaving this page.');
+    expect(renderToStaticMarkup(<SaveStatus status={null} draftSavedAt={null} storageUnavailable />)).toContain(DECISION_FORM_COPY.noStorage);
     const failed = renderToStaticMarkup(<SaveStatus status={{ id: 'M-05', text: 'Not saved: connection lost. Your answer is kept on this device. Retry.', live: 'assertive', next: 'retry' }} draftSavedAt={null} storageUnavailable={false} />);
     expect(failed).toMatch(/role="status"[^>]*><\/[a-z]+>/);
     expect(failed).toMatch(/role="alert"[^>]*>Not saved: connection lost\./);
@@ -128,8 +131,8 @@ describe('S-12 status line and conflict view', () => {
 
   it('F4 UX-26: when the browser cannot keep drafts, the failure the screen reader hears says so too', () => {
     const h = renderToStaticMarkup(<SaveStatus status={{ id: 'M-05', text: 'Not saved: connection lost. Your answer is kept on this device. Retry.', live: 'assertive', next: 'retry' }} draftSavedAt={null} storageUnavailable />);
-    expect(h).toMatch(/role="alert"[^>]*>Not saved: connection lost\. Your answer is kept on this device\. Retry\. This browser cannot keep drafts\. Save before leaving this page\.</);
-    expect(h.match(/This browser cannot keep drafts/g)).toHaveLength(1);
+    expect(h).toMatch(new RegExp(`role="alert"[^>]*>Not saved: connection lost\\. Your answer is kept on this device\\. Retry\\. ${DECISION_FORM_COPY.noStorage}<`));
+    expect(h.match(new RegExp(DECISION_FORM_COPY.noStorage, 'g'))).toHaveLength(1);
   });
 
   it('CR-2 UX-26: a gate alert with no storage is the gate line alone, without "Save before leaving this page"', () => {
@@ -137,21 +140,21 @@ describe('S-12 status line and conflict view', () => {
       const gate = gateStatus(nav);
       const h = renderToStaticMarkup(<SaveStatus status={gate} draftSavedAt={null} storageUnavailable />);
       expect(h).toMatch(new RegExp(`role="alert"[^>]*>${gate.text.replace(/[.]/g, '\\.')}</`));
-      expect(h).not.toContain('This browser cannot keep drafts');
+      expect(h).not.toContain(DECISION_FORM_COPY.noStorage);
     }
   });
 
   it('CR-1 ruling 5 UX-25: after a save that the person typed past, the line says Saved and also that a newer draft is on the device', () => {
     const h = renderToStaticMarkup(<SaveStatus status={{ id: 'M-03', text: 'Saved as version 1 at 10:42 EAT. Decided by: you. Entered by: you.', live: 'polite', next: 'none' }} draftSavedAt="2026-10-12T07:43:00.000Z" storageUnavailable={false} />);
     expect(h).toMatch(/role="status"[^>]*>Saved as version 1 at 10:42 EAT\./);
-    expect(h).toMatch(/Draft on this device, not saved yet \(\d{2}:\d{2} \S+\)/);
+    expect(h).toMatch(new RegExp(DECISION_FORM_COPY.unsaved));
     // with no newer draft, "Saved" stands alone
-    expect(renderToStaticMarkup(<SaveStatus status={{ id: 'M-03', text: 'Saved as version 1 at 10:42 EAT.', live: 'polite', next: 'none' }} draftSavedAt={null} storageUnavailable={false} />)).not.toContain('Draft on this device');
+    expect(renderToStaticMarkup(<SaveStatus status={{ id: 'M-03', text: 'Saved as version 1 at 10:42 EAT.', live: 'polite', next: 'none' }} draftSavedAt={null} storageUnavailable={false} />)).not.toContain(DECISION_FORM_COPY.unsaved);
   });
 
   it('UX-28 M-10: the conflict view shows both reasons, who saved, and the three actions', () => {
     const h = renderToStaticMarkup(<ConflictView current={{ ...V2, reason: 'Theirs' }} mine={{ ...EMPTY, reason: 'Mine' }} viewerId="u-me" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
-    expect(h).toContain('Theirs'); expect(h).toContain('Mine'); expect(h).toContain('Version 2 was saved by Joseph K.');
+    expect(h).toContain('Theirs'); expect(h).toContain('Mine'); expect(h).toMatch(/<p>Joseph K\. saved a newer version at \d{2}:\d{2} \S+\. Compare it with your version, then choose what to keep\.<\/p>/);
     expect(h).toMatch(/<h3[^>]*tabindex="-1"[^>]*>Not saved: someone saved a newer version\.<\/h3>/i);
     expect([...h.matchAll(/<button[^>]*>([^<]+)<\/button>/g)].map((m) => m[1])).toEqual(['Save mine as version 3', 'Edit mine first', 'Discard mine']);
   });
@@ -159,7 +162,7 @@ describe('S-12 status line and conflict view', () => {
   it('F3 UX-28: "Your answer" lists the restored draft\'s evidence the block cannot name, as Save mine will attach it', () => {
     const h = renderToStaticMarkup(<ConflictView current={V2} mine={{ ...EMPTY, reason: 'Mine' }} viewerId="u-me" mineEvidence={['memo.pdf']} mineKeptEvidence={2} onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
     expect(h).toContain('memo.pdf');
-    expect(h).toContain('This answer also holds 2 evidence items added before the page was closed. It is attached when you save.');
+    expect(h).toContain(DECISION_OUTCOME_COPY.keptEvidence(2));
   });
 
   it('F10 FR-DEC-08: when the newer version is a withdrawal, the conflict view says so', () => {
@@ -210,7 +213,7 @@ describe('S-12 regions', () => {
     expect(v2).not.toContain('No decision yet.');
     expect(v2).toContain('Partly');
     expect(v2).toContain('version 2');
-    expect(v2).toContain('Decided by: Principal investigator (outside role), 12 Oct 2026.');
+    expect(v2).toContain(`Decided by: ${deciderLabel({ kind: 'outside_role', role: 'principal_investigator' }, '', 'record')}, 12 Oct 2026.`);
     expect(v2).toMatch(/Entered by: Joseph K\., 12 Oct 2026 \d{2}:\d{2} \S+/);
     expect(v2).toMatch(/<a[^>]*href="\/h"[^>]*>History: 2 versions<\/a>/);
   });

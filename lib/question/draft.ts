@@ -1,4 +1,5 @@
 import { declaredDateFromParts, utcPlus14Date, validateDecisionFields, type DateParts } from '@/lib/decision/rules';
+import { DECISION_OUTCOME_COPY } from '@/lib/decision/outcome/copy';
 import type { DraftKey, DraftStore, StoredDraft } from '@/lib/client/drafts';
 import type { QuestionPanelData } from '@/lib/question/panel';
 import type { LoadedQuestion } from '@/types/content';
@@ -127,9 +128,9 @@ export function isDraftValue(v: unknown): v is DecisionDraft {
     && (d.reasonCode === null || typeof d.reasonCode === 'string') && (d.decidedBy === null || typeof d.decidedBy === 'object');
 }
 
-/** The line for evidence a restored draft holds that the evidence block cannot name (S-12 and W-4's "Your answer"). */
+/** The line for evidence a restored draft holds that the evidence block cannot name (S-12 and W-4's "Your version"). */
 export function keptEvidenceLine(n: number): string {
-  return `This answer also holds ${n} evidence ${n === 1 ? 'item' : 'items'} added before the page was closed. It is attached when you save.`;
+  return DECISION_OUTCOME_COPY.keptEvidence(n);
 }
 
 /**

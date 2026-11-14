@@ -1295,11 +1295,6 @@
     "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
   },
   {
-    "file": "components/decision/SaveStatus.tsx",
-    "text": "Draft on this device, not saved yet (${…})",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
     "file": "components/decision/SignOutWithDraftsGuard.tsx",
     "text": "Delete them and sign out",
     "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
