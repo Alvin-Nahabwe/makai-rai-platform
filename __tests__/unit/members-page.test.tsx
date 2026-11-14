@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { InvitationView, MemberView } from '@/types/api';
+import { ORG_COPY } from '@/lib/org/copy';
 
 /** S-22's page: it pages what the service returns (UX-40, UX-37) and gives pending invitations only to roles that may invite (obligation M10). The mocks stand in for the gate and the service, which other tests prove. */
 const memberViews = (n: number): MemberView[] => Array.from({ length: n }, (_, i) => ({
@@ -47,6 +48,13 @@ describe('S-22 page', () => {
     const page = await html({});
     expect(listInvitations).toHaveBeenCalledTimes(1);
     expect(page).toContain(MARKER_EMAIL);
+  });
+
+  it.each([['owner', true], ['admin', true], ['assessor', false], ['reviewer', false], ['viewer', false]] as const)('FR-MEM-01 (OR3): the line under the heading, which says what Owners and Admins do here, is shown to a %s: %s', async (role, shown) => {
+    state.role = role;
+    const page = await html({});
+    expect(page.includes(ORG_COPY.members.lead)).toBe(shown);
+    expect(page).toMatch(new RegExp(`<h1[^>]*>${ORG_COPY.titles.members}</h1>`));
   });
 
   it('UX-37: the S-22 page and its manager import no next/link', () => {

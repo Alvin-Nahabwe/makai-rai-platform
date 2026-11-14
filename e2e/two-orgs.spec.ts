@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { INVITATION_PAGE_COPY } from '../lib/org/copy';
 import { roleWithArticle } from '../lib/org/copy';
+import { MEMBERS_COPY } from '../lib/org/members/copy';
 import fs from 'node:fs';
 import type { OrgRole } from '@prisma/client';
 import { can } from '../lib/authz/policy';
@@ -92,7 +93,7 @@ test.describe('an invitation moves a third person into an org, at the invited ro
     const invitePost = ownerPage.waitForResponse(
       (r) => r.url().includes('/members') && r.request().method() === 'POST',
     );
-    await ownerPage.getByRole('checkbox', { name: 'Show link', exact: true }).check();
+    await ownerPage.getByRole('checkbox', { name: MEMBERS_COPY.invite.showLink, exact: true }).check();
     await ownerPage.getByRole('button', { name: 'Invite' }).click();
     const body = await (await invitePost).json();
     expect(body.emailSent, 'the email leg must fail locally, not succeed remotely').toBe(false);

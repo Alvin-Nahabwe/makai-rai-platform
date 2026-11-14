@@ -9,6 +9,8 @@ import {
   addDecision, addFinding, addIssuedDocument, addProject, addSealRow, addStageReview, buildOrg, type OrgFixture,
 } from '../__tests__/helpers/recordFixture';
 import { PERSONAL_DATA_COPY } from '../lib/account/copy';
+import { ADMIN_FORMS_COPY } from '../lib/admin/forms/copy';
+import { MEMBERS_COPY } from '../lib/org/members/copy';
 import { adminSeat } from './fixtures/manifest';
 import { failOnDialog } from './helpers/dialogs';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
@@ -169,6 +171,11 @@ type Opened = {
   focus: Locator | 'trigger';
   /** True where the focus target is inside the confirmation, so the kit's focus check applies to it. */
   focusInside: boolean;
+  /**
+   * The confirmation's cancel button, where it is not named "Cancel": the owner invitation's is "Keep invitation", and a
+   * name match on "Cancel" would find its confirm button, "Cancel invitation" (plan 1A Task 19, coordinator's answer Q7).
+   */
+  cancel?: Locator;
 };
 /**
  * `passesWithoutRepair` names, per size, a pinned case that passes with the repair switched off, and why: it checks the
@@ -249,32 +256,55 @@ const SCREENS: Screen[] = [
   },
   {
     name: 'members, remove (S-26)', who: 'owner', expect: { wide: 'strip', narrow: 'strip' },
+    passesWithoutRepair: {
+      wide: 'not established since plan 1A Task 19 moved focus from the button that opened the confirmation to its Cancel button',
+      narrow: 'not established since plan 1A Task 19 moved focus from the button that opened the confirmation to its Cancel button',
+    },
     open: async (page) => {
       await load(page, `/orgs/${fx.org.slug}/settings/members`);
       const name = fx.members.viewer.name;
-      return { trigger: page.getByRole('button', { name: `Remove ${name}` }), confirmation: page.getByRole('group', { name }), focus: 'trigger', focusInside: false };
+      const confirmation = page.getByRole('group', { name });
+      // The confirmation has no field, so the screen focuses its first button, Cancel (MembersManager.tsx; ruling X-4).
+      return {
+        trigger: page.getByRole('button', { name: MEMBERS_COPY.members.removeName(name) }), confirmation,
+        focus: confirmation.getByRole('button', { name: 'Cancel', exact: true }), focusInside: true,
+      };
     },
   },
   {
     name: 'members, revoke (S-26)', who: 'owner', expect: { wide: 'strip', narrow: 'strip' },
+    passesWithoutRepair: {
+      wide: 'not established since plan 1A Task 19 moved focus from the button that opened the confirmation to its "Keep invitation" button',
+      narrow: 'not established since plan 1A Task 19 moved focus from the button that opened the confirmation to its "Keep invitation" button',
+    },
     open: async (page, baseURL) => {
       revealInvitation ??= newInvitation(baseURL);
       const { email } = await revealInvitation;
       await load(page, `/orgs/${fx.org.slug}/settings/members`);
+      const confirmation = page.getByRole('group', { name: MEMBERS_COPY.invitations.confirmObject(email) });
+      // The confirmation has no field, so the screen focuses its first button, "Keep invitation" (MembersManager.tsx; ruling X-4).
       return {
-        trigger: page.getByRole('button', { name: `Revoke invitation for ${email}` }), confirmation: page.getByRole('group', { name: `Invitation for ${email}` }),
-        focus: 'trigger', focusInside: false,
+        trigger: page.getByRole('button', { name: MEMBERS_COPY.invitations.cancelTo(email) }), confirmation,
+        focus: confirmation.getByRole('button', { name: MEMBERS_COPY.invitations.keep }), focusInside: true,
+        cancel: confirmation.getByRole('button', { name: MEMBERS_COPY.invitations.keep }),
       };
     },
   },
   {
     name: 'first-owner invitation (S-24)', who: 'admin', expect: { wide: 'strip', narrow: 'strip' },
+    passesWithoutRepair: {
+      wide: 'not established since plan 1A Task 19 moved focus from the button that opened the confirmation to its "Keep invitation" button',
+      narrow: 'not established since plan 1A Task 19 moved focus from the button that opened the confirmation to its "Keep invitation" button',
+    },
     open: async (page, baseURL) => {
       const { orgId, email } = await ownerInvitationOrg(baseURL);
       await load(page, `/admin/organisations/${orgId}`);
+      const confirmation = page.getByRole('group', { name: ADMIN_FORMS_COPY.invitation.confirmObject(email) });
+      // The confirmation has no field, so the screen focuses its first button, "Keep invitation" (OwnerInvitationBox.tsx; ruling X-4).
       return {
-        trigger: page.getByRole('button', { name: 'Revoke invitation' }).first(), confirmation: page.getByRole('group', { name: `Invitation to ${email}` }),
-        focus: 'trigger', focusInside: false,
+        trigger: page.getByRole('button', { name: ADMIN_FORMS_COPY.invitation.cancelTrigger }).first(), confirmation,
+        focus: confirmation.getByRole('button', { name: ADMIN_FORMS_COPY.invitation.keep }), focusInside: true,
+        cancel: confirmation.getByRole('button', { name: ADMIN_FORMS_COPY.invitation.keep }),
       };
     },
   },
@@ -374,7 +404,7 @@ async function arrange(page: Page, o: Opened, expected: Geometry): Promise<{ wid
   const stripOf = o.focus === 'trigger' ? o.confirmation : o.focus;
   const probe = await placeOf(stripOf);
   const whole = await placeOf(o.confirmation);
-  await o.confirmation.getByRole('button', { name: 'Cancel' }).click();
+  await (o.cancel ?? o.confirmation.getByRole('button', { name: 'Cancel' })).click();
   await expect(o.confirmation).toHaveCount(0);
   // The least window height whose visible box holds the whole confirmation, with 8 px to spare.
   const now0 = await placeOf(o.trigger);
@@ -602,11 +632,11 @@ test.describe('the confirm button while the request is sent', () => {
     const page = await pageAs(browser, 'admin', WIDE);
     const { orgId, email } = await ownerInvitationOrg(baseURL!);
     await load(page, `/admin/organisations/${orgId}`);
-    await page.getByRole('button', { name: 'Revoke invitation' }).first().click();
-    const confirmation = page.getByRole('group', { name: `Invitation to ${email}` });
+    await page.getByRole('button', { name: ADMIN_FORMS_COPY.invitation.cancelTrigger }).first().click();
+    const confirmation = page.getByRole('group', { name: ADMIN_FORMS_COPY.invitation.confirmObject(email) });
     const held = await hold(page, /\/owner-invitations\/[^/]+\/revoke$/, 'POST', (r) => r.continue());
-    await busyPress(page, confirmation.getByRole('button', { name: 'Revoke invitation' }), held);
-    await expect(page.getByText(`Revoked. The invitation to ${email} no longer works.`)).toBeVisible();
+    await busyPress(page, confirmation.getByRole('button', { name: ADMIN_FORMS_COPY.invitation.confirmAction }), held);
+    await expect(page.getByText(ADMIN_FORMS_COPY.invitation.cancelled(email))).toBeVisible();
     await held.done();
   });
 
@@ -631,18 +661,18 @@ test.describe('the confirm button while the request is sent', () => {
     await held.done();
   });
 
-  test('UX-29 NFR-A11Y-02: members, revoke (S-26) at 1280 wide: the confirm button, neither busy nor disabled there, keeps focus while the revoke is held, and the screen\'s own guard sends one request for two Enters', async ({ browser, baseURL }) => {
+  test('SC 2.4.3 UX-29 NFR-A11Y-02: members, revoke (S-26) at 1280 wide: the confirm button keeps focus while the cancellation is held, and a second Enter sends nothing', async ({ browser, baseURL }) => {
     test.setTimeout(120_000);
     const page = await pageAs(browser, 'owner', WIDE);
-    const invitation = await newInvitation(baseURL!);   // this case's own, so revoking it for real disturbs no other case
+    const invitation = await newInvitation(baseURL!);   // this case's own, so cancelling it for real disturbs no other case
     await load(page, `/orgs/${fx.org.slug}/settings/members`);
-    await page.getByRole('button', { name: `Revoke invitation for ${invitation.email}` }).click();
-    const confirmation = page.getByRole('group', { name: `Invitation for ${invitation.email}` });
+    await page.getByRole('button', { name: MEMBERS_COPY.invitations.cancelTo(invitation.email) }).click();
+    const confirmation = page.getByRole('group', { name: MEMBERS_COPY.invitations.confirmObject(invitation.email) });
     const held = await hold(page, `/invitations/${invitation.id}/revoke`, 'POST', (r) => r.continue());
-    // MembersManager.tsx passes no `busy` to the confirmation: while the request is held its confirm button is neither busy nor
-    // disabled, nothing moves focus, and the second press is stopped by the screen's own in-flight guard, not by the button.
-    await busyPress(page, confirmation.getByRole('button', { name: 'Revoke invitation', exact: true }), held, { focused: true, busy: null, disabled: false });
-    await expect(page.getByText(`Invitation for ${invitation.email} revoked.`)).toBeVisible();
+    // Since plan 1A Task 19 the confirmation's confirm button is the kit's busy button while its own request is held:
+    // aria-busy, focused, not disabled, and a press that does nothing (the screen's in-flight guard stays behind it).
+    await busyPress(page, confirmation.getByRole('button', { name: MEMBERS_COPY.invitations.confirmAction, exact: true }), held);
+    await expect(page.getByText(MEMBERS_COPY.cancelled(invitation.email))).toBeVisible();
     await expect(confirmation).toHaveCount(0);
     await held.done();
   });

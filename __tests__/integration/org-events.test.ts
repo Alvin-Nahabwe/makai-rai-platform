@@ -9,6 +9,7 @@ import { buildOrg, buildPlatformAdmin, ctxFor, type FixtureAccount, type OrgFixt
 import { listOrganisationEvents } from '../../lib/data/orgEvents';
 import { ALL_ORG_EVENT_ACTIONS, OrganisationEventsList, actionWords } from '../../components/org/OrganisationEventsList';
 import type { OrgEventView } from '../../types/api';
+import { ORG_COPY } from '../../lib/org/copy';
 
 /**
  * S-30's read and its slot (FR-ORG-09; SRS lines 333, 577): the organisation's own administrator and membership
@@ -166,9 +167,23 @@ describe('the S-30 action rows', () => {
     const html = renderToString(createElement(OrganisationEventsList, { events: [adminEvent], hasMore: false }));
     expect(html).toContain('MAK-AI administrator');
     expect(html).toContain('<caption');
-    for (const text of ['Corrected the organisation name', 'CTRL-9', 'Old Name', '2 Nov 2026']) expect(html).toContain(text);
+    for (const text of [ORG_COPY.events.actions.organisation_name_corrected, 'CTRL-9', 'Old Name', '2 Nov 2026']) expect(html).toContain(text);
     expect(html).not.toContain('platform_admin');
+    // A member's role at the time is the vocabulary's word (OR79), never the raw value.
+    const ownerEvent: OrgEventView = { ...adminEvent, id: 'e2', actorName: 'Olu Owner', actorRole: 'owner', action: 'member_invited', requestReference: null, previousValue: null };
+    const owned = renderToString(createElement(OrganisationEventsList, { events: [ownerEvent], hasMore: false }));
+    expect(owned).toContain('Olu Owner (Owner)');
+    expect(owned).not.toContain('(owner)');
     expect(html).not.toContain('Show older');
     expect(renderToString(createElement(OrganisationEventsList, { events: [adminEvent], hasMore: true }))).toContain('Show older');
+  });
+
+  it('FR-ORG-09 (answer Q23): the six column headings, the fifth naming both things its cell may hold', () => {
+    const event: OrgEventView = { id: 'e3', actorName: 'Ada Admin', actorRole: 'platform_admin', action: 'owner_invitation_issued',
+      targetName: null, reason: null, requestReference: 'CTRL-23', previousValue: null, at: '2026-11-02T07:42:00.000Z' };
+    const html = renderToString(createElement(OrganisationEventsList, { events: [event], hasMore: false }));
+    const headings = [...html.matchAll(/<th[^>]*scope="col"[^>]*>([^<]*)<\/th>/g)].map((m) => m[1]);
+    expect(headings).toEqual(['When', 'Who', 'What', 'Member or invitation', 'Reason or request reference', 'Before the change']);
+    expect(headings[4]).toBe(ORG_COPY.events.columns.reason);
   });
 });

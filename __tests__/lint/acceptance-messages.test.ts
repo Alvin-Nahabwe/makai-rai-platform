@@ -32,9 +32,11 @@ describe('S-04 and S-05 take their shared texts from one place', () => {
   });
 
   it('7.4.2 S-04 / S-05: the not-created copy is written in one component', () => {
-    // S-24 (ORG) shows the old 7.4.2 sentence for its own create form (SRS line 2387, the S-23 / S-24 row; plan 1A Task 19 words it);
-    // S-04 and S-05 take theirs from the acceptances copy module, one text per kind of send.
-    expect(filesMatching('Not created: connection lost. Nothing was created.')).toEqual(['components/admin/CreateOrganisationForm.tsx']);
+    // S-24 (ORG) takes its create form's lost-reply sentence from the administrator forms' copy module (plan 1A Task 19,
+    // ruling L5-7: the Retry replays the same request id); S-04 and S-05 take theirs from the acceptances copy module,
+    // one text per kind of send.
+    expect(filesMatching('Not created yet. We did not get a reply, so the organisation may already be created.')).toEqual(['lib/admin/forms/copy.ts']);
+    expect(filesMatching('Not created: connection lost. Nothing was created.')).toEqual([]);
     expect(filesMatching('We did not get a reply, so your account may already be created.')).toEqual(['lib/legal/acceptances/copy.ts']);
     expect(filesMatching('Your choice was not saved because of a problem on our side. Try again.')).toEqual(['lib/legal/acceptances/copy.ts']);
   });
