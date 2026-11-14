@@ -28,8 +28,11 @@ const { invitationByToken } = await import('@/lib/data/preauth');
 const { tryResolveIdentity } = await import('@/lib/auth/identity');
 const { PASSWORD_MIN_LENGTH } = await import('@/lib/validate');
 const { VALIDATION_COPY } = await import('@/lib/http/copy');
+const { INVITATION_COPY, INVITATION_PAGE_COPY } = await import('@/lib/invitations/copy');
+const { ACCEPTANCES_COPY } = await import('@/lib/legal/acceptances/copy');
+const { roleWithArticle } = await import('@/lib/org/copy');
 
-const M23 = 'This invitation link does not work. It may have expired, been used, or been replaced by a newer one. Ask the person who invited you to send it again.';
+const M23 = INVITATION_PAGE_COPY.unusable;
 const TEXTS = STUB_LEGAL_TEXTS.slice();
 const pendingInvitation: Invitation & { org: { name: string; slug: string }; invitedBy: { name: string } } = {
   id: 'inv1', orgId: 'org1', email: 'head.of.lab@example.ac.ug', role: 'assessor', tokenHash: 'h'.repeat(64), status: 'pending',
@@ -54,16 +57,17 @@ describe('S-04, the invitation page (FR-ACC-01)', () => {
   it('M-23 FR-ACC-01: an unusable link shows one message', async () => {
     vi.mocked(invitationByToken).mockResolvedValue(null);
     const markup = html(await InvitationPage({ params: Promise.resolve({ token: 'x' }) }));
-    expect(markup).toContain(`<p>${M23}</p>`);
+    expect(markup).toContain(`<h1>${INVITATION_PAGE_COPY.unusableHeading}</h1><p>${M23}</p>`);
     expect(markup).not.toMatch(/<input|<button|<form/);
-    expect(text(markup)).not.toMatch(/invited you as|The invitation expires|Create your account/);       // no organisation, role or inviter name
+    expect(text(markup)).not.toMatch(/invited you to join|This invitation ends|Create your account/);       // no organisation, role or inviter name
   });
 
   it('FR-MEM-01 FR-ACC-01: S-04 shows the inviter\'s account name, the role and the expiry date', async () => {
     vi.mocked(invitationByToken).mockResolvedValue(pendingInvitation);
     const markup = html(await InvitationPage({ params: Promise.resolve({ token: 't'.repeat(64) }) }));
     expect(markup).toContain('<h1>You are invited to Makerere CAI Lab</h1>');
-    expect(text(markup)).toContain('Amina N. invited you as an assessor. The invitation expires on 4 Nov 2026.');
+    expect(text(markup)).toContain(INVITATION_PAGE_COPY.invitedLine('Amina N.', 'an Assessor', '4 Nov 2026'));
+    expect(text(markup)).toContain('Amina N. invited you to join as an Assessor. This invitation ends on 4 Nov 2026.');
     expect(markup).toContain('value="head.of.lab@example.ac.ug"');
   });
 
@@ -74,54 +78,66 @@ describe('S-04, the invitation page (FR-ACC-01)', () => {
   });
 
   it('FR-MEM-01: the invited line uses "a" or "an" for the role', async () => {
-    for (const [role, article] of [['owner', 'an'], ['admin', 'an'], ['assessor', 'an'], ['reviewer', 'a'], ['viewer', 'a']] as const) {
+    for (const [role, withArticle] of [['owner', 'an Owner'], ['admin', 'an Admin'], ['assessor', 'an Assessor'], ['reviewer', 'a Reviewer'], ['viewer', 'a Viewer']] as const) {
+      expect(roleWithArticle(role)).toBe(withArticle);
       vi.mocked(invitationByToken).mockResolvedValue({ ...pendingInvitation, role });
       const markup = html(await InvitationPage({ params: Promise.resolve({ token: 't'.repeat(64) }) }));
-      expect(text(markup)).toContain(`Amina N. invited you as ${article} ${role}. The invitation expires on 4 Nov 2026.`);
+      expect(text(markup)).toContain(`Amina N. invited you to join as ${withArticle}. This invitation ends on 4 Nov 2026.`);
     }
   });
 
   it('FR-ACC-01: after creation S-04 lands on the dashboard with welcome=1 and nothing else in the address', () => {
     expect(welcomePath('lab')).toBe('/orgs/lab/dashboard?welcome=1');
-    expect(registerOutcome(201, { orgSlug: 'lab' })).toEqual({ kind: 'created', orgSlug: 'lab' });
+    expect(registerOutcome(201, { orgSlug: 'lab' }, 't')).toEqual({ kind: 'created', orgSlug: 'lab' });
   });
 
   it('FR-ACC-01 (7.4.2 S-04): while sending, S-04 shows "Creating your account..."', () => {
     const markup = view({ step: 'acceptances', send: { state: 'sending' } });
-    expect(markup).toMatch(/<p[^>]*role="status"[^>]*>Creating your account\.\.\.<\/p>/);
+    expect(markup).toMatch(/<div[^>]*role="status"[^>]*class="ui-status"[^>]*>Creating your account\.\.\.<\/div>/);
     expect(markup).toMatch(/<button[^>]*type="submit"[^>]*disabled=""[^>]*>Create account<\/button>/);
   });
 
   it('FR-ACC-01 (7.4.2 S-04): a lost connection shows the not-created text with Try again', () => {
     const markup = view({ step: 'acceptances', send: { state: 'lost' } });
-    expect(text(markup.match(/<div[^>]*role="alert"[^>]*>.*?<\/div>/)?.[0] ?? '')).toBe('Not created: connection lost. Nothing was created. Try again');
+    expect(text(markup.match(/<div[^>]*role="alert"[^>]*>.*?<\/div>/)?.[0] ?? '')).toBe(ACCEPTANCES_COPY.send.account.lost);
+    expect(ACCEPTANCES_COPY.send.account.lost).toBe('Your account was not created. Check your internet connection and try again.');
     expect(markup).toMatch(/<button[^>]*type="button"[^>]*>Try again<\/button>/);
+    // A server fault on the new-account branch, and both texts on the other kind of send.
+    expect(text(html(<SendStatus send={{ state: 'refused' }} what="account" sendingText="x" onRetry={vi.fn()} />))).toContain('Your account was not created because of a problem on our side. Try again.');
+    expect(text(html(<SendStatus send={{ state: 'lost' }} what="choice" sendingText="x" onRetry={vi.fn()} />))).toContain('Your choice was not saved. Check your internet connection and try again.');
+    expect(text(html(<SendStatus send={{ state: 'refused' }} what="choice" sendingText="x" onRetry={vi.fn()} />))).toContain('Your choice was not saved because of a problem on our side. Try again.');
   });
 
   it('FR-ACC-01 (7.4.2 S-04 validation): an empty name and a short password are named on their fields and nothing is posted', () => {
-    expect(signUpErrors('', 'short')).toEqual({ name: VALIDATION_COPY.required('name'), password: VALIDATION_COPY.passwordTooShort(PASSWORD_MIN_LENGTH) });
+    expect(signUpErrors('', 'short')).toEqual({ name: INVITATION_COPY.nameRequired, password: VALIDATION_COPY.passwordTooShort(PASSWORD_MIN_LENGTH) });
+    expect(signUpErrors('   ', 'a'.repeat(PASSWORD_MIN_LENGTH))).toEqual({ name: INVITATION_COPY.nameRequired });
+    expect(INVITATION_COPY.nameRequired).toBe('Enter your name.');
     expect(signUpErrors('  Amina  ', 'a'.repeat(PASSWORD_MIN_LENGTH))).toEqual({});
     const markup = view({ errors: { name: 'Name is required', password: `Password must be at least ${PASSWORD_MIN_LENGTH} characters` } });
     expect(tagOf(markup, 'name')).toContain('aria-invalid="true"');
-    expect(tagOf(markup, 'name')).toMatch(/aria-describedby="name-error"/);
+    expect(tagOf(markup, 'name')).toMatch(/aria-describedby="name-hint name-error"/);
     expect(tagOf(markup, 'name-error')).not.toBe('');
     expect(markup).toMatch(/id="name-error"[^>]*>Name is required</);
     expect(tagOf(markup, 'new-password')).toContain('aria-invalid="true"');
-    expect(tagOf(markup, 'new-password')).toMatch(/aria-describedby="password-hint password-error"/);
-    expect(markup).toMatch(new RegExp(`id="password-error"[^>]*>Password must be at least ${PASSWORD_MIN_LENGTH} characters<`));
+    expect(tagOf(markup, 'new-password')).toMatch(/aria-describedby="new-password-hint new-password-error"/);
+    expect(markup).toMatch(new RegExp(`id="new-password-error"[^>]*>Password must be at least ${PASSWORD_MIN_LENGTH} characters<`));
     expect(markup).not.toContain('accept-terms');      // still on step 1: the acceptances are not shown
   });
 
   it('FR-ACC-01: the server answers map to what S-04 shows', () => {
-    expect(registerOutcome(410, { error: M23, code: 'invitation_unusable' })).toEqual({ kind: 'message', text: M23 });
-    expect(registerOutcome(409, { error: 'An account with this email already exists. Sign in to accept.', code: 'account_exists' }))
-      .toEqual({ kind: 'message', text: 'An account with this email already exists. Sign in to accept.' });
-    expect(registerOutcome(422, { code: 'validation', error: 'x', fields: [{ field: 'name', message: 'name is required' }] }))
+    expect(registerOutcome(410, { error: M23, code: 'invitation_unusable' }, 't')).toEqual({ kind: 'message', text: M23 });
+    // A 409 `account_exists` carries the sign-in link with the text (A 270): matched on status and code, never on the words.
+    const signInHref = `/login?callbackUrl=${encodeURIComponent(`/invitations/${'t'.repeat(64)}`)}`;
+    expect(registerOutcome(409, { error: 'any words at all', code: 'account_exists' }, 't'.repeat(64)))
+      .toEqual({ kind: 'message', text: INVITATION_COPY.accountExists, link: { href: signInHref, label: INVITATION_COPY.signIn } });
+    expect(INVITATION_COPY.accountExists).toBe('You already have an account with this email. Sign in to accept the invitation.');
+    expect(registerOutcome(409, { error: 'x', code: 'legal_text_changed' }, 't'.repeat(64))).toEqual({ kind: 'reload', text: 'x' });
+    expect(registerOutcome(422, { code: 'validation', error: 'x', fields: [{ field: 'name', message: 'name is required' }] }, 't'))
       .toEqual({ kind: 'fields', errors: { name: 'name is required' } });
-    expect(registerOutcome(422, { code: 'validation', error: 'To continue, accept the privacy notice.', missing: ['privacy'], fields: [] }))
+    expect(registerOutcome(422, { code: 'validation', error: 'To continue, accept the privacy notice.', missing: ['privacy'], fields: [] }, 't'))
       .toEqual({ kind: 'message', text: 'To continue, accept the privacy notice.' });
-    expect(registerOutcome(503, { error: 'Service unavailable', code: 'database_unavailable' })).toEqual({ kind: 'refused' });
-    expect(registerOutcome(500, null)).toEqual({ kind: 'refused' });
+    expect(registerOutcome(503, { error: 'Service unavailable', code: 'database_unavailable' }, 't')).toEqual({ kind: 'refused' });
+    expect(registerOutcome(500, null, 't')).toEqual({ kind: 'refused' });
   });
 
   it('FR-ACC-03: a 403 acceptances_required from route 32 (a kind missing, or a current version only offered) shows the form for those kinds', () => {
@@ -133,21 +149,24 @@ describe('S-04, the invitation page (FR-ACC-01)', () => {
 
   it('FR-ACC-03 (threat A5): a 409 legal_text_changed from route 31 reloads S-04 with the new text and shows M-39', () => {
     const m39 = 'A new version of the privacy notice was published on 2 Dec 2026.';
-    expect(registerOutcome(409, { error: m39, code: 'legal_text_changed', missing: ['privacy'] })).toEqual({ kind: 'reload', text: m39 });
+    expect(registerOutcome(409, { error: m39, code: 'legal_text_changed', missing: ['privacy'] }, 't')).toEqual({ kind: 'reload', text: m39 });
   });
 
   it('FR-ACC-01 (7.4.2 S-04): an account created whose automatic sign-in fails says so, with a link to sign in and land on the welcome', () => {
     expect(afterCreated(true, 'lab')).toEqual({ push: '/orgs/lab/dashboard?welcome=1' });
     const failed = afterCreated(false, 'lab');
-    expect(failed).toEqual({ send: { state: 'message', text: 'Your account was created. Sign in to continue.',
-      link: { href: '/login?callbackUrl=%2Forgs%2Flab%2Fdashboard%3Fwelcome%3D1', label: 'Sign in' } } });
-    const markup = html(<SendStatus send={'send' in failed ? failed.send : { state: 'idle' }} sendingText="x" onRetry={vi.fn()} />);
-    expect(markup).toMatch(/<div[^>]*role="alert"[^>]*>Your account was created\. Sign in to continue\. <a[^>]*href="\/login\?callbackUrl=%2Forgs%2Flab%2Fdashboard%3Fwelcome%3D1"[^>]*>Sign in<\/a><\/div>/);
+    expect(failed).toEqual({ send: { state: 'message', text: INVITATION_COPY.accountCreated,
+      link: { href: '/login?callbackUrl=%2Forgs%2Flab%2Fdashboard%3Fwelcome%3D1', label: INVITATION_COPY.signIn } } });
+    expect(INVITATION_COPY.accountCreated).toBe('Your account was created. Sign in to continue.');
+    // The link follows the alert region directly, outside it (a region holds a string only).
+    const markup = html(<SendStatus send={'send' in failed ? failed.send : { state: 'idle' }} what="account" sendingText="x" onRetry={vi.fn()} />);
+    expect(markup).toMatch(/<div[^>]*role="alert"[^>]*>(<span[^>]*>.*?<\/span>)?Your account was created\. Sign in to continue\.<\/div><p[^>]*><a[^>]*href="\/login\?callbackUrl=%2Forgs%2Flab%2Fdashboard%3Fwelcome%3D1"[^>]*>Sign in<\/a>/);
   });
 
   it('M-24: a different signed-in account sees both emails', () => {
     const markup = html(<AcceptInvitationClient {...props} viewerEmail="b@x.test" viewerUserId="u-b" />);
-    expect(text(markup.match(/<p[^>]*role="alert"[^>]*>.*?<\/p>/)?.[0] ?? '')).toBe('You are signed in as b@x.test, but this invitation is for a@x.test. Sign out, then open the link again.');
+    expect(text(markup.match(/<div[^>]*role="alert"[^>]*>.*?<\/div>/)?.[0] ?? '')).toBe(INVITATION_COPY.wrongAccount('b@x.test', 'a@x.test'));
+    expect(INVITATION_COPY.wrongAccount('b@x.test', 'a@x.test')).toBe('You are signed in as b@x.test, but this invitation is for a@x.test. Sign out, then open the link again.');
     expect(markup).toMatch(/<button[^>]*>Sign out<\/button>/);
   });
 
@@ -163,15 +182,17 @@ describe('S-04, the invitation page (FR-ACC-01)', () => {
     expect(email).toMatch(/autocomplete="username"/i);   // react-dom writes the attribute as autoComplete; HTML ignores case
     expect(email).toMatch(/readOnly=""|readonly=""/);
     expect(email).toContain('type="email"');
-    expect(markup).toMatch(/<label for="email"[^>]*>Email <span[^>]*>\(from the invitation; cannot be changed\)<\/span><\/label>/);
+    expect(markup).toMatch(/<label[^>]*for="email"[^>]*>Email<\/label>/);
+    expect(markup).toContain('This is the email your invitation was sent to. You cannot change it.');
     const pw = tagOf(markup, 'new-password');
     expect(pw).toMatch(/autocomplete="new-password"/i);
     expect(pw).toContain('type="password"');
-    expect(markup).toMatch(/<label for="new-password"[^>]*>Password<\/label>/);
-    expect(markup).toMatch(/<label for="name"[^>]*>Your name<\/label>/);
+    expect(markup).toMatch(/<label[^>]*for="new-password"[^>]*>Password[^<]*(<span[^>]*>[^<]*<\/span>)?<\/label>/);
+    expect(markup).toMatch(/<label[^>]*for="name"[^>]*>Your name[^<]*(<span[^>]*>[^<]*<\/span>)?<\/label>/);
+    expect(markup).toContain('Your colleagues will see this name. You cannot change it later.');
     expect(tagOf(markup, 'name')).toMatch(/autocomplete="name"/i);
     expect(markup).toContain(`At least ${PASSWORD_MIN_LENGTH} characters.`);
-    expect(markup).toMatch(/<button[^>]*aria-pressed="false"[^>]*>Show<\/button>/);
+    expect(markup).toMatch(/<button[^>]*aria-pressed="false"[^>]*>Show password<\/button>/);
     expect(markup).not.toMatch(/onpaste|oncopy|autocomplete="off"/i);
     expect(markup).toMatch(/Already have an account with this email\? <a href="\/login\?callbackUrl=%2Finvitations%2Ft{64}"[^>]*>Sign in to accept<\/a>/);
     expect(markup).toMatch(/<button[^>]*type="submit"[^>]*>Continue<\/button>/);
@@ -181,7 +202,7 @@ describe('S-04, the invitation page (FR-ACC-01)', () => {
     const markup = view({ step: 'acceptances', name: 'Amina', password: 'a'.repeat(12) });
     expect(markup.match(/<input[^>]*type="checkbox"[^>]*>/g)?.filter((b) => !/\bchecked\b/.test(b))).toHaveLength(3);
     expect(markup).toMatch(/<button[^>]*type="submit"[^>]*>Create account<\/button>/);
-    expect(markup).toContain('If you do not want to accept, close this page. Nothing has been created.');
+    expect(markup).toContain('If you do not want to accept, close this page. Your account will not be created.');
     expect(markup).not.toContain('type="password"');      // step 1 is done; the password is kept, not shown again
   });
 });

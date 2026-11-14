@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { MY_ACCEPTANCES_COPY } from '../lib/legal/copy';
 import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { test, expect, type Browser, type Page } from '@playwright/test';
@@ -157,9 +158,9 @@ test.describe('My account and sessions', () => {
     const res = await page.goto('/account');
     expect(res?.status()).toBe(200);
     await expect(page).toHaveURL(/\/account$/);
-    await expect(page.getByRole('heading', { name: 'What I have accepted' })).toBeVisible();
-    await expect(page.getByText(/no longer counts/).first()).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Review' }).first()).toHaveAttribute('href', '/acceptances');
+    await expect(page.getByRole('heading', { name: MY_ACCEPTANCES_COPY.heading })).toBeVisible();
+    await expect(page.getByText(MY_ACCEPTANCES_COPY.olderVersion).first()).toBeVisible();
+    await expect(page.getByRole('link', { name: MY_ACCEPTANCES_COPY.readAndAccept }).first()).toHaveAttribute('href', '/acceptances');
     await expect(page.getByRole('button', { name: 'Sign out everywhere' })).toBeVisible();
   });
 

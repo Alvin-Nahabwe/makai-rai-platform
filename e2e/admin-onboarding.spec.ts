@@ -9,6 +9,7 @@ import { expectNoHorizontalScroll } from './helpers/reflow';
 import { abortPendingBackgroundRequests } from './helpers/pendingLinks';
 import { testDb } from '../__tests__/helpers/db';
 import { buildOrg } from '../__tests__/helpers/recordFixture';
+import { COPY_LINK_COPY, INVITATION_COPY, INVITATION_PAGE_COPY } from '../lib/invitations/copy';
 
 /**
  * J-01, the MAK-AI administrator's journey (units/ORG.md Task 9): create an organisation with its institution's legal
@@ -65,8 +66,8 @@ test('FR-ORG-01 FR-ORG-02 UX-23: the administrator creates an organisation and r
   await page.getByRole('button', { name: 'Create organisation and send invitation' }).click();
   // The e2e server has no mail sender, so this is UX-23's failure branch: the sentence in the status region, the link.
   await expect(page.getByRole('main').getByRole('status').first()).toHaveText('Created. The invitation email could not be sent. Send this link another way.');
-  await expect(page.getByRole('button', { name: 'Copy link' })).toBeEnabled();
-  await expect(page.getByLabel('Invitation link')).toHaveValue(/\/invitations\/[0-9a-f]{64}$/);
+  await expect(page.getByRole('button', { name: COPY_LINK_COPY.copy })).toBeEnabled();
+  await expect(page.getByLabel(COPY_LINK_COPY.linkLabel)).toHaveValue(/\/invitations\/[0-9a-f]{64}$/);
   await expect(page.getByText(/^The link works once and expires on \d{1,2} [A-Z][a-z]{2} \d{4}\.$/)).toBeVisible();
 
   await page.getByRole('link', { name: 'Open the organisation' }).click();
@@ -112,20 +113,20 @@ test('FR-ORG-01 FR-ACC-03 FR-ORG-09: the first owner accepts the three texts fro
   await fillCreate(page, name, `owner-${randomUUID().slice(0, 8)}@fixture.test`, 'Owner University');
   await page.getByLabel(/^Show link/).check();
   await page.getByRole('button', { name: 'Create organisation and send invitation' }).click();
-  const link = await page.getByLabel('Invitation link').inputValue();
+  const link = await page.getByLabel(COPY_LINK_COPY.linkLabel).inputValue();
   const org = await testDb.organization.findFirstOrThrow({ where: { name }, select: { slug: true } });
   const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
   await abortPendingBackgroundRequests(context);
   const owner = await context.newPage();
   await owner.goto(link);
-  await owner.getByLabel('Your name').fill('Olive Owner');
-  await owner.getByLabel('Password', { exact: true }).fill('Owner-password-ok-1');
-  await owner.getByRole('button', { name: 'Continue' }).click();
+  await owner.getByLabel(INVITATION_COPY.name).fill('Olive Owner');
+  await owner.locator('#new-password').fill('Owner-password-ok-1');
+  await owner.getByRole('button', { name: INVITATION_COPY.continue }).click();
   // The acceptance step offers exactly three texts (the code's accepted kinds), none ticked: tick each.
   const boxes = owner.getByRole('checkbox');
   await expect(boxes).toHaveCount(3);
   for (const box of await boxes.all()) await box.check();
-  await owner.getByRole('button', { name: 'Create account' }).click();
+  await owner.getByRole('button', { name: INVITATION_COPY.createAccount }).click();
   await owner.waitForURL(`**/orgs/${org.slug}/dashboard?welcome=1`);
   await owner.goto(`/orgs/${org.slug}/settings/organisation`);
   await expect(owner.getByRole('heading', { level: 1, name: 'Organisation details' })).toBeVisible();
@@ -140,16 +141,16 @@ test('UX-23 FR-ORG-02: with the email failed and no link shown, Resend and show 
   await fillCreate(page, name, `nolink-${randomUUID().slice(0, 8)}@fixture.test`);
   await page.getByRole('button', { name: 'Create organisation and send invitation' }).click();
   await expect(page.getByRole('main').getByRole('status').first()).toHaveText('Created. The invitation email could not be sent. Send this link another way.');
-  await expect(page.getByLabel('Invitation link')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Resend and show link' }).click();
+  await expect(page.getByLabel(COPY_LINK_COPY.linkLabel)).toHaveCount(0);
+  await page.getByRole('button', { name: COPY_LINK_COPY.resend }).click();
   await expect(page.getByRole('main').getByRole('status').first()).toHaveText('Resent: the old link no longer works. The invitation email could not be sent. Send this link another way.');
-  const link = await page.getByLabel('Invitation link').inputValue();
+  const link = await page.getByLabel(COPY_LINK_COPY.linkLabel).inputValue();
   expect(link).toMatch(/\/invitations\/[0-9a-f]{64}$/);
   const outsider = await browser.newContext({ storageState: { cookies: [], origins: [] } });
   const s04 = await outsider.newPage();
   const res = await s04.goto(link);
   expect(res?.status()).toBe(200);
-  await expect(s04.getByRole('heading', { level: 1 })).toHaveText(`You are invited to ${name}`);
+  await expect(s04.getByRole('heading', { level: 1 })).toHaveText(INVITATION_PAGE_COPY.heading(name));
   await outsider.close();
 });
 

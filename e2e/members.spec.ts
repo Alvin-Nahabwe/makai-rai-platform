@@ -9,6 +9,7 @@ import { testDb } from '../__tests__/helpers/db';
 import { currentAcceptances } from '../__tests__/helpers/legalStub';
 import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from './fixtures/manifest';
 import type { OrgRole } from '@prisma/client';
+import { COPY_LINK_COPY } from '../lib/invitations/copy';
 
 /**
  * S-22 Members and S-30 Organisation details (FR-MEM-01 to FR-MEM-04, UX-23, UX-27, UX-29, NFR-INT-02,
@@ -297,7 +298,7 @@ test.describe('S-22 interactions', () => {
     await script(page, '**/api/v1/orgs/*/members', [{ status: 201, json: { ...INVITED, emailSent: true, acceptUrl: 'https://h/invitations/t' } }]);
     await inviteVia(page, 'reviewer@fixture.test', 'reviewer', { showLink: true });
     await expect(status(page, 'Invitation sent to reviewer@fixture.test.')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Copy link' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: COPY_LINK_COPY.copy })).toBeEnabled();
     await script(page, '**/api/v1/orgs/*/members/*', [{ status: 204 }]);
     await changeRoleVia(page, ASSESSOR_NAME, 'reviewer');
     await expect(status(page, 'Role changed to reviewer. It applies from their next action.')).toBeVisible();
@@ -314,7 +315,7 @@ test.describe('S-22 interactions', () => {
     await expect(status(page, 'This invitation was already created. If the email did not arrive, use Resend.')).toBeVisible();
     await expect(status(page, 'Invitation sent to')).toHaveCount(0);
     await expect(page.getByText('The invitation email could not be sent. Send this link another way.')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Copy link' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: COPY_LINK_COPY.copy })).toHaveCount(0);
     await script(page, '**/api/v1/orgs/*/invitations/*/resend', [{ status: 200, json: replayed }]);
     await resendVia(page);
     await expect(status(page, 'This invitation was already created. If the email did not arrive, use Resend.')).toBeVisible();
@@ -350,11 +351,11 @@ test.describe('S-22 interactions', () => {
       { status: 201, json: { ...INVITED, invitation: { ...INVITED.invitation, id: 'inv-second', email: 'second@fixture.test' }, emailSent: false, acceptUrl: null } },
     ]);
     await inviteVia(page, 'first@fixture.test', 'reviewer', { showLink: true });
-    await page.getByRole('button', { name: 'Copy link' }).click();
-    await expect(status(page, /Link copied|could not be copied/)).toBeVisible();
+    await page.getByRole('button', { name: COPY_LINK_COPY.copy }).click();
+    await expect(status(page, new RegExp(`${COPY_LINK_COPY.copied}|${COPY_LINK_COPY.copyFailed}`))).toBeVisible();
     await inviteVia(page, 'second@fixture.test', 'reviewer', { showLink: false });
     await expect(status(page, 'The invitation email could not be sent. Send this link another way.')).toBeVisible();
-    await expect(status(page, /Link copied|could not be copied/)).toHaveCount(0);
+    await expect(status(page, new RegExp(`${COPY_LINK_COPY.copied}|${COPY_LINK_COPY.copyFailed}`))).toHaveCount(0);
   });
 
   test('NFR-A11Y-02 (A11Y-2): a refused submit puts focus on the first invalid field', async ({ page }) => {
@@ -468,7 +469,7 @@ test.describe('S-22 interactions', () => {
     await inviteVia(page, 'reviewer@fixture.test', 'reviewer', { showLink: false });
     await expect(status(page, 'The invitation email could not be sent. Send this link another way.')).toBeVisible();
     const resent = await script(page, '**/api/v1/orgs/*/invitations/*/resend', [{ status: 201, json: { ...INVITED, emailSent: false, acceptUrl: 'https://h/invitations/t2' } }]);
-    await page.getByRole('button', { name: 'Resend and show link' }).click();
+    await page.getByRole('button', { name: COPY_LINK_COPY.resend }).click();
     await expect(page.getByRole('textbox', { name: /invitation link/i })).toHaveValue('https://h/invitations/t2');
     expect(resent).toHaveLength(1);
     expect(resent[0].body.showLink).toBe(true);

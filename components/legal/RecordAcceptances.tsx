@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AcceptancesForm, SendStatus, acceptancePairs, handleFailure, recordOutcome, textsKey, type SendState } from '@/components/legal/AcceptancesForm';
+import { ACCEPTANCES_COPY } from '@/lib/legal/acceptances/copy';
 import type { LegalTextVersion } from '@/types/legal';
 
 /*
@@ -45,9 +46,9 @@ export function RecordAcceptances({ texts, mode, userId }: { texts: LegalTextVer
 
   return (
     <>
-      <AcceptancesForm key={textsKey(texts)} texts={texts} mode={mode} userId={userId} submitLabel="Accept and continue" busy={send.state === 'sending'}
+      <AcceptancesForm key={textsKey(texts)} texts={texts} mode={mode} userId={userId} submitLabel={ACCEPTANCES_COPY.submit} busy={send.state === 'sending'}
         onAccepted={(kinds) => record(JSON.stringify({ acceptances: acceptancePairs(texts, kinds) }))} />
-      <SendStatus send={send} sendingText="Saving..." onRetry={() => { if (sent.current !== null) void record(sent.current); }} />
+      <SendStatus send={send} what="choice" sendingText={ACCEPTANCES_COPY.saving} onRetry={() => { if (sent.current !== null) void record(sent.current); }} />
     </>
   );
 }

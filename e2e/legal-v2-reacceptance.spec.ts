@@ -5,6 +5,8 @@ import { testDb } from '../__tests__/helpers/db';
 import { buildOrg, type FixtureAccount, type OrgFixture } from '../__tests__/helpers/recordFixture';
 import { currentLegalText } from '../lib/legal/registry';
 import { ACCEPT_LABEL } from '../components/legal/AcceptancesForm';
+import { INVITATION_COPY } from '../lib/invitations/copy';
+import { ACCEPTANCES_COPY } from '../lib/legal/acceptances/copy';
 import { ACCEPTED_KINDS, CONSENT_TYPE_FOR } from '../types/legal';
 import { draftKeys, draftValues, fillValid, stageOf, waitForQuestionPage } from './helpers/session';
 
@@ -67,14 +69,14 @@ test.describe('version 2 of the terms, the privacy notice and the consent to sto
     await expect(page).toHaveURL(/\/acceptances$/);
 
     // Each box is for the version now current, and its link opens that version's page.
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Before you continue');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(ACCEPTANCES_COPY.legend);
     await expect(page.getByRole('checkbox')).toHaveCount(3);
     for (const kind of ACCEPTED_KINDS) {
       const { version, publishedOn } = currentLegalText(kind);
       expect(version, `${kind}: a text later than version 1 is current`).not.toBe('1');
-      await expect(page.locator(`#accept-${kind}-meta`)).toContainText(`Version ${version}, published`);
+      await expect(page.locator(`#accept-${kind}-hint`)).toContainText(`Version ${version}, published`);
       expect(publishedOn).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-      await expect(page.locator(`#accept-${kind}-meta a`)).toHaveAttribute('href', `/legal/${kind}/${version}`);
+      await expect(page.locator(`#accept-${kind}-hint a`)).toHaveAttribute('href', `/legal/${kind}/${version}`);
       await expect(page.getByLabel(ACCEPT_LABEL[kind], { exact: true })).not.toBeChecked();
     }
     // The version-1 rows alone do not open the app: nothing was recorded for the new texts.
@@ -128,7 +130,7 @@ test.describe('version 2 of the terms, the privacy notice and the consent to sto
     await expect(page).toHaveURL(/\/acceptances$/);
     // The way back is the one the form itself takes after a refused save (lib/question/saveOutcome.ts navigationForOutcome).
     await page.goto(`/acceptances?callbackUrl=${encodeURIComponent(question)}`);
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Before you continue');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(ACCEPTANCES_COPY.legend);
 
     // The save itself is refused by the server, whatever the page does: 403 acceptances_required, nothing written.
     const refused = await page.request.post(`/api/v1/orgs/${fx.org.slug}/projects/${id}/decisions`, { data: {
@@ -174,14 +176,14 @@ test.describe('version 2 of the terms, the privacy notice and the consent to sto
       await route.continue({ postData: JSON.stringify({ ...sent, acceptances: versionOne }) });
     });
     await page.goto(`/invitations/${raw}`);
-    await page.getByLabel('Your name').fill('Stale Page');
-    await page.getByLabel('Password', { exact: true }).fill('Stale-page-ok-1');
-    await page.getByRole('button', { name: 'Continue' }).click();
+    await page.getByLabel(INVITATION_COPY.name).fill('Stale Page');
+    await page.locator('#new-password').fill('Stale-page-ok-1');
+    await page.getByRole('button', { name: INVITATION_COPY.continue }).click();
     for (const box of await page.getByRole('checkbox').all()) await box.check();
-    await page.getByRole('button', { name: 'Create account' }).click();
+    await page.getByRole('button', { name: INVITATION_COPY.createAccount }).click();
     await expect(page.getByRole('alert').filter({ hasText: 'A new version of the' }).first()).toBeVisible();
     for (const kind of ACCEPTED_KINDS) {
-      await expect(page.locator(`#accept-${kind}-meta`)).toContainText(`Version ${currentLegalText(kind).version}, published`);
+      await expect(page.locator(`#accept-${kind}-hint`)).toContainText(`Version ${currentLegalText(kind).version}, published`);
     }
     expect(await userCount(email)).toBe(0);
     await page.context().close();

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CopyLinkFallback } from '@/components/invitations/CopyLinkFallback';
+import { COPY_LINK_COPY } from '@/lib/invitations/copy';
 import MembersManager from '@/app/(authenticated)/orgs/[slug]/settings/members/MembersManager';
 import type { InvitationView, MemberView } from '@/types/api';
 
@@ -20,25 +21,25 @@ describe('CopyLinkFallback', () => {
     const [box] = tagsOf(html, 'input');
     expect(box).toMatchObject({ type: 'text', readonly: '', value: 'https://h/invitations/t' });
     expect(html).toMatch(new RegExp(`<label[^>]*for="${box.id}"[^>]*>[^<]*invitation link`, 'i'));
-    const copy = buttonsOf(html).find((b) => b.name === 'Copy link')!;
+    const copy = buttonsOf(html).find((b) => b.name === COPY_LINK_COPY.copy)!;
     expect(copy.attrs).toMatchObject({ type: 'button' });
     expect(copy.attrs).not.toHaveProperty('disabled');
     expect(text(html)).toContain('The link works once and expires on 4 Nov 2026.');
   });
   it('UX-23 NFR-A11Y-05: the box mounts with an empty status region (a region inserted with text is not announced), and the failure sentence is plain text', () => {
     const html = renderToStaticMarkup(<CopyLinkFallback acceptUrl="https://h/invitations/t" expiresAt="2026-11-04T09:00:00.000Z" emailSent={false} />);
-    expect(html).toMatch(/<div role="status"><\/div>/);
+    expect(html).toMatch(/<div role="status" class="ui-status"><\/div>/);
     expect(html).toMatch(/<p>The invitation email could not be sent\. Send this link another way\.<\/p>/);
   });
   it('UX-23: when the page announces the failure sentence itself, the box does not repeat it', () => {
     const html = renderToStaticMarkup(<CopyLinkFallback acceptUrl="https://h/invitations/t" expiresAt="2026-11-04T09:00:00.000Z" emailSent={false} noticeShownElsewhere />);
     expect(html).not.toContain('could not be sent');
-    expect(html).toMatch(/<div role="status"><\/div>/);
+    expect(html).toMatch(/<div role="status" class="ui-status"><\/div>/);
   });
   it('UX-23: no link shown and the email failed: the Resend and show link button is rendered', () => {
     const html = renderToStaticMarkup(<CopyLinkFallback acceptUrl={null} expiresAt="2026-11-04T09:00:00.000Z" emailSent={false} onResendWithLink={() => {}} />);
-    expect(buttonsOf(html).map((b) => b.name)).toContain('Resend and show link');
-    expect(buttonsOf(html).map((b) => b.name)).not.toContain('Copy link');
+    expect(buttonsOf(html).map((b) => b.name)).toContain(COPY_LINK_COPY.resend);
+    expect(buttonsOf(html).map((b) => b.name)).not.toContain(COPY_LINK_COPY.copy);
   });
 });
 

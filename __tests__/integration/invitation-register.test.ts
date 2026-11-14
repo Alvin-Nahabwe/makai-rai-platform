@@ -9,6 +9,7 @@ import { STUB_LEGAL_TEXTS, currentAcceptances } from '../helpers/legalStub';
 import { hashInvitationToken } from '../../lib/data/invitationToken';
 import { ACCEPTED_KINDS } from '../../types/legal';
 import { LEGAL_KIND_NAMES, acceptanceError } from '../../lib/legal/kinds';
+import { INVITATION_COPY, INVITATION_PAGE_COPY } from '../../lib/invitations/copy';
 
 /**
  * Route 31, POST /api/v1/invitations/[token]/register (FR-ACC-01, FR-ACC-03, FR-ACC-10; contract
@@ -35,7 +36,7 @@ const bcrypt = await import('@/lib/auth/passwordHash');
 const { validatePassword, PASSWORD_MIN_LENGTH } = await import('@/lib/validate');
 const { VALIDATION_COPY } = await import('@/lib/http/copy');
 
-const M23 = 'This invitation link does not work. It may have expired, been used, or been replaced by a newer one. Ask the person who invited you to send it again.';
+const M23 = INVITATION_PAGE_COPY.unusable;
 const bodyA = { name: 'New Person', password: 'a'.repeat(12), acceptances: currentAcceptances() };
 
 let fx: OrgFixture;
@@ -149,7 +150,7 @@ describe('route 31: an account only from an invitation, with its acceptances (FR
     const before = { users: await testDb.user.count(), memberships: await testDb.membership.count(), consent_records: await testDb.consentRecord.count() };
     const res = await register(raw, { ...bodyA, name: '   ' });
     expect(res.status).toBe(422);
-    expect((await res.json()).fields).toEqual([{ field: 'name', message: 'Name is required' }]);
+    expect((await res.json()).fields).toEqual([{ field: 'name', message: INVITATION_COPY.nameRequired }]);
     expect({ users: await testDb.user.count(), memberships: await testDb.membership.count(), consent_records: await testDb.consentRecord.count() })
       .toEqual(before);
   });
@@ -169,7 +170,7 @@ describe('route 31: an account only from an invitation, with its acceptances (FR
   it('FR-ACC-01 (gap G027): an existing account with the invitation\'s email answers 409 account_exists and the invitation stays usable', async () => {
     const { raw, inv } = await invitationRow(fx, { email: fx.members.viewer.email, role: 'assessor' });
     const res = await register(raw, bodyA);
-    expect([res.status, await res.json()]).toEqual([409, { error: 'An account with this email already exists. Sign in to accept.', code: 'account_exists' }]);
+    expect([res.status, await res.json()]).toEqual([409, { error: INVITATION_COPY.accountExists, code: 'account_exists' }]);
     expect((await testDb.invitation.findUniqueOrThrow({ where: { id: inv.id } })).status).toBe('pending');
   });
 

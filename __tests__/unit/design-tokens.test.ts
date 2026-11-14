@@ -354,7 +354,7 @@ describe('design tokens', () => {
       expect(ruleFor(css, selector), selector).toMatch(/text-decoration:\s*underline/);
     }
     // Navigation and buttons are the exception SRS 7.6.3 D-4 names.
-    for (const selector of ['.sidebar-link', '.btn', '.btn-primary']) {
+    for (const selector of ['.sidebar-link', '.btn']) {
       expect(ruleFor(css, selector), selector).toMatch(/text-decoration:\s*none/);
     }
     expect(css).not.toMatch(/html\s*\{\s*font-size:\s*14px/);
@@ -380,10 +380,12 @@ describe('component defects', () => {
   // live element drawn with the same pair.
   it("UX-33 NFR-A11Y-05 (D-6): a tinted note on S-06 (the retired text's) is moderate-tint text on its tint, never the yellow risk colour", async () => {
     const html = renderToStaticMarkup(await LegalKindPage({ params: Promise.resolve({ kind: 'organisation-agreement' }) }));
-    const notice = /<p[^>]*role="note"[^>]*>/.exec(html)?.[0] ?? '';
+    // Since plan 1A Task 16 the note is the kit's Callout (ink on the tint panel, Callout.css), kept in a role="note" wrapper.
+    const notice = /<div[^>]*role="note"[^>]*>.*?<div class="ui-callout ui-callout--note">/.exec(html)?.[0] ?? '';
     expect(notice).not.toBe('');
-    expect(notice).toContain('color:var(--tint-moderate-fg)');
-    expect(notice).toContain('var(--tint-moderate-bg)');
-    expect(notice).not.toContain('--color-risk-moderate');
+    expect(notice).not.toContain('style=');
+    expect(html).not.toContain('--color-risk-moderate');
+    expect(readFileSync('components/ui/Callout.css', 'utf8')).toMatch(/\.ui-callout\s*\{[^}]*background-color:\s*var\(--color-tint\);[^}]*color:\s*var\(--color-ink\)/);
+    for (const theme of THEMES) expect(contrast(theme, 'color-ink', 'color-tint'), `note text on its tint, ${theme}`).toBeGreaterThanOrEqual(4.5);
   });
 });

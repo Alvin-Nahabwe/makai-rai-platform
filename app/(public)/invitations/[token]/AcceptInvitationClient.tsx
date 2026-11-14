@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import { signOutClearingDrafts } from '@/lib/client/signOutClearingDrafts';
@@ -11,6 +11,10 @@ import {
 import { PASSWORD_MIN_LENGTH, validatePassword, validateString } from '@/lib/validate';
 import type { AcceptedKind, LegalTextVersion } from '@/types/legal';
 import { useHydrated } from '@/lib/client/useHydrated';
+import { INVITATION_COPY } from '@/lib/invitations/copy';
+import { Button } from '@/components/ui/Button';
+import { StatusRegion } from '@/components/ui/StatusRegion';
+import { TextInput } from '@/components/ui/TextInput';
 
 interface Props {
   token: string;
@@ -43,15 +47,17 @@ export type FieldErrors = { name?: string; password?: string };
  */
 export function afterCreated(signedIn: boolean, orgSlug: string): { push: string } | { send: SendState } {
   if (signedIn) return { push: welcomePath(orgSlug) };
-  return { send: { state: 'message', text: 'Your account was created. Sign in to continue.',
-    link: { href: `/login?callbackUrl=${encodeURIComponent(welcomePath(orgSlug))}`, label: 'Sign in' } } };
+  return { send: { state: 'message', text: INVITATION_COPY.accountCreated,
+    link: { href: `/login?callbackUrl=${encodeURIComponent(welcomePath(orgSlug))}`, label: INVITATION_COPY.signIn } } };
 }
 
 /** Step 1's checks (7.4.2 row S-04: "Name required; password rules"), the same as route 31's. */
 export function signUpErrors(name: string, password: string): FieldErrors {
   const errors: FieldErrors = {};
   const n = validateString(name, 'Name', 100, true, 'name');
-  if (n.error !== null || n.value.length === 0) errors.name = n.error?.message ?? 'Name is required';
+  // An empty or blank name says "Enter your name." here and in route 31 (audit A 165, 272).
+  if (n.value.length === 0) errors.name = INVITATION_COPY.nameRequired;
+  else if (n.error !== null) errors.name = n.error.message;
   const p = validatePassword(password);
   if (p !== null) errors.password = p.message;
   return errors;
@@ -62,8 +68,8 @@ export type RegisterOutcome =
   | { kind: 'fields'; errors: FieldErrors }
   | SendFailure;
 
-/** What S-04 does with route 31's answer. */
-export function registerOutcome(status: number, body: unknown): RegisterOutcome {
+/** What S-04 does with route 31's answer; `token` is the invitation's, for the sign-in link a 409 `account_exists` carries. */
+export function registerOutcome(status: number, body: unknown, token: string): RegisterOutcome {
   const b = (typeof body === 'object' && body !== null ? body : {}) as {
     orgSlug?: unknown; error?: unknown; code?: unknown; fields?: unknown; missing?: unknown;
   };
@@ -74,6 +80,11 @@ export function registerOutcome(status: number, body: unknown): RegisterOutcome 
       if ((f.field === 'name' || f.field === 'password') && typeof f.message === 'string') errors[f.field] = f.message;
     }
     if (Object.keys(errors).length > 0) return { kind: 'fields', errors };
+  }
+  // An account for this email exists (audit A 270): the words are fixed here, matched on the status and the route's code, never on its text.
+  if (status === 409 && b.code === 'account_exists') {
+    return { kind: 'message', text: INVITATION_COPY.accountExists,
+      link: { href: `/login?callbackUrl=${encodeURIComponent(`/invitations/${token}`)}`, label: INVITATION_COPY.signIn } };
   }
   return failureOutcome(status, body);
 }
@@ -96,10 +107,6 @@ export function joinOutcome(status: number, body: unknown): JoinOutcome {
 
 export type { SendState };
 
-const TARGET: CSSProperties = { minWidth: '24px', minHeight: '24px' };
-const FIELD_ERROR: CSSProperties = { margin: 'var(--space-1) 0 0', color: 'var(--color-risk-critical)', fontSize: 'var(--font-size-sm)' };
-const HINT: CSSProperties = { margin: 'var(--space-1) 0 0', fontSize: 'var(--font-size-sm)' };
-
 /**
  * Three branches by who is viewing (W-11): signed in as the invited email (one Accept invitation
  * action, which may first need the acceptances); signed in as another email (M-24 and Sign out);
@@ -115,13 +122,10 @@ export default function AcceptInvitationClient(p: Props) {
   if (viewer !== null) {
     return (
       <div>
-        <p className="auth-error" role="alert">
-          You are signed in as {viewer.email}, but this invitation is for {p.invitedEmail}. Sign out, then open the link again.
-        </p>
-        <button type="button" className="btn-primary" style={TARGET}
-          onClick={() => void signOutClearingDrafts(viewer.userId, returnTo)}>
-          Sign out
-        </button>
+        <StatusRegion politeness="assertive" tone="error" message={INVITATION_COPY.wrongAccount(viewer.email, p.invitedEmail)} />
+        <Button variant="primary" onClick={() => void signOutClearingDrafts(viewer.userId, returnTo)}>
+          {INVITATION_COPY.signOut}
+        </Button>
       </div>
     );
   }
@@ -184,17 +188,17 @@ function AcceptAsSignedIn({ token, texts, userId }: { token: string; texts: Lega
   return (
     <div>
       {missing === null ? (
-        <button type="button" className="btn-primary" style={TARGET} disabled={send.state === 'sending'} onClick={() => void accept()}>
-          Accept invitation
-        </button>
+        <Button variant="primary" disabled={send.state === 'sending'} onClick={() => void accept()}>
+          {INVITATION_COPY.accept}
+        </Button>
       ) : (
         <div id="acceptances-step" tabIndex={-1} ref={formStep}>
           <AcceptancesForm key={textsKey(texts)} texts={texts.filter((t) => missing.includes(t.kind as AcceptedKind))} mode="required" userId={userId}
-            submitLabel="Accept and continue" busy={send.state === 'sending'}
+            submitLabel={INVITATION_COPY.acceptAndContinue} busy={send.state === 'sending'}
             onAccepted={(kinds) => acceptThenJoin(JSON.stringify({ acceptances: acceptancePairs(texts, kinds) }))} />
         </div>
       )}
-      <SendStatus send={send} sendingText="Saving..." onRetry={() => {
+      <SendStatus send={send} what="choice" sendingText={INVITATION_COPY.saving} onRetry={() => {
         const last = lastAction.current;
         void (last.kind === 'record' ? acceptThenJoin(last.body) : accept());
       }} />
@@ -226,43 +230,35 @@ export interface NewAccountViewProps extends Omit<Props, 'viewerUserId'> {
 
 /** The markup of the signed-out branch for a given state; `NewAccount` holds the state. */
 export function NewAccountView(v: NewAccountViewProps) {
-  const describedBy = (hint: string | null, error: string | null) => [hint, error].filter(Boolean).join(' ') || undefined;
   return (
     <div>
       {v.step === 'details' ? (
         <form method="post" noValidate onSubmit={v.onContinue}>
-          <h2>Create your account</h2>
-          <label htmlFor="email">Email <span style={{ fontWeight: 'var(--font-weight-regular)' }}>(from the invitation; cannot be changed)</span></label>
-          <input type="email" id="email" name="email" autoComplete="username" spellCheck={false} readOnly value={v.invitedEmail} />
-          <label htmlFor="name">Your name</label>
-          <input type="text" id="name" name="name" autoComplete="name" required value={v.name}
-            onChange={(e) => v.onName(e.currentTarget.value)} aria-invalid={v.errors.name ? true : undefined}
-            aria-describedby={describedBy(null, v.errors.name ? 'name-error' : null)} ref={(el) => v.nameInput?.(el)} />
-          {v.errors.name && <p id="name-error" style={FIELD_ERROR}>{v.errors.name}</p>}
-          <label htmlFor="new-password">Password</label>
-          <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
-            <input type={v.showPassword ? 'text' : 'password'} id="new-password" name="new-password" autoComplete="new-password" required
-              value={v.password} onChange={(e) => v.onPassword(e.currentTarget.value)} aria-invalid={v.errors.password ? true : undefined}
-              aria-describedby={describedBy('password-hint', v.errors.password ? 'password-error' : null)} ref={(el) => v.passwordInput?.(el)} />
-            <button type="button" aria-pressed={v.showPassword} aria-controls="new-password" onClick={v.onToggleShow}
-              style={{ ...TARGET, padding: '0 var(--space-2)' }}>
-              Show
-            </button>
-          </div>
-          <p id="password-hint" style={HINT}>{`At least ${PASSWORD_MIN_LENGTH} characters.`}</p>
-          {v.errors.password && <p id="password-error" style={FIELD_ERROR}>{v.errors.password}</p>}
-          <button type="submit" className="btn-primary" disabled={v.hydrated === false} style={TARGET}>Continue</button>
+          <h2>{INVITATION_COPY.createHeading}</h2>
+          <TextInput id="email" name="email" label={INVITATION_COPY.email} hint={INVITATION_COPY.emailHint} type="email" autoComplete="username"
+            spellCheck={false} readOnly value={v.invitedEmail} />
+          <TextInput id="name" name="name" label={INVITATION_COPY.name} hint={INVITATION_COPY.nameHint} required autoComplete="name"
+            value={v.name} onChange={(e) => v.onName(e.currentTarget.value)} error={v.errors.name} ref={(el) => v.nameInput?.(el)} />
+          <TextInput id="new-password" name="new-password" label={INVITATION_COPY.password} hint={INVITATION_COPY.passwordHint(PASSWORD_MIN_LENGTH)}
+            type={v.showPassword ? 'text' : 'password'} required autoComplete="new-password" value={v.password}
+            onChange={(e) => v.onPassword(e.currentTarget.value)} error={v.errors.password} ref={(el) => v.passwordInput?.(el)} />
+          {/* The kit's Button cannot carry aria-pressed or aria-controls (ruling T16-5), so this is a native button in the kit's classes. */}
+          <p style={{ margin: 'calc(-1 * var(--space-4)) 0 var(--space-6)' }}>
+            <button type="button" className="ui-button ui-button--quiet ui-button--compact" aria-controls="new-password"
+              aria-pressed={v.showPassword} onClick={v.onToggleShow}>{INVITATION_COPY.showPassword}</button>
+          </p>
+          <Button variant="primary" type="submit" disabled={v.hydrated === false}>{INVITATION_COPY.continue}</Button>
         </form>
       ) : (
         <div id="acceptances-step" tabIndex={-1} ref={(el) => v.acceptancesStep?.(el)}>
-          <AcceptancesForm key={textsKey(v.texts)} texts={v.texts} mode="invitation" submitLabel="Create account" onAccepted={v.onAccepted}
+          <AcceptancesForm key={textsKey(v.texts)} texts={v.texts} mode="invitation" submitLabel={INVITATION_COPY.createAccount} onAccepted={v.onAccepted}
             busy={v.send.state === 'sending'} />
         </div>
       )}
-      <SendStatus send={v.send} sendingText="Creating your account..." onRetry={v.onRetry} />
+      <SendStatus send={v.send} what="account" sendingText={INVITATION_COPY.creating} onRetry={v.onRetry} />
       <p className="auth-footer">
-        Already have an account with this email? <a href={`/login?callbackUrl=${encodeURIComponent(`/invitations/${v.token}`)}`}
-          style={{ display: 'inline-block', minHeight: '24px' }}>Sign in to accept</a>
+        {INVITATION_COPY.alreadyHave}{' '}<a href={`/login?callbackUrl=${encodeURIComponent(`/invitations/${v.token}`)}`}
+          style={{ display: 'inline-block', minHeight: '24px' }}>{INVITATION_COPY.signInToAccept}</a>
       </p>
     </div>
   );
@@ -316,7 +312,7 @@ function NewAccount(p: Props) {
       setSend({ state: 'lost' });   // no reply arrived
       return;
     }
-    const outcome = registerOutcome(res.status, await res.json().catch(() => null));
+    const outcome = registerOutcome(res.status, await res.json().catch(() => null), p.token);
     if (outcome.kind === 'created') {
       const signedIn = await signIn('credentials', { email: p.invitedEmail, password, redirect: false })
         .then((r) => r?.ok === true, () => false);

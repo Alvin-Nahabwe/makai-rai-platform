@@ -766,5 +766,37 @@
     "property": "Each of M-20, M-21 and M-22 is written once (in lib/auth/copy.ts, re-exported by lib/http/messages.ts) and no screen or route repeats the text: the two server files still import M21 and M22 from lib/http/messages, and the three client screens now import AUTH_MESSAGE_COPY from lib/auth/copy and read the matching key, so the sign-in pages never load lib/http/messages.ts",
     "proof": "__tests__/unit/auth-pages.test.tsx::M-20 M-21 M-22: the texts live once, in lib/http/messages.ts, and every screen and route imports them: the users map for the server files, the clients map (import of AUTH_MESSAGE_COPY, the key read, no lib/http/messages import) and the no-repeat check for all five files",
     "task": "1A-16"
+  },
+  {
+    "kind": "structure",
+    "changed": "e2e/two-orgs.spec.ts::an invitation moves a third person into an org, at the invited role",
+    "replacedBy": "e2e/two-orgs.spec.ts::an invitation moves a third person into an org, at the invited role",
+    "property": "The invited person, signed out, types the password into the new-account form's one password field (id new-password, kept by AcceptInvitationClient) and goes on to the three acceptances; the field is found by its id because the kit's TextInput writes \"(required)\" after the label, so the exact label \"Password\" no longer names it",
+    "proof": "e2e/two-orgs.spec.ts::an invitation moves a third person into an org, at the invited role: await thirdPage.locator('#new-password').fill(thirdPassword) followed by the unchanged Continue, three ticks, Create account and the landing assertions",
+    "task": "1A-16"
+  },
+  {
+    "kind": "structure",
+    "changed": "e2e/two-orgs.spec.ts::a brand-new person accepts a live invitation into org A as assessor",
+    "replacedBy": "e2e/two-orgs.spec.ts::a brand-new person accepts a live invitation into org A as assessor",
+    "property": "The invited person, signed out, types the password into the new-account form's one password field (id new-password, kept by AcceptInvitationClient) and goes on to the three acceptances; the field is found by its id because the kit's TextInput writes \"(required)\" after the label, so the exact label \"Password\" no longer names it",
+    "proof": "e2e/two-orgs.spec.ts::a brand-new person accepts a live invitation into org A as assessor: await thirdPage.locator('#new-password').fill(thirdPassword) followed by the unchanged Continue, three ticks, Create account and the landing assertions",
+    "task": "1A-16"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/admin-screens.test.tsx::UX-23 FR-ORG-02: after creation S-24 shows the copy link and the expiry, and the email failure sentence in the region that was there before",
+    "replacedBy": "__tests__/unit/admin-screens.test.tsx::UX-23 FR-ORG-02: after creation S-24 shows the copy link and the expiry, and the email failure sentence in the region that was there before",
+    "property": "After creation S-24 renders the copy-link box's Copy action as a button carrying the box's copy label (COPY_LINK_COPY.copy, now \"Copy link\" in the kit's secondary Button); the label is read from the copy module inside a regular expression for the button element, and the same label is asserted by the no-link case as absent",
+    "proof": "__tests__/unit/admin-screens.test.tsx::UX-23 FR-ORG-02: after creation S-24 shows the copy link and the expiry, and the email failure sentence in the region that was there before: expect(html).toMatch(new RegExp(`<button[^>]*>${COPY_LINK_COPY.copy}</button>`))",
+    "task": "1A-16"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/admin-screens.test.tsx::UX-23 FR-ORG-02: when the email failed and no link was shown, S-24 offers Resend and show link, and the resend shows the new link",
+    "replacedBy": "__tests__/unit/admin-screens.test.tsx::UX-23 FR-ORG-02: when the email failed and no link was shown, S-24 offers Resend and show link, and the resend shows the new link",
+    "property": "With the email failed and no link shown, S-24 offers the resend action as a button carrying the copy-link box's resend label (COPY_LINK_COPY.resend, now \"Send the email again and show the link\"), shows no link field, and after the resend shows the new link and no resend button; the label is read from the copy module inside a regular expression for the button element",
+    "proof": "__tests__/unit/admin-screens.test.tsx::UX-23 FR-ORG-02: when the email failed and no link was shown, S-24 offers Resend and show link, and the resend shows the new link: expect(html).toMatch(new RegExp(`<button[^>]*>${COPY_LINK_COPY.resend}</button>`)) and the not.toContain(COPY_LINK_COPY.resend) and not.toContain(COPY_LINK_COPY.linkLabel) assertions",
+    "task": "1A-16"
   }
 ]
