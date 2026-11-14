@@ -257,7 +257,7 @@ describe('project, typed and meta fields', () => {
     for (const t of [text(m, 'MC-03'), text(m, 'MC-10'), text(d, 'DC-06')]) expect(t).not.toContain('other');
     const bare = resolveFields(modelCardMap, snapWith({}, { metadata: { aiSystemType: 'other', aiSystemTypeOther: null } }), {});
     expect(text(bare, 'MC-03')).toMatch(/^Other/);
-    expect(text(resolveFields(modelCardMap, snapWith({}, { metadata: { aiSystemType: 'classification' } }), {}), 'MC-03')).toContain('classification');
+    expect(text(resolveFields(modelCardMap, snapWith({}, { metadata: { aiSystemType: 'classification' } }), {}), 'MC-03')).toBe(`Classification\n${PROJECT_MARK}`);
   });
 
   it('FR-DOC-02 (round 10): a dataset size band prints its words, never the enum value', () => {

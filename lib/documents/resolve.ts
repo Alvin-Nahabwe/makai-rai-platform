@@ -13,6 +13,8 @@ import { FINDINGS_COPY } from '@/lib/findings/copy';
 import { isOverdue } from '@/lib/followup/overdue';
 import { formatDay, formatDeclaredDate } from '@/lib/format/dates';
 import { DATASET_SIZE_WORDS, PERSONAL_DATA_WORDS } from '@/lib/project/labels';
+import { PROJECT_FORM_COPY } from '@/lib/project/form/copy';
+import { REVIEW_COPY } from '@/lib/review/copy';
 import { formatFingerprint } from '@/lib/seal/format';
 import {
   ETHICS_APPROVED, ETHICS_NOT_REQUIRED, ETHICS_SUBMITTED, FILE_NAME_ERASED, GATE_DERIVED_NA, assignedToLine, checkAgainLine, decidedByLine, decidedInLine, decisionSource,
@@ -282,6 +284,11 @@ function projectValue(snap: DocumentSnapshot, field: string): string | null {
   }
   if (field === 'datasetSize' && Object.hasOwn(DATASET_SIZE_WORDS, v)) return DATASET_SIZE_WORDS[v as keyof typeof DATASET_SIZE_WORDS];
   if (field === 'processesPersonalData' && Object.hasOwn(PERSONAL_DATA_WORDS, v)) return PERSONAL_DATA_WORDS[v as 'true' | 'false'];
+  // The AI system type is stored as the form's option value; print the option's words as the form shows them (walk S1).
+  if (field === 'aiSystemType') {
+    const option = PROJECT_FORM_COPY.aiSystemTypes.find((o) => o.value === v);
+    if (option !== undefined) return option.label;
+  }
   return v;
 }
 
@@ -487,7 +494,7 @@ function sealsOf(snap: DocumentSnapshot): SealedStage[] {
 function sealLine(s: SealedStage): string {
   const at = utcSecond(s.seal.sealedAt);
   const n = s.seal.enteredByPeople;
-  return `Seal ${s.seal.sealNumber} of ${s.seal.reviewName}: sealed ${at} by ${s.seal.sealedBy.name} (${s.seal.sealedByRole}); decisions entered by ${n} ${n === 1 ? 'person' : 'people'}. Fingerprint ${formatFingerprint(s.seal.fingerprint, 'full')}`;
+  return `Seal ${s.seal.sealNumber} of ${s.seal.reviewName}: sealed ${at} by ${s.seal.sealedBy.name} (${word(REVIEW_COPY.roleWords, s.seal.sealedByRole, 'role')}); decisions entered by ${n} ${n === 1 ? 'person' : 'people'}. Fingerprint ${formatFingerprint(s.seal.fingerprint, 'full')}`;
 }
 
 function resolveMeta(source: Extract<FieldSource, { kind: 'meta' }>, snap: DocumentSnapshot): ResolvedPart {
