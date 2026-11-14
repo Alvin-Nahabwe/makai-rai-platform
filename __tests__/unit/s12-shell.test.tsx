@@ -113,6 +113,7 @@ describe('S-12 shell', () => {
     expect(propsSeen.CurrentDecision).toEqual({
       orgSlug: 'acme-health', current: CURRENT, historyCount: 2, seals: PANEL.seals,
       historyHref: '/orgs/acme-health/projects/p1/stages/pre-processing/questions/Q-PP-01/history',
+      gated: false, isScopeQuestion: false,
     });
     expect(propsSeen.SealNote).toEqual({ seals: PANEL.seals, nextVersionNumber: 3 });
     expect(propsSeen.EvidenceBlock).toMatchObject({ orgSlug: 'acme-health', projectId: 'p1', initial: [{ id: 'e1' }], disabled: false });

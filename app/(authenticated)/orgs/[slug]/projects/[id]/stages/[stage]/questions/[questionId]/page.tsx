@@ -20,9 +20,22 @@ import { isReworded } from '@/lib/question/reworded';
 import { STAGE_TITLE } from '@/lib/question/stageList';
 import { canWithdrawVersion, questionHref } from '@/lib/question/draft';
 import { DECISION_COPY } from '@/lib/decision/copy';
+import { QUESTION_COPY } from '@/lib/question/copy';
 import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
 import RememberProject from '@/components/layout/RememberProject';
+
+const Q = QUESTION_COPY;
+
+/**
+ * Whether the personal data question's recorded answer makes this question not apply: the rule of
+ * lib/content/loader.ts questionApplies (FR-CNT-04) for the one question the page shows, whose condition it holds.
+ */
+function gatedByAnswer(data: QuestionPanelData): boolean {
+  const condition = data.runningQuestion.condition;
+  if (condition === undefined || (data.gateAnswer !== 'yes' && data.gateAnswer !== 'no')) return false;
+  return data.gateAnswer !== condition.value;
+}
 
 /** n in the in-page link "Ways teams address this (n)": SUG's `suggestionCount`. At 0 (the gate) there is no link and no section. */
 function countFor(data: QuestionPanelData): number {
@@ -35,7 +48,8 @@ function countFor(data: QuestionPanelData): number {
  * shell"). Each is a `<section>` named by its heading; `finding-link` and `suggestions` come last so that
  * on a narrow screen they follow the form, and the grid puts them beside it on a wide one (W-3).
  *
- * Above them: the page's one `h1`, the question id and module, which takes focus on arrival (UX-42), and
+ * Above them: the page's one `h1`, the question id and module ("{Q-ID} · {module}", the page title's own words), which
+ * takes focus on arrival (UX-42), and
  * Previous and Next over the questions that apply in this stage. The evidence block is rendered by the
  * answer form, a client component, so its callbacks are the form's and no function crosses from this
  * server component to a client one (EVD RE-1). Exported so a unit test renders the markup without the loader.
@@ -49,47 +63,49 @@ export function QuestionPanelRegions({ data }: { data: QuestionPanelData }) {
   return (
     <div className="page-content">
       <ArchivedBanner archived={data.projectArchived} />
-      <nav aria-label="Questions in this stage" style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center', marginBottom: '1rem' }}>
-        {previousId !== null ? <Link href={questionHref(data, previousId)}>Previous question</Link> : null}
-        <span>{`Question ${index + 1} of ${total} in ${STAGE_TITLE[data.stage]}`}</span>
-        {nextId !== null ? <Link href={questionHref(data, nextId)}>Next question</Link> : null}
-        <Link href={`${base}/stages/${data.stage}`}>Back to stage</Link>
+      <nav aria-label={Q.nav.label} style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center', marginBottom: '1rem' }}>
+        {previousId !== null ? <Link href={questionHref(data, previousId)}>{Q.nav.previous}</Link> : null}
+        <span>{Q.nav.position(index + 1, total, STAGE_TITLE[data.stage])}</span>
+        {nextId !== null ? <Link href={questionHref(data, nextId)}>{Q.nav.next}</Link> : null}
+        <Link href={`${base}/stages/${data.stage}`}>{Q.nav.back(STAGE_TITLE[data.stage])}</Link>
       </nav>
       <div style={{ display: 'grid', gap: '1.5rem', alignItems: 'start', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 24rem), 1fr))' }}>
         <div>
           <section data-region="question" aria-labelledby="s12-question">
-            <h1 id="question-heading" tabIndex={-1}>{`${question.id} . ${question.moduleTitle}`}</h1>
+            <h1 id="question-heading" tabIndex={-1}>{DECISION_COPY.titles.question(question.id, question.moduleTitle)}</h1>
             <FocusOnArrival targetId="question-heading" />
-            <h2 id="s12-question">Question</h2>
+            <h2 id="s12-question">{Q.headings.question}</h2>
             {/* FR-CNT-08, ruling on SPEC-1: the region shows the running wording, the one a new save re-confirms against; the
                 disclosure below holds the wording the current decision was answered against (FR-CNT-07). */}
             <QuestionContent question={data.runningQuestion} suggestionCount={count} />
             {reworded ? (
               <div data-reworded>
-                <p>{`Wording updated in content version ${data.contentSemver}.`}</p>
+                <p>{Q.reworded.line}</p>
                 <details>
-                  <summary>See the earlier wording</summary>
+                  <summary>{Q.reworded.summary}</summary>
                   <p>{question.expectedPractice}</p>
                 </details>
               </div>
             ) : null}
           </section>
           <section data-region="current-decision" aria-labelledby="s12-current-decision">
-            <h2 id="s12-current-decision">Current decision</h2>
+            <h2 id="s12-current-decision">{Q.headings.current}</h2>
             <CurrentDecision
               orgSlug={data.orgSlug}
               current={data.current}
               historyCount={data.historyCount}
               historyHref={`${base}/stages/${data.stage}/questions/${question.id}/history`}
               seals={data.seals}
+              gated={gatedByAnswer(data)}
+              isScopeQuestion={question.type === 'gate'}
             />
           </section>
           <section data-region="seal-note" aria-labelledby="s12-seal-note">
-            <h2 id="s12-seal-note">Seals</h2>
+            <h2 id="s12-seal-note">{Q.headings.seals}</h2>
             <SealNote seals={data.seals} nextVersionNumber={(data.current?.versionNumber ?? 0) + 1} />
           </section>
           <section data-region="answer-form" aria-labelledby="s12-answer-form">
-            <h2 id="s12-answer-form">Record a decision</h2>
+            <h2 id="s12-answer-form">{Q.headings.record}</h2>
             <DecisionForm key={`${data.projectId}:${question.id}`} data={data} />
             {/* Mounted whenever there is a current version, with the permission as a prop, so after a withdrawal it stays to
                 say "Withdrawn..." and to take focus (F12); it shows the More menu only while it can act. */}
@@ -103,7 +119,7 @@ export function QuestionPanelRegions({ data }: { data: QuestionPanelData }) {
         </div>
         <div>
           <section data-region="finding-link" aria-labelledby="s12-finding-link">
-            <h2 id="s12-finding-link">Findings</h2>
+            <h2 id="s12-finding-link">{Q.headings.findings}</h2>
             <QuestionFindingLink
               orgSlug={data.orgSlug}
               projectId={data.projectId}
@@ -116,7 +132,7 @@ export function QuestionPanelRegions({ data }: { data: QuestionPanelData }) {
           </section>
           {count > 0 ? (
             <section data-region="suggestions" id="suggestions" aria-labelledby="s12-suggestions">
-              <h2 id="s12-suggestions">Ways teams address this</h2>
+              <h2 id="s12-suggestions">{Q.headings.suggestions}</h2>
               <SuggestedControls
                 contentSemver={data.contentSemver}
                 questionId={question.id}

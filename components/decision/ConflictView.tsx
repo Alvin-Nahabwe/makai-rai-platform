@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useRef, type ReactElement } from 'react';
+import { Button } from '@/components/ui/Button';
 import { WITHDRAWAL_CODE_LABELS, deciderLabel } from '@/lib/decision/copy';
+import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
 import { statusText } from '@/lib/question/stageList';
 import { keptEvidenceLine } from '@/lib/question/draft';
 import { formatDeclaredDate, formatTime } from '@/lib/format/dates';
@@ -10,11 +12,14 @@ import { conflictText } from '@/lib/question/saveOutcome';
 import { declaredDateFromParts } from '@/lib/decision/rules';
 import type { DecisionDraft } from '@/lib/question/draft';
 import type { DecisionVersionView } from '@/types/api';
+import './ConflictView.css';
+
+const C = DECISION_FORM_COPY.conflict;
 
 export type ConflictViewProps = {
   current: DecisionVersionView; mine: DecisionDraft; viewerId: string;
   onSaveMine: () => void; onEditMine: () => void; onDiscard: () => void;
-  /** Who "your answer" names as the decider and which evidence it holds, as the form knows them (W-4). */
+  /** Who "your version" names as the decider and which evidence it holds, as the form knows them (W-4). */
   mineDecidedBy?: string; mineEvidence?: string[];
   /** Evidence ids the restored draft holds that the evidence block cannot name; Save mine attaches them too (F3). */
   mineKeptEvidence?: number;
@@ -22,17 +27,17 @@ export type ConflictViewProps = {
 
 /** The status words of either side: statusText's words, and a withdrawal named with its code (as S-13 names it). */
 function statusWords(v: Pick<DecisionVersionView, 'status' | 'scopeAnswer' | 'withdrawalCode'>): string {
-  if (v.status === 'withdrawn') return `Withdrawn: ${v.withdrawalCode === null ? '' : WITHDRAWAL_CODE_LABELS[v.withdrawalCode]}`;
-  return v.status === null && v.scopeAnswer === null ? 'None' : statusText(v);
+  if (v.status === 'withdrawn') return C.withdrawn(v.withdrawalCode === null ? '' : WITHDRAWAL_CODE_LABELS[v.withdrawalCode]);
+  return v.status === null && v.scopeAnswer === null ? C.none : statusText(v);
 }
 
 function Column({ title, rows }: { title: string; rows: Array<[string, string]> }): ReactElement {
   return (
     <div>
       <h4>{title}</h4>
-      <dl>
+      <dl className="conflict-view__list">
         {rows.map(([k, v]) => (
-          <div key={k}><dt style={{ display: 'inline', fontWeight: 600 }}>{`${k}: `}</dt><dd style={{ display: 'inline', margin: 0 }}><bdi>{v}</bdi></dd></div>
+          <div key={k}><dt>{`${k}: `}</dt><dd><bdi>{v}</bdi></dd></div>
         ))}
       </dl>
     </div>
@@ -51,30 +56,30 @@ export function ConflictView(p: ConflictViewProps): ReactElement {
   const c = p.current;
   const mineDate = declaredDateFromParts(p.mine.date);
   const theirs: Array<[string, string]> = [
-    ['Status', statusWords(c)],
-    ['Reason', c.reason ?? 'Erased'],
-    ['Decided by', c.decidedBy === null ? 'None' : `${deciderLabel(c.decidedBy, p.viewerId, 'record')}${c.declaredDate ? `, ${formatDeclaredDate(c.declaredDate)}` : ''}`],
-    ['Evidence', c.evidence.length === 0 ? 'None' : c.evidence.map(evidenceDisplayName).join(', ')],
+    [C.status, statusWords(c)],
+    [C.reason, c.reason ?? C.erased],
+    [C.decidedBy, c.decidedBy === null ? C.none : `${deciderLabel(c.decidedBy, p.viewerId, 'record')}${c.declaredDate ? `, ${formatDeclaredDate(c.declaredDate)}` : ''}`],
+    [C.evidence, c.evidence.length === 0 ? C.none : c.evidence.map(evidenceDisplayName).join(', ')],
   ];
   const mine: Array<[string, string]> = [
-    ['Status', statusWords({ status: p.mine.status, scopeAnswer: p.mine.scopeAnswer, withdrawalCode: null })],
-    ['Reason', p.mine.reason],
-    ['Decided by', `${p.mineDecidedBy ?? ''}${'field' in mineDate ? '' : `, ${formatDeclaredDate(mineDate.date)}`}`],
-    ['Evidence', (p.mineEvidence ?? []).length === 0 ? 'None' : (p.mineEvidence ?? []).join(', ')],
-    ...((p.mineKeptEvidence ?? 0) > 0 ? [['Also', keptEvidenceLine(p.mineKeptEvidence ?? 0)] as [string, string]] : []),
+    [C.status, statusWords({ status: p.mine.status, scopeAnswer: p.mine.scopeAnswer, withdrawalCode: null })],
+    [C.reason, p.mine.reason],
+    [C.decidedBy, `${p.mineDecidedBy ?? ''}${'field' in mineDate ? '' : `, ${formatDeclaredDate(mineDate.date)}`}`],
+    [C.evidence, (p.mineEvidence ?? []).length === 0 ? C.none : (p.mineEvidence ?? []).join(', ')],
+    ...((p.mineKeptEvidence ?? 0) > 0 ? [[C.also, keptEvidenceLine(p.mineKeptEvidence ?? 0)] as [string, string]] : []),
   ];
   return (
-    <section className="card" data-region="conflict" aria-labelledby="decision-conflict-heading">
-      <h3 id="decision-conflict-heading" tabIndex={-1} ref={heading}>Not saved: someone saved a newer version.</h3>
+    <section className="conflict-view" data-region="conflict" aria-labelledby="decision-conflict-heading">
+      <h3 id="decision-conflict-heading" tabIndex={-1} ref={heading}>{C.heading}</h3>
       <p>{conflictText(c, p.viewerId, formatTime)}</p>
-      <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 16rem), 1fr))' }}>
-        <Column title={`Version ${c.versionNumber} (saved)`} rows={theirs} />
-        <Column title="Your answer (draft on this device)" rows={mine} />
+      <div className="conflict-view__columns">
+        <Column title={C.saved(c.versionNumber)} rows={theirs} />
+        <Column title={C.mine} rows={mine} />
       </div>
-      <div className="form-actions">
-        <button type="button" className="btn btn--primary" onClick={p.onSaveMine}>{`Save mine as version ${c.versionNumber + 1}`}</button>
-        <button type="button" className="btn btn--secondary" onClick={p.onEditMine}>Edit mine first</button>
-        <button type="button" className="btn btn--secondary" onClick={p.onDiscard}>Discard mine</button>
+      <div className="conflict-view__actions">
+        <Button variant="primary" onClick={p.onSaveMine}>{C.saveMine}</Button>
+        <Button variant="secondary" onClick={p.onEditMine}>{C.editMine}</Button>
+        <Button variant="secondary" onClick={p.onDiscard}>{C.discardMine}</Button>
       </div>
     </section>
   );

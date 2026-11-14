@@ -8,6 +8,7 @@ import { gateStatus } from '@/lib/question/saveOutcome';
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
 import { DECISION_OUTCOME_COPY } from '@/lib/decision/outcome/copy';
 import { deciderLabel, FINDING_NOTE } from '@/lib/decision/copy';
+import { QUESTION_COPY } from '@/lib/question/copy';
 
 /**
  * The S-12 regions DEC-b fills (W-3, W-4; UX-09 to UX-12, UX-25, UX-28; NFR-A11Y-03, NFR-A11Y-04), rendered as
@@ -180,8 +181,8 @@ describe('S-12 status line and conflict view', () => {
   it('UX-28 M-10: the conflict view shows both reasons, who saved, and the three actions', () => {
     const h = renderToStaticMarkup(<ConflictView current={{ ...V2, reason: 'Theirs' }} mine={{ ...EMPTY, reason: 'Mine' }} viewerId="u-me" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
     expect(h).toContain('Theirs'); expect(h).toContain('Mine'); expect(h).toMatch(/<p>Joseph K\. saved a newer version at \d{2}:\d{2} \S+\. Compare it with your version, then choose what to keep\.<\/p>/);
-    expect(h).toMatch(/<h3[^>]*tabindex="-1"[^>]*>Not saved: someone saved a newer version\.<\/h3>/i);
-    expect([...h.matchAll(/<button[^>]*>([^<]+)<\/button>/g)].map((m) => m[1])).toEqual(['Save mine as version 3', 'Edit mine first', 'Discard mine']);
+    expect(h).toMatch(new RegExp(`<h3[^>]*tabindex="-1"[^>]*>${DECISION_FORM_COPY.conflict.heading}</h3>`, 'i'));
+    expect([...h.matchAll(/<button[^>]*>([^<]+)<\/button>/g)].map((m) => m[1])).toEqual([DECISION_FORM_COPY.conflict.saveMine, DECISION_FORM_COPY.conflict.editMine, DECISION_FORM_COPY.conflict.discardMine]);
   });
 
   it('F3 UX-28: "Your answer" lists the restored draft\'s evidence the block cannot name, as Save mine will attach it', () => {
@@ -212,20 +213,20 @@ describe('S-12 regions', () => {
 
   it('FR-CNT-08: S-12 shows the reworded line when the running wording differs', async () => {
     const h = renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, current: V2, runningQuestion: { ...PANEL.question, expectedPractice: 'New wording.' }, contentSemver: '0.0.2-fixture' } }));
-    expect(h).toContain('Wording updated in content version 0.0.2-fixture.');
-    expect(h).toMatch(/<details[^>]*>\s*<summary[^>]*>See the earlier wording<\/summary>[\s\S]*Old wording\./);
+    expect(h).toContain(QUESTION_COPY.reworded.line.replace("'", '&#x27;'));
+    expect(h).toMatch(new RegExp(`<details[^>]*>\\s*<summary[^>]*>${QUESTION_COPY.reworded.summary}</summary>[\\s\\S]*Old wording\\.`));
     // SPEC-1 ruling: the question region shows the running wording a new save re-confirms against; the disclosure, the
     // wording the current decision was answered against. Each text once.
     expect(h.match(/New wording\./g)).toHaveLength(1);
     expect(h.match(/Old wording\./g)).toHaveLength(1);
-    expect(h.indexOf('New wording.')).toBeLessThan(h.indexOf('See the earlier wording'));
-    expect(renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, current: V2 } }))).not.toContain('Wording updated');
+    expect(h.indexOf('New wording.')).toBeLessThan(h.indexOf(QUESTION_COPY.reworded.summary));
+    expect(renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, current: V2 } }))).not.toContain(QUESTION_COPY.reworded.summary);
   });
 
   it('UX-42 W-3: one h1 for the question that takes focus, and Previous and Next go to the neighbouring questions', async () => {
     const h = renderToStaticMarkup(await QuestionPanelRegions({ data: PANEL }));
     expect(h.match(/<h1/g)).toHaveLength(1);
-    expect(h).toMatch(/<h1 id="question-heading" tabindex="-1"[^>]*>Q-PP-01 \. Problem Formulation<\/h1>/i);
+    expect(h).toMatch(/<h1 id="question-heading" tabindex="-1"[^>]*>Q-PP-01 \u00b7 Problem Formulation<\/h1>/i);
     expect(h).toMatch(/<a[^>]*href="\/orgs\/acme\/projects\/p1\/stages\/pre-processing\/questions\/Q-PP-00"[^>]*>Previous question<\/a>/);
     expect(h).toMatch(/<a[^>]*href="\/orgs\/acme\/projects\/p1\/stages\/pre-processing\/questions\/Q-PP-02"[^>]*>Next question<\/a>/);
     expect(h).toContain('Question 2 of 24 in Pre-processing');   // the stage's name, not its address segment (CR-7)
@@ -233,30 +234,31 @@ describe('S-12 regions', () => {
   });
 
   it('FR-DEC-01 FR-DEC-03 (screen): with no version, Current decision reads "No decision yet."', () => {
-    expect(renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={null} historyCount={0} historyHref="/h" seals={[]} />)).toContain('No decision yet.');
-    const v2 = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={V2} historyCount={2} historyHref="/h" seals={[]} />);
-    expect(v2).not.toContain('No decision yet.');
+    expect(renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={null} historyCount={0} historyHref="/h" seals={[]} gated={false} isScopeQuestion={false} />)).toContain(QUESTION_COPY.current.none);
+    const v2 = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={V2} historyCount={2} historyHref="/h" seals={[]} gated={false} isScopeQuestion={false} />);
+    expect(v2).not.toContain(QUESTION_COPY.current.none);
     expect(v2).toContain('Partly');
-    expect(v2).toContain('version 2');
+    expect(v2).toContain(QUESTION_COPY.current.version(2));
     expect(v2).toContain(`Decided by: ${deciderLabel({ kind: 'outside_role', role: 'principal_investigator' }, '', 'record')}, 12 Oct 2026.`);
-    expect(v2).toMatch(/Entered by: Joseph K\., 12 Oct 2026 \d{2}:\d{2} \S+/);
-    expect(v2).toMatch(/<a[^>]*href="\/h"[^>]*>History: 2 versions<\/a>/);
+    expect(v2).toMatch(/Entered by: Joseph K\. on 12 Oct 2026 at \d{2}:\d{2} \S+/);
+    expect(v2).toMatch(new RegExp(`<a[^>]*href="/h"[^>]*>${QUESTION_COPY.current.history(2).replace(/[()]/g, '\\$&')}</a>`));
   });
 
   it('U12 (d): the current decision shows the version\'s reason and its evidence, or None, for every role', () => {
-    const withBoth = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={{ ...V2, reason: 'We checked the sources.', evidence: [{ id: 'e1', kind: 'link', url: 'https://example.org/a', label: 'Audit report', fileName: null, mimeType: null, byteSize: null, erased: null } as never] }} historyCount={2} historyHref="/h" seals={[]} />);
+    const withBoth = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={{ ...V2, reason: 'We checked the sources.', evidence: [{ id: 'e1', kind: 'link', url: 'https://example.org/a', label: 'Audit report', fileName: null, mimeType: null, byteSize: null, erased: null } as never] }} historyCount={2} historyHref="/h" seals={[]} gated={false} isScopeQuestion={false} />);
     expect(withBoth).toMatch(/<dt>Reason<\/dt><dd>We checked the sources\.<\/dd>/);
     expect(withBoth).toContain('Audit report');
-    const none = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={{ ...V2, reason: null, evidence: [] }} historyCount={2} historyHref="/h" seals={[]} />);
+    const none = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={{ ...V2, reason: null, evidence: [] }} historyCount={2} historyHref="/h" seals={[]} gated={false} isScopeQuestion={false} />);
     expect(none).toMatch(/<dt>Evidence<\/dt><dd>None<\/dd>/);
-    const erased = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={{ ...V2, reason: null, reasonErased: { erasedOn: '2026-11-01' } as never, evidence: [] }} historyCount={2} historyHref="/h" seals={[]} />);
+    const erased = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={{ ...V2, reason: null, reasonErased: { erasedOn: '2026-11-01' } as never, evidence: [] }} historyCount={2} historyHref="/h" seals={[]} gated={false} isScopeQuestion={false} />);
     expect(erased).toContain("on the organisation&#x27;s instruction.");
   });
 
   it('FR-DEC-08 (screen): a withdrawal as the current version reads as no decision, with its history link', () => {
-    const w = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={{ ...V2, versionNumber: 3, status: 'withdrawn', withdrawalCode: 'duplicate', decidedBy: null, declaredDate: null }} historyCount={3} historyHref="/h" seals={[]} />);
-    expect(w).toContain('No decision. Version 3 withdrew the decision: Duplicate.');
-    expect(w).toContain('History: 3 versions');
+    const w = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={{ ...V2, versionNumber: 3, status: 'withdrawn', withdrawalCode: 'duplicate', decidedBy: null, declaredDate: null }} historyCount={3} historyHref="/h" seals={[]} gated={false} isScopeQuestion={false} />);
+    expect(w).toContain(QUESTION_COPY.current.withdrawn('Duplicate'));
+    expect(w).toContain(QUESTION_COPY.current.history(3));
+    expect(w).not.toContain('ui-mark');
   });
 });
 

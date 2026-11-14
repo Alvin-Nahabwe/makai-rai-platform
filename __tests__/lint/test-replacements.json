@@ -1102,5 +1102,45 @@
     "property": "SAVED_V1, the pattern of the save line every first save in this file waits for, follows M-03's ruled wording. M-03 was reworded (copy audit B#345, the lead's ruling that the save line keeps the version): \"Saved at {time} as version {n}. Decided by: {who}.\" The \"Entered by\" sentence is no longer part of the save line (B#345 drops it; who entered a version is still shown under Current decision and in the history).",
     "proof": "SAVED_V1 is now /^Saved at \\d{2}:\\d{2} \\S+ as version 1\\. Decided by: you\\.$/: the whole line, anchored, with the version number and the decider; the cases that read it are unchanged.",
     "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/decision-components.test.tsx::U12 (d): the current decision shows the version's reason and its evidence, or None, for every role",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::U12 (d): the current decision shows the version's reason and its evidence, or None, for every role",
+    "property": "The current decision shows the version's reason and its evidence for every role, None when there is no evidence, and the erased-text line when the reason was erased. CurrentDecision gained two props the question page passes, gated and isScopeQuestion (the inputs of lib/ui/marks.ts markKindOf), so its status shows as the kit's StatusMark (brief section 5); the case passes both as false, the values for this ordinary question.",
+    "proof": "The case's assertions are unchanged (<dt>Reason</dt><dd>We checked the sources.</dd>, the link label, <dt>Evidence</dt><dd>None</dd>, the erased line read from Task 18's text); each render adds gated={false} isScopeQuestion={false}.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/decision-components.test.tsx::FR-DEC-08 (screen): a withdrawal as the current version reads as no decision, with its history link",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::FR-DEC-08 (screen): a withdrawal as the current version reads as no decision, with its history link",
+    "property": "A withdrawal as the current version reads as no decision, names what kind of mistake it was, keeps the history link with the number of versions, and shows no status mark. Reworded by copy audit B#181 and B#180: \"No decision. The last decision was withdrawn ({code}).\", \"See all versions ({n})\". CurrentDecision gained two props the question page passes, gated and isScopeQuestion (the inputs of lib/ui/marks.ts markKindOf), so its status shows as the kit's StatusMark (brief section 5); the case passes both as false, the values for this ordinary question.",
+    "proof": "The case renders version 3, a withdrawal with code duplicate, and requires QUESTION_COPY.current.withdrawn('Duplicate'), QUESTION_COPY.current.history(3), and no ui-mark element.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/decision-components.test.tsx::FR-CNT-08: S-12 shows the reworded line when the running wording differs",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::FR-CNT-08: S-12 shows the reworded line when the running wording differs",
+    "property": "When the running content words the question differently from the content the current decision was answered against, the page says so and holds the earlier wording in a disclosure after the running wording; each wording appears once; with the same wording there is no line. Reworded by copy audit B#14 and B#15 (\"The description of good practice changed after your team's decision.\", \"See the earlier description\"); \"content version\" is retired by the vocabulary, so the line no longer names the semver.",
+    "proof": "The case requires QUESTION_COPY.reworded.line (HTML-escaped apostrophe), a <details> whose <summary> is QUESTION_COPY.reworded.summary followed by the old wording, each wording exactly once, the new wording before the summary, and with no rewording no summary at all.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/decision-components.test.tsx::UX-42 W-3: one h1 for the question that takes focus, and Previous and Next go to the neighbouring questions",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::UX-42 W-3: one h1 for the question that takes focus, and Previous and Next go to the neighbouring questions",
+    "property": "The page has one h1, the question's id and module, focusable (tabindex -1), and Previous and Next link to the neighbouring questions, with the position in words. The h1's separator is now U+00B7 with a space each side (copy audit B#12 as the lead ruled it, gap G-b1 (b): \"{Q-ID} · {module}\"), the same function as the tab title.",
+    "proof": "The case requires exactly one <h1, <h1 id=\"question-heading\" tabindex=\"-1\"…>Q-PP-01 · Problem Formulation</h1> with U+00B7 (written \\u00b7 in the pattern), the two links with their exact hrefs, 'Question 2 of 24 in Pre-processing', and no Previous link on the first question.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 (helper): each region's component gets the props its contract row names, from the panel data",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 (helper): each region's component gets the props its contract row names, from the panel data",
+    "property": "Each region's component gets the props its contract row names, from the panel data. CurrentDecision now also gets gated and isScopeQuestion, which the page computes from the panel data (the personal data question's recorded answer and the question's condition; the question's type), so the current decision shows the kit's status mark (plan 1A Task 17, brief section 5).",
+    "proof": "The case requires CurrentDecision's props to equal exactly orgSlug, current, historyCount, seals, historyHref as before plus gated: false and isScopeQuestion: false for this panel (no gate answer; a likert question); the other regions' expectations are unchanged.",
+    "task": "plan 1A Task 17"
   }
 ]
