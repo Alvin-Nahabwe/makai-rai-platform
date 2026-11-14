@@ -68,10 +68,10 @@ test.beforeAll(async ({ browser }) => {
 test.afterAll(() => { if (dir !== undefined) fs.rmSync(dir, { recursive: true, force: true }); });
 
 /** What a case opened, closed after it whatever happened: held requests are let go first, then the contexts closed. */
-const opened: { contexts: BrowserContext[]; releases: Array<() => void> } = { contexts: [], releases: [] };
+const cleanup: { contexts: BrowserContext[]; releases: Array<() => void> } = { contexts: [], releases: [] };
 test.afterEach(async () => {
-  for (const release of opened.releases.splice(0)) release();
-  for (const context of opened.contexts.splice(0)) await context.close();
+  for (const release of cleanup.releases.splice(0)) release();
+  for (const context of cleanup.contexts.splice(0)) await context.close();
 });
 
 type Who = 'owner' | 'viewer' | 'admin';
@@ -80,7 +80,7 @@ type Who = 'owner' | 'viewer' | 'admin';
 async function pageAs(browser: Browser, who: Who, size: { width: number; height: number }): Promise<Page> {
   const storageState = who === 'admin' ? adminSeat().storageStatePath : sessions[who];
   const context = await browser.newContext({ storageState, viewport: { ...size } });
-  opened.contexts.push(context);
+  cleanup.contexts.push(context);
   const page = await context.newPage();
   failOnDialog(page);
   return page;
@@ -169,7 +169,15 @@ type Opened = {
   /** True where the focus target is inside the confirmation, so the kit's focus check applies to it. */
   focusInside: boolean;
 };
-type Screen = { name: string; who: Who; expect: { wide: Geometry; narrow: Geometry }; open: (page: Page, baseURL: string) => Promise<Opened> };
+/**
+ * `passesWithoutRepair` names, per size, a pinned case that passes with the repair switched off, and why: it checks the
+ * screen still behaves, but it does not prove the repair. Every other reveal case fails without the repair.
+ */
+type Screen = {
+  name: string; who: Who; expect: { wide: Geometry; narrow: Geometry };
+  passesWithoutRepair?: { wide?: string; narrow?: string };
+  open: (page: Page, baseURL: string) => Promise<Opened>;
+};
 
 /** Loads `url` and waits until the page has settled its requests, so a press reaches a hydrated control. */
 async function load(page: Page, url: string): Promise<void> {
@@ -205,6 +213,7 @@ const SCREENS: Screen[] = [
   },
   {
     name: 'decision withdrawal on the question page, inside More (S-12)', who: 'owner', expect: { wide: 'no-strip', narrow: 'grown-strip' },
+    passesWithoutRepair: { wide: 'the focus target opens hidden past the end of the page, and the browser\'s own focus scroll brings it in' },
     open: async (page) => {
       await load(page, questionPath(await decided('Q-PP-01'), 'Q-PP-01'));
       await page.locator('summary', { hasText: /^More$/ }).click();
@@ -214,6 +223,7 @@ const SCREENS: Screen[] = [
   },
   {
     name: 'findings (S-15)', who: 'owner', expect: { wide: 'no-strip', narrow: 'no-strip' },
+    passesWithoutRepair: { wide: 'the focus target opens hidden past the end of the page, and the browser\'s own focus scroll brings it in' },
     open: async (page) => {
       await load(page, (await findingPage()).url);
       const confirmation = page.getByRole('group', { name: /^Finding: / });
@@ -221,9 +231,11 @@ const SCREENS: Screen[] = [
     },
   },
   {
-    name: 'archive project (S-10)', who: 'owner', expect: { wide: 'held', narrow: 'strip' },
+    name: 'archive project (S-10)', who: 'owner', expect: { wide: 'strip', narrow: 'strip' },
+    passesWithoutRepair: { wide: 'the screen focuses a wrapper around the whole confirmation, and the browser brings a focused element that is not a text field wholly into view', narrow: 'the screen focuses a wrapper around the whole confirmation, and the browser brings a focused element that is not a text field wholly into view' },
     open: async (page) => {
-      const name = `Confirm archive ${randomUUID().slice(0, 8)}`;
+      // A fixed name, so the heading wraps the same way in every run (project names need not be unique; the page shows one).
+      const name = 'Confirm archive project';
       const project = await addProject(fx, { name });
       await load(page, projectPath(project.id));
       const confirmation = page.getByRole('group', { name: `Archive ${name}?` });
@@ -275,6 +287,9 @@ const SCREENS: Screen[] = [
 type Place = {
   contentTop: number; top: number; bottom: number; visibleTop: number; visibleBottom: number; scrollTop: number; maxScroll: number; scroller: string;
 };
+/** Scrolls the scroller of `el` to `top`, instantly; `placeOf` with a scrollTop, for its side effect. */
+const scrollScrollerTo = async (el: Locator, top: number): Promise<void> => { await placeOf(el, top); };
+
 const placeOf = (target: Locator, scrollTop?: number): Promise<Place> => target.evaluate((el, y): Place => {
   let s: Element | null = el.parentElement;
   while (s !== null && s !== document.body && s !== document.documentElement) {
@@ -326,7 +341,7 @@ async function settled(page: Page, el: Locator): Promise<void> {
 async function cutAtBottom(page: Page, el: Locator, shown: number): Promise<Place> {
   const before = await placeOf(el);
   const want = Math.round(before.scrollTop + before.top - (before.visibleBottom - shown));
-  await placeOf(el, Math.max(0, Math.min(before.maxScroll, want)));
+  await scrollScrollerTo(el, Math.max(0, Math.min(before.maxScroll, want)));
   await settled(page, el);
   const scrolled = await placeOf(el);
   const missing = scrolled.visibleBottom - shown - scrolled.top;
@@ -374,20 +389,25 @@ async function arrange(page: Page, o: Opened, expected: Geometry): Promise<{ wid
     const boxTop = now.top - (now.contentTop - now.scrollTop);
     const want = Math.round(boxTop + probe.contentTop - (now.visibleBottom - STRIP));
     if (want > now.maxScroll) {
-      await placeOf(o.trigger, now.maxScroll);
+      await scrollScrollerTo(o.trigger, now.maxScroll);
       found = 'no-strip';
       detail = `the element would need a scroll of ${want} px and ${now.scroller} scrolls ${now.maxScroll} px`;
     } else if (want >= 0) {
-      await placeOf(o.trigger, want);
+      await scrollScrollerTo(o.trigger, want);
       found = grown ? 'grown-strip' : 'strip';
     } else {
       const size = page.viewportSize()!;
-      // Within 8 px of the least height the window is held there: a page that settles a few pixels differently from run to
-      // run must not flip a case between 'strip' and 'held'.
-      const height = size.height + want - least < 8 ? least : size.height + want;
-      if (height === size.height) {
+      const height = size.height + want;
+      if (height - least < 8) {
+        // The strip would need a window shorter than, or within 8 px of, the least height that holds the confirmation. The
+        // window is set to that least height and the case is 'held' there, the element showing more than the strip: so a page
+        // that settles a few pixels differently from run to run cannot flip a case between 'strip' and 'held' (archive at
+        // 1280 sat about 4 px from it while its project name was random).
+        if (size.height !== least) await page.setViewportSize({ width: size.width, height: least });
+        await scrollScrollerTo(o.trigger, 0);
+        const held = await placeOf(o.trigger);
         found = 'held';
-        detail = `the element shows ${Math.round(now.visibleBottom - (boxTop + probe.contentTop))} px`;
+        detail = `the element shows ${Math.round(held.visibleBottom - (held.top - (held.contentTop - held.scrollTop) + probe.contentTop))} px`;
       } else {
         await page.setViewportSize({ width: size.width, height });
       }
@@ -395,7 +415,7 @@ async function arrange(page: Page, o: Opened, expected: Geometry): Promise<{ wid
   }
   if (found === null) throw new Error('cannot arrange: four resizes did not settle the geometry');
   const size = page.viewportSize()!;
-  test.info().annotations.push({ type: 'geometry', description: `${found}; window ${size.width}x${size.height}${detail === '' ? '' : `; ${detail}`}` });
+  test.info().annotations.push({ type: 'geometry', description: `${found}; window ${size.width}x${size.height}; least height that holds the confirmation ${least}${detail === '' ? '' : `; ${detail}`}` });
   expect(found, `the geometry this case is pinned to (window ${size.width}x${size.height}${detail === '' ? '' : `; ${detail}`})`).toBe(expected);
   await settled(page, o.trigger);
   const trig = await placeOf(o.trigger);
@@ -458,6 +478,8 @@ for (const screen of SCREENS) {
       test.setTimeout(120_000);
       const page = await pageAs(browser, screen.who, size);
       const opened = await screen.open(page, baseURL!);
+      const without = screen.passesWithoutRepair?.[key];
+      if (without !== undefined) test.info().annotations.push({ type: 'passes without the repair', description: without });
       const used = await arrange(page, opened, screen.expect[key]);
       await opened.trigger.focus();
       await page.keyboard.press('Enter');
@@ -480,7 +502,7 @@ for (const screen of SCREENS) {
 async function hold(page: Page, url: string | RegExp, method: string, answer: (route: Route) => Promise<void>) {
   let release!: () => void;
   const held = new Promise<void>((r) => { release = r; });
-  opened.releases.push(release);
+  cleanup.releases.push(release);
   const matches = (requestUrl: string) => (typeof url === 'string' ? new URL(requestUrl).pathname.endsWith(url) : url.test(requestUrl));
   let routed = 0;
   let sent = 0;
@@ -593,7 +615,9 @@ test.describe('the confirm button while the request is sent', () => {
     await confirmation.getByLabel('Password', { exact: true }).fill('not-the-password');
     await confirmation.getByLabel('Type DELETE MY ACCOUNT to confirm').fill('DELETE MY ACCOUNT');
     // Answered here with the refusal of a wrong password, so the fixture's account is never deleted and route 39's hourly limit is not spent.
-    const held = await hold(page, /\/api\/users\/me$/, 'DELETE', refusePassword);
+    const held = await hold(page, /\/api\/users\/me$/, 'DELETE', (r) => r.fulfill({
+      status: 422, contentType: 'application/json', body: JSON.stringify({ error: 'validation', fields: [{ field: 'password', message: 'The password is not right.' }] }),
+    }));
     await busyPress(page, confirmation.getByRole('button', { name: 'Delete my account', exact: true }), held);
     const field = confirmation.getByLabel('Password', { exact: true });
     await expect(page.getByText('The password is not right.')).toBeVisible();
@@ -620,20 +644,16 @@ test.describe('the confirm button while the request is sent', () => {
   });
 });
 
-/** Answers a held account deletion with the refusal of a wrong password (route 39's 422), so no account is deleted. */
-const refusePassword = (r: Route) => r.fulfill({
-  status: 422, contentType: 'application/json', body: JSON.stringify({ error: 'validation', fields: [{ field: 'password', message: 'The password is not right.' }] }),
-});
-
 test('SC 2.4.11 NFR-A11Y-02: a text field that takes focus inside an open confirmation while cut by the window\'s edge is brought wholly into view (documents, 1280 wide)', async ({ browser }) => {
   // The on-focus reveal alone (InlineConfirm's onFocus; register D-386). A text field that takes focus inside an already open
   // confirmation (its layout effect has run) while cut by the bottom edge with its first line still showing: the documents
   // page's reason, a textarea, blurred, cut, and focused again by a script, as a later script focus by a screen would be.
-  // Chromium brings a focused text field's caret into view, not its box: with the first line showing it scrolls nothing, and
-  // with the handler removed this case fails ("the reason field is wholly in view (391 to 477, visible 0 to 431)"). With
-  // only 12 px showing the caret itself is cut, the browser scrolls the field in by itself, and the case passes with no
-  // handler: the strip must show the whole first line, or the case proves nothing about the handler.
-  const FIRST_LINE_SHOWING = 40;
+  // Chromium brings a focused text field's caret into view, not its box: with the whole first line showing it scrolls
+  // nothing, and with the handler removed this case fails ("the reason field is wholly in view (391 to 477, visible 0 to
+  // 431)"). With 12 px showing the caret is out of view altogether, the browser scrolls the field in by itself, and the case
+  // passes with no handler. So the strip is taken from the field itself (its top border, top padding and line height: where
+  // its first line ends, plus a few pixels), and the case fails, saying why, unless that strip shows the whole first line and
+  // leaves the field well cut: a restyle of the form controls must not turn this case into one that proves nothing.
   test.setTimeout(120_000);
   const page = await pageAs(browser, 'owner', WIDE);
   await load(page, (await documentPage()).url);
@@ -643,7 +663,19 @@ test('SC 2.4.11 NFR-A11Y-02: a text field that takes focus inside an open confir
   await expect(field).toBeFocused();
   await settled(page, confirmation);
   await field.evaluate((el) => (el as HTMLElement).blur());
-  await cutAtBottom(page, field, FIRST_LINE_SHOWING);
+  const lines = await field.evaluate((el) => {
+    const cs = getComputedStyle(el);
+    const padTop = parseFloat(cs.paddingTop);
+    const padBottom = parseFloat(cs.paddingBottom);
+    const rows = (el as HTMLTextAreaElement).rows;
+    // The line height: the computed value, or, where it is 'normal', the content box's height over the rows.
+    const line = cs.lineHeight === 'normal' ? (el.clientHeight - padTop - padBottom) / rows : parseFloat(cs.lineHeight);
+    return { firstLineEnds: parseFloat(cs.borderTopWidth) + padTop + line, height: el.getBoundingClientRect().height };
+  });
+  const firstLineShowing = Math.ceil(lines.firstLineEnds) + 4;
+  expect(firstLineShowing >= lines.firstLineEnds && firstLineShowing <= lines.height - 16,
+    `the strip shows the reason field's whole first line (it ends ${lines.firstLineEnds} px down; the strip is ${firstLineShowing} px) and leaves at least 16 px of the ${lines.height} px field cut; otherwise the browser's own caret reveal, or no cut at all, would decide this case and it would prove nothing about the on-focus reveal`).toBe(true);
+  await cutAtBottom(page, field, firstLineShowing);
   await field.evaluate((el) => (el as HTMLElement).focus());
   await expect(field).toBeFocused();
   await settled(page, field);
