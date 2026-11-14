@@ -31,7 +31,8 @@ function reasonOf(next: NextStep): ReactNode {
 
 /**
  * Home's "Your next step" (spec 9.1; plan 1B rule C2): one question, named in words with its code small after them, where
- * it is, why it was chosen, and two equal controls, one to the question and one to its stage's questions. A server
+ * it is, why it was chosen, and two controls of one height (plan C7): the primary to the question, the secondary to its
+ * stage's questions, in that order on every width. A server
  * component: no state and no handler of its own.
  */
 export function NextStepCard({ orgSlug, next }: { orgSlug: string; next: NextStep }): ReactElement {
@@ -39,17 +40,17 @@ export function NextStepCard({ orgSlug, next }: { orgSlug: string; next: NextSte
   return (
     <section className="next-step" aria-labelledby="next-step">
       <h2 id="next-step">{HOME_COPY.nextStepHeading}</h2>
-      <p className="next-step__where">
-        <span>{withSlot(HOME_COPY.projectOf(SLOT), <bdi>{next.projectName}</bdi>)}</span>
-        <span>{STAGE_NAME[next.stage]}</span>
-      </p>
+      <div className="next-step__where">
+        <p>{withSlot(HOME_COPY.projectOf(SLOT), <bdi>{next.projectName}</bdi>)}</p>
+        <p>{STAGE_NAME[next.stage]}</p>
+      </div>
       <p className="next-step__question">
         <bdi>{next.questionText}</bdi> <span className="next-step__code">{next.questionId}</span>
       </p>
       <p>{positionWords(next.position.n, next.position.of)}</p>
       <p>{reasonOf(next)}</p>
       <div className="next-step__actions">
-        <ButtonLink variant="secondary" href={`${stage}/questions/${next.questionId}`}>{HOME_COPY.continueRecording}</ButtonLink>
+        <ButtonLink variant="primary" href={`${stage}/questions/${next.questionId}`}>{HOME_COPY.continueRecording}</ButtonLink>
         <ButtonLink variant="secondary" href={stage}>{HOME_COPY.chooseAnother}</ButtonLink>
       </div>
     </section>

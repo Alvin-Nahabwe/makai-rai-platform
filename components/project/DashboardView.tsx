@@ -28,7 +28,7 @@ export function DashboardView({ data, next }: { data: DashboardData; next?: Next
       {data.welcome ? <WelcomeNotice orgName={data.orgName} role={data.role} /> : null}
       <PageHeader
         title={HOME_COPY.heading}
-        actions={data.canCreate ? <ButtonLink variant="primary" href={newProject}>{HOME_COPY.newProject}</ButtonLink> : null}
+        actions={data.canCreate ? <ButtonLink variant={next ? 'secondary' : 'primary'} href={newProject}>{HOME_COPY.newProject}</ButtonLink> : null}
       />
 
       {next ? <NextStepCard orgSlug={data.orgSlug} next={next} /> : null}

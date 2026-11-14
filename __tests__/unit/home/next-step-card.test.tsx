@@ -39,10 +39,20 @@ describe('NextStepCard', () => {
     expect(textOf(h)).toContain(HOME_COPY.reasonNextOpen('Pre-processing', '3 Nov 2026'));
     expect(linksNamed(h, [HOME_COPY.continueRecording, HOME_COPY.chooseAnother])).toHaveLength(2);
     expect(textOf(h)).toContain(positionWords(5, 22));
-    expect(textOf(h)).not.toMatch(/Q-PP-\d+\s*$/m);
+    // The plan's "code not alone at a line's end" is held by the indexOf case below: stripped markup has no line ends.
     expect(textOf(h)).toContain(HOME_COPY.nextStepHeading);
     expect(textOf(h)).toContain(HOME_COPY.projectOf('Antenatal risk triage'));
     expect(textOf(h)).toContain('Pre-processing');
+  });
+
+  it('F2: the project line and the stage name are separate lines, never joined as text', () => {
+    const h = card();
+    // Text as a block-aware reader takes it: each closing block tag ends a line, an inline one does not.
+    const lines = textOf(h.replace(/<\/(p|div|h2|section)>/g, '\n')).split('\n').map((l) => l.trim());
+    expect(lines).toContain(HOME_COPY.projectOf('Antenatal risk triage'));
+    expect(lines).toContain('Pre-processing');
+    expect(lines.join('\n')).not.toMatch(/Antenatal risk triage[^\n]*Pre-processing/);
+    expect(h).toMatch(/<p[^>]*>Project: <bdi>Antenatal risk triage<\/bdi><\/p>\s*<p[^>]*>Pre-processing<\/p>/);
   });
 
   it('is a section labelled by its h2 #next-step', () => {
@@ -74,11 +84,12 @@ describe('NextStepCard', () => {
     expect(linksNamed(h, [HOME_COPY.chooseAnother])).toEqual([[HOME_COPY.chooseAnother, '/orgs/org-a/projects/p1/stages/in-processing']]);
   });
 
-  it('the two controls are of the same kit variant', () => {
-    const classes = [...card().matchAll(/<a\b[^>]*class="([^"]*)"/g)].map((m) => m[1]);
-    expect(classes).toHaveLength(2);
-    expect(classes[0]).toBe(classes[1]);
-    expect(classes[0]).toContain('ui-button--secondary');
+  it('C7: Continue recording is the primary button and Choose another question the secondary one, in that order', () => {
+    const h = card();
+    const controls = [...h.matchAll(/<a\b[^>]*class="([^"]*)"[^>]*>([\s\S]*?)<\/a>/g)].map((m) => [textOf(m[2]).trim(), m[1]]);
+    expect(controls.map(([t]) => t)).toEqual([HOME_COPY.continueRecording, HOME_COPY.chooseAnother]);
+    expect(controls[0][1].split(/\s+/)).toContain('ui-button--primary');
+    expect(controls[1][1].split(/\s+/)).toContain('ui-button--secondary');
   });
 
   it('principle 7: no %, no total, no progress element, no tick, the position the only count', () => {
@@ -116,6 +127,20 @@ describe('DashboardView with a next step', () => {
       expect(h).not.toContain('id="next-step"');
       expect(h).not.toContain(HOME_COPY.continueRecording);
       expect(h).not.toContain(HOME_COPY.nextStepHeading);
+    }
+  });
+
+  it("with a next step, Home's header New project is secondary and Continue recording the page's only primary", () => {
+    const h = html(<DashboardView data={DASHBOARD} next={NEXT} />);
+    const controls = [...h.matchAll(/<a\b[^>]*class="([^"]*)"[^>]*>([\s\S]*?)<\/a>/g)].map((m) => [textOf(m[2]).trim(), m[1].split(/\s+/)] as const);
+    expect(controls.find(([t]) => t === HOME_COPY.newProject)?.[1]).toContain('ui-button--secondary');
+    expect(controls.filter(([, c]) => c.includes('ui-button--primary')).map(([t]) => t)).toEqual([HOME_COPY.continueRecording]);
+  });
+
+  it("with no next step, or next null, Home's header New project stays primary", () => {
+    for (const h of [html(<DashboardView data={DASHBOARD} next={null} />), html(<DashboardView data={DASHBOARD} />)]) {
+      const link = [...h.matchAll(/<a\b[^>]*class="([^"]*)"[^>]*>([\s\S]*?)<\/a>/g)].find((m) => textOf(m[2]).trim() === HOME_COPY.newProject);
+      expect(link?.[1].split(/\s+/)).toContain('ui-button--primary');
     }
   });
 });
