@@ -1,4 +1,4 @@
-import type { Identity } from '@/lib/auth/identity';
+import { identityPassesGates, type Identity } from '@/lib/auth/identity';
 import { orgRoleLabel } from '@/lib/authz/roleLabel';
 import { identityDb } from '@/lib/data/identity';
 import { membershipsForUser } from '@/lib/data/preauth';
@@ -41,8 +41,18 @@ export function roleWord(label: string): string {
  * last-active hint names, chosen by resolveOrgDispatch exactly as app/page.tsx does, so the hint (unconstrained text,
  * D-069) only ever selects among these memberships and is never itself a slug. The hint is read, by the person's own id,
  * only when there are two or more memberships. Null for the administrator, for a person in none, and with no usable hint.
+ *
+ * A person held at a sign-in gate (a password change due, or a legal text not yet accepted: identityPassesGates, the
+ * written copy of requireIdentity's gates 2 and 3) gets the shell of a person in no organisation: no organisation, no role
+ * word, no home slug, so the rail on S-05, S-21 and S-29 links to no organisation page they cannot reach yet (coordinator
+ * ruling of 14 November 2026, after S4 gave those links real addresses). Their memberships are not read, as on Help
+ * (app/help/layout.tsx). The acceptance read is the one requireIdentity already made in this request (React cache()).
  */
 export async function loadShellData(identity: Identity): Promise<ShellData> {
+  if (!(await identityPassesGates(identity))) {
+    const platformLabel = await orgRoleLabel(identity, undefined);
+    return { userId: identity.userId, userName: identity.name || '', platformLabel, roleLabels: {}, orgs: [], homeSlug: null };
+  }
   const memberships = await membershipsForUser(identity.userId);
   const [platformLabel, ...orgLabels] = await Promise.all([
     orgRoleLabel(identity, undefined),

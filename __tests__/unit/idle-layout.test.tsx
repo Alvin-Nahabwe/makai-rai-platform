@@ -22,6 +22,8 @@ vi.mock('@/lib/auth/identity', () => ({
     platformRole: 'assessor',
     mustChangePassword: false,
   })),
+  // The ordinary person has passed the sign-in gates; lib/shell/data.ts asks before reading the memberships.
+  identityPassesGates: vi.fn(async () => true),
 }));
 vi.mock('@/lib/auth/idleDeadline', () => ({ readSessionDeadlines: readSessionDeadlinesMock }));
 vi.mock('@/lib/data/preauth', () => ({ membershipsForUser: membershipsMock }));

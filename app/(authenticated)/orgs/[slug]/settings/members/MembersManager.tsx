@@ -252,7 +252,7 @@ export default function MembersManager({ slug, currentUserId, currentRole, membe
   const memberRows = members.map((m) => ({
     key: m.userId,
     cells: {
-      name: <>{m.name}{m.userId === currentUserId ? C.members.you : ''}{m.createdFromShownLink && <span className="members-muted">{C.members.copiedLink}</span>}</>,
+      name: <>{m.name}{m.userId === currentUserId ? C.members.you : ''}{m.createdFromShownLink && <span className="members-mark">{C.members.copiedLink}</span>}</>,
       role: mayChangeRole(m) ? (
         <div className="ui-select__wrap members-role">
           <select

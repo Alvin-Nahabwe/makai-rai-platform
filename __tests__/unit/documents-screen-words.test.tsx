@@ -67,8 +67,8 @@ describe('S-18 words (plan 1A Task 18c (c))', () => {
       .toContain('Part of this document comes from the In-processing stage, which has not been sealed. Those fields will read &quot;Not recorded: this stage had no seal when the document was issued&quot;.');
     expect(renderToStaticMarkup(<GenerateDocumentForm {...form({ neverSealed: ['in-processing', 'post-processing'] })} />))
       .toContain('Part of this document comes from the In-processing and Post-processing stages, which have not been sealed. Those fields will read &quot;Not recorded: this stage had no seal when the document was issued&quot;.');
-    expect(fromRecordLine({ fields: 1, questions: 1, notRecorded: 1 })).toBe('1 field from 1 question . 1 field will read "Not recorded"');
-    expect(fromRecordLine({ fields: 10, questions: 0, notRecorded: 2 })).toBe('10 fields . 2 fields will read "Not recorded"');
+    expect(fromRecordLine({ fields: 1, questions: 1, notRecorded: 1 })).toBe('1 field from 1 question\u00a0· 1 field will read "Not recorded"');
+    expect(fromRecordLine({ fields: 10, questions: 0, notRecorded: 2 })).toBe('10 fields\u00a0· 2 fields will read "Not recorded"');
   });
 
   it('the status lines and the refusals of the two phases', () => {
@@ -105,11 +105,11 @@ describe('S-18 words (plan 1A Task 18c (c))', () => {
 
   it('the issued list and the S-16 slot', () => {
     const html = renderToStaticMarkup(<IssuedDocumentsList orgSlug="o" documents={[doc()]} latestSealNumber={2} canWithdraw />);
-    expect(html).toContain('Data card . seal 1 . 3 Nov 2026 . by Amina N. . Fingerprint a1b2 c3d4 ... 8f90');
+    expect(html).toContain('Data card\u00a0· seal 1\u00a0· 3 Nov 2026\u00a0· by Amina N.\u00a0· Fingerprint a1b2 c3d4 ... 8f90');
     expect(html).toContain('Made from an older seal. A newer seal exists.');
     expect(renderToStaticMarkup(<IssuedDocumentsList orgSlug="o" documents={[doc({ erased: { erasedOn: '2026-11-04' } })]} latestSealNumber={1} canWithdraw />)).toContain('File erased on 4 Nov 2026');
     expect(renderToStaticMarkup(<ReviewDocumentsList orgSlug="o" projectId="p" reviewId="r" documents={[doc()]} />))
-      .toContain('Data card . from seal 1 . issued 3 Nov 2026 . Fingerprint a1b2 c3d4 ... 8f90 . Issued');
+      .toContain('Data card\u00a0· from seal 1\u00a0· issued 3 Nov 2026\u00a0· Fingerprint a1b2 c3d4 ... 8f90\u00a0· Issued');
   });
 
   it('copy and withdraw', () => {

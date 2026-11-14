@@ -34,7 +34,7 @@ export const AUTH_COPY = Object.freeze({
  */
 export const AUTH_MESSAGE_COPY = Object.freeze({
   /** M-20: one text for a wrong password, a locked account and an unknown email. */
-  wrongCredentials: 'The email or password is wrong, or the account is locked after too many tries. Try again in 15 minutes, or reset your password.',
+  wrongCredentials: 'The email or password is wrong. Check them and try again. After five wrong tries an account is locked for 15 minutes. You can also reset your password.',
   /** M-21: one answer whatever the address. */
   resetLinkSent: 'If an account exists for this email, we have sent a link. It works once and expires in 30 minutes.',
   /** M-22: a reset link that is used, expired, voided or unknown. */

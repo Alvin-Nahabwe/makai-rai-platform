@@ -47,7 +47,7 @@ export function previewLines(p: SealPreview, sealNumber: number, reasonLabels: R
     c.byStatus(p.byStatus.done, p.byStatus.partly, p.byStatus.not_yet, p.byStatus.not_applicable),
   ];
   const reasons = Object.entries(p.byReasonCode);
-  if (reasons.length > 0) lines.push(c.byReason(reasons.map(([code, n]) => `${reasonLabels[code] ?? code} ${n}`).join(' . ')));
+  if (reasons.length > 0) lines.push(c.byReason(reasons.map(([code, n]) => `${reasonLabels[code] ?? code} ${n}`).join('\u00a0· ')));
   if (p.scopeAnswer !== null) lines.push(c.gateAnswer(REVIEW_COPY.gateWords[p.scopeAnswer.answer]));
   lines.push(
     c.doneNoEvidence(p.doneWithoutEvidence),

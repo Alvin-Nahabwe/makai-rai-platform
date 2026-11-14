@@ -150,8 +150,8 @@ test('UX-18 FR-DEC-07 (owner question B5): a slow seal says Sealing... then Stil
   expect((await replied).status()).toBe(200);
   await expect(sealedStatus(page)).toContainText(/^Sealed as seal 1 on /);
   await page.goto(s16Url);
-  await expect(page.getByText(/^Seal 1 \./)).toHaveCount(1);
-  await expect(page.getByText(/^Seal 2 \./)).toHaveCount(0);
+  await expect(page.getByText(/^Seal 1[\u00a0 ]· /)).toHaveCount(1);
+  await expect(page.getByText(/^Seal 2[\u00a0 ]· /)).toHaveCount(0);
 });
 
 test('FR-DEC-07 NFR-INT-02 (C4 ruling on hunter H1): after a lost reply, a reload and a new press replay the first request id, the route answers 200 with that seal, and no second seal exists', async ({ page, baseURL }) => {
@@ -229,6 +229,28 @@ test('NFR-SEC-02 FR-AUTHZ-01 (C4 SO-2): S-16 of another organisation\'s review i
   expect((await page.goto(`/orgs/${org.slug}/projects/${p.id}/reviews/new`))?.status()).toBe(200);
   await expect(page.getByText(REVIEW_COPY.open.refusal)).toBeVisible();
   await expect(page.getByLabel(REVIEW_COPY.open.noteLabel)).toHaveCount(0);
+});
+
+test('S-16 (workshop walk S5): the breadcrumb leads back to the project, and a viewer opens an issued document\'s PDF from the review', async ({ page, baseURL }) => {
+  const name = `Way back ${randomUUID().slice(0, 8)}`;
+  const p = await newProject(baseURL!, name);
+  await saveDecision(baseURL!, p.id, 'Q-PP-12', null);
+  const r = await openReview(baseURL!, p.id);
+  const s = await api<{ id: string }>(baseURL!, 'reviewer', `/api/v1/orgs/${org.slug}/projects/${p.id}/reviews/${r.id}/seals`, { requestId: randomUUID() });
+  // One issue by the admin seat, of the ten an hour each user may make.
+  const d = await api<{ id: string }>(baseURL!, 'admin', `/api/v1/orgs/${org.slug}/projects/${p.id}/reviews/${r.id}/documents`, {
+    requestId: randomUUID(), documentType: 'data_card', sealId: s.id, typedFields: {},
+  });
+  await signIn(page, 'viewer');
+  await page.goto(`/orgs/${org.slug}/projects/${p.id}/reviews/${r.id}`);
+  const pdf = page.getByRole('main').getByRole('link', { name: /^Download PDF \(/ });
+  await expect(pdf).toHaveCount(1);
+  await expect(pdf).toHaveAttribute('href', `/api/v1/orgs/${org.slug}/documents/${d.id}/pdf`);
+  const res = await page.request.get((await pdf.getAttribute('href'))!);
+  expect([res.status(), res.headers()['content-type']]).toEqual([200, 'application/pdf']);
+  await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name }).click();
+  await expect(page).toHaveURL(new RegExp(`/orgs/${org.slug}/projects/${p.id}$`));
+  await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
 });
 
 test.afterAll(async () => {

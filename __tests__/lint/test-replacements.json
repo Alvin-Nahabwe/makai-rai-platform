@@ -2046,5 +2046,61 @@
     "property": "The dashboard's project card still reads, per stage, \"<stage>: <n> open findings, <n> overdue mitigations\", with no score. Ruling R5 (S10, 14 Nov 2026) makes \"<n> open findings\" a link to that stage's findings when n is above 0, so the words are now split by the link's tags; the case reads the card's text without tags.",
     "proof": "The case renders the dashboard as a viewer and requires, on its text with the tags removed, /Pre-processing: \\d+ open findings?, \\d+ overdue mitigations?/, and no score, % or maturity on the markup; __tests__/unit/project-card-findings-link.test.tsx requires the link to /orgs/<org>/projects/<id>/findings?stage=<stage> around \"2 open findings\", plain text at 0, and the zero line exactly as HOME_COPY.card.line writes it.",
     "task": "fix/walk-findings-closure Part 2, ruling R5"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/integration/documents-page.test.tsx::S-16: the seal explanation link sits under the Seals heading, and the time-stamp sentence is not on screen",
+    "replacedBy": "__tests__/integration/documents-page.test.tsx::S-16: the seal explanation link sits in the Status section after the state line, and the time-stamp sentence is not on screen",
+    "property": "S-16 shows the \"What sealing means\" link exactly once, and the time-stamp sentence not at all. The link moved from under the Seals heading into the Status section, directly after the state line, because the Seals heading is now drawn only when the review has a seal (workshop walk finding S5-2: no heading with nothing under it).",
+    "proof": "For a sealed and an unsealed review the case takes the Status section's markup and requires it to start with <h2 id=\"review-state\">Status</h2>, then the state line's paragraph, then <p><a href=\"/help#what-sealing-means\">What sealing means</a></p>; the count of 'What sealing means' on the page stays exactly 1 and 'independently time-stamped' stays absent. __tests__/integration/stage-review-page.test.tsx requires that a review with no seal draws no Seals heading and a sealed one does.",
+    "task": "workshop walk fix S5"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/review-text.test.ts::UX-18: the unsaved-answers line, and the statement that sealing records open items",
+    "replacedBy": "__tests__/unit/review-text.test.ts::UX-18: the unsaved-answers line, and the statement that sealing records open items",
+    "property": "The seal page's preview lines say the decisions by status and the Not applicable and Not yet reasons with their counts. The separator \" . \" became a no-break space, a middle dot and a space (U+00A0, U+00B7, U+0020), so a line that wraps never starts with the dot (workshop walk finding S12-a).",
+    "proof": "The same case: in the two expected lines 'Decisions by status: ...' and 'Not applicable and Not yet by reason: ...' each ' . ' is now '\\u00a0· '; the words, counts and every other line of the case are byte for byte unchanged.",
+    "task": "workshop walk fix S12-a"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/documents-screen.test.tsx::UX-20: a document that takes questions says how many fields come from how many questions; one that takes none says only the fields (data card, model card, mitigation plan)",
+    "replacedBy": "__tests__/unit/documents-screen.test.tsx::UX-20: a document that takes questions says how many fields come from how many questions; one that takes none says only the fields (data card, model card, mitigation plan)",
+    "property": "S-18's summary line says how many fields come from how many questions and how many will read Not recorded. The separator \" . \" became a no-break space, a middle dot and a space (U+00A0, U+00B7, U+0020), so a line that wraps never starts with the dot (workshop walk finding S12-a).",
+    "proof": "The same case: in the three expected summary lines the one ' . ' is now '\\u00a0· '; the numbers, the words and the other assertions are unchanged.",
+    "task": "workshop walk fix S12-a"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/documents-screen.test.tsx::FR-DOC-01 (S-16 slot): the review lists each document with its seal, date and short SHA-256, and adds no link of its own",
+    "replacedBy": "__tests__/unit/documents-screen.test.tsx::FR-DOC-01 (S-16 slot): the review lists each document with its seal, date and short SHA-256, and adds no link of its own",
+    "property": "S-16's documents slot lists each document with its type, seal, issue date and short fingerprint, and adds no Generate a document link. The separator \" . \" became a no-break space, a middle dot and a space (U+00A0, U+00B7, U+0020), so a line that wraps never starts with the dot (workshop walk finding S12-a).",
+    "proof": "The same case: in the two expected lines each ' . ' is now '\\u00a0· '; the Withdrawn and Issued words, the absent 'Generate a document' and the empty slot for no documents are unchanged. The PDF link the slot now carries (workshop walk S5-4) is required by the added case 'FR-DOC-04 (S-16 slot, workshop walk S5-4): ...' in the same file.",
+    "task": "workshop walk fix S12-a"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/integration/documents-page.test.tsx::FR-REV-08 (C4 RE-1): after erase_text_field on the file name a document printed, S-16 and S-18 still render for every role and list the document as erased",
+    "replacedBy": "__tests__/integration/documents-page.test.tsx::FR-REV-08 (C4 RE-1): after erase_text_field on the file name a document printed, S-16 and S-18 still render for every role and list the document as erased",
+    "property": "After an evidence file name is erased, S-16 and S-18 still render for every role and list the document. The separator \" . \" became a no-break space, a middle dot and a space (U+00A0, U+00B7, U+0020), so a line that wraps never starts with the dot (workshop walk finding S12-a).",
+    "proof": "The same case: the S-16 check 'Data card . from seal 1' is now 'Data card\\u00a0· from seal 1'; every other line is unchanged.",
+    "task": "workshop walk fix S12-a"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/decision-components.test.tsx::plan 1A Task 17: every control keeps its id and name, and the status cards show each status shape",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::plan 1A Task 17: every control keeps its id and name, and each status card shows one symbol, its radio button",
+    "property": "Every control of the decision form keeps its id and name, and each status choice shows one symbol: the native radio button, which is the one that shows what is chosen. The status shape beside it is gone (workshop walk finding S12-d): before anything was chosen, Not yet showed two empty circles and Done's filled disc read as chosen.",
+    "proof": "The case renders DecisionFields and requires, for done, partly, not_yet and not_applicable, the radio with type=\"radio\", name=\"status\", its value and its aria-describedby, exactly as before; the count of class=\"ui-mark__shape\" in the markup, which was 4, is now none (match returns null). The option, reason-code and select assertions are unchanged. __tests__/unit/ui/radio-cards.test.tsx still requires RadioCards to draw a mark for an option that passes one, so the kit's option stays.",
+    "task": "workshop walk fix S12-d"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/idle-layout.test.tsx::(module)",
+    "replacedBy": "__tests__/unit/idle-layout.test.tsx::UX-02: the layout gives the Sidebar the person's role in each of their organisations, the platform label and no platform role",
+    "property": "The file's module code serves the cases below: the layout is walked as an element tree with the data reads mocked, so the cases see what the layout hands the shell.",
+    "proof": "One module change: the mock of @/lib/auth/identity gains identityPassesGates, resolving true, because lib/shell/data.ts now asks it before reading the memberships (a person held at a sign-in gate gets the shell of a person in no organisation; coordinator ruling after workshop walk finding S4). Without it vitest refuses the missing export of the mocked module. The mocked person is the ordinary one who has passed the gates, so every case still sees the membershipsForUser and orgRoleLabel mocks decide the shell, unchanged. The held case is required by __tests__/unit/shell-data.test.ts::gate 2 or 3 not passed: the shell of a person in no organisation, and the memberships are not read.",
+    "task": "workshop walk fix S4, gate ruling"
   }
 ]

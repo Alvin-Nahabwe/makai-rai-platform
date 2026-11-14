@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { HOSTILE_STRINGS } from '../helpers/hostile';
@@ -86,6 +87,12 @@ describe('ControlCard', () => {
     expect(card('C-13')).toContain('Download the list of software it needs (requirements.txt)');
     expect(card('C-13')).toContain('<p class="ctl-card__note">Run it on your own computer or in a notebook service.</p>');
     expect(card('C-13')).not.toMatch(/never runs it/);
+  });
+
+  it('UX-13 (workshop walk S12-b): the type line is drawn as written, "Type: Procedural", not upper-cased or spaced out', () => {
+    const rule = readFileSync('components/suggestions/ControlCard.css', 'utf8').match(/\.ctl-card__type \{([^}]*)\}/)?.[1];
+    expect(rule).toBeDefined();
+    expect(rule).not.toMatch(/text-transform|letter-spacing/);
   });
 
   it('FR-SUG-04 FR-CNT-05: CNT\'s parseResources accepts the card test resources unchanged', () => {
