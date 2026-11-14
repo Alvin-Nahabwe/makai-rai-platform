@@ -76,7 +76,10 @@
   color: var(--color-ink-muted);
 }
 
-.admin-account__name {
+/* The organisation's name in the Organisations table takes the same rule: one long unbreakable word in a name must
+   not make the table wider than its wrapper and push the last column out of sight. */
+.admin-account__name,
+.admin-org__name {
   display: inline-block;
   min-inline-size: 7em;
   overflow-wrap: anywhere;

@@ -57,7 +57,7 @@ export default async function OrganisationsPage({ searchParams }: { searchParams
           cells: {
             organisation: (
               <>
-                <ListLink href={`/admin/organisations/${encodeURIComponent(r.orgId)}`}>{r.name}</ListLink>
+                <span className="admin-org__name"><ListLink href={`/admin/organisations/${encodeURIComponent(r.orgId)}`}>{r.name}</ListLink></span>
                 {r.archived ? <span>{O.archived}</span> : null}
                 {r.hasActiveOwner ? null : <strong className="admin-flag">{O.noActiveOwner}</strong>}
               </>
