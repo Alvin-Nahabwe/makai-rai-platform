@@ -9,6 +9,8 @@ import { INVITATION_COPY } from '../lib/invitations/copy';
 import { ACCEPTANCES_COPY } from '../lib/legal/acceptances/copy';
 import { ACCEPTED_KINDS, CONSENT_TYPE_FOR } from '../types/legal';
 import { draftKeys, draftValues, fillValid, stageOf, waitForQuestionPage } from './helpers/session';
+import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
+import { FIELD_COPY } from '../lib/ui/field/copy';
 
 /**
  * Version 2 of the three accepted texts reaches an account that accepted version 1 (FR-ACC-04, FR-ACC-03 threat A5,
@@ -148,7 +150,7 @@ test.describe('version 2 of the terms, the privacy notice and the consent to sto
     await page.waitForURL((url) => url.pathname !== '/acceptances');
     await page.goto(question);
     await waitForQuestionPage(page);
-    await expect(page.getByLabel('Reason (required)')).toHaveValue(REASON);
+    await expect(page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`)).toHaveValue(REASON);
     await page.context().close();
   });
 

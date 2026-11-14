@@ -66,7 +66,9 @@ describe('QuestionContent', () => {
     // main area, the viewport less the 260px sidebar and two 2rem paddings, reaches 49.5rem, at a viewport of about 1180px.
     expect(css).toMatch(/@media \(width >= 75rem\) \{\s*\.question-content__jump \{\s*display: none;/);
     expect(css).toMatch(/\.question-content__jump \{[^}]*min-block-size: 24px;[^}]*min-inline-size: 24px;/);
-    expect(css).toMatch(/\.question-content__jump:focus-visible \{[^}]*outline: 3px solid var\(--tint-brand-fg\);/);
+    expect(css).toMatch(/\.question-content__jump:focus-visible \{[^}]*outline: 3px solid var\(--color-action-text\);/);
+    // Colour roles only (plan 1A Task 17): no name of the legacy aliases block of app/globals.css.
+    expect(css).not.toMatch(/var\(--(text-muted|text-primary|text-body|font-size-(sm|lg|base)|tint-brand-fg)\)/);
     expect(css).not.toMatch(/outline: none|outline: 0/);
   });
 });

@@ -5,6 +5,7 @@ import { ReminderEmailsSetting, ReminderEmailsSettingView, settingReducer, initi
 import { StageFollowUp, STATUS_WORD } from '@/components/followup/StageFollowUp';
 import { readFileSync } from 'node:fs';
 import { StageFollowUpCounts } from '@/components/followup/StageFollowUpCounts';
+import { PROJECT_COPY } from '@/lib/project/copy';
 import type { FollowUpItem } from '@/types/api';
 
 const item = (id: string, dueDate: string, over: Partial<FollowUpItem> = {}): FollowUpItem => ({
@@ -18,15 +19,15 @@ const CANNOT_20_NOV = item('m-cannot', '2026-11-20', { ownerCanAct: false });
 describe('reminder emails setting (S-21)', () => {
   it('FR-FUP-06: turning reminders off says "Reminder emails turned off."', () => {   // 7.4.2 row S-21, SRS line 2389
     expect(reminderSettingSaved(false)).toBe('Reminder emails turned off.');
-    expect(reminderSettingSaved(true)).toBe('Saved.');
+    expect(reminderSettingSaved(true)).toBe('Reminder emails turned on.');
     expect(REMINDER_SETTING_COPY.turnedOff).toBe('Reminder emails turned off.');
   });
 
   it('FR-FUP-06 NFR-A11Y-02: the setting is a labelled checkbox with its note', () => {
     const html = renderToStaticMarkup(<ReminderEmailsSetting enabled />);
     expect(html).toMatch(/<input[^>]*type="checkbox"[^>]*checked/);
-    expect(html).toMatch(/<label[^>]*>[^<]*Email me when a mitigation I own is due/);
-    expect(html).toContain('The lists on the dashboard and project pages do not change.');
+    expect(html).toMatch(/<label[^>]*>[^<]*Email me when a mitigation assigned to me is due or overdue/);
+    expect(html).toContain('This only turns the emails on or off. Your mitigations still show on Home.');
   });
 });
 
@@ -78,19 +79,24 @@ describe('reminder emails setting state (S-21)', () => {
 describe('stage follow-up (S-10, S-11)', () => {
   it('FR-FUP-01 FR-FUP-05: StageFollowUp lists overdue first and marks overdue and owner cannot act in words', () => {
     const html = renderToStaticMarkup(<StageFollowUp orgSlug="o" projectId="p" stage="pre-processing" items={[DUE_12_NOV, OVERDUE_28_OCT]} cannotAct={[CANNOT_20_NOV]} />);
-    expect(html).toContain('Mitigations to follow up');
-    expect(html.indexOf('>Overdue<')).toBeLessThan(html.indexOf('Due 12 Nov 2026'));
-    expect(html.indexOf('Due 12 Nov 2026')).toBeLessThan(html.indexOf('Due 20 Nov 2026'));
-    // R13-7: the label word carries the class, the rest of the phrase is plain text after it.
-    expect(html).toContain('<span class="status-label status-label--warning">Overdue</span>: was due 28 Oct 2026');
-    expect(html).toContain('<span class="status-label status-label--warning">Owner cannot act</span>: reassign');
+    const F = PROJECT_COPY.followUp;
+    const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    expect(html).toContain(F.heading);
+    expect(html.indexOf(`>${F.overdue}<`)).toBeLessThan(html.indexOf(F.due('12 Nov 2026')));
+    expect(html.indexOf(F.due('12 Nov 2026'))).toBeLessThan(html.indexOf(F.due('20 Nov 2026')));
+    // spec 7.1 (plan 1A Task 15 carry): the word Overdue alone is red, outside any status label; the date follows as plain text.
+    expect(html).toContain(`<span class="followup-overdue">${F.overdue}</span>${F.wasDue('28 Oct 2026')}`);
+    expect(html.match(/class="followup-overdue"/g)).toHaveLength(1);
+    // the owner who cannot act: a sentence naming them, then what to do, both plain text (ruling L5-5 amended: a sentence is
+    // not a status label)
+    expect(html).toContain(`<span>${F.cannotAct('Ada Owner')} ${F.reassign}</span>`);
+    expect(html).not.toMatch(new RegExp(`class="status-label"[^>]*>[^<]*${esc(F.cannotAct('Ada Owner'))}`));
     expect(html).toContain('href="/orgs/o/projects/p/findings/');
+    expect(html.match(new RegExp(`>${esc(F.view)}</a>`, 'g'))).toHaveLength(3);
     expect(html).toContain('<span class="status-label">In progress</span>');
     expect(html).toContain('<span class="status-label">Planned</span>');
-    expect(html).not.toMatch(/badge--moderate|data-status-label/);
-    const warnings = [...html.matchAll(/status-label--warning">([^<]*)</g)].map((m) => m[1]);
-    expect(warnings.sort()).toEqual(['Overdue', 'Owner cannot act']);                          // the tint is on those two words only
-    expect(html).toContain('Ada Owner');
+    expect(html).not.toMatch(/badge--moderate|data-status-label|status-label--warning/);
+    expect(html).toContain(F.assignedTo('Ada Owner'));
   });
 
   it('FR-FUP-01: an item in both lists is shown once', () => {
@@ -98,14 +104,19 @@ describe('stage follow-up (S-10, S-11)', () => {
     expect(html.match(/Do m-cannot/g)).toHaveLength(1);
   });
 
+  it('FR-FUP-01: a mitigation whose text was erased says so', () => {
+    const html = renderToStaticMarkup(<StageFollowUp orgSlug="o" projectId="p" stage="pre-processing" items={[{ ...DUE_12_NOV, what: null }]} cannotAct={[]} />);
+    expect(html).toContain(`<span>${PROJECT_COPY.followUp.erased.replaceAll("'", '&#x27;')}</span>`);
+  });
+
   it('FR-FUP-01: StageFollowUpCounts links open findings and overdue mitigations', () => {
     const html = renderToStaticMarkup(<StageFollowUpCounts orgSlug="o" projectId="p" stage="in-processing" counts={{ openFindings: 1, overdueMitigations: 2 }} />);
-    expect(html).toContain('href="/orgs/o/projects/p/findings"'); expect(html).toContain('1 open finding');
-    expect(html).toContain('href="/orgs/o/projects/p#in-processing"'); expect(html).toContain('2 overdue mitigations');
+    expect(html).toContain('href="/orgs/o/projects/p/findings"'); expect(html).toMatch(/>1 open finding<\/a>/);
+    expect(html).toContain('href="/orgs/o/projects/p#in-processing"'); expect(html).toMatch(/>2 overdue mitigations<\/a>/);
   });
 
   it('FR-FUP-01: StageFollowUp says "None open." for an empty stage', () => {
-    expect(renderToStaticMarkup(<StageFollowUp orgSlug="o" projectId="p" stage="post-processing" items={[]} cannotAct={[]} />)).toContain('None open.');
+    expect(renderToStaticMarkup(<StageFollowUp orgSlug="o" projectId="p" stage="post-processing" items={[]} cannotAct={[]} />)).toContain(`<p>${PROJECT_COPY.followUp.none}</p>`);
   });
 
   it('FR-FUP-01 FR-PUB-01: the claims crawl exempts exactly the status words StageFollowUp renders', () => {

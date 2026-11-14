@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { DecisionVersionView } from '@/types/api';
 import {
-  deciderLabel, FINDING_NOTE, M11, OUTSIDE_ROLE_LABELS, problemSummary, REASON_HELP, reasonCount, savedMessage, SCOPE_OPTIONS,
-  STATUS_OPTIONS, WITHDRAW_COPY, WITHDRAWAL_CODE_LABELS, WITHDRAWAL_CODES,
+  DECISION_COPY, deciderLabel, FINDING_NOTE, M11, OUTSIDE_ROLE_LABELS, problemSummary, REASON_HELP, reasonCount, REQUEST_MESSAGES, savedLine,
+  savedMessage, SCOPE_OPTIONS, STATUS_OPTIONS, WITHDRAW_COPY, WITHDRAWAL_CODE_LABELS, WITHDRAWAL_CODES,
 } from '@/lib/decision/copy';
+import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
+import { DECISION_OUTCOME_COPY } from '@/lib/decision/outcome/copy';
+import { QUESTION_COPY } from '@/lib/question/copy';
+import { TERM_DONE, TERM_NOT_APPLICABLE, TERM_NOT_YET, TERM_PARTLY, TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION } from '@/lib/vocabulary/terms';
 
 const ME = 'user-me';
 
@@ -22,19 +26,21 @@ function view(over: Partial<DecisionVersionView>): DecisionVersionView {
 describe('lib/decision/copy.ts', () => {
   it('UX-09: four statuses in order with the 7.5.6 helper texts and the finding note', () => {
     expect(STATUS_OPTIONS).toEqual([
-      { value: 'done', label: 'Done', help: 'The expected practice is in place.' },
-      { value: 'partly', label: 'Partly', help: 'Some of the expected practice is in place.' },
-      { value: 'not_yet', label: 'Not yet', help: 'The expected practice is not in place yet.' },
-      { value: 'not_applicable', label: 'Not applicable', help: 'The practice does not apply to this project. Say why in the reason.' },
+      { value: 'done', label: 'Done', help: 'This is in place.' },
+      { value: 'partly', label: 'Partly', help: 'Some of it is in place, but not all of it.' },
+      { value: 'not_yet', label: 'Not yet', help: 'It is not in place yet.' },
+      { value: 'not_applicable', label: 'Not applicable', help: 'It does not apply to this project. Say why in the reason.' },
     ]);
-    expect(FINDING_NOTE).toBe("Saving 'Partly' or 'Not yet' keeps a finding open for this question, or opens one.");
+    // plan line 926: the help sentences are the vocabulary's own definitions, character for character
+    expect(STATUS_OPTIONS.map((o) => o.help)).toEqual([TERM_DONE, TERM_PARTLY, TERM_NOT_YET, TERM_NOT_APPLICABLE].map((t) => t.definition));
+    expect(FINDING_NOTE).toBe('If you choose Partly or Not yet, a finding is raised for this question (or stays open).');
   });
 
   it('FR-DEC-02: the three scope answers in order with the 7.5.6 helper texts', () => {
     expect(SCOPE_OPTIONS).toEqual([
-      { value: 'yes', label: 'Yes', help: 'It contains sensitive or personal information.' },
+      { value: 'yes', label: 'Yes', help: 'The data includes personal or sensitive information.' },
       { value: 'no', label: 'No', help: 'It does not.' },
-      { value: 'not_sure', label: 'Not sure', help: 'We do not know yet. The two personal-data questions stay open.' },
+      { value: 'not_sure', label: 'Not sure', help: 'We do not know yet. The questions about consent and anonymisation still apply.' },
     ]);
   });
 
@@ -46,31 +52,177 @@ describe('lib/decision/copy.ts', () => {
 
   it('UX-11 M-03: the saved confirmation names who decided and who entered', () => {
     expect(savedMessage(view({ versionNumber: 1, decidedBy: { kind: 'outside_role', role: 'ethics_committee' } }), '10:42 EAT', ME))
-      .toBe('Saved as version 1 at 10:42 EAT. Decided by: Ethics committee. Entered by: you.');
+      .toBe('Saved at 10:42 EAT as version 1. Decided by: Ethics committee.');
+    expect(savedLine('10:42 EAT', 2, null)).toBe('Saved at 10:42 EAT as version 2.');
     expect(Object.values(OUTSIDE_ROLE_LABELS)).toEqual(['Principal investigator', 'Supervisor', 'Ethics committee',
       'Data-access committee', 'Institutional data-protection officer', 'Funder', 'Other']);
-    expect(deciderLabel({ kind: 'outside_role', role: 'principal_investigator' }, ME, 'record')).toBe('Principal investigator (outside role)');
+    expect(deciderLabel({ kind: 'outside_role', role: 'principal_investigator' }, ME, 'record')).toBe('Principal investigator (no platform account)');
     expect(deciderLabel({ kind: 'member', user: { userId: 'u2', name: 'Grace A.', formerMember: true } }, ME, 'record')).toBe('Grace A. (former member)');
     expect(deciderLabel({ kind: 'member', user: { userId: ME, name: 'Amina K.', formerMember: false } }, ME, 'confirmation')).toBe('you');
     expect(deciderLabel({ kind: 'member', user: { userId: 'u2', name: 'Grace A.', formerMember: false } }, ME, 'confirmation')).toBe('Grace A.');
   });
 
   it('M-11: the summary counts the problems and keeps the answer', () => {
-    expect(problemSummary(1)).toBe('There is a problem with this decision. Your answer is kept.');
-    expect(problemSummary(2)).toBe('There are 2 problems with this decision. Your answer is kept.');
+    expect(problemSummary(1)).toBe('There is a problem with this decision. Your text is kept.');
+    expect(problemSummary(2)).toBe('There are 2 problems with this decision. Your text is kept.');
     expect(M11.webAddress).toBe('Enter a web address that starts with http:// or https://.');
     expect([M11.monthDays(2, 2028), M11.monthDays(4, 2026), M11.reasonTooLong(12345), M11.unchanged(2)]).toEqual([
       'February has 29 days.', 'April has 30 days.', 'The reason is 12,345 characters. The limit is 4,000.',
-      'This is the same as version 2. Change something before saving, or keep version 2.',
+      'Nothing has changed since the current decision. Change something before you save.',
     ]);
+    expect([M11.scopeAnswer, M11.reasonCode, M11.reasonCodeNotAllowed]).toEqual(['Choose an answer.', 'Choose a main reason.', 'Choose a main reason from the list.']);
+    expect(REQUEST_MESSAGES).toEqual({
+      body: 'Something went wrong. Reload the page and try again.',
+      requestId: 'Something went wrong. Reload the page and try again.',
+      stage: 'This page is out of date. Reload it and try again.',
+      questionId: 'This question has changed. Reload the page.',
+      baseVersionNumber: 'This page is out of date. Reload it and try again.',
+      statusOnScope: 'This page is out of date. Reload it and try again.',
+      scopeOnPractice: 'This page is out of date. Reload it and try again.',
+      optionsNotOfQuestion: 'This page is out of date. Reload it and try again.',
+      optionsOnPractice: 'This page is out of date. Reload it and try again.',
+      evidenceIds: 'Attach each file or link once.',
+      evidenceTooMany: 'Attach at most 100 files or links to one decision.',
+      withdrawalCode: 'Choose what kind of mistake it was.',
+      noCurrentDecision: 'There is no current decision to withdraw.',
+    });
   });
 
   it('UX-29 UX-42 FR-DEC-08: the withdrawal confirmation names the object and the consequence and repeats the action', () => {
     expect(WITHDRAW_COPY.trigger).toBe('Withdraw this decision');
     expect(WITHDRAW_COPY.action).toBe('Withdraw decision');
-    expect(WITHDRAW_COPY.objectName(2, 'Q-PP-01')).toBe('Version 2 of the decision on Q-PP-01');
+    expect(WITHDRAW_COPY.objectName(2, 'Q-PP-01')).toBe('Withdraw the decision on Q-PP-01?');
+    expect([WITHDRAW_COPY.codeLabel, WITHDRAW_COPY.chooseOne, WITHDRAW_COPY.reasonLabel, WITHDRAW_COPY.more, WITHDRAW_COPY.retry])
+      .toEqual(['What kind of mistake was it?', 'Choose one', 'Explain', 'More actions', 'Retry']);
     expect(WITHDRAW_COPY.consequence).toBe('The question returns to "no decision". Every version stays in the history.');
     expect(Object.values(WITHDRAWAL_CODE_LABELS)).toEqual(['Entered in error', 'Wrong project', 'Duplicate', 'Test entry']);
     expect(WITHDRAWAL_CODES).toEqual(['entered_in_error', 'wrong_project', 'duplicate', 'test_entry']);
+  });
+
+  it('the question page title separates the id and the module with a middle dot', () => {
+    expect(DECISION_COPY.titles.question('Q-PP-01', 'Problem Formulation')).toBe('Q-PP-01 \u00b7 Problem Formulation');
+    expect(DECISION_COPY.titles.history('Q-PP-01')).toBe('History of Q-PP-01');
+  });
+});
+
+describe('lib/decision/outcome/copy.ts', () => {
+  it('the save lines say the outcome as its own sentence and keep "your text" for what was typed', () => {
+    expect(DECISION_OUTCOME_COPY.save).toEqual({
+      saving: 'Saving...',
+      slow: 'Still saving. The connection is slow. A copy of your text is kept in this browser.',
+      slowNoStorage: 'Still saving. The connection is slow.',
+      connection: 'Not saved. The connection was lost. Your text is still here. Select Retry.',
+      noReply: 'Not saved yet. We did not get a reply in time, so your decision may already be saved. Select Retry. It will not save twice.',
+      server: 'Not saved. Something went wrong on our side. Your text is still here. Select Retry.',
+      signedOut: 'Not saved. You have been signed out. Your text is kept in this browser. Sign in again to save it.',
+      signedOutNoStorage: 'Not saved. You have been signed out. Copy your text before you sign in again: this browser cannot keep it.',
+      forbidden: 'Not saved. Your role no longer allows this. Ask an Owner or Admin to change your role.',
+      archived: 'Not saved. This project is archived. Owners and Admins can unarchive it.',
+    });
+    expect(DECISION_OUTCOME_COPY.alreadySaved('10:42 EAT', 1)).toBe('This was already saved at 10:42 EAT (version 1).');
+    expect(DECISION_OUTCOME_COPY.gate).toEqual({
+      terms: 'Not saved. Accept the updated terms first. Copy your text before you go: this browser cannot keep it.',
+      password: 'Not saved. Change your password first. Copy your text before you go: this browser cannot keep it.',
+      termsLink: 'Go to the terms', passwordLink: 'Change password',
+    });
+  });
+
+  it('the conflict sentence names who saved the newer version, and "your version" for the reader\'s side', () => {
+    expect(DECISION_OUTCOME_COPY.conflict.other('Joseph K.', '10:42 EAT')).toBe('Joseph K. saved a newer version at 10:42 EAT. Compare it with your version, then choose what to keep.');
+    expect(DECISION_OUTCOME_COPY.conflict.own('10:42 EAT')).toBe('You saved a newer version at 10:42 EAT. Compare it with your version, then choose what to keep.');
+  });
+
+  it('the withdrawal lines', () => {
+    expect(DECISION_OUTCOME_COPY.withdraw).toEqual({
+      withdrawing: 'Withdrawing...',
+      withdrawn: 'Withdrawn. The question has no current decision.',
+      maybeArrived: 'Not withdrawn yet. We did not get a reply in time, so it may already be withdrawn. Select Retry. It will not withdraw twice.',
+      moved: 'Not withdrawn. Someone saved a newer version. Reload the page to see it.',
+      forbidden: 'Not withdrawn. Your role no longer allows this. Ask an Owner or Admin.',
+      terms: 'Not withdrawn. Accept the updated terms first.',
+      password: 'Not withdrawn. Change your password first.',
+      archived: 'Not withdrawn. This project is archived. Owners and Admins can unarchive it.',
+      signedOut: 'Not withdrawn. You have been signed out. Sign in again to withdraw it.',
+      server: 'Not withdrawn. Something went wrong on our side. Select Retry.',
+    });
+  });
+
+  it('the kept-evidence line has a singular and a plural', () => {
+    expect(DECISION_OUTCOME_COPY.keptEvidence(1)).toBe('1 file or link you added earlier is still part of this decision. It will be attached when you save.');
+    expect(DECISION_OUTCOME_COPY.keptEvidence(2)).toBe('2 files or links you added earlier are still part of this decision. They will be attached when you save.');
+  });
+});
+
+describe('lib/decision/form/copy.ts', () => {
+  it('the unsaved line is plan line 925\'s sentence, with no time', () => {
+    expect(DECISION_FORM_COPY.unsaved).toBe('Not saved yet. Your text is kept in this browser for up to 7 days. Signing out here, or another person signing in on this browser, removes it.');
+    expect(DECISION_FORM_COPY.noStorage).toBe('This browser cannot keep a copy of your text. Save before you leave this page.');
+  });
+
+  it('the field labels and the personal data question\'s line', () => {
+    expect(DECISION_FORM_COPY.fields).toEqual({
+      status: 'Status', scopeAnswer: 'Answer', optionsInPlace: 'Which of these are in place?', reasonCode: 'Main reason',
+      reason: 'Explain your decision', decidedBy: 'Decided by', declaredDate: 'When was this decided?',
+    });
+    expect(DECISION_FORM_COPY.scopeLegend).toBe('Answer (required)');
+    expect(DECISION_FORM_COPY.scopeNote).toBe(TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION.definition);
+    expect(DECISION_FORM_COPY.noAccountGroup).toBe('Someone without a platform account');
+    expect(DECISION_FORM_COPY.sameAsMyLast('Oct 2026')).toBe('Same date as my last decision (Oct 2026)');
+    expect(DECISION_FORM_COPY.sameAsCurrent('12 Oct 2026')).toBe('Same date as the current decision (12 Oct 2026)');
+  });
+
+  it('singular and plural for the kept evidence and the files still uploading', () => {
+    expect([DECISION_FORM_COPY.removeKept(1), DECISION_FORM_COPY.removeKept(3)]).toEqual(['Remove it from this decision', 'Remove them from this decision']);
+    expect([DECISION_FORM_COPY.saveWithout(1), DECISION_FORM_COPY.saveWithout(2)]).toEqual(['Save without this file', 'Save without these files']);
+    // the coordinator's answer to Q17 (b): one file "add it", more than one "add them"
+    expect(`${DECISION_FORM_COPY.savedWithout.before}a.pdf${DECISION_FORM_COPY.savedWithout.after}`).toBe('Saved without a.pdf. When the upload has finished, save again to add it.');
+    expect(`${DECISION_FORM_COPY.savedWithout.before}a.pdf, b.pdf${DECISION_FORM_COPY.savedWithout.afterMany}`).toBe('Saved without a.pdf, b.pdf. When the upload has finished, save again to add them.');
+  });
+
+  it('the conflict view: the heading as its own sentence, and "my version" on the buttons', () => {
+    expect(DECISION_FORM_COPY.conflict.heading).toBe('Not saved. A newer version was saved while you worked.');
+    expect([DECISION_FORM_COPY.conflict.saveMine, DECISION_FORM_COPY.conflict.editMine, DECISION_FORM_COPY.conflict.discardMine])
+      .toEqual(['Save my version', 'Edit my version', 'Discard my version']);
+    expect([DECISION_FORM_COPY.conflict.saved(2), DECISION_FORM_COPY.conflict.mine]).toEqual(['Saved version (2)', 'Your version (not saved)']);
+  });
+
+  // Copy review 17b, finding 14: the ruled texts no other test pins as written, pinned once each.
+  it('the form\'s other words, as ruled', () => {
+    const F = DECISION_FORM_COPY;
+    expect(F.startingNote).toBe('The form shows the current decision. Change what is different, then save.');
+    expect(F.optionsCount(2, 5)).toBe('2 of 5 in place');
+    expect(F.chooseOne).toBe('Choose one');
+    expect(`${F.waiting.before}a.pdf${F.waiting.after}`).toBe('Waiting for a.pdf to finish uploading.');
+    expect(F.evidenceFallback).toBe('Evidence');
+    expect(F.you('Amina K.')).toBe('You (Amina K.)');
+    expect(F.formerMember('Amina K.')).toBe('Amina K. (former member)');
+    expect(F.dateHelp).toBe('Leave the day empty if you only know the month. Leave both empty if you only know the year.');
+    expect([F.cancel, F.save, F.retry, F.signInAgain]).toEqual(['Cancel', 'Save decision', 'Retry', 'Sign in again']);
+    expect([F.conflict.status, F.conflict.reason, F.conflict.decidedBy, F.conflict.evidence, F.conflict.also, F.conflict.none, F.conflict.erased])
+      .toEqual(['Status', 'Reason', 'Decided by', 'Evidence', 'Also attached', 'None', 'Text erased']);
+    expect(F.conflict.withdrawn('Duplicate')).toBe('Withdrawn: Duplicate');
+  });
+});
+
+describe('lib/question/copy.ts', () => {
+  it('the question page\'s own words', () => {
+    expect(QUESTION_COPY.nav.back('Pre-processing')).toBe('Back to Pre-processing');
+    expect(QUESTION_COPY.reworded).toEqual({ line: 'The description of good practice changed after your team\'s decision.', summary: 'See the earlier description' });
+    expect(QUESTION_COPY.headings.seals).toBe('Sealed reviews');
+    expect(QUESTION_COPY.current.history(2)).toBe('See all versions (2)');
+    expect(QUESTION_COPY.current.withdrawn('Duplicate')).toBe('No decision. The last decision was withdrawn (Duplicate).');
+    expect(QUESTION_COPY.current.enteredBy('Joseph K.', '12 Oct 2026', '10:42 EAT')).toBe('Entered by: Joseph K. on 12 Oct 2026 at 10:42 EAT');
+    // copy review 17b, finding 14: the rest of the page's words, pinned once each
+    expect([QUESTION_COPY.nav.label, QUESTION_COPY.nav.previous, QUESTION_COPY.nav.next]).toEqual(['Questions in this stage', 'Previous question', 'Next question']);
+    expect(QUESTION_COPY.nav.position(4, 22, 'Pre-processing')).toBe('Question 4 of 22 in Pre-processing');
+    expect([QUESTION_COPY.headings.question, QUESTION_COPY.headings.current, QUESTION_COPY.headings.record, QUESTION_COPY.headings.findings])
+      .toEqual(['Question', 'Current decision', 'Record a decision', 'Findings']);
+    expect(QUESTION_COPY.current.none).toBe('No decision yet.');
+    expect(QUESTION_COPY.current.version(2)).toBe('version 2');
+    expect(QUESTION_COPY.current.withdrawnNoCode).toBe('No decision. The last decision was withdrawn.');
+    expect(QUESTION_COPY.current.decidedBy('Ethics committee', '12 Oct 2026')).toBe('Decided by: Ethics committee, 12 Oct 2026.');
+    expect(QUESTION_COPY.current.decidedBy('Ethics committee', null)).toBe('Decided by: Ethics committee.');
+    expect(QUESTION_COPY.current.formerMember('Amina K.')).toBe('Amina K. (former member)');
+    expect([QUESTION_COPY.current.reason, QUESTION_COPY.current.evidence, QUESTION_COPY.current.noEvidence]).toEqual(['Reason', 'Evidence', 'None']);
   });
 });

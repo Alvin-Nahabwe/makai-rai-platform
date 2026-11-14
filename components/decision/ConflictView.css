@@ -1,0 +1,55 @@
+/*
+ * W-4, the conflict view (plan 1A Task 17): the two versions side by side when there is room, one under the other when
+ * not, and the three actions. The panel is a surface with the container border, as the kit's surfaces are; the rows of
+ * each version are a definition list read inline ("Reason: ...").
+ */
+.conflict-view {
+  margin-block-end: var(--space-6);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border-container);
+  border-radius: var(--radius-surface);
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+}
+
+.conflict-view > h3 {
+  margin-block: 0 var(--space-2);
+}
+
+/* The heading takes focus when the view opens; a programmatic focus shows no :focus-visible ring. */
+.conflict-view > h3:focus {
+  outline: var(--focus-width) solid var(--color-focus);
+  outline-offset: var(--focus-offset);
+}
+
+.conflict-view__columns {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+}
+
+.conflict-view__columns h4 {
+  margin-block: var(--space-2);
+}
+
+.conflict-view__list {
+  margin: 0;
+}
+
+.conflict-view__list dt {
+  display: inline;
+  font-weight: var(--font-weight-semibold);
+}
+
+.conflict-view__list dd {
+  display: inline;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.conflict-view__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-block-start: var(--space-4);
+}

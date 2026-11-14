@@ -1,0 +1,78 @@
+/*
+ * The evidence block (components/evidence/EvidenceBlockView.tsx; UX-30, plan 1A Task 17). A group of the decision form
+ * and of the mitigation form, drawn as the kit draws its groups: no box, the legend in bold ink, the help in muted ink
+ * below it. Its buttons and fields wear the kit's classes (Button.css and TextInput.css, which this block's own kit
+ * Button and FieldLabel load); this file adds only the layout around them, in colour roles. Nothing moves: the kit's
+ * buttons change colour over --duration-state and nothing else.
+ */
+.evidence-block {
+  min-inline-size: 0;
+  margin: 0 0 var(--space-6);
+  padding: 0;
+  border: 0;
+}
+
+.evidence-block > legend {
+  margin-block-end: var(--space-2);
+  padding: 0;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-ink);
+}
+
+.evidence-block__help {
+  max-inline-size: var(--measure-reading);
+  margin-block-end: var(--space-4);
+  color: var(--color-ink-muted);
+}
+
+.evidence-block__help > p {
+  margin: 0;
+}
+
+.evidence-block__types {
+  margin-block-start: var(--space-1);
+  font-size: var(--font-size-small);
+}
+
+/* One row per file or link: its name and line, then its buttons; they wrap under the name at a narrow width. */
+.evidence-block__list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  list-style: none;
+}
+
+.evidence-block__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+/* A long name or address wraps instead of widening the page at 320 px (SC 1.4.10). */
+.evidence-block__name {
+  flex: 1 1 16rem;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.evidence-block__from,
+.evidence-block__note {
+  color: var(--color-ink-muted);
+}
+
+.evidence-block__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.evidence-block__link {
+  margin-block-start: var(--space-4);
+  max-inline-size: var(--measure-reading);
+}
+
+.evidence-block__error {
+  margin-block-start: var(--space-3);
+}

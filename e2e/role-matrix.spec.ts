@@ -4,6 +4,9 @@ import type { OrgRole } from '@prisma/client';
 import { can, type Action } from '../lib/authz/policy';
 import { FIXTURE_ROLES } from '../__tests__/helpers/fixture';
 import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from './fixtures/manifest';
+import { HOME_COPY } from '../lib/home/copy';
+import { PROJECT_COPY } from '../lib/project/copy';
+import { PROJECT_FORM_COPY } from '../lib/project/form/copy';
 
 /**
  * Task 12 Step 1 — O-13: no mutating control is rendered to a role that may
@@ -108,7 +111,7 @@ interface Control {
 
 const DASHBOARD_CONTROLS: Control[] = [
   { name: 'New project', action: 'project:create', mode: 'presence', locator: (p) => p.getByRole('link', { name: 'New project' }) },
-  { name: 'Archived projects', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Archived projects' }) },
+  { name: HOME_COPY.allProjects, action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: HOME_COPY.allProjects }) },
 ];
 
 const PROJECTS_LIST_CONTROLS: Control[] = [
@@ -123,13 +126,13 @@ const PROJECTS_LIST_CONTROLS: Control[] = [
 const PROJECTS_NEW_CONTROLS: Control[] = [
   { name: 'Create project', action: 'project:create', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Create project' }) },
   { name: 'Cancel', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Cancel' }) },
-  { name: 'Show additional details', action: null, mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Show additional details' }) },
-  { name: 'Back to Projects', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: /Back to Projects/ }) },
+  { name: PROJECT_FORM_COPY.moreDetails, action: null, mode: 'presence', locator: (p) => p.getByRole('button', { name: PROJECT_FORM_COPY.moreDetails }) },
+  { name: PROJECT_FORM_COPY.back, action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: new RegExp(PROJECT_FORM_COPY.back) }) },
 ];
 
 const PROJECT_DETAIL_CONTROLS: Control[] = [
   { name: 'Edit project', action: 'project:update', mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Edit project' }) },
-  { name: 'Export project', action: 'team:export', mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Export project' }) },
+  { name: PROJECT_COPY.overview.downloadRecords, action: 'team:export', mode: 'presence', locator: (p) => p.getByRole('link', { name: PROJECT_COPY.overview.downloadRecords }) },
   { name: 'Archive project', action: 'project:archive', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Archive project', exact: true }) },
   { name: 'Findings for this project', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Findings for this project' }) },
   { name: 'Open pre-processing', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Open pre-processing' }) },

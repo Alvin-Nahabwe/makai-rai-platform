@@ -1,46 +1,50 @@
+import './DashboardView.css';
 import type { ReactElement } from 'react';
 import { ListLink } from '@/components/ui/ListLink';
+import { ButtonLink } from '@/components/ui/Button';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { WelcomeNotice } from '@/components/account/WelcomeNotice';
 import { ProjectCard } from '@/components/dashboard/ProjectCard';
 import { MyMitigationsList } from '@/components/project/MyMitigationsList';
 import type { DashboardData } from '@/lib/data/projects';
+import { HOME_COPY } from '@/lib/home/copy';
 
 export type { DashboardData } from '@/lib/data/projects';
 
 /**
- * S-08, the dashboard (FR-PRJ-04, FR-FUP-02, UX-06; SRS 7.4.2 row S-08): the welcome notice when the query asks for it,
- * the active projects with their per-stage counts, a link to the archived ones, and the person's own open mitigations.
+ * S-08, Home (FR-PRJ-04, FR-FUP-02, UX-06; SRS 7.4.2 row S-08): the welcome notice when the query asks for it,
+ * the active projects with their per-stage counts, a link to all projects, and the mitigations assigned to the person.
+ * With no project at all a creator keeps the second "New project" link in the empty line (audit B#32; register D-396,
+ * plan 1B); with archived projects only, the line is plain text and the All projects link after it is the way on.
  */
 export function DashboardView({ data }: { data: DashboardData }): ReactElement {
   const newProject = `/orgs/${data.orgSlug}/projects/new`;
   return (
     <div className="page-content">
       {data.welcome ? <WelcomeNotice orgName={data.orgName} role={data.role} /> : null}
-      <div className="page-header">
-        <div>
-          <h1>Dashboard</h1>
-        </div>
-        {data.canCreate ? <ListLink href={newProject} className="btn btn--primary">New project</ListLink> : null}
-      </div>
+      <PageHeader
+        title={HOME_COPY.heading}
+        actions={data.canCreate ? <ButtonLink variant="primary" href={newProject}>{HOME_COPY.newProject}</ButtonLink> : null}
+      />
 
       <section className="dashboard-section" aria-labelledby="active-projects">
-        <h2 id="active-projects">Active projects</h2>
+        <h2 id="active-projects">{HOME_COPY.activeProjects}</h2>
         {data.projects.length === 0 ? (
           data.archivedCount > 0
-            ? (data.canCreate ? <p>No active projects. <ListLink href={newProject}>New project</ListLink></p> : <p>No active projects.</p>)
+            ? <p>{HOME_COPY.noActiveProjects}</p>
             : data.canCreate
-              ? <p>No projects yet. <ListLink href={newProject}>New project</ListLink></p>
-              : <p>No projects yet. Owners, admins and assessors can create one.</p>
+              ? <p>{HOME_COPY.noProjects} <ListLink href={newProject}>{HOME_COPY.newProject}</ListLink></p>
+              : <p>{`${HOME_COPY.noProjects} ${HOME_COPY.whoCanCreate}`}</p>
         ) : (
           <div className="projects-grid">
             {data.projects.map((p) => <ProjectCard key={p.project.id} orgSlug={data.orgSlug} project={p.project} counts={p.counts} />)}
           </div>
         )}
-        <p><ListLink href={`/orgs/${data.orgSlug}/projects`}>Archived projects</ListLink></p>
+        <p><ListLink href={`/orgs/${data.orgSlug}/projects`}>{HOME_COPY.allProjects}</ListLink></p>
       </section>
 
       <section className="dashboard-section" aria-labelledby="my-mitigations">
-        <h2 id="my-mitigations">My open and overdue mitigations</h2>
+        <h2 id="my-mitigations">{HOME_COPY.myMitigations}</h2>
         <MyMitigationsList orgSlug={data.orgSlug} items={data.mine} projectNames={data.projectNames} />
       </section>
     </div>

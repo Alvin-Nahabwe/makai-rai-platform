@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 import { loadContent } from '@/lib/content/loader';
 import { loadResources } from '@/lib/content/resources';
 import { controlsForArea } from '@/lib/content/suggestions';
+import { SUGGESTIONS_COPY } from '@/lib/suggestions/copy';
 import { ControlCard } from './ControlCard';
 
 export type FindingSuggestionsProps = { contentSemver: string; riskArea: string | null };
@@ -35,12 +36,12 @@ export function FindingSuggestions(p: FindingSuggestionsProps): ReactElement | n
         {controls.map((x, i) => (
           <span key={x.control.id}>
             {i > 0 ? <span aria-hidden="true"> {'\u00b7'} </span> : null}
-            {`${x.control.id} ${x.control.name}`}
+            {x.control.name}
           </span>
         ))}
       </p>
       <details>
-        <summary>Show details</summary>
+        <summary>{SUGGESTIONS_COPY.showDetails}</summary>
         {controls.map((x) => <ControlCard key={x.control.id} control={x.control} resources={resources} headingLevel={3} />)}
       </details>
     </div>

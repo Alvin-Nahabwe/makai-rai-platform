@@ -4,6 +4,10 @@ import type { OrgRole } from '@prisma/client';
 import { failOnDialog } from './helpers/dialogs';
 import { expectStatusMarksInk } from './helpers/noScore';
 import { actAsSeat, draftKeys, draftValues, fillValid, newProject, openQuestion, stagePath } from './helpers/session';
+import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
+import { FIELD_COPY } from '../lib/ui/field/copy';
+import { QUESTION_COPY } from '../lib/question/copy';
+import { STAGE_LIST_COPY } from '../lib/question/list/copy';
 
 /**
  * S-11, the stage workspace (W-2; FR-DEC-06, FR-CNT-08, NFR-PERF-05, NFR-PRIV-04, UX-26; RM's FR-RM-04, UX-06 and
@@ -45,12 +49,12 @@ test('FR-RM-04 UX-06 UX-07 (S-11, R12-16): each stage page prints its own questi
 
 test('UX-26 FR-DEC-06: a draft is marked on S-11 and listed by Drafts on this device', async ({ page, baseURL }) => {
   const projectId = await openQuestion(page, 'assessor', Q, baseURL!);
-  await page.getByLabel('Reason (required)').fill('A draft');
-  await page.getByRole('link', { name: 'Back to stage' }).click();
+  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`).fill('A draft');
+  await page.getByRole('link', { name: QUESTION_COPY.nav.back('Pre-processing') }).click();
   await page.waitForURL(`**${stagePath(projectId, 'pre-processing')}`);
   const row = page.locator(`[data-question-id="${Q}"]`);
-  await expect(row).toContainText(/Draft on this device, kept until \d{1,2} [A-Z][a-z]{2} \d{4}/);
-  await page.getByRole('radio', { name: /^Drafts on this device 1$/ }).check();
+  await expect(row).toContainText(/not saved yet \(kept in this browser until \d{1,2} [A-Z][a-z]{2} \d{4}\)/);
+  await page.getByRole('radio', { name: `${STAGE_LIST_COPY.filters.drafts} 1`, exact: true }).check();
   await expect(page.locator('[data-question-id]')).toHaveCount(1);
   expect(new URL(page.url()).search).toBe('?show=drafts');
   // the address S-17 links to (contract "S-11 address") opens the same filter
@@ -74,10 +78,10 @@ test('FR-DEC-06 NFR-REL-05: Retry all re-sends each pressed draft with its own r
   const sent: string[] = [];
   page.on('request', (r) => { if (r.method() === 'POST' && r.url().endsWith('/decisions')) sent.push((r.postDataJSON() as { requestId: string }).requestId); });
   await openStage(page, 'assessor', 'pre-processing', baseURL!, projectId);
-  await expect(page.getByText('2 answers saved on this device have not reached the server.')).toBeVisible();
-  await page.getByRole('button', { name: 'Retry all 2' }).click();
-  await expect(page.locator('[data-question-id="Q-PP-01"]')).toContainText(/Saved as version 1/);
-  await expect(page.locator('[data-question-id="Q-PP-02"]')).toContainText(/Saved as version 1/);
+  await expect(page.getByText(STAGE_LIST_COPY.unsent(2))).toBeVisible();
+  await page.getByRole('button', { name: STAGE_LIST_COPY.saveAll(2) }).click();
+  await expect(page.locator('[data-question-id="Q-PP-01"]')).toContainText(/Saved at .+ as version 1\./);
+  await expect(page.locator('[data-question-id="Q-PP-02"]')).toContainText(/Saved at .+ as version 1\./);
   expect(sent.sort()).toEqual(stored);
   expect(await draftKeys(page)).toHaveLength(0);
 });

@@ -1,14 +1,14 @@
 import { formatSize } from '@/lib/format/size';
 import { formatMbPair, stripBidiControls } from '@/lib/evidence/format';
 import {
-  ARCHIVED_TEXT, CONNECTION_LOST_TEXT, ROLE_CHANGED_TEXT, SIGNED_OUT_TEXT, STORAGE_FULL_TEXT, UPLOAD_LIMIT_TEXT,
+  ARCHIVED_TEXT, CONNECTION_LOST_TEXT, EVIDENCE_COPY, ROLE_CHANGED_TEXT, SIGNED_OUT_TEXT, STORAGE_FULL_TEXT, UPLOAD_LIMIT_TEXT,
 } from '@/lib/evidence/copy';
 import type { RetryState } from '@/lib/client/retrySafeWrite';
 import type { EvidenceItemView } from '@/types/api';
 
 /**
- * The states of the files a person is adding (UX-30) and the exact copy of messages M-13 to M-19 (SRS lines
- * 2560-2566). Pure: no React, no server code. Every file name in a line is shown without bidi controls (E14).
+ * The states of the files a person is adding (UX-30) and their lines, M-13 to M-19, in the words of lib/evidence/copy.ts.
+ * Pure: no React, no server code. Every file name in a line is shown without bidi controls (E14).
  */
 
 export type UploadFailure =
@@ -41,36 +41,35 @@ const plain = (text: string): NamedLine => named(text, '', '');
 
 export function statusLine(i: UploadItem): NamedLine & { retry: boolean } {
   const name = stripBidiControls(i.fileName);
+  const words = EVIDENCE_COPY.lines;
   if (i.state === 'uploading') {
     const { x, y } = formatMbPair(i.loaded, i.size);
-    return { ...named('Uploading ', name, `: ${x} of ${y} MB.`), retry: false };                       // M-13
+    return { ...named(words.uploadingBefore, name, words.uploadingAfter(x, y)), retry: false };                   // M-13
   }
-  if (i.state === 'uploaded') return { ...named('Uploaded ', name, ` (${formatSize(i.size)}).`), retry: false };   // M-14
+  if (i.state === 'uploaded') return { ...named(words.uploadedBefore, name, words.uploadedAfter(formatSize(i.size))), retry: false };   // M-14
   switch (i.failure) {
-    case 'too_large':
-      return { ...named('Not uploaded: ', name, ' is larger than 10 MB. Add a link to where it is kept instead.'), retry: false };   // M-15
-    case 'wrong_type':
-      return { ...named('Not uploaded: ', name, ' is not a PDF, PNG, JPEG, Office document or ZIP file.'), retry: false };          // M-16
-    case 'rate_limited': return { ...plain(UPLOAD_LIMIT_TEXT), retry: true };                                                         // M-19
-    case 'storage_full': return { ...plain(STORAGE_FULL_TEXT), retry: false };                                                        // NFR-REL-09
-    case 'archived': return { ...plain(ARCHIVED_TEXT), retry: false };                                                                // M-12
-    case 'role_changed': return { ...plain(ROLE_CHANGED_TEXT), retry: false };                                                        // M-09
-    case 'signed_out': return { ...plain(SIGNED_OUT_TEXT), retry: false };                                                            // M-08
+    case 'too_large': return { ...named(words.notUploadedBefore, name, words.tooLargeAfter), retry: false };        // M-15
+    case 'wrong_type': return { ...named(words.notUploadedBefore, name, words.wrongTypeAfter), retry: false };      // M-16
+    case 'rate_limited': return { ...plain(UPLOAD_LIMIT_TEXT), retry: true };                                       // M-19
+    case 'storage_full': return { ...plain(STORAGE_FULL_TEXT), retry: false };                                      // NFR-REL-09
+    case 'archived': return { ...plain(ARCHIVED_TEXT), retry: false };                                              // M-12
+    case 'role_changed': return { ...plain(ROLE_CHANGED_TEXT), retry: false };                                      // M-09
+    case 'signed_out': return { ...plain(SIGNED_OUT_TEXT), retry: false };                                          // M-08
     case 'cut_off':
     case null:
-      return { ...plain(CONNECTION_LOST_TEXT), retry: true };                                                                         // M-17
+      return { ...plain(CONNECTION_LOST_TEXT), retry: true };                                                       // M-17
   }
 }
 
 /** M-18: a file that was still uploading when the page closed. */
 export function notUploadedLine(fileName: string): NamedLine {
-  return named('', stripBidiControls(fileName), ' was not uploaded before the page closed. Choose the file again.');
+  return named('', stripBidiControls(fileName), EVIDENCE_COPY.lines.closedAfter);
 }
 
 /** NFR-PERF-06: the size and the suggestion of a link, for a file over 2 MB. */
 export function largeFileNote(size: number): string | null {
   if (size <= LARGE_FILE_BYTES) return null;
-  return `${(size / 1e6).toFixed(1)} MB. Large files are slow on poor connections; you can link to where the file is kept instead.`;
+  return EVIDENCE_COPY.lines.largeFile((size / 1e6).toFixed(1));
 }
 
 /**

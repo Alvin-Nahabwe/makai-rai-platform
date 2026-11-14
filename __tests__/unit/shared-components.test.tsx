@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { InlineConfirm } from '@/components/ui/InlineConfirm';
 import { ArchivedBanner } from '@/components/project/ArchivedBanner';
+import { PROJECT_COPY } from '@/lib/project/copy';
 
 const noop = () => {};
 
@@ -51,6 +52,8 @@ describe('ArchivedBanner', () => {
 
   it('UX-31 FR-PRJ-03 (helper): an archived project shows the exact sentence in a status region', () => {
     const html = renderToStaticMarkup(<ArchivedBanner archived />);
-    expect(html).toMatch(/^<div[^>]*role="status"[^>]*>This project is archived\. Nothing in it can be changed\. Owners and admins can unarchive it from All projects\.<\/div>$/);
+    // the kit's Banner is not a live region, so a wrapper keeps role="status"; the sentence is the banner body's only text
+    expect(html).toMatch(/^<div role="status"><div class="ui-banner ui-banner--archived"><span class="ui-banner__icon">[\s\S]*?<\/span><div class="ui-banner__body">([^<]*)<\/div><\/div><\/div>$/);
+    expect(/<div class="ui-banner__body">([^<]*)</.exec(html)?.[1]).toBe(PROJECT_COPY.archivedBanner);
   });
 });

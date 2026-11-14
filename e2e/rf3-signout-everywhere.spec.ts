@@ -5,6 +5,9 @@ import { testDb } from '../__tests__/helpers/db';
 import { buildOrg } from '../__tests__/helpers/recordFixture';
 import { failOnDialog } from './helpers/dialogs';
 import { fillValid, saveAlert, signInWith, waitForQuestionPage } from './helpers/session';
+import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
+import { FIELD_COPY } from '../lib/ui/field/copy';
+import { DECISION_OUTCOME_COPY } from '../lib/decision/outcome/copy';
 
 /**
  * Review Focus RF-3 (FR-DEC-06, FR-ACC-07, UX-26): a draft typed in one browser survives **Sign out everywhere** pressed in
@@ -62,13 +65,13 @@ test('FR-DEC-06 FR-ACC-07 UX-26: a draft survives sign out everywhere from a sec
 
   // Back in A: the save is refused with M-08, and the answer is kept.
   await a.getByRole('button', { name: 'Save decision' }).click();
-  await expect(saveAlert(a)).toHaveText('Not saved: you have been signed out. Your answer is kept on this device. Sign in again to save it.');
+  await expect(saveAlert(a)).toHaveText(DECISION_OUTCOME_COPY.save.signedOut);
   expect(await testDb.decisionVersion.count({ where: { projectId } }), 'nothing was saved').toBe(0);
   await a.getByRole('link', { name: 'Sign in again' }).click();
   await signInWith(a, assessor.email, assessor.password);
   await expect(a).toHaveURL(new RegExp(`^${escape(new URL(a.url()).origin)}${escape(questionPath)}$`));
   await waitForQuestionPage(a);
-  await expect(a.getByLabel('Reason (required)')).toHaveValue(TYPED);
+  await expect(a.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`)).toHaveValue(TYPED);
 
   await a.context().close();
   await b.context().close();

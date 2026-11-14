@@ -1,13 +1,17 @@
 import type { ReactElement, ReactNode } from 'react';
 import { ListLink } from '@/components/ui/ListLink';
+import { ButtonLink } from '@/components/ui/Button';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { UnarchiveProjectButton } from '@/components/project/UnarchiveProjectButton';
 import type { ProjectRow } from '@/lib/data/projects';
 import { PROJECT_COPY } from '@/lib/project/copy';
 
 export type { ProjectRow } from '@/lib/data/projects';
 
-function Rows({ orgSlug, rows, unarchive, forFindings }: { orgSlug: string; rows: ProjectRow[]; unarchive: boolean; forFindings: boolean }): ReactElement {
-  if (rows.length === 0) return <p>None.</p>;
+const C = PROJECT_COPY.allProjects;
+
+function Rows({ orgSlug, rows, unarchive, forFindings, empty }: { orgSlug: string; rows: ProjectRow[]; unarchive: boolean; forFindings: boolean; empty: string }): ReactElement {
+  if (rows.length === 0) return <p>{empty}</p>;
   return (
     <ul className="projects-list">
       {rows.map((r) => (
@@ -24,8 +28,9 @@ function Rows({ orgSlug, rows, unarchive, forFindings }: { orgSlug: string; rows
 /**
  * S-32, all projects (FR-PRJ-03; SRS S-32 row): active ones, then archived ones, each with a link to S-10; an archived row has
  * Unarchive for owners and admins. `children` is rendered once, after both lists (the "Show more" link). A long list, so
- * every link is a `ListLink` that never prefetches (UX-37). With `forFindings` (the rail's Findings link, plan 1A Task 12) the
- * page says to choose a project, and every project links to its findings page instead.
+ * every row link is a `ListLink` and the header's link a `ButtonLink`, neither of which prefetches (UX-37). With
+ * `forFindings` (the rail's Findings link, plan 1A Task 12) the page says to choose a project, and every project links to
+ * its findings page instead.
  */
 export function AllProjectsView({ data, children }: {
   data: { orgSlug: string; canCreate?: boolean; canUnarchive: boolean; active: ProjectRow[]; archived: ProjectRow[]; forFindings?: boolean };
@@ -34,20 +39,20 @@ export function AllProjectsView({ data, children }: {
   const forFindings = data.forFindings === true;
   return (
     <div className="page-content">
-      <div className="page-header">
-        <div>
-          <h1>All projects</h1>
-          {forFindings ? <p>{PROJECT_COPY.chooseForFindings}</p> : null}
-        </div>
-        {data.canCreate === true ? <ListLink href={`/orgs/${data.orgSlug}/projects/new`} className="btn btn--primary">New project</ListLink> : null}
-      </div>
+      <PageHeader
+        title={C.heading}
+        lead={forFindings ? <p>{PROJECT_COPY.chooseForFindings}</p> : null}
+        actions={data.canCreate === true ? <ButtonLink variant="primary" href={`/orgs/${data.orgSlug}/projects/new`}>{C.newProject}</ButtonLink> : null}
+      />
+      {/* tabIndex -1: an unarchived project moves here, and UnarchiveProjectButton sends focus to this heading (by its id,
+          ACTIVE_HEADING_ID there) before the refresh that moves the row */}
       <section aria-labelledby="projects-active">
-        <h2 id="projects-active">Active</h2>
-        <Rows orgSlug={data.orgSlug} rows={data.active} unarchive={false} forFindings={forFindings} />
+        <h2 id="projects-active" tabIndex={-1}>{C.active}</h2>
+        <Rows orgSlug={data.orgSlug} rows={data.active} unarchive={false} forFindings={forFindings} empty={C.noActive} />
       </section>
       <section aria-labelledby="projects-archived">
-        <h2 id="projects-archived">Archived</h2>
-        <Rows orgSlug={data.orgSlug} rows={data.archived} unarchive={data.canUnarchive} forFindings={forFindings} />
+        <h2 id="projects-archived">{C.archived}</h2>
+        <Rows orgSlug={data.orgSlug} rows={data.archived} unarchive={data.canUnarchive} forFindings={forFindings} empty={C.noArchived} />
       </section>
       {children}
     </div>

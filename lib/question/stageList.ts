@@ -1,12 +1,11 @@
-import { SCOPE_OPTIONS, STATUS_OPTIONS } from '@/lib/decision/copy';
+import { STATUS_OPTIONS } from '@/lib/decision/copy';
+import { STAGE_LIST_COPY } from '@/lib/question/list/copy';
 import type { LoadedQuestion } from '@/types/content';
 import type { DecisionVersionView } from '@/types/api';
 import type { DeclaredDate, ScopeAnswer, Stage } from '@/types/record';
 
 /** The stage's name as pages print it (W-2, W-3): never its address segment. */
-export const STAGE_TITLE: Readonly<Record<Stage, string>> = Object.freeze({
-  'pre-processing': 'Pre-processing', 'in-processing': 'In-processing', 'post-processing': 'Post-processing',
-});
+export const STAGE_TITLE: Readonly<Record<Stage, string>> = STAGE_LIST_COPY.stageTitle;
 
 /**
  * S-11's rows and filters (W-2, SRS lines 1785-1830): one row per question of the stage, its status as words
@@ -33,22 +32,21 @@ export function statusText(v: Pick<DecisionVersionView, 'status' | 'scopeAnswer'
 function versionStatusText(v: Pick<DecisionVersionView, 'status' | 'scopeAnswer'>): string {
   const status = STATUS_OPTIONS.find((o) => o.value === v.status);
   if (status !== undefined) return status.label;
-  const scope = SCOPE_OPTIONS.find((o) => o.value === v.scopeAnswer);
-  return scope === undefined ? 'No decision' : `Scope answer: ${scope.label.toLowerCase()}`;
+  return v.scopeAnswer === null ? STAGE_LIST_COPY.status.noDecision : STAGE_LIST_COPY.status.answer(v.scopeAnswer);
 }
 
-export const NOT_APPLICABLE_BY_GATE = 'Not applicable (scope answer: no)';
+export const NOT_APPLICABLE_BY_GATE = STAGE_LIST_COPY.status.doesNotApply;
 
 /** The filter's words in W-2's filter group (FR-CNT-08 names the reworded one). */
 export function filterLabel(f: StageFilter, sealNumber: number | null): string {
   switch (f) {
-    case 'all': return 'All';
-    case 'no_decision': return 'No decision';
-    case 'shortfalls': return 'Shortfalls';
-    case 'done_without_evidence': return 'Done without evidence';
-    case 'changed_since_seal': return sealNumber === null ? 'Changed since the last seal' : `Changed since seal ${sealNumber}`;
-    case 'reworded': return 'Expected practice reworded since the decision';
-    case 'drafts': return 'Drafts on this device';
+    case 'all': return STAGE_LIST_COPY.filters.all;
+    case 'no_decision': return STAGE_LIST_COPY.filters.noDecision;
+    case 'shortfalls': return STAGE_LIST_COPY.filters.shortfalls;
+    case 'done_without_evidence': return STAGE_LIST_COPY.filters.doneNoEvidence;
+    case 'changed_since_seal': return STAGE_LIST_COPY.filters.changedSinceSeal(sealNumber);
+    case 'reworded': return STAGE_LIST_COPY.filters.reworded;
+    case 'drafts': return STAGE_LIST_COPY.filters.drafts;
   }
 }
 
@@ -59,7 +57,7 @@ export function isStageFilter(v: unknown): v is StageFilter {
 /**
  * One row per question, in the order given (the stage's module order). A withdrawal as the current version is no
  * decision (FR-DEC-03, 5.3 item 2) and keeps its version number; the gate shows its scope answer (FR-CNT-04); with
- * the gate answered "no" the questions conditional on it read "Not applicable (scope answer: no)" (W-2 note 4).
+ * the gate answered "no" the questions conditional on it read "Does not apply" (W-2 note 4).
  */
 export function buildStageRows(i: {
   questions: LoadedQuestion[]; current: ReadonlyMap<string, DecisionVersionView>; gate: ScopeAnswer | null;
@@ -68,7 +66,7 @@ export function buildStageRows(i: {
   return i.questions.map((q) => {
     const v = i.current.get(q.id) ?? null;
     const decided = v !== null && v.status !== 'withdrawn' ? v : null;
-    let statusText = 'No decision';
+    let statusText: string = STAGE_LIST_COPY.status.noDecision;
     let kind: StageRow['kind'] = 'none';
     if (q.condition !== undefined && i.gate === 'no' && i.gate !== q.condition.value) {
       statusText = NOT_APPLICABLE_BY_GATE; kind = 'not_applicable_by_gate';
@@ -121,7 +119,7 @@ export function stageDraftIds(listedQuestionIds: readonly string[], rows: readon
 export function retryAllSummary(results: readonly string[]): string {
   const saved = results.filter((id) => id === 'M-03' || id === 'M-04').length;
   const n = results.length;
-  return saved === n ? `${n} saved.` : `${saved} of ${n} saved. ${n - saved} not saved: see each question.`;
+  return STAGE_LIST_COPY.retryAllSummary(saved, n);
 }
 
 /** W-2's module groups, in the rows' order: each module's rows with its question count and its no-decision count. */

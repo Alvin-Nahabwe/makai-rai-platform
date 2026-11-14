@@ -2,6 +2,8 @@ import 'dotenv/config';
 import { test, expect, type Browser, type Page } from '@playwright/test';
 import { buildOrg, type FixtureAccount } from '../__tests__/helpers/recordFixture';
 import { draftKeys } from './helpers/session';
+import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
+import { FIELD_COPY } from '../lib/ui/field/copy';
 import { INVITATION_COPY } from '../lib/invitations/copy';
 
 /**
@@ -36,7 +38,7 @@ test('NFR-PRIV-06 FR-EXP-03 FIX-7: deleting the account removes its drafts from 
   await page.goto(`/orgs/${fx.org.slug}/projects/${id}/stages/pre-processing/questions/Q-PP-01`);
   await expect(page.locator('#question-heading')).toBeVisible();
   await page.waitForFunction(() => document.querySelector('[data-region="answer-form"] form')?.getAttribute('data-ready') === 'true');
-  await page.getByLabel('Reason (required)').fill('secret reason text for fix 7');
+  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`).fill('secret reason text for fix 7');
   expect((await draftKeys(page, assessor.userId)).length, 'a draft is stored').toBe(1);
 
   await page.goto('/account');

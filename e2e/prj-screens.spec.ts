@@ -11,6 +11,12 @@ import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { failOnDialog } from './helpers/dialogs';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { expectCountsAsWholeNumbersPerStage, expectStatusMarksInk } from './helpers/noScore';
+import { PROJECT_COPY } from '../lib/project/copy';
+import { PROJECT_FORM_COPY } from '../lib/project/form/copy';
+import { PROJECT_WRITE_COPY } from '../lib/project/write/copy';
+import { PROJECT_FIELD_MESSAGES } from '../lib/projects/copy';
+import { LIFECYCLE_STAGE_WORDS } from '../lib/project/labels';
+import { UI_COPY } from '../lib/ui/copy';
 
 /**
  * The project screens in a browser: S-08 (dashboard), S-09 (new and edit project), S-10 (stage view) and S-32 (all
@@ -161,16 +167,178 @@ test('UX-29 FR-PRJ-03: archiving shows "Archiving..." then the archived line; a 
   await page.route('**/archive', (r) => r.abort('internetdisconnected'));
   await page.getByRole('button', { name: 'Archive project' }).click();
   await page.getByRole('button', { name: 'Archive project' }).last().click();
-  await expect(page.getByRole('status').filter({ hasText: 'Not archived: connection lost.' })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: PROJECT_WRITE_COPY.archive.lost })).toBeVisible();
   await page.unroute('**/archive');
   await page.route('**/archive', async (r) => { await new Promise((ok) => setTimeout(ok, 1500)); await r.continue(); });
   await page.getByRole('button', { name: 'Retry', exact: true }).click();
-  await expect(page.getByText('Archiving...')).toBeVisible();
-  await expect(page.getByText('Archived. Nothing in this project can be changed until it is unarchived.')).toBeVisible();
-  await expect(page.getByText('This project is archived. Nothing in it can be changed. Owners and admins can unarchive it from All projects.')).toBeVisible();
+  await expect(page.getByText(PROJECT_WRITE_COPY.archive.archiving)).toBeVisible();
+  await expect(page.getByText(PROJECT_WRITE_COPY.archive.archived)).toBeVisible();
+  await expect(page.getByText(PROJECT_COPY.archivedBanner)).toBeVisible();
   expect(ids).toHaveLength(2);
   expect(ids[0]).toMatch(UUID_V4);
   expect(ids[1]).toBe(ids[0]);
+});
+
+/**
+ * After an answer the archive control's container has focus (not the page body), and keeps it once the refresh that
+ * follows has rendered the archived page: polled, so a focus moved after the commit is waited for, not sampled once.
+ */
+async function expectFocusOnArchiveControl(page: Page): Promise<void> {
+  await expect(page.locator('.archive-control')).toBeFocused();
+  await expect(page.getByText(PROJECT_COPY.archivedBanner)).toBeVisible();
+  await expect(page.locator('.archive-control')).toBeFocused();
+}
+
+test('L5-4 D-398: Archive opens on Cancel; while the request is held the confirm button keeps focus and is aria-busy; after success focus is inside the control', async ({ browser }) => {
+  const name = `PRJ focus held ${RUN}`;
+  const project = await addProject(fx, { name });
+  const page = await signedIn(browser, fx.members.owner);
+  await page.goto(path(`/projects/${project.id}`));
+  const ids = requestIdsOf(page, /\/archive$/);
+  let release = () => {};
+  const held = new Promise<void>((ok) => { release = ok; });
+  await page.route('**/archive', async (r) => { await held; await r.continue(); });
+  await page.getByRole('button', { name: PROJECT_WRITE_COPY.archive.trigger }).click();
+  const confirmation = page.getByRole('group', { name: PROJECT_WRITE_COPY.archive.objectName(name) });
+  await expect(confirmation.getByRole('button', { name: UI_COPY.confirm.cancel })).toBeFocused();
+  await page.keyboard.press('Tab');
+  const confirm = confirmation.getByRole('button', { name: PROJECT_WRITE_COPY.archive.action });
+  await expect(confirm).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.getByText(PROJECT_WRITE_COPY.archive.archiving)).toBeVisible();
+  await expect(confirm).toBeFocused();
+  await expect(confirm).toHaveAttribute('aria-busy', 'true');
+  await page.keyboard.press('Enter');   // a second press on the busy confirm button sends nothing (register D-386)
+  release();
+  await expect(page.getByText(PROJECT_WRITE_COPY.archive.archived)).toBeVisible();
+  await expectFocusOnArchiveControl(page);
+  expect(ids).toHaveLength(1);
+});
+
+test('L5-4 L5-15: while the archive request is held, Cancel does nothing: the confirmation stays open and its button busy', async ({ browser }) => {
+  const name = `PRJ cancel held ${RUN}`;
+  const project = await addProject(fx, { name });
+  const page = await signedIn(browser, fx.members.owner);
+  await page.goto(path(`/projects/${project.id}`));
+  let release = () => {};
+  const held = new Promise<void>((ok) => { release = ok; });
+  await page.route('**/archive', async (r) => { await held; await r.continue(); });
+  await page.getByRole('button', { name: PROJECT_WRITE_COPY.archive.trigger }).click();
+  const confirmation = page.getByRole('group', { name: PROJECT_WRITE_COPY.archive.objectName(name) });
+  const confirm = confirmation.getByRole('button', { name: PROJECT_WRITE_COPY.archive.action });
+  await confirm.click();
+  await expect(confirm).toHaveAttribute('aria-busy', 'true');
+  await confirmation.getByRole('button', { name: UI_COPY.confirm.cancel }).click();
+  await expect(confirmation).toBeVisible();
+  await expect(confirm).toHaveAttribute('aria-busy', 'true');
+  release();
+  await expect(page.getByText(PROJECT_WRITE_COPY.archive.archived)).toBeVisible();
+});
+
+test('L5-4 D-398: after a failed archive focus is on Retry, and stays on Retry, aria-busy, while its own request is held', async ({ browser }) => {
+  const name = `PRJ focus retry ${RUN}`;
+  const project = await addProject(fx, { name });
+  const page = await signedIn(browser, fx.members.owner);
+  await page.goto(path(`/projects/${project.id}`));
+  let release = () => {};
+  const held = new Promise<void>((ok) => { release = ok; });
+  let sends = 0;
+  await page.route('**/archive', async (r) => { if (sends++ === 0) { await r.abort('internetdisconnected'); return; } await held; await r.continue(); });
+  await page.getByRole('button', { name: PROJECT_WRITE_COPY.archive.trigger }).click();
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('status').filter({ hasText: PROJECT_WRITE_COPY.archive.lost })).toBeVisible();
+  const retry = page.getByRole('button', { name: PROJECT_WRITE_COPY.archive.retry, exact: true });
+  await expect(retry).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.getByText(PROJECT_WRITE_COPY.archive.archiving)).toBeVisible();
+  await expect(retry).toBeFocused();
+  await expect(retry).toHaveAttribute('aria-busy', 'true');
+  release();
+  await expect(page.getByText(PROJECT_WRITE_COPY.archive.archived)).toBeVisible();
+  await expectFocusOnArchiveControl(page);
+});
+
+test('L5-4 D-398: after a failed unarchive focus is on Retry, and stays on Retry, aria-busy, while its own request is held', async ({ browser }) => {
+  const name = `PRJ focus unarchive ${RUN}`;
+  await addProject(fx, { name, archived: true });
+  const page = await signedIn(browser, fx.members.owner);
+  await page.goto(path('/projects'));
+  let release = () => {};
+  const held = new Promise<void>((ok) => { release = ok; });
+  let sends = 0;
+  await page.route('**/unarchive', async (r) => { if (sends++ === 0) { await r.abort('internetdisconnected'); return; } await held; await r.continue(); });
+  const button = page.getByRole('button', { name: PROJECT_WRITE_COPY.unarchive.named(name) });
+  await button.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('status').filter({ hasText: PROJECT_WRITE_COPY.unarchive.lost })).toBeVisible();
+  const retry = page.locator('li', { hasText: name }).getByRole('button', { name: PROJECT_WRITE_COPY.unarchive.retry, exact: true });
+  await expect(retry).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(retry).toBeFocused();
+  await expect(retry).toHaveAttribute('aria-busy', 'true');
+  release();
+  await expect(page.getByRole('button', { name: PROJECT_WRITE_COPY.unarchive.named(name) })).toHaveCount(0);
+  // ruling L5-13: the success after a Retry leaves focus on the Active heading, where the project now is, not on the body
+  await expect(page.locator('section[aria-labelledby="projects-active"] li', { hasText: name })).toBeVisible();
+  await expect(page.locator('#projects-active')).toBeFocused();
+});
+
+test('L5-4 L5-13: after a successful unarchive the row is under Active and focus is on the Active heading, not the page body; the pressed button shows the kit\'s spinner while its request is held', async ({ browser }) => {
+  const name = `PRJ focus unarchived ${RUN}`;
+  await addProject(fx, { name, archived: true });
+  const page = await signedIn(browser, fx.members.owner);
+  await page.goto(path('/projects'));
+  let release = () => {};
+  const held = new Promise<void>((ok) => { release = ok; });
+  await page.route('**/unarchive', async (r) => { await held; await r.continue(); });
+  const button = page.getByRole('button', { name: PROJECT_WRITE_COPY.unarchive.named(name) });
+  await button.focus();
+  await page.keyboard.press('Enter');
+  await expect(button).toHaveAttribute('aria-busy', 'true');
+  await expect(button.locator('.ui-button__spinner[aria-hidden="true"]')).toHaveCount(1);
+  await expect(button).toBeFocused();
+  release();
+  await expect(page.locator('section[aria-labelledby="projects-active"] li', { hasText: name })).toBeVisible();
+  await expect(page.locator('#projects-active')).toBeFocused();
+  expect(await page.evaluate(() => document.activeElement === document.body)).toBe(false);
+});
+
+test('UX-27 L5-14: after a successful create the form stays busy until the new page has loaded, and a second Enter sends nothing', async ({ browser }) => {
+  const page = await signedIn(browser, fx.members.assessor);
+  await page.goto(path('/projects/new'));
+  const ids = requestIdsOf(page, /\/api\/v1\/orgs\/[^/]+\/projects$/);
+  let release = () => {};
+  const held = new Promise<void>((ok) => { release = ok; });
+  // hold the navigation to the new project's page (its server component payload), not the create request itself
+  await page.route((url) => /\/orgs\/[^/]+\/projects\/[0-9a-f-]{36}$/.test(url.pathname), async (r) => { await held; await r.continue(); });
+  await page.getByLabel('Project name').fill(`Held navigation ${RUN}`);
+  await page.getByRole('button', { name: PROJECT_FORM_COPY.create }).click();
+  await expect.poll(() => ids.length).toBe(1);
+  await page.waitForTimeout(500);   // the create has answered; the navigation is held
+  await page.getByLabel('Project name').press('Enter');
+  await page.locator('form button[type="submit"]').click();
+  await page.waitForTimeout(500);
+  expect(ids).toHaveLength(1);
+  await expect(page.getByRole('button', { name: PROJECT_FORM_COPY.creating })).toHaveAttribute('aria-busy', 'true');
+  release();
+  await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
+  expect(ids).toHaveLength(1);
+});
+
+test('NFR-A11Y-05 (motion): the project form\'s details do not animate on page load, and do after the person opens them', async ({ browser }) => {
+  const project = await addProject(fx, { name: `PRJ motion ${RUN}` });
+  const page = await signedIn(browser, fx.members.owner);
+  await page.goto(path(`/projects/${project.id}/edit`));
+  const details = page.locator('#project-details');
+  await expect(details).toBeVisible();
+  expect(await details.evaluate((el) => getComputedStyle(el).animationName)).toBe('none');
+  const toggle = page.getByRole('button', { name: PROJECT_FORM_COPY.moreDetails });
+  await toggle.click();
+  await expect(details).toBeHidden();
+  await toggle.click();
+  await expect(details).toBeVisible();
+  expect(await details.evaluate((el) => getComputedStyle(el).animationName)).not.toBe('none');
 });
 
 test('UX-27 NFR-INT-02: S-09 keeps its request id when the same form is sent again after a lost connection, and takes a new one once a field is edited', async ({ browser }) => {
@@ -181,9 +349,9 @@ test('UX-27 NFR-INT-02: S-09 keeps its request id when the same form is sent aga
   await page.route('**/api/v1/orgs/*/projects', (r) => (r.request().method() === 'POST' && posts++ < 2 ? r.abort('internetdisconnected') : r.continue()));
   await page.getByLabel('Project name').fill('Retry probe');
   await page.getByRole('button', { name: 'Create project' }).click();
-  await expect(page.getByText('Something went wrong. Please try again.')).toBeVisible();
+  await expect(page.getByText(PROJECT_FORM_COPY.noReply.create)).toBeVisible();
   await page.getByRole('button', { name: 'Create project' }).click();
-  await expect(page.getByText('Something went wrong. Please try again.')).toBeVisible();
+  await expect(page.getByText(PROJECT_FORM_COPY.noReply.create)).toBeVisible();
   expect(ids).toHaveLength(2);
   expect(ids[1]).toBe(ids[0]);
   await page.getByLabel('Project name').fill('Retry probe, edited');
@@ -195,7 +363,7 @@ test('UX-27 NFR-INT-02: S-09 keeps its request id when the same form is sent aga
 
 test('UX-27 (M-02): create, archive and unarchive each say "Still saving. The connection is slow." when the server is held past 10 seconds', async ({ browser }) => {
   test.setTimeout(150_000);
-  const SLOW = 'Still saving. The connection is slow.';
+  const SLOW = PROJECT_FORM_COPY.slow;   // the form's line; Archive and Unarchive say their own (archive.slow, unarchive.slow)
   const hold = async (route: import('@playwright/test').Route) => { await new Promise((ok) => setTimeout(ok, 11_500)); await route.continue(); };
   const toArchive = await addProject(fx, { name: `PRJ slow archive ${RUN}` });
   const shelvedSlow = await addProject(fx, { name: `PRJ slow unarchive ${RUN}`, archived: true });
@@ -212,13 +380,13 @@ test('UX-27 (M-02): create, archive and unarchive each say "Still saving. The co
   await owner.route('**/archive', hold);
   await owner.getByRole('button', { name: 'Archive project' }).click();
   await owner.getByRole('button', { name: 'Archive project' }).last().click();
-  await expect(owner.getByRole('status').filter({ hasText: SLOW })).toBeVisible({ timeout: 20_000 });
-  await expect(owner.getByText('Archived. Nothing in this project can be changed until it is unarchived.')).toBeVisible({ timeout: 20_000 });
+  await expect(owner.getByRole('status').filter({ hasText: PROJECT_WRITE_COPY.archive.slow })).toBeVisible({ timeout: 20_000 });
+  await expect(owner.getByText(PROJECT_WRITE_COPY.archive.archived)).toBeVisible({ timeout: 20_000 });
 
   await owner.goto(path('/projects'));
   await owner.route('**/unarchive', hold);
   await owner.getByRole('button', { name: `Unarchive ${`PRJ slow unarchive ${RUN}`}` }).click();
-  await expect(owner.getByRole('status').filter({ hasText: SLOW })).toBeVisible({ timeout: 20_000 });
+  await expect(owner.getByRole('status').filter({ hasText: PROJECT_WRITE_COPY.unarchive.slow })).toBeVisible({ timeout: 20_000 });
   await expect(owner.getByRole('button', { name: `Unarchive ${`PRJ slow unarchive ${RUN}`}` })).toHaveCount(0, { timeout: 20_000 });
   void shelvedSlow;
 });
@@ -227,21 +395,23 @@ test('SPEC-2 F8: a 422 on a field in the closed details opens them and shows the
   const owner = await signedIn(browser, fx.members.owner);
   await owner.goto(path('/projects/new'));
   await owner.getByLabel('Project name').fill(`Too long sector ${RUN}`);
-  await owner.getByRole('button', { name: 'Show additional details' }).click();
+  await owner.getByRole('button', { name: PROJECT_FORM_COPY.moreDetails }).click();
   await owner.getByLabel('Sector').fill('s'.repeat(201));
-  await owner.getByRole('button', { name: 'Show additional details' }).click();   // close the section again
+  await owner.getByRole('button', { name: PROJECT_FORM_COPY.moreDetails }).click();   // close the section again
   await owner.getByRole('button', { name: 'Create project' }).click();
-  await expect(owner.getByRole('alert').filter({ hasText: 'There is a problem with this project. What you typed is kept.' })).toBeVisible();
+  // the kit's error summary is not a live region: its title takes focus after the refused submit, which is how a reader hears it
+  await expect(owner.getByRole('heading', { name: PROJECT_WRITE_COPY.summary(1) })).toBeFocused();
   await expect(owner.getByLabel('Sector')).toBeVisible();   // the section was opened for the person
-  await expect(owner.locator('#deploymentSector-error')).toContainText('at most 200 characters');
+  await expect(owner.locator('#deploymentSector-error')).toHaveText(PROJECT_FIELD_MESSAGES.textMax(200));
   await expect(owner.getByLabel('Sector')).toHaveAttribute('aria-describedby', 'deploymentSector-error');
 
   await owner.goto(path(`/projects/${emptyProject.id}`));
   await owner.route('**/archive', (r) => r.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ error: 'Forbidden', code: 'forbidden' }) }));
   await owner.getByRole('button', { name: 'Archive project' }).click();
   await owner.getByRole('button', { name: 'Archive project' }).last().click();
-  await expect(owner.getByRole('status').filter({ hasText: 'You can no longer change this project.' })).toBeVisible();
+  await expect(owner.getByRole('status').filter({ hasText: PROJECT_WRITE_COPY.forbidden })).toBeVisible();
   await expect(owner.getByRole('button', { name: 'Archive project' })).toBeDisabled();
+  await expect(owner.locator('.archive-control')).toBeFocused();   // ruling L5-4: the stop path leaves focus on the control's container
 });
 
 test('FR-PRJ-01: an assessor creates a project with every descriptive field and edits one; S-10 shows both', async ({ browser }) => {
@@ -249,24 +419,24 @@ test('FR-PRJ-01: an assessor creates a project with every descriptive field and 
   await page.goto(path('/projects/new'));
   await page.getByLabel('Project name').fill(`Described ${RUN}`);
   await page.getByLabel('AI system type').selectOption('classification');
-  await page.getByRole('button', { name: 'Show additional details' }).click();
+  await page.getByRole('button', { name: PROJECT_FORM_COPY.moreDetails }).click();
   await page.getByLabel('Sector').fill('health');
   await page.getByLabel('Dataset type').fill('tabular');
   await page.getByLabel('Dataset size').selectOption('medium_1k_100k');
-  await page.getByLabel('Personal data').selectOption('true');
+  await page.getByLabel(PROJECT_FORM_COPY.labels.processesPersonalData).selectOption('true');
   await page.getByLabel('Funding source').fill('GIZ');
   await page.getByLabel('Regulatory context').fill('A national data-protection act');
-  await page.getByLabel('Lifecycle stage').selectOption('development');
+  await page.getByLabel(PROJECT_FORM_COPY.labels.developmentStage).selectOption('development');
   await page.getByLabel('Start date').fill('2026-09-01');
   await page.getByLabel('End date').fill('2027-03-31');
   await page.getByRole('button', { name: 'Create project' }).click();
   await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
-  await expect(page.getByText('Classification, health, personal data: yes, lifecycle stage: Development')).toBeVisible();
+  await expect(page.getByText(['Classification', 'health', PROJECT_COPY.descriptive.usesPersonalData, LIFECYCLE_STAGE_WORDS.development].join(', '))).toBeVisible();
   await page.getByRole('link', { name: 'Edit project' }).click();
-  await page.getByLabel('Lifecycle stage').selectOption('testing');
+  await page.getByLabel(PROJECT_FORM_COPY.labels.developmentStage).selectOption('testing');
   await page.getByRole('button', { name: 'Save changes' }).click();
   await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
-  await expect(page.getByText('Classification, health, personal data: yes, lifecycle stage: Testing')).toBeVisible();
+  await expect(page.getByText(['Classification', 'health', PROJECT_COPY.descriptive.usesPersonalData, LIFECYCLE_STAGE_WORDS.testing].join(', '))).toBeVisible();
 });
 
 test('UX-27 NFR-INT-02: S-32 sends Unarchive with a request id and keeps it across a Retry', async ({ browser }) => {
@@ -277,7 +447,7 @@ test('UX-27 NFR-INT-02: S-32 sends Unarchive with a request id and keeps it acro
   let sends = 0;
   await page.route('**/unarchive', (r) => (sends++ < 1 ? r.abort('internetdisconnected') : r.continue()));
   await page.getByRole('button', { name: 'Unarchive' }).first().click();
-  await expect(page.getByRole('status').filter({ hasText: 'Not unarchived: connection lost.' })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: PROJECT_WRITE_COPY.unarchive.lost })).toBeVisible();
   await page.getByRole('button', { name: 'Retry', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Unarchive' })).toHaveCount(before - 1);
   expect(ids).toHaveLength(2);
@@ -299,7 +469,7 @@ test('FR-PRJ-02: a new project\'s S-10 shows the 7.4.2 empty texts in each stage
   const page = await signedIn(browser, fx.members.owner);
   await page.goto(path(`/projects/${empty.id}`));
   await expect(page.getByText('Nothing recorded yet.')).toHaveCount(3);
-  await expect(page.getByText('None open.')).toHaveCount(3);
+  await expect(page.getByText(PROJECT_COPY.followUp.none)).toHaveCount(3);
   await expect(page.getByText('No stage review yet.')).toHaveCount(3);
 });
 

@@ -5,6 +5,12 @@ import type { DecisionDraft } from '@/lib/question/draft';
 import type { LoadedQuestion } from '@/types/content';
 import type { DecisionVersionView } from '@/types/api';
 import { gateStatus } from '@/lib/question/saveOutcome';
+import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
+import { DECISION_OUTCOME_COPY } from '@/lib/decision/outcome/copy';
+import { deciderLabel, FINDING_NOTE } from '@/lib/decision/copy';
+import { QUESTION_COPY } from '@/lib/question/copy';
+import { AUTHZ_COPY } from '@/lib/authz/copy';
+import { STATUS_MARK_COPY } from '@/lib/ui/copy';
 
 /**
  * The S-12 regions DEC-b fills (W-3, W-4; UX-09 to UX-12, UX-25, UX-28; NFR-A11Y-03, NFR-A11Y-04), rendered as
@@ -55,10 +61,10 @@ describe('S-12 decision fields', () => {
     const h = html();
     expect(h).toMatch(/<fieldset[^>]*>\s*<legend[^>]*>Status<\/legend>/);
     expect([...h.matchAll(/<input[^>]*type="radio"[^>]*value="([a-z_]+)"/g)].map((m) => m[1])).toEqual(['done', 'partly', 'not_yet', 'not_applicable']);
-    expect(h).toContain("Saving &#x27;Partly&#x27; or &#x27;Not yet&#x27; keeps a finding open for this question, or opens one.");
-    expect(h).not.toContain('Reason code (required)');
+    expect(h).toContain(FINDING_NOTE);
+    expect(h).not.toContain(DECISION_FORM_COPY.fields.reasonCode);
     const ny = html({}, { status: 'not_yet' });
-    expect(ny).toContain('Reason code (required)');
+    expect(ny).toContain(DECISION_FORM_COPY.fields.reasonCode);
     expect(ny).toContain('Planned for later');
     expect(ny).not.toContain('Other reason');   // the codes of the chosen status only
   });
@@ -69,11 +75,11 @@ describe('S-12 decision fields', () => {
     const dateInputs = [...h.matchAll(/<input[^>]*inputmode="numeric"[^>]*>/gi)];
     expect(dateInputs).toHaveLength(3);
     expect(dateInputs.every((m) => !/value="[^"]+"/.test(m[0]))).toBe(true);
-    expect(h).toContain('Starting from version 2');
+    expect(h).toContain(DECISION_FORM_COPY.startingNote);
     expect(h).toMatch(/<button[^>]*>Today<\/button>/);
-    expect(h).toMatch(/<button[^>]*>Same as version 2 \(12 Oct 2026\)<\/button>/);
-    expect(h).toMatch(/<button[^>]*>Same as my last save: Oct 2026<\/button>/);
-    expect(html({ current: null, lastOwnSaveDate: null })).not.toMatch(/Same as/);
+    expect(h).toContain(`>${DECISION_FORM_COPY.sameAsCurrent('12 Oct 2026')}</button>`);
+    expect(h).toContain(`>${DECISION_FORM_COPY.sameAsMyLast('Oct 2026')}</button>`);
+    expect(html({ current: null, lastOwnSaveDate: null })).not.toMatch(/Same date as/);
   });
 
   it('FR-DEC-01: a new version opens from the current version\'s fields, and a withdrawal opens an empty form', () => {
@@ -85,7 +91,7 @@ describe('S-12 decision fields', () => {
 
   it('UX-11: Decided by lists You first, then members, then the Outside roles group', () => {
     const h = html({ viewer: { userId: 'u-me', name: 'Amina N.', role: 'assessor' }, members: [{ userId: 'u-j', name: 'Joseph K.' }] });
-    expect(h).toMatch(/<option[^>]*>You \(Amina N\.\)<\/option>\s*<option[^>]*>Joseph K\.<\/option>\s*<optgroup label="Outside roles">\s*<option[^>]*>Principal investigator<\/option>/);
+    expect(h).toMatch(/<option[^>]*>You \(Amina N\.\)<\/option>\s*<option[^>]*>Joseph K\.<\/option>\s*<optgroup label="Someone without a platform account">\s*<option[^>]*>Principal investigator<\/option>/);
   });
 
   it('UX-12: the reason helper and the count in text, linked to the field', () => {
@@ -97,9 +103,9 @@ describe('S-12 decision fields', () => {
 
   it('FR-CNT-04 FR-CNT-03 (screen): the gate takes a scope answer, a checklist its options with the count in text', () => {
     const gate = html({ question: { ...QUESTION, id: 'Q-PP-GATE-SENSITIVE', type: 'gate' } });
-    expect(gate).toMatch(/<legend[^>]*>Scope answer \(required\)<\/legend>/);
+    expect(gate).toMatch(/<legend[^>]*>Answer \(required\)<\/legend>/);
     expect(gate).not.toMatch(/<legend[^>]*>Status<\/legend>/);
-    expect(gate).toContain('This answer decides whether Q-PP-13 and Q-PP-14 apply. It does not open a finding.');
+    expect(gate).toContain(DECISION_FORM_COPY.scopeNote);
     const list = html({ question: { ...QUESTION, id: 'Q-PP-16', type: 'checklist', options: ['A', 'B', 'C'] } }, { optionsInPlace: ['B'] });
     expect(list).toMatch(/<legend[^>]*>Which of these are in place\?<\/legend>/);
     expect([...list.matchAll(/type="checkbox"/g)]).toHaveLength(3);
@@ -113,6 +119,31 @@ describe('S-12 decision fields', () => {
     expect(h).toMatch(/<textarea[^>]*aria-describedby="[^"]*decision-reason-error/);
     expect(h).toMatch(/id="decision-reason-error"[^>]*>Write a reason\.</);
   });
+
+  it('plan 1A Task 17: every control keeps its id and name, and the status cards show each status shape', () => {
+    const h = html({ question: { ...QUESTION, type: 'checklist', options: ['A', 'B'] } }, { status: 'not_yet' });
+    for (const v of ['done', 'partly', 'not_yet', 'not_applicable']) {
+      const radio = h.match(new RegExp(`<input[^>]*id="decision-status-${v}"[^>]*>`))?.[0] ?? '';
+      for (const attr of ['type="radio"', 'name="status"', `value="${v}"`, `aria-describedby="decision-status-${v}-help"`]) expect(radio).toContain(attr);
+    }
+    expect(h.match(/class="ui-mark__shape"/g)).toHaveLength(4);
+    expect(h).toMatch(/<input[^>]*id="decision-option-0"[^>]*name="optionsInPlace"/);
+    expect(h).toMatch(/<select[^>]*id="decision-reason-code"[^>]*name="reasonCode"/);
+    expect(h).toMatch(/<option value=""[^>]*>Choose one<\/option>/);
+    expect(h).toMatch(/<textarea[^>]*id="decision-reason"[^>]*name="reason"[^>]*aria-describedby="decision-reason-count decision-reason-help"/);
+    expect(h).toMatch(/<select[^>]*id="decision-decided-by"[^>]*name="decidedBy"/);
+    for (const part of ['day', 'month', 'year']) expect(h).toMatch(new RegExp(`<input[^>]*id="decision-${part}"[^>]*inputmode="numeric"`, 'i'));
+    expect(h).toMatch(/<fieldset[^>]*aria-describedby="decision-options-count"/);
+    expect(h).toContain(`<p id="decision-options-count" class="decision-fields__count">${DECISION_FORM_COPY.optionsCount(0, 2)}</p>`);
+  });
+
+  it('plan 1A Task 17: a date error keeps its id, and the reason count is not a limit on typing', () => {
+    const h = renderToStaticMarkup(<DecisionFields data={PANEL} value={{ ...EMPTY, reason: 'x'.repeat(4001) }} errors={[{ field: 'declaredDate', message: 'February has 28 days.' }]} disabled={false} onChange={() => {}} />);
+    expect(h).toMatch(/id="decision-declaredDate-error"[^>]*>February has 28 days\.</);
+    expect(h).toMatch(/<input[^>]*id="decision-day"[^>]*aria-describedby="[^"]*decision-declaredDate-error/);
+    expect(h).not.toMatch(/<textarea[^>]*maxlength/i);
+    expect(h).toContain('4,001 / 4,000 characters');
+  });
 });
 
 describe('S-12 status line and conflict view', () => {
@@ -120,16 +151,17 @@ describe('S-12 status line and conflict view', () => {
     const h = renderToStaticMarkup(<SaveStatus status={null} draftSavedAt={null} storageUnavailable={false} />);
     expect(h).toMatch(/role="status"[^>]*><\/[a-z]+>/);
     expect(h).toMatch(/role="alert"[^>]*><\/[a-z]+>/);
-    expect(renderToStaticMarkup(<SaveStatus status={null} draftSavedAt={null} storageUnavailable />)).toContain('This browser cannot keep drafts. Save before leaving this page.');
+    expect(renderToStaticMarkup(<SaveStatus status={null} draftSavedAt={null} storageUnavailable />)).toContain(DECISION_FORM_COPY.noStorage);
     const failed = renderToStaticMarkup(<SaveStatus status={{ id: 'M-05', text: 'Not saved: connection lost. Your answer is kept on this device. Retry.', live: 'assertive', next: 'retry' }} draftSavedAt={null} storageUnavailable={false} />);
     expect(failed).toMatch(/role="status"[^>]*><\/[a-z]+>/);
     expect(failed).toMatch(/role="alert"[^>]*>Not saved: connection lost\./);
   });
 
   it('F4 UX-26: when the browser cannot keep drafts, the failure the screen reader hears says so too', () => {
+    const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const h = renderToStaticMarkup(<SaveStatus status={{ id: 'M-05', text: 'Not saved: connection lost. Your answer is kept on this device. Retry.', live: 'assertive', next: 'retry' }} draftSavedAt={null} storageUnavailable />);
-    expect(h).toMatch(/role="alert"[^>]*>Not saved: connection lost\. Your answer is kept on this device\. Retry\. This browser cannot keep drafts\. Save before leaving this page\.</);
-    expect(h.match(/This browser cannot keep drafts/g)).toHaveLength(1);
+    expect(h).toMatch(new RegExp(`role="alert"[^>]*>Not saved: connection lost\\. Your answer is kept on this device\\. Retry\\. ${esc(DECISION_FORM_COPY.noStorage)}<`));
+    expect(h.match(new RegExp(esc(DECISION_FORM_COPY.noStorage), 'g'))).toHaveLength(1);
   });
 
   it('CR-2 UX-26: a gate alert with no storage is the gate line alone, without "Save before leaving this page"', () => {
@@ -137,29 +169,55 @@ describe('S-12 status line and conflict view', () => {
       const gate = gateStatus(nav);
       const h = renderToStaticMarkup(<SaveStatus status={gate} draftSavedAt={null} storageUnavailable />);
       expect(h).toMatch(new RegExp(`role="alert"[^>]*>${gate.text.replace(/[.]/g, '\\.')}</`));
-      expect(h).not.toContain('This browser cannot keep drafts');
+      expect(h).not.toContain(DECISION_FORM_COPY.noStorage);
     }
   });
 
   it('CR-1 ruling 5 UX-25: after a save that the person typed past, the line says Saved and also that a newer draft is on the device', () => {
     const h = renderToStaticMarkup(<SaveStatus status={{ id: 'M-03', text: 'Saved as version 1 at 10:42 EAT. Decided by: you. Entered by: you.', live: 'polite', next: 'none' }} draftSavedAt="2026-10-12T07:43:00.000Z" storageUnavailable={false} />);
     expect(h).toMatch(/role="status"[^>]*>Saved as version 1 at 10:42 EAT\./);
-    expect(h).toMatch(/Draft on this device, not saved yet \(\d{2}:\d{2} \S+\)/);
+    expect(h).toMatch(new RegExp(DECISION_FORM_COPY.unsaved));
     // with no newer draft, "Saved" stands alone
-    expect(renderToStaticMarkup(<SaveStatus status={{ id: 'M-03', text: 'Saved as version 1 at 10:42 EAT.', live: 'polite', next: 'none' }} draftSavedAt={null} storageUnavailable={false} />)).not.toContain('Draft on this device');
+    expect(renderToStaticMarkup(<SaveStatus status={{ id: 'M-03', text: 'Saved as version 1 at 10:42 EAT.', live: 'polite', next: 'none' }} draftSavedAt={null} storageUnavailable={false} />)).not.toContain(DECISION_FORM_COPY.unsaved);
+  });
+
+  it('C4 (Q18 (a)): when this browser can keep nothing, the signed-out line says to copy the text and never that it is kept', () => {
+    const S = DECISION_OUTCOME_COPY.save;
+    const h = renderToStaticMarkup(<SaveStatus status={{ id: 'M-08', text: S.signedOut, live: 'assertive', next: 'sign_in' }} draftSavedAt={null} storageUnavailable />);
+    const alert = /role="alert"[^>]*>([^<]*)</.exec(h)?.[1];
+    expect(alert).toBe('Not saved. You have been signed out. Copy your text before you sign in again: this browser cannot keep it.');
+    expect(h).not.toContain('kept');
+  });
+
+  it('C4 (Q18 (a)): when this browser can keep nothing, the slow line drops "A copy of your text is kept in this browser."', () => {
+    const S = DECISION_OUTCOME_COPY.save;
+    const h = renderToStaticMarkup(<SaveStatus status={{ id: 'M-02', text: S.slow, live: 'polite', next: 'none' }} draftSavedAt={null} storageUnavailable />);
+    expect(/role="status"[^>]*>([^<]*)</.exec(h)?.[1]).toBe('Still saving. The connection is slow.');
+    expect(h).not.toContain('kept');
+    expect(h).toContain(DECISION_FORM_COPY.noStorage);   // the no-storage line beside it, as before
+  });
+
+  it('C4 (Q18 (a)): with storage working, the signed-out and slow lines are as built', () => {
+    const S = DECISION_OUTCOME_COPY.save;
+    const out = renderToStaticMarkup(<SaveStatus status={{ id: 'M-08', text: S.signedOut, live: 'assertive', next: 'sign_in' }} draftSavedAt={null} storageUnavailable={false} />);
+    expect(/role="alert"[^>]*>([^<]*)</.exec(out)?.[1]).toBe('Not saved. You have been signed out. Your text is kept in this browser. Sign in again to save it.');
+    const slow = renderToStaticMarkup(<SaveStatus status={{ id: 'M-02', text: S.slow, live: 'polite', next: 'none' }} draftSavedAt={null} storageUnavailable={false} />);
+    expect(/role="status"[^>]*>([^<]*)</.exec(slow)?.[1]).toBe('Still saving. The connection is slow. A copy of your text is kept in this browser.');
   });
 
   it('UX-28 M-10: the conflict view shows both reasons, who saved, and the three actions', () => {
     const h = renderToStaticMarkup(<ConflictView current={{ ...V2, reason: 'Theirs' }} mine={{ ...EMPTY, reason: 'Mine' }} viewerId="u-me" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
-    expect(h).toContain('Theirs'); expect(h).toContain('Mine'); expect(h).toContain('Version 2 was saved by Joseph K.');
-    expect(h).toMatch(/<h3[^>]*tabindex="-1"[^>]*>Not saved: someone saved a newer version\.<\/h3>/i);
-    expect([...h.matchAll(/<button[^>]*>([^<]+)<\/button>/g)].map((m) => m[1])).toEqual(['Save mine as version 3', 'Edit mine first', 'Discard mine']);
+    expect(h).toContain('Theirs'); expect(h).toContain('Mine'); expect(h).toMatch(/<p>Joseph K\. saved a newer version at \d{2}:\d{2} \S+\. Compare it with your version, then choose what to keep\.<\/p>/);
+    const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    expect(h).toMatch(new RegExp(`<h3[^>]*tabindex="-1"[^>]*>${esc(DECISION_FORM_COPY.conflict.heading)}</h3>`, 'i'));
+    expect(h).toContain(DECISION_FORM_COPY.conflict.saved(2));   // which version is the saved one (the unit case pins it too)
+    expect([...h.matchAll(/<button[^>]*>([^<]+)<\/button>/g)].map((m) => m[1])).toEqual([DECISION_FORM_COPY.conflict.saveMine, DECISION_FORM_COPY.conflict.editMine, DECISION_FORM_COPY.conflict.discardMine]);
   });
 
   it('F3 UX-28: "Your answer" lists the restored draft\'s evidence the block cannot name, as Save mine will attach it', () => {
     const h = renderToStaticMarkup(<ConflictView current={V2} mine={{ ...EMPTY, reason: 'Mine' }} viewerId="u-me" mineEvidence={['memo.pdf']} mineKeptEvidence={2} onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
     expect(h).toContain('memo.pdf');
-    expect(h).toContain('This answer also holds 2 evidence items added before the page was closed. It is attached when you save.');
+    expect(h).toContain(DECISION_OUTCOME_COPY.keptEvidence(2));
   });
 
   it('F10 FR-DEC-08: when the newer version is a withdrawal, the conflict view says so', () => {
@@ -176,7 +234,7 @@ describe('S-12 status line and conflict view', () => {
 describe('S-12 regions', () => {
   it('FR-DEC-01 UX-31 UX-14: a viewer and an archived project get no form', async () => {
     const viewer = renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, canWrite: false, viewer: { ...PANEL.viewer, role: 'viewer' } } }));
-    expect(viewer).toContain('Only owners, admins and assessors record decisions.');
+    expect(viewer).toContain(AUTHZ_COPY.decisionFormNote.viewer);
     expect(viewer).not.toMatch(/Save decision/);
     expect(viewer).not.toMatch(/<form/);
     expect(renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, canWrite: false, projectArchived: true } }))).not.toMatch(/<form/);
@@ -184,20 +242,24 @@ describe('S-12 regions', () => {
 
   it('FR-CNT-08: S-12 shows the reworded line when the running wording differs', async () => {
     const h = renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, current: V2, runningQuestion: { ...PANEL.question, expectedPractice: 'New wording.' }, contentSemver: '0.0.2-fixture' } }));
-    expect(h).toContain('Wording updated in content version 0.0.2-fixture.');
-    expect(h).toMatch(/<details[^>]*>\s*<summary[^>]*>See the earlier wording<\/summary>[\s\S]*Old wording\./);
+    const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const line = QUESTION_COPY.reworded.line.replaceAll("'", '&#x27;');
+    expect(h).toContain(line);
+    expect(h).toMatch(new RegExp(`<details[^>]*>\\s*<summary[^>]*>${esc(QUESTION_COPY.reworded.summary)}</summary>[\\s\\S]*Old wording\\.`));
     // SPEC-1 ruling: the question region shows the running wording a new save re-confirms against; the disclosure, the
     // wording the current decision was answered against. Each text once.
     expect(h.match(/New wording\./g)).toHaveLength(1);
     expect(h.match(/Old wording\./g)).toHaveLength(1);
-    expect(h.indexOf('New wording.')).toBeLessThan(h.indexOf('See the earlier wording'));
-    expect(renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, current: V2 } }))).not.toContain('Wording updated');
+    expect(h.indexOf('New wording.')).toBeLessThan(h.indexOf(QUESTION_COPY.reworded.summary));
+    const same = renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, current: V2 } }));
+    expect(same).not.toContain(QUESTION_COPY.reworded.summary);
+    expect(same).not.toContain(line);   // with the same wording there is no line (the property's own words), not only no summary
   });
 
   it('UX-42 W-3: one h1 for the question that takes focus, and Previous and Next go to the neighbouring questions', async () => {
     const h = renderToStaticMarkup(await QuestionPanelRegions({ data: PANEL }));
     expect(h.match(/<h1/g)).toHaveLength(1);
-    expect(h).toMatch(/<h1 id="question-heading" tabindex="-1"[^>]*>Q-PP-01 \. Problem Formulation<\/h1>/i);
+    expect(h).toMatch(/<h1 id="question-heading" tabindex="-1"[^>]*>Q-PP-01 \u00b7 Problem Formulation<\/h1>/i);
     expect(h).toMatch(/<a[^>]*href="\/orgs\/acme\/projects\/p1\/stages\/pre-processing\/questions\/Q-PP-00"[^>]*>Previous question<\/a>/);
     expect(h).toMatch(/<a[^>]*href="\/orgs\/acme\/projects\/p1\/stages\/pre-processing\/questions\/Q-PP-02"[^>]*>Next question<\/a>/);
     expect(h).toContain('Question 2 of 24 in Pre-processing');   // the stage's name, not its address segment (CR-7)
@@ -205,30 +267,47 @@ describe('S-12 regions', () => {
   });
 
   it('FR-DEC-01 FR-DEC-03 (screen): with no version, Current decision reads "No decision yet."', () => {
-    expect(renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={null} historyCount={0} historyHref="/h" seals={[]} />)).toContain('No decision yet.');
-    const v2 = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={V2} historyCount={2} historyHref="/h" seals={[]} />);
-    expect(v2).not.toContain('No decision yet.');
+    expect(renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={null} historyCount={0} historyHref="/h" seals={[]} isScopeQuestion={false} />)).toContain(QUESTION_COPY.current.none);
+    const v2 = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={V2} historyCount={2} historyHref="/h" seals={[]} isScopeQuestion={false} />);
+    expect(v2).not.toContain(QUESTION_COPY.current.none);
     expect(v2).toContain('Partly');
-    expect(v2).toContain('version 2');
-    expect(v2).toContain('Decided by: Principal investigator (outside role), 12 Oct 2026.');
-    expect(v2).toMatch(/Entered by: Joseph K\., 12 Oct 2026 \d{2}:\d{2} \S+/);
-    expect(v2).toMatch(/<a[^>]*href="\/h"[^>]*>History: 2 versions<\/a>/);
+    expect(v2).toContain(QUESTION_COPY.current.version(2));
+    expect(v2).toContain(`Decided by: ${deciderLabel({ kind: 'outside_role', role: 'principal_investigator' }, '', 'record')}, 12 Oct 2026.`);
+    expect(v2).toMatch(/Entered by: Joseph K\. on 12 Oct 2026 at \d{2}:\d{2} \S+/);
+    const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    expect(v2).toMatch(new RegExp(`<a[^>]*href="/h"[^>]*>${esc(QUESTION_COPY.current.history(2))}</a>`));
   });
 
   it('U12 (d): the current decision shows the version\'s reason and its evidence, or None, for every role', () => {
-    const withBoth = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={{ ...V2, reason: 'We checked the sources.', evidence: [{ id: 'e1', kind: 'link', url: 'https://example.org/a', label: 'Audit report', fileName: null, mimeType: null, byteSize: null, erased: null } as never] }} historyCount={2} historyHref="/h" seals={[]} />);
+    const withBoth = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={{ ...V2, reason: 'We checked the sources.', evidence: [{ id: 'e1', kind: 'link', url: 'https://example.org/a', label: 'Audit report', fileName: null, mimeType: null, byteSize: null, erased: null } as never] }} historyCount={2} historyHref="/h" seals={[]} isScopeQuestion={false} />);
     expect(withBoth).toMatch(/<dt>Reason<\/dt><dd>We checked the sources\.<\/dd>/);
     expect(withBoth).toContain('Audit report');
-    const none = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={{ ...V2, reason: null, evidence: [] }} historyCount={2} historyHref="/h" seals={[]} />);
+    const none = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={{ ...V2, reason: null, evidence: [] }} historyCount={2} historyHref="/h" seals={[]} isScopeQuestion={false} />);
     expect(none).toMatch(/<dt>Evidence<\/dt><dd>None<\/dd>/);
-    const erased = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={{ ...V2, reason: null, reasonErased: { erasedOn: '2026-11-01' } as never, evidence: [] }} historyCount={2} historyHref="/h" seals={[]} />);
+    const erased = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={{ ...V2, reason: null, reasonErased: { erasedOn: '2026-11-01' } as never, evidence: [] }} historyCount={2} historyHref="/h" seals={[]} isScopeQuestion={false} />);
     expect(erased).toContain("on the organisation&#x27;s instruction.");
   });
 
   it('FR-DEC-08 (screen): a withdrawal as the current version reads as no decision, with its history link', () => {
-    const w = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={{ ...V2, versionNumber: 3, status: 'withdrawn', withdrawalCode: 'duplicate', decidedBy: null, declaredDate: null }} historyCount={3} historyHref="/h" seals={[]} />);
-    expect(w).toContain('No decision. Version 3 withdrew the decision: Duplicate.');
-    expect(w).toContain('History: 3 versions');
+    const w = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={{ ...V2, versionNumber: 3, status: 'withdrawn', withdrawalCode: 'duplicate', decidedBy: null, declaredDate: null }} historyCount={3} historyHref="/h" seals={[]} isScopeQuestion={false} />);
+    expect(w).toContain(QUESTION_COPY.current.withdrawn('Duplicate'));
+    expect(w).toContain(QUESTION_COPY.current.history(3));
+    expect(w).not.toContain('ui-mark');
+  });
+
+  it('L5-11 amended (C3): the current decision shows what its version records, whatever the personal data answer says today', () => {
+    const words = (html: string) => [...html.matchAll(/class="ui-mark__words"[^>]*>([^<]*)</g)].map((m) => m[1]);
+    // a version recorded as Partly on a question the gate now removes still reads Partly (no gate input at all: a caller
+    // that still passed the retired `gated` prop changes nothing)
+    const partly = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={V2} historyCount={2} historyHref="/h" seals={[]} isScopeQuestion={false} {...({ gated: true } as object)} />);
+    expect(words(partly)).toEqual([STATUS_MARK_COPY.partly]);
+    // the personal data question's version reads its answer
+    const answer = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={{ ...V2, status: null, scopeAnswer: 'no' } as never} historyCount={2} historyHref="/h" seals={[]} isScopeQuestion />);
+    expect(words(answer)).toEqual([STATUS_MARK_COPY.scope_answered('no')]);
+    // a withdrawn version has its words and no mark
+    const withdrawn = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={{ ...V2, versionNumber: 3, status: 'withdrawn', withdrawalCode: 'duplicate', decidedBy: null, declaredDate: null }} historyCount={3} historyHref="/h" seals={[]} isScopeQuestion={false} />);
+    expect(withdrawn).toContain(QUESTION_COPY.current.withdrawn('Duplicate'));
+    expect(withdrawn).not.toContain('ui-mark');
   });
 });
 

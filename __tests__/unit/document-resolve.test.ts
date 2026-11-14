@@ -261,7 +261,7 @@ describe('project, typed and meta fields', () => {
   });
 
   it('FR-DOC-02 (round 10): a dataset size band prints its words, never the enum value', () => {
-    const words: Array<[string, string]> = [['small_lt1k', 'Under 1,000'], ['medium_1k_100k', '1,000 to 100,000'], ['large_100k_1m', '100,000 to 1 million'], ['very_large_gt1m', 'Over 1 million'], ['unknown', 'Unknown']];
+    const words: Array<[string, string]> = [['small_lt1k', 'Under 1,000 records'], ['medium_1k_100k', '1,000 to 100,000 records'], ['large_100k_1m', '100,000 to 1 million records'], ['very_large_gt1m', 'Over 1 million records'], ['unknown', 'Not known']];
     for (const [band, word] of words) {
       const p = part('project', { kind: 'project', field: 'datasetSize' }, snapWith({}, { metadata: { datasetSize: band } }));
       expect(p.text).toContain(word);

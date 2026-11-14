@@ -7,6 +7,7 @@ import { testDb } from '../__tests__/helpers/db';
 import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
+import { PROJECT_COPY } from '../lib/project/copy';
 
 /**
  * J-08 and the S-16 / S-17 states (FR-REV-01, 02, 03, 05; UX-18, UX-31, M-28; NFR-A11Y-02, NFR-A11Y-05). The fixture
@@ -203,7 +204,7 @@ test('UX-31 NFR-A11Y-05: S-16 and S-17 have no serious axe violation at 1280 and
   // PRJ's archive route is not built yet (PENDING_ROUTES), so the fixture archives the project as the database owner.
   await testDb.project.update({ where: { id: p.id }, data: { archivedAt: new Date() } });
   await page.goto(s17Url);
-  await expect(page.getByText('This project is archived. Nothing in it can be changed. Owners and admins can unarchive it from All projects.')).toBeVisible();
+  await expect(page.getByText(PROJECT_COPY.archivedBanner)).toBeVisible();
   await expect(page.getByRole('button', { name: /Seal as seal/ })).toHaveCount(0);
 });
 

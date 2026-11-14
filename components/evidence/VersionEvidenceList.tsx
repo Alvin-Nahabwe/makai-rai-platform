@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { DownloadLink } from '@/components/ui/DownloadLink';
+import { EVIDENCE_COPY } from '@/lib/evidence/copy';
 import { formatDay } from '@/lib/format/dates';
 import { evidenceKind, stripBidiControls } from '@/lib/evidence/format';
 import { isHttpUrl } from '@/lib/evidence/link';
@@ -9,17 +10,17 @@ export type VersionEvidenceListProps = { orgSlug: string; items: EvidenceItemVie
 
 /** The name a person sees for an item, bidi controls removed (E14). A link without a label is named by its address. */
 export function evidenceDisplayName(item: EvidenceItemView): string {
-  return stripBidiControls(item.fileName ?? item.label ?? item.url ?? 'Evidence');
+  return stripBidiControls(item.fileName ?? item.label ?? item.url ?? EVIDENCE_COPY.list.fallbackName);
 }
 
 /**
  * One item as text: a file is a download link stating its kind and size (UX-39), a link is a plain anchor only when
- * its address is http or https (never next/link, which prefetches: FR-EVD-03), and an erased file reads the 7.5.6
- * line with no link. Every file name sits inside `<bdi>` so a right-to-left override cannot reorder its neighbours.
+ * its address is http or https (never next/link, which prefetches: FR-EVD-03), and an erased file reads its name, then
+ * "File erased on {date} at your organisation's request." (copy audit B#277, answer Q16) with no link. Every file name sits inside `<bdi>` so a right-to-left override cannot reorder its neighbours.
  */
 export function EvidenceItemText({ orgSlug, item }: { orgSlug: string; item: EvidenceItemView }): ReactElement {
   if (item.kind === 'link') {
-    if (item.url === null) return <>Link address erased</>;
+    if (item.url === null) return <>{EVIDENCE_COPY.list.linkAddressErased}</>;
     // The address shown has no bidi controls (E14); href keeps the stored address, which the browser percent-encodes.
     const address = stripBidiControls(item.url);
     const label = item.label === null ? null : stripBidiControls(item.label);
@@ -35,12 +36,12 @@ export function EvidenceItemText({ orgSlug, item }: { orgSlug: string; item: Evi
   if (item.erased !== null) {
     return (
       <>
-        {name === null ? 'File name erased' : <bdi>{name}</bdi>}
-        {` . File erased on ${formatDay(item.erased.erasedOn)} on the organisation's instruction. Its fingerprint is kept, so seals that include it still check.`}
+        {name === null ? EVIDENCE_COPY.list.fileNameErased : <bdi>{name}</bdi>}
+        {EVIDENCE_COPY.list.fileErased(formatDay(item.erased.erasedOn))}
       </>
     );
   }
-  const label = name ?? 'File name erased';
+  const label = name ?? EVIDENCE_COPY.list.fileNameErased;
   if (item.byteSize === null || item.mimeType === null) return <bdi>{label}</bdi>;
   return (
     <bdi>

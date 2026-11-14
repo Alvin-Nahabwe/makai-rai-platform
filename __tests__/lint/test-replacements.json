@@ -1168,14 +1168,6 @@
     "task": "1A-16"
   },
   {
-    "kind": "rule",
-    "changed": "__tests__/unit/shared-components.test.tsx::UX-29 (helper): the confirm button is disabled while busy or when canConfirm is false, and the cancel button never is",
-    "replacedBy": "__tests__/unit/shared-components.test.tsx::UX-29 (helper): busy, the confirm button is aria-busy and not disabled; canConfirm false disables it, busy or not; the cancel button is never either",
-    "property": "An inline confirmation cannot send its action twice, and its cancel button is always usable. The old rule kept the second press out by disabling the busy confirm button, which also dropped its keyboard focus (register D-386, SC 2.4.3); the new rule keeps it out with the kit's Button busy state instead: aria-busy, the press prevented and onConfirm not called, focus kept. canConfirm false still disables the confirm button, busy or not, and the cancel button is never disabled or busy.",
-    "proof": "__tests__/unit/shared-components.test.tsx::UX-29 (helper): busy, the confirm button is aria-busy and not disabled; canConfirm false disables it, busy or not; the cancel button is never either (the markup of each combination of busy and canConfirm); that a busy Button's press calls no onClick is __tests__/unit/ui/button.test.tsx::busy: the host handler prevents the default action and never calls the caller's onClick; on the screens that keep the confirmation open while sending, a second Enter during a held request reaches the server zero more times (one request in all) and the button keeps focus in e2e/inline-confirm-reveal.spec.ts::the confirm button while the request is sent (documents, decision withdrawal on S-13, findings, first-owner invitation, account deletion; archive project is not among them because it closes its confirmation as the request starts, so there is no confirm button left to press again; on members the confirmation stays open for the whole request and its confirm button is never given busy (MembersManager.tsx passes none), so there the second press is stopped by the screen's own in-flight guard, which e2e/inline-confirm-reveal.spec.ts::UX-29 NFR-A11Y-02: members, revoke (S-26) at 1280 wide: the confirm button, neither busy nor disabled there, keeps focus while the revoke is held, and the screen's own guard sends one request for two Enters shows: one request for two Enters, the button keeping focus); the kit's busy demo confirms nothing when pressed in e2e/ui-kit.spec.ts::Cancel comes first on screen at every width, the destructive variant is the kit's, and a busy confirm is aria-busy, not disabled, keeps focus and does nothing when pressed",
-    "task": "1A-D386"
-  },
-  {
     "kind": "removed",
     "deleted": "__tests__/unit/break-glass-session.test.ts::notice carries only event, time and entry id",
     "replacedBy": "__tests__/unit/break-glass-session.test.ts::notice carries only time and entry id, and no event",
@@ -1422,5 +1414,261 @@
     "replacedBy": "__tests__/unit/release-waivers.test.ts::SFH-11: the committed file names no release but 0.6.0, 0.6.1, 0.6.2 and 0.7.0",
     "property": "The committed waiver file names only the releases the test lists, so a mistyped release cannot waive nothing in silence. Release 0.7.0 records a waiver (the owner deferred the screen-reader walk on 14 November 2026), so the list and the title gain 0.7.0.",
     "proof": "The same case with one more version in its toEqual list; a release outside the list still fails it. The 0.7.0 entry has a case of its own above it."
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/shared-components.test.tsx::UX-29 (helper): the confirm button is disabled while busy or when canConfirm is false, and the cancel button never is",
+    "replacedBy": "__tests__/unit/shared-components.test.tsx::UX-29 (helper): busy, the confirm button is aria-busy and not disabled; canConfirm false disables it, busy or not; the cancel button is never either",
+    "property": "An inline confirmation cannot send its action twice, and its cancel button is always usable. The old rule kept the second press out by disabling the busy confirm button, which also dropped its keyboard focus (register D-386, SC 2.4.3); the new rule keeps it out with the kit's Button busy state instead: aria-busy, the press prevented and onConfirm not called, focus kept. canConfirm false still disables the confirm button, busy or not, and the cancel button is never disabled or busy.",
+    "proof": "__tests__/unit/shared-components.test.tsx::UX-29 (helper): busy, the confirm button is aria-busy and not disabled; canConfirm false disables it, busy or not; the cancel button is never either (the markup of each combination of busy and canConfirm); that a busy Button's press calls no onClick is __tests__/unit/ui/button.test.tsx::busy: the host handler prevents the default action and never calls the caller's onClick; on the screens that keep the confirmation open while sending, a second Enter during a held request reaches the server zero more times (one request in all) and the button keeps focus in e2e/inline-confirm-reveal.spec.ts::the confirm button while the request is sent (documents, decision withdrawal on S-13, findings, first-owner invitation, account deletion; archive project (S-10) keeps its confirmation open and its confirm button busy while sending, and there a second Enter during a held request reaches the server zero more times (one request in all) and the button keeps focus in e2e/prj-screens.spec.ts::L5-4 D-398: Archive opens on Cancel; while the request is held the confirm button keeps focus and is aria-busy; after success focus is inside the control; on members the confirmation stays open for the whole request and its confirm button is never given busy (MembersManager.tsx passes none), so there the second press is stopped by the screen's own in-flight guard, which e2e/inline-confirm-reveal.spec.ts::UX-29 NFR-A11Y-02: members, revoke (S-26) at 1280 wide: the confirm button, neither busy nor disabled there, keeps focus while the revoke is held, and the screen's own guard sends one request for two Enters shows: one request for two Enters, the button keeping focus); the kit's busy demo confirms nothing when pressed in e2e/ui-kit.spec.ts::Cancel comes first on screen at every width, the destructive variant is the kit's, and a busy confirm is aria-busy, not disabled, keeps focus and does nothing when pressed",
+    "task": "1A-D386"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/prj-components.test.tsx::UX-06 (R12-16, R13-7): in an overdue mitigation line only the word Overdue is a status-label--warning element, a due one is plain text, and each status word is a status-label",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::UX-06 (spec 7.1, plan 1A Task 15): in an overdue mitigation line only the word Overdue is red, outside any status label; a due one is plain text; each status word is a status-label with no warning class",
+    "property": "On Home an overdue mitigation is said in words, and only the word Overdue carries the overdue colour: the date after it is plain text, a mitigation that is not overdue has no marked word, and the status words Planned and In progress stay neutral status labels. The old rule tinted Overdue as a status-label--warning label; spec 7.1 and the plan 1A Task 15 carry reserve the overdue red for an overdue date and the word Overdue, never inside a status label or a mark, so the word leaves the status label and takes the overdue role.",
+    "proof": "The new case renders MyMitigationsList with one overdue and one due item and requires exactly one element of class followup-overdue, holding PROJECT_COPY.followUp.overdue and followed directly by PROJECT_COPY.followUp.wasDue('28 Oct 2026') as plain text; no status-label--warning or badge--moderate anywhere; the due line PROJECT_COPY.followUp.due('20 Nov 2026') inside no status-label or followup-overdue element; and the only status-label elements are exactly Planned then In progress, each with the class status-label alone. components/followup/FollowUp.css gives .followup-overdue the --color-overdue role.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/prj-components.test.tsx::FR-PRJ-03: S-32 lists active and archived projects, with Unarchive for owner and admin only",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::FR-PRJ-03: S-32 lists active and archived projects, with Unarchive for owner and admin only",
+    "property": "S-32 lists active projects before archived ones, offers Unarchive to a role that may archive and to no other, shows no assessment, maturity or completion word, and says of each empty list that it is empty. Only the empty text changed: \"None.\" under both headings became \"No active projects.\" and \"No archived projects.\" (audit B#72, voice rule 2), so one split on a shared word became one check per list.",
+    "proof": "Every other assertion of the case is byte for byte as at the base. With both lists empty the case requires PROJECT_COPY.allProjects.noActive and PROJECT_COPY.allProjects.noArchived each exactly once (split length 2), the active line before the archived one.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-04: S-08 counts the archived projects, so an organisation with only archived ones is not told it has none",
+    "replacedBy": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-04: S-08 counts the archived projects, so an organisation with only archived ones is not told it has none",
+    "property": "Home counts archived projects: an organisation whose only project is archived is told it has no active project and where the archived ones are, never that it has no project, and a person who can create still has New project. Audit B#31 rewrote the line to \"No active projects. Your archived projects are on the All projects page.\" (the row's sentence with one word changed by the coordinator) for every role, as plain text, so the creator's second New project link inside the line is gone (coordinator Q4 (a)); the page header's New project stays.",
+    "proof": "The case still loads the dashboard of an organisation whose one project is archived (no active project, archivedCount 1, both unchanged) and renders DashboardView for its owner. It requires the sentence HOME_COPY.noActiveProjects as a paragraph of its own, no HOME_COPY.noProjects, exactly one link to /orgs/<slug>/projects/new named HOME_COPY.newProject (the header action a creator sees), and that link (the index of its match) before the sentence's paragraph.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/prj-components.test.tsx::FR-PRJ-01: the descriptive line is built from the fields and shows no score",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::FR-PRJ-01: the descriptive line is built from the fields and shows no score",
+    "property": "A project's descriptive line is built from its descriptive fields, in their order, each only when set, joined by commas, and shows no score; with no field it is empty. The words of two parts changed (audit B#367, B#368): \"personal data: yes\" became \"Uses personal data\" and \"lifecycle stage: Testing\" became the status word alone, \"Testing\" (\"Lifecycle stage\" is retired by the vocabulary), so the expected line is written from the copy constant and the case also checks the No branch.",
+    "proof": "The case requires descriptiveLine of classification, health, personal data true and testing to equal exactly 'Classification', 'health', PROJECT_COPY.descriptive.usesPersonalData and 'Testing' joined by ', '; descriptiveLine of personal data false alone to equal PROJECT_COPY.descriptive.noPersonalData; and descriptiveLine(null) to be '' (unchanged).",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/decision-components.test.tsx::F4 UX-26: when the browser cannot keep drafts, the failure the screen reader hears says so too",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::F4 UX-26: when the browser cannot keep drafts, the failure the screen reader hears says so too",
+    "property": "When the browser cannot keep drafts, the one assertive announcement of a failed save carries the no-storage sentence after the failure, once. The no-storage sentence was reworded (copy audit B#149 with the owner's decision D2: \"This browser cannot keep a copy of your text. Save before you leave this page.\"), so the pinned regular expression is built from the copy constant.",
+    "proof": "The case renders SaveStatus with the same M-05 failure and storageUnavailable, and requires the role=\"alert\" element to hold exactly the failure text followed by a space and DECISION_FORM_COPY.noStorage (a RegExp built from the constant; the sentence holds no regular-expression metacharacter other than the full stops, which match themselves), and that sentence to occur exactly once in the markup (RegExp of the constant with the g flag).",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/decision-components.test.tsx::UX-28 M-10: the conflict view shows both reasons, who saved, and the three actions",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::UX-28 M-10: the conflict view shows both reasons, who saved, and the three actions",
+    "property": "The conflict view shows both reasons, names who saved the newer version and when, takes focus on its heading (tabindex -1), and offers exactly three actions as plain buttons in this order: save mine, edit mine, discard mine. The words were reworded by ruled texts: the sentence is copy audit B#414 with \"your version\" (the lead, gap G-b8: \"{name} saved a newer version at {time}. Compare it with your version, then choose what to keep.\"), the heading B#165 in the coordinator's Q2 form (\"Not saved. A newer version was saved while you worked.\"), and the buttons CONSOLIDATED 8 #6 (\"Save my version\", \"Edit my version\", \"Discard my version\").",
+    "proof": "The case renders ConflictView with a newer version by Joseph K. and the reader's own reason, and requires both reasons, a paragraph holding exactly \"Joseph K. saved a newer version at {hh:mm zone}. Compare it with your version, then choose what to keep.\", the h3 with tabindex=\"-1\" whose whole text is DECISION_FORM_COPY.conflict.heading, the saved column's heading DECISION_FORM_COPY.conflict.saved(2) (which version is the saved one), and the text of every <button>…</button> in order to equal DECISION_FORM_COPY.conflict.saveMine, editMine and discardMine (no icon or wrapper inside a button).",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/decision-components.test.tsx::FR-DEC-01 FR-DEC-03 (screen): with no version, Current decision reads \"No decision yet.\"",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::FR-DEC-01 FR-DEC-03 (screen): with no version, Current decision reads \"No decision yet.\"",
+    "property": "With no version the current decision reads \"No decision yet.\"; with a version it shows the status, the version number, who decided with the declared date, who entered it with the day and time it was received, and a link to the history with the number of versions. The words were reworded (copy audit B#180, B#184, and CONSOLIDATED 8 #5 for a decider without a platform account): \"See all versions ({n})\", \"Entered by: {name} on {day} at {time}\", \"{role} (no platform account)\".",
+    "proof": "The case renders CurrentDecision with no version and requires QUESTION_COPY.current.none; with version 2 (Partly, decided by the principal investigator role on 12 Oct 2026, entered by Joseph K.) it requires no QUESTION_COPY.current.none, the status words Partly, QUESTION_COPY.current.version(2), \"Decided by: \" followed by deciderLabel of that role in the record form and \", 12 Oct 2026.\", \"Entered by: Joseph K. on 12 Oct 2026 at {hh:mm zone}\", and a link to /h whose whole text is QUESTION_COPY.current.history(2).",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/decision-components.test.tsx::UX-10 FR-DEC-10 NFR-A11Y-04: the date fields are empty on open; Same as version N is offered beside Today, not filled in",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::UX-10 FR-DEC-10 NFR-A11Y-04: the date fields are empty on open; Same as version N is offered beside Today, not filled in",
+    "property": "The three date boxes are empty when the form opens from a version that has a declared date and a last own save; Today and the two shortcuts (the person's last decision's date, the current decision's date) are offered as buttons and fill nothing until pressed; with neither date there is no shortcut; the form says it starts from the current decision. The words were reworded (copy audit B#226, B#242, B#243): \"The form shows the current decision. Change what is different, then save.\", \"Same date as my last decision ({date})\", \"Same date as the current decision ({date})\"; the buttons are now the kit's DateField buttons.",
+    "proof": "The case renders the fields opened from version 2 (declared 12 Oct 2026) with a last own save of Oct 2026 and requires exactly three inputmode=\"numeric\" inputs, none with a value; DECISION_FORM_COPY.startingNote; a <button> whose whole text is Today; a button whose whole text is DECISION_FORM_COPY.sameAsCurrent(\"12 Oct 2026\") and one that is DECISION_FORM_COPY.sameAsMyLast(\"Oct 2026\"); and, with no current version and no last own save, no \"Same date as\" at all.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/decision-components.test.tsx::UX-11: Decided by lists You first, then members, then the Outside roles group",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::UX-11: Decided by lists You first, then members, then the Outside roles group",
+    "property": "Decided by lists the person first as \"You ({name})\", then the other members, then a labelled group of the roles a person without a platform account can hold, starting with Principal investigator. The group's label was reworded by CONSOLIDATED 8 #5 (\"Someone without a platform account\"; \"outside role\" is retired by the vocabulary).",
+    "proof": "The case renders the fields for Amina N. with one other member, Joseph K., and requires, in this order with nothing between them but white space, the option \"You (Amina N.)\", the option \"Joseph K.\", <optgroup label=\"Someone without a platform account\"> and its first option \"Principal investigator\".",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/decision-components.test.tsx::FR-CNT-04 FR-CNT-03 (screen): the gate takes a scope answer, a checklist its options with the count in text",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::FR-CNT-04 FR-CNT-03 (screen): the gate takes a scope answer, a checklist its options with the count in text",
+    "property": "The personal data question takes its answer, under a legend that says it is required, with spec 6's line saying which questions stop applying, and no Status group; a checklist question shows its options as checkboxes under \"Which of these are in place?\", the count of those in place in text, and the Status group too. The legend was reworded by audit B#228 with the owner's decision D2 (\"Answer (required)\"), and the line is spec 6's exact sentence, the vocabulary's definition of the personal data question.",
+    "proof": "The case renders the gate question and requires a legend whose whole text is \"Answer (required)\", no Status legend, and DECISION_FORM_COPY.scopeNote (= TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION.definition); and renders a checklist with options A, B, C, B in place, requiring the legend \"Which of these are in place?\", exactly three type=\"checkbox\" inputs, the text \"1 of 3 in place\", and the Status legend.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "e2e/decision-conflict.spec.ts::FR-DEC-05 UX-28 M-10 NFR-A11Y-03: a colleague saved version 2 first: both reasons, who saved, focus on the announced heading",
+    "replacedBy": "e2e/decision-conflict.spec.ts::FR-DEC-05 UX-28 M-10 NFR-A11Y-03: a colleague saved version 2 first: both reasons, who saved, focus on the announced heading",
+    "property": "A save over a version a colleague saved after the person started is refused and opens the conflict view: its heading is announced and focused, the view names who saved the newer version and when, shows both reasons and which version is the saved one, and saving the person's version makes version 3; the draft is then gone. The words were reworded by ruled texts: the heading (B#165 in the coordinator's Q2 form), the sentence (B#414 with \"your version\", the lead's gap G-b8: it no longer states the version number, so the saved column's title, \"Saved version (2)\", B#166, now carries it), the button (CONSOLIDATED 8 #6 \"Save my version\") and M-03. M-03 was reworded (copy audit B#345, the lead's ruling that the save line keeps the version): \"Saved at {time} as version {n}. Decided by: {who}.\" The \"Entered by\" sentence is no longer part of the save line (B#345 drops it; who entered a version is still shown under Current decision and in the history).",
+    "proof": "The case saves version 1, has the assessor fill the form, has the owner save version 2 through the API, presses Save decision, and requires the heading DECISION_FORM_COPY.conflict.heading focused; in the conflict region the text '{name} saved a newer version at {hh:mm zone}. Compare it with your version, then choose what to keep.', the heading DECISION_FORM_COPY.conflict.saved(2), and both reasons; then it presses DECISION_FORM_COPY.conflict.saveMine and requires the status line to start 'Saved at {time} as version 3.' and no draft key left.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "e2e/decision-conflict.spec.ts::UX-28: Edit mine first returns to the form with the draft and the new base",
+    "replacedBy": "e2e/decision-conflict.spec.ts::UX-28: Edit mine first returns to the form with the draft and the new base",
+    "property": "Edit my version returns to the form with the person's text and focus in the reason field, on the new base, so the next save makes version 2. Button and save line reworded: CONSOLIDATED 8 #6 (\"Edit my version\") and M-03. M-03 was reworded (copy audit B#345, the lead's ruling that the save line keeps the version): \"Saved at {time} as version {n}. Decided by: {who}.\" The \"Entered by\" sentence is no longer part of the save line (B#345 drops it; who entered a version is still shown under Current decision and in the history).",
+    "proof": "The case requires, after the conflict, the reason field (labelled DECISION_FORM_COPY.fields.reason with FIELD_COPY.required) to hold 'Mine to edit' and to be focused after pressing DECISION_FORM_COPY.conflict.editMine; after an edit and Save, the status line starts 'Saved at {time} as version 2.'.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "e2e/decision-conflict.spec.ts::M-10: the same account on another device: the text says so",
+    "replacedBy": "e2e/decision-conflict.spec.ts::M-10: the same account on another device: the text says so",
+    "property": "When the newer version was saved by the same account (another browser or an earlier attempt), the conflict text says it was the person themselves. Reworded by the lead's gap G-b8 ruling: \"You saved a newer version at {time}. Compare it with your version, then choose what to keep.\" (B#412's fragment falls away with B#414).",
+    "proof": "The case saves through the API as the same assessor while the form holds other text, presses Save decision, and requires in the conflict region exactly 'You saved a newer version at {hh:mm zone}. Compare it with your version, then choose what to keep.'",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "e2e/decision-save.spec.ts::UX-27 FR-DEC-07 M-04: a reply lost after the server saved; Retry unchanged reuses the id and shows Already saved",
+    "replacedBy": "e2e/decision-save.spec.ts::UX-27 FR-DEC-07 M-04: a reply lost after the server saved; Retry unchanged reuses the id and shows Already saved",
+    "property": "When the reply to a save is lost after the server saved it, Retry with nothing changed sends the same request id, the server replays the version, and the line says it was already saved as version 1. M-04 was reworded (copy audit B#408): \"This was already saved at {time} (version {n}).\"",
+    "proof": "The case is unchanged except the status line's pattern, now /^This was already saved at \\d{2}:\\d{2} \\S+ \\(version 1\\)\\.$/ (the request-id checks before it are unchanged).",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "e2e/decision-save.spec.ts::UX-09 UX-11 M-03: choosing Not yet shows the reason code; Ethics committee is named in the confirmation",
+    "replacedBy": "e2e/decision-save.spec.ts::UX-09 UX-11 M-03: choosing Not yet shows the reason code; Ethics committee is named in the confirmation",
+    "property": "Status is a group of four radios; the main reason field appears only once Not yet is chosen; an outside decider (Ethics committee) is named in the save confirmation. The field's label was reworded (B#232, C2: \"Main reason (required)\") and M-03 was reworded (copy audit B#345, the lead's ruling that the save line keeps the version): \"Saved at {time} as version {n}. Decided by: {who}.\" The \"Entered by\" sentence is no longer part of the save line (B#345 drops it; who entered a version is still shown under Current decision and in the history).",
+    "proof": "The case requires four radios in the group named Status, no field labelled DECISION_FORM_COPY.fields.reasonCode with FIELD_COPY.required before Not yet is checked, that field after it (a code is chosen), and, after Save, a status line ending 'Decided by: Ethics committee.'.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "e2e/decision-save.spec.ts::UX-30: Save while a file is uploading waits; Save without it names the file left out",
+    "replacedBy": "e2e/decision-save.spec.ts::UX-30: Save while a file is uploading waits; Save without it names the file left out",
+    "property": "Save while a file is uploading waits and says which file it waits for; Save without this file sends the decision without it at once, and the line after the save names the file left out. The button and the line were reworded (B#154 with the coordinator's Q10 singular: \"Save without this file\"; B#159: \"Saved without {files}. When the upload has finished, save again to add it.\").",
+    "proof": "The case requires the waiting text for costing-sheet.pdf, presses DECISION_FORM_COPY.saveWithout(1), checks the request was sent, and requires the text DECISION_FORM_COPY.savedWithout.before + 'costing-sheet.pdf' + DECISION_FORM_COPY.savedWithout.after.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "e2e/decision-save.spec.ts::UX-30: a failed upload is never waited out by itself; Save without it leaves it out and names it",
+    "replacedBy": "e2e/decision-save.spec.ts::UX-30: a failed upload is never waited out by itself; Save without it leaves it out and names it",
+    "property": "A failed upload is never waited out: Save waits and names the file, Save without this file leaves it out, and the line after the save names it. Button and line reworded as B#154 (Q10 singular) and B#159.",
+    "proof": "The case requires the failed-upload line, the waiting text for kept-eight-bad.pdf, presses DECISION_FORM_COPY.saveWithout(1), and requires DECISION_FORM_COPY.savedWithout.before + 'kept-eight-bad.pdf' + DECISION_FORM_COPY.savedWithout.after.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "e2e/decision-save.spec.ts::(module)",
+    "replacedBy": "e2e/decision-save.spec.ts::FR-DEC-06 NFR-REL-04 UX-25 M-01 M-03: Save shows Saving, then Saved as version 1 only after the reply",
+    "property": "SAVED_V1, the pattern of the save line every first save in this file waits for, follows M-03's ruled wording. M-03 was reworded (copy audit B#345, the lead's ruling that the save line keeps the version): \"Saved at {time} as version {n}. Decided by: {who}.\" The \"Entered by\" sentence is no longer part of the save line (B#345 drops it; who entered a version is still shown under Current decision and in the history).",
+    "proof": "SAVED_V1 is now /^Saved at \\d{2}:\\d{2} \\S+ as version 1\\. Decided by: you\\.$/: the whole line, anchored, with the version number and the decider; the cases that read it are unchanged.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/decision-components.test.tsx::U12 (d): the current decision shows the version's reason and its evidence, or None, for every role",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::U12 (d): the current decision shows the version's reason and its evidence, or None, for every role",
+    "property": "The current decision shows the version's reason and its evidence for every role, None when there is no evidence, and the erased-text line when the reason was erased. CurrentDecision gained one prop the question page passes, isScopeQuestion (with gated false, the inputs of lib/ui/marks.ts markKindOf), so the status its version records shows as the kit's StatusMark (brief section 5; ruling L5-11 amended, which removed the gated prop the first build had); the case passes isScopeQuestion as false, the value for this ordinary question.",
+    "proof": "The case's assertions are unchanged (<dt>Reason</dt><dd>We checked the sources.</dd>, the link label, <dt>Evidence</dt><dd>None</dd>, the erased line read from Task 18's text); each render adds isScopeQuestion={false}.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/decision-components.test.tsx::FR-DEC-08 (screen): a withdrawal as the current version reads as no decision, with its history link",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::FR-DEC-08 (screen): a withdrawal as the current version reads as no decision, with its history link",
+    "property": "A withdrawal as the current version reads as no decision, names what kind of mistake it was, keeps the history link with the number of versions, and shows no status mark. Reworded by copy audit B#181 and B#180: \"No decision. The last decision was withdrawn ({code}).\", \"See all versions ({n})\". CurrentDecision gained one prop the question page passes, isScopeQuestion (with gated false, the inputs of lib/ui/marks.ts markKindOf), so the status its version records shows as the kit's StatusMark (brief section 5; ruling L5-11 amended, which removed the gated prop the first build had); the case passes isScopeQuestion as false, the value for this ordinary question.",
+    "proof": "The case renders version 3, a withdrawal with code duplicate, and requires QUESTION_COPY.current.withdrawn('Duplicate'), QUESTION_COPY.current.history(3), and no ui-mark element.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/decision-components.test.tsx::FR-CNT-08: S-12 shows the reworded line when the running wording differs",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::FR-CNT-08: S-12 shows the reworded line when the running wording differs",
+    "property": "When the running content words the question differently from the content the current decision was answered against, the page says so and holds the earlier wording in a disclosure after the running wording; each wording appears once; with the same wording there is no line. Reworded by copy audit B#14 and B#15 (\"The description of good practice changed after your team's decision.\", \"See the earlier description\"); \"content version\" is retired by the vocabulary, so the line no longer names the semver.",
+    "proof": "The case requires QUESTION_COPY.reworded.line (HTML-escaped apostrophe), a <details> whose <summary> is QUESTION_COPY.reworded.summary followed by the old wording, each wording exactly once, the new wording before the summary, and with no rewording neither the summary nor the line (QUESTION_COPY.reworded.line, HTML-escaped).",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/decision-components.test.tsx::UX-42 W-3: one h1 for the question that takes focus, and Previous and Next go to the neighbouring questions",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::UX-42 W-3: one h1 for the question that takes focus, and Previous and Next go to the neighbouring questions",
+    "property": "The page has one h1, the question's id and module, focusable (tabindex -1), and Previous and Next link to the neighbouring questions, with the position in words. The h1's separator is now U+00B7 with a space each side (copy audit B#12 as the lead ruled it, gap G-b1 (b): \"{Q-ID} · {module}\"), the same function as the tab title.",
+    "proof": "The case requires exactly one <h1, <h1 id=\"question-heading\" tabindex=\"-1\"…>Q-PP-01 · Problem Formulation</h1> with U+00B7 (written \\u00b7 in the pattern), the two links with their exact hrefs, 'Question 2 of 24 in Pre-processing', and no Previous link on the first question.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 (helper): each region's component gets the props its contract row names, from the panel data",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 (helper): each region's component gets the props its contract row names, from the panel data",
+    "property": "Each region's component gets the props its contract row names, from the panel data. CurrentDecision now also gets isScopeQuestion, which the page computes from the question's type, so the current decision shows the kit's mark for what its version records (plan 1A Task 17, brief section 5; ruling L5-11 amended removed the gated prop the first build passed).",
+    "proof": "The case requires CurrentDecision's props to equal exactly orgSlug, current, historyCount, seals, historyHref as before plus isScopeQuestion: false for this panel (a likert question), and no other prop; the other regions' expectations are unchanged.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/integration/decision-pages.test.ts::UX-08 FR-CNT-02 (screen): QuestionContent gets the suggestion count and the suggestions section carries id=\"suggestions\"",
+    "replacedBy": "__tests__/integration/decision-pages.test.ts::UX-08 FR-CNT-02 (screen): QuestionContent gets the suggestion count and the suggestions section carries id=\"suggestions\"",
+    "property": "On the question page the content region's link carries the number of suggestions (\"Ways teams address this (3)\"), the suggestions section has its h2 and id=\"suggestions\", and the suggestions slot is rendered in it. The slot's own count line (\"3 controls for this question's risk area\") is removed (copy audit B#279, plan 1A Task 17 part 17c): the number is stated once, in the link.",
+    "proof": "The case still requires href=\"#suggestions\">Ways teams address this (3)</a> (the number, from suggestionCount), <h2 id=\"s12-suggestions\">Ways teams address this</h2> and <section … id=\"suggestions\">; the removed count-line assertion is replaced by the slot's introduction (SUGGESTIONS_COPY.intro), which SuggestedControls renders only when it has at least one card, so the slot's presence is still proven. The count line's absence is pinned in __tests__/unit/suggestion-slots.test.tsx.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/suggestion-slots.test.tsx::UX-08: the count line says \"1 control\" for one and \"n controls\" otherwise",
+    "replacedBy": "__tests__/unit/suggestion-slots.test.tsx::UX-08 (copy audit B#279): the slot has no count line; the count stays in the content region's link",
+    "property": "The suggestions slot states the number of controls once. The count line and its helper controlCountLine are removed (copy audit B#279, plan 1A Task 17 part 17c); the number is the content region's link \"Ways teams address this (n)\", from suggestionCount.",
+    "proof": "The new case renders the slot for Q-PP-01 and for Q-PP-17 with a ticked option and requires no suggested-controls__count element and no \"n control(s) for this question\" text; suggestionCount stays pinned by the two cases on the count, and the link's number by question-content.test.tsx and decision-pages.test.ts.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/permission-notes.test.ts::UX-14: decisionFormNote names the roles and is null when archived or allowed",
+    "replacedBy": "__tests__/unit/permission-notes.test.ts::UX-14: decisionFormNote names the roles and is null when archived or allowed",
+    "property": "A role that records no decision (Reviewer, Viewer) is told in one line who records decisions; the note is null for a role that may record one and in an archived project. Audit D row OR87 (the coordinator's ruling OR87, role names capitalised) adds what each role can do instead, so the one sentence both roles read became two: the Reviewer's (\"... You can read them and raise a finding.\") and the Viewer's (\"... You can read them.\"), held in lib/authz/copy.ts.",
+    "proof": "The case requires decisionFormNote('reviewer', false) to be AUTHZ_COPY.decisionFormNote.reviewer and decisionFormNote('viewer', false) to be AUTHZ_COPY.decisionFormNote.viewer (the loop over the two roles with one literal is unrolled, one line per role and text); owner, admin and assessor still get null, and viewer and owner on an archived project still get null (unchanged lines).",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/permission-notes.test.ts::(module)",
+    "replacedBy": "__tests__/unit/permission-notes.test.ts::UX-14: decisionFormNote names the roles and is null when archived or allowed",
+    "property": "The file's comment quoted the one sentence of the note; it now says what each role is told (audit D row OR87), and the file imports the copy module that holds the two sentences. Nothing outside the case is asserted.",
+    "proof": "Outside its case the file changed only in its header comment, which now describes the two lines instead of quoting the old one, and in the import of AUTHZ_COPY from lib/authz/copy (a copy module); the case's assertions are as the entry above says.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/integration/decision-pages.test.ts::FR-DEC-06 (screen): a new project's stage shows every question as No decision and the W-2 empty line",
+    "replacedBy": "__tests__/integration/decision-pages.test.ts::FR-DEC-06 (screen): a new project's stage shows every question as No decision and the W-2 empty line",
+    "property": "A new project's stage shows every question as No decision, the stage's question count, each module heading with its own counts, the subtitle naming the stage's modules in module order, and the empty line. Audit B row 3 rewrites the subtitle from \"{Stage}: {module}; {module}\" to \"{module} · {module}\" (C2 retires \"module\"; the stage is already the h1), and row 5 rewrites the empty line (\"You can work on the stages in any order.\"), now read from QUESTION_COPY.stage.nothingRecorded.",
+    "proof": "The case still requires the empty line (now the constant), one \">No decision<\" per question, the question count, the module h2 followed by \"7 questions · 7 with no decision\", and both module titles in module order in one line, now joined by \" · \" without the stage prefix: 'Problem Formulation · Data Collection &amp; Preparation'.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/integration/decision-pages.test.ts::FR-DEC-06 (screen): with a decision recorded the empty line goes and the row shows its status and version",
+    "replacedBy": "__tests__/integration/decision-pages.test.ts::FR-DEC-06 (screen): with a decision recorded the empty line goes and the row shows its status and version",
+    "property": "With a decision recorded the empty line goes and the row shows the decision's status words in their status-label element followed by its declared date. Audit B row 214 removes the \" · v{n}\" marker from the row (C2 retires \"v3\" as a label); the version stays on the question page and in History.",
+    "proof": "The regular expression still anchors on the row's data-question-id and requires the status words \"Partly\" to close their </span> and be followed by \" · Oct 2026\", the declared date at its precision; only the removed \" · v1\" between them is gone. The not-toContain of the empty line is unchanged.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/integration/decision-pages.test.ts::FR-DEC-06 (screen): a filter with no results says so and links to all",
+    "replacedBy": "__tests__/integration/decision-pages.test.ts::FR-DEC-06 (screen): a filter with no results says so and links to all",
+    "property": "A filter with no results names the chosen filter in \"No questions match '{filter}'.\" and links to all the questions. The filter done_without_evidence is labelled \"Done, no evidence attached\" (CONSOLIDATED 2, vocabulary term done-no-evidence-attached, which retires \"Done without evidence\").",
+    "proof": "The case still renders ?show=done_without_evidence and requires the no-match line naming that filter's label (now 'Done, no evidence attached', escaped as the server writes it) and the anchored link to ?show=all with \"Show all {n}\" (unchanged line).",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/document-resolve.test.ts::FR-DOC-02 (round 10): a dataset size band prints its words, never the enum value",
+    "replacedBy": "__tests__/unit/document-resolve.test.ts::FR-DOC-02 (round 10): a dataset size band prints its words, never the enum value",
+    "property": "Each dataset size band prints its display words in a new document, with the project mark, and never its enum value; a null size prints nothing. The words are audit B rows 350 to 354 as the coordinator's answer Q14 applies them: \"Under 1,000 records\", \"1,000 to 100,000 records\", \"100,000 to 1 million records\", \"Over 1 million records\", \"Not known\" (lib/project/labels.ts). Issued documents are stored bytes and are not re-rendered.",
+    "proof": "Only the five word literals of the band table changed; the loop still requires, for every band, that the resolved part's text contains its words and the project mark and does not contain the enum value, and the null case is unchanged.",
+    "task": "plan 1A Task 17"
   }
 ]

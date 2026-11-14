@@ -407,18 +407,13 @@ describe('the vocabulary lint, on the repository', () => {
     expect(ratchetViolations(current, allowed as Worklist)).toEqual([]);
   });
 
-  // Scopes (1) copy modules, (3) field maps and (4) email all hold hits today: the worklist of the copy tasks.
-  // Register row (toolkit-process/docs/DEFERRED_REGISTER.md), trigger "Task 20 merged"; Task 20 removes `.fails`.
-  it.fails('vocabulary lint (worklist until Task 20)', () => {
-    // `it.fails` turns every throw into a pass. So a scan that crashed, or read no file in a scope, must not throw
-    // here: the body returns normally, which `it.fails` reports as a failure of this case, even when it runs alone.
-    let scan: ReturnType<typeof scanWorklistScopes> | undefined;
-    try { scan = scanWorklistScopes(); } catch (e) {
-      console.error(`vocabulary lint: the worklist scan failed: ${(e as Error).message}`);
-      return;
-    }
+  // Scopes (1) copy modules, (3) field maps and (4) email held hits until the copy tasks cleared them: the worklist
+  // emptied when Task 17 and Task 18's document words met on the integration branch (14 November 2026), so the case
+  // is an ordinary one now. A scan that crashes, or reads no file in a scope, fails it.
+  it('vocabulary lint (worklist until Task 20)', () => {
+    const scan = scanWorklistScopes();
     const empty = Object.entries(scan).filter(([, r]) => !r.files.length).map(([name]) => name);
-    if (empty.length) { console.error(`vocabulary lint: the worklist scan read no file in: ${empty.join(', ')}`); return; }
+    expect(empty, 'the worklist scan read no file in these scopes').toEqual([]);
     expect(worklistHits().map(formatHit)).toEqual([]);
   });
 

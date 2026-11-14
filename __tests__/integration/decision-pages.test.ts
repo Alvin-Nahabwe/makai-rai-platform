@@ -10,6 +10,8 @@ import { addDecision, addProject, addSealRow, addStageReview, buildOrg, ctxFor, 
 import { FIXTURE_QUESTION_IDS } from '../helpers/content';
 import type { StageFilter } from '@/lib/question/stageList';
 import { HOSTILE_STRINGS } from '../helpers/hostile';
+import { SUGGESTIONS_COPY } from '@/lib/suggestions/copy';
+import { QUESTION_COPY } from '@/lib/question/copy';
 
 /**
  * S-11, S-12 and S-13 rendered from real panel data on the fixture bundle (contract "Content bundle"). The router is the
@@ -46,7 +48,7 @@ describe('S-12 page', () => {
     const h = renderToStaticMarkup(createElement(QuestionPanelRegions, { data: await panelData('assessor', 'Q-PP-01') }));
     expect(h).toContain('href="#suggestions">Ways teams address this (3)</a>');
     expect(h).toContain('<h2 id="s12-suggestions">Ways teams address this</h2>');
-    expect(h).toContain('3 controls for this question&#x27;s risk area');
+    expect(h).toContain(SUGGESTIONS_COPY.intro);
     expect(h).toMatch(/<section[^>]*id="suggestions"/);
   });
 
@@ -84,24 +86,24 @@ describe('S-11 page', () => {
 
   it('FR-DEC-06 (screen): a new project\'s stage shows every question as No decision and the W-2 empty line', async () => {
     const h = await renderS11('?show=all');
-    expect(h).toContain('Nothing is recorded for this stage yet. Open any question to start. Stages can be recorded in any order.');
+    expect(h).toContain(QUESTION_COPY.stage.nothingRecorded);
     expect([...h.matchAll(/>No decision</g)].length).toBe(STAGE_QUESTION_COUNT);
     expect(h).toContain(`${STAGE_QUESTION_COUNT} questions`);
     // SPEC-4 W-2: module headings with their own counts, under a stage subtitle
     expect(h).toMatch(/<h2[^>]*>Problem Formulation<\/h2>\s*<p[^>]*>7 questions · 7 with no decision<\/p>/);
-    expect(h).toContain('Pre-processing: Problem Formulation; Data Collection &amp; Preparation');
+    expect(h).toContain('Problem Formulation · Data Collection &amp; Preparation');
   });
 
   it('FR-DEC-06 (screen): with a decision recorded the empty line goes and the row shows its status and version', async () => {
     await addDecision(fx, project.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId: c1.contentVersionId, status: 'partly', declaredDate: '2026-10' });
     const h = await renderS11('?show=all');
     expect(h).not.toContain('Nothing is recorded for this stage yet.');
-    expect(h).toMatch(/data-question-id="Q-PP-01"[\s\S]*?>Partly<\/span> · v1 · Oct 2026/);
+    expect(h).toMatch(/data-question-id="Q-PP-01"[\s\S]*?>Partly<\/span> · Oct 2026/);
   });
 
   it('FR-DEC-06 (screen): a filter with no results says so and links to all', async () => {
     const h = await renderS11('?show=done_without_evidence');
-    expect(h).toContain('No questions match &#x27;Done without evidence&#x27;.');
+    expect(h).toContain('No questions match &#x27;Done, no evidence attached&#x27;.');
     expect(h).toMatch(new RegExp(`<a[^>]*href="[^"]*\\?show=all"[^>]*>Show all ${STAGE_QUESTION_COUNT}</a>`));
   });
 

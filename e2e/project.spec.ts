@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import { test, expect } from '@playwright/test';
 import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
+import { PROJECT_FORM_COPY } from '../lib/project/form/copy';
 
 /**
  * Project creation by a signed-in member. The member is a fixture seat (e2e/fixtures/auth.setup.ts,
@@ -18,7 +19,7 @@ test.describe('Project Creation Flow', () => {
 
     // Navigate to new project page
     await page.goto(`/orgs/${orgSlug}/projects/new`);
-    await expect(page.locator('h1')).toHaveText('New Project');
+    await expect(page.locator('h1')).toHaveText(PROJECT_FORM_COPY.headingCreate);
 
     // Fill project form
     const projectName = `E2E Test Project ${Date.now()}`;

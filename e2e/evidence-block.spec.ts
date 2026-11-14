@@ -6,6 +6,7 @@ import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { failOnDialog } from './helpers/dialogs';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { applyNetworkProfile } from './helpers/network';
+import { CONNECTION_LOST_TEXT, EVIDENCE_COPY, UPLOAD_LIMIT_TEXT } from '../lib/evidence/copy';
 
 /**
  * The evidence block on S-12 (UX-30, NFR-PERF-06, NFR-A11Y-02, NFR-A11Y-05, M-14 to M-19). S-12 answers an error until
@@ -88,7 +89,7 @@ test('UX-30 NFR-PERF-06: under the Poor profile the line shows changing byte cou
   await applyNetworkProfile(page, 'Poor');
   await openS12(page, 'assessor', baseURL as string);
   await chooseFile(page, pdfOf(2_400_000, 'costing.pdf'));
-  await expect(page.getByText(/^2\.4 MB\. Large files are slow on poor connections/)).toBeVisible();
+  await expect(page.getByText(EVIDENCE_COPY.lines.largeFile('2.4'), { exact: true })).toBeVisible();
   const first = await uploadLine(page, 'costing.pdf');
   await page.waitForTimeout(3000);
   expect(await uploadLine(page, 'costing.pdf')).not.toBe(first);
@@ -107,9 +108,9 @@ test('M-18 UX-30: reloading mid-upload names the file that was not uploaded', as
 test('M-15 M-16: a too-large file and a wrong type show their messages', async ({ page, baseURL }) => {
   await openS12(page, 'assessor', baseURL as string);
   await chooseFile(page, bytesOf(11_000_000, 'big.pdf'));
-  await expect(page.getByText('Not uploaded: big.pdf is larger than 10 MB. Add a link to where it is kept instead.')).toBeVisible();
+  await expect(page.getByText(`${EVIDENCE_COPY.lines.notUploadedBefore}big.pdf${EVIDENCE_COPY.lines.tooLargeAfter}`)).toBeVisible();
   await chooseFile(page, { name: 'x.html', buffer: Buffer.from('<html>') });
-  await expect(page.getByText('Not uploaded: x.html is not a PDF, PNG, JPEG, Office document or ZIP file.')).toBeVisible();
+  await expect(page.getByText(`${EVIDENCE_COPY.lines.notUploadedBefore}x.html${EVIDENCE_COPY.lines.wrongTypeAfter}`)).toBeVisible();
 });
 
 test('M-19: the eleventh upload in a minute shows the upload limit', async ({ page, baseURL }) => {
@@ -117,14 +118,14 @@ test('M-19: the eleventh upload in a minute shows the upload limit', async ({ pa
   await openS12(page, 'admin', baseURL as string, 1);
   for (let i = 0; i < 10; i++) await chooseFile(page, pdfOf(1000, `f${i}.pdf`));
   await chooseFile(page, pdfOf(1000, 'f10.pdf'));
-  await expect(page.getByText('Not uploaded: you can upload 10 files a minute. Wait a minute, then retry.')).toBeVisible();
+  await expect(page.getByText(UPLOAD_LIMIT_TEXT)).toBeVisible();
 });
 
 test('M-17 M-14: an upload cut off offers Retry upload, which then uploads', async ({ page, context, baseURL }) => {
   await openS12(page, 'assessor', baseURL as string);
   await context.setOffline(true);
   await chooseFile(page, pdfOf(200_000, 'cut.pdf'));
-  await expect(page.getByText('Not uploaded: connection lost.')).toBeVisible();
+  await expect(page.getByText(CONNECTION_LOST_TEXT)).toBeVisible();
   await context.setOffline(false);
   await page.getByRole('button', { name: /Retry upload/ }).click();
   await expect(page.getByText('Uploaded cut.pdf (200 KB).')).toBeVisible();

@@ -385,11 +385,6 @@ h5 { font-size: var(--font-size-body); }
   color: var(--surface-base);   /* the page colour on the text colour: --color-white is not light-on-dark in the dark theme */
 }
 
-.btn--large {
-  padding: var(--space-4) var(--space-8);
-  font-size: var(--font-size-base);
-}
-
 /* ── Cards ── */
 .card {
   background: var(--surface-card);
@@ -418,17 +413,6 @@ h5 { font-size: var(--font-size-body); }
   font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-}
-
-.badge--moderate {
-  background-color: var(--tint-moderate-bg);
-  color: var(--tint-moderate-fg);
-}
-
-/* The warning tint of UX-06: "Overdue", "Owner cannot act" and "Legal name not recorded" only (the label word, never the phrase). */
-.status-label--warning {
-  background-color: var(--tint-moderate-bg);
-  color: var(--tint-moderate-fg);
 }
 
 /* ── Stage indicators ── */
@@ -467,11 +451,6 @@ h5 { font-size: var(--font-size-body); }
 
   .container {
     padding: 0 var(--space-4);
-  }
-
-  .btn--large {
-    padding: var(--space-3) var(--space-6);
-    font-size: var(--font-size-sm);
   }
 }
 
@@ -536,48 +515,7 @@ h5 { font-size: var(--font-size-body); }
   color: var(--link);
 }
 
-/* ── Projects Grid ── */
-.projects-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: var(--space-6);
-}
-
-.project-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  text-decoration: none;
-  color: inherit;
-  cursor: pointer;
-}
-
-.project-card__name {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-  line-height: var(--line-height-tight);
-}
-
-.project-card__desc {
-  font-size: var(--font-size-sm);
-  color: var(--text-muted);
-  line-height: var(--line-height-normal);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
 /* ── Form Styles (authenticated pages) ── */
-.form-container {
-  background: var(--surface-card);
-  border-radius: var(--border-radius-lg);
-  padding: var(--space-8);
-  box-shadow: var(--shadow-sm);
-  max-width: 720px;
-}
-
 .form-error {
   background-color: var(--tint-critical-bg);
   /* The foreground paired with --tint-critical-bg in both themes: 5.30:1 light, 8.38:1 dark (risk-critical gave 3.95 and 3.29). */
@@ -600,10 +538,6 @@ h5 { font-size: var(--font-size-body); }
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
-}
-
-.required {
-  color: var(--color-risk-critical);
 }
 
 .form-group input,
@@ -641,50 +575,6 @@ h5 { font-size: var(--font-size-body); }
   gap: var(--space-4);
 }
 
-.form-section-toggle {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  margin: var(--space-6) 0;
-  padding: var(--space-4) 0;
-  border-top: 1px solid var(--color-gray-300);
-  border-bottom: 1px solid var(--color-gray-300);
-}
-
-.toggle-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  background: none;
-  border: none;
-  font-family: var(--font-family);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  color: var(--link);
-  cursor: pointer;
-  padding: 0;
-  transition: color var(--transition-fast);
-}
-
-.toggle-btn:hover {
-  color: var(--color-primary-dark);
-}
-
-.toggle-icon {
-  display: inline-block;
-  font-size: var(--font-size-xs);
-  transition: transform var(--transition-fast);
-}
-
-.toggle-icon.open {
-  transform: rotate(90deg);
-}
-
-.form-details {
-  padding: var(--space-4) 0;
-  animation: fadeInUp 0.3s ease-out;
-}
-
 .form-actions {
   display: flex;
   justify-content: flex-end;
@@ -703,10 +593,6 @@ h5 { font-size: var(--font-size-body); }
   .page-header {
     flex-direction: column;
     gap: var(--space-4);
-  }
-
-  .projects-grid {
-    grid-template-columns: 1fr;
   }
 
   .form-row {
@@ -800,15 +686,6 @@ h5 { font-size: var(--font-size-body); }
 .reveal {
   opacity: 0;
   animation: fadeInUp 0.6s ease-out forwards;
-}
-
-/* ── Dashboard ── */
-.dashboard-section {
-  margin-bottom: var(--space-10);
-}
-
-.dashboard-section h2 {
-  margin-bottom: var(--space-6);
 }
 
 /* =================================================================

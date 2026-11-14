@@ -1,8 +1,8 @@
 /*
  * The S-12 question content slot (components/question/QuestionContent.tsx; UX-08, FR-CNT-02).
- * Colours are the theme tokens of app/globals.css, which both themes redefine, so text keeps 4.5:1 in light and
- * dark (NFR-A11Y-05). The link uses --tint-brand-fg rather than the global link colour, because --color-primary
- * does not change in the dark theme and is too dark on the dark page.
+ * Colours are the colour roles of app/globals.css, which both themes redefine, so text keeps 4.5:1 in light and
+ * dark (NFR-A11Y-05). The link uses --color-action-text, the role the legacy --tint-brand-fg resolved to, so it looks
+ * as before in both themes.
  */
 
 /* A long word or address in a content text wraps instead of widening the page at 320px (SC 1.4.10). */
@@ -12,26 +12,26 @@
 
 .question-content__principle {
   margin: 0 0 var(--space-1);
-  color: var(--text-muted);
-  font-size: var(--font-size-sm);
+  color: var(--color-ink-muted);
+  font-size: var(--font-size-small);
 }
 
 .question-content__text {
   margin: var(--space-2) 0 var(--space-3);
-  color: var(--text-primary);
-  font-size: var(--font-size-lg);
+  color: var(--color-heading);
+  font-size: var(--font-size-h3);
   line-height: 1.4;
 }
 
 .question-content__heading {
   margin: var(--space-4) 0 var(--space-1);
-  color: var(--text-primary);
-  font-size: var(--font-size-base);
+  color: var(--color-heading);
+  font-size: var(--font-size-body);
 }
 
 .question-content__body {
   margin: 0;
-  color: var(--text-body);
+  color: var(--color-ink);
 }
 
 .question-content__jump-line {
@@ -45,17 +45,17 @@
   min-block-size: 24px;
   min-inline-size: 24px;
   padding-block: 2px;
-  color: var(--tint-brand-fg);
+  color: var(--color-action-text);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
 .question-content__jump:hover {
-  color: var(--tint-brand-fg);
+  color: var(--color-action-text);
 }
 
 .question-content__jump:focus-visible {
-  outline: 3px solid var(--tint-brand-fg);
+  outline: 3px solid var(--color-action-text);
   outline-offset: 2px;
 }
 
