@@ -586,9 +586,9 @@
   {
     "kind": "removed",
     "deleted": "e2e/documents.spec.ts::NFR-A11Y-05 (Task 10): at 769, 800 and 820 px wide .app-main has no horizontal overflow on S-18 and the UNCST table stacks",
-    "replacedBy": "e2e/documents.spec.ts::NFR-A11Y-05 (Task 10): at 769, 800 and 820 px wide .app-main has no horizontal overflow on S-18",
+    "replacedBy": "e2e/documents.spec.ts::NFR-A11Y-05 (Task 10): at 769, 800, 820 and 1024 px wide the main landmark has no horizontal overflow on S-18",
     "property": "At 769, 800 and 820 px .app-main has no horizontal overflow on S-18 and the page does not scroll sideways; the table that stacked is removed",
-    "proof": "e2e/documents.spec.ts::NFR-A11Y-05 (Task 10): at 769, 800 and 820 px wide .app-main has no horizontal overflow on S-18",
+    "proof": "e2e/documents.spec.ts::NFR-A11Y-05 (Task 10): at 769, 800, 820 and 1024 px wide the main landmark has no horizontal overflow on S-18",
     "task": "1A-14"
   },
   {
@@ -702,5 +702,237 @@
     "property": "To-do counts come before recorded counts, and the status on S-10 and S-08 is not carried by colour: words in ink, with no tick and no green, and text colour, background and border held to the ink lists (spec 7.2; spec 12: rewritten to the new rule). The old title's second half, the warning tint allowed only on the allowed labels (UX-06), is retired by spec 12, which replaces UX-06 with section 7.2, and is not carried over.",
     "proof": "e2e/prj-screens.spec.ts::UX-06: to-do counts come before recorded counts; status is words in ink, with no tick and no green (S-10 and S-08): the unchanged indexOf('with no decision') < indexOf('Recorded') assertion, and expectStatusMarksInk(page) on both screens, which rejects a green, a tick, a colour outside the ink lists on a status label or the elements inside it, and a label's own colour other than ink or muted ink; each of those rejections is asserted in e2e/no-score-helpers.spec.ts::spec 7.2 NFR-A11Y-05 (helper): a status mark is a shape and words in ink, with no tick and no green",
     "task": "1A-15"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/sidebar-role.test.tsx::UX-02: the sidebar shows the open organisation's role and never the platform role field",
+    "replacedBy": "__tests__/unit/ui/shell.test.tsx::UX-02: the rail shows the open organisation's role and never the platform role field",
+    "property": "Under the person's name the shell shows their role in the organisation whose page is open, and outside one shows no organisation role; the account's platform role field cannot be shown because no shell module holds it (UX-02, D-10).",
+    "proof": "The new case renders the Rail at /orgs/a and /orgs/b and reads .shell-rail__role as Viewer and Owner, reads no role words outside an organisation, and checks that Rail.tsx, AppShell.tsx, lib/shell/types.ts and lib/shell/data.ts never name userRole or platformRole; with the field absent from every module that builds or renders the shell, it cannot reach the markup. __tests__/unit/shell-nav.test.ts::UX-02: inside an organisation it is the person's role there; outside one, the platform label checks the choice itself.",
+    "task": "1A Task 11"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/sidebar-role.test.tsx::UX-02: with the stub label (null) the sidebar shows no role at all",
+    "replacedBy": "__tests__/unit/ui/shell.test.tsx::UX-02: with no role label the rail shows the name and no role at all",
+    "property": "When orgRoleLabel gives no label, nothing is shown under the name.",
+    "proof": "The new case asserts on the markup that would show a role: the whole person block is exactly the name span, and its text is the name alone, at an organisation page, a guidance page and My account. A renamed class cannot make it pass, because it reads the block's full content, not the absence of a class name.",
+    "task": "1A Task 11"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/sidebar-role.test.tsx::UX-02 (S-31): on an address for an organisation the person is not in, the sidebar shows no role",
+    "replacedBy": "__tests__/unit/ui/shell.test.tsx::UX-02 (S-31): on an address for an organisation the person is not in, the rail shows no role and no organisation name for it",
+    "property": "An address naming an organisation the person is not in shows no role and nothing about that organisation (S-31: no existence leak).",
+    "proof": "The new case renders the rail at /orgs/zzz: the person block is the name alone, no role word and no 'zzz' is in the text, and the switcher's button holds no organisation name. __tests__/unit/shell-nav.test.ts::UX-02 (S-31): an organisation the person is not in gives no role, even for the administrator checks roleUnderName directly.",
+    "task": "1A Task 11"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/sidebar-role.test.tsx::UX-02 NFR-SEC-07: a slug that is an Object.prototype name reads as no role and does not throw",
+    "replacedBy": "__tests__/unit/ui/shell.test.tsx::UX-02 NFR-SEC-07: a slug that is an Object.prototype name reads as no role and does not throw",
+    "property": "A slug that names an Object.prototype member is looked up as an own property, gives no role and does not throw, so S-31 stays a page and not an error.",
+    "proof": "The case of the same title in the new file renders the rail at /orgs/<name>/dashboard for __proto__, constructor, toString, hasOwnProperty and valueOf: rendering does not throw, the person block is the name alone, and no [object or function text appears. __tests__/unit/shell-nav.test.ts::UX-02 NFR-SEC-07: a slug that is an Object.prototype name gives no role and does not throw checks the function, and __tests__/unit/shell-data.test.ts::1A Task 11 L2-50 T3 NFR-SEC-07: an organisation whose slug is __proto__ or constructor cannot put a key on the prototype checks the data.",
+    "task": "1A Task 11"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/sidebar-role.test.tsx::UX-02: a role label is rendered as text, not markup",
+    "replacedBy": "__tests__/unit/ui/shell.test.tsx::UX-02 NFR-SEC-11: a role label, a person's name and an organisation name are rendered as text, not markup",
+    "property": "A role label is shown as text and never parsed as markup; now the person's name and the organisation's name too.",
+    "proof": "The new case renders hostile values in the role label, the name and the organisation name and finds each escaped (&lt;img src=x, &lt;img src=y, &lt;b&gt;x) and no raw tag; it also checks that no shell component uses dangerouslySetInnerHTML.",
+    "task": "1A Task 11"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/sidebar-role.test.tsx::UX-02: outside an organisation the MAK-AI administrator label is shown under the name",
+    "replacedBy": "__tests__/unit/ui/shell.test.tsx::UX-02: outside an organisation the MAK-AI administrator label is shown under the name",
+    "property": "Outside any organisation the platform administrator sees MAK-AI administrator under the name.",
+    "proof": "The case of the same title in the new file renders the administrator's rail at /admin/users and /explore/framework and reads .shell-rail__role as MAK-AI administrator.",
+    "task": "1A Task 11"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/sidebar-role.test.tsx::UX-41 (D-9): no emoji, and every icon is hidden from assistive technology",
+    "replacedBy": "__tests__/unit/ui/shell.test.tsx::UX-41 (D-9): no emoji, and every icon is hidden from assistive technology",
+    "property": "The shell holds no emoji and every icon is hidden from assistive technology.",
+    "proof": "The case of the same title in the new file renders the whole AppShell (bar, panel and rail) for a member, the administrator and a person in no organisation: no Extended_Pictographic character, at least one svg, and every svg carries aria-hidden=\"true\". The rail has no icon span any more; its icons are the kit's svg.",
+    "task": "1A Task 11"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/sidebar-role.test.tsx::UX-02: the organisation shell lists the 7.1.1 items in order, Switch organisation only for more than one",
+    "replacedBy": "__tests__/unit/ui/shell.test.tsx::1A Task 11 L2-49: the organisation rail lists Home, Projects, Findings, Guidance, Members, Organisation details, My account at their addresses",
+    "property": "The organisation shell lists its items in a fixed order; switching organisation is offered only to a member of more than one. The item list itself is replaced by plan 1A's (Home, Projects, Findings, Guidance, then Members, Organisation details, My account; Help is added by Task 12 with its page).",
+    "proof": "The new case reads the rail's link labels in DOM order and asserts the list, and that the person block sits between Organisation details and My account. __tests__/unit/ui/shell.test.tsx::1A Task 11 L2-53: one organisation is a name, with no control and __tests__/unit/ui/shell.test.tsx::1A Task 11 L2-53: two organisations are a button naming the open one, and a closed, empty list carry the more-than-one rule; __tests__/unit/shell-nav.test.ts::1A Task 11 L2-49: a member of an organisation gets Home, Projects, Findings, Guidance, then Members, Organisation details, My account checks the function's order.",
+    "task": "1A Task 11"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/sidebar-role.test.tsx::UX-02: the organisation items and the Explore items point at the 7.1.5 addresses",
+    "replacedBy": "__tests__/unit/ui/shell.test.tsx::1A Task 11 L2-49: the organisation rail lists Home, Projects, Findings, Guidance, Members, Organisation details, My account at their addresses",
+    "property": "Each item of the shell points at its address under the open organisation, or at a fixed application path. About and Controls leave the rail (About is in the footer; Controls is reached from Guidance), and switching organisation is a list of the person's organisations' dashboards instead of a link to /.",
+    "proof": "The new case reads every href of the navigation in order and asserts the seven addresses for /orgs/a. __tests__/unit/shell-nav.test.ts::1A Task 11 L2-49: outside an organisation the organisation items fall back to / and none of them is current checks the fallback.",
+    "task": "1A Task 11"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/sidebar-role.test.tsx::UX-02: the MAK-AI administrator shell has no organisation items and reads \"MAK-AI administrator\"",
+    "replacedBy": "__tests__/unit/ui/shell.test.tsx::UX-01 UX-02: the MAK-AI administrator rail links S-23 and S-25, then My account, and has no organisation item",
+    "property": "The administrator's shell has no organisation item and shows MAK-AI administrator.",
+    "proof": "The new case renders the administrator's rail and asserts its links are exactly Organisations, Accounts, My account and that the text holds MAK-AI administrator; an exact list cannot hold an organisation item. __tests__/unit/shell-nav.test.ts::1A Task 11 L2-49: the MAK-AI administrator gets Organisations and Accounts, then My account, and no organisation item checks it even when the account is also in an organisation.",
+    "task": "1A Task 11"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/sidebar-role.test.tsx::UX-02: an account in no organisation sees only Explore and My account (SRS 7.1.1)",
+    "replacedBy": "__tests__/unit/ui/shell.test.tsx::UX-02 (SRS 7.1.1): an account in no organisation sees only Guidance and My account",
+    "property": "An account in no organisation sees no organisation item (SRS 7.1.1); Explore is now called Guidance.",
+    "proof": "The new case asserts the rail's links are exactly Guidance and My account for a person with no organisation.",
+    "task": "1A Task 11"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/sidebar-role.test.tsx::UX-02: the sidebar says \"Switch organisation\" in British spelling",
+    "replacedBy": "__tests__/unit/ui/shell.test.tsx::UX-02: the rail says \"Switch organisation\" in British spelling",
+    "property": "The shell spells organisation the British way.",
+    "proof": "The new case renders the rail of a member of two organisations, finds Switch organisation in its text, and no 'organization' in any case.",
+    "task": "1A Task 11"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/sidebar-role.test.tsx::M-41 UX-26: the Sign out button sits inside the SignOutWithDraftsGuard slot",
+    "replacedBy": "__tests__/unit/ui/shell.test.tsx::M-41 UX-26: the Sign out button sits inside the SignOutWithDraftsGuard slot, with the person's own id",
+    "property": "Sign out in the shell goes through SignOutWithDraftsGuard, so a press with unsaved drafts on the device warns first and purges them (NFR-PRIV-06).",
+    "proof": "The new case reads components/layout/Rail.tsx and requires the Sign out button, whose label is SHELL_COPY.signOut, to be the guard's direct child with userId={shell.userId}, and renders the rail to find the button. e2e/shell-redesign.spec.ts case 10 drives the guard in a browser at 1280 and 375 px.",
+    "task": "1A Task 11"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/sidebar-role.test.tsx::M-41: before any press the guard renders its children, and no warning",
+    "replacedBy": "__tests__/unit/shell-slots.test.tsx::M-41: before any press the guard renders its children, and no warning",
+    "property": "Unchanged: the case does not touch the sidebar.",
+    "proof": "Moved unchanged, title and body, into __tests__/unit/shell-slots.test.tsx, because the old file imported the deleted Sidebar; not into __tests__/unit/ui, which runs with no database.",
+    "task": "1A Task 11"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/sidebar-role.test.tsx::M-39: the notice renders nothing for an account offered no newer text",
+    "replacedBy": "__tests__/unit/shell-slots.test.tsx::M-39: the notice renders nothing for an account offered no newer text",
+    "property": "Unchanged: the case does not touch the sidebar.",
+    "proof": "Moved unchanged, title and body, into __tests__/unit/shell-slots.test.tsx, because the old file imported the deleted Sidebar; not into __tests__/unit/ui, which runs with no database.",
+    "task": "1A Task 11"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/sidebar-role.test.tsx::M-39 M-41: a slot keeps its producer marker until the producer fills it",
+    "replacedBy": "__tests__/unit/shell-slots.test.tsx::M-39 M-41: a slot keeps its producer marker until the producer fills it",
+    "property": "Unchanged: the case does not touch the sidebar.",
+    "proof": "Moved unchanged, title and body, into __tests__/unit/shell-slots.test.tsx, because the old file imported the deleted Sidebar; not into __tests__/unit/ui, which runs with no database.",
+    "task": "1A Task 11"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/idle-layout.test.tsx::(module)",
+    "replacedBy": "__tests__/unit/idle-layout.test.tsx::UX-02: the layout gives the Sidebar the person's role in each of their organisations, the platform label and no platform role",
+    "property": "The file's module code serves the cases below: the layout is walked as an element tree with the data reads mocked, so the cases see what the layout hands the shell.",
+    "proof": "Three module changes, all forced by the shell replacing the sidebar: the mock and import of the deleted Sidebar now name AppShell (mocked to render nothing, as Sidebar was, so the walk finds its element and its props); the mocked membership rows carry an organisation name, which loadShellData sorts by and passes on; and findMain is removed, since the layout no longer writes <main> itself (AppShell does, checked in __tests__/unit/ui/shell.test.tsx). loadShellData itself is not mocked, so the membershipsForUser and orgRoleLabel mocks still decide what the cases see.",
+    "task": "1A Task 11"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/idle-layout.test.tsx::UX-02: the layout gives the Sidebar the person's role in each of their organisations, the platform label and no platform role",
+    "replacedBy": "__tests__/unit/idle-layout.test.tsx::UX-02: the layout gives the Sidebar the person's role in each of their organisations, the platform label and no platform role",
+    "property": "The layout hands the shell the person's role in each of their organisations and the platform label, asks orgRoleLabel once per organisation and once for the platform, and the account's platform role field never reaches the shell (UX-02, D-10).",
+    "proof": "The case now finds the one AppShell element in the layout's tree, asserts its props are exactly children and shell, and that shell equals the expected object exactly (role words now capitalised, Viewer and Owner; orgs as slug and name in place of orgCount), the same membershipsForUser and orgRoleLabel call checks, and that every prop but children, serialised, holds no 'assessor', the mocked identity's platform role. With the prop list pinned and an exact toEqual on shell, no other prop or field can carry the platform role to the shell. The title still says Sidebar: it is kept so the case keeps its identity.",
+    "task": "1A Task 11"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/idle-layout.test.tsx::UX-02: with the stub label function (null) the layout passes no role label at all",
+    "replacedBy": "__tests__/unit/idle-layout.test.tsx::UX-02: with the stub label function (null) the layout passes no role label at all",
+    "property": "With no labels from orgRoleLabel the layout passes no role label.",
+    "proof": "The case reads the AppShell element's shell prop in place of the Sidebar's props: roleLabels is empty, platformLabel null, and the two organisations are there (orgs in place of orgCount 2).",
+    "task": "1A Task 11"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/idle-layout.test.tsx::UX-02: a MAK-AI administrator with no organisation gets the platform label",
+    "replacedBy": "__tests__/unit/idle-layout.test.tsx::UX-02: a MAK-AI administrator with no organisation gets the platform label",
+    "property": "The administrator with no organisation gets the platform label and no organisation.",
+    "proof": "The case reads the AppShell element's shell prop: platformLabel is MAK-AI administrator, roleLabels empty, orgs empty (in place of orgCount 0).",
+    "task": "1A Task 11"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/idle-layout.test.tsx::M-39: the layout renders the newer-text notice first inside main, for the signed-in person",
+    "replacedBy": "__tests__/unit/idle-layout.test.tsx::M-39: the layout renders the newer-text notice first inside main, for the signed-in person",
+    "property": "The newer-legal-text notice is the first thing in the signed-in page's main landmark, for the signed-in person.",
+    "proof": "The layout no longer writes <main>; AppShell does, with its children first inside it. The case now asserts the notice (with the person's id) is the first child the layout hands the one AppShell element, and __tests__/unit/ui/shell.test.tsx::1A Task 11 L2-44: AppShell puts its children first inside <main id=\"main-content\" tabindex=\"-1\" class=\"shell__main\">, and nothing of the shell is in main asserts that AppShell's main holds exactly its children, first. Together they entail the notice is first in main.",
+    "task": "1A Task 11"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/admin-screens.test.tsx::(module)",
+    "replacedBy": "__tests__/unit/admin-screens.test.tsx::UX-01: the administrator sidebar links S-23 and S-25 (SRS line 1514)",
+    "property": "The module imports the components the cases render.",
+    "proof": "The import of the deleted Sidebar is replaced by the import of Rail, the component that now draws the administrator's links; nothing else of the module changes. The case at 106 (data-seconds-left=\"3000\") is unchanged and passes.",
+    "task": "1A Task 11"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/admin-screens.test.tsx::UX-01: the administrator sidebar links S-23 and S-25 (SRS line 1514)",
+    "replacedBy": "__tests__/unit/admin-screens.test.tsx::UX-01: the administrator sidebar links S-23 and S-25 (SRS line 1514)",
+    "property": "The administrator's shell links S-23 (/admin/organisations) and S-25 (/admin/accounts), and no Settings or /admin/users link.",
+    "proof": "The case renders Rail for the administrator (shell prop with platformLabel MAK-AI administrator and no organisation) in place of Sidebar. The two link assertions allow the kit's hidden svg icon and the label's span inside the anchor; the Settings check now refuses the word as the end of a span or of an anchor, so the new markup cannot slip past it; the /admin/users check is unchanged. The title still says sidebar: kept so the case keeps its identity.",
+    "task": "1A Task 11"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/design-tokens.test.ts::UX-33: the phone menu button draws its bars with the token tested above, on the navy it tests against",
+    "replacedBy": "__tests__/unit/design-tokens.test.ts::UX-33 1A Task 11: the Menu button draws its text with the shell ink, on the shell navy tested above (components/layout/shell.css)",
+    "property": "The narrow-screen menu button stands out: what it draws is held to a contrast minimum on its own background in every theme (U12 (a), coordinator ruling R2). The three bars are gone; the button now carries the word Menu, so the minimum is the text one, 4.5:1.",
+    "proof": "The new case reads .shell-topbar__menu-button in components/layout/shell.css and requires color: var(--color-shell-ink) and background-color: var(--color-shell), and that every rule for the button paints only those two or --color-shell-hover; __tests__/unit/design-tokens.test.ts::UX-33 NFR-A11Y-05: the Menu button's text, shell ink on the shell navy, holds 4.5:1 in every theme holds that pair to 4.5:1 in light and both dark blocks. e2e/live-ui-defects.spec.ts measures it in the browser at 390 px in the dark theme.",
+    "task": "1A Task 11"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/offline-banner.test.tsx::M-40 UX-35: on phones the banner text starts clear of the fixed menu button",
+    "replacedBy": "e2e/shell.spec.ts::M-40 UX-35: at 360 pixels nothing covers the first words of the offline banner",
+    "property": "On a phone nothing covers the first words of the offline banner. The fixed menu button it had to clear is gone: the Menu button is now in the top bar, in flow, so the 48 px clearance rule is deleted.",
+    "proof": "The e2e case goes offline at 360 px on a signed-in page and reads document.elementFromPoint at the start of the banner's body text: it must be the text or inside it. That fails for any cover, a fixed button or anything else.",
+    "task": "1A Task 11"
+  },
+  {
+    "kind": "removed",
+    "deleted": "e2e/shell.spec.ts::UX-02: a viewer seat sees 'viewer' under the name on its organisation's pages and nothing on another organisation's",
+    "replacedBy": "e2e/shell.spec.ts::UX-02: a viewer seat sees 'Viewer' under the name on its organisation's pages and nothing on another organisation's",
+    "property": "A viewer seat sees its role under its name on its own organisation's pages and no role on another organisation's refused address (UX-02, S-31). The word is now capitalised (CONSOLIDATED section 2).",
+    "proof": "The renamed case reads .shell-rail__role as Viewer on the seat's dashboard, then on the other organisation's dashboard gets 404, sees the rail's name element (so the shell is drawn) and no .shell-rail__role.",
+    "task": "1A Task 11"
+  },
+  {
+    "kind": "removed",
+    "deleted": "e2e/shell.spec.ts::M-40 UX-35: at 360 pixels the fixed menu button does not cover the first words of the offline banner",
+    "replacedBy": "e2e/shell.spec.ts::M-40 UX-35: at 360 pixels nothing covers the first words of the offline banner",
+    "property": "On a phone nothing covers the first words of the offline banner. The fixed menu button is gone (the Menu button is in the top bar, in flow), so the title no longer names it.",
+    "proof": "The body is unchanged: at 360 px offline, document.elementFromPoint at the start of the banner's first line must be inside the banner's body text, which fails for any cover.",
+    "task": "1A Task 11"
+  },
+  {
+    "kind": "removed",
+    "deleted": "e2e/about.spec.ts::UX-03 FR-PUB-02 NFR-A11Y-04: signed in as a seat, the sidebar About link reaches /about",
+    "replacedBy": "e2e/about.spec.ts::UX-03 FR-PUB-02 NFR-A11Y-04: signed in as a seat, the footer About link reaches /about",
+    "property": "A signed-in person can reach About. The rail has no About item (plan 1A Task 11); the footer, on every page, has the link.",
+    "proof": "The renamed case signs in as a seat, presses About in the navigation named Footer, lands on /about with Help and contact visible, and keeps the old-address check.",
+    "task": "1A Task 11"
+  },
+  {
+    "kind": "removed",
+    "deleted": "e2e/live-ui-defects.spec.ts::U12 (a): at 390 wide in the dark theme, the menu button bars stand out from the button by at least 3:1",
+    "replacedBy": "e2e/live-ui-defects.spec.ts::U12 (a): at 390 wide in the dark theme, the Menu button text stands out from the button by at least 4.5:1",
+    "property": "At phone width in the dark theme the menu button is visible against its own background (U12 (a), coordinator ruling R2). The bars are replaced by the word Menu, so the minimum is the text minimum, 4.5:1.",
+    "proof": "The renamed case at 390 px with the dark scheme emulated finds the visible .shell-topbar__menu-button reading Menu, confirms the dark media query matches, and measures the computed colour of the button's text against its computed background at 4.5:1 or better. __tests__/unit/design-tokens.test.ts holds the same pair in every theme.",
+    "task": "1A Task 11"
   }
 ]

@@ -12,6 +12,10 @@ import {
   withMargin,
   type IdleDeadlines,
 } from '@/lib/auth/idle';
+import { Banner } from '@/components/ui/Banner';
+import { Button } from '@/components/ui/Button';
+import { Dialog } from '@/components/ui/Dialog';
+import './shell.css';
 
 const WARNING_TEXT = 'You will be signed out in 2 minutes because nothing has happened for a while.';
 const FAILED_TEXT = 'Could not keep you signed in just now. Try again.';
@@ -20,14 +24,13 @@ const ENDED_TEXT = 'You have been signed out. What you typed is still on this pa
 /**
  * The signed-out notice (owner default B35). It is ordinary page content, not a dialog: nothing is
  * inert, so a mouse or touch user can still select and copy what they typed, and the link goes back
- * to the same address after signing in. `role="alert"` announces it when it appears.
+ * to the same address after signing in. `role="alert"` announces it when it appears: the kit's Banner is not a live
+ * region, so the alert is this wrapper's.
  */
 export function IdleEndedNotice({ signInHref }: { signInHref: string }) {
   return (
-    <div role="alert" className="idle-ended">
-      <p className="idle-ended__text">
-        {ENDED_TEXT} <a href={signInHref}>Sign in again</a>
-      </p>
+    <div role="alert" className="shell-idle__ended">
+      <Banner kind="session" action={<a href={signInHref}>Sign in again</a>}>{ENDED_TEXT}</Banner>
     </div>
   );
 }
@@ -46,10 +49,12 @@ export function IdleEndedNotice({ signInHref }: { signInHref: string }) {
  * clock does not matter; the component counts from the moment it received them. It counts 5 s
  * early for the delay between the server's render and this mount.
  *
- * A native `<dialog>` opened with `showModal()`: the browser gives it the inert page, focus
- * containment, the top layer and `Esc`, so it has no role, no aria-modal, no focus trap and no key
- * handler. Its native `cancel` event (Esc, the back gesture) counts as "Stay signed in"; the event
- * is not prevented, so the dialog closes as the platform does.
+ * The kit's Dialog, a native `<dialog>` opened with `showModal()`: the browser gives it the inert page,
+ * focus containment, the top layer and `Esc`, so it has no role, no aria-modal, no focus trap and no key
+ * handler. The browser closing it (Esc, the back gesture: the native `cancel`, which Dialog reports as
+ * `onClose`) counts as "Stay signed in"; the event is not prevented, so the dialog closes as the platform
+ * does. showModal() focuses the first focusable element, which is Stay signed in. The seconds the server
+ * handed over are on the wrapper, `data-seconds-left`, read by the specs and the release's live run.
  *
  * Timers sleep with a laptop, so a single timeout is not enough. The check runs from one timeout to
  * the next phase boundary, every 15 s, and when the page becomes visible, is shown again from the
@@ -71,8 +76,10 @@ export default function IdleWarning({
   secondsLeft: number;
   absoluteSecondsLeft: number;
 }) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
-  const stayRef = useRef<HTMLButtonElement>(null);
+  // Whether the warning is open: state for the Dialog, and a ref that mirrors it for check, restart and stay, which run
+  // from timers and listeners and are not re-created.
+  const [open, setOpen] = useState(false);
+  const openRef = useRef(false);
   const channelRef = useRef<BroadcastChannel | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // The deadlines the countdown runs against (already less the margin) and the moment it started.
@@ -87,25 +94,25 @@ export default function IdleWarning({
   const [signInHref, setSignInHref] = useState<string | null>(null);
 
   const elapsedSeconds = () => (Date.now() - baseRef.current) / 1000;
+  const setWarningOpen = useCallback((next: boolean) => {
+    openRef.current = next;
+    setOpen(next);
+  }, []);
 
   // Decides what the clock says now and sets the next wake-up. Safe to call as often as is wanted.
   // (A named function expression: it schedules itself, and a const cannot be read inside its own initialiser.)
   const check = useCallback(function checkNow() {
     clearTimeout(timerRef.current);
-    const dialog = dialogRef.current;
     const progress = { ...deadlinesRef.current, elapsedSeconds: elapsedSeconds() };
     const phase = idlePhase(progress);
     if (phase === 'warning') {
-      if (dialog && !dialog.open && !signedOutRef.current && !readingRef.current) {
-        dialog.showModal();
-        stayRef.current?.focus();
-      }
+      if (!openRef.current && !signedOutRef.current && !readingRef.current) setWarningOpen(true);
     } else if (phase === 'ended') {
-      if (dialog?.open) dialog.close();
+      if (openRef.current) setWarningOpen(false);
     }
     const wait = msToNextPhase(progress);
     if (wait !== null) timerRef.current = setTimeout(checkNow, wait);
-  }, []);
+  }, [setWarningOpen]);
 
   // Starts a new countdown from these deadlines: after an extension, an accepted message from another tab. An extension means
   // the session is alive, so a signed-out notice from before it is stale and the warning may open again.
@@ -117,10 +124,10 @@ export default function IdleWarning({
       signedOutRef.current = false;
       setSignInHref(null);
       setFailed(false);
-      if (dialogRef.current?.open) dialogRef.current.close();
+      if (openRef.current) setWarningOpen(false);
       check();
     },
-    [check],
+    [check, setWarningOpen],
   );
 
   // The server's numbers: at mount, and again whenever a full load or router.refresh() renders the layout anew.
@@ -164,11 +171,6 @@ export default function IdleWarning({
     };
   }, [idleSeconds, restart]);
 
-  // A disabled button gives up focus; give it back once the read is over and the dialog is still there.
-  useEffect(() => {
-    if (!busy && failed && dialogRef.current?.open) stayRef.current?.focus();
-  }, [busy, failed]);
-
   async function stay() {
     if (readingRef.current) return;
     readingRef.current = true;
@@ -195,7 +197,6 @@ export default function IdleWarning({
     const absoluteNow = deadlinesRef.current.absoluteSecondsLeft - elapsed;
     const phaseNow = idlePhase({ ...deadlinesRef.current, elapsedSeconds: elapsed });
     const outcome = settleStay(stayOutcome(read.status, read.body, absoluteNow), phaseNow);
-    const dialog = dialogRef.current;
 
     if (outcome === 'extended') {
       const next = { secondsLeft: idleSeconds, absoluteSecondsLeft: Math.max(0, Math.floor(absoluteNow)) };
@@ -204,34 +205,36 @@ export default function IdleWarning({
     } else if (outcome === 'failed') {
       setFailed(true);
       // Esc closed the dialog before the read came back: open it again so the line is seen.
-      if (dialog && !dialog.open) {
-        dialog.showModal();
-        stayRef.current?.focus();
-      }
+      if (!openRef.current) setWarningOpen(true);
     } else {
       // Ended: the modal gives way to a notice in the page, so what the person typed can still be read and copied.
       signedOutRef.current = true;
-      if (dialog?.open) dialog.close();
+      if (openRef.current) setWarningOpen(false);
       setSignInHref(signInAgainHref(window.location.pathname, window.location.search));
     }
   }
 
+  // The browser closed the dialog (Esc, the back gesture): that counts as Stay signed in.
+  function onBrowserClose() {
+    setWarningOpen(false);
+    void stay();
+  }
+
   return (
-    <>
+    <div className="shell-idle" data-seconds-left={secondsLeft}>
       {signInHref ? <IdleEndedNotice signInHref={signInHref} /> : null}
-      <dialog
-        ref={dialogRef}
-        className="idle-warning"
-        aria-labelledby="idle-warning-text"
-        data-seconds-left={secondsLeft}
-        onCancel={() => void stay()}
+      <Dialog
+        open={open}
+        title={WARNING_TEXT}
+        onClose={onBrowserClose}
+        actions={
+          <Button variant="primary" busy={busy} onClick={() => void stay()}>
+            Stay signed in
+          </Button>
+        }
       >
-        <p id="idle-warning-text">{WARNING_TEXT}</p>
-        <button ref={stayRef} type="button" className="btn btn--primary" autoFocus disabled={busy} onClick={() => void stay()}>
-          Stay signed in
-        </button>
-        {failed ? <p role="alert">{FAILED_TEXT}</p> : null}
-      </dialog>
-    </>
+        {failed ? <p role="alert" className="shell-idle__failed">{FAILED_TEXT}</p> : null}
+      </Dialog>
+    </div>
   );
 }

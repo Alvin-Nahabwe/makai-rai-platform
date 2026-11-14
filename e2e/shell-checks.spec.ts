@@ -196,7 +196,7 @@ test.describe('shell pages, checked with the harness helpers', () => {
       await page.goto(`/orgs/${slug}/dashboard`);
       expect(requests.urls().some((u) => u.endsWith(`/orgs/${slug}/dashboard`)), 'the recording holds the page itself').toBe(true);
       await page.waitForFunction(() => {
-        const d = document.querySelector('dialog.idle-warning');
+        const d = document.querySelector('.shell-idle dialog.ui-dialog');
         return d !== null && Object.keys(d).some((k) => k.startsWith('__reactProps$'));
       });
       // The countdown starts at mount, so a jump made before React hydrated the dialog is counted from the wrong moment.
@@ -207,7 +207,7 @@ test.describe('shell pages, checked with the harness helpers', () => {
       await page.clock.runFor(31_000); // two 15 s ticks fire: a tick is a local check, not a request
       await expect(page.getByRole('dialog')).toContainText('You will be signed out in 2 minutes because nothing has happened for a while.', { timeout: 10_000 });
       // Not requests of the warning: the page itself, Next's assets, the browser's own fetch of the page icons, and the Link
-      // prefetches (marked by the router's own header) the sidebar's links make in a production build when they come into view.
+      // prefetches (marked by the router's own header) the rail's links make in a production build when they come into view.
       // A server refresh or any API call from the warning would be left in the list.
       // The page's own address is dropped once only: a second request for it (a reload) stays in the list.
       const own = `/orgs/${slug}/dashboard`;
