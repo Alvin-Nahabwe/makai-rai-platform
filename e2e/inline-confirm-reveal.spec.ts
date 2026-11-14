@@ -226,8 +226,12 @@ const SCREENS: Screen[] = [
     },
   },
   {
-    name: 'decision withdrawal on the question page, inside More (S-12)', who: 'owner', expect: { wide: 'no-strip', narrow: 'grown-strip' },
-    passesWithoutRepair: { wide: 'the focus target opens hidden past the end of the page, and the browser\'s own focus scroll brings it in' },
+    // The question page now ends its main column with the way on ("Next question: ...", workshop walk S9), below More, so
+    // at 1280 the page scrolls far enough to cut the focus target with a strip showing: 'strip', where it was 'no-strip'
+    // while More was the last thing in the column. NOT ESTABLISHED whether the wide case passes with the repair switched
+    // off, so it has no `passesWithoutRepair` (the 'no-strip' reason, the browser's own focus scroll, no longer describes
+    // it); settling it needs a run with InlineConfirm's reveal switched off (components/ui), and none has been made.
+    name: 'decision withdrawal on the question page, inside More (S-12)', who: 'owner', expect: { wide: 'strip', narrow: 'grown-strip' },
     open: async (page) => {
       await load(page, questionPath(await decided('Q-PP-01'), 'Q-PP-01'));
       await page.locator('summary', { hasText: new RegExp(`^${WITHDRAW_COPY.more.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`) }).click();
