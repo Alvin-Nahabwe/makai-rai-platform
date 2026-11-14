@@ -115,8 +115,8 @@ export function QuestionPanelRegions({ data, openWork }: { data: QuestionPanelDa
   const historyHref = `${base}/stages/${data.stage}/questions/${question.id}/history`;
   const stageHref = `${base}/stages/${data.stage}`;
   const doesNotApply = data.gateAnswer === 'no' && !questionApplies(runningContent(), data.runningQuestion.id, data.gateAnswer);
-  // Only a reader is shown the finding link without the right to raise one when there is something to view (R4); a
-  // person who may record keeps the section as before.
+  // The Findings section: for a person who may record, when there is an open finding to view or they may raise one; for
+  // a reader, only when they may raise one (R4), since the reader's open findings are listed in the main column.
   const showFindings = data.canWrite ? data.openFinding !== null || data.canRaiseFinding : data.canRaiseFinding;
   const reading = data.canWrite ? null : readingRegions(data, openWork ?? null, historyHref);
   // Only a question in a seal has something to say here: SealNote renders nothing for one in none.
@@ -194,7 +194,8 @@ export function QuestionPanelRegions({ data, openWork }: { data: QuestionPanelDa
         <div className="question-workspace__guide">
           {/* The guidance of the running wording (FR-CNT-08, ruling on SPEC-1), as an aside (plan 1C decision C1, cut). */}
           <QuestionContent question={data.runningQuestion} suggestionCount={count} />
-          {/* Exactly when QuestionFindingLink renders something, so no heading stands over nothing. */}
+          {/* Exactly when QuestionFindingLink renders something, so no heading stands over nothing. A reader's open findings are
+              in "Still open on this question", so here the reader gets only the raise link (review M2), not the same finding twice. */}
           {showFindings ? (
             <section data-region="finding-link" aria-labelledby="s12-finding-link">
               <h2 id="s12-finding-link">{Q.headings.findings}</h2>
@@ -204,7 +205,7 @@ export function QuestionPanelRegions({ data, openWork }: { data: QuestionPanelDa
                 stage={data.stage}
                 questionId={question.id}
                 currentVersionId={data.current?.id ?? null}
-                openFinding={data.openFinding}
+                openFinding={reading === null ? data.openFinding : null}
                 canRaise={data.canRaiseFinding}
               />
             </section>

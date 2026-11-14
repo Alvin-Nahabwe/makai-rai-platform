@@ -7,6 +7,7 @@ import type { DecisionVersionView } from '@/types/api';
 import { PROJECT_COPY } from '@/lib/project/copy';
 import { AUTHZ_COPY } from '@/lib/authz/copy';
 import { QUESTION_COPY } from '@/lib/question/copy';
+import { runningContent } from '@/lib/content/loader';
 
 /**
  * The read-only question page (plan 1C Task 7; rulings R1 to R7 of the lane 6 brief of 14 November 2026): a person who
@@ -104,15 +105,17 @@ describe('the read-only question page (plan 1C Task 7)', () => {
     }
   });
 
-  it('C12: the heading is "What the team decided"; question, current decision, open work, the permission line and the seal note come in that order', async () => {
+  it('C12: the heading is "What the team decided"; question, current decision, open work, the permission line, the seal note and the way on come in that order, the way on last', async () => {
     const html = await render(REVIEWER);
     expect(html).toContain('<section data-region="current-decision" aria-labelledby="s12-current-decision"><h2 id="s12-current-decision">What the team decided</h2>');
     expect(html).toContain('<section data-region="open-work" aria-labelledby="s12-open-work"><h2 id="s12-open-work">Still open on this question: 2 findings</h2>');
-    expect(regions(main(html))).toEqual(['question', 'current-decision', 'open-work', 'seal-note']);
+    expect(regions(main(html))).toEqual(['question', 'current-decision', 'open-work', 'seal-note', 'way-on']);
     const m = main(html);
     const at = (s: string) => m.indexOf(s);
-    const order = [at('data-region="question"'), at('data-region="current-decision"'), at('data-region="open-work"'), at('data-permission-note'), at('data-region="seal-note"')];
+    const order = [at('data-region="question"'), at('data-region="current-decision"'), at('data-region="open-work"'), at('data-permission-note'), at('data-region="seal-note"'), at('data-region="way-on"')];
     expect(order.every((n, i) => n >= 0 && (i === 0 || n > order[i - 1])), order.join(',')).toBe(true);
+    // The way on is the main column's last child: its paragraph closes, then the column does.
+    expect(m).toMatch(/<p class="question-foot" data-region="way-on">(?:(?!<\/p>)[\s\S])*<\/p><\/div>$/);
     // The open findings come directly under the decision: no other section between them.
     expect(m).toMatch(/<\/section><section data-region="open-work"/);
     expect(m).toContain(`<p data-permission-note="true">${AUTHZ_COPY.decisionFormNote.reviewer}</p>`);
@@ -187,6 +190,27 @@ describe('the read-only question page (plan 1C Task 7)', () => {
     expect(viewer).not.toContain('s12-finding-link');
     // The guidance aside is as for everyone.
     expect(viewer).toContain('data-region="guidance"');
+  });
+
+  it('review M2: a Reviewer with an open platform-raised finding sees it once, in the open-work list, and the raise link stays in the aside', async () => {
+    const html = await render(REVIEWER);
+    expect(html.split('href="/orgs/acme-health/projects/p1/findings/f1"')).toHaveLength(2);
+    expect(main(html)).toContain('href="/orgs/acme-health/projects/p1/findings/f1"');
+    expect(html).not.toContain(QUESTION_COPY.findingLink.view);
+    const guide = html.slice(html.indexOf('<div class="question-workspace__guide">'));
+    expect(guide).toContain('data-region="finding-link"');
+    expect(guide).toContain(QUESTION_COPY.findingLink.raise);
+  });
+
+  it('workshop walk S3: a reader on a question the personal data answer switched off reads the sentence under the code line', async () => {
+    const off = runningContent().questions.get('Q-PP-13')!;
+    for (const data of [VIEWER, REVIEWER]) {
+      const html = await render({ ...data, question: off, runningQuestion: off, gateAnswer: 'no' });
+      const question = html.match(/<section data-region="question"[\s\S]*?<\/section>/)![0];
+      expect(question).toMatch(/<p class="question-frame__code">[^<]*<\/p><p data-does-not-apply="true">/);
+      expect(question).toContain(QUESTION_COPY.doesNotApply);
+    }
+    expect(await render(VIEWER)).not.toContain('data-does-not-apply');
   });
 
   it('UX-31 C12: in an archived project an Owner gets the reading view, no permission line, and the archived banner', async () => {

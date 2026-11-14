@@ -169,6 +169,9 @@ for (const role of ['viewer', 'reviewer'] as const) {
     await expect(page.locator('.decision-save-bar')).toHaveCount(0);
     const raise = page.getByRole('link', { name: QUESTION_COPY.findingLink.raise });
     await expect(raise).toHaveCount(role === 'reviewer' ? 1 : 0);
+    // The open finding is listed once, in the main column, not again in the aside (review M2); the way on closes the column.
+    await expect(page.getByRole('link', { name: QUESTION_COPY.findingLink.view })).toHaveCount(0);
+    await expect(page.locator('.question-workspace__main > :last-child')).toHaveAttribute('data-region', 'way-on');
     for (const [width, height] of [[1280, 900], [375, 812], [320, 640]] as const) {
       await page.setViewportSize({ width, height });
       await expectNoHorizontalScroll(page);

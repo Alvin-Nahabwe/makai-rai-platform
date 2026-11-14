@@ -77,6 +77,18 @@ describe('loadQuestionOpenWork', () => {
     expect((await work(pB.id, 'Q-PP-01', { fx: fxB })).findings).toHaveLength(1);
   });
 
+  it('review M6: a finding on the same question id in another project of the same organisation is not in the list', async () => {
+    const other = await addProject(fx);
+    const theirs = await addFinding(fx, other.id, { stage: 'pre-processing', source: 'team', questionId: 'Q-PP-01' });
+    await addMitigationVersion(fx, theirs.id, { status: 'planned', owner: 'assessor', dueDate: '2026-12-01' });
+    const mine = await addFinding(fx, project.id, { stage: 'pre-processing', source: 'team', questionId: 'Q-PP-01' });
+    const w = await work();
+    expect(w.findings.map((f) => f.findingId)).toEqual([mine.id]);
+    expect(w.findings[0].mitigations).toEqual([]);
+    // The other project reads its own: the absence above is the project filter, not a broken read.
+    expect((await work(other.id)).findings.map((f) => f.findingId)).toEqual([theirs.id]);
+  });
+
   it('S4: the result holds exactly the fields of R2, so a spread of a FindingView or a FollowUpItem fails here', async () => {
     const f = await addFinding(fx, project.id, { stage: 'pre-processing', source: 'team', questionId: 'Q-PP-01' });
     await addMitigationVersion(fx, f.id, { status: 'planned', owner: 'assessor', dueDate: '2026-12-01' });
