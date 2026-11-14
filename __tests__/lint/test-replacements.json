@@ -1566,5 +1566,53 @@
     "property": "Each dataset size band prints its display words in a new document, with the project mark, and never its enum value; a null size prints nothing. The words are audit B rows 350 to 354 as the coordinator's answer Q14 applies them: \"Under 1,000 records\", \"1,000 to 100,000 records\", \"100,000 to 1 million records\", \"Over 1 million records\", \"Not known\" (lib/project/labels.ts). Issued documents are stored bytes and are not re-rendered.",
     "proof": "Only the five word literals of the band table changed; the loop still requires, for every band, that the resolved part's text contains its words and the project mark and does not contain the enum value, and the null case is unchanged.",
     "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::UX-08: every labelled region is named by a heading of the page that it points to, the evidence block has no heading of its own, and the suggestions section is the in-page target",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::UX-08: every labelled region is named by a heading of the page that it points to, the evidence block has no heading of its own, and the suggestions section is the in-page target",
+    "property": "Every region the page labels is named by a heading of the page that it points to; the evidence block has no heading of its own; the suggestions section is the one in-page target, headed \"Ways teams address this\". Slice 1 makes the question region's name the page's h1 (#question-heading, the question in words, which carries tabindex=\"-1\" and its class) instead of the removed h2 \"Question\" (s12-question), so the heading a label points to can now be an h1 with further attributes.",
+    "proof": "The case renders QuestionPanelRegions with PANEL (QuestionContent mocked to nothing, so the guidance aside is not in its markup; question-frame.test.tsx carries the aside), collects every aria-labelledby value, requires six distinct ones and no s12-evidence, and for each id an h1, h2 or h3 element carrying that id (other attributes allowed) whose closing tag is of the same level and which holds text; it still requires the one id=\"suggestions\" on the suggestions section and <h2 id=\"s12-suggestions\">Ways teams address this</h2>. A label pointing to a missing heading, or to an id on anything but a heading, fails it.",
+    "task": "plan 1C Task 4 (cut), slice 1"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/decision-components.test.tsx::UX-42 W-3: one h1 for the question that takes focus, and Previous and Next go to the neighbouring questions",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::UX-42 W-3: one h1 for the question that takes focus, and Previous and Next go to the neighbouring questions",
+    "property": "The page has one h1, which takes focus (tabindex -1), and Previous and Next link to the neighbouring questions, with the position in words. Slice 1 (plan 1C decision C1, cut) makes the h1 the running question's text; the id and module \"{Q-ID} · {module}\" move to the code line, a separate element directly after it.",
+    "proof": "The case requires exactly one <h1, <h1 id=\"question-heading\" tabindex=\"-1\"…> holding the question's text 'Have you evaluated whether AI is the right approach?' immediately followed by a <p…> reading 'Q-PP-01 · Problem Formulation' (U+00B7, written \\u00b7 in the pattern), the two links with their exact hrefs, 'Question 2 of 24 in Pre-processing', and no Previous link on the first question; those three lines are unchanged.",
+    "task": "plan 1C Task 4 (cut), slice 1"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/decision-components.test.tsx::FR-CNT-08: S-12 shows the reworded line when the running wording differs",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::FR-CNT-08: S-12 shows the reworded line when the running wording differs",
+    "property": "When the running content words the question's good practice differently from the content the current decision was answered against, the page says so and holds the earlier wording in a disclosure; each wording appears once; with the same wording there is neither the line nor the summary. Slice 1 (plan 1C decision C1, cut) moves the running \"What good looks like\" into the guidance aside after the form, while the line and its disclosure stay in the question region under the h1, so the running wording now follows the disclosure in DOM order.",
+    "proof": "The case still requires QUESTION_COPY.reworded.line (HTML-escaped), a <details> whose <summary> is QUESTION_COPY.reworded.summary followed by 'Old wording.', each wording exactly once, and with the same wording neither summary nor line. In place of 'New wording.' before the summary it now requires 'New wording.' inside <aside … data-region=\"guidance\">…</aside> and 'Old wording.' inside <details>…</details>: the running wording printed outside the guidance, or the earlier one outside the disclosure, fails it.",
+    "task": "plan 1C Task 4 (cut), slice 1"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/question-content.test.tsx::UX-08 FR-CNT-02: question, link, What good looks like, then Why this is asked, with no form control",
+    "replacedBy": "__tests__/unit/question-content.test.tsx::UX-08 FR-CNT-02: What good looks like, then Why this is asked, the principle, then the link, with no form control",
+    "property": "QuestionContent shows its texts in a fixed order and holds no form control. Slice 1 (plan 1C decision C1, cut, ruling R2) makes it the guidance aside: the question text is the page's h1 and no longer printed here, and the order is \"What good looks like\" and its text, \"Why this is asked\" and its text, the principle, then the jump link.",
+    "proof": "The case renders QuestionContent with Q-PP-01 of 0.0.1-fixture and suggestionCount 3 and requires the indexes of 'What good looks like', the expected practice, 'Why this is asked', the reason for asking, 'Principle:' and 'Ways teams address this (3)' to be present and increasing, the principle line, href=\"#suggestions\", and no input, select, textarea, form or button.",
+    "task": "plan 1C Task 4 (cut), slice 1"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/question-content.test.tsx::UX-08 (W-3): the id and module title, then the principle, then the question, as the wireframe orders them",
+    "replacedBy": "__tests__/unit/question-content.test.tsx::UX-08 (W-3): the aside opens with What good looks like; the question text, id and module title are left to the page heading",
+    "property": "QuestionContent repeats nothing the page heading says. Slice 1 (plan 1C decision C1, cut) makes the question text the h1 and the id and module the code line under it, so the aside prints neither and opens with its first heading, \"What good looks like\", which names it.",
+    "proof": "The case renders QuestionContent and requires the markup to start with <aside class=\"question-content\" data-region=\"guidance\" aria-labelledby=\"s12-guidance\"><h2 id=\"s12-guidance\">What good looks like</h2>, and not to contain question-content__meta, the module title, the question text or 'Q-PP-01 · '; the jump link 'Ways teams address this (2)' is still there. question-frame.test.tsx requires the h1 and the code line on the page.",
+    "task": "plan 1C Task 4 (cut), slice 1"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/question-content.test.tsx::NFR-A11Y-02 UX-08: the texts sit under real headings below the shell's region heading, and no id of the shell is repeated",
+    "replacedBy": "__tests__/unit/question-content.test.tsx::NFR-A11Y-02 UX-08: the texts sit under real headings one level below the page's h1, and no id of the shell is repeated",
+    "property": "The guidance texts sit under real headings one level below the heading above them, and the slot repeats no id of the page. With the h2 \"Question\" removed (slice 1), that heading is the page's h1, so \"What good looks like\" and \"Why this is asked\" are h2 (they were h3), and the id it must not repeat is question-heading.",
+    "proof": "The case renders QuestionContent and requires no id=\"question-heading\", no h1 or h3 to h6, exactly two h2, and the h2 texts 'What good looks like' and 'Why this is asked'. question-frame.test.tsx requires, on the whole page, that the first heading is the h1 and no heading is more than one level below the one before it.",
+    "task": "plan 1C Task 4 (cut), slice 1"
   }
 ]
