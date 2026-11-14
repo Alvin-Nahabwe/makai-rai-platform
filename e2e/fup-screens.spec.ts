@@ -7,6 +7,7 @@ import { addFinding, addMitigationVersion, addProject, buildOrg, type FixtureAcc
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { eatDate } from '../lib/followup/overdue';
+import { PROJECT_COPY } from '../lib/project/copy';
 
 /**
  * The follow-up lines of S-10 and the reminder setting of S-21 in a browser (FR-FUP-01, FR-FUP-06,
@@ -112,7 +113,7 @@ test('NFR-A11Y-02 FR-FUP-01: keyboard only, a member reaches an overdue mitigati
   const { fx, url } = await projectWithFollowUp();
   const page = await signedIn(browser, fx.members.owner);
   await openProject(page, url);
-  await tabUntil(page, /^Open$/, { inside: FOLLOW_UP }); await expectFocusVisibleAndUncovered(page);
+  await tabUntil(page, new RegExp(`^${PROJECT_COPY.followUp.view}$`), { inside: FOLLOW_UP }); await expectFocusVisibleAndUncovered(page);
   await page.keyboard.press('Enter'); await expect(page).toHaveURL(/\/findings\//);
 });
 

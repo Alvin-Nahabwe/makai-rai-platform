@@ -17,8 +17,8 @@
 }
 
 .stage-column {
-  border: 1px solid var(--border);
-  border-radius: var(--border-radius-md);
+  border: 1px solid var(--color-border-container);
+  border-radius: var(--radius-control);
   padding: var(--space-4);
 }
 
@@ -33,8 +33,8 @@
 
 .stage-column__todo-line {
   display: block;
-  font-size: var(--font-size-sm);
-  color: var(--text-muted);
+  font-size: var(--font-size-small);
+  color: var(--color-ink-muted);
 }
 
 .stage-column[open] > summary .stage-column__todo-line {

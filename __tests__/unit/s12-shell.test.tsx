@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import type { QuestionPanelData } from '@/lib/question/panel';
 import type { LoadedQuestion } from '@/types/content';
 import type { DecisionVersionView } from '@/types/api';
+import { PROJECT_COPY } from '@/lib/project/copy';
 
 /**
  * The S-12 shell (contract "The S-12 shell"): the page resolves the identity and the organisation, loads the
@@ -100,7 +101,7 @@ describe('S-12 shell', () => {
 
   it('UX-31 FR-PRJ-03: an archived project shows the archived banner on S-12', async () => {
     const html = renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, projectArchived: true } }));
-    expect(html).toContain('This project is archived. Nothing in it can be changed. Owners and admins can unarchive it from All projects.');
+    expect(html).toContain(PROJECT_COPY.archivedBanner);
     // the banner is above the regions
     expect(html.indexOf('This project is archived')).toBeLessThan(html.indexOf('data-region="question"'));
     expect(renderToStaticMarkup(await QuestionPanelRegions({ data: PANEL }))).not.toContain('This project is archived');

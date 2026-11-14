@@ -11,6 +11,7 @@ import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { failOnDialog } from './helpers/dialogs';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { expectCountsAsWholeNumbersPerStage, expectStatusMarksInk } from './helpers/noScore';
+import { PROJECT_COPY } from '../lib/project/copy';
 
 /**
  * The project screens in a browser: S-08 (dashboard), S-09 (new and edit project), S-10 (stage view) and S-32 (all
@@ -167,7 +168,7 @@ test('UX-29 FR-PRJ-03: archiving shows "Archiving..." then the archived line; a 
   await page.getByRole('button', { name: 'Retry', exact: true }).click();
   await expect(page.getByText('Archiving...')).toBeVisible();
   await expect(page.getByText('Archived. Nothing in this project can be changed until it is unarchived.')).toBeVisible();
-  await expect(page.getByText('This project is archived. Nothing in it can be changed. Owners and admins can unarchive it from All projects.')).toBeVisible();
+  await expect(page.getByText(PROJECT_COPY.archivedBanner)).toBeVisible();
   expect(ids).toHaveLength(2);
   expect(ids[0]).toMatch(UUID_V4);
   expect(ids[1]).toBe(ids[0]);
@@ -299,7 +300,7 @@ test('FR-PRJ-02: a new project\'s S-10 shows the 7.4.2 empty texts in each stage
   const page = await signedIn(browser, fx.members.owner);
   await page.goto(path(`/projects/${empty.id}`));
   await expect(page.getByText('Nothing recorded yet.')).toHaveCount(3);
-  await expect(page.getByText('None open.')).toHaveCount(3);
+  await expect(page.getByText(PROJECT_COPY.followUp.none)).toHaveCount(3);
   await expect(page.getByText('No stage review yet.')).toHaveCount(3);
 });
 

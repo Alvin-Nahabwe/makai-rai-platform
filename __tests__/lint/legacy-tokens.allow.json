@@ -17,7 +17,6 @@
   "components/legal/LegalTextView.tsx",
   "components/legal/NewerLegalTextOffers.tsx",
   "components/project/ProjectForm.tsx",
-  "components/project/StageView.css",
   "components/question/QuestionContent.css",
   "components/report/ReferencesList.css",
   "components/suggestions/ControlCard.css"

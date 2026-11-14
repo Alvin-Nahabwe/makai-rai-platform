@@ -82,7 +82,7 @@ describe('S-10 (Task 5)', () => {
 
   it('UX-31 FR-PRJ-03: an archived project shows the banner and no form or Archive control on S-10', () => {
     const html = renderPage({ archived: true, role: 'owner' });
-    expect(html).toContain('This project is archived. Nothing in it can be changed. Owners and admins can unarchive it from All projects.');
+    expect(html).toContain(PROJECT_COPY.archivedBanner);
     expect(html).not.toMatch(/<form|Archive project|Edit project/);
   });
 
@@ -96,7 +96,7 @@ describe('S-10 (Task 5)', () => {
     const project = renderPage({});
     const home = renderToStaticMarkup(<DashboardView data={{ orgSlug: 'o', orgName: 'Org', role: 'owner', welcome: false, canCreate: true, projects: [], mine: [], projectNames: new Map(), archivedCount: 0 }} />);
     expect(home).toMatch(new RegExp(`<h1[^>]*>${HOME_COPY.heading}</h1>`));   // not vacuous: the view rendered, its heading inside the kit's page header
-    expect(project).toContain('Stages can be recorded in any order.');
+    expect(project).toContain(PROJECT_COPY.overview.anyOrder);
     for (const html of [home, project]) expect(html).not.toMatch(/East Africa|UTC\+3|\bEAT\b/);
   });
 
@@ -145,7 +145,7 @@ describe('S-10 (Task 5)', () => {
       reviewSummaryProps.length = 0;
       const html = renderPage({ role, archived });
       expect(reviewSummaryProps.splice(0).map((p) => p.canOpen)).toEqual(STAGES.map(() => can(role, 'review:open') && !archived));
-      expect(html.includes('Export project')).toBe(can(role, 'team:export'));
+      expect(html.includes(PROJECT_COPY.overview.downloadRecords)).toBe(can(role, 'team:export'));
     }
   });
 

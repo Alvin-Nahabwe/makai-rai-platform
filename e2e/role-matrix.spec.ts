@@ -5,6 +5,7 @@ import { can, type Action } from '../lib/authz/policy';
 import { FIXTURE_ROLES } from '../__tests__/helpers/fixture';
 import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from './fixtures/manifest';
 import { HOME_COPY } from '../lib/home/copy';
+import { PROJECT_COPY } from '../lib/project/copy';
 
 /**
  * Task 12 Step 1 — O-13: no mutating control is rendered to a role that may
@@ -130,7 +131,7 @@ const PROJECTS_NEW_CONTROLS: Control[] = [
 
 const PROJECT_DETAIL_CONTROLS: Control[] = [
   { name: 'Edit project', action: 'project:update', mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Edit project' }) },
-  { name: 'Export project', action: 'team:export', mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Export project' }) },
+  { name: PROJECT_COPY.overview.downloadRecords, action: 'team:export', mode: 'presence', locator: (p) => p.getByRole('link', { name: PROJECT_COPY.overview.downloadRecords }) },
   { name: 'Archive project', action: 'project:archive', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Archive project', exact: true }) },
   { name: 'Findings for this project', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Findings for this project' }) },
   { name: 'Open pre-processing', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Open pre-processing' }) },
