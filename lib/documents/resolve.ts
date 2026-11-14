@@ -405,14 +405,17 @@ function closingCause(m: MitigationVersionView, f: FindingView, snap: DocumentSn
 }
 
 /**
- * The lines under a closed finding's status line: for each closing record entered after its latest reopen, oldest first, who entered
- * it and the UTC day it was received (as "Raised on:" prints a day), then its cause when the record supports one. A finding that is
+ * The lines under a closed finding's status line: for the closing record that closed it, who entered it and the UTC day it was
+ * received (as "Raised on:" prints a day), then its cause when the record supports one. A closing record closed the finding only when
+ * it is after the latest reopen and nothing was recorded on the finding's mitigations after it (its `findingSeq` is the highest of the
+ * current versions): one entered while a planned mitigation was still open did not close it, and prints nothing. A finding that is
  * open, withdrawn or closed by an accepted risk prints none.
  */
 function closingLines(sf: SealedFinding, snap: DocumentSnapshot): string[] {
   if (sf.finding.state !== 'closed_mitigation') return [];
   const r = reopenedAt(sf);
-  return sf.mitigations.filter((m) => isClosingRecord(m, snap) && m.findingSeq > r).sort((x, y) => x.findingSeq - y.findingSeq).flatMap((m) => {
+  const last = Math.max(...sf.mitigations.map((m) => m.findingSeq));
+  return sf.mitigations.filter((m) => isClosingRecord(m, snap) && m.findingSeq > r && m.findingSeq === last).flatMap((m) => {
     const cause = closingCause(m, sf.finding, snap);
     return [closedByLine(m.enteredBy.name, formatUtcDay(m.receivedAt)), ...(cause === null ? [] : [cause])];
   });

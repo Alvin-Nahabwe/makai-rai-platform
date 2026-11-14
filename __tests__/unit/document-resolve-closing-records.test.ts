@@ -265,12 +265,35 @@ describe('the lead\'s readings 2 to 7', () => {
     expect(t).not.toContain('Closed because');
   });
 
-  it('reading 4: several records after the latest reopen print oldest first', () => {
+  it('reading 4: of several records after the latest reopen, only the last, the one that closed the finding, prints', () => {
     const t = fieldText(plan([{ id: 'f-1', questionId: 'Q-PP-01', state: 'closed_mitigation', mitigations: [
       { id: 'mv-2', seq: 5, kind: 'decision_changed', by: 'Second S.', closes: 'dv-gate' },
       { id: 'mv-1', seq: 2, kind: 'decision_withdrawn', by: 'First F.', closes: 'dv-1' },
     ] }], { decisions: [{ questionId: GATE, id: 'dv-gate', scope: 'no' }] }), 'MP-05') as string;
-    expect(t).toContain(`Status: Closed\nClosed by First F. on 14 Nov 2026.\n${WITHDRAWN}\nClosed by Second S. on 14 Nov 2026.\n${CLOSED_NO_LONGER_APPLIES}`);
+    expect(t).toContain(`Status: Closed\nClosed by Second S. on 14 Nov 2026.\n${CLOSED_NO_LONGER_APPLIES}`);
+    expect(t).not.toContain('First F.');
+    expect(t).not.toContain(WITHDRAWN);
+  });
+
+  it('a closing record entered while a planned mitigation was open, which that mitigation\'s later done closed: Closed by a mitigation, no closing line', () => {
+    const t = fieldText(plan([{ id: 'f-1', questionId: 'Q-PP-08', state: 'closed_mitigation', mitigations: [
+      { id: 'mv-a', seq: 3, v: 2, what: 'Write the register.', by: 'Olive Owner', at: '2026-11-20T09:00:00.000Z' },
+      { id: 'mv-b', seq: 2, kind: 'decision_changed', closes: 'dv-08' },
+    ] }], { decisions: [{ questionId: 'Q-PP-08', id: 'dv-08' }] }), 'MP-05') as string;
+    expect(t).toContain('Status: Closed by a mitigation\n');
+    expect(t).not.toContain('Closed by Asha Assessor');
+    expect(t).not.toContain(CHANGED);
+  });
+
+  it('the same record when the planned mitigation was cancelled instead: Closed, with no closing line', () => {
+    const t = fieldText(plan([{ id: 'f-1', questionId: 'Q-PP-08', state: 'closed_mitigation', mitigations: [
+      { id: 'mv-a', seq: 3, v: 2, what: 'Write the register.', status: 'cancelled', by: 'Olive Owner' },
+      { id: 'mv-b', seq: 2, kind: 'decision_changed', closes: 'dv-08' },
+    ] }], { decisions: [{ questionId: 'Q-PP-08', id: 'dv-08' }] }), 'MP-05') as string;
+    expect(t).toContain('Status: Closed');
+    expect(t).not.toContain('Status: Closed by');
+    expect(t).not.toContain('Closed by Asha Assessor');
+    expect(t).not.toContain(CHANGED);
   });
 
   it('reading 5: MP-02 adds "Closed: N." only when a finding prints Closed', () => {
