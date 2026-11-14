@@ -626,11 +626,14 @@ const refusePassword = (r: Route) => r.fulfill({
 });
 
 test('SC 2.4.11 NFR-A11Y-02: a text field that takes focus inside an open confirmation while cut by the window\'s edge is brought wholly into view (documents, 1280 wide)', async ({ browser }) => {
-  // A text field that takes focus inside an already open confirmation (its layout effect has run) while cut by the bottom
-  // edge with 12 px showing: the documents page's reason, a textarea, blurred, cut, and focused again by a script, as a later
-  // script focus by a screen would be. It proves the property, not the on-focus reveal alone: with that handler removed it
-  // still passes in Chromium, where focus() on a settled page brings this field wholly into view by itself (so did account
-  // deletion's password field, focused by the screen on a refused password, the first form of this case). Register D-386.
+  // The on-focus reveal alone (InlineConfirm's onFocus; register D-386). A text field that takes focus inside an already open
+  // confirmation (its layout effect has run) while cut by the bottom edge with its first line still showing: the documents
+  // page's reason, a textarea, blurred, cut, and focused again by a script, as a later script focus by a screen would be.
+  // Chromium brings a focused text field's caret into view, not its box: with the first line showing it scrolls nothing, and
+  // with the handler removed this case fails ("the reason field is wholly in view (391 to 477, visible 0 to 431)"). With
+  // only 12 px showing the caret itself is cut, the browser scrolls the field in by itself, and the case passes with no
+  // handler: the strip must show the whole first line, or the case proves nothing about the handler.
+  const FIRST_LINE_SHOWING = 40;
   test.setTimeout(120_000);
   const page = await pageAs(browser, 'owner', WIDE);
   await load(page, (await documentPage()).url);
@@ -640,7 +643,7 @@ test('SC 2.4.11 NFR-A11Y-02: a text field that takes focus inside an open confir
   await expect(field).toBeFocused();
   await settled(page, confirmation);
   await field.evaluate((el) => (el as HTMLElement).blur());
-  await cutAtBottom(page, field, 12);
+  await cutAtBottom(page, field, FIRST_LINE_SHOWING);
   await field.evaluate((el) => (el as HTMLElement).focus());
   await expect(field).toBeFocused();
   await settled(page, field);
