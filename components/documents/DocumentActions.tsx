@@ -2,7 +2,11 @@
 
 import { useEffect, useId, useRef, useState, type ReactElement } from 'react';
 import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/Button';
 import { InlineConfirm } from '@/components/ui/InlineConfirm';
+import { revealFocused } from '@/components/ui/revealInView';
+import '@/components/ui/textAreaStyles';
+import './Documents.css';
 import { requestIdFor, sendWrite, type RetryState, type SendOutcome } from '@/lib/client/retrySafeWrite';
 import { DOCUMENTS_COPY, DOCUMENT_TITLES, formatUtcDay } from '@/lib/documents/copy';
 import { isKnownWithdrawMessage } from '@/lib/documents/generate';
@@ -109,13 +113,16 @@ export function CopyFallback({ text }: { text: string }): ReactElement {
   const id = useId();
   const box = useRef<HTMLTextAreaElement | null>(null);
   useEffect(() => {
-    box.current?.focus();
-    box.current?.select();
+    const el = box.current;
+    if (el === null) return;
+    el.focus();
+    el.select();
+    revealFocused(el);   // D-398 item 8: a focus() alone can leave the box cut by the window's edge
   }, []);
   return (
-    <div className="form-group">
-      <label htmlFor={id}>{W.selectAll}</label>
-      <textarea id={id} ref={box} readOnly rows={8} value={text} onFocus={(e) => e.currentTarget.select()} />
+    <div className="ui-field">
+      <label className="ui-field__label" htmlFor={id}>{W.selectAll}</label>
+      <textarea className="ui-textarea ui-textarea--readonly" id={id} ref={box} readOnly rows={8} value={text} onFocus={(e) => e.currentTarget.select()} />
     </div>
   );
 }
@@ -136,9 +143,14 @@ export function WithdrawConfirm(p: {
   const box = useRef<HTMLTextAreaElement | null>(null);
   useEffect(() => { box.current!.focus(); }, []);
 
-  async function send(): Promise<void> {
+  const retryButton = useRef<HTMLButtonElement | null>(null);
+  const retried = useRef(false);
+
+  async function send(fromRetry = false): Promise<void> {
+    retried.current = fromRetry;
     setBusy(true);
-    setFailure('');
+    // A Retry keeps its line and stays, busy and focused, until the answer (D-398 item 4); a first send clears the line.
+    if (!fromRetry) setFailure('');
     const out = await withdrawSend({ orgSlug: p.orgSlug, documentId: p.document.id, reason, retry, unknown });
     setBusy(false);
     setRetry(out.retry);
@@ -146,6 +158,11 @@ export function WithdrawConfirm(p: {
     if (out.result.kind === 'refused') { setFailure(out.result.line); setCanRetry(out.result.retry); return; }
     p.onDone(out.result.kind);
   }
+
+  // A Retry that is no longer offered after its answer would leave focus on nothing: it goes to the reason.
+  useEffect(() => {
+    if (!busy && retried.current && !(failure !== '' && canRetry)) { retried.current = false; box.current?.focus(); }
+  }, [busy, failure, canRetry]);
 
   return (
     <div data-inline-confirm>
@@ -155,17 +172,18 @@ export function WithdrawConfirm(p: {
         actionLabel={W.withdraw}
         busy={busy}
         canConfirm={reason.trim() !== ''}
-        onConfirm={send}
+        onConfirm={() => send()}
         onCancel={p.onCancel}
+        destructive
       >
-        <div className="form-group">
-          <label htmlFor={`withdraw-reason-${p.document.id}`}>{W.reasonLabel}</label>
-          <textarea id={`withdraw-reason-${p.document.id}`} ref={box} rows={3} required value={reason} onChange={(e) => setReason(e.target.value)} />
+        <div className="ui-field">
+          <label className="ui-field__label" htmlFor={`withdraw-reason-${p.document.id}`}>{W.reasonLabel}</label>
+          <textarea className="ui-textarea" id={`withdraw-reason-${p.document.id}`} ref={box} rows={3} required value={reason} onChange={(e) => setReason(e.target.value)} />
         </div>
       </InlineConfirm>
-      <p role="alert">{failure}</p>
+      <p role="alert" className="documents-line">{failure}</p>
       {failure !== '' && canRetry
-        ? <button type="button" className="btn btn--secondary" disabled={busy} onClick={() => { void send(); }}>{W.retry}</button>
+        ? <Button variant="secondary" ref={retryButton} busy={busy} onClick={() => { void send(true); }}>{W.retry}</Button>
         : null}
     </div>
   );
@@ -219,13 +237,13 @@ export function DocumentActions(p: DocumentActionsProps): ReactElement {
           onCancel={() => setOpen(false)}
         />
       ) : (
-        <div className="form-actions">
-          {p.document.erased === null ? <button type="button" ref={copyButton} className="btn btn--secondary" disabled={copying} onClick={() => { void copy(); }}>{W.copy}</button> : null}
-          {canWithdraw ? <button type="button" ref={trigger} className="btn btn--secondary" onClick={() => { setToday(new Date().toISOString().slice(0, 10)); setStatus(''); setOpen(true); }}>{W.withdraw}</button> : null}
+        <div className="document-actions__buttons">
+          {p.document.erased === null ? <Button variant="secondary" ref={copyButton} busy={copying} onClick={() => { void copy(); }}>{W.copy}</Button> : null}
+          {canWithdraw ? <Button variant="secondary" ref={trigger} onClick={() => { setToday(new Date().toISOString().slice(0, 10)); setStatus(''); setOpen(true); }}>{W.withdraw}</Button> : null}
         </div>
       )}
-      <p role="status">{status}</p>
-      <p role="alert">{alert}</p>
+      <p role="status" className="documents-line">{status}</p>
+      <p role="alert" className="documents-line">{alert}</p>
       {fallback === null ? null : <CopyFallback text={fallback} />}
     </div>
   );

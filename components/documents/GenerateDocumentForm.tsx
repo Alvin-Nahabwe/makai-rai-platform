@@ -12,6 +12,11 @@ import { DOCUMENTS_COPY, ETHICS_APPROVED, ETHICS_NOT_REQUIRED, ETHICS_STATES, ST
 import { FINDINGS_COPY } from '@/lib/findings/copy';
 import { formatFingerprint } from '@/lib/seal/format';
 import { formatSize } from '@/lib/format/size';
+import { Button } from '@/components/ui/Button';
+import { Icon } from '@/components/ui/Icon';
+import '@/components/ui/formStyles';
+import '@/components/ui/selectStyles';
+import './Documents.css';
 
 /**
  * S-18's generate form (W-9; FR-DOC-01, FR-DOC-03, FR-DOC-05, FR-DOC-08; UX-20, UX-27, M-35). One radio group of the three documents in
@@ -31,9 +36,9 @@ export { generateReducer, type GenerateEvent, type GenerateState } from '@/lib/d
 export function GenerateStatus({ state, onRetry }: { state: GenerateState; onRetry: () => void }): ReactElement | null {
   if (!isFailed(state) || state.message === null) return null;
   return (
-    <p role="alert">
+    <p role="alert" className="documents-line">
       {state.message}
-      {state.retry ? <> <button type="button" className="btn btn--secondary" onClick={onRetry}>{C.form.retry}</button></> : null}
+      {state.retry ? <> <Button variant="secondary" size="compact" onClick={onRetry}>{C.form.retry}</Button></> : null}
     </p>
   );
 }
@@ -63,9 +68,9 @@ export function issuedMessage(d: { sha256: string; byteSize: number }): string {
 /** The review has no seal: only this line and the way to make one. */
 export function NeverSealed({ orgSlug, projectId, reviewId }: { orgSlug: string; projectId: string; reviewId: string }): ReactElement {
   return (
-    <div>
-      <p>{NEVER_SEALED_LINE}</p>
-      <p><a href={`/orgs/${encodeURIComponent(orgSlug)}/projects/${encodeURIComponent(projectId)}/reviews/${encodeURIComponent(reviewId)}/seal`}>{C.form.sealThisReview}</a></p>
+    <div className="documents-section">
+      <p className="documents-note">{NEVER_SEALED_LINE}</p>
+      <p><a className="documents-link" href={`/orgs/${encodeURIComponent(orgSlug)}/projects/${encodeURIComponent(projectId)}/reviews/${encodeURIComponent(reviewId)}/seal`}>{C.form.sealThisReview}</a></p>
     </div>
   );
 }
@@ -76,11 +81,11 @@ export function NeverSealed({ orgSlug, projectId, reviewId }: { orgSlug: string;
  */
 export function PreviewPane({ text }: { text: string }): ReactElement {
   return (
-    <div className="document-preview" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+    <div className="document-preview">
       {text.split('\n').map((line, i) => (
         line === STATEMENT
-          ? <p key={i} style={{ margin: 0 }}><span data-claims-allowed="AL-1 document statement">{line}</span></p>
-          : <p key={i} style={{ margin: 0 }}>{line === '' ? ' ' : line}</p>
+          ? <p key={i}><span data-claims-allowed="AL-1 document statement">{line}</span></p>
+          : <p key={i}>{line === '' ? ' ' : line}</p>
       ))}
     </div>
   );
@@ -99,15 +104,15 @@ export type GenerateDocumentFormProps = { orgSlug: string; projectId: string; re
 export function TypedGroup({ doc, values, set, hidden, refused }: { doc: GenerateFormDocument; values: Record<string, string>; set: (id: string, v: string) => void; hidden: boolean; refused: Map<string, string> }): ReactElement {
   const markId = `typed-mark-${doc.type}`;
   const input = (id: string, label: string) => (
-    <div className="form-field" key={id}>
-      <label htmlFor={`typed-${id}`}>{label}</label>
-      <input id={`typed-${id}`} type="text" value={values[id] ?? ''} onChange={(e) => set(id, e.target.value)} autoComplete="off"
+    <div className="ui-field" key={id}>
+      <label className="ui-field__label" htmlFor={`typed-${id}`}>{label}</label>
+      <input className={refused.has(id) ? 'ui-input ui-input--invalid' : 'ui-input'} id={`typed-${id}`} type="text" value={values[id] ?? ''} onChange={(e) => set(id, e.target.value)} autoComplete="off"
         aria-invalid={refused.has(id) ? true : undefined} aria-describedby={refused.has(id) ? `${markId} typed-error-${id}` : markId} />
       {refused.has(id) ? <p id={`typed-error-${id}`} className="field-error">{refused.get(id)}</p> : null}
     </div>
   );
   return (
-    <div hidden={hidden} role="group" aria-labelledby={`typed-heading-${doc.type}`}>
+    <div hidden={hidden} role="group" className="documents-typed" aria-labelledby={`typed-heading-${doc.type}`}>
       <h3 id={`typed-heading-${doc.type}`}>{C.form.typedHeading(doc.title)}</h3>
       <p id={markId}>{C.form.typedNote}</p>
       {doc.typedFields.map((f) => {
@@ -115,13 +120,16 @@ export function TypedGroup({ doc, values, set, hidden, refused }: { doc: Generat
         const state = values[`${f.fieldId}:state`] ?? '';
         return (
           <div key={f.fieldId}>
-            <div className="form-field">
-              <label htmlFor={`typed-${f.fieldId}:state`}>{f.label}</label>
-              <select id={`typed-${f.fieldId}:state`} value={state} onChange={(e) => set(`${f.fieldId}:state`, e.target.value)}
+            <div className="ui-field">
+              <label className="ui-field__label" htmlFor={`typed-${f.fieldId}:state`}>{f.label}</label>
+              <div className="ui-select__wrap">
+              <select className={refused.has(`${f.fieldId}:state`) ? 'ui-select ui-select--invalid' : 'ui-select'} id={`typed-${f.fieldId}:state`} value={state} onChange={(e) => set(`${f.fieldId}:state`, e.target.value)}
                 aria-invalid={refused.has(`${f.fieldId}:state`) ? true : undefined} aria-describedby={refused.has(`${f.fieldId}:state`) ? `${markId} typed-error-${f.fieldId}:state` : markId}>
                 <option value="">{C.form.printNotRecorded}</option>
                 {ETHICS_STATES.map(([v, word]) => <option key={v} value={v}>{word}</option>)}
               </select>
+              <span className="ui-select__icon"><Icon name="chevron-down" size={20} /></span>
+              </div>
               {refused.has(`${f.fieldId}:state`) ? <p id={`typed-error-${f.fieldId}:state`} className="field-error">{refused.get(`${f.fieldId}:state`)}</p> : null}
             </div>
             {state === ETHICS_APPROVED ? <>{input(`${f.fieldId}:committee`, C.form.committee)}{input(`${f.fieldId}:reference`, C.form.reference)}{input(`${f.fieldId}:date`, C.form.approvalDate)}</> : null}
@@ -150,6 +158,7 @@ export function GenerateDocumentForm(props: GenerateDocumentFormProps): ReactEle
   const headingRef = useRef<HTMLHeadingElement>(null);
   const generateRef = useRef<HTMLButtonElement>(null);
   const issuedRef = useRef<HTMLParagraphElement>(null);
+  const issueRef = useRef<HTMLButtonElement>(null);
   const doc = props.documents.find((d) => d.type === selected) as GenerateFormDocument;
   const chosen = props.seals.find((s) => s.sealId === sealId);
 
@@ -203,6 +212,8 @@ export function GenerateDocumentForm(props: GenerateDocumentFormProps): ReactEle
   }
 
   function onRetry(): void {
+    // The Retry leaves with the failure line: focus moves first to the button that sends, which stays, busy (D-398, UX-42).
+    (state.failedIn === 'issuing' ? issueRef : generateRef).current?.focus();
     dispatch({ kind: 'retry' });
     if (state.failedIn === 'issuing') void issue(); else void generate();
   }
@@ -213,10 +224,10 @@ export function GenerateDocumentForm(props: GenerateDocumentFormProps): ReactEle
 
   if (issued !== null && state.phase === 'issued') {
     return (
-      <div>
-        <p role="status" tabIndex={-1} ref={issuedRef}>{issuedMessage(issued)}</p>
-        <p><a href={`/api/v1/orgs/${encodeURIComponent(props.orgSlug)}/documents/${encodeURIComponent(issued.id)}/pdf`}>{C.issued.download(formatSize(issued.byteSize))}</a></p>
-        <p><a href={`/orgs/${encodeURIComponent(props.orgSlug)}/projects/${encodeURIComponent(props.projectId)}/reviews/${encodeURIComponent(props.reviewId)}/documents`}>{C.issued.another}</a></p>
+      <div className="documents-done">
+        <p role="status" className="documents-line" tabIndex={-1} ref={issuedRef}>{issuedMessage(issued)}</p>
+        <p className="documents-line"><a href={`/api/v1/orgs/${encodeURIComponent(props.orgSlug)}/documents/${encodeURIComponent(issued.id)}/pdf`}>{C.issued.download(formatSize(issued.byteSize))}</a></p>
+        <p className="documents-line"><a href={`/orgs/${encodeURIComponent(props.orgSlug)}/projects/${encodeURIComponent(props.projectId)}/reviews/${encodeURIComponent(props.reviewId)}/documents`}>{C.issued.another}</a></p>
       </div>
     );
   }
@@ -225,25 +236,25 @@ export function GenerateDocumentForm(props: GenerateDocumentFormProps): ReactEle
     return (
       <div>
         <h2 tabIndex={-1} ref={headingRef}>{C.preview.heading(doc.title)}</h2>
-        <p>{C.preview.nothingSaved}</p>
+        <p className="documents-note">{C.preview.nothingSaved}</p>
         <PreviewPane text={preview.text} />
-        {preview.notRecordedFields.length > 0 ? <p>{C.preview.notRecordedCount(preview.notRecordedFields.length)}</p> : null}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3)', alignItems: 'center' }}>
-          <button type="button" className="btn btn--primary" aria-disabled={busy || undefined} onClick={() => { void issue(); }}>{C.preview.issue}</button>
-          <button type="button" className="btn btn--secondary" aria-disabled={busy || undefined} onClick={() => { if (!busy) backToEdit(); }}>{C.preview.back}</button>
+        {preview.notRecordedFields.length > 0 ? <p className="documents-summary">{C.preview.notRecordedCount(preview.notRecordedFields.length)}</p> : null}
+        <div className="documents-actions">
+          <Button variant="primary" ref={issueRef} busy={busy} onClick={() => { void issue(); }}>{C.preview.issue}</Button>
+          <Button variant="secondary" disabled={busy} onClick={() => { if (!busy) backToEdit(); }}>{C.preview.back}</Button>
         </div>
-        <p role="status">{busy ? state.message : ''}</p>
+        <p role="status" className="documents-line">{busy ? state.message : ''}</p>
         <GenerateStatus state={state} onRetry={onRetry} />
       </div>
     );
   }
 
   return (
-    <form method="post" onSubmit={(e: FormEvent<HTMLFormElement>) => { e.preventDefault(); void generate(); }} noValidate>
-      <fieldset>
+    <form className="documents-form" method="post" onSubmit={(e: FormEvent<HTMLFormElement>) => { e.preventDefault(); void generate(); }} noValidate>
+      <fieldset className="documents-choice">
         <legend>{C.form.legend}</legend>
         {props.documents.map((d) => (
-          <div key={d.type} className="form-field">
+          <div key={d.type} className="documents-choice__option">
             <input type="radio" name="document-type" id={`doc-${d.type}`} value={d.type} checked={selected === d.type} onChange={() => setSelected(d.type)} aria-describedby={`help-${d.type}`} />
             <label htmlFor={`doc-${d.type}`}>{d.title}</label>
             <p id={`help-${d.type}`}>{d.help}</p>
@@ -254,16 +265,19 @@ export function GenerateDocumentForm(props: GenerateDocumentFormProps): ReactEle
         ))}
       </fieldset>
 
-      <div className="form-field">
-        <label htmlFor="document-seal">{C.form.sealLabel}</label>
-        <select id="document-seal" value={sealId} onChange={(e) => setSealId(e.target.value)} aria-describedby={older === null ? undefined : 'document-seal-note'}>
+      <div className="ui-field">
+        <label className="ui-field__label" htmlFor="document-seal">{C.form.sealLabel}</label>
+        <div className="ui-select__wrap">
+        <select className="ui-select" id="document-seal" value={sealId} onChange={(e) => setSealId(e.target.value)} aria-describedby={older === null ? undefined : 'document-seal-note'}>
           {props.seals.map((s) => (
             <option key={s.sealId} value={s.sealId} disabled={!s.bytesMatch}>
               {s.bytesMatch ? C.form.sealOption(s.sealNumber, formatUtcDay(s.sealedAt), s.latest) : C.form.sealOptionUnusable(s.sealNumber, formatUtcDay(s.sealedAt))}
             </option>
           ))}
         </select>
-        {older === null ? null : <p id="document-seal-note">{older}</p>}
+        <span className="ui-select__icon"><Icon name="chevron-down" size={20} /></span>
+        </div>
+        {older === null ? null : <p className="ui-field__hint" id="document-seal-note">{older}</p>}
       </div>
 
       {props.documents.map((d) => (
@@ -273,10 +287,10 @@ export function GenerateDocumentForm(props: GenerateDocumentFormProps): ReactEle
       ))}
 
       {doc.fromRecord === null ? null : (
-        <p>{fromRecordLine(doc.fromRecord)}</p>
+        <p className="documents-summary">{fromRecordLine(doc.fromRecord)}</p>
       )}
-      <button type="submit" ref={generateRef} className="btn btn--primary" aria-disabled={busy || chosen === undefined || !chosen.bytesMatch || undefined}>{C.form.previewButton}</button>
-      <p role="status">{busy ? state.message : ''}</p>
+      <Button variant="primary" type="submit" ref={generateRef} busy={busy}>{C.form.previewButton}</Button>
+      <p role="status" className="documents-line">{busy ? state.message : ''}</p>
       <GenerateStatus state={state} onRetry={onRetry} />
     </form>
   );

@@ -21,6 +21,7 @@ import { ArchivedBanner } from '@/components/project/ArchivedBanner';
 import { GenerateDocumentForm, NeverSealed, type GenerateDocumentFormProps } from '@/components/documents/GenerateDocumentForm';
 import { IssuedDocumentsList } from '@/components/documents/IssuedDocumentsList';
 import RememberProject from '@/components/layout/RememberProject';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 interface PageProps {
   params: Promise<{ slug: string; id: string; reviewId: string }>;
@@ -96,13 +97,12 @@ export default async function DocumentsPage({ params }: PageProps) {
   return (
     <div className="page-content">
       <ArchivedBanner archived={archived} />
-      <h1>{DOCUMENTS_COPY.page.heading}</h1>
-      <p>{review.name}</p>
+      <PageHeader title={DOCUMENTS_COPY.page.heading} lead={<p>{review.name}</p>} />
       {seals.length === 0 ? <NeverSealed orgSlug={slug} projectId={id} reviewId={reviewId} /> : (
         <>
-          {form !== null ? <section aria-labelledby="documents-generate"><h2 id="documents-generate">{DOCUMENTS_COPY.page.chooseHeading}</h2>{form}</section> : null}
-          {sealsFailed ? <section aria-labelledby="documents-generate"><h2 id="documents-generate">{DOCUMENTS_COPY.page.chooseHeading}</h2><p>{MSG_SEAL_CHECK_FAILED}</p></section> : null}
-          <section aria-labelledby="documents-issued">
+          {form !== null ? <section className="documents-section" aria-labelledby="documents-generate"><h2 id="documents-generate">{DOCUMENTS_COPY.page.chooseHeading}</h2>{form}</section> : null}
+          {sealsFailed ? <section className="documents-section" aria-labelledby="documents-generate"><h2 id="documents-generate">{DOCUMENTS_COPY.page.chooseHeading}</h2><p>{MSG_SEAL_CHECK_FAILED}</p></section> : null}
+          <section className="documents-section" aria-labelledby="documents-issued">
             <h2 id="documents-issued">{DOCUMENTS_COPY.page.issuedHeading}</h2>
             <IssuedDocumentsList orgSlug={slug} documents={documents} latestSealNumber={latestNumber} canWithdraw={canWithdraw} />
           </section>
