@@ -59,9 +59,9 @@ describe('S-12 decision fields', () => {
     expect(h).toMatch(/<fieldset[^>]*>\s*<legend[^>]*>Status<\/legend>/);
     expect([...h.matchAll(/<input[^>]*type="radio"[^>]*value="([a-z_]+)"/g)].map((m) => m[1])).toEqual(['done', 'partly', 'not_yet', 'not_applicable']);
     expect(h).toContain(FINDING_NOTE);
-    expect(h).not.toContain('Reason code (required)');
+    expect(h).not.toContain(DECISION_FORM_COPY.fields.reasonCode);
     const ny = html({}, { status: 'not_yet' });
-    expect(ny).toContain('Reason code (required)');
+    expect(ny).toContain(DECISION_FORM_COPY.fields.reasonCode);
     expect(ny).toContain('Planned for later');
     expect(ny).not.toContain('Other reason');   // the codes of the chosen status only
   });
@@ -72,11 +72,11 @@ describe('S-12 decision fields', () => {
     const dateInputs = [...h.matchAll(/<input[^>]*inputmode="numeric"[^>]*>/gi)];
     expect(dateInputs).toHaveLength(3);
     expect(dateInputs.every((m) => !/value="[^"]+"/.test(m[0]))).toBe(true);
-    expect(h).toContain('Starting from version 2');
+    expect(h).toContain(DECISION_FORM_COPY.startingNote);
     expect(h).toMatch(/<button[^>]*>Today<\/button>/);
-    expect(h).toMatch(/<button[^>]*>Same as version 2 \(12 Oct 2026\)<\/button>/);
-    expect(h).toMatch(/<button[^>]*>Same as my last save: Oct 2026<\/button>/);
-    expect(html({ current: null, lastOwnSaveDate: null })).not.toMatch(/Same as/);
+    expect(h).toContain(`>${DECISION_FORM_COPY.sameAsCurrent('12 Oct 2026')}</button>`);
+    expect(h).toContain(`>${DECISION_FORM_COPY.sameAsMyLast('Oct 2026')}</button>`);
+    expect(html({ current: null, lastOwnSaveDate: null })).not.toMatch(/Same date as/);
   });
 
   it('FR-DEC-01: a new version opens from the current version\'s fields, and a withdrawal opens an empty form', () => {
@@ -88,7 +88,7 @@ describe('S-12 decision fields', () => {
 
   it('UX-11: Decided by lists You first, then members, then the Outside roles group', () => {
     const h = html({ viewer: { userId: 'u-me', name: 'Amina N.', role: 'assessor' }, members: [{ userId: 'u-j', name: 'Joseph K.' }] });
-    expect(h).toMatch(/<option[^>]*>You \(Amina N\.\)<\/option>\s*<option[^>]*>Joseph K\.<\/option>\s*<optgroup label="Outside roles">\s*<option[^>]*>Principal investigator<\/option>/);
+    expect(h).toMatch(/<option[^>]*>You \(Amina N\.\)<\/option>\s*<option[^>]*>Joseph K\.<\/option>\s*<optgroup label="Someone without a platform account">\s*<option[^>]*>Principal investigator<\/option>/);
   });
 
   it('UX-12: the reason helper and the count in text, linked to the field', () => {
@@ -100,9 +100,9 @@ describe('S-12 decision fields', () => {
 
   it('FR-CNT-04 FR-CNT-03 (screen): the gate takes a scope answer, a checklist its options with the count in text', () => {
     const gate = html({ question: { ...QUESTION, id: 'Q-PP-GATE-SENSITIVE', type: 'gate' } });
-    expect(gate).toMatch(/<legend[^>]*>Scope answer \(required\)<\/legend>/);
+    expect(gate).toMatch(/<legend[^>]*>Answer \(required\)<\/legend>/);
     expect(gate).not.toMatch(/<legend[^>]*>Status<\/legend>/);
-    expect(gate).toContain('This answer decides whether Q-PP-13 and Q-PP-14 apply. It does not open a finding.');
+    expect(gate).toContain(DECISION_FORM_COPY.scopeNote);
     const list = html({ question: { ...QUESTION, id: 'Q-PP-16', type: 'checklist', options: ['A', 'B', 'C'] } }, { optionsInPlace: ['B'] });
     expect(list).toMatch(/<legend[^>]*>Which of these are in place\?<\/legend>/);
     expect([...list.matchAll(/type="checkbox"/g)]).toHaveLength(3);
@@ -115,6 +115,31 @@ describe('S-12 decision fields', () => {
     expect(h).toMatch(/<textarea[^>]*aria-invalid="true"/);
     expect(h).toMatch(/<textarea[^>]*aria-describedby="[^"]*decision-reason-error/);
     expect(h).toMatch(/id="decision-reason-error"[^>]*>Write a reason\.</);
+  });
+
+  it('plan 1A Task 17: every control keeps its id and name, and the status cards show each status shape', () => {
+    const h = html({ question: { ...QUESTION, type: 'checklist', options: ['A', 'B'] } }, { status: 'not_yet' });
+    for (const v of ['done', 'partly', 'not_yet', 'not_applicable']) {
+      const radio = h.match(new RegExp(`<input[^>]*id="decision-status-${v}"[^>]*>`))?.[0] ?? '';
+      for (const attr of ['type="radio"', 'name="status"', `value="${v}"`, `aria-describedby="decision-status-${v}-help"`]) expect(radio).toContain(attr);
+    }
+    expect(h.match(/class="ui-mark__shape"/g)).toHaveLength(4);
+    expect(h).toMatch(/<input[^>]*id="decision-option-0"[^>]*name="optionsInPlace"/);
+    expect(h).toMatch(/<select[^>]*id="decision-reason-code"[^>]*name="reasonCode"/);
+    expect(h).toMatch(/<option value=""[^>]*>Choose one<\/option>/);
+    expect(h).toMatch(/<textarea[^>]*id="decision-reason"[^>]*name="reason"[^>]*aria-describedby="decision-reason-count decision-reason-help"/);
+    expect(h).toMatch(/<select[^>]*id="decision-decided-by"[^>]*name="decidedBy"/);
+    for (const part of ['day', 'month', 'year']) expect(h).toMatch(new RegExp(`<input[^>]*id="decision-${part}"[^>]*inputmode="numeric"`, 'i'));
+    expect(h).toMatch(/<fieldset[^>]*aria-describedby="decision-options-count"/);
+    expect(h).toContain(`<p id="decision-options-count" class="decision-fields__count">${DECISION_FORM_COPY.optionsCount(0, 2)}</p>`);
+  });
+
+  it('plan 1A Task 17: a date error keeps its id, and the reason count is not a limit on typing', () => {
+    const h = renderToStaticMarkup(<DecisionFields data={PANEL} value={{ ...EMPTY, reason: 'x'.repeat(4001) }} errors={[{ field: 'declaredDate', message: 'February has 28 days.' }]} disabled={false} onChange={() => {}} />);
+    expect(h).toMatch(/id="decision-declaredDate-error"[^>]*>February has 28 days\.</);
+    expect(h).toMatch(/<input[^>]*id="decision-day"[^>]*aria-describedby="[^"]*decision-declaredDate-error/);
+    expect(h).not.toMatch(/<textarea[^>]*maxlength/i);
+    expect(h).toContain('4,001 / 4,000 characters');
   });
 });
 

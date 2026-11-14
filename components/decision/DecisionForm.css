@@ -1,4 +1,61 @@
 /*
+ * The answer form's own elements (plan 1A Task 17), in the kit's colour roles.
+ *
+ * The error summary stays the form's own element (it is role="alert", lists a refusal that has no field, and protected
+ * tests pin its markup), so it takes the look of the kit's ErrorSummary here: a 2 px ink border on the surface, never red
+ * (decision B5). Its global .card class stays on it; this rule replaces the card's shadow and its lift on hover, which
+ * belong to a card that is a link.
+ */
+[data-error-summary].card,
+[data-error-summary].card:hover {
+  box-sizing: border-box;
+  max-inline-size: var(--measure-reading);
+  margin-block-end: var(--space-6);
+  padding: var(--space-4);
+  border: 2px solid var(--color-ink);
+  border-radius: var(--radius-surface);
+  background-color: var(--color-surface);
+  box-shadow: none;
+  transform: none;
+  color: var(--color-ink);
+}
+
+[data-error-summary] > p {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-h3);
+}
+
+/* The summary's first line takes focus after a refused Save; a programmatic focus shows no :focus-visible ring. */
+[data-error-summary] > p:focus {
+  outline: var(--focus-width) solid var(--color-focus);
+  outline-offset: var(--focus-offset);
+}
+
+[data-error-summary] ul {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding-inline-start: var(--space-5);
+}
+
+[data-error-summary] a {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-link);
+}
+
+/* The kept-evidence and upload-wait boxes: the kit's note callout inside an element that keeps the data attribute. */
+.decision-form__box .ui-callout__body > p {
+  margin-block: 0 var(--space-3);
+}
+
+.decision-form__box .form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin: 0;
+}
+
+/*
  * W-3 narrow layout (SRS line 1942): at 768 px and below, S-12's Save button and save status stay in a bar fixed to the
  * bottom of the screen, and the page reserves the bar's height under its content and in its scroll padding, so a focused
  * field is never hidden behind it (WCAG 2.4.11, UX-34). DecisionForm measures the bar and sets --decision-save-bar-h.
@@ -11,8 +68,8 @@
     z-index: 50;
     max-height: 40vh;
     overflow-y: auto;
-    background: var(--surface-card);
-    border-block-start: 1px solid var(--border-strong);
+    background: var(--color-surface);
+    border-block-start: 1px solid var(--color-border-control);
     padding: 0.5rem 1rem;
   }
 

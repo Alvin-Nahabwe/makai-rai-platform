@@ -5,6 +5,9 @@ import { testDb } from '../__tests__/helpers/db';
 import { buildOrg, type FixtureMember, type OrgFixture } from '../__tests__/helpers/recordFixture';
 import { failOnDialog } from './helpers/dialogs';
 import { fillValid, saveAlert, signInWith, waitForQuestionPage } from './helpers/session';
+import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
+import { FIELD_COPY } from '../lib/ui/field/copy';
+import { DECISION_OUTCOME_COPY } from '../lib/decision/outcome/copy';
 
 /**
  * Review Focus RF-4 (FR-PRJ-03, FR-MEM-03): a write refused on a page that was already open is refused on the server too,
@@ -20,8 +23,8 @@ import { fillValid, saveAlert, signInWith, waitForQuestionPage } from './helpers
  * The organisation is this file's own: lowering a role and archiving a project would break the shared fixture seats of
  * every spec that runs after this one. The counts are scoped to it, so a spec running in another worker does not move them.
  */
-const M12 = 'Not saved: this project is archived. Owners and admins can unarchive it.';
-const M09 = 'Not saved: your role in this organisation no longer allows this. Your answer is kept on this device. Ask an owner or admin.';
+const M12 = DECISION_OUTCOME_COPY.save.archived;
+const M09 = DECISION_OUTCOME_COPY.save.forbidden;
 /**
  * S-17's seal refusals are not M-12 and M-09: REV-b's C4 ruling CR-6 (owner copy, components/review/reviewText.ts:111-112)
  * gives a seal its own sentences, because a seal keeps nothing on the device. The spec checks the words the page shows.
@@ -163,7 +166,7 @@ test('FR-PRJ-03 RF-4: archiving refuses Save, upload, Seal and Generate on pages
   await expectOk(await ownerApi.post(`/api/v1/orgs/${fx.org.slug}/projects/${projectId}/archive`, { data: { requestId: randomUUID() } }), 'route 21');
   await pressAll(pages, { save: M12, seal: SEAL_ARCHIVED, issue: M12 });
   expect(await countRows()).toEqual(before);
-  await expect(pages.s12.getByLabel('Reason (required)')).toHaveValue(TYPED);   // 7.4.1: the typed answer stays
+  await expect(pages.s12.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`)).toHaveValue(TYPED);   // 7.4.1: the typed answer stays
   await pages.context.close();
 });
 

@@ -6,11 +6,14 @@ import { EvidenceBlock } from '@/components/evidence/EvidenceBlock';
 import { ConflictView } from '@/components/decision/ConflictView';
 import { DecisionFields, FIELD_LABEL, FIELD_TARGET } from '@/components/decision/DecisionFields';
 import { SaveStatus } from '@/components/decision/SaveStatus';
+import { Button } from '@/components/ui/Button';
+import { Callout } from '@/components/ui/Callout';
 import { decisionFormNote } from '@/lib/authz/permissionNotes';
 import { signInAgainHref } from '@/lib/auth/idle';
 import { openDraftStore, type DraftStore, type StoredDraft } from '@/lib/client/drafts';
 import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafeWrite';
 import { OUTSIDE_ROLE_LABELS, problemSummary } from '@/lib/decision/copy';
+import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
 import { formatTime } from '@/lib/format/dates';
 import { draftErrors, draftFromCurrent, draftHeldForGate, draftKeyFor, isDecision, isDraftValue, keptEvidenceLine, toSaveBody, type DecisionDraft } from '@/lib/question/draft';
 import type { QuestionPanelData } from '@/lib/question/panel';
@@ -22,6 +25,7 @@ import type { FieldError, UtcInstant } from '@/types/record';
 export type DecisionFormProps = { data: QuestionPanelData };
 
 const NO_RETRY: RetryState = { requestId: null, sentBody: null };
+const F = DECISION_FORM_COPY;
 const sameIds = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((x, i) => x === b[i]);
 
 /** The names of files still moving or failed, joined for a sentence. */
@@ -88,7 +92,11 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
   // restored draft, cleared by a save of exactly what the field holds and by Discard. The form keeps it itself, so it
   // holds in a browser that cannot keep drafts too: a new version replaces the form only when this is false (CR-1, F11).
   const [typedSinceCurrent, setTypedSinceCurrent] = useState(false);
+  // D-398 item 4: a pressed Retry stays mounted, busy, while its own request is out, so focus stays on it.
+  const [retrying, setRetrying] = useState(false);
   const saveBar = useRef<HTMLDivElement | null>(null);
+  // Set when a Retry's request is answered: if that answer removed the Retry and nothing else took focus, the bar takes it.
+  const afterRetry = useRef(false);
 
   const store = useRef<DraftStore | null>(null);
   const summary = useRef<HTMLParagraphElement | null>(null);
@@ -151,6 +159,15 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
     if (focusSummary.current) { focusSummary.current = false; summary.current?.focus(); }
   });
 
+  // After the answer to a Retry: a Retry still offered keeps its focus; the summary and the conflict view take focus
+  // themselves (their effects run before this one); otherwise focus would fall to the page, so the save bar, which holds
+  // the status line, takes it.
+  useEffect(() => {
+    if (!afterRetry.current) return;
+    afterRetry.current = false;
+    if (document.activeElement === null || document.activeElement === document.body) saveBar.current?.focus();
+  });
+
   // W-3 narrow: the fixed save bar's height is the space the page reserves under its content (DecisionForm.css).
   useEffect(() => {
     const bar = saveBar.current;
@@ -181,7 +198,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
     keep({ baseVersionNumber: latest.current.base, value: next, savedAt: new Date().toISOString(), savePressedAt: null, retry: latest.current.retry });
   }, [keep]);
 
-  const send = useCallback(async (d: DecisionDraft, saveBase: number | null, state: RetryState, omitted: string[], auto = false): Promise<void> => {
+  const send = useCallback(async (d: DecisionDraft, saveBase: number | null, state: RetryState, omitted: string[], auto = false, fromRetry = false): Promise<void> => {
     if (sending.current) return;
     sending.current = true;
     // Whatever this send's reply is, the automatic retry of an earlier one is spent or superseded (NFR-REL-05).
@@ -192,6 +209,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
     setRetry(id.state);
     keep({ baseVersionNumber: saveBase, value: d, savedAt: now, savePressedAt: now, retry: id.state });
     setSaving(true);
+    setRetrying(fromRetry);
     setErrors([]);
     setStatus(savingStatus(false));
     const outcome = await sendWrite<DecisionVersionView>(
@@ -200,6 +218,8 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
     );
     sending.current = false;
     setSaving(false);
+    setRetrying(false);
+    afterRetry.current = fromRetry;
     const next = statusForOutcome(outcome, { viewerId: data.viewer.userId, timeText: formatTime });
     if ((next.id === 'M-03' || next.id === 'M-04') && outcome.kind === 'saved') {
       const saved = outcome.body.versionNumber;
@@ -285,7 +305,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
     return () => window.removeEventListener('online', onOnline);
   }, [data, send]);
 
-  function save(withoutUploads: boolean, files: { uploading: string[]; failed: string[] } = uploads, saveBase: number | null = base): void {
+  function save(withoutUploads: boolean, files: { uploading: string[]; failed: string[] } = uploads, saveBase: number | null = base, fromRetry = false): void {
     if (saving) return;
     // The wait path runs inside the evidence block's effect flush, before this form re-renders, so the render's `value` can be one edit behind.
     const answer = latest.current.value;
@@ -300,7 +320,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
     const pendingFiles = [...files.uploading, ...files.failed];
     if (pendingFiles.length > 0 && !withoutUploads) { setWaiting(true); return; }
     setWaiting(false);
-    void send(answer, saveBase, retry, withoutUploads ? pendingFiles : []);
+    void send(answer, saveBase, retry, withoutUploads ? pendingFiles : [], false, fromRetry);
   }
 
   // UX-30: a Save that waited is sent once every chosen file has finished (the block reports each change of its uploads).
@@ -318,9 +338,9 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
     const d = value.decidedBy;
     if (d === null) return '';
     if (d.kind === 'outside_role') return OUTSIDE_ROLE_LABELS[d.role];
-    if (d.userId === data.viewer.userId) return `You (${data.viewer.name})`;
+    if (d.userId === data.viewer.userId) return F.you(data.viewer.name);
     const other = isDecision(data.current) && data.current.decidedBy?.kind === 'member' && data.current.decidedBy.user.userId === d.userId
-      ? `${data.current.decidedBy.user.name} (former member)` : '';
+      ? F.formerMember(data.current.decidedBy.user.name) : '';
     return data.members.find((m) => m.userId === d.userId)?.name ?? other;
   })();
 
@@ -336,7 +356,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
       {conflict !== null ? (
         <ConflictView
           current={conflict} mine={value} viewerId={data.viewer.userId}
-          mineDecidedBy={deciderName} mineEvidence={evidenceItems.map((i) => i.fileName ?? i.label ?? i.url ?? 'Evidence')}
+          mineDecidedBy={deciderName} mineEvidence={evidenceItems.map((i) => i.fileName ?? i.label ?? i.url ?? F.evidenceFallback)}
           mineKeptEvidence={extraEvidenceIds.length}
           onSaveMine={() => { const b = conflict.versionNumber; setConflict(null); setBase(b); save(false, uploads, b); }}
           onEditMine={() => {
@@ -399,36 +419,44 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
         </section>
 
         {extraEvidenceIds.length > 0 ? (
-          <div className="card" data-kept-evidence>
-            <p>{keptEvidenceLine(extraEvidenceIds.length)}</p>
-            <button type="button" className="btn btn--secondary btn--small" onClick={() => {
-              const now = latest.current.value;
-              setExtraEvidenceIds([]);
-              edit({ ...now, evidenceIds: now.evidenceIds.filter((x) => !extraEvidenceIds.includes(x)) });
-            }}>Leave it out</button>
+          <div className="decision-form__box" data-kept-evidence>
+            <Callout kind="note">
+              <p>{keptEvidenceLine(extraEvidenceIds.length)}</p>
+              <Button variant="secondary" size="compact" onClick={() => {
+                const now = latest.current.value;
+                setExtraEvidenceIds([]);
+                edit({ ...now, evidenceIds: now.evidenceIds.filter((x) => !extraEvidenceIds.includes(x)) });
+              }}>{F.removeKept(extraEvidenceIds.length)}</Button>
+            </Callout>
           </div>
         ) : null}
 
         {waiting ? (
-          <div className="card" data-upload-wait>
-            <p>Waiting for <bdi>{fileList([...uploads.uploading, ...uploads.failed])}</bdi> to finish uploading.</p>
-            <div className="form-actions">
-              <button type="button" className="btn btn--secondary" onClick={() => save(true)}>Save without it</button>
-              <button type="button" className="btn btn--secondary" onClick={() => setWaiting(false)}>Cancel</button>
-            </div>
+          <div className="decision-form__box" data-upload-wait>
+            <Callout kind="note">
+              <p>{F.waiting.before}<bdi>{fileList([...uploads.uploading, ...uploads.failed])}</bdi>{F.waiting.after}</p>
+              <div className="form-actions">
+                <Button variant="secondary" onClick={() => save(true)}>{F.saveWithout(uploads.uploading.length + uploads.failed.length)}</Button>
+                <Button variant="secondary" onClick={() => setWaiting(false)}>{F.cancel}</Button>
+              </div>
+            </Callout>
           </div>
         ) : null}
 
-        <div className="decision-save-bar" ref={saveBar}>
+        {/* tabIndex -1: after a Retry's answer removes the Retry, focus comes here, beside the status line, not to the page. */}
+        <div className="decision-save-bar" ref={saveBar} tabIndex={-1}>
           <div className="form-actions">
-            <button type="submit" className="btn btn--primary" disabled={saving}>Save decision</button>
-            {status?.next === 'retry' || (status === null && restoredPressed) ? <button type="button" className="btn btn--secondary" disabled={saving} onClick={() => save(false)}>Retry</button> : null}
-            {status?.next === 'sign_in' ? <a className="btn btn--secondary" href={signInHref}>Sign in again</a> : null}
-            {status?.next === 'go' && status.action !== undefined ? <a className="btn btn--secondary" href={status.action.href} data-gate-link>{status.action.label}</a> : null}
+            <Button variant="primary" type="submit" disabled={saving}>{F.save}</Button>
+            {status?.next === 'retry' || (status === null && restoredPressed) || (saving && retrying)
+              ? <Button variant="secondary" busy={saving} onClick={() => save(false, uploads, base, true)}>{F.retry}</Button>
+              : null}
+            {/* Native links in the kit's button classes: ButtonLink is next/link, and the gate link carries data-gate-link. */}
+            {status?.next === 'sign_in' ? <a className="ui-button ui-button--secondary" href={signInHref}>{F.signInAgain}</a> : null}
+            {status?.next === 'go' && status.action !== undefined ? <a className="ui-button ui-button--secondary" href={status.action.href} data-gate-link>{status.action.label}</a> : null}
           </div>
           <SaveStatus status={status} draftSavedAt={draftSavedAt} storageUnavailable={storageUnavailable} />
           {leftOut.length > 0 && status !== null && (status.id === 'M-03' || status.id === 'M-04')
-            ? <p>Saved without <bdi>{fileList(leftOut)}</bdi>. Add it in a new save once it has uploaded.</p>
+            ? <p>{F.savedWithout.before}<bdi>{fileList(leftOut)}</bdi>{F.savedWithout.after}</p>
             : null}
         </div>
         </fieldset>

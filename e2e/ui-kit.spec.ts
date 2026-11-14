@@ -2,6 +2,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { expectNoSeriousA11yViolations, settleHover } from './helpers/a11y';
 import { expectNoHorizontalScroll } from './helpers/reflow';
 import { expectTargetsAtLeast24px } from './helpers/targetSize';
+import { TERM_DONE, TERM_PARTLY } from '../lib/vocabulary/terms';
 
 /**
  * The development gallery /dev/ui-kit (plan 1A Task 3): every components/ui component in every state, driven in a
@@ -365,7 +366,7 @@ test.describe('RadioCards', () => {
     const group = section(page, 'radio-cards').getByRole('group', { name: 'Status', exact: true });
     const done = group.getByRole('radio', { name: 'Done', exact: true });
     await expect(done).toHaveCount(1);
-    await expect(done).toHaveAccessibleDescription('The expected practice is in place.');
+    await expect(done).toHaveAccessibleDescription(TERM_DONE.definition);
     await page.locator('#kit-select-error').focus();
     await page.keyboard.press('Tab');
     await expect(done).toBeFocused();
@@ -380,7 +381,7 @@ test.describe('RadioCards', () => {
     await openKit(page);
     // The label's stretched ::after lies over the help sentence, so the click lands on the label, as a person's would;
     // force skips Playwright's check that the sentence itself receives the pointer.
-    await page.getByText('Some of the expected practice is in place.').click({ force: true });
+    await page.getByText(TERM_PARTLY.definition).click({ force: true });
     await expect(section(page, 'radio-cards').getByRole('group', { name: 'Status', exact: true }).getByRole('radio', { name: 'Partly', exact: true })).toBeChecked();
   });
 

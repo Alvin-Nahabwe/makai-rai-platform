@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import { expect, type Page } from '@playwright/test';
 import type { OrgRole } from '@prisma/client';
 import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from '../fixtures/manifest';
+import { DECISION_FORM_COPY } from '../../lib/decision/form/copy';
+import { FIELD_COPY } from '../../lib/ui/field/copy';
 
 /**
  * Shared sign-in helpers for specs that need a real session in a browser context of their own (gap G103; V-prog imports
@@ -145,7 +147,7 @@ export async function waitForQuestionPage(page: Page): Promise<void> {
 /** Fills the S-12 form with a valid answer: Done, a reason, decided by the person, Today; `over` changes any part. */
 export async function fillValid(page: Page, over: { status?: string | null; reason?: string; decidedBy?: string; day?: string; month?: string; year?: string } = {}): Promise<void> {
   if (over.status !== null) await page.getByRole('radio', { name: over.status ?? 'Done', exact: true }).check();
-  await page.getByLabel('Reason (required)').fill(over.reason ?? 'Compared a rule-based alert with the model.');
+  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`).fill(over.reason ?? 'Compared a rule-based alert with the model.');
   if (over.decidedBy !== undefined) await page.getByLabel('Decided by (required)').selectOption({ label: over.decidedBy });
   if (over.day === undefined && over.month === undefined && over.year === undefined) {
     await page.getByRole('button', { name: 'Today', exact: true }).click();

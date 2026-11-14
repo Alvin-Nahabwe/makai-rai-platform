@@ -2,6 +2,9 @@ import { spawnSync } from 'node:child_process';
 import { expect, test } from '@playwright/test';
 import { failOnDialog } from './helpers/dialogs';
 import { draftKeys, fillValid, openQuestionIn, saveAlert, seatOf, signInAs, signInOnLoginPage, waitForQuestionPage } from './helpers/session';
+import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
+import { FIELD_COPY } from '../lib/ui/field/copy';
+import { DECISION_OUTCOME_COPY } from '../lib/decision/outcome/copy';
 
 /**
  * Review Focus RF-3 (FR-DEC-06, UX-26, UX-43; call R-53): a draft survives an idle sign-out and returns after sign-in
@@ -32,12 +35,12 @@ test('FR-DEC-06 UX-26 UX-43: a draft survives an idle sign-out and returns after
   await page.waitForTimeout(sessionCookie.expires * 1000 - Date.now() + 5_000);   // the cookie's own expiry plus 5 s, no request in between
   await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 10_000 });     // UI's warning has closed itself
   await page.getByRole('button', { name: 'Save decision' }).click();
-  await expect(saveAlert(page)).toHaveText('Not saved: you have been signed out. Your answer is kept on this device. Sign in again to save it.');
+  await expect(saveAlert(page)).toHaveText(DECISION_OUTCOME_COPY.save.signedOut);
   await page.getByRole('link', { name: 'Sign in again' }).click();
   await signInOnLoginPage(page, 'assessor');
   await expect(page).toHaveURL(new RegExp(`^${escape(new URL(page.url()).origin)}${escape(questionPath)}$`));
   await waitForQuestionPage(page);
-  await expect(page.getByLabel('Reason (required)')).toHaveValue('Typed before the idle limit');
+  await expect(page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`)).toHaveValue('Typed before the idle limit');
   if (PURGE_AT_SIGN_IN) {
     await ctx.clearCookies();
     await signInAs(page, 'viewer');

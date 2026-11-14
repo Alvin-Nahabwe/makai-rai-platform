@@ -1014,5 +1014,93 @@
     "property": "With no version the current decision reads \"No decision yet.\"; with a version it shows the status, the version number, who decided with the declared date, who entered it with the day and time it was received, and a link to the history with the number of versions. The words were reworded (copy audit B#180, B#184, and CONSOLIDATED 8 #5 for a decider without a platform account): \"See all versions ({n})\", \"Entered by: {name} on {day} at {time}\", \"{role} (no platform account)\".",
     "proof": "The case renders CurrentDecision with no version and requires QUESTION_COPY.current.none; with version 2 (Partly, decided by the principal investigator role on 12 Oct 2026, entered by Joseph K.) it requires no QUESTION_COPY.current.none, the status words Partly, QUESTION_COPY.current.version(2), \"Decided by: \" followed by deciderLabel of that role in the record form and \", 12 Oct 2026.\", \"Entered by: Joseph K. on 12 Oct 2026 at {hh:mm zone}\", and a link to /h whose whole text is QUESTION_COPY.current.history(2).",
     "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/decision-components.test.tsx::UX-10 FR-DEC-10 NFR-A11Y-04: the date fields are empty on open; Same as version N is offered beside Today, not filled in",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::UX-10 FR-DEC-10 NFR-A11Y-04: the date fields are empty on open; Same as version N is offered beside Today, not filled in",
+    "property": "The three date boxes are empty when the form opens from a version that has a declared date and a last own save; Today and the two shortcuts (the person's last decision's date, the current decision's date) are offered as buttons and fill nothing until pressed; with neither date there is no shortcut; the form says it starts from the current decision. The words were reworded (copy audit B#226, B#242, B#243): \"The form shows the current decision. Change what is different, then save.\", \"Same date as my last decision ({date})\", \"Same date as the current decision ({date})\"; the buttons are now the kit's DateField buttons.",
+    "proof": "The case renders the fields opened from version 2 (declared 12 Oct 2026) with a last own save of Oct 2026 and requires exactly three inputmode=\"numeric\" inputs, none with a value; DECISION_FORM_COPY.startingNote; a <button> whose whole text is Today; a button whose whole text is DECISION_FORM_COPY.sameAsCurrent(\"12 Oct 2026\") and one that is DECISION_FORM_COPY.sameAsMyLast(\"Oct 2026\"); and, with no current version and no last own save, no \"Same date as\" at all.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/decision-components.test.tsx::UX-11: Decided by lists You first, then members, then the Outside roles group",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::UX-11: Decided by lists You first, then members, then the Outside roles group",
+    "property": "Decided by lists the person first as \"You ({name})\", then the other members, then a labelled group of the roles a person without a platform account can hold, starting with Principal investigator. The group's label was reworded by CONSOLIDATED 8 #5 (\"Someone without a platform account\"; \"outside role\" is retired by the vocabulary).",
+    "proof": "The case renders the fields for Amina N. with one other member, Joseph K., and requires, in this order with nothing between them but white space, the option \"You (Amina N.)\", the option \"Joseph K.\", <optgroup label=\"Someone without a platform account\"> and its first option \"Principal investigator\".",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/decision-components.test.tsx::FR-CNT-04 FR-CNT-03 (screen): the gate takes a scope answer, a checklist its options with the count in text",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::FR-CNT-04 FR-CNT-03 (screen): the gate takes a scope answer, a checklist its options with the count in text",
+    "property": "The personal data question takes its answer, under a legend that says it is required, with spec 6's line saying which questions stop applying, and no Status group; a checklist question shows its options as checkboxes under \"Which of these are in place?\", the count of those in place in text, and the Status group too. The legend was reworded by audit B#228 with the owner's decision D2 (\"Answer (required)\"), and the line is spec 6's exact sentence, the vocabulary's definition of the personal data question.",
+    "proof": "The case renders the gate question and requires a legend whose whole text is \"Answer (required)\", no Status legend, and DECISION_FORM_COPY.scopeNote (= TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION.definition); and renders a checklist with options A, B, C, B in place, requiring the legend \"Which of these are in place?\", exactly three type=\"checkbox\" inputs, the text \"1 of 3 in place\", and the Status legend.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "e2e/decision-conflict.spec.ts::FR-DEC-05 UX-28 M-10 NFR-A11Y-03: a colleague saved version 2 first: both reasons, who saved, focus on the announced heading",
+    "replacedBy": "e2e/decision-conflict.spec.ts::FR-DEC-05 UX-28 M-10 NFR-A11Y-03: a colleague saved version 2 first: both reasons, who saved, focus on the announced heading",
+    "property": "A save over a version a colleague saved after the person started is refused and opens the conflict view: its heading is announced and focused, the view names who saved the newer version and when, shows both reasons and which version is the saved one, and saving the person's version makes version 3; the draft is then gone. The words were reworded by ruled texts: the heading (B#165 in the coordinator's Q2 form), the sentence (B#414 with \"your version\", the lead's gap G-b8: it no longer states the version number, so the saved column's title, \"Saved version (2)\", B#166, now carries it), the button (CONSOLIDATED 8 #6 \"Save my version\") and M-03. M-03 was reworded (copy audit B#345, the lead's ruling that the save line keeps the version): \"Saved at {time} as version {n}. Decided by: {who}.\" The \"Entered by\" sentence is no longer part of the save line (B#345 drops it; who entered a version is still shown under Current decision and in the history).",
+    "proof": "The case saves version 1, has the assessor fill the form, has the owner save version 2 through the API, presses Save decision, and requires the heading DECISION_FORM_COPY.conflict.heading focused; in the conflict region the text '{name} saved a newer version at {hh:mm zone}. Compare it with your version, then choose what to keep.', the heading DECISION_FORM_COPY.conflict.saved(2), and both reasons; then it presses DECISION_FORM_COPY.conflict.saveMine and requires the status line to start 'Saved at {time} as version 3.' and no draft key left.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "e2e/decision-conflict.spec.ts::UX-28: Edit mine first returns to the form with the draft and the new base",
+    "replacedBy": "e2e/decision-conflict.spec.ts::UX-28: Edit mine first returns to the form with the draft and the new base",
+    "property": "Edit my version returns to the form with the person's text and focus in the reason field, on the new base, so the next save makes version 2. Button and save line reworded: CONSOLIDATED 8 #6 (\"Edit my version\") and M-03. M-03 was reworded (copy audit B#345, the lead's ruling that the save line keeps the version): \"Saved at {time} as version {n}. Decided by: {who}.\" The \"Entered by\" sentence is no longer part of the save line (B#345 drops it; who entered a version is still shown under Current decision and in the history).",
+    "proof": "The case requires, after the conflict, the reason field (labelled DECISION_FORM_COPY.fields.reason with FIELD_COPY.required) to hold 'Mine to edit' and to be focused after pressing DECISION_FORM_COPY.conflict.editMine; after an edit and Save, the status line starts 'Saved at {time} as version 2.'.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "e2e/decision-conflict.spec.ts::M-10: the same account on another device: the text says so",
+    "replacedBy": "e2e/decision-conflict.spec.ts::M-10: the same account on another device: the text says so",
+    "property": "When the newer version was saved by the same account (another browser or an earlier attempt), the conflict text says it was the person themselves. Reworded by the lead's gap G-b8 ruling: \"You saved a newer version at {time}. Compare it with your version, then choose what to keep.\" (B#412's fragment falls away with B#414).",
+    "proof": "The case saves through the API as the same assessor while the form holds other text, presses Save decision, and requires in the conflict region exactly 'You saved a newer version at {hh:mm zone}. Compare it with your version, then choose what to keep.'",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "e2e/decision-save.spec.ts::UX-27 FR-DEC-07 M-04: a reply lost after the server saved; Retry unchanged reuses the id and shows Already saved",
+    "replacedBy": "e2e/decision-save.spec.ts::UX-27 FR-DEC-07 M-04: a reply lost after the server saved; Retry unchanged reuses the id and shows Already saved",
+    "property": "When the reply to a save is lost after the server saved it, Retry with nothing changed sends the same request id, the server replays the version, and the line says it was already saved as version 1. M-04 was reworded (copy audit B#408): \"This was already saved at {time} (version {n}).\"",
+    "proof": "The case is unchanged except the status line's pattern, now /^This was already saved at \\d{2}:\\d{2} \\S+ \\(version 1\\)\\.$/ (the request-id checks before it are unchanged).",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "e2e/decision-save.spec.ts::UX-09 UX-11 M-03: choosing Not yet shows the reason code; Ethics committee is named in the confirmation",
+    "replacedBy": "e2e/decision-save.spec.ts::UX-09 UX-11 M-03: choosing Not yet shows the reason code; Ethics committee is named in the confirmation",
+    "property": "Status is a group of four radios; the main reason field appears only once Not yet is chosen; an outside decider (Ethics committee) is named in the save confirmation. The field's label was reworded (B#232, C2: \"Main reason (required)\") and M-03 was reworded (copy audit B#345, the lead's ruling that the save line keeps the version): \"Saved at {time} as version {n}. Decided by: {who}.\" The \"Entered by\" sentence is no longer part of the save line (B#345 drops it; who entered a version is still shown under Current decision and in the history).",
+    "proof": "The case requires four radios in the group named Status, no field labelled DECISION_FORM_COPY.fields.reasonCode with FIELD_COPY.required before Not yet is checked, that field after it (a code is chosen), and, after Save, a status line ending 'Decided by: Ethics committee.'.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "e2e/decision-save.spec.ts::UX-30: Save while a file is uploading waits; Save without it names the file left out",
+    "replacedBy": "e2e/decision-save.spec.ts::UX-30: Save while a file is uploading waits; Save without it names the file left out",
+    "property": "Save while a file is uploading waits and says which file it waits for; Save without this file sends the decision without it at once, and the line after the save names the file left out. The button and the line were reworded (B#154 with the coordinator's Q10 singular: \"Save without this file\"; B#159: \"Saved without {files}. When the upload has finished, save again to add it.\").",
+    "proof": "The case requires the waiting text for costing-sheet.pdf, presses DECISION_FORM_COPY.saveWithout(1), checks the request was sent, and requires the text DECISION_FORM_COPY.savedWithout.before + 'costing-sheet.pdf' + DECISION_FORM_COPY.savedWithout.after.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "e2e/decision-save.spec.ts::UX-30: a failed upload is never waited out by itself; Save without it leaves it out and names it",
+    "replacedBy": "e2e/decision-save.spec.ts::UX-30: a failed upload is never waited out by itself; Save without it leaves it out and names it",
+    "property": "A failed upload is never waited out: Save waits and names the file, Save without this file leaves it out, and the line after the save names it. Button and line reworded as B#154 (Q10 singular) and B#159.",
+    "proof": "The case requires the failed-upload line, the waiting text for kept-eight-bad.pdf, presses DECISION_FORM_COPY.saveWithout(1), and requires DECISION_FORM_COPY.savedWithout.before + 'kept-eight-bad.pdf' + DECISION_FORM_COPY.savedWithout.after.",
+    "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "e2e/decision-save.spec.ts::(module)",
+    "replacedBy": "e2e/decision-save.spec.ts::FR-DEC-06 NFR-REL-04 UX-25 M-01 M-03: Save shows Saving, then Saved as version 1 only after the reply",
+    "property": "SAVED_V1, the pattern of the save line every first save in this file waits for, follows M-03's ruled wording. M-03 was reworded (copy audit B#345, the lead's ruling that the save line keeps the version): \"Saved at {time} as version {n}. Decided by: {who}.\" The \"Entered by\" sentence is no longer part of the save line (B#345 drops it; who entered a version is still shown under Current decision and in the history).",
+    "proof": "SAVED_V1 is now /^Saved at \\d{2}:\\d{2} \\S+ as version 1\\. Decided by: you\\.$/: the whole line, anchored, with the version number and the decider; the cases that read it are unchanged.",
+    "task": "plan 1A Task 17"
   }
 ]

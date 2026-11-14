@@ -6,6 +6,7 @@ import { expectTargetsAtLeast24px } from './helpers/targetSize';
 import {
   actAsSeat, fillValid, historyPath, newProject, openQuestion, questionPath, saveStatus, saveViaApi, stagePath, waitForQuestionPage,
 } from './helpers/session';
+import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
 
 /**
  * Keyboard, accessibility and reflow of S-11 to S-13 (UX-42, NFR-A11Y-02, NFR-A11Y-04, NFR-A11Y-05). The themes follow
@@ -57,7 +58,7 @@ test('NFR-A11Y-02: J-05 by keyboard alone: status, reason, decided by, Today, Sa
   await tabTo(page, 'Save decision', (e) => e.tag === 'button' && e.name === 'Save decision');
   await expectFocusVisibleAndUncovered(page);
   await page.keyboard.press('Enter');
-  await expect(saveStatus(page)).toHaveText(/^Saved as version 1 at /);
+  await expect(saveStatus(page)).toHaveText(/^Saved at .+ as version 1\./);
 });
 
 test('SPEC-2 W-3 NFR-A11Y-02 SC 2.4.11: at 320 px Save and its status sit in a bar fixed to the bottom, and no field reached by keyboard hides behind it', async ({ page, baseURL }) => {
@@ -86,7 +87,7 @@ test('SPEC-2 W-3 NFR-A11Y-02 SC 2.4.11: at 320 px Save and its status sit in a b
     if (what === 'Today') await page.keyboard.press('Enter');
   }
   await page.keyboard.press('Enter');
-  await expect(saveStatus(page)).toHaveText(/^Saved as version 1 at /);
+  await expect(saveStatus(page)).toHaveText(/^Saved at .+ as version 1\./);
   // At a wide width the bar is part of the page, not fixed (W-3 wide).
   await page.setViewportSize({ width: 1280, height: 800 });
   expect(await bar.evaluate((el) => getComputedStyle(el).position)).not.toBe('fixed');
@@ -119,7 +120,7 @@ test('NFR-A11Y-04 NFR-A11Y-05: targets of 24 px, no horizontal scroll at 320 px,
           receivedAt: new Date().toISOString(), evidence: [],
         } }) }), { times: 1 });
       await page.getByRole('button', { name: 'Save decision' }).click();
-      await expect(page.getByRole('heading', { name: 'Not saved: someone saved a newer version.' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: DECISION_FORM_COPY.conflict.heading })).toBeVisible();
       return;
     }
     if (state === 'S-11') { await page.goto(stagePath(projectId, 'pre-processing')); await page.waitForSelector('[data-question-id]'); return; }

@@ -3,6 +3,9 @@ import type { OrgRole } from '@prisma/client';
 import { HOSTILE_STRINGS } from '../__tests__/helpers/hostile';
 import { failOnDialog } from './helpers/dialogs';
 import { actAsSeat, fillValid, fixtureOrgSlug, historyPath, newProject, questionPath, saveStatus, saveViaApi, seatRequest, stagePath, waitForQuestionPage } from './helpers/session';
+import { REQUEST_MESSAGES, WITHDRAW_COPY, deciderLabel } from '../lib/decision/copy';
+import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
+import { FIELD_COPY } from '../lib/ui/field/copy';
 
 /**
  * S-13 and the withdrawal (FR-DEC-04, FR-DEC-08, FR-CNT-07, UX-14, UX-29, UX-40, UX-42, NFR-SEC-11; owner question B21).
@@ -30,8 +33,8 @@ test('FR-DEC-04 (screen) FR-DEC-08: three versions in reverse order; after withd
   const projectId = await twoVersions(baseURL!);
   await openHistory(page, 'assessor', projectId);
   await page.getByRole('button', { name: 'Withdraw this decision' }).click();
-  await page.getByLabel('Withdrawal code (required)').selectOption('duplicate');
-  await page.getByLabel('Reason (required)').fill('Duplicate of Q-PP-02.');
+  await page.getByLabel(`${WITHDRAW_COPY.codeLabel} ${FIELD_COPY.required}`).selectOption('duplicate');
+  await page.getByLabel(`${WITHDRAW_COPY.reasonLabel} ${FIELD_COPY.required}`).fill('Duplicate of Q-PP-02.');
   await page.getByRole('button', { name: 'Withdraw decision' }).press('Enter');
   await expect(withdrawStatus(page)).toHaveText('Withdrawn. The question has no current decision.');
   await expect(page.locator('[data-version-number]')).toHaveCount(3);
@@ -42,7 +45,7 @@ test('FR-DEC-04 (screen) FR-DEC-08: three versions in reverse order; after withd
   await expect(v3).toContainText('Withdrawn: Duplicate');
   await expect(v3).toContainText('Duplicate of Q-PP-02.');
   const v2 = page.locator('[data-version-number="2"]');
-  for (const part of ['Partly', 'Version 2', 'Supervisor (outside role), 12 Oct 2026', 'Entered by']) await expect(v2).toContainText(part);
+  for (const part of ['Partly', 'Version 2', `${deciderLabel({ kind: 'outside_role', role: 'supervisor' }, '', 'record')}, 12 Oct 2026`, 'Entered by']) await expect(v2).toContainText(part);
   // CONSOLIDATED section 4: the content version and the "Show UTC" disclosure are internal and are not shown.
   for (const gone of ['0.0.1-fixture', 'Content version', 'Show UTC']) await expect(v2).not.toContainText(gone);
   await page.goto(stagePath(projectId, 'pre-processing'));
@@ -53,7 +56,7 @@ test('UX-29 UX-42 FR-DEC-08: the withdrawal confirmation names the version and t
   await openHistory(page, 'assessor', await twoVersions(baseURL!));
   const trigger = page.getByRole('button', { name: 'Withdraw this decision' });
   await trigger.focus(); await page.keyboard.press('Enter');
-  await expect(page.getByText('Version 2 of the decision on Q-PP-01')).toBeVisible();
+  await expect(page.getByText(WITHDRAW_COPY.objectName(2, 'Q-PP-01'))).toBeVisible();
   await expect(page.getByText('The question returns to "no decision". Every version stays in the history.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Withdraw decision' })).toBeVisible();
   expect(await page.evaluate(() => document.activeElement?.closest('[data-inline-confirm]') !== null)).toBe(true);
@@ -97,8 +100,8 @@ test('FR-DEC-08 UX-25 (screen): the withdrawal shows Withdrawing..., then Withdr
   const held = new Promise<void>((res) => (release = res));
   await page.route('**/withdrawal', async (r) => { await held; await r.continue(); });
   await page.getByRole('button', { name: 'Withdraw this decision' }).click();
-  await page.getByLabel('Withdrawal code (required)').selectOption('duplicate');
-  await page.getByLabel('Reason (required)').fill('Duplicate of Q-PP-02.');
+  await page.getByLabel(`${WITHDRAW_COPY.codeLabel} ${FIELD_COPY.required}`).selectOption('duplicate');
+  await page.getByLabel(`${WITHDRAW_COPY.reasonLabel} ${FIELD_COPY.required}`).fill('Duplicate of Q-PP-02.');
   await page.getByRole('button', { name: 'Withdraw decision' }).click();
   await expect(withdrawStatus(page)).toHaveText('Withdrawing...');
   release();
@@ -111,7 +114,7 @@ test('FR-DEC-08: a withdrawal needs a withdrawal code and a reason, and sends no
   await openHistory(page, 'assessor', await twoVersions(baseURL!));
   await page.getByRole('button', { name: 'Withdraw this decision' }).click();
   await page.getByRole('button', { name: 'Withdraw decision' }).click();
-  await expect(page.locator('#withdraw-code-error')).toHaveText('Choose a withdrawal code.');
+  await expect(page.locator('#withdraw-code-error')).toHaveText(REQUEST_MESSAGES.withdrawalCode);
   await expect(page.locator('#withdraw-reason-error')).toContainText('Write a reason.');
   expect(sent).toEqual([]);
 });
@@ -154,7 +157,7 @@ test('NFR-SEC-11: hostile reason text shows as text on S-12 and S-13 and opens n
   for (const s of HOSTILE_STRINGS) await expect(page.getByText(s, { exact: true })).toBeVisible();   // failOnDialog is armed in beforeEach
   await actAsSeat(page, 'assessor');
   await page.goto(questionPath(projectId, Q)); await waitForQuestionPage(page);
-  await expect(page.getByLabel('Reason (required)')).toHaveValue(HOSTILE_STRINGS[HOSTILE_STRINGS.length - 1]);
+  await expect(page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`)).toHaveValue(HOSTILE_STRINGS[HOSTILE_STRINGS.length - 1]);
 });
 
 test('F12: on S-12 the withdrawal result takes focus, and a new decision saved after it clears that line', async ({ page, baseURL }) => {
@@ -164,7 +167,7 @@ test('F12: on S-12 the withdrawal result takes focus, and a new decision saved a
   await waitForQuestionPage(page);
   await page.locator('details.more-menu summary').click();
   await page.getByRole('button', { name: 'Withdraw this decision' }).click();
-  await page.getByLabel('Withdrawal code (required)').selectOption('duplicate');
+  await page.getByLabel(`${WITHDRAW_COPY.codeLabel} ${FIELD_COPY.required}`).selectOption('duplicate');
   await page.locator('#withdraw-reason').fill('Duplicate of Q-PP-02.');
   await page.getByRole('button', { name: 'Withdraw decision' }).press('Enter');
   await expect(withdrawStatus(page)).toHaveText('Withdrawn. The question has no current decision.');
@@ -174,7 +177,7 @@ test('F12: on S-12 the withdrawal result takes focus, and a new decision saved a
   // A new decision on the same page, without a reload: the withdrawal's line no longer describes the question.
   await fillValid(page, { reason: 'Decided again after the withdrawal' });
   await page.getByRole('button', { name: 'Save decision' }).click();
-  await expect(saveStatus(page)).toHaveText(/^Saved as version 4 at /);
+  await expect(saveStatus(page)).toHaveText(/^Saved at .+ as version 4\./);
   await expect(page.locator('details.more-menu')).toHaveCount(1);
   await expect(page.getByText('Withdrawn. The question has no current decision.')).toHaveCount(0);
 });
