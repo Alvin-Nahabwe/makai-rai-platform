@@ -83,6 +83,15 @@ export const outsideOtherBodyLine = (member: string): string =>
 export const evidenceFileLine = (name: string, fingerprint: string | null): string => `file ${name}${fingerprint === null ? '' : ` (fingerprint ${fingerprint})`}`;
 /** A finding's state, in its block (C#347). */
 export const findingStatusLine = (word: string): string => `Status: ${word}`;
+/**
+ * The status word of a finding closed with no real (kind action) mitigation done since its latest reopen: a decision closed it
+ * (the coordinator's ruling, 14 Nov 2026 21:45). "Closed by a mitigation" stays for a finding a real one closed.
+ */
+export const FINDING_CLOSED = 'Closed';
+/** Under a finding a decision closed: who entered the closing record and the UTC day it was received (the same ruling). */
+export const closedByLine = (name: string, day: string): string => `Closed by ${name} on ${day}.`;
+/** The cause under it when the record names the personal data question's version answering No (the same ruling). */
+export const CLOSED_NO_LONGER_APPLIES = 'Closed because this question no longer applies: the team answered No to the personal data question.';
 /** An accepted risk's check date and the note of its last check (C#359, C#360). */
 export const checkAgainLine = (day: string): string => `To be checked again on: ${day}`;
 export const lastCheckNoteLine = (note: string): string => `Notes from the last check: ${note}`;
