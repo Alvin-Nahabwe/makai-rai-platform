@@ -132,8 +132,8 @@ function reached(entry: string): Set<string> {
 }
 
 describe('the form fields\' import weight', () => {
-  // RadioCards and DateField are left out on purpose: each reads other words of UI_COPY through a component of its own
-  // (the lead checks both with a walker on this tree), so they legitimately reach lib/ui/copy.ts.
+  // RadioCards and DateField are left out on purpose: each needs other words of UI_COPY (RadioCards draws StatusMark's
+  // shapes, and StatusMark.tsx imports the marks' words; DateField has its own date words), so they reach lib/ui/copy.ts.
   it("NFR-PERF-02: the kit's text field and the fields built on its parts do not load the kit's whole word list", () => {
     const roots = ['TextInput', 'TextArea', 'Checkbox', 'Select', 'ErrorSummary', 'StatusRegion', 'Button'].map((n) => `components/ui/${n}.tsx`);
     expect(roots.filter((root) => reached(root).has('lib/ui/copy.ts'))).toEqual([]);
