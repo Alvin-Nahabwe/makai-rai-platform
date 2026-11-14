@@ -232,15 +232,18 @@ const SCREENS: Screen[] = [
   },
   {
     name: 'archive project (S-10)', who: 'owner', expect: { wide: 'strip', narrow: 'strip' },
-    passesWithoutRepair: { wide: 'the screen focuses a wrapper around the whole confirmation, and the browser brings a focused element that is not a text field wholly into view', narrow: 'the screen focuses a wrapper around the whole confirmation, and the browser brings a focused element that is not a text field wholly into view' },
+    passesWithoutRepair: {
+      wide: 'not established since plan 1A Task 17 moved focus from a wrapper around the confirmation (which the browser scrolled wholly into view) to its Cancel button',
+      narrow: 'not established since plan 1A Task 17 moved focus from a wrapper around the confirmation (which the browser scrolled wholly into view) to its Cancel button',
+    },
     open: async (page) => {
       // A fixed name, so the heading wraps the same way in every run (project names need not be unique; the page shows one).
       const name = 'Confirm archive project';
       const project = await addProject(fx, { name });
       await load(page, projectPath(project.id));
       const confirmation = page.getByRole('group', { name: `Archive ${name}?` });
-      // The screen focuses the wrapper around the confirmation (ArchiveProjectControl.tsx), which is not inside it.
-      return { trigger: page.getByRole('button', { name: 'Archive project' }).first(), confirmation, focus: confirmation.locator('xpath=..'), focusInside: false };
+      // The confirmation has no field, so the screen focuses its Cancel button (ArchiveProjectControl.tsx; ruling X-4).
+      return { trigger: page.getByRole('button', { name: 'Archive project' }).first(), confirmation, focus: confirmation.getByRole('button', { name: 'Cancel' }), focusInside: true };
     },
   },
   {

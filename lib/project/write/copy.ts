@@ -13,4 +13,27 @@ export const PROJECT_WRITE_COPY = Object.freeze({
   summary: (n: number) => (n === 1
     ? 'There is a problem with this project. What you typed is kept.'
     : `There are ${n} problems with this project. What you typed is kept.`),
+  /** Archive on S-10: the trigger, the confirmation, the status lines and Retry. */
+  archive: Object.freeze({
+    trigger: 'Archive project',
+    objectName: (project: string) => `Archive ${project}?`,
+    consequence: 'Nothing in it can be changed until it is unarchived. No reminders are sent. Its issued documents stay stored and can still be downloaded.',
+    action: 'Archive project',
+    archiving: 'Archiving...',
+    slow: 'Still archiving. The connection is slow.',
+    archived: 'Archived. Nothing in this project can be changed until it is unarchived.',
+    lost: 'Not archived. The connection was lost. Select Retry.',
+    failed: 'Not archived. Something went wrong. Please try again.',
+    retry: 'Retry',
+  }),
+  /** Unarchive on S-32. */
+  unarchive: Object.freeze({
+    button: 'Unarchive',
+    /** The button's accessible name, which names the project. */
+    named: (project: string) => `Unarchive ${project}`,
+    slow: 'Still unarchiving. The connection is slow.',
+    lost: 'Not unarchived. The connection was lost. Select Retry.',
+    failed: 'Not unarchived. Something went wrong. Please try again.',
+    retry: 'Retry',
+  }),
 });
