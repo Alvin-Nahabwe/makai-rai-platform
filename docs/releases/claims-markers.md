@@ -8,7 +8,6 @@ Line numbers are as of the last generation: regenerate before a release candidat
 
 | Marker | Reason | Allow-list id |
 |---|---|---|
-| app/(public)/about/page.tsx:47 | about-model-scores | FR-RM-01 |
-| app/(public)/about/page.tsx:169 | about-model-scores | FR-RM-01 |
-| app/(public)/about/page.tsx:276 | not-an-approval-service | AL-3 |
+| app/(public)/about/page.tsx:104 | about-model-scores | FR-RM-01 |
+| app/(public)/about/page.tsx:138 | not-an-approval-service | AL-3 |
 | components/documents/GenerateDocumentForm.tsx:87 | AL-1 document statement | AL-1 |

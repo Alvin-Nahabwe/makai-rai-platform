@@ -242,13 +242,6 @@ describe('design tokens', () => {
     expect(readFileSync('app/globals.css', 'utf8')).toContain('/* LEGACY ALIASES: deleted by Task 21 */');
   });
 
-  it('UX-33 NFR-A11Y-05 (legacy, until Task 19): the About hero eyebrow colour holds 4.5:1 on the navy in every theme', () => {
-    // AboutPage.css reads --color-primary-light as text on the navy hero; orange text on navy was 2.66:1.
-    for (const theme of THEMES) {
-      expect(contrast(theme, 'color-primary-light', 'color-shell'), `eyebrow on the hero, ${theme}`).toBeGreaterThanOrEqual(4.5);
-    }
-  });
-
   it('UX-33 NFR-A11Y-05 (legacy, until Task 21): the legacy names the rules still read hold the minimums the SRS 7.6.3 pairs set', () => {
     // The 35 role pairs test the new roles; these tie each old name to a role that was tested.
     const pairs: Array<[string, string, string, number]> = [
@@ -318,7 +311,9 @@ describe('design tokens', () => {
   });
 
   it('UX-33 (D-1, D-3, D-5): the rules that draw fields, links, the ring and stage labels read the tokens tested above', () => {
-    expect(ruleFor(css, '.form-group input')).toMatch(/border:\s*1px solid var\(--form-field-border\)/);
+    // The .form-group field rules are gone from app/globals.css with their last writer (the stage list's filter, now
+    // chips): every field is the kit's, whose border the next case pins. The token keeps its pair in the colour case.
+    expect(rules(css).flatMap((r) => r.selectors).filter((s) => s.includes('.form-group'))).toEqual([]);
     expect(ruleFor(css, 'a')).toMatch(/color:\s*var\(--link\)/);
     for (const stage of ['pre', 'in', 'post', 'cross']) {
       const rule = ruleFor(css, `.stage-indicator--${stage}`);
@@ -354,9 +349,12 @@ describe('design tokens', () => {
   });
 
   it('UX-33 (D-2, D-4, D-7): the focus ring stays on form fields, links in running text are underlined, the root font stays 16 pixels', () => {
-    expect(ruleFor(css, '.form-group input:focus')).not.toMatch(/outline:\s*none/);
-    expect(ruleFor(css, '.form-group select:focus')).not.toMatch(/outline:\s*none/);
-    expect(ruleFor(css, '.form-group textarea:focus')).not.toMatch(/outline:\s*none/);
+    // No rule of app/globals.css that names a field switches the ring off (the .form-group rules, which this case read,
+    // are gone; the kit's own field rule is read in the sign-in case above).
+    const ringOff = rules(css)
+      .filter((r) => r.selectors.some((s) => /\b(input|select|textarea)\b/.test(s)) && /outline:\s*none/.test(r.body))
+      .map((r) => r.selectors.join(', '));
+    expect(ringOff).toEqual([]);
     expect(ruleFor(css, 'a')).not.toMatch(/text-decoration:\s*none/);
     for (const selector of ['p a', 'li a', 'td a']) {
       expect(ruleFor(css, selector), selector).toMatch(/text-decoration:\s*underline/);

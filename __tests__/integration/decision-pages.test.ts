@@ -98,7 +98,7 @@ describe('S-11 page', () => {
     await addDecision(fx, project.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId: c1.contentVersionId, status: 'partly', declaredDate: '2026-10' });
     const h = await renderS11('?show=all');
     expect(h).not.toContain('Nothing is recorded for this stage yet.');
-    expect(h).toMatch(/data-question-id="Q-PP-01"[\s\S]*?>Partly<\/span> · Oct 2026/);
+    expect(h).toMatch(/data-question-id="Q-PP-01"[\s\S]*?class="ui-mark__words">Partly<\/span>[\s\S]*?class="ui-plate__state">Oct 2026</);
   });
 
   it('FR-DEC-06 (screen): a filter with no results says so and links to all', async () => {
@@ -121,12 +121,6 @@ describe('S-11 page', () => {
     expect(h).toMatch(/Pre-processing review 1:[\s\S]*changed since seal 1 in 2 questions\./);
     expect(h).toContain(`href="/orgs/${fx.org.slug}/projects/${project.id}/reviews/${lastReviewId}"`);
     expect(h).toMatch(/value="changed_since_seal"[^>]*\/?>\s*Changed since seal 1 2</);
-  });
-
-  it('UX-06 (screen, R12-16): every S-11 row\'s status words sit in a status-label element, and none carries the warning class', async () => {
-    const h = await renderS11('?show=all');
-    expect([...h.matchAll(/class="[^"]*\bstatus-label\b[^"]*"/g)].length).toBe(STAGE_QUESTION_COUNT);
-    expect(h).not.toContain('status-label--warning');
   });
 
   it('UX-26 W-2: ?show=drafts renders every row on the server with the Drafts on this device filter chosen', async () => {

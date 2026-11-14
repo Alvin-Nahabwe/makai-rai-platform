@@ -43,3 +43,19 @@
 .project-form__optional {
   font-size: var(--font-size-small);
 }
+
+/* The two sections' headings, "About the project" and "More details (optional)" (plan 1B Task 13): a step below the
+   page's h1, inside the form's card. */
+.project-form__section-title {
+  font-size: var(--font-size-h3);
+  margin: 0 0 var(--space-4);
+}
+
+/* The actions keep their order on a narrow screen: the primary button, then Cancel (plan 1B Task 13 item 6). The shared
+   rule in app/globals.css reverses .form-actions into a column at 768 px and narrower, which drew Cancel above the
+   primary button; two classes win over that rule whatever the order of the stylesheets. */
+@media (max-width: 768px) {
+  .form-actions.project-form__actions {
+    flex-direction: column;
+  }
+}

@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { expect, test } from '@playwright/test';
+import { GUIDANCE_COPY } from '../lib/guidance/copy';
 import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
@@ -31,9 +32,9 @@ test('UX-36 FR-CNT-01: S-26 content without JavaScript', async ({ browser }) => 
   try {
     const page = await context.newPage();
     await page.goto('/explore/framework');
-    await expect(page.getByRole('heading', { level: 1, name: 'Framework' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: GUIDANCE_COPY.framework.heading, exact: true })).toBeVisible();
     for (const name of ['Pre-processing', 'In-processing', 'Post-processing']) await expect(page.getByRole('heading', { level: 2, name })).toBeVisible();
-    await expect(page.getByText('3 stages, 6 modules, 21 risk areas, 28 controls')).toBeVisible();
+    await expect(page.getByText(GUIDANCE_COPY.framework.counts(3, 6, 21, 28))).toBeVisible();
     await expect(page.locator('[id^="area-card-"]')).toHaveCount(21);
   } finally {
     await context.close();

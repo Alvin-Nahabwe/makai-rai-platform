@@ -8,6 +8,9 @@ import type { Stage } from '@/types/record';
  */
 export const PROJECT_COPY = Object.freeze({
   titles: Object.freeze({ project: 'Project', editProject: 'Edit project' }),
+  /** S-10's one primary action (plan 1C C11): after a save of the person's in this project, and before one. */
+  continue: 'Continue recording',
+  start: 'Start recording',
   /** S-32 reached from the rail's Findings link with no project to go to (plan 1A Task 12, L2-65). */
   chooseForFindings: 'Choose a project to see its findings.',
   allProjects: Object.freeze({
