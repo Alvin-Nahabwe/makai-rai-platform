@@ -87,7 +87,7 @@ test('FR-DOC-08 FR-DOC-04 FR-DOC-01 NFR-A11Y-02 NFR-A11Y-05 NFR-SEC-11: generate
   await expect(issuedStatus(page)).toBeFocused();
   // N3: router.refresh() after the Issue brings the new document into the list below with no reload.
   await expect(page.getByText('No documents issued from this review yet.')).toHaveCount(0);
-  await expect(page.getByText(/^Data card \. seal 1 \./)).toBeVisible();
+  await expect(page.getByText(/^Data card[\u00a0 ]· seal 1[\u00a0 ]· /)).toBeVisible();
   await expectFocusVisibleAndUncovered(page);
   // The status line (M-35) and the refreshed list (W-9) each carry a link to the same file.
   const downloads = page.getByRole('link', { name: /^Download PDF \(\d+ KB\)$/ });

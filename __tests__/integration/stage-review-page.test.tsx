@@ -113,8 +113,8 @@ describe('S-16 separators (workshop walk S12-a)', () => {
     await sealFixture(fxA, review, { projectId: project });
     sessionFor(fxA.members.viewer.userId);
     const html = renderToStaticMarkup(await StageReviewPage({ params: Promise.resolve({ slug: fxA.org.slug, id: project, reviewId: review }) })).replace(/<!-- -->/g, '');
-    expect(html).toMatch(/Stage: Pre-processing · (Prepared for: [^<]* · )?Opened by /);
-    expect(html).toMatch(/Seal 1 · <time[^>]*>[^<]*<\/time> · sealed by /);
+    expect(html).toMatch(/Stage: Pre-processing\u00a0· (Prepared for: [^<]*\u00a0· )?Opened by /);
+    expect(html).toMatch(/Seal 1\u00a0· <time[^>]*>[^<]*<\/time>\u00a0· sealed by /);
     expect(html).not.toMatch(/ \. /);
   });
 });
