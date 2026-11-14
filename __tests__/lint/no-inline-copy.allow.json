@@ -1650,16 +1650,6 @@
     "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
   },
   {
-    "file": "components/findings/CloseByDecisionButton.tsx",
-    "text": "${…}. Finding: ${…}",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "components/findings/CloseByDecisionButton.tsx",
-    "text": "Still saving. The connection is slow.",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
     "file": "components/findings/FindingActions.tsx",
     "text": "Finding: ${…}",
     "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
@@ -1812,36 +1802,6 @@
   {
     "file": "components/findings/FindingPageView.tsx",
     "text": "Why the date changed:",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "components/findings/FindingsPageView.tsx",
-    "text": "All stages",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "components/findings/FindingsPageView.tsx",
-    "text": "Back to",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "components/findings/FindingsPageView.tsx",
-    "text": "Filter the list",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "components/findings/FindingsPageView.tsx",
-    "text": "No findings in this project. A finding opens when a decision is saved as Partly or Not yet, or when someone raises one.",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "components/findings/FindingsPageView.tsx",
-    "text": "No findings in this stage.",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "components/findings/FindingsPageView.tsx",
-    "text": "Show more",
     "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
   },
   {
@@ -2022,66 +1982,6 @@
   {
     "file": "components/findings/QuestionFindingLink.tsx",
     "text": "Raise a finding about this question",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "components/findings/RaiseFindingForm.tsx",
-    "text": "About question",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "components/findings/RaiseFindingForm.tsx",
-    "text": "Choose a stage",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "components/findings/RaiseFindingForm.tsx",
-    "text": "Description",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "components/findings/RaiseFindingForm.tsx",
-    "text": "Finding raised.",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "components/findings/RaiseFindingForm.tsx",
-    "text": "No risk area",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "components/findings/RaiseFindingForm.tsx",
-    "text": "Open it",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "components/findings/RaiseFindingForm.tsx",
-    "text": "Raise a finding",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "components/findings/RaiseFindingForm.tsx",
-    "text": "Raise finding",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "components/findings/RaiseFindingForm.tsx",
-    "text": "Risk area (optional)",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "components/findings/RaiseFindingForm.tsx",
-    "text": "Stage",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "components/findings/RaiseFindingForm.tsx",
-    "text": "Still saving. The connection is slow. What you typed is still in the form.",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "components/findings/RaiseFindingForm.tsx",
-    "text": "Title",
     "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
   },
   {

@@ -2,9 +2,13 @@
 
 import { useRouter } from 'next/navigation';
 import { useId, useState, type ReactElement } from 'react';
+import { Button } from '@/components/ui/Button';
 import { ListLink } from '@/components/ui/ListLink';
+import { Select } from '@/components/ui/Select';
+import { TextInput } from '@/components/ui/TextInput';
 import { ErrorSummary, Field, StatusLine, useFindingWrite } from '@/components/findings/FindingActions';
 import { characterCount, charCount, KEPT_IN_FORM, raiseFormErrors, raiseRequestBody, TEXT_MAX, type RaiseFormValue } from '@/lib/findings/formRules';
+import { FINDINGS_COPY } from '@/lib/findings/copy';
 import { STAGE_NAMES } from '@/lib/findings/labels';
 import type { RaiseFormData } from '@/lib/findings/pageData';
 import { STAGES, type FieldError } from '@/types/record';
@@ -12,11 +16,15 @@ import type { FindingView } from '@/types/api';
 
 export type RaiseFindingFormProps = { orgSlug: string; projectId: string; data: RaiseFormData };
 
+const C = FINDINGS_COPY.raise;
+
 /**
  * "Raise a finding" on S-14 (FR-FND-02; SRS 7.4.2 S-14 row; UX-14): a title, a description, a stage, and optionally one risk
  * area. Opened from S-12 it has the stage filled in, the question's own risk areas listed first with the first chosen, and the line
- * "About question <id> (version <n>)". Raise finding sends route 5 with a request id kept for Retry; "Raising..." then
- * "Finding raised. [Open it]". Nothing is sent when Title or Stage is empty: the summary takes focus and names each field.
+ * "About question: <question>". Raise finding sends route 5 with a request id kept for Retry; "Raising..." then
+ * "Finding raised. [View the finding]". Nothing is sent when Title or Stage is empty: the summary takes focus and names each
+ * field. The summary is the legacy one (`ErrorSummary` of FindingActions.tsx): a server answer can name a field this form
+ * does not show (the question or the decision version), which the kit's summary cannot list.
  */
 export function RaiseFindingForm({ orgSlug, projectId, data }: RaiseFindingFormProps): ReactElement {
   const router = useRouter();
@@ -49,33 +57,25 @@ export function RaiseFindingForm({ orgSlug, projectId, data }: RaiseFindingFormP
   const set = (patch: Partial<RaiseFormValue>) => { setV((x) => ({ ...x, ...patch })); setErrors([]); };
 
   return (
-    <form method="post" id="raise" onSubmit={(e) => { e.preventDefault(); void submit(); }} noValidate aria-labelledby={`${id}-h`}>
-      <h2 id={`${id}-h`}>Raise a finding</h2>
-      <ErrorSummary summary={all.length === 1 ? 'There is a problem with this finding. What you typed is kept.' : `There are ${all.length} problems with this finding. What you typed is kept.`} errors={all} focusKey={attempt} />
-      {linked ? <p>About question <bdi>{prefill.questionId}</bdi>{prefill.versionNumber === null ? '' : ` (version ${prefill.versionNumber})`}</p> : null}
-      <Field id="title" label="Title" error={err('title')} render={(a) => <input {...a} name="title" type="text" value={v.title} onChange={(e) => set({ title: e.target.value })} />} />
-      <Field id="description" label="Description" error={err('description')} help="Say what the problem is and who it may affect."
-        render={(a) => <textarea {...a} name="description" rows={4} value={v.description} onChange={(e) => set({ description: e.target.value })} />} />
-      <p className="text-muted">{characterCount(charCount(v.description), TEXT_MAX)}</p>
-      <Field id="stage" label="Stage" error={err('stage')} render={(a) => (
-        <select {...a} name="stage" value={v.stage} onChange={(e) => set({ stage: e.target.value, riskArea: '' })}>
-          <option value="">Choose a stage</option>
-          {STAGES.map((s) => <option key={s} value={s}>{STAGE_NAMES[s]}</option>)}
-        </select>
-      )} />
-      <Field id="riskArea" label="Risk area (optional)" error={err('riskArea')} render={(a) => (
-        <select {...a} name="riskArea" value={v.riskArea} onChange={(e) => set({ riskArea: e.target.value })}>
-          <option value="">No risk area</option>
-          {ordered.map((area) => <option key={area.id} value={area.id}>{area.id} {area.name}</option>)}
-        </select>
-      )} />
-      <div className="form-actions">
-        <button type="submit" className="btn btn--primary" aria-disabled={w.phase !== 'idle' ? true : undefined}>Raise finding</button>
+    <form method="post" id="raise" className="finding-form" onSubmit={(e) => { e.preventDefault(); void submit(); }} noValidate aria-labelledby={`${id}-h`}>
+      <h2 id={`${id}-h`}>{C.heading}</h2>
+      <ErrorSummary summary={C.summary(all.length)} errors={all} focusKey={attempt} />
+      {linked ? <p>{C.aboutQuestion} <bdi>{prefill.questionText}</bdi></p> : null}
+      <TextInput id="title" name="title" label={C.title} error={err('title') ?? undefined} value={v.title} onChange={(e) => set({ title: e.target.value })} />
+      <Field id="description" label={C.description} error={err('description')} help={C.descriptionHelp}
+        render={(a) => <textarea {...a} className={err('description') ? 'ui-textarea ui-textarea--invalid' : 'ui-textarea'} name="description" rows={4} value={v.description} onChange={(e) => set({ description: e.target.value })} />}
+        after={<p className="ui-count">{characterCount(charCount(v.description), TEXT_MAX)}</p>} />
+      <Select id="stage" name="stage" label={C.stage} error={err('stage') ?? undefined} value={v.stage} placeholder={C.chooseStage}
+        options={STAGES.map((s) => ({ value: s, label: STAGE_NAMES[s] }))} onChange={(e) => set({ stage: e.target.value, riskArea: '' })} />
+      <Select id="riskArea" name="riskArea" label={C.riskArea} error={err('riskArea') ?? undefined} value={v.riskArea} placeholder={C.noRiskArea}
+        options={ordered.map((area) => ({ value: area.id, label: C.areaOption(area.id, area.name) }))} onChange={(e) => set({ riskArea: e.target.value })} />
+      <div className="finding-actions">
+        <Button variant="primary" type="submit" busy={w.phase !== 'idle'}>{C.submit}</Button>
       </div>
-      {w.failure !== null && w.failure.fields.length === 0 ? <p role="alert">{w.failure.text}</p> : null}
+      {w.failure !== null && w.failure.fields.length === 0 ? <p role="alert" className="finding-alert">{w.failure.text}</p> : null}
       <StatusLine>
-        {w.phase === 'saving' ? 'Raising...' : w.phase === 'slow' ? 'Still saving. The connection is slow. What you typed is still in the form.'
-          : raised === null ? null : <>Finding raised. <ListLink href={`/orgs/${orgSlug}/projects/${projectId}/findings/${raised}`}>Open it</ListLink></>}
+        {w.phase === 'saving' ? C.raising : w.phase === 'slow' ? C.slow
+          : raised === null ? null : <>{C.raised} <ListLink href={`/orgs/${orgSlug}/projects/${projectId}/findings/${raised}`}>{C.viewFinding}</ListLink></>}
       </StatusLine>
     </form>
   );

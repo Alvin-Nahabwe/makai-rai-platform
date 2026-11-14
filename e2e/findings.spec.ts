@@ -14,6 +14,7 @@ import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { failOnDialog } from './helpers/dialogs';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { claimMatches } from '../lib/claims/pattern';
+import { FINDINGS_COPY } from '../lib/findings/copy';
 import { expectStatusMarksInk, expectNoCrossStageTotal, expectNoScoreShapes } from './helpers/noScore';
 import { expectTargetsAtLeast24px } from './helpers/targetSize';
 
@@ -103,19 +104,19 @@ test('FR-FND-02 FR-FND-08 NFR-A11Y-02: a reviewer raises a team finding on S-14 
   const page = await as(browser, 'reviewer');
   failOnDialog(page);
   await page.goto(s14);
-  await focusByKeyboard(page, 'Title'); await page.keyboard.type(HOSTILE_STRINGS[0]);
-  await focusByKeyboard(page, 'Description'); await page.keyboard.type('Labels disagree between annotators.');
-  await focusByKeyboard(page, 'Stage');
+  await focusByKeyboard(page, FINDINGS_COPY.raise.title); await page.keyboard.type(HOSTILE_STRINGS[0]);
+  await focusByKeyboard(page, FINDINGS_COPY.raise.description); await page.keyboard.type('Labels disagree between annotators.');
+  await focusByKeyboard(page, FINDINGS_COPY.raise.stage);
   await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowDown');                 // "Choose a stage" -> Pre-processing -> In-processing
-  await expect(page.getByLabel('Stage', { exact: true })).toHaveValue('in-processing');
+  await expect(page.getByLabel(FINDINGS_COPY.raise.stage, { exact: true })).toHaveValue('in-processing');
   let release!: () => void;
   const held = new Promise<void>((res) => { release = res; });
   await page.route('**/findings', async (r) => { if (r.request().method() !== 'POST') return r.continue(); await held; await r.continue(); });
-  await focusByKeyboard(page, 'Raise finding'); await page.keyboard.press('Enter');
-  await expect(status(page)).toHaveText('Raising...');
+  await focusByKeyboard(page, FINDINGS_COPY.raise.submit); await page.keyboard.press('Enter');
+  await expect(status(page)).toHaveText(FINDINGS_COPY.raise.raising);
   release();
-  await expect(status(page)).toHaveText('Finding raised. Open it');
-  await expect(status(page).getByRole('link', { name: 'Open it' })).toHaveAttribute('href', /\/findings\/[^/]+$/);
+  await expect(status(page)).toHaveText(`${FINDINGS_COPY.raise.raised} ${FINDINGS_COPY.raise.viewFinding}`);
+  await expect(status(page).getByRole('link', { name: FINDINGS_COPY.raise.viewFinding })).toHaveAttribute('href', /\/findings\/[^/]+$/);
   await expect(page.getByRole('link', { name: HOSTILE_STRINGS[0] })).toBeVisible();
   await expectFocusVisibleAndUncovered(page);
 });
@@ -219,6 +220,6 @@ test('UX-14: a reviewer on S-12 follows "Raise a finding about this question" to
   const answered = (await page.goto(s12))?.status() === 200;
   test.skip(process.env.RELEASE_CANDIDATE !== '1' && !answered, 'S-12 needs DEC-b');
   await page.getByRole('link', { name: 'Raise a finding about this question' }).click();
-  await expect(page.getByLabel('Stage', { exact: true })).toHaveValue('pre-processing');
-  await expect(page.getByText(/^About question Q-PP-12( \(version \d+\))?$/)).toBeVisible();
+  await expect(page.getByLabel(FINDINGS_COPY.raise.stage, { exact: true })).toHaveValue('pre-processing');
+  await expect(page.getByText(new RegExp(`^${FINDINGS_COPY.raise.aboutQuestion} \\S`))).toBeVisible();
 });

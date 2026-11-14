@@ -171,6 +171,7 @@ export const FINDINGS_COPY = Object.freeze({
 
   /** S-15, one finding. */
   finding: Object.freeze({
+    untitled: 'Untitled finding',
     backToFindings: 'Back to findings',
     riskArea: 'Risk area:',
     namedId: (name: string, id: string): string => `${name} (${id})`,

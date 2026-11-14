@@ -3,6 +3,12 @@
 import { useRouter } from 'next/navigation';
 import { cloneElement, isValidElement, useCallback, useEffect, useId, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { InlineConfirm } from '@/components/ui/InlineConfirm';
+import { Icon } from '@/components/ui/Icon';
+import { FieldError as KitFieldError, FieldHint, FieldLabel } from '@/components/ui/TextInput';
+import '@/components/ui/TextInput.css';
+import '@/components/ui/TextArea.css';
+import '@/components/ui/Select.css';
+import './Findings.css';
 import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafeWrite';
 import { characterCount, KEPT_IN_FORM, reasonErrors, writeFailure, type WriteFailure } from '@/lib/findings/formRules';
 import type { FieldError } from '@/types/record';
@@ -76,20 +82,38 @@ export function ErrorSummary({ summary, errors, focusKey, prefix = '' }: { summa
   );
 }
 
-/** A labelled control with its help and error linked by `aria-describedby` (the forms guide). */
+/**
+ * A labelled control with its help and error linked by `aria-describedby` (the forms guide), drawn with the kit's field
+ * parts (`div.ui-field`, `FieldLabel`, `FieldHint`, `FieldError`). It stays for the controls the kit's own fields cannot
+ * carry with the same ids: the help's id is `<id>-help` (the kit's is `<id>-hint`), and the control is the caller's,
+ * which wears the kit's class (`ui-input`, `ui-textarea`, `ui-select`).
+ */
 export function Field(p: {
   id: string; label: string; error?: string | null; help?: string;
   render: (a: { id: string; 'aria-describedby'?: string; 'aria-invalid'?: true }) => ReactElement;
+  /** Shown after the control, before the error: a textarea's count. */
+  after?: ReactNode;
 }): ReactElement {
   const helpId = `${p.id}-help`;
   const errorId = `${p.id}-error`;
   const describedBy = [p.help ? helpId : null, p.error ? errorId : null].filter((x): x is string => x !== null).join(' ');
   return (
-    <div className="form-group">
-      <label htmlFor={p.id}>{p.label}</label>
-      {p.help ? <p id={helpId} className="text-muted">{p.help}</p> : null}
+    <div className="ui-field">
+      <FieldLabel htmlFor={p.id} label={p.label} />
+      {p.help ? <FieldHint id={helpId}>{p.help}</FieldHint> : null}
       {p.render({ id: p.id, ...(describedBy === '' ? {} : { 'aria-describedby': describedBy }), ...(p.error ? { 'aria-invalid': true as const } : {}) })}
-      {p.error ? <p id={errorId} className="form-error">{p.error}</p> : null}
+      {p.after}
+      {p.error ? <KitFieldError id={errorId} message={p.error} /> : null}
+    </div>
+  );
+}
+
+/** A native select in the kit's look: the wrap and the chevron of `components/ui/Select.tsx`, for a select `Field` labels. */
+export function SelectBox({ children }: { children: ReactElement }): ReactElement {
+  return (
+    <div className="ui-select__wrap">
+      {children}
+      <span className="ui-select__icon"><Icon name="chevron-down" size={20} /></span>
     </div>
   );
 }

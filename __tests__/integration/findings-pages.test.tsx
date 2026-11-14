@@ -8,6 +8,7 @@ import { FindingPageView } from '@/components/findings/FindingPageView';
 import { loadFindingPage, loadFindingsPage, type FindingPageData } from '@/lib/findings/pageData';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
 import { onlyRolesCanText } from '@/lib/findings/messages';
+import { runningContent } from '@/lib/content/loader';
 import { resetDb } from '../helpers/db';
 import { useFixtureContent } from '../helpers/content';
 import { sessionFor } from '../helpers/authSession';
@@ -77,8 +78,9 @@ describe('S-14 the findings list (UX-15, UX-06, UX-07, FR-FND-07, FR-FND-08)', (
   it('UX-15 FR-FND-07: S-14 shows each kind under its UX-15 heading in order, and withdrawn ones only under Withdrawn', async () => {
     const k = await everyKind();
     const html = await renderList('reviewer', k.p.id);
-    const order: Array<string | RegExp> = ['Decision now done: close it', 'Decision withdrawn: close it', /Pre-processing: \d+ findings?/, 'Open, no mitigation yet',
-      'Open, with overdue mitigations', 'Accepted risks to look at again', 'Closed', 'Withdrawn'];   // the stage heading carries its count (R13-9)
+    const L = FINDINGS_COPY.list;
+    const order: Array<string | RegExp> = [L.decisionDone, L.decisionWithdrawn, /Pre-processing: \d+ findings?/, L.noMitigation,
+      L.overdue, L.lookAgain, L.closed, L.withdrawn];   // the stage heading carries its count (R13-9)
     const at = (h: string | RegExp) => html.search(typeof h === 'string' ? new RegExp(`>${h}<`) : new RegExp(`>${h.source}<`));
     expect(order.map(at).every((i) => i >= 0)).toBe(true);
     expect(order.map(at)).toEqual([...order.map(at)].sort((a, b) => a - b));
@@ -118,8 +120,10 @@ describe('S-14 the findings list (UX-15, UX-06, UX-07, FR-FND-07, FR-FND-08)', (
   it('FR-FND-06 UX-15: a to-close finding carries its Close it button when the role can mitigate, and none for a reviewer', async () => {
     const k = await everyKind();
     const asAssessor = await renderList('assessor', k.p.id);
-    expect(asAssessor).toContain('Close it: decision changed'); expect(asAssessor).toContain('Close it: decision withdrawn');
-    expect(await renderList('reviewer', k.p.id)).not.toContain('Close it:');
+    // One button each for the decision now done and the decision withdrawn, named with the finding's title.
+    expect(asAssessor.split(`aria-label="${FINDINGS_COPY.closeByDecision.ariaLabel('')}`).length - 1).toBe(2);
+    expect(asAssessor).toContain(`>${FINDINGS_COPY.closeByDecision.label}</button>`);
+    expect(await renderList('reviewer', k.p.id)).not.toContain(FINDINGS_COPY.closeByDecision.label);
   });
 
   it('FR-FND-01 (screen): a shortfall is titled by its question text and sourced from its version; a team finding is "Raised by the team"', async () => {
@@ -162,15 +166,22 @@ describe('S-14 the findings list (UX-15, UX-06, UX-07, FR-FND-07, FR-FND-08)', (
     await addFinding(fx, archived.id, { stage: 'pre-processing', source: 'team' });
     const html = await renderList('owner', archived.id);
     expect(html).toContain('This project is archived. Nothing in it can be changed.');
-    expect(html).not.toMatch(/<form|Close it:/);
+    expect(html).not.toMatch(new RegExp(`<form|${FINDINGS_COPY.closeByDecision.label}`));
     expect(k.p.id).not.toBe(archived.id);
   });
 
   it('FR-FND-02 FR-FND-08 (screen): a project with no finding shows the S-14 empty text', async () => {
     const p = await addProject(fx);
-    expect(await renderList('viewer', p.id)).toContain('No findings in this project. A finding opens when a decision is saved as Partly or Not yet, or when someone raises one.');
+    expect(await renderList('viewer', p.id)).toContain(FINDINGS_COPY.list.emptyProject);
   });
 });
+
+/** A question's text in the content the pages run on (the fixture content). */
+function questionText(id: string): string {
+  const q = runningContent().questions.get(id);
+  if (q === undefined) throw new Error(`no question ${id} in the fixture content`);
+  return q.text;
+}
 
 function buildHostileOrg(): Promise<OrgFixture> {
   return buildOrg({ label: 'h', text: hostileText });
@@ -199,13 +210,13 @@ describe('S-15 the finding page and the S-14 raise form (FR-FND-02, FR-FND-03, F
     const html = renderToStaticMarkup(<FindingsPageView data={await loadPage('reviewer', p.id, null, { stage: 'pre-processing', questionId: 'Q-PP-12', versionId: v.id })} />);
     expect(html).toMatch(/<option[^>]*value="pre-processing"[^>]*selected/);
     expect(html).toMatch(/<option[^>]*value="PP-07"[^>]*selected/);          // Q-PP-12's gaps in the fixture content are ['PP-07']
-    expect(html).toContain('About question <bdi>Q-PP-12</bdi> (version 1)');
+    expect(html).toContain(`${FINDINGS_COPY.raise.aboutQuestion} <bdi>${questionText('Q-PP-12')}</bdi>`);
   });
 
   it('UX-14: a hand-made raise address naming a question of another stage fills nothing in', async () => {
     const p = await addProject(fx);
     const html = renderToStaticMarkup(<FindingsPageView data={await loadPage('reviewer', p.id, null, { stage: 'in-processing', questionId: 'Q-PP-12', versionId: null })} />);
-    expect(html).not.toContain('About question');
+    expect(html).not.toContain(FINDINGS_COPY.raise.aboutQuestion);
   });
 
   it('UX-16 UX-17 M-26: an assessor sees no accept form and the M-26 line; a viewer sees no form at all', async () => {
@@ -286,7 +297,7 @@ describe('S-15 the finding page and the S-14 raise form (FR-FND-02, FR-FND-03, F
     const f = await team({ project: archived, by: 'owner' });
     const html = await renderFinding(f, 'owner');
     expect(html).toContain('This project is archived. Nothing in it can be changed.');
-    expect(html).not.toMatch(/<form|<button|Close it:/);
+    expect(html).not.toMatch(new RegExp(`<form|<button|${FINDINGS_COPY.closeByDecision.label}`));
   });
 
   it('FR-FND-05: an accepted risk reads "Closed: risk accepted by <who> on <date>. Look at it again on <date>."', async () => {
@@ -315,9 +326,9 @@ describe('S-15 the finding page and the S-14 raise form (FR-FND-02, FR-FND-03, F
     await addDecision(fx, p.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId, status: 'done' });
     const html = await renderFinding(f, 'assessor');
     expect(html).toContain('The decision on Q-PP-01 is now Done (version 2). Close this finding with that decision?');
-    expect(html).toContain('Close it: decision changed');
+    expect(html).toContain(`>${FINDINGS_COPY.closeByDecision.label}</button>`);
     expect(html).toContain('Raised automatically on');
-    expect(await renderFinding(f, 'reviewer')).not.toContain('Close it:');
+    expect(await renderFinding(f, 'reviewer')).not.toContain(FINDINGS_COPY.closeByDecision.label);
   });
 
   it('FR-FND-02 FR-FND-08 (screen): a viewer gets S-14 without the raise form', async () => {

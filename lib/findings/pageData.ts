@@ -6,6 +6,7 @@ import { ownerCannotAct } from '@/lib/data/followup';
 import { contentRefById } from '@/lib/data/framework';
 import { userRefs } from '@/lib/data/views';
 import { loadContent, runningContent } from '@/lib/content/loader';
+import { FINDINGS_COPY } from '@/lib/findings/copy';
 import { groupFindings } from '@/lib/findings/groups';
 import { decisionStatusWord, findingSourceLabel, findingStateLabel, STAGE_NAMES, stageCountHeading } from '@/lib/findings/labels';
 import { eatDate, isOverdue } from '@/lib/followup/overdue';
@@ -25,7 +26,7 @@ export interface RaisePrefill { stage: Stage; questionId: string | null; version
 /** The raise form's data: the stages, each stage's risk areas, and the prefill with the question's own areas listed first. */
 export interface RaiseFormData {
   areas: Record<Stage, Array<{ id: string; name: string }>>;
-  prefill: { stage: Stage; questionId: string; versionId: string | null; versionNumber: number | null; areaIds: string[] } | null;
+  prefill: { stage: Stage; questionId: string; questionText: string; versionId: string | null; versionNumber: number | null; areaIds: string[] } | null;
 }
 
 /** One row of S-14: what a finding is called, where it came from and how it stands, as text. */
@@ -71,10 +72,16 @@ async function versionsOf(tx: TenantTx, ids: readonly (string | null)[]): Promis
   return out;
 }
 
+/** A question's text in the content version a decision was answered against, or in the running content; the id when the content lacks it. */
+function questionTextOf(questionId: string, version: VersionInfo | undefined): string {
+  const content = version === undefined ? runningContent() : loadContent(version.contentSemver as never);
+  return content.questions.get(questionId)?.text ?? questionId;
+}
+
 /** A shortfall finding is called by the question's text in the content version it was raised against (it stores no title, 5.1). */
 function titleOf(f: Pick<FindingView, 'source' | 'title' | 'questionId'>, version: VersionInfo | undefined): string {
-  if (f.source === 'team') return f.title ?? 'Untitled finding';
-  if (f.questionId === null) return 'Untitled finding';
+  if (f.source === 'team') return f.title ?? FINDINGS_COPY.finding.untitled;
+  if (f.questionId === null) return FINDINGS_COPY.finding.untitled;
   const text = version === undefined ? undefined : loadContent(version.contentSemver as never).questions.get(f.questionId)?.text;
   return text ?? f.questionId;
 }
@@ -137,7 +144,7 @@ async function raiseFormData(ctx: OrgContext, projectId: string, raise: RaisePre
   return {
     areas,
     prefill: {
-      stage: raise.stage, questionId: question.id, versionId: version?.id ?? null, versionNumber: version?.versionNumber ?? null,
+      stage: raise.stage, questionId: question.id, questionText: question.text, versionId: version?.id ?? null, versionNumber: version?.versionNumber ?? null,
       areaIds: question.gaps.filter((g) => content.areas.get(g)?.stage === raise.stage),
     },
   };
@@ -200,6 +207,8 @@ export interface FindingPageData {
   viewer: { userId: string; name: string };
   detail: FindingDetailView;
   title: string; sourceLabel: string; stateLabel: string;
+  /** A team finding about a question: that question's text (C#69), in the content version the named decision was answered against, else the running content. */
+  questionText: string | null;
   /** Shortfall: the decision it was raised from. Team: the version it names, if any. */
   version: { versionNumber: number; status: StoredDecisionStatus | null; statusWord: string } | null;
   contentSemver: string;
@@ -255,7 +264,9 @@ export async function loadFindingPage(
   const writable = !project.archived;
   return {
     orgSlug: project.orgSlug, orgId: ctx.orgId, projectId: a.projectId, projectName: project.name, archived: project.archived, viewer, detail,
-    title: titleOf(detail, version), sourceLabel: findingSourceLabel(detail, version === undefined ? null : { versionNumber: version.versionNumber, status: version.status }),
+    title: titleOf(detail, version),
+    questionText: detail.source === 'team' && detail.questionId !== null ? questionTextOf(detail.questionId, version) : null,
+    sourceLabel: findingSourceLabel(detail, version === undefined ? null : { versionNumber: version.versionNumber, status: version.status }),
     stateLabel: findingStateLabel(detail.state, detail.acceptedRisk),
     version: version === undefined ? null : { versionNumber: version.versionNumber, status: version.status, statusWord: decisionStatusWord(version.status) },
     contentSemver: content.semver,

@@ -1,0 +1,153 @@
+/* The findings list (S-14) and one finding (S-15), plan 1A Task 18, part 18a. The kit draws the fields, the buttons and
+   the summaries; this file draws what the kit has no component for: the back link, the stage filter, the finding rows,
+   the mitigation cards, the history, the forms' spacing and the one red word, "Overdue". Colour roles only (no legacy
+   alias), weights 400, 600 and 700, motion on state changes only and none under reduced motion. */
+
+/* The link back to the project or to the list: small, muted, underlined, a 24 px target. */
+.finding-back {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--target-min);
+  margin-block-end: var(--space-2);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-ink-muted);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.finding-back:hover {
+  color: var(--color-link);
+}
+
+/* The stage filter: one row of links that wraps, the current one marked by weight and an ink underline bar. */
+.finding-filter ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: 0 0 var(--space-6);
+  padding: 0;
+  list-style: none;
+}
+
+.finding-filter a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--target-min);
+  padding-block: var(--space-1);
+  color: var(--color-link);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.finding-filter a[aria-current='page'] {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-ink);
+  text-decoration-thickness: 2px;
+}
+
+/* A group of findings and its list of rows. */
+.finding-group {
+  margin-block: var(--space-8);
+}
+
+.finding-group > h2 {
+  margin-block-end: var(--space-3);
+}
+
+.finding-subgroup {
+  margin-block: var(--space-4) var(--space-6);
+}
+
+.finding-subgroup > h3 {
+  margin-block-end: var(--space-2);
+  color: var(--color-ink);
+}
+
+.finding-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-block-start: 1px solid var(--color-border-container);
+}
+
+.finding-row {
+  display: grid;
+  gap: var(--space-1);
+  padding-block: var(--space-3);
+  border-block-end: 1px solid var(--color-border-container);
+}
+
+.finding-row__title {
+  justify-self: start;
+  min-block-size: var(--target-min);
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.finding-row__meta {
+  margin: 0;
+  color: var(--color-ink-muted);
+  font-size: var(--font-size-small);
+  overflow-wrap: anywhere;
+}
+
+.finding-empty {
+  max-inline-size: var(--measure-reading);
+  color: var(--color-ink);
+}
+
+/* A form of these screens: the raise form, the mitigation form, the acceptance, the reopen form. */
+.finding-form {
+  max-inline-size: 40rem;
+  margin-block: var(--space-6);
+  padding: var(--space-6);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-container);
+  border-radius: var(--radius-surface);
+}
+
+.finding-form > h2,
+.finding-form > h3 {
+  margin-block: 0 var(--space-4);
+}
+
+.finding-form fieldset {
+  min-inline-size: 0;
+  margin: 0 0 var(--space-6);
+  padding: 0;
+  border: 0;
+}
+
+.finding-form legend {
+  margin-block-end: var(--space-2);
+  padding: 0;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-ink);
+}
+
+/* The buttons of a form or a confirmation, in one row that wraps and keeps its order at every width. */
+.finding-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-block: var(--space-4);
+}
+
+/* A sentence that says what went wrong: ink on the surface, never red (red is the overdue date's alone). */
+.finding-alert {
+  max-inline-size: var(--measure-reading);
+  margin-block: var(--space-3);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-ink);
+}
+
+/* The close button and its status, in one row that wraps. */
+.finding-close {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin-block-start: var(--space-2);
+}
