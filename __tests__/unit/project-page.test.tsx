@@ -163,3 +163,72 @@ describe('the project page, each stage a plain block (slice 2)', () => {
     expect(S.allQuestions).toBe('All questions in this stage');
   });
 });
+
+/** Plan 1C C11 (cut), step 4: the page's ONE primary action, from loadContinueTarget (plan lines 588, 589 as they bind this cut). */
+describe('the project page\'s primary action (plan 1C C11, cut)', () => {
+  const P = PROJECT_COPY;
+  const primaries = (html: string) => html.match(/class="ui-button ui-button--primary[^"]*"/g) ?? [];
+  const withTarget = (continueTo: Parameters<typeof ProjectOverview>[0]['continueTo'], d: ProjectOverviewData = data()) =>
+    renderToStaticMarkup(<ProjectOverview data={d} continueTo={continueTo} />);
+
+  it('the exact words of the two constants', () => {
+    expect(P.continue).toBe('Continue recording');
+    expect(P.start).toBe('Start recording');
+  });
+
+  it('"Continue recording" links to the question\'s address', () => {
+    const html = withTarget({ stage: 'in-processing', questionId: 'Q-IP-03', label: 'continue' });
+    expect(html).toContain(`<a class="ui-button ui-button--primary" href="/orgs/o/projects/p1/stages/in-processing/questions/Q-IP-03">${P.continue}</a>`);
+    expect(html).not.toContain(P.start);
+  });
+
+  it('"Start recording" with label start', () => {
+    const html = withTarget({ stage: 'pre-processing', questionId: 'Q-PP-01', label: 'start' });
+    expect(html).toContain(`<a class="ui-button ui-button--primary" href="/orgs/o/projects/p1/stages/pre-processing/questions/Q-PP-01">${P.start}</a>`);
+    expect(html).not.toContain(P.continue);
+  });
+
+  it('a null question links to the stage\'s All questions', () => {
+    const html = withTarget({ stage: 'post-processing', questionId: null, label: 'continue' });
+    expect(html).toContain(`<a class="ui-button ui-button--primary" href="/orgs/o/projects/p1/stages/post-processing">${P.continue}</a>`);
+  });
+
+  it('null and an absent prop render neither label and no primary button', () => {
+    for (const html of [withTarget(null), render()]) {
+      expect(html).not.toContain(P.continue);
+      expect(html).not.toContain(P.start);
+      expect(primaries(html)).toHaveLength(0);
+    }
+  });
+
+  it('exactly one primary button when the action shows', () => {
+    expect(primaries(withTarget({ stage: 'pre-processing', questionId: 'Q-PP-01', label: 'start' }))).toHaveLength(1);
+  });
+
+  it('for an Owner the primary is first, Archive is last, and they are not adjacent', () => {
+    const html = withTarget({ stage: 'pre-processing', questionId: 'Q-PP-01', label: 'start' });
+    const actions = html.slice(html.indexOf('ui-button ui-button--primary'));
+    const order = [P.start, P.overview.editProject, P.overview.downloadRecords, 'Archive'].map((w) => actions.indexOf(`>${w}`));
+    expect(order.every((i) => i > -1)).toBe(true);
+    expect([...order].sort((x, y) => x - y)).toEqual(order);
+    // Not adjacent: two actions stand between them.
+    expect(order[1]).toBeGreaterThan(order[0]);
+    expect(order[2]).toBeLessThan(order[3]);
+  });
+
+  it('an archived project given no target shows no primary', () => {
+    const d = { ...data(), project: { ...data().project, archived: true }, can: projectActions('owner', true) };
+    const html = withTarget(null, d);
+    expect(primaries(html)).toHaveLength(0);
+    expect(html).not.toContain(P.continue);
+    expect(html).not.toContain(P.start);
+  });
+
+  it('with no other action allowed, the actions wrapper shows when, and only when, the primary does', () => {
+    const none = { ...data(), can: { update: false, archive: false, archiveControl: false, export: false, openReview: false } };
+    expect(withTarget(null, none)).not.toContain('ui-button');
+    const html = withTarget({ stage: 'pre-processing', questionId: 'Q-PP-01', label: 'start' }, none);
+    expect(primaries(html)).toHaveLength(1);
+    expect(html).toContain(`>${P.start}</a>`);
+  });
+});

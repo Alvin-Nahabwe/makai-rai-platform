@@ -199,7 +199,7 @@ describe('the Help page', () => {
 
 describe('the Help layout (L2-68, S5, S7)', () => {
   const identity = { userId: 'u1', email: 'a@example.test', name: 'A', platformRole: 'assessor' as const, mustChangePassword: false };
-  const shell = { userId: 'u1', userName: 'A', platformLabel: null, roleLabels: {}, orgs: [] };
+  const shell = { userId: 'u1', userName: 'A', platformLabel: null, roleLabels: {}, orgs: [], homeSlug: null };
 
   it('L2-68 S5: signed out, the public header with Sign in at /login, one main, no AppShell, no IdleWarning, no shell data read', async () => {
     identityMocks.tryResolveIdentity.mockResolvedValue(null);

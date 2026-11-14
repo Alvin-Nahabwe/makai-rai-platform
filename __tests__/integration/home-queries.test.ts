@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { lastSavedBy } from '@/lib/home/queries';
+import { lastSavedBy, lastSavedIn } from '@/lib/home/queries';
 import { resetDb, testDb } from '../helpers/db';
 import { useFixtureContent } from '../helpers/content';
 import { addDecision, addProject, buildOrg, ctxFor, type OrgFixture } from '../helpers/recordFixture';
@@ -72,5 +72,49 @@ describe('lastSavedBy', () => {
     await addDecision(asUInB, pb.id, { stage, questionId: 'Q-PP-02', contentVersionId: cv, status: 'done' });
     expect(await lastSavedBy(ctxFor(fx, 'assessor'), u.userId)).toMatchObject({ projectId: pa.id, projectName: 'Project in A', questionId: 'Q-PP-01' });
     expect(await lastSavedBy(ctxFor(b, 'assessor'), u.userId)).toMatchObject({ projectId: pb.id, projectName: 'Project in B', questionId: 'Q-PP-02' });
+  });
+});
+
+/** Plan 1C C11 (cut), case at plan line 368: `lastSavedIn`, the lastSavedBy rule for one project. */
+describe('lastSavedIn', () => {
+  it('returns the newest version the viewer entered in this project, a withdrawal included', async () => {
+    const p = await addProject(fx);
+    await addDecision(fx, p.id, { stage, questionId: 'Q-PP-01', contentVersionId: cv, status: 'done' });
+    await addDecision(fx, p.id, { stage: 'in-processing', questionId: 'Q-IP-01', contentVersionId: cv, status: 'done' });
+    expect(await lastSavedIn(ctxFor(fx, 'assessor'), p.id, fx.members.assessor.userId)).toEqual({ stage: 'in-processing', questionId: 'Q-IP-01' });
+    await addDecision(fx, p.id, { stage, questionId: 'Q-PP-01', contentVersionId: cv, status: 'withdrawn', withdrawalCode: 'entered_in_error' });
+    expect(await lastSavedIn(ctxFor(fx, 'assessor'), p.id, fx.members.assessor.userId)).toEqual({ stage, questionId: 'Q-PP-01' });
+  });
+
+  it("ignores another member's newer save in the project", async () => {
+    const p = await addProject(fx);
+    await addDecision(fx, p.id, { stage, questionId: 'Q-PP-01', contentVersionId: cv, status: 'done' });
+    await addDecision(fx, p.id, { stage, questionId: 'Q-PP-02', contentVersionId: cv, status: 'done', by: 'owner' });
+    expect(await lastSavedIn(ctxFor(fx, 'assessor'), p.id, fx.members.assessor.userId)).toEqual({ stage, questionId: 'Q-PP-01' });
+  });
+
+  it("ignores the viewer's newer save in another project", async () => {
+    const p = await addProject(fx, { name: 'This' });
+    const other = await addProject(fx, { name: 'Other' });
+    await addDecision(fx, p.id, { stage, questionId: 'Q-PP-01', contentVersionId: cv, status: 'done' });
+    await addDecision(fx, other.id, { stage, questionId: 'Q-PP-02', contentVersionId: cv, status: 'done' });
+    expect(await lastSavedIn(ctxFor(fx, 'assessor'), p.id, fx.members.assessor.userId)).toEqual({ stage, questionId: 'Q-PP-01' });
+  });
+
+  it('is null when the viewer saved nothing in the project', async () => {
+    const p = await addProject(fx);
+    await addDecision(fx, p.id, { stage, questionId: 'Q-PP-01', contentVersionId: cv, status: 'done', by: 'owner' });
+    expect(await lastSavedIn(ctxFor(fx, 'assessor'), p.id, fx.members.assessor.userId)).toBeNull();
+  });
+
+  it("under ctx A, the id of B's project where the same person (a member of both) saved gives null", async () => {
+    const b = await buildOrg({ label: 'b' });
+    const u = fx.members.assessor;
+    await testDb.membership.create({ data: { orgId: b.org.id, userId: u.userId, role: 'assessor' } });
+    const asUInB: OrgFixture = { ...b, members: { ...b.members, assessor: { ...u, orgId: b.org.id, orgSlug: b.org.slug } } };
+    const pb = await addProject(b, { name: 'Project in B' });
+    await addDecision(asUInB, pb.id, { stage, questionId: 'Q-PP-02', contentVersionId: cv, status: 'done' });
+    expect(await lastSavedIn(ctxFor(fx, 'assessor'), pb.id, u.userId)).toBeNull();
+    expect(await lastSavedIn(ctxFor(b, 'assessor'), pb.id, u.userId)).toEqual({ stage, questionId: 'Q-PP-02' });
   });
 });

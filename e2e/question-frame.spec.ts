@@ -3,7 +3,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { failOnDialog } from './helpers/dialogs';
 import { expectNoHorizontalScroll } from './helpers/reflow';
-import { newProject, openQuestion } from './helpers/session';
+import { fillValid, fixtureOrgSlug, newProject, openQuestion, saveStatus, seatRequest } from './helpers/session';
 import { QUESTION_COPY } from '../lib/question/copy';
 
 /**
@@ -162,11 +162,89 @@ test('a Viewer sees the same frame with no form controls', async ({ page, baseUR
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(LONGEST_FIXTURE);
   await expect(page.locator('#question-heading + .question-frame__code')).toHaveText(/^Q-PP-01 · /);
   await expect(page.getByRole('complementary', { name: QUESTION_COPY.content.goodPractice })).toBeVisible();
-  await expect(page.getByRole('link', { name: QUESTION_COPY.nav.allQuestions, exact: true })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: QUESTION_COPY.nav.label }).getByRole('link', { name: QUESTION_COPY.nav.allQuestions, exact: true })).toBeVisible();
   const answer = form(page);
   await expect(answer.locator('[data-permission-note]')).toBeVisible();
   await expect(answer.locator('input, select, textarea, button')).toHaveCount(0);
   const f = await box(answer);
   const a = await box(aside(page));
   expect(a.y, 'the aside is below the form at 1280').toBeGreaterThanOrEqual(f.y + f.height);
+});
+
+// ─── Workshop walk S3 and S9: the switched-off question says so, the position is true, and the foot gives a way on ──
+
+const GATE = 'Q-PP-GATE-SENSITIVE';
+
+/** The Assessor answers the personal data question No through route 1 (the gate takes a scope answer, no status). */
+async function answerGateNo(baseURL: string, projectId: string): Promise<void> {
+  const ctx = await seatRequest(baseURL, 'assessor');
+  try {
+    const res = await ctx.post(`/api/v1/orgs/${fixtureOrgSlug()}/projects/${projectId}/decisions`, { data: {
+      requestId: crypto.randomUUID(), stage: 'pre-processing', questionId: GATE, baseVersionNumber: null,
+      status: null, scopeAnswer: 'no', optionsInPlace: [], reasonCode: null, reason: 'The model uses no personal data.',
+      decidedBy: { kind: 'outside_role', role: 'supervisor' }, declaredDate: '2026-10-12', evidenceIds: [],
+    } });
+    expect(res.status(), 'the gate answer is saved').toBe(201);
+  } finally {
+    await ctx.dispose();
+  }
+}
+const stripPosition = (page: Page) => page.locator('nav.question-strip > span');
+const wayOn = (page: Page) => page.locator('[data-region="way-on"]');
+
+test('S3: after the personal data answer is No, Q-PP-13 and Q-PP-14 say they do not apply, keep the form, and hold their own places of 24', async ({ page, baseURL }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const projectId = await newProject(baseURL!);
+  await answerGateNo(baseURL!, projectId);
+  for (const [id, n] of [['Q-PP-13', 14], ['Q-PP-14', 15]] as const) {
+    await openQuestion(page, 'assessor', id, baseURL!, projectId);
+    const note = page.locator('#question-heading ~ [data-does-not-apply]');
+    await expect(note, id).toHaveText(QUESTION_COPY.doesNotApply);
+    await expect(page.getByRole('group', { name: 'Status' }), id).toBeVisible();
+    await expect(stripPosition(page), id).toHaveText(`Question ${n} of 24 in Pre-processing`);
+  }
+  await openQuestion(page, 'assessor', 'Q-PP-12', baseURL!, projectId);
+  await expect(page.locator('[data-does-not-apply]')).toHaveCount(0);
+  await expect(stripPosition(page)).toHaveText('Question 12 of 24 in Pre-processing');
+});
+
+for (const [width, height] of [[1280, 900], [375, 812]] as const) {
+  test(`S9: at ${width} by ${height}, after a save on the first question, the foot's Next question link is below the form, scrolls into view clear of the save bar, and opens the next question`, async ({ page, baseURL }) => {
+    await page.setViewportSize({ width, height });
+    await openQuestion(page, 'assessor', Q, baseURL!);
+    await fillValid(page);
+    await page.getByRole('button', { name: 'Save decision', exact: true }).click();
+    await expect(saveStatus(page)).toHaveText(/^Saved at /);
+    const next = wayOn(page).getByRole('link', { name: /^Next question: / });
+    await expect(next).toHaveCount(1);
+    await expect(wayOn(page).getByRole('link', { name: QUESTION_COPY.nav.allQuestions, exact: true })).toBeVisible();
+    const f = await box(form(page));
+    const n = await box(next);
+    expect(n.y, 'the link is below the form').toBeGreaterThanOrEqual(f.y + f.height);
+    await next.evaluate((el) => el.scrollIntoView({ block: 'end', behavior: 'instant' }));
+    const seen = await box(next);
+    expect(seen.y, 'the link is on the screen').toBeGreaterThanOrEqual(0);
+    expect(seen.height, 'the link is a target of at least 24px').toBeGreaterThanOrEqual(24);
+    const bar = page.locator('.decision-save-bar');
+    if (await bar.evaluate((el) => getComputedStyle(el).position) === 'fixed') {
+      const b = await box(bar);
+      expect(seen.y + seen.height, 'the link ends above the fixed save bar').toBeLessThanOrEqual(b.y);
+    } else {
+      expect(seen.y + seen.height, 'the link ends on the screen').toBeLessThanOrEqual(height);
+    }
+    await next.click();
+    await expect(page.locator('#question-heading + .question-frame__code')).toHaveText(/^Q-PP-02 \u00b7 /);
+  });
+}
+
+test('S3: Q-PP-13 after the No has no serious accessibility violation and nothing scrolls sideways at 1280, 375 and 320', async ({ page, baseURL }) => {
+  const projectId = await newProject(baseURL!);
+  await answerGateNo(baseURL!, projectId);
+  for (const [width, height] of [[1280, 900], [375, 812], [320, 640]] as const) {
+    await page.setViewportSize({ width, height });
+    await openQuestion(page, 'assessor', 'Q-PP-13', baseURL!, projectId);
+    await expect(page.locator('[data-does-not-apply]')).toBeVisible();
+    await expectNoHorizontalScroll(page);
+    await expectNoSeriousA11yViolations(page, `Q-PP-13 after No, ${width}`);
+  }
 });

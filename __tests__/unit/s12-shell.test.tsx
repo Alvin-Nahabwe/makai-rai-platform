@@ -74,7 +74,7 @@ describe('S-12 shell', () => {
   it('FR-DEC-01 UX-08: S-12 shell regions in order, each but the evidence block labelled by a heading, evidence block inside the answer form', async () => {
     const html = renderToStaticMarkup(await QuestionPanelRegions({ data: PANEL }));
     expect([...html.matchAll(/data-region="([a-z-]+)"/g)].map((m) => m[1]))
-      .toEqual(['question', 'current-decision', 'seal-note', 'answer-form', 'evidence-block', 'finding-link', 'suggestions']);
+      .toEqual(['question', 'current-decision', 'seal-note', 'answer-form', 'evidence-block', 'way-on', 'finding-link', 'suggestions']);
     // The evidence block is named once, by its fieldset legend (evidence-components.test.tsx), not by a heading of its own.
     expect(html.match(/<section[^>]*aria-labelledby=/g)).toHaveLength(6);
     expect(html).toMatch(/<section data-region="evidence-block">/);

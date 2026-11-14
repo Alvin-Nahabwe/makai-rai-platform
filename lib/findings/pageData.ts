@@ -165,7 +165,8 @@ export async function loadFindingsPage(
     acceptedRisksToLookAgain(ctx, a.projectId, today),
   ]);
   const inScope = <T extends { stage: Stage }>(xs: readonly T[]) => (a.stage === null ? [...xs] : xs.filter((x) => x.stage === a.stage));
-  const toClose = inScope(toCloseAll);
+  // B2 (ruling R1): a finding with a mitigation Planned or In progress is blocked, so it is not offered for closing; it stays in its stage's group.
+  const toClose = inScope(toCloseAll).filter((f) => f.openMitigations === 0);
   const lookAgain = inScope(lookAgainAll);
   const groups = groupFindings({ findings: all, toClose, lookAgain });
 
@@ -224,7 +225,24 @@ export interface FindingPageData {
     reason: 'decision_done' | 'decision_withdrawn' | 'gate_no'; decisionVersionId: string;
     questionId: string; versionNumber: number; statusWord: string;
   } | null;
+  /**
+   * B2 (ruling R1): the close box shows, with no button, the sentence that the finding stays open while a mitigation is
+   * Planned or In progress. True when the finding is blocked (`closeBlocked`) and the person could close it today.
+   */
+  closeBlocked: boolean;
   canMitigate: boolean; canAccept: boolean; canReopen: boolean; canWithdraw: boolean;
+}
+
+/**
+ * B2 (ruling R1): an open finding is blocked when a current mitigation is planned or in progress and either a decision
+ * closure is available or it already holds a closing record above R (a non-`action` mitigation with exactly one version,
+ * whose `findingSeq` is above the latest reopen). Closing it would write a record and leave the finding open.
+ */
+function closeBlocked(detail: FindingDetailView, closureAvailable: boolean): boolean {
+  if (detail.state !== 'open') return false;
+  if (!detail.mitigations.some((m) => m.current.status === 'planned' || m.current.status === 'in_progress')) return false;
+  const reopenedAt = Math.max(0, ...detail.events.filter((e) => e.kind === 'reopened').map((e) => e.findingSeq));
+  return closureAvailable || detail.mitigations.some((m) => m.current.kind !== 'action' && m.versions === 1 && m.current.findingSeq > reopenedAt);
 }
 
 /** S-15: one finding of the route's project with its mitigations and history, or `NotFoundError`. */
@@ -262,6 +280,7 @@ export async function loadFindingPage(
   const today = eatDate(new Date());
   const raisedByMe = detail.raisedBy.userId === identity.userId;
   const writable = !project.archived;
+  const mayClose = writable && can(ctx.role, 'mitigation:write');
   return {
     orgSlug: project.orgSlug, orgId: ctx.orgId, projectId: a.projectId, projectName: project.name, archived: project.archived, viewer, detail,
     title: titleOf(detail, version),
@@ -277,7 +296,8 @@ export async function loadFindingPage(
     ownerCannotAct: detail.mitigations.filter((m) => cannot.has(m.mitigationId)).map((m) => m.mitigationId),
     owners, members, controls: [...content.controls.values()].map((c) => ({ id: c.id, name: c.name })),
     riskAreaName: detail.riskArea === null ? null : content.areas.get(detail.riskArea)?.name ?? null,
-    closeByDecision: closing === undefined || closingVersion === null || !writable || !can(ctx.role, 'mitigation:write') ? null : {
+    closeBlocked: mayClose && closeBlocked(detail, closing !== undefined),
+    closeByDecision: closing === undefined || closingVersion === null || !mayClose ? null : {
       reason: closing.reason, decisionVersionId: closing.decisionVersionId, questionId: closingVersion.questionId,
       versionNumber: closingVersion.versionNumber, statusWord: decisionStatusWord(closingVersion.status as StoredDecisionStatus | null),
     },

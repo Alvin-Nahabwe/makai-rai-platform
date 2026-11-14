@@ -255,7 +255,7 @@ describe('S-23 and S-25 in pages of 50 (UX-40)', () => {
 describe('the administrator sidebar', () => {
   it('UX-01: the administrator sidebar links S-23 and S-25 (SRS line 1514)', () => {
     pathnameMock.mockReturnValue('/admin/organisations');
-    const html = renderToStaticMarkup(<Rail shell={{ userName: 'A', userId: 'a-1', roleLabels: {}, platformLabel: 'MAK-AI administrator', orgs: [] }} />);
+    const html = renderToStaticMarkup(<Rail shell={{ userName: 'A', userId: 'a-1', roleLabels: {}, platformLabel: 'MAK-AI administrator', orgs: [], homeSlug: null }} />);
     expect(html).toMatch(/<a [^>]*href="\/admin\/organisations"[^>]*>(?:<svg[\s\S]*?<\/svg>)?<span>Organisations<\/span><\/a>/);
     expect(html).toMatch(/<a [^>]*href="\/admin\/accounts"[^>]*>(?:<svg[\s\S]*?<\/svg>)?<span>Accounts<\/span><\/a>/);
     expect(html).not.toMatch(/>Settings<\/(?:span|a)>/);

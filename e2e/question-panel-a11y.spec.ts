@@ -42,7 +42,7 @@ async function tabTo(page: Page, what: string, match: (el: { tag: string; type: 
 
 test('UX-42 NFR-A11Y-02: keyboard-only Next moves focus to the new question heading', async ({ page, baseURL }) => {
   await openQuestion(page, 'assessor', Q, baseURL!);
-  await page.getByRole('link', { name: 'Next question' }).focus();
+  await page.getByRole('link', { name: 'Next question', exact: true }).focus();
   await page.keyboard.press('Enter');
   // The h1 is the question in words (plan 1C decision C1, cut); its code line "Q-PP-02 · {module}" follows it.
   const heading = page.getByRole('heading', { level: 1, name: Q2_TEXT, exact: true });
