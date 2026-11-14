@@ -1,5 +1,6 @@
 import type { EmailContent } from '../templates';
 import { escapeHtml } from '../escape';
+import { EMAIL_COPY } from '../copy';
 import { formatDay } from '../../format/dates';
 import { publicOrigin } from '../../publicOrigin';
 
@@ -12,11 +13,15 @@ import { publicOrigin } from '../../publicOrigin';
 export function passwordChangedEmail(input: { changedAt: Date }): EmailContent {
   const resetUrl = new URL('/forgot-password', publicOrigin()).toString();
   const hhmm = input.changedAt.toISOString().slice(11, 16);
-  const before = `The password for your account was changed on ${formatDay(input.changedAt, 'UTC')} at ${hhmm} UTC. If this was not you, reset your password now: `;
-  const after = ', and tell your organisation\'s owner.';
+  const { passwordChanged } = EMAIL_COPY;
+  const intro = passwordChanged.intro(formatDay(input.changedAt, 'UTC'), hhmm);
   return {
-    subject: 'Your MAK-AI RAI Platform password was changed',
-    text: `${before}${resetUrl}${after}`,
-    html: `<p>${escapeHtml(before)}<a href="${escapeHtml(resetUrl)}">${escapeHtml(resetUrl)}</a>${escapeHtml(after)}</p>`,
+    subject: passwordChanged.subject,
+    text: [`${intro}\n${resetUrl}`, passwordChanged.closing].join('\n\n'),
+    html: [
+      `<p>${intro}</p>`,
+      `<p><a href="${escapeHtml(resetUrl)}">${escapeHtml(resetUrl)}</a></p>`,
+      `<p>${passwordChanged.closing}</p>`,
+    ].join('\n'),
   };
 }

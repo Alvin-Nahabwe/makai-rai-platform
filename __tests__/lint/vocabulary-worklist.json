@@ -21,19 +21,10 @@
     "not-recorded :: the bare \"at the time of issue\" form": 1,
     "personal-data-question-scope-question :: scope answer": 1
   },
-  "lib/email/templates/mitigationDue.ts": {
-    "assigned-to :: \"owner\" and \"own\" for mitigations": 2
-  },
   "lib/evidence/copy.ts": {
     "unsaved-changes-draft :: on this device": 2
   },
   "lib/followup/copy.ts": {
     "assigned-to :: \"owner\" and \"own\" for mitigations": 1
-  },
-  "ops/host/break-glass-notice.txt": {
-    "emergency-access :: break-glass": 1,
-    "emergency-access :: integrity log": 1,
-    "product :: lower-case \"platform\" in the name": 1,
-    "sign-in-sign-out :: login": 2
   }
 }

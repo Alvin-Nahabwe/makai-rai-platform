@@ -1,32 +1,32 @@
 import type { EmailContent } from '../templates';
 import { escapeHtml } from '../escape';
+import { EMAIL_COPY } from '../copy';
 import { formatDay } from '../../format/dates';
 import type { CalendarDate } from '../../../types/record';
 
 /**
- * E-04 (FR-FUP-03, SRS 7.5.9 line 2603): a mitigation the reader owns is due. SRS 6.1 and
+ * E-04 (FR-FUP-03, SRS 7.5.9 line 2603): a mitigation assigned to the reader is due. SRS 6.1 and
  * NFR-PRIV-02: only the organisation name, one date and one link; no record text, project name or
  * count. Pure: no I/O; `lib/reminders/job.ts` sends it through lib/email/send.ts.
  */
 export type ReminderEmailInput = { orgName: string; dueDate: CalendarDate; dashboardUrl: string };
 
-/** The part E-04 and E-05 share; `when` is the clause after "A mitigation you own in <organisation>". */
-export function buildReminderEmail(i: ReminderEmailInput, subject: (org: string) => string, when: string): EmailContent {
-  const intro = `A mitigation you own in ${i.orgName} ${when}.`;
-  const see = 'See your mitigations: ';
-  const why = 'You get this email because you own a mitigation that is due.';
-  const off = 'You can turn these emails off in My account.';
+/** The part E-04 and E-05 share; `intro` is the first paragraph, built from `EMAIL_COPY.reminder` with the organisation as written. */
+export function buildReminderEmail(i: ReminderEmailInput, subject: string, intro: (organisation: string) => string): EmailContent {
+  const { reminder } = EMAIL_COPY;
   return {
-    subject: subject(i.orgName),
-    text: `${intro} ${see}${i.dashboardUrl}. ${why} ${off}`,
+    subject,
+    text: [intro(i.orgName), `${reminder.linkLead}\n${i.dashboardUrl}`, reminder.closing].join('\n\n'),
     html: [
-      `<p>${escapeHtml(intro)}</p>`,
-      `<p>${see}<a href="${escapeHtml(i.dashboardUrl)}">${escapeHtml(i.dashboardUrl)}</a>.</p>`,
-      `<p>${why} ${off}</p>`,
+      `<p>${intro(escapeHtml(i.orgName))}</p>`,
+      `<p>${reminder.linkLead}</p>`,
+      `<p><a href="${escapeHtml(i.dashboardUrl)}">${escapeHtml(i.dashboardUrl)}</a></p>`,
+      `<p>${reminder.closing}</p>`,
     ].join('\n'),
   };
 }
 
 export function mitigationDueEmail(i: ReminderEmailInput): EmailContent {
-  return buildReminderEmail(i, (org) => `A mitigation is due today in ${org}`, `is due today, ${formatDay(i.dueDate)}`);
+  const date = formatDay(i.dueDate);
+  return buildReminderEmail(i, EMAIL_COPY.reminder.dueSubject(i.orgName), (org) => EMAIL_COPY.reminder.dueIntro(org, date));
 }
