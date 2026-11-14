@@ -7,6 +7,9 @@ import {
   actAsSeat, fillValid, historyPath, newProject, openQuestion, questionPath, saveStatus, saveViaApi, stagePath, waitForQuestionPage,
 } from './helpers/session';
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
+import { WITHDRAW_COPY } from '../lib/decision/copy';
+import { DECISION_OUTCOME_COPY } from '../lib/decision/outcome/copy';
+import { FIELD_COPY } from '../lib/ui/field/copy';
 
 /**
  * Keyboard, accessibility and reflow of S-11 to S-13 (UX-42, NFR-A11Y-02, NFR-A11Y-04, NFR-A11Y-05). The themes follow
@@ -36,7 +39,7 @@ test('UX-42 NFR-A11Y-02: keyboard-only Next moves focus to the new question head
   await openQuestion(page, 'assessor', Q, baseURL!);
   await page.getByRole('link', { name: 'Next question' }).focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('heading', { level: 1, name: /^Q-PP-02 \./ })).toBeFocused();
+  await expect(page.getByRole('heading', { level: 1, name: /^Q-PP-02 \u00b7 / })).toBeFocused();
   await expectFocusVisibleAndUncovered(page);
 });
 
@@ -146,4 +149,93 @@ test('NFR-A11Y-04 NFR-A11Y-05: targets of 24 px, no horizontal scroll at 320 px,
   await page.setViewportSize({ width: 320, height: 900 });
   await reach('S-12 with version 2');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= 320)).toBe(true);
+});
+
+/** S-12 with version 1 saved, More open and the withdrawal confirmation open, its first field focused. */
+async function openWithdrawal(page: Page, baseURL: string): Promise<{ projectId: string }> {
+  const projectId = await openQuestion(page, 'assessor', Q, baseURL);
+  expect((await saveViaApi(baseURL, 'assessor', projectId, Q, { reason: 'Version 1' })).status).toBe(201);
+  await page.reload(); await waitForQuestionPage(page);
+  await page.locator('details.more-menu > summary').click();
+  await page.getByRole('button', { name: WITHDRAW_COPY.trigger }).click();
+  await expect(page.getByLabel(`${WITHDRAW_COPY.codeLabel} ${FIELD_COPY.required}`)).toBeFocused();
+  return { projectId };
+}
+
+/** The box of an element in the viewport, and whether the fixed save bar overlaps it. */
+async function placeOf(page: Page, selector: string): Promise<{ top: number; bottom: number; inView: boolean; underBar: boolean }> {
+  return page.evaluate((sel) => {
+    const el = document.querySelector(sel) as HTMLElement;
+    const r = el.getBoundingClientRect();
+    const bar = document.querySelector('.decision-save-bar') as HTMLElement;
+    const b = bar.getBoundingClientRect();
+    const fixed = getComputedStyle(bar).position === 'fixed';
+    return { top: r.top, bottom: r.bottom, inView: r.top >= 0 && r.bottom <= window.innerHeight, underBar: fixed && r.bottom > b.top && r.top < b.bottom };
+  }, selector);
+}
+
+test('D-398 item 1: at 320 by 568 the open withdrawal confirmation, its focused field and its two buttons, can be wholly seen above the save bar; after Cancel the bar is fixed again', async ({ page, baseURL }) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await openWithdrawal(page, baseURL!);
+  const bar = page.locator('.decision-save-bar');
+  // As the confirmation opens, with no scroll of the test's own: all three at once, in the viewport, none under the bar.
+  for (const sel of ['#withdraw-code', '.ui-confirm__actions button:first-child', '.ui-confirm__actions button:last-child']) {
+    const place = await placeOf(page, sel);
+    expect(place.inView, `${sel} ${JSON.stringify(place)}`).toBe(true);
+    expect(place.underBar, `${sel} ${JSON.stringify(place)}`).toBe(false);
+  }
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByRole('button', { name: WITHDRAW_COPY.trigger })).toBeFocused();
+  expect(await bar.evaluate((el) => getComputedStyle(el).position)).toBe('fixed');
+  await page.getByRole('button', { name: WITHDRAW_COPY.trigger }).click();
+  const field = await placeOf(page, '#withdraw-code');
+  expect(field.inView && !field.underBar, JSON.stringify(field)).toBe(true);
+});
+
+test('D-398 item 4: after a failed withdrawal focus is on Retry; a pressed Retry keeps focus, busy, while its request is held; after success focus is not on the page body', async ({ page, baseURL }) => {
+  await openWithdrawal(page, baseURL!);
+  await page.getByLabel(`${WITHDRAW_COPY.codeLabel} ${FIELD_COPY.required}`).selectOption('duplicate');
+  await page.getByLabel(`${WITHDRAW_COPY.reasonLabel} ${FIELD_COPY.required}`).fill('Entered twice.');
+  let mode: 'fail' | 'hold' = 'fail';
+  let release: () => void = () => {};
+  await page.route(/\/withdrawal$/, async (route) => {
+    if (mode === 'fail') { await route.abort('failed'); return; }
+    await new Promise<void>((r) => { release = r; });
+    await route.continue();
+  });
+  await page.getByRole('button', { name: WITHDRAW_COPY.action }).click();
+  await expect(page.locator('[data-withdraw-alert]')).toHaveText(DECISION_OUTCOME_COPY.withdraw.maybeArrived);
+  const retry = page.getByRole('button', { name: WITHDRAW_COPY.retry, exact: true }).last();
+  await expect(retry).toBeFocused();
+  mode = 'hold';
+  await page.keyboard.press('Enter');
+  await expect(retry).toHaveAttribute('aria-busy', 'true');
+  await expect(retry).toBeFocused();
+  release();
+  await expect(page.locator('[data-withdraw-status]')).toHaveText(DECISION_OUTCOME_COPY.withdraw.withdrawn);
+  expect(await page.evaluate(() => document.activeElement === document.body || document.activeElement === null)).toBe(false);
+});
+
+test('D-398 item 4 (save bar): a pressed Retry keeps focus, busy, while its save is held; after the save focus is on the save bar, not the page body', async ({ page, baseURL }) => {
+  await openQuestion(page, 'assessor', Q, baseURL!);
+  await fillValid(page);
+  let mode: 'fail' | 'hold' = 'fail';
+  let release: () => void = () => {};
+  await page.route(/\/decisions$/, async (route) => {
+    if (route.request().method() !== 'POST') { await route.continue(); return; }
+    if (mode === 'fail') { await route.abort('failed'); return; }
+    await new Promise<void>((r) => { release = r; });
+    await route.continue();
+  });
+  await page.getByRole('button', { name: DECISION_FORM_COPY.save }).click();
+  await expect(page.locator('[data-region="answer-form"] .save-status [role="alert"]')).toHaveText(DECISION_OUTCOME_COPY.save.connection);
+  const retry = page.locator('.decision-save-bar').getByRole('button', { name: DECISION_FORM_COPY.retry, exact: true });
+  await retry.focus();
+  mode = 'hold';
+  await page.keyboard.press('Enter');
+  await expect(retry).toHaveAttribute('aria-busy', 'true');
+  await expect(retry).toBeFocused();
+  release();
+  await expect(saveStatus(page)).toHaveText(/^Saved at .+ as version 1\./);
+  await expect(page.locator('.decision-save-bar')).toBeFocused();
 });

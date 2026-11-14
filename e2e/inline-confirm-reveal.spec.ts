@@ -12,6 +12,8 @@ import { adminSeat } from './fixtures/manifest';
 import { failOnDialog } from './helpers/dialogs';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { signInWith } from './helpers/session';
+import { WITHDRAW_COPY } from '../lib/decision/copy';
+import { FIELD_COPY } from '../lib/ui/field/copy';
 
 /**
  * The shared in-place confirmation (components/ui/InlineConfirm.tsx) on each of the screens that use it (SC 2.4.11, SC 2.4.3,
@@ -207,8 +209,8 @@ const SCREENS: Screen[] = [
     name: 'decision withdrawal on the history page (S-13)', who: 'owner', expect: { wide: 'held', narrow: 'held' },
     open: async (page) => {
       await load(page, `${questionPath(await decided('Q-PP-01'), 'Q-PP-01')}/history`);
-      const confirmation = page.getByRole('group', { name: 'Version 1 of the decision on Q-PP-01' });
-      return { trigger: page.getByRole('button', { name: 'Withdraw this decision' }), confirmation, focus: confirmation.getByLabel('Withdrawal code (required)'), focusInside: true };
+      const confirmation = page.getByRole('group', { name: WITHDRAW_COPY.objectName(1, 'Q-PP-01') });
+      return { trigger: page.getByRole('button', { name: WITHDRAW_COPY.trigger }), confirmation, focus: confirmation.getByLabel(`${WITHDRAW_COPY.codeLabel} ${FIELD_COPY.required}`), focusInside: true };
     },
   },
   {
@@ -216,9 +218,9 @@ const SCREENS: Screen[] = [
     passesWithoutRepair: { wide: 'the focus target opens hidden past the end of the page, and the browser\'s own focus scroll brings it in' },
     open: async (page) => {
       await load(page, questionPath(await decided('Q-PP-01'), 'Q-PP-01'));
-      await page.locator('summary', { hasText: /^More$/ }).click();
-      const confirmation = page.getByRole('group', { name: 'Version 1 of the decision on Q-PP-01' });
-      return { trigger: page.getByRole('button', { name: 'Withdraw this decision' }), confirmation, focus: confirmation.getByLabel('Withdrawal code (required)'), focusInside: true };
+      await page.locator('summary', { hasText: new RegExp(`^${WITHDRAW_COPY.more}$`) }).click();
+      const confirmation = page.getByRole('group', { name: WITHDRAW_COPY.objectName(1, 'Q-PP-01') });
+      return { trigger: page.getByRole('button', { name: WITHDRAW_COPY.trigger }), confirmation, focus: confirmation.getByLabel(`${WITHDRAW_COPY.codeLabel} ${FIELD_COPY.required}`), focusInside: true };
     },
   },
   {
@@ -570,10 +572,10 @@ test.describe('the confirm button while the request is sent', () => {
     const page = await pageAs(browser, 'owner', WIDE);
     const projectId = await decided('Q-PP-02');
     await load(page, `${questionPath(projectId, 'Q-PP-02')}/history`);
-    await page.getByRole('button', { name: 'Withdraw this decision' }).click();
-    const confirmation = page.getByRole('group', { name: 'Version 1 of the decision on Q-PP-02' });
-    await confirmation.getByLabel('Withdrawal code (required)').selectOption('duplicate');
-    await confirmation.getByLabel('Reason (required)').fill('Duplicate of Q-PP-01.');
+    await page.getByRole('button', { name: WITHDRAW_COPY.trigger }).click();
+    const confirmation = page.getByRole('group', { name: WITHDRAW_COPY.objectName(1, 'Q-PP-02') });
+    await confirmation.getByLabel(`${WITHDRAW_COPY.codeLabel} ${FIELD_COPY.required}`).selectOption('duplicate');
+    await confirmation.getByLabel(`${WITHDRAW_COPY.reasonLabel} ${FIELD_COPY.required}`).fill('Duplicate of Q-PP-01.');
     const held = await hold(page, '/questions/Q-PP-02/withdrawal', 'POST', (r) => r.continue());
     await busyPress(page, confirmation.getByRole('button', { name: 'Withdraw decision' }), held);
     await expect(page.locator('[data-withdraw-status]')).toHaveText('Withdrawn. The question has no current decision.');

@@ -86,4 +86,20 @@
   html:has(.decision-save-bar) {
     scroll-padding-block-end: var(--decision-save-bar-h, 8rem);
   }
+
+  /* Register D-398 item 1: an in-place confirmation open in the answer region (the withdrawal under More) can be taller
+     than the space above the fixed bar (506 px of 481 at 320 by 568). While one is open the bar returns to the flow at
+     the form's end, still reachable, and the page stops reserving its height, so the confirmation can be wholly seen. */
+  [data-region="answer-form"]:has(.ui-confirm) .decision-save-bar {
+    position: static;
+    max-height: none;
+  }
+
+  .page-content:has([data-region="answer-form"] .ui-confirm) {
+    padding-block-end: 0;
+  }
+
+  html:has([data-region="answer-form"] .ui-confirm) {
+    scroll-padding-block-end: 0;
+  }
 }
