@@ -27,16 +27,6 @@ import RememberProject from '@/components/layout/RememberProject';
 
 const Q = QUESTION_COPY;
 
-/**
- * Whether the personal data question's recorded answer makes this question not apply: the rule of
- * lib/content/loader.ts questionApplies (FR-CNT-04) for the one question the page shows, whose condition it holds.
- */
-function gatedByAnswer(data: QuestionPanelData): boolean {
-  const condition = data.runningQuestion.condition;
-  if (condition === undefined || (data.gateAnswer !== 'yes' && data.gateAnswer !== 'no')) return false;
-  return data.gateAnswer !== condition.value;
-}
-
 /** n in the in-page link "Ways teams address this (n)": SUG's `suggestionCount`. At 0 (the gate) there is no link and no section. */
 function countFor(data: QuestionPanelData): number {
   return suggestionCount({ contentSemver: data.contentSemver, questionId: data.question.id, tickedOptions: data.current?.optionsInPlace ?? [] });
@@ -96,7 +86,6 @@ export function QuestionPanelRegions({ data }: { data: QuestionPanelData }) {
               historyCount={data.historyCount}
               historyHref={`${base}/stages/${data.stage}/questions/${question.id}/history`}
               seals={data.seals}
-              gated={gatedByAnswer(data)}
               isScopeQuestion={question.type === 'gate'}
             />
           </section>

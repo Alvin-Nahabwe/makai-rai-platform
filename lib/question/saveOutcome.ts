@@ -131,16 +131,30 @@ export function conflictText(current: DecisionVersionView, viewerId: string, tim
  */
 export const WITHDRAW_TEXT = DECISION_OUTCOME_COPY.withdraw;
 
-export type WithdrawResult = { kind: 'withdrawn' } | { kind: 'fix'; fields: FieldError[] } | { kind: 'failed'; text: string; retry: boolean };
+export type WithdrawResult =
+  | { kind: 'withdrawn' } | { kind: 'fix'; fields: FieldError[] }
+  | { kind: 'failed'; text: string; retry: boolean; action?: { label: string; href: string } };
 
-/** What one outcome of route 2 means for the withdrawal control (FR-DEC-08). */
-export function withdrawOutcome(o: SendOutcome<DecisionVersionView>): WithdrawResult {
+/**
+ * What one outcome of route 2 means for the withdrawal control (FR-DEC-08). A 403 that is the identity gate
+ * (`acceptances_required`, `must_change_password`, the codes the save path branches on) says what to do first, with the
+ * save path's own link for that case (`navigationForOutcome`, back to `here`); a 403 about the role keeps its line.
+ */
+export function withdrawOutcome(o: SendOutcome<DecisionVersionView>, here = ''): WithdrawResult {
   if (o.kind === 'saved') return isVersionView(o.body) ? { kind: 'withdrawn' } : { kind: 'failed', text: WITHDRAW_TEXT.maybeArrived, retry: true };
   if (o.kind === 'not_saved') return { kind: 'failed', text: WITHDRAW_TEXT.maybeArrived, retry: true };
   const { status, body } = o;
   if (status === 422) return { kind: 'fix', fields: body.fields !== undefined && body.fields.length > 0 ? body.fields : [{ field: 'reason', message: body.error }] };
   if (status === 401) return { kind: 'failed', text: WITHDRAW_TEXT.signedOut, retry: false };
-  if (status === 403) return { kind: 'failed', text: WITHDRAW_TEXT.forbidden, retry: false };
+  if (status === 403) {
+    const gate = navigationForOutcome(o, here);
+    if (gate !== null && gate.kind === 'go') {
+      const terms = body.code === 'acceptances_required';
+      const G = DECISION_OUTCOME_COPY.gate;
+      return { kind: 'failed', text: terms ? WITHDRAW_TEXT.terms : WITHDRAW_TEXT.password, retry: false, action: { label: terms ? G.termsLink : G.passwordLink, href: gate.href } };
+    }
+    return { kind: 'failed', text: WITHDRAW_TEXT.forbidden, retry: false };
+  }
   if (status === 409 && body.code === 'base_version_moved') return { kind: 'failed', text: WITHDRAW_TEXT.moved, retry: false };
   if (status === 409 && body.code === 'project_archived') return { kind: 'failed', text: WITHDRAW_TEXT.archived, retry: false };
   return { kind: 'failed', text: WITHDRAW_TEXT.server, retry: true };

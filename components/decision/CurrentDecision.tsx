@@ -15,22 +15,21 @@ const C = QUESTION_COPY.current;
 
 export type CurrentDecisionProps = {
   orgSlug: string; current: DecisionVersionView | null; historyCount: number; historyHref: string; seals: SealRef[];
-  /** Whether the personal data question's answer makes this question not apply (lib/ui/marks.ts markKindOf). */
-  gated: boolean;
   /** Whether this is the personal data question itself, whose decision is an answer, not a status. */
   isScopeQuestion: boolean;
 };
 
 /**
  * The current decision of the question on S-12 (W-3 note 3; FR-DEC-01, FR-DEC-04, FR-DEC-09): its status as the kit's
- * mark with its words, and its version, its seal marker (REV-b's slot), who decided with the declared date at its
+ * mark with its words (what the version RECORDS: its own status, or the personal data question's answer, whatever the
+ * personal data answer says of this question today; ruling L5-11 amended), and its version, its seal marker (REV-b's slot), who decided with the declared date at its
  * precision, who entered it with the received time, the reason and the evidence of that version (every role reads them:
  * owner decision D6, which replaces W-3 note 3 and the read-only variant), and the history link. Both pairs appear
  * together (principle 4). With no version it reads "No decision yet." (7.4.2); a withdrawal as the current version is no
  * decision, says what kind of mistake it was, and has no mark (a mark has no kind for it). A server component: every
  * value is a React child, so it is text, never markup (NFR-SEC-11).
  */
-export function CurrentDecision({ orgSlug, current, historyCount, historyHref, seals, gated, isScopeQuestion }: CurrentDecisionProps): ReactElement | null {
+export function CurrentDecision({ orgSlug, current, historyCount, historyHref, seals, isScopeQuestion }: CurrentDecisionProps): ReactElement | null {
   if (current === null) return <p>{C.none}</p>;
   const history = <p><Link href={historyHref}>{C.history(historyCount)}</Link></p>;
   if (current.status === 'withdrawn') {
@@ -44,7 +43,7 @@ export function CurrentDecision({ orgSlug, current, historyCount, historyHref, s
   const decided = current.decidedBy === null ? null
     : C.decidedBy(deciderLabel(current.decidedBy, '', 'record'), current.declaredDate === null ? null : formatDeclaredDate(current.declaredDate));
   const entered = C.enteredBy(current.enteredBy.formerMember ? C.formerMember(current.enteredBy.name) : current.enteredBy.name, formatDay(current.receivedAt), formatTime(current.receivedAt));
-  const kind = markKindOf({ status: current.status, scopeAnswer: current.scopeAnswer, gated, isScopeQuestion });
+  const kind = markKindOf({ status: current.status, scopeAnswer: current.scopeAnswer, gated: false, isScopeQuestion });
   return (
     <div className="current-decision">
       <p>

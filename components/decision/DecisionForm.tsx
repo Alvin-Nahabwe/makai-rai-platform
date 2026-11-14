@@ -95,7 +95,8 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
   // D-398 item 4: a pressed Retry stays mounted, busy, while its own request is out, so focus stays on it.
   const [retrying, setRetrying] = useState(false);
   const saveBar = useRef<HTMLDivElement | null>(null);
-  // Set when a Retry's request is answered: if that answer removed the Retry and nothing else took focus, the bar takes it.
+  // Set when a Retry's request is answered, or a send removed a focused control of the bar: if nothing else took focus,
+  // the bar takes it.
   const afterRetry = useRef(false);
 
   const store = useRef<DraftStore | null>(null);
@@ -208,6 +209,11 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
     const now = new Date().toISOString();
     setRetry(id.state);
     keep({ baseVersionNumber: saveBase, value: d, savedAt: now, savePressedAt: now, retry: id.state });
+    // A focused control in the bar that this send removes or disables (a Retry the person did not press, as on the
+    // automatic retry or after waiting for uploads; Save itself) would leave focus on the page body: the bar takes it,
+    // after the render that removed it and again after the answer (the effect below moves focus only from the body).
+    const focusInBar = saveBar.current?.contains(document.activeElement) ?? false;
+    if (focusInBar && !fromRetry) afterRetry.current = true;
     setSaving(true);
     setRetrying(fromRetry);
     setErrors([]);
@@ -219,7 +225,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
     sending.current = false;
     setSaving(false);
     setRetrying(false);
-    afterRetry.current = fromRetry;
+    afterRetry.current = fromRetry || focusInBar;
     const next = statusForOutcome(outcome, { viewerId: data.viewer.userId, timeText: formatTime });
     if ((next.id === 'M-03' || next.id === 'M-04') && outcome.kind === 'saved') {
       const saved = outcome.body.versionNumber;
@@ -456,7 +462,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
           </div>
           <SaveStatus status={status} draftSavedAt={draftSavedAt} storageUnavailable={storageUnavailable} />
           {leftOut.length > 0 && status !== null && (status.id === 'M-03' || status.id === 'M-04')
-            ? <p>{F.savedWithout.before}<bdi>{fileList(leftOut)}</bdi>{F.savedWithout.after}</p>
+            ? <p>{F.savedWithout.before}<bdi>{fileList(leftOut)}</bdi>{leftOut.length === 1 ? F.savedWithout.after : F.savedWithout.afterMany}</p>
             : null}
         </div>
         </fieldset>

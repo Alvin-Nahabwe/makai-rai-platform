@@ -131,6 +131,29 @@ describe('decision save outcome', () => {
     expect(withdrawOutcome(rej(500, 'x'))).toEqual({ kind: 'failed', text: WITHDRAW_TEXT.server, retry: true });
   });
 
+  it('FR-DEC-08 (Q18 (b)): a withdrawal\'s 403 acceptances_required says to accept the updated terms first, with the save path\'s terms link', () => {
+    const at = '/orgs/acme/projects/p1/stages/pre-processing/questions/Q-PP-01';
+    expect(withdrawOutcome(rej(403, 'acceptances_required'), at)).toEqual({
+      kind: 'failed', text: WITHDRAW_TEXT.terms, retry: false,
+      action: { label: DECISION_OUTCOME_COPY.gate.termsLink, href: `/acceptances?callbackUrl=${encodeURIComponent(at)}` },
+    });
+    expect(WITHDRAW_TEXT.terms).toBe('Not withdrawn. Accept the updated terms first.');
+  });
+
+  it('FR-DEC-08 (Q18 (b)): a withdrawal\'s 403 must_change_password says to change the password first, with the save path\'s password link', () => {
+    const at = '/orgs/acme/projects/p1/stages/pre-processing/questions/Q-PP-01';
+    expect(withdrawOutcome(rej(403, 'must_change_password'), at)).toEqual({
+      kind: 'failed', text: WITHDRAW_TEXT.password, retry: false,
+      action: { label: DECISION_OUTCOME_COPY.gate.passwordLink, href: `/change-password?callbackUrl=${encodeURIComponent(at)}` },
+    });
+    expect(WITHDRAW_TEXT.password).toBe('Not withdrawn. Change your password first.');
+  });
+
+  it('FR-DEC-08 (Q18 (b)): a withdrawal\'s 403 forbidden (the role) keeps its line and has no link', () => {
+    expect(withdrawOutcome(rej(403, 'forbidden'), '/q')).toEqual({ kind: 'failed', text: WITHDRAW_TEXT.forbidden, retry: false });
+    expect(WITHDRAW_TEXT.forbidden).toBe('Not withdrawn. Your role no longer allows this. Ask an Owner or Admin.');
+  });
+
   it('CR-2 ruling 3: with no storage a 403 gate does not navigate by itself; the line says what to do first and links there', () => {
     const at = '/orgs/acme/projects/p1/stages/pre-processing/questions/Q-PP-01';
     const terms = navigationForOutcome(rej(403, 'acceptances_required'), at)!;

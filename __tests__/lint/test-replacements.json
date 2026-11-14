@@ -1244,7 +1244,7 @@
     "changed": "__tests__/unit/decision-components.test.tsx::UX-28 M-10: the conflict view shows both reasons, who saved, and the three actions",
     "replacedBy": "__tests__/unit/decision-components.test.tsx::UX-28 M-10: the conflict view shows both reasons, who saved, and the three actions",
     "property": "The conflict view shows both reasons, names who saved the newer version and when, takes focus on its heading (tabindex -1), and offers exactly three actions as plain buttons in this order: save mine, edit mine, discard mine. The words were reworded by ruled texts: the sentence is copy audit B#414 with \"your version\" (the lead, gap G-b8: \"{name} saved a newer version at {time}. Compare it with your version, then choose what to keep.\"), the heading B#165 in the coordinator's Q2 form (\"Not saved. A newer version was saved while you worked.\"), and the buttons CONSOLIDATED 8 #6 (\"Save my version\", \"Edit my version\", \"Discard my version\").",
-    "proof": "The case renders ConflictView with a newer version by Joseph K. and the reader's own reason, and requires both reasons, a paragraph holding exactly \"Joseph K. saved a newer version at {hh:mm zone}. Compare it with your version, then choose what to keep.\", the h3 with tabindex=\"-1\" whose whole text is DECISION_FORM_COPY.conflict.heading, and the text of every <button>…</button> in order to equal DECISION_FORM_COPY.conflict.saveMine, editMine and discardMine (no icon or wrapper inside a button).",
+    "proof": "The case renders ConflictView with a newer version by Joseph K. and the reader's own reason, and requires both reasons, a paragraph holding exactly \"Joseph K. saved a newer version at {hh:mm zone}. Compare it with your version, then choose what to keep.\", the h3 with tabindex=\"-1\" whose whole text is DECISION_FORM_COPY.conflict.heading, the saved column's heading DECISION_FORM_COPY.conflict.saved(2) (which version is the saved one), and the text of every <button>…</button> in order to equal DECISION_FORM_COPY.conflict.saveMine, editMine and discardMine (no icon or wrapper inside a button).",
     "task": "plan 1A Task 17"
   },
   {
@@ -1347,15 +1347,15 @@
     "kind": "structure",
     "changed": "__tests__/unit/decision-components.test.tsx::U12 (d): the current decision shows the version's reason and its evidence, or None, for every role",
     "replacedBy": "__tests__/unit/decision-components.test.tsx::U12 (d): the current decision shows the version's reason and its evidence, or None, for every role",
-    "property": "The current decision shows the version's reason and its evidence for every role, None when there is no evidence, and the erased-text line when the reason was erased. CurrentDecision gained two props the question page passes, gated and isScopeQuestion (the inputs of lib/ui/marks.ts markKindOf), so its status shows as the kit's StatusMark (brief section 5); the case passes both as false, the values for this ordinary question.",
-    "proof": "The case's assertions are unchanged (<dt>Reason</dt><dd>We checked the sources.</dd>, the link label, <dt>Evidence</dt><dd>None</dd>, the erased line read from Task 18's text); each render adds gated={false} isScopeQuestion={false}.",
+    "property": "The current decision shows the version's reason and its evidence for every role, None when there is no evidence, and the erased-text line when the reason was erased. CurrentDecision gained one prop the question page passes, isScopeQuestion (with gated false, the inputs of lib/ui/marks.ts markKindOf), so the status its version records shows as the kit's StatusMark (brief section 5; ruling L5-11 amended, which removed the gated prop the first build had); the case passes isScopeQuestion as false, the value for this ordinary question.",
+    "proof": "The case's assertions are unchanged (<dt>Reason</dt><dd>We checked the sources.</dd>, the link label, <dt>Evidence</dt><dd>None</dd>, the erased line read from Task 18's text); each render adds isScopeQuestion={false}.",
     "task": "plan 1A Task 17"
   },
   {
     "kind": "wording",
     "changed": "__tests__/unit/decision-components.test.tsx::FR-DEC-08 (screen): a withdrawal as the current version reads as no decision, with its history link",
     "replacedBy": "__tests__/unit/decision-components.test.tsx::FR-DEC-08 (screen): a withdrawal as the current version reads as no decision, with its history link",
-    "property": "A withdrawal as the current version reads as no decision, names what kind of mistake it was, keeps the history link with the number of versions, and shows no status mark. Reworded by copy audit B#181 and B#180: \"No decision. The last decision was withdrawn ({code}).\", \"See all versions ({n})\". CurrentDecision gained two props the question page passes, gated and isScopeQuestion (the inputs of lib/ui/marks.ts markKindOf), so its status shows as the kit's StatusMark (brief section 5); the case passes both as false, the values for this ordinary question.",
+    "property": "A withdrawal as the current version reads as no decision, names what kind of mistake it was, keeps the history link with the number of versions, and shows no status mark. Reworded by copy audit B#181 and B#180: \"No decision. The last decision was withdrawn ({code}).\", \"See all versions ({n})\". CurrentDecision gained one prop the question page passes, isScopeQuestion (with gated false, the inputs of lib/ui/marks.ts markKindOf), so the status its version records shows as the kit's StatusMark (brief section 5; ruling L5-11 amended, which removed the gated prop the first build had); the case passes isScopeQuestion as false, the value for this ordinary question.",
     "proof": "The case renders version 3, a withdrawal with code duplicate, and requires QUESTION_COPY.current.withdrawn('Duplicate'), QUESTION_COPY.current.history(3), and no ui-mark element.",
     "task": "plan 1A Task 17"
   },
@@ -1364,7 +1364,7 @@
     "changed": "__tests__/unit/decision-components.test.tsx::FR-CNT-08: S-12 shows the reworded line when the running wording differs",
     "replacedBy": "__tests__/unit/decision-components.test.tsx::FR-CNT-08: S-12 shows the reworded line when the running wording differs",
     "property": "When the running content words the question differently from the content the current decision was answered against, the page says so and holds the earlier wording in a disclosure after the running wording; each wording appears once; with the same wording there is no line. Reworded by copy audit B#14 and B#15 (\"The description of good practice changed after your team's decision.\", \"See the earlier description\"); \"content version\" is retired by the vocabulary, so the line no longer names the semver.",
-    "proof": "The case requires QUESTION_COPY.reworded.line (HTML-escaped apostrophe), a <details> whose <summary> is QUESTION_COPY.reworded.summary followed by the old wording, each wording exactly once, the new wording before the summary, and with no rewording no summary at all.",
+    "proof": "The case requires QUESTION_COPY.reworded.line (HTML-escaped apostrophe), a <details> whose <summary> is QUESTION_COPY.reworded.summary followed by the old wording, each wording exactly once, the new wording before the summary, and with no rewording neither the summary nor the line (QUESTION_COPY.reworded.line, HTML-escaped).",
     "task": "plan 1A Task 17"
   },
   {
@@ -1379,8 +1379,8 @@
     "kind": "structure",
     "changed": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 (helper): each region's component gets the props its contract row names, from the panel data",
     "replacedBy": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 (helper): each region's component gets the props its contract row names, from the panel data",
-    "property": "Each region's component gets the props its contract row names, from the panel data. CurrentDecision now also gets gated and isScopeQuestion, which the page computes from the panel data (the personal data question's recorded answer and the question's condition; the question's type), so the current decision shows the kit's status mark (plan 1A Task 17, brief section 5).",
-    "proof": "The case requires CurrentDecision's props to equal exactly orgSlug, current, historyCount, seals, historyHref as before plus gated: false and isScopeQuestion: false for this panel (no gate answer; a likert question); the other regions' expectations are unchanged.",
+    "property": "Each region's component gets the props its contract row names, from the panel data. CurrentDecision now also gets isScopeQuestion, which the page computes from the question's type, so the current decision shows the kit's mark for what its version records (plan 1A Task 17, brief section 5; ruling L5-11 amended removed the gated prop the first build passed).",
+    "proof": "The case requires CurrentDecision's props to equal exactly orgSlug, current, historyCount, seals, historyHref as before plus isScopeQuestion: false for this panel (a likert question), and no other prop; the other regions' expectations are unchanged.",
     "task": "plan 1A Task 17"
   },
   {

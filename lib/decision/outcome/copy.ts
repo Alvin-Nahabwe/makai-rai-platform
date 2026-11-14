@@ -9,11 +9,15 @@ export const DECISION_OUTCOME_COPY = Object.freeze({
   save: Object.freeze({
     saving: 'Saving...',
     slow: 'Still saving. The connection is slow. A copy of your text is kept in this browser.',
+    /** M-02 when this browser can keep nothing (`storageUnavailable`): the sentence about the kept copy is dropped (Q18 (a)). */
+    slowNoStorage: 'Still saving. The connection is slow.',
     connection: 'Not saved. The connection was lost. Your text is still here. Select Retry.',
     // True: a repeated request id is answered with the version it saved, never saved again (lib/data/decisions.ts idempotentWrite).
     noReply: 'Not saved yet. We did not get a reply in time, so your decision may already be saved. Select Retry. It will not save twice.',
     server: 'Not saved. Something went wrong on our side. Your text is still here. Select Retry.',
     signedOut: 'Not saved. You have been signed out. Your text is kept in this browser. Sign in again to save it.',
+    /** M-08 when this browser can keep nothing: the gate lines' shape, never "kept" (the coordinator's answer to Q18 (a)). */
+    signedOutNoStorage: 'Not saved. You have been signed out. Copy your text before you sign in again: this browser cannot keep it.',
     forbidden: 'Not saved. Your role no longer allows this. Ask an Owner or Admin to change your role.',
     archived: 'Not saved. This project is archived. Owners and Admins can unarchive it.',
   }),
@@ -37,6 +41,9 @@ export const DECISION_OUTCOME_COPY = Object.freeze({
     maybeArrived: 'Not withdrawn yet. We did not get a reply in time, so it may already be withdrawn. Select Retry. It will not withdraw twice.',
     moved: 'Not withdrawn. Someone saved a newer version. Reload the page to see it.',
     forbidden: 'Not withdrawn. Your role no longer allows this. Ask an Owner or Admin.',
+    /** A 403 that is the identity gate, not the role: the save path's gate lines (gate.terms, gate.password) with the outcome changed. */
+    terms: 'Not withdrawn. Accept the updated terms first.',
+    password: 'Not withdrawn. Change your password first.',
     archived: 'Not withdrawn. This project is archived. Owners and Admins can unarchive it.',
     signedOut: 'Not withdrawn. You have been signed out. Sign in again to withdraw it.',
     server: 'Not withdrawn. Something went wrong on our side. Select Retry.',

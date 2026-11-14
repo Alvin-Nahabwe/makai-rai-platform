@@ -43,6 +43,13 @@
   color: var(--color-link);
 }
 
+/* The save bar takes focus after a send removed its focused control (D-398 item 4): a programmatic focus shows no
+   :focus-visible ring, so the bar draws one, as the summary's first line does. */
+.decision-save-bar:focus {
+  outline: var(--focus-width) solid var(--color-focus);
+  outline-offset: var(--focus-offset);
+}
+
 /* The kept-evidence and upload-wait boxes: the kit's note callout inside an element that keeps the data attribute. */
 .decision-form__box .ui-callout__body > p {
   margin-block: 0 var(--space-3);
@@ -88,18 +95,20 @@
   }
 
   /* Register D-398 item 1: an in-place confirmation open in the answer region (the withdrawal under More) can be taller
-     than the space above the fixed bar (506 px of 481 at 320 by 568). While one is open the bar returns to the flow at
-     the form's end, still reachable, and the page stops reserving its height, so the confirmation can be wholly seen. */
-  [data-region="answer-form"]:has(.ui-confirm) .decision-save-bar {
+     than the space above the fixed bar (506 px of 481 at 320 by 568). While one is shown the bar returns to the flow at
+     the form's end, still reachable, and the page stops reserving its height, so the confirmation can be wholly seen.
+     "Shown" is the open menu: a confirmation left open inside a closed More is still in the DOM but not on screen, and
+     then the bar is fixed again. The page keeps its own bottom padding (globals.css .page-content at this width). */
+  [data-region="answer-form"]:has(.more-menu[open] .ui-confirm) .decision-save-bar {
     position: static;
     max-height: none;
   }
 
-  .page-content:has([data-region="answer-form"] .ui-confirm) {
-    padding-block-end: 0;
+  .page-content:has([data-region="answer-form"] .more-menu[open] .ui-confirm) {
+    padding-block-end: var(--space-4);
   }
 
-  html:has([data-region="answer-form"] .ui-confirm) {
+  html:has([data-region="answer-form"] .more-menu[open] .ui-confirm) {
     scroll-padding-block-end: 0;
   }
 }

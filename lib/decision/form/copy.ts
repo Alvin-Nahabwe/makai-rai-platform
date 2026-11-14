@@ -37,7 +37,11 @@ export const DECISION_FORM_COPY = Object.freeze({
   save: 'Save decision',
   retry: 'Retry',
   signInAgain: 'Sign in again',
-  savedWithout: Object.freeze({ before: 'Saved without ', after: '. When the upload has finished, save again to add it.' }),
+  /** "Saved without {files}. ...": `after` for one file, `afterMany` for more than one (the coordinator's answer to Q17 (b)). */
+  savedWithout: Object.freeze({
+    before: 'Saved without ', after: '. When the upload has finished, save again to add it.',
+    afterMany: '. When the upload has finished, save again to add them.',
+  }),
   /** Plan line 925, exact: under the form while the field holds text that is not saved. */
   unsaved: 'Not saved yet. Your text is kept in this browser for up to 7 days. Signing out here, or another person signing in on this browser, removes it.',
   noStorage: 'This browser cannot keep a copy of your text. Save before you leave this page.',

@@ -110,10 +110,12 @@ describe('lib/decision/outcome/copy.ts', () => {
     expect(DECISION_OUTCOME_COPY.save).toEqual({
       saving: 'Saving...',
       slow: 'Still saving. The connection is slow. A copy of your text is kept in this browser.',
+      slowNoStorage: 'Still saving. The connection is slow.',
       connection: 'Not saved. The connection was lost. Your text is still here. Select Retry.',
       noReply: 'Not saved yet. We did not get a reply in time, so your decision may already be saved. Select Retry. It will not save twice.',
       server: 'Not saved. Something went wrong on our side. Your text is still here. Select Retry.',
       signedOut: 'Not saved. You have been signed out. Your text is kept in this browser. Sign in again to save it.',
+      signedOutNoStorage: 'Not saved. You have been signed out. Copy your text before you sign in again: this browser cannot keep it.',
       forbidden: 'Not saved. Your role no longer allows this. Ask an Owner or Admin to change your role.',
       archived: 'Not saved. This project is archived. Owners and Admins can unarchive it.',
     });
@@ -137,6 +139,8 @@ describe('lib/decision/outcome/copy.ts', () => {
       maybeArrived: 'Not withdrawn yet. We did not get a reply in time, so it may already be withdrawn. Select Retry. It will not withdraw twice.',
       moved: 'Not withdrawn. Someone saved a newer version. Reload the page to see it.',
       forbidden: 'Not withdrawn. Your role no longer allows this. Ask an Owner or Admin.',
+      terms: 'Not withdrawn. Accept the updated terms first.',
+      password: 'Not withdrawn. Change your password first.',
       archived: 'Not withdrawn. This project is archived. Owners and Admins can unarchive it.',
       signedOut: 'Not withdrawn. You have been signed out. Sign in again to withdraw it.',
       server: 'Not withdrawn. Something went wrong on our side. Select Retry.',
@@ -170,6 +174,9 @@ describe('lib/decision/form/copy.ts', () => {
   it('singular and plural for the kept evidence and the files still uploading', () => {
     expect([DECISION_FORM_COPY.removeKept(1), DECISION_FORM_COPY.removeKept(3)]).toEqual(['Remove it from this decision', 'Remove them from this decision']);
     expect([DECISION_FORM_COPY.saveWithout(1), DECISION_FORM_COPY.saveWithout(2)]).toEqual(['Save without this file', 'Save without these files']);
+    // the coordinator's answer to Q17 (b): one file "add it", more than one "add them"
+    expect(`${DECISION_FORM_COPY.savedWithout.before}a.pdf${DECISION_FORM_COPY.savedWithout.after}`).toBe('Saved without a.pdf. When the upload has finished, save again to add it.');
+    expect(`${DECISION_FORM_COPY.savedWithout.before}a.pdf, b.pdf${DECISION_FORM_COPY.savedWithout.afterMany}`).toBe('Saved without a.pdf, b.pdf. When the upload has finished, save again to add them.');
   });
 
   it('the conflict view: the heading as its own sentence, and "my version" on the buttons', () => {
@@ -177,6 +184,23 @@ describe('lib/decision/form/copy.ts', () => {
     expect([DECISION_FORM_COPY.conflict.saveMine, DECISION_FORM_COPY.conflict.editMine, DECISION_FORM_COPY.conflict.discardMine])
       .toEqual(['Save my version', 'Edit my version', 'Discard my version']);
     expect([DECISION_FORM_COPY.conflict.saved(2), DECISION_FORM_COPY.conflict.mine]).toEqual(['Saved version (2)', 'Your version (not saved)']);
+  });
+
+  // Copy review 17b, finding 14: the ruled texts no other test pins as written, pinned once each.
+  it('the form\'s other words, as ruled', () => {
+    const F = DECISION_FORM_COPY;
+    expect(F.startingNote).toBe('The form shows the current decision. Change what is different, then save.');
+    expect(F.optionsCount(2, 5)).toBe('2 of 5 in place');
+    expect(F.chooseOne).toBe('Choose one');
+    expect(`${F.waiting.before}a.pdf${F.waiting.after}`).toBe('Waiting for a.pdf to finish uploading.');
+    expect(F.evidenceFallback).toBe('Evidence');
+    expect(F.you('Amina K.')).toBe('You (Amina K.)');
+    expect(F.formerMember('Amina K.')).toBe('Amina K. (former member)');
+    expect(F.dateHelp).toBe('Leave the day empty if you only know the month. Leave both empty if you only know the year.');
+    expect([F.cancel, F.save, F.retry, F.signInAgain]).toEqual(['Cancel', 'Save decision', 'Retry', 'Sign in again']);
+    expect([F.conflict.status, F.conflict.reason, F.conflict.decidedBy, F.conflict.evidence, F.conflict.also, F.conflict.none, F.conflict.erased])
+      .toEqual(['Status', 'Reason', 'Decided by', 'Evidence', 'Also attached', 'None', 'Text erased']);
+    expect(F.conflict.withdrawn('Duplicate')).toBe('Withdrawn: Duplicate');
   });
 });
 
@@ -188,5 +212,17 @@ describe('lib/question/copy.ts', () => {
     expect(QUESTION_COPY.current.history(2)).toBe('See all versions (2)');
     expect(QUESTION_COPY.current.withdrawn('Duplicate')).toBe('No decision. The last decision was withdrawn (Duplicate).');
     expect(QUESTION_COPY.current.enteredBy('Joseph K.', '12 Oct 2026', '10:42 EAT')).toBe('Entered by: Joseph K. on 12 Oct 2026 at 10:42 EAT');
+    // copy review 17b, finding 14: the rest of the page's words, pinned once each
+    expect([QUESTION_COPY.nav.label, QUESTION_COPY.nav.previous, QUESTION_COPY.nav.next]).toEqual(['Questions in this stage', 'Previous question', 'Next question']);
+    expect(QUESTION_COPY.nav.position(4, 22, 'Pre-processing')).toBe('Question 4 of 22 in Pre-processing');
+    expect([QUESTION_COPY.headings.question, QUESTION_COPY.headings.current, QUESTION_COPY.headings.record, QUESTION_COPY.headings.findings])
+      .toEqual(['Question', 'Current decision', 'Record a decision', 'Findings']);
+    expect(QUESTION_COPY.current.none).toBe('No decision yet.');
+    expect(QUESTION_COPY.current.version(2)).toBe('version 2');
+    expect(QUESTION_COPY.current.withdrawnNoCode).toBe('No decision. The last decision was withdrawn.');
+    expect(QUESTION_COPY.current.decidedBy('Ethics committee', '12 Oct 2026')).toBe('Decided by: Ethics committee, 12 Oct 2026.');
+    expect(QUESTION_COPY.current.decidedBy('Ethics committee', null)).toBe('Decided by: Ethics committee.');
+    expect(QUESTION_COPY.current.formerMember('Amina K.')).toBe('Amina K. (former member)');
+    expect([QUESTION_COPY.current.reason, QUESTION_COPY.current.evidence, QUESTION_COPY.current.noEvidence]).toEqual(['Reason', 'Evidence', 'None']);
   });
 });
