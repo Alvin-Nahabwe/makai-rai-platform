@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { describedBy, FieldError, FieldHint, given } from '@/components/ui/TextInput';
 import type { DateParts } from '@/components/ui/types';
 import { UI_COPY } from '@/lib/ui/copy';
+import { FIELD_COPY } from '@/lib/ui/field/copy';
 import { todayParts } from '@/lib/ui/dateParts';
 import './TextInput.css';
 import './DateField.css';
@@ -50,7 +51,7 @@ export function DateField({
     <fieldset className="ui-date" disabled={disabled}>
       <legend className="ui-date__legend">
         {legend}
-        {required ? <> <span className="ui-field__required">{UI_COPY.field.required}</span></> : null}
+        {required ? <> <span className="ui-field__required">{FIELD_COPY.required}</span></> : null}
       </legend>
       {hintId === undefined ? null : <FieldHint id={hintId}>{hint}</FieldHint>}
       {given(error) ? <FieldError id={errorElementId} message={error} /> : null}

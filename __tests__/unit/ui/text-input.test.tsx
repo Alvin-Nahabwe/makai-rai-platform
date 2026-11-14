@@ -1,3 +1,5 @@
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { dirname, join, relative } from 'node:path';
 import { createRef, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -99,3 +101,42 @@ function findHost(node: unknown, tag: string): Host | undefined {
   if (el.type === tag) return el;
   return findHost(el.props?.children, tag);
 }
+
+const ROOT = process.cwd();
+
+/** The file an import specifier names, or null for a package. `@/` is the repository root. */
+function resolveImport(from: string, spec: string): string | null {
+  const base = spec.startsWith('@/') ? join(ROOT, spec.slice(2)) : spec.startsWith('.') ? join(dirname(from), spec) : null;
+  if (base === null) return null;
+  for (const candidate of [base, `${base}.ts`, `${base}.tsx`, join(base, 'index.ts'), join(base, 'index.tsx')]) {
+    if (existsSync(candidate) && statSync(candidate).isFile()) return candidate;
+  }
+  throw new Error(`${relative(ROOT, from)}: cannot resolve ${spec}`);
+}
+
+/** Every repository file `entry` reaches through static imports and re-exports; only .ts and .tsx files are followed. */
+function reached(entry: string): Set<string> {
+  const seen = new Set<string>();
+  const queue = [join(ROOT, entry)];
+  while (queue.length > 0) {
+    const file = queue.pop() as string;
+    if (seen.has(file)) continue;
+    seen.add(file);
+    if (!/\.tsx?$/.test(file)) continue;
+    for (const m of readFileSync(file, 'utf8').matchAll(/(?:^|\n)\s*(?:import|export)\s[^'"]*?from\s+['"]([^'"]+)['"]/g)) {
+      const target = resolveImport(file, m[1]);
+      if (target !== null) queue.push(target);
+    }
+  }
+  return new Set([...seen].map((f) => relative(ROOT, f)));
+}
+
+describe('the form fields\' import weight', () => {
+  // RadioCards and DateField are left out on purpose: each reads other words of UI_COPY through a component of its own
+  // (the lead checks both with a walker on this tree), so they legitimately reach lib/ui/copy.ts.
+  it("NFR-PERF-02: the kit's text field and the fields built on its parts do not load the kit's whole word list", () => {
+    const roots = ['TextInput', 'TextArea', 'Checkbox', 'Select', 'ErrorSummary', 'StatusRegion', 'Button'].map((n) => `components/ui/${n}.tsx`);
+    expect(roots.filter((root) => reached(root).has('lib/ui/copy.ts'))).toEqual([]);
+    expect(reached('components/ui/TextInput.tsx').has('lib/ui/field/copy.ts')).toBe(true);
+  });
+});
