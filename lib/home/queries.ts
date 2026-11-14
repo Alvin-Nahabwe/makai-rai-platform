@@ -49,3 +49,24 @@ export async function hasSavedAny(ctx: OrgContext, userId: string): Promise<bool
 export function hasSavedAnySql(userId: string): Prisma.Sql {
   return Prisma.sql`SELECT EXISTS (SELECT 1 FROM "decision_versions" WHERE "enteredById" = ${userId}) AS "any"`;
 }
+
+/**
+ * The person's newest saved entry in THIS project (plan 1C C11): `lastSavedBy`'s rule for one project, a withdrawal
+ * included. Runs inside `withOrg`, so another organisation's project id finds no row. `null` when they saved nothing here.
+ */
+export async function lastSavedIn(ctx: OrgContext, projectId: string, userId: string): Promise<{ stage: Stage; questionId: string } | null> {
+  const rows = await withOrg(ctx, (tx) => tx.$queryRaw<Array<{ stage: Stage; questionId: string }>>(lastSavedInSql(projectId, userId)));
+  const row = rows[0];
+  if (row === undefined) return null;
+  return { stage: row.stage, questionId: row.questionId };
+}
+
+/** `lastSavedIn`'s one statement, a tagged template; exported only so the query-plan probe can EXPLAIN it. Run inside `withOrg`. */
+export function lastSavedInSql(projectId: string, userId: string): Prisma.Sql {
+  return Prisma.sql`
+    SELECT v."stage" AS "stage", v."questionId" AS "questionId"
+    FROM "decision_versions" v
+    WHERE v."projectId" = ${projectId} AND v."enteredById" = ${userId}
+    ORDER BY v."receivedAt" DESC, v."versionNumber" DESC
+    LIMIT 1`;
+}

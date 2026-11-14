@@ -1918,5 +1918,13 @@
     "property": "The guidance texts sit under real headings one level below the heading above them, and the slot repeats no id of the page. With the h2 \"Question\" removed (slice 1), that heading is the page's h1, so \"What good looks like\" and \"Why this is asked\" are h2 (they were h3), and the id it must not repeat is question-heading.",
     "proof": "The case renders QuestionContent and requires no id=\"question-heading\", no h1 or h3 to h6, exactly two h2, and the h2 texts 'What good looks like' and 'Why this is asked'. question-frame.test.tsx requires, on the whole page, that the first heading is the h1 and no heading is more than one level below the one before it.",
     "task": "plan 1C Task 4 (cut), slice 1"
+  },
+  {
+    "kind": "structure",
+    "changed": "e2e/role-matrix.spec.ts::(module)",
+    "replacedBy": "e2e/role-matrix.spec.ts::dashboard, projects, projects/new, project detail and members render only the controls this role may use",
+    "property": "O-13 on the project page: the page's one primary action (plan 1C C11) is a registered control, not an exclusion. For all five roles the link named PROJECT_COPY.start shows exactly where can(role, 'decision:write') (Owner, Admin, Assessor) and nowhere else (Reviewer, Viewer), and the owner's census of the page counts it.",
+    "proof": "PROJECT_DETAIL_CONTROLS gains one entry, first: { name: PROJECT_COPY.start, action: 'decision:write', mode: 'presence', locator: getByRole('link', { name: PROJECT_COPY.start, exact: true }) }; every other line is unchanged. The fixture's project is fresh, so the label there is Start recording. Seen RED then GREEN on the remote machine: without the entry the owner census failed 'project detail: unclassified control(s) — add to the registry in e2e/role-matrix.spec.ts: Start recording' (org A and org B owner); with it the case passes for every role. The role rule whatever the data is held by __tests__/integration/home-load.test.ts 'S4: a Reviewer and a Viewer get null, also when rows exist, their own included', which fails when the decision:write check in loadContinueTarget is removed (shown by mutation: Tests 1 failed | 17 passed).",
+    "task": "plan 1C C11, cut (lane 5, Continue recording on the project page)"
   }
 ]

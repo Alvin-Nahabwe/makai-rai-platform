@@ -131,6 +131,7 @@ const PROJECTS_NEW_CONTROLS: Control[] = [
 ];
 
 const PROJECT_DETAIL_CONTROLS: Control[] = [
+  { name: PROJECT_COPY.start, action: 'decision:write', mode: 'presence', locator: (p) => p.getByRole('link', { name: PROJECT_COPY.start, exact: true }) },
   { name: 'Edit project', action: 'project:update', mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Edit project' }) },
   { name: PROJECT_COPY.overview.downloadRecords, action: 'team:export', mode: 'presence', locator: (p) => p.getByRole('link', { name: PROJECT_COPY.overview.downloadRecords }) },
   { name: 'Archive project', action: 'project:archive', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Archive project', exact: true }) },
