@@ -1870,5 +1870,21 @@
     "property": "O-13 as before, plus Home's next-step role rule: a Reviewer or Viewer never sees the next step or a Continue recording link on Home. Presence for the roles that record depends on their saves and is not asserted here.",
     "proof": "Every existing line of the case is unchanged; the added lines are the `if (!can(role, 'decision:write'))` block with `expect.soft(page.locator('.next-step'), ...).toHaveCount(0)` and `expect.soft(page.getByRole('link', { name: HOME_COPY.continueRecording }), ...).toHaveCount(0)`, run on the dashboard page the case has just loaded. The same rule is held by e2e/home-next-step.spec.ts 'T9.5: a viewer sees no next step and no Continue recording' and by __tests__/integration/home-load.test.ts 'T9.5: a viewer and a reviewer get null, also when rows exist that they did not enter' (null even for versions entered under their own id).",
     "task": "plan 1B Tasks 9 and 10 (slice 3, Home's next step)"
+  },
+  {
+    "kind": "structure",
+    "deleted": "__tests__/integration/decision-pages.test.ts::UX-06 (screen, R12-16): every S-11 row's status words sit in a status-label element, and none carries the warning class",
+    "replacedBy": "__tests__/unit/stage-route.test.tsx::each row shows its StatusMark with words and its code after the question in words; no \"v3\" or other version number",
+    "property": "Every S-11 question row shows its status as words in a status element of its own, never colour alone (UX-06, R12-16), and no row's status carries the warning style. Plan 1C Task 3 rebuilds each row as the kit's ItemPlate, whose status is the kit's StatusMark (shape plus words in ink, spec 7.2); the legacy .status-label element is gone from this page, so the property is now held on the mark.",
+    "proof": "The new case renders StageWorkspace from fixture rows of five kinds (done without and with evidence, the personal data question answered, partly, no decision) and, for each row's <li data-question-id> markup, requires exactly one `class=\"ui-mark ui-mark--` element, a `ui-mark__words` span holding letters, the question's code after its text, no version number, and no `status-label` class at all (so no warning class). Seen RED (0 marks per row, 'expected [] to have a length of 1') before the list used ItemPlate, GREEN after. The ink of the mark (no colour per status, no warning colour) is held in a browser by expectStatusMarksInk in e2e/stage-workspace.spec.ts 'FR-RM-04 UX-06 UX-07 (S-11, R12-16) ...', which now counts one `.ui-mark` per row in each stage before running it. The deleted case was seen failing on the new markup ('expected +0 to be 24').",
+    "task": "plan 1C Task 3 (lane 7 part 1, All questions)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/integration/decision-pages.test.ts::FR-DEC-06 (screen): with a decision recorded the empty line goes and the row shows its status and version",
+    "replacedBy": "__tests__/integration/decision-pages.test.ts::FR-DEC-06 (screen): with a decision recorded the empty line goes and the row shows its status and version",
+    "property": "With a decision recorded the empty line goes and the row shows the decision's status words followed by its declared date at its precision. The row is now the kit's ItemPlate: the words are the StatusMark's (`ui-mark__words`) and the date opens the plate's one line of state (`ui-plate__state`), after the mark, with no separator before it (plan 1C Task 3, spec 8).",
+    "proof": "The regular expression still anchors on the row's data-question-id and requires, in order, the status words \"Partly\" closing their </span> and then the state line starting with \"Oct 2026\" (the declared date at month precision): `class=\"ui-mark__words\">Partly<\\/span>[\\s\\S]*?class=\"ui-plate__state\">Oct 2026<`. The `<` after the date requires it to be the state line's first and only part here. The not-toContain of the empty line is unchanged. Seen failing on the new markup with the old pattern (`>Partly<\\/span> · Oct 2026`), passing with the new one.",
+    "task": "plan 1C Task 3 (lane 7 part 1, All questions)"
   }
 ]

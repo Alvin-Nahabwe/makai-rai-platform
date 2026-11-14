@@ -50,7 +50,7 @@ test('FR-DEC-04 (screen) FR-DEC-08: three versions in reverse order; after withd
   // CONSOLIDATED section 4: the content version and the "Show UTC" disclosure are internal and are not shown.
   for (const gone of ['0.0.1-fixture', 'Content version', 'Show UTC']) await expect(v2).not.toContainText(gone);
   await page.goto(stagePath(projectId, 'pre-processing'));
-  await expect(page.locator(`[data-question-id="${Q}"] .status-label`)).toHaveText('No decision');
+  await expect(page.locator(`[data-question-id="${Q}"] .ui-mark__words`)).toHaveText('No decision');
 });
 
 test('UX-29 UX-42 FR-DEC-08: the withdrawal confirmation names the version and the consequence, takes focus, and Cancel returns it', async ({ page, baseURL }) => {
