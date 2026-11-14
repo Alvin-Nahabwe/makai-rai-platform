@@ -27,7 +27,8 @@ const F = PROJECT_COPY.followUp;
 /**
  * The follow-up of one stage on the project page (S-10; FR-FUP-01, 02, 05). Overdue and an owner who cannot act are said
  * in words (UX-06): the word Overdue alone is red (spec 7.1, never inside a status label) with ": was due <date>" plain
- * after it; the owner who cannot act is a neutral status label, followed by what to do.
+ * after it; the owner who cannot act is a plain sentence naming them (not a status label: ruling L5-5 amended), followed
+ * by what to do.
  */
 export function StageFollowUp({ orgSlug, projectId, stage, items, cannotAct }: StageFollowUpProps): ReactElement {
   const all = ordered(items, cannotAct);
@@ -48,7 +49,7 @@ export function StageFollowUp({ orgSlug, projectId, stage, items, cannotAct }: S
               ) : (
                 <span>{F.due(formatDay(i.dueDate))}</span>
               )}
-              {!i.ownerCanAct ? <>{' '}<span><span className="status-label">{F.cannotAct(i.owner.name)}</span>{' '}{F.reassign}</span></> : null}
+              {!i.ownerCanAct ? <>{' '}<span>{F.cannotAct(i.owner.name)}{' '}{F.reassign}</span></> : null}
               {' '}
               <ListLink href={`/orgs/${orgSlug}/projects/${projectId}/findings/${i.findingId}`}>{F.view}</ListLink>
             </li>

@@ -7,7 +7,7 @@ import { PROJECT_COPY } from '@/lib/project/copy';
 
 /** The stage names and the line under each (SRS W-1), read from the project screens' copy module. */
 export const STAGE_NAME: Readonly<Record<Stage, string>> = PROJECT_COPY.stageNames;
-export const STAGE_LINE: Readonly<Record<Stage, string>> = PROJECT_COPY.stageLines;
+const STAGE_LINE: Readonly<Record<Stage, string>> = PROJECT_COPY.stageLines;
 
 const C = PROJECT_COPY.stage;
 

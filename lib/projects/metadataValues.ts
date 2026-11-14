@@ -3,8 +3,6 @@ import { LIFECYCLE_STAGE_WORDS } from '@/lib/project/labels';
 import { PROJECT_FIELD_MESSAGES as M } from '@/lib/projects/copy';
 import { PROJECT_COPY } from '@/lib/project/copy';
 
-export { LIFECYCLE_STAGE_WORDS } from '@/lib/project/labels';
-
 /** The values of the Prisma enums `DevelopmentStage` and `DatasetSize` (prisma/schema.prisma). */
 const DEVELOPMENT_STAGES: readonly string[] = ['concept', 'development', 'testing', 'deployed', 'retired'];
 const DATASET_SIZES: readonly string[] = ['small_lt1k', 'medium_1k_100k', 'large_100k_1m', 'very_large_gt1m', 'unknown'];

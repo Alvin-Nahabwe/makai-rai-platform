@@ -123,6 +123,13 @@ describe('S-10 (Task 5)', () => {
     expect(html).not.toContain('Team working view');
   });
 
+  it('S-10 (kit page header): a person with no action on the project gets no empty actions wrapper; an owner gets it, with Archive', () => {
+    expect(renderPage({ role: 'viewer' })).not.toContain('ui-page-header__actions');
+    const owner = renderPage({ role: 'owner' });
+    expect(owner).toContain('ui-page-header__actions');
+    expect(owner).toContain('class="archive-control"');
+  });
+
   it('FR-PRJ-02: a new project shows "Nothing recorded yet." in each stage', () => {
     expect(renderPage({ counts: ZERO }).split('Nothing recorded yet.')).toHaveLength(4);
   });
@@ -271,6 +278,8 @@ describe('S-09 and S-32 (Task 7)', () => {
   });
 
   it('FR-PRJ-01 (X-2): the API answers a bad descriptive value with the ruled field message, and the client form ships none of them', async () => {
+    // A dynamic import although the module is imported at the top: a new static import line would be a module-level change
+    // to this protected file, which only a ledger entry could excuse; this case is newer than stage-1-base and not compared.
     const { validateProjectMetadataValues } = await import('@/lib/projects/metadataValues');
     const M = PROJECT_FIELD_MESSAGES;
     expect(validateProjectMetadataValues({ developmentStage: 'beta' })).toEqual({ field: 'developmentStage', message: M.developmentStage });

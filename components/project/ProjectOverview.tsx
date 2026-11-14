@@ -35,7 +35,10 @@ export function ProjectOverview({ data, children }: { data: ProjectOverviewData;
             <p className="text-muted">{C.anyOrder}</p>
           </>
         )}
-        actions={(
+        // No action at all (a viewer): no actions wrapper. Otherwise one fragment whose slots keep their places, so
+        // ArchiveProjectControl stays mounted across the refresh that follows an archive (`can.archiveControl` follows the
+        // role alone, lib/projects/can.ts), with its status line. Do not move the control out of this slot.
+        actions={can.update || can.export || can.archiveControl ? (
           <>
             {can.update ? <ButtonLink variant="secondary" href={`${base}/edit`}>{C.editProject}</ButtonLink> : null}
             {can.export ? <ButtonLink variant="secondary" href={`${base}/export`}>{C.downloadRecords}</ButtonLink> : null}
@@ -43,7 +46,7 @@ export function ProjectOverview({ data, children }: { data: ProjectOverviewData;
               <ArchiveProjectControl orgSlug={orgSlug} projectId={project.id} projectName={project.name} archived={project.archived} />
             ) : null}
           </>
-        )}
+        ) : null}
       />
       <ArchivedBanner archived={project.archived} />
       <div className="stage-list">

@@ -80,16 +80,19 @@ describe('stage follow-up (S-10, S-11)', () => {
   it('FR-FUP-01 FR-FUP-05: StageFollowUp lists overdue first and marks overdue and owner cannot act in words', () => {
     const html = renderToStaticMarkup(<StageFollowUp orgSlug="o" projectId="p" stage="pre-processing" items={[DUE_12_NOV, OVERDUE_28_OCT]} cannotAct={[CANNOT_20_NOV]} />);
     const F = PROJECT_COPY.followUp;
+    const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     expect(html).toContain(F.heading);
     expect(html.indexOf(`>${F.overdue}<`)).toBeLessThan(html.indexOf(F.due('12 Nov 2026')));
     expect(html.indexOf(F.due('12 Nov 2026'))).toBeLessThan(html.indexOf(F.due('20 Nov 2026')));
     // spec 7.1 (plan 1A Task 15 carry): the word Overdue alone is red, outside any status label; the date follows as plain text.
     expect(html).toContain(`<span class="followup-overdue">${F.overdue}</span>${F.wasDue('28 Oct 2026')}`);
     expect(html.match(/class="followup-overdue"/g)).toHaveLength(1);
-    // the owner who cannot act: a neutral status label naming them, then what to do, as plain text
-    expect(html).toContain(`<span class="status-label">${F.cannotAct('Ada Owner')}</span> ${F.reassign}`);
+    // the owner who cannot act: a sentence naming them, then what to do, both plain text (ruling L5-5 amended: a sentence is
+    // not a status label)
+    expect(html).toContain(`<span>${F.cannotAct('Ada Owner')} ${F.reassign}</span>`);
+    expect(html).not.toMatch(new RegExp(`class="status-label"[^>]*>[^<]*${esc(F.cannotAct('Ada Owner'))}`));
     expect(html).toContain('href="/orgs/o/projects/p/findings/');
-    expect(html.match(new RegExp(`>${F.view}</a>`, 'g'))).toHaveLength(3);
+    expect(html.match(new RegExp(`>${esc(F.view)}</a>`, 'g'))).toHaveLength(3);
     expect(html).toContain('<span class="status-label">In progress</span>');
     expect(html).toContain('<span class="status-label">Planned</span>');
     expect(html).not.toMatch(/badge--moderate|data-status-label|status-label--warning/);
@@ -103,7 +106,7 @@ describe('stage follow-up (S-10, S-11)', () => {
 
   it('FR-FUP-01: a mitigation whose text was erased says so', () => {
     const html = renderToStaticMarkup(<StageFollowUp orgSlug="o" projectId="p" stage="pre-processing" items={[{ ...DUE_12_NOV, what: null }]} cannotAct={[]} />);
-    expect(html).toContain(`<span>${PROJECT_COPY.followUp.erased.replace("'", '&#x27;')}</span>`);
+    expect(html).toContain(`<span>${PROJECT_COPY.followUp.erased.replaceAll("'", '&#x27;')}</span>`);
   });
 
   it('FR-FUP-01: StageFollowUpCounts links open findings and overdue mitigations', () => {
