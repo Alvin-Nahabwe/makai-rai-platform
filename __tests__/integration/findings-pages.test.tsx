@@ -9,6 +9,7 @@ import { FindingPageView } from '@/components/findings/FindingPageView';
 import { MitigationForm } from '@/components/findings/MitigationForm';
 import { loadFindingPage, loadFindingsPage, type FindingPageData } from '@/lib/findings/pageData';
 import { closeByDecision, openShortfallForQuestion } from '@/lib/data/findings';
+import { loadQuestionPanel } from '@/lib/question/panel';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
 import { onlyRolesCanText } from '@/lib/findings/messages';
 import { deciderLabel, OUTSIDE_ROLE_LABELS } from '@/lib/decision/copy';
@@ -731,11 +732,15 @@ describe('R2 R3: a closing record is not a mitigation, and the cause is true (ru
 
   it('R2: after the stuck case is cancelled the label is "Closed" with the cause; after Done it is "Closed by a mitigation" with no closure line', async () => {
     const c = await blockedWalk();
-    await pressClose(c);
-    await addMitigationVersion(fx, c.f.id, { mitigationId: c.m!.mitigationId, status: 'cancelled', owner: 'assessor', dueDate: '2099-01-01' });
+    await pressClose(c);   // the assessor presses while the mitigation is Planned
+    await addMitigationVersion(fx, c.f.id, { mitigationId: c.m!.mitigationId, status: 'cancelled', owner: 'assessor', by: 'owner', dueDate: '2099-01-01' });   // the owner cancels
     const cancelled = await renderFinding(c.f, 'viewer');
     expect(cancelled).toContain(`<bdi class="status-label">${FINDINGS_COPY.labels.closed}</bdi>`);
-    expect(cancelled).toMatch(closureLine(M.closedBecauseDecisionChanged));
+    // Fix 1: the press did not close the finding, so no "Closed by" names its presser or day; the cause stands alone.
+    expect(cancelled).not.toContain(`${F.closedBy} <bdi>`);
+    expect(cancelled).toContain(`<p>${M.closedBecauseDecisionChanged}</p>`);
+    expect(cancelled).toMatch(new RegExp(`</time> ${lit(M.pressedWhileOpen)} <bdi>${lit(name())}</bdi></li>`));
+    expect(cancelled).toMatch(new RegExp(`</time> ${lit(M.updated(2))}[^<]*<bdi>[^<]*</bdi>[^<]*<bdi>${lit(fx.members.owner.name)}</bdi></li>`));
     const dn = await blockedWalk();
     await pressClose(dn);
     await addMitigationVersion(fx, dn.f.id, { mitigationId: dn.m!.mitigationId, status: 'done', owner: 'assessor', dueDate: '2099-01-01' });
@@ -776,6 +781,14 @@ describe('R4 R5: the question page line, the link back, and the order of S-14 (r
     const raising = await addDecision(fx, p.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId, status: 'not_yet' });
     const plain = await addFinding(fx, p.id, { stage: 'pre-processing', source: 'shortfall', questionId: 'Q-PP-01', decisionVersionId: raising.id });
     expect(await openShortfallForQuestion(ctx, p.id, 'Q-PP-01')).toEqual({ findingId: plain.id });
+  });
+
+  it('R4 (fix 2): on an archived project S-12 does not say the finding can now be closed', async () => {
+    const live = await blockedWalk({ mitigation: false });
+    const q = (projectId: string) => loadQuestionPanel(ctxFor(fx, 'owner'), identityOf('owner'), { projectId, stage: 'pre-processing', questionId: 'Q-PP-01' });
+    expect((await q(live.f.projectId)).openFinding).toEqual({ findingId: live.f.id, closable: true });
+    const shelved = await blockedWalk({ mitigation: false, archived: true });
+    expect((await q(shelved.f.projectId)).openFinding).toEqual({ findingId: shelved.f.id });
   });
 
   it('R4: a finding about a question of the running content links back to it; a team finding with no question does not', async () => {

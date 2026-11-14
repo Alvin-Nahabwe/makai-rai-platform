@@ -20,8 +20,11 @@ export interface ClosureDecision { questionId: string; scopeAnswer: string | nul
 
 export type ClosureCause = 'changed' | 'withdrawn' | 'no_longer_applies';
 
-/** "Closed by {name} on {date}." and its cause, or no cause when it cannot be read (rule A: never a guessed cause). */
-export interface Closure { by: string; at: UtcInstant; cause: ClosureCause | null }
+/**
+ * The closure line: "Closed by {name} on {date}." (`closedBy`, only when the record itself closed the finding) and its
+ * cause, or no cause when it cannot be read (rule A: never a guessed cause).
+ */
+export interface Closure { closedBy: { by: string; at: UtcInstant } | null; cause: ClosureCause | null }
 
 /** The closing record that closed the finding, and its cause. */
 export interface RecordClosure<M extends ClosureMitigation> { record: M; cause: ClosureCause | null }

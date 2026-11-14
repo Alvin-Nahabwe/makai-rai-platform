@@ -93,7 +93,9 @@ export async function loadQuestionPanel(
     canWrite: can(ctx.role, 'decision:write') && !archived,
     canRaiseFinding: can(ctx.role, 'finding:raise') && !archived,
     lastOwnSaveDate: read.lastOwn === null ? null : declaredDateOf(read.lastOwn.declaredOn, read.lastOwn.declaredPrecision as DeclaredPrecision | null),
-    openFinding, gateAnswer, contentSemver: running.semver, orgId: ctx.orgId,
+    // Fix 2 (lead's ruling): nobody can close a finding in an archived project, so S-12 does not say it can now be closed.
+    openFinding: openFinding === null || !archived ? openFinding : { findingId: openFinding.findingId },
+    gateAnswer, contentSemver: running.semver, orgId: ctx.orgId,
   };
 }
 

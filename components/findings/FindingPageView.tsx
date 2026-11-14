@@ -149,9 +149,9 @@ export function FindingPageView({ data }: { data: FindingPageData }): ReactEleme
         <h1 className="ui-page-header__title"><bdi>{d.title}</bdi></h1>
         <p><bdi className="status-label">{d.stateLabel}</bdi></p>
         {acceptedLine === null ? null : <p>{acceptedLine}</p>}
-        {d.closure === null ? null : (
-          <p>{F.closedBy} <bdi>{d.closure.by}</bdi> {F.on} <LocalTime at={d.closure.at} dateOnly />.{d.closure.cause === null ? null : ` ${CAUSE_TEXT[d.closure.cause]}`}</p>
-        )}
+        {d.closure === null ? null : d.closure.closedBy !== null ? (
+          <p>{F.closedBy} <bdi>{d.closure.closedBy.by}</bdi> {F.on} <LocalTime at={d.closure.closedBy.at} dateOnly />.{d.closure.cause === null ? null : ` ${CAUSE_TEXT[d.closure.cause]}`}</p>
+        ) : d.closure.cause === null ? null : <p>{CAUSE_TEXT[d.closure.cause]}</p>}
         <p>
           {d.sourceLabel}{SEP}{STAGE_NAMES[f.stage]}
           {f.riskArea === null ? null : <>{SEP}{F.riskArea} <bdi>{named(f.riskArea, d.riskAreaName)}</bdi></>}
