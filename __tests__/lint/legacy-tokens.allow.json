@@ -3,6 +3,5 @@
   "app/(authenticated)/explore/framework/FrameworkMapPage.css",
   "app/(public)/about/AboutPage.css",
   "app/globals.css",
-  "components/export/TeamExportPanel.tsx",
   "components/report/ReferencesList.css"
 ]

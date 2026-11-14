@@ -9,6 +9,7 @@ import { EXPORT_NOT_ALLOWED } from '@/lib/export/messages';
 import { EXPORT_COPY } from '@/lib/export/copy';
 import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 type Params = Promise<{ slug: string }>;
 
@@ -46,13 +47,12 @@ export default async function OrgExportPage({ params, searchParams }: {
 }) {
   const { slug } = await params;
   const loaded = await load(slug);
-  if (loaded.refused) return <div className="page-content"><h1>Team export</h1><p>{EXPORT_NOT_ALLOWED}</p></div>;
+  if (loaded.refused) return <div className="page-content"><PageHeader title={EXPORT_COPY.titles.downloadRecords} /><p>{EXPORT_NOT_ALLOWED}</p></div>;
   const { ctx, org } = loaded;
   const aboutBytes = await estimateTeamExport(ctx, null);
   return (
     <div className="page-content">
-      <h1>Team export</h1>
-      <p>Everything your organisation recorded, with its history, every evidence file and every issued document.</p>
+      <PageHeader title={EXPORT_COPY.titles.downloadRecords} lead={<p>{EXPORT_COPY.intro.organisation}</p>} />
       <TeamExportPanel href={`/api/v1/orgs/${slug}/export`} scopeName={org.name} aboutBytes={aboutBytes} refused={refusedFrom(await searchParams)} />
     </div>
   );

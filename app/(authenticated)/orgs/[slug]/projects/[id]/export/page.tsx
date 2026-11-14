@@ -10,8 +10,10 @@ import { EXPORT_NOT_ALLOWED } from '@/lib/export/messages';
 import { EXPORT_COPY } from '@/lib/export/copy';
 import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { ArchivedBanner } from '@/components/project/ArchivedBanner';
 import RememberProject from '@/components/layout/RememberProject';
+import '@/components/export/TeamExportPanel.css';
 
 type Params = Promise<{ slug: string; id: string }>;
 
@@ -54,14 +56,14 @@ export default async function ProjectExportPage({ params, searchParams }: {
 }) {
   const { slug, id } = await params;
   const loaded = await load(slug, id);
-  if (loaded.refused) return <div className="page-content"><h1>Team export</h1><p>{EXPORT_NOT_ALLOWED}</p></div>;
+  if (loaded.refused) return <div className="page-content"><PageHeader title={EXPORT_COPY.titles.downloadRecords} /><p>{EXPORT_NOT_ALLOWED}</p></div>;
   const { ctx, project, userId } = loaded;
   const aboutBytes = await estimateTeamExport(ctx, project.id);
   return (
     <div className="page-content">
-      <h1>Team export</h1>
+      <PageHeader title={EXPORT_COPY.titles.downloadRecords} />
       <ArchivedBanner archived={project.archivedAt !== null} />
-      <p>This project&apos;s records, with their history, its evidence files and its issued documents.</p>
+      <p className="export-intro">{EXPORT_COPY.intro.project}</p>
       <TeamExportPanel href={`/api/v1/orgs/${slug}/export?projectId=${encodeURIComponent(project.id)}`} scopeName={project.name}
         aboutBytes={aboutBytes} refused={refusedFrom(await searchParams)} />
       <RememberProject userId={userId} orgSlug={slug} projectId={project.id} />

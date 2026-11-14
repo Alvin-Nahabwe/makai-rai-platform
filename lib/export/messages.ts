@@ -26,4 +26,4 @@ export function tooManyAttempts(retryAfterSeconds: number | null): string {
 }
 
 /** M-26 on S-20 for a role without team:export (contract Q9, owner question B21; owner copy, queued). */
-export const EXPORT_NOT_ALLOWED = "Only owners and admins can export the team's records.";
+export const EXPORT_NOT_ALLOWED = "Only Owners and Admins can download the team's records.";

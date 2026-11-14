@@ -1,27 +1,21 @@
-import type { CSSProperties, ReactElement } from 'react';
+import type { ReactElement } from 'react';
 import { formatSize } from '@/lib/format/size';
+import { EXPORT_COPY, recordsOf } from '@/lib/export/copy';
+import { Callout } from '@/components/ui/Callout';
 import { PreparingDownload } from './PreparingDownload';
+import './TeamExportPanel.css';
 
 /**
- * S-20's panel (FR-EXP-01, M-37): what will be exported, about how big, as one ZIP file, and a plain
- * "Download export" link to route 20. When route 20 or the proxy refused an earlier press and sent the
+ * S-20's panel (FR-EXP-01, M-37): what will be downloaded, about how big, as one ZIP file, and a plain
+ * "Download records" link to route 20. When route 20 or the proxy refused an earlier press and sent the
  * browser back here with `?refused=` (contract Routes row 20, owner question B4), the reason is shown
- * first, in an alert. Server-rendered: the server pages call `refusedFrom`, and only the link's
- * "Preparing" sentence runs in the browser (PreparingDownload).
+ * first, in an alert inside a caution callout. Server-rendered: the server pages call `refusedFrom`, and only the
+ * link's "Preparing" sentence runs in the browser (PreparingDownload).
  */
 
-/** The critical tint pair (app/globals.css), whose text meets 4.5:1 on its own background in both themes. */
-export const ALERT: CSSProperties = {
-  padding: 'var(--space-3) var(--space-4)', background: 'var(--tint-critical-bg)', color: 'var(--tint-critical-fg)',
-  borderRadius: 'var(--border-radius-sm)', fontWeight: 'var(--font-weight-semibold)',
-};
-
-export const PREPARING = 'Preparing the export. Large projects can take a few minutes.';
+export const PREPARING = EXPORT_COPY.panel.preparing;
 /** Owner question B4. */
-export const REFUSED_TEXT: Record<'export_busy' | 'rate_limited', string> = {
-  export_busy: 'Two exports are already being prepared. Try again when one has finished.',
-  rate_limited: 'You can start 3 exports an hour. Try again later.',
-};
+export const REFUSED_TEXT: Record<'export_busy' | 'rate_limited', string> = EXPORT_COPY.panel.refused;
 
 /** The `refused` query value S-20 shows a reason for; anything else, a list included, is null. */
 export function refusedFrom(searchParams: Record<string, string | string[] | undefined>): 'export_busy' | 'rate_limited' | null {
@@ -31,10 +25,10 @@ export function refusedFrom(searchParams: Record<string, string | string[] | und
 
 export function TeamExportPanel(p: { href: string; scopeName: string; aboutBytes: number; refused: 'export_busy' | 'rate_limited' | null }): ReactElement {
   return (
-    <div className="card">
-      {p.refused !== null && <p role="alert" style={ALERT}>{REFUSED_TEXT[p.refused]}</p>}
-      <p>{`Export ${p.scopeName}: about ${formatSize(p.aboutBytes)} as one ZIP file.`}</p>
-      <PreparingDownload href={p.href} label="Download export" preparing={PREPARING} />
+    <div className="export-panel">
+      {p.refused !== null && <Callout kind="caution"><p role="alert">{REFUSED_TEXT[p.refused]}</p></Callout>}
+      <p className="export-panel__sentence">{recordsOf(p.scopeName, formatSize(p.aboutBytes))}</p>
+      <PreparingDownload href={p.href} label={EXPORT_COPY.panel.download} preparing={PREPARING} />
     </div>
   );
 }

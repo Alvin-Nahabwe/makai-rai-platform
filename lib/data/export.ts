@@ -332,7 +332,7 @@ export async function writeTeamExport(ctx: OrgContext, actor: Actor, a: { projec
       const { slug } = await tx.organization.findFirstOrThrow({ where: { id: ctx.orgId }, select: { slug: true } });
       const integrityFailure = (evidenceId: string): AppError => {
         logSecurityEvent('EVIDENCE_INTEGRITY_FAILURE', 'error', { userId: actor.userId, details: { orgId: ctx.orgId, evidenceId } });
-        return new AppError(500, 'integrity_failure', 'Integrity failure');
+        return new AppError(500, 'integrity_failure', 'The export stopped because a stored file failed its safety check. Nothing was downloaded. Write to MAK-AI and give the reference shown with this message.');
       };
       const evidence = [...json.projects.flatMap((p) => p.evidence), ...json.unattachedEvidence];
       // A file with no bytes is only right when the operator erased them (FR-EVD-05): its tombstone is in the export.
@@ -358,7 +358,7 @@ export async function writeTeamExport(ctx: OrgContext, actor: Actor, a: { projec
           // As the PDF route does (contract row 17): bytes that no longer match their stored SHA-256 fail closed.
           if (createHash('sha256').update(pdf).digest('hex') !== d.sha256) {
             logSecurityEvent('DOCUMENT_INTEGRITY_FAILURE', 'error', { userId: actor.userId, details: { orgId: ctx.orgId, documentId: d.id } });
-            throw new AppError(500, 'integrity_failure', 'Integrity failure');
+            throw new AppError(500, 'integrity_failure', 'The export stopped because a stored file failed its safety check. Nothing was downloaded. Write to MAK-AI and give the reference shown with this message.');
           }
           zip.add(d.file, pdf);
         }
@@ -369,7 +369,7 @@ export async function writeTeamExport(ctx: OrgContext, actor: Actor, a: { projec
           // No ZIP64 in v1 (fflate writes none): refuse, with a fixed code and ids only.
           const code = e.limit === 'entries' ? 'export_entry_limit' : 'export_size_limit';
           console.error(JSON.stringify({ code, orgId: ctx.orgId, projectId: a.projectId, userId: actor.userId, at: new Date().toISOString() }));
-          throw new AppError(500, code, 'Export too large');
+          throw new AppError(500, code, 'This export is too large to make as one file. Export one project at a time.');
         }
         throw e;
       }
