@@ -1,0 +1,29 @@
+/* S-20's panel, Download records (plan 1A Task 18, part 18d): only what the kit has no part for. The link, the status line
+   and the refusal's callout are the kit's (components/ui); this file draws the panel and spaces its parts, from the role
+   tokens only. */
+
+/* The panel: the surface, its container border, the surface radius, in place of the legacy .card. */
+.export-panel {
+  max-inline-size: var(--measure-reading);
+  margin-block-end: var(--space-6);
+  padding: var(--space-5);
+  border: 1px solid var(--color-border-container);
+  border-radius: var(--radius-surface);
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+}
+
+/* The sentence naming what is downloaded: a long name, or a name without spaces, wraps rather than widening the page. */
+.export-panel__sentence {
+  margin-block: 0 var(--space-4);
+  overflow-wrap: anywhere;
+}
+
+/* The refusal's callout sits inside the panel, above the sentence. */
+.export-panel .ui-callout {
+  margin-block-end: var(--space-4);
+}
+
+.export-panel .ui-callout p {
+  margin: 0;
+}

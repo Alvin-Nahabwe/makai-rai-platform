@@ -90,26 +90,6 @@
     "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
   },
   {
-    "file": "app/(authenticated)/orgs/[slug]/export/page.tsx",
-    "text": "Everything your organisation recorded, with its history, every evidence file and every issued document.",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "app/(authenticated)/orgs/[slug]/export/page.tsx",
-    "text": "Team export",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "app/(authenticated)/orgs/[slug]/projects/[id]/export/page.tsx",
-    "text": "Team export",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "app/(authenticated)/orgs/[slug]/projects/[id]/export/page.tsx",
-    "text": "This project&apos;s records, with their history, its evidence files and its issued documents.",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
     "file": "app/(authenticated)/orgs/[slug]/projects/[id]/reviews/[reviewId]/documents/page.tsx",
     "text": "Generate a document",
     "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
@@ -892,16 +872,6 @@
   {
     "file": "components/evidence/VersionEvidenceList.tsx",
     "text": "Link address erased",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "components/export/TeamExportPanel.tsx",
-    "text": "Download export",
-    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
-  },
-  {
-    "file": "components/export/TeamExportPanel.tsx",
-    "text": "Export ${…}: about ${…} as one ZIP file.",
     "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
   },
   {

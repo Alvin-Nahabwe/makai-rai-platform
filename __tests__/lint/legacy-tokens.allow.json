@@ -7,7 +7,6 @@
   "components/decision/DecisionForm.css",
   "components/decision/DecisionHistoryList.tsx",
   "components/decision/StageQuestionList.tsx",
-  "components/export/TeamExportPanel.tsx",
   "components/project/ProjectForm.tsx",
   "components/project/StageView.css",
   "components/question/QuestionContent.css",
