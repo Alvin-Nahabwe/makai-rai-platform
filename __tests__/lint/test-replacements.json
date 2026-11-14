@@ -1990,5 +1990,13 @@
     "property": "Every control of the decision form keeps its id and name, and each status choice shows one symbol: the native radio button, which is the one that shows what is chosen. The status shape beside it is gone (workshop walk finding S12-d): before anything was chosen, Not yet showed two empty circles and Done's filled disc read as chosen.",
     "proof": "The case renders DecisionFields and requires, for done, partly, not_yet and not_applicable, the radio with type=\"radio\", name=\"status\", its value and its aria-describedby, exactly as before; the count of class=\"ui-mark__shape\" in the markup, which was 4, is now none (match returns null). The option, reason-code and select assertions are unchanged. __tests__/unit/ui/radio-cards.test.tsx still requires RadioCards to draw a mark for an option that passes one, so the kit's option stays.",
     "task": "workshop walk fix S12-d"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/idle-layout.test.tsx::(module)",
+    "replacedBy": "__tests__/unit/idle-layout.test.tsx::UX-02: the layout gives the Sidebar the person's role in each of their organisations, the platform label and no platform role",
+    "property": "The file's module code serves the cases below: the layout is walked as an element tree with the data reads mocked, so the cases see what the layout hands the shell.",
+    "proof": "One module change: the mock of @/lib/auth/identity gains identityPassesGates, resolving true, because lib/shell/data.ts now asks it before reading the memberships (a person held at a sign-in gate gets the shell of a person in no organisation; coordinator ruling after workshop walk finding S4). Without it vitest refuses the missing export of the mocked module. The mocked person is the ordinary one who has passed the gates, so every case still sees the membershipsForUser and orgRoleLabel mocks decide the shell, unchanged. The held case is required by __tests__/unit/shell-data.test.ts::gate 2 or 3 not passed: the shell of a person in no organisation, and the memberships are not read.",
+    "task": "workshop walk fix S4, gate ruling"
   }
 ]

@@ -15,6 +15,9 @@ vi.mock('@/lib/data/preauth', () => ({ membershipsForUser: membershipsMock }));
 vi.mock('@/lib/authz/roleLabel', () => ({ orgRoleLabel: orgRoleLabelMock }));
 const findUniqueMock = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/data/identity', () => ({ identityDb: { user: { findUnique: findUniqueMock } } }));
+// Whether the person passes the sign-in gates (a password change due, a legal text to accept): they do unless a case says not.
+const passesGatesMock = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/auth/identity', () => ({ identityPassesGates: passesGatesMock }));
 
 import { loadShellData, roleWord } from '@/lib/shell/data';
 
@@ -33,6 +36,41 @@ describe('loadShellData', () => {
     orgRoleLabelMock.mockResolvedValue(null);
     findUniqueMock.mockReset();
     findUniqueMock.mockResolvedValue({ lastActiveOrgId: null });
+    passesGatesMock.mockReset();
+    passesGatesMock.mockResolvedValue(true);
+  });
+
+  describe('a person held at a sign-in gate (coordinator ruling after S4)', () => {
+    it('gate 2 or 3 not passed: the shell of a person in no organisation, and the memberships are not read', async () => {
+      membershipsMock.mockResolvedValue([row('a', 'Alpha'), row('b', 'Beta')]);
+      orgRoleLabelMock.mockImplementation(async (_i: unknown, slug: string | undefined) => (slug === undefined ? null : 'viewer'));
+      findUniqueMock.mockResolvedValue({ lastActiveOrgId: 'org-id-b' });
+      passesGatesMock.mockResolvedValue(false);
+      const shell = await loadShellData(identity);
+      expect(shell).toEqual({ userId: 'user-1', userName: 'Ssekandi Nnaŋŋa', platformLabel: null, roleLabels: {}, orgs: [], homeSlug: null });
+      expect(passesGatesMock).toHaveBeenCalledWith(identity);
+      expect(membershipsMock).not.toHaveBeenCalled();
+      expect(findUniqueMock).not.toHaveBeenCalled();
+      expect(orgRoleLabelMock.mock.calls.map((c) => c[1])).toEqual([undefined]);
+      const serialised = JSON.stringify(shell);
+      for (const value of ['"a"', '"b"', 'Alpha', 'Beta', 'Viewer', 'org-id']) expect(serialised).not.toContain(value);
+    });
+
+    it('a held MAK-AI administrator keeps the platform label and still gets no organisation', async () => {
+      membershipsMock.mockResolvedValue([row('stray', 'Stray')]);
+      orgRoleLabelMock.mockImplementation(async (_i: unknown, slug: string | undefined) => (slug === undefined ? 'MAK-AI administrator' : 'viewer'));
+      passesGatesMock.mockResolvedValue(false);
+      const shell = await loadShellData({ ...identity, platformRole: 'admin', mustChangePassword: true });
+      expect(shell).toEqual({ userId: 'user-1', userName: 'Ssekandi Nnaŋŋa', platformLabel: 'MAK-AI administrator', roleLabels: {}, orgs: [], homeSlug: null });
+      expect(membershipsMock).not.toHaveBeenCalled();
+    });
+
+    it('a gate read that fails is an error, never a shell with organisations', async () => {
+      membershipsMock.mockResolvedValue([row('a', 'Alpha')]);
+      passesGatesMock.mockRejectedValue(new Error('database down'));
+      await expect(loadShellData(identity)).rejects.toThrow('database down');
+      expect(membershipsMock).not.toHaveBeenCalled();
+    });
   });
 
   it('1A Task 11 L2-50 T1: one read of the memberships, one label per organisation and one for the platform', async () => {
