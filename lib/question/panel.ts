@@ -22,7 +22,7 @@ export interface QuestionPanelData {
   seals: SealRef[]; reasonCodes: ReasonCodeEntry[];
   members: Array<{ userId: string; name: string }>; viewer: { userId: string; name: string; role: OrgRole };
   canWrite: boolean; canRaiseFinding: boolean; lastOwnSaveDate: DeclaredDate | null;
-  openFinding: { findingId: string } | null; gateAnswer: ScopeAnswer | null; contentSemver: string;
+  openFinding: { findingId: string; closable?: true } | null; gateAnswer: ScopeAnswer | null; contentSemver: string;
   orgId: string;                            // the draft key's organisation (UX-26; gap G041)
 }
 
