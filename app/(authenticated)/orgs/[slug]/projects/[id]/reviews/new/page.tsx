@@ -12,6 +12,7 @@ import { REVIEW_COPY } from '@/lib/review/copy';
 import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
 import RememberProject from '@/components/layout/RememberProject';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 interface PageProps {
   params: Promise<{ slug: string; id: string }>;
@@ -45,10 +46,10 @@ export default async function OpenReviewPage({ params, searchParams }: PageProps
   const { slug, id } = await params;
   const { stage } = await searchParams;
   const { identity, ctx, project } = await load(slug, id);
-  const heading = <h1>Open a stage review</h1>;
+  const heading = <PageHeader title={REVIEW_COPY.titles.openReview} />;
   const remember = <RememberProject userId={identity.userId} orgSlug={slug} projectId={project.id} />;
   if (!can(ctx.role, 'review:open')) {
-    return <div className="page-content">{heading}<p>Only owners, admins and assessors can open a stage review.</p>{remember}</div>;
+    return <div className="page-content">{heading}<p>{REVIEW_COPY.open.refusal}</p>{remember}</div>;
   }
   if (project.archivedAt !== null) {
     return <div className="page-content"><ArchivedBanner archived />{heading}{remember}</div>;

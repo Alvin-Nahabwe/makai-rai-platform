@@ -11,6 +11,7 @@ import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
 import { FIELD_COPY } from '../lib/ui/field/copy';
 import { DECISION_OUTCOME_COPY } from '../lib/decision/outcome/copy';
 import { ARCHIVED_TEXT, ROLE_CHANGED_TEXT } from '../lib/evidence/copy';
+import { REVIEW_COPY } from '../lib/review/copy';
 
 /**
  * Review Focus RF-4 (FR-PRJ-03, FR-MEM-03): a write refused on a page that was already open is refused on the server too,
@@ -33,8 +34,8 @@ const S12_M09 = DECISION_OUTCOME_COPY.save.forbidden;
  * S-17's seal refusals are not M-12 and M-09: REV-b's C4 ruling CR-6 (owner copy, components/review/reviewText.ts:111-112)
  * gives a seal its own sentences, because a seal keeps nothing on the device. The spec checks the words the page shows.
  */
-const SEAL_ARCHIVED = 'Not sealed: this project is archived.';
-const SEAL_ROLE = 'Not sealed: your role changed. Ask an owner or admin.';
+const SEAL_ARCHIVED = REVIEW_COPY.confirm.archived;
+const SEAL_ROLE = REVIEW_COPY.confirm.roleChanged;
 /** S-18's refusals at Issue are its own sentences (lib/documents/copy.ts, DOCUMENTS_COPY.refusal), not M-09 or M-12. */
 const ISSUE_ROLE = DOCUMENTS_COPY.refusal.role('issuing');
 const ISSUE_ARCHIVED = DOCUMENTS_COPY.refusal.archived('issuing');
@@ -133,7 +134,7 @@ async function openPages(browser: Browser): Promise<OpenPages> {
 
   const s17 = await page();
   await s17.goto(`${root}/reviews/${reviewId}/seal`);
-  await expect(s17.getByRole('button', { name: 'Seal as seal 2' })).toBeVisible();
+  await expect(s17.getByRole('button', { name: REVIEW_COPY.confirm.sealNow })).toBeVisible();
 
   const s18 = await page();
   await s18.goto(`${root}/reviews/${reviewId}/documents`);
@@ -157,7 +158,7 @@ async function pressAll(p: OpenPages, text: { save: string; upload: string; miti
   // The refused upload keeps its own alert (the evidence block's line); this is the save's refusal, the form's own paragraph.
   await expect(mit.locator('form > p[role="alert"]')).toHaveText(text.mitigation);
 
-  await p.s17.getByRole('button', { name: 'Seal as seal 2' }).click();
+  await p.s17.getByRole('button', { name: REVIEW_COPY.confirm.sealNow }).click();
   await expect(p.s17.locator('main').getByRole('alert')).toContainText(text.seal);   // Next's route announcer is a second alert, outside <main>
 
   await p.s18.getByRole('button', { name: 'Issue this document' }).click();

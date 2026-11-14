@@ -14,6 +14,7 @@ import { NO_DOCUMENTS_LINE } from '../../components/documents/GenerateDocumentFo
 import { captureLogs } from '../helpers/logCapture';
 import { can } from '../../lib/authz/policy';
 import { DOCUMENTS_COPY, MSG_SEAL_CHECK_FAILED } from '../../lib/documents/copy';
+import { REVIEW_COPY } from '../../lib/review/copy';
 
 vi.setConfig({ testTimeout: 60_000 });
 vi.mock('next/navigation', async (orig) => ({ ...(await orig<typeof import('next/navigation')>()), useRouter: () => ({ refresh() {} }) }));
@@ -101,11 +102,11 @@ describe('S-18', () => {
     const stageReview = async () => renderToStaticMarkup(await StageReviewPage({ params: Promise.resolve({ slug: fxA.org.slug, id: projectOfA, reviewId: reviewOfA }) }));
     for (const role of ['owner', 'admin', 'reviewer'] as const) {
       sessionFor(fxA.members[role].userId);
-      expect([role, (await stageReview()).split('Generate a document').length - 1]).toEqual([role, 1]);
+      expect([role, (await stageReview()).split(REVIEW_COPY.review.createDocument).length - 1]).toEqual([role, 1]);
     }
     for (const role of ['assessor', 'viewer'] as const) {
       sessionFor(fxA.members[role].userId);
-      expect([role, (await stageReview()).split('Generate a document').length - 1]).toEqual([role, 0]);
+      expect([role, (await stageReview()).split(REVIEW_COPY.review.createDocument).length - 1]).toEqual([role, 0]);
     }
   });
 

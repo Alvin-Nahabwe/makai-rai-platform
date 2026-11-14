@@ -1670,5 +1670,29 @@
     "property": "Each dataset size band prints its display words in a new document, with the project mark, and never its enum value; a null size prints nothing. The words are audit B rows 350 to 354 as the coordinator's answer Q14 applies them: \"Under 1,000 records\", \"1,000 to 100,000 records\", \"100,000 to 1 million records\", \"Over 1 million records\", \"Not known\" (lib/project/labels.ts). Issued documents are stored bytes and are not re-rendered.",
     "proof": "Only the five word literals of the band table changed; the loop still requires, for every band, that the resolved part's text contains its words and the project mark and does not contain the enum value, and the null case is unchanged.",
     "task": "plan 1A Task 17"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/review-components.test.tsx::UX-31: SealNote says before saving what saving will do, once per review, for the highest seal",
+    "replacedBy": "__tests__/unit/review-components.test.tsx::UX-31: SealNote says before saving what saving will do, once per review, for the highest seal",
+    "property": "Before a person saves a decision that a seal holds, SealNote says, once per review and for that review's highest seal, that the seal keeps what it holds and that the review will then show \"changed since seal N\"; with no seal it renders nothing. Task 18 answer Q9 (G-b4) rewords the sentence (C#244): it no longer names version numbers.",
+    "proof": "In this case: expect(html).toContain(REVIEW_COPY.mounted.sealNote(2).replaceAll('\"', '&quot;')) requires the sentence for seal 2, the highest of the review's two seals, as React renders it (the quotes escaped, as the old literal wrote them); expect(html.match(/This decision is in seal/g)).toHaveLength(1) still requires one sentence per review; toBe('') for no seal is unchanged.",
+    "task": "1A-18"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/review-components.test.tsx::FR-REV-05 NFR-A11Y-05: StageSealBanner names the review, the seal and the changed count in text",
+    "replacedBy": "__tests__/unit/review-components.test.tsx::FR-REV-05 NFR-A11Y-05: StageSealBanner names the review, the seal and the changed count in text",
+    "property": "The changed-since-seal banner says the seal number and the changed counts in text, links the review by its address when one is given, and renders nothing when nothing changed. Task 18 (C#243, C2) renames the link from the retired \"Open review\" to \"View review\".",
+    "proof": "In this case the same regex /<a [^>]*href=\"\\/orgs\\/o\\/projects\\/p\\/reviews\\/r\"[^>]*>View review<\\/a>/ requires a native link to the same address with the new words; the count assertions and toBe('') are unchanged. The words are a regex with markup, which the protected-test rule cannot express as a copy constant.",
+    "task": "1A-18"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/review-components.test.tsx::FR-REV-01 FR-REV-05: StageReviewsSummary lists each review with its note and state, and offers Open a stage review only when allowed",
+    "replacedBy": "__tests__/unit/review-components.test.tsx::FR-REV-01 FR-REV-05: StageReviewsSummary lists each review with its note and state, and offers Open a stage review only when allowed",
+    "property": "StageReviewsSummary lists each review with its name, its note and its state in words, links each review by its address, and offers \"Open a stage review\" only when allowed. Task 18 (C#240, C2) renames the per-review link from the retired \"Open review\" to \"View review\", and C#239 rewords the erased note.",
+    "proof": "In this case the same regex /<a [^>]*href=\"\\/orgs\\/o\\/projects\\/p\\/reviews\\/r\"[^>]*>View review<\\/a>/ requires a native link to the review's address with the new words; expect(erased).toContain(REVIEW_COPY.mounted.noteErased('3 Nov 2026')) requires the erased note with its date; the name, note, state and the Open a stage review link assertions are unchanged.",
+    "task": "1A-18"
   }
 ]

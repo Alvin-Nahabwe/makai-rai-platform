@@ -14,6 +14,7 @@ import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
 import { contentChangedLine, previewLines } from '@/components/review/reviewText';
 import RememberProject from '@/components/layout/RememberProject';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 interface PageProps {
   params: Promise<{ slug: string; id: string; reviewId: string }>;
@@ -56,11 +57,11 @@ export default async function SealConfirmationPage({ params }: PageProps) {
   const archived = project.archivedAt !== null;
   const sealNumber = nextSealNumber(review);
   const base = `/orgs/${encodeURIComponent(slug)}/projects/${encodeURIComponent(id)}`;
-  const heading = <h1>{`Seal "${review.name}" as seal ${sealNumber}`}</h1>;
+  const heading = <PageHeader title={REVIEW_COPY.titles.seal(review.name, sealNumber)} />;
   const remember = <RememberProject userId={identity.userId} orgSlug={slug} projectId={project.id} />;
 
   if (!can(ctx.role, 'review:seal')) {
-    return <div className="page-content">{heading}<p>Only owners, admins and reviewers can seal a stage review.</p>{remember}</div>;
+    return <div className="page-content">{heading}<p>{REVIEW_COPY.sealPage.refusal}</p>{remember}</div>;
   }
   if (archived) {
     return <div className="page-content"><ArchivedBanner archived />{heading}{remember}</div>;
@@ -71,24 +72,30 @@ export default async function SealConfirmationPage({ params }: PageProps) {
   const labels = Object.fromEntries([...reasonCodesFor(content, 'not_applicable'), ...reasonCodesFor(content, 'not_yet')].map((c) => [c.code, c.label]));
   const lines = previewLines(preview, sealNumber, labels);
   const contentLine = contentChangedLine(review.latestSeal, content.semver);
+  const stageQuestions = questionsInStage(content, review.stage);
+  const questionText = new Map(stageQuestions.map((q) => [q.id, q.text]));
   return (
     <div className="page-content">
       {heading}
       <SealConfirm
         orgSlug={slug} projectId={id} reviewId={reviewId} stage={review.stage} sealNumber={sealNumber}
-        userId={identity.userId} orgId={ctx.orgId} questionIds={questionsInStage(content, review.stage).map((q) => q.id)}
+        userId={identity.userId} orgId={ctx.orgId} questionIds={stageQuestions.map((q) => q.id)}
       >
         <p>{lines[0]}</p>
         {contentLine !== null ? <p>{contentLine}</p> : null}
-        <h2>{`What the seal will hold (${review.stage})`}</h2>
+        <h2>{REVIEW_COPY.sealPage.includesHeading}</h2>
         <ul>
           {lines.slice(1).map((l) => <li key={l}>{l}</li>)}
           <li>
-            {`No decision (${preview.noDecision.length})`}
-            {preview.noDecision.length > 0 ? ': ' : ''}
-            {preview.noDecision.map((q, i) => (
-              <span key={q}>{i > 0 ? ', ' : ''}<a href={`${base}/stages/${review.stage}/questions/${encodeURIComponent(q)}`}>{q}</a></span>
-            ))}
+            {REVIEW_COPY.sealPage.noDecision(preview.noDecision.length)}
+            {preview.noDecision.length > 0 ? ':' : ''}
+            {preview.noDecision.length > 0 ? (
+              <ul className="review-questions">
+                {preview.noDecision.map((q) => (
+                  <li key={q}><a href={`${base}/stages/${review.stage}/questions/${encodeURIComponent(q)}`}>{questionText.get(q) ?? q}</a></li>
+                ))}
+              </ul>
+            ) : null}
           </li>
         </ul>
       </SealConfirm>

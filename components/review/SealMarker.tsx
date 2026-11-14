@@ -1,5 +1,6 @@
 import type { SealRef } from '@/types/seal';
 import type { ReactElement } from 'react';
+import { REVIEW_COPY } from '@/lib/review/copy';
 
 export type SealMarkerProps = { seals: SealRef[] };
 
@@ -11,7 +12,7 @@ export function SealMarker({ seals }: SealMarkerProps): ReactElement | null {
   if (seals.length === 0) return null;
   return (
     <ul className="seal-markers">
-      {seals.map((s) => <li key={s.sealId}>{`In seal ${s.sealNumber} of ${s.reviewName}`}</li>)}
+      {seals.map((s) => <li key={s.sealId}>{REVIEW_COPY.mounted.sealMarker(s.sealNumber, s.reviewName)}</li>)}
     </ul>
   );
 }
