@@ -69,6 +69,11 @@ type StageInputs = { questions: ReadonlyArray<{ id: string; text: string }>; ope
  * before any read (S4). Then two transactions, one after the other, both inside `withOrg` (S1): the person's last save in
  * this project, then the three stages' current rows (one statement after another in one transaction). No error is caught
  * (S5): a failed read is an error, never "no action".
+ *
+ * PRECONDITION: `project` comes from a read already made under this same `ctx` (the page: `loadProjectOverview`, then
+ * `notFound()`). This function does not check that the project exists or is visible: for an id with no visible row
+ * (another organisation's, or none) it returns the `start` target of an empty project, built from content ids only,
+ * never `null`; `archived` is trusted as given.
  */
 export async function loadContinueTarget(
   ctx: OrgContext, userId: string, project: { id: string; archived: boolean },

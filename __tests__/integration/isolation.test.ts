@@ -414,7 +414,7 @@ it("Home's next step (plan 1B Task 9, slice 3): lastSavedBy and loadNextStep und
   expect(namesB(next)).toBe(false);
 });
 
-it("The project page's primary action (plan 1C C11, cut): lastSavedIn and loadContinueTarget under ctx A for B's project return null and no id of B's", async () => {
+it("The project page's primary action (plan 1C C11, cut): under ctx A for B's project, lastSavedIn is null and loadContinueTarget gives the start target of an empty project, with no id of B's", async () => {
   await resetDb();
   const { useFixtureContent } = await import('../helpers/content');
   const { addDecision, addProject, buildOrg } = await import('../helpers/recordFixture');
@@ -431,8 +431,11 @@ it("The project page's primary action (plan 1C C11, cut): lastSavedIn and loadCo
   // Under B the person's save is found: the row exists, so A's null below is the policy's doing.
   expect(await lastSavedIn(ctx(b.org.id, 'assessor'), pb.id, u.userId)).toEqual({ stage: 'in-processing', questionId: 'Q-IP-01' });
   expect(await lastSavedIn(ctx(a.org.id, 'assessor'), pb.id, u.userId)).toBeNull();
+  // Under B the person's save decides the target; under A, B's project is indistinguishable from one that does not exist.
+  expect(await loadContinueTarget(ctx(b.org.id, 'assessor'), u.userId, { id: pb.id, archived: false })).toMatchObject({ stage: 'in-processing', label: 'continue' });
   const target = await loadContinueTarget(ctx(a.org.id, 'assessor'), u.userId, { id: pb.id, archived: false });
-  expect(target?.label).not.toBe('continue');
+  expect(target).toEqual(await loadContinueTarget(ctx(a.org.id, 'assessor'), u.userId, { id: 'no-such-project', archived: false }));
+  expect(target?.label).toBe('start');
   expect(JSON.stringify(target ?? null)).not.toContain(pb.id);
   expect(JSON.stringify(target ?? null)).not.toContain(b.org.id);
 });
