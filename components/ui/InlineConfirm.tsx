@@ -44,9 +44,12 @@ export interface InlineConfirmProps {
  *     putting focus where it did. Only when the confirmation mounted after the page: one that comes with the page's own HTML
  *     (the kit page's) is not revealed, so that page still loads at the top. `useHydrated` tells the two apart by its value in
  *     the first render (false while hydrating server HTML). Not handled: a page reached by client-side navigation that shows a
- *     confirmation from its first render would be revealed too; no screen does that today.
+ *     confirmation from its first render would be revealed too; no product screen does that (the kit page itself would, if
+ *     reached by client-side navigation). On a screen that leaves focus on the button that opened it, a window too short for
+ *     that button and the confirmation together shows the confirmation, and the button may leave the view.
  *   - On focus: an element that takes focus inside the confirmation (a caller's focus(), a later script focus such as a field
- *     error's, or Tab) is brought wholly into view, as DecisionForm.tsx's form does.
+ *     error's, or Tab) is brought wholly into view, as DecisionForm.tsx's form does. Like that form's, it also runs when the
+ *     window or tab regains focus with focus inside the confirmation, bringing that element back into view.
  */
 export function InlineConfirm(p: InlineConfirmProps): ReactElement {
   const headingId = useId();

@@ -18,8 +18,9 @@ function standIn(name: string, calls: Call[], holds: StandIn[] = []): StandIn {
 type StandIn = { scrollIntoView: (o?: ScrollIntoViewOptions) => void; contains: (other: StandIn | null) => boolean };
 
 describe('revealOpened and revealFocused', () => {
-  it('scrolls to the nearest edge, both ways, instantly rather than with the page\'s smooth scroll', () => {
+  it('scrolls to the nearest edge, both ways, instantly rather than with the page\'s smooth scroll, with options no importer can change', () => {
     expect(NEAREST_INSTANT).toEqual({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
+    expect(Object.isFrozen(NEAREST_INSTANT)).toBe(true);
   });
 
   it('SC 2.4.11: an opened confirmation is brought into view whole first, then the element that has focus when it is inside', () => {

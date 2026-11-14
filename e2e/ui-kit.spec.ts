@@ -747,7 +747,7 @@ test.describe('InlineConfirm', () => {
       await page.setViewportSize(viewport);
       await openKit(page);
       await scrollSettled(page);
-      // Every vertical scroller on the page, the document and .app-main included, is still at its top (a sideways scroll, such
+      // Every vertical scroller on the page, the document included, is still at its top (a sideways scroll, such
       // as the tab row bringing its current tab into view, is not this case's).
       const moved = await page.evaluate(() => Array.from(document.querySelectorAll('*'))
         .filter((el) => el.scrollTop !== 0)
