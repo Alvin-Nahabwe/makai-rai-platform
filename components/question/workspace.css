@@ -1,0 +1,74 @@
+/*
+ * The question page's frame (app/(authenticated)/.../questions/[questionId]/page.tsx; plan 1C decision C1, cut to
+ * slice 1): the strip, the question as the page's h1 with its code line, and two columns, the main one (the question,
+ * the current decision, the seal note, the form) and the guide one (the guidance aside, the finding link, the
+ * suggestions). Role tokens and spaces only, so both themes hold.
+ */
+
+/* The strip: Previous question, the position, Next question, All questions. */
+.question-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: center;
+  margin-block-end: var(--space-4);
+}
+
+/* One column, in DOM order: the main column, then the guide column. */
+.question-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "main"
+    "guide";
+  gap: var(--space-6);
+  align-items: start;
+  overflow-wrap: break-word;
+}
+
+.question-workspace__main {
+  grid-area: main;
+  min-width: 0;
+}
+
+.question-workspace__guide {
+  grid-area: guide;
+  min-width: 0;
+}
+
+/* Each region starts clear of the one above it: the current decision under the question, the form under the current
+   decision, and in the guide column the finding link and the suggestions under the guidance. */
+.question-workspace__main > section + section,
+.question-workspace__guide > * + * {
+  margin-block-start: var(--space-6);
+}
+
+/*
+ * Two columns once the main one keeps at least 30rem beside a guide of 16rem and the 1.5rem gap: 47.5rem (760px) of
+ * content. From 1024px the window also holds the rail (248px), the main area's padding (2 x 2rem), the page's padding
+ * (2 x 2rem) and, where scroll bars take space, the main area's scroll bar (15px in Chromium on Linux, 17px on
+ * Windows): 760 + 248 + 64 + 64 + 17 = 1153px, so 72.5rem (1160px) with a few pixels to spare. Below it, one column in
+ * DOM order. e2e/question-frame.spec.ts measures the columns either side of it. QuestionContent.css hides the jump link
+ * by the same query. The main column is twice the guide's width above that.
+ */
+@media (width >= 72.5rem) {
+  .question-workspace {
+    grid-template-columns: minmax(0, 2fr) minmax(16rem, 1fr);
+    grid-template-areas: "main guide";
+  }
+}
+
+/* The question in words: the h2 step of the type ramp, so the longest question still leaves the form's first field in
+   the first view at 1280 by 900. */
+.question-frame__title {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-h2);
+  overflow-wrap: break-word;
+}
+
+/* The code line "{Q-ID} · {module}", directly under the h1. */
+.question-frame__code {
+  margin: 0 0 var(--space-4);
+  font-size: var(--font-size-small);
+  color: var(--color-ink-muted);
+}
