@@ -88,6 +88,17 @@ describe('loadNextStep', () => {
     expect(await next('assessor')).toMatchObject({ projectId: newer.id, questionId: ids(PP)[1], position: { n: 2 }, rule: 'first-open' });
   });
 
+  it('F1: an assessor whose only saves are in a project archived since gets null, not first-open', async () => {
+    const active = await addProject(fx, { name: 'Active' });
+    const archived = await addProject(fx, { name: 'Archived since' });
+    await save(fx, archived.id, { stage: PP, questionId: 'Q-PP-01' });
+    await testDb.project.update({ where: { id: archived.id }, data: { archivedAt: new Date() } });
+    expect(await next('assessor')).toBeNull();
+    // Another assessor of the same organisation, who never saved, still gets first-open in the active project.
+    await testDb.membership.update({ where: { orgId_userId: { orgId: fx.org.id, userId: fx.members.admin.userId } }, data: { role: 'assessor' } });
+    expect(await loadNextStep(ctxFor(fx, 'assessor'), fx.members.admin.userId)).toMatchObject({ projectId: active.id, rule: 'first-open' });
+  });
+
   it('an assessor with no saved entry and no active project gets null', async () => {
     await addProject(fx, { archived: true });
     expect(await next('assessor')).toBeNull();

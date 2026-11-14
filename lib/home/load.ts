@@ -4,7 +4,7 @@ import { currentDecisionRows } from '@/lib/data/decisions';
 import { listProjectRows, openQuestionIds } from '@/lib/data/projects';
 import { withOrg, type OrgContext } from '@/lib/data/tenant';
 import type { ScopeAnswer, Stage, UtcInstant } from '@/types/record';
-import { lastSavedBy } from '@/lib/home/queries';
+import { hasSavedAny, lastSavedBy } from '@/lib/home/queries';
 import { nextStep } from '@/lib/home/nextStep';
 import type { NextStep } from '@/lib/home/types';
 
@@ -21,8 +21,10 @@ export async function loadNextStep(ctx: OrgContext, userId: string): Promise<Nex
     return stepIn(ctx, { projectId: saved.projectId, projectName: saved.projectName, stage: saved.stage }, saved.questionId, saved.at);
   }
   // Never saved here: an Assessor starts in Pre-processing of the most recently updated active project; an Owner or Admin
-  // who has not recorded gets no next step.
+  // who has not recorded gets no next step. An Assessor whose saves are all in projects archived since did save, so gets no
+  // next step rather than a first-time reason that would be untrue (review F1).
   if (ctx.role !== 'assessor') return null;
+  if (await hasSavedAny(ctx, userId)) return null;
   const project = (await listProjectRows(ctx)).active[0];
   if (project === undefined) return null;
   return stepIn(ctx, { projectId: project.id, projectName: project.name, stage: 'pre-processing' }, null, null);

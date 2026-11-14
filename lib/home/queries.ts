@@ -34,3 +34,18 @@ export function lastSavedSql(userId: string): Prisma.Sql {
     ORDER BY v."receivedAt" DESC, v."versionNumber" DESC
     LIMIT 1`;
 }
+
+/**
+ * Whether the person has entered any decision version in this organisation, in any project, archived or not, a withdrawal
+ * included (fix round 1, review F1). Home asks it only when `lastSavedBy` finds nothing, so a person whose saves are all
+ * in projects archived since is not told they never saved.
+ */
+export async function hasSavedAny(ctx: OrgContext, userId: string): Promise<boolean> {
+  const rows = await withOrg(ctx, (tx) => tx.$queryRaw<Array<{ any: boolean }>>(hasSavedAnySql(userId)));
+  return rows[0].any;
+}
+
+/** `hasSavedAny`'s one statement, a tagged template; exported only so the query-plan probe can EXPLAIN it. Run inside `withOrg`. */
+export function hasSavedAnySql(userId: string): Prisma.Sql {
+  return Prisma.sql`SELECT EXISTS (SELECT 1 FROM "decision_versions" WHERE "enteredById" = ${userId}) AS "any"`;
+}
