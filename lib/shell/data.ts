@@ -42,6 +42,8 @@ export async function loadShellData(identity: Identity): Promise<ShellData> {
   ]);
   // Object.fromEntries defines each key as an own property (it never calls the __proto__ setter), and the object stays a
   // plain one: React refuses a null-prototype object as a prop of a client component.
+  // The platform administrator holds no membership by rule; a stray row's name and role do not reach the browser.
+  if (platformLabel !== null) return { userId: identity.userId, userName: identity.name || '', platformLabel, roleLabels: {}, orgs: [] };
   const roleLabels: Record<string, string> = Object.fromEntries(
     memberships.flatMap((m, i) => {
       const label = orgLabels[i];

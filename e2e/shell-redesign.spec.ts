@@ -158,6 +158,8 @@ test('1A Task 11 (1): at 1280 px the rail is the first column, full height, Home
 
     for (const colorScheme of ['light', 'dark'] as const) {
       await page.emulateMedia({ colorScheme });
+      // Links carry a 160 ms colour transition: read colours once every running animation has finished.
+      await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished)));
       const orange = new Set([await resolved(page, '--color-action'), await resolved(page, '--color-action-text'), await resolved(page, '--color-selected')]);
       const colours = await page.locator('.shell-rail, .shell-rail *, .shell-topbar, .shell-topbar *').evaluateAll((els) => els.map((e) => getComputedStyle(e).color));
       expect(colours.length).toBeGreaterThan(10);
@@ -249,6 +251,17 @@ for (const width of [1023, 375]) {
       await expect(menu).toHaveAttribute('aria-expanded', 'false');
       expect(await page.evaluate(() => (window as unknown as { __shellMarker?: number }).__shellMarker), 'a client navigation').toBe(1);
 
+      // Back to the dashboard with the panel open: the pathname changes without a link press, and the panel closes.
+      await menu.click();
+      await expect(panel).toBeVisible();
+      await page.goBack();
+      await page.waitForURL((url) => url.pathname === `/orgs/${slug}/dashboard`);
+      await expect(panel).toBeHidden();
+      await expect(menu).toHaveAttribute('aria-expanded', 'false');
+      await menu.click();
+      await railLinks(page).filter({ hasText: 'Projects' }).click();
+      await page.waitForURL((url) => url.pathname === `/orgs/${slug}/projects`);
+
       // A link that keeps the pathname closes the panel too: Findings (?for=findings), then the current item.
       await menu.click();
       await expect(panel).toBeVisible();
@@ -261,7 +274,14 @@ for (const width of [1023, 375]) {
       await railLinks(page).filter({ hasText: 'Projects' }).click();
       await expect(panel).toBeHidden();
       await expect(menu).toHaveAttribute('aria-expanded', 'false');
+      // The item of the page already open, at the same address: hidden too.
+      await menu.click();
+      await expect(panel).toBeVisible();
+      await railLinks(page).filter({ hasText: 'Projects' }).click();
+      await expect(panel).toBeHidden();
+      await expect(menu).toHaveAttribute('aria-expanded', 'false');
       expect(await page.evaluate(() => (window as unknown as { __shellMarker?: number }).__shellMarker), 'still the same document').toBe(1);
+
     } finally {
       await context.close();
     }
@@ -284,7 +304,7 @@ test('1A Task 11 (2) F1: a panel opened before the scripts arrive stays open thr
     const menu = page.locator('.shell-topbar__menu-button');
     await expect(menu).toBeVisible();
     expect(await menu.getAttribute('aria-expanded'), 'no state in the server markup').toBeNull();
-    expect(held.length, 'scripts were held').toBeGreaterThan(0);
+    await expect.poll(() => held.length, { message: 'scripts were held' }).toBeGreaterThan(0);
     await menu.click();
     const panel = page.locator('.shell-topbar__panel');
     await expect(panel).toBeVisible();
@@ -737,8 +757,19 @@ for (const width of [1280, 375]) {
         localStorage.setItem(key, JSON.stringify({ baseVersionNumber: null, value: { reason: 'x' }, savedAt: new Date().toISOString(), savePressedAt: null, retry: { requestId: null, sentBody: null } }));
       }, [p.account.userId, p.a.org.id] as const);
       if (width >= 1024) {
-        // A positioned element in main (kit components will be): the warning must still paint over it.
-        await page.evaluate(() => { (document.querySelector('main') as HTMLElement).style.position = 'relative'; });
+        // An element inside main with a high z-index (a kit radio card has z-index 1), opaque, under the warning's box:
+        // the left 400 px of main over the bottom 300 px of the viewport. The warning must still paint over it.
+        await page.evaluate(() => {
+          const main = document.querySelector('main') as HTMLElement;
+          const block = document.createElement('div');
+          block.setAttribute('data-test-cover', '');
+          block.style.cssText = 'position: relative; z-index: 1000; width: 400px; height: 300px; background: rgb(255, 0, 0);';
+          main.prepend(block);
+          const top = window.innerHeight - 300 - block.getBoundingClientRect().top;
+          block.style.top = `${top}px`;
+        });
+        const cover = (await page.locator('[data-test-cover]').boundingBox())!;
+        expect(Math.abs(cover.y + cover.height - 700), 'the cover reaches the bottom of the viewport').toBeLessThanOrEqual(1);
       }
       for (const colorScheme of ['light', 'dark'] as const) {
         await page.emulateMedia({ colorScheme });

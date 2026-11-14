@@ -117,6 +117,9 @@
     overflow-y: auto;
     max-height: 100vh;
     padding: var(--space-8);
+    /* One stacking context for main at level auto: no z-index inside it, however high, can pass the rail's z-index 1
+       (and the sign-out warning in it). It makes no containing block, so fixed and sticky descendants are unchanged. */
+    isolation: isolate;
   }
 }
 

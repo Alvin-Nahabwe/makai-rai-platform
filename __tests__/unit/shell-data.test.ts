@@ -77,7 +77,7 @@ describe('loadShellData', () => {
 
   it('1A Task 11 L2-50 T3 NFR-SEC-07: an organisation whose slug is __proto__ or constructor cannot put a key on the prototype', async () => {
     membershipsMock.mockResolvedValue([row('__proto__', 'P'), row('constructor', 'C')]);
-    orgRoleLabelMock.mockResolvedValue('viewer');
+    orgRoleLabelMock.mockImplementation(async (_i: unknown, slug: string | undefined) => (slug === undefined ? null : 'viewer'));
     const shell = await loadShellData(identity);
     expect(Object.hasOwn(shell.roleLabels, '__proto__')).toBe(true);
     expect(Object.hasOwn(shell.roleLabels, 'constructor')).toBe(true);
@@ -96,6 +96,20 @@ describe('loadShellData', () => {
     expect(shell.platformLabel).toBe('MAK-AI administrator');
     expect(shell.orgs).toEqual([]);
     expect(Object.keys(shell.roleLabels)).toEqual([]);
+  });
+
+  it('1A Task 11 T2: an administrator with a stray membership row gets the label, and nothing of the row reaches the result', async () => {
+    membershipsMock.mockResolvedValue([row('stray', 'Stray Lab')]);
+    orgRoleLabelMock.mockImplementation(async (_i: unknown, slug: string | undefined) => (slug === undefined ? 'MAK-AI administrator' : 'viewer'));
+    const shell = await loadShellData({ ...identity, platformRole: 'admin' });
+    // The reads are the same as for anyone (a protected test counts them).
+    expect(membershipsMock).toHaveBeenCalledTimes(1);
+    expect(orgRoleLabelMock.mock.calls.map((c) => c[1]).sort()).toEqual(['stray', undefined]);
+    expect(shell.platformLabel).toBe('MAK-AI administrator');
+    expect(shell.orgs).toEqual([]);
+    expect(shell.roleLabels).toEqual({});
+    const serialised = JSON.stringify(shell);
+    for (const value of ['stray', 'Stray Lab', 'org-id-stray', 'm-stray', 'Legal name of stray', 'Viewer']) expect(serialised).not.toContain(value);
   });
 
   it('1A Task 11 T1: the shell data module and the signed-in layout read only through membershipsForUser and orgRoleLabel', () => {
@@ -118,13 +132,16 @@ describe('loadShellData', () => {
   });
 });
 
-/** Every module a file names: import declarations (side-effect ones included), export-from, dynamic import() and require(), sorted. */
+/** Every module a file names: import declarations (side-effect ones included), import-equals, export-from, dynamic import() and require(), sorted. */
 function moduleSpecifiers(file: string): string[] {
   const sf = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true, file.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
   const out: string[] = [];
   const visit = (node: ts.Node): void => {
     if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
       out.push(node.moduleSpecifier.text);
+    } else if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference)) {
+      const ref = node.moduleReference.expression;
+      out.push(ts.isStringLiteral(ref) ? ref.text : '(not a literal)');
     } else if (ts.isCallExpression(node) && (node.expression.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(node.expression) && node.expression.text === 'require'))) {
       const arg = node.arguments[0];
       out.push(arg && ts.isStringLiteralLike(arg) ? arg.text : '(not a literal)');
