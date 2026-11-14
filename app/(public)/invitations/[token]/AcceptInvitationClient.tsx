@@ -234,7 +234,7 @@ export function NewAccountView(v: NewAccountViewProps) {
     <div>
       {v.step === 'details' ? (
         <form method="post" noValidate onSubmit={v.onContinue}>
-          <h2>{INVITATION_COPY.createHeading}</h2>
+          <h2 style={{ margin: 'var(--space-6) 0 var(--space-4)' }}>{INVITATION_COPY.createHeading}</h2>
           <TextInput id="email" name="email" label={INVITATION_COPY.email} hint={INVITATION_COPY.emailHint} type="email" autoComplete="username"
             spellCheck={false} readOnly value={v.invitedEmail} />
           <TextInput id="name" name="name" label={INVITATION_COPY.name} hint={INVITATION_COPY.nameHint} required autoComplete="name"

@@ -132,6 +132,8 @@ export function untickedKinds(texts: readonly LegalTextVersion[], ticked: Readon
 }
 
 const HEADING: CSSProperties = { margin: 0 };
+// The invitation's second step has the page's h1 and the invited line above it, so its h2 gets room above (the h1 of /acceptances does not).
+const STEP_HEADING: CSSProperties = { margin: 'var(--space-6) 0 0' };
 const FIELDSET: CSSProperties = { border: 0, padding: 0, margin: 0 };
 const LEGEND: CSSProperties = { marginBottom: 'var(--space-2)', padding: 0 };
 // Full width by layout: the button stretches in the flex column that holds it, so no width is written.
@@ -184,7 +186,7 @@ export function AcceptancesFormView(p: AcceptancesFormViewProps) {
       <fieldset style={FIELDSET}>
         {/* On S-05 the legend is the page's heading (W-11); in S-04's second step the page already has one. */}
         <legend style={LEGEND}>
-          {p.mode === 'invitation' ? <h2 style={HEADING}>{legend}</h2> : <h1 style={HEADING}>{legend}</h1>}
+          {p.mode === 'invitation' ? <h2 style={STEP_HEADING}>{legend}</h2> : <h1 style={HEADING}>{legend}</h1>}
         </legend>
         <p>{ACCEPTANCES_COPY.lead}</p>
         <div className="consent-group">

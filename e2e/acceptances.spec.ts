@@ -58,18 +58,11 @@ const userCount = (email: string) => testDb.user.count({ where: { email } });
 
 /** Tab until `target` has focus, checking at each press that the focused element is visible and not covered (NFR-A11Y-02). */
 async function tabTo(page: Page, target: ReturnType<Page['locator']>, max = 40): Promise<void> {
+  // The page scrolls smoothly (app/globals.css), so a focus that needs a scroll is not in view for a moment; this check is of
+  // where focus ends up, so the scroll is made instant (the probe: with 400 ms to settle the field was in view).
+  await page.addStyleTag({ content: 'html { scroll-behavior: auto !important; }' });
   for (let i = 0; i < max; i += 1) {
     await page.keyboard.press('Tab');
-    // The page scrolls smoothly (app/globals.css), so a focus that needs a scroll is read once the scroll has stopped.
-    await page.evaluate(() => new Promise<void>((done) => {
-      let last = -1;
-      let still = 0;
-      const tick = () => {
-        if (window.scrollY === last) { still += 1; if (still >= 3) { done(); return; } } else { still = 0; last = window.scrollY; }
-        requestAnimationFrame(tick);
-      };
-      tick();
-    }));
     await expectFocusVisibleAndUncovered(page);
     if (await target.evaluate((el) => el === document.activeElement)) return;
   }
