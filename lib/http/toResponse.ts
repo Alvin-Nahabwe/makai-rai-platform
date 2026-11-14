@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { NotFoundError, ForbiddenError } from '@/lib/data/tenant';
 import { UnauthenticatedError, PasswordChangeRequiredError } from '@/lib/auth/identity';
 import { AppError } from '@/lib/http/errors';
+import { API_COPY } from '@/lib/http/api/copy';
 import type { ApiErrorBody } from '@/types/api';
 import { isDatabaseUnavailable } from '@/lib/data/pgErrors';
 import { redactEmails } from '@/lib/redact';
@@ -109,19 +110,19 @@ export function toResponse(e: unknown): NextResponse {
     return NextResponse.json({ ...e.extra, error: e.message, code: e.code }, { status: e.status });
   }
   if (e instanceof UnauthenticatedError) {
-    return NextResponse.json({ error: 'Unauthorized', code: 'unauthenticated' }, { status: 401 });
+    return NextResponse.json({ error: API_COPY.unauthenticated, code: 'unauthenticated' }, { status: 401 });
   }
   if (e instanceof PasswordChangeRequiredError) {
     return NextResponse.json(
-      { error: 'Password change required', code: 'must_change_password' },
+      { error: API_COPY.mustChangePassword, code: 'must_change_password' },
       { status: 403 },
     );
   }
   if (e instanceof NotFoundError) {
-    return NextResponse.json({ error: 'Not found', code: 'not_found' }, { status: 404 });
+    return NextResponse.json({ error: API_COPY.notFound, code: 'not_found' }, { status: 404 });
   }
   if (e instanceof ForbiddenError) {
-    return NextResponse.json({ error: 'Forbidden', code: 'forbidden' }, { status: 403 });
+    return NextResponse.json({ error: API_COPY.forbidden, code: 'forbidden' }, { status: 403 });
   }
   if (isDatabaseUnavailable(e)) {
     // A fixed body: the adapter's own message names the database host and port. The log line names which kind of
@@ -129,7 +130,7 @@ export function toResponse(e: unknown): NextResponse {
     const reference = stampReference(e);
     logRequestFailure({ reference, status: 503, code: 'database_unavailable', cause: unavailableCause(e) });
     return NextResponse.json(
-      { error: 'Service unavailable', code: 'database_unavailable', reference },
+      { error: API_COPY.databaseUnavailable, code: 'database_unavailable', reference },
       { status: 503 },
     );
   }
@@ -137,6 +138,7 @@ export function toResponse(e: unknown): NextResponse {
   // reference, never its message (a Prisma message can carry argument values), then the answer carries the reference.
   const reference = stampReference(e);
   logRequestFailure({ reference, status: 500, code: 'internal_error', error: describeUnmappedError(e) });
-  const body: ApiErrorBody = { error: 'internal_error', code: 'internal_error', message: 'internal_error', reference };
+  const text = API_COPY.internalError(reference);
+  const body: ApiErrorBody = { error: text, code: 'internal_error', message: text, reference };
   return NextResponse.json(body, { status: 500 });
 }

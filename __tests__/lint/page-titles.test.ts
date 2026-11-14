@@ -9,6 +9,7 @@ import { AUTH_COPY } from '@/lib/auth/copy';
 import { DECISION_COPY } from '@/lib/decision/copy';
 import { DOCUMENTS_COPY } from '@/lib/documents/copy';
 import { ERRORS_COPY } from '@/lib/errors/copy';
+import { NOT_FOUND_COPY } from '@/lib/errors/not-found/copy';
 import { EXPORT_COPY } from '@/lib/export/copy';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
 import { GUIDANCE_COPY } from '@/lib/guidance/copy';
@@ -59,7 +60,7 @@ describe('page titles (spec 7.5)', () => {
     expect(code('app/error.tsx')).toContain('<title>{pageTitle(ERRORS_COPY.titles.error)}</title>');
     expect(code('app/global-error.tsx')).toContain('<ErrorPage ');
     expect(withoutComments(code('app/global-error.tsx'))).not.toContain('<title');
-    for (const f of ['app/not-found.tsx', 'app/(authenticated)/not-found.tsx']) expect(code(f)).toContain('title: pageTitle(ERRORS_COPY.titles.notFound)');
+    for (const f of ['app/not-found.tsx', 'app/(authenticated)/not-found.tsx']) expect(code(f)).toContain('title: pageTitle(NOT_FOUND_COPY.title)');
   });
 
   // Shape only: the behaviour (gates first, Next's 404 for a non-member or an unknown organisation, no name on a refusal)
@@ -83,6 +84,7 @@ describe('page titles (spec 7.5)', () => {
     };
     for (const m of [ABOUT_COPY, ACCOUNT_COPY, ADMIN_COPY, AUTH_COPY, DECISION_COPY, DOCUMENTS_COPY, ERRORS_COPY, EXPORT_COPY, FINDINGS_COPY,
       GUIDANCE_COPY, HOME_COPY, LEGAL_COPY, ORG_COPY, PROJECT_COPY, REVIEW_COPY]) collect(m.titles);
+    collect(NOT_FOUND_COPY.title);
     expect(words.length).toBeGreaterThan(20);
     expect(words.filter((w) => isClaim(w) || w.includes('Toolkit') || w.trim() === '')).toEqual([]);
   });

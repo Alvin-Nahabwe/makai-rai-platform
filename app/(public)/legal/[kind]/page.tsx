@@ -3,9 +3,11 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { LegalTextKind } from '@/types/legal';
 import { RETIRED_NOTE, isRetiredKind } from '@/lib/legal/kinds';
+import { LEGAL_PAGE_COPY } from '@/lib/legal/copy';
 import { LEGAL_KINDS, currentLegalText, legalKindFrom, legalTextHistory } from '@/lib/legal/registry';
 import { pageTitle } from '@/lib/ui/title';
-import { LEGAL_LINK_STYLE, LEGAL_NOTE_STYLE, LEGAL_PAGE_STYLE, LegalTextView, legalTextHeading, versionLine } from '@/components/legal/LegalTextView';
+import { Callout } from '@/components/ui/Callout';
+import { LEGAL_LINK_STYLE, LEGAL_PAGE_STYLE, LegalTextView, legalTextHeading, versionLine } from '@/components/legal/LegalTextView';
 
 /**
  * S-06, one kind (FR-ACC-02, SRS line 479): the current version of the text and the list of its past versions, which
@@ -41,19 +43,20 @@ export default async function LegalKindPage({ params }: { params: Params }) {
   return (
     <div style={LEGAL_PAGE_STYLE}>
       {isRetiredKind(kind) && (
-        <p role="note" style={LEGAL_NOTE_STYLE}>
-          {RETIRED_NOTE[kind]}
-        </p>
+        <div role="note">
+          <Callout kind="note">{RETIRED_NOTE[kind]}</Callout>
+        </div>
       )}
       <LegalTextView text={current} />
       <p style={{ marginTop: 'var(--space-6)' }}>
         <Link href={`/legal/${kind}/${current.version}`} style={LEGAL_LINK_STYLE}>
-          {`Permanent link to version ${current.version}`}
-        </Link>
+          {LEGAL_PAGE_COPY.linkToVersion(current.version)}
+        </Link>{' '}
+        {LEGAL_PAGE_COPY.textWillNotChange}
       </p>
       {past.length > 0 && (
         <section style={{ marginTop: 'var(--space-8)' }}>
-          <h2>Past versions</h2>
+          <h2>{LEGAL_PAGE_COPY.pastVersions}</h2>
           <ul style={{ listStyle: 'none', padding: 0, marginTop: 'var(--space-2)' }}>
             {past.map((text) => (
               <li key={text.version}>

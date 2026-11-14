@@ -6,6 +6,7 @@ import { expectNoHorizontalScroll } from './helpers/reflow';
 import { expectDownloadLinksShowKindAndSize } from './helpers/downloads';
 import { readCreditLine } from '../lib/credit';
 import { abortPendingBackgroundRequests } from './helpers/pendingLinks';
+import { NOT_FOUND_COPY } from '../lib/errors/not-found/copy';
 
 /**
  * The shell every page sits in (units UI, SRS 7.1.1 and 7.6): S-31, the offline
@@ -37,8 +38,8 @@ test.describe('S-31 not found or no access', () => {
       for (const url of ['/no-such-page', `/orgs/${slug}/assessment/${randomUUID()}/report`]) {
         const response = await page.goto(url);
         expect(response!.status(), url).toBe(404);
-        await expect(page.locator('main'), url).toContainText('We cannot find this page');
-        await expect(page.getByRole('link', { name: 'Go to your home page' }), url).toBeVisible();
+        await expect(page.locator('main'), url).toContainText(NOT_FOUND_COPY.body);
+        await expect(page.getByRole('link', { name: NOT_FOUND_COPY.home }), url).toBeVisible();
       }
     } finally {
       await context.close();
@@ -139,7 +140,7 @@ test.describe('skip link, footer and landmarks (SRS 7.1.1)', () => {
       expect(response!.status()).toBe(404);
       await expect(page.locator('main')).toHaveCount(1);
       await expect(page.locator('[id="main-content"]')).toHaveCount(1);
-      await expect(page.locator('main')).toContainText('We cannot find this page');
+      await expect(page.locator('main')).toContainText(NOT_FOUND_COPY.body);
     } finally {
       await context.close();
     }

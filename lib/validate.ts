@@ -4,6 +4,7 @@
  */
 
 import { EMAIL_SHAPE_SOURCE } from './email-shape';
+import { VALIDATION_COPY } from './http/copy';
 
 export interface ValidationError {
   field: string;
@@ -23,15 +24,15 @@ const SHAPE_WHOLE = new RegExp(`^(?:${EMAIL_SHAPE_SOURCE})$`);
 /** Validate email format (RFC 5322 simplified, and inside the log redactor's shape). */
 export function validateEmail(email: unknown): ValidationError | null {
   if (typeof email !== 'string' || email.length === 0) {
-    return { field: 'email', message: 'Email is required' };
+    return { field: 'email', message: VALIDATION_COPY.emailRequired };
   }
   const trimmed = email.trim().toLowerCase();
   if (trimmed.length > 254) {
-    return { field: 'email', message: 'Email must be 254 characters or fewer' };
+    return { field: 'email', message: VALIDATION_COPY.tooLong(254) };
   }
   const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
   if (!emailRegex.test(trimmed) || !SHAPE_WHOLE.test(trimmed)) {
-    return { field: 'email', message: 'Please enter a valid email address' };
+    return { field: 'email', message: VALIDATION_COPY.emailShape };
   }
   return null;
 }
@@ -47,27 +48,31 @@ export const PASSWORD_MIN_LENGTH = 12;
 /** Validate password strength. */
 export function validatePassword(password: unknown): ValidationError | null {
   if (typeof password !== 'string' || password.length === 0) {
-    return { field: 'password', message: 'Password is required' };
+    return { field: 'password', message: VALIDATION_COPY.passwordRequired };
   }
   if (password.length < PASSWORD_MIN_LENGTH) {
-    return { field: 'password', message: `Password must be at least ${PASSWORD_MIN_LENGTH} characters` };
+    return { field: 'password', message: VALIDATION_COPY.passwordTooShort(PASSWORD_MIN_LENGTH) };
   }
   if (password.length > 128) {
-    return { field: 'password', message: 'Password must be 128 characters or fewer' };
+    return { field: 'password', message: VALIDATION_COPY.tooLong(128) };
   }
   return null;
 }
 
-/** Validate and sanitize a string field. */
+/**
+ * Validate and sanitize a string field. `field` is the key the answer names the field by; `label` is the plain lower-case
+ * name a person reads in the message ("project name"), and is used only in the words.
+ */
 export function validateString(
   value: unknown,
   field: string,
   maxLength: number,
-  required = true,
+  required: boolean,
+  label: string,
 ): { value: string; error: ValidationError | null } {
   if (value === null || value === undefined || value === '') {
     if (required) {
-      return { value: '', error: { field, message: `${field} is required` } };
+      return { value: '', error: { field, message: VALIDATION_COPY.required(label) } };
     }
     return { value: '', error: null };
   }
@@ -78,7 +83,7 @@ export function validateString(
   if (sanitized.length > maxLength) {
     return {
       value: sanitized,
-      error: { field, message: `${field} must be ${maxLength} characters or fewer` },
+      error: { field, message: VALIDATION_COPY.tooLong(maxLength) },
     };
   }
   return { value: sanitized, error: null };
@@ -178,8 +183,9 @@ export function validateMetadataFields(
 export function requireNonBlank(
   result: { value: string; error: ValidationError | null },
   field: string,
+  label: string,
 ): ValidationError | null {
   if (result.error) return result.error;
-  if (result.value.length === 0) return { field, message: `${field} is required` };
+  if (result.value.length === 0) return { field, message: VALIDATION_COPY.required(label) };
   return null;
 }

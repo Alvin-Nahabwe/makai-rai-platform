@@ -58,15 +58,15 @@ export async function PATCH(
     // 422 `validation` naming the form's own field.
     let nameValue: string | undefined;
     if (name !== undefined) {
-      const nameResult = validateString(name, 'Project name', 200);
-      const nameError = requireNonBlank(nameResult, 'Project name');
+      const nameResult = validateString(name, 'Project name', 200, true, 'project name');
+      const nameError = requireNonBlank(nameResult, 'Project name', 'project name');
       if (nameError) throw new ValidationFailed([{ field: 'name', message: nameError.message }]);
       nameValue = nameResult.value;
     }
 
     let descriptionValue: string | undefined;
     if (description !== undefined) {
-      const descResult = validateString(description, 'Description', 2000, false);
+      const descResult = validateString(description, 'Description', 2000, false, 'description');
       if (descResult.error) throw new ValidationFailed([{ field: 'description', message: descResult.error.message }]);
       descriptionValue = descResult.value;
     }

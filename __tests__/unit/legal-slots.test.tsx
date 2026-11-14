@@ -4,6 +4,10 @@ import type { LegalTextVersion } from '@/types/legal';
 import type { OfferedText } from '@/components/legal/NewerLegalTextOffers';
 import { STUB_LEGAL_TEXTS } from '../helpers/legalStub';
 import { HOSTILE_STRINGS } from '../helpers/hostile';
+import { escapeRe } from '../helpers/escapeRe';
+import { NOTICE_COPY } from '@/lib/legal/notice/copy';
+import { MY_ACCEPTANCES_COPY } from '@/lib/legal/copy';
+import { roleWithArticle, welcomeLine } from '@/lib/org/copy';
 
 /**
  * ACC-a Task 12: the three slots ACC-a fills (contract "Screens and slots": the shell's NewerLegalTextNotice, S-21's
@@ -47,11 +51,14 @@ describe('the newer-text notice (M-39, FR-ACC-04)', () => {
     const props = await offersOf('u1');
     expect(offeredAcceptances).toHaveBeenCalledWith('u1');
     // The server half hands the client half only what the notice shows.
-    expect(props).toEqual({ userId: 'u1', offers: [{ kind: 'privacy', version: '2', publishedOn: '2026-12-01' }] });
+    expect(props).toEqual({ userId: 'u1', offers: [{ kind: 'privacy', name: 'privacy notice', version: '2', publishedOn: '2026-12-01' }] });
     const markup = html(<NewerLegalTextOffersView offers={props?.offers ?? []} hidden={new Set()} onNotNow={vi.fn()} />);
-    expect(markup).toMatch(/<div[^>]*role="status"[^>]*>A new version of the privacy notice was published on 1 Dec 2026\. /);
-    expect(markup).toMatch(/<a[^>]*href="\/acceptances"[^>]*>Read and accept<\/a>/);
-    expect(markup).toMatch(/<button[^>]*type="button"[^>]*>Not now<\/button>/);
+    // Each notice keeps its status wrapper and holds the kit's info Banner, with the two actions in its action slot.
+    expect(markup).toMatch(/<div[^>]*role="status"[^>]*><div class="ui-banner ui-banner--info">/);
+    expect(text(markup)).toContain(NOTICE_COPY.published('privacy notice', '1 Dec 2026'));
+    expect(NOTICE_COPY.published('privacy notice', '1 Dec 2026')).toBe('A new version of the privacy notice was published on 1 Dec 2026.');
+    expect(markup).toMatch(/<a[^>]*class="ui-button ui-button--secondary"[^>]*href="\/acceptances"[^>]*>Read and accept<\/a>/);
+    expect(markup).toMatch(/<button[^>]*class="ui-button ui-button--quiet"[^>]*type="button"[^>]*>Not now<\/button>/);
     vi.mocked(offeredAcceptances).mockResolvedValue([]);
     expect(await NewerLegalTextNotice({ userId: 'u1' })).toBeNull();
   });
@@ -66,7 +73,7 @@ describe('the newer-text notice (M-39, FR-ACC-04)', () => {
   });
 
   it('M-39: before it has read sessionStorage the notice renders nothing, so a notice turned down never paints', () => {
-    expect(html(<NewerLegalTextOffers userId="u1" offers={[{ kind: 'privacy', version: '2', publishedOn: '2026-12-01' }]} />)).toBe('');
+    expect(html(<NewerLegalTextOffers userId="u1" offers={[{ kind: 'privacy', name: 'privacy notice', version: '2', publishedOn: '2026-12-01' }]} />)).toBe('');
   });
 
   it('M-39: Not now is kept per account, kind and version in sessionStorage, and a storage that throws only means the notice shows again', () => {
@@ -92,14 +99,17 @@ describe('My acceptances on S-21 (FR-ACC-03, FR-ACC-04)', () => {
     const markup = html(await MyAcceptances({ userId: 'u1' }));
     expect(myAcceptances).toHaveBeenCalledWith('u1');
     expect(offeredAcceptances).toHaveBeenCalledWith('u1');
-    expect(text(markup)).toMatch(/Privacy notice v1 . accepted 28 Oct 2026/);
+    expect(text(markup)).toContain(MY_ACCEPTANCES_COPY.accepted('Privacy notice', '1', '28 Oct 2026'));
+    expect(MY_ACCEPTANCES_COPY.accepted('Privacy notice', '1', '28 Oct 2026')).toBe('Privacy notice, version 1. Accepted on 28 Oct 2026.');
     expect(markup).toMatch(/<a[^>]*href="\/legal\/privacy\/1"[^>]*>Read<\/a>/);
-    expect(text(markup)).toContain('A newer version (v2) exists');
-    expect(markup).toMatch(/<a[^>]*href="\/acceptances"[^>]*>Review<\/a>/);
+    expect(text(markup)).toContain(MY_ACCEPTANCES_COPY.newerAvailable('2'));
+    expect(MY_ACCEPTANCES_COPY.newerAvailable('2')).toBe('Version 2 is now available.');
+    expect(markup).toMatch(/<a[^>]*href="\/acceptances"[^>]*>Read and accept<\/a>/);
+    expect(markup).not.toMatch(/ · |   /);   // no middle dots and no runs of spaces
     expect(markup).not.toMatch(/<(input|button|select|textarea)\b/);   // a read-only record (7.4.2 S-21)
   });
 
-  it('FR-ACC-03 FR-ACC-04 (S-21): a pre-v1 row that does not count is shown as such, with Review and no Read link', async () => {
+  it('FR-ACC-03 FR-ACC-04 (S-21): a pre-v1 row that does not count is shown as such, with Read and accept and no Read link', async () => {
     // A v0.5.0 row (version '1.0', no hash) is not an acceptance (lib/data/acceptances.ts) and /legal/<kind>/1.0 is a 404.
     vi.mocked(myAcceptances).mockResolvedValue([
       { kind: 'privacy', version: '1.0', sha256: null, acceptedAt: '2026-05-04T09:00:00.000Z' },
@@ -107,8 +117,9 @@ describe('My acceptances on S-21 (FR-ACC-03, FR-ACC-04)', () => {
     ]);
     const markup = html(await MyAcceptances({ userId: 'u1' }));
     expect(markup).not.toMatch(/href="\/legal\/[^"]*\/1\.0"/);
-    expect(text(markup)).toMatch(/Privacy notice v1\.0 · accepted 4 May 2026 · no longer counts · Review/);
-    expect(markup).toMatch(/<a[^>]*href="\/acceptances"[^>]*>Review<\/a>/);
+    expect(text(markup)).toContain(`${MY_ACCEPTANCES_COPY.accepted('Privacy notice', '1.0', '4 May 2026')} ${MY_ACCEPTANCES_COPY.olderVersion}`);
+    expect(MY_ACCEPTANCES_COPY.olderVersion).toBe('This was an older version. Accept the current version.');
+    expect(markup).toMatch(/<a[^>]*href="\/acceptances"[^>]*>Read and accept<\/a>/);
     expect(markup).toMatch(/<a[^>]*href="\/legal\/terms\/1"[^>]*>Read<\/a>/);   // the counting row is as before
   });
 
@@ -118,17 +129,20 @@ describe('My acceptances on S-21 (FR-ACC-03, FR-ACC-04)', () => {
       { kind: 'cross-border-consent', version: '1', sha256: 'c'.repeat(64), acceptedAt: '2026-10-29T09:00:00.000Z' },
     ]);
     const t = text(html(await MyAcceptances({ userId: 'u1' })));
-    expect(t.indexOf('Terms of service v1')).toBeLessThan(t.indexOf('Consent to storage abroad v1'));
-    expect(t).not.toContain('A newer version');
+    expect(t.indexOf('Terms of service, version 1')).toBeLessThan(t.indexOf('Consent to storage abroad, version 1'));
+    expect(t).not.toContain('is now available');
     vi.mocked(myAcceptances).mockResolvedValue([]);
-    expect(text(html(await MyAcceptances({ userId: 'u1' })))).toContain('No acceptance is recorded for this account.');
+    expect(text(html(await MyAcceptances({ userId: 'u1' })))).toContain(MY_ACCEPTANCES_COPY.empty);
+    expect(MY_ACCEPTANCES_COPY.empty).toBe('You have not accepted any legal texts yet.');
   });
 });
 
 describe('the welcome on S-08 (FR-ACC-01)', () => {
   it('FR-ACC-01 (7.4.2 S-04 / S-05): the welcome names the organisation and the role, as text', () => {
     const markup = html(<WelcomeNotice orgName="Makerere CAI Lab" role="assessor" />);
-    expect(markup).toMatch(/<[a-z]+[^>]*role="status"[^>]*>Welcome to Makerere CAI Lab\. Your role is assessor\.<\/[a-z]+>/);
+    expect(markup).toMatch(new RegExp(`<[a-z]+[^>]*role="status"[^>]*>${escapeRe(welcomeLine('Makerere CAI Lab', roleWithArticle('assessor')))}</[a-z]+>`));
+    expect(welcomeLine('Makerere CAI Lab', roleWithArticle('assessor'))).toBe('Welcome to Makerere CAI Lab. You are an Assessor.');
+    expect(welcomeLine('Lab Two', roleWithArticle('viewer'))).toBe('Welcome to Lab Two. You are a Viewer.');
     for (const hostile of HOSTILE_STRINGS) {
       const m = html(<WelcomeNotice orgName={hostile} role="viewer" />);
       expect(m, hostile).not.toMatch(/<script|<img/i);   // the name is escaped text (it may read "onerror=" as words)

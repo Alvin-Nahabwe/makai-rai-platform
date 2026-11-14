@@ -5,6 +5,8 @@ import type { Identity } from '@/lib/auth/identity';
 import type { AdminOrganisationRow } from '@/types/api';
 import type { AdminAccountRow } from '@/lib/data/admin';
 import type { InvitationState } from '@/types/record';
+import { COPY_LINK_COPY } from '@/lib/invitations/link/copy';
+import { ORG_COPY } from '@/lib/org/copy';
 
 /**
  * The administrator's screens S-23 (`/admin/organisations`) and S-25 (`/admin/accounts`), the landing page
@@ -98,7 +100,7 @@ describe('S-07, the landing page', () => {
     await expect(renderLanding(adminIdentity)).rejects.toMatchObject({ digest: expect.stringMatching(/NEXT_REDIRECT;.*\/admin\/organisations/) });
     expect(membershipsMock).not.toHaveBeenCalled();   // gate 4 comes before the membership dispatch
     const html = await renderLanding(noOrgIdentity);
-    expect(html).toContain('You are not in an organisation yet: ask its owner for an invitation.');
+    expect(html).toContain(ORG_COPY.chooser.emptyBody.replace("'", '&#x27;'));
     expect(html).not.toMatch(/Create (a new|an) organi[sz]ation/);
     expect(html).not.toContain('/orgs/new');
   });
@@ -256,7 +258,7 @@ describe('S-24, creating and recovering an organisation', () => {
     const html = view({ result, status: result.status });
     expect(statusText(html)).toBe(`Created. ${EMAIL_FAILED}`);
     expect(html.split(EMAIL_FAILED)).toHaveLength(2);   // once, in the status region: the link box does not print it again
-    expect(html).toMatch(/<button[^>]*>Copy link<\/button>/);
+    expect(html).toMatch(new RegExp(`<button[^>]*>${COPY_LINK_COPY.copy}</button>`));
     expect(html).toContain('https://h/invitations/t');
     expect(html).toContain('The link works once and expires on 3 Nov 2026.');
     expect(html).not.toContain('<form');
@@ -273,8 +275,8 @@ describe('S-24, creating and recovering an organisation', () => {
     const replay = resentResult(created.response, { kind: 'saved', status: 200, body: { invitation: inv, acceptUrl: null, emailSent: false } });
     expect(replay.status).toBe(ALREADY_RESENT);
     const html = view({ result: replay, status: replay.status, onResendWithLink: vi.fn() });
-    expect(html).not.toContain('Resend and show link');
-    expect(html).not.toContain('Invitation link');
+    expect(html).not.toContain(COPY_LINK_COPY.resend);
+    expect(html).not.toContain(COPY_LINK_COPY.linkLabel);
     expect(html.split(EMAIL_FAILED)).toHaveLength(1);
   });
 
@@ -284,8 +286,8 @@ describe('S-24, creating and recovering an organisation', () => {
     expect(replay.status).toBe(ALREADY_CREATED);
     const html = view({ result: replay, status: replay.status, onResendWithLink: vi.fn() });
     expect(statusText(html)).toBe(ALREADY_CREATED);
-    expect(html).not.toContain('Resend and show link');
-    expect(html).not.toContain('Invitation link');
+    expect(html).not.toContain(COPY_LINK_COPY.resend);
+    expect(html).not.toContain(COPY_LINK_COPY.linkLabel);
     expect(html).toContain('Open the organisation');
   });
 
@@ -312,8 +314,8 @@ describe('S-24, creating and recovering an organisation', () => {
     const noLink = createResult({ kind: 'saved', status: 201, body: { ...CREATED, acceptUrl: null, invitation: { ...CREATED.invitation, linkShown: false } } });
     const html = view({ result: noLink, status: noLink.status, onResendWithLink: vi.fn() });
     expect(statusText(html)).toBe(`Created. ${EMAIL_FAILED}`);
-    expect(html).toMatch(/<button[^>]*>Resend and show link<\/button>/);
-    expect(html).not.toContain('Invitation link');
+    expect(html).toMatch(new RegExp(`<button[^>]*>${COPY_LINK_COPY.resend}</button>`));
+    expect(html).not.toContain(COPY_LINK_COPY.linkLabel);
     if (noLink.kind !== 'created') throw new Error('expected created');
     const resentInv = { ...CREATED.invitation, id: 'inv-10', linkShown: true };
     const resent = resentResult(noLink.response, { kind: 'saved', status: 201, body: { invitation: resentInv, acceptUrl: 'https://h/invitations/u', emailSent: false } });
@@ -322,7 +324,7 @@ describe('S-24, creating and recovering an organisation', () => {
     expect(resent.response).toMatchObject({ orgId: 'org-9', slug: 'makerere-cai-lab', acceptUrl: 'https://h/invitations/u', invitation: { id: 'inv-10' } });
     const after = view({ result: resent, status: resent.status, onResendWithLink: vi.fn() });
     expect(after).toContain('https://h/invitations/u');
-    expect(after).not.toContain('Resend and show link');
+    expect(after).not.toContain(COPY_LINK_COPY.resend);
     const refused = resentResult(noLink.response, { kind: 'rejected', status: 409, body: { error: 'x', code: 'invitation_not_pending' } });
     expect(refused.kind).toBe('created');   // the organisation stays created; only the resend was refused
     expect(refused.status).toBe('That invitation is no longer pending. Reload the page.');

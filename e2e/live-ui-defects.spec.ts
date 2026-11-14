@@ -5,6 +5,8 @@ import { MANIFEST_PATH, adminSeat, type FixtureManifest } from './fixtures/manif
 import { buildOrg } from '../__tests__/helpers/recordFixture';
 import { testDb } from '../__tests__/helpers/db';
 import { actAsSeat, fixtureOrgSlug, newProject, questionPath, seatOf, seatRequest, stageOf } from './helpers/session';
+import { API_COPY } from '../lib/http/api/copy';
+import { ORG_COPY } from '../lib/org/copy';
 
 /**
  * v0.6.1 U12 rows (a), (b), (d) and (e): four defects that were broken for people on v0.6.0, each checked at the
@@ -61,7 +63,7 @@ test('U12 (b): the organisation chooser shows its links on the card, at 4.5:1 or
     await page.goto('/');
     await expect(page.locator(`a[href="/orgs/${fx.org.slug}/dashboard"]`)).toBeVisible();
     expect(await contrastOf(page, '.auth-card nav a', '.auth-card', 'color')).toBeGreaterThanOrEqual(4.5);
-    await expect(page.getByRole('heading', { level: 1, name: 'Choose an organisation' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: ORG_COPY.chooser.heading })).toBeVisible();
   } finally {
     await context.close();
   }
@@ -245,7 +247,7 @@ test.describe('U12 (e): a refused download address does not leave raw JSON on th
       if (!alsoAsApiClient) continue;
       const res = await request.get(address);
       expect(res.status(), address).toBe(401);
-      expect(await res.json(), address).toEqual({ error: 'Unauthorized', code: 'unauthenticated' });
+      expect(await res.json(), address).toEqual({ error: API_COPY.unauthenticated, code: 'unauthenticated' });
     }
     await context.close();
   });

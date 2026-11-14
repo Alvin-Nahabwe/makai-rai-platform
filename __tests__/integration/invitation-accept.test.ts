@@ -8,6 +8,8 @@ import { sessionFor, clearSession } from '../helpers/authSession';
 import { hashInvitationToken } from '../../lib/data/invitationToken';
 import { ACCEPTED_KINDS, type LegalTextKind, type LegalTextVersion } from '../../types/legal';
 import { STUB_LEGAL_TEXTS, currentAcceptances } from '../helpers/legalStub';
+import { INVITATION_PAGE_COPY } from '../../lib/org/copy';
+import { INVITATION_ROUTE_COPY } from '../../lib/http/api/copy';
 
 /**
  * Route 32, POST /api/v1/invitations/[token] (FR-ACC-01, FR-ACC-03; contract Routes row 32): a
@@ -47,7 +49,7 @@ const { acceptInvitationViaDefiner } = await import('@/lib/data/definer');
 const { membershipsForUser } = await import('@/lib/data/preauth');
 const realPreauth = await vi.importActual<typeof import('@/lib/data/preauth')>('@/lib/data/preauth');
 
-const M23 = 'This invitation link does not work. It may have expired, been used, or been replaced by a newer one. Ask the person who invited you to send it again.';
+const M23 = INVITATION_PAGE_COPY.unusable;
 
 let fx: OrgFixture;
 let invitee: FixtureAccount;
@@ -143,7 +145,7 @@ describe('route 32: accept an invitation as a signed-in account (FR-ACC-01)', ()
     const other = fx.members.assessor;
     const { raw } = await invitationRow(fx, { email: invitee.email, role: 'viewer' });
     const wrong = await asUser(other, () => ACCEPT(raw));
-    expect([wrong.status, await wrong.json()]).toEqual([409, { error: 'This invitation is for another account.', code: 'wrong_account' }]);
+    expect([wrong.status, await wrong.json()]).toEqual([409, { error: INVITATION_ROUTE_COPY.wrongAccount, code: 'wrong_account' }]);
     expect(acceptInvitationViaDefiner).not.toHaveBeenCalled();
     expect((await asUser(invitee, () => ACCEPT(raw))).status).toBe(200);
   });

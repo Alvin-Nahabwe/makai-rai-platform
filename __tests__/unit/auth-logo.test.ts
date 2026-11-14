@@ -1,12 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { AUTH_COPY } from '@/lib/auth/copy';
 
 /**
  * NFR-PERF-02 (SRS line 3195: every public page at most 220 KB on first visit). S-01, S-02 and S-03 show the logo as a plain
  * <img> of a file already sized for it, so next/image's client runtime and its optimizer round trip leave those pages
  * (cuts C and D of the V-prog finding). The logo is drawn 48 px high (`.auth-logo` in app/globals.css) at the file's
  * 7646:1454 aspect, so about 252 px wide: the 1x file is 252 x 48 and the 2x file 504 x 96. The width, height and alt
- * attributes stay as they were, so the box before the image loads and the accessible name are unchanged.
+ * attributes stay as they were (the alt text now read from AUTH_COPY.logoAlt), so the box before the image loads and the accessible name are unchanged.
  */
 const PAGES = ['app/(public)/login/page.tsx', 'app/(public)/forgot-password/page.tsx', 'app/(public)/reset-password/page.tsx'];
 
@@ -24,7 +25,8 @@ describe('the logo on S-01, S-02 and S-03', () => {
     const img = /<img\b[^>]*\/>/.exec(src)?.[0] ?? '';
     expect(img).toContain('src="/logo-makai-252.png"');
     expect(img).toContain('srcSet="/logo-makai-252.png 1x, /logo-makai-504.png 2x"');
-    expect(img).toContain('alt="MAK-AI"');
+    expect(img).toContain('alt={AUTH_COPY.logoAlt}');
+    expect(AUTH_COPY.logoAlt, 'the accessible name of the logo is unchanged').toBe('MAK-AI');
     expect(img).toContain('className="auth-logo"');
     expect(img).toMatch(/width=\{200\}/);
     expect(img).toMatch(/height=\{60\}/);

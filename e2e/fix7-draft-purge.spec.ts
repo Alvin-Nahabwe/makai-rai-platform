@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { test, expect, type Browser, type Page } from '@playwright/test';
 import { buildOrg, type FixtureAccount } from '../__tests__/helpers/recordFixture';
 import { draftKeys } from './helpers/session';
+import { INVITATION_COPY } from '../lib/invitations/copy';
 
 /**
  * NFR-PRIV-06 FIX-7: the sign-outs that end this browser's session other than the sidebar's also remove the account's
@@ -87,7 +88,7 @@ test('NFR-PRIV-06 FIX-7: the invitation page\'s sign-out removes this account\'s
   await signIn(page, viewer);
   await expect(page).toHaveURL(/\/acceptances/);
   await page.goto(`/invitations/${found![1]}`);
-  await page.getByRole('button', { name: 'Accept invitation' }).click();
+  await page.getByRole('button', { name: INVITATION_COPY.accept }).click();
   // The route answers acceptances_required, so the form of the missing texts shows, with its sign-out.
   const signOutButton = page.locator('form').getByRole('button', { name: 'sign out', exact: true });
   await expect(signOutButton).toBeVisible();
@@ -128,7 +129,7 @@ test('NFR-PRIV-06 SPEC-1 SO-2 SFH-3: the invitation page\'s M-24 sign-out remove
   // The sign-out returns to this same page, now signed out, so M-24 and its button are gone once it has finished.
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page.getByRole('alert').filter({ hasText: 'this invitation is for' })).toBeHidden();
-  await expect(page.getByRole('heading', { name: 'Create your account' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: INVITATION_COPY.createHeading })).toBeVisible();
   expect(await draftKeys(page, viewer.userId)).toEqual([]);
 });
 

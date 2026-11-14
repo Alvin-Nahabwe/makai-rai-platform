@@ -4,6 +4,7 @@ import { test, expect } from '@playwright/test';
 import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
 import { testDb } from '../__tests__/helpers/db';
 import { buildOrg } from '../__tests__/helpers/recordFixture';
+import { ORG_COPY } from '../lib/org/copy';
 
 /**
  * The members are fixture seats (e2e/fixtures/auth.setup.ts, K0a's buildTwoOrgFixture) with their
@@ -35,7 +36,7 @@ test.describe('Org URL routing', () => {
     await page.waitForURL((url) => url.pathname !== '/login');
     await page.goto('/');
     await expect(page).toHaveURL('/');
-    await expect(page.locator('h1')).toHaveText('Choose an organisation');
+    await expect(page.locator('h1')).toHaveText(ORG_COPY.chooser.heading);
     await expect(page.locator(`a[href="/orgs/${fx.org.slug}/dashboard"]`)).toHaveCount(1);
     await context.close();
     await testDb.$disconnect();

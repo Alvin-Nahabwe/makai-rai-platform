@@ -9,6 +9,7 @@ import { toResponse } from '@/lib/http/toResponse';
 import { NotFoundError } from '@/lib/data/tenant';
 import { isDatabaseUnavailable } from '@/lib/data/pgErrors';
 import { captureLogs, scanLines } from '../helpers/logCapture';
+import { API_COPY } from '@/lib/http/api/copy';
 
 /**
  * NFR-OBS-05 (SRS line 3376): every failed request answers with a support reference and writes one log line with
@@ -47,7 +48,7 @@ const loggedFor = (lines: string[], reference: unknown) => lines.filter((l) => l
 
 it('NFR-OBS-05 NFR-PRIV-03: a failed request logs one line with the reference and ids only', async () => {
   const { result, lines } = await captureLogs(async () => toResponse(unreachableDbError()).json());
-  expect(result).toMatchObject({ error: 'Service unavailable', code: 'database_unavailable', reference: expect.stringMatching(REFERENCE) });
+  expect(result).toMatchObject({ error: API_COPY.databaseUnavailable, code: 'database_unavailable', reference: expect.stringMatching(REFERENCE) });
   const hits = lines.filter((l) => l.includes(result.reference));
   expect(hits).toHaveLength(1);
   expect(Object.keys(JSON.parse(hits[0])).sort()).toEqual(['at', 'cause', 'code', 'event', 'reference', 'status']);
@@ -60,7 +61,7 @@ it('NFR-OBS-05 NFR-PRIV-03: a failed request logs one line with the reference an
 it('NFR-OBS-05: a 4xx answer carries no reference and logs nothing', async () => {
   const { status, body, lines } = await answer(new NotFoundError());
   expect(status).toBe(404);
-  expect(body).toEqual({ error: 'Not found', code: 'not_found' });
+  expect(body).toEqual({ error: API_COPY.notFound, code: 'not_found' });
   expect(lines).toEqual([]);
   const conflict = await answer(new AppError(409, 'project_archived'));
   expect(conflict.body).not.toHaveProperty('reference');
@@ -257,7 +258,7 @@ it('NFR-MNT-01 NFR-OBS-05: any other thrown value answers 500 internal_error wit
   for (const thrown of [new Error('boom'), prismaCode('P2002'), new AggregateError([nodeError('ECONNREFUSED'), nodeError('EACCES')], ''), 'a string was thrown', null]) {
     const { status, body, lines } = await answer(thrown);
     expect(status, String(thrown)).toBe(500);
-    expect(body, String(thrown)).toMatchObject({ code: 'internal_error', message: 'internal_error', error: 'internal_error', reference: expect.stringMatching(REFERENCE) });
+    expect(body, String(thrown)).toMatchObject({ code: 'internal_error', message: API_COPY.internalError(String(body.reference)), error: API_COPY.internalError(String(body.reference)), reference: expect.stringMatching(REFERENCE) });
     expect(Object.keys(body).sort(), String(thrown)).toEqual(['code', 'error', 'message', 'reference']);
     // The reference is in exactly one line (NFR-OBS-05): the REQUEST_FAILED line, which also carries the class and frames.
     const hits = loggedFor(lines, body.reference);
