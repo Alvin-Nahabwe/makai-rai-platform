@@ -68,6 +68,20 @@ test('saving a decision in the form updates the open question\'s mark in the col
   await expect(plate.locator('.ui-mark__words')).toHaveText(/^Done/);
 });
 
+test('a question left unsaved is "not saved yet" in the column; once it is saved, the column no longer says so (review F1)', async ({ page, baseURL }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const projectId = await openQuestion(page, 'assessor', Q, baseURL!);
+  await fillValid(page);
+  await page.goto(questionPath(projectId, Q));
+  const plate = column(page).locator(`.stage-question-list [data-question-id="${Q}"]`);
+  await expect(plate).toContainText(/not saved yet \(kept in this browser until /);
+  await fillValid(page);
+  await page.getByRole('button', { name: 'Save decision' }).click();
+  await expect(saveStatus(page)).toHaveText(/^Saved at /);
+  await expect(plate.locator('.ui-mark__words')).toHaveText(/^Done/);
+  await expect(plate).not.toContainText('not saved yet');
+});
+
 test('at 375 only the short form shows, after the guidance: the stage\'s name, the row of marks with its tally, the link; not the list', async ({ page, baseURL }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await openQuestion(page, 'assessor', Q, baseURL!);

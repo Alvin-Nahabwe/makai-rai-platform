@@ -93,6 +93,32 @@ describe('The route column: the open question', () => {
   });
 });
 
+describe('The route column: after a save', () => {
+  /** The list element RouteColumn renders, found in its returned tree (keys do not reach static markup). */
+  const listElement = async (d: StagePageData) => {
+    const { RouteColumn } = await import('@/components/question/RouteColumn');
+    const { StageQuestionList } = await import('@/components/decision/StageQuestionList');
+    const find = (n: unknown): { key: string | null } | null => {
+      if (n === null || typeof n !== 'object') return null;
+      if (Array.isArray(n)) { for (const c of n) { const f = find(c); if (f) return f; } return null; }
+      const el = n as { type?: unknown; key: string | null; props?: { children?: unknown } };
+      if (el.type === StageQuestionList) return el;
+      return find(el.props?.children);
+    };
+    const found = find(RouteColumn({ data: d, currentQuestionId: 'Q-PP-17', show: 'all' }));
+    expect(found).not.toBeNull();
+    return found!;
+  };
+  it('a new version of any question of the stage gives the list a new key, so it mounts again and reads the drafts again (review F1)', async () => {
+    const before = await listElement(data(ROWS));
+    const same = await listElement(data(ROWS.map((r) => ({ ...r }))));
+    const saved = await listElement(data(ROWS.map((r) => (r.questionId === 'Q-PP-17' ? { ...r, versionNumber: 1, kind: 'done' as const } : r))));
+    expect(before.key).not.toBeNull();
+    expect(same.key).toBe(before.key);
+    expect(saved.key).not.toBe(before.key);
+  });
+});
+
 describe('The route column: the filter', () => {
   it('a <select> labelled "Show", one option per filter "{label} {count}" in the stage page\'s order, the given filter chosen; no count on "Not saved yet"', async () => {
     const h = await column(data(ROWS), 'Q-PP-01', 'no_decision');

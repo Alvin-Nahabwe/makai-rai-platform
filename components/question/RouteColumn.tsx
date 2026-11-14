@@ -31,7 +31,10 @@ export function RouteColumn({ data, currentQuestionId, show }: { data: StagePage
         />
       </div>
       <div className="route-column__list">
+        {/* Keyed on the stage's versions: the list reads this browser's drafts once, on mount, and a save removes its
+            draft and refreshes the page; a new key mounts the list again, so "Not saved yet" is read again. */}
         <StageQuestionList
+          key={data.rows.map((r) => `${r.questionId}:${r.versionNumber ?? 0}`).join(',')}
           variant="column" currentQuestionId={currentQuestionId} topicTallies={topicTallies}
           orgSlug={data.orgSlug} orgId={data.orgId} projectId={data.projectId} stage={data.stage} viewerId={data.viewerId}
           rows={data.rows} show={show} counts={counts} filters={filters}
