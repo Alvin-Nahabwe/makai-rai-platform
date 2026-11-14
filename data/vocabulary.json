@@ -1806,7 +1806,7 @@
       "group": "Using the platform",
       "concept": "Emergency access",
       "term": "emergency access",
-      "definition": "A way for MAK-AI's server staff to reach the server when the normal way fails. Owners and Admins are emailed.",
+      "definition": "How MAK-AI's server staff reach the server when the normal way does not work. Owners and Admins are emailed.",
       "ownerDecision": false,
       "defineOnFirstUse": false,
       "retired": [

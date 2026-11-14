@@ -14,6 +14,8 @@ export const SHELL_COPY = Object.freeze({
   switchOrganisation: 'Switch organisation',
   theme: Object.freeze({ toDark: 'Switch to dark theme', toLight: 'Switch to light theme' }),
   public: Object.freeze({ about: 'About', signIn: 'Sign in' }),
+  /** The footer's first site link, to Help's legal section (plan 1A Task 12, R7). */
+  footer: Object.freeze({ termsAndPrivacy: 'Terms and privacy' }),
   items: Object.freeze({
     home: 'Home', projects: 'Projects', findings: 'Findings', guidance: 'Guidance', help: 'Help',
     members: 'Members', organisation: 'Organisation details', account: 'My account',

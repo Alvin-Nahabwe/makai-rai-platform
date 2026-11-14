@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type MouseEvent, type ReactElement, type ReactNode } from 'react';
 import { signOut } from 'next-auth/react';
 import { openDraftStore } from '@/lib/client/drafts';
+import { clearLastProjects } from '@/lib/client/lastProject';
 
 export type SignOutWithDraftsGuardProps = { userId: string; children: ReactNode };
 
@@ -39,6 +40,7 @@ export function SignOutWithDraftsGuard({ userId, children }: SignOutWithDraftsGu
   async function deleteAndSignOut(): Promise<void> {
     setBusy(true);
     openDraftStore()?.purgeAccount(userId);
+    clearLastProjects(userId);
     await signOut({ callbackUrl: '/login' });
   }
 

@@ -22,6 +22,7 @@ import type { OrgRole } from '@prisma/client';
 import { DECISION_COPY } from '@/lib/decision/copy';
 import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
+import RememberProject from '@/components/layout/RememberProject';
 
 export interface HistoryPageData {
   orgSlug: string; projectId: string; projectName: string; projectArchived: boolean; stage: Stage; questionId: string;
@@ -99,7 +100,12 @@ export default async function HistoryPage({
   const { slug, id, stage, questionId } = await params;
   const data = await load(slug, id, stage, questionId);
   const sp = await searchParams;
-  return <HistoryView data={data} shown={typeof sp.shown === 'string' ? sp.shown : null} />;
+  return (
+    <>
+      <HistoryView data={data} shown={typeof sp.shown === 'string' ? sp.shown : null} />
+      <RememberProject userId={data.viewer.userId} orgSlug={slug} projectId={data.projectId} />
+    </>
+  );
 }
 
 /** The markup of S-13, exported so a test renders it from real data. */

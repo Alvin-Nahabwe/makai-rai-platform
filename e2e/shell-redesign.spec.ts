@@ -20,7 +20,7 @@ import { expectNoHorizontalScroll } from './helpers/reflow';
 
 const WARNING = 'You will be signed out in 2 minutes because nothing has happened for a while.';
 const ENDED = 'You have been signed out. What you typed is still on this page.';
-const ORG_ITEMS = ['Home', 'Projects', 'Findings', 'Guidance', 'Members', 'Organisation details', 'My account'];
+const ORG_ITEMS = ['Home', 'Projects', 'Findings', 'Guidance', 'Help', 'Members', 'Organisation details', 'My account'];
 /** 70 characters, no hyphen and no space: the hardest organisation name to fit in the rail. */
 const LONG_ORG_NAME = 'Kampalanakasongolaresponsibleartificialintelligencelaboratoryformakere';
 const PERSON_NAME = 'Ssekandi Nnaŋŋa';
@@ -262,11 +262,15 @@ for (const width of [1023, 375]) {
       await railLinks(page).filter({ hasText: 'Projects' }).click();
       await page.waitForURL((url) => url.pathname === `/orgs/${slug}/projects`);
 
-      // A link that keeps the pathname closes the panel too: Findings (?for=findings), then the current item.
+      // A link that keeps the pathname closes the panel too: Findings (?for=findings), then the current item. Since plan 1A
+      // Task 12 the Projects page sends Findings straight to a project's findings when the organisation has one project, so
+      // the press ends on either address; the panel must close on both (on the kept pathname, or on the navigation).
       await menu.click();
       await expect(panel).toBeVisible();
       await railLinks(page).filter({ hasText: 'Findings' }).click();
-      await page.waitForURL((url) => url.pathname === `/orgs/${slug}/projects` && url.searchParams.get('for') === 'findings');
+      await page.waitForURL((url) =>
+        (url.pathname === `/orgs/${slug}/projects` && url.searchParams.get('for') === 'findings')
+        || new RegExp(`^/orgs/${slug}/projects/[0-9a-f-]{36}/findings$`).test(url.pathname));
       await expect(panel).toBeHidden();
       await expect(menu).toHaveAttribute('aria-expanded', 'false');
       await menu.click();
@@ -824,6 +828,23 @@ test('1A Task 11 (11): printed, the page shows main and none of the bar, the pan
     await expect(page.locator('main')).toBeVisible();
     await page.goto('/about');
     await expect(page.locator('.shell-public-header')).toBeHidden();
+    await expect(page.locator('main')).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
+
+test('1A Task 12 (11b): printed at 800 px (an A4 page in portrait is under 1024 px), signed in, the top bar, its Menu button and the panel are not displayed and main is', async ({ browser }) => {
+  // The print rule's copy at the end of components/layout/shell.css is what hides the bar here: without it the bar's own
+  // `display: flex` would come after the print rule in globals.css and win (plan 1A Task 12, fix round 2, item 4).
+  const { slug, seat: owner } = seat('owner');
+  const context = await contextAs(browser, owner.storageStatePath, { viewport: { width: 800, height: 1000 } });
+  try {
+    const page = await context.newPage();
+    await page.goto(`/orgs/${slug}/dashboard`);
+    await page.emulateMedia({ media: 'print' });
+    for (const selector of ['.shell-topbar', '.shell-topbar__menu-button', '.shell-topbar__panel']) await expect(page.locator(selector), selector).toBeHidden();
+    expect(await page.locator('.shell-topbar').evaluate((el) => getComputedStyle(el).display)).toBe('none');
     await expect(page.locator('main')).toBeVisible();
   } finally {
     await context.close();

@@ -157,7 +157,7 @@ it('NFR-PERF-01: S-05 sits in the signed-in group but is a public page, so it is
   expect(r.stderr).not.toContain('/account');
   expect(r.stderr).not.toContain('/acceptances/history');
   // The list is a named constant of the script, with the route directory as the build writes it.
-  expect(readFileSync('scripts/measure_first_load.mjs', 'utf8')).toMatch(/PUBLIC_OUTSIDE_PUBLIC_GROUP = \[\s*'\(authenticated\)\/acceptances',?\s*\]/);
+  expect(readFileSync('scripts/measure_first_load.mjs', 'utf8')).toMatch(/PUBLIC_OUTSIDE_PUBLIC_GROUP = \[\s*'\(authenticated\)\/acceptances',\s*\/\/[^\n]*\n\s*'help',?\s*\]/);
 });
 
 it('NFR-PERF-01: a listed exception passes until its route is gone, then the stale entry fails', () => {

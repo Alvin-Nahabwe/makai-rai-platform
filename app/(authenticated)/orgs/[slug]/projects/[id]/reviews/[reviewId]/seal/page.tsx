@@ -13,6 +13,7 @@ import { REVIEW_COPY } from '@/lib/review/copy';
 import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
 import { contentChangedLine, previewLines } from '@/components/review/reviewText';
+import RememberProject from '@/components/layout/RememberProject';
 
 interface PageProps {
   params: Promise<{ slug: string; id: string; reviewId: string }>;
@@ -56,12 +57,13 @@ export default async function SealConfirmationPage({ params }: PageProps) {
   const sealNumber = nextSealNumber(review);
   const base = `/orgs/${encodeURIComponent(slug)}/projects/${encodeURIComponent(id)}`;
   const heading = <h1>{`Seal "${review.name}" as seal ${sealNumber}`}</h1>;
+  const remember = <RememberProject userId={identity.userId} orgSlug={slug} projectId={project.id} />;
 
   if (!can(ctx.role, 'review:seal')) {
-    return <div className="page-content">{heading}<p>Only owners, admins and reviewers can seal a stage review.</p></div>;
+    return <div className="page-content">{heading}<p>Only owners, admins and reviewers can seal a stage review.</p>{remember}</div>;
   }
   if (archived) {
-    return <div className="page-content"><ArchivedBanner archived />{heading}</div>;
+    return <div className="page-content"><ArchivedBanner archived />{heading}{remember}</div>;
   }
 
   const content = runningContent();
@@ -90,6 +92,7 @@ export default async function SealConfirmationPage({ params }: PageProps) {
           </li>
         </ul>
       </SealConfirm>
+      {remember}
     </div>
   );
 }

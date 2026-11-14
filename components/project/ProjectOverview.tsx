@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { STAGES } from '@/types/record';
 import { ListLink } from '@/components/ui/ListLink';
 import { ArchivedBanner } from '@/components/project/ArchivedBanner';
@@ -17,7 +17,7 @@ const SHORT = { 'pre-processing': 'Pre', 'in-processing': 'In', 'post-processing
  * role may take, then the three stages side by side with each stage's follow-up and stage reviews. A synchronous view
  * of loaded data (the page file loads it), so it renders the same on the server and in a test.
  */
-export function ProjectOverview({ data }: { data: ProjectOverviewData }): ReactElement {
+export function ProjectOverview({ data, children }: { data: ProjectOverviewData; children?: ReactNode }): ReactElement {
   const { orgSlug, project, can } = data;
   const base = `/orgs/${orgSlug}/projects/${project.id}`;
   return (
@@ -55,6 +55,7 @@ export function ProjectOverview({ data }: { data: ProjectOverviewData }): ReactE
       </div>
       <p className="text-muted">To share your record outside the team, seal a stage review and create a document from it.</p>
       <p><ListLink href={`${base}/findings`}>Findings for this project</ListLink></p>
+      {children}
     </div>
   );
 }

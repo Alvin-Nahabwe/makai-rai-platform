@@ -762,17 +762,17 @@
   {
     "kind": "removed",
     "deleted": "__tests__/unit/sidebar-role.test.tsx::UX-02: the organisation shell lists the 7.1.1 items in order, Switch organisation only for more than one",
-    "replacedBy": "__tests__/unit/ui/shell.test.tsx::1A Task 11 L2-49: the organisation rail lists Home, Projects, Findings, Guidance, Members, Organisation details, My account at their addresses",
-    "property": "The organisation shell lists its items in a fixed order; switching organisation is offered only to a member of more than one. The item list itself is replaced by plan 1A's (Home, Projects, Findings, Guidance, then Members, Organisation details, My account; Help is added by Task 12 with its page).",
-    "proof": "The new case reads the rail's link labels in DOM order and asserts the list, and that the person block sits between Organisation details and My account. __tests__/unit/ui/shell.test.tsx::1A Task 11 L2-53: one organisation is a name, with no control and __tests__/unit/ui/shell.test.tsx::1A Task 11 L2-53: two organisations are a button naming the open one, and a closed, empty list carry the more-than-one rule; __tests__/unit/shell-nav.test.ts::1A Task 11 L2-49: a member of an organisation gets Home, Projects, Findings, Guidance, then Members, Organisation details, My account checks the function's order.",
+    "replacedBy": "__tests__/unit/ui/shell.test.tsx::1A Task 12 L2-48: the organisation rail lists Home, Projects, Findings, Guidance, Help, Members, Organisation details, My account at their addresses",
+    "property": "The organisation shell lists its items in a fixed order; switching organisation is offered only to a member of more than one. The item list itself is replaced by plan 1A's (Home, Projects, Findings, Guidance, Help, then Members, Organisation details, My account; Help added by Task 12, ruling L2-48).",
+    "proof": "The new case reads the rail's link labels in DOM order and asserts the list, and that the person block sits between Organisation details and My account. __tests__/unit/ui/shell.test.tsx::1A Task 11 L2-53: one organisation is a name, with no control and __tests__/unit/ui/shell.test.tsx::1A Task 11 L2-53: two organisations are a button naming the open one, and a closed, empty list carry the more-than-one rule; __tests__/unit/shell-nav.test.ts::1A Task 12 L2-48: a member of an organisation gets Home, Projects, Findings, Guidance, Help, then Members, Organisation details, My account checks the function's order.",
     "task": "1A Task 11"
   },
   {
     "kind": "removed",
     "deleted": "__tests__/unit/sidebar-role.test.tsx::UX-02: the organisation items and the Explore items point at the 7.1.5 addresses",
-    "replacedBy": "__tests__/unit/ui/shell.test.tsx::1A Task 11 L2-49: the organisation rail lists Home, Projects, Findings, Guidance, Members, Organisation details, My account at their addresses",
+    "replacedBy": "__tests__/unit/ui/shell.test.tsx::1A Task 12 L2-48: the organisation rail lists Home, Projects, Findings, Guidance, Help, Members, Organisation details, My account at their addresses",
     "property": "Each item of the shell points at its address under the open organisation, or at a fixed application path. About and Controls leave the rail (About is in the footer; Controls is reached from Guidance), and switching organisation is a list of the person's organisations' dashboards instead of a link to /.",
-    "proof": "The new case reads every href of the navigation in order and asserts the seven addresses for /orgs/a. __tests__/unit/shell-nav.test.ts::1A Task 11 L2-49: outside an organisation the organisation items fall back to / and none of them is current checks the fallback.",
+    "proof": "The new case reads every href of the navigation in order and asserts the eight addresses for /orgs/a, /help among them (Task 12). __tests__/unit/shell-nav.test.ts::1A Task 11 L2-49: outside an organisation the organisation items fall back to / and none of them is current checks the fallback.",
     "task": "1A Task 11"
   },
   {
@@ -786,9 +786,9 @@
   {
     "kind": "removed",
     "deleted": "__tests__/unit/sidebar-role.test.tsx::UX-02: an account in no organisation sees only Explore and My account (SRS 7.1.1)",
-    "replacedBy": "__tests__/unit/ui/shell.test.tsx::UX-02 (SRS 7.1.1): an account in no organisation sees only Guidance and My account",
-    "property": "An account in no organisation sees no organisation item (SRS 7.1.1); Explore is now called Guidance.",
-    "proof": "The new case asserts the rail's links are exactly Guidance and My account for a person with no organisation.",
+    "replacedBy": "__tests__/unit/ui/shell.test.tsx::UX-02 (SRS 7.1.1) 1A Task 12 L2-48: an account in no organisation sees only Guidance, Help and My account",
+    "property": "An account in no organisation sees no organisation item (SRS 7.1.1); Explore is now called Guidance, and Help (Task 12, ruling L2-48) is an item every account but the administrator has.",
+    "proof": "The new case asserts the rail's links are exactly Guidance, Help and My account for a person with no organisation.",
     "task": "1A Task 11"
   },
   {
@@ -1182,5 +1182,21 @@
     "property": "The emergency-access notice template's only placeholders are {TIME_UTC} and {ENTRY_ID}: it has no {EVENT} placeholder and no Event: line (CONSOLIDATED section 8 row 15), every line is at most 80 columns, it holds no shell expansion, and it starts with a Subject: line and a blank line",
     "proof": "__tests__/unit/break-glass-session.test.ts::notice carries only time and entry id, and no event: the set of {NAME} placeholders equals ['ENTRY_ID', 'TIME_UTC'], the file does not contain '{EVENT}' or 'Event:', the longest line is at most 80, no $ or backtick, line 1 matches ^Subject: and line 2 is empty",
     "task": "1A-16"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/review-text.test.ts::UX-18 (G023, G050): Go to them opens S-11 with its drafts filter, and What a seal proves opens its About anchor",
+    "replacedBy": "__tests__/unit/review-text.test.ts::UX-18 (G023, G050): Go to them opens S-11 with its drafts filter, and the seal link opens What sealing means on Help",
+    "property": "The review page's seal link (contract G050) reaches the place that says what a seal shows and does not show. That place moved from About's section to Help's \"What sealing means\" (plan 1A Task 12, rulings R10 and W2), so the link's address and the title's words change; the drafts address is unchanged.",
+    "proof": "The case now requires SEAL_PROOF_HREF to equal '/help#what-sealing-means', literal for literal. __tests__/unit/help-page.test.tsx's W2 case requires the Help page to render an h2 whose id is that address's fragment, so the address and the heading cannot drift apart; the draftsHref assertion is kept byte for byte.",
+    "task": "1A Task 12"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/about-page.test.tsx::FR-PUB-04 UX-03: the seal section says what a seal does not prove and keeps the exact timestamp sentence",
+    "replacedBy": "__tests__/unit/help-page.test.tsx::W1 (FR-PUB-04 UX-03): \"What sealing means\" is the two paragraphs, word for word, and says what a seal does not show",
+    "property": "The platform says publicly, on a page anyone can open, what a seal does not show. The bold sentence \"Sealed by the platform; not independently time-stamped.\" left the public pages with About's seal section (plan 1A Task 12, ruling R10); its substance is carried on Help by \"The platform keeps this seal. No outside body has time-stamped it.\" (DESIGN-SPEC.md:424, the owner's decision of 14 November 2026), and it stays on the documents (lib/documents/copy.ts:10).",
+    "proof": "The Help case renders the real Help page and requires the section with id what-sealing-means to hold exactly the two W1 paragraphs: the second begins \"A seal does not show that the decisions are correct or that the evidence supports them.\" and ends \"The platform keeps this seal. No outside body has time-stamped it.\"; the page must hold no \"not independently time-stamped\". That the page is public is shown in a browser by e2e/help-and-findings.spec.ts::L2-69 R7: signed out, the public header, the four headings in order, the footer link lands on Terms and privacy in view, Sign in goes to /login, which opens /help with no session and reads the four headings, \"What sealing means\" among them.",
+    "task": "1A Task 12"
   }
 ]

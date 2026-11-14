@@ -8,11 +8,18 @@ import type { RailItem } from '@/lib/shell/types';
  * current pathname's slug through resolveOrgHref (security obligation T5).
  */
 
-/** Where Task 12 keeps the last project a person opened in an organisation. Nothing reads or writes it in this task. */
-export const LAST_PROJECT_PREFIX = 'makrai:last-project:';
-export const LAST_PROJECT_KEY = (userId: string, orgSlug: string): string => `${LAST_PROJECT_PREFIX}${userId}:${orgSlug}`;
+/**
+ * Where the last project a person opened in an organisation is kept. Read and written only by lib/client/lastProject.ts
+ * (plan 1A Task 12, L2-64), which this module re-exports the key from and otherwise leaves alone: it stays storage-free.
+ */
+export { LAST_PROJECT_PREFIX, LAST_PROJECT_KEY } from '@/lib/client/lastProject';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Whether a value is a string shaped like a UUID: the one test the Findings link and the Projects page share (L2-65). */
+export function isUuid(value: unknown): value is string {
+  return typeof value === 'string' && UUID.test(value);
+}
 const FINDINGS_PAGE = /^\/orgs\/[^/]+\/projects\/[^/]+\/findings(\/|$)/;
 
 /**
@@ -22,7 +29,7 @@ const FINDINGS_PAGE = /^\/orgs\/[^/]+\/projects\/[^/]+\/findings(\/|$)/;
  */
 export function findingsHref(orgSlug: string, lastProjectId: string | null): string {
   const base = `/orgs/${orgSlug}/projects?for=findings`;
-  return lastProjectId !== null && UUID.test(lastProjectId) ? `${base}&last=${lastProjectId}` : base;
+  return isUuid(lastProjectId) ? `${base}&last=${lastProjectId}` : base;
 }
 
 type Draft = Omit<RailItem, 'label' | 'current'>;
@@ -31,12 +38,14 @@ type Draft = Omit<RailItem, 'label' | 'current'>;
  * The rail's items, in order. The MAK-AI administrator has Organisations and Accounts (S-23, S-25, SRS line 1514) and no
  * organisation item (FR-ORG-03); a person in an organisation has Home, Projects, Findings and Guidance, then Members and
  * Organisation details; an account in no organisation has only Guidance (SRS 7.1.1). My account comes last for everyone.
- * At most one item is current. Help is added by Task 12, after Guidance, with its page.
+ * Help (plan 1A Task 12, L2-48) follows Guidance for a person in an organisation and for an account in none; the
+ * administrator's rail has none (answer iv). At most one item is current.
  */
 export function railItems(input: { pathname: string; isPlatformAdmin: boolean; hasOrganisation: boolean; findingsHref: string }): RailItem[] {
   const { pathname } = input;
   const account: Draft = { key: 'account', href: '/account', icon: 'user', group: 'lower' };
   const guidance: Draft = { key: 'guidance', href: '/explore/framework', icon: 'book-open', group: 'main' };
+  const help: Draft = { key: 'help', href: '/help', icon: 'circle-help', group: 'main' };
   let drafts: Draft[];
   if (input.isPlatformAdmin) {
     drafts = [
@@ -50,12 +59,13 @@ export function railItems(input: { pathname: string; isPlatformAdmin: boolean; h
       { key: 'projects', href: resolveOrgHref(pathname, '/projects'), icon: 'folder', group: 'main' },
       { key: 'findings', href: input.findingsHref, icon: 'flag', group: 'main' },
       guidance,
+      help,
       { key: 'members', href: resolveOrgHref(pathname, '/settings/members'), icon: 'users', group: 'lower' },
       { key: 'organisation', href: resolveOrgHref(pathname, '/settings/organisation'), icon: 'building-2', group: 'lower' },
       account,
     ];
   } else {
-    drafts = [guidance, account];
+    drafts = [guidance, help, account];
   }
   const onFindings = FINDINGS_PAGE.test(pathname);
   const isCurrent = (d: Draft): boolean => {

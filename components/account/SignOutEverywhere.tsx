@@ -6,6 +6,7 @@ import { openDraftStore } from '@/lib/client/drafts';
 import { Button } from '@/components/ui/Button';
 import { StatusRegion } from '@/components/ui/StatusRegion';
 import { SIGN_OUT_EVERYWHERE_COPY } from '@/lib/account/copy';
+import { clearLastProjects } from '@/lib/client/lastProject';
 
 const NOT_DONE = SIGN_OUT_EVERYWHERE_COPY.notDone;
 
@@ -57,7 +58,10 @@ export function SignOutEverywhere({ userId }: { userId: string }) {
         // The sessions have already ended on the server; a plain navigation finishes this browser's sign-out.
         if (o.callbackUrl) window.location.assign(o.callbackUrl);
       }
-    }, () => openDraftStore()?.purgeAccount(userId)));
+    }, () => {
+      openDraftStore()?.purgeAccount(userId);
+      clearLastProjects(userId);
+    }));
   }
   return (
     <>

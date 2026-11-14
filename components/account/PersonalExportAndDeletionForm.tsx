@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { signOut } from 'next-auth/react';
 import { openDraftStore } from '@/lib/client/drafts';
+import { clearLastProjects } from '@/lib/client/lastProject';
 import type { CSSProperties, ReactElement } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Callout } from '@/components/ui/Callout';
@@ -89,6 +90,7 @@ export function DeleteConfirm({ userId, onCancel }: { userId: string; onCancel: 
       // Every session already ended on the server (sessionEpoch); this clears this browser's cookie and shows S-01.
       // The account's drafts (its reason text) leave this device first (NFR-PRIV-06).
       openDraftStore()?.purgeAccount(userId);
+      clearLastProjects(userId);
       try {
         await signOut({ callbackUrl: '/login' });
       } catch {

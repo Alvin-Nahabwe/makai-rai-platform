@@ -11,6 +11,7 @@ import { EXPORT_COPY } from '@/lib/export/copy';
 import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
 import { ArchivedBanner } from '@/components/project/ArchivedBanner';
+import RememberProject from '@/components/layout/RememberProject';
 
 type Params = Promise<{ slug: string; id: string }>;
 
@@ -32,7 +33,7 @@ const load = cache(async (slug: string, id: string) => {
   }
   const project = await withOrg(ctx, (tx) => tx.project.findUnique({ where: { id }, select: { id: true, name: true, archivedAt: true } }));
   if (project === null) notFound();
-  return { refused: false, ctx, project } as const;
+  return { refused: false, ctx, project, userId: identity.userId } as const;
 });
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
@@ -54,7 +55,7 @@ export default async function ProjectExportPage({ params, searchParams }: {
   const { slug, id } = await params;
   const loaded = await load(slug, id);
   if (loaded.refused) return <div className="page-content"><h1>Team export</h1><p>{EXPORT_NOT_ALLOWED}</p></div>;
-  const { ctx, project } = loaded;
+  const { ctx, project, userId } = loaded;
   const aboutBytes = await estimateTeamExport(ctx, project.id);
   return (
     <div className="page-content">
@@ -63,6 +64,7 @@ export default async function ProjectExportPage({ params, searchParams }: {
       <p>This project&apos;s records, with their history, its evidence files and its issued documents.</p>
       <TeamExportPanel href={`/api/v1/orgs/${slug}/export?projectId=${encodeURIComponent(project.id)}`} scopeName={project.name}
         aboutBytes={aboutBytes} refused={refusedFrom(await searchParams)} />
+      <RememberProject userId={userId} orgSlug={slug} projectId={project.id} />
     </div>
   );
 }

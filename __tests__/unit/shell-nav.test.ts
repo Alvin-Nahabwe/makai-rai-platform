@@ -14,17 +14,15 @@ const current = (items: ReturnType<typeof railItems>) => items.filter((i) => i.c
 const UUID = '3f2b8c1e-9a4d-4e6f-8b2a-1c3d5e7f9a0b';
 
 describe('railItems', () => {
-  it('1A Task 11 L2-49: a member of an organisation gets Home, Projects, Findings, Guidance, then Members, Organisation details, My account', () => {
+  it('1A Task 12 L2-48: a member of an organisation gets Home, Projects, Findings, Guidance, Help, then Members, Organisation details, My account', () => {
     const items = member('/orgs/a/dashboard');
-    expect(keys(items)).toEqual(['main:home', 'main:projects', 'main:findings', 'main:guidance', 'lower:members', 'lower:organisation', 'lower:account']);
-    expect(items.map((i) => i.label)).toEqual(['Home', 'Projects', 'Findings', 'Guidance', 'Members', 'Organisation details', 'My account']);
+    expect(keys(items)).toEqual(['main:home', 'main:projects', 'main:findings', 'main:guidance', 'main:help', 'lower:members', 'lower:organisation', 'lower:account']);
+    expect(items.map((i) => i.label)).toEqual(['Home', 'Projects', 'Findings', 'Guidance', 'Help', 'Members', 'Organisation details', 'My account']);
     expect(items.map((i) => i.href)).toEqual([
-      '/orgs/a/dashboard', '/orgs/a/projects', '/orgs/a/projects?for=findings', '/explore/framework',
+      '/orgs/a/dashboard', '/orgs/a/projects', '/orgs/a/projects?for=findings', '/explore/framework', '/help',
       '/orgs/a/settings/members', '/orgs/a/settings/organisation', '/account',
     ]);
-    expect(items.map((i) => i.icon)).toEqual(['home', 'folder', 'flag', 'book-open', 'users', 'building-2', 'user']);
-    // No Help item until its page exists (L2-48: Task 12 adds it after Guidance).
-    expect(items.map((i) => i.key)).not.toContain('help');
+    expect(items.map((i) => i.icon)).toEqual(['home', 'folder', 'flag', 'book-open', 'circle-help', 'users', 'building-2', 'user']);
   });
 
   it('1A Task 11 L2-49: the MAK-AI administrator gets Organisations and Accounts, then My account, and no organisation item', () => {
@@ -37,9 +35,15 @@ describe('railItems', () => {
     expect(keys(railItems({ pathname: '/admin/accounts', isPlatformAdmin: true, hasOrganisation: true, findingsHref: '/' }))).toEqual(keys(items));
   });
 
-  it('1A Task 11 L2-49 (SRS 7.1.1): an account in no organisation sees only Guidance and My account', () => {
+  it('1A Task 12 answer (iv): the administrator\'s rail has no Help item, and on /help none of its items is current', () => {
+    const items = railItems({ pathname: '/help', isPlatformAdmin: true, hasOrganisation: false, findingsHref: '/' });
+    expect(items.map((i) => i.key)).not.toContain('help');
+    expect(current(items)).toEqual([]);
+  });
+
+  it('1A Task 12 L2-48 (SRS 7.1.1): an account in no organisation sees only Guidance, Help and My account', () => {
     const items = railItems({ pathname: '/explore/framework', isPlatformAdmin: false, hasOrganisation: false, findingsHref: '/' });
-    expect(keys(items)).toEqual(['main:guidance', 'lower:account']);
+    expect(keys(items)).toEqual(['main:guidance', 'main:help', 'lower:account']);
   });
 
   it('1A Task 11 L2-49: every label is the one SHELL_COPY.items holds for its key', () => {
@@ -65,6 +69,8 @@ describe('railItems', () => {
     expect(current(member('/orgs/a/settings/members'))).toEqual(['members']);
     expect(current(member('/orgs/a/settings/organisation'))).toEqual(['organisation']);
     expect(current(member('/account'))).toEqual(['account']);
+    expect(current(member('/help'))).toEqual(['help']);
+    expect(current(railItems({ pathname: '/help', isPlatformAdmin: false, hasOrganisation: false, findingsHref: '/' }))).toEqual(['help']);
     expect(current(railItems({ pathname: '/admin/accounts', isPlatformAdmin: true, hasOrganisation: false, findingsHref: '/' }))).toEqual(['admin-accounts']);
   });
 

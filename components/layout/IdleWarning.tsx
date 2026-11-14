@@ -15,7 +15,6 @@ import {
 import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
-import './shell.css';
 
 const WARNING_TEXT = 'You will be signed out in 2 minutes because nothing has happened for a while.';
 const FAILED_TEXT = 'Could not keep you signed in just now. Try again.';

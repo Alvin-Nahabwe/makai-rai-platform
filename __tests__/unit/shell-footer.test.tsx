@@ -35,7 +35,7 @@ describe('footer', () => {
     expect(html).toContain(escapeHtml(credit.current.text));
     expect(anchors(html)).toEqual([
       [credit.current.licence, credit.current.href],
-      ['Legal texts', '/legal/terms'],
+      ['Terms and privacy', '/help#terms-and-privacy'],
       ['About', '/about'],
       ['Help and contact', '/about#help-and-contact'],
     ]);
@@ -47,7 +47,7 @@ describe('footer', () => {
     expect(html).toContain('&lt;b&gt;x&lt;/b&gt; GIZ');
     expect(html).not.toContain('<b>');
     expect(html).not.toContain('javascript:');
-    expect(anchors(html).map(([name]) => name)).toEqual(['Legal texts', 'About', 'Help and contact']);
+    expect(anchors(html).map(([name]) => name)).toEqual(['Terms and privacy', 'About', 'Help and contact']);
     expect(html).toContain('LICENCE');
   });
 
