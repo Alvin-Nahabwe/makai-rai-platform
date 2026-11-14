@@ -286,6 +286,9 @@ export default async function QuestionPage({
   // identity, in parallel with the panel; the panel and the open work come from that one call.
   const { identity, ctx } = await gate(slug, stage);
   const stagePage = loadStagePage(ctx, identity.userId, id, stage as Stage);
+  // Observed at once: if the panel refuses (notFound) the page never awaits the list, and its failure must not escape
+  // as an unhandled rejection. The await below still sees a failure when the panel loads.
+  stagePage.catch(() => {});
   const { panel, openWork } = await load(slug, id, stage, questionId);
   const stageData = await stagePage;
   // The project's name is for the title only; the regions (and the client form inside them) get the panel as before.
