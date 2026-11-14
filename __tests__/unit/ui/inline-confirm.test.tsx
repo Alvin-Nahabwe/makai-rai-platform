@@ -19,8 +19,9 @@ describe('InlineConfirm on the kit', () => {
     for (const props of [{}, { destructive: true }, { busy: true }, { cancelLabel: 'Keep it' }]) {
       const html = renderToStaticMarkup(<InlineConfirm {...base} {...props} />);
       const actions = /<div class="ui-confirm__actions">([\s\S]*?)<\/div>/.exec(html)?.[1] ?? '';
-      // The actions hold buttons only, as siblings, so the last child is the last button.
-      const children = [...actions.matchAll(/<(\w+)[^>]*>[^<]*<\/\1>/g)];
+      // The actions hold buttons only, as siblings, so the last child is the last button. A busy button holds the kit's empty
+      // spinner span before its label (Button.tsx), inside the button.
+      const children = [...actions.matchAll(/<(\w+)[^>]*>(?:<span class="ui-button__spinner" aria-hidden="true"><\/span>)?[^<]*<\/\1>/g)];
       expect(children.map((c) => c[1]), JSON.stringify(props)).toEqual(['button', 'button']);
       expect(children.map((c) => c[0]).join(''), JSON.stringify(props)).toBe(actions);
       expect(children[1][0], JSON.stringify(props)).toMatch(/>Withdraw document<\/button>$/);
@@ -39,9 +40,20 @@ describe('InlineConfirm on the kit', () => {
     expect(renderToStaticMarkup(<InlineConfirm {...base} cancelLabel="Keep the document" />)).toMatch(/<button [^>]*>Keep the document<\/button><button/);
   });
 
-  it('a busy confirm button is disabled, not the kit\'s busy state, so it cannot be pressed twice', () => {
-    const html = renderToStaticMarkup(<InlineConfirm {...base} busy />);
-    expect(html).toMatch(/<button [^>]*disabled=""[^>]*>Withdraw document<\/button>/);
-    expect(html).not.toContain('aria-busy');
+  it('a busy confirm button is the kit\'s busy state (aria-busy, not disabled), so it keeps focus; canConfirm false disables it, busy or not; Cancel never is either', () => {
+    const confirmOf = (html: string) => /<button [^>]*>(?:<span[^>]*><\/span>)?Withdraw document<\/button>/.exec(html)![0];
+    const cancelOf = (html: string) => /<button [^>]*>Cancel<\/button>/.exec(html)![0];
+    for (const [props, want] of [
+      [{}, { busy: false, disabled: false }],
+      [{ busy: true }, { busy: true, disabled: false }],
+      [{ canConfirm: false }, { busy: false, disabled: true }],
+      [{ busy: true, canConfirm: false }, { busy: true, disabled: true }],
+      [{ busy: true, canConfirm: true }, { busy: true, disabled: false }],
+    ] as const) {
+      const html = renderToStaticMarkup(<InlineConfirm {...base} {...props} />);
+      const confirm = confirmOf(html);
+      expect({ busy: confirm.includes('aria-busy="true"'), disabled: confirm.includes('disabled=""') }, JSON.stringify(props)).toEqual(want);
+      expect(cancelOf(html), JSON.stringify(props)).not.toMatch(/disabled|aria-busy/);
+    }
   });
 });

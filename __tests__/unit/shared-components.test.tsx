@@ -12,14 +12,15 @@ describe('InlineConfirm', () => {
     expect(html).toMatch(/<button[^>]*>Withdraw document<\/button>/); expect(html).not.toMatch(/>OK</);
   });
 
-  it('UX-29 (helper): the confirm button is disabled while busy or when canConfirm is false, and the cancel button never is', () => {
+  it('UX-29 (helper): busy, the confirm button is aria-busy and not disabled; canConfirm false disables it, busy or not; the cancel button is never either', () => {
     const base = { objectName: 'Maternal-risk triage', consequence: 'Nothing in it can be changed.', actionLabel: 'Archive project', onConfirm: noop, onCancel: noop };
-    const confirmOf = (html: string) => /<button[^>]*>Archive project<\/button>/.exec(html)![0];
+    const confirmOf = (html: string) => /<button[^>]*>(?:<span[^>]*><\/span>)?Archive project<\/button>/.exec(html)![0];
     const cancelOf = (html: string) => /<button[^>]*>Cancel<\/button>/.exec(html)![0];
-    for (const [props, disabled] of [[{}, false], [{ busy: true }, true], [{ canConfirm: false }, true], [{ canConfirm: true }, false]] as const) {
+    for (const [props, busy, disabled] of [[{}, false, false], [{ busy: true }, true, false], [{ canConfirm: false }, false, true], [{ canConfirm: true }, false, false], [{ busy: true, canConfirm: false }, true, true]] as const) {
       const html = renderToStaticMarkup(<InlineConfirm {...base} {...props} />);
+      expect(/aria-busy="true"/.test(confirmOf(html)), JSON.stringify(props)).toBe(busy);
       expect(/disabled/.test(confirmOf(html)), JSON.stringify(props)).toBe(disabled);
-      expect(/disabled/.test(cancelOf(html)), JSON.stringify(props)).toBe(false);
+      expect(/disabled|aria-busy/.test(cancelOf(html)), JSON.stringify(props)).toBe(false);
     }
   });
 
