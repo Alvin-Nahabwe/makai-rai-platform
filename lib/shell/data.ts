@@ -1,6 +1,8 @@
 import type { Identity } from '@/lib/auth/identity';
 import { orgRoleLabel } from '@/lib/authz/roleLabel';
+import { identityDb } from '@/lib/data/identity';
 import { membershipsForUser } from '@/lib/data/preauth';
+import { resolveOrgDispatch } from '@/lib/org-dispatch';
 import type { ShellData, ShellOrg } from '@/lib/shell/types';
 import { TERM_ADMIN, TERM_ASSESSOR, TERM_OWNER, TERM_REVIEWER, TERM_VIEWER } from '@/lib/vocabulary/terms';
 
@@ -33,6 +35,12 @@ export function roleWord(label: string): string {
  * that is all a client component of the shell receives (T2). The account's platform role field is not passed on (D-10).
  * The role labels are own properties of a plain object, so an organisation whose slug is `__proto__` puts no key on
  * Object.prototype, and a lookup by an address's slug finds only the person's own organisations (T3).
+ *
+ * homeSlug (workshop walk finding S4) is the organisation `/` would send the person to, for the rail's links on pages whose
+ * address carries no slug: the only organisation of a person in one; for a person in two or more, the one their
+ * last-active hint names, chosen by resolveOrgDispatch exactly as app/page.tsx does, so the hint (unconstrained text,
+ * D-069) only ever selects among these memberships and is never itself a slug. The hint is read, by the person's own id,
+ * only when there are two or more memberships. Null for the administrator, for a person in none, and with no usable hint.
  */
 export async function loadShellData(identity: Identity): Promise<ShellData> {
   const memberships = await membershipsForUser(identity.userId);
@@ -43,7 +51,9 @@ export async function loadShellData(identity: Identity): Promise<ShellData> {
   // Object.fromEntries defines each key as an own property (it never calls the __proto__ setter), and the object stays a
   // plain one: React refuses a null-prototype object as a prop of a client component.
   // The platform administrator holds no membership by rule; a stray row's name and role do not reach the browser.
-  if (platformLabel !== null) return { userId: identity.userId, userName: identity.name || '', platformLabel, roleLabels: {}, orgs: [] };
+  if (platformLabel !== null) {
+    return { userId: identity.userId, userName: identity.name || '', platformLabel, roleLabels: {}, orgs: [], homeSlug: null };
+  }
   const roleLabels: Record<string, string> = Object.fromEntries(
     memberships.flatMap((m, i) => {
       const label = orgLabels[i];
@@ -53,5 +63,14 @@ export async function loadShellData(identity: Identity): Promise<ShellData> {
   const orgs: ShellOrg[] = memberships
     .map((m) => ({ slug: m.org.slug, name: m.org.name }))
     .sort((a, b) => a.name.localeCompare(b.name) || a.slug.localeCompare(b.slug));
-  return { userId: identity.userId, userName: identity.name || '', platformLabel, roleLabels, orgs };
+  return { userId: identity.userId, userName: identity.name || '', platformLabel, roleLabels, orgs, homeSlug: await homeSlugOf(identity, memberships) };
+}
+
+/** The slug `/` would redirect to (see loadShellData), or null. */
+async function homeSlugOf(identity: Identity, memberships: Awaited<ReturnType<typeof membershipsForUser>>): Promise<string | null> {
+  if (memberships.length === 0) return null;
+  if (memberships.length === 1) return memberships[0].org.slug;
+  const user = await identityDb.user.findUnique({ where: { id: identity.userId }, select: { lastActiveOrgId: true } });
+  const dispatch = resolveOrgDispatch(user?.lastActiveOrgId ?? null, memberships);
+  return dispatch.kind === 'redirect' ? dispatch.slug : null;
 }

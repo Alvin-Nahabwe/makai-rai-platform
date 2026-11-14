@@ -27,9 +27,10 @@ const shell: ShellData = {
   platformLabel: null,
   roleLabels: { a: 'Viewer', b: 'Owner' },
   orgs: [{ slug: 'a', name: 'Alpha Lab' }, { slug: 'b', name: 'Beta Lab' }],
+  homeSlug: null,
 };
-const admin: ShellData = { userId: 'a1', userName: 'A', platformLabel: 'MAK-AI administrator', roleLabels: {}, orgs: [] };
-const noOrg: ShellData = { userId: 'n1', userName: 'N', platformLabel: null, roleLabels: {}, orgs: [] };
+const admin: ShellData = { userId: 'a1', userName: 'A', platformLabel: 'MAK-AI administrator', roleLabels: {}, orgs: [], homeSlug: null };
+const noOrg: ShellData = { userId: 'n1', userName: 'N', platformLabel: null, roleLabels: {}, orgs: [], homeSlug: null };
 
 function at(pathname: string): void {
   pathnameMock.mockReturnValue(pathname);
@@ -201,6 +202,35 @@ describe('the rail, ported from the sidebar (UX-02, UX-41)', () => {
     const lower = /<ul class="shell-rail__lower">([\s\S]*?)<\/ul>/.exec(html)?.[1] ?? '';
     expect(lower.indexOf('Organisation details')).toBeLessThan(lower.indexOf('shell-rail__person'));
     expect(lower.indexOf('shell-rail__person')).toBeLessThan(lower.indexOf('My account'));
+  });
+
+  it('S4: on Help, My account and Guidance the five organisation links go to the person\'s home organisation, not to Home', () => {
+    const hrefsOf = (html: string) => [...navOf(html).matchAll(/<a [^>]*href="([^"]*)"/g)].map((m) => m[1].replace(/&amp;/g, '&'));
+    const one: ShellData = { ...shell, roleLabels: { a: 'Viewer' }, orgs: [{ slug: 'a', name: 'Alpha Lab' }], homeSlug: 'a' };
+    const twoHinted: ShellData = { ...shell, homeSlug: 'b' };
+    for (const [data, s] of [[one, 'a'], [twoHinted, 'b']] as const) {
+      for (const path of ['/help', '/account', '/explore/framework']) {
+        expect(hrefsOf(rail(path, data)), `${path} ${s}`).toEqual([
+          `/orgs/${s}/dashboard`, `/orgs/${s}/projects`, `/orgs/${s}/projects?for=findings`, '/explore/framework', '/help',
+          `/orgs/${s}/settings/members`, `/orgs/${s}/settings/organisation`, '/account',
+        ]);
+      }
+    }
+  });
+
+  it('S4: two organisations and no usable home give the chooser (/), and a home slug outside the person\'s organisations is never used', () => {
+    for (const data of [shell, { ...shell, homeSlug: 'zzz' }]) {
+      const html = rail('/account', data);
+      const hrefs = [...navOf(html).matchAll(/<a [^>]*href="([^"]*)"/g)].map((m) => m[1]);
+      expect(hrefs.slice(0, 3)).toEqual(['/', '/', '/']);
+      expect(hrefs.slice(5, 7)).toEqual(['/', '/']);
+      expect(html).not.toContain('zzz');
+    }
+  });
+
+  it('S4: no organisation gives no organisation link, and the administrator\'s rail is unchanged, with a home slug or without', () => {
+    expect(linkLabels(rail('/account', noOrg))).toEqual(['Guidance', 'Help', 'My account']);
+    expect(linkLabels(rail('/account', { ...admin, homeSlug: null }))).toEqual(['Organisations', 'Accounts', 'My account']);
   });
 
   it('UX-01 UX-02: the MAK-AI administrator rail links S-23 and S-25, then My account, and has no organisation item', () => {

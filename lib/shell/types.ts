@@ -18,6 +18,12 @@ export type ShellData = {
   roleLabels: Readonly<Record<string, string>>;
   /** Sorted by name, then slug. */
   orgs: readonly ShellOrg[];
+  /**
+   * The organisation `/` would send the person to (S4), for the rail's links outside an organisation: a slug that is in
+   * `orgs`, never anything else of the user or organisation row (T2). Null for the administrator, for a person in no
+   * organisation, and for a person in several with no usable last-active hint.
+   */
+  homeSlug: string | null;
 };
 
 export type RailItem = {
