@@ -256,8 +256,13 @@ describe('S-09 and S-32 (Task 7)', () => {
   it('FR-PRJ-01: the form has a labelled control for each descriptive field', () => {
     const html = renderToStaticMarkup(<ProjectForm mode="create" />);
     for (const label of ['AI system type', 'Sector', 'Dataset type', 'Dataset size', PROJECT_FORM_COPY.labels.processesPersonalData, 'Funding source',
-                         'Regulatory context', PROJECT_FORM_COPY.labels.developmentStage, 'Start date', 'End date'])
+                         'Regulatory context', PROJECT_FORM_COPY.labels.developmentStage])
       expect(html).toMatch(new RegExp(`<label[^>]*for="[^"]+"[^>]*>${label}`));
+    // The two dates are the kit's DateField (plan 1B Task 13): a fieldset named by its legend, and three labelled boxes.
+    for (const [prefix, legend] of [['projectStart', 'Start date'], ['projectEnd', 'End date']]) {
+      expect(html).toMatch(new RegExp(`<fieldset[^>]*>\\s*<legend[^>]*>${legend}</legend>`));
+      for (const part of ['day', 'month', 'year']) expect(html).toMatch(new RegExp(`<label[^>]*for="${prefix}-${part}"[^>]*>[^<]+</label>\\s*<input[^>]*id="${prefix}-${part}"`));
+    }
   });
 
   it('FR-PRJ-01 (B37): the dataset size and personal data options print the words of lib/project/labels.ts, and the form writes none of them', () => {

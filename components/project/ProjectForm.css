@@ -43,3 +43,10 @@
 .project-form__optional {
   font-size: var(--font-size-small);
 }
+
+/* The two sections' headings, "About the project" and "More details (optional)" (plan 1B Task 13): a step below the
+   page's h1, inside the form's card. */
+.project-form__section-title {
+  font-size: var(--font-size-h3);
+  margin: 0 0 var(--space-4);
+}
