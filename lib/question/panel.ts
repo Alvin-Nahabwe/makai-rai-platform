@@ -22,7 +22,7 @@ export interface QuestionPanelData {
   seals: SealRef[]; reasonCodes: ReasonCodeEntry[];
   members: Array<{ userId: string; name: string }>; viewer: { userId: string; name: string; role: OrgRole };
   canWrite: boolean; canRaiseFinding: boolean; lastOwnSaveDate: DeclaredDate | null;
-  openFinding: { findingId: string } | null; gateAnswer: ScopeAnswer | null; contentSemver: string;
+  openFinding: { findingId: string; closable?: true } | null; gateAnswer: ScopeAnswer | null; contentSemver: string;
   orgId: string;                            // the draft key's organisation (UX-26; gap G041)
 }
 
@@ -97,7 +97,9 @@ export async function loadQuestionPanel(
     canWrite: can(ctx.role, 'decision:write') && !archived,
     canRaiseFinding: can(ctx.role, 'finding:raise') && !archived,
     lastOwnSaveDate: read.lastOwn === null ? null : declaredDateOf(read.lastOwn.declaredOn, read.lastOwn.declaredPrecision as DeclaredPrecision | null),
-    openFinding, gateAnswer, contentSemver: running.semver, orgId: ctx.orgId,
+    // Fix 2 (lead's ruling): nobody can close a finding in an archived project, so S-12 does not say it can now be closed.
+    openFinding: openFinding === null || !archived ? openFinding : { findingId: openFinding.findingId },
+    gateAnswer, contentSemver: running.semver, orgId: ctx.orgId,
   };
 }
 

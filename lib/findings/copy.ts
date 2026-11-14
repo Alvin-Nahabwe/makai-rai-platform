@@ -66,6 +66,12 @@ const FIELDS = Object.freeze({
   notStorable: 'This contains a character that cannot be stored. Remove it and save again.',
 } as const);
 
+/** The close box's sentences (B2): each cause once, and "You can close this finding now." once; the unblocked box joins them. */
+const CLOSE_NOW = 'You can close this finding now.';
+const CAUSE_WITHDRAWN = 'The decision on this question was withdrawn.';
+const CAUSE_GATE = 'Your team answered No to the personal data question, so this question does not apply.';
+const causeChanged = (status: string): string => `The decision on this question is now ${status}.`;
+
 export const FINDINGS_COPY = Object.freeze({
   titles: Object.freeze({ findings: 'Findings' }),
 
@@ -90,6 +96,8 @@ export const FINDINGS_COPY = Object.freeze({
   labels: Object.freeze({
     open: 'Open',
     closedByMitigation: 'Closed by a mitigation',
+    /** R2: a finding the "Close finding" button closed (its closing record, no done action since the latest reopen). */
+    closed: 'Closed',
     withdrawn: 'Withdrawn',
     closedByAcceptedRisk: 'Closed by an accepted risk',
     closedByAcceptedRiskBy: (who: string): string => `Closed by an accepted risk (${who})`,
@@ -147,6 +155,7 @@ export const FINDINGS_COPY = Object.freeze({
     emptyStage: 'No findings in this stage.',
     decisionDone: 'Ready to close: the decision has changed',
     decisionWithdrawn: 'Ready to close: the decision was withdrawn',
+    gateNo: 'Ready to close: the question no longer applies',
     noMitigation: 'Open, no mitigation yet',
     overdue: 'Open, with overdue mitigations',
     open: 'Open',
@@ -194,13 +203,13 @@ export const FINDINGS_COPY = Object.freeze({
     checkAgainOn: (date: string): string => ` To be checked again on ${date}.`,
     closeSection: 'Can be closed now',
     /** The box's cause sentences alone (B2: a blocked box gives the cause without "You can close this finding now."). */
-    closeWithdrawnCause: 'The decision on this question was withdrawn.',
-    closeGateCause: 'Your team answered No to the personal data question, so this question does not apply.',
-    closeChangedCause: (status: string): string => `The decision on this question is now ${status}.`,
-    closeNow: 'You can close this finding now.',
-    closeWithdrawn: 'The decision on this question was withdrawn. You can close this finding now.',
-    closeGate: 'Your team answered No to the personal data question, so this question does not apply. You can close this finding now.',
-    closeChanged: (status: string): string => `The decision on this question is now ${status}. You can close this finding now.`,
+    closeWithdrawnCause: CAUSE_WITHDRAWN,
+    closeGateCause: CAUSE_GATE,
+    closeChangedCause: causeChanged,
+    closeNow: CLOSE_NOW,
+    closeWithdrawn: sentences(CAUSE_WITHDRAWN, CLOSE_NOW),
+    closeGate: sentences(CAUSE_GATE, CLOSE_NOW),
+    closeChanged: (status: string): string => sentences(causeChanged(status), CLOSE_NOW),
     /** B2 (ruling R1): shown in the close box, with no button, while a mitigation is Planned or In progress. */
     closeBlocked: 'This finding stays open while it has a mitigation that is Planned or In progress. Mark the mitigation Done, or cancel it and say why.',
     mitigations: 'Mitigations',
@@ -210,6 +219,10 @@ export const FINDINGS_COPY = Object.freeze({
     ways: 'Ways teams address this',
     otherWays: 'Accept the risk, withdraw or reopen',
     history: 'History',
+    /** R2: the closure line under the status, "Closed by <name> on <date>." then the cause sentence, when there is one. */
+    closedBy: 'Closed by',
+    /** R4: the link from a finding to its question on S-12. */
+    openQuestion: 'Open the question',
   } as const),
 
   /** A mitigation's card and its history on S-15. */
@@ -241,6 +254,11 @@ export const FINDINGS_COPY = Object.freeze({
      */
     closedBecauseDecisionChanged: 'Closed because the decision changed.',
     closedBecauseDecisionWithdrawn: 'Closed because the decision was withdrawn.',
+    /** R3: a close by the personal data question answered No. */
+    closedBecauseNoLongerApplies: 'Closed because this question no longer applies: the team answered No to the personal data question.',
+    /** R2: a closing record's history line: it closed the finding ("Finding closed by <name>."), or it did not. */
+    findingClosedBy: 'Finding closed by',
+    pressedWhileOpen: 'Close finding was pressed while a mitigation was still open, so the finding stayed open.',
   }),
 
   /** "Accept the risk, withdraw or reopen": withdraw and reopen. */

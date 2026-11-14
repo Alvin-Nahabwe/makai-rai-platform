@@ -863,15 +863,21 @@ export async function acceptedRisksToLookAgain(
   });
 }
 
-/** The question's open shortfall finding, or null; team findings never count (FR-FND-02). S-12 links to it (UX-09). */
+/**
+ * The question's open shortfall finding, or null; team findings never count (FR-FND-02). S-12 links to it (UX-09).
+ * `closable: true` (R4) when a decision closure is available for it and no mitigation of it is planned or in progress
+ * (B2: S-15 then offers "Close finding"); the field is absent otherwise.
+ */
 export async function openShortfallForQuestion(
   ctx: OrgContext, projectId: string, questionId: string,
-): Promise<{ findingId: string } | null> {
+): Promise<{ findingId: string; closable?: true } | null> {
   return withOrg(ctx, async (tx) => {
     const records = await loadRecords(tx, { projectId, questionId, source: 'shortfall' }, BY_RAISING_VERSION);
     const open = records.filter((r) => r.state === 'open');
     // The latest raised, should a reopen of an older one have left two open.
     const last = open.at(-1);
-    return last === undefined ? null : { findingId: last.finding.id };
+    if (last === undefined) return null;
+    const closable = !last.current.some(isOpenWork) && (await decisionClosures(tx, projectId, [last])).has(last.finding.id);
+    return closable ? { findingId: last.finding.id, closable: true } : { findingId: last.finding.id };
   });
 }

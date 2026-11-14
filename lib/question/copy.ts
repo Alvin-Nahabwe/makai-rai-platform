@@ -84,6 +84,8 @@ export const QUESTION_COPY = Object.freeze({
   /** components/findings/QuestionFindingLink.tsx (answer Q7 (b)). */
   findingLink: Object.freeze({
     open: 'This question has an open finding.',
+    /** R4: the open finding has a decision closure available and no mitigation open. */
+    closable: 'This question has a finding that can now be closed.',
     view: 'View the finding',
     raise: 'Raise a finding about this question',
   }),

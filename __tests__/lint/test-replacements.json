@@ -2042,6 +2042,7 @@
     "proof": "The one changed line is the expected region list, which gains 'way-on' between 'evidence-block' and 'finding-link'; every other line of the case, including the count of six labelled sections and the order regex from answer-form to finding-link, is unchanged and passes. __tests__/unit/question-frame.test.tsx's new cases require the foot to be the last child of the main column after the answer form, its exact links and text, the last-question sentence, and that an unknown nextId throws.",
     "task": "workshop walk S9, the coordinator's order of 14 November 2026 21:35 EAT: a way on at the foot of the form"
 <<<<<<< HEAD
+<<<<<<< HEAD
   },
   {
     "kind": "rule",
@@ -2068,5 +2069,15 @@
     "task": "walk-documents S1, item 2"
 =======
 >>>>>>> c3c49e7c
+=======
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-03: S-32 lists the archived project under Archived with Unarchive for an owner, and the dashboard leaves it out",
+    "replacedBy": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-03: S-32 lists the archived project under Archived with Unarchive for an owner, and the dashboard leaves it out",
+    "property": "The dashboard's project card still reads, per stage, \"<stage>: <n> open findings, <n> overdue mitigations\", with no score. Ruling R5 (S10, 14 Nov 2026) makes \"<n> open findings\" a link to that stage's findings when n is above 0, so the words are now split by the link's tags; the case reads the card's text without tags.",
+    "proof": "The case renders the dashboard as a viewer and requires, on its text with the tags removed, /Pre-processing: \\d+ open findings?, \\d+ overdue mitigations?/, and no score, % or maturity on the markup; __tests__/unit/project-card-findings-link.test.tsx requires the link to /orgs/<org>/projects/<id>/findings?stage=<stage> around \"2 open findings\", plain text at 0, and the zero line exactly as HOME_COPY.card.line writes it.",
+    "task": "fix/walk-findings-closure Part 2, ruling R5"
+>>>>>>> 2a9b9dd8
   }
 ]

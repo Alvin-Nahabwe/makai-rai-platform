@@ -15,7 +15,7 @@ export interface ProjectCardProps {
 
 const C = HOME_COPY.card;
 
-/** One active project on S-08 (FR-PRJ-04): its name, the descriptive line and, per stage, the open findings and overdue mitigations. No score (FR-RM-01). */
+/** One active project on S-08 (FR-PRJ-04): its name, the descriptive line and, per stage, the open findings (a link to them when any, R5) and overdue mitigations. No score (FR-RM-01). */
 export function ProjectCard({ orgSlug, project, counts }: ProjectCardProps): ReactElement {
   return (
     <article className="card project-card">
@@ -23,7 +23,14 @@ export function ProjectCard({ orgSlug, project, counts }: ProjectCardProps): Rea
       {project.descriptiveLine !== '' ? <p className="project-card__desc">{project.descriptiveLine}</p> : null}
       <ul>
         {STAGES.map((s) => (
-          <li key={s}>{C.line(STAGE_NAME[s], plural(counts[s].openFindings, C.openFinding, C.openFindings), plural(counts[s].overdueMitigations, C.overdueMitigation, C.overdueMitigations))}</li>
+          <li key={s}>
+            {C.lineStart(STAGE_NAME[s])}
+            {/* R5 (S10): the count links to that stage's findings when there are any, as the project page's count does. */}
+            {counts[s].openFindings > 0
+              ? <ListLink href={`/orgs/${orgSlug}/projects/${project.id}/findings?stage=${s}`}>{plural(counts[s].openFindings, C.openFinding, C.openFindings)}</ListLink>
+              : plural(counts[s].openFindings, C.openFinding, C.openFindings)}
+            {C.lineEnd(plural(counts[s].overdueMitigations, C.overdueMitigation, C.overdueMitigations))}
+          </li>
         ))}
       </ul>
     </article>

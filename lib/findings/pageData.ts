@@ -7,10 +7,11 @@ import { contentRefById } from '@/lib/data/framework';
 import { userRefs } from '@/lib/data/views';
 import { loadContent, runningContent } from '@/lib/content/loader';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
+import { closureOf, isClosingRecord, recordClosedFinding, reopenedAt, type Closure, type ClosureDecision, type ClosureMitigation } from '@/lib/findings/closure';
 import { groupFindings } from '@/lib/findings/groups';
 import { decisionStatusWord, findingSourceLabel, findingStateLabel, STAGE_NAMES, stageCountHeading } from '@/lib/findings/labels';
 import { eatDate, isOverdue } from '@/lib/followup/overdue';
-import { STAGES, type CalendarDate, type FindingState, type OutsideRole, type Stage, type StoredDecisionStatus } from '@/types/record';
+import { STAGES, type CalendarDate, type FindingState, type MitigationKind, type MitigationStatus, type OutsideRole, type Stage, type StoredDecisionStatus } from '@/types/record';
 import type { AcceptedRiskView, FindingDetailView, FindingView, MitigationVersionView, UserRef } from '@/types/api';
 
 /**
@@ -49,7 +50,8 @@ export interface FindingsPageData {
   shown: string | null;
   /** True when the project has no finding at all (not when the filter hides them). */
   empty: boolean;
-  decisionDone: FindingListItem[]; decisionWithdrawn: FindingListItem[]; stages: StageGroupData[];
+  /** R3: "Ready to close" in three groups, in this order: the decision changed, the decision withdrawn, the question no longer applies (`gate_no`). */
+  decisionDone: FindingListItem[]; decisionWithdrawn: FindingListItem[]; gateNo: FindingListItem[]; stages: StageGroupData[];
   lookAgain: FindingListItem[]; closed: FindingListItem[]; withdrawn: FindingListItem[];
   raise: RaiseFormData | null;
 }
@@ -88,14 +90,60 @@ function titleOf(f: Pick<FindingView, 'source' | 'title' | 'questionId'>, versio
 
 function itemOf(
   f: FindingView, version: VersionInfo | undefined, accepted: Pick<AcceptedRiskView, 'acceptedBy'> | null,
-  closing: { decisionVersionId: string; reason: FindingListItem['closeReason'] } | undefined,
+  closing: { decisionVersionId: string; reason: FindingListItem['closeReason'] } | undefined, closedByRecord: boolean,
 ): FindingListItem {
   return {
     id: f.id, stage: f.stage, title: titleOf(f, version), state: f.state,
     decisionVersionId: closing?.decisionVersionId ?? null, closeReason: closing?.reason ?? null,
     sourceLabel: findingSourceLabel(f, version === undefined ? null : { versionNumber: version.versionNumber, status: version.status }),
-    stateLabel: findingStateLabel(f.state, accepted), openMitigations: f.openMitigations, overdueMitigations: f.overdueMitigations, raisedAt: f.raisedAt,
+    stateLabel: closedByRecord ? FINDINGS_COPY.labels.closed : findingStateLabel(f.state, accepted),
+    openMitigations: f.openMitigations, overdueMitigations: f.overdueMitigations, raisedAt: f.raisedAt,
   };
+}
+
+/** The decision versions closing records name, as rule A reads them (R3), inside the caller's `withOrg`. */
+async function closureDecisions(tx: TenantTx, ids: readonly (string | null)[]): Promise<Map<string, ClosureDecision>> {
+  const wanted = [...new Set(ids.filter((i): i is string => i !== null))];
+  if (wanted.length === 0) return new Map();
+  const rows = await tx.decisionVersion.findMany({ where: { id: { in: wanted } }, select: { id: true, questionId: true, scopeAnswer: true } });
+  return new Map(rows.map((r) => [r.id, { questionId: r.questionId, scopeAnswer: r.scopeAnswer }]));
+}
+
+/**
+ * R2 on S-14: the findings of `closed` (state `closed_mitigation`) that their "Close finding" record closed, by `closureOf`,
+ * in one tenant-scoped read of their mitigation versions and reopens. The row shows the label only.
+ */
+async function closedByRecords(ctx: OrgContext, closed: readonly FindingView[]): Promise<Set<string>> {
+  const out = new Set<string>();
+  if (closed.length === 0) return out;
+  const ids = closed.map((f) => f.id);
+  return withOrg(ctx, async (tx) => {
+    const [versions, reopens] = await Promise.all([
+      tx.mitigationVersion.findMany({
+        where: { findingId: { in: ids } }, orderBy: { versionNumber: 'asc' },
+        select: { findingId: true, mitigationId: true, kind: true, status: true, findingSeq: true, closureDecisionVersionId: true },
+      }),
+      tx.findingEvent.findMany({ where: { findingId: { in: ids }, kind: 'reopened' }, select: { findingId: true, kind: true, findingSeq: true } }),
+    ]);
+    // The row shows the label only, and `closureOf` decides that without the cause: no decision versions are read here.
+    const noDecisions = new Map<string, ClosureDecision>();
+    for (const f of closed) {
+      const byMitigation = new Map<string, ClosureMitigation>();
+      for (const v of versions.filter((x) => x.findingId === f.id)) {
+        const seen = byMitigation.get(v.mitigationId);
+        byMitigation.set(v.mitigationId, {
+          versions: (seen?.versions ?? 0) + 1,
+          current: { kind: v.kind as MitigationKind, status: v.status as MitigationStatus, findingSeq: v.findingSeq, closureDecisionVersionId: v.closureDecisionVersionId },
+        });
+      }
+      const closure = closureOf({
+        state: f.state, questionId: f.questionId, reopenedAt: reopenedAt(reopens.filter((e) => e.findingId === f.id)),
+        mitigations: [...byMitigation.values()], decisions: noDecisions,
+      });
+      if (closure !== null) out.add(f.id);
+    }
+    return out;
+  });
 }
 
 /** The current accepted risk of each finding (the highest findingSeq above its latest reopen, 5.3 item 11 rule 2) as the S-14 label needs it, in one read. */
@@ -176,7 +224,9 @@ export async function loadFindingsPage(
   const versions = await withOrg(ctx, (tx) => versionsOf(tx, all.map((f) => f.decisionVersionId)));
   // The accepter is in the finding's current accepted risk, not in its list view: one read for all the findings closed by one.
   const accepted = await currentAcceptedRisks(ctx, all.filter((f) => f.state === 'closed_accepted_risk').map((f) => f.id));
-  const item = (f: FindingView) => itemOf(f, versions.get(raisedFrom.get(f.id) ?? ''), accepted.get(f.id) ?? null, closing.get(f.id));
+  // R2: the label "Closed" for a finding its "Close finding" record closed, read as `currentAcceptedRisks` reads the accepter.
+  const byRecord = await closedByRecords(ctx, all.filter((f) => f.state === 'closed_mitigation'));
+  const item = (f: FindingView) => itemOf(f, versions.get(raisedFrom.get(f.id) ?? ''), accepted.get(f.id) ?? null, closing.get(f.id), byRecord.has(f.id));
   const items = (fs: readonly FindingView[]) => fs.map(item);
 
   const stages: StageGroupData[] = STAGES.map((stage) => {
@@ -191,7 +241,8 @@ export async function loadFindingsPage(
     orgSlug: project.orgSlug, orgId: ctx.orgId, projectId: a.projectId, projectName: project.name, archived: project.archived,
     userId: identity.userId, stageFilter: a.stage, shown: a.shown ?? null, canRaise, canClose: can(ctx.role, 'mitigation:write') && !project.archived,
     empty: (a.stage === null ? all : await listFindings(ctx, a.projectId, undefined, today)).length === 0,
-    decisionDone: items(groups.decisionDone), decisionWithdrawn: items(groups.decisionWithdrawn),
+    decisionDone: items(groups.decisionDone).filter((i) => i.closeReason !== 'gate_no'), decisionWithdrawn: items(groups.decisionWithdrawn),
+    gateNo: items(groups.decisionDone).filter((i) => i.closeReason === 'gate_no'),
     stages, lookAgain: items(groups.lookAgain), closed: items(groups.closed), withdrawn: items(groups.withdrawn),
     raise: canRaise ? await raiseFormData(ctx, a.projectId, a.raise) : null,
   };
@@ -203,6 +254,9 @@ export interface MitigationOnPage {
   current: MitigationVersionView; versions: number; history: MitigationVersionView[]; overdue: boolean;
 }
 
+/** R2: a closing record, kept out of the cards; in the history it reads "Finding closed by" when it closed the finding. */
+export interface ClosingRecordOnPage { current: MitigationVersionView; closedFinding: boolean }
+
 export interface FindingPageData {
   orgSlug: string; orgId: string; projectId: string; projectName: string; archived: boolean;
   viewer: { userId: string; name: string };
@@ -213,7 +267,16 @@ export interface FindingPageData {
   /** Shortfall: the decision it was raised from. Team: the version it names, if any. */
   version: { versionNumber: number; status: StoredDecisionStatus | null; statusWord: string } | null;
   contentSemver: string;
+  /** The mitigation cards: every mitigation but the closing records (R2; ruling C keeps a two-version one here). */
   mitigations: MitigationOnPage[];
+  closingRecords: ClosingRecordOnPage[];
+  /**
+   * R2 R3: set when the finding is closed and its "Close finding" record counts (the label "Closed"). `closedBy` (who and
+   * when) only when that record itself closed the finding; the cause, when rule A can read one.
+   */
+  closure: Closure | null;
+  /** R4: S-12 of the finding's question when the running content has it, else null. */
+  questionHref: string | null;
   /** The ids of this finding's mitigations whose owner cannot act (FUP's `ownerCannotAct`; `[]` until FUP merges). */
   ownerCannotAct: string[];
   owners: UserRef[];
@@ -241,8 +304,8 @@ export interface FindingPageData {
 function closeBlocked(detail: FindingDetailView, closureAvailable: boolean): boolean {
   if (detail.state !== 'open') return false;
   if (!detail.mitigations.some((m) => m.current.status === 'planned' || m.current.status === 'in_progress')) return false;
-  const reopenedAt = Math.max(0, ...detail.events.filter((e) => e.kind === 'reopened').map((e) => e.findingSeq));
-  return closureAvailable || detail.mitigations.some((m) => m.current.kind !== 'action' && m.versions === 1 && m.current.findingSeq > reopenedAt);
+  const r = reopenedAt(detail.events);
+  return closureAvailable || detail.mitigations.some((m) => isClosingRecord(m) && m.current.findingSeq > r);
 }
 
 /** S-15: one finding of the route's project with its mitigations and history, or `NotFoundError`. */
@@ -258,7 +321,7 @@ export async function loadFindingPage(
     findingsToCloseByDecision(ctx, a.projectId),
   ]);
   const closing = toClose.find((f) => f.id === a.findingId);
-  const { versions, members, viewer, closingVersion } = await withOrg(ctx, async (tx) => {
+  const { versions, members, viewer, closingVersion, decisions } = await withOrg(ctx, async (tx) => {
     const memberRows = await tx.membership.findMany({ where: { status: 'active' }, select: { userId: true } });
     const refs = await userRefs(tx, [...memberRows.map((m) => m.userId), identity.userId]);
     const self = refs.get(identity.userId);
@@ -266,6 +329,7 @@ export async function loadFindingPage(
     if (self === undefined) throw new Error(`loadFindingPage: account ${identity.userId} has no user row`);
     return {
       versions: await versionsOf(tx, [detail.decisionVersionId]),
+      decisions: await closureDecisions(tx, detail.mitigations.filter(isClosingRecord).map((m) => m.current.closureDecisionVersionId)),
       closingVersion: closing === undefined ? null : await tx.decisionVersion.findUnique({
         where: { id: closing.decisionVersionId }, select: { questionId: true, versionNumber: true, status: true },
       }),
@@ -281,17 +345,33 @@ export async function loadFindingPage(
   const raisedByMe = detail.raisedBy.userId === identity.userId;
   const writable = !project.archived;
   const mayClose = writable && can(ctx.role, 'mitigation:write');
+  const pages = detail.mitigations.map((m, i) => ({ m, history: histories[i] }));
+  const othersThan = (mitigationId: string) => pages.filter((o) => o.m.mitigationId !== mitigationId).map((o) => o.history);
+  const closedBy = closureOf({ state: detail.state, questionId: detail.questionId, reopenedAt: reopenedAt(detail.events), mitigations: detail.mitigations, decisions });
+  // Fix 1 (lead's ruling): "Closed by {name} on {date}." only when that record itself closed the finding; else the cause alone.
+  const closure: Closure | null = closedBy === null ? null : {
+    closedBy: recordClosedFinding(closedBy.record.current.findingSeq, othersThan(closedBy.record.mitigationId))
+      ? { by: closedBy.record.current.enteredBy.name, at: closedBy.record.current.receivedAt } : null,
+    cause: closedBy.cause,
+  };
+  const question = detail.questionId === null ? undefined : content.questions.get(detail.questionId);
   return {
     orgSlug: project.orgSlug, orgId: ctx.orgId, projectId: a.projectId, projectName: project.name, archived: project.archived, viewer, detail,
     title: titleOf(detail, version),
     questionText: detail.source === 'team' && detail.questionId !== null ? questionTextOf(detail.questionId, version) : null,
     sourceLabel: findingSourceLabel(detail, version === undefined ? null : { versionNumber: version.versionNumber, status: version.status }),
-    stateLabel: findingStateLabel(detail.state, detail.acceptedRisk),
+    stateLabel: closure === null ? findingStateLabel(detail.state, detail.acceptedRisk) : FINDINGS_COPY.labels.closed,
+    closure,
+    questionHref: question === undefined ? null : `/orgs/${project.orgSlug}/projects/${a.projectId}/stages/${question.stage}/questions/${question.id}`,
     version: version === undefined ? null : { versionNumber: version.versionNumber, status: version.status, statusWord: decisionStatusWord(version.status) },
     contentSemver: content.semver,
-    mitigations: detail.mitigations.map((m, i) => ({
-      current: m.current, versions: m.versions, history: histories[i],
+    mitigations: pages.filter(({ m }) => !isClosingRecord(m)).map(({ m, history }) => ({
+      current: m.current, versions: m.versions, history,
       overdue: isOverdue(m.current, detail.state, today),
+    })),
+    closingRecords: pages.filter(({ m }) => isClosingRecord(m)).map(({ m }) => ({
+      current: m.current,
+      closedFinding: recordClosedFinding(m.current.findingSeq, othersThan(m.mitigationId)),
     })),
     ownerCannotAct: detail.mitigations.filter((m) => cannot.has(m.mitigationId)).map((m) => m.mitigationId),
     owners, members, controls: [...content.controls.values()].map((c) => ({ id: c.id, name: c.name })),
