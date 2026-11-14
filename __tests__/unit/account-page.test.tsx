@@ -62,6 +62,11 @@ describe('S-21 My account', () => {
     expect(headings).toEqual([ACCOUNT_COPY.page.detailsHeading, ACCOUNT_COPY.page.passwordHeading, ACCOUNT_COPY.page.devicesHeading]);
     expect(headings).toEqual(['Name and email', 'Password', 'Signed-in devices']); // audit A 78, 81, 83: the h2 no longer repeats the h1
     expect(markup).toMatch(new RegExp(`<h1[^>]*>${escapeRe(ACCOUNT_COPY.page.heading)}</h1>`));
+    // One column that may shrink below its content's width, and the name and email wrap anywhere, so a long unbroken
+    // value stays inside the page.
+    expect(markup).toMatch(/<div class="page-content" style="[^"]*grid-template-columns:minmax\(0, 1fr\)[^"]*">/);
+    expect(markup).toMatch(new RegExp(`<dd style="overflow-wrap:anywhere">${escapeRe('Amina N.')}</dd>`));
+    expect(markup).toMatch(new RegExp(`<dd style="overflow-wrap:anywhere">${escapeRe(id.email)}</dd>`));
   });
 
   it('FR-ACC-07: Sign out everywhere ends the sessions, then signs this browser out', async () => {
@@ -173,7 +178,7 @@ describe('1A-16c: the words of My data and Delete my account, word for word (aud
     expect(PERSONAL_DATA_COPY.download).toBe('Download my data');
   });
 
-  it('A 89, 94: the confirm button is destructive, the typed phrase keeps its input attributes, and the download sentence comes before the link', () => {
+  it('A 89 and account deletion: the confirm button is destructive, the typed phrase keeps its input attributes, and the download sentence comes before the link', () => {
     const confirm = html(<DeleteConfirm userId="u1" onCancel={noop} />);
     expect(confirm).toMatch(new RegExp(`<button[^>]*class="[^"]*\\bui-button--destructive\\b[^"]*"[^>]*>${escapeRe(PERSONAL_DATA_COPY.deleteAction)}</button>`));
     // React writes these three names in camel case (autoCapitalize=…); HTML attribute names ignore case.

@@ -42,6 +42,11 @@ export const ACCEPTANCES_COPY = Object.freeze({
   alternativesOr: ' or ',
   signOut: 'sign out',
   alternativesAfter: '.',
+  /**
+   * Under a sign out (this form's, and the invitation page's for another account) whose press failed: its code did not
+   * load, or the sign-out got no answer (the coordinator's ruling T16-Q11; ruling T16-31). One key for both controls.
+   */
+  stillSignedIn: 'You are still signed in. Check your internet connection and try again.',
   /** Mode `invitation` (audit A 195). */
   closePage: 'If you do not want to accept, close this page. Your account will not be created.',
   notNow: 'Not now',

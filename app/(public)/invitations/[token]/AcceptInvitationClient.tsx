@@ -2,11 +2,10 @@
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { signIn } from 'next-auth/react';
-import { signOutClearingDrafts } from '@/lib/client/signOutClearingDrafts';
 import type { OrgRole } from '@prisma/client';
 import {
-  AcceptancesForm, SendStatus, acceptancePairs, failureOutcome, handleFailure, recordOutcome, textsKey, type SendFailure, type SendState,
+  AcceptancesForm, SendStatus, acceptancePairs, failureOutcome, handleFailure, recordOutcome, textsKey, useSignOutPress, type SendFailure,
+  type SendState,
 } from '@/components/legal/AcceptancesForm';
 import { PASSWORD_MIN_LENGTH, validatePassword, validateString } from '@/lib/validate';
 import type { AcceptedKind, LegalTextVersion } from '@/types/legal';
@@ -49,6 +48,30 @@ export function afterCreated(signedIn: boolean, orgSlug: string): { push: string
   if (signedIn) return { push: welcomePath(orgSlug) };
   return { send: { state: 'message', text: INVITATION_COPY.accountCreated,
     link: { href: `/login?callbackUrl=${encodeURIComponent(welcomePath(orgSlug))}`, label: INVITATION_COPY.signIn } } };
+}
+
+/** The sign-in library, loaded after route 31's 201 (ruling T16-Q11); a test passes its own. */
+export type LoadSignIn = () => Promise<Pick<typeof import('next-auth/react'), 'signIn'>>;
+
+/**
+ * Only `signIn` is taken from the awaited import, so the bundler keeps the rest of next-auth/react out of the pages
+ * that share it (a whole-module import() put SessionProvider and the rest into /login and /acceptances).
+ */
+async function loadSignIn(): ReturnType<LoadSignIn> {
+  const { signIn } = await import('next-auth/react');
+  return { signIn };
+}
+
+/**
+ * The automatic sign-in after an account is created. next-auth/react is not in S-04's first visit (NFR-PERF-02): it is
+ * loaded here, at the point of use. True only when the sign-in worked; a library that does not load, a sign-in that
+ * rejects and one that is refused are all false, which `afterCreated` words as "Your account was created. Sign in to
+ * continue." with its link, so no rejection escapes the send.
+ */
+export async function signInAfterCreated(email: string, password: string, load: LoadSignIn = loadSignIn): Promise<boolean> {
+  return load()
+    .then(({ signIn }) => signIn('credentials', { email, password, redirect: false }))
+    .then((r) => r?.ok === true, () => false);
 }
 
 /** Step 1's checks (7.4.2 row S-04: "Name required; password rules"), the same as route 31's. */
@@ -118,18 +141,28 @@ export default function AcceptInvitationClient(p: Props) {
   if (viewer !== null && viewer.email.toLowerCase() === p.invitedEmail.toLowerCase()) {
     return <AcceptAsSignedIn token={p.token} texts={p.texts} userId={viewer.userId} />;
   }
-  const returnTo = `/invitations/${p.token}`;
   if (viewer !== null) {
-    return (
-      <div>
-        <StatusRegion politeness="assertive" tone="error" message={INVITATION_COPY.wrongAccount(viewer.email, p.invitedEmail)} />
-        <Button variant="primary" onClick={() => void signOutClearingDrafts(viewer.userId, returnTo)}>
-          {INVITATION_COPY.signOut}
-        </Button>
-      </div>
-    );
+    return <WrongAccount viewerEmail={viewer.email} viewerUserId={viewer.userId} invitedEmail={p.invitedEmail} returnTo={`/invitations/${p.token}`} />;
   }
   return <NewAccount {...p} />;
+}
+
+/**
+ * Signed in as another email: M-24 and Sign out, which returns here signed out. The sign-out's code loads at the press
+ * (ruling T16-Q11): the kit's busy state while it is carried out, and the failure line in an alert region directly under
+ * the button. Its own component, because the branch above returns early and a hook cannot be called conditionally.
+ */
+function WrongAccount({ viewerEmail, viewerUserId, invitedEmail, returnTo }: { viewerEmail: string; viewerUserId: string; invitedEmail: string; returnTo: string }) {
+  const signOut = useSignOutPress(viewerUserId, returnTo);
+  return (
+    <div>
+      <StatusRegion politeness="assertive" tone="error" message={INVITATION_COPY.wrongAccount(viewerEmail, invitedEmail)} />
+      <Button variant="primary" busy={signOut.busy} onClick={signOut.press}>
+        {INVITATION_COPY.signOut}
+      </Button>
+      <StatusRegion politeness="assertive" tone="error" message={signOut.message} />
+    </div>
+  );
 }
 
 /** Signed in as the invited email: route 32; a 403 acceptances_required shows the missing texts first. */
@@ -314,8 +347,7 @@ function NewAccount(p: Props) {
     }
     const outcome = registerOutcome(res.status, await res.json().catch(() => null), p.token);
     if (outcome.kind === 'created') {
-      const signedIn = await signIn('credentials', { email: p.invitedEmail, password, redirect: false })
-        .then((r) => r?.ok === true, () => false);
+      const signedIn = await signInAfterCreated(p.invitedEmail, password);
       const next = afterCreated(signedIn, outcome.orgSlug);
       if ('push' in next) router.push(next.push);
       else setSend(next.send);

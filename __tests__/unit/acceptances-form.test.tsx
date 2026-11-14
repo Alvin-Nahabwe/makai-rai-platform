@@ -172,3 +172,78 @@ describe('S-05 acceptances form (UX-22, FR-ACC-03)', () => {
     expect(keyed.length).toBe(uses.length);
   });
 });
+
+const { signOutPress, signOutMessage } = await import('@/components/legal/AcceptancesForm');
+type SignOutPhase = import('@/components/legal/AcceptancesForm').SignOutPhase;
+
+/** A promise the case settles by hand, so a load can be held, then let through or failed. */
+function deferred<T>() {
+  let resolve!: (v: T) => void;
+  let reject!: (e: unknown) => void;
+  const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
+  return { promise, resolve, reject };
+}
+const settle = () => new Promise((r) => setTimeout(r, 0));
+
+describe('NFR-PERF-02 NFR-PRIV-06 T16-Q11: the two sign-out controls load their code when pressed', () => {
+  it('T16-Q11: a slow load leaves the press working, and a second press starts nothing', async () => {
+    const load = deferred<{ signOutClearingDrafts: (u: string, c: string) => Promise<void> }>();
+    const loads = vi.fn(() => load.promise);
+    const signOut = vi.fn(async () => {});
+    const phases: SignOutPhase[] = [];
+    const press = signOutPress(loads, (p) => phases.push(p));
+    void press('u-1', '/login');
+    void press('u-1', '/login');
+    await settle();
+    expect(phases).toEqual(['working']);
+    expect(loads).toHaveBeenCalledTimes(1);
+    load.resolve({ signOutClearingDrafts: signOut });
+    await settle();
+    expect(signOut).toHaveBeenCalledTimes(1);
+    expect(signOut).toHaveBeenCalledWith('u-1', '/login');
+    // Signed out: the browser leaves the page, so the press stays working and a further press still starts nothing.
+    expect(phases).toEqual(['working']);
+    await press('u-1', '/login');
+    expect(loads).toHaveBeenCalledTimes(1);
+  });
+
+  it('T16-Q11 T16-31: a rejected load ends working and shows the line; the next press loads again and signs out', async () => {
+    const signOut = vi.fn(async () => {});
+    const loads = vi.fn()
+      .mockImplementationOnce(() => Promise.reject(new Error('chunk load failed')))
+      .mockImplementationOnce(async () => ({ signOutClearingDrafts: signOut }));
+    const phases: SignOutPhase[] = [];
+    const press = signOutPress(loads, (p) => phases.push(p));
+    await press('u-1', '/invitations/t');
+    expect(phases).toEqual(['working', 'stillSignedIn']);
+    expect(signOut).not.toHaveBeenCalled();
+    await press('u-1', '/invitations/t');
+    // The press empties the line (working) before it loads again.
+    expect(phases).toEqual(['working', 'stillSignedIn', 'working']);
+    expect(loads).toHaveBeenCalledTimes(2);
+    expect(signOut).toHaveBeenCalledWith('u-1', '/invitations/t');
+  });
+
+  it('T16-31: a load that works followed by a rejected sign-out shows the line too, and each press empties it first', async () => {
+    const signOut = vi.fn(() => Promise.reject(new TypeError('Failed to fetch')));
+    const phases: SignOutPhase[] = [];
+    const press = signOutPress(async () => ({ signOutClearingDrafts: signOut }), (p) => phases.push(p));
+    await press('u-1', '/login');
+    await press('u-1', '/login');
+    expect(phases).toEqual(['working', 'stillSignedIn', 'working', 'stillSignedIn']);
+    expect(signOut).toHaveBeenCalledTimes(2);
+    expect(phases.map(signOutMessage)).toEqual([null, ACCEPTANCES_COPY.stillSignedIn, null, ACCEPTANCES_COPY.stillSignedIn]);
+    expect(signOutMessage('idle')).toBeNull();
+    expect(ACCEPTANCES_COPY.stillSignedIn).toBe('You are still signed in. Check your internet connection and try again.');
+  });
+
+  it('T16-Q11: in mode required the sign out control is idle, the alert region after the sentence is there and empty, and the sentence is unchanged', () => {
+    const markup = view({ mode: 'required' });
+    const button = markup.match(new RegExp(`<button[^>]*>${escapeRe(ACCEPTANCES_COPY.signOut)}</button>`))?.[0] ?? '';
+    expect(button).not.toBe('');
+    expect(button).not.toContain('aria-busy');
+    expect(markup).toMatch(new RegExp(`${escapeRe(ACCEPTANCES_COPY.alternativesBefore)}<a[^>]*href="/account"[^>]*>${escapeRe(ACCEPTANCES_COPY.deleteAccount)}</a>${escapeRe(ACCEPTANCES_COPY.alternativesOr)}<button[^>]*type="button"[^>]*>${escapeRe(ACCEPTANCES_COPY.signOut)}</button>${escapeRe(ACCEPTANCES_COPY.alternativesAfter)}</p><div role="alert" class="ui-status ui-status--error"></div>`));
+    // The other modes have no sign out and so no such region.
+    expect(view({ mode: 'invitation' })).not.toContain('role="alert"');
+  });
+});

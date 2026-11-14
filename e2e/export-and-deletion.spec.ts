@@ -76,7 +76,7 @@ test.describe('S-20 and S-21 by keyboard', () => {
     await page.keyboard.press('Tab');
     await expect(page.getByLabel(phraseLabel('DELETE MY ACCOUNT'))).toBeFocused();
     await page.keyboard.insertText('DELETE MY ACCOUNT');
-    await tabTo(page, page.getByRole('button', { name: 'Delete my account', exact: true }), 5);
+    await tabTo(page, page.getByRole('button', { name: PERSONAL_DATA_COPY.deleteAction, exact: true }), 5);
     await Promise.all([page.waitForURL((url) => url.pathname === '/login'), page.keyboard.press('Enter')]);
     expect(await testDb.membership.count({ where: { userId: assessor.userId } })).toBe(0);
     expect((await testDb.user.findUniqueOrThrow({ where: { id: assessor.userId } })).name).toBe('Deleted user');
@@ -90,7 +90,7 @@ test.describe('S-20 and S-21 by keyboard', () => {
     await page.getByRole('button', { name: PERSONAL_DATA_COPY.deleteTrigger }).click();
     await page.locator('input[type="password"][name="password"]').fill('not-the-password');
     await page.getByLabel(phraseLabel('DELETE MY ACCOUNT')).fill('DELETE MY ACCOUNT');
-    await page.getByRole('button', { name: 'Delete my account', exact: true }).click();
+    await page.getByRole('button', { name: PERSONAL_DATA_COPY.deleteAction, exact: true }).click();
     const field = page.locator('input[type="password"][name="password"]');
     await expect(page.getByText('The password is not right.')).toBeVisible();
     await expect(field).toBeFocused();

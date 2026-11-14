@@ -187,6 +187,8 @@ test.describe('My account and sessions', () => {
 
   test('UX-29 UX-42 FR-EXP-03: Delete my account, opened with the keyboard at 1280 by 720, leaves the password field and both buttons inside the viewport', async ({ browser }) => {
     // components/ui/InlineConfirm.tsx brings a confirmation that opens wholly into view; the boxes are printed below.
+    // This case measures against the window only. The full check (every clipping ancestor and the scroller's visible
+    // box) is in e2e/inline-confirm-reveal.spec.ts.
     const a = (await buildOrg({ label: 'delconf' })).members.assessor;
     const page = await newPage(browser);
     await page.setViewportSize({ width: 1280, height: 720 });
@@ -226,7 +228,9 @@ test.describe('My account and sessions', () => {
     });
     await page.goto('/account');
     await page.getByRole('button', { name: PERSONAL_DATA_COPY.deleteTrigger }).click();
-    await page.getByLabel(PERSONAL_DATA_COPY.passwordLabel).fill(a.password);
+    // A wrong password, as e2e/inline-confirm-reveal.spec.ts does: the route above answers before any server reads it,
+    // and if it ever stopped matching, no real deletion would run.
+    await page.getByLabel(PERSONAL_DATA_COPY.passwordLabel).fill('not-the-password');
     await page.getByLabel(phraseLabel(DELETE_PHRASE)).fill(DELETE_PHRASE);
     const region = page.locator('.ui-confirm [role="alert"]');
     await expect(region).toHaveText('');

@@ -1,8 +1,7 @@
 'use client';
 
-import { useState, type CSSProperties, type FormEvent } from 'react';
+import { useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import { flushSync } from 'react-dom';
-import { signOutClearingDrafts } from '@/lib/client/signOutClearingDrafts';
 import { LEGAL_KIND_NAMES, acceptanceError, type AcceptancePair } from '@/lib/legal/kinds';
 import { ACCEPT_LABEL, ACCEPTANCES_COPY } from '@/lib/legal/acceptances/copy';
 import { formatDay } from '@/lib/format/dates';
@@ -172,6 +171,81 @@ export function SendStatus({ send, what, sendingText, onRetry }: { send: SendSta
   );
 }
 
+/** Where a sign-out press stands: not pressed, being carried out (until the browser leaves), or failed: still signed in, and said so. */
+export type SignOutPhase = 'idle' | 'working' | 'stillSignedIn';
+
+/** The sign-out module, loaded when a sign out is pressed (ruling T16-Q11); a test passes its own. */
+export type LoadSignOut = () => Promise<Pick<typeof import('@/lib/client/signOutClearingDrafts'), 'signOutClearingDrafts'>>;
+
+/**
+ * NFR-PERF-02: the sign-out module (and next-auth/react with it) is not in S-04's first visit; it is loaded here, at
+ * the press. Written as import() inside the function so the bundler splits it into its own chunk. (On S-05 the
+ * signed-in shell loads next-auth/react anyway, so there it changes where the code arrives, not the page's weight.)
+ */
+const loadSignOutClearingDrafts: LoadSignOut = () => import('@/lib/client/signOutClearingDrafts');
+
+/**
+ * One sign-out press for the two sign out controls of S-04 and S-05 (rulings T16-Q11, T16-30): `show` hears `working`
+ * first (which empties the failure line, so a second identical failure is announced again), then `stillSignedIn` if the load
+ * or the sign-out itself rejects (T16-31). A press while one is working starts nothing: one load, one sign-out request.
+ * Success leaves the phase at `working`, because the browser is leaving the page. There is no fallback: a press that
+ * fails never navigates, so the account's drafts are removed only by signOutClearingDrafts (NFR-PRIV-06).
+ */
+export function signOutPress(load: LoadSignOut, show: (phase: SignOutPhase) => void): (userId: string, callbackUrl: string) => Promise<void> {
+  let working = false;
+  return async (userId, callbackUrl) => {
+    if (working) return;
+    working = true;
+    show('working');
+    try {
+      const { signOutClearingDrafts } = await load();
+      await signOutClearingDrafts(userId, callbackUrl);
+    } catch {
+      // Not swallowed: the person is still signed in and the line says so (ruling T16-31); the control is pressable again.
+      working = false;
+      show('stillSignedIn');
+    }
+  };
+}
+
+/** The failure line's words for a phase: the ruled sentence once a press has failed, else nothing (the region stays, empty). */
+export function signOutMessage(phase: SignOutPhase): string | null {
+  return phase === 'stillSignedIn' ? ACCEPTANCES_COPY.stillSignedIn : null;
+}
+
+/** A sign out control's state and press, for S-04's M-24 button and S-05's link-styled button alike (ruling T16-30). */
+export function useSignOutPress(userId: string, callbackUrl: string): { busy: boolean; message: string | null; press: () => void } {
+  const [phase, setPhase] = useState<SignOutPhase>('idle');
+  const pressRef = useRef<ReturnType<typeof signOutPress> | null>(null);
+  function press() {
+    // `working` is committed at once, so the failure line is empty in the page before any later failure fills it again.
+    pressRef.current ??= signOutPress(loadSignOutClearingDrafts, (next) => {
+      if (next === 'working') flushSync(() => setPhase(next)); else setPhase(next);
+    });
+    void pressRef.current(userId, callbackUrl);
+  }
+  return { busy: phase === 'working', message: signOutMessage(phase), press };
+}
+
+/**
+ * Mode `required`'s two ways out (W-11 note 3). "sign out" sits inside the sentence, so it stays a link-styled native
+ * button; while its press is carried out it says `aria-busy` and keeps focus (it is not disabled). The failure line sits
+ * in an alert region directly after the paragraph, empty until a press fails (ruling T16-6).
+ */
+function RequiredAlternatives({ userId }: { userId: string }) {
+  const signOut = useSignOutPress(userId, '/login');
+  return (
+    <>
+      <p style={{ marginTop: 'var(--space-4)' }}>
+        {ACCEPTANCES_COPY.alternativesBefore}<a href="/account" style={LINK_TARGET}>{ACCEPTANCES_COPY.deleteAccount}</a>{ACCEPTANCES_COPY.alternativesOr}
+        <button type="button" style={LINK_AS_BUTTON} aria-busy={signOut.busy ? true : undefined}
+          onClick={signOut.press}>{ACCEPTANCES_COPY.signOut}</button>{ACCEPTANCES_COPY.alternativesAfter}
+      </p>
+      <StatusRegion politeness="assertive" tone="error" message={signOut.message} />
+    </>
+  );
+}
+
 export type AcceptancesFormViewProps = Omit<AcceptancesFormBase, 'onAccepted'> & AcceptancesFormMode & {
   ticked: ReadonlySet<AcceptedKind>;
   errors: readonly AcceptedKind[];
@@ -215,12 +289,7 @@ export function AcceptancesFormView(p: AcceptancesFormViewProps) {
       <div style={{ marginTop: 'var(--space-6)' }}>
         <Button variant="primary" type="submit" disabled={p.busy}>{p.submitLabel}</Button>
       </div>
-      {p.mode === 'required' && (
-        <p style={{ marginTop: 'var(--space-4)' }}>
-          {ACCEPTANCES_COPY.alternativesBefore}<a href="/account" style={LINK_TARGET}>{ACCEPTANCES_COPY.deleteAccount}</a>{ACCEPTANCES_COPY.alternativesOr}
-          <button type="button" style={LINK_AS_BUTTON} onClick={() => void signOutClearingDrafts(p.userId, '/login')}>{ACCEPTANCES_COPY.signOut}</button>{ACCEPTANCES_COPY.alternativesAfter}
-        </p>
-      )}
+      {p.mode === 'required' && <RequiredAlternatives userId={p.userId} />}
       {p.mode === 'invitation' && (
         <p style={{ marginTop: 'var(--space-4)' }}>{ACCEPTANCES_COPY.closePage}</p>
       )}

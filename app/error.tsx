@@ -25,8 +25,9 @@ function supportReferenceOf(error: unknown): string | null {
 }
 
 /**
- * `footer` is true on every page that has the layout and so a footer with "Help and contact"; the global error page has
- * neither, passes false, and its sentence points at Help and contact without saying where.
+ * `footer` is true on every page that has the layout and so a footer with "Help and contact" (the footer is rendered by
+ * the root layout, `app/layout.tsx`); the global error page has neither, passes false, and its sentence points at Help
+ * and contact without saying where.
  */
 export default function ErrorPage({ error, retry, footer = true }: { error: unknown; retry: () => void; footer?: boolean }) {
   const reference = supportReferenceOf(error);

@@ -23,7 +23,7 @@ vi.mock('next/navigation', async (importOriginal) => ({
 
 const { default: InvitationPage } = await import('@/app/(public)/invitations/[token]/page');
 const client = await import('@/app/(public)/invitations/[token]/AcceptInvitationClient');
-const { default: AcceptInvitationClient, NewAccountView, signUpErrors, registerOutcome, joinOutcome, welcomePath, afterCreated } = client;
+const { default: AcceptInvitationClient, NewAccountView, signUpErrors, registerOutcome, joinOutcome, welcomePath, afterCreated, signInAfterCreated } = client;
 const { SendStatus } = await import('@/components/legal/AcceptancesForm');
 const { invitationByToken } = await import('@/lib/data/preauth');
 const { tryResolveIdentity } = await import('@/lib/auth/identity');
@@ -162,6 +162,27 @@ describe('S-04, the invitation page (FR-ACC-01)', () => {
     // The link follows the alert region directly, outside it (a region holds a string only).
     const markup = html(<SendStatus send={'send' in failed ? failed.send : { state: 'idle' }} what="account" sendingText="x" onRetry={vi.fn()} />);
     expect(markup).toMatch(/<div[^>]*role="alert"[^>]*>(<span[^>]*>.*?<\/span>)?Your account was created\. Sign in to continue\.<\/div><p[^>]*><a[^>]*href="\/login\?callbackUrl=%2Forgs%2Flab%2Fdashboard%3Fwelcome%3D1"[^>]*>Sign in<\/a>/);
+  });
+
+  it('NFR-PERF-02 T16-Q11: when the sign-in library cannot load after the 201, S-04 shows that the account was created, with its sign-in link', async () => {
+    const load = vi.fn(() => Promise.reject(new Error('chunk load failed')));
+    const signedIn = await signInAfterCreated('a@x.test', 'pw-typed', load);
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(signedIn).toBe(false);
+    expect(afterCreated(signedIn, 'lab')).toEqual(afterCreated(false, 'lab'));
+    // The library's own answers keep their meaning: ok signs in, anything else (a rejection too) does not.
+    const signIn = vi.fn(async () => ({ ok: true }));
+    expect(await signInAfterCreated('a@x.test', 'pw-typed', async () => ({ signIn }) as never)).toBe(true);
+    expect(signIn).toHaveBeenCalledWith('credentials', { email: 'a@x.test', password: 'pw-typed', redirect: false });
+    expect(await signInAfterCreated('a@x.test', 'pw-typed', async () => ({ signIn: async () => ({ ok: false }) }) as never)).toBe(false);
+    expect(await signInAfterCreated('a@x.test', 'pw-typed', async () => ({ signIn: () => Promise.reject(new Error('x')) }) as never)).toBe(false);
+  });
+
+  it('T16-Q11: the M-24 Sign out is idle, with an empty alert region directly under it', () => {
+    const markup = html(<AcceptInvitationClient {...props} viewerEmail="b@x.test" viewerUserId="u-b" />);
+    const button = markup.match(/<button[^>]*>Sign out<\/button>/)?.[0] ?? '';
+    expect(button).not.toContain('aria-busy');
+    expect(markup).toMatch(/<button[^>]*>Sign out<\/button><div role="alert" class="ui-status ui-status--error"><\/div>/);
   });
 
   it('M-24: a different signed-in account sees both emails', () => {
