@@ -76,6 +76,12 @@ export const EVIDENCE_COPY = Object.freeze({
     chooseKind: 'Choose a file or a link.',
     /** Under "Add link" while the link's request is out (walk finding B3). */
     adding: 'Adding the link...',
+    /** Where a form's save waits for that request (the decision form and the mitigation form). */
+    waiting: 'Waiting for the link to be added.',
+    /** Under "Add link" while the form's own save is out: nothing is added until it is back. */
+    waitForSave: 'Wait for the save to finish, then add it.',
+    /** A save refused because the address box holds text that was never added: in the form's summary and at the box. */
+    typedNotAdded: 'Not saved. You typed a web address but did not add it. Select Add link, or clear the box, then save.',
   }),
   /** A version's evidence (components/evidence/VersionEvidenceList.tsx). */
   list: Object.freeze({

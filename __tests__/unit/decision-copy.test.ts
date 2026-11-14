@@ -179,9 +179,10 @@ describe('lib/decision/form/copy.ts', () => {
     expect(`${DECISION_FORM_COPY.savedWithout.before}a.pdf, b.pdf${DECISION_FORM_COPY.savedWithout.afterMany}`).toBe('Saved without a.pdf, b.pdf. When the upload has finished, save again to add them.');
   });
 
-  it('B3: the lines for a Save that waits for a link, and for a link that was not added while it waited', () => {
-    expect(DECISION_FORM_COPY.waitingLink).toBe('Waiting for the link to be added.');
-    expect(DECISION_FORM_COPY.linkNotAdded).toBe('Not saved. The link was not added. Add it again, or select Save decision to save without it.');
+  it('B3: the line for a link that was not added while Save waited (the wait\'s own line is the evidence block\'s)', () => {
+    expect('waitingLink' in DECISION_FORM_COPY).toBe(false);
+    // "or clear the box": an address left in the box holds the next Save back too.
+    expect(DECISION_FORM_COPY.linkNotAdded).toBe('Not saved. The link was not added. Select Add link again, or clear the box, then save.');
   });
 
   it('the conflict view: the heading as its own sentence, and "my version" on the buttons', () => {

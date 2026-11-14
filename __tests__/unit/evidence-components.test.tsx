@@ -114,6 +114,43 @@ describe('the evidence block and the version evidence list', () => {
     expect(region(view({ linkFormOpen: true }))).toBe('');
     expect(view({})).not.toMatch(/data-link-adding/);
   });
+  it('while the parent\'s save is out, Add link is aria-disabled and described by the reason, never natively disabled, and the two boxes are read-only', () => {
+    const html = view({ linkFormOpen: true, held: true });
+    const button = html.match(/<button[^>]*>Add link<\/button>/)![0];
+    expect(button).toMatch(/aria-disabled="true"/);
+    expect(button).not.toMatch(/\sdisabled=""/);
+    expect(button).toMatch(/aria-describedby="evidence-link-held"/);
+    expect(html).toMatch(/<p[^>]*id="evidence-link-held"[^>]*>Wait for the save to finish, then add it\.<\/p>/);
+    expect(EVIDENCE_COPY.link.waitForSave).toBe('Wait for the save to finish, then add it.');
+    for (const id of ['evidence-link-url', 'evidence-link-label']) {
+      const input = html.match(new RegExp(`<input[^>]*id="${id}"[^>]*>`))![0];
+      expect(input).toMatch(/\sreadOnly=""/i);
+      expect(input).toMatch(/aria-describedby="[^"]*evidence-link-held/);
+    }
+    const free = view({ linkFormOpen: true });
+    expect(free).not.toMatch(/aria-disabled|readonly|evidence-link-held/i);
+  });
+  it('an address typed and not added: the refusal marks the address box and is tied to it', () => {
+    expect(EVIDENCE_COPY.link.typedNotAdded).toBe('Not saved. You typed a web address but did not add it. Select Add link, or clear the box, then save.');
+    const html = view({ linkFormOpen: true, linkUrl: 'https://example.org/x', linkRefused: true });
+    const address = html.match(/<input[^>]*id="evidence-link-url"[^>]*>/)![0];
+    expect(address).toMatch(/aria-invalid="true"/);
+    expect(address).toMatch(/aria-describedby="evidence-help evidence-link-refused"/);
+    expect(html).toMatch(/role="alert"[^>]*>(?:(?!<\/div>)[\s\S])*You typed a web address but did not add it/);
+    expect(html.match(/<input[^>]*id="evidence-link-label"[^>]*>/)![0]).not.toMatch(/aria-invalid/);
+  });
+  it('third commit, N2: the refusal of a save never takes the place of the box\'s own line: both are shown, the box\'s own first', () => {
+    const html = view({ linkFormOpen: true, linkUrl: 'example.org/x', linkError: EVIDENCE_COPY.link.address, linkRefused: true });
+    const alert = html.match(/<div[^>]*role="alert"[^>]*>([\s\S]*?)<\/div>/)![1];
+    const own = alert.indexOf('Enter a web address that starts with');
+    const refusal = alert.indexOf('You typed a web address but did not add it');
+    expect(own).toBeGreaterThan(-1);
+    expect(refusal).toBeGreaterThan(own);
+    expect(html.match(/<input[^>]*id="evidence-link-url"[^>]*>/)![0]).toMatch(/aria-describedby="evidence-help evidence-link-error evidence-link-refused"/);
+  });
+  it('the words of a save that waits for a link are one sentence for both forms', () => {
+    expect(EVIDENCE_COPY.link.waiting).toBe('Waiting for the link to be added.');
+  });
   it('NFR-A11Y-02: a link error is announced and tied to the address input', () => {
     const html = view({ linkFormOpen: true, linkUrl: 'ftp://x', linkError: 'Enter a web address that starts with http:// or https://.' });
     expect(html).toMatch(/role="alert"[^>]*>(?:(?!<\/div>)[\s\S])*Enter a web address that starts with http:\/\/ or https:\/\/\./);
