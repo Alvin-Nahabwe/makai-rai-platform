@@ -222,20 +222,20 @@ describe('S-15 the finding page and the S-14 raise form (FR-FND-02, FR-FND-03, F
   it('UX-16 UX-17 M-26: an assessor sees no accept form and the M-26 line; a viewer sees no form at all', async () => {
     const f = await team();
     const a = await renderFinding(f, 'assessor');
-    expect(a).not.toContain('Accept the risk</button>'); expect(a).toContain(onlyRolesCanText('risk:accept'));
+    expect(a).not.toContain(`${FINDINGS_COPY.acceptRisk.submit}</button>`); expect(a).toContain(onlyRolesCanText('risk:accept'));
     expect(await renderFinding(f, 'viewer')).not.toMatch(/<form|<button[^>]*>(Add a mitigation|Update this mitigation|Accept the risk)/);
   });
 
   it('UX-17 FR-FND-05: an admin sees the accept form with its sentence slot, an owner of an accepted risk sees keep-accepted, a reviewer neither', async () => {
     const f = await team({ by: 'owner' });
     const admin = await renderFinding(f, 'admin');
-    expect(admin).toContain('Accept the risk</button>'); expect(admin).toContain('Accepting a risk closes this finding without a mitigation.');
-    expect(admin).toContain('Ethics committee (outside role)');
+    expect(admin).toContain(`${FINDINGS_COPY.acceptRisk.submit}</button>`); expect(admin).toContain(FINDINGS_COPY.acceptRisk.intro);
+    expect(admin).toContain(FINDINGS_COPY.acceptRisk.outsideWho('Ethics committee'));
     expect(admin).toMatch(/<button[^>]*>Cancel<\/button>/);   // W-6: Accept the risk and Cancel
-    expect(await renderFinding(f, 'reviewer')).not.toContain('Accept the risk</button>');
+    expect(await renderFinding(f, 'reviewer')).not.toContain(`${FINDINGS_COPY.acceptRisk.submit}</button>`);
     const g = await team({ by: 'owner' });
     await addAcceptedRisk(fx, g.id, { lookAgainOn: '2020-01-01' });
-    expect(await renderFinding(g, 'owner')).toContain('Looked at again: keep accepted');
+    expect(await renderFinding(g, 'owner')).toContain(FINDINGS_COPY.acceptRisk.keepTrigger);
   });
 
   it('UX-29 FR-FND-07: withdraw appears only on a team finding, for its raiser, owners and admins', async () => {
@@ -385,8 +385,8 @@ describe('S-15 mitigations on the page (FR-FUP-05, FR-FND-03, UX-06, NFR-A11Y-05
     const first = await addMitigationVersion(fx, f.id, { status: 'planned', owner: 'assessor', dueDate: '2026-12-01' });
     await addMitigationVersion(fx, f.id, { mitigationId: first.mitigationId, status: 'done', owner: 'assessor', dueDate: '2026-12-01' });
     const html = await renderFinding({ ...f, projectId: p.id }, 'owner');
-    expect(html).toMatch(/Done, no artefact: <bdi>Fixture closureNote \d+<\/bdi>/);
-    expect(html).toContain('History: 2 versions');
+    expect(html).toMatch(new RegExp(`${FINDINGS_COPY.mitigationForm.doneNothingAttached} <bdi>Fixture closureNote \\d+</bdi>`));
+    expect(html).toContain(FINDINGS_COPY.mitigation.historySummary(2));
   });
 });
 
@@ -415,7 +415,7 @@ describe('C4 fixes: names in bdi, the accept form after an acceptance, separator
     const f = await addFinding(fx, p.id, { stage: 'pre-processing', source: 'team', by: 'owner' });
     await addAcceptedRisk(fx, f.id, { lookAgainOn: '2020-01-01' });
     const html = await renderFinding({ ...f, projectId: p.id }, 'admin');
-    expect(html).toContain('Looked at again: keep accepted');
+    expect(html).toContain(FINDINGS_COPY.acceptRisk.keepTrigger);
     expect(html).not.toMatch(/<textarea|Accepted by \(required\)|Why the risk is/);
   });
 

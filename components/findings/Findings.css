@@ -238,3 +238,61 @@
 .finding-history li + li {
   margin-block-start: var(--space-2);
 }
+
+/* The mitigation's status, four radios in a row that wraps; each label is a 24 px target and the native radio is kept. */
+.finding-radios > legend {
+  margin-block-end: var(--space-2);
+}
+
+.finding-radios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-6);
+}
+
+.finding-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: var(--target-min);
+  color: var(--color-ink);
+  cursor: pointer;
+}
+
+.finding-radio > input {
+  inline-size: 20px;
+  block-size: 20px;
+  margin: 0;
+  accent-color: var(--color-ink);
+}
+
+/* A file still uploading holds the save: the line and its two choices, set apart on the tint. */
+.finding-held {
+  margin-block: var(--space-4);
+  padding: var(--space-4);
+  background-color: var(--color-tint);
+  border-radius: var(--radius-surface);
+  color: var(--color-ink);
+}
+
+.finding-held > p {
+  margin: 0;
+}
+
+.finding-unsaved {
+  flex-basis: 100%;
+  max-inline-size: var(--measure-reading);
+  font-size: var(--font-size-small);
+  color: var(--color-ink-muted);
+}
+
+/* The line that says which roles can act, where the action is absent. */
+.finding-note {
+  max-inline-size: var(--measure-reading);
+  color: var(--color-ink-muted);
+}
+
+.finding-confirm {
+  max-inline-size: 40rem;
+  margin-block: var(--space-4);
+}

@@ -1,14 +1,20 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useId, useState, type ReactElement, type ReactNode } from 'react';
-import { ErrorSummary, FailureText, Field, StatusLine, useFindingWrite } from '@/components/findings/FindingActions';
+import { useEffect, useId, useRef, useState, type ReactElement, type ReactNode } from 'react';
+import { DateBoxes, ErrorSummary, FailureText, Field, StatusLine, useFindingWrite } from '@/components/findings/FindingActions';
+import { Button } from '@/components/ui/Button';
+import { Select } from '@/components/ui/Select';
+import { FINDINGS_COPY } from '@/lib/findings/copy';
 import {
   acceptedWho, acceptRiskFormErrors, characterCount, charCount, dueDateOf, KEPT_IN_FORM, TEXT_MAX,
 } from '@/lib/findings/formRules';
 import { OUTSIDE_ROLE_LABELS } from '@/lib/findings/labels';
 import { OUTSIDE_ROLES, type Decider, type FieldError, type OutsideRole } from '@/types/record';
 import type { UserRef } from '@/types/api';
+import './Findings.css';
+
+const AR = FINDINGS_COPY.acceptRisk;
 
 export type AcceptRiskFormProps = {
   orgSlug: string; projectId: string; findingId: string; members: UserRef[]; viewer: { userId: string; name: string };
@@ -19,12 +25,12 @@ export type AcceptRiskFormProps = {
 
 /** UX-17: the label the finding will show, said above the button, with the accepter inside <bdi>; nothing while nothing is chosen. */
 export function AcceptedSentence({ choice, names }: { choice: Decider | null; names: ReadonlyMap<string, string> }): ReactElement | null {
-  return choice === null ? null : <>The finding will show as &quot;Closed: risk accepted by <bdi>{acceptedWho(choice, names)}</bdi>&quot;.</>;
+  return choice === null ? null : <>{AR.willShowStart}<bdi>{acceptedWho(choice, names)}</bdi>{AR.willShowEnd}</>;
 }
 
-/** 7.4.2 S-15 row: "Closed: risk accepted by <who>." with the accepter inside <bdi>. */
+/** 7.4.2 S-15 row with C#411's label: "Closed by an accepted risk (<who>)." with the accepter inside <bdi>. */
 export function AcceptedSaved({ choice, names }: { choice: Decider; names: ReadonlyMap<string, string> }): ReactElement {
-  return <>Closed: risk accepted by <bdi>{acceptedWho(choice, names)}</bdi>.</>;
+  return <>{AR.savedStart}<bdi>{acceptedWho(choice, names)}</bdi>{AR.savedEnd}</>;
 }
 
 const encode = (d: Decider): string => (d.kind === 'member' ? `member:${d.userId}` : `outside:${d.role}`);
@@ -36,9 +42,10 @@ const decode = (v: string): Decider | null => {
 
 /**
  * "Accept the risk" (W-6; FR-FND-05, UX-17): who accepted it and why, with an optional date to look at it again, and the
- * sentence the finding will show, above the buttons. Only owners and admins are given this form (the page does not render it
- * for anyone else; the route re-checks). `mode: 'keep_accepted'` is "Looked at again: keep accepted" for an accepted risk whose
- * date has come: it also asks what was looked at. Posts route 8 with a request id kept for Retry.
+ * sentence the finding will show, above the buttons. Only Owners and Admins are given this form (the page does not render it
+ * for anyone else; the route re-checks). `mode: 'keep_accepted'` is "Keep the risk accepted" for an accepted risk whose
+ * date has come: it also asks what was checked. Posts route 8 with a request id kept for Retry. The summary is the legacy
+ * one (`ErrorSummary` of FindingActions.tsx): a server answer can name a field this form does not show.
  */
 export function AcceptRiskForm(p: AcceptRiskFormProps): ReactElement {
   const router = useRouter();
@@ -52,6 +59,14 @@ export function AcceptRiskForm(p: AcceptRiskFormProps): ReactElement {
   const [done, setDone] = useState<ReactNode>('');
   const [open, setOpen] = useState(p.mode === 'accept');
   const keep = p.mode === 'keep_accepted';
+  const trigger = useRef<HTMLButtonElement>(null);
+  const pressed = useRef(false);
+  // The form replaces "Keep the risk accepted": a press puts focus on its first field, "Accepted by" (ruling X-4).
+  useEffect(() => {
+    if (!open || !pressed.current) return;
+    pressed.current = false;
+    document.getElementById(`${id}-acceptedBy`)?.focus();
+  }, [open, id]);
   const w = useFindingWrite(`/api/v1/orgs/${encodeURIComponent(p.orgSlug)}/projects/${encodeURIComponent(p.projectId)}/findings/${encodeURIComponent(p.findingId)}/accepted-risks`, KEPT_IN_FORM);
   const names = new Map([[p.viewer.userId, p.viewer.name], ...p.members.map((m) => [m.userId, m.name] as const)]);
   const decider = decode(choice);
@@ -72,48 +87,37 @@ export function AcceptRiskForm(p: AcceptRiskFormProps): ReactElement {
     router.refresh();
   };
 
-  if (!open) return <button type="button" className="btn btn--secondary" onClick={() => setOpen(true)}>Looked at again: keep accepted</button>;
+  const reasonError = err('reason');
+  const noteError = err('lookAgainNote');
+  if (!open) return <Button variant="secondary" ref={trigger} onClick={() => { pressed.current = true; setOpen(true); }}>{AR.keepTrigger}</Button>;
   return (
-    <form method="post" onSubmit={(e) => { e.preventDefault(); void submit(); }} noValidate aria-labelledby={`${id}-h`}>
-      <h3 id={`${id}-h`}>{keep ? 'Looked at again' : 'Accept the risk'}</h3>
-      <p>Accepting a risk closes this finding without a mitigation. It records who accepted the risk and why. It can be reopened later.</p>
-      <ErrorSummary summary={all.length === 1 ? 'There is a problem with this acceptance. What you typed is kept.' : `There are ${all.length} problems with this acceptance. What you typed is kept.`} errors={all} focusKey={attempt} prefix={`${id}-`} />
-      <Field id={`${id}-acceptedBy`} label="Accepted by (required)" error={err('acceptedBy')} render={(a) => (
-        <select {...a} name="acceptedBy" value={choice} onChange={(e) => edit(() => setChoice(e.target.value))}>
-          <option value="">Choose who accepted the risk</option>
-          <option value={encode({ kind: 'member', userId: p.viewer.userId })}>You ({p.viewer.name})</option>
-          {p.members.filter((m) => m.userId !== p.viewer.userId).map((m) => <option key={m.userId} value={encode({ kind: 'member', userId: m.userId })}>{m.name}</option>)}
-          <optgroup label="Outside roles">
-            {OUTSIDE_ROLES.map((r) => <option key={r} value={encode({ kind: 'outside_role', role: r })}>{OUTSIDE_ROLE_LABELS[r]} (outside role)</option>)}
-          </optgroup>
-        </select>
-      )} />
-      <Field id={`${id}-reason`} label={keep ? 'Why the risk is still accepted (required)' : 'Why the risk is accepted (required)'} error={err('reason')}
-        help="Say why, and where the acceptance is recorded (for example, committee minutes)."
-        render={(a) => <textarea {...a} name="reason" rows={4} value={reason} onChange={(e) => edit(() => setReason(e.target.value))} />} />
-      <p className="text-muted">{characterCount(charCount(reason), TEXT_MAX)}</p>
+    <form method="post" className="finding-form" onSubmit={(e) => { e.preventDefault(); void submit(); }} noValidate aria-labelledby={`${id}-h`}>
+      <h3 id={`${id}-h`}>{keep ? AR.keepHeading : AR.heading}</h3>
+      <p>{AR.intro}</p>
+      <ErrorSummary summary={AR.summary(all.length)} errors={all} focusKey={attempt} prefix={`${id}-`} />
+      <Select id={`${id}-acceptedBy`} name="acceptedBy" label={AR.acceptedBy} error={err('acceptedBy') ?? undefined} value={choice} placeholder={AR.choose}
+        onChange={(e) => edit(() => setChoice(e.target.value))}
+        options={[
+          { value: encode({ kind: 'member', userId: p.viewer.userId }), label: AR.you(p.viewer.name) },
+          ...p.members.filter((m) => m.userId !== p.viewer.userId).map((m) => ({ value: encode({ kind: 'member', userId: m.userId }), label: m.name })),
+        ]}
+        groups={[{ label: AR.outsideGroup, options: OUTSIDE_ROLES.map((r) => ({ value: encode({ kind: 'outside_role', role: r }), label: AR.outsideWho(OUTSIDE_ROLE_LABELS[r]) })) }]} />
+      <Field id={`${id}-reason`} label={keep ? AR.reasonKeep : AR.reason} error={reasonError} help={AR.reasonHelp}
+        render={(a) => <textarea {...a} className={reasonError ? 'ui-textarea ui-textarea--invalid' : 'ui-textarea'} name="reason" rows={4} value={reason} onChange={(e) => edit(() => setReason(e.target.value))} />}
+        after={<p className="ui-count">{characterCount(charCount(reason), TEXT_MAX)}</p>} />
       {keep ? (
-        <Field id={`${id}-lookAgainNote`} label="What was looked at again (required)" error={err('lookAgainNote')}
-          render={(a) => <textarea {...a} name="lookAgainNote" rows={2} value={note} onChange={(e) => edit(() => setNote(e.target.value))} />} />
+        <Field id={`${id}-lookAgainNote`} label={AR.note} error={noteError}
+          render={(a) => <textarea {...a} className={noteError ? 'ui-textarea ui-textarea--invalid' : 'ui-textarea'} name="lookAgainNote" rows={2} value={note} onChange={(e) => edit(() => setNote(e.target.value))} />} />
       ) : null}
-      <fieldset id={`${id}-lookAgainOn`} aria-describedby={err('lookAgainOn') ? `${id}-date-error` : undefined}>
-        <legend>Look at it again on (optional)</legend>
-        {([['day', 'Day', 2], ['month', 'Month', 2], ['year', 'Year', 4]] as const).map(([part, label, size]) => (
-          <span key={part}>
-            <label htmlFor={`${id}-${part}`}>{label}</label>{' '}
-            <input id={`${id}-${part}`} name={part} type="text" inputMode="numeric" size={size + 1} maxLength={size} value={again[part]}
-              aria-invalid={err('lookAgainOn') ? true : undefined} onChange={(e) => edit(() => setAgain({ ...again, [part]: e.target.value }))} />{' '}
-          </span>
-        ))}
-        {err('lookAgainOn') ? <p id={`${id}-date-error`} className="form-error">{err('lookAgainOn')}</p> : null}
-      </fieldset>
+      <DateBoxes id={`${id}-lookAgainOn`} boxId={(part) => `${id}-${part}`} legend={AR.dateLegend} value={again}
+        onChange={(part, v) => edit(() => setAgain({ ...again, [part]: v }))} error={err('lookAgainOn')} errorId={`${id}-date-error`} />
       <p><AcceptedSentence choice={decider} names={names} /></p>
-      <div className="form-actions">
-        <button type="submit" className="btn btn--primary" aria-disabled={w.phase !== 'idle' ? true : undefined}>{keep ? 'Looked at again: keep accepted' : 'Accept the risk'}</button>
-        <button type="button" className="btn btn--secondary" onClick={() => { if (keep) setOpen(false); setChoice(''); setReason(''); setNote(''); setAgain({ day: '', month: '', year: '' }); setErrors([]); w.clearFailure(); }}>Cancel</button>
+      <div className="finding-actions">
+        <Button variant="primary" type="submit" busy={w.phase !== 'idle'}>{keep ? AR.submitKeep : AR.submit}</Button>
+        <Button variant="secondary" onClick={() => { if (keep) { setOpen(false); requestAnimationFrame(() => trigger.current?.focus()); } setChoice(''); setReason(''); setNote(''); setAgain({ day: '', month: '', year: '' }); setErrors([]); w.clearFailure(); }}>{AR.cancel}</Button>
       </div>
-      {w.failure !== null && w.failure.fields.length === 0 ? <p role="alert"><FailureText text={w.failure.text} name={w.failure.nameInText} /></p> : null}
-      <StatusLine>{w.phase === 'saving' ? 'Saving...' : w.phase === 'slow' ? 'Still saving. The connection is slow. What you typed is still in the form.' : done}</StatusLine>
+      {w.failure !== null && w.failure.fields.length === 0 ? <p role="alert" className="finding-alert"><FailureText text={w.failure.text} name={w.failure.nameInText} /></p> : null}
+      <StatusLine>{w.phase === 'saving' ? AR.saving : w.phase === 'slow' ? AR.slow : done}</StatusLine>
     </form>
   );
 }
