@@ -182,6 +182,7 @@ test('UX-27 M-06 FR-DOC-06: a withdrawal whose reply is lost says it may have ar
       abortNext = false;
       await route.abort('connectionfailed');
     } else {
+      await new Promise((r) => setTimeout(r, 1_500));   // held, so the Retry is pressed while its send is out
       await route.continue();
     }
   });
@@ -191,8 +192,13 @@ test('UX-27 M-06 FR-DOC-06: a withdrawal whose reply is lost says it may have ar
   const alert = page.getByRole('alert').filter({ hasText: 'Not withdrawn yet' });
   await expect(alert).toContainText(LOST);
   expect(await testDb.documentEvent.count({ where: { documentId: card.documentId } })).toBe(0);
-  await page.getByRole('button', { name: 'Retry' }).click();
+  const retryButton = page.getByRole('button', { name: 'Retry' });
+  await retryButton.click();
+  // D-398 item 4: the pressed Retry stays, busy and focused, while its send is out; focus never falls to the page body.
+  await expect(retryButton).toBeFocused();
+  await expect(retryButton).toHaveAttribute('aria-busy', 'true');
   await expect(page.getByRole('status').filter({ hasText: 'Withdrawn.' })).toBeVisible();
+  expect(await page.evaluate(() => document.activeElement === document.body || document.activeElement === null)).toBe(false);
   expect(sent).toHaveLength(2);
   expect(sent[1].requestId).toBe(sent[0].requestId);
   expect(await testDb.documentEvent.count({ where: { documentId: card.documentId } })).toBe(1);
