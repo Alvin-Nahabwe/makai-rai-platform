@@ -309,18 +309,38 @@ describe('the public pages load no shell stylesheet (plan 1A Task 12, fix round 
     return seen;
   }
 
-  it('F1a: nothing the root layout, the not-found page, the public layout, the footer, the public header, the theme switch or the idle warning imports reaches shell.css', () => {
-    const roots = ['app/layout.tsx', 'app/not-found.tsx', 'app/(public)/layout.tsx', 'components/layout/Footer.tsx',
+  it('F1a: nothing the root layout, the not-found page, the public layout, any public page, the footer, the public header, the theme switch or the idle warning imports reaches shell.css', () => {
+    // Every page.tsx under app/(public)/ is walked from disk, so a new public page is covered without an edit.
+    const publicPages = readdirSync('app/(public)', { recursive: true, encoding: 'utf8' })
+      .filter((f) => f === 'page.tsx' || f.endsWith('/page.tsx')).map((f) => `app/(public)/${f}`);
+    expect(publicPages.length).toBeGreaterThanOrEqual(8);
+    const roots = ['app/layout.tsx', 'app/not-found.tsx', 'app/(public)/layout.tsx', ...publicPages, 'components/layout/Footer.tsx',
       'components/layout/PublicHeader.tsx', 'components/layout/ThemeToggle.tsx', 'components/layout/IdleWarning.tsx'];
     const reached = closure(roots);
     expect(reached.size).toBeGreaterThan(roots.length);
     expect([...reached].filter((f) => f.endsWith('components/layout/shell.css'))).toEqual([]);
   });
 
-  it('F1a: only the signed-in shell (AppShell, TopBar, Rail, OrgSwitcher) imports shell.css', () => {
-    const importers = readdirSync('components/layout').map((f) => `components/layout/${f}`)
-      .filter((f) => /\.tsx?$/.test(f) && importsOf(f).includes('components/layout/shell.css')).sort();
-    expect(importers).toEqual(['components/layout/AppShell.tsx', 'components/layout/OrgSwitcher.tsx', 'components/layout/Rail.tsx', 'components/layout/TopBar.tsx']);
+  it('F1a: the importers of shell.css and of the four signed-in shell files, across app and components, are exactly these', () => {
+    const files = ['app', 'components'].flatMap((root) => readdirSync(root, { recursive: true, encoding: 'utf8' }).map((f) => `${root}/${f}`))
+      .filter((f) => /\.tsx?$/.test(f));
+    const importersOf = (target: string) => files.filter((f) => importsOf(f).includes(target)).sort();
+    // A new importer fails here and is looked at: a public page that reached any of these would load the rail's rules.
+    expect({
+      shellCss: importersOf('components/layout/shell.css'),
+      appShell: importersOf('components/layout/AppShell.tsx'),
+      topBar: importersOf('components/layout/TopBar.tsx'),
+      rail: importersOf('components/layout/Rail.tsx'),
+      orgSwitcher: importersOf('components/layout/OrgSwitcher.tsx'),
+    }).toEqual({
+      shellCss: ['components/layout/AppShell.tsx', 'components/layout/OrgSwitcher.tsx', 'components/layout/Rail.tsx', 'components/layout/TopBar.tsx'],
+      // Help's layout renders the shell only past the gates (S5); /help's signed-out first visit, with whatever its layout's
+      // module graph loads, is measured by e2e/first-visit-transfer.spec.ts.
+      appShell: ['app/(authenticated)/layout.tsx', 'app/help/layout.tsx'],
+      topBar: ['components/layout/AppShell.tsx'],
+      rail: ['components/layout/TopBar.tsx'],
+      orgSwitcher: ['components/layout/Rail.tsx'],
+    });
   });
 
   it('F1a: the public shell\'s and the idle warning\'s rules are one block at the very end of app/globals.css, and gone from shell.css', () => {
@@ -334,8 +354,9 @@ describe('the public pages load no shell stylesheet (plan 1A Task 12, fix round 
       expect(block.split('\n'), sel).toContain(sel);
       expect(shell.split('\n'), sel).not.toContain(sel);
     }
-    // The print rule is in both, byte for byte: globals.css for the public pages, and the end of shell.css so that on a
-    // signed-in page it still comes after shell.css's `@media (min-width: 1024px)` panel rule, as before the move.
+    // The print rule is in both, byte for byte: globals.css for the public pages, and the end of shell.css for the signed-in
+    // pages. shell.css used to be linked before globals.css and now follows it there, so without the copy the top bar's own
+    // `display: flex` (below 1024 px) and the panel's `display: block` (from 1024 px) would beat the print rule at every width.
     const print = (css: string) => css.slice(css.lastIndexOf('/* ── Print: the page\'s content only ── */'));
     expect(print(block)).toMatch(/^\/\* ── Print[\s\S]*@media print \{[\s\S]*\.shell-footer[\s\S]*\}\n$/);
     expect(print(shell)).toBe(print(block));

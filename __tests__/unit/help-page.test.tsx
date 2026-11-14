@@ -186,7 +186,8 @@ describe('the Help page', () => {
   it('X-2: the files that import Help\'s modules are exactly these three server files, none of them a client file', () => {
     const files = ['app', 'components', 'lib'].flatMap((root) => readdirSync(root, { recursive: true, encoding: 'utf8' }).map((f) => `${root}/${f}`))
       .filter((f) => /\.(ts|tsx)$/.test(f));
-    const importers = files.filter((f) => /from '@\/lib\/help\/(copy|vocabulary|contact)'/.test(readFileSync(f, 'utf8'))).sort();
+    // Any spelling: the alias or a relative path, single or double quotes.
+    const importers = files.filter((f) => /lib\/help\/(copy|vocabulary|contact)['"]/.test(readFileSync(f, 'utf8'))).sort();
     expect(importers).toEqual([
       'app/(authenticated)/orgs/[slug]/projects/[id]/reviews/[reviewId]/page.tsx',
       'app/(public)/about/page.tsx',

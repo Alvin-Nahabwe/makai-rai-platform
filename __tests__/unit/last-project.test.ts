@@ -172,7 +172,7 @@ describe('lib/client/lastProject', () => {
     }
   });
 
-  it('L2-64: the module imports nothing (it is on two public pages through signOutClearingDrafts)', () => {
+  it('L2-64: the module imports nothing, so it stays small on every page that loads it', () => {
     const src = readFileSync('lib/client/lastProject.ts', 'utf8');
     expect(src).not.toMatch(/^\s*import\s/m);
   });

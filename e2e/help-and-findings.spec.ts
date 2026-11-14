@@ -20,8 +20,8 @@ const CHOOSE = 'Choose a project to see its findings.';
 const PREFIX = 'makrai:last-project:';
 
 let ipSeq = 0;
-// 10.50.: a range no other spec uses (grep of e2e/ for "10.50."; 10.47. is first-visit-transfer's, 10.49. two others').
-const nextClientIp = () => `10.50.${Math.floor(++ipSeq / 250)}.${(ipSeq % 250) + 1}`;
+// 10.41.: no literal "10.41." in e2e/, and outside the one computed range there (live-ui-defects.spec.ts, 10.50 to 10.149).
+const nextClientIp = () => `10.41.${Math.floor(++ipSeq / 250)}.${(ipSeq % 250) + 1}`;
 
 async function newContext(browser: Browser, opts: Parameters<Browser['newContext']>[0] = {}): Promise<BrowserContext> {
   return browser.newContext({ extraHTTPHeaders: { 'x-forwarded-for': nextClientIp() }, ...opts });

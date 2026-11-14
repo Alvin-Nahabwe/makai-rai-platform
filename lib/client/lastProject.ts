@@ -1,6 +1,7 @@
 /**
- * The last project a person opened in an organisation (plan 1A Task 12, rulings P2/L2-64): the ONE place this task touches
- * browser storage. It imports nothing, because signOutClearingDrafts (on two public pages) imports it.
+ * The last project a person opened in an organisation (plan 1A Task 12, rulings P2/L2-64): the store of the last-project
+ * keys. lib/client/signOutClearingDrafts.ts removes them too, without importing this file, to stay off the public pages'
+ * first visit (fix round 1, F1c). This module imports nothing, which keeps it small wherever it is loaded.
  *
  * The key carries the person's own id and the organisation's slug (S4), so a second person on the same browser never reads
  * the first person's value; each person-started sign-out (the rail's, with or without drafts, and the four others of ruling

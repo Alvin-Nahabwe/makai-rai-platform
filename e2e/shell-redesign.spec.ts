@@ -834,6 +834,23 @@ test('1A Task 11 (11): printed, the page shows main and none of the bar, the pan
   }
 });
 
+test('1A Task 12 (11b): printed at 800 px (an A4 page in portrait is under 1024 px), signed in, the top bar, its Menu button and the panel are not displayed and main is', async ({ browser }) => {
+  // The print rule's copy at the end of components/layout/shell.css is what hides the bar here: without it the bar's own
+  // `display: flex` would come after the print rule in globals.css and win (plan 1A Task 12, fix round 2, item 4).
+  const { slug, seat: owner } = seat('owner');
+  const context = await contextAs(browser, owner.storageStatePath, { viewport: { width: 800, height: 1000 } });
+  try {
+    const page = await context.newPage();
+    await page.goto(`/orgs/${slug}/dashboard`);
+    await page.emulateMedia({ media: 'print' });
+    for (const selector of ['.shell-topbar', '.shell-topbar__menu-button', '.shell-topbar__panel']) await expect(page.locator(selector), selector).toBeHidden();
+    expect(await page.locator('.shell-topbar').evaluate((el) => getComputedStyle(el).display)).toBe('none');
+    await expect(page.locator('main')).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
+
 // ── 12. Targets and focus in the open panel ──────────────────────────────────────────────────────────────────────────
 
 test('1A Task 11 (12): at 375 px every control of the bar and the open panel is at least 24 by 24 px, rail items 44 px high, and each focus ring shows', async ({ browser }) => {

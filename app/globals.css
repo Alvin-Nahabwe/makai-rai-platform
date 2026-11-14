@@ -1201,7 +1201,10 @@ dialog::backdrop {
    T12-x): the rules a public page uses (the theme switch, with the rail's Sign out that shares its rule; the public header;
    the footer; their print rule) and the idle warning's. A root-layout stylesheet reaches every public page anyway;
    shell.css is now loaded only inside the signed-in shell (AppShell, TopBar, Rail, OrgSwitcher), so S-04's first visit
-   no longer carries the rail's rules (NFR-PERF-02). */
+   no longer carries the rail's rules (NFR-PERF-02). shell.css used to be linked before globals.css (the root layout
+   imports its components before ./globals.css) and on a signed-in page it now follows it, so the print rule is kept, byte
+   for byte, at the end of shell.css too: without it the top bar's own display: flex (below 1024 px) and the panel's
+   display: block (from 1024 px) would beat the print rule at every width. */
 
 /* Sign out and the theme switch in the rail: navy controls in shell ink, a full target high. */
 .shell-rail__signout,
