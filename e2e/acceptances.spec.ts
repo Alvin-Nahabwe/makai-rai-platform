@@ -183,14 +183,16 @@ test.describe('S-04 and S-05 in a browser', () => {
     // shared (authenticated) layout; each destination must still send the account back to S-05.
     const nav = page.getByRole('navigation', { name: 'Main', exact: true });
     // Every link of the shell's rail, by href (several org items fall back to / outside an organisation). A public page
-    // (PUB's /about) is open to anyone, so it is not behind the gate and the click lands there.
+    // (PUB's /about, Help, a legal text) is open to anyone, and gate 3 lets S-21 through (My account: export and
+    // deletion, FR-ACC-04), so a click on one of those lands there. Asserting "back on S-05" for them passed only while
+    // the assertion ran before the router had shown the page, and failed when the page won (seen on a production build).
     await page.goto('/acceptances');
     await expect(nav).toBeVisible();
     const hrefs = [...new Set(await nav.getByRole('link').evaluateAll((els) => els.map((e) => e.getAttribute('href') ?? '')))];
     expect(hrefs, 'the rail has links to try').toEqual(expect.arrayContaining(['/explore/framework', '/account']));
     // Guidance is the rail's one entry to the framework pages; Controls is reached from it, not from the rail.
     expect(hrefs).not.toContain('/explore/controls');
-    const PUBLIC = /^\/(about|legal\/)/;
+    const REACHABLE = /^\/(about$|help$|legal\/|account$)/;
     for (const href of hrefs) {
       await page.goto('/acceptances');
       // The router's own request for the destination (not a prefetch), so the check waits for the server's answer.
@@ -198,7 +200,7 @@ test.describe('S-04 and S-05 in a browser', () => {
         && r.request().headers()['next-router-prefetch'] === undefined);
       await nav.locator(`a[href="${href}"]`).first().click();
       await answered;
-      if (PUBLIC.test(href)) {
+      if (REACHABLE.test(href)) {
         await expect(page, href).toHaveURL(new RegExp(`${href}$`));
         continue;
       }
