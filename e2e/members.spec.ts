@@ -287,17 +287,19 @@ test.describe('journeys', () => {
 // ── S6 of the workshop walk: the answer to Invite (and Resend) is on the screen, with focus ─────────────────────────
 /**
  * The whole of `target` is inside the viewport and below the top bar's bottom edge (the bar shows below 1024 px; at 1280 it
- * is display: none and its edge is 0).
+ * is display: none and its edge is 0). Half a pixel is allowed at each edge: an element scrolled to an edge sits at a
+ * fractional offset the integer scroll position cannot reach (a status line brought to the top measured -0.5).
  */
+const SUBPIXEL = 0.5;
 async function expectWhollyInView(page: Page, target: ReturnType<Page['locator']>, what: string): Promise<void> {
   const box = await target.boundingBox();
   expect(box, what).not.toBeNull();
   const viewport = page.viewportSize()!;
   const barBottom = await page.locator('.shell-topbar').evaluate((el) => Math.max(0, el.getBoundingClientRect().bottom));
-  expect(box!.y, `${what}: its top is below the top bar`).toBeGreaterThanOrEqual(barBottom);
-  expect(box!.y + box!.height, `${what}: its bottom is inside the viewport`).toBeLessThanOrEqual(viewport.height);
-  expect(box!.x, `${what}: its left edge is inside the viewport`).toBeGreaterThanOrEqual(0);
-  expect(box!.x + box!.width, `${what}: its right edge is inside the viewport`).toBeLessThanOrEqual(viewport.width);
+  expect(box!.y, `${what}: its top is below the top bar`).toBeGreaterThanOrEqual(barBottom - SUBPIXEL);
+  expect(box!.y + box!.height, `${what}: its bottom is inside the viewport`).toBeLessThanOrEqual(viewport.height + SUBPIXEL);
+  expect(box!.x, `${what}: its left edge is inside the viewport`).toBeGreaterThanOrEqual(-SUBPIXEL);
+  expect(box!.x + box!.width, `${what}: its right edge is inside the viewport`).toBeLessThanOrEqual(viewport.width + SUBPIXEL);
 }
 
 for (const size of [{ width: 375, height: 812 }, { width: 1280, height: 800 }]) {
