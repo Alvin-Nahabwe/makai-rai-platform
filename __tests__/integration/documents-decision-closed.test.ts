@@ -99,7 +99,7 @@ describe('documents of a stage holding a finding closed by a decision (D-408)', 
     const { reviewId, sealId } = await sealStage('in-processing');
     const before = await testDb.seal.findUniqueOrThrow({ where: { id: sealId } });
     const { preview, issued } = await previewAndIssue('model_card', reviewId, sealId);
-    for (const t of [preview, issued]) expect(t).toContain(`1. ${CHANGED}\nOwner: `);
+    for (const t of [preview, issued]) expect(t).toContain(`1. ${CHANGED}\nAssigned to: `);
     await nothingStoredChanged(mitigationVersionId, sealId, before);
   });
 });

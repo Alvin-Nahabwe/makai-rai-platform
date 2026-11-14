@@ -14,7 +14,10 @@ import { isOverdue } from '@/lib/followup/overdue';
 import { formatDay, formatDeclaredDate } from '@/lib/format/dates';
 import { DATASET_SIZE_WORDS, PERSONAL_DATA_WORDS } from '@/lib/project/labels';
 import { formatFingerprint } from '@/lib/seal/format';
-import { ETHICS_APPROVED, ETHICS_NOT_REQUIRED, ETHICS_SUBMITTED, FILE_NAME_ERASED, GATE_DERIVED_NA, fileErasedLine, formatUtcDay, textErasedLine, utcSecond } from './copy';
+import {
+  ETHICS_APPROVED, ETHICS_NOT_REQUIRED, ETHICS_SUBMITTED, FILE_NAME_ERASED, GATE_DERIVED_NA, assignedToLine, decidedByLine, decisionSource, doneEvidenceLine,
+  fileErasedLine, formatUtcDay, fromQuestion, personalDataAnswerLine, textErasedLine, utcSecond,
+} from './copy';
 import type { ResolvedField } from './render';
 
 /**
@@ -160,8 +163,7 @@ function deciderText(d: SealedDecision): string | null {
 function provenanceOf(d: SealedDecision): string {
   const who = deciderText(d);
   const when = declaredText(d.row);
-  const decided = who === null ? '' : ` Decided by ${who}${when === null ? '' : `; declared ${when}`}.`;
-  return `From ${d.row.questionId} v${d.row.versionNumber} (content ${d.content.semver}).${decided}`;
+  return who === null ? decisionSource(d.row.questionId, d.row.versionNumber) : `${decisionSource(d.row.questionId, d.row.versionNumber)} ${decidedByLine(who, when)}`;
 }
 
 /** A link item's address as text. Read by key: the redirect-origin lint reads any `.url` as a request address, and this one is stored text. */
@@ -229,7 +231,7 @@ function extract(d: SealedDecision, snap: DocumentSnapshot, parts: ReadonlySet<P
       sources.push({ sourceTable: 'decision_versions', sourceId: d.row.id, field: 'reason' });
     }
   }
-  if (parts.has('scope') && d.row.scopeAnswer !== null) lines.push(`Scope answer: ${word(SCOPE_WORD, d.row.scopeAnswer, 'scope answer')}`);
+  if (parts.has('scope') && d.row.scopeAnswer !== null) lines.push(personalDataAnswerLine(word(SCOPE_WORD, d.row.scopeAnswer, 'scope answer')));
   // A whole decision lists the options of a checklist question; any other question has none to list.
   if (parts.has('options') && (own.type === 'checklist' || option !== undefined)) {
     if (option === undefined && own.options === undefined) throw new Error(`documents: checklist ${d.row.questionId} has no options in content ${content.semver}`);
@@ -254,7 +256,7 @@ function recordPart(questionId: string, parts: ReadonlySet<PartName>, option: st
     if (first !== undefined && first !== entry.fieldId) return part({ text: `See ${first}`, sealIds });
     const from = [...sealed.decisions.values()].find((x) => x.row.id === gate);
     if (from === undefined) throw new Error(`documents: question ${questionId} is derived from decision version ${gate}, which the seal does not hold`);
-    return part({ text: GATE_DERIVED_NA, provenance: `From ${from.row.questionId} v${from.row.versionNumber} (content ${from.content.semver}).`, sealIds });
+    return part({ text: GATE_DERIVED_NA, provenance: `${fromQuestion(from.row.questionId, from.row.versionNumber)}.`, sealIds });
   }
   if (d === undefined || d.row.status === 'withdrawn') return part({ sealIds });              // D1
   if (first !== undefined && first !== entry.fieldId) return part({ text: `See ${first}`, sealIds });   // D4, later field
@@ -345,7 +347,7 @@ function resolveFindings(source: Extract<FieldSource, { kind: 'findings' }>, sna
   const sources: RowRef[] = [];
   const text = items.length === 0 ? NONE : items.map(({ finding: f }, i) => {
     const version = f.decisionVersionId === null ? undefined : versions.get(f.decisionVersionId);
-    const origin = f.source === 'team' || f.questionId === null ? 'Raised by the team' : `From ${f.questionId}${version === undefined ? '' : ` v${version}`}`;
+    const origin = f.source === 'team' || f.questionId === null ? 'Raised by the team' : fromQuestion(f.questionId, version);
     sources.push({ sourceTable: 'findings', sourceId: f.id, field: 'title' }, { sourceTable: 'findings', sourceId: f.id, field: 'description' });
     const shortfall = f.source === 'shortfall' && f.questionId !== null;
     return [`${i + 1}. ${findingTitle(f, snap)}`, `Source: ${origin}`, `Risk area: ${areaText(snap, f.riskArea)}`,
@@ -378,7 +380,7 @@ function mitigationWhat(m: MitigationVersionView, snap: DocumentSnapshot): strin
 /** One mitigation as a document prints it: what, owner, due date, then the control it follows. `sources` takes the rows the text came from. */
 function mitigationLines(m: MitigationVersionView, snap: DocumentSnapshot, sources: RowRef[]): string[] {
   sources.push({ sourceTable: 'mitigation_versions', sourceId: m.id, field: 'what' });
-  const lines = [mitigationWhat(m, snap), `Owner: ${m.owner.name}`, `Due: ${formatDay(m.dueDate)}`];
+  const lines = [mitigationWhat(m, snap), assignedToLine(m.owner.name), `Due: ${formatDay(m.dueDate)}`];
   if (m.followsControl !== null) {
     const control = running(snap).controls.get(m.followsControl);
     lines.push(`Control followed: ${m.followsControl}${control === undefined ? '' : ` ${control.name}`}`);
@@ -438,7 +440,7 @@ function resolveMitigations(source: Extract<FieldSource, { kind: 'mitigations' }
       sources.push({ sourceTable: 'mitigation_versions', sourceId: m.id, field: 'closureNote' });
     }
     if (m.evidence.length > 0) {
-      lines.push(`Closure evidence: ${m.evidence.map((e) => evidenceItem(e, snap)).join('; ')}`);
+      lines.push(doneEvidenceLine(m.evidence.map((e) => evidenceItem(e, snap)).join('; ')));
       sources.push(...evidenceRows(m.evidence));
     }
     return lines.join('\n');
@@ -542,7 +544,7 @@ function notApplicableList(snap: DocumentSnapshot): ResolvedPart {
     const from = [...s.decisions.values()].find((x) => x.row.id === gate);
     if (from === undefined) throw new Error(`documents: question ${question} is derived from decision version ${gate}, which the seal does not hold`);
     lines.push(`${question}: ${GATE_DERIVED_NA}`);
-    provenance.push(`From ${from.row.questionId} v${from.row.versionNumber} (content ${from.content.semver}).`);
+    provenance.push(`${fromQuestion(from.row.questionId, from.row.versionNumber)}.`);
   }
   return part({
     text: lines.length === 0 ? NONE : lines.join('\n'), provenance: provenance.join('\n'), sources, sealIds: [s.seal.sealId],

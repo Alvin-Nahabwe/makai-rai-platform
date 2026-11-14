@@ -52,8 +52,23 @@ export const FILE_NAME_ERASED = 'File name erased';
 export const textErasedLine = (date: string): string => `Text erased on ${formatDay(date)} on the organisation's instruction.`;
 export const fileErasedLine = (name: string, date: string): string =>
   `${name} . File erased on ${formatDay(date)} on the organisation's instruction. Its fingerprint is kept, so seals that include it still check.`;
-/** The gate-derived line (SRS 7.5.6 "Gate-derived N/A", FR-CNT-04). */
-export const GATE_DERIVED_NA = 'Not applicable (scope answer: no)';
+/** The gate-derived line (SRS 7.5.6 "Gate-derived N/A", FR-CNT-04), as ruled in G-c3 (a). */
+export const GATE_DERIVED_NA = 'Does not apply: the team answered No to the personal data question';
+
+// The lines a document prints around the record (C2; C8 #4; rulings G-c3 and G-c5 (a), which keep FR-DOC-02's four items).
+/** A decision's source, first sentence of its provenance: "Source: question <Q-id>, version <n> of the decision." */
+export const decisionSource = (questionId: string, version: number): string => `Source: question ${questionId}, version ${version} of the decision.`;
+/** The second sentence of a decision's provenance, when it has a decider. */
+export const decidedByLine = (who: string, on: string | null): string => `Decided by ${who}${on === null ? '' : ` on ${on}`}.`;
+/** The short source of a finding or of a gate-derived line: "From question <Q-id> (decision version <n>)". */
+export const fromQuestion = (questionId: string, version?: number): string =>
+  `From question ${questionId}${version === undefined ? '' : ` (decision version ${version})`}`;
+/** A gate decision's answer (FR-DOC-02 B38). */
+export const personalDataAnswerLine = (answer: string): string => `Answer to the personal data question: ${answer}`;
+/** Who a mitigation is assigned to (C2 "Assigned to", over "Owner"). */
+export const assignedToLine = (name: string): string => `Assigned to: ${name}`;
+/** The evidence of a done mitigation (C2 "Evidence that it is done", over "Closure evidence"). */
+export const doneEvidenceLine = (items: string): string => `Evidence that it is done: ${items}`;
 
 /**
  * The erasable text fields as erase_text_field names them: [table, key, column] (migration 20261030000500_v060_05_functions, the VALUES

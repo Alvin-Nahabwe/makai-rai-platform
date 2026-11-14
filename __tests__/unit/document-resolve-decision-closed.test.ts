@@ -61,7 +61,7 @@ const card = (s: Spec) => resolveFields(mc, snap('model_card', 'in-processing', 
 describe('a mitigation closed by a decision, as a document prints it (D-408)', () => {
   it('FR-FND-06 FR-DOC-01: MP-05 prints "Closed because the decision changed." for a done decision_changed with no text and no tombstone', () => {
     const text = fieldText(plan({ what: null, kind: 'decision_changed' }), 'MP-05');
-    expect(text).toContain(`1. ${CHANGED}\nFinding: Labels drift\nOwner: Amina N.`);
+    expect(text).toContain(`1. ${CHANGED}\nFinding: Labels drift\nAssigned to: Amina N.`);
   });
 
   it('FR-FND-06 FR-DOC-01: MP-05 prints "Closed because the decision was withdrawn." for a done decision_withdrawn', () => {
@@ -69,8 +69,8 @@ describe('a mitigation closed by a decision, as a document prints it (D-408)', (
   });
 
   it('FR-FND-06 FR-DOC-01: MC-24 of the model card prints the sentence for both decision kinds', () => {
-    expect(fieldText(card({ what: null, kind: 'decision_changed' }), 'MC-24')).toContain(`1. ${CHANGED}\nOwner: Amina N.`);
-    expect(fieldText(card({ what: null, kind: 'decision_withdrawn' }), 'MC-24')).toContain(`1. ${WITHDRAWN}\nOwner: Amina N.`);
+    expect(fieldText(card({ what: null, kind: 'decision_changed' }), 'MC-24')).toContain(`1. ${CHANGED}\nAssigned to: Amina N.`);
+    expect(fieldText(card({ what: null, kind: 'decision_withdrawn' }), 'MC-24')).toContain(`1. ${WITHDRAWN}\nAssigned to: Amina N.`);
   });
 
   it('FR-REV-08 (SRS 7.5.6): a decision-kind row with a tombstone prints the erased line, not the sentence', () => {

@@ -9,6 +9,7 @@ import { controlsForArea } from '@/lib/content/suggestions';
 import { loadFieldMap } from '@/lib/documents/fieldMaps';
 import {
   GATE_DERIVED_NA, textErasedLine, NOT_RECORDED_AT_ISSUE, SEALED_NOTE, STATEMENT,
+  decisionSource, fromQuestion, personalDataAnswerLine,
 } from '@/lib/documents/copy';
 import { SOURCE_RESOLVERS, resolveFields, type DocumentSnapshot, type SealedDecision, type SealedFinding, type SealedStage } from '@/lib/documents/resolve';
 
@@ -148,7 +149,7 @@ describe('the mitigation plan resolvers', () => {
       mitigations: [{ what: 'Second coder', owner: 'Amina N.', due: '2026-11-10', status: 'planned', control: 'C-03' }],
     }] });
     const mp3 = text(r, 'MP-03') as string;
-    for (const s of ['From Q-PP-12', 'PP-02', 'Labels drift', 'Coders disagree.', '29 Oct 2026', 'Second coder', 'Amina N.', '10 Nov 2026', 'Planned', 'C-03']) expect(mp3).toContain(s);
+    for (const s of ['Source: From question Q-PP-12', 'Assigned to: Amina N.', 'PP-02', 'Labels drift', 'Coders disagree.', '29 Oct 2026', 'Second coder', 'Amina N.', '10 Nov 2026', 'Planned', 'C-03']) expect(mp3).toContain(s);
     const mp4 = text(r, 'MP-04') as string;
     for (const g of controlsForArea(content, 'PP-02')) for (const c of g.controls) expect(mp4).toContain(`${c.control.id} ${c.control.name}`);
   });
@@ -265,6 +266,36 @@ describe('the ruled words a new document prints (plan 1A Task 18c)', () => {
   it('FR-DOC-02 (AL-1, AL-2): the statement and the sealed note on every document, word for word', () => {
     expect(STATEMENT).toBe("Made from this team's own records in the MAK-AI RAI Platform. It is not an ethics approval, audit, certification or compliance statement.");
     expect(SEALED_NOTE).toBe('The platform keeps this seal. No outside body has time-stamped it.');
+  });
+
+  it('FR-DOC-02 (C2, C8 #4, G-c3, G-c5): the five ruled lines: Assigned to, Evidence that it is done, the personal data answer, Does not apply, and the source of a decision', () => {
+    const r = resolve({
+      findings: [
+        { mitigations: [{ owner: 'Joan K.', status: 'planned', control: 'C-03' }] },
+        { state: 'closed_mitigation', mitigations: [{ status: 'done', evidence: [{
+          id: 'ev-1', kind: 'file', fileName: 'audit.pdf', mimeType: 'application/pdf', byteSize: 100, sha256: 'ab'.repeat(32), url: null, label: null,
+          uploadedBy: null, uploadedAt: '2026-10-30T09:00:00.000Z', erased: null,
+        }] }] },
+      ],
+      notApplicable: { 'Q-PP-18': ['na_no_personal_data', 'Whole register used.'] },
+      gate: { derived: ['Q-PP-13'], answer: 'no' },
+    });
+    const mp3 = text(r, 'MP-03') as string;
+    expect(mp3).toContain('Assigned to: Joan K.');
+    expect(mp3).not.toContain('Owner:');
+    expect(mp3).toContain('Control followed: C-03');   // kept as it was
+    expect(text(r, 'MP-05')).toContain('Evidence that it is done: file audit.pdf');
+    expect(text(r, 'MP-05')).not.toContain('Closure evidence');
+    expect(GATE_DERIVED_NA).toBe('Does not apply: the team answered No to the personal data question');
+    expect(text(r, 'MP-08')).toContain('Q-PP-13: Does not apply: the team answered No to the personal data question');
+    expect(provenance(r, 'MP-08').split('\n')).toEqual([
+      'Source: question Q-PP-18, version 1 of the decision. Decided by Amina N. on 12 Oct 2026.',
+      'From question Q-PP-GATE-SENSITIVE (decision version 1).',
+    ]);
+    expect(personalDataAnswerLine('Not sure')).toBe('Answer to the personal data question: Not sure');
+    expect(fromQuestion('Q-PP-12', 3)).toBe('From question Q-PP-12 (decision version 3)');
+    expect(fromQuestion('Q-PP-12')).toBe('From question Q-PP-12');
+    expect(decisionSource('Q-PP-12', 3)).toBe('Source: question Q-PP-12, version 3 of the decision.');
   });
 });
 
