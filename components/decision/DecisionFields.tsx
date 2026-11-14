@@ -58,7 +58,7 @@ export function DecisionFields({ data, value, errors, disabled, onChange }: Deci
     <RadioCards
       name="status" legend={F.fields.status} legendHint={FINDING_NOTE} disabled={disabled} error={err('status')}
       value={value.status ?? ''}
-      options={STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label, help: o.help, mark: o.value, id: `decision-status-${o.value}` }))}
+      options={STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label, help: o.help, id: `decision-status-${o.value}` }))}
       onChange={(next) => {
         const status = STATUS_OPTIONS.find((o) => o.value === next)?.value ?? null;
         // A reason code belongs to one status (OD-C2 (a)); it does not follow the person to another.

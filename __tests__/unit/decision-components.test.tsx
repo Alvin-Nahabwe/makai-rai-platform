@@ -120,13 +120,13 @@ describe('S-12 decision fields', () => {
     expect(h).toMatch(/id="decision-reason-error"[^>]*>Write a reason\.</);
   });
 
-  it('plan 1A Task 17: every control keeps its id and name, and the status cards show each status shape', () => {
+  it('plan 1A Task 17: every control keeps its id and name, and each status card shows one symbol, its radio button', () => {
     const h = html({ question: { ...QUESTION, type: 'checklist', options: ['A', 'B'] } }, { status: 'not_yet' });
     for (const v of ['done', 'partly', 'not_yet', 'not_applicable']) {
       const radio = h.match(new RegExp(`<input[^>]*id="decision-status-${v}"[^>]*>`))?.[0] ?? '';
       for (const attr of ['type="radio"', 'name="status"', `value="${v}"`, `aria-describedby="decision-status-${v}-help"`]) expect(radio).toContain(attr);
     }
-    expect(h.match(/class="ui-mark__shape"/g)).toHaveLength(4);
+    expect(h.match(/class="ui-mark__shape"/g)).toBeNull();
     expect(h).toMatch(/<input[^>]*id="decision-option-0"[^>]*name="optionsInPlace"/);
     expect(h).toMatch(/<select[^>]*id="decision-reason-code"[^>]*name="reasonCode"/);
     expect(h).toMatch(/<option value=""[^>]*>Choose one<\/option>/);
