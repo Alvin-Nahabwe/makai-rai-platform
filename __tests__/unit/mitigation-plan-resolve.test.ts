@@ -8,7 +8,7 @@ import { loadContent } from '@/lib/content/loader';
 import { controlsForArea } from '@/lib/content/suggestions';
 import { loadFieldMap } from '@/lib/documents/fieldMaps';
 import {
-  GATE_DERIVED_NA, textErasedLine, NOT_RECORDED_AT_ISSUE,
+  GATE_DERIVED_NA, textErasedLine, NOT_RECORDED_AT_ISSUE, SEALED_NOTE, STATEMENT,
 } from '@/lib/documents/copy';
 import { SOURCE_RESOLVERS, resolveFields, type DocumentSnapshot, type SealedDecision, type SealedFinding, type SealedStage } from '@/lib/documents/resolve';
 
@@ -258,6 +258,13 @@ describe('the mitigation plan records what it prints, so an erasure reaches it (
 
   it('FR-REV-08: a finding text that is null with no tombstone is a broken row and throws', () => {
     expect(() => resolve({ findings: [{ id: 'f-bad', title: null }] })).toThrow(/no title and no tombstone/);
+  });
+});
+
+describe('the ruled words a new document prints (plan 1A Task 18c)', () => {
+  it('FR-DOC-02 (AL-1, AL-2): the statement and the sealed note on every document, word for word', () => {
+    expect(STATEMENT).toBe("Made from this team's own records in the MAK-AI RAI Platform. It is not an ethics approval, audit, certification or compliance statement.");
+    expect(SEALED_NOTE).toBe('The platform keeps this seal. No outside body has time-stamped it.');
   });
 });
 

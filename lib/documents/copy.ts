@@ -6,8 +6,10 @@
 
 import { formatDay } from '@/lib/format/dates';
 
-export const STATEMENT = 'Generated from this team\'s own records in the MAK-AI RAI Platform. Not an ethics approval, audit, certification or compliance statement.'; // FR-DOC-02, SRS line 1025
-export const SEALED_NOTE = 'Sealed by the platform; not independently time-stamped.';   // 6.5, D8, R-56
+/** The owner's decision (C8 #21, audit C#270) over FR-DOC-02's SRS line 1025. */
+export const STATEMENT = 'Made from this team\'s own records in the MAK-AI RAI Platform. It is not an ethics approval, audit, certification or compliance statement.';
+/** The design spec's sentence (DESIGN-SPEC.md:424, the owner's decision of 14 November 2026) over 6.5, D8, R-56. */
+export const SEALED_NOTE = 'The platform keeps this seal. No outside body has time-stamped it.';
 export const NOT_RECORDED = 'Not recorded';                                           // FR-DOC-02, D1
 export const NOT_RECORDED_AT_ISSUE = 'Not recorded at the time of issue';             // FR-DOC-05, D3
 export const PROJECT_MARK = 'From the project description when this document was issued; not part of the sealed record'; // FR-DOC-02
