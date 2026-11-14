@@ -8,8 +8,8 @@ export const HOME_COPY = Object.freeze({
   heading: 'Home',
   newProject: 'New project',
   activeProjects: 'Active projects',
-  /** Archived projects only, for every role (B#31): plain text, the page's All projects link follows it. */
-  noActiveProjects: 'No active projects. Your archived projects are in All projects.',
+  /** Archived projects only, for every role (B#31, one word changed by the coordinator): plain text, the page's All projects link follows it. */
+  noActiveProjects: 'No active projects. Your archived projects are on the All projects page.',
   /** No project at all (B#32, B#33): a creator's line is followed by a New project link, everyone else's by whoCanCreate. */
   noProjects: 'No projects yet.',
   whoCanCreate: 'Owners, Admins and Assessors can create one.',

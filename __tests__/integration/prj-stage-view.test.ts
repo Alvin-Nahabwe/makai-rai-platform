@@ -278,7 +278,9 @@ describe('page wiring (C4 round 1)', () => {
     const html = renderToStaticMarkup(createElement(DashboardView, { data }));
     expect(html).toContain(`<p>${HOME_COPY.noActiveProjects}</p>`);   // plain text: the page's All projects link follows it
     expect(html).not.toContain(HOME_COPY.noProjects);
-    expect(html.match(new RegExp(`<a[^>]*href="/orgs/${only.org.slug}/projects/new"[^>]*>${HOME_COPY.newProject}</a>`, 'g'))).toHaveLength(1);   // the header's New project, for a creator
-    expect(html.indexOf(HOME_COPY.newProject)).toBeLessThan(html.indexOf(HOME_COPY.noActiveProjects));
+    const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const links = [...html.matchAll(new RegExp(`<a[^>]*href="/orgs/${esc(only.org.slug)}/projects/new"[^>]*>${esc(HOME_COPY.newProject)}</a>`, 'g'))];
+    expect(links).toHaveLength(1);   // the header's New project, for a creator
+    expect(links[0].index).toBeLessThan(html.indexOf(`<p>${HOME_COPY.noActiveProjects}</p>`));   // that link, before the sentence
   });
 });
