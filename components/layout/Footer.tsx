@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import { readCreditLine } from '@/lib/credit';
 import { SHELL_COPY } from '@/lib/shell/copy';
-import './shell.css';
 
 /**
  * The footer of every page (SRS 7.1.1 "Same place on every page"; UX-03; FR-PUB-02): the GIZ credit line, then the licence,

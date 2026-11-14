@@ -2,7 +2,6 @@ import Link from 'next/link';
 import ThemeToggle from '@/components/layout/ThemeToggle';
 import { SHELL_COPY } from '@/lib/shell/copy';
 import { PRODUCT_NAME } from '@/lib/ui/title';
-import './shell.css';
 
 /**
  * The header of the signed-out pages (SRS 7.1.1): the product name, About, Sign in and the theme switch (in the header, not

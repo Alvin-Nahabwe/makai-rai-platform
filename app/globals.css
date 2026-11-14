@@ -1196,3 +1196,166 @@ dialog::backdrop {
   overscroll-behavior: contain;
   background: rgba(15, 19, 28, 0.6);
 }
+
+/* Moved from components/layout/shell.css (plan 1A Task 11), unchanged, by plan 1A Task 12 (fix round 1, F1a; ruling
+   T12-x): the rules a public page uses (the theme switch, with the rail's Sign out that shares its rule; the public header;
+   the footer; their print rule) and the idle warning's. A root-layout stylesheet reaches every public page anyway;
+   shell.css is now loaded only inside the signed-in shell (AppShell, TopBar, Rail, OrgSwitcher), so S-04's first visit
+   no longer carries the rail's rules (NFR-PERF-02). */
+
+/* Sign out and the theme switch in the rail: navy controls in shell ink, a full target high. */
+.shell-rail__signout,
+.shell-theme {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  inline-size: 100%;
+  min-block-size: var(--target-primary);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-shell-muted);
+  border-radius: var(--radius-control);
+  background-color: var(--color-shell);
+  color: var(--color-shell-ink);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.shell-rail__signout:hover,
+.shell-theme:hover {
+  background-color: var(--color-shell-hover);
+}
+
+/* ── The theme switch: one of its two labels, the one naming the other theme ── */
+.shell-theme__to-dark,
+.shell-theme__to-light {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.shell-theme__to-light {
+  display: none;
+}
+
+:root[data-theme='dark'] .shell-theme__to-light {
+  display: inline-flex;
+}
+
+:root[data-theme='dark'] .shell-theme__to-dark {
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .shell-theme__to-light {
+    display: inline-flex;
+  }
+
+  :root:not([data-theme='light']) .shell-theme__to-dark {
+    display: none;
+  }
+}
+
+/* On the public header's surface: a quiet control in ink. */
+.shell-theme--on-light {
+  inline-size: auto;
+  min-block-size: var(--target-min);
+  padding: var(--space-1) var(--space-2);
+  border-color: var(--color-border-control);
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+}
+
+.shell-theme--on-light:hover {
+  background-color: var(--color-tint);
+}
+
+/* ── The public header and the footer: plain flow content on the surface, links underlined and 24 px high ── */
+.shell-public-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-6);
+  padding: var(--space-3) var(--space-4);
+  border-block-end: 1px solid var(--color-border-container);
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+}
+
+.shell-public-header__name {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--target-min);
+  color: var(--color-heading);
+  font-weight: var(--font-weight-bold);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.shell-public-header__nav,
+.shell-footer__nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-6);
+}
+
+.shell-public-header__nav a,
+.shell-footer__nav a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--target-min);
+  color: var(--color-link);
+  text-underline-offset: 0.15em;
+}
+
+.shell-public-header__nav a,
+.shell-footer__nav a {
+  text-decoration: underline;
+}
+
+.shell-footer {
+  padding: var(--space-6) var(--space-4);
+  border-block-start: 1px solid var(--color-border-container);
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+  font-size: var(--font-size-small);
+}
+
+.shell-footer__credit {
+  max-width: var(--max-width);
+  margin: 0 auto var(--space-3);
+}
+
+.shell-footer__nav {
+  max-width: var(--max-width);
+  margin: 0 auto;
+}
+
+/* ── The session dialogs: the warning is the kit's Dialog; the signed-out notice is a Banner at the top of the page ── */
+.shell-idle__failed {
+  margin-block-start: var(--space-3);
+  color: var(--color-ink);
+  font-weight: var(--font-weight-bold);
+}
+
+/* ── Print: the page's content only ── */
+@media print {
+  .shell-topbar,
+  .shell-topbar__panel,
+  .shell-public-header,
+  .shell-footer {
+    display: none;
+  }
+
+  .shell {
+    display: block;
+  }
+
+  .shell__main {
+    overflow: visible;
+    max-height: none;
+    padding: 0;
+  }
+}

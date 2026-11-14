@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 const pathnameMock = vi.hoisted(() => vi.fn());
@@ -279,6 +280,59 @@ describe('the rail, ported from the sidebar (UX-02, UX-41)', () => {
   it('1A Task 12 L2-66 S4: the rail\'s Sign out clears this person\'s last-project keys before signing out', () => {
     const source = readFileSync('components/layout/Rail.tsx', 'utf8');
     expect(source).toMatch(/onClick=\{\(\) => \{\s*clearLastProjects\(shell\.userId\);\s*void signOut\(\{ callbackUrl: '\/login' \}\);\s*\}\}/);
+  });
+});
+
+describe('the public pages load no shell stylesheet (plan 1A Task 12, fix round 1, F1a)', () => {
+  /** The files a module imports, resolved: `@/` and relative specifiers to .ts, .tsx or .css files that exist. */
+  function importsOf(file: string): string[] {
+    const src = readFileSync(file, 'utf8');
+    const out: string[] = [];
+    for (const m of src.matchAll(/(?:^|\n)\s*(?:import|export)\s[^;]*?from\s+'([^']+)'|(?:^|\n)\s*import\s+'([^']+)'/g)) {
+      const spec = m[1] ?? m[2];
+      if (!spec.startsWith('@/') && !spec.startsWith('.')) continue;
+      const base = spec.startsWith('@/') ? spec.slice(2) : join(dirname(file), spec);
+      const found = [base, `${base}.ts`, `${base}.tsx`, `${base}/index.ts`, `${base}/index.tsx`].find((c) => existsSync(c) && statSync(c).isFile());
+      if (found !== undefined) out.push(found.replace(/\\/g, '/'));
+    }
+    return out;
+  }
+  function closure(roots: string[]): Set<string> {
+    const seen = new Set<string>();
+    const queue = [...roots];
+    while (queue.length > 0) {
+      const f = queue.pop()!;
+      if (seen.has(f)) continue;
+      seen.add(f);
+      if (/\.(ts|tsx)$/.test(f)) queue.push(...importsOf(f));
+    }
+    return seen;
+  }
+
+  it('F1a: nothing the root layout, the not-found page, the public layout, the footer, the public header, the theme switch or the idle warning imports reaches shell.css', () => {
+    const roots = ['app/layout.tsx', 'app/not-found.tsx', 'app/(public)/layout.tsx', 'components/layout/Footer.tsx',
+      'components/layout/PublicHeader.tsx', 'components/layout/ThemeToggle.tsx', 'components/layout/IdleWarning.tsx'];
+    const reached = closure(roots);
+    expect(reached.size).toBeGreaterThan(roots.length);
+    expect([...reached].filter((f) => f.endsWith('components/layout/shell.css'))).toEqual([]);
+  });
+
+  it('F1a: only the signed-in shell (AppShell, TopBar, Rail, OrgSwitcher) imports shell.css', () => {
+    const importers = readdirSync('components/layout').map((f) => `components/layout/${f}`)
+      .filter((f) => /\.tsx?$/.test(f) && importsOf(f).includes('components/layout/shell.css')).sort();
+    expect(importers).toEqual(['components/layout/AppShell.tsx', 'components/layout/OrgSwitcher.tsx', 'components/layout/Rail.tsx', 'components/layout/TopBar.tsx']);
+  });
+
+  it('F1a: the public shell\'s and the idle warning\'s rules are one block at the very end of app/globals.css, and gone from shell.css', () => {
+    const globals = readFileSync('app/globals.css', 'utf8');
+    const start = globals.indexOf('/* Moved from components/layout/shell.css');
+    expect(start).toBeGreaterThan(0);
+    const block = globals.slice(start);
+    const shell = readFileSync('components/layout/shell.css', 'utf8');
+    for (const sel of ['.shell-public-header {', '.shell-footer {', '.shell-theme--on-light {', '.shell-theme__to-light {', '.shell-idle__failed {', '@media print {']) {
+      expect(block, sel).toContain(sel);
+      expect(shell, sel).not.toContain(sel);
+    }
   });
 });
 
