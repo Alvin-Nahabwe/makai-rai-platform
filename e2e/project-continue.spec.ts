@@ -56,7 +56,8 @@ test('C11: an assessor on a fresh project sees Start recording, which opens the 
   await expect(primary(page, PROJECT_COPY.continue)).toHaveCount(0);
   await primary(page, PROJECT_COPY.start).click();
   await page.waitForURL(`**/stages/pre-processing/questions/${PP_FIRST}`);
-  await expect(page.locator('#question-heading')).toContainText(PP_FIRST);
+  // The question page's heading is the question in words; its code is the line under it (the frame of slice 1).
+  await expect(page.locator('.question-frame__code')).toContainText(PP_FIRST);
 });
 
 test('C11: after a saved decision, Continue recording opens the next question with no decision, the one Home names', async ({ browser }) => {
@@ -77,7 +78,7 @@ test('C11: after a saved decision, Continue recording opens the next question wi
   await expect(primary(page, PROJECT_COPY.start)).toHaveCount(0);
   await primary(page, PROJECT_COPY.continue).click();
   await page.waitForURL(`**/stages/in-processing/questions/${homeCode}`);
-  await expect(page.locator('#question-heading')).toContainText(homeCode);
+  await expect(page.locator('.question-frame__code')).toContainText(homeCode);
 });
 
 for (const role of ['reviewer', 'viewer'] as const) {
