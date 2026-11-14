@@ -224,7 +224,7 @@ test('FR-DOC-06: a 409 already_withdrawn says someone else withdrew it first, an
   const alert = page.getByRole('alert').filter({ hasText: 'Not withdrawn yet' });
   await expect(alert).toContainText(LOST);
   await page.getByRole('button', { name: 'Retry' }).click();
-  await expect(page.getByRole('status').filter({ hasText: 'Withdrawn. Your earlier request may have done it; the reason shown is the one recorded.' })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: DOCUMENTS_COPY.actions.withdrawEarlier })).toBeVisible();
 });
 
 test('FR-DOC-07 NFR-SEC-11: when the clipboard refuses, Copy as text shows the text in a read-only box to copy by hand', async ({ page, baseURL }) => {
