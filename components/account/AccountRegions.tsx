@@ -9,6 +9,9 @@ import { ACCOUNT_COPY } from '@/lib/account/copy';
 import { SignOutEverywhere } from './SignOutEverywhere';
 
 const TARGET: CSSProperties = { display: 'inline-block', minWidth: '24px', minHeight: '24px' };
+// The page's h1, sections and slots in one column, 2rem apart; a heading sits close to its own content.
+const REGIONS: CSSProperties = { display: 'grid', gap: 'var(--space-8)' };
+const SECTION_HEADING: CSSProperties = { marginBottom: 'var(--space-2)' };
 
 export interface AccountRegionsProps {
   identity: Identity;
@@ -27,9 +30,9 @@ export interface AccountRegionsProps {
 export function AccountRegions({ identity, reminderEmails, lastActiveOwnerOf }: AccountRegionsProps): ReactElement {
   const t = ACCOUNT_COPY.page;
   return (
-    <div className="page-content">
+    <div className="page-content" style={REGIONS}>
       <h1>{t.heading}</h1>
-      <section aria-labelledby="account-details-heading"><h2 id="account-details-heading">{t.detailsHeading}</h2>
+      <section aria-labelledby="account-details-heading"><h2 id="account-details-heading" style={SECTION_HEADING}>{t.detailsHeading}</h2>
         <dl>
           <dt>{t.name}</dt>
           <dd>{identity.name}</dd>
@@ -37,10 +40,10 @@ export function AccountRegions({ identity, reminderEmails, lastActiveOwnerOf }: 
           <dd>{identity.email}</dd>
         </dl>
       </section>
-      <section aria-labelledby="account-password-heading"><h2 id="account-password-heading">{t.passwordHeading}</h2>
+      <section aria-labelledby="account-password-heading"><h2 id="account-password-heading" style={SECTION_HEADING}>{t.passwordHeading}</h2>
         <p><Link href="/change-password" style={TARGET}>{t.changePassword}</Link></p>
       </section>
-      <section aria-labelledby="account-sessions-heading"><h2 id="account-sessions-heading">{t.devicesHeading}</h2>
+      <section aria-labelledby="account-sessions-heading"><h2 id="account-sessions-heading" style={SECTION_HEADING}>{t.devicesHeading}</h2>
         <div><SignOutEverywhere userId={identity.userId} /></div>
       </section>
       <MyAcceptances userId={identity.userId} />

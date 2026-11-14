@@ -21,7 +21,7 @@ export async function MyAcceptances({ userId }: MyAcceptancesProps): Promise<Rea
   const [rows, offered] = await Promise.all([myAcceptances(userId), offeredAcceptances(userId)]);
   return (
     <section aria-labelledby="my-acceptances-heading">
-      <h2 id="my-acceptances-heading">{MY_ACCEPTANCES_COPY.heading}</h2>
+      <h2 id="my-acceptances-heading" style={{ marginBottom: 'var(--space-2)' }}>{MY_ACCEPTANCES_COPY.heading}</h2>
       {rows.length === 0 ? (
         <p>{MY_ACCEPTANCES_COPY.empty}</p>
       ) : (

@@ -1,6 +1,5 @@
 'use client';
 
-import { Button } from '@/components/ui/Button';
 import { ERRORS_COPY, errorBody, supportReferenceLine } from '@/lib/errors/copy';
 import { pageTitle } from '@/lib/ui/title';
 
@@ -39,9 +38,11 @@ export default function ErrorPage({ error, retry, footer = true }: { error: unkn
         <h1>{ERRORS_COPY.error.heading}</h1>
         <p>{errorBody(reference !== null, footer)}</p>
         {reference === null ? null : <p>{supportReferenceLine(reference)}</p>}
-        <Button variant="primary" onClick={() => retry()}>
+        {/* A native button: every page loads this boundary, and the kit's Button would add to each page's first load; the
+            last-resort page (app/global-error.tsx) loads no global stylesheet for the kit to draw with. */}
+        <button type="button" className="btn btn--primary" onClick={() => retry()}>
           {ERRORS_COPY.error.tryAgain}
-        </Button>
+        </button>
       </div>
     </main>
   );

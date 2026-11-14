@@ -57,7 +57,7 @@ describe('S-21 My account', () => {
 
   it('FR-ACC-04 (S-21, W-12): the regions come in W-12 order, each a labelled section', () => {
     const markup = html(<AccountRegions identity={id} reminderEmails lastActiveOwnerOf={[]} />);
-    const headings = [...markup.matchAll(/<section aria-labelledby="([^"]+)"><h2 id="\1">([^<]+)<\/h2>/g)].map((m) => m[2]);
+    const headings = [...markup.matchAll(/<section aria-labelledby="([^"]+)"><h2 id="\1"[^>]*>([^<]+)<\/h2>/g)].map((m) => m[2]);
     expect(headings).toEqual([ACCOUNT_COPY.page.detailsHeading, ACCOUNT_COPY.page.passwordHeading, ACCOUNT_COPY.page.devicesHeading]);
     expect(headings).toEqual(['Name and email', 'Password', 'Signed-in devices']); // audit A 78, 81, 83: the h2 no longer repeats the h1
     expect(markup).toMatch(new RegExp(`<h1[^>]*>${escapeRe(ACCOUNT_COPY.page.heading)}</h1>`));

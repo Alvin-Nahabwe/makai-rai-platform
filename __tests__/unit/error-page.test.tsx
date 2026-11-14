@@ -6,7 +6,6 @@ import ErrorPage from '../../app/error';
 import GlobalError from '../../app/global-error';
 import { ERRORS_COPY, errorBody, supportReferenceLine } from '../../lib/errors/copy';
 import { pageTitle } from '../../lib/ui/title';
-import { Button } from '../../components/ui/Button';
 
 /**
  * NFR-OBS-05 and NFR-AVL-04 (unit H0). When a page fails on the server, the person sees what did not happen,
@@ -49,7 +48,7 @@ it('NFR-OBS-05 NFR-AVL-04: the error page says what did not happen, what is safe
 it('NFR-OBS-05: Try again calls retry, once, and nothing else on the page is a control', () => {
   const retry = vi.fn();
   const tree = ErrorPage({ error: failure('1234567890'), retry }) as ReactElement;
-  const button = find(tree, Button as unknown as string);
+  const button = find(tree, 'button');
   expect(button).not.toBeNull();
   button?.props.onClick?.();
   expect(retry).toHaveBeenCalledTimes(1);
@@ -111,8 +110,10 @@ it('1A-16c: "your text is kept in this browser" is true of decisions and mitigat
   expect([...union.matchAll(/kind: '(\w+)'/g)].map((m) => m[1])).toEqual(['question', 'mitigation']);
 });
 
-it('1A-16c: the page with a footer shows the footer sentence, and the plain page button is the kit primary button', () => {
+it('1A-16c: the page with a footer shows the footer sentence, and Try again is a native primary button, not the kit\'s', () => {
   const html = renderToStaticMarkup(<ErrorPage error={failure('1234567890')} retry={() => {}} />);
   expect(html).toContain(errorBody(true, true));
-  expect(html).toMatch(/<button[^>]*class="ui-button ui-button--primary"/);
+  expect(html).toMatch(/<button type="button" class="btn btn--primary">/);
+  expect(html).not.toContain('ui-button');
+  expect(readFileSync('app/error.tsx', 'utf8')).not.toContain('@/components/ui/Button');
 });

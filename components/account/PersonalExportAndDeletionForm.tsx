@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { signOut } from 'next-auth/react';
 import { openDraftStore } from '@/lib/client/drafts';
-import type { ReactElement } from 'react';
+import type { CSSProperties, ReactElement } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Callout } from '@/components/ui/Callout';
 import { InlineConfirm } from '@/components/ui/InlineConfirm';
@@ -26,6 +26,8 @@ import {
 
 export const PREPARING_PERSONAL = PERSONAL_DATA_COPY.preparing;
 const PHRASE_LABEL = phraseLabel(DELETE_PHRASE);
+// A heading sits close to its own content (the page puts 2rem between sections, AccountRegions.tsx).
+const SECTION_HEADING: CSSProperties = { marginBottom: 'var(--space-2)' };
 
 export type DeletionOutcome =
   | { kind: 'deleted' }
@@ -130,12 +132,12 @@ export function PersonalExportAndDeletionForm({ userId, lastActiveOwnerOf }: { u
   return (
     <>
       <section aria-labelledby="account-data-heading">
-        <h2 id="account-data-heading">{PERSONAL_DATA_COPY.dataHeading}</h2>
+        <h2 id="account-data-heading" style={SECTION_HEADING}>{PERSONAL_DATA_COPY.dataHeading}</h2>
         <p>{PERSONAL_DATA_COPY.downloadIntro}</p>
         <PreparingDownload href="/api/users/me/export" label={PERSONAL_DATA_COPY.download} preparing={PERSONAL_DATA_COPY.preparing} />
       </section>
       <section aria-labelledby="account-delete-heading">
-        <h2 id="account-delete-heading">{PERSONAL_DATA_COPY.deleteHeading}</h2>
+        <h2 id="account-delete-heading" style={SECTION_HEADING}>{PERSONAL_DATA_COPY.deleteHeading}</h2>
         {!open && <p>{PERSONAL_DATA_COPY.deleteConsequence}</p>}{/* once open, the confirmation says it (UX-29: object and consequence) */}
         {lastActiveOwnerOf.length > 0
           ? lastActiveOwnerOf.map((org) => <Callout key={org} kind="note">{m38(org)}</Callout>)
