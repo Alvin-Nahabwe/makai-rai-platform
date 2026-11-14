@@ -301,18 +301,18 @@ test.describe('the app font', () => {
       const font = '16px overpass';
       const texts = ['·', '`', '´', 'ˇ', 'a', 'b', ' ', 'a · b', 'a·b'];
       // Each text loads the face whose unicode-range holds it; an empty answer means it would draw in a fallback font.
+      // This is the guard against measuring a fallback: Arial's backtick is within a pixel of Overpass's.
       const faces = await Promise.all(texts.map(async (t) => (await document.fonts.load(font, t)).length));
       const ctx = document.createElement('canvas').getContext('2d');
       if (ctx === null) throw new Error('no 2d canvas context');
       ctx.font = font;
       const m = (t: string) => ctx.measureText(t);
-      const dot = m('a·b');
       return {
         faces,
         width: Object.fromEntries(texts.map((t) => [t, m(t).width])),
-        // The dot's ink in "a·b", from the start of the text: it lies inside its own advance, after the a's.
-        dotInk: { left: -dot.actualBoundingBoxLeft, right: dot.actualBoundingBoxRight },
-        aDotInk: { left: -m('a·').actualBoundingBoxLeft, right: m('a·').actualBoundingBoxRight, a: m('a').actualBoundingBoxRight },
+        // Where the ink ends, from the start of the text: of "a" alone, and of "a·" (the dot's ink is the last).
+        aInk: m('a').actualBoundingBoxRight,
+        aDotInk: m('a·').actualBoundingBoxRight,
         // A glyph still in a GPOS mark coverage is attached to the a's anchor even with its own advance: the backtick
         // was then drawn on top of the a.
         aGraveInk: m('a`').actualBoundingBoxRight,
@@ -329,9 +329,9 @@ test.describe('the app font', () => {
     expect(Math.abs(w['a · b'] - parts), `"a · b" is ${w['a · b']} px, its parts ${parts} px`).toBeLessThan(1);
     expect(Math.abs(w['a·b'] - (w.a + w['·'] + w.b)), `"a·b" is ${w['a·b']} px`).toBeLessThan(1);
     // In "a·", the dot's ink starts after the a's ink and ends within the a's and the dot's advances: not moved onto the a.
-    expect(measured.aDotInk.right, 'the dot ink ends after the a ink').toBeGreaterThan(measured.aDotInk.a + 0.5);
-    expect(measured.aDotInk.right, 'the dot ink ends inside its own advance').toBeLessThanOrEqual(w.a + w['·'] + 0.5);
-    expect(measured.aGraveInk, 'the backtick ink in "a`" ends after the a ink').toBeGreaterThan(measured.aDotInk.a + 0.5);
+    expect(measured.aDotInk, 'the dot ink ends after the a ink').toBeGreaterThan(measured.aInk + 0.5);
+    expect(measured.aDotInk, 'the dot ink ends inside its own advance').toBeLessThanOrEqual(w.a + w['·'] + 0.5);
+    expect(measured.aGraveInk, 'the backtick ink in "a`" ends after the a ink').toBeGreaterThan(measured.aInk + 0.5);
     expect(measured.aGraveInk, 'the backtick ink ends inside its own advance').toBeLessThanOrEqual(w.a + w['`'] + 0.5);
   });
 });

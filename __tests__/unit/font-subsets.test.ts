@@ -704,7 +704,7 @@ describe('NFR-PERF-02: the preloaded font files hold printable ASCII and the pag
 });
 
 /**
- * Upstream Overpass (fonts/source/, as Google serves it) classes ten mapped spacing glyphs as marks: the middle dot
+ * Upstream Overpass (fonts/source/, as Google serves it) classes twelve mapped spacing glyphs as marks: the middle dot
  * U+00B7, the backtick U+0060 and the spacing accents (´ ¸ ¨ ¯ ˆ ˚ ˜ in the latin file, ˇ ˉ ˝ in latin-ext). They have
  * GDEF glyph class 3 and sit in the GPOS mark coverages, and the text shaper gives a mark no advance: the " · "
  * separator drew its dot on top of the space after it. scripts/fonts/subset.sh applies the rule "a mapped glyph that

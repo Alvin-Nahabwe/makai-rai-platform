@@ -94,7 +94,7 @@ PY
 out="$(mktemp -d)"
 trap 'rm -rf "$out"' EXIT
 # Upstream Overpass has a fault that this step repairs. Its latin and latin-ext files, as Google serves them
-# (fonts/source/), class ten mapped spacing glyphs as marks: the middle dot U+00B7, the backtick U+0060 and the spacing
+# (fonts/source/), class twelve mapped spacing glyphs as marks: the middle dot U+00B7, the backtick U+0060 and the ten spacing
 # accents U+00A8, U+00AF, U+00B4, U+00B8, U+02C6, U+02C7, U+02C9, U+02DA, U+02DC and U+02DD. Each has GDEF glyph class 3
 # and sits in the mark coverage of GPOS mark-positioning lookups, and a text shaper gives a mark no advance, so the " · "
 # separator drew its dot on top of the space after it. Each file therefore gets the rule "a mapped glyph that Unicode
