@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useState, type ReactElement } from 'react';
+import { Button } from '@/components/ui/Button';
 import { openDraftStore, type DraftStore } from '@/lib/client/drafts';
+import { DRAFTS_COPY } from '@/lib/decision/drafts/copy';
 import { formatDay } from '@/lib/format/dates';
 import type { CalendarDate } from '@/types/record';
 
@@ -16,8 +18,8 @@ export function safeDraftHref(v: unknown): string | null {
 }
 
 /**
- * S-21's "Drafts on this device" (UX-26, NFR-PRIV-06): how many answers this account has kept on this browser, each
- * with its link and "kept until <date>", and Delete, which removes them all. Read from storage after mount; with no
+ * S-21's "Unsaved changes in this browser" (UX-26, NFR-PRIV-06): how many unsaved changes this account has kept in this
+ * browser, each with its link and "kept until <date>", and a Delete that removes them all. Read from storage after mount; with no
  * storage it says there are none it can keep. A slot of S-21: ACC-b renders it.
  */
 export function DraftsOnThisDevice({ userId }: DraftsOnThisDeviceProps): ReactElement {
@@ -29,7 +31,7 @@ export function DraftsOnThisDevice({ userId }: DraftsOnThisDeviceProps): ReactEl
     return s.list(userId, new Date()).map((d) => ({
       key: `${d.key.orgId}:${d.key.projectId}:${d.key.target.kind === 'question' ? d.key.target.questionId : d.key.target.findingId}`,
       href: safeDraftHref(d.draft.value),
-      label: d.key.target.kind === 'question' ? d.key.target.questionId : 'Mitigation',
+      label: d.key.target.kind === 'question' ? d.key.target.questionId : DRAFTS_COPY.list.mitigation,
       keptUntil: d.keptUntil,
     }));
   }
@@ -46,19 +48,19 @@ export function DraftsOnThisDevice({ userId }: DraftsOnThisDeviceProps): ReactEl
   const n = items?.length ?? 0;
   return (
     <section id="drafts-on-this-device" aria-labelledby="drafts-on-this-device-heading">
-      <h2 id="drafts-on-this-device-heading">Drafts on this device</h2>
-      <p role="status">{items === null ? '' : `Drafts on this device: ${n}`}</p>
+      <h2 id="drafts-on-this-device-heading">{DRAFTS_COPY.list.heading}</h2>
+      <p role="status">{items === null ? '' : DRAFTS_COPY.list.count(n)}</p>
       {n > 0 ? (
         <>
           <ul>
             {items!.map((d) => (
               <li key={d.key}>
                 {d.href !== null ? <a href={d.href}>{d.label}</a> : d.label}
-                {`, kept until ${formatDay(d.keptUntil)}`}
+                {DRAFTS_COPY.list.keptUntil(formatDay(d.keptUntil))}
               </li>
             ))}
           </ul>
-          <button type="button" className="btn btn--secondary" onClick={() => { store?.purgeAccount(userId); setItems(read(store)); }}>Delete</button>
+          <Button variant="secondary" onClick={() => { store?.purgeAccount(userId); setItems(read(store)); }}>{DRAFTS_COPY.list.deleteAll}</Button>
         </>
       ) : null}
     </section>
