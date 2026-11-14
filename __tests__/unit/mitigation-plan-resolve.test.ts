@@ -5,7 +5,7 @@ import type { AcceptedRiskView, ContentRef, FindingView, MitigationVersionView, 
 import type { FieldMap } from '@/types/documents';
 import type { SealManifestV1 } from '@/types/seal';
 import { loadContent } from '@/lib/content/loader';
-import { controlsForArea } from '@/lib/content/suggestions';
+import { controlsForArea, controlsForQuestion } from '@/lib/content/suggestions';
 import { loadFieldMap } from '@/lib/documents/fieldMaps';
 import {
   GATE_DERIVED_NA, textErasedLine, NOT_RECORDED_AT_ISSUE, SEALED_NOTE, STATEMENT,
@@ -168,6 +168,34 @@ describe('the mitigation plan resolvers', () => {
 
   it('FR-DOC-01 (MP-04): an open finding with no risk area has no controls to suggest, and the field says so', () => {
     expect(text(resolve({ findings: [{ riskArea: null }] }), 'MP-04')).toBe('None');
+  });
+
+  it('FR-DOC-01 FR-SUG-01 (MP-04): a finding raised from a decision has no risk area of its own; it lists the controls of its question\'s risk areas, the set its question page suggests', () => {
+    // Walk 2 N3: the shortfall finding's risk areas are its question's (SRS 10.3.4 MP-04 "controls of the finding's risk areas"; SRS "Mapping").
+    const r = resolve({ findings: [{ source: 'shortfall', questionId: 'Q-PP-09', riskArea: null, title: null }] });
+    const { first, rest } = controlsForQuestion(content, 'Q-PP-09', []);
+    const ids = [...first, ...rest].flatMap((g) => g.controls.map((x) => x.control.id));
+    expect(ids).toEqual(['C-03', 'C-04', 'C-05', 'C-07']);
+    const name = (id: string) => content.controls.get(id)?.name as string;
+    const area = (id: string) => `${id} ${content.areas.get(id)?.name as string}`;
+    expect(text(r, 'MP-04')).toBe([
+      '1. Finding on Q-PP-09',
+      `Risk areas of question Q-PP-09: ${area('PP-02')}; ${area('PP-04')}`,
+      `Controls: ${ids.map((id) => `${id} ${name(id)}`).join('; ')}`,
+    ].join('\n'));
+  });
+
+  it('FR-DOC-01 (MP-04): a finding with a risk area keeps its area\'s controls even when it names a question; closed findings and findings with neither are not listed', () => {
+    const r = resolve({ findings: [
+      { riskArea: 'PP-02', questionId: 'Q-PP-12', title: 'With area' },
+      { state: 'closed_mitigation', riskArea: null, source: 'shortfall', questionId: 'Q-PP-10', title: null, mitigations: [{ status: 'done' }] },
+      { riskArea: null, questionId: null, title: 'Neither' },
+    ] });
+    const mp4 = text(r, 'MP-04') as string;
+    expect(mp4).toContain('1. With area\nRisk area: PP-02');
+    expect(mp4).not.toContain('C-12');            // Q-PP-12's area PP-07 is not read when the finding has its own area
+    expect(mp4).not.toContain('Q-PP-10');
+    expect(mp4).not.toContain('Neither');
   });
 
   it('FR-DOC-01 (MP-05): findings closed by a mitigation with the closure note or evidence', () => {

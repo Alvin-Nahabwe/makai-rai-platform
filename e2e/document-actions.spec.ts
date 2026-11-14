@@ -252,6 +252,34 @@ test('FR-DOC-07 NFR-SEC-11: when the clipboard refuses, Copy as text shows the t
   await expect(page.getByRole('status').filter({ hasText: 'Copied.' })).toHaveCount(0);
 });
 
+test('FR-DOC-01 (MP-04): an issued mitigation plan lists, for a finding raised from a decision, the controls of its question\'s risk areas', async ({ baseURL }) => {
+  // Workshop walk 2, N3: such a finding has no risk area of its own, and MP-04 printed "None". Issued as the owner seat, so the admin
+  // seat's issue budget above is untouched.
+  test.setTimeout(120_000);
+  const base = `/api/v1/orgs/${org.slug}/projects`;
+  const p = await api<{ id: string }>(baseURL!, 'owner', base, { requestId: randomUUID(), name: `N3 ${randomUUID().slice(0, 8)}`, aiSystemType: 'classification' });
+  await api(baseURL!, 'assessor', `${base}/${p.id}/decisions`, {
+    requestId: randomUUID(), stage: 'pre-processing', questionId: 'Q-PP-12', baseVersionNumber: null, status: 'partly', scopeAnswer: null, optionsInPlace: [],
+    reasonCode: null, reason: `End-to-end reason ${randomUUID()} for this decision.`, decidedBy: { kind: 'outside_role', role: 'principal_investigator' },
+    declaredDate: '2026-10-30', evidenceIds: [],
+  });
+  const r = await api<{ id: string }>(baseURL!, 'admin', `${base}/${p.id}/reviews`, { requestId: randomUUID(), stage: 'pre-processing', preparedFor: null });
+  const s = await api<{ id: string }>(baseURL!, 'reviewer', `${base}/${p.id}/reviews/${r.id}/seals`, { requestId: randomUUID() });
+  const d = await api<{ id: string }>(baseURL!, 'owner', `${base}/${p.id}/reviews/${r.id}/documents`, {
+    requestId: randomUUID(), documentType: 'mitigation_plan', sealId: s.id, typedFields: {},
+  });
+  const ctx = await pwRequest.newContext({ baseURL, storageState: seat('reviewer').storageStatePath });
+  try {
+    const res = await ctx.get(`/api/v1/orgs/${org.slug}/documents/${d.id}/text`);
+    expect(res.status()).toBe(200);
+    const text = await res.text();
+    expect(text).toContain('Risk areas of question Q-PP-12: PP-07 Labeling Bias');
+    expect(text).toContain('Controls: C-03 Data Quality & Representativeness Audit; C-04 Bias Detection in Data; C-12 Labeling Quality Assurance');
+  } finally {
+    await ctx.dispose();
+  }
+});
+
 test('FR-DOC-07 FR-REV-08: a 410 on Copy as text says the text was erased and refreshes the list', async ({ page, baseURL }) => {
   test.setTimeout(120_000);
   failOnDialog(page);
