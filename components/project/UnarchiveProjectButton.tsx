@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
@@ -11,6 +11,13 @@ import { PROJECT_WRITE_COPY } from '@/lib/project/write/copy';
 
 const FRESH: RetryState = { requestId: null, sentBody: null };
 const C = PROJECT_WRITE_COPY.unarchive;
+/** The id of the Active list's heading on S-32 (components/project/AllProjectsView.tsx), focusable with tabIndex -1. */
+const ACTIVE_HEADING_ID = 'projects-active';
+
+/** Before a refresh that removes this row: focus goes to the Active heading, while the focused control still exists. */
+function focusActiveHeading(): void {
+  document.getElementById(ACTIVE_HEADING_ID)?.focus();
+}
 
 /**
  * Unarchive on S-32 (FR-PRJ-03, UX-27): POST route 22 with a request id that a Retry repeats. One `role="status"` region
@@ -22,7 +29,12 @@ const C = PROJECT_WRITE_COPY.unarchive;
  * (never `disabled` during its send), and Retry stays, busy, while its own request is in flight. When the answer
  * arrives focus goes to Retry after a lost connection or a server error, and to this control's container after a refusal
  * that disables the button. The button is native, in the kit's classes: it needs `aria-label`, which the kit's Button
- * cannot carry.
+ * cannot carry; while its request is in flight it shows the kit's own spinner, the markup the kit's Button writes when busy.
+ *
+ * A success, or a 409 that refreshes, removes this row from Archived: the refreshed page lists the project under Active,
+ * and this control (and whatever in it had focus) is gone. So just before the refresh, while the pressed button or Retry
+ * still exists, focus moves to the page's Active heading (`ACTIVE_HEADING_ID`, AllProjectsView), which outlives the
+ * refresh and is where the project now appears (ruling L5-13).
  */
 export function UnarchiveProjectButton(p: { orgSlug: string; projectId: string; projectName?: string }): ReactElement {
   const router = useRouter();
@@ -37,7 +49,8 @@ export function UnarchiveProjectButton(p: { orgSlug: string; projectId: string; 
   const [canRetry, setCanRetry] = useState(false);
   const [stopped, setStopped] = useState(false);
 
-  useEffect(() => {
+  // A layout effect: focus moves in the same commit that removed the focused control, so no painted frame has it on body.
+  useLayoutEffect(() => {
     const target = focusNext.current;
     if (target === null) return;
     focusNext.current = null;
@@ -55,13 +68,14 @@ export function UnarchiveProjectButton(p: { orgSlug: string; projectId: string; 
     inFlight.current = false;
     setBusy(false);
     if (outcome.kind === 'not_saved') {
+      focusNext.current = 'retry';
       setLine(C.lost);   // keep the id: a Retry is answered again if the first request had arrived
       setCanRetry(true);
-      focusNext.current = 'retry';
       return;
     }
     if (outcome.kind === 'saved') {
       retry.current = FRESH;
+      focusActiveHeading();
       setLine('');
       setCanRetry(false);
       router.refresh();
@@ -72,19 +86,20 @@ export function UnarchiveProjectButton(p: { orgSlug: string; projectId: string; 
       window.location.assign(signInAgainHref(window.location.pathname, window.location.search));   // the session ended: sign in, then come back
     } else if (r.kind === 'stop') {
       retry.current = FRESH;   // the same request would be refused again
+      focusNext.current = 'box';
       setLine(r.line);
       setStopped(true);
       setCanRetry(false);
-      focusNext.current = 'box';
     } else if (r.kind === 'refresh') {
-      retry.current = FRESH;
+      retry.current = FRESH;   // 409: another person unarchived it first; the refreshed page lists it under Active
+      focusActiveHeading();
       setLine('');
       setCanRetry(false);
       router.refresh();
     } else {
+      focusNext.current = 'retry';
       setLine(C.failed);   // keep the id
       setCanRetry(true);
-      focusNext.current = 'retry';
     }
   }
 
@@ -97,6 +112,7 @@ export function UnarchiveProjectButton(p: { orgSlug: string; projectId: string; 
           type="button" className="ui-button ui-button--secondary ui-button--compact" disabled={stopped} aria-busy={busy ? true : undefined}
           aria-label={p.projectName === undefined ? undefined : C.named(p.projectName)} onClick={() => { void send(); }}
         >
+          {busy ? <span className="ui-button__spinner" aria-hidden="true" /> : null}
           {C.button}
         </button>
       )}{' '}

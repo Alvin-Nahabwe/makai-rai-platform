@@ -237,11 +237,11 @@ const SCREENS: Screen[] = [
     },
   },
   {
+    // NOT ESTABLISHED whether this case passes with the repair switched off, so it has no `passesWithoutRepair` (a field
+    // that says it does). Plan 1A Task 17 moved focus from a wrapper around the confirmation, which the browser scrolled
+    // wholly into view, to its Cancel button, which the browser's own focus scroll may bring in without the confirmation.
+    // Settling it needs a run with InlineConfirm's reveal switched off (components/ui, lane 1's); none has been made.
     name: 'archive project (S-10)', who: 'owner', expect: { wide: 'strip', narrow: 'strip' },
-    passesWithoutRepair: {
-      wide: 'not established since plan 1A Task 17 moved focus from a wrapper around the confirmation (which the browser scrolled wholly into view) to its Cancel button',
-      narrow: 'not established since plan 1A Task 17 moved focus from a wrapper around the confirmation (which the browser scrolled wholly into view) to its Cancel button',
-    },
     open: async (page) => {
       // A fixed name, so the heading wraps the same way in every run (project names need not be unique; the page shows one).
       const name = 'Confirm archive project';

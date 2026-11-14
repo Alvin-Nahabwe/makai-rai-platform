@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
@@ -24,7 +24,8 @@ const C = PROJECT_WRITE_COPY.archive;
  * never removed or disabled while its own request is in flight. The confirmation opens on its Cancel button (it has no
  * field) and stays open, its confirm button busy, until the answer arrives; Retry stays, busy, while its own request is
  * in flight. When the answer arrives focus goes to Retry after a lost connection or a server error, and otherwise to
- * this control's container, which holds the status line.
+ * this control's container, which holds the status line. Cancel does nothing while the request is in flight (ruling
+ * L5-15): the archive cannot be stopped once sent, so the confirmation stays open, busy, until the answer arrives.
  */
 export function ArchiveProjectControl(p: { orgSlug: string; projectId: string; projectName: string; archived: boolean }): ReactElement | null {
   const router = useRouter();
@@ -41,13 +42,16 @@ export function ArchiveProjectControl(p: { orgSlug: string; projectId: string; p
   const [canRetry, setCanRetry] = useState(false);
   const [stopped, setStopped] = useState(false);   // the role was lowered or the project is gone: the control stays, disabled, with its line
 
-  // UX-42, X-4: the confirmation has no field, so focus goes to its Cancel button, the first of its actions.
+  // UX-42, X-4: the confirmation has no field, so focus goes to its Cancel button, the first of its actions. This reaches
+  // into the kit's markup by class and order; the order (Cancel first, inside __actions) is pinned by the kit's unit case
+  // "Cancel comes before the confirm button in the markup, inside __actions" (__tests__/unit/ui/inline-confirm.test.tsx).
   useEffect(() => {
     if (confirming) box.current?.querySelector<HTMLButtonElement>('.ui-confirm__actions button')?.focus();
   }, [confirming]);
 
-  // After the render that follows an answer, focus goes to what that render left in place.
-  useEffect(() => {
+  // After the render that follows an answer, focus goes to what that render left in place. A layout effect: focus moves in
+  // the same commit that removed the focused confirm button or Retry, so no painted frame has it on the page body.
+  useLayoutEffect(() => {
     const target = focusNext.current;
     if (target === null) return;
     focusNext.current = null;
@@ -67,16 +71,16 @@ export function ArchiveProjectControl(p: { orgSlug: string; projectId: string; p
     setConfirming(false);
     if (outcome.kind === 'not_saved') {
       // Keep the id: a Retry sends the same request, which the server answers again if it had arrived.
+      focusNext.current = 'retry';
       setStatus(C.lost);
       setCanRetry(true);
-      focusNext.current = 'retry';
       return;
     }
     if (outcome.kind === 'saved' || (outcome.kind === 'rejected' && outcome.status === 409 && outcome.body.code === 'already_archived')) {
       retry.current = FRESH;
+      focusNext.current = 'box';
       setStatus(C.archived);
       setCanRetry(false);
-      focusNext.current = 'box';
       router.refresh();
       return;
     }
@@ -85,28 +89,30 @@ export function ArchiveProjectControl(p: { orgSlug: string; projectId: string; p
       window.location.assign(signInAgainHref(window.location.pathname, window.location.search));   // the session ended: sign in, then come back
     } else if (r.kind === 'stop') {
       retry.current = FRESH;   // the same request would be refused again
+      focusNext.current = 'box';
       setStatus(r.line);       // no refresh: the refreshed page leaves this control out and the line with it
       setStopped(true);
       setCanRetry(false);
-      focusNext.current = 'box';
     } else if (r.kind === 'refresh') {
       retry.current = FRESH;
+      focusNext.current = 'box';
       setStatus(null);   // another state: the refreshed page shows what applies now
       setCanRetry(false);
-      focusNext.current = 'box';
       router.refresh();
     } else {
       // A server error or a limit: say so, keep the id, and let the person try again.
+      focusNext.current = 'retry';
       setStatus(C.failed);
       setCanRetry(true);
-      focusNext.current = 'retry';
     }
   }
 
   function cancel(): void {
+    // ruling L5-15: a request in flight cannot be called back, so Cancel then does nothing and the confirmation stays
+    // open and busy: closing it would say the archive was cancelled while the project is archived a moment later
+    if (inFlight.current) return;
     setConfirming(false);
-    // the trigger is back unless a request is in flight; then the container, which holds the status line, takes focus
-    (busy ? box : trigger).current?.focus();
+    trigger.current?.focus();   // the trigger is back
   }
 
   if (p.archived && status === null) return null;

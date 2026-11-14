@@ -44,8 +44,10 @@ export function AllProjectsView({ data, children }: {
         lead={forFindings ? <p>{PROJECT_COPY.chooseForFindings}</p> : null}
         actions={data.canCreate === true ? <ButtonLink variant="primary" href={`/orgs/${data.orgSlug}/projects/new`}>{C.newProject}</ButtonLink> : null}
       />
+      {/* tabIndex -1: an unarchived project moves here, and UnarchiveProjectButton sends focus to this heading (by its id,
+          ACTIVE_HEADING_ID there) before the refresh that moves the row */}
       <section aria-labelledby="projects-active">
-        <h2 id="projects-active">{C.active}</h2>
+        <h2 id="projects-active" tabIndex={-1}>{C.active}</h2>
         <Rows orgSlug={data.orgSlug} rows={data.active} unarchive={false} forFindings={forFindings} empty={C.noActive} />
       </section>
       <section aria-labelledby="projects-archived">
