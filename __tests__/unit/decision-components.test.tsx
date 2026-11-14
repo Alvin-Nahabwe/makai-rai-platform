@@ -246,13 +246,13 @@ describe('S-12 regions', () => {
     const line = QUESTION_COPY.reworded.line.replaceAll("'", '&#x27;');
     expect(h).toContain(line);
     expect(h).toMatch(new RegExp(`<details[^>]*>\\s*<summary[^>]*>${esc(QUESTION_COPY.reworded.summary)}</summary>[\\s\\S]*Old wording\\.`));
-    // SPEC-1 ruling: the question region shows the running wording a new save re-confirms against; the disclosure, the
+    // SPEC-1 ruling: the page shows the running wording a new save re-confirms against; the disclosure, the
     // wording the current decision was answered against. Each text once.
     expect(h.match(/New wording\./g)).toHaveLength(1);
     expect(h.match(/Old wording\./g)).toHaveLength(1);
     // Plan 1C decision C1 (cut): the running wording is the guidance aside's; the earlier one is only in the disclosure.
     expect(h).toMatch(/<aside[^>]*data-region="guidance"[^>]*>[\s\S]*New wording\.[\s\S]*<\/aside>/);
-    expect(h).toMatch(/<details[^>]*>[\s\S]*Old wording\.[\s\S]*<\/details>/);
+    expect(h).toMatch(/<details[^>]*>(?:(?!<\/details>)[\s\S])*Old wording\./);
     const same = renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, current: V2 } }));
     expect(same).not.toContain(QUESTION_COPY.reworded.summary);
     expect(same).not.toContain(line);   // with the same wording there is no line (the property's own words), not only no summary

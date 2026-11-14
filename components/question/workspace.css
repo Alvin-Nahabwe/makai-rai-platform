@@ -36,6 +36,13 @@
   min-width: 0;
 }
 
+/* Each region starts clear of the one above it: the current decision under the question, the form under the current
+   decision, and in the guide column the finding link and the suggestions under the guidance. */
+.question-workspace__main > section + section,
+.question-workspace__guide > * + * {
+  margin-block-start: var(--space-6);
+}
+
 /*
  * Two columns once the main one keeps at least 30rem beside a guide of 16rem and the 1.5rem gap: 47.5rem (760px) of
  * content. From 1024px the window also holds the rail (248px), the main area's padding (2 x 2rem), the page's padding

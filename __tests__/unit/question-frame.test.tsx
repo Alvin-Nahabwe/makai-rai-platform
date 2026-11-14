@@ -84,7 +84,7 @@ describe('the question page frame (slice 1)', () => {
     const html = await render();
     expect(html).toContain(`<h1 id="question-heading" tabindex="-1" class="question-frame__title">${RUNNING.text}</h1>`);
     expect(html.split(RUNNING.text)).toHaveLength(2);
-    expect(html).not.toContain(QUESTION.text);   // the wording the decision was answered against is only in the reworded disclosure, which is not open here
+    expect(html).not.toContain(QUESTION.text);   // the question text the decision was answered against is printed nowhere (the reworded disclosure holds the earlier good practice, not the earlier question)
     expect(html.match(/<h1\b/g)).toHaveLength(1);
     // The code line: the page title's own words, in an element of its own directly after the h1 (FocusOnArrival renders nothing).
     expect(html).toMatch(/<\/h1><p class="question-frame__code">Q-PP-01 · Problem Formulation<\/p>/);

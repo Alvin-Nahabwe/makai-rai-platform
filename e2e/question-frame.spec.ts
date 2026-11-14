@@ -43,14 +43,14 @@ const box = async (l: Locator) => {
 const heading = (page: Page) => page.locator('#question-heading');
 const form = (page: Page) => page.locator('section[data-region="answer-form"]');
 const aside = (page: Page) => page.locator('aside[data-region="guidance"]');
-/** The first option of the status choice, the form's first field. */
-const firstStatus = (page: Page) => page.locator('label[for="decision-status-done"]');
+/** The last option's card of the status choice, the form's first field: the four cards are stacked, so the choice ends where this card ends. */
+const lastStatus = (page: Page) => page.locator('.ui-radio-card:has(#decision-status-not_applicable)');
 
-/** The status choice is wholly in the first view: nothing has scrolled, and its first option ends above the fold. */
+/** The status choice is wholly in the first view: nothing has scrolled, and its last option's card ends above the fold. */
 async function expectStatusInFirstView(page: Page, height: number, what: string): Promise<void> {
   const scrolled = await page.evaluate(() => window.scrollY + (document.querySelector('.shell__main')?.scrollTop ?? 0));
   expect(scrolled, `${what}: the page has not scrolled`).toBe(0);
-  const b = await box(firstStatus(page));
+  const b = await box(lastStatus(page));
   expect(b.y + b.height, `${what}: the status choice ends at ${b.y + b.height}px of ${height}`).toBeLessThanOrEqual(height);
 }
 
