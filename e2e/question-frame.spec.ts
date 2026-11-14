@@ -188,7 +188,9 @@ for (const role of ['viewer', 'reviewer'] as const) {
     await expect(page.locator('blockquote.current-decision__reason')).toHaveText(reason);
     const open = page.locator('section[data-region="open-work"]');
     await expect(open.getByRole('heading', { level: 2 })).toHaveText(QUESTION_COPY.reading.stillOpen(1));
-    await expect(page.locator('form')).toHaveCount(0);
+    // No decision form; the route column's GET filter ("Show") is a form of its own and stays for every role.
+    await expect(page.locator('form:not(.route-column__filter)')).toHaveCount(0);
+    await expect(page.locator('[data-region="answer-form"]')).toHaveCount(0);
     await expect(page.locator('.decision-save-bar')).toHaveCount(0);
     const raise = page.getByRole('link', { name: QUESTION_COPY.findingLink.raise });
     await expect(raise).toHaveCount(role === 'reviewer' ? 1 : 0);
