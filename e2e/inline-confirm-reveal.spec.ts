@@ -226,8 +226,11 @@ const SCREENS: Screen[] = [
     },
   },
   {
-    name: 'decision withdrawal on the question page, inside More (S-12)', who: 'owner', expect: { wide: 'no-strip', narrow: 'grown-strip' },
-    passesWithoutRepair: { wide: 'the focus target opens hidden past the end of the page, and the browser\'s own focus scroll brings it in' },
+    // At 1280 the guidance is below the form since the route column (lane 7 part 2, owner's decision of 14 November
+    // 2026), so the page runs on past the form and the trigger can be scrolled to a strip: 'strip', where it was
+    // 'no-strip' with the guidance beside the form. Whether 'strip' passes without the repair is not established, so the
+    // `passesWithoutRepair` note of the old geometry is not carried over.
+    name: 'decision withdrawal on the question page, inside More (S-12)', who: 'owner', expect: { wide: 'strip', narrow: 'grown-strip' },
     open: async (page) => {
       await load(page, questionPath(await decided('Q-PP-01'), 'Q-PP-01'));
       await page.locator('summary', { hasText: new RegExp(`^${WITHDRAW_COPY.more.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`) }).click();
