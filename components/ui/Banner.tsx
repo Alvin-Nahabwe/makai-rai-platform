@@ -1,7 +1,6 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import type { IconName } from '@/components/ui/types';
-import './Banner.css';
 
 export type BannerKind = 'offline' | 'archived' | 'session' | 'info';
 
