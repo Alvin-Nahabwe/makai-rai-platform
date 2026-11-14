@@ -171,6 +171,17 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
   });
 
   // W-3 narrow: the fixed save bar's height is the space the page reserves under its content (DecisionForm.css).
+  // Measured after every render too, not only by the observer below: a render that grows the bar (the unsaved line
+  // appearing on the first edit) is followed at once by the next key, and the observer reports only at the next
+  // rendering frame, so a Tab before that frame scrolled the next field into view above the bar's old height and the
+  // bar covered it (SC 2.4.11). A layout effect runs inside the same event, before the next key is handled.
+  useLayoutEffect(() => {
+    const bar = saveBar.current;
+    if (bar === null) return;
+    const root = document.documentElement;
+    const h = `${bar.offsetHeight}px`;
+    if (root.style.getPropertyValue('--decision-save-bar-h') !== h) root.style.setProperty('--decision-save-bar-h', h);
+  });
   useEffect(() => {
     const bar = saveBar.current;
     if (bar === null || typeof ResizeObserver === 'undefined') return;
