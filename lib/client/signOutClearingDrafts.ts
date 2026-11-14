@@ -1,4 +1,5 @@
 import { signOut } from 'next-auth/react';
+import { clearLastProjects } from '@/lib/client/lastProject';
 
 /** `DRAFT_PREFIX` of lib/client/drafts.ts, written here so the store stays out of the page (a test pins the two equal). */
 export const DRAFT_KEY_PREFIX = 'makrai.draft.v1:';
@@ -25,9 +26,12 @@ function sweepAccountDrafts(userId: string): void {
 /**
  * A person-started sign-out that first removes this account's drafts from this device (NFR-PRIV-06), as the sidebar's
  * sign-out does. The draft store is imported inside the call, never at module load: imported statically it put about
- * 10 KB of source into the first visit of S-04 and S-05, over the owner's NFR-PERF-02 limit for those pages.
+ * 10 KB of source into the first visit of S-04 and S-05, over the owner's NFR-PERF-02 limit for those pages. It also removes
+ * this account's last-project keys (plan 1A Task 12, L2-66), outside the drafts' try, so that does not depend on the
+ * store's chunk loading; lib/client/lastProject.ts imports nothing, so it adds nothing of weight here.
  */
 export async function signOutClearingDrafts(userId: string, callbackUrl: string): Promise<void> {
+  clearLastProjects(userId);
   try {
     (await import('@/lib/client/drafts')).openDraftStore()?.purgeAccount(userId);
   } catch {

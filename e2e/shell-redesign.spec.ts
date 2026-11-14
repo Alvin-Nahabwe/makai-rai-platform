@@ -20,7 +20,7 @@ import { expectNoHorizontalScroll } from './helpers/reflow';
 
 const WARNING = 'You will be signed out in 2 minutes because nothing has happened for a while.';
 const ENDED = 'You have been signed out. What you typed is still on this page.';
-const ORG_ITEMS = ['Home', 'Projects', 'Findings', 'Guidance', 'Members', 'Organisation details', 'My account'];
+const ORG_ITEMS = ['Home', 'Projects', 'Findings', 'Guidance', 'Help', 'Members', 'Organisation details', 'My account'];
 /** 70 characters, no hyphen and no space: the hardest organisation name to fit in the rail. */
 const LONG_ORG_NAME = 'Kampalanakasongolaresponsibleartificialintelligencelaboratoryformakere';
 const PERSON_NAME = 'Ssekandi Nnaŋŋa';
@@ -262,11 +262,15 @@ for (const width of [1023, 375]) {
       await railLinks(page).filter({ hasText: 'Projects' }).click();
       await page.waitForURL((url) => url.pathname === `/orgs/${slug}/projects`);
 
-      // A link that keeps the pathname closes the panel too: Findings (?for=findings), then the current item.
+      // A link that keeps the pathname closes the panel too: Findings (?for=findings), then the current item. Since plan 1A
+      // Task 12 the Projects page sends Findings straight to a project's findings when the organisation has one project, so
+      // the press ends on either address; the panel must close on both (on the kept pathname, or on the navigation).
       await menu.click();
       await expect(panel).toBeVisible();
       await railLinks(page).filter({ hasText: 'Findings' }).click();
-      await page.waitForURL((url) => url.pathname === `/orgs/${slug}/projects` && url.searchParams.get('for') === 'findings');
+      await page.waitForURL((url) =>
+        (url.pathname === `/orgs/${slug}/projects` && url.searchParams.get('for') === 'findings')
+        || new RegExp(`^/orgs/${slug}/projects/[0-9a-f-]{36}/findings$`).test(url.pathname));
       await expect(panel).toBeHidden();
       await expect(menu).toHaveAttribute('aria-expanded', 'false');
       await menu.click();

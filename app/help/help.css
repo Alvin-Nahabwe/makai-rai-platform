@@ -1,0 +1,83 @@
+/*
+ * Help, /help (plan 1A Task 12, ruling L2-69): a reading page. One column no wider than the reading measure, headings on
+ * the type ramp, each term and its definition read as one item, more space between groups than between items. Only the
+ * tokens of app/globals.css; no card, no icon, no colour beyond ink and the link colour, no motion. It sits under the
+ * public header (inside .public-layout, which centres its child in a flex row) and inside the shell's main.
+ */
+.help {
+  inline-size: 100%;
+  max-inline-size: var(--measure-reading);
+  align-self: flex-start;
+  margin-inline: auto;
+  padding: var(--space-8) var(--space-4) var(--space-12);
+  color: var(--color-ink);
+  overflow-wrap: break-word;
+}
+
+.help h2 {
+  margin-block: var(--space-12) var(--space-4);
+  font-size: var(--font-size-h2);
+  color: var(--color-heading);
+  text-wrap: balance;
+}
+
+.help h3 {
+  margin-block: var(--space-8) var(--space-3);
+  font-size: var(--font-size-h3);
+  color: var(--color-heading);
+  text-wrap: balance;
+}
+
+/* A followed anchor (#terms-and-privacy, #what-sealing-means) lands with a little air above its heading. */
+.help [id] {
+  scroll-margin-block-start: var(--space-4);
+}
+
+.help p {
+  margin-block: 0 var(--space-4);
+  font-size: var(--font-size-body);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.help__list {
+  margin: 0;
+}
+
+.help__list dt {
+  margin-block-start: var(--space-5);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.5;
+  color: var(--color-ink);
+}
+
+.help__list dt:first-child {
+  margin-block-start: 0;
+}
+
+.help__list dd {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-regular);
+  line-height: 1.5;
+  color: var(--color-ink);
+  text-wrap: pretty;
+}
+
+.help__links {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.help__links a,
+.help > p a,
+.help section p a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 1.5rem;
+}

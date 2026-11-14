@@ -19,6 +19,8 @@ import { DeviceDateTime, ReviewStateLine } from '@/components/review/DeviceTime'
 import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
 import { SEAL_PROOF_HREF, contentChangedLine, reviewStateLine, sealAgainLabel } from '@/components/review/reviewText';
+import RememberProject from '@/components/layout/RememberProject';
+import { HELP_COPY } from '@/lib/help/copy';
 
 interface PageProps {
   params: Promise<{ slug: string; id: string; reviewId: string }>;
@@ -36,7 +38,7 @@ const load = cache(async (slug: string, id: string, reviewId: string) => {
   if (project === null) notFound();
   const review = (await listStageReviews(ctx, id)).find((r) => r.id === reviewId);
   if (review === undefined) notFound();
-  return { ctx, project, review };
+  return { identity, ctx, project, review };
 });
 
 /** The review's own heading (its name), then the project. */
@@ -55,7 +57,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
  */
 export default async function StageReviewPage({ params }: PageProps) {
   const { slug, id, reviewId } = await params;
-  const { ctx, project, review } = await load(slug, id, reviewId);
+  const { identity, ctx, project, review } = await load(slug, id, reviewId);
   const [seals, documents, findings] = await Promise.all([
     listSeals(ctx, reviewId), listDocuments(ctx, { projectId: id, reviewId }),
     review.changed !== null && review.changed.changedFindings.length > 0 ? listFindings(ctx, id, review.stage) : Promise.resolve([]),
@@ -114,7 +116,7 @@ export default async function StageReviewPage({ params }: PageProps) {
 
       <section aria-labelledby="review-seals">
         <h2 id="review-seals">Seals</h2>
-        <p><a href={SEAL_PROOF_HREF}>What a seal proves</a></p>
+        <p><a href={SEAL_PROOF_HREF}>{HELP_COPY.sealing.heading}</a></p>
         {seals.length === 0 ? null : (
           <ul>
             {seals.map((s) => (
@@ -136,6 +138,7 @@ export default async function StageReviewPage({ params }: PageProps) {
           <p><a href={`${base}/reviews/${encodeURIComponent(review.id)}/documents`}>Generate a document</a></p>
         ) : null}
       </section>
+      <RememberProject userId={identity.userId} orgSlug={slug} projectId={project.id} />
     </div>
   );
 }

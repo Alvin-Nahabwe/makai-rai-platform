@@ -67,6 +67,34 @@ describe('NFR-PRIV-06 CR-1 SFH-4: signOutClearingDrafts', () => {
     }
   });
 
+  it('1A Task 12 L2-66 S4: the last-project keys of this account only are removed before signOut, whether or not the store loads', async () => {
+    for (const store of ['loads', 'fails'] as const) {
+      const keys = new Map<string, string>([
+        ['makrai:last-project:u-1:acme', 'p'], ['makrai:last-project:u-1:beta', 'p'],
+        ['makrai:last-project:u-10:acme', 'p'], ['makrai:last-project:u-2:acme', 'p'], ['other', 'kept'],
+      ]);
+      let atSignOut: string[] = [];
+      signOut.mockImplementationOnce(async () => { atSignOut = [...keys.keys()].sort(); });
+      vi.stubGlobal('localStorage', {
+        get length() { return keys.size; },
+        key: (i: number) => [...keys.keys()][i] ?? null,
+        removeItem: (k: string) => { keys.delete(k); },
+      });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      vi.resetModules();
+      if (store === 'loads') vi.doMock('@/lib/client/drafts', () => ({ openDraftStore: () => ({ purgeAccount: () => {} }) }));
+      else vi.doMock('@/lib/client/drafts', () => { throw new Error('ChunkLoadError'); });
+      try {
+        const { signOutClearingDrafts } = await import('@/lib/client/signOutClearingDrafts');
+        await signOutClearingDrafts('u-1', '/login');
+        expect(atSignOut, store).toEqual(['makrai:last-project:u-10:acme', 'makrai:last-project:u-2:acme', 'other']);
+      } finally {
+        warn.mockRestore();
+        vi.unstubAllGlobals();
+      }
+    }
+  });
+
   it('NFR-PRIV-06 FIX-7: the prefix this file sweeps is the draft store\'s own', async () => {
     const { DRAFT_PREFIX } = await vi.importActual<typeof import('@/lib/client/drafts')>('@/lib/client/drafts');
     const { DRAFT_KEY_PREFIX } = await import('@/lib/client/signOutClearingDrafts');

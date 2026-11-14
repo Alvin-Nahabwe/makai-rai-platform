@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 const pathnameMock = vi.hoisted(() => vi.fn());
@@ -188,12 +188,12 @@ describe('the rail, ported from the sidebar (UX-02, UX-41)', () => {
     }
   });
 
-  it('1A Task 11 L2-49: the organisation rail lists Home, Projects, Findings, Guidance, Members, Organisation details, My account at their addresses', () => {
+  it('1A Task 12 L2-48: the organisation rail lists Home, Projects, Findings, Guidance, Help, Members, Organisation details, My account at their addresses', () => {
     const html = rail('/orgs/a/dashboard');
-    expect(linkLabels(html)).toEqual(['Home', 'Projects', 'Findings', 'Guidance', 'Members', 'Organisation details', 'My account']);
+    expect(linkLabels(html)).toEqual(['Home', 'Projects', 'Findings', 'Guidance', 'Help', 'Members', 'Organisation details', 'My account']);
     const hrefs = [...navOf(html).matchAll(/<a [^>]*href="([^"]*)"/g)].map((m) => m[1].replace(/&amp;/g, '&'));
     expect(hrefs).toEqual([
-      '/orgs/a/dashboard', '/orgs/a/projects', '/orgs/a/projects?for=findings', '/explore/framework',
+      '/orgs/a/dashboard', '/orgs/a/projects', '/orgs/a/projects?for=findings', '/explore/framework', '/help',
       '/orgs/a/settings/members', '/orgs/a/settings/organisation', '/account',
     ]);
     // Members and Organisation details, then the person, then My account, in the lower list.
@@ -208,8 +208,8 @@ describe('the rail, ported from the sidebar (UX-02, UX-41)', () => {
     expect(stripTags(html)).toContain('MAK-AI administrator');
   });
 
-  it('UX-02 (SRS 7.1.1): an account in no organisation sees only Guidance and My account', () => {
-    expect(linkLabels(rail('/explore/framework', noOrg))).toEqual(['Guidance', 'My account']);
+  it('UX-02 (SRS 7.1.1) 1A Task 12 L2-48: an account in no organisation sees only Guidance, Help and My account', () => {
+    expect(linkLabels(rail('/explore/framework', noOrg))).toEqual(['Guidance', 'Help', 'My account']);
   });
 
   it('UX-02: the rail says "Switch organisation" in British spelling', () => {
@@ -224,7 +224,7 @@ describe('the rail, ported from the sidebar (UX-02, UX-41)', () => {
     expect(rail('/orgs/a/dashboard')).toMatch(/<button type="button" class="shell-rail__signout">[\s\S]*?Sign out<\/button>/);
   });
 
-  it('1A Task 11 T6: the shell reads and writes no storage but the theme key, and builds no address from storage or a query', () => {
+  it('1A Task 12 L2-64: the shell touches no storage but the theme key and lib/client/lastProject.ts, and builds no address from a query', () => {
     for (const file of ['components/layout/Rail.tsx', 'components/layout/TopBar.tsx', 'components/layout/OrgSwitcher.tsx', 'components/layout/AppShell.tsx', 'lib/shell/nav.ts', 'lib/shell/data.ts']) {
       const source = readFileSync(file, 'utf8');
       expect(source, file).not.toMatch(/localStorage|sessionStorage|indexedDB|useSearchParams|searchParams|document\.cookie/);
@@ -232,6 +232,32 @@ describe('the rail, ported from the sidebar (UX-02, UX-41)', () => {
     const theme = readFileSync('components/layout/ThemeToggle.tsx', 'utf8');
     expect([...theme.matchAll(/localStorage\.(\w+)\(/g)].map((m) => m[1])).toEqual(['setItem']);
     expect(theme).toContain("localStorage.setItem('theme', next)");
+    // The one file under components/layout and lib/shell, besides the theme switch, that names localStorage is
+    // lib/client/lastProject.ts: one getItem, one setItem and the removal loop, each inside a try.
+    const layoutAndShell = [
+      ...readdirSync('components/layout').map((f) => `components/layout/${f}`),
+      ...readdirSync('lib/shell').map((f) => `lib/shell/${f}`),
+    ].filter((f) => /\.(ts|tsx)$/.test(f) && f !== 'components/layout/ThemeToggle.tsx');
+    for (const f of layoutAndShell) expect(readFileSync(f, 'utf8'), f).not.toMatch(/localStorage/);
+    const store = readFileSync('lib/client/lastProject.ts', 'utf8');
+    expect([...store.matchAll(/localStorage\.(\w+)\(/g)].map((m) => m[1])).toEqual(['getItem', 'setItem', 'key', 'removeItem']);
+    for (const call of ['localStorage.getItem(', 'localStorage.setItem(', 'localStorage.key(', 'localStorage.removeItem(']) {
+      const before = store.slice(0, store.indexOf(call));
+      expect(before.lastIndexOf('try {'), call).toBeGreaterThan(before.lastIndexOf('}\n'));
+    }
+    // The rail reads it through the store's subscription, after hydration (the server snapshot is null).
+    const railSource = readFileSync('components/layout/Rail.tsx', 'utf8');
+    expect(railSource).toMatch(/useSyncExternalStore\(\s*subscribeLastProject,\s*\(\) => \(slug \? readLastProject\(shell\.userId, slug\) : null\),\s*\(\) => null,?\s*\)/);
+  });
+
+  it('1A Task 12 P2: the server-rendered Findings link is the plain address, whatever the device holds', () => {
+    const hrefs = [...navOf(rail('/orgs/a/projects/3f2b8c1e-9a4d-4e6f-8b2a-1c3d5e7f9a0b')).matchAll(/<a [^>]*href="([^"]*)"/g)].map((m) => m[1].replace(/&amp;/g, '&'));
+    expect(hrefs).toContain('/orgs/a/projects?for=findings');
+  });
+
+  it('1A Task 12 L2-66 S4: the rail\'s Sign out clears this person\'s last-project keys before signing out', () => {
+    const source = readFileSync('components/layout/Rail.tsx', 'utf8');
+    expect(source).toMatch(/onClick=\{\(\) => \{\s*clearLastProjects\(shell\.userId\);\s*void signOut\(\{ callbackUrl: '\/login' \}\);\s*\}\}/);
   });
 });
 

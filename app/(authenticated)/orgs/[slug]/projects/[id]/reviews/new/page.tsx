@@ -11,6 +11,7 @@ import { STAGES, type Stage } from '@/types/record';
 import { REVIEW_COPY } from '@/lib/review/copy';
 import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
+import RememberProject from '@/components/layout/RememberProject';
 
 interface PageProps {
   params: Promise<{ slug: string; id: string }>;
@@ -45,11 +46,12 @@ export default async function OpenReviewPage({ params, searchParams }: PageProps
   const { stage } = await searchParams;
   const { identity, ctx, project } = await load(slug, id);
   const heading = <h1>Open a stage review</h1>;
+  const remember = <RememberProject userId={identity.userId} orgSlug={slug} projectId={project.id} />;
   if (!can(ctx.role, 'review:open')) {
-    return <div className="page-content">{heading}<p>Only owners, admins and assessors can open a stage review.</p></div>;
+    return <div className="page-content">{heading}<p>Only owners, admins and assessors can open a stage review.</p>{remember}</div>;
   }
   if (project.archivedAt !== null) {
-    return <div className="page-content"><ArchivedBanner archived />{heading}</div>;
+    return <div className="page-content"><ArchivedBanner archived />{heading}{remember}</div>;
   }
   // Only the next number of each stage is needed: one read of the reviews' stages and numbers, not the seal state (C4 SF-6).
   const reviews = await withOrg(ctx, (tx) => tx.stageReview.findMany({ where: { projectId: id }, select: { stage: true, numberInStage: true } }));
@@ -59,6 +61,7 @@ export default async function OpenReviewPage({ params, searchParams }: PageProps
     <div className="page-content">
       {heading}
       <OpenReviewForm orgSlug={slug} projectId={id} userId={identity.userId} fixedStage={fixedStage} nextNumbers={nextNumbers} />
+      {remember}
     </div>
   );
 }

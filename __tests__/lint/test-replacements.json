@@ -934,5 +934,45 @@
     "property": "At phone width in the dark theme the menu button is visible against its own background (U12 (a), coordinator ruling R2). The bars are replaced by the word Menu, so the minimum is the text minimum, 4.5:1.",
     "proof": "The renamed case at 390 px with the dark scheme emulated finds the visible .shell-topbar__menu-button reading Menu, confirms the dark media query matches, and measures the computed colour of the button's text against its computed background at 4.5:1 or better. __tests__/unit/design-tokens.test.ts holds the same pair in every theme.",
     "task": "1A Task 11"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/review-text.test.ts::UX-18 (G023, G050): Go to them opens S-11 with its drafts filter, and What a seal proves opens its About anchor",
+    "replacedBy": "__tests__/unit/review-text.test.ts::UX-18 (G023, G050): Go to them opens S-11 with its drafts filter, and the seal link opens What sealing means on Help",
+    "property": "The review page's seal link (contract G050) reaches the place that says what a seal shows and does not show. That place moved from About's section to Help's \"What sealing means\" (plan 1A Task 12, rulings R10 and W2), so the link's address and the title's words change; the drafts address is unchanged.",
+    "proof": "The case now requires SEAL_PROOF_HREF to equal '/help#what-sealing-means', literal for literal. __tests__/unit/help-page.test.tsx's W2 case requires the Help page to render an h2 whose id is that address's fragment, so the address and the heading cannot drift apart; the draftsHref assertion is kept byte for byte.",
+    "task": "1A Task 12"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/about-page.test.tsx::FR-PUB-04 UX-03: the seal section says what a seal does not prove and keeps the exact timestamp sentence",
+    "replacedBy": "__tests__/unit/help-page.test.tsx::W1 (FR-PUB-04 UX-03): \"What sealing means\" is the two paragraphs, word for word, and says what a seal does not show",
+    "property": "The platform says publicly, on a page anyone can open, what a seal does not show. By the coordinator's ruling (answer i) that statement moves from About to Help in the audit's words, and the sentence \"Sealed by the platform; not independently time-stamped.\" leaves the public pages; it stays on the documents (lib/documents/copy.ts:10). The old case's second half (that exact sentence on About) is therefore not carried over, on purpose.",
+    "proof": "The Help case renders the real Help page and requires the section with id what-sealing-means to hold exactly the two W1 paragraphs, the second beginning \"A seal does not show that the decisions are correct or that the evidence supports them.\", and the page to hold no \"not independently time-stamped\". The layout cases of the same file show the page is served to a signed-out visitor (public header, no session), so the statement stays public.",
+    "task": "1A Task 12"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/sidebar-role.test.tsx::UX-02: the organisation shell lists the 7.1.1 items in order, Switch organisation only for more than one",
+    "replacedBy": "__tests__/unit/ui/shell.test.tsx::1A Task 12 L2-48: the organisation rail lists Home, Projects, Findings, Guidance, Help, Members, Organisation details, My account at their addresses",
+    "property": "The organisation's navigation lists its items in their fixed order. Task 11 carried this to the rail case, whose title named the items; plan 1A Task 12 adds Help after Guidance (ruling L2-48), so that case is retitled to name Help and this entry points the chain at the new title.",
+    "proof": "The retitled case renders the real Rail for a member at /orgs/a/dashboard and requires the link names, in order, to be Home, Projects, Findings, Guidance, Help, Members, Organisation details, My account, and the lower list to hold the person between Organisation details and My account.",
+    "task": "1A Task 12"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/sidebar-role.test.tsx::UX-02: the organisation items and the Explore items point at the 7.1.5 addresses",
+    "replacedBy": "__tests__/unit/ui/shell.test.tsx::1A Task 12 L2-48: the organisation rail lists Home, Projects, Findings, Guidance, Help, Members, Organisation details, My account at their addresses",
+    "property": "Each organisation item of the navigation points at its address. The rail case Task 11 named is retitled by plan 1A Task 12 (Help added, ruling L2-48); this entry points the chain at the new title.",
+    "proof": "The retitled case requires the hrefs in order: /orgs/a/dashboard, /orgs/a/projects, /orgs/a/projects?for=findings, /explore/framework, /help, /orgs/a/settings/members, /orgs/a/settings/organisation, /account.",
+    "task": "1A Task 12"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/sidebar-role.test.tsx::UX-02: an account in no organisation sees only Explore and My account (SRS 7.1.1)",
+    "replacedBy": "__tests__/unit/ui/shell.test.tsx::UX-02 (SRS 7.1.1) 1A Task 12 L2-48: an account in no organisation sees only Guidance, Help and My account",
+    "property": "An account in no organisation sees no organisation item, only the items every account has. Plan 1A Task 12 adds Help to those (ruling L2-48), so the rail case is retitled and this entry points the chain at it.",
+    "proof": "The retitled case renders the real Rail for an account with no organisation and requires exactly the links Guidance, Help and My account.",
+    "task": "1A Task 12"
   }
 ]

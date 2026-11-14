@@ -22,6 +22,7 @@ import { canWithdrawVersion, questionHref } from '@/lib/question/draft';
 import { DECISION_COPY } from '@/lib/decision/copy';
 import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
+import RememberProject from '@/components/layout/RememberProject';
 
 /** n in the in-page link "Ways teams address this (n)": SUG's `suggestionCount`. At 0 (the gate) there is no link and no section. */
 function countFor(data: QuestionPanelData): number {
@@ -169,5 +170,10 @@ export default async function QuestionPage({
   const { slug, id, stage, questionId } = await params;
   // The project's name is for the title only; the regions (and the client form inside them) get the panel as before.
   const { projectName: _projectName, ...data } = await load(slug, id, stage, questionId);
-  return <QuestionPanelRegions data={data} />;
+  return (
+    <>
+      <QuestionPanelRegions data={data} />
+      <RememberProject userId={data.viewer.userId} orgSlug={slug} projectId={data.projectId} />
+    </>
+  );
 }
