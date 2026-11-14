@@ -59,16 +59,16 @@ describe('QuestionContent', () => {
     expect(html.match(/<h2\b/g)).toHaveLength(2);
   });
 
-  it('UX-08 NFR-A11Y-05 (UX-34): the jump link is shown only below the two-column width, is at least 24 by 24 pixels, and keeps a visible focus ring', () => {
+  it('UX-08 NFR-A11Y-05 (UX-34): the jump link is shown only while the guidance is not beside the form, is at least 24 by 24 pixels, and keeps a visible focus ring', () => {
     const html = renderToStaticMarkup(<QuestionContent question={q} suggestionCount={3} />);
     expect(html).toMatch(/<a class="question-content__jump" href="#suggestions">/);
     const css = readFileSync('components/question/QuestionContent.css', 'utf8');
     expect(readFileSync('components/question/QuestionContent.tsx', 'utf8')).toContain("import './QuestionContent.css';");
-    // Hidden by the same media query that makes the page two columns (components/question/workspace.css): the main
-    // column of at least 30rem beside a guide of 16rem, with the rail, the paddings and a scroll bar, from 72.5rem.
-    expect(css).toMatch(/@media \(width >= 72\.5rem\) \{\s*\.question-content__jump \{\s*display: none;/);
+    // Hidden by the same media query that puts the guidance beside the form (components/question/workspace.css): from
+    // 90rem the three columns, the stage's questions, the main one and the guide; under it the guidance is below the form.
+    expect(css).toMatch(/@media \(width >= 90rem\) \{\s*\.question-content__jump \{\s*display: none;/);
     expect(readFileSync('components/question/workspace.css', 'utf8'))
-      .toMatch(/@media \(width >= 72\.5rem\) \{\s*\.question-workspace \{\s*grid-template-columns: minmax\(0, 2fr\) minmax\(16rem, 1fr\);/);
+      .toMatch(/@media \(width >= 90rem\) \{\s*\.question-workspace \{\s*grid-template-columns: minmax\(16rem, 1fr\) minmax\(0, 2fr\) minmax\(16rem, 1fr\);\s*grid-template-areas: "route main guide";/);
     expect(css).not.toContain('75rem');
     expect(css).toMatch(/\.question-content__jump \{[^}]*min-block-size: 24px;[^}]*min-inline-size: 24px;/);
     expect(css).toMatch(/\.question-content__jump:focus-visible \{[^}]*outline: 3px solid var\(--color-action-text\);/);

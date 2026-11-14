@@ -8,7 +8,8 @@ import { QUESTION_COPY } from '../lib/question/copy';
 
 /**
  * The question page's frame (plan 1C decision C1, cut to slice 1): the question in words is the h1, the form follows it
- * in the main column, and the guidance is an aside, beside the form on a wide window and after it on a narrow one.
+ * in the main column, and the guidance is an aside, below the form from 72.5rem with the stage's questions as a column on
+ * the left, beside the form from 90rem, and after it on a narrow one (owner's decision "Route column", 14 November 2026).
  * Every project is new, so no question has a decision. Q-PP-01 has the longest text of the fixture bundle the server
  * runs on; the longest text of the real bundles (data/content) is put into the h1 in place to measure it too.
  */
@@ -54,14 +55,18 @@ async function expectStatusInFirstView(page: Page, height: number, what: string)
   expect(b.y + b.height, `${what}: the status choice ends at ${b.y + b.height}px of ${height}`).toBeLessThanOrEqual(height);
 }
 
-test('at 1280 by 900 the guidance aside is to the right of the form, and the status choice is in the first view for a question with no decision', async ({ page, baseURL }) => {
+const routeCol = (page: Page) => page.locator('.question-workspace__route');
+
+test('at 1280 by 900 the stage\'s questions are the column left of the form, the guidance aside is below the form, and the status choice is in the first view for a question with no decision', async ({ page, baseURL }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await openQuestion(page, 'assessor', Q, baseURL!);
   await expect(heading(page), 'Q-PP-01 is the fixture bundle\'s longest question').toHaveText(LONGEST_FIXTURE);
   const f = await box(form(page));
   const a = await box(aside(page));
-  expect(a.x, 'the aside starts right of the form').toBeGreaterThanOrEqual(f.x + f.width);
-  expect(a.y, 'the aside starts beside the form, not below it').toBeLessThan(f.y + f.height);
+  const r = await box(routeCol(page));
+  expect(f.x, 'the form starts right of the stage\'s column').toBeGreaterThanOrEqual(r.x + r.width);
+  expect(r.y, 'the column starts beside the form, not below it').toBeLessThan(f.y + f.height);
+  expect(a.y, 'the aside starts below the form').toBeGreaterThanOrEqual(f.y + f.height);
   await expectStatusInFirstView(page, 900, Q);
   // The longest question of the running real bundle, in the same place.
   expect(LONGEST_REAL.length).toBeGreaterThan(0);
@@ -69,21 +74,39 @@ test('at 1280 by 900 the guidance aside is to the right of the form, and the sta
   await expectStatusInFirstView(page, 900, `the longest real question (${LONGEST_REAL.length} characters)`);
 });
 
-test('the two columns start at 72.5rem: at 1160 the main column keeps 30rem beside a 16rem guide, at 1150 the page is one column', async ({ page, baseURL }) => {
+test('the column starts at 72.5rem: at 1160 the main column keeps 30rem beside a 16rem column, at 1150 the page is one column; three columns from 90rem: at 1440 the main one keeps 30rem, at 1430 two', async ({ page, baseURL }) => {
   const projectId = await newProject(baseURL!);
   await page.setViewportSize({ width: 1160, height: 900 });
   await openQuestion(page, 'assessor', Q, baseURL!, projectId);
   const main = await box(page.locator('.question-workspace__main'));
+  const route = await box(routeCol(page));
   const guide = await box(page.locator('.question-workspace__guide'));
   expect(main.width, 'the main column').toBeGreaterThanOrEqual(480);
-  expect(guide.width, 'the guide column').toBeGreaterThanOrEqual(256);
-  expect(guide.x).toBeGreaterThanOrEqual(main.x + main.width);
-  await expect(page.locator('.question-content__jump')).toBeHidden();
+  expect(route.width, 'the stage\'s column').toBeGreaterThanOrEqual(256);
+  expect(main.x).toBeGreaterThanOrEqual(route.x + route.width);
+  expect(guide.y, 'the guide is below the main column').toBeGreaterThanOrEqual(main.y + main.height);
+  await expect(page.locator('.question-content__jump'), 'the guidance is not beside the form: the jump link shows').toBeVisible();
   await page.setViewportSize({ width: 1150, height: 900 });
   const main2 = await box(page.locator('.question-workspace__main'));
   const guide2 = await box(page.locator('.question-workspace__guide'));
+  const route2 = await box(routeCol(page));
   expect(guide2.y, 'the guide follows the main column').toBeGreaterThanOrEqual(main2.y + main2.height);
+  expect(route2.y, 'the stage\'s short form follows the guide').toBeGreaterThanOrEqual(guide2.y + guide2.height);
   await expect(page.locator('.question-content__jump')).toBeVisible();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const main3 = await box(page.locator('.question-workspace__main'));
+  const route3 = await box(routeCol(page));
+  const guide3 = await box(page.locator('.question-workspace__guide'));
+  expect(main3.width, 'the main column at 1440').toBeGreaterThanOrEqual(480);
+  expect(route3.width).toBeGreaterThanOrEqual(256);
+  expect(guide3.width).toBeGreaterThanOrEqual(256);
+  expect(main3.x).toBeGreaterThanOrEqual(route3.x + route3.width);
+  expect(guide3.x).toBeGreaterThanOrEqual(main3.x + main3.width);
+  await expect(page.locator('.question-content__jump')).toBeHidden();
+  await page.setViewportSize({ width: 1430, height: 900 });
+  const main4 = await box(page.locator('.question-workspace__main'));
+  const guide4 = await box(page.locator('.question-workspace__guide'));
+  expect(guide4.y, 'at 1430 the guide is below the main column').toBeGreaterThanOrEqual(main4.y + main4.height);
 });
 
 test('at 375 by 812 the page is one column in reading order: heading, current decision, form, guidance, finding link; nothing scrolls sideways; the end of the page clears the fixed save bar', async ({ page, baseURL }) => {
@@ -147,7 +170,7 @@ test('a Viewer sees the same frame with no form controls', async ({ page, baseUR
   await expect(main.locator('input, select, textarea, button')).toHaveCount(0);
   const f = await box(page.locator('section[data-region="current-decision"]'));
   const a = await box(aside(page));
-  expect(a.x).toBeGreaterThanOrEqual(f.x + f.width);
+  expect(a.y, 'the aside is below the form at 1280').toBeGreaterThanOrEqual(f.y + f.height);
 });
 
 /**

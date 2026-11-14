@@ -231,6 +231,8 @@ const SCREENS: Screen[] = [
     // while More was the last thing in the column. NOT ESTABLISHED whether the wide case passes with the repair switched
     // off, so it has no `passesWithoutRepair` (the 'no-strip' reason, the browser's own focus scroll, no longer describes
     // it); settling it needs a run with InlineConfirm's reveal switched off (components/ui), and none has been made.
+    // Since the route column (lane 7 part 2, owner's decision of 14 November 2026) the guidance is also below the form at
+    // 1280, which lengthens the page further; the expectation is the same.
     name: 'decision withdrawal on the question page, inside More (S-12)', who: 'owner', expect: { wide: 'strip', narrow: 'grown-strip' },
     open: async (page) => {
       await load(page, questionPath(await decided('Q-PP-01'), 'Q-PP-01'));

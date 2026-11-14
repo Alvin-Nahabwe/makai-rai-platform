@@ -30,6 +30,8 @@ vi.mock('@/lib/auth/identity', () => ({ requireIdentity: (...a: unknown[]) => re
 vi.mock('@/lib/auth/context', () => ({ requireOrgContextFor: (...a: unknown[]) => requireOrgContextFor(...a) }));
 vi.mock('@/lib/question/panel', () => ({ loadQuestionPanel: (...a: unknown[]) => loadQuestionPanel(...a) }));
 vi.mock('@/lib/question/openWork', () => ({ loadQuestionOpenWork: (...a: unknown[]) => loadQuestionOpenWork(...a) }));
+// The route column's stage list (lane 7) is not this file's subject: its load answers null, so no column renders.
+vi.mock('@/lib/question/stagePage', () => ({ loadStagePage: async () => null }));
 
 const { default: QuestionPage, QuestionPanelRegions } = await import(
   '@/app/(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]/page'
@@ -244,9 +246,10 @@ describe('the read-only question page (plan 1C Task 7)', () => {
 
 describe('the page loads the open work only for a reader (R3)', () => {
   const params = Promise.resolve({ slug: 'acme-health', id: 'p1', stage: 'pre-processing', questionId: 'Q-PP-01' });
+  const searchParams = Promise.resolve({});
 
   it('canWrite false: openWork is loaded with the context, the route ids and today, after the panel', async () => {
-    const html = renderToStaticMarkup(await QuestionPage({ params }));
+    const html = renderToStaticMarkup(await QuestionPage({ params, searchParams }));
     expect(loadQuestionOpenWork).toHaveBeenCalledTimes(1);
     expect(loadQuestionOpenWork).toHaveBeenCalledWith({ orgId: 'o1', role: 'viewer' },
       { projectId: 'p1', stage: 'pre-processing', questionId: 'Q-PP-01', today: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) });
@@ -256,13 +259,13 @@ describe('the page loads the open work only for a reader (R3)', () => {
 
   it('canWrite true: openWork is not loaded', async () => {
     loadQuestionPanel.mockResolvedValueOnce({ ...PANEL, canWrite: true, projectName: 'P' });
-    const html = renderToStaticMarkup(await QuestionPage({ params: Promise.resolve({ slug: 'acme-health', id: 'p1', stage: 'pre-processing', questionId: 'Q-PP-02' }) }));
+    const html = renderToStaticMarkup(await QuestionPage({ params: Promise.resolve({ slug: 'acme-health', id: 'p1', stage: 'pre-processing', questionId: 'Q-PP-02' }), searchParams }));
     expect(loadQuestionOpenWork).not.toHaveBeenCalled();
     expect(html).toContain('data-region="answer-form"');
   });
 
   it('a failed open-work read fails the page, not "nothing open"', async () => {
     loadQuestionOpenWork.mockRejectedValueOnce(new Error('db down'));
-    await expect(QuestionPage({ params: Promise.resolve({ slug: 'acme-health', id: 'p1', stage: 'pre-processing', questionId: 'Q-PP-03' }) })).rejects.toThrow('db down');
+    await expect(QuestionPage({ params: Promise.resolve({ slug: 'acme-health', id: 'p1', stage: 'pre-processing', questionId: 'Q-PP-03' }), searchParams })).rejects.toThrow('db down');
   });
 });

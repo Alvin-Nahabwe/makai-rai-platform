@@ -74,6 +74,13 @@ export const QUESTION_COPY = Object.freeze({
     /** The row of marks' label (plan 1C Task 3): the words of the question page's own navigation, nav.label. */
     routeLabel: 'Questions in this stage',
     showMore: 'Show more' as const,
+    /**
+     * The question page's column: its link to the stage page. The strip's link already reads nav.allQuestions, so this one
+     * reads the words ruled for the project page's link to a stage (spec 9.2; PROJECT_COPY at lib/project/copy.ts,
+     * `allQuestions`), copied here because this module is the question page's own; __tests__/unit/route-column.test.tsx
+     * holds the two equal.
+     */
+    allQuestionsInStage: 'All questions in this stage',
   }),
   /** The history page of a question and components/decision/DecisionHistoryList.tsx (copy audit B rows 21 to 25, 185 to 197). */
   history: Object.freeze({

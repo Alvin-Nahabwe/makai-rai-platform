@@ -3,9 +3,9 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { requireIdentity } from '@/lib/auth/identity';
 import { requireOrgContextFor } from '@/lib/auth/context';
-import { filterCounts, filterLabel, isStageFilter, moduleGroups, STAGE_FILTERS, STAGE_TITLE, type StageFilter } from '@/lib/question/stageList';
+import { isStageFilter, moduleGroups, STAGE_TITLE, type StageFilter } from '@/lib/question/stageList';
 import { loadStagePage, type StagePageData } from '@/lib/question/stagePage';
-import { stopsOf, tallyOfRows } from '@/lib/question/route';
+import { stageFilterSet, stopsOf, tallyOfRows } from '@/lib/question/route';
 import { questionHref } from '@/lib/question/draft';
 import { LIST_PAGE_SIZE, pageOf } from '@/lib/ui/showMore';
 import { ArchivedBanner } from '@/components/project/ArchivedBanner';
@@ -77,13 +77,10 @@ export default async function StagePage({
 /** The markup of S-11, exported so a test renders it from real data without the request. */
 export function StageWorkspace({ data, show, shown }: { data: StagePageData; show: StageFilter; shown: string | null }) {
   const base = `/orgs/${data.orgSlug}/projects/${data.projectId}`;
-  // RE-4: the changed filter counts every question the seal comparison names, a question the running content has cut
-  // included, so it agrees with the banner (REV-b RE-1); the rows it shows are those the stage still holds.
-  const counts = { ...filterCounts(data.rows, new Set()), ...(data.changed === null ? {} : { changed_since_seal: data.changed.changedQuestions.length }) };
+  // The counts and options, and the RE-4 rule for the changed filter: lib/question/route.ts, shared with the question page's column.
+  const { counts, filters, sealNumber } = stageFilterSet(data.rows, data.changed);
   const noDecision = counts.no_decision;
   const page = pageOf(data.rows, shown, LIST_PAGE_SIZE);
-  const sealNumber = data.changed?.sealNumber ?? null;
-  const filters = STAGE_FILTERS.filter((f) => f !== 'changed_since_seal' || data.changed !== null);
   return (
     <div className="page-content">
       <ArchivedBanner archived={data.projectArchived} />
@@ -113,7 +110,7 @@ export function StageWorkspace({ data, show, shown }: { data: StagePageData; sho
       ) : null}
       <StageQuestionList
         orgSlug={data.orgSlug} orgId={data.orgId} projectId={data.projectId} stage={data.stage} viewerId={data.viewerId}
-        rows={page.items} show={show} counts={counts} filters={filters.map((f) => ({ key: f, label: filterLabel(f, sealNumber) }))}
+        rows={page.items} show={show} counts={counts} filters={filters}
         total={data.rows.length} sealNumber={sealNumber} marks={data.marks} scopeAnswer={data.scopeAnswer}
       />
       {page.hasMore ? <ShowMoreLink href={`?show=${show}&shown=${page.nextShown}`} label={QUESTION_COPY.stage.showMore} /> : null}

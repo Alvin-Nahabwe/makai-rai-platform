@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { cache } from 'react';
+import { cache, type ReactNode } from 'react';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { requireIdentity } from '@/lib/auth/identity';
@@ -29,6 +29,9 @@ import { QUESTION_COPY } from '@/lib/question/copy';
 import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
 import RememberProject from '@/components/layout/RememberProject';
+import { RouteColumn } from '@/components/question/RouteColumn';
+import { loadStagePage } from '@/lib/question/stagePage';
+import { isStageFilter } from '@/lib/question/stageList';
 import '@/components/question/workspace.css';
 
 const Q = QUESTION_COPY;
@@ -106,7 +109,7 @@ function readingRegions(data: QuestionPanelData, openWork: QuestionOpenWork | nu
  * question, a sentence saying so) and All questions (workshop walk S3, S9). The Findings section is there only when it
  * has something to show: an open finding, or a person who may raise one.
  */
-export function QuestionPanelRegions({ data, openWork }: { data: QuestionPanelData; openWork?: QuestionOpenWork | null }) {
+export function QuestionPanelRegions({ data, openWork, route }: { data: QuestionPanelData; openWork?: QuestionOpenWork | null; route?: ReactNode }) {
   const question = data.question;
   const count = countFor(data);
   const base = `/orgs/${data.orgSlug}/projects/${data.projectId}`;
@@ -221,6 +224,8 @@ export function QuestionPanelRegions({ data, openWork }: { data: QuestionPanelDa
             </section>
           ) : null}
         </div>
+        {/* The stage's questions (RouteColumn), last in the DOM at every width; workspace.css places it. */}
+        {route === undefined ? null : <div className="question-workspace__route">{route}</div>}
       </div>
     </div>
   );
@@ -232,10 +237,15 @@ type Params = Promise<{ slug: string; id: string; stage: string; questionId: str
  * The gates and the loader, once per request: the page and its title both read through this (React `cache()`), so an
  * unknown stage, question or project is the same `notFound()` for both and the title names nothing.
  */
-const load = cache(async (slug: string, id: string, stage: string, questionId: string) => {
+const gate = cache(async (slug: string, stage: string) => {
   const identity = await requireIdentity();
   const ctx = await requireOrgContextFor(identity.userId, slug, 'record:read');
   if (!(STAGES as readonly string[]).includes(stage)) notFound();
+  return { identity, ctx };
+});
+
+const load = cache(async (slug: string, id: string, stage: string, questionId: string) => {
+  const { identity, ctx } = await gate(slug, stage);
 
   try {
     const panel = await loadQuestionPanel(ctx, identity, { projectId: id, stage: stage as Stage, questionId });
@@ -264,17 +274,27 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
  * comment says why `requireOrgContext` is for route handlers): an unauthenticated visitor is redirected, not shown an error.
  */
 export default async function QuestionPage({
-  params,
+  params, searchParams,
 }: {
   params: Params;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const { slug, id, stage, questionId } = await params;
-  // The project's name is for the title only; the regions (and the client form inside them) get the panel as before.
+  const sp = await searchParams;
+  const show = isStageFilter(sp.show) ? sp.show : 'all';
+  // The gate first (load reads the same one, cache()); then the stage's list for the column, with that context and
+  // identity, in parallel with the panel; the panel and the open work come from that one call.
+  const { identity, ctx } = await gate(slug, stage);
+  const stagePage = loadStagePage(ctx, identity.userId, id, stage as Stage);
   const { panel, openWork } = await load(slug, id, stage, questionId);
+  const stageData = await stagePage;
+  // The project's name is for the title only; the regions (and the client form inside them) get the panel as before.
   const { projectName: _projectName, ...data } = panel;
+  // The project and stage the panel just found: null only where the panel's own load has already refused (notFound).
+  const route = stageData === null ? undefined : <RouteColumn data={stageData} currentQuestionId={data.question.id} show={show} />;
   return (
     <>
-      <QuestionPanelRegions data={data} openWork={openWork} />
+      <QuestionPanelRegions data={data} openWork={openWork} route={route} />
       <RememberProject userId={data.viewer.userId} orgSlug={slug} projectId={data.projectId} />
     </>
   );

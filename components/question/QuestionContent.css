@@ -60,10 +60,11 @@
 
 /*
  * The suggestions are in the guidance column, just below this aside and the finding link, once that column sits
- * beside the form: the same media query as the two columns (components/question/workspace.css), so the link shows
- * exactly while the suggestions are below the form, and is never hidden where it is the way down to them.
+ * beside the form: the same media query as the three columns (components/question/workspace.css), so the link shows
+ * exactly while the suggestions are below the form, and is never hidden where it is the way down to them. If the
+ * owner's swap in workspace.css puts the guidance beside the form from 72.5rem, this query becomes (width >= 72.5rem).
  */
-@media (width >= 72.5rem) {
+@media (width >= 90rem) {
   .question-content__jump {
     display: none;
   }
