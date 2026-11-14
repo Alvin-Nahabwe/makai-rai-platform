@@ -179,6 +179,11 @@ describe('lib/decision/form/copy.ts', () => {
     expect(`${DECISION_FORM_COPY.savedWithout.before}a.pdf, b.pdf${DECISION_FORM_COPY.savedWithout.afterMany}`).toBe('Saved without a.pdf, b.pdf. When the upload has finished, save again to add them.');
   });
 
+  it('B3: the lines for a Save that waits for a link, and for a link that was not added while it waited', () => {
+    expect(DECISION_FORM_COPY.waitingLink).toBe('Waiting for the link to be added.');
+    expect(DECISION_FORM_COPY.linkNotAdded).toBe('Not saved. The link was not added. Add it again, or select Save decision to save without it.');
+  });
+
   it('the conflict view: the heading as its own sentence, and "my version" on the buttons', () => {
     expect(DECISION_FORM_COPY.conflict.heading).toBe('Not saved. A newer version was saved while you worked.');
     expect([DECISION_FORM_COPY.conflict.saveMine, DECISION_FORM_COPY.conflict.editMine, DECISION_FORM_COPY.conflict.discardMine])

@@ -15,7 +15,11 @@ export type EvidenceBlockProps = {
   initial: EvidenceItemView[];
   disabled: boolean;
   onChange: (evidenceIds: string[]) => void;
-  onUploadState: (s: { uploading: string[]; failed: string[] }) => void;
+  /**
+   * The files still moving or failed, and the link's request: `linkAdding` while it is out, `linkNotAdded` once it has
+   * ended without the link (until the next one is sent). A parent that holds its Save for uploads holds it for a link too.
+   */
+  onUploadState: (s: { uploading: string[]; failed: string[]; linkAdding: boolean; linkNotAdded: boolean }) => void;
   /** W-4's evidence names in "your answer". */
   onItemsChange?: (items: EvidenceItemView[]) => void;
   /** M-18: files still uploading when the page closed, kept by the parent's per-account draft. */
@@ -42,6 +46,9 @@ export function EvidenceBlock(props: EvidenceBlockProps): ReactElement {
   const [linkLabel, setLinkLabel] = useState('');
   const [linkError, setLinkError] = useState<string | null>(null);
   const [linkPending, setLinkPending] = useState(false);
+  // The last link request ended without adding the link (a refusal, a lost connection, no reply in time).
+  const [linkNotAdded, setLinkNotAdded] = useState(false);
+  const linkAddedByRequest = useRef(false);
   // The parent's callbacks change identity on every render; the latest ones are read, never depended on.
   const latest = useRef(props);
   const uploadsRef = useRef<UploadItem[]>([]);
@@ -56,8 +63,18 @@ export function EvidenceBlock(props: EvidenceBlockProps): ReactElement {
   useEffect(() => {
     addLinkRef.current = createLinkAdder({
       send: (body) => postEvidenceLink({ url: evidenceUploadUrl(latest.current.orgSlug, latest.current.projectId), body }),
-      onPending: setLinkPending,
-      onAdded: (item) => setAdded((l) => appendOnce(l, item)),
+      // The adder calls onAdded before it ends a request that stored the link, and never for one that did not.
+      onPending: (pending) => {
+        if (pending) {
+          linkAddedByRequest.current = false;
+          // Said to the parent in the press itself, with the uploads as it last heard them, and again by the effect below
+          // after the render: a Save pressed straight after "Add link" finds the request out, whenever React renders.
+          latest.current.onUploadState({ ...uploadState(uploadsRef.current), linkAdding: true, linkNotAdded: false });
+        }
+        setLinkNotAdded(!pending && !linkAddedByRequest.current);
+        setLinkPending(pending);
+      },
+      onAdded: (item) => { linkAddedByRequest.current = true; setAdded((l) => appendOnce(l, item)); },
       onError: setLinkError,
       onDone: () => { setLinkUrl(''); setLinkLabel(''); setLinkFormOpen(false); },
     });
@@ -73,9 +90,11 @@ export function EvidenceBlock(props: EvidenceBlockProps): ReactElement {
     latest.current.onChange(items.map((i) => i.id));
     latest.current.onItemsChange?.(items);
   }, [carried, added, uploads]);
+  // After the effect above, in the same flush: when a link's request ends, the parent has the link's id before it hears
+  // that the request is over, so a Save it held for the link is sent with it.
   useEffect(() => {
-    latest.current.onUploadState(uploadState(uploads));
-  }, [uploads]);
+    latest.current.onUploadState({ ...uploadState(uploads), linkAdding: linkPending, linkNotAdded });
+  }, [uploads, linkPending, linkNotAdded]);
   // Uploads still moving when the block goes away are cancelled with it.
   useEffect(() => {
     const live = controllers.current;
