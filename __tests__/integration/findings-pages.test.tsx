@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { OrgRole } from '@prisma/client';
@@ -7,6 +8,7 @@ import { AcceptRiskForm } from '@/components/findings/AcceptRiskForm';
 import { FindingPageView } from '@/components/findings/FindingPageView';
 import { MitigationForm } from '@/components/findings/MitigationForm';
 import { loadFindingPage, loadFindingsPage, type FindingPageData } from '@/lib/findings/pageData';
+import { closeByDecision } from '@/lib/data/findings';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
 import { onlyRolesCanText } from '@/lib/findings/messages';
 import { deciderLabel, OUTSIDE_ROLE_LABELS } from '@/lib/decision/copy';
@@ -75,6 +77,23 @@ async function everyKind() {
   await addFindingEvent(fx, withdrawn.id, { kind: 'withdrawn', by: 'owner' });
   return { p, done, gone, none, late, plain, again, closed, withdrawn };
 }
+
+/** The walk's path (B2): a Not yet decision, its finding, a Planned mitigation, then the decision changed to Done. */
+async function blockedWalk(o: { mitigation?: boolean } = {}) {
+  const p = await addProject(fx);
+  const stage = 'pre-processing' as const;
+  const raising = await addDecision(fx, p.id, { stage, questionId: 'Q-PP-01', contentVersionId, status: 'not_yet' });
+  const f = { ...(await addFinding(fx, p.id, { stage, source: 'shortfall', questionId: 'Q-PP-01', decisionVersionId: raising.id })), projectId: p.id };
+  const m = o.mitigation === false ? null : await addMitigationVersion(fx, f.id, { status: 'planned', owner: 'assessor', dueDate: '2099-01-01' });
+  const done = await addDecision(fx, p.id, { stage, questionId: 'Q-PP-01', contentVersionId, status: 'done' });
+  return { f, m, done };
+}
+
+/** "Close finding" pressed: the service route 11 calls, as an assessor. */
+const pressClose = (w: { f: { id: string; projectId: string }; done: { id: string } }) => closeByDecision(
+  ctxFor(fx, 'assessor'), { userId: fx.members.assessor.userId, role: 'assessor' },
+  { requestId: randomUUID(), decisionVersionId: w.done.id, projectId: w.f.projectId, findingId: w.f.id }, 'd'.repeat(64),
+);
 
 describe('S-14 the findings list (UX-15, UX-06, UX-07, FR-FND-07, FR-FND-08)', () => {
   it('UX-15 FR-FND-07: S-14 shows each kind under its UX-15 heading in order, and withdrawn ones only under Withdrawn', async () => {
@@ -336,6 +355,62 @@ describe('S-15 the finding page and the S-14 raise form (FR-FND-02, FR-FND-03, F
     expect(html).toContain(`>${FINDINGS_COPY.closeByDecision.label}</button>`);
     expect(html).toContain(FINDINGS_COPY.finding.raisedByPlatformOn);
     expect(await renderFinding(f, 'reviewer')).not.toContain(FINDINGS_COPY.closeByDecision.label);
+  });
+
+  it('B2 (loader): a finding with a Planned mitigation whose decision is now Done is blocked, and S-14 keeps it in its stage group, not under Ready to close', async () => {
+    const w = await blockedWalk();
+    const data = await pageData('assessor', w.f.projectId, w.f.id);
+    expect(data.closeBlocked).toBe(true);
+    expect(data.closeByDecision).toMatchObject({ reason: 'decision_done', decisionVersionId: w.done.id });
+    const list = await loadPage('assessor', w.f.projectId);
+    expect(list.decisionDone).toEqual([]);
+    expect(list.stages.map((s) => s.other.map((i) => i.id))).toEqual([[w.f.id]]);
+    // An unblocked one is not marked.
+    const free = await blockedWalk({ mitigation: false });
+    expect((await pageData('assessor', free.f.projectId, free.f.id)).closeBlocked).toBe(false);
+  });
+
+  it('B2 (screen): while a mitigation is Planned the box gives the cause and why the finding stays open, with no Close finding button', async () => {
+    const w = await blockedWalk();
+    const html = await renderFinding(w.f, 'assessor');
+    const F = FINDINGS_COPY.finding;
+    expect(html).toMatch(new RegExp(`class="finding-close-box"[^>]*><p>${F.closeChangedCause('Done')}</p><p>${F.closeBlocked}</p></section>`));
+    expect(html).not.toContain(F.closeChanged('Done'));
+    expect(html).not.toContain(FINDINGS_COPY.closeByDecision.label);
+    const list = await renderList('assessor', w.f.projectId);
+    expect(list).not.toContain(`>${FINDINGS_COPY.list.decisionDone}<`);
+    expect(list).not.toContain(FINDINGS_COPY.closeByDecision.label);
+    expect(list.split(`/findings/${w.f.id}"`).length - 1).toBe(1);
+  });
+
+  it('B2 (stuck): after a close pressed while a mitigation was Planned, the box says why it stays open, with no cause and no button; Cancel then closes it', async () => {
+    const w = await blockedWalk();
+    await pressClose(w);
+    expect((await pageData('assessor', w.f.projectId, w.f.id)).closeBlocked).toBe(true);
+    const html = await renderFinding(w.f, 'assessor');
+    const F = FINDINGS_COPY.finding;
+    expect(html).toMatch(new RegExp(`class="finding-close-box"[^>]*><p>${F.closeBlocked}</p></section>`));
+    expect(html).not.toContain(F.closeChangedCause('Done'));
+    expect(html).not.toContain(FINDINGS_COPY.closeByDecision.label);
+    await addMitigationVersion(fx, w.f.id, { mitigationId: w.m!.mitigationId, status: 'cancelled', owner: 'assessor', dueDate: '2099-01-01' });
+    const after = await pageData('assessor', w.f.projectId, w.f.id);
+    expect(after.detail.state).toBe('closed_mitigation');
+    expect(renderToStaticMarkup(<FindingPageView data={after} />)).not.toContain('finding-close-box');
+  });
+
+  it('B2 (a way on): marking the mitigation Done closes the finding; cancelling it brings back Close finding, and pressing it closes the finding', async () => {
+    const d = await blockedWalk();
+    await addMitigationVersion(fx, d.f.id, { mitigationId: d.m!.mitigationId, status: 'done', owner: 'assessor', dueDate: '2099-01-01' });
+    expect((await pageData('assessor', d.f.projectId, d.f.id)).detail.state).toBe('closed_mitigation');
+    const c = await blockedWalk();
+    await addMitigationVersion(fx, c.f.id, { mitigationId: c.m!.mitigationId, status: 'cancelled', owner: 'assessor', dueDate: '2099-01-01' });
+    const data = await pageData('assessor', c.f.projectId, c.f.id);
+    expect(data.closeBlocked).toBe(false);
+    const html = renderToStaticMarkup(<FindingPageView data={data} />);
+    expect(html).toContain(FINDINGS_COPY.finding.closeChanged('Done'));
+    expect(html).toContain(`>${FINDINGS_COPY.closeByDecision.label}</button>`);
+    await pressClose(c);
+    expect((await pageData('assessor', c.f.projectId, c.f.id)).detail.state).toBe('closed_mitigation');
   });
 
   it('FR-FND-02 FR-FND-08 (screen): a viewer gets S-14 without the raise form', async () => {
