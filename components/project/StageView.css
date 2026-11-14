@@ -6,8 +6,14 @@
 
 .stage-list__jump {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-3);
   margin-bottom: var(--space-3);
+}
+
+/* The jump links read the full stage names: a name wraps to the next line whole, never at its hyphen. */
+.stage-list__jump a {
+  white-space: nowrap;
 }
 
 .stage-list__columns {
