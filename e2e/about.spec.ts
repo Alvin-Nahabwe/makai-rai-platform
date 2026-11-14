@@ -100,14 +100,14 @@ test('UX-03 FR-PUB-02 NFR-A11Y-04: /about is public, and /explore/about redirect
   await expect(page.locator('#help-and-contact')).toBeVisible();
 });
 
-test('UX-03 FR-PUB-02 NFR-A11Y-04: signed in as a seat, the sidebar About link reaches /about', async ({ browser, baseURL }) => {
+test('UX-03 FR-PUB-02 NFR-A11Y-04: signed in as a seat, the footer About link reaches /about', async ({ browser, baseURL }) => {
   const seat = ownerSeat();
   const context = await browser.newContext({ baseURL, storageState: seat.storageStatePath });
   const page = await context.newPage();
   failOnDialog(page);
   await page.goto(`/orgs/${seat.orgSlug}/dashboard`);
-  // The sidebar's link points at /explore/about until UI changes it, and at /about after; both end here.
-  await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: /About$/ }).click();
+  // The shell's rail has no About item (plan 1A Task 11): a signed-in person reaches About by the footer, on every page.
+  await page.getByRole('navigation', { name: 'Footer' }).getByRole('link', { name: 'About', exact: true }).click();
   await page.waitForURL((url) => url.pathname === '/about');
   await expect(page.locator('#help-and-contact')).toBeVisible();
 
