@@ -91,9 +91,9 @@ describe('the project page, each stage a plain block (slice 2)', () => {
   it('9.2: Still open lists only the counts above zero, in words, with the open findings as a link to that stage\'s findings; all zero reads "Nothing is open in this stage."', () => {
     const b = blocks(render({ 'in-processing': { ...COUNTS, noDecision: 1, openFindings: 1, openFindingsWithoutMitigation: 0, overdueMitigations: 2 }, 'post-processing': { ...ZERO, noDecision: 0 } }));
     expect(itemsAfter(b['pre-processing'], S.stillOpen)).toEqual(['9 questions with no decision', '3 open findings (1 of them with no mitigation yet)', '1 overdue mitigation']);
-    expect(b['pre-processing']).toContain('<a href="/orgs/o/projects/p1/findings#g-pre-processing">3 open findings</a> (1 of them with no mitigation yet)');
+    expect(b['pre-processing']).toContain('<a href="/orgs/o/projects/p1/findings?stage=pre-processing">3 open findings</a> (1 of them with no mitigation yet)');
     expect(itemsAfter(b['in-processing'], S.stillOpen)).toEqual(['1 question with no decision', '1 open finding', '2 overdue mitigations']);
-    expect(b['in-processing']).toContain('<a href="/orgs/o/projects/p1/findings#g-in-processing">1 open finding</a>');
+    expect(b['in-processing']).toContain('<a href="/orgs/o/projects/p1/findings?stage=in-processing">1 open finding</a>');
     expect(itemsAfter(b['post-processing'], S.stillOpen)).toEqual([]);
     expect(b['post-processing']).toContain(`<p>${S.nothingOpen}</p>`);
     expect(S.nothingOpen).toBe('Nothing is open in this stage.');

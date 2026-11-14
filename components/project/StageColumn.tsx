@@ -25,7 +25,8 @@ const TALLY_KINDS = ['done', 'partly', 'not_yet', 'not_applicable', 'does_not_ap
  * A stage's tally from the loader's counts (lib/data/projects.ts), nothing new read. Every question of a stage is
  * gated (`notApplicableByGate`), or has no decision (`noDecision`), or has a status (`byStatus`), or is the gate itself
  * with an answer and no status (lib/ui/marks.ts): the loader counts the first three, so the answered gate is what is
- * left. Counts that over-add (they come from separate reads) give 0 answered, never a negative count.
+ * left. The loader's counts cannot over-add (one current row per question, and a row has a status or an answer, never
+ * both); counts built by hand that do give 0 answered, never a negative count.
  */
 export function stageTally(c: StageCounts): Tally & Record<(typeof TALLY_KINDS)[number], number> & { doneNoEvidence: number } {
   const { done, partly, not_yet, not_applicable } = c.byStatus;
@@ -52,9 +53,11 @@ export function StageColumn(p: { orgSlug: string; projectId: string; stage: Stag
   const stillOpen: ReactNode[] = [];
   if (c.noDecision > 0) stillOpen.push(<li key="no-decision">{C.noDecisionQuestions(c.noDecision)}</li>);
   if (c.openFindings > 0) {
+    // The findings page filtered to this stage (`?stage=`) lists every open finding the count holds, the ones to close
+    // included; its per-stage heading (`#g-<stage>`) leaves those out and is absent when it would count none.
     stillOpen.push(
       <li key="findings">
-        <ListLink href={`/orgs/${p.orgSlug}/projects/${p.projectId}/findings#g-${p.stage}`}>{plural(c.openFindings, C.openFinding, C.openFindings)}</ListLink>
+        <ListLink href={`/orgs/${p.orgSlug}/projects/${p.projectId}/findings?stage=${p.stage}`}>{plural(c.openFindings, C.openFinding, C.openFindings)}</ListLink>
         {c.openFindingsWithoutMitigation > 0 ? C.withoutMitigation(c.openFindingsWithoutMitigation) : null}
       </li>,
     );
