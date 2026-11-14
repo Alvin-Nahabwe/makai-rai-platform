@@ -34,7 +34,9 @@ test('at 1280 the column is left of the form with the open question marked; the 
   await expect(col.locator('details[open]')).toHaveCount(1);
   // No two landmarks share a name: the strip keeps "Questions in this stage", the column is named by the stage.
   await expect(page.getByRole('navigation', { name: QUESTION_COPY.nav.label, exact: true })).toHaveCount(1);
-  await expect(page.getByRole('link', { name: QUESTION_COPY.nav.allQuestions, exact: true })).toHaveCount(1);
+  // The strip keeps its "All questions" (the form's foot has its own, workshop walk S9); the column adds none of that name.
+  await expect(page.getByRole('navigation', { name: QUESTION_COPY.nav.label, exact: true }).getByRole('link', { name: QUESTION_COPY.nav.allQuestions, exact: true })).toHaveCount(1);
+  await expect(col.getByRole('link', { name: QUESTION_COPY.nav.allQuestions, exact: true })).toHaveCount(0);
   await expect(col.getByRole('link', { name: QUESTION_COPY.stage.allQuestionsInStage, exact: true })).toBeVisible();
 
   await page.evaluate(() => { (window as unknown as { __samePage: boolean }).__samePage = true; });
