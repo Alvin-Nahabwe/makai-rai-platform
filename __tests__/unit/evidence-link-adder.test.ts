@@ -46,12 +46,12 @@ describe('the link adder behind the evidence block (CR-1, CR-3)', () => {
 
   it('CR-3 M-12 M-19 M-08 M-09: each refusal reaches onError with its own line and adds nothing', async () => {
     const cases: Array<[number, string, string]> = [
-      [409, 'project_archived', 'Not saved: this project is archived. Owners and admins can unarchive it.'],
-      [429, 'rate_limited', 'Not uploaded: you can upload 10 files a minute. Wait a minute, then retry.'],
-      [401, 'unauthenticated', 'Not saved: you have been signed out. Your answer is kept on this device. Sign in again to save it.'],
-      [403, 'forbidden', 'Not saved: your role in this organisation no longer allows this. Your answer is kept on this device. Ask an owner or admin.'],
+      [409, 'project_archived', 'Not added. This project is archived. An Owner or Admin can unarchive it.'],
+      [429, 'rate_limited', 'Not added. You can add 10 files or links a minute. Wait a minute, then try again.'],
+      [401, 'unauthenticated', 'Not added. You have been signed out. Sign in again, then add the link again.'],
+      [403, 'forbidden', 'Not added. Your role no longer allows this. Ask an Owner or Admin.'],
       [422, 'validation', LINK_URL_MESSAGE],
-      [500, 'internal_error', 'The link was not added: connection lost. Try again.'],
+      [500, 'internal_error', 'Not added. The connection was lost. Try again.'],
     ];
     for (const [status, code, text] of cases) {
       const { add, events } = adder(async () => ({ kind: 'rejected', status, body: { error: 'x', code } }));
@@ -61,7 +61,7 @@ describe('the link adder behind the evidence block (CR-1, CR-3)', () => {
     }
     const lost = adder(async () => ({ kind: 'not_uploaded', reason: 'network' }));
     await lost.add({ address: 'https://example.org/x', label: '' });
-    expect(lost.events.errors.at(-1)).toBe('The link was not added: connection lost. Try again.');
+    expect(lost.events.errors.at(-1)).toBe('Not added. The connection was lost. Try again.');
   });
 
   it('FR-EVD-01: an address that is not http or https, or a label over 200 characters, is refused before any request', async () => {
@@ -70,7 +70,7 @@ describe('the link adder behind the evidence block (CR-1, CR-3)', () => {
     await add({ address: 'ftp://x', label: '' });
     await add({ address: 'https://example.org/x', label: 'x'.repeat(201) });
     expect(send).not.toHaveBeenCalled();
-    expect(events.errors).toEqual([LINK_URL_MESSAGE, 'Enter a label of 200 characters or fewer.']);
+    expect(events.errors).toEqual([LINK_URL_MESSAGE, 'Use 200 characters or fewer for the name.']);
   });
 
   it('FR-DEC-07: Retry of an unchanged link reuses its request id; a changed link, or a stored one, gets a new id', async () => {

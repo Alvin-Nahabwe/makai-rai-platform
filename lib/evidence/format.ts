@@ -1,5 +1,8 @@
+import { EVIDENCE_COPY } from '@/lib/evidence/copy';
+
 /**
- * Pure name and number helpers for evidence. No server or browser import, so client components use them.
+ * Pure name and number helpers for evidence. No server or browser import (the copy module imports nothing), so client
+ * components use them.
  */
 
 /** The bidi controls a file name must not carry on screen or in a header: U+202A to U+202E, U+2066 to U+2069. */
@@ -18,11 +21,11 @@ export function formatMbPair(loaded: number, total: number): { x: string; y: str
 /** The kind of a stored type, in the words of W-3's help line (UX-39). */
 export function evidenceKind(mimeType: string): string {
   switch (mimeType) {
-    case 'application/pdf': return 'PDF';
-    case 'image/png': return 'PNG';
-    case 'image/jpeg': return 'JPEG';
-    case 'application/zip': return 'ZIP';
-    default: return 'Office document';
+    case 'application/pdf': return EVIDENCE_COPY.kinds.pdf;
+    case 'image/png': return EVIDENCE_COPY.kinds.png;
+    case 'image/jpeg': return EVIDENCE_COPY.kinds.jpeg;
+    case 'application/zip': return EVIDENCE_COPY.kinds.zip;
+    default: return EVIDENCE_COPY.kinds.office;
   }
 }
 

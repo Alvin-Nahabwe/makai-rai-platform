@@ -137,12 +137,12 @@ describe('the client upload module', () => {
   it('CR-3 M-08 M-09 M-12 M-19: every refusal of a link shows its own line; only a lost connection or a 5xx says connection lost', () => {
     const rej = (status: number, code: string) => linkFailureText({ kind: 'rejected', status, body: { error: 'x', code } });
     expect(rej(422, 'validation')).toBe('Enter a web address that starts with http:// or https://.');
-    expect(rej(409, 'project_archived')).toBe('Not saved: this project is archived. Owners and admins can unarchive it.');
-    expect(rej(429, 'rate_limited')).toBe('Not uploaded: you can upload 10 files a minute. Wait a minute, then retry.');
-    expect(rej(401, 'unauthenticated')).toBe('Not saved: you have been signed out. Your answer is kept on this device. Sign in again to save it.');
-    expect(rej(403, 'forbidden')).toBe('Not saved: your role in this organisation no longer allows this. Your answer is kept on this device. Ask an owner or admin.');
-    expect(rej(500, 'internal_error')).toBe('The link was not added: connection lost. Try again.');
-    expect(rej(503, 'database_unavailable')).toBe('The link was not added: connection lost. Try again.');
-    expect(linkFailureText({ kind: 'not_uploaded', reason: 'network' })).toBe('The link was not added: connection lost. Try again.');
+    expect(rej(409, 'project_archived')).toBe('Not added. This project is archived. An Owner or Admin can unarchive it.');
+    expect(rej(429, 'rate_limited')).toBe('Not added. You can add 10 files or links a minute. Wait a minute, then try again.');
+    expect(rej(401, 'unauthenticated')).toBe('Not added. You have been signed out. Sign in again, then add the link again.');
+    expect(rej(403, 'forbidden')).toBe('Not added. Your role no longer allows this. Ask an Owner or Admin.');
+    expect(rej(500, 'internal_error')).toBe('Not added. The connection was lost. Try again.');
+    expect(rej(503, 'database_unavailable')).toBe('Not added. The connection was lost. Try again.');
+    expect(linkFailureText({ kind: 'not_uploaded', reason: 'network' })).toBe('Not added. The connection was lost. Try again.');
   });
 });

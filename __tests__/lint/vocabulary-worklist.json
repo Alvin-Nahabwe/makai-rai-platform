@@ -10,9 +10,6 @@
     "not-recorded :: the bare \"at the time of issue\" form": 1,
     "personal-data-question-scope-question :: scope answer": 1
   },
-  "lib/evidence/copy.ts": {
-    "unsaved-changes-draft :: on this device": 2
-  },
   "lib/followup/copy.ts": {
     "assigned-to :: \"owner\" and \"own\" for mitigations": 1
   }

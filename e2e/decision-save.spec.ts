@@ -8,6 +8,7 @@ import { problemSummary, savedLine } from '../lib/decision/copy';
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
 import { DECISION_OUTCOME_COPY } from '../lib/decision/outcome/copy';
 import { FIELD_COPY } from '../lib/ui/field/copy';
+import { CONNECTION_LOST_TEXT } from '../lib/evidence/copy';
 
 /**
  * S-12's save path in the browser (FR-DEC-06, FR-DEC-07, NFR-REL-04, NFR-REL-05, NFR-PRIV-06, UX-24 to UX-27, UX-30,
@@ -560,7 +561,7 @@ test('UX-30: a failed upload is never waited out by itself; Save without it leav
   page.on('request', (r) => { if (isDecisionPost(r)) bodies.push(r.postDataJSON() as { evidenceIds: string[] }); });
   await context.setOffline(true);
   await page.locator('input[type="file"]').setInputFiles(evidencePdf('kept-eight-bad.pdf'));
-  await expect(page.getByText('Not uploaded: connection lost.')).toBeVisible();
+  await expect(page.getByText(CONNECTION_LOST_TEXT)).toBeVisible();
   await context.setOffline(false);
   await page.getByRole('button', { name: 'Save decision' }).click();
   await expect(page.getByText('Waiting for kept-eight-bad.pdf to finish uploading.')).toBeVisible();

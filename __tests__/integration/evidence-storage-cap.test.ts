@@ -6,6 +6,7 @@ import { addIssuedDocument, addProject, addSealRow, addStageReview, buildOrg, ct
 import { createFileEvidence } from '@/lib/data/evidence';
 import { requestDigest } from '@/lib/data/idempotency';
 import { storageLimits } from '@/lib/evidence/storageCap';
+import { STORAGE_FULL_TEXT } from '@/lib/evidence/copy';
 
 // NFR-REL-09: a multipart body of an exact 10 MiB file exceeds MAX_BYTES and the 10 MB proxy buffer, so a test of the
 // cap uses files just under it, or its 413 would be the size gate's.
@@ -58,7 +59,7 @@ describe('storage caps (NFR-REL-09)', () => {
     for (let i = 0; i < 2; i++) await expect(upload(fx, 'assessor', pdf(NEAR_10_MIB, i))).resolves.toMatchObject({ replayed: false });
     const before = await counts();
     await expect(upload(fx, 'assessor', pdf(NEAR_10_MIB, 3))).rejects.toMatchObject({
-      status: 413, code: 'storage_full', message: "This organisation's storage is full. Attach a link instead.",
+      status: 413, code: 'storage_full', message: STORAGE_FULL_TEXT,
     });
     expect(await counts()).toEqual(before);
   });
