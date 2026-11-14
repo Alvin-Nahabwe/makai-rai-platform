@@ -5,9 +5,13 @@ import { signOut } from 'next-auth/react';
 import { openDraftStore } from '@/lib/client/drafts';
 import { clearLastProjects } from '@/lib/client/lastProject';
 import type { CSSProperties, ReactElement } from 'react';
+import { Button } from '@/components/ui/Button';
+import { Callout } from '@/components/ui/Callout';
 import { InlineConfirm } from '@/components/ui/InlineConfirm';
+import { StatusRegion } from '@/components/ui/StatusRegion';
+import { FieldError, FieldLabel, TextInput, describedBy } from '@/components/ui/TextInput';
 import { PreparingDownload } from '@/components/export/PreparingDownload';
-import { ALERT } from '@/components/export/TeamExportPanel';
+import { PERSONAL_DATA_COPY, phraseLabel } from '@/lib/account/copy';
 import {
   DELETE_PHRASE, DELETION_UNCONFIRMED, NOT_DELETED, PLATFORM_ADMIN_ACCOUNT, lastActiveOwnerMessage as m38, tooManyAttempts,
 } from '@/lib/export/messages';
@@ -21,12 +25,10 @@ import {
  * back to the first button on Cancel (UX-42).
  */
 
-export const PREPARING_PERSONAL = 'Preparing your file...';
-const EXPORT_TEXT = 'A JSON file with your account, memberships, acceptances, reminder setting and a list of the records you entered or were named in. It does not include your teams\' record text, which belongs to each organisation.';
-const DELETE_TEXT = 'Your name and email are removed and you are signed out everywhere. Records you entered stay with your organisations, shown as entered by "Deleted user". This cannot be undone.';
-const PHRASE_LABEL = `Type ${DELETE_PHRASE} to confirm`;
-
-const FIELD_ERROR: CSSProperties = { margin: 'var(--space-1) 0 0', color: 'var(--color-risk-critical)', fontSize: 'var(--font-size-sm)' };
+export const PREPARING_PERSONAL = PERSONAL_DATA_COPY.preparing;
+const PHRASE_LABEL = phraseLabel(DELETE_PHRASE);
+// A heading sits close to its own content (the page puts 2rem between sections, AccountRegions.tsx).
+const SECTION_HEADING: CSSProperties = { marginBottom: 'var(--space-2)' };
 
 export type DeletionOutcome =
   | { kind: 'deleted' }
@@ -71,6 +73,7 @@ export function DeleteConfirm({ userId, onCancel }: { userId: string; onCancel: 
   }, [outcome]);
 
   async function onConfirm() {
+    setOutcome(null);
     setBusy(true);
     let next: DeletionOutcome;
     try {
@@ -102,24 +105,21 @@ export function DeleteConfirm({ userId, onCancel }: { userId: string; onCancel: 
   const fieldError = (field: 'password' | 'phrase') => (outcome?.kind === 'field' && outcome.field === field ? outcome.message : null);
   const passwordError = fieldError('password');
   const phraseError = fieldError('phrase');
+  const alertText = outcome !== null && outcome.kind !== 'deleted' && outcome.kind !== 'field' ? outcome.message : null;
   return (
-    <InlineConfirm objectName="Your account" consequence={DELETE_TEXT} actionLabel="Delete my account"
-      onConfirm={onConfirm} onCancel={onCancel} busy={busy} canConfirm={password !== '' && phrase !== ''}>
-      <div className="form-group">
-        <label htmlFor={`${id}-password`}>Password</label>
-        <input ref={passwordRef} id={`${id}-password`} name="password" type="password" autoComplete="current-password" required
-          value={password} onChange={(e) => setPassword(e.currentTarget.value)}
-          aria-invalid={passwordError ? true : undefined} aria-describedby={passwordError ? `${id}-password-error` : undefined} />
-        {passwordError && <p id={`${id}-password-error`} style={FIELD_ERROR}>{passwordError}</p>}
+    <InlineConfirm objectName={PERSONAL_DATA_COPY.objectName} consequence={PERSONAL_DATA_COPY.deleteConsequence} actionLabel={PERSONAL_DATA_COPY.deleteAction}
+      onConfirm={onConfirm} onCancel={onCancel} busy={busy} canConfirm={password !== '' && phrase !== ''} destructive>
+      <TextInput id={`${id}-password`} name="password" label={PERSONAL_DATA_COPY.passwordLabel} type="password" required autoComplete="current-password"
+        ref={passwordRef} value={password} onChange={(e) => setPassword(e.currentTarget.value)} error={passwordError ?? undefined} />
+      {/* TextInput has no autoCapitalize prop, so this one field is built from the kit's own field parts and class names. */}
+      <div className="ui-field">
+        <FieldLabel htmlFor={`${id}-phrase`} label={PHRASE_LABEL} required />
+        <input ref={phraseRef} className={phraseError === null ? 'ui-input' : 'ui-input ui-input--invalid'} id={`${id}-phrase`} name="phrase" type="text"
+          autoComplete="off" autoCapitalize="characters" spellCheck={false} required value={phrase} onChange={(e) => setPhrase(e.currentTarget.value)}
+          aria-invalid={phraseError !== null} aria-describedby={describedBy(phraseError !== null && `${id}-phrase-error`)} />
+        {phraseError === null ? null : <FieldError id={`${id}-phrase-error`} message={phraseError} />}
       </div>
-      <div className="form-group">
-        <label htmlFor={`${id}-phrase`}>{PHRASE_LABEL}</label>
-        <input ref={phraseRef} id={`${id}-phrase`} name="phrase" type="text" autoComplete="off" autoCapitalize="characters" spellCheck={false} required
-          value={phrase} onChange={(e) => setPhrase(e.currentTarget.value)}
-          aria-invalid={phraseError ? true : undefined} aria-describedby={phraseError ? `${id}-phrase-error` : undefined} />
-        {phraseError && <p id={`${id}-phrase-error`} style={FIELD_ERROR}>{phraseError}</p>}
-      </div>
-      {outcome !== null && outcome.kind !== 'deleted' && outcome.kind !== 'field' && <p role="alert" style={ALERT}>{outcome.message}</p>}
+      <StatusRegion message={alertText} politeness="assertive" tone="error" />
     </InlineConfirm>
   );
 }
@@ -135,18 +135,18 @@ export function PersonalExportAndDeletionForm({ userId, lastActiveOwnerOf }: { u
   return (
     <>
       <section aria-labelledby="account-data-heading">
-        <h2 id="account-data-heading">My data</h2>
-        <PreparingDownload href="/api/users/me/export" label="Export my data" preparing={PREPARING_PERSONAL} />
-        <p>{EXPORT_TEXT}</p>
+        <h2 id="account-data-heading" style={SECTION_HEADING}>{PERSONAL_DATA_COPY.dataHeading}</h2>
+        <p>{PERSONAL_DATA_COPY.downloadIntro}</p>
+        <PreparingDownload href="/api/users/me/export" label={PERSONAL_DATA_COPY.download} preparing={PERSONAL_DATA_COPY.preparing} />
       </section>
       <section aria-labelledby="account-delete-heading">
-        <h2 id="account-delete-heading">Delete my account</h2>
-        {!open && <p>{DELETE_TEXT}</p>}{/* once open, the confirmation says it (UX-29: object and consequence) */}
+        <h2 id="account-delete-heading" style={SECTION_HEADING}>{PERSONAL_DATA_COPY.deleteHeading}</h2>
+        {!open && <p>{PERSONAL_DATA_COPY.deleteConsequence}</p>}{/* once open, the confirmation says it (UX-29: object and consequence) */}
         {lastActiveOwnerOf.length > 0
-          ? lastActiveOwnerOf.map((org) => <p key={org} role="note">{m38(org)}</p>)
+          ? lastActiveOwnerOf.map((org) => <div key={org} role="note"><Callout kind="note">{m38(org)}</Callout></div>)
           : open
             ? <DeleteConfirm userId={userId} onCancel={() => { closedOnce.current = true; setOpen(false); }} />
-            : <button ref={triggerRef} type="button" className="btn btn--secondary" onClick={() => setOpen(true)}>Delete my account...</button>}
+            : <Button ref={triggerRef} variant="secondary" onClick={() => setOpen(true)}>{PERSONAL_DATA_COPY.deleteTrigger}</Button>}
       </section>
     </>
   );

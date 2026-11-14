@@ -1,6 +1,7 @@
 import { test, expect, type Browser, type BrowserContext, type Page, type Route } from '@playwright/test';
 import fs from 'node:fs';
 import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from './fixtures/manifest';
+import { NOT_FOUND_COPY } from '../lib/errors/not-found/copy';
 
 /**
  * UX-43 (SRS 7.6.1, line 2645; WCAG 2.2.1): two minutes before the session cookie's expiry the
@@ -460,7 +461,7 @@ test.describe('idle-sign-out warning on the 12-hour server', () => {
     expect(signedOutNotFound.status()).toBe(404);
     const signedOutHtml = await signedOutNotFound.text();
     // Not vacuous: the page is the one the signed-in visit above read the wrapper from.
-    expect(signedOutHtml).toContain('We cannot find this page');
+    expect(signedOutHtml).toContain(NOT_FOUND_COPY.body);
     expect(signedOutHtml).not.toContain('shell-idle');
     expect(signedOutHtml).not.toContain('data-seconds-left');
     const login = await request.get('/login');
@@ -499,9 +500,7 @@ test.describe('idle-sign-out warning on the 12-hour server', () => {
       await expect(page.locator('.shell-idle dialog.ui-dialog')).toHaveCount(1);
       await expect(page.locator('dialog')).toHaveCount(1);
       await expect(page.locator('main')).toHaveCount(1);
-      await expect(page.locator('main')).toContainText(
-        'We cannot find this page, or you do not have access to it. If someone sent you this link, ask them to check it or to invite you.',
-      );
+      await expect(page.locator('main')).toContainText(NOT_FOUND_COPY.body);
       await expect(page.locator('.shell-rail')).toHaveCount(1);
     } finally {
       await context.close();

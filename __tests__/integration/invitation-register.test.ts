@@ -9,6 +9,10 @@ import { STUB_LEGAL_TEXTS, currentAcceptances } from '../helpers/legalStub';
 import { hashInvitationToken } from '../../lib/data/invitationToken';
 import { ACCEPTED_KINDS } from '../../types/legal';
 import { LEGAL_KIND_NAMES, acceptanceError } from '../../lib/legal/kinds';
+import { INVITATION_COPY } from '../../lib/invitations/copy';
+import { INVITATION_PAGE_COPY } from '../../lib/org/copy';
+import { API_COPY } from '@/lib/http/api/copy';
+import { EMAIL_COPY } from '@/lib/email/copy';
 
 /**
  * Route 31, POST /api/v1/invitations/[token]/register (FR-ACC-01, FR-ACC-03, FR-ACC-10; contract
@@ -33,8 +37,9 @@ const { invitationByToken, membershipsForUser } = await import('@/lib/data/preau
 const realPreauth = await vi.importActual<typeof import('@/lib/data/preauth')>('@/lib/data/preauth');
 const bcrypt = await import('@/lib/auth/passwordHash');
 const { validatePassword, PASSWORD_MIN_LENGTH } = await import('@/lib/validate');
+const { VALIDATION_COPY } = await import('@/lib/http/copy');
 
-const M23 = 'This invitation link does not work. It may have expired, been used, or been replaced by a newer one. Ask the person who invited you to send it again.';
+const M23 = INVITATION_PAGE_COPY.unusable;
 const bodyA = { name: 'New Person', password: 'a'.repeat(12), acceptances: currentAcceptances() };
 
 let fx: OrgFixture;
@@ -148,7 +153,7 @@ describe('route 31: an account only from an invitation, with its acceptances (FR
     const before = { users: await testDb.user.count(), memberships: await testDb.membership.count(), consent_records: await testDb.consentRecord.count() };
     const res = await register(raw, { ...bodyA, name: '   ' });
     expect(res.status).toBe(422);
-    expect((await res.json()).fields).toEqual([{ field: 'name', message: 'Name is required' }]);
+    expect((await res.json()).fields).toEqual([{ field: 'name', message: INVITATION_COPY.nameRequired }]);
     expect({ users: await testDb.user.count(), memberships: await testDb.membership.count(), consent_records: await testDb.consentRecord.count() })
       .toEqual(before);
   });
@@ -168,7 +173,7 @@ describe('route 31: an account only from an invitation, with its acceptances (FR
   it('FR-ACC-01 (gap G027): an existing account with the invitation\'s email answers 409 account_exists and the invitation stays usable', async () => {
     const { raw, inv } = await invitationRow(fx, { email: fx.members.viewer.email, role: 'assessor' });
     const res = await register(raw, bodyA);
-    expect([res.status, await res.json()]).toEqual([409, { error: 'An account with this email already exists. Sign in to accept.', code: 'account_exists' }]);
+    expect([res.status, await res.json()]).toEqual([409, { error: INVITATION_COPY.accountExists, code: 'account_exists' }]);
     expect((await testDb.invitation.findUniqueOrThrow({ where: { id: inv.id } })).status).toBe('pending');
   });
 
@@ -206,8 +211,10 @@ describe('route 31: an account only from an invitation, with its acceptances (FR
       const { raw } = await invitationRow(fx, { email, role: 'viewer', linkShownAt: shown });
       expect((await register(raw, bodyA)).status).toBe(201);
       expect(sendEmail).toHaveBeenLastCalledWith(expect.objectContaining({ to: email, from: 'MAK-AI <noreply@fixture.test>',
-        subject: 'An account was created for this address' }));
-      expect(vi.mocked(sendEmail).mock.lastCall![0].text).toContain(`in ${fx.org.name} on `);
+        subject: EMAIL_COPY.accountCreated.subject }));
+      const text = vi.mocked(sendEmail).mock.lastCall![0].text;
+      expect(text).toContain(`It is a member of ${fx.org.name}.`);
+      expect(text).toContain(EMAIL_COPY.accountCreated.closing(fx.org.name));
     }
     expect(sendEmail).toHaveBeenCalledTimes(2);
   });
@@ -303,7 +310,7 @@ describe('route 31: an account only from an invitation, with its acceptances (FR
     expect(PASSWORD_MIN_LENGTH).toBe(12); // NFR-SEC-18 (ACC-b raised it from ACC-a's 8)
     expect(validatePassword('a'.repeat(PASSWORD_MIN_LENGTH - 1))).not.toBeNull();
     expect(validatePassword('a'.repeat(PASSWORD_MIN_LENGTH))).toBeNull();
-    expect(validatePassword('a'.repeat(PASSWORD_MIN_LENGTH - 1))?.message).toBe(`Password must be at least ${PASSWORD_MIN_LENGTH} characters`);
+    expect(validatePassword('a'.repeat(PASSWORD_MIN_LENGTH - 1))?.message).toBe(VALIDATION_COPY.passwordTooShort(PASSWORD_MIN_LENGTH));
   });
 
   it('NFR-AVL-04 NFR-OBS-05: with the database unreachable, route 31 answers 503 database_unavailable with a reference and writes one REQUEST_FAILED line', async () => {
@@ -313,7 +320,7 @@ describe('route 31: an account only from an invitation, with its acceptances (FR
     vi.mocked(invitationByToken).mockRejectedValueOnce(Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }));
     const { result, lines } = await captureLogs(() => register(raw, { name: 'Out Age', password: 'a'.repeat(12), acceptances: currentAcceptances() }));
     const body = await result.json();
-    expect([result.status, body]).toEqual([503, { error: 'Service unavailable', code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) }]);
+    expect([result.status, body]).toEqual([503, { error: API_COPY.databaseUnavailable, code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) }]);
     expect(lines.filter((l) => l.includes('REQUEST_FAILED') && l.includes(body.reference))).toHaveLength(1);
     expect(lines.join('\n')).not.toContain('Internal server error');
     expect(await counts('outage@fixture.test')).toEqual({ users: 0, memberships: 0, consent_records: 0 });

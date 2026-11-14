@@ -17,13 +17,13 @@ export default function LoginPage() {
         <img
           src="/logo-makai-252.png"
           srcSet="/logo-makai-252.png 1x, /logo-makai-504.png 2x"
-          alt="MAK-AI"
+          alt={AUTH_COPY.logoAlt}
           className="auth-logo"
           width={200}
           height={60}
           fetchPriority="high"
         />
-        <Suspense fallback={<p>Loading...</p>}>
+        <Suspense fallback={<p>{AUTH_COPY.loading}</p>}>
           <LoginForm />
         </Suspense>
       </div>

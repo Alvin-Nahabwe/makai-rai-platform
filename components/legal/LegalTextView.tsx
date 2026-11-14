@@ -1,7 +1,10 @@
 import type { CSSProperties, ReactElement } from 'react';
 import type { LegalTextKind, LegalTextVersion } from '@/types/legal';
 import { LEGAL_KIND_NAMES } from '@/lib/legal/registry';
+import { LEGAL_PAGE_COPY } from '@/lib/legal/copy';
 import { formatDay } from '@/lib/format/dates';
+import { TERM_FINGERPRINT } from '@/lib/vocabulary/terms';
+import { Definition, Term } from '@/components/ui/Definition';
 
 /**
  * One version of a legal text as S-06 shows it (FR-ACC-02, SRS line 479; screen row line 1677): the kind's name as
@@ -21,7 +24,7 @@ export function legalTextHeading(kind: LegalTextKind): string {
 
 /** "Version 2, published 1 Dec 2026" (7.5.8 dates), one string so the markup holds it as one text node. */
 export function versionLine(text: Pick<LegalTextVersion, 'version' | 'publishedOn'>): string {
-  return `Version ${text.version}, published ${formatDay(text.publishedOn)}`;
+  return LEGAL_PAGE_COPY.versionLine(text.version, formatDay(text.publishedOn));
 }
 
 /** 7.5.8: "lower-case hexadecimal in groups of four, separated by spaces". */
@@ -50,15 +53,6 @@ export const LEGAL_PAGE_STYLE: CSSProperties = {
   padding: 'var(--space-12) var(--space-6)',
 };
 
-/** The tinted band of S-06's notes (the retired agreement's, the earlier version's), above the text and outside its block. */
-export const LEGAL_NOTE_STYLE: CSSProperties = {
-  marginBottom: 'var(--space-6)',
-  padding: 'var(--space-3) var(--space-4)',
-  background: 'var(--tint-moderate-bg)',
-  color: 'var(--tint-moderate-fg)',
-  borderRadius: 'var(--border-radius-sm)',
-};
-
 /**
  * A link on its own line: underlined (7.6.3 D-4, links are not shown by colour alone) and at least 24 CSS
  * pixels tall (UX-34, WCAG 2.5.8). Pixels, not rem: the root font is 14 pixels on narrow screens until 7.6.3
@@ -85,7 +79,7 @@ export function LegalTextView({ text }: { text: LegalTextVersion }): ReactElemen
           display: 'flex',
           flexDirection: 'column',
           gap: 'var(--space-4)',
-          lineHeight: 'var(--line-height-relaxed)',
+          lineHeight: 'var(--line-height-body)',
           whiteSpace: 'pre-line',
           overflowWrap: 'break-word',
         }}
@@ -98,8 +92,10 @@ export function LegalTextView({ text }: { text: LegalTextVersion }): ReactElemen
       {/* The article's footer, so moving by headings does not read the fingerprint as part of the text's last section. */}
       <footer>
         <dl style={{ margin: 'var(--space-6) 0 0' }}>
-          <dt style={{ fontWeight: 'var(--font-weight-bold)' }}>File fingerprint, for checking that this text has not changed</dt>
+          {/* First use of "fingerprint" on this page (T16-11): the term, and its definition as the first child of the dd. */}
+          <dt style={{ fontWeight: 'var(--font-weight-bold)' }}>{LEGAL_PAGE_COPY.fingerprintBefore}<Term of={TERM_FINGERPRINT} />{LEGAL_PAGE_COPY.fingerprintAfter}</dt>
           <dd style={{ margin: 0 }}>
+            <Definition of={TERM_FINGERPRINT} as="p" />
             <code style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', overflowWrap: 'anywhere' }}>
               {groupsOfFour(text.sha256)}
             </code>

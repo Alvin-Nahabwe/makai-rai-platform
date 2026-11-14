@@ -8,6 +8,7 @@ import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { expectNoHorizontalScroll } from './helpers/reflow';
 import { expectTargetsAtLeast24px } from './helpers/targetSize';
+import { PERSONAL_DATA_COPY, phraseLabel } from '../lib/account/copy';
 
 /**
  * S-20 and S-21's data actions on a running server, by keyboard alone (FR-EXP-01, FR-EXP-03, UX-29,
@@ -64,7 +65,7 @@ test.describe('S-20 and S-21 by keyboard', () => {
     const page = await newPage(browser);
     await signInPage(page, assessor);
     await page.goto('/account');
-    const open = page.getByRole('button', { name: 'Delete my account...' });
+    const open = page.getByRole('button', { name: PERSONAL_DATA_COPY.deleteTrigger });
     await tabTo(page, open);
     await page.keyboard.press('Enter');
     const password = page.locator('input[type="password"][name="password"]');
@@ -73,9 +74,9 @@ test.describe('S-20 and S-21 by keyboard', () => {
     await expectFocusVisibleAndUncovered(page);
     await page.keyboard.insertText(assessor.password);   // as a paste or a password manager fills it (UX-29)
     await page.keyboard.press('Tab');
-    await expect(page.getByLabel('Type DELETE MY ACCOUNT to confirm')).toBeFocused();
+    await expect(page.getByLabel(phraseLabel('DELETE MY ACCOUNT'))).toBeFocused();
     await page.keyboard.insertText('DELETE MY ACCOUNT');
-    await tabTo(page, page.getByRole('button', { name: 'Delete my account', exact: true }), 5);
+    await tabTo(page, page.getByRole('button', { name: PERSONAL_DATA_COPY.deleteAction, exact: true }), 5);
     await Promise.all([page.waitForURL((url) => url.pathname === '/login'), page.keyboard.press('Enter')]);
     expect(await testDb.membership.count({ where: { userId: assessor.userId } })).toBe(0);
     expect((await testDb.user.findUniqueOrThrow({ where: { id: assessor.userId } })).name).toBe('Deleted user');
@@ -86,10 +87,10 @@ test.describe('S-20 and S-21 by keyboard', () => {
     const page = await newPage(browser);
     await signInPage(page, fx.members.viewer);
     await page.goto('/account');
-    await page.getByRole('button', { name: 'Delete my account...' }).click();
+    await page.getByRole('button', { name: PERSONAL_DATA_COPY.deleteTrigger }).click();
     await page.locator('input[type="password"][name="password"]').fill('not-the-password');
-    await page.getByLabel('Type DELETE MY ACCOUNT to confirm').fill('DELETE MY ACCOUNT');
-    await page.getByRole('button', { name: 'Delete my account', exact: true }).click();
+    await page.getByLabel(phraseLabel('DELETE MY ACCOUNT')).fill('DELETE MY ACCOUNT');
+    await page.getByRole('button', { name: PERSONAL_DATA_COPY.deleteAction, exact: true }).click();
     const field = page.locator('input[type="password"][name="password"]');
     await expect(page.getByText('The password is not right.')).toBeVisible();
     await expect(field).toBeFocused();
@@ -97,7 +98,7 @@ test.describe('S-20 and S-21 by keyboard', () => {
     expect(await testDb.membership.count({ where: { userId: fx.members.viewer.userId } })).toBe(1);
     // Cancel closes the confirmation and gives focus back to the button that opened it (UX-42).
     await page.getByRole('button', { name: 'Cancel' }).click();
-    await expect(page.getByRole('button', { name: 'Delete my account...' })).toBeFocused();
+    await expect(page.getByRole('button', { name: PERSONAL_DATA_COPY.deleteTrigger })).toBeFocused();
   });
 
   test('M-38 FR-EXP-03: a last owner sees which organisation needs another owner, and no delete button', async ({ browser }) => {
@@ -106,8 +107,8 @@ test.describe('S-20 and S-21 by keyboard', () => {
     await signInPage(page, fx.members.owner);
     await page.goto('/account');
     await expect(page.getByText(`You are the only owner of ${fx.org.name} with an active account. Make someone else an owner first, then delete your account.`)).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Delete my account...' })).toHaveCount(0);
-    await expect(page.getByRole('link', { name: 'Export my data' })).toBeVisible();
+    await expect(page.getByRole('button', { name: PERSONAL_DATA_COPY.deleteTrigger })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: PERSONAL_DATA_COPY.download })).toBeVisible();
   });
 
   test('NFR-A11Y-04 NFR-A11Y-05: S-20 and the S-21 confirmation have no serious axe violation in both themes at 1280 and 360 pixels, 24-pixel targets, no loss at 320 pixels', async ({ browser }) => {
@@ -121,7 +122,7 @@ test.describe('S-20 and S-21 by keyboard', () => {
     const screens: Array<[string, Page, string, () => Promise<void>]> = [
       ['S-20', owner, `/orgs/${fx.org.slug}/export?refused=export_busy`, async () => {}],
       ['S-20 project', owner, `/orgs/${fx.org.slug}/projects/${projectId}/export`, async () => {}],
-      ['S-21 confirm', viewer, '/account', async () => { await viewer.getByRole('button', { name: 'Delete my account...' }).click(); }],
+      ['S-21 confirm', viewer, '/account', async () => { await viewer.getByRole('button', { name: PERSONAL_DATA_COPY.deleteTrigger }).click(); }],
     ];
     for (const [screen, page, path, prepare] of screens) {
       for (const colorScheme of ['light', 'dark'] as const) for (const width of [1280, 360]) {

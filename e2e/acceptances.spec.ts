@@ -3,11 +3,16 @@ import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { test, expect, type Browser, type Page } from '@playwright/test';
 import { testDb } from '../__tests__/helpers/db';
+import { escapeRe } from '../__tests__/helpers/escapeRe';
 import { buildOrg, type FixtureAccount, type OrgFixture } from '../__tests__/helpers/recordFixture';
 import { claimMatches } from '../lib/claims/pattern';
 import { currentLegalText } from '../lib/legal/registry';
 import { acceptanceError } from '../lib/legal/kinds';
+import { VALIDATION_COPY } from '../lib/http/copy';
 import { ACCEPT_LABEL } from '../components/legal/AcceptancesForm';
+import { INVITATION_COPY } from '../lib/invitations/copy';
+import { ACCEPTANCES_COPY } from '../lib/legal/acceptances/copy';
+import { INVITATION_PAGE_COPY, roleWithArticle } from '../lib/org/copy';
 import { ACCEPTED_KINDS, CONSENT_TYPE_FOR } from '../types/legal';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
@@ -54,6 +59,9 @@ const userCount = (email: string) => testDb.user.count({ where: { email } });
 
 /** Tab until `target` has focus, checking at each press that the focused element is visible and not covered (NFR-A11Y-02). */
 async function tabTo(page: Page, target: ReturnType<Page['locator']>, max = 40): Promise<void> {
+  // The page scrolls smoothly (app/globals.css), so a focus that needs a scroll is not in view for a moment; this check is of
+  // where focus ends up, so the scroll is made instant (the probe: with 400 ms to settle the field was in view).
+  await page.addStyleTag({ content: 'html { scroll-behavior: auto !important; }' });
   for (let i = 0; i < max; i += 1) {
     await page.keyboard.press('Tab');
     await expectFocusVisibleAndUncovered(page);
@@ -61,6 +69,28 @@ async function tabTo(page: Page, target: ReturnType<Page['locator']>, max = 40):
   }
   throw new Error(`tabTo: ${max} presses of Tab did not reach the target`);
 }
+
+/**
+ * Records, at the moment each box receives focus, what a screen reader reads on arrival: the box's id, its
+ * aria-invalid and the text of the elements its aria-describedby names. A web-first assertion made after the press
+ * retries until it passes, so it cannot tell an error drawn before focus moved from one drawn just after; this can.
+ */
+async function recordFocusArrivals(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const w = window as unknown as { focusArrivals: Array<{ id: string; invalid: string | null; description: string }> };
+    w.focusArrivals = [];
+    document.addEventListener('focusin', (e) => {
+      const el = e.target as HTMLElement;
+      if (!(el instanceof HTMLInputElement) || el.type !== 'checkbox') return;
+      const description = (el.getAttribute('aria-describedby') ?? '').split(/\s+/).filter(Boolean)
+        .map((id) => document.getElementById(id)?.textContent ?? '').join(' ');
+      w.focusArrivals.push({ id: el.id, invalid: el.getAttribute('aria-invalid'), description });
+    });
+  });
+}
+
+const focusArrivals = (page: Page) =>
+  page.evaluate(() => (window as unknown as { focusArrivals: Array<{ id: string; invalid: string | null; description: string }> }).focusArrivals);
 
 test.afterAll(async () => {
   await testDb.$disconnect();
@@ -76,21 +106,21 @@ test.describe('S-04 and S-05 in a browser', () => {
     page.on('request', (r) => { if (r.method() === 'POST' && r.url().includes('/register')) posts.push(r.url()); });
 
     await page.goto(`/invitations/${raw}`);
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText(`You are invited to ${fx.org.name}`);
-    await expect(page.getByText(new RegExp(`^${fx.members.owner.name} invited you as an assessor\\. The invitation expires on \\d{1,2} [A-Z][a-z]{2} \\d{4}\\.$`))).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(INVITATION_PAGE_COPY.heading(fx.org.name));
+    await expect(page.getByText(new RegExp(`^${escapeRe(fx.members.owner.name)} ${escapeRe(INVITATION_PAGE_COPY.invitedAs(roleWithArticle('assessor')))}\\. This invitation ends on \\d{1,2} [A-Z][a-z]{2} \\d{4}\\.$`))).toBeVisible();
     await expect(page.getByLabel(/^Email/)).toHaveValue(email);
 
     // 7.4.2 S-04 validation: Continue with nothing typed stays on step 1 and names both fields.
-    await page.getByRole('button', { name: 'Continue' }).click();
-    await expect(page.getByLabel('Your name')).toHaveAttribute('aria-invalid', 'true');
-    await expect(page.getByLabel('Your name')).toBeFocused();
-    await expect(page.getByLabel('Password', { exact: true })).toHaveAccessibleDescription(/Password is required/);
+    await page.getByRole('button', { name: INVITATION_COPY.continue }).click();
+    await expect(page.getByLabel(INVITATION_COPY.name)).toHaveAttribute('aria-invalid', 'true');
+    await expect(page.getByLabel(INVITATION_COPY.name)).toBeFocused();
+    await expect(page.locator('#new-password')).toHaveAccessibleDescription(new RegExp(escapeRe(VALIDATION_COPY.passwordRequired)));
 
-    await page.getByLabel('Your name').fill('Jay Three');
-    await page.getByLabel('Password', { exact: true }).fill('J03-password-ok');
-    await page.getByRole('button', { name: 'Show' }).click();
-    await expect(page.getByLabel('Password', { exact: true })).toHaveAttribute('type', 'text');
-    await page.getByRole('button', { name: 'Continue' }).click();
+    await page.getByLabel(INVITATION_COPY.name).fill('Jay Three');
+    await page.locator('#new-password').fill('J03-password-ok');
+    await page.getByRole('button', { name: INVITATION_COPY.showPassword }).click();
+    await expect(page.locator('#new-password')).toHaveAttribute('type', 'text');
+    await page.getByRole('button', { name: INVITATION_COPY.continue }).click();
     // Step 1's form and its button are gone: focus moves to step 2, not to the page body (WCAG 2.4.3).
     await expect(page.locator('#acceptances-step')).toBeFocused();
 
@@ -102,17 +132,28 @@ test.describe('S-04 and S-05 in a browser', () => {
     // Two ticks: M-25 names the third, focus moves to it, and nothing is sent.
     await page.getByLabel(ACCEPT_LABEL.terms, { exact: true }).check();
     await page.getByLabel(ACCEPT_LABEL.privacy, { exact: true }).check();
-    await page.getByRole('button', { name: 'Create account' }).click();
-    const summary = page.locator('#acceptances-errors');   // Next's own route announcer is also role=alert
-    await expect(summary).toHaveAttribute('role', 'alert');
-    await expect(summary).toHaveText(acceptanceError('cross-border-consent'));
+    await recordFocusArrivals(page);
+    await page.getByRole('button', { name: INVITATION_COPY.createAccount }).click();
+    // Focus lands on the unticked box with its error already drawn (R1-1): invalid, and the error in its description.
+    const thirdBox = page.getByLabel(ACCEPT_LABEL['cross-border-consent'], { exact: true });
+    await expect(thirdBox).toBeFocused();
+    await expect(thirdBox).toHaveAttribute('aria-invalid', 'true');
+    await expect(thirdBox).toHaveAccessibleDescription(new RegExp(escapeRe(ACCEPTANCES_COPY.tickThis)));
+    expect(await focusArrivals(page)).toEqual([
+      { id: 'accept-cross-border-consent', invalid: 'true', description: expect.stringContaining(ACCEPTANCES_COPY.tickThis) },
+    ]);
+    // The kit's error summary lists the missing box as a link to it; the box carries its own short error.
+    const summary = page.locator('.ui-error-summary');
+    await expect(summary.getByRole('heading')).toHaveText(ACCEPTANCES_COPY.summaryTitle);
+    await expect(summary.getByRole('link')).toHaveText(acceptanceError('cross-border-consent'));
+    await expect(page.locator('#accept-cross-border-consent-error')).toHaveText(ACCEPTANCES_COPY.tickThis);
     await expect(page.getByLabel(ACCEPT_LABEL['cross-border-consent'], { exact: true })).toBeFocused();
     await expect(page.getByLabel(ACCEPT_LABEL['cross-border-consent'], { exact: true })).toHaveAttribute('aria-invalid', 'true');
     expect(posts).toEqual([]);
     expect(await userCount(email)).toBe(0);
 
     await page.getByLabel(ACCEPT_LABEL['cross-border-consent'], { exact: true }).check();
-    await page.getByRole('button', { name: 'Create account' }).click();
+    await page.getByRole('button', { name: INVITATION_COPY.createAccount }).click();
     await page.waitForURL(`**/orgs/${fx.org.slug}/dashboard?welcome=1`);
     expect(new URL(page.url()).search).toBe('?welcome=1');
     const user = await testDb.user.findUniqueOrThrow({ where: { email } });
@@ -122,7 +163,8 @@ test.describe('S-04 and S-05 in a browser', () => {
 
     // The same link again: M-23 and nothing else.
     await page.goto(`/invitations/${raw}`);
-    await expect(page.getByText('This invitation link does not work. It may have expired, been used, or been replaced by a newer one. Ask the person who invited you to send it again.')).toBeVisible();
+    await expect(page.getByText(INVITATION_PAGE_COPY.unusable)).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(INVITATION_PAGE_COPY.unusableHeading);
     await expect(page.getByRole('textbox')).toHaveCount(0);
     await page.context().close();
   });
@@ -141,14 +183,16 @@ test.describe('S-04 and S-05 in a browser', () => {
     // shared (authenticated) layout; each destination must still send the account back to S-05.
     const nav = page.getByRole('navigation', { name: 'Main', exact: true });
     // Every link of the shell's rail, by href (several org items fall back to / outside an organisation). A public page
-    // (PUB's /about) is open to anyone, so it is not behind the gate and the click lands there.
+    // (PUB's /about, Help, a legal text) is open to anyone, and gate 3 lets S-21 through (My account: export and
+    // deletion, FR-ACC-04), so a click on one of those lands there. Asserting "back on S-05" for them passed only while
+    // the assertion ran before the router had shown the page, and failed when the page won (seen on a production build).
     await page.goto('/acceptances');
     await expect(nav).toBeVisible();
     const hrefs = [...new Set(await nav.getByRole('link').evaluateAll((els) => els.map((e) => e.getAttribute('href') ?? '')))];
     expect(hrefs, 'the rail has links to try').toEqual(expect.arrayContaining(['/explore/framework', '/account']));
     // Guidance is the rail's one entry to the framework pages; Controls is reached from it, not from the rail.
     expect(hrefs).not.toContain('/explore/controls');
-    const PUBLIC = /^\/(about|legal\/)/;
+    const REACHABLE = /^\/(about$|help$|legal\/|account$)/;
     for (const href of hrefs) {
       await page.goto('/acceptances');
       // The router's own request for the destination (not a prefetch), so the check waits for the server's answer.
@@ -156,32 +200,39 @@ test.describe('S-04 and S-05 in a browser', () => {
         && r.request().headers()['next-router-prefetch'] === undefined);
       await nav.locator(`a[href="${href}"]`).first().click();
       await answered;
-      if (PUBLIC.test(href)) {
+      if (REACHABLE.test(href)) {
         await expect(page, href).toHaveURL(new RegExp(`${href}$`));
         continue;
       }
       await expect(page, href).toHaveURL(/\/acceptances$/);
-      await expect(page.getByRole('heading', { level: 1 }), href).toHaveText('Before you continue');
+      await expect(page.getByRole('heading', { level: 1 }), href).toHaveText(ACCEPTANCES_COPY.legend);
     }
 
     // S-05: one box unticked sends nothing and moves focus to it.
     const posts: string[] = [];
     page.on('request', (r) => { if (r.method() === 'POST' && r.url().endsWith('/api/acceptances')) posts.push(r.url()); });
     await page.goto('/acceptances');
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Before you continue');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(ACCEPTANCES_COPY.legend);
     await expect(page.getByRole('link', { name: /\(opens in a new tab\)$/ })).toHaveCount(3);
     await page.getByLabel(ACCEPT_LABEL.terms, { exact: true }).check();
-    await page.getByRole('button', { name: 'Accept and continue' }).click();
-    const summary = page.locator('#acceptances-errors');
-    await expect(summary).toHaveAttribute('role', 'alert');
+    await recordFocusArrivals(page);
+    await page.getByRole('button', { name: ACCEPTANCES_COPY.submit }).click();
+    const summary = page.locator('.ui-error-summary');
     await expect(summary).toContainText(acceptanceError('privacy'));
     await expect(summary).toContainText(acceptanceError('cross-border-consent'));
-    await expect(page.getByLabel(ACCEPT_LABEL.privacy, { exact: true })).toBeFocused();
+    // Focus lands on the first unticked box with its error already drawn (R1-1): invalid, and the error in its description.
+    const firstUnticked = page.getByLabel(ACCEPT_LABEL.privacy, { exact: true });
+    await expect(firstUnticked).toBeFocused();
+    await expect(firstUnticked).toHaveAttribute('aria-invalid', 'true');
+    await expect(firstUnticked).toHaveAccessibleDescription(new RegExp(escapeRe(ACCEPTANCES_COPY.tickThis)));
+    expect(await focusArrivals(page)).toEqual([
+      { id: 'accept-privacy', invalid: 'true', description: expect.stringContaining(ACCEPTANCES_COPY.tickThis) },
+    ]);
     expect(posts).toEqual([]);
 
     await page.getByLabel(ACCEPT_LABEL.privacy, { exact: true }).check();
     await page.getByLabel(ACCEPT_LABEL['cross-border-consent'], { exact: true }).check();
-    await page.getByRole('button', { name: 'Accept and continue' }).click();
+    await page.getByRole('button', { name: ACCEPTANCES_COPY.submit }).click();
     await page.waitForURL((url) => url.pathname !== '/acceptances');
     expect(posts).toHaveLength(1);
     const res = await page.goto(`/orgs/${fx.org.slug}/dashboard`);
@@ -190,7 +241,7 @@ test.describe('S-04 and S-05 in a browser', () => {
     await page.context().close();
   });
 
-  test('FR-ACC-01 (7.4.2 S-04): a lost connection on Create account says nothing was created, and Try again sends the same body', async ({ browser }) => {
+  test('FR-ACC-01 (7.4.2 S-04): a lost connection on Create account says the account may already be created, and Try again sends the same body', async ({ browser }) => {
     const fx = await buildOrg({ label: 'resend' });
     const email = `resend-${Date.now()}@fixture.test`;
     const raw = await invitationFor(fx, email, 'viewer');
@@ -203,15 +254,15 @@ test.describe('S-04 and S-05 in a browser', () => {
       else await route.continue();
     });
     await page.goto(`/invitations/${raw}`);
-    await page.getByLabel('Your name').fill('Re Send');
-    await page.getByLabel('Password', { exact: true }).fill('Resend-password-ok');
-    await page.getByRole('button', { name: 'Continue' }).click();
+    await page.getByLabel(INVITATION_COPY.name).fill('Re Send');
+    await page.locator('#new-password').fill('Resend-password-ok');
+    await page.getByRole('button', { name: INVITATION_COPY.continue }).click();
     for (const box of await page.getByRole('checkbox').all()) await box.check();
-    await page.getByRole('button', { name: 'Create account' }).click();
-    const lost = page.getByRole('alert').filter({ hasText: 'Not created: connection lost.' });
-    await expect(lost).toHaveText('Not created: connection lost. Nothing was created. Try again');
+    await page.getByRole('button', { name: INVITATION_COPY.createAccount }).click();
+    const lost = page.getByRole('alert').filter({ hasText: ACCEPTANCES_COPY.send.account.lost });
+    await expect(lost).toHaveText(ACCEPTANCES_COPY.send.account.lost);
     expect(await userCount(email)).toBe(0);
-    await lost.getByRole('button', { name: 'Try again' }).click();
+    await page.getByRole('button', { name: ACCEPTANCES_COPY.tryAgain }).click();   // the button follows the alert, outside it
     await page.waitForURL(`**/orgs/${fx.org.slug}/dashboard?welcome=1`);
     expect(bodies).toHaveLength(2);
     expect(bodies[1]).toBe(bodies[0]);
@@ -219,7 +270,51 @@ test.describe('S-04 and S-05 in a browser', () => {
     await page.context().close();
   });
 
-  test('FR-ACC-04 (7.4.2 S-05): a lost connection on Accept and continue says nothing was created, and Try again sends the same body', async ({ browser }) => {
+  test('FR-ACC-01 (7.4.2 S-04): when the reply to Create account is lost after the account was created, the screen says it may exist, Try again shows M-23, and the person signs in with the password typed', async ({ browser }) => {
+    const fx = await buildOrg({ label: 'lostreply' });
+    const email = `lostreply-${Date.now()}@fixture.test`;
+    const password = 'Lost-reply-password-ok';
+    const raw = await invitationFor(fx, email, 'viewer');
+    const page = await newPage(browser);
+    const statuses: number[] = [];
+    await page.route('**/api/v1/invitations/*/register', async (route) => {
+      if (statuses.length === 0) {
+        // The request reaches the server, which commits the account; its reply is then dropped, as when the connection fails on the way back.
+        const reply = await route.fetch();
+        statuses.push(reply.status());
+        await route.abort('connectionfailed');
+      } else {
+        const reply = await route.fetch();
+        statuses.push(reply.status());
+        await route.fulfill({ response: reply });
+      }
+    });
+    await page.goto(`/invitations/${raw}`);
+    await page.getByLabel(INVITATION_COPY.name).fill('Lost Reply');
+    await page.locator('#new-password').fill(password);
+    await page.getByRole('button', { name: INVITATION_COPY.continue }).click();
+    for (const box of await page.getByRole('checkbox').all()) await box.check();
+    await page.getByRole('button', { name: INVITATION_COPY.createAccount }).click();
+    const lost = page.getByRole('alert').filter({ hasText: ACCEPTANCES_COPY.send.account.lost });
+    await expect(lost).toHaveText(ACCEPTANCES_COPY.send.account.lost);
+    expect(statuses).toEqual([201]);
+    expect(await userCount(email)).toBe(1);
+
+    // Try again: the link is used now, so route 31 answers 410 and the screen shows M-23.
+    await page.getByRole('button', { name: ACCEPTANCES_COPY.tryAgain }).click();
+    await expect(page.getByRole('alert').filter({ hasText: INVITATION_PAGE_COPY.unusable })).toHaveText(INVITATION_PAGE_COPY.unusable);
+    expect(statuses).toEqual([201, 410]);
+
+    // Sign in with the invited email and the password typed in step 1: the person lands signed in.
+    await signIn(page, { email, password });
+    expect(new URL(page.url()).pathname).not.toBe('/login');
+    const res = await page.goto(`/orgs/${fx.org.slug}/dashboard`);
+    expect(res?.status()).toBe(200);
+    await expect(page).toHaveURL(new RegExp(`/orgs/${escapeRe(fx.org.slug)}/dashboard$`));
+    await page.context().close();
+  });
+
+  test('FR-ACC-04 (7.4.2 S-05): a lost connection on Accept and continue says the choice was not saved, and Try again sends the same body', async ({ browser }) => {
     const fx = await buildOrg({ label: 'resendfive', acceptances: 'pre-v1' });
     const page = await newPage(browser);
     await signIn(page, fx.members.assessor);
@@ -231,10 +326,10 @@ test.describe('S-04 and S-05 in a browser', () => {
     });
     await page.goto('/acceptances');
     for (const box of await page.getByRole('checkbox').all()) await box.check();
-    await page.getByRole('button', { name: 'Accept and continue' }).click();
-    const lost = page.getByRole('alert').filter({ hasText: 'Not created: connection lost.' });
-    await expect(lost).toHaveText('Not created: connection lost. Nothing was created. Try again');   // the SRS string, on S-05
-    await lost.getByRole('button', { name: 'Try again' }).click();
+    await page.getByRole('button', { name: ACCEPTANCES_COPY.submit }).click();
+    const lost = page.getByRole('alert').filter({ hasText: ACCEPTANCES_COPY.send.choice.lost });
+    await expect(lost).toHaveText(ACCEPTANCES_COPY.send.choice.lost);   // S-05 says what was being sent: a choice, not an account
+    await page.getByRole('button', { name: ACCEPTANCES_COPY.tryAgain }).click();
     await page.waitForURL((url) => url.pathname !== '/acceptances');
     expect(bodies).toHaveLength(2);
     expect(bodies[1]).toBe(bodies[0]);
@@ -261,13 +356,13 @@ test.describe('S-04 and S-05 in a browser', () => {
       else await route.continue();
     });
     await page.goto(`/invitations/${raw}`);
-    await page.getByRole('button', { name: 'Accept invitation' }).click();
+    await page.getByRole('button', { name: INVITATION_COPY.accept }).click();
     await expect(page.locator('#acceptances-step')).toBeFocused();
     for (const box of await page.getByRole('checkbox').all()) await box.check();
-    await page.getByRole('button', { name: 'Accept and continue' }).click();
-    const lost = page.getByRole('alert').filter({ hasText: 'Not created: connection lost.' });
-    await expect(lost).toHaveText('Not created: connection lost. Nothing was created. Try again');
-    await lost.getByRole('button', { name: 'Try again' }).click();
+    await page.getByRole('button', { name: ACCEPTANCES_COPY.submit }).click();
+    const lost = page.getByRole('alert').filter({ hasText: ACCEPTANCES_COPY.send.choice.lost });
+    await expect(lost).toHaveText(ACCEPTANCES_COPY.send.choice.lost);
+    await page.getByRole('button', { name: ACCEPTANCES_COPY.tryAgain }).click();
     await page.waitForURL(`**/orgs/${host.org.slug}/dashboard?welcome=1`);
     const join = `/api/v1/invitations/${raw}`;
     expect(posts).toEqual([join, '/api/acceptances', '/api/acceptances', join]);
@@ -290,9 +385,9 @@ test.describe('S-04 and S-05 in a browser', () => {
     const raw = await invitationFor(fx, `res-${Date.now()}@fixture.test`, 'viewer');
     const s04 = await newPage(browser);
     await s04.goto(`/invitations/${raw}`);
-    await s04.getByLabel('Your name').fill('No Research');
-    await s04.getByLabel('Password', { exact: true }).fill('No-research-ok');
-    await s04.getByRole('button', { name: 'Continue' }).click();
+    await s04.getByLabel(INVITATION_COPY.name).fill('No Research');
+    await s04.locator('#new-password').fill('No-research-ok');
+    await s04.getByRole('button', { name: INVITATION_COPY.continue }).click();
     await noResearchControl(s04, 'S-04 step 2');
     await s04.context().close();
     const s05 = await newPage(browser);
@@ -319,11 +414,11 @@ test.describe('S-04 and S-05 in a browser', () => {
     const raw = await invitationFor(fx, email, 'viewer');
     const page = await newPage(browser);
     await page.goto(`/invitations/${raw}`);
-    await tabTo(page, page.getByLabel('Your name'));
+    await tabTo(page, page.getByLabel(INVITATION_COPY.name));
     await page.keyboard.type('Key Board');
-    await tabTo(page, page.getByLabel('Password', { exact: true }));
+    await tabTo(page, page.locator('#new-password'));
     await page.keyboard.type('Keyboard-only-ok');
-    await tabTo(page, page.getByRole('button', { name: 'Continue' }));
+    await tabTo(page, page.getByRole('button', { name: INVITATION_COPY.continue }));
     await page.keyboard.press('Enter');
     await expect(page.locator('#acceptances-step')).toBeFocused();
     for (const box of await page.getByRole('checkbox').all()) {
@@ -331,7 +426,7 @@ test.describe('S-04 and S-05 in a browser', () => {
       await page.keyboard.press('Space');
       await expect(box).toBeChecked();
     }
-    await tabTo(page, page.getByRole('button', { name: 'Create account' }));
+    await tabTo(page, page.getByRole('button', { name: INVITATION_COPY.createAccount }));
     await page.keyboard.press('Enter');
     await page.waitForURL(`**/orgs/${fx.org.slug}/dashboard?welcome=1`);
     expect(await userCount(email)).toBe(1);
@@ -348,9 +443,9 @@ test.describe('S-04 and S-05 in a browser', () => {
     const states: Array<[string, Page, string, ((p: Page) => Promise<void>) | null]> = [
       ['S-04 step 1', signedOut, `/invitations/${raw}`, null],
       ['S-04 step 2', signedOut, `/invitations/${raw}`, async (p) => {
-        await p.getByLabel('Your name').fill('Axe Check');
-        await p.getByLabel('Password', { exact: true }).fill('Axe-check-ok-1');
-        await p.getByRole('button', { name: 'Continue' }).click();
+        await p.getByLabel(INVITATION_COPY.name).fill('Axe Check');
+        await p.locator('#new-password').fill('Axe-check-ok-1');
+        await p.getByRole('button', { name: INVITATION_COPY.continue }).click();
         await expect(p.locator('#acceptances-step')).toBeFocused();
       }],
       ['S-05', signedIn, '/acceptances', null],

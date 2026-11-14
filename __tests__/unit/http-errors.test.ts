@@ -9,6 +9,7 @@ import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { isUniqueViolation, uniqueViolationIndex, isDatabaseUnavailable } from '@/lib/data/pgErrors';
 import { NotFoundError, ForbiddenError } from '@/lib/data/tenant';
 import { UnauthenticatedError, PasswordChangeRequiredError } from '@/lib/auth/identity';
+import { API_COPY } from '@/lib/http/api/copy';
 
 /**
  * A look-alike of `DriverAdapterError` from `@prisma/driver-adapter-utils`, which package.json does not list (it comes in
@@ -103,11 +104,11 @@ describe('lib/http/errors, toResponse, assertSameOrigin, pgErrors', () => {
   });
 
   it('NFR-MNT-01: toResponse keeps the existing four mappings and adds codes', async () => {
-    expect(await toResponse(new NotFoundError()).json()).toEqual({ error: 'Not found', code: 'not_found' });
-    expect(await toResponse(new UnauthenticatedError('x')).json()).toEqual({ error: 'Unauthorized', code: 'unauthenticated' });
-    expect(await toResponse(new ForbiddenError('evidence:create', 'viewer')).json()).toEqual({ error: 'Forbidden', code: 'forbidden' });
+    expect(await toResponse(new NotFoundError()).json()).toEqual({ error: API_COPY.notFound, code: 'not_found' });
+    expect(await toResponse(new UnauthenticatedError('x')).json()).toEqual({ error: API_COPY.unauthenticated, code: 'unauthenticated' });
+    expect(await toResponse(new ForbiddenError('evidence:create', 'viewer')).json()).toEqual({ error: API_COPY.forbidden, code: 'forbidden' });
     const must = toResponse(new PasswordChangeRequiredError());
-    expect([must.status, await must.json()]).toEqual([403, { error: 'Password change required', code: 'must_change_password' }]);
+    expect([must.status, await must.json()]).toEqual([403, { error: API_COPY.mustChangePassword, code: 'must_change_password' }]);
     expect([toResponse(new NotFoundError()).status, toResponse(new UnauthenticatedError('x')).status,
       toResponse(new ForbiddenError('evidence:create', 'viewer')).status]).toEqual([404, 401, 403]);
   });
@@ -121,7 +122,7 @@ describe('lib/http/errors, toResponse, assertSameOrigin, pgErrors', () => {
     const r = toResponse(e);
     expect(r.status).toBe(503);
     const body = JSON.stringify(await r.json());
-    expect(JSON.parse(body)).toEqual({ error: 'Service unavailable', code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) });
+    expect(JSON.parse(body)).toEqual({ error: API_COPY.databaseUnavailable, code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) });
     expect(body).not.toMatch(/127\.0\.0\.1|port|reach/i);
   });
 
@@ -152,7 +153,7 @@ describe('lib/http/errors, toResponse, assertSameOrigin, pgErrors', () => {
       expect(isDatabaseUnavailable(e), code).toBe(true);
       const r = toResponse(e);
       const body = JSON.stringify(await r.json());
-      expect([r.status, JSON.parse(body)], code).toEqual([503, { error: 'Service unavailable', code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) }]);
+      expect([r.status, JSON.parse(body)], code).toEqual([503, { error: API_COPY.databaseUnavailable, code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) }]);
       expect(body, code).not.toMatch(/User|findUnique|invocation/);
     }
   });
@@ -187,7 +188,7 @@ describe('lib/http/errors, toResponse, assertSameOrigin, pgErrors', () => {
       const e = new DriverAdapterError({ kind, host: '127.0.0.1', port: 1 });
       expect(isDatabaseUnavailable(e), kind).toBe(true);
       const r = toResponse(e);
-      expect([r.status, await r.json()], kind).toEqual([503, { error: 'Service unavailable', code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) }]);
+      expect([r.status, await r.json()], kind).toEqual([503, { error: API_COPY.databaseUnavailable, code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) }]);
     }
     // another kind of DriverAdapterError is not an outage
     expect(isDatabaseUnavailable(new DriverAdapterError({ kind: 'UniqueConstraintViolation', constraint: { index: 'x' } }))).toBe(false);
@@ -199,7 +200,7 @@ describe('lib/http/errors, toResponse, assertSameOrigin, pgErrors', () => {
     expect([e.name, e.code, e.message, 'syscall' in e, 'errno' in e]).toEqual(['AggregateError', 'ECONNREFUSED', '', false, false]);
     const r = toResponse(e);
     const body = JSON.stringify(await r.json());
-    expect([r.status, JSON.parse(body)]).toEqual([503, { error: 'Service unavailable', code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) }]);
+    expect([r.status, JSON.parse(body)]).toEqual([503, { error: API_COPY.databaseUnavailable, code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) }]);
     expect(body).not.toMatch(/127\.0\.0\.1|::1|connect/);
   });
 
@@ -210,7 +211,7 @@ describe('lib/http/errors, toResponse, assertSameOrigin, pgErrors', () => {
       // no own code on the aggregate: the codes of errors[] decide
       expect(isDatabaseUnavailable(new AggregateError([nodeError(code, 'a'), nodeError('ETIMEDOUT', 'b')], '')), `errors[] ${code}`).toBe(true);
       const r = toResponse(Object.assign(new Error('x'), { code }));
-      expect([r.status, await r.json()], code).toEqual([503, { error: 'Service unavailable', code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) }]);
+      expect([r.status, await r.json()], code).toEqual([503, { error: API_COPY.databaseUnavailable, code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) }]);
     }
   });
 

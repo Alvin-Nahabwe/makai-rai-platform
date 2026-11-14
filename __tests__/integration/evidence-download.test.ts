@@ -7,6 +7,7 @@ import { resetDb, testDb } from '../helpers/db';
 import { clearSession, sessionFor } from '../helpers/authSession';
 import { captureLogs } from '../helpers/logCapture';
 import { addEvidence, addProject, buildOrg, type OrgFixture } from '../helpers/recordFixture';
+import { API_COPY } from '@/lib/http/api/copy';
 
 /**
  * The download route (contract route row 4). Rows are written through testDb (the schema owner), which is also
@@ -180,7 +181,7 @@ describe('evidence download route', () => {
     const ev = await addEvidence(fx, p.id, { kind: 'file', bytes: PDF_BYTES });
     const { result, lines } = await captureLogs(() => { outage.armed = true; return download('assessor', ev.id); });
     const body = await result.json();
-    expect([result.status, body]).toEqual([503, { error: 'Service unavailable', code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) }]);
+    expect([result.status, body]).toEqual([503, { error: API_COPY.databaseUnavailable, code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) }]);
     expect(lines.filter((l) => l.includes('REQUEST_FAILED') && l.includes(body.reference))).toHaveLength(1);
     expect(JSON.stringify(body)).not.toMatch(/ECONNREFUSED|127\.0\.0\.1/);
   });
@@ -189,7 +190,7 @@ describe('evidence download route', () => {
     const ev = await addEvidence(fx, p.id, { kind: 'file', bytes: PDF_BYTES });
     for (const id of [ev.id, randomUUID()]) {
       const res = await callDelete('owner', id);
-      expect([id, res.status, await res.json()]).toEqual([id, 404, { error: 'Not found', code: 'not_found' }]);
+      expect([id, res.status, await res.json()]).toEqual([id, 404, { error: API_COPY.notFound, code: 'not_found' }]);
     }
     expect(await testDb.evidence.count({ where: { id: ev.id } })).toBe(1);
     expect(await testDb.evidenceBlob.count({ where: { evidenceId: ev.id } })).toBe(1);

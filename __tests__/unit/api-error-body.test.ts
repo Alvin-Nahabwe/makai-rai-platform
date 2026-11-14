@@ -1,6 +1,7 @@
 import { expect, it, vi } from 'vitest';
 import { AppError } from '@/lib/http/errors';
 import { toResponse } from '@/lib/http/toResponse';
+import { API_COPY } from '@/lib/http/api/copy';
 import type { ApiErrorBody } from '@/types/api';
 
 /**
@@ -18,8 +19,10 @@ it('NFR-MNT-01: the body of a 500 that nothing mapped is an ApiErrorBody with a 
     const res = toResponse(new Error('not mapped'));
     const answered = (await res.json()) as ApiErrorBody;
     expect(res.status).toBe(500);
-    expect(answered.message).toBe('internal_error');
     expect(answered.reference).toMatch(/^[0-9a-f]{8}$/);
+    const text = API_COPY.internalError(answered.reference as string);
+    expect(answered.error).toBe(text);
+    expect(answered.message).toBe(text);
   } finally {
     spy.mockRestore();
   }

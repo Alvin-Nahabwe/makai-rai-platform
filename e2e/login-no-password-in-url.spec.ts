@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { SIGN_IN_COPY } from '../lib/auth/copy';
 
 /**
  * NFR-SEC password-in-URL (unit FIXPW). Before React has hydrated, a native submit of the sign-in form must not put
@@ -19,7 +20,7 @@ test.describe('Sign-in form before hydration', () => {
     expect(res?.status()).toBe(200);
     await page.fill('#email', 'nobody@example.test');
     await page.fill('#password', 'Not-A-Real-Pw-1');
-    const button = page.getByRole('button', { name: 'Sign In' });
+    const button = page.getByRole('button', { name: SIGN_IN_COPY.submit });
     await expect(button).toBeDisabled();
     const before = urls.length;
     // Both ways a person submits: the button, and Enter in the password field.
@@ -43,7 +44,7 @@ test.describe('Sign-in form before hydration', () => {
     await page.goto('/login');
     await page.fill('#email', 'nobody@example.test');
     await page.fill('#password', 'Not-A-Real-Pw-1');
-    await expect(page.getByRole('button', { name: 'Sign In' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: SIGN_IN_COPY.submit })).toBeDisabled();
 
     // The page has loaded, so the next main-frame navigation request is the submit.
     const navigation = page.waitForRequest((r) => r.isNavigationRequest() && r.frame() === page.mainFrame());

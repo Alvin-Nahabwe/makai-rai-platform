@@ -1,31 +1,30 @@
 'use client';
 
-import { useState, type CSSProperties, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { getSession, signIn } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { safeCallbackUrl } from '@/lib/safe-callback-url';
 import { DRAFT_PREFIX, openDraftStore } from '@/lib/client/drafts';
-import { M20 } from '@/lib/http/messages';
+import { AUTH_MESSAGE_COPY, SIGN_IN_COPY } from '@/lib/auth/copy';
 import { useHydrated } from '@/lib/client/useHydrated';
+import { Button } from '@/components/ui/Button';
+import { StatusRegion } from '@/components/ui/StatusRegion';
+import { TextInput } from '@/components/ui/TextInput';
 
 /** Owner copy (C4 ruling SC-1): the admission's 503 `sign_in_busy` (lib/auth/signInAdmission.ts). */
-export const SIGN_IN_BUSY = 'Not signed in: the server is busy with other sign-ins. Nothing was changed. Try again in a minute.';
+export const SIGN_IN_BUSY = SIGN_IN_COPY.busy;
 /** Owner copy (C4 ruling SC-1): any other failure on the server, a database outage included. */
-export const SIGN_IN_SERVER_PROBLEM = 'Not signed in: the server had a problem. Nothing was changed. Try again in a few minutes.';
+export const SIGN_IN_SERVER_PROBLEM = SIGN_IN_COPY.serverProblem;
 /** Owner copy (C4 ruling F2): no readable answer came back (a lost connection, or a gateway's HTML error page). */
-export const SIGN_IN_CONNECTION_LOST = 'Not signed in: connection lost. Nothing was changed. Try again.';
+export const SIGN_IN_CONNECTION_LOST = SIGN_IN_COPY.connectionLost;
 
 /** The admission's 429 `rate_limited`, with the wait its url carries in `code`, in whole minutes rounded up. */
 function rateLimitedText(code: string | null | undefined): string {
   const seconds = /^\d{1,5}$/.test(code ?? '') ? Number(code) : 60;
   const minutes = Math.max(1, Math.ceil(seconds / 60));
-  return `Too many sign-ins right now. Wait ${minutes} ${minutes === 1 ? 'minute' : 'minutes'} and try again.`;
+  return SIGN_IN_COPY.rateLimited(minutes);
 }
-const SIGNED_OUT = 'You are signed out. Sign in, then start the download again.';
-const PASSWORD_CHANGED = 'Password changed. Please sign in with your new password.';
-
-const TARGET: CSSProperties = { minWidth: '24px', minHeight: '24px' };
 
 /**
  * The text S-01 shows for a sign-in that did not succeed. `next-auth/react`'s `signIn` reads `error` from the `url` of the
@@ -35,7 +34,7 @@ const TARGET: CSSProperties = { minWidth: '24px', minHeight: '24px' };
  * not told as a wrong password; it says nothing about the account either way.
  */
 export function signInErrorText(result: { error?: string | null; code?: string | null }): string {
-  if (result.error === 'CredentialsSignin') return M20;
+  if (result.error === 'CredentialsSignin') return AUTH_MESSAGE_COPY.wrongCredentials;
   if (result.error === 'rate_limited') return rateLimitedText(result.code);
   if (result.error === 'sign_in_busy') return SIGN_IN_BUSY;
   return SIGN_IN_SERVER_PROBLEM;
@@ -129,26 +128,25 @@ export interface LoginViewProps {
 export function LoginView(v: LoginViewProps) {
   return (
     <>
-      <h1>Sign In</h1>
-      {v.notice && <div className="auth-success" role="status">{v.notice}</div>}
-      {v.error && <div className="auth-error" role="alert">{v.error}</div>}
+      <h1>{SIGN_IN_COPY.heading}</h1>
+      <StatusRegion message={v.notice} />
+      <StatusRegion message={v.error === '' ? null : v.error} politeness="assertive" tone="error" />
       <form method="post" onSubmit={v.onSubmit}>
-        <label htmlFor="email">Email</label>
-        <input id="email" name="email" type="email" required autoComplete="username" spellCheck={false}
+        <TextInput id="email" name="email" label={SIGN_IN_COPY.email} type="email" required autoComplete="username" spellCheck={false}
           value={v.email} onChange={(e) => v.onEmail(e.currentTarget.value)} />
-        <label htmlFor="password">Password</label>
-        <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
-          <input id="password" name="password" type={v.showPassword ? 'text' : 'password'} required autoComplete="current-password"
-            value={v.password} onChange={(e) => v.onPassword(e.currentTarget.value)} />
-          <button type="button" aria-controls="password" aria-pressed={v.showPassword} onClick={v.onToggleShow}
-            style={{ ...TARGET, padding: '0 var(--space-2)' }}>Show</button>
-        </div>
-        <button type="submit" className="btn-primary" disabled={v.loading || v.hydrated === false} style={TARGET}>
-          {v.loading ? 'Signing in...' : 'Sign In'}
-        </button>
+        <TextInput id="password" name="password" label={SIGN_IN_COPY.password} type={v.showPassword ? 'text' : 'password'} required
+          autoComplete="current-password" value={v.password} onChange={(e) => v.onPassword(e.currentTarget.value)} />
+        {/* The kit's Button cannot carry aria-pressed or aria-controls (ruling T16-5), so this is a native button in the kit's classes. */}
+        <p style={{ margin: 'calc(-1 * var(--space-4)) 0 var(--space-6)' }}>
+          <button type="button" className="ui-button ui-button--quiet ui-button--compact" aria-controls="password"
+            aria-pressed={v.showPassword} onClick={v.onToggleShow}>{SIGN_IN_COPY.showPassword}</button>
+        </p>
+        <Button variant="primary" type="submit" disabled={v.loading || v.hydrated === false}>
+          {v.loading ? SIGN_IN_COPY.submitting : SIGN_IN_COPY.submit}
+        </Button>
       </form>
       <p className="auth-footer">
-        <Link href="/forgot-password" style={{ display: 'inline-block', minHeight: '24px' }}>Forgot your password?</Link>
+        <Link href="/forgot-password" style={{ display: 'inline-block', minHeight: '24px' }}>{SIGN_IN_COPY.forgotLink}</Link>
       </p>
     </>
   );
@@ -160,7 +158,7 @@ export function LoginForm() {
   const searchParams = useSearchParams();
   // Defaults to `/`, the org dispatcher; a caller (the invitation page) may ask to come back. Validated same-origin.
   const callbackUrl = safeCallbackUrl(searchParams.get('callbackUrl'));
-  const notice = searchParams.get('passwordChanged') ? PASSWORD_CHANGED : searchParams.get('reason') === 'signed_out' ? SIGNED_OUT : null;
+  const notice = searchParams.get('passwordChanged') ? SIGN_IN_COPY.passwordChanged : searchParams.get('reason') === 'signed_out' ? SIGN_IN_COPY.signedOut : null;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);

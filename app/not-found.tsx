@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { ERRORS_COPY } from '@/lib/errors/copy';
+import { NOT_FOUND_COPY } from '@/lib/errors/not-found/copy';
 import { pageTitle } from '@/lib/ui/title';
 import { headers } from 'next/headers';
 import IdleWarning from '@/components/layout/IdleWarning';
@@ -8,7 +8,7 @@ import { MAIN_CONTENT_ID } from '@/components/layout/SkipLink';
 import { idleLimitSeconds } from '@/lib/auth/idle';
 import { readSessionDeadlines } from '@/lib/auth/idleDeadline';
 
-export const metadata: Metadata = { title: pageTitle(ERRORS_COPY.titles.notFound) };
+export const metadata: Metadata = { title: pageTitle(NOT_FOUND_COPY.title) };
 
 /**
  * S-31, "Not found or no access" (SRS 7.1.5; UX-05; M-27).

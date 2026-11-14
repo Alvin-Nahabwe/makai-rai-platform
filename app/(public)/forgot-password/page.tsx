@@ -16,16 +16,16 @@ export default function ForgotPasswordPage() {
         <img
           src="/logo-makai-252.png"
           srcSet="/logo-makai-252.png 1x, /logo-makai-504.png 2x"
-          alt="MAK-AI"
+          alt={AUTH_COPY.logoAlt}
           className="auth-logo"
           width={200}
           height={60}
           fetchPriority="high"
         />
-        <h1>Forgot password</h1>
+        <h1>{AUTH_COPY.resetHeading}</h1>
         <ForgotPasswordClient />
         <p className="auth-footer">
-          <Link href="/login" style={{ display: 'inline-block', minHeight: '24px' }}>Back to sign in</Link>
+          <Link href="/login" style={{ display: 'inline-block', minHeight: '24px' }}>{AUTH_COPY.backToSignIn}</Link>
         </p>
       </div>
     </div>
