@@ -12,8 +12,9 @@ import { reasonFieldError } from '@/lib/decision/rules';
 import { WITHDRAW_TEXT, withdrawOutcome } from '@/lib/question/saveOutcome';
 import type { DecisionVersionView } from '@/types/api';
 import type { FieldError, Stage, WithdrawalCode } from '@/types/record';
-import '@/components/ui/TextArea.css';
 import './WithdrawDecision.css';
+import '@/components/ui/textAreaStyles';
+import '@/components/ui/buttonStyles';
 
 export type WithdrawDecisionProps = {
   orgSlug: string; projectId: string; stage: Stage; questionId: string; current: DecisionVersionView; canWithdraw: boolean;
@@ -81,8 +82,18 @@ export function WithdrawDecision(p: WithdrawDecisionProps): ReactElement | null 
   // confirmation, moves to the result line instead of falling to the page (F12): once when the reply comes (after the
   // effect above has returned focus to the trigger), and again when the refresh brings the withdrawn version and the
   // line is the only thing left. Declared after that effect so it runs after it.
+  // The refresh shortens the page above the line (by 370 px at 320 by 568, measured 14 Nov 2026), and focus's own scroll
+  // follows html's smooth scrolling, so the focused line sat above the viewport until that animation ended. It is
+  // focused without a scroll and brought into view at once (instant), above the save bar by the page's scroll padding,
+  // and again on the next frame in case layout moved after this commit.
   useEffect(() => {
-    if (status === WITHDRAW_TEXT.withdrawn) result.current?.focus();
+    if (status !== WITHDRAW_TEXT.withdrawn) return;
+    const line = result.current;
+    if (line === null) return;
+    line.focus({ preventScroll: true });
+    const show = () => { if (document.activeElement === line) line.scrollIntoView({ block: 'nearest', behavior: 'instant' }); };
+    show();
+    requestAnimationFrame(show);
   }, [status, p.current.id]);
 
   // Focus is moved only from inside this control or from the page body: a person who went back to the decision form while

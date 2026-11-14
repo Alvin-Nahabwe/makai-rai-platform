@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ALL_ORG_ROLES } from '@/lib/authz/roles';
+import { ORG_COPY } from '@/lib/org/copy';
 
 /**
  * S-30 (MEM Task 2): the page's wiring (the organisation's name and legal name, and the two slots). The slot components are mocked, so this proves what the page gives them
@@ -52,7 +53,7 @@ describe('S-30 organisation details page', () => {
       const html = await renderPage(r);
       const manager = r === 'owner' || r === 'admin';
       expect(html, r).not.toContain('Membership and organisation changes');   // OrganisationEventsList carries the block's one heading
-      expect(html.includes('<h2 id="export-heading">Team export</h2>'), r).toBe(manager);
+      expect(html.includes(`<h2 id="export-heading">${ORG_COPY.organisation.downloadHeading}</h2>`), r).toBe(manager);
       for (const m of html.matchAll(/aria-labelledby="([^"]+)"/g)) expect(html, `${r}: ${m[1]}`).toContain(`id="${m[1]}"`);
     }
   });
@@ -61,14 +62,20 @@ describe('S-30 organisation details page', () => {
     for (const r of ALL_ORG_ROLES) {
       legalName = 'Fixture University';
       const html = await renderPage(r);
-      expect(html, r).toContain(`<p class="text-muted">${ORG_NAME}</p>`);
-      expect(html, r).toContain('Legal name: Fixture University');
+      expect(html, r).toContain(`<div class="ui-page-header__lead"><p>${ORG_NAME}</p>`);
+      expect(html, r).toContain(ORG_COPY.organisation.legalName('Fixture University'));
       expect(html, r).not.toMatch(/agreement|controller|data-protection contact/i);
       legalName = null;
       const none = await renderPage(r);
-      expect(none, r).toContain('Legal name: Not recorded');
+      expect(none, r).toContain(ORG_COPY.organisation.legalName(null));
       expect(none, r).not.toMatch(/agreement/i);
     }
+  });
+
+  it('S-30 (the legal plan\'s words, copy review 7): with no legal name recorded the page reads "Legal name: Not recorded"', async () => {
+    legalName = null;
+    const text = (await renderPage('viewer')).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
+    expect(text).toContain('Legal name: Not recorded');
   });
 
   it('FR-ORG-09 (RE-3): ?before reaches the reader only as an id; anything else is a first page', async () => {

@@ -4,6 +4,7 @@ import {
   CHANGE_NOTE_MAX, TEXT_MAX, parseAcceptRisk, parseAddMitigation, parseCloseByDecision, parseFindingEvent, parseUpdateMitigation, textLength,
 } from '@/lib/findings/validate';
 import { onlyRolesCanText } from '@/lib/findings/messages';
+import { FINDINGS_COPY } from '@/lib/findings/copy';
 
 const R = '0b8f7c1e-3a2d-4c5b-9e6f-7a8b9c0d1e2f';
 const ADD: AddMitigationRequest = {
@@ -22,9 +23,9 @@ const fieldsOf = (fn: () => unknown) => {
 
 describe('lib/findings/messages.ts and lib/findings/validate.ts', () => {
   it('M-26 FR-FND-05 UX-17: the not-allowed texts come from GRANTS', () => {
-    expect(onlyRolesCanText('risk:accept')).toBe('Only owners and admins can accept a risk.');
-    expect(onlyRolesCanText('mitigation:write')).toBe('Only owners, admins and assessors can add or update a mitigation.');
-    expect(onlyRolesCanText('finding:reopen')).toBe('Only owners, admins and assessors can reopen a finding.');
+    expect(onlyRolesCanText('risk:accept')).toBe(FINDINGS_COPY.roles.onlyRolesCan(['Owners', 'Admins'], FINDINGS_COPY.roles.actions['risk:accept']));
+    expect(onlyRolesCanText('mitigation:write')).toBe(FINDINGS_COPY.roles.onlyRolesCan(['Owners', 'Admins', 'Assessors'], FINDINGS_COPY.roles.actions['mitigation:write']));
+    expect(onlyRolesCanText('finding:reopen')).toBe('Only Owners, Admins and Assessors can reopen a finding.');
   });
 
   it('FR-FND-03: text limits: 4,000 characters, the change note 1,000, counted in code points after NFC', () => {
@@ -36,25 +37,25 @@ describe('lib/findings/messages.ts and lib/findings/validate.ts', () => {
     expect(parseUpdateMitigation({ ...UPDATE, changeNote: 'x'.repeat(1000) }).changeNote).toHaveLength(1000);
     expect(() => parseAddMitigation({ ...ADD, what: 'x'.repeat(4001) })).toThrow(expect.objectContaining({ status: 422 }));
     expect(parseAddMitigation({ ...ADD, what: '\u{1F600}'.repeat(4000) }).what).toHaveLength(8000);   // 4,000 code points
-    expect(() => parseAcceptRisk({ ...ACCEPT, reason: '   ' })).toThrow(expect.objectContaining({ extra: { fields: [{ field: 'reason', message: 'Write why the risk is accepted.' }] } }));
+    expect(() => parseAcceptRisk({ ...ACCEPT, reason: '   ' })).toThrow(expect.objectContaining({ extra: { fields: [{ field: 'reason', message: FINDINGS_COPY.fields.acceptReason }] } }));
   });
 
   it('FR-FND-07: an event code other than null is refused (no code set exists in v1)', () => {
     expect(() => parseFindingEvent({ requestId: R, reason: 'x', eventCode: 'any' })).toThrow(expect.objectContaining({ status: 422 }));
     expect(parseFindingEvent({ requestId: R, reason: 'x', eventCode: null })).toEqual({ requestId: R, reason: 'x', eventCode: null });
     expect(() => parseFindingEvent({ requestId: R, reason: '', eventCode: null })).toThrow(expect.objectContaining({
-      extra: { fields: [{ field: 'reason', message: 'Write a reason.' }] } }));
+      extra: { fields: [{ field: 'reason', message: FINDINGS_COPY.fields.eventReason }] } }));
   });
 
   it('FR-FND-03 FR-FND-04 UX-16: the field texts of the mitigation form', () => {
     const one = (body: unknown) => { try { parseAddMitigation(body); } catch (e) { return (e as { extra: { fields: unknown[] } }).extra.fields; } return []; };
-    expect(one({ ...ADD, ownerUserId: '' })).toEqual([{ field: 'ownerUserId', message: 'Choose an owner.' }]);
-    expect(one({ ...ADD, dueDate: '2026-02-30' })).toEqual([{ field: 'dueDate', message: 'Enter a due date.' }]);
-    expect(one({ ...ADD, dueDate: null })).toEqual([{ field: 'dueDate', message: 'Enter a due date.' }]);
-    expect(one({ ...ADD, what: ' ' })).toEqual([{ field: 'what', message: 'Write what will be done.' }]);
-    expect(one({ ...ADD, status: 'done' })).toEqual([{ field: 'closureNote', message: 'Add closure evidence, or say why there is none.' }]);
+    expect(one({ ...ADD, ownerUserId: '' })).toEqual([{ field: 'ownerUserId', message: FINDINGS_COPY.fields.ownerUserId }]);
+    expect(one({ ...ADD, dueDate: '2026-02-30' })).toEqual([{ field: 'dueDate', message: FINDINGS_COPY.fields.dueDate }]);
+    expect(one({ ...ADD, dueDate: null })).toEqual([{ field: 'dueDate', message: FINDINGS_COPY.fields.dueDate }]);
+    expect(one({ ...ADD, what: ' ' })).toEqual([{ field: 'what', message: FINDINGS_COPY.fields.what }]);
+    expect(one({ ...ADD, status: 'done' })).toEqual([{ field: 'closureNote', message: FINDINGS_COPY.fields.closureNote }]);
     expect(one({ ...ADD, status: 'done', evidenceIds: ['ev-1'] })).toEqual([]);
-    expect(one({ ...ADD, status: 'cancelled' })).toEqual([{ field: 'cancelReason', message: 'Say why it is cancelled.' }]);
+    expect(one({ ...ADD, status: 'cancelled' })).toEqual([{ field: 'cancelReason', message: FINDINGS_COPY.fields.cancelReason }]);
     expect(fieldsOf(() => parseUpdateMitigation({ ...UPDATE, baseVersionNumber: 0 }))).toEqual(['baseVersionNumber']);
   });
 
@@ -88,7 +89,7 @@ describe('lib/findings/messages.ts and lib/findings/validate.ts', () => {
     expect(parseUpdateMitigation({ ...UPDATE, changeNote: ' ' }).changeNote).toBeNull();
     expect(parseAcceptRisk({ ...ACCEPT, lookAgainNote: '' }).lookAgainNote).toBeNull();
     const one = (fn: () => unknown) => { try { fn(); } catch (e) { return (e as { extra: { fields: unknown[] } }).extra.fields; } return []; };
-    expect(one(() => parseAddMitigation({ ...ADD, status: 'done', closureNote: '' }))).toEqual([{ field: 'closureNote', message: 'Add closure evidence, or say why there is none.' }]);
+    expect(one(() => parseAddMitigation({ ...ADD, status: 'done', closureNote: '' }))).toEqual([{ field: 'closureNote', message: FINDINGS_COPY.fields.closureNote }]);
     expect(one(() => parseAddMitigation({ ...ADD, closureNote: 5 }))).toEqual([{ field: 'closureNote', message: 'closureNote must be text or null.' }]);
     const { cancelReason: _omitted, ...noCancelKey } = ADD;
     expect(one(() => parseAddMitigation(noCancelKey))).toEqual([{ field: 'cancelReason', message: 'cancelReason must be text or null.' }]);
@@ -108,9 +109,9 @@ describe('lib/findings/messages.ts and lib/findings/validate.ts', () => {
 
   it('FR-FND-03 NFR-SEC-02: an id field holding a character the database cannot store answers 422 on that field', () => {
     const one = (fn: () => unknown) => { try { fn(); } catch (e) { return (e as { extra: { fields: unknown[] } }).extra.fields; } return []; };
-    expect(one(() => parseAddMitigation({ ...ADD, ownerUserId: 'user\u0000-1' }))).toEqual([{ field: 'ownerUserId', message: 'Choose an owner.' }]);
-    expect(one(() => parseAddMitigation({ ...ADD, evidenceIds: ['ev\u0000'] }))).toEqual([{ field: 'evidenceIds', message: 'Attach each evidence item once, and at most 100.' }]);
-    expect(one(() => parseAcceptRisk({ ...ACCEPT, acceptedBy: { kind: 'member', userId: 'u\u0000' } }))).toEqual([{ field: 'acceptedBy', message: 'Choose who accepted the risk.' }]);
-    expect(one(() => parseCloseByDecision({ requestId: R, decisionVersionId: 'v\uD800' }))).toEqual([{ field: 'decisionVersionId', message: 'Choose the decision version that closes this finding.' }]);
+    expect(one(() => parseAddMitigation({ ...ADD, ownerUserId: 'user\u0000-1' }))).toEqual([{ field: 'ownerUserId', message: FINDINGS_COPY.fields.ownerUserId }]);
+    expect(one(() => parseAddMitigation({ ...ADD, evidenceIds: ['ev\u0000'] }))).toEqual([{ field: 'evidenceIds', message: FINDINGS_COPY.fields.evidenceIds }]);
+    expect(one(() => parseAcceptRisk({ ...ACCEPT, acceptedBy: { kind: 'member', userId: 'u\u0000' } }))).toEqual([{ field: 'acceptedBy', message: FINDINGS_COPY.fields.acceptedBy }]);
+    expect(one(() => parseCloseByDecision({ requestId: R, decisionVersionId: 'v\uD800' }))).toEqual([{ field: 'decisionVersionId', message: FINDINGS_COPY.fields.closingDecisionVersionId }]);
   });
 });

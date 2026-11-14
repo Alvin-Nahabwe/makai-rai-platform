@@ -1,8 +1,9 @@
 /**
  * The question page's own words (copy audit B rows 7 to 20, 179 to 184 and 249 to 251, audit C rows 172 to 174, plan 1A
  * Task 17): its navigation, its region headings, the earlier-wording disclosure, the current decision, the question's
- * content and the finding link. SERVER ONLY: the page, CurrentDecision, QuestionContent and QuestionFindingLink, all
- * server components, import it; no 'use client' file does (ruling X-2), so these words are not shipped to the browser.
+ * content and the finding link; the stage page's and the history page's own words, with DecisionHistoryList's. SERVER
+ * ONLY: the pages, CurrentDecision, DecisionHistoryList, QuestionContent and QuestionFindingLink, all server components,
+ * import it; no 'use client' file does (ruling X-2), so these words are not shipped to the browser.
  */
 export const QUESTION_COPY = Object.freeze({
   nav: Object.freeze({
@@ -43,6 +44,30 @@ export const QUESTION_COPY = Object.freeze({
     jump: (n: number): string => `Ways teams address this (${n})`,
     goodPractice: 'What good looks like',
     whyAsked: 'Why this is asked',
+  }),
+  /** The stage page, All questions (copy audit B rows 2 to 6). */
+  stage: Object.freeze({
+    topics: (titles: readonly string[]): string => titles.join(' · '),
+    nothingRecorded: 'Nothing is recorded for this stage yet. Open any question to start. You can work on the stages in any order.',
+    reviewName: (name: string): string => `${name}:`,
+    showMore: 'Show more' as const,
+  }),
+  /** The history page of a question and components/decision/DecisionHistoryList.tsx (copy audit B rows 21 to 25, 185 to 197). */
+  history: Object.freeze({
+    back: (questionId: string): string => `Back to ${questionId}`,
+    none: 'No decision has been recorded for this question yet.',
+    count: (n: number): string => `${n} ${n === 1 ? 'version' : 'versions'}, newest first.`,
+    showOlder: 'Show older' as const,
+    version: (n: number): string => `Version ${n}`,
+    status: 'Status',
+    withdrawn: (code: string): string => `Withdrawn: ${code}`,
+    reason: 'Reason',
+    decidedBy: 'Decided by',
+    enteredBy: 'Entered by',
+    questionThen: 'Question as worded then',
+    goodPracticeThen: 'What good looked like',
+    evidence: 'Evidence',
+    noEvidence: 'None',
   }),
   /** components/findings/QuestionFindingLink.tsx (answer Q7 (b)). */
   findingLink: Object.freeze({

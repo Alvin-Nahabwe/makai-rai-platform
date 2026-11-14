@@ -1,5 +1,6 @@
 import { ValidationFailed } from '@/lib/http/errors';
 import { isRequestId } from '@/lib/data/idempotency';
+import { FINDINGS_COPY } from '@/lib/findings/copy';
 import { OUTSIDE_ROLES, type CalendarDate, type Decider, type FieldError, type MitigationStatus, type OutsideRole } from '@/types/record';
 import type {
   AcceptRiskRequest, AddMitigationRequest, CloseByDecisionRequest, FindingEventRequest, UpdateMitigationRequest,
@@ -26,33 +27,39 @@ export function textLength(s: string): number {
   return Array.from(s.trim().normalize('NFC')).length;
 }
 
-/** The field texts (7.4.2 S-15 row, SRS line 2384, and the brief's request texts). */
+/**
+ * The field texts (7.4.2 S-15 row, SRS line 2384, and the brief's request texts). Every text a form may show is
+ * `FINDINGS_COPY.fields`' own string, the copy the forms' checks and `fieldText`'s allow-list read too; the texts that
+ * name a request field (`body`, `requestId`, `baseVersionNumber`, `mode`, `eventCode`, `notText`) are for a developer and
+ * a form shows its fixed sentence in their place.
+ */
+const F = FINDINGS_COPY.fields;
 export const FINDING_MESSAGES = Object.freeze({
   body: 'The request body must be a JSON object.',
   requestId: 'requestId must be a UUID (8-4-4-4-12 hexadecimal).',
-  what: 'Write what will be done.',
-  ownerUserId: 'Choose an owner.',
-  dueDate: 'Enter a due date.',
-  status: 'Choose a status.',
-  followsControl: 'Choose a control from the suggested controls, or none.',
-  closureNote: 'Add closure evidence, or say why there is none.',
-  closureNoteNotDone: 'Only a done mitigation has a closure note.',
-  cancelReason: 'Say why it is cancelled.',
-  cancelReasonNotCancelled: 'Only a cancelled mitigation has a cancel reason.',
-  evidenceIds: 'Attach each evidence item once, and at most 100.',
+  what: F.what,
+  ownerUserId: F.ownerUserId,
+  dueDate: F.dueDate,
+  status: F.status,
+  followsControl: F.followsControl,
+  closureNote: F.closureNote,
+  closureNoteNotDone: F.closureNoteNotDone,
+  cancelReason: F.cancelReason,
+  cancelReasonNotCancelled: F.cancelReasonNotCancelled,
+  evidenceIds: F.evidenceIds,
   baseVersionNumber: 'baseVersionNumber must be the number of the version you started from.',
-  changeNote: 'Say why the date changed.',
+  changeNote: F.changeNote,
   mode: 'mode must be accept or keep_accepted.',
-  acceptedBy: 'Choose who accepted the risk.',
-  acceptReason: 'Write why the risk is accepted.',
-  lookAgainOn: 'Enter a real date to look at it again, or none.',
-  lookAgainNote: 'Write what was looked at again.',
-  eventReason: 'Write a reason.',
+  acceptedBy: F.acceptedBy,
+  acceptReason: F.acceptReason,
+  lookAgainOn: F.lookAgainOn,
+  lookAgainNote: F.lookAgainNote,
+  eventReason: F.eventReason,
   eventCode: 'eventCode must be null: no event codes exist yet.',
-  decisionVersionId: 'Choose the decision version that closes this finding.',
-  cancelledFinal: 'A cancelled mitigation cannot be changed.',
-  tooLong: (n: number, max: number) => `This is ${n.toLocaleString('en-GB')} characters. The limit is ${max.toLocaleString('en-GB')}.`,
-  notStorable: 'This contains a character that cannot be stored. Remove it and save again.',
+  decisionVersionId: F.closingDecisionVersionId,
+  cancelledFinal: F.cancelledFinal,
+  tooLong: FINDINGS_COPY.tooLong,
+  notStorable: F.notStorable,
   notText: (field: string) => `${field} must be text or null.`,
 });
 
@@ -193,7 +200,7 @@ export function parseAcceptRisk(body: unknown): AcceptRiskRequest {
   c.check(isDecider(b.acceptedBy), 'acceptedBy', FINDING_MESSAGES.acceptedBy);
   c.add(textError(b.reason, 'reason', FINDING_MESSAGES.acceptReason, TEXT_MAX));
   c.check(b.lookAgainOn === null || isCalendarDate(b.lookAgainOn), 'lookAgainOn', FINDING_MESSAGES.lookAgainOn);
-  // "Looked at again: keep accepted" is a new accepted risk with a note (FR-FND-05); a first acceptance may carry one.
+  // "Keep the risk accepted" is a new accepted risk with a note (FR-FND-05); a first acceptance may carry one.
   const before = c.errors.length;
   const lookAgainNote = optionalNote(b, 'lookAgainNote', c);
   if (c.errors.length === before && (b.mode === 'keep_accepted' || lookAgainNote !== null)) {

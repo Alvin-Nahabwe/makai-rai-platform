@@ -12,6 +12,8 @@ import { buildOrg } from '../__tests__/helpers/recordFixture';
 import { INVITATION_COPY } from '../lib/invitations/copy';
 import { COPY_LINK_COPY } from '../lib/invitations/link/copy';
 import { INVITATION_PAGE_COPY, ORG_COPY } from '../lib/org/copy';
+import { ADMIN_FORMS_COPY, INVITATION_STATE_WORDS } from '../lib/admin/forms/copy';
+import { ADMIN_COPY } from '../lib/admin/copy';
 
 /**
  * J-01, the MAK-AI administrator's journey (units/ORG.md Task 9): create an organisation with its institution's legal
@@ -20,6 +22,18 @@ import { INVITATION_PAGE_COPY, ORG_COPY } from '../lib/org/copy';
  * gives the administrator the same S-31 as a non-member (UX-05); the removed creation paths answer 404 (FR-ORG-04);
  * keyboard, axe and reflow (NFR-A11Y-02, NFR-A11Y-05). The administrator is the run's one seat (adminSeat(), Task 8b).
  */
+
+const CREATE = ADMIN_FORMS_COPY.create;
+const OWNER = ADMIN_FORMS_COPY.invitation;
+const LEGAL = ADMIN_FORMS_COPY.legalName;
+const NAME = ADMIN_FORMS_COPY.name;
+
+/** A whole line of the copy, with `(.+)` where the function puts its argument, as a pattern anchored at both ends. */
+function wholeLine(line: (arg: string) => string): RegExp {
+  const marker = 'ARGUMENT';
+  const escaped = line(marker).replace(/[.*+?^$()|[\]\\{}]/g, '\\$&');
+  return new RegExp(`^${escaped.replace(marker, '.+')}$`);
+}
 
 function manifest(): FixtureManifest {
   return JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf-8')) as FixtureManifest;
@@ -34,9 +48,9 @@ test.use({ storageState: adminSeat().storageStatePath });
 
 /** Fills S-24's create form by label: the organisation, its institution's legal name and the first owner. */
 async function fillCreate(page: Page, name: string, ownerEmail: string, legalName = 'Makerere University'): Promise<void> {
-  await page.getByLabel('Organisation name').fill(name);
-  await page.getByLabel("Institution's legal name").fill(legalName);
-  await page.getByLabel("First owner's email").fill(ownerEmail);
+  await page.getByLabel(CREATE.nameLabel).fill(name);
+  await page.getByLabel(CREATE.legalNameLabel).fill(legalName);
+  await page.getByLabel(CREATE.ownerEmailLabel).fill(ownerEmail);
 }
 
 /**
@@ -61,48 +75,53 @@ test('FR-ORG-01 FR-ORG-02 UX-23: the administrator creates an organisation and r
   const name = `J01 Lab ${randomUUID().slice(0, 8)}`;
   const ownerEmail = `j01-${randomUUID().slice(0, 8)}@fixture.test`;
   await page.goto('/admin/organisations');
-  await page.getByRole('link', { name: 'Create organisation' }).first().click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Create an organisation' })).toBeVisible();
+  await page.getByRole('link', { name: ADMIN_COPY.organisations.create }).first().click();
+  await expect(page.getByRole('heading', { level: 1, name: ADMIN_COPY.titles.newOrganisation })).toBeVisible();
   await fillCreate(page, name, ownerEmail, 'J01 University');
-  await page.getByLabel(/^Show link/).check();
-  await page.getByRole('button', { name: 'Create organisation and send invitation' }).click();
+  await page.getByLabel(CREATE.showLink).check();
+  await page.getByRole('button', { name: CREATE.submit }).click();
   // The e2e server has no mail sender, so this is UX-23's failure branch: the sentence in the status region, the link.
-  await expect(page.getByRole('main').getByRole('status').first()).toHaveText('Created. The invitation email could not be sent. Send this link another way.');
+  const createStatus = page.getByRole('main').getByRole('status').first();
+  await expect(createStatus).toHaveText(`${CREATE.createdPrefix} ${COPY_LINK_COPY.emailFailed}`);
+  // The pressed button went with the form: focus is on the status line that holds the result (rulings X-4, L5-14).
+  await expect(createStatus).toBeFocused();
   await expect(page.getByRole('button', { name: COPY_LINK_COPY.copy })).toBeEnabled();
-  await expect(page.getByLabel(COPY_LINK_COPY.linkLabel)).toHaveValue(/\/invitations\/[0-9a-f]{64}$/);
+  await expect(page.getByLabel(COPY_LINK_COPY.linkLabel, { exact: true })).toHaveValue(/\/invitations\/[0-9a-f]{64}$/);
   await expect(page.getByText(/^The link works once and expires on \d{1,2} [A-Z][a-z]{2} \d{4}\.$/)).toBeVisible();
 
-  await page.getByRole('link', { name: 'Open the organisation' }).click();
+  await page.getByRole('link', { name: CREATE.open }).click();
   await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
-  await expect(page.getByText('Legal name: J01 University')).toBeVisible();
-  await expect(page.getByText(`${ownerEmail} · owner · Pending`, { exact: false })).toBeVisible();
+  await expect(page.getByText(ADMIN_COPY.organisation.legalName('J01 University'))).toBeVisible();
+  await expect(page.getByText(OWNER.line(ownerEmail, INVITATION_STATE_WORDS.pending), { exact: false })).toBeVisible();
 
-  // The legal name is corrected on its own form, and the page and S-23 show the new value.
-  await page.getByRole('button', { name: 'Correct the legal name' }).click();
-  await page.getByLabel("Institution's legal name").fill('J01 University of Science');
-  await page.getByRole('button', { name: 'Save the corrected legal name' }).click();
-  await expect(page.getByRole('status').filter({ hasText: /^Saved\./ })).toHaveText('Saved. The legal name is now J01 University of Science; it was J01 University.');
-  await expect(page.getByText('Legal name: J01 University of Science')).toBeVisible();
+  // The legal name is changed on its own form, and the page and S-23 show the new value.
+  await page.getByRole('button', { name: LEGAL.change }).click();
+  await page.getByLabel(LEGAL.label).fill('J01 University of Science');
+  await page.getByRole('button', { name: LEGAL.save }).click();
+  await expect(page.getByRole('status').filter({ hasText: /^Saved\./ })).toHaveText(LEGAL.saved('J01 University of Science', 'J01 University'));
+  await expect(page.getByText(ADMIN_COPY.organisation.legalName('J01 University of Science'))).toBeVisible();
 
   // The retired agreements route answers 404 for this organisation, to the administrator with the app's own headers.
   const orgId = (await testDb.organization.findFirstOrThrow({ where: { name }, select: { id: true } })).id;
   const retired = await page.request.post(`/api/admin/organisations/${orgId}/agreements`, { data: {}, headers: { origin: new URL(page.url()).origin } });
   expect(retired.status()).toBe(404);
 
-  await page.getByRole('button', { name: 'Resend invitation' }).click();
-  await expect(page.getByText(/^Resent: the old link no longer works\./)).toBeVisible();
-  await page.getByRole('button', { name: 'Revoke invitation' }).click();
-  await page.getByRole('group').getByRole('button', { name: 'Revoke invitation' }).click();
-  await expect(page.getByText(`Revoked. The invitation to ${ownerEmail} no longer works.`)).toBeVisible();
+  await page.getByRole('button', { name: OWNER.resend }).click();
+  await expect(page.getByText(OWNER.resentPrefix)).toBeVisible();
+  await page.getByRole('button', { name: OWNER.cancelTrigger }).click();
+  await page.getByRole('group').getByRole('button', { name: OWNER.confirmAction }).click();
+  await expect(page.getByText(OWNER.cancelled(ownerEmail))).toBeVisible();
 
-  await page.getByRole('button', { name: 'Issue a new first-owner invitation' }).click();
-  await page.getByLabel("New first owner's email").fill(`second-${ownerEmail}`);
-  await page.getByLabel("Reference of the controller's written request").fill('CTRL-J01');
-  await page.getByRole('button', { name: 'Issue invitation' }).click();
-  await expect(page.getByText(/^Issued\./)).toBeVisible();
+  await page.getByRole('button', { name: OWNER.sendNew }).click();
+  await page.getByLabel(OWNER.emailLabel).fill(`second-${ownerEmail}`);
+  await page.getByLabel(OWNER.referenceLabel).fill('CTRL-J01');
+  await page.getByRole('button', { name: OWNER.submit, exact: true }).click();
+  // No link was asked for: the sentence names the link box's button (answer Q21).
+  await expect(page.getByText(`${OWNER.createdPrefix} ${COPY_LINK_COPY.emailFailedNoLink}`)).toBeVisible();
+  await expect(page.getByRole('button', { name: COPY_LINK_COPY.resend })).toBeVisible();
   await page.reload();
-  await expect(page.getByText(`second-${ownerEmail} · owner · Pending`, { exact: false })).toBeVisible();
-  await expect(page.getByText(`${ownerEmail} · owner · Revoked`, { exact: false }).first()).toBeVisible();
+  await expect(page.getByText(OWNER.line(`second-${ownerEmail}`, INVITATION_STATE_WORDS.pending), { exact: false })).toBeVisible();
+  await expect(page.getByText(OWNER.line(ownerEmail, INVITATION_STATE_WORDS.revoked), { exact: false }).first()).toBeVisible();
 
   await page.goto('/admin/organisations?shown=1000');
   await expect(page.getByRole('link', { name })).toBeVisible();
@@ -113,9 +132,9 @@ test('FR-ORG-01 FR-ACC-03 FR-ORG-09: the first owner accepts the three texts fro
   const name = `Owner Lab ${randomUUID().slice(0, 8)}`;
   await page.goto('/admin/organisations/new');
   await fillCreate(page, name, `owner-${randomUUID().slice(0, 8)}@fixture.test`, 'Owner University');
-  await page.getByLabel(/^Show link/).check();
-  await page.getByRole('button', { name: 'Create organisation and send invitation' }).click();
-  const link = await page.getByLabel(COPY_LINK_COPY.linkLabel).inputValue();
+  await page.getByLabel(CREATE.showLink).check();
+  await page.getByRole('button', { name: CREATE.submit }).click();
+  const link = await page.getByLabel(COPY_LINK_COPY.linkLabel, { exact: true }).inputValue();
   const org = await testDb.organization.findFirstOrThrow({ where: { name }, select: { slug: true } });
   const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
   await abortPendingBackgroundRequests(context);
@@ -131,8 +150,8 @@ test('FR-ORG-01 FR-ACC-03 FR-ORG-09: the first owner accepts the three texts fro
   await owner.getByRole('button', { name: INVITATION_COPY.createAccount }).click();
   await owner.waitForURL(`**/orgs/${org.slug}/dashboard?welcome=1`);
   await owner.goto(`/orgs/${org.slug}/settings/organisation`);
-  await expect(owner.getByRole('heading', { level: 1, name: 'Organisation details' })).toBeVisible();
-  await expect(owner.getByText('Legal name: Owner University')).toBeVisible();
+  await expect(owner.getByRole('heading', { level: 1, name: ORG_COPY.titles.organisation })).toBeVisible();
+  await expect(owner.getByText(ORG_COPY.organisation.legalName('Owner University'))).toBeVisible();
   await expect(owner.locator('main')).not.toContainText(/agreement/i);
   await context.close();
 });
@@ -141,12 +160,17 @@ test('UX-23 FR-ORG-02: with the email failed and no link shown, Resend and show 
   const name = `Nolink Lab ${randomUUID().slice(0, 8)}`;
   await page.goto('/admin/organisations/new');
   await fillCreate(page, name, `nolink-${randomUUID().slice(0, 8)}@fixture.test`);
-  await page.getByRole('button', { name: 'Create organisation and send invitation' }).click();
-  await expect(page.getByRole('main').getByRole('status').first()).toHaveText('Created. The invitation email could not be sent. Send this link another way.');
-  await expect(page.getByLabel(COPY_LINK_COPY.linkLabel)).toHaveCount(0);
-  await page.getByRole('button', { name: COPY_LINK_COPY.resend }).click();
-  await expect(page.getByRole('main').getByRole('status').first()).toHaveText('Resent: the old link no longer works. The invitation email could not be sent. Send this link another way.');
-  const link = await page.getByLabel(COPY_LINK_COPY.linkLabel).inputValue();
+  await page.getByRole('button', { name: CREATE.submit }).click();
+  // No link on the screen: the sentence names the button the link box offers (answer Q21).
+  await expect(page.getByRole('main').getByRole('status').first()).toHaveText(`${CREATE.createdPrefix} ${COPY_LINK_COPY.emailFailedNoLink}`);
+  await expect(page.getByLabel(COPY_LINK_COPY.linkLabel, { exact: true })).toHaveCount(0);
+  const resendWithLink = page.getByRole('button', { name: COPY_LINK_COPY.resend });
+  await resendWithLink.click();
+  // The link is on the screen now: the sentence says to send it another way.
+  await expect(page.getByRole('main').getByRole('status').first()).toHaveText(`${OWNER.resentPrefix} ${COPY_LINK_COPY.emailFailed}`);
+  await expect(resendWithLink).toHaveCount(0);
+  await expect(page.getByRole('main').getByRole('status').first()).toBeFocused();   // the pressed button is gone (X-4, L5-14)
+  const link = await page.getByLabel(COPY_LINK_COPY.linkLabel, { exact: true }).inputValue();
   expect(link).toMatch(/\/invitations\/[0-9a-f]{64}$/);
   const outsider = await browser.newContext({ storageState: { cookies: [], origins: [] } });
   const s04 = await outsider.newPage();
@@ -156,27 +180,30 @@ test('UX-23 FR-ORG-02: with the email failed and no link shown, Resend and show 
   await outsider.close();
 });
 
+// Register D-382: the handler below holds a refresh for 3 s, and the unroute could run while it waited, so its late
+// continue() threw "Route is already handled!". The routes are now taken off with unrouteAll({ behavior: 'wait' }),
+// which waits for a handler still running before it returns.
 test('FR-ORG-02: a revoke straight after a resend revokes the new invitation, before the page has refreshed', async ({ page }) => {
   const name = `Stale Lab ${randomUUID().slice(0, 8)}`;
   const ownerEmail = `stale-${randomUUID().slice(0, 8)}@fixture.test`;
   await page.goto('/admin/organisations/new');
   await fillCreate(page, name, ownerEmail);
-  await page.getByRole('button', { name: 'Create organisation and send invitation' }).click();
-  await page.getByRole('link', { name: 'Open the organisation' }).click();
+  await page.getByRole('button', { name: CREATE.submit }).click();
+  await page.getByRole('link', { name: CREATE.open }).click();
   await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
   // Hold every refresh of the page's server data, so the box acts on what it was given before the refresh lands.
   await page.route('**/admin/organisations/**', async (route) => {
     if (route.request().headers()['rsc'] !== undefined) await new Promise((r) => setTimeout(r, 3000));
     await route.continue();
   });
-  await page.getByRole('button', { name: 'Resend invitation' }).click();
-  await expect(page.getByText(/^Resent: the old link no longer works\./)).toBeVisible();
-  await page.getByRole('button', { name: 'Revoke invitation' }).click();
-  await page.getByRole('group').getByRole('button', { name: 'Revoke invitation' }).click();
-  await expect(page.getByText(`Revoked. The invitation to ${ownerEmail} no longer works.`)).toBeVisible();
-  await page.unroute('**/admin/organisations/**');
+  await page.getByRole('button', { name: OWNER.resend }).click();
+  await expect(page.getByText(OWNER.resentPrefix)).toBeVisible();
+  await page.getByRole('button', { name: OWNER.cancelTrigger }).click();
+  await page.getByRole('group').getByRole('button', { name: OWNER.confirmAction }).click();
+  await expect(page.getByText(OWNER.cancelled(ownerEmail))).toBeVisible();
+  await page.unrouteAll({ behavior: 'wait' });
   await page.reload();
-  await expect(page.getByText(`${ownerEmail} · owner · Pending`, { exact: false })).toHaveCount(0);
+  await expect(page.getByText(OWNER.line(ownerEmail, INVITATION_STATE_WORDS.pending), { exact: false })).toHaveCount(0);
 });
 
 test('SC 2.4.11 (D-349): a refresh that adds the resent invitation\'s row after focus reached the confirmation leaves the focused button wholly in view', async ({ page }) => {
@@ -184,8 +211,8 @@ test('SC 2.4.11 (D-349): a refresh that adds the resent invitation\'s row after 
   const ownerEmail = `late-row-${randomUUID().slice(0, 8)}@fixture.test`;
   await page.goto('/admin/organisations/new');
   await fillCreate(page, name, ownerEmail);
-  await page.getByRole('button', { name: 'Create organisation and send invitation' }).click();
-  await page.getByRole('link', { name: 'Open the organisation' }).click();
+  await page.getByRole('button', { name: CREATE.submit }).click();
+  await page.getByRole('link', { name: CREATE.open }).click();
   await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
   // Hold the refresh of the page's server data that follows the resend (the RSC request), until focus is on the button.
   let release: () => void = () => {};
@@ -195,12 +222,12 @@ test('SC 2.4.11 (D-349): a refresh that adds the resent invitation\'s row after 
     await route.continue();
   });
   try {
-    const rows = page.locator('section').filter({ has: page.getByRole('heading', { name: 'First-owner invitation' }) }).locator('ul > li');
+    const rows = page.locator('section').filter({ has: page.getByRole('heading', { name: OWNER.heading }) }).locator('ul > li');
     await expect(rows).toHaveCount(1);
-    await page.getByRole('button', { name: 'Resend invitation' }).click();
-    await expect(page.getByText(/^Resent: the old link no longer works\./)).toBeVisible();
-    await page.getByRole('button', { name: 'Revoke invitation' }).first().click();
-    const confirm = page.getByRole('group').getByRole('button', { name: 'Revoke invitation' });
+    await page.getByRole('button', { name: OWNER.resend }).click();
+    await expect(page.getByText(OWNER.resentPrefix)).toBeVisible();
+    await page.getByRole('button', { name: OWNER.cancelTrigger }).first().click();
+    const confirm = page.getByRole('group').getByRole('button', { name: OWNER.confirmAction });
     // Put the confirm button's bottom a few pixels above the window's edge, as at 720 px in J-01: wholly in view, so
     // reaching it scrolls nothing, and a row added above it afterwards pushes it past the edge.
     const box = await confirm.boundingBox();
@@ -215,10 +242,86 @@ test('SC 2.4.11 (D-349): a refresh that adds the resent invitation\'s row after 
     await expect(confirm).toBeFocused();
     await expect(confirm).toBeInViewport({ ratio: 1 });
   } finally {
-    // Released and removed whatever happened above, so a failure cannot leave the held request waiting for ever.
+    // Released and removed whatever happened above, so a failure cannot leave the held request waiting for ever. The
+    // unroute waits for a handler still running (register D-382's repair): released, it may still call continue().
     release();
-    await page.unroute('**/admin/organisations/**');
+    await page.unrouteAll({ behavior: 'wait' });
   }
+});
+
+test('SC 4.1.2 (ruling L5-25): while a resend is in flight, Resend alone is busy and Cancel invitation is disabled, so no confirmation can open on a request that is not its own', async ({ page }) => {
+  const name = `Busy Lab ${randomUUID().slice(0, 8)}`;
+  await page.goto('/admin/organisations/new');
+  await fillCreate(page, name, `busy-${randomUUID().slice(0, 8)}@fixture.test`);
+  await page.getByRole('button', { name: CREATE.submit }).click();
+  await page.getByRole('link', { name: CREATE.open }).click();
+  await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
+  let release: () => void = () => {};
+  const held = new Promise<void>((r) => { release = r; });
+  await page.route('**/owner-invitations/*/resend', async (route) => {
+    await held;
+    await route.continue();
+  });
+  const resend = page.getByRole('button', { name: OWNER.resend });
+  const cancelInvitation = page.getByRole('button', { name: OWNER.cancelTrigger });
+  try {
+    await expect(cancelInvitation).toBeEnabled();
+    await resend.click();
+    await expect(resend).toHaveAttribute('aria-busy', 'true');
+    await expect(resend).toBeEnabled();
+    await expect(cancelInvitation).toBeDisabled();
+    await expect(cancelInvitation).not.toHaveAttribute('aria-busy', 'true');
+    await expect(page.getByRole('group', { name: /./ }).getByRole('button', { name: OWNER.confirmAction })).toHaveCount(0);
+  } finally {
+    release();
+    await page.unrouteAll({ behavior: 'wait' });
+  }
+  await expect(page.getByText(OWNER.resentPrefix)).toBeVisible();
+  await expect(cancelInvitation.first()).toBeEnabled();
+});
+
+test('SC 2.4.3 (rulings L5-14, X-4): on the organisation page each form opens on its field and each Cancel gives focus back to the control that opened it', async ({ page }) => {
+  const name = `Focus Lab ${randomUUID().slice(0, 8)}`;
+  const ownerEmail = `focus-${randomUUID().slice(0, 8)}@fixture.test`;
+  await page.goto('/admin/organisations/new');
+  await fillCreate(page, name, ownerEmail);
+  await page.getByRole('button', { name: CREATE.submit }).click();
+  await page.getByRole('link', { name: CREATE.open }).click();
+  await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
+  await page.waitForLoadState('networkidle');
+
+  // The name: the form replaces its button and opens on its field; Cancel brings the button back, focused.
+  const changeName = page.getByRole('button', { name: NAME.change });
+  await changeName.click();
+  await expect(page.getByLabel(NAME.label)).toBeFocused();
+  await page.getByRole('button', { name: NAME.cancel, exact: true }).click();
+  await expect(changeName).toBeFocused();
+
+  // The legal name: the same.
+  const changeLegal = page.getByRole('button', { name: LEGAL.change });
+  await changeLegal.click();
+  await expect(page.getByLabel(LEGAL.label)).toBeFocused();
+  await page.getByRole('button', { name: LEGAL.cancel, exact: true }).click();
+  await expect(changeLegal).toBeFocused();
+
+  // The owner invitation's confirmation opens on "Keep invitation", which gives focus back to "Cancel invitation".
+  const cancelInvitation = page.getByRole('button', { name: OWNER.cancelTrigger }).first();
+  await cancelInvitation.click();
+  const confirmation = page.getByRole('group', { name: OWNER.confirmObject(ownerEmail) });
+  await expect(confirmation.getByRole('button', { name: OWNER.keep })).toBeFocused();
+  await confirmation.getByRole('button', { name: OWNER.keep }).click();
+  await expect(confirmation).toHaveCount(0);
+  await expect(cancelInvitation).toBeFocused();
+
+  // With the invitation cancelled, the send form opens on its email field, and its Cancel gives focus back.
+  await cancelInvitation.click();
+  await confirmation.getByRole('button', { name: OWNER.confirmAction }).click();
+  await expect(page.getByText(OWNER.cancelled(ownerEmail))).toBeVisible();
+  const sendNew = page.getByRole('button', { name: OWNER.sendNew });
+  await sendNew.click();
+  await expect(page.getByLabel(OWNER.emailLabel)).toBeFocused();
+  await page.getByRole('button', { name: OWNER.cancel, exact: true }).click();
+  await expect(sendNew).toBeFocused();
 });
 
 test('FR-ORG-03 NFR-SEC-04: the administrator pages hold no record content', async ({ browser, baseURL }) => {
@@ -279,7 +382,7 @@ test('NFR-A11Y-02 NFR-A11Y-05: J-01 by keyboard; S-07 and S-23 to S-25 pass axe 
   const steps: Array<[string, string]> = [
     ['name', name], ['legalName', 'Keyboard University'], ['ownerEmail', `keys-${randomUUID().slice(0, 8)}@fixture.test`],
   ];
-  await page.getByLabel('Organisation name').focus();
+  await page.getByLabel(CREATE.nameLabel).focus();
   for (const [field, value] of steps) {
     await expect(page.locator(`form [name="${field}"]`)).toBeFocused();
     await expectFocusVisibleAndUncovered(page);
@@ -289,40 +392,40 @@ test('NFR-A11Y-02 NFR-A11Y-05: J-01 by keyboard; S-07 and S-23 to S-25 pass axe 
   await expect(page.locator('form [name="showLink"]')).toBeFocused();
   await page.keyboard.press('Space');
   await page.keyboard.press('Tab');
-  await expect(page.getByRole('button', { name: 'Create organisation and send invitation' })).toBeFocused();
+  await expect(page.getByRole('button', { name: CREATE.submit })).toBeFocused();
   await expectFocusVisibleAndUncovered(page);
   await page.keyboard.press('Enter');
   await expect(page.getByRole('main').getByRole('status').first()).toHaveText(/^Created\./);
-  // J-01's recovery by keyboard alone, on the detail page: Resend, Revoke and its confirmation, Issue (C4 SPEC-2).
-  await tabTo(page, page.getByRole('link', { name: 'Open the organisation' }));
+  // J-01's recovery by keyboard alone, on the detail page: Resend, Cancel and its confirmation, Send a new one (C4 SPEC-2).
+  await tabTo(page, page.getByRole('link', { name: CREATE.open }));
   await expectFocusVisibleAndUncovered(page);
   await page.keyboard.press('Enter');
   await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
-  await tabTo(page, page.getByRole('button', { name: 'Resend invitation' }));
+  await tabTo(page, page.getByRole('button', { name: OWNER.resend }));
   await expectFocusVisibleAndUncovered(page);
   await page.keyboard.press('Enter');
-  await expect(page.getByText(/^Resent: the old link no longer works\./)).toBeVisible();
-  await tabTo(page, page.getByRole('button', { name: 'Revoke invitation' }).first());
+  await expect(page.getByText(OWNER.resentPrefix)).toBeVisible();
+  await tabTo(page, page.getByRole('button', { name: OWNER.cancelTrigger }).first());
   await expectFocusVisibleAndUncovered(page);
   await page.keyboard.press('Enter');
-  await tabTo(page, page.getByRole('group').getByRole('button', { name: 'Revoke invitation' }));
+  await tabTo(page, page.getByRole('group').getByRole('button', { name: OWNER.confirmAction }));
   await expectFocusVisibleAndUncovered(page);
   await page.keyboard.press('Enter');
-  await expect(page.getByText(/^Revoked\. The invitation to .+ no longer works\.$/)).toBeVisible();
-  await tabTo(page, page.getByRole('button', { name: 'Issue a new first-owner invitation' }));
+  await expect(page.getByText(wholeLine(OWNER.cancelled))).toBeVisible();
+  await tabTo(page, page.getByRole('button', { name: OWNER.sendNew }));
   await expectFocusVisibleAndUncovered(page);
   await page.keyboard.press('Enter');
-  await tabTo(page, page.getByLabel("New first owner's email"));
+  await tabTo(page, page.getByLabel(OWNER.emailLabel));
   await expectFocusVisibleAndUncovered(page);
   await page.keyboard.type(`keys-second-${randomUUID().slice(0, 8)}@fixture.test`);
   await page.keyboard.press('Tab');
-  await expect(page.getByLabel("Reference of the controller's written request")).toBeFocused();
+  await expect(page.getByLabel(OWNER.referenceLabel)).toBeFocused();
   await expectFocusVisibleAndUncovered(page);
   await page.keyboard.type('CTRL-KEYS');
-  await tabTo(page, page.getByRole('button', { name: 'Issue invitation' }));
+  await tabTo(page, page.getByRole('button', { name: OWNER.submit, exact: true }));
   await expectFocusVisibleAndUncovered(page);
   await page.keyboard.press('Enter');
-  await expect(page.getByText(/^Issued\./)).toBeVisible();
+  await expect(page.getByText(OWNER.createdPrefix)).toBeVisible();
 
   const m = manifest();
   const pages: Array<[string, string]> = [

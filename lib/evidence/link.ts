@@ -6,7 +6,7 @@ export const LINK_URL_MAX = 2048;
 export const LINK_LABEL_MAX = 200;
 
 /** M-11's web-address text, the one source (the server's field message and the browser's). */
-export const LINK_URL_MESSAGE = EVIDENCE_COPY.link.url;
+export const LINK_URL_MESSAGE = EVIDENCE_COPY.link.address;
 
 /** True when `s` parses as a URL whose scheme is http or https. The only links the platform stores or renders as anchors. */
 export function isHttpUrl(s: string): boolean {
