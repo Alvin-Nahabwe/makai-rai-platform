@@ -246,11 +246,13 @@ describe('S-12 regions', () => {
     const line = QUESTION_COPY.reworded.line.replaceAll("'", '&#x27;');
     expect(h).toContain(line);
     expect(h).toMatch(new RegExp(`<details[^>]*>\\s*<summary[^>]*>${esc(QUESTION_COPY.reworded.summary)}</summary>[\\s\\S]*Old wording\\.`));
-    // SPEC-1 ruling: the question region shows the running wording a new save re-confirms against; the disclosure, the
+    // SPEC-1 ruling: the page shows the running wording a new save re-confirms against; the disclosure, the
     // wording the current decision was answered against. Each text once.
     expect(h.match(/New wording\./g)).toHaveLength(1);
     expect(h.match(/Old wording\./g)).toHaveLength(1);
-    expect(h.indexOf('New wording.')).toBeLessThan(h.indexOf(QUESTION_COPY.reworded.summary));
+    // Plan 1C decision C1 (cut): the running wording is the guidance aside's; the earlier one is only in the disclosure.
+    expect(h).toMatch(/<aside[^>]*data-region="guidance"[^>]*>[\s\S]*New wording\.[\s\S]*<\/aside>/);
+    expect(h).toMatch(/<details[^>]*>(?:(?!<\/details>)[\s\S])*Old wording\./);
     const same = renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, current: V2 } }));
     expect(same).not.toContain(QUESTION_COPY.reworded.summary);
     expect(same).not.toContain(line);   // with the same wording there is no line (the property's own words), not only no summary
@@ -259,7 +261,7 @@ describe('S-12 regions', () => {
   it('UX-42 W-3: one h1 for the question that takes focus, and Previous and Next go to the neighbouring questions', async () => {
     const h = renderToStaticMarkup(await QuestionPanelRegions({ data: PANEL }));
     expect(h.match(/<h1/g)).toHaveLength(1);
-    expect(h).toMatch(/<h1 id="question-heading" tabindex="-1"[^>]*>Q-PP-01 \u00b7 Problem Formulation<\/h1>/i);
+    expect(h).toMatch(/<h1 id="question-heading" tabindex="-1"[^>]*>Have you evaluated whether AI is the right approach\?<\/h1><p[^>]*>Q-PP-01 \u00b7 Problem Formulation<\/p>/i);
     expect(h).toMatch(/<a[^>]*href="\/orgs\/acme\/projects\/p1\/stages\/pre-processing\/questions\/Q-PP-00"[^>]*>Previous question<\/a>/);
     expect(h).toMatch(/<a[^>]*href="\/orgs\/acme\/projects\/p1\/stages\/pre-processing\/questions\/Q-PP-02"[^>]*>Next question<\/a>/);
     expect(h).toContain('Question 2 of 24 in Pre-processing');   // the stage's name, not its address segment (CR-7)

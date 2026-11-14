@@ -50,7 +50,7 @@ test('FR-RM-04 UX-06 UX-07 (S-11, R12-16): each stage page prints its own questi
 test('UX-26 FR-DEC-06: a draft is marked on S-11 and listed by Drafts on this device', async ({ page, baseURL }) => {
   const projectId = await openQuestion(page, 'assessor', Q, baseURL!);
   await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`).fill('A draft');
-  await page.getByRole('link', { name: QUESTION_COPY.nav.back('Pre-processing') }).click();
+  await page.getByRole('link', { name: QUESTION_COPY.nav.allQuestions, exact: true }).click();
   await page.waitForURL(`**${stagePath(projectId, 'pre-processing')}`);
   const row = page.locator(`[data-question-id="${Q}"]`);
   await expect(row).toContainText(/not saved yet \(kept in this browser until \d{1,2} [A-Z][a-z]{2} \d{4}\)/);

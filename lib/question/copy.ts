@@ -11,10 +11,10 @@ export const QUESTION_COPY = Object.freeze({
     previous: 'Previous question',
     next: 'Next question',
     position: (n: number, of: number, stage: string): string => `Question ${n} of ${of} in ${stage}`,
-    back: (stage: string): string => `Back to ${stage}`,
+    /** The strip's link to the stage page (design spec 9.3; plan 1C `DECISION_COPY.allQuestionsLink`). */
+    allQuestions: 'All questions',
   }),
   headings: Object.freeze({
-    question: 'Question',
     current: 'Current decision',
     seals: 'Sealed reviews',
     record: 'Record a decision',

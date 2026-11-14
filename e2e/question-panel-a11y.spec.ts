@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { failOnDialog } from './helpers/dialogs';
@@ -17,6 +18,10 @@ import { FIELD_COPY } from '../lib/ui/field/copy';
  * so `emulateMedia` switches them. Q is a fixture id.
  */
 const Q = 'Q-PP-01';
+/** The text of Q-PP-02 in the fixture bundle the e2e server runs on. */
+const Q2_TEXT = (JSON.parse(readFileSync('__tests__/fixtures/content/0.0.1-fixture/questionBank.json', 'utf8')) as {
+  stages: Record<string, { modules: Array<{ questions: Array<{ id: string; text: string }> }> }>;
+}).stages['pre-processing'].modules.flatMap((m) => m.questions).find((q) => q.id === 'Q-PP-02')!.text;
 
 test.beforeEach(async ({ page }) => { failOnDialog(page); });
 
@@ -39,7 +44,10 @@ test('UX-42 NFR-A11Y-02: keyboard-only Next moves focus to the new question head
   await openQuestion(page, 'assessor', Q, baseURL!);
   await page.getByRole('link', { name: 'Next question' }).focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('heading', { level: 1, name: /^Q-PP-02 \u00b7 / })).toBeFocused();
+  // The h1 is the question in words (plan 1C decision C1, cut); its code line "Q-PP-02 · {module}" follows it.
+  const heading = page.getByRole('heading', { level: 1, name: Q2_TEXT, exact: true });
+  await expect(heading).toBeFocused();
+  await expect(page.locator('#question-heading + .question-frame__code')).toHaveText(/^Q-PP-02 \u00b7 /);
   await expectFocusVisibleAndUncovered(page);
 });
 
@@ -193,6 +201,10 @@ test('D-398 item 1: at 320 by 568 the open withdrawal confirmation, its focused 
   await page.getByRole('button', { name: 'Cancel' }).press('Enter');   // by keyboard, so the trigger shows its focus ring
   await expect(page.getByRole('button', { name: WITHDRAW_COPY.trigger })).toBeFocused();
   expect(await bar.evaluate((el) => getComputedStyle(el).position)).toBe('fixed');
+  // WithdrawDecision brings the trigger into view on the frame after it takes focus (its requestAnimationFrame): since the
+  // guidance follows the form (slice 1), the page no longer shrinks to the trigger when the confirmation closes, so the
+  // check waits for that frame, and one more, before it looks.
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   await expectFocusVisibleAndUncovered(page);   // SC 2.4.11: the trigger that took focus back is not under the bar fixed again
   await page.getByRole('button', { name: WITHDRAW_COPY.trigger }).click();
   const field = await placeOf(page, '#withdraw-code');
