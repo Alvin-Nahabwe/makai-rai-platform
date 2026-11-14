@@ -25,6 +25,15 @@ interface Blocking {
 export async function expectNoSeriousA11yViolations(page: Page, state: string): Promise<void> {
   await page.addScriptTag({ path: AXE_SOURCE });
   const found = await page.evaluate(async (tags): Promise<AxeResults['violations']> => {
+    // A control that has just changed state is half way between two colours for a moment, and axe would read the blend: a
+    // submit button that hydration has just enabled passes through about 1.2:1 on its way from the disabled colours to the
+    // primary ones (measured on S-01, plan 1A Task 16). So the check waits for the CSS transitions that are running, at
+    // most two seconds, and then reads the page as a person sees it at rest.
+    const running = document.getAnimations().filter((a): a is CSSTransition => a instanceof CSSTransition);
+    await Promise.race([
+      Promise.all(running.map((a) => a.finished.catch(() => undefined))),
+      new Promise((resolve) => setTimeout(resolve, 2000)),
+    ]);
     const axe = (window as unknown as { axe: { run(ctx: Document, opts: object): Promise<AxeResults> } }).axe;
     return (await axe.run(document, { runOnly: { type: 'tag', values: tags } })).violations;
   }, TAGS);
