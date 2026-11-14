@@ -2000,6 +2000,22 @@
     "task": "1A-19"
   },
   {
+    "kind": "rule",
+    "changed": "__tests__/integration/question-panel.test.ts::FR-CNT-04 (screen) owner question B13: with the gate at no, Q-PP-13 and Q-PP-14 leave the position; unanswered, they count",
+    "replacedBy": "__tests__/integration/question-panel.test.ts::FR-CNT-04 (screen) workshop walk S3: with the gate at no, the position still counts all 24 questions of the stage while Next skips Q-PP-13 and Q-PP-14; unanswered, they are next",
+    "property": "The question page's position \"Question n of N\" counts every question of the stage, switched off by the personal data answer or not, in the stage's order, so no two questions share a place and N is the number of rows All questions lists. Previous and Next still skip a question the gate switches off (FR-CNT-04). The old rule took both the position and the total over the applying questions only, so after a No the switched-off Q-PP-13 and Q-PP-14 both read \"Question 14 of 23\" and every other question \"of 22\", against 24 on All questions (workshop walk S3).",
+    "proof": "The new case records the gate Q-PP-GATE-SENSITIVE as scopeAnswer 'no' on the fixture content and requires the gate's panel to have gateAnswer 'no', position.total 24 and position.nextId still Q-PP-15; before the answer, its nextId is Q-PP-13, as before. New cases in the same file require, with the gate at no, Q-PP-13's and Q-PP-14's index to be their own places in questionsInStage order with total 24, previousId Q-PP-GATE-SENSITIVE and nextId Q-PP-15; the 24 questions' indexes to be 0 to 23 in order; and total to equal loadStagePage's rows.length for the stage. lib/question/panel.ts takes index and total over questionsInStage(running, p.stage) and keeps previousId and nextId over the applying questions.",
+    "task": "workshop walk S3, the coordinator's order of 14 November 2026 21:35 EAT: the position counts every question of the stage"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 UX-08: S-12 shell regions in order, each but the evidence block labelled by a heading, evidence block inside the answer form",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 UX-08: S-12 shell regions in order, each but the evidence block labelled by a heading, evidence block inside the answer form",
+    "property": "S-12's regions in DOM order gain one, the way on at the foot of the main column (workshop walk S9): after the answer form and the evidence block inside it, before the guide column's finding link and suggestions, a paragraph data-region=\"way-on\" holding \"Next question: {the next question in words}\" (or, on the stage's last question, the sentence that it is the last) and All questions. Every other region, its order, its heading and the six aria-labelledby sections are unchanged; the new region is a paragraph, not a section, so it is named by no heading and adds no landmark.",
+    "proof": "The one changed line is the expected region list, which gains 'way-on' between 'evidence-block' and 'finding-link'; every other line of the case, including the count of six labelled sections and the order regex from answer-form to finding-link, is unchanged and passes. __tests__/unit/question-frame.test.tsx's new cases require the foot to be the last child of the main column after the answer form, its exact links and text, the last-question sentence, and that an unknown nextId throws.",
+    "task": "workshop walk S9, the coordinator's order of 14 November 2026 21:35 EAT: a way on at the foot of the form"
+  },
+  {
     "kind": "structure",
     "changed": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-03: S-32 lists the archived project under Archived with Unarchive for an owner, and the dashboard leaves it out",
     "replacedBy": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-03: S-32 lists the archived project under Archived with Unarchive for an owner, and the dashboard leaves it out",

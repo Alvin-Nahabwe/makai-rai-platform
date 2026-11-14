@@ -33,9 +33,13 @@ export interface QuestionPanelData {
  *
  * Field sources (FR-CNT-07, FR-CNT-08, FR-DEC-10, UX-10, UX-11, UX-26): `question` is the wording of the
  * content version the current decision was answered against, unless there is no decision or the current
- * version is a withdrawal, when it is the running wording; `position` runs over the stage's questions that
- * apply under the gate's current scope answer (a gate with no answer shows them all: owner question B13),
- * the question itself always included; `members` are the organisation's members other than the viewer;
+ * version is a withdrawal, when it is the running wording; `position.index` and `position.total` run over every
+ * question of the stage in the stage's order, switched off by the gate or not, so no two questions share a place and
+ * the total is the number All questions lists (workshop walk S3); `position.previousId` and `position.nextId` are the
+ * nearest neighbours among the stage's questions that apply under the gate's current scope answer (a gate with no
+ * answer shows them all: owner question B13), the question itself always included, so Previous and Next skip a
+ * switched-off question (FR-CNT-04) and a switched-off question's own page leads to its applying neighbours;
+ * `members` are the organisation's members other than the viewer;
  * `lastOwnSaveDate` is the declared date of the viewer's newest non-withdrawal version in this project;
  * `canWrite` and `canRaiseFinding` are the role's grant in a project that is not archived.
  */
@@ -75,15 +79,15 @@ export async function loadQuestionPanel(
     ? loadContent(current.content.semver).questions.get(p.questionId)
     : undefined;
   const gateAnswer = read.gate !== null && read.gate.status !== 'withdrawn' ? (read.gate.scopeAnswer as ScopeAnswer | null) : null;
-  const ordered = questionsInStage(running, p.stage)
-    .filter((q) => q.id === p.questionId || questionApplies(running, q.id, gateAnswer));
-  const index = ordered.findIndex((q) => q.id === p.questionId);
+  const inStage = questionsInStage(running, p.stage);
+  const ordered = inStage.filter((q) => q.id === p.questionId || questionApplies(running, q.id, gateAnswer));
+  const at = ordered.findIndex((q) => q.id === p.questionId);
   const archived = read.project.archivedAt !== null;
 
   return {
     orgSlug: read.project.org.slug, projectId: p.projectId, projectName: read.project.name, projectArchived: archived, stage: p.stage,
     question: answeredAgainst ?? runningQuestion, runningQuestion,
-    position: { index, total: ordered.length, previousId: ordered[index - 1]?.id ?? null, nextId: ordered[index + 1]?.id ?? null },
+    position: { index: inStage.findIndex((q) => q.id === p.questionId), total: inStage.length, previousId: ordered[at - 1]?.id ?? null, nextId: ordered[at + 1]?.id ?? null },
     current, historyCount: history.length, seals, reasonCodes: [...running.reasonCodes],
     members: read.memberships
       .filter((m) => m.userId !== identity.userId)
