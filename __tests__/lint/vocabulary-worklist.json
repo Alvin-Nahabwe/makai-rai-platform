@@ -1,10 +1,4 @@
 {
-  "data/fieldmaps/mitigation_plan.json": {
-    "check-again-date :: look at again": 1,
-    "close-a-finding :: Closed by mitigation": 1,
-    "evidence-that-it-is-done :: closure evidence": 1,
-    "main-reason-reason-code :: reason code": 1
-  },
   "lib/decision/copy.ts": {
     "content-version :: content version": 1,
     "evidence :: evidence item": 2,

@@ -14,13 +14,8 @@ const PROJECT_FIELDS = ['fundingSource', 'datasetDescription', 'datasetSize', 'd
  * The only labels the shared claims pattern may flag, each by field id and exact text. MP-02 is SRS 10.3.4 (line
  * 4422) word for word, and its "in progress" is the mitigation status word, not the progress of a stage.
  */
-const CLAIM_LABELS_ALLOWED: Array<{ documentType: DocumentType; fieldId: string; label: string; reason: string }> = [
-  {
-    documentType: 'mitigation_plan', fieldId: 'MP-02',
-    label: 'Counts (whole numbers): open findings; closed by mitigation; closed by accepted risk; mitigations planned, in progress, done, cancelled, overdue',
-    reason: "mitigation status word (SRS line 2531), as claim-allowlist.json's In progress entry",
-  },
-];
+// MP-02's entry left with its label: C#378 rewords it to "Number of findings and mitigations", which holds no claim word.
+const CLAIM_LABELS_ALLOWED: Array<{ documentType: DocumentType; fieldId: string; label: string; reason: string }> = [];
 
 /**
  * Labels that differ from SRS 10.3 by a ruling. `baseline` entries are the seven notes the CW-11 re-check stripped
@@ -39,6 +34,26 @@ const RULED_LABELS: Array<{ documentType: DocumentType; fieldId: string; in: 'ba
   // SRS 7.5.3 (line 2472): forms of "fail" never appear in documents; AL-7 covers question texts only (C4 RE-1, owner copy queued).
   { documentType: 'model_card', fieldId: 'MC-26', in: 'final', from: 'Known limitations and failure modes',
     label: 'Known limitations and conditions where the model should not be relied on' },
+  // Plan 1A Task 18c: the copy audit's RULED TEXT (C#371, C#372, C#374, C#375, C#377 to C#382; DC-07 by the lead's brief, X-1).
+  { documentType: 'data_card', fieldId: 'DC-07', in: 'final', from: 'Is this a sample or complete collection? How was sampling done?',
+    label: 'Is this a sample or complete collection? How was the sample chosen?' },
+  { documentType: 'data_card', fieldId: 'DC-23', in: 'final', from: 'Could the dataset composition negatively affect future uses? Which bias checks were run, and their results',
+    label: "Could the dataset's make-up harm future uses? Which bias checks were run, and what did they show?" },
+  { documentType: 'data_card', fieldId: 'DC-31', in: 'final', from: 'Datasheet held by the team', label: 'Does the team keep its own datasheet? Where?' },
+  { documentType: 'model_card', fieldId: 'MC-19', in: 'final', from: 'Disaggregated performance (subgroup x metric table)', label: 'Performance for each group' },
+  { documentType: 'model_card', fieldId: 'MC-29', in: 'final', from: 'Model card held by the team', label: 'Does the team keep its own model card? Where?' },
+  { documentType: 'mitigation_plan', fieldId: 'MP-01', in: 'final', from: 'Stage, stage review name and the review\'s "Prepared for" note', label: 'Stage and review' },
+  { documentType: 'mitigation_plan', fieldId: 'MP-02', in: 'final',
+    from: 'Counts (whole numbers): open findings; closed by mitigation; closed by accepted risk; mitigations planned, in progress, done, cancelled, overdue',
+    label: 'Number of findings and mitigations' },
+  { documentType: 'mitigation_plan', fieldId: 'MP-03', in: 'final',
+    from: 'Open findings, each with source, risk area, title, description, date raised and its mitigations (what, owner, due date, status, overdue, control followed)',
+    label: 'Open findings and their mitigations' },
+  { documentType: 'mitigation_plan', fieldId: 'MP-06', in: 'final', from: 'Risks accepted: who accepted, why, date to look again', label: 'Accepted risks' },
+  { documentType: 'mitigation_plan', fieldId: 'MP-05', in: 'final', from: 'Findings closed by a mitigation, with closure evidence or closure note',
+    label: 'Findings closed, with their evidence' },
+  { documentType: 'mitigation_plan', fieldId: 'MP-08', in: 'final', from: 'Questions marked not applicable, with reason code and reason',
+    label: 'Questions marked Not applicable, and why' },
 ];
 
 /**
