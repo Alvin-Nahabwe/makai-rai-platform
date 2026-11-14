@@ -38,6 +38,27 @@ function isAbandonedPrefetch(url: string, headers: Record<string, string>, error
 
 const PUBLIC_BUDGET = 220_000;
 /**
+ * The stylesheets S-04's first visit receives, exactly. The kit's sheets reach S-04 through styles entries
+ * (components/ui/<part>Styles.ts; the lints __tests__/lint/kit-styles-entries.test.ts and
+ * __tests__/lint/invitation-kit-sheets.test.ts read the source). That an entry's sheets are served as one file is
+ * measured, not derived (components/ui/formStyles.ts), so the built page is checked here: the next/font sheet with
+ * Icon.css, globals.css, Button.css with Dialog.css, and the four form sheets in one file. An exact figure, so a join
+ * that forms by chance is noticed as well as a split; and by content, so a split and a join at once are noticed too.
+ */
+const S04_STYLESHEETS = 4;
+/**
+ * The sheets that must share one built file, each found by a class its own rules open with: a built file is minified,
+ * so a rule starts at a line's start (each source sheet begins a line) or after a `}`. Each class below opens a rule in its own sheet only (checked
+ * against the built files when this was written).
+ */
+const SHARED_FILES: ReadonlyArray<{ entry: string; sheets: Record<string, string> }> = [
+  { entry: 'components/ui/formStyles.ts', sheets: { 'TextInput.css': 'ui-field', 'StatusRegion.css': 'ui-status', 'Checkbox.css': 'ui-checkbox', 'ErrorSummary.css': 'ui-error-summary' } },
+  { entry: 'components/ui/buttonStyles.ts', sheets: { 'Button.css': 'ui-button', 'Dialog.css': 'ui-dialog' } },
+];
+const WHERE_TO_LOOK = 'The files are .next/static/chunks/<name>; a sheet is found in them by grepping the class its rules open with '
+  + "(grep -lE '(^|})\\.ui-field\\{' .next/static/chunks/*.css); the entries are components/ui/*Styles.ts; the import rules "
+  + 'are __tests__/lint/kit-styles-entries.test.ts.';
+/**
  * Inviter names in three orthographies whose letters sit in the common latin-ext face: Luganda (U+014B), Kikuyu
  * (U+0169, U+0129) and Hausa (U+018A, U+0181). The sign-in rate limit keys on the client address
  * (e2e/fixtures/auth.setup.ts), so each sign-in gets its own.
@@ -101,7 +122,12 @@ for (const { language, inviter, letters, clientIp } of CASES) test(`NFR-PERF-02:
     const received = new Map<string, number>();
     let total = 0;
     cdp.on('Network.requestWillBeSent', (e) => { urls.set(e.requestId, e.request.url); });
-    cdp.on('Network.responseReceived', (e) => { received.set(e.requestId, (received.get(e.requestId) ?? 0) + e.response.encodedDataLength); });
+    /** Every stylesheet response of the visit: URL to request id (a stylesheet fetched twice counts once). */
+    const stylesheets = new Map<string, string>();
+    cdp.on('Network.responseReceived', (e) => {
+      received.set(e.requestId, (received.get(e.requestId) ?? 0) + e.response.encodedDataLength);
+      if (e.type === 'Stylesheet') stylesheets.set(e.response.url, e.requestId);
+    });
     cdp.on('Network.dataReceived', (e) => { received.set(e.requestId, (received.get(e.requestId) ?? 0) + e.encodedDataLength); });
     cdp.on('Network.loadingFinished', (e) => { total += e.encodedDataLength; received.delete(e.requestId); });
     // A request that ends without finishing still transferred what it received before it ended.
@@ -120,12 +146,30 @@ for (const { language, inviter, letters, clientIp } of CASES) test(`NFR-PERF-02:
     expect(new URL(page.url()).pathname, 'landed on S-04').toBe(path);
     await expect(page.getByText(inviter)).toBeVisible();
     expect(failed, 'requests that failed').toEqual([]);
+    const measured = total;   // the visit's bytes, taken before the stylesheets' bodies are read back below
     const fonts = [...urls.values()].filter((u) => u.endsWith('.woff2')).map((u) => u.split('/').pop()!);
-    console.log(`route=/invitations/[token] inviter=${language} bytes=${total} budget=${PUBLIC_BUDGET} abandoned_prefetches=${abandonedPrefetches.length} fonts=${fonts.join(',')}`);
+    const nameOf = (u: string) => new URL(u).pathname.split('/').pop()!;
+    const sheets = [...stylesheets.keys()].map(nameOf).sort();
+    console.log(`route=/invitations/[token] inviter=${language} bytes=${measured} budget=${PUBLIC_BUDGET} abandoned_prefetches=${abandonedPrefetches.length} fonts=${fonts.join(',')} stylesheets=${sheets.length}:${sheets.join(',')}`);
+    // The bodies come from the browser's memory (CDP Network.getResponseBody): no request is made.
+    const bodies = new Map<string, string>();
+    for (const [url, requestId] of stylesheets) {
+      const { body, base64Encoded } = await cdp.send('Network.getResponseBody', { requestId });
+      bodies.set(nameOf(url), base64Encoded ? Buffer.from(body, 'base64').toString('utf8') : body);
+    }
+    for (const { entry, sheets: markers } of SHARED_FILES) {
+      const holders = Object.fromEntries(Object.entries(markers).map(([sheet, cls]) => [sheet,
+        [...bodies].filter(([, css]) => new RegExp(String.raw`(?:^|\})\.${cls}\{`, 'm').test(css)).map(([name]) => name)]));
+      const files = new Set(Object.values(holders).flat());
+      expect(files.size === 1 && Object.values(holders).every((h) => h.length === 1), `the sheets of ${entry} must arrive in `
+        + `one stylesheet of S-04; found ${JSON.stringify(holders)}. ${WHERE_TO_LOOK}`).toBe(true);
+    }
+    expect(sheets, `S-04 received ${sheets.length} stylesheets, not ${S04_STYLESHEETS}: a kit stylesheet was split, a new one `
+      + `was added, or two files joined. ${WHERE_TO_LOOK}`).toHaveLength(S04_STYLESHEETS);
     // The name's letters come from the small face; the large remainder face is not fetched.
     expect(fonts.some((f) => f.startsWith('overpass_latin_ext_common'))).toBe(true);
     expect(fonts.some((f) => f.startsWith('overpass_latin_ext_rest'))).toBe(false);
-    expect(total, `first-visit bytes of S-04 with a ${language} inviter name`).toBeLessThanOrEqual(PUBLIC_BUDGET);
+    expect(measured, `first-visit bytes of S-04 with a ${language} inviter name`).toBeLessThanOrEqual(PUBLIC_BUDGET);
   } finally {
     await context.close();
   }

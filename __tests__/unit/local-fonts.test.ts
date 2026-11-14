@@ -25,10 +25,10 @@ const SOURCE_DIR = join(process.cwd(), 'fonts', 'source');
 const FONT_FILES = [
   { dir: SOURCE_DIR, name: 'overpass-latin.woff2', bytes: 39_380, sha256: '29217ef8adef5f6c059feb461bdb029348205fc233dc9b6ca8604b0d068ac086' },
   { dir: SOURCE_DIR, name: 'overpass-latin-ext.woff2', bytes: 46_080, sha256: '0a1c9727f08b91252c19bd4ca36caf98162455f33c0adcac935606b5d8d11938' },
-  { dir: DIR, name: 'overpass-latin-core.woff2', bytes: 27_212, sha256: '27b7dffd898afaef5a65883fa98d994006128dce58bba2ac555e5c996f0c39c4' },
-  { dir: DIR, name: 'overpass-latin-rest.woff2', bytes: 16_104, sha256: '28d91acff78f194aaa051b5c63ed177ea86c4fb475b58799f96c040c818d6ddf' },
+  { dir: DIR, name: 'overpass-latin-core.woff2', bytes: 26_964, sha256: '6f5bef43c0d961d4dbd6a76613a2e3e030bf7cadf0d0e068462e77887eed0966' },
+  { dir: DIR, name: 'overpass-latin-rest.woff2', bytes: 16_100, sha256: '9a4840c142e67acd731e8b8e2ea0a09c893d3c5a8cb9419b58034afe33cbb122' },
   { dir: DIR, name: 'overpass-latin-ext-common.woff2', bytes: 13_952, sha256: '4fd1720bcf21db833305624ac30fe8a17bae7298429785c2ac7b6d7912142069' },
-  { dir: DIR, name: 'overpass-latin-ext-rest.woff2', bytes: 37_320, sha256: '3ef5fca8977f7e1bd7358ee5054f6fb4a8fd47598c7b9cb6bd09087d147ea72b' },
+  { dir: DIR, name: 'overpass-latin-ext-rest.woff2', bytes: 37_260, sha256: 'ad16182597bf9b0f20b9b60042d98f24ffaf7079521ab2261a69360ba1718125' },
 ] as const;
 
 /** The licence file: the first line of the upstream text (google/fonts ofl/overpass/OFL.txt at 5dac96833c85), exactly. */
