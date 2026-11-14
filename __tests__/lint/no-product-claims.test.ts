@@ -656,9 +656,11 @@ describe('no product claims', () => {
     expect(markers.filter((m) => m.reason === '').map((m) => m.file), 'a marker with no reason').toEqual([]);
     // Every marker in app and components is listed here with its file, so a new one fails until it is added with its
     // AL row (SRS 7.5.3). DOC-a adds AL-1 for the document pages in its own commit.
+    // Since plan 1A Task 19 the About page has two (AB30's sentence no longer names a score); the title keeps
+    // "three" because a ledger entry in test-replacements.json names this case by its title.
     const about = join('app', '(public)', 'about', 'page.tsx');
     expect(markers.map((m) => `${m.file} ${m.reason}`).sort()).toEqual(
-      [`${about} about-model-scores`, `${about} about-model-scores`, `${about} not-an-approval-service`,
+      [`${about} about-model-scores`, `${about} not-an-approval-service`,
         'components/documents/GenerateDocumentForm.tsx AL-1 document statement'].sort(),
     );   // why-no-score left with About's "Why there is no score" (CONSOLIDATED section 4)
   });

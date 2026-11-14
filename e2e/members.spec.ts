@@ -284,6 +284,68 @@ test.describe('journeys', () => {
   });
 });
 
+// ── S6 of the workshop walk: the answer to Invite (and Resend) is on the screen, with focus ─────────────────────────
+/**
+ * The whole of `target` is inside the viewport and below the top bar's bottom edge (the bar shows below 1024 px; at 1280 it
+ * is display: none and its edge is 0). Half a pixel is allowed at each edge: an element scrolled to an edge sits at a
+ * fractional offset the integer scroll position cannot reach (a status line brought to the top measured -0.5).
+ */
+const SUBPIXEL = 0.5;
+async function expectWhollyInView(page: Page, target: ReturnType<Page['locator']>, what: string): Promise<void> {
+  const box = await target.boundingBox();
+  expect(box, what).not.toBeNull();
+  const viewport = page.viewportSize()!;
+  const barBottom = await page.locator('.shell-topbar').evaluate((el) => Math.max(0, el.getBoundingClientRect().bottom));
+  expect(box!.y, `${what}: its top is below the top bar`).toBeGreaterThanOrEqual(barBottom - SUBPIXEL);
+  expect(box!.y + box!.height, `${what}: its bottom is inside the viewport`).toBeLessThanOrEqual(viewport.height + SUBPIXEL);
+  expect(box!.x, `${what}: its left edge is inside the viewport`).toBeGreaterThanOrEqual(-SUBPIXEL);
+  expect(box!.x + box!.width, `${what}: its right edge is inside the viewport`).toBeLessThanOrEqual(viewport.width + SUBPIXEL);
+}
+
+for (const size of [{ width: 375, height: 812 }, { width: 1280, height: 800 }]) {
+  test.describe(`S6: after Invite the result is in view and has focus, at ${size.width} by ${size.height}`, () => {
+    test.use({ storageState: OWNER_STATE, viewport: size });
+
+    test('an invitation with its link shown: the status sentence and the whole link box are in view, and the status has focus; Resend with the link likewise', async ({ page }) => {
+      const email = `members-spec-s6-${size.width}-${Date.now()}@fixture.test`;
+      await page.goto(MEMBERS);
+      await inviteVia(page, email, 'viewer', { showLink: true });
+      // The e2e server has no email key: the answer is the email-failure sentence and the link box.
+      const sentence = status(page, COPY_LINK_COPY.emailFailed);
+      await expect(sentence).toBeVisible();
+      const linkBox = page.locator('.card').filter({ has: page.getByRole('textbox', { name: /invitation link/i }) });
+      await expect(linkBox).toHaveCount(1);
+      await expect(sentence).toBeFocused();
+      await expectWhollyInView(page, sentence, 'the status sentence');
+      await expectWhollyInView(page, linkBox, 'the link box (field, Copy, the "works once" sentence)');
+
+      // Resend with "show the link", from the invitations list further down the page.
+      const first = await page.getByRole('textbox', { name: /invitation link/i }).inputValue();
+      await page.getByRole('checkbox', { name: C.invitations.showLinkFor(email) }).check();
+      await page.getByRole('button', { name: C.invitations.resendTo(email) }).click();
+      await expect(page.getByRole('textbox', { name: /invitation link/i })).not.toHaveValue(first);
+      await expect(sentence).toBeFocused();
+      await expectWhollyInView(page, sentence, 'the status sentence after Resend');
+      await expectWhollyInView(page, linkBox, 'the link box after Resend');
+
+      // Leave the fixture organisation as it was.
+      await page.getByRole('button', { name: C.invitations.cancelTo(email) }).click();
+      await page.getByRole('button', { name: C.invitations.confirmAction, exact: true }).click();
+      await expect(status(page, C.cancelled(email))).toBeVisible();
+    });
+
+    test('a refusal from the server: the status sentence is in view and has focus', async ({ page }) => {
+      await page.goto(MEMBERS);
+      await script(page, '**/api/v1/orgs/*/members', [{ status: 409, json: { error: 'Conflict', code: 'already_member' } }], { method: 'POST' });
+      await inviteVia(page, 'someone@fixture.test', 'viewer', { showLink: false });
+      const sentence = status(page, C.refusals.alreadyMember);
+      await expect(sentence).toBeVisible();
+      await expect(sentence).toBeFocused();
+      await expectWhollyInView(page, sentence, 'the refusal');
+    });
+  });
+}
+
 // ── S-22 interactions (scripted) ──────────────────────────────────────────────────────────────────────────────────
 test.describe('S-22 interactions', () => {
   test.use({ storageState: OWNER_STATE });

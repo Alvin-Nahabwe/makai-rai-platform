@@ -26,11 +26,21 @@ describe('RouteRow', () => {
   it('the list is labelled, and each stop says its title and its status in words, in question order', () => {
     const html = renderToStaticMarkup(<RouteRow label="Pre-processing" stops={STOPS} tally={TALLY} />);
     expect(html).toMatch(/<ol class="ui-route-row__stops" role="list" aria-label="Pre-processing">/);
-    const spoken = [...html.matchAll(/<span class="visually-hidden">([^<]*)<\/span>/g)].map((m) => decode(m[1]));
+    // The words as they are read: the title's own element (the case below) adds no text.
+    const spoken = [...html.matchAll(/<span class="visually-hidden"><span>([^<]*)<\/span>([^<]*)<\/span>/g)].map((m) => decode(m[1] + m[2]));
     expect(spoken).toEqual([
       'Data sources are recorded: Done', 'Consent covers this use: Partly',
       'A data protection impact assessment exists: Not yet', 'Retention is set: No decision',
     ]);
+  });
+
+  it('a stop\'s title is the whole text of an element of its own, apart from its status words', () => {
+    // FR-PUB-01: the claims crawl (e2e/claims-crawl.spec.ts) exempts an allow-listed question text only as a WHOLE text
+    // node. A stage's stops are titled by its questions, so the title must not share its node with the status words.
+    const html = renderToStaticMarkup(<RouteRow label="Pre-processing" stops={STOPS} tally={TALLY} />);
+    for (const [title, words] of [['Data sources are recorded', 'Done'], ['Retention is set', 'No decision']]) {
+      expect(html).toContain(`<span class="visually-hidden"><span>${title}</span>: ${words}</span>`);
+    }
   });
 
   it('only the current stop carries aria-current and the current class, and a stop with an address is a link', () => {

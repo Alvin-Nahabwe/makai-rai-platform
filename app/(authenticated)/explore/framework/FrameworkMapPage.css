@@ -1,42 +1,41 @@
 /*
  * S-26, the framework page (app/(authenticated)/explore/framework/page.tsx).
- * Colours are the theme tokens of app/globals.css, which both themes redefine, so text keeps 4.5:1 in light and
- * dark (NFR-A11Y-05). The brand colour --color-primary does not change in the dark theme, so accents and links use
- * --tint-brand-fg, which does. Nothing is wider than its container, so the page reflows at 320px (SC 1.4.10).
+ * Colours are the role tokens of app/globals.css, which both themes redefine, so text keeps 4.5:1 in light and
+ * dark (NFR-A11Y-05); accents and links use --color-action-text, which the dark theme lightens. The header is the
+ * kit's PageHeader. Nothing is wider than its container, so the page reflows at 320px (SC 1.4.10).
  */
 
 .framework-page {
   overflow-wrap: break-word;
 }
 
-.framework-page__header {
-  margin-bottom: var(--space-6);
-}
-
 .framework-page__counts {
-  margin: var(--space-2) 0 0;
-  color: var(--text-muted);
+  margin: 0;
+  font-size: var(--font-size-small);
+  color: var(--color-ink-muted);
 }
 
 /* ── What the framework covers ── */
 .framework-scope {
   margin-bottom: var(--space-8);
   padding: var(--space-4) var(--space-5);
-  background: var(--surface-card);
-  border: 1px solid var(--border);
-  border-radius: var(--border-radius-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-container);
+  border-radius: var(--radius-control);
 }
 
 .framework-scope summary {
   cursor: pointer;
-  color: var(--text-primary);
+  color: var(--color-heading);
 }
 
 .framework-scope__body {
   margin-top: var(--space-4);
   max-width: 70ch;
-  line-height: 1.6;
-  color: var(--text-body);
+  line-height: var(--line-height-body);
+  display: grid;
+  gap: var(--space-3);
+  color: var(--color-ink);
 }
 
 /* ── One stage ── */
@@ -46,18 +45,18 @@
 
 .framework-stage__title {
   padding-bottom: var(--space-2);
-  border-bottom: 3px solid var(--border-strong);
+  border-bottom: 3px solid var(--color-border-control);
 }
 
 .framework-stage__subtitle {
   margin: var(--space-6) 0 var(--space-3);
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-h3);
 }
 
 .framework-stage__modules {
   margin: 0;
   padding-left: var(--space-6);
-  color: var(--text-body);
+  color: var(--color-ink);
 }
 
 .framework-stage__areas {
@@ -74,27 +73,27 @@
 /* A 1px border on all sides in the muted border token, on the card surface: no one-side accent (owner, "make it subtler"). */
 .area-card {
   padding: var(--space-6);
-  border: 1px solid var(--border);
+  border: 1px solid var(--color-border-container);
 }
 
 .area-card__title {
   margin: 0 0 var(--space-2);
-  font-size: var(--font-size-lg);
-  line-height: var(--line-height-tight);
+  font-size: var(--font-size-h3);
+  line-height: var(--line-height-heading);
 }
 
 .area-card__id {
   margin-right: var(--space-1);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-bold);
-  color: var(--tint-brand-fg);
+  color: var(--color-action-text);
   letter-spacing: 0.04em;
 }
 
 .area-card__principle {
   margin: 0 0 var(--space-3);
-  font-size: var(--font-size-sm);
-  color: var(--text-muted);
+  font-size: var(--font-size-small);
+  color: var(--color-ink-muted);
 }
 
 /* At least 24px tall (SC 2.5.8) and underlined (SC 1.4.1), like the control links. */
@@ -102,42 +101,42 @@
   display: inline-flex;
   align-items: center;
   min-block-size: 24px;
-  color: var(--tint-brand-fg);
+  color: var(--color-action-text);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
 .area-card__principle-link:hover {
-  color: var(--tint-brand-fg);
+  color: var(--color-action-text);
 }
 
 .area-card__principle-link:focus-visible {
-  outline: 3px solid var(--tint-brand-fg);
+  outline: 3px solid var(--color-action-text);
   outline-offset: 2px;
 }
 
 .area-card__desc {
   margin: 0 0 var(--space-4);
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-relaxed);
-  color: var(--text-body);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-body);
+  color: var(--color-ink);
 }
 
 .area-card__context {
   margin: 0 0 var(--space-4);
   padding: var(--space-3) var(--space-4);
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-relaxed);
-  color: var(--text-body);
-  background: var(--surface-raised);
-  border-radius: var(--border-radius-md);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-body);
+  color: var(--color-ink);
+  background: var(--color-tint);
+  border-radius: var(--radius-control);
 }
 
 .area-card__controls-label {
   margin: 0 0 var(--space-2);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
+  color: var(--color-heading);
 }
 
 .area-card__controls {
@@ -156,18 +155,18 @@
   min-block-size: 24px;
   min-inline-size: 24px;
   padding: 2px var(--space-2);
-  color: var(--tint-brand-fg);
+  color: var(--color-action-text);
   text-decoration: underline;
   text-underline-offset: 2px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--border-radius-md);
+  border: 1px solid var(--color-border-control);
+  border-radius: var(--radius-control);
 }
 
 .area-card__control:hover {
-  color: var(--tint-brand-fg);
+  color: var(--color-action-text);
 }
 
 .area-card__control:focus-visible {
-  outline: 3px solid var(--tint-brand-fg);
+  outline: 3px solid var(--color-action-text);
   outline-offset: 2px;
 }

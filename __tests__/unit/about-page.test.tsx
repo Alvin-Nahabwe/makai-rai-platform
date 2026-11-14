@@ -20,6 +20,7 @@ vi.mock('node:fs', async (importOriginal) => {
 import AboutPage, { metadata } from '@/app/(public)/about/page';
 import { ABOUT_COPY } from '@/lib/about/copy';
 import { pageTitle } from '@/lib/ui/title';
+import { TERM_STAGE_1, TERM_STAGE_2, TERM_STAGE_3 } from '@/lib/vocabulary/terms';
 
 /**
  * S-28, the public About page (FR-PUB-01, FR-PUB-02, FR-PUB-04, FR-PUB-05, UX-03).
@@ -75,7 +76,7 @@ function stripClaimsAllowed(markup: string): string {
 
 const helpContact = (): { email: string | null } =>
   JSON.parse(readFileSync('data/help-contact.json', 'utf8'));
-const PENDING = 'The Help and contact address is published before the platform opens to teams.';
+const PENDING = ABOUT_COPY.help.pending;
 const helpEmailOrPendingText = (): string => {
   const { email } = helpContact();
   return email === null ? PENDING : email;
@@ -107,7 +108,7 @@ describe('S-28 About page', () => {
     }
   });
 
-  it('FR-PUB-04: the section "What this platform is and is not" says the platform does not test your model or calculate anything from your data', () => {
+  it('FR-PUB-04: the section "What the platform does" says the platform does not test your model or calculate anything from your data', () => {
     expect(plain(section(html, 'what-this-is'))).toContain('The platform does not test your model or calculate anything from your data.');
     // The section "What this platform never does" is removed (CONSOLIDATED section 4); its one fact is the sentence above.
     expect(html).not.toContain('id="never-runs"');
@@ -115,8 +116,11 @@ describe('S-28 About page', () => {
   });
 
   it('FR-PUB-01: the About page says who can see records, and never that MAK-AI cannot', () => {
-    expect(text).toContain("MAK-AI's administrator has no access to records in the application");
-    expect(text).toContain('the operator who runs the server has technical access to the database');
+    // The owner's four sentences (14 November 2026, Q18), word for word.
+    const owner =
+      'Every member of your organisation can read its records. Other organisations cannot. The MAK-AI administrator has no access to your records in the platform. The people at MAK-AI who run the server can reach the database for technical work.';
+    expect(ABOUT_COPY.whatItDoes.whoCanSee.text).toBe(owner);
+    expect(plain(section(html, 'what-this-is'))).toContain(`${ABOUT_COPY.whatItDoes.whoCanSee.heading} ${owner}`);
     expect(text).not.toMatch(/cannot see your records/i);
   });
 
@@ -130,23 +134,24 @@ describe('S-28 About page', () => {
   it('UX-03 NFR-A11Y-04: Help and contact gives the address, asks for the support reference, and says never to send record text', () => {
     const s = plain(section(html, 'help-and-contact'));
     expect(s).toMatch(/support reference/i);
-    expect(s).toMatch(/never send record text|do not send record text/i);
+    expect(s).toContain(ABOUT_COPY.help.noRecords);
+    expect(ABOUT_COPY.help.noRecords).toMatch(/^Do not put your records in the email/);
     expect(s).toContain(helpEmailOrPendingText());
   });
 
   it('FR-PUB-01 FR-PUB-05: every sentence that names a score sits inside a data-claims-allowed element', () => {
-    expect(text).toMatch(/\bscores?\b/i);
+    expect(text).toMatch(/\d\s?%/);
     const outside = plain(stripClaimsAllowed(html));
-    expect(outside).not.toMatch(/\bscores?\b/i);
+    expect(outside).not.toMatch(/\bscores?\b|\d\s?%/i);
     // The strip removed something, so the check above is not vacuous.
     expect(outside.length).toBeLessThan(text.length);
   });
 
-  it("FR-PUB-05: the allowed elements are the not-an-approval sentence and the two sentences about a model's own scores", () => {
+  it("FR-PUB-05: the allowed elements are the not-an-approval sentence and the one sentence about a model's own score", () => {
     const reasons = [...html.matchAll(/data-claims-allowed="([^"]*)"/g)].map((m) => m[1]);
-    expect(reasons.sort()).toEqual(['about-model-scores', 'about-model-scores', 'not-an-approval-service']);
+    expect(reasons.sort()).toEqual(['about-model-scores', 'not-an-approval-service']);
     expect(plain(html.match(/<[a-z0-9]+[^>]*data-claims-allowed="about-model-scores"[^>]*>[\s\S]*?<\/[a-z0-9]+>/)![0])).toMatch(
-      /accuracy score|confidence score/,
+      /"60% likely"/,
     );
   });
 
@@ -169,23 +174,27 @@ describe('S-28 About page', () => {
     }
     expect(marked.sort()).toEqual(
       [
-        'It is not an approval, audit, certification or compliance service, and nothing it produces is one.',
-        'A healthcare algorithm that works well on average but works poorly for Black patients produces real harm, regardless of its overall accuracy score.',
-        "A clinician who treats a model's 60% confidence score as certainty will make worse decisions than one who understands the margin of error.",
+        ABOUT_COPY.whatItDoes.notApproval,
+        ABOUT_COPY.principles.awareness.marked,
       ].sort(),
     );
   });
 
-  it('FR-PUB-01: a model-score sentence holds no banned word besides "accuracy score" and "60% confidence score"', () => {
-    for (const m of html.matchAll(/<span[^>]*data-claims-allowed="about-model-scores"[^>]*>([\s\S]*?)<\/span>/g)) {
-      const rest = plain(m[1]).replace(/accuracy score|(60% )?confidence score/g, '');
+  it('FR-PUB-01: a model-score sentence holds no banned word besides "60% likely"', () => {
+    const marked = [...html.matchAll(/<span[^>]*data-claims-allowed="about-model-scores"[^>]*>([\s\S]*?)<\/span>/g)];
+    expect(marked).toHaveLength(1);
+    for (const m of marked) {
+      const rest = plain(m[1]).replace(/"60% likely"/g, '');
       expect(isClaim(rest), rest).toBe(false);
     }
   });
 
   it('FR-PUB-05: the platform states what it is not, in the exact allow-listed sentence', () => {
     expect(text).toContain(
-      'It is not an approval, audit, certification or compliance service, and nothing it produces is one.',
+      'The platform does not approve, audit or certify AI systems. Its documents are your team\'s own record, not an approval.',
+    );
+    expect(ABOUT_COPY.whatItDoes.notApproval).toBe(
+      'The platform does not approve, audit or certify AI systems. Its documents are your team\'s own record, not an approval.',
     );
     const reasons = [...html.matchAll(/data-claims-allowed="([^"]*)"/g)].map((m) => m[1]);
     expect(reasons).toContain('not-an-approval-service');
@@ -277,6 +286,44 @@ describe('S-28 About page', () => {
     // passes this case (docs/releases/release-waivers.json); without one the address must be named.
     const waived = releaseWaiver('UX-03 help-contact-pending')?.covers.includes('data/help-contact.json') === true;
     expect(helpContact().email !== null || waived, 'the address is pending and no owner waiver covers it').toBe(true);
+  });
+
+  it('1A Task 19 (AB3, Q20): the heading spells out the product name once, from the copy module', () => {
+    expect(html).toContain(`<h1>${ABOUT_COPY.hero.heading}</h1>`);
+    expect(ABOUT_COPY.hero.heading).toBe('About the MAK-AI Responsible AI (RAI) Platform');
+    expect(readFileSync('app/(public)/about/page.tsx', 'utf8')).not.toContain('MAK-AI RAI Platform');
+  });
+
+  it("1A Task 19 (Q15, L5-11): the three stage lines pair the content's name with the vocabulary's definition", () => {
+    const s = plain(section(html, 'what-this-is'));
+    expect(s).toContain(ABOUT_COPY.whatItDoes.intro);
+    for (const t of [TERM_STAGE_1, TERM_STAGE_2, TERM_STAGE_3]) {
+      expect(html, t.term).toContain(`<li><strong>${t.term}.</strong> ${t.definition}</li>`);
+    }
+  });
+
+  it('1A Task 19 (Q17): the paragraph on what the team records is the ruled one, word for word', () => {
+    expect(plain(section(html, 'what-this-is'))).toContain(
+      'For each question, your team records a decision, the reason, who decided, when, and any evidence. The team decides; the platform records. If a decision does not meet good practice, a finding is raised. Your team closes each finding in one of two ways: it fixes the problem (a mitigation), or it records that it accepts the risk. When your team is ready, it seals a stage review. Sealing fixes the record so it cannot change. The platform then makes documents from it for your ethics committee or funder. The platform does not test your model or calculate anything from your data.',
+    );
+  });
+
+  it('1A Task 19 (Q19, AB37o): the two sentences the coordinator changed, and the energy paragraph has no "five cars" figure', () => {
+    expect(text).toContain('Keep the code, a record of which data was used, and the settings, so the results can be produced again.');
+    expect(text).toContain('A safe system shows clearly when something goes wrong, so people can handle it.');
+    expect(text).not.toMatch(/five cars|data version/);
+    expect(text).toContain('Risk areas');
+    expect(text).not.toMatch(/assessment areas/i);
+  });
+
+  it('1A Task 19 (L5-15): the band holds no decoration and nothing on the page moves or wears a hand-typed colour', () => {
+    expect(html).not.toMatch(/page-hero__(bg|grid-overlay|accent-line)|page-hero--animated|--stage-color|style="/);
+    const css = readFileSync('app/(public)/about/AboutPage.css', 'utf8');
+    expect(css).not.toMatch(/@keyframes|animation|transition/);
+    expect(css).not.toMatch(/#[0-9a-f]{3,8}\b|rgba?\(/i);
+    expect(css).not.toMatch(/border-(left|right)\s*:\s*(?!1px)\d/);
+    expect(css).not.toMatch(/content\s*:\s*'\u2713/);
+    expect(css).not.toMatch(/--color-primary/);
   });
 
   it('UX-03 WCAG 2.4.2: the page title says which page it is', () => {

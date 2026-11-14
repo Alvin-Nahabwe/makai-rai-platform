@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { requireIdentity } from '@/lib/auth/identity';
 import { requireOrgContextFor } from '@/lib/auth/context';
 import { loadProjectOverview } from '@/lib/data/projects';
+import { loadContinueTarget } from '@/lib/home/load';
 import { eatDate } from '@/lib/followup/overdue';
 import { PROJECT_COPY } from '@/lib/project/copy';
 import { orNotFound } from '@/lib/auth/titleGate';
@@ -24,7 +25,9 @@ const load = cache(async (slug: string, id: string) => {
   const ctx = await requireOrgContextFor(identity.userId, slug, 'project:read');
   const data = await loadProjectOverview(ctx, { orgSlug: slug, projectId: id, today: eatDate(new Date()) });
   if (data === null) notFound();
-  return { data, userId: identity.userId };
+  // The page's one primary action (plan 1C C11): only after the project is known visible, for the signed-in person.
+  const continueTo = await loadContinueTarget(ctx, identity.userId, { id: data.project.id, archived: data.project.archived });
+  return { data, continueTo, userId: identity.userId };
 });
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
@@ -39,9 +42,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
  */
 export default async function ProjectDetailPage({ params }: PageProps) {
   const { slug, id } = await params;
-  const { data, userId } = await load(slug, id);
+  const { data, continueTo, userId } = await load(slug, id);
   return (
-    <ProjectOverview data={data}>
+    <ProjectOverview data={data} continueTo={continueTo}>
       <RememberProject userId={userId} orgSlug={slug} projectId={data.project.id} />
     </ProjectOverview>
   );

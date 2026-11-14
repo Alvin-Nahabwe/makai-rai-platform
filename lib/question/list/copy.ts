@@ -42,11 +42,22 @@ export const STAGE_LIST_COPY = Object.freeze({
   showAll: (n: number): string => `Show all ${n}`,
   /** A count line: the stage's under its heading, and each topic's under its own. */
   summary: (n: number, noDecision: number): string => `${n} questions · ${noDecision} with no decision`,
+  /**
+   * The parts of a question plate's one line of state, joined by `separator`. Each part stands alone: the line follows the
+   * plate's status mark, not the status words, so its first part starts with no separator (plan 1C Task 3).
+   */
   row: Object.freeze({
-    inPlace: (n: number, of: number): string => ` · ${n} of ${of} in place`,
-    openFindings: (n: number): string => ` · ${n} open ${n === 1 ? 'finding' : 'findings'}`,
-    changedSinceSeal: (n: number | null): string => ` · changed since seal ${n ?? ''}`,
-    reworded: ' · good practice changed',
-    notSaved: (date: string): string => ` · not saved yet (kept in this browser until ${date})`,
+    separator: ' · ',
+    inPlace: (n: number, of: number): string => `${n} of ${of} in place`,
+    openFindings: (n: number): string => `${n} open ${n === 1 ? 'finding' : 'findings'}`,
+    changedSinceSeal: (n: number | null): string => `changed since seal ${n ?? ''}`,
+    reworded: 'good practice changed',
+    notSaved: (date: string): string => `not saved yet (kept in this browser until ${date})`,
   }),
+  /**
+   * Under the filter group, once storage has been read and this browser keeps none: the "Not saved yet" option then shows
+   * no count. Ruled in lib/decision/form/copy.ts as DECISION_FORM_COPY.noStorage; repeated here, word for word, because this
+   * list imports only its own copy module (ruling X-2), and __tests__/unit/stage-route.test.tsx holds the two equal.
+   */
+  noStorage: 'This browser cannot keep a copy of your text. Save before you leave this page.',
 });

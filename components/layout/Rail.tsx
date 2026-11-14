@@ -1,6 +1,6 @@
 'use client';
 
-import { useSyncExternalStore } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { signOut } from 'next-auth/react';
@@ -10,7 +10,7 @@ import ThemeToggle from '@/components/layout/ThemeToggle';
 import { SignOutWithDraftsGuard } from '@/components/decision/SignOutWithDraftsGuard';
 import { currentOrgSlug } from '@/lib/org-nav';
 import { clearLastProjects, readLastProject, subscribeLastProject } from '@/lib/client/lastProject';
-import { findingsHref, railItems, roleUnderName } from '@/lib/shell/nav';
+import { findingsHref, railItems, railOrgSlug, rememberOrgSlug, roleUnderName } from '@/lib/shell/nav';
 import { SHELL_COPY } from '@/lib/shell/copy';
 import { PRODUCT_NAME } from '@/lib/ui/title';
 import type { RailItem, ShellData } from '@/lib/shell/types';
@@ -45,10 +45,20 @@ function Item({ item }: { item: RailItem }) {
  * lib/client/lastProject.ts through useSyncExternalStore, so the server and hydration renders give the plain address and the
  * stored one arrives after hydration and again whenever RememberProject writes. Sign out goes through SignOutWithDraftsGuard
  * with the person's own id (M-41, NFR-PRIV-06) and first clears this person's last-project keys (L2-66, S4).
+ *
+ * The organisation items link to railOrgSlug's organisation (finding S4 of the workshop walk): on Help, My account and
+ * Guidance, whose addresses carry no slug, that is the last of the person's own organisations seen in an address while this
+ * rail stayed mounted (the signed-in layout outlives a client navigation, so its ShellData can be older than a switch), or
+ * else the server's homeSlug. It is remembered in state, updated during render when the address names one of the person's
+ * own organisations (React's "storing information from previous renders"), so the first render already has it.
  */
 export default function Rail({ shell }: { shell: ShellData }) {
   const pathname = usePathname();
-  const slug = currentOrgSlug(pathname);
+  const addressSlug = currentOrgSlug(pathname);
+  const [lastSeen, setLastSeen] = useState<string | null>(null);
+  const seen = rememberOrgSlug(lastSeen, pathname, shell.orgs);
+  if (seen !== lastSeen) setLastSeen(seen);
+  const slug = railOrgSlug(pathname, seen, shell);
   const last = useSyncExternalStore(
     subscribeLastProject,
     () => (slug ? readLastProject(shell.userId, slug) : null),
@@ -56,6 +66,7 @@ export default function Rail({ shell }: { shell: ShellData }) {
   );
   const items = railItems({
     pathname,
+    orgSlug: slug,
     isPlatformAdmin: shell.platformLabel !== null,
     hasOrganisation: shell.orgs.length > 0,
     findingsHref: slug ? findingsHref(slug, last) : '/',
@@ -67,7 +78,7 @@ export default function Rail({ shell }: { shell: ShellData }) {
       <p className="shell-rail__product">{PRODUCT_NAME}</p>
       {shell.platformLabel === null && shell.orgs.length > 0 ? (
         <div className="shell-rail__org">
-          <OrgSwitcher orgs={shell.orgs} currentSlug={slug ?? null} />
+          <OrgSwitcher orgs={shell.orgs} currentSlug={addressSlug ?? null} />
         </div>
       ) : null}
       <div className="shell-rail__nav">

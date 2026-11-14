@@ -193,9 +193,16 @@ export const FINDINGS_COPY = Object.freeze({
     acceptedHeaderOn: (date: string): string => `) on ${date}.`,
     checkAgainOn: (date: string): string => ` To be checked again on ${date}.`,
     closeSection: 'Can be closed now',
+    /** The box's cause sentences alone (B2: a blocked box gives the cause without "You can close this finding now."). */
+    closeWithdrawnCause: 'The decision on this question was withdrawn.',
+    closeGateCause: 'Your team answered No to the personal data question, so this question does not apply.',
+    closeChangedCause: (status: string): string => `The decision on this question is now ${status}.`,
+    closeNow: 'You can close this finding now.',
     closeWithdrawn: 'The decision on this question was withdrawn. You can close this finding now.',
     closeGate: 'Your team answered No to the personal data question, so this question does not apply. You can close this finding now.',
     closeChanged: (status: string): string => `The decision on this question is now ${status}. You can close this finding now.`,
+    /** B2 (ruling R1): shown in the close box, with no button, while a mitigation is Planned or In progress. */
+    closeBlocked: 'This finding stays open while it has a mitigation that is Planned or In progress. Mark the mitigation Done, or cancel it and say why.',
     mitigations: 'Mitigations',
     noMitigations: 'No mitigations yet. A mitigation says what the team will do about this finding. An Owner or Admin can accept the risk instead.',
     addMitigation: 'Add a mitigation',
