@@ -96,9 +96,8 @@ async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
  */
 function endedUrl(data: unknown): string | null {
   if (typeof data !== 'object' || data === null) return null;
-  // The answer's own field, read by key: __tests__/unit/redirect-origin.test.ts flags every `.url` property read as a
-  // request's address, and this is next-auth's JSON body, not a request.
-  const url = (data as Record<string, unknown>)['url'];
+  // next-auth's JSON answer, not a request's address: counted in __tests__/unit/redirect-origin.test.ts's ALLOWED table.
+  const url = (data as { url?: unknown }).url;
   if (typeof url !== 'string') return null;
   let parsed: URL;
   try {
