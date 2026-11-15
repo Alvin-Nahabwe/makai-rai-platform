@@ -146,10 +146,11 @@ describe('the read-only question page (plan 1C Task 7)', () => {
     const m = main(html);
     expect(m).toContain('<section data-region="current-decision" aria-labelledby="s12-current-decision" class="reading-decision"><div class="reading-decision__head"><h2 id="s12-current-decision">What the team decided</h2>');
     expect(m).toContain('<section data-region="open-work" aria-labelledby="s12-open-work" class="still-open"><h2 id="s12-open-work">Still open on this question: 2 findings</h2>');
-    // The main column holds the question, the card, a Reviewer's raise link under it (coordinator's ruling on review
-    // S1a-4) and what is still open, in that order and nothing else: the seal note (a sentence about saving) and the
-    // foot's way on are the writer's; the reader's way on is in the aside. A Viewer gets no finding link.
-    expect(regions(m)).toEqual(['question', 'current-decision', 'finding-link', 'open-work']);
+    // The main column holds the question, the card, what is still open (spec 9.3: directly under the decision; design fix
+    // S4-N2) and a Reviewer's raise link after it (coordinator's ruling on review S1a-4), in that order and nothing else:
+    // the seal note (a sentence about saving) and the foot's way on are the writer's; the reader's way on is in the aside.
+    // A Viewer gets no finding link.
+    expect(regions(m)).toEqual(['question', 'current-decision', 'open-work', 'finding-link']);
     expect(regions(main(await render(VIEWER)))).toEqual(['question', 'current-decision', 'open-work']);
     expect(m).toMatch(/<\/section><section data-region="open-work"/);
     expect(m).not.toContain('data-permission-note');
@@ -398,14 +399,25 @@ describe('the read-only question page (plan 1C Task 7)', () => {
     expect(viewer).toContain('data-region="guidance"');
   });
 
-  it('review M2: a Reviewer with an open platform-raised finding sees it once, in the open-work list, and the raise link sits under the decision', async () => {
+  it('review M-B1: the reader\'s "Next: question n" counts the stage as the panel does when the personal data answer switches questions off: after Q-PP-12 at No, Q-PP-15, the 16th of 24', async () => {
+    const q12 = runningContent().questions.get('Q-PP-12')!;
+    const stageIds = [...runningContent().questions.values()].filter((q) => q.stage === 'pre-processing').map((q) => q.id);
+    const n = stageIds.indexOf('Q-PP-15') + 1;
+    expect(n).toBe(16);   // Q-PP-13 and Q-PP-14 are switched off but keep their places; the personal data question is the 13th
+    const html = await render({ ...VIEWER, question: q12, runningQuestion: q12, gateAnswer: 'no', position: { index: 11, total: 24, previousId: 'Q-PP-11', nextId: 'Q-PP-15' } });
+    const a = aside(html);
+    expect(a).toContain(`>Next: question ${n}<`);
+    expect(a).toContain(`Question ${n} of 24 in Pre-processing`);
+    expect(a).toContain('href="/orgs/acme-health/projects/p1/stages/pre-processing/questions/Q-PP-15"');
+  });
+
+  it('review M2: a Reviewer with an open platform-raised finding sees it once, in the open-work list, and the raise link comes after it', async () => {
     const html = await render(REVIEWER);
     expect(html.split('href="/orgs/acme-health/projects/p1/findings/f1"')).toHaveLength(2);
     expect(main(html)).toContain('href="/orgs/acme-health/projects/p1/findings/f1"');
     expect(html).not.toContain(QUESTION_COPY.findingLink.view);
     const m = main(html);
-    expect(m.indexOf('data-region="finding-link"')).toBeGreaterThan(m.indexOf('data-region="current-decision"'));
-    expect(m.indexOf('data-region="finding-link"')).toBeLessThan(m.indexOf('data-region="open-work"'));
+    expect(m.indexOf('data-region="finding-link"')).toBeGreaterThan(m.indexOf('data-region="open-work"'));
     expect(m).toContain(QUESTION_COPY.findingLink.raise);
     expect(guide(html)).not.toContain('data-region="finding-link"');
   });
@@ -415,7 +427,7 @@ describe('the read-only question page (plan 1C Task 7)', () => {
     for (const data of [VIEWER, REVIEWER]) {
       const html = await render({ ...data, question: off, runningQuestion: off, gateAnswer: 'no' });
       const question = html.match(/<section data-region="question"[\s\S]*?<\/section>/)![0];
-      expect(question).toMatch(/<p class="question-frame__code">[^<]*<\/p><p data-does-not-apply="true">/);
+      expect(question).toMatch(/<p class="question-frame__code">[^<]*<\/p><p data-does-not-apply="true" class="question-frame__does-not-apply"><svg class="ui-mark__shape"/);
       expect(question).toContain(QUESTION_COPY.doesNotApply);
     }
     expect(await render(VIEWER)).not.toContain('data-does-not-apply');

@@ -201,21 +201,20 @@ for (const role of ['viewer', 'reviewer'] as const) {
     await expect(page.locator('form:not(.route-column__filter)')).toHaveCount(0);
     await expect(page.locator('[data-region="answer-form"]')).toHaveCount(0);
     await expect(page.locator('.decision-save-bar')).toHaveCount(0);
-    // Coordinator's ruling on review S1a-4: a Reviewer's raise link sits under the decision in the main column, before
-    // what is still open; none in the guidance column; a Viewer has none.
+    // Coordinator's ruling on review S1a-4 and design fix S4-N2: a Reviewer's raise link sits in the main column after what
+    // is still open (spec 9.3: open findings directly under the decision); none in the guidance column; a Viewer has none.
     const raise = page.getByRole('link', { name: QUESTION_COPY.findingLink.raise });
     await expect(raise).toHaveCount(role === 'reviewer' ? 1 : 0);
     await expect(page.locator('.question-workspace__guide [data-region="finding-link"]')).toHaveCount(0);
     if (role === 'reviewer') {
-      const decided = await box(page.locator('[data-region="current-decision"]'));
+      const stillOpen = await box(open);
       const raised = await box(raise);
-      expect(raised.y, 'the raise link is under the decision').toBeGreaterThanOrEqual(decided.y + decided.height);
-      expect(raised.y, 'and above what is still open').toBeLessThan((await box(open)).y);
+      expect(raised.y, 'the raise link comes after what is still open').toBeGreaterThanOrEqual(stillOpen.y + stillOpen.height);
     }
     // The open finding is listed once, in the main column, not again in the aside (review M2); what is still open closes the
     // column, and the way on is the reader's aside's one primary link (lane 1 Task 3, viewer-reading.png).
     await expect(page.getByRole('link', { name: QUESTION_COPY.findingLink.view })).toHaveCount(0);
-    await expect(page.locator('.question-workspace__main > :last-child')).toHaveAttribute('data-region', 'open-work');
+    await expect(page.locator('.question-workspace__main > :last-child')).toHaveAttribute('data-region', role === 'reviewer' ? 'finding-link' : 'open-work');
     await expect(page.locator('[data-region="reading-aside"] .ui-button--primary')).toHaveCount(1);
     for (const [width, height] of [[1280, 900], [375, 812], [320, 640]] as const) {
       await page.setViewportSize({ width, height });

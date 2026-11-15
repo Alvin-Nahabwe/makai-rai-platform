@@ -267,6 +267,26 @@ describe('design fix round 1', () => {
   });
 });
 
+describe('fix round 3', () => {
+  /** WCAG relative luminance of a #rrggbb colour, and the contrast of two. */
+  const lum = (hex: string) => {
+    const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  };
+  const ratio = (a: string, b: string) => { const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05); };
+  it('S1b-N5: the position strip\'s ring is at least 3:1 against the strip\'s surface in the light theme and both dark blocks', () => {
+    const css = readFileSync('components/question/workspace.css', 'utf8');
+    expect(css).toMatch(/\.position-strip__ring \{[^}]*border: 3px solid var\(--color-action-text\);/);
+    expect(css).toMatch(/\.position-strip \{[^}]*background: var\(--color-surface\);/);
+    const globals = readFileSync('app/globals.css', 'utf8');
+    const ring = [...globals.matchAll(/--color-action-text:\s*(#[0-9A-Fa-f]{6});/g)].map((m) => m[1]);
+    const ground = [...globals.matchAll(/--color-surface:\s*(#[0-9A-Fa-f]{6});/g)].map((m) => m[1]);
+    expect(ring.length).toBeGreaterThanOrEqual(3);
+    expect(ground.length).toBe(ring.length);
+    ring.forEach((r, i) => expect(ratio(r, ground[i]), `${r} on ${ground[i]}`).toBeGreaterThanOrEqual(3));
+  });
+});
+
 describe('the guidance aside', () => {
   it('What good looks like, Why this is asked, the risk areas under it as linked labels (name, then code in small type), then Ways teams address this as one folded details with the list inside', async () => {
     const html = await render();
@@ -315,7 +335,10 @@ describe('the frame states', () => {
   it('S3 R1: with the gate at No, a question with the condition says it does not apply, under the code line and before the slot; the form is still there', async () => {
     const html = await render(q13('no'));
     expect(html.split(sentence)).toHaveLength(2);
-    expect(html).toMatch(new RegExp(`<p class="question-frame__code">Q-PP-13 · [^<]*</p><p data-does-not-apply="true">${sentence}</p>`));
+    // Design fix S5-N6: the switched-off mark beside the sentence, in ink and semibold (no orange, no red).
+    expect(html).toMatch(new RegExp(`<p class="question-frame__code">Q-PP-13 · [^<]*</p><p data-does-not-apply="true" class="question-frame__does-not-apply"><svg class="ui-mark__shape"[^>]*>[\\s\\S]*?</svg>${sentence}</p>`));
+    const css = readFileSync('components/question/workspace.css', 'utf8');
+    expect(css).toMatch(/\.question-frame__does-not-apply \{[^}]*color: var\(--color-ink\);[^}]*font-weight: var\(--font-weight-semibold\);/);
     expect(html.indexOf('data-does-not-apply')).toBeLessThan(html.indexOf('data-region="decision-slot"'));
     expect(html).toMatch(/<form\b/);
   });

@@ -247,7 +247,9 @@ a.position-strip__step:hover {
 .position-strip__ring {
   display: inline-flex;
   padding: 2px;
-  border: 3px solid var(--color-action);
+  /* The orange text role, not the fill: at least 3:1 against the strip's surface in both themes (design fix S1b-N5;
+     --color-action is 2.77:1 on the dark surface). */
+  border: 3px solid var(--color-action-text);
   border-radius: 50%;
   background: var(--color-surface);
 }
@@ -353,7 +355,6 @@ a.position-strip__step:hover {
   margin-block-start: var(--space-6);
 }
 
-
 /* ── The question in words (R7: one ramp step below the sketch's 30px, so "Save decision" stays in the first view) ── */
 .question-frame__title {
   margin: 0;
@@ -378,6 +379,21 @@ a.position-strip__step:hover {
 .question-frame__title[data-keyboard-focus]:focus-visible {
   outline: var(--focus-width) solid var(--color-focus);
   outline-offset: var(--focus-offset);
+}
+
+/* The line under the code line of a question the personal data answer switched off (spec 9.7: a state to notice). */
+.question-frame__does-not-apply {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+  color: var(--color-ink);
+  font-weight: var(--font-weight-semibold);
+}
+
+.question-frame__does-not-apply .ui-mark__shape {
+  flex: none;
+  color: var(--color-mark);
 }
 
 /* The code line "{Q-ID} · {topic}", directly under the h1. */

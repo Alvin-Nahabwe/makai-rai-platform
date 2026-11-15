@@ -16,6 +16,7 @@ import { questionApplies, runningContent } from '@/lib/content/loader';
 import { riskAreasOf } from '@/lib/content/riskAreas';
 import { ArchivedBanner } from '@/components/project/ArchivedBanner';
 import { QuestionContent } from '@/components/question/QuestionContent';
+import { MarkShape } from '@/components/ui/StatusMark';
 import { QuestionTopStrip } from '@/components/question/QuestionTopStrip';
 import { PositionStrip } from '@/components/question/PositionStrip';
 import { DecisionSlot } from '@/components/question/DecisionSlot';
@@ -129,7 +130,8 @@ export function QuestionPanelRegions({ data, openWork, route, stage }: {
             <HeadingFocusCue headingId="question-heading" />
             <FocusOnArrival targetId="question-heading" />
             <p className="question-frame__code">{DECISION_COPY.titles.question(question.id, question.moduleTitle)}</p>
-            {doesNotApply ? <p data-does-not-apply>{Q.doesNotApply}</p> : null}
+            {/* A state the reader must notice (spec 9.7; design fix S5-N6): the switched-off mark and the sentence in ink, semibold. */}
+            {doesNotApply ? <p data-does-not-apply className="question-frame__does-not-apply"><MarkShape kind="does_not_apply" size={16} />{Q.doesNotApply}</p> : null}
             {/* FR-CNT-07: the disclosure holds the wording the current decision was answered against. */}
             {reworded ? (
               <div data-reworded>
@@ -142,9 +144,11 @@ export function QuestionPanelRegions({ data, openWork, route, stage }: {
             ) : null}
           </section>
           {reading === null ? null : reading.decision}
+          {reading === null ? null : reading.openWork}
           {/* Coordinator's ruling on review S1a-4: a reader who may raise a finding (a Reviewer) finds the link in the
-              decision area, under the decision and before what is still open; a Viewer gets nothing. The reader's open
-              findings are in "Still open", so the link is the raise link only. Writers get it from the decision card. */}
+              decision area; a Viewer gets nothing. Spec 9.3: open findings sit directly under the decision, so the order
+              is the card, what is still open, then this link (design fix S4-N2). The link is the raise link only (the
+              reader's open findings are in "Still open"). Writers get it from the decision card. */}
           {reading !== null && data.canRaiseFinding ? (
             <section data-region="finding-link" aria-labelledby="s12-finding-link">
               <h2 id="s12-finding-link">{Q.headings.findings}</h2>
@@ -152,7 +156,6 @@ export function QuestionPanelRegions({ data, openWork, route, stage }: {
                 currentVersionId={data.current?.id ?? null} openFinding={null} canRaise={data.canRaiseFinding} />
             </section>
           ) : null}
-          {reading === null ? null : reading.openWork}
           {/* A reader's sealed copy is in the reader's aside; a writer's seal note stands above the decision card. */}
           {reading === null ? sealNote : null}
           <DecisionSlot data={data} next={next} stageHref={stageHref} openFindingsOnQuestion={openFindingsOnQuestion} />
