@@ -3126,5 +3126,13 @@
     "property": "Recorded so far shows each status as the kit's mark, hidden from assistive technology, beside its count in words, never a warning style. There is no row of marks per question on the project page any more (owner's ruling of 15 Nov 2026 20:50, as sketched): the tally alone carries the marks.",
     "proof": "The case slices the pre-processing line's Recorded so far stop and requires NO ui-route-row__stop (the row is gone) and exactly 5 <li class=\"ui-route-row__tally-item\" data-tally-kind=...> each opening with an <svg class=\"ui-mark__shape\" aria-hidden=\"true\">; the tally read without its (i) must equal exactly \"7 done (2 with no evidence attached)\", \"n partly\", \"n not yet\", \"n not applicable\", \"1 answered\", in that order; no status-label or warning in the stop. Ink is checked in the browser by expectStatusMarksInk (e2e/prj-screens.spec.ts UX-06 UX-07, whose sentinel project now has one decision so S-10 has a mark).",
     "task": "lane 8 I4 round 3 (owner 20:50: drop the per-question marks row on S-10)"
+  },
+  {
+    "kind": "rule",
+    "changed": "e2e/first-visit-transfer.spec.ts::NFR-PERF-02: S-11 and S-12 of a 28-question stage transfer at most 300 KB on first visit",
+    "replacedBy": "e2e/first-visit-transfer.spec.ts::NFR-PERF-02: S-11 of a 28-question stage transfers at most 300 KB and S-12 at most 315 KB on first visit",
+    "property": "S-11 (the stage page of the 28-question stage) transfers at most 300,000 B on first visit and S-12 (its question page) at most 315,000 B, each failing above its own limit; nothing was trimmed. The owner's ruling of 15 Nov 2026 20:50 EAT (box) set S-12's limit; S-11 keeps the SRS's 300 KB.",
+    "proof": "The case measures both pages with the same measure() as before and asserts m.total <= its own limit per page ([s11, 300_000], [s12, 315_000]); S-12 measured 312,535 B at e422129c (lane 8 investigation on the remote runner, a temporary spec copying this file's measure()).",
+    "task": "lane 8 (owner 20:50: S-12 first-visit limit 315,000 B)"
   }
 ]
