@@ -958,3 +958,36 @@ test('1A Task 11 (12): at 375 px every control of the bar and the open panel is 
     await context.close();
   }
 });
+
+// ── Public pages: the root frame must not break the door pages' full-height column (re-review round 4, N1) ───────────
+test('final fix 1: at 1280x900 the footer of /login ends on the foot of the viewport, and on /about it follows the content', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  try {
+    const page = await context.newPage();
+    await page.goto('/login');
+    const login = await page.evaluate(() => {
+      const footer = document.querySelector('footer');
+      return { bottom: footer ? footer.getBoundingClientRect().bottom : -1, inner: window.innerHeight, scrolls: document.documentElement.scrollHeight > window.innerHeight };
+    });
+    expect(Math.abs(login.bottom - login.inner), '/login footer bottom against the viewport foot').toBeLessThanOrEqual(1);
+    expect(login.scrolls, '/login does not scroll').toBe(false);
+
+    await page.goto('/about');
+    const about = await page.evaluate(() => {
+      const footer = document.querySelector('footer');
+      const main = document.querySelector('main');
+      return {
+        footerTop: footer ? footer.getBoundingClientRect().top + window.scrollY : -1,
+        mainBottom: main ? main.getBoundingClientRect().bottom + window.scrollY : -1,
+        footerBottom: footer ? footer.getBoundingClientRect().bottom + window.scrollY : -1,
+        docHeight: document.documentElement.scrollHeight,
+        inner: window.innerHeight,
+      };
+    });
+    expect(about.docHeight, '/about is longer than the viewport').toBeGreaterThan(about.inner);
+    expect(about.footerTop, '/about footer starts at the content end').toBeGreaterThanOrEqual(about.mainBottom - 1);
+    expect(Math.abs(about.footerBottom - about.docHeight), '/about footer ends the document').toBeLessThanOrEqual(1);
+  } finally {
+    await context.close();
+  }
+});
