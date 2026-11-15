@@ -143,10 +143,10 @@ describe('Projects, one list (plan 1B Task 12)', () => {
     expect(C.archivedNotShown(12)).toBe('12 archived projects are not shown yet. Archived projects come last.');
   });
 
-  it('gap 2: the page is headed "Projects", and the archived banner names that page', () => {
+  // The archived banner is the project page's (lane 4: three parts, its words "All projects page", pinned by
+  // __tests__/unit/project-page.test.tsx), so this test no longer words it.
+  it('gap 2: the page is headed "Projects"', () => {
     expect(C.heading).toBe('Projects');
-    expect(PROJECT_COPY.archivedBanner).toContain('on the Projects page');
-    expect(PROJECT_COPY.archivedBanner).not.toContain('All projects');
   });
 
   it('UX-37: the list uses ListLink and imports no next/link; Unarchive focuses the list by its id', () => {
