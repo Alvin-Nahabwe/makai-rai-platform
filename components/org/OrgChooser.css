@@ -1,0 +1,9 @@
+/* The organisation chooser (plan 1B Task 8): the person's organisations as item plates, one under another on the card's
+   left edge, the gap a step of the 4 px grid. Role tokens only (the plates carry their own colours). */
+.org-chooser {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}

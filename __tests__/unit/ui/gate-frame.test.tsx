@@ -334,16 +334,18 @@ describe('the gate pages pass a route of true stops', () => {
   it('/ with organisations to choose from: Choose an organisation current, Home upcoming, in the wide card', async () => {
     data.findUser.mockResolvedValue({ lastActiveOrgId: null });
     data.memberships.mockResolvedValue([
-      { orgId: 'o1', org: { slug: 'alpha', name: 'Alpha Lab' } },
-      { orgId: 'o2', org: { slug: 'beta', name: 'Beta Lab' } },
+      { orgId: 'o1', role: 'owner', org: { slug: 'alpha', name: 'Alpha Lab' } },
+      { orgId: 'o2', role: 'viewer', org: { slug: 'beta', name: 'Beta Lab' } },
     ]);
     const Page = (await import('@/app/(gate)/page')).default;
     const p = frameOf(await Page());
     expect(p.route).toEqual([{ label: 'Choose an organisation', state: 'current' }, { label: 'Home', state: 'upcoming' }]);
     expect(p.wide).toBe(true);
     expect(p.accountReachable).toBe(true);
-    // T1.4: the chooser reads only this person's own memberships and last organisation, by their own id.
-    expect(data.memberships.mock.calls).toEqual([['u1']]);
+    // T1.4: the chooser reads only this person's own memberships and last organisation, by their own id (orgRoleLabel, which
+    // words each plate's role since plan 1B Task 8, reads the same memberships by the same id).
+    expect(data.memberships.mock.calls.length).toBeGreaterThan(0);
+    for (const call of data.memberships.mock.calls) expect(call).toEqual(['u1']);
     expect(data.findUser.mock.calls).toEqual([[{ where: { id: 'u1' }, select: { lastActiveOrgId: true } }]]);
   });
 
