@@ -297,6 +297,9 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     expect(stacked(html)).toContain(button);
     expect(stacked(html)).toContain(P.nextLabel);
     expect(html.match(/ui-button--primary/g)).toHaveLength(2);
+    // Above the stacked lines the block sits outside its stage's line, so it names the stage; inside the line it does not.
+    expect(text(stacked(html))).toContain(`${P.stageNames['in-processing']} · Question`);
+    expect(text(head)).not.toContain(`${P.stageNames['in-processing']} · Question`);
   });
 
   it('C11: "Start recording" for a first save; a null question links to the stage, with the sentence and no label; all decided says so', () => {

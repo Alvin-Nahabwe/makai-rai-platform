@@ -288,6 +288,8 @@ export function NextStep({ target, base, route, counts, where }: {
   const at = questionId === null ? -1 : route.stops.findIndex((s) => s.id === questionId);
   const next = at !== -1 && route.stops[at].kind === 'no_decision' ? route.stops[at] : null;
   const href = questionId === null ? stagePath(base, target.stage) : `${stagePath(base, target.stage)}/questions/${questionId}`;
+  // Above the stacked lines the block is not inside its stage's line, so it names the stage before the place in it.
+  const stagePrefix = where === 'stacked' ? `${P.stageNames[target.stage]}${SEP}` : '';
   return (
     <div className={`next-step-block next-step-block--${where}`}>
       <p className="stage-line__next">
@@ -298,9 +300,9 @@ export function NextStep({ target, base, route, counts, where }: {
               <b className="stage-line__next-label">{P.nextLabel}</b>{' '}
               <span className="stage-line__next-text">{next.title}</span>
             </span>{' '}
-            <span className="stage-line__position">{positionWords(at + 1, route.stops.length)}</span>
+            <span className="stage-line__position">{stagePrefix}{positionWords(at + 1, route.stops.length)}</span>
           </>
-        ) : counts.noDecision > 0 ? P.noDecisionYet(counts.noDecision) : P.allDecided}
+        ) : <>{stagePrefix}{counts.noDecision > 0 ? P.noDecisionYet(counts.noDecision) : P.allDecided}</>}
       </p>
       <p className="stage-line__primary">
         <ButtonLink variant="primary" href={href}>{target.label === 'continue' ? P.continue : P.start}</ButtonLink>
