@@ -90,6 +90,21 @@ body:has(.gate--public) {
   font-size: var(--font-size-small);
 }
 
+/* A route that follows a step changed in the browser without route code (S-04 signed out,
+   app/(public)/invitations/[token]/InvitationRoute.tsx; the lean frame, owner, 15 Nov 15:35): the server draws the route
+   of each step and the form names its step in data-step, and only that step's route is drawn, so the other's list and
+   aria-current are out of the accessibility tree. The wrappers lay their contents out as the column's own children: the
+   band's two lines stay its flex items. */
+.gate-steps,
+.gate-steps__step {
+  display: contents;
+}
+
+.gate-steps[data-step="details"] > [data-for="acceptances"],
+.gate-steps[data-step="acceptances"] > [data-for="details"] {
+  display: none;
+}
+
 /* ── The card ── */
 .gate__main {
   min-width: 0;

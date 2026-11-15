@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import type { ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { Invitation } from '@prisma/client';
@@ -14,14 +15,16 @@ vi.mock('next/navigation', async (importOriginal) => ({
 }));
 
 const { default: InvitationPage } = await import('@/app/(public)/invitations/[token]/page');
-const { NewAccountView, InvitationRoute, InvitationRouteView, invitationStep } = await import('@/app/(public)/invitations/[token]/AcceptInvitationClient');
+const { NewAccountView } = await import('@/app/(public)/invitations/[token]/AcceptInvitationClient');
+const { InvitationRoute } = await import('@/app/(public)/invitations/[token]/InvitationRoute');
+const { INVITATION_ROUTE_ID, showInvitationStep } = await import('@/app/(public)/invitations/[token]/invitationStep');
+const { GatePublicFrame } = await import('@/components/layout/GatePublicFrame');
 const { invitationByToken } = await import('@/lib/data/preauth');
 const { tryResolveIdentity } = await import('@/lib/auth/identity');
 const { INVITATION_PAGE_COPY, roleTerm } = await import('@/lib/org/copy');
 const { INVITATION_COPY } = await import('@/lib/invitations/copy');
 const { TERM_ASSESSOR } = await import('@/lib/vocabulary/terms');
 const { GATE_COPY } = await import('@/lib/shell/copy');
-const { GatePublicFrame } = await import('@/components/layout/GatePublicFrame');
 
 /**
  * Plan 1B Task 6 (rulings L5-14, L5-15): S-04 in the gate frame's public variant. The card says who invited the person, as
@@ -64,15 +67,51 @@ describe('S-04 in the gate frame (plan 1B Task 6)', () => {
     expect(el.props.route).toBeUndefined();
     expect(el.props.routeSlot?.type).toBe(InvitationRoute);
     const steps = (html: string) => [...html.matchAll(/gate-route__stop--(\w+)"><span class="gate-route__mark" aria-hidden="true"><\/span><span class="gate-route__label"[^>]*>(?:<span class="gate-route__here">[^<]*<\/span> )?([^<]+)/g)].map((m) => [m[2].trim(), m[1]]);
-    expect(steps(renderToStaticMarkup(<InvitationRouteView step="details" />))).toEqual([
+    // The lean frame (owner, 15 Nov 15:35): the server draws the route of each step; the wrapper names the step the client
+    // is on, and the server and the first render name the first, so the page's HTML never depends on the browser.
+    const html = renderToStaticMarkup(<InvitationRoute />);
+    const found = new RegExp(`^<div id="${INVITATION_ROUTE_ID}" class="gate-steps" data-step="details"><div class="gate-steps__step" data-for="details">(.*?)</div><div class="gate-steps__step" data-for="acceptances">(.*)</div></div>$`).exec(html);
+    expect(found, html).not.toBeNull();
+    const [, details, acceptances] = found!;
+    expect(steps(details)).toEqual([
       [INVITATION_COPY.stops.details, 'current'], [GATE_COPY.stops.accept, 'upcoming'], [INVITATION_COPY.stops.join, 'upcoming'],
     ]);
-    expect(steps(renderToStaticMarkup(<InvitationRouteView step="acceptances" />))).toEqual([
+    expect(steps(acceptances)).toEqual([
       [INVITATION_COPY.stops.details, 'done'], [GATE_COPY.stops.accept, 'current'], [INVITATION_COPY.stops.join, 'upcoming'],
     ]);
-    // The server and the first render see the first step: the page's HTML never depends on the browser.
-    expect(invitationStep.initial).toBe('details');
-    expect(renderToStaticMarkup(<InvitationRoute />)).toBe(renderToStaticMarkup(<InvitationRouteView step="details" />));
+    // Each step's route says where the person is, once, with aria-current on that stop, and the band's two lines.
+    expect(details.match(/aria-current="step"/g)).toHaveLength(1);
+    expect(details).toContain(`<p class="gate__where">${GATE_COPY.where(INVITATION_COPY.stops.details)}</p><p class="gate__next">${GATE_COPY.next(GATE_COPY.stops.accept)}</p>`);
+    expect(acceptances.match(/aria-current="step"/g)).toHaveLength(1);
+    expect(acceptances).toContain(`<p class="gate__where">${GATE_COPY.where(GATE_COPY.stops.accept)}</p><p class="gate__next">${GATE_COPY.next(INVITATION_COPY.stops.join)}</p>`);
+  });
+
+  it('L5-28 (lean frame): the client names its step on the route\'s wrapper, and the public sheet shows only that step\'s route', () => {
+    const attrs = new Map<string, string>();
+    const wrapper = { setAttribute: (name: string, value: string) => { attrs.set(name, value); } };
+    const doc = { getElementById: (id: string) => (id === INVITATION_ROUTE_ID ? wrapper : null) } as unknown as Pick<Document, 'getElementById'>;
+    showInvitationStep(doc, 'acceptances');
+    expect(attrs.get('data-step')).toBe('acceptances');
+    showInvitationStep(doc, 'details');
+    expect(attrs.get('data-step')).toBe('details');
+    // NewAccount does it on each change of its step, after the render that changed it.
+    const client = readFileSync('app/(public)/invitations/[token]/AcceptInvitationClient.tsx', 'utf8');
+    expect(client).toMatch(/useEffect\(\(\) => \{ showInvitationStep\(document, step\); \}, \[step\]\);/);
+    // The wrappers lay their contents out as the column's own children (the band's lines are its flex items); the step not
+    // named is not drawn, so its list and its aria-current are out of the accessibility tree.
+    const css = readFileSync('components/layout/gate.css', 'utf8');
+    expect(css).toMatch(/\.gate-steps,\s*\.gate-steps__step \{\s*display: contents;\s*\}/);
+    expect(css).toMatch(/\.gate-steps\[data-step="details"\] > \[data-for="acceptances"\],\s*\.gate-steps\[data-step="acceptances"\] > \[data-for="details"\] \{\s*display: none;\s*\}/);
+  });
+
+  it('L5-28 (lean frame): a page with no route for the client to follow is logged, and the form still works', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      expect(() => showInvitationStep({ getElementById: () => null } as unknown as Pick<Document, 'getElementById'>, 'acceptances')).not.toThrow();
+      expect(warn).toHaveBeenCalledWith('invitation: the frame has no route for the step', 'acceptances');
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('L5-14: signed in as the invited email, Join alone when it is the one step left; Accept the terms first when one is missing; someone else (M-24), no route', async () => {

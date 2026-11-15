@@ -12,7 +12,8 @@ import { pageTitle } from '@/lib/ui/title';
 import { GatePublicFrame } from '@/components/layout/GatePublicFrame';
 import type { GateStop } from '@/components/layout/GateRoute';
 import { AuthCard } from '@/components/auth/AuthCardBase';
-import AcceptInvitationClient, { InvitationRoute } from './AcceptInvitationClient';
+import AcceptInvitationClient from './AcceptInvitationClient';
+import { InvitationRoute } from './InvitationRoute';
 
 export const metadata: Metadata = { title: pageTitle(ORG_COPY.titles.invitation) };
 
@@ -42,10 +43,10 @@ export const metadata: Metadata = { title: pageTitle(ORG_COPY.titles.invitation)
  *
  * In the gate frame's public variant since plan 1B Task 6 (rulings L5-14, L5-15): the card says who invited the person, as
  * what, what that role means (the vocabulary's sentence, plain text) and until when; the frame's route is this door's
- * steps. Signed out: Your details, Accept the terms, Join, drawn in the browser from the new-account form's step
- * (InvitationRoute in the frame's routeSlot, ruling L5-28). The frame is GatePublicFrame and the card AuthCardBase, so the
- * first visit carries neither the signed-in frame's sheet and code nor components/auth/auth.css (the lean frame, owner,
- * 15 Nov 15:35). Signed in as the invited email: Join alone when it is the one
+ * steps. Signed out: Your details, Accept the terms, Join, following the new-account form's step (InvitationRoute in the
+ * frame's routeSlot, ruling L5-28). The frame is GatePublicFrame and the card AuthCardBase, so the first visit carries
+ * neither the signed-in frame's sheet and code nor components/auth/auth.css, and the route is drawn on the server (the
+ * lean frame, owner, 15 Nov 15:35). Signed in as the invited email: Join alone when it is the one
  * step left, or Accept the terms then Join while one of the person's own acceptances is missing (route 32 asks for it
  * first). Signed in as someone else (M-24) and an unusable link: none.
  */
