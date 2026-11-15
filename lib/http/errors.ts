@@ -1,7 +1,7 @@
 import type { ApiErrorBody } from '@/types/api';
 import type { FieldError, CalendarDate } from '@/types/record';
 import type { LegalTextKind } from '@/types/legal';
-import { VALIDATION_COPY } from '@/lib/http/copy';
+import { HTTP_COPY, VALIDATION_COPY } from '@/lib/http/copy';
 
 /**
  * An error a route answers with a known status and code. `toResponse`
@@ -46,13 +46,14 @@ export class RateLimitedError extends AppError {
     if (!Number.isFinite(retryAfterSeconds) || retryAfterSeconds <= 0) {
       throw new RangeError(`RateLimitedError needs a positive, finite retryAfterSeconds, got ${retryAfterSeconds}`);
     }
-    super(429, code, 'Too many requests. Please try again later.', { retryAfterSeconds: Math.ceil(retryAfterSeconds) });
+    // The text by code: `export_busy` is the platform's two running exports, not this person's attempts (review B2 I1).
+    super(429, code, code === 'export_busy' ? HTTP_COPY.exportBusy : HTTP_COPY.rateLimited(retryAfterSeconds), { retryAfterSeconds: Math.ceil(retryAfterSeconds) });
   }
 }
 
 export class ErasedError extends AppError {
   constructor(erasedOn: CalendarDate) {
-    super(410, 'erased', 'Erased', { erasedOn });
+    super(410, 'erased', HTTP_COPY.erased(erasedOn), { erasedOn });
   }
 }
 
@@ -64,6 +65,6 @@ export class NotImplementedError extends AppError {
 
 export class AcceptancesRequiredError extends AppError {
   constructor(missing: LegalTextKind[]) {
-    super(403, 'acceptances_required', 'Acceptances required', { missing });
+    super(403, 'acceptances_required', HTTP_COPY.acceptancesRequired, { missing });
   }
 }

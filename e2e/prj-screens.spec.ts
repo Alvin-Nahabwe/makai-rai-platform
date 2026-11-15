@@ -655,7 +655,7 @@ test('FR-PRJ-02: a new project\'s S-10 shows the 7.4.2 empty texts in each stage
   const page = await signedIn(browser, fx.members.owner);
   await page.goto(path(`/projects/${empty.id}`));
   await expect(page.getByText('No decisions recorded yet', { exact: true })).toHaveCount(3);
-  await expect(page.getByText(PROJECT_COPY.followUp.none)).toHaveCount(3);
+  await expect(page.getByText(PROJECT_COPY.noOverdue)).toHaveCount(3);   // each line's Still open (Route R5)
   await expect(page.getByText('No stage review yet.')).toHaveCount(3);
 });
 
@@ -715,13 +715,15 @@ test('FR-RM-04 UX-06 UX-07: each stage count on S-10 and S-08 is a whole number 
   // Fixture text with no digits: Home (plan 1B Task 10) lists an Owner's findings with no mitigation by title, and the
   // default titles ("Fixture title 83") would put the sum on the page as the team's own words, not as a count.
   const sentinelOrg = await buildOrg({ label: 'prjsent', text: (field) => `Sentinel ${field}` });
-  // S-10 prints the organisation's name in its breadcrumb, and the name carries buildOrg's random run id, whose digits
-  // can be the sum (about one id in 150 holds a whole "83"). The name is the test's own text, so the check is told to
-  // leave it out (`ownText`). Here the name always holds the sum, so a run that stops leaving it out fails every time.
+  // The organisation's name carries buildOrg's random run id, whose digits can be the sum (about one id in 150 holds a whole
+  // "83"), and S-10 prints the project's name in its heading and breadcrumb ("Projects › name", Route R5). Both are the
+  // test's own text, so the check is told to leave them out (`ownText`). Here the project's name always holds the sum, so a
+  // run that stops leaving it out fails every time.
   const orgName = `${sentinelOrg.org.name} (${sum})`;
   await testDb.organization.update({ where: { id: sentinelOrg.org.id }, data: { name: orgName } });
-  const own = { ownText: [orgName, sentinelOrg.org.slug] };
-  const project = await addProject(sentinelOrg, { name: 'Sentinel counts' });
+  const projectName = `Sentinel counts (${sum})`;
+  const own = { ownText: [orgName, sentinelOrg.org.slug, projectName] };
+  const project = await addProject(sentinelOrg, { name: projectName });
   for (const [stage, n] of Object.entries(SENTINELS)) {
     for (let i = 0; i < n; i += 1) await addFinding(sentinelOrg, project.id, { stage: stage as Stage, source: 'team' });
   }
@@ -733,7 +735,7 @@ test('FR-RM-04 UX-06 UX-07: each stage count on S-10 and S-08 is a whole number 
   const s10 = `/orgs/${sentinelOrg.org.slug}/projects/${project.id}`;
   for (const p of [s10, `/orgs/${sentinelOrg.org.slug}/dashboard`]) {
     await page.goto(p);
-    if (p === s10) await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toContainText(orgName);
+    if (p === s10) await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toContainText(projectName);
     await expectCountsAsWholeNumbersPerStage(page, sentinels, own);
     await expectStatusMarksInk(page);
   }

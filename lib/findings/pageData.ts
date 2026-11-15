@@ -33,6 +33,8 @@ export interface RaiseFormData {
 /** One row of S-14: what a finding is called, where it came from and how it stands, as text. */
 export interface FindingListItem {
   id: string; stage: Stage; title: string; sourceLabel: string; stateLabel: string; state: FindingState;
+  /** The status `sourceLabel` names ("From a decision: Partly"), so the page can define it; null when it names none. */
+  sourceStatus: StoredDecisionStatus | null;
   /** Set for the two "close it" groups: why, and the decision version that closes it (route 11's body). */
   decisionVersionId: string | null; closeReason: 'decision_done' | 'decision_withdrawn' | 'gate_no' | null;
   openMitigations: number; overdueMitigations: number; raisedAt: string;
@@ -96,6 +98,7 @@ function itemOf(
     id: f.id, stage: f.stage, title: titleOf(f, version), state: f.state,
     decisionVersionId: closing?.decisionVersionId ?? null, closeReason: closing?.reason ?? null,
     sourceLabel: findingSourceLabel(f, version === undefined ? null : { versionNumber: version.versionNumber, status: version.status }),
+    sourceStatus: f.source === 'shortfall' && version !== undefined ? version.status : null,
     stateLabel: closedByRecord ? FINDINGS_COPY.labels.closed : findingStateLabel(f.state, accepted),
     openMitigations: f.openMitigations, overdueMitigations: f.overdueMitigations, raisedAt: f.raisedAt,
   };
@@ -287,6 +290,8 @@ export interface FindingPageData {
   closeByDecision: {
     reason: 'decision_done' | 'decision_withdrawn' | 'gate_no'; decisionVersionId: string;
     questionId: string; versionNumber: number; statusWord: string;
+    /** The status `statusWord` names, so the page can define it (spec 6). */
+    status: StoredDecisionStatus | null;
   } | null;
   /**
    * B2 (ruling R1): the close box shows, with no button, the sentence that the finding stays open while a mitigation is
@@ -380,6 +385,7 @@ export async function loadFindingPage(
     closeByDecision: closing === undefined || closingVersion === null || !mayClose ? null : {
       reason: closing.reason, decisionVersionId: closing.decisionVersionId, questionId: closingVersion.questionId,
       versionNumber: closingVersion.versionNumber, statusWord: decisionStatusWord(closingVersion.status as StoredDecisionStatus | null),
+      status: closingVersion.status as StoredDecisionStatus | null,
     },
     canMitigate: can(ctx.role, 'mitigation:write') && writable,
     canAccept: can(ctx.role, 'risk:accept') && writable,

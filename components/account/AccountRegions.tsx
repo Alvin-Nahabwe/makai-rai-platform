@@ -6,6 +6,10 @@ import { ReminderEmailsSetting } from '@/components/followup/ReminderEmailsSetti
 import { PersonalExportAndDeletion } from '@/components/account/PersonalExportAndDeletion';
 import { DraftsOnThisDevice } from '@/components/decision/DraftsOnThisDevice';
 import { ACCOUNT_COPY } from '@/lib/account/copy';
+import { REMINDER_SETTING_COPY } from '@/lib/followup/copy';
+import { Definition } from '@/components/ui/Definition';
+import { markTerms } from '@/components/review/markTerms';
+import { TERM_MITIGATION } from '@/lib/vocabulary/terms';
 import { SignOutEverywhere } from './SignOutEverywhere';
 
 const TARGET: CSSProperties = { display: 'inline-block', minWidth: '24px', minHeight: '24px' };
@@ -31,6 +35,9 @@ export interface AccountRegionsProps {
  * slots"): `MyAcceptances` (ACC-a, the read-only record), `ReminderEmailsSetting` (FUP), `PersonalExportAndDeletion`
  * (EXP: "My data" and "Delete my account", M-38 from `lastActiveOwnerOf`) and `DraftsOnThisDevice` (DEC-b).
  */
+/** The id of the mitigation's definition, which the reminder checkbox names. */
+const MITIGATION_DEFINITION_ID = 'account-mitigation-definition';
+
 export function AccountRegions({ identity, reminderEmails, lastActiveOwnerOf }: AccountRegionsProps): ReactElement {
   const t = ACCOUNT_COPY.page;
   return (
@@ -51,7 +58,12 @@ export function AccountRegions({ identity, reminderEmails, lastActiveOwnerOf }: 
         <div><SignOutEverywhere userId={identity.userId} /></div>
       </section>
       <MyAcceptances userId={identity.userId} />
-      <ReminderEmailsSetting enabled={reminderEmails} />
+      {/* The reminder label holds the page's first "mitigation" (spec 6): the word is marked and its definition follows the
+          label, named by the checkbox. Built here, so the client setting does not import the vocabulary (X-2). */}
+      <ReminderEmailsSetting
+        enabled={reminderEmails} label={markTerms(REMINDER_SETTING_COPY.label, [TERM_MITIGATION])}
+        hint={{ id: MITIGATION_DEFINITION_ID, node: <Definition of={TERM_MITIGATION} id={MITIGATION_DEFINITION_ID} /> }}
+      />
       <PersonalExportAndDeletion userId={identity.userId} lastActiveOwnerOf={lastActiveOwnerOf} />
       <DraftsOnThisDevice userId={identity.userId} />
     </div>

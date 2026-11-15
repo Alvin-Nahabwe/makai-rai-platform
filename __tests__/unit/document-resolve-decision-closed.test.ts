@@ -4,7 +4,7 @@ import { STAGES } from '@/types/record';
 import type { FindingView, MitigationVersionView, UserRef } from '@/types/api';
 import { loadContent } from '@/lib/content/loader';
 import { loadFieldMap } from '@/lib/documents/fieldMaps';
-import { textErasedLine } from '@/lib/documents/copy';
+import { docTextErasedLine } from '@/lib/documents/copy';
 import { resolveFields, type DocumentSnapshot, type SealedStage } from '@/lib/documents/resolve';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
 
@@ -64,12 +64,12 @@ const card = (s: Spec) => resolveFields(mc, snap('model_card', 'in-processing', 
 describe('a mitigation closed by a decision, as a document prints it (D-408)', () => {
   it('FR-FND-06 FR-DOC-01: MP-05 prints "Closed because the decision changed." under the finding for a done decision_changed with no text and no tombstone', () => {
     const text = fieldText(plan({ what: null, kind: 'decision_changed' }), 'MP-05');
-    expect(text).toBe(`1. Labels drift\nSource: From question Q-PP-01\nRisk area: none\nDescription: Coders disagree.\nStatus: Closed\nClosed by Amina N. on 30 Oct 2026.\n${CHANGED}`);
+    expect(text).toBe(`1. Labels drift\nSource: question Q-PP-01\nRisk area: none\nDescription: Coders disagree.\nStatus: Closed\nClosed by Amina N. on 30 Oct 2026.\n${CHANGED}`);
   });
 
   it('FR-FND-06 FR-DOC-01: MP-05 prints "Closed because the decision was withdrawn." under the finding for a done decision_withdrawn', () => {
     expect(fieldText(plan({ what: null, kind: 'decision_withdrawn' }), 'MP-05'))
-      .toBe(`1. Labels drift\nSource: From question Q-PP-01\nRisk area: none\nDescription: Coders disagree.\nStatus: Closed\nClosed by Amina N. on 30 Oct 2026.\n${WITHDRAWN}`);
+      .toBe(`1. Labels drift\nSource: question Q-PP-01\nRisk area: none\nDescription: Coders disagree.\nStatus: Closed\nClosed by Amina N. on 30 Oct 2026.\n${WITHDRAWN}`);
   });
 
   it('FR-FND-06 FR-DOC-01: MC-24 of the model card lists neither decision kind as a done mitigation', () => {
@@ -80,7 +80,7 @@ describe('a mitigation closed by a decision, as a document prints it (D-408)', (
 
   it('FR-REV-08 (SRS 7.5.6): a decision-kind row with a tombstone prints the erased line, not the sentence', () => {
     const text = fieldText(plan({ what: null, kind: 'decision_changed', erasedOn: '2026-11-02' }), 'MP-05');
-    expect(text).toContain(`1. ${textErasedLine('2026-11-02')}`);
+    expect(text).toContain(`1. ${docTextErasedLine('2026-11-02')}`);
     expect(text).not.toContain(CHANGED);
   });
 

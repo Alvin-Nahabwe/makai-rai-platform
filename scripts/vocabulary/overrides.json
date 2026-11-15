@@ -4,7 +4,9 @@
       "dashboard": "Home",
       "stage-1": "Pre-processing",
       "stage-2": "In-processing",
-      "stage-3": "Post-processing"
+      "stage-3": "Post-processing",
+      "deleted-account": "Deleted user",
+      "cross-border-storage-consent": "consent to storage abroad"
     },
     "extract": {
       "product": "MAK-AI RAI Platform",
@@ -34,7 +36,6 @@
       "download-all-records-team-export": "Download records",
       "control": "control",
       "legal-texts-collective": "Terms and privacy",
-      "cross-border-storage-consent": "consent to store data in other countries",
       "signed-in-devices": "signed-in devices",
       "personal-data-question-scope-question": "the personal data question"
     },
@@ -52,11 +53,13 @@
   "definitions": {
     "emergency-access": "How MAK-AI's server staff reach the server when the normal way does not work. Owners and Admins are emailed.",
     "organisation-agreement-record-of-signing": null,
-    "dashboard": "Your starting page in this organisation: your next step and what is open."
+    "dashboard": "Your starting page in this organisation: your next step and what is open.",
+    "owner": "Can do everything, including making other members Owners and downloading all records."
   },
   "retired": {
     "add": {
-      "dashboard": ["Dashboard"]
+      "dashboard": ["Dashboard"],
+      "cross-border-storage-consent": ["consent to store data in other countries"]
     }
   },
   "additions": [
@@ -71,7 +74,7 @@
       "source": "stage-0-legal-two-texts-plan.md Part 1, decision 2"
     }
   ],
-  "historical": ["organisation-agreement", "organisation-agreement-record-of-signing"],
+  "historical": ["organisation-agreement", "organisation-agreement-record-of-signing", "data-protection-contact"],
   "defineOnFirstUse": [
     "finding", "mitigation", "accepted-risk", "stage-review", "seal", "control", "risk-area", "fingerprint",
     "version-of-a-decision", "stage-1", "stage-2", "stage-3", "done", "partly", "not-yet", "not-applicable",

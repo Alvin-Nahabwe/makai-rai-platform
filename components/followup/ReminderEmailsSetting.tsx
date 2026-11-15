@@ -1,11 +1,17 @@
 'use client';
 
-import { useId, useReducer, type CSSProperties, type ReactElement } from 'react';
+import { useId, useReducer, type CSSProperties, type ReactElement, type ReactNode } from 'react';
 import { sendWrite } from '@/lib/client/retrySafeWrite';
 import { REMINDER_SETTING_COPY, reminderSettingSaved } from '@/lib/followup/copy';
 import type { PreferencesRequest } from '@/types/api';
 
-export type ReminderEmailsSettingProps = { enabled: boolean };
+/**
+ * `label` and `hint` are optional and off by default (lane 6, FX2): the account page, a server component, passes the label
+ * with "mitigation" marked as a term and that term's definition as the hint (spec 6), so this client file never imports the
+ * vocabulary (ruling X-2). The hint sits right after the label and the checkbox names it with aria-describedby.
+ */
+export type SettingTerms = { label?: ReactNode; hint?: { id: string; node: ReactNode } };
+export type ReminderEmailsSettingProps = { enabled: boolean } & SettingTerms;
 
 export type SettingState = { checked: boolean; confirmed: boolean; pending: boolean; status: string; failed: boolean };
 export type SettingAction = { type: 'start'; next: boolean } | { type: 'saved' } | { type: 'unsaved' };
@@ -32,16 +38,17 @@ const LABEL: CSSProperties = { justifySelf: 'start' };
 const FULL_ROW: CSSProperties = { gridColumn: '1 / -1' };
 
 /** What a person sees: pure, so the pending state can be rendered and asserted without a browser. */
-export function ReminderEmailsSettingView({ id, state: s, onChange }: { id: string; state: SettingState; onChange: (next: boolean) => void }): ReactElement {
+export function ReminderEmailsSettingView({ id, state: s, onChange, label, hint }: { id: string; state: SettingState; onChange: (next: boolean) => void } & SettingTerms): ReactElement {
   return (
     <div style={BOX_AND_LABEL}>
       {/* aria-disabled, not disabled: a disabled control that has focus can drop it, and the next key press then misses the box. */}
       <input
-        id={id} type="checkbox" checked={s.checked} aria-disabled={s.pending}
+        id={id} type="checkbox" checked={s.checked} aria-disabled={s.pending} aria-describedby={hint?.id}
         style={s.pending ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
         onChange={(e) => { if (!s.pending) onChange(e.target.checked); }}
       />
-      <label htmlFor={id} style={LABEL}>{REMINDER_SETTING_COPY.label}</label>
+      <label htmlFor={id} style={LABEL}>{label ?? REMINDER_SETTING_COPY.label}</label>
+      {hint === undefined ? null : <p style={FULL_ROW}>{hint.node}</p>}
       <p style={FULL_ROW}>{REMINDER_SETTING_COPY.note}</p>
       <p role="status" style={FULL_ROW}>{s.status}</p>
       {s.failed ? <p role="alert" style={FULL_ROW}>{REMINDER_SETTING_COPY.failed}</p> : null}
@@ -54,7 +61,7 @@ export function ReminderEmailsSettingView({ id, state: s, onChange }: { id: stri
  * screen's owner renders it. A change is sent at once; while it is in flight the box is aria-disabled
  * and further changes are ignored, so two saves are never in flight; the status line says what became of it.
  */
-export function ReminderEmailsSetting({ enabled }: ReminderEmailsSettingProps): ReactElement {
+export function ReminderEmailsSetting({ enabled, label, hint }: ReminderEmailsSettingProps): ReactElement {
   const id = useId();
   const [s, dispatch] = useReducer(settingReducer, enabled, initialSetting);
 
@@ -64,5 +71,5 @@ export function ReminderEmailsSetting({ enabled }: ReminderEmailsSettingProps): 
     dispatch({ type: out.kind === 'saved' ? 'saved' : 'unsaved' });
   }
 
-  return <ReminderEmailsSettingView id={id} state={s} onChange={(next) => void change(next)} />;
+  return <ReminderEmailsSettingView id={id} state={s} onChange={(next) => void change(next)} label={label} hint={hint} />;
 }

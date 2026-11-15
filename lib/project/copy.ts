@@ -6,11 +6,56 @@ import type { Stage } from '@/types/record';
  * 'use client' imports it (ruling X-2); the form's words are lib/project/form/copy.ts, Archive's and Unarchive's
  * lib/project/write/copy.ts.
  */
+/** The archived banner's sentence, split around the words that link to All projects (lane 1's design review S5-1). */
+const ARCHIVED_BANNER = Object.freeze({
+  before: 'This project is archived. Nothing in it can be changed. An Owner or Admin can unarchive it on the ',
+  link: 'All projects page',
+  after: '.',
+});
+
 export const PROJECT_COPY = Object.freeze({
   titles: Object.freeze({ project: 'Project', editProject: 'Edit project' }),
   /** S-10's one primary action (plan 1C C11): after a save of the person's in this project, and before one. */
   continue: 'Continue recording',
   start: 'Start recording',
+  /**
+   * S-10 as three lines of stops (Route R5; spec 9.2; plan 1C Task 8's copy table). The interface never says "stop" or
+   * "line" (spec principle 4): the last stop's label is "Next question".
+   */
+  nextLabel: 'Next question',
+  noDecisionYet: (n: number) => (n === 1 ? '1 question has no decision yet.' : `${n} questions have no decision yet.`),
+  allDecided: 'Every question in this stage has a decision.',
+  /** After the first three questions with no decision, named; links to the stage's no-decision list. */
+  andMore: (k: number) => `and ${k} more`,
+  beforeSealing: 'Before sealing, look at:',
+  nothingLeftOpen: 'Nothing is left open in this stage.',
+  doneNoEvidence: (n: number) => (n === 1 ? '1 decision marked Done with no evidence attached' : `${n} decisions marked Done with no evidence attached`),
+  overdueMitigations: (n: number) => (n === 1 ? '1 overdue mitigation' : `${n} overdue mitigations`),
+  changedSinceSeal: (n: number) => (n === 1 ? '1 decision changed since it was sealed' : `${n} decisions changed since it was sealed`),
+  /** After the decisions part of a sealed review's line; links to the review, which lists them. */
+  findingsChangedSinceSeal: (n: number) => (n === 1 ? '1 finding changed since it was sealed' : `${n} findings changed since it was sealed`),
+  reviewsHeading: 'Reviews',
+  /** A review's quiet line: "Review 1 · sealed 11 Nov 2026" or "Review 2 · not sealed yet". */
+  reviewNumber: (n: number) => `Review ${n}`,
+  sealed: 'sealed',
+  notSealedYet: 'not sealed yet',
+  /** The foot row of project actions (the sketch's nav.acts), named by its heading. */
+  thisProject: 'This project',
+  findings: 'Findings',
+  editProjectDetails: 'Edit project details',
+  /** "Overdue: 1 mitigation", "Not overdue: 2 mitigations"; the word Overdue is followUp.overdue. */
+  mitigationCount: (n: number) => (n === 1 ? '1 mitigation' : `${n} mitigations`),
+  noOverdue: 'No overdue mitigations',
+  notOverdue: 'Not overdue',
+  /** The red part of an overdue mitigation's plate (spec 7.1: red only on "Overdue" and the date). */
+  wasDue: (day: string) => `was due ${day}`,
+  /** The name of a stage's row of marks, one per question. */
+  routeLabel: (stageName: string) => `Questions in ${stageName}`,
+  /**
+   * The accessible name of the (i) beside a status word in a tally, at its first use on the page: 'What does "Done" mean?'
+   * (the owner's ruling of 15 November 2026, 11:05; the same words as the question page's, lib/question/copy.ts on lane 1).
+   */
+  whatMeans: (term: string) => `What does "${term}" mean?`,
   /** S-32 reached from the rail's Findings link with no project to go to (plan 1A Task 12, L2-65). */
   chooseForFindings: 'Choose a project to see its findings.',
   /** S-32, Projects: one list, active and archived (plan 1B Task 12; spec 8, rule C8). The key keeps its 1A name. */
@@ -45,36 +90,29 @@ export const PROJECT_COPY = Object.freeze({
     usesPersonalData: 'Uses personal data',
     noPersonalData: 'No personal data',
   }),
-  /** S-10's header, jump links and closing lines. */
+  /** S-10's header, jump links and the share line. */
   overview: Object.freeze({
     anyOrder: 'You can work on the stages in any order.',
-    editProject: 'Edit project',
     downloadRecords: 'Download records',
     jumpTo: 'Jump to a stage',
     shareLine: 'To share your record outside the team, seal a stage review and create a document from it.',
-    findings: 'Findings for this project',
   }),
   /** Every page of an archived project (coordinator Q5 (a): no link, the banner's props stay as they are). */
-  archivedBanner: 'This project is archived. Nothing in it can be changed. An Owner or Admin can unarchive it on the Projects page.',
+  archivedBanner: `${ARCHIVED_BANNER.before}${ARCHIVED_BANNER.link}${ARCHIVED_BANNER.after}`,
+  /** The same sentence in three parts: ArchivedBanner links only the middle one to the organisation's projects (S5-1). */
+  archivedBannerParts: ARCHIVED_BANNER,
   /** S-09 in edit mode for an archived project: the heading above the banner. */
   editArchivedHeading: 'Edit project',
-  /** The stage names (decision D1) and the line under each (SRS W-1). */
+  /** The stage names (decision D1); each stage's meaning is its vocabulary definition (TERM_STAGE_1 to 3). */
   stageNames: Object.freeze({
     'pre-processing': 'Pre-processing', 'in-processing': 'In-processing', 'post-processing': 'Post-processing',
   } satisfies Record<Stage, string>),
-  stageLines: Object.freeze({
-    'pre-processing': 'Problem formulation; data collection and preparation',
-    'in-processing': 'Model development and training; evaluation, fairness, documentation',
-    'post-processing': 'Deployment and monitoring; governance and community engagement',
-  } satisfies Record<Stage, string>),
-  /** A stage block's counts, through StageColumn's `plural` where a word has a singular and a plural. */
+  /** A stage's counts, through `plural` (components/project/StageColumn.tsx) where a word has a singular and a plural. */
   stage: Object.freeze({
     question: 'question',
     questions: 'questions',
     openFinding: 'open finding',
     openFindings: 'open findings',
-    overdueMitigation: 'overdue mitigation',
-    overdueMitigations: 'overdue mitigations',
     acceptedRisk: 'accepted risk',
     acceptedRisks: 'accepted risks',
     document: 'document',

@@ -204,7 +204,7 @@ describe('record fields', () => {
 
   it('FR-DOC-02 FR-REV-08: an erased reason prints Erased on <date>, never the old text', () => {
     const r = resolveFields(dataCardMap, snapWith({ 'Q-PP-08': decision({ v: 1, status: 'done', reason: null, reasonErased: { erasedOn: '2026-11-04' } }) }), {});
-    expect(text(r, 'DC-01')).toContain("Text erased on 4 Nov 2026 on the organisation's instruction.");
+    expect(text(r, 'DC-01')).toContain(docTextErasedLine('2026-11-04'));
   });
 
   it('FR-DOC-02 FR-REV-08: every printed record field and evidence file is a source row', () => {
@@ -409,7 +409,7 @@ describe('gaps, gate-derived questions and erasure lines', () => {
   });
 
   it('FR-REV-08 (SRS 7.5.6, H6): an erased link address or label reads "Text erased on <date> on the organisation\'s instruction.", an erased file name "File name erased"', () => {
-    const line = "Text erased on 4 Nov 2026 on the organisation's instruction.";
+    const line = docTextErasedLine('2026-11-04');
     const erasures = { evidence: new Map([['ev-l', gone(['url', 'label'])], ['ev-f', gone(['fileName'])]]) };
     const items = [link({ url: null, label: null }), { ...file('ev-f'), fileName: null }];
     const r = resolveFields(dataCardMap, snapshotWith({ 'Q-PP-13': decision({ v: 1, evidence: items }) }, erasures), {});
@@ -422,7 +422,7 @@ describe('gaps, gate-derived questions and erasure lines', () => {
   it("FR-REV-08 (SRS 7.5.6, H6): an erased file prints its name, the date and \"Its fingerprint is kept, so seals that include it still check.\"", () => {
     const erasedFile = { ...file('ev-f'), erased: { erasedOn: '2026-11-04' } };
     const r = resolveFields(dataCardMap, snapWith({ 'Q-PP-13': decision({ v: 1, evidence: [erasedFile] }) }), {});
-    expect(text(r, 'DC-16')).toContain("ev-f-protocol.pdf . File erased on 4 Nov 2026 on the organisation's instruction. Its fingerprint is kept, so seals that include it still check.");
+    expect(text(r, 'DC-16')).toContain(fileErasedLine('ev-f-protocol.pdf', '2026-11-04'));
   });
 
   it('FR-REV-08 (H6): a link or file whose text is null with no tombstone is a broken row and throws, naming the row', () => {
@@ -440,7 +440,7 @@ describe('gaps, gate-derived questions and erasure lines', () => {
         evidence: [{ ...file('ev-f'), erased: { erasedOn: '2026-11-04' } }, link({})], erasedFields: [] }], acceptedRisk: null, events: [],
     }];
     const t = text(resolveFields(modelCardMap, snap, {}), 'MC-24') as string;
-    expect(t).toContain('File erased on 4 Nov 2026 on the organisation\'s instruction.');
+    expect(t).toContain(fileErasedLine('ev-f-protocol.pdf', '2026-11-04'));
     expect(t).toContain("link 'Portal' https://example.org/a");
   });
 
@@ -452,7 +452,7 @@ describe('gaps, gate-derived questions and erasure lines', () => {
     const risk = { id: 'ar1', findingId: 'f1', acceptedBy: { kind: 'member', user: user('J') }, accepterRole: 'owner', reason: null, lookAgainNote: null, lookAgainOn: null, enteredBy: user('J'), enteredByRole: 'owner', findingSeq: 3, receivedAt: '2026-10-03T00:00:00.000Z', erasedFields: ['reason', 'lookAgainNote'] };
     (snap.stages['in-processing'] as { findings: unknown }).findings = [{ finding: { ...base, id: 'f1', source: 'team', title: null, description: null, state: 'closed_accepted_risk' }, mitigations: [], acceptedRisk: risk, events: [] }];
     const r = resolveFields(modelCardMap, snap, {});
-    const erased = "Text erased on 4 Nov 2026 on the organisation's instruction.";
+    const erased = docTextErasedLine('2026-11-04');
     expect(text(r, 'MC-23')).toContain(`1. ${erased}`);
     expect(text(r, 'MC-23')).toContain(`Description: ${erased}`);
     expect(text(r, 'MC-25')).toContain(`Reason: ${erased}`);
@@ -512,8 +512,8 @@ describe('fix round 1: sources, Not yet, gaps and per-field dates', () => {
     const snap = snapshot({}, { reviewStage: 'in-processing', erasures: { findings: new Map([['f5', new Map([['title', '2026-01-10'], ['description', '2026-03-12']])]]) } });
     (snap.stages['in-processing'] as { findings: unknown }).findings = [{ finding: { ...baseFinding, id: 'f5', source: 'team', riskArea: 'IP-01', title: null, description: null, state: 'open' }, mitigations: [], acceptedRisk: null, events: [] }];
     const t = text(resolveFields(modelCardMap, snap, {}), 'MC-23') as string;
-    expect(t).toContain("1. Text erased on 10 Jan 2026 on the organisation's instruction.");
-    expect(t).toContain("Description: Text erased on 12 Mar 2026 on the organisation's instruction.");
+    expect(t).toContain(`1. ${docTextErasedLine('2026-01-10')}`);
+    expect(t).toContain(docTextErasedLine('2026-03-12'));
   });
 });
 
@@ -533,7 +533,7 @@ describe('erasure coverage and shortfall findings', () => {
         raisedBy: user('A'), raisedAt: '2026-10-01T00:00:00.000Z', state: 'open', openMitigations: 0, hasNoMitigation: true, overdueMitigations: 0 }, mitigations: [], acceptedRisk: null, events: [],
     }];
     const t = text(resolveFields(modelCardMap, snap, {}), 'MC-23') as string;
-    expect(t).toContain('Finding on Q-IP-01');
+    expect(t).toContain(findingOnQuestion('Have you justified the choice of model architecture relative to the problem complexity and data availability?', 'Q-IP-01'));
     expect(t).not.toContain('Erased');
   });
 });
@@ -556,4 +556,4 @@ describe('boundaries', () => {
   });
 });
 
-import { GATE_DERIVED_NA, decidedByLine, decisionSource, evidenceFileLine, fromQuestion, noDecisionLine, outsideRoleLine, personalDataAnswerLine } from '@/lib/documents/copy';
+import { GATE_DERIVED_NA, decidedByLine, decisionSource, evidenceFileLine, fileErasedLine, findingOnQuestion, fromQuestion, noDecisionLine, outsideRoleLine, personalDataAnswerLine, docTextErasedLine } from '@/lib/documents/copy';

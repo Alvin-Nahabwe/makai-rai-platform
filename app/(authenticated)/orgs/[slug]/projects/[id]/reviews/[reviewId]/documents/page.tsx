@@ -12,7 +12,7 @@ import { runningContent } from '@/lib/content/loader';
 import { DOCUMENT_TITLES, DOCUMENTS_COPY } from '@/lib/documents/copy';
 import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
-import { DOCUMENT_TYPES, type DocumentType } from '@/types/record';
+import { DOCUMENT_TYPES, STAGES, type DocumentType } from '@/types/record';
 import { MSG_SEAL_CHECK_FAILED } from '@/lib/documents/copy';
 import { RENDERERS } from '@/lib/documents/render';
 import { AppError } from '@/lib/http/errors';
@@ -20,6 +20,7 @@ import { logSecurityEvent } from '@/lib/security-logger';
 import { ArchivedBanner } from '@/components/project/ArchivedBanner';
 import { GenerateDocumentForm, NeverSealed, type GenerateDocumentFormProps } from '@/components/documents/GenerateDocumentForm';
 import { IssuedDocumentsList } from '@/components/documents/IssuedDocumentsList';
+import { DocumentTerms, DocumentsLead } from '@/components/documents/DocumentsIntro';
 import RememberProject from '@/components/layout/RememberProject';
 import { PageHeader } from '@/components/ui/PageHeader';
 
@@ -93,11 +94,15 @@ export default async function DocumentsPage({ params }: PageProps) {
     }
   }
   const form = formProps === null ? null : <GenerateDocumentForm {...formProps} />;
+  // The other stages the form's never-sealed notes name, defined under the heading before those notes use them (spec 6, D1).
+  const named = new Set(formProps?.documents.flatMap((d) => d.neverSealedStages) ?? []);
+  const otherStages = STAGES.filter((st) => st !== review.stage && named.has(st));
 
   return (
     <div className="page-content">
       <ArchivedBanner archived={archived} />
-      <PageHeader title={DOCUMENTS_COPY.page.heading} lead={<p>{review.name}</p>} />
+      <PageHeader title={DOCUMENTS_COPY.page.heading} lead={<DocumentsLead reviewName={review.name} stage={review.stage} />} />
+      <DocumentTerms stages={otherStages} finding={form !== null} />
       {seals.length === 0 ? <NeverSealed orgSlug={slug} projectId={id} reviewId={reviewId} /> : (
         <>
           {form !== null ? <section className="documents-section" aria-labelledby="documents-generate"><h2 id="documents-generate">{DOCUMENTS_COPY.page.chooseHeading}</h2>{form}</section> : null}

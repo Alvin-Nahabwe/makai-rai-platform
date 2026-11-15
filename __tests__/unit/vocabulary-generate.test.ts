@@ -73,7 +73,22 @@ describe('the committed vocabulary (no source needed)', () => {
     expect(byId('organisation-agreement').historical).toBe(true);
     expect(byId('organisation-agreement-record-of-signing').historical).toBe(true);
     expect((COMMITTED.concepts as Concept[]).filter((c) => c.historical).map((c) => c.id).sort())
-      .toEqual(['organisation-agreement', 'organisation-agreement-record-of-signing']);
+      .toEqual(['data-protection-contact', 'organisation-agreement', 'organisation-agreement-record-of-signing']);
+  });
+
+  it('the data-protection contact role is dropped (owner, 17 Oct): kept as historical, so Help leaves it out', () => {
+    expect(byId('data-protection-contact').historical).toBe(true);
+  });
+
+  it('W5: the storage consent term is the owner-approved legal texts\' "consent to storage abroad"; the older name is retired', () => {
+    const consent = byId('cross-border-storage-consent');
+    expect(consent.term).toBe('consent to storage abroad');
+    expect(consent.retired.map((r) => r.text)).toEqual(['cross-border storage consent', 'consent to store data in other countries']);
+    expect(consent.definition).toBe('Your agreement that your account and records are stored in the countries the text names.');
+  });
+
+  it('voice rule 12: a role word in a definition takes a capital (Owner)', () => {
+    expect(byId('owner').definition).toBe('Can do everything, including making other members Owners and downloading all records.');
   });
 
   it('every retired item has a lint rule: a phrase with a pattern and a case flag, or a review with a why (Task 8)', () => {
@@ -301,7 +316,7 @@ describe('against the source file', () => {
   it.skipIf(!SOURCE)('term overrides: an extraction is a substring of its cell, a label is an extraction of the cell and the term joins them, a concept entry is the Concept column lower-cased (needs the source file)', () => {
     const rows = new Map<string, { ruled: string; concept: string }>(parseSection2(src()).map((r: { id: string; ruled: string; concept: string }) => [r.id, r]));
     const T = OVERRIDES.terms as Record<'extract' | 'fromConcept', Record<string, string>> & { labels: Record<string, string[]> };
-    expect(Object.keys(T.extract)).toHaveLength(30);
+    expect(Object.keys(T.extract)).toHaveLength(29);
     expect(Object.keys(T.labels)).toHaveLength(3);
     expect(Object.keys(T.fromConcept)).toHaveLength(3);
     for (const [id, t] of Object.entries(T.extract)) expect(rows.get(id)!.ruled, id).toContain(t);

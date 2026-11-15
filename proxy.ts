@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import { checkRateLimit, isSignInPath, SESSION_READ_PATH } from '@/lib/rate-limit';
 import { exportRefusalLocation } from '@/lib/http/exportRefusal';
+import { HTTP_COPY } from '@/lib/http/copy';
 import { publicOrigin } from '@/lib/publicOrigin';
 import { requireAuthSecret } from '@/lib/auth/secret';
 import { usesSecureCookies } from '@/lib/auth/secureCookie';
@@ -237,7 +238,7 @@ export async function proxy(request: NextRequest) {
     const retryAfter = Math.max(1, Math.ceil((result.resetAt.getTime() - Date.now()) / 1000));
     return new NextResponse(
       JSON.stringify({
-        error: 'Too many requests. Please try again later.',
+        error: HTTP_COPY.rateLimited(retryAfter),
         code: 'rate_limited',
         retryAfterSeconds: retryAfter,
       }),

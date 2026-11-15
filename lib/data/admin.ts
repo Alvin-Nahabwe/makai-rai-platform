@@ -5,6 +5,7 @@ import type {
 } from '../../types/api';
 import type { FieldError, InvitationKind, InvitationState, UtcInstant } from '../../types/record';
 import { ValidationFailed } from '../http/errors';
+import { HTTP_COPY, VALIDATION_COPY } from '../http/copy';
 import { validateEmail } from '../validate';
 import { identityLaneClient } from './identityClient';
 import { invitationState } from './invitationState';
@@ -189,11 +190,16 @@ export { MAX_ORG_NAME, MAX_REQUEST_REFERENCE };
 const asObject = (raw: unknown): Record<string, unknown> =>
   typeof raw === 'object' && raw !== null && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
 
+/** The plain names `VALIDATION_COPY.required` puts in "Enter the ...", one per field `textField` guards. */
+const ORG_NAME_LABEL = "organisation's name";
+const LEGAL_NAME_LABEL = "institution's legal name";
+const REQUEST_REFERENCE_LABEL = 'request reference';
+
 /** A required text of 1 to `max` characters after trimming, or a field error. */
-function textField(o: Record<string, unknown>, key: string, field: string, max: number, errors: FieldError[]): string {
+function textField(o: Record<string, unknown>, key: string, field: string, label: string, max: number, errors: FieldError[]): string {
   const v = o[key];
   const t = typeof v === 'string' ? v.trim() : '';
-  if (t.length === 0) errors.push({ field, message: 'Enter this.' });
+  if (t.length === 0) errors.push({ field, message: VALIDATION_COPY.required(label) });
   else if (t.length > max) errors.push({ field, message: `Use ${max} characters or fewer.` });
   return t;
 }
@@ -216,12 +222,12 @@ function showLinkField(o: Record<string, unknown>, errors: FieldError[]): boolea
 export function parseCreateOrganisation(raw: unknown): CreateOrganisationRequest {
   const o = asObject(raw);
   const errors: FieldError[] = [];
-  const name = textField(o, 'name', 'name', MAX_ORG_NAME, errors);
-  const legalName = textField(o, 'legalName', 'legalName', MAX_LEGAL_NAME, errors);
+  const name = textField(o, 'name', 'name', ORG_NAME_LABEL, MAX_ORG_NAME, errors);
+  const legalName = textField(o, 'legalName', 'legalName', LEGAL_NAME_LABEL, MAX_LEGAL_NAME, errors);
   const ownerEmail = emailField(o, 'ownerEmail', 'ownerEmail', errors);
   const showLink = showLinkField(o, errors);
   // Retry-safe by request id (NFR-INT-02): the organisation's id is derived from it and the definer keeps a receipt.
-  if (!isRequestId(o.requestId)) errors.push({ field: 'requestId', message: 'requestId must be a UUID (8-4-4-4-12 hexadecimal).' });
+  if (!isRequestId(o.requestId)) errors.push({ field: 'requestId', message: HTTP_COPY.outOfDate });
   if (errors.length > 0) throw new ValidationFailed(errors);
   return { requestId: o.requestId as string, name, legalName, ownerEmail, showLink };
 }
@@ -237,8 +243,8 @@ export function parseCorrectOrganisation(raw: unknown): CorrectOrganisationReque
   if (hasName === hasLegalName) throw new ValidationFailed([{ field: 'name', message: 'Correct the name or the legal name, one at a time.' }]);
   const errors: FieldError[] = [];
   const request: CorrectOrganisationRequest = hasName
-    ? { name: textField(o, 'name', 'name', MAX_ORG_NAME, errors) }
-    : { legalName: textField(o, 'legalName', 'legalName', MAX_LEGAL_NAME, errors) };
+    ? { name: textField(o, 'name', 'name', ORG_NAME_LABEL, MAX_ORG_NAME, errors) }
+    : { legalName: textField(o, 'legalName', 'legalName', LEGAL_NAME_LABEL, MAX_LEGAL_NAME, errors) };
   if (errors.length > 0) throw new ValidationFailed(errors);
   return request;
 }
@@ -248,7 +254,7 @@ export function parseIssueOwnerInvitation(raw: unknown): IssueOwnerInvitationReq
   const o = asObject(raw);
   const errors: FieldError[] = [];
   const email = emailField(o, 'email', 'email', errors);
-  const requestReference = textField(o, 'requestReference', 'requestReference', MAX_REQUEST_REFERENCE, errors);
+  const requestReference = textField(o, 'requestReference', 'requestReference', REQUEST_REFERENCE_LABEL, MAX_REQUEST_REFERENCE, errors);
   const showLink = showLinkField(o, errors);
   if (errors.length > 0) throw new ValidationFailed(errors);
   return { email, requestReference, showLink };

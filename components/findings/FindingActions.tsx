@@ -96,7 +96,8 @@ export function ErrorSummary({ summary, errors, focusKey, prefix = '' }: { summa
  * which wears the kit's class (`ui-input`, `ui-textarea`, `ui-select`).
  */
 export function Field(p: {
-  id: string; label: string; error?: string | null; help?: string;
+  /** Words, or words with a defined term marked in them (`Term`); `help` may then hold the term's `Definition`. */
+  id: string; label: ReactNode; error?: string | null; help?: ReactNode;
   render: (a: { id: string; 'aria-describedby'?: string; 'aria-invalid'?: true }) => ReactElement;
   /** Shown after the control, before the error: a textarea's count. */
   after?: ReactNode;
