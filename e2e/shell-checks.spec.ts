@@ -68,9 +68,9 @@ async function contextFor(browser: Browser, signedIn: boolean, colorScheme: 'lig
 type Place = 'rail-brand' | 'bar-brand' | 'footer' | 'sign-in' | 'gate-brand' | 'other';
 type ShownImage = { src: string; srcset: string | null; alt: string | null; place: Place };
 const MAKAI_SET = '/logo-makai-white-154.webp 1x, /logo-makai-white-308.webp 2x';
-const RAIL_SET = '/logo-makai-white-208.webp 1x, /logo-makai-white-416.webp 2x';
+const RAIL_SET = '/logo-makai-white-207.webp 1x, /logo-makai-white-414.webp 2x';
 const LOGO_PLACES: ReadonlyArray<ShownImage> = [
-  { src: '/logo-makai-white-208.webp', srcset: RAIL_SET, alt: '', place: 'rail-brand' },
+  { src: '/logo-makai-white-207.webp', srcset: RAIL_SET, alt: '', place: 'rail-brand' },
   { src: '/logo-makai-white-154.webp', srcset: MAKAI_SET, alt: 'MAK-AI RAI Platform', place: 'bar-brand' },
   { src: '/logo-makai-white-154.webp', srcset: MAKAI_SET, alt: 'MAK-AI', place: 'footer' },
   // Lane 5's gate frame (components/layout/GateFrame.tsx, `.gate__brand`; the not-found page draws the same brand in `[data-gate-look]`, app/not-found.tsx): the same logo, decorative beside the name (ruling I-3).

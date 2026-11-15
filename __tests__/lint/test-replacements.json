@@ -2908,7 +2908,15 @@
     "changed": "__tests__/unit/ui/shell-route.test.tsx::the logo (decorative beside the name) and \"MAK-AI RAI Platform\" are one link to the organisation's Home",
     "replacedBy": "__tests__/unit/ui/shell-route.test.tsx::the logo (decorative beside the name) and \"MAK-AI RAI Platform\" are one link to the organisation's Home",
     "property": "The rail's brand is one link to the organisation's Home holding the MAK-AI logo (decorative, alt \"\") and the platform's name, first in the rail, decoding async, no loading or fetchpriority attribute. Only the logo's file and drawn size changed: the tagline of the logo was about 4 px high at 154 px wide.",
-    "proof": "The case still reads the brand link's href, its text 'MAK-AI RAI Platform', alt \"\", decoding=\"async\", no loading/fetchpriority, and the brand before the switcher; the img's src, srcSet, width and height now name /logo-makai-white-208.webp, its 2x /logo-makai-white-416.webp, 208 and 49 (the rail's content width), and the file sizes are held by the it.each cases added beside the existing ones in the same file.",
+    "proof": "The case still reads the brand link's href, its text 'MAK-AI RAI Platform', alt \"\", decoding=\"async\", no loading/fetchpriority, and the brand before the switcher; the img's src, srcSet, width and height now name /logo-makai-white-207.webp, its 2x /logo-makai-white-414.webp, 207 and 48 (the rail's content width), and the file sizes are held by the it.each cases added beside the existing ones in the same file.",
+    "task": "plan 1B (lane 3 task 7: hand-in fixes, logo)"
+  },
+  {
+    "kind": "structure",
+    "changed": "e2e/shell-project.spec.ts::R4: the rail's brand is the MAK-AI logo with the platform's name, one link to the organisation's Home",
+    "replacedBy": "e2e/shell-project.spec.ts::R4: the rail's brand is the MAK-AI logo with the platform's name, one link to the organisation's Home",
+    "property": "The rail's brand is one link to the organisation's Home, named 'MAK-AI RAI Platform', whose logo has loaded and is drawn at the box its width and height attributes give (no layout shift). Only the drawn size changed, from 154 x 36 to the rail's content width.",
+    "proof": "The case still requires the visible brand link, its accessible name, its href, a loaded image (complete, naturalWidth > 0) and that the image's drawn box equals the markup's width and height; the expected box is now [207, 48], the MAKAI_LOGO_RAIL size, which components/layout/logos.ts and shell-route.test.tsx pin.",
     "task": "plan 1B (lane 3 task 7: hand-in fixes, logo)"
   }
 ]
