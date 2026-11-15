@@ -190,8 +190,10 @@
   margin-block-start: var(--space-1);
 }
 
-/* A definition with its term (design review S4-1), in the reading view's small text. */
-.reading-def {
+/* A definition with its term (design review S4-1), in the reading view's small text wherever it sits (design review 3
+   S4-N8): `p.` matches `.reading-aside p` in specificity and this rule comes after it, so the aside's body size does not
+   reach it. */
+p.reading-def {
   margin: var(--space-1) 0 0;
   color: var(--color-ink-muted);
   font-size: var(--font-size-small);

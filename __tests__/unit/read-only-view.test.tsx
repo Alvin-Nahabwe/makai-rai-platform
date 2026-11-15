@@ -280,6 +280,10 @@ describe('the read-only question page (plan 1C Task 7)', () => {
     expect(rule('.reading-evidence__link')).not.toMatch(/display:\s*inline-flex/);
     expect(css).not.toContain('--font-size-legal');
     expect(readFileSync('components/question/OpenWorkList.css', 'utf8')).not.toContain('--font-size-legal');
+    // Design review 3 S4-N8: a definition line is small print wherever it sits. `.reading-aside p` (body size) would win
+    // over a bare `.reading-def` in the sealed copy, so the definition's rule matches it in specificity and comes later.
+    expect(rule('p.reading-def')).toMatch(/font-size:\s*var\(--font-size-small\)/);
+    expect(css.indexOf('p.reading-def {')).toBeGreaterThan(css.indexOf('.reading-aside p {'));
     // Design review 2: no 15 px step either; every size is on the ramp (body 16, small 14), through its token.
     for (const sheet of [css, readFileSync('components/question/OpenWorkList.css', 'utf8')]) {
       expect(sheet).not.toMatch(/0\.9375rem|15px/);
