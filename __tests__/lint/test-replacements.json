@@ -2486,5 +2486,37 @@
     "property": "The file's module code serves the cases below: next/navigation is mocked so the S-12 regions render outside a request, with the readers the rendered components call.",
     "proof": "One module line changes: the next/navigation mock also returns useParams () => ({ slug: 'acme' }). Lane 4's ArchivedBanner (merged from design/route-stage1 f7997a58) now renders OrgProjectsLink, a client component that calls useParams, so the archived case threw \"No useParams export is defined on the next/navigation mock\" before any expectation ran. No case and no expectation changed. After the line: decision-components.test.tsx, protected-tests.test.ts and test-replacements.test.ts gave 'Test Files  3 passed (3)' and 'Tests  57 passed (57)' at TZ=UTC.",
     "task": "1B-route-L1 lead (merge of design/route-stage1 f7997a58)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/lint/authenticated-page-gate.test.ts::UX-01 FR-ACC-04 (A7): each page under app/(authenticated) calls requireIdentity, or a layout below the group root does, or is exempt with a reason",
+    "replacedBy": "__tests__/lint/authenticated-page-gate.test.ts::UX-01 FR-ACC-04 (A7): each page under app/(authenticated) and app/(gate) calls requireIdentity, or a layout below its group root does, or is exempt with a reason",
+    "property": "Every signed-in page runs the gates on a client-side navigation (threat A7): each page calls requireIdentity itself, or a layout between it and its group root does, or it is on the named exempt list with a reason; the group app/(authenticated) still holds more than 8 pages.",
+    "proof": "The case now walks both signed-in groups, app/(authenticated) and app/(gate) (plan 1B Task 1 moved S-05, S-29 and S-07 into app/(gate)), with the same ungatedPages check per group, its group root passed as the second argument; the `> 8` page count is kept for app/(authenticated) and app/(gate) is required to hold exactly 3 pages. The exempt entry's key moved with its file to app/(gate)/acceptances/page.tsx, reason unchanged. Seen RED with app/(gate) missing (ENOENT), GREEN after the move; the lint self-test case is unchanged.",
+    "task": "plan 1B Task 1 (the gate frame and the (gate) route group)"
+  },
+  {
+    "kind": "structure",
+    "changed": "e2e/acceptances.spec.ts::FR-ACC-04 UX-01 (ruling after S4): a person held at gate 3 has no organisation link in the rail on S-05 and S-21, and has them once the texts are accepted",
+    "replacedBy": "e2e/acceptances.spec.ts::FR-ACC-04 UX-01 (ruling after S4; plan 1B Task 1): a person held at gate 3 has no organisation link on S-05 (the gate frame) or S-21 (the rail), and has them once the texts are accepted",
+    "property": "A person held at gate 3 is shown no link that names or reaches their organisation on S-05 and S-21, and has the organisation's links in the rail once the texts are accepted.",
+    "proof": "S-05 moved out of the shell into the gate frame (plan 1B Task 1, app/(gate)/acceptances/page.tsx), so it has no rail to check: the case now asserts no navigation named Main on /acceptances, that the page's banner links only to /help (T1.3), and that the organisation's name appears nowhere in the page. S-21 keeps the rail and keeps the old assertion (links exactly /explore/framework, /help, /account; no organisation name). The part after accepting is unchanged.",
+    "task": "plan 1B Task 1 (the gate frame and the (gate) route group)"
+  },
+  {
+    "kind": "structure",
+    "changed": "e2e/acceptances.spec.ts::SRS 7.1.2 gate 2 (ruling after S4): with a password change due, the rail on S-29 has no organisation link",
+    "replacedBy": "e2e/acceptances.spec.ts::SRS 7.1.2 gate 2 (ruling after S4; plan 1B Task 1): with a password change due, S-29 is in the gate frame, with no rail and no organisation link",
+    "property": "A flagged account on S-29 is shown no link that names or reaches its organisation.",
+    "proof": "S-29 moved into the gate frame (plan 1B Task 1, app/(gate)/change-password/page.tsx). The case asserts no navigation named Main, the banner's links are exactly ['/help'] (T1.3), and the organisation's name appears nowhere in the page; the flag is set and cleared as before.",
+    "task": "plan 1B Task 1 (the gate frame and the (gate) route group)"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/admin-screens.test.tsx::UX-43: S-07 renders the idle warning from the session deadlines when it renders, and none when they cannot be read",
+    "replacedBy": "__tests__/unit/admin-screens.test.tsx::UX-43: S-07 shows the idle warning from the session deadlines, rendered by the (gate) layout around the page, and none when they cannot be read",
+    "property": "A person on S-07 (`/`) is shown the idle warning from the session deadlines when they can be read, and none when they cannot; the administrator is redirected before S-07 renders.",
+    "proof": "Plan 1B Task 1 moved `/` to app/(gate)/page.tsx and its IdleWarning to the group layout app/(gate)/layout.tsx (the plan: \"Its own IdleWarning and <main> go, because the group layout now renders them\"). The case now renders S-07 as Next serves it, the layout around the page (`GateLayout({ children: await LandingPage() })`): with readSessionDeadlines mocked to { secondsLeft: 3000, absoluteSecondsLeft: 500000 } it asserts data-seconds-left=\"3000\" for the empty state (with the page's emptyBody inside) and for the organisation picker; mocked to null it asserts no data-seconds-left and the layout's one fixed log line idle_deadline_unreadable. The administrator's NEXT_REDIRECT and readSessionDeadlines not being called by the page are kept unchanged. The module's identity mock adds tryResolveIdentity, which the layout calls, returning the same identity. The link between the layout and `/`: __tests__/lint/gate-group.test.ts::C1: (gate) holds exactly acceptances, change-password and the root page. The layout alone is also covered by __tests__/unit/ui/gate-frame.test.tsx::signed in, it renders the warning from the session deadlines, and none with one fixed log line when they cannot be read. Seen red: with the layout's IdleWarning disabled (`false && deadlines`), the new case fails.",
+    "task": "plan 1B Task 1 (the gate frame and the (gate) route group), ruling L5-3"
   }
 ]

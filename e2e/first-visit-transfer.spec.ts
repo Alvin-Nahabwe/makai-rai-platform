@@ -247,7 +247,7 @@ test.describe('the signed-in budget', () => {
     const project = await addProject(fx, { name: 'First visit' });
     storageState = 'test-results/first-visit-owner.json';
     // A signed-in account lands on its dashboard, or on the organisation picker at `/` when it has no last organisation
-    // yet (app/page.tsx, lib/org-dispatch.ts:17-31), as a fresh fixture owner has not.
+    // yet (app/(gate)/page.tsx, lib/org-dispatch.ts:17-31), as a fresh fixture owner has not.
     await signInAndSave(browser, baseURL, fx.members.owner, storageState, SIGN_IN_IP, SIGNED_IN);
     s11 = `/orgs/${fx.org.slug}/projects/${project.id}/stages/post-processing`;
     s12 = `${s11}/questions/Q-PO-01`;
@@ -267,7 +267,7 @@ test.describe('the signed-in budget', () => {
 test.describe('the public budget', () => {
   /** Page files that answer with a permanent redirect; the visit lands on the target (ACC-a). */
   const REDIRECTS_TO: Record<string, string> = { '/terms': '/legal/terms', '/privacy': '/legal/privacy' };
-  const S05 = 'app/(authenticated)/acceptances/page.tsx';
+  const S05 = 'app/(gate)/acceptances/page.tsx';
   let token: string;
   let acceptancesState: string;
 

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { resolveOrgDispatch } from '../../lib/org-dispatch';
 
 /**
- * Pure decision core for app/page.tsx (Task 6, constraint 6): `/` reads
+ * Pure decision core for app/(gate)/page.tsx (Task 6, constraint 6): `/` reads
  * `lastActiveOrgId` as a HINT ONLY. Extracted so this logic is testable
  * without a session, cookies, Next.js `redirect()`, or a database — the
  * same shape this codebase already uses for `requireOrgContextFor`

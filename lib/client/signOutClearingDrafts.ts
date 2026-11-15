@@ -1,7 +1,8 @@
 import { signOut } from 'next-auth/react';
+import { DRAFT_KEY_PREFIX } from '@/lib/client/draftKeys';
 
-/** `DRAFT_PREFIX` of lib/client/drafts.ts, written here so the store stays out of the page (a test pins the two equal). */
-export const DRAFT_KEY_PREFIX = 'makrai.draft.v1:';
+/** `DRAFT_PREFIX` of lib/client/drafts.ts, kept in lib/client/draftKeys.ts so the store stays out of the page (a test pins the two equal). */
+export { DRAFT_KEY_PREFIX };
 
 /**
  * `LAST_PROJECT_PREFIX` of lib/client/lastProject.ts, written here for the same reason (plan 1A Task 12, fix round 1 F1c):
