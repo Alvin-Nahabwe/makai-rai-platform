@@ -57,26 +57,28 @@ async function contextFor(browser: Browser, signedIn: boolean, colorScheme: 'lig
   return context;
 }
 
-/** Runs `check` on every shell page, signed in or out as the page needs, in one context per kind. */
 /**
  * UX-41 with the logos (route task 1): the only images a shell page may show, each as [file, alt, place]. The MAK-AI logo
  * is decorative beside the visible name in the rail's brand (alt ""), names the narrow bar's link to Home ("MAK-AI RAI
  * Platform"), and is "MAK-AI" in the footer and on the sign-in pages (their own sized file); the DSWB logo is in the
- * footer only. Anything else is reported, whatever its alt.
+ * footer only. The file is read from both `src` and `srcset` (a 2x screen shows the srcset's file). Anything else is
+ * reported, whatever its alt.
  */
 type Place = 'rail-brand' | 'bar-brand' | 'footer' | 'sign-in' | 'other';
-type ShownImage = { src: string; alt: string | null; place: Place };
+type ShownImage = { src: string; srcset: string | null; alt: string | null; place: Place };
+const MAKAI_SET = '/logo-makai-white-154.webp 1x, /logo-makai-white-308.webp 2x';
 const LOGO_PLACES: ReadonlyArray<ShownImage> = [
-  { src: '/logo-makai-white-154.webp', alt: '', place: 'rail-brand' },
-  { src: '/logo-makai-white-154.webp', alt: 'MAK-AI RAI Platform', place: 'bar-brand' },
-  { src: '/logo-makai-white-154.webp', alt: 'MAK-AI', place: 'footer' },
-  { src: '/logo-dswb-white-125.webp', alt: 'Data Science Without Borders', place: 'footer' },
-  { src: '/logo-makai-252.png', alt: 'MAK-AI', place: 'sign-in' },
+  { src: '/logo-makai-white-154.webp', srcset: MAKAI_SET, alt: '', place: 'rail-brand' },
+  { src: '/logo-makai-white-154.webp', srcset: MAKAI_SET, alt: 'MAK-AI RAI Platform', place: 'bar-brand' },
+  { src: '/logo-makai-white-154.webp', srcset: MAKAI_SET, alt: 'MAK-AI', place: 'footer' },
+  { src: '/logo-dswb-white-125.webp', srcset: '/logo-dswb-white-125.webp 1x, /logo-dswb-white-250.webp 2x', alt: 'Data Science Without Borders', place: 'footer' },
+  { src: '/logo-makai-252.png', srcset: '/logo-makai-252.png 1x, /logo-makai-504.png 2x', alt: 'MAK-AI', place: 'sign-in' },
 ];
 function strayImages(images: readonly ShownImage[]): string[] {
-  return images.filter((i) => !LOGO_PLACES.some((l) => l.src === i.src && l.alt === i.alt && l.place === i.place))
-    .map((i) => `${i.src} alt=${JSON.stringify(i.alt)} in ${i.place}`);
+  return images.filter((i) => !LOGO_PLACES.some((l) => l.src === i.src && l.srcset === i.srcset && l.alt === i.alt && l.place === i.place))
+    .map((i) => `${i.src} srcset=${JSON.stringify(i.srcset)} alt=${JSON.stringify(i.alt)} in ${i.place}`);
 }
+/** Runs `check` on every shell page, signed in or out as the page needs, in one context per kind. */
 async function onEveryShellPage(
   browser: Browser,
   colorScheme: 'light' | 'dark',
@@ -186,7 +188,7 @@ test.describe('shell pages, checked with the harness helpers', () => {
     await onEveryShellPage(browser, 'light', 1280, async (page, label) => {
       // Where each image sits is read in the page (a function of this file is not sent to the browser).
       const images = await page.locator('img').evaluateAll((els) => els.map((e) => ({
-        src: e.getAttribute('src') ?? '', alt: e.getAttribute('alt'),
+        src: e.getAttribute('src') ?? '', srcset: e.getAttribute('srcset'), alt: e.getAttribute('alt'),
         place: (e.closest('.shell-rail__brand') ? 'rail-brand' : e.closest('.shell-topbar__brand') ? 'bar-brand'
           : e.closest('footer.shell-footer') ? 'footer' : e.classList.contains('auth-logo') ? 'sign-in' : 'other') as Place,
       })));
@@ -199,21 +201,17 @@ test.describe('shell pages, checked with the harness helpers', () => {
     });
   });
 
-  test('UX-41 (self-test): a stray image is reported, whatever its alt, and a logo out of its place too', () => {
+  test('UX-41 (self-test): a stray image is reported, whatever its alt, a logo out of its place, and a foreign 2x file', () => {
+    expect(strayImages(LOGO_PLACES)).toEqual([]);
+    // A decorative image anywhere else, an image that borrows a logo's alt, a logo file in the wrong place, and a logo's
+    // own src and alt in its own place but another file for 2x screens each fail.
     expect(strayImages([
-      { src: '/logo-makai-white-154.webp', alt: '', place: 'rail-brand' },
-      { src: '/logo-makai-white-154.webp', alt: 'MAK-AI RAI Platform', place: 'bar-brand' },
-      { src: '/logo-makai-white-154.webp', alt: 'MAK-AI', place: 'footer' },
-      { src: '/logo-dswb-white-125.webp', alt: 'Data Science Without Borders', place: 'footer' },
-      { src: '/logo-makai-252.png', alt: 'MAK-AI', place: 'sign-in' },
-    ])).toEqual([]);
-    // A decorative image anywhere else, an image that borrows a logo's alt, and a logo file in the wrong place each fail.
-    expect(strayImages([
-      { src: '/uploads/chart.png', alt: '', place: 'other' },
-      { src: '/x.png', alt: 'MAK-AI', place: 'footer' },
-      { src: '/logo-makai-white-154.webp', alt: '', place: 'other' },
-      { src: '/logo-dswb-white-125.webp', alt: 'Data Science Without Borders', place: 'rail-brand' },
-    ])).toHaveLength(4);
+      { src: '/uploads/chart.png', srcset: null, alt: '', place: 'other' },
+      { src: '/x.png', srcset: null, alt: 'MAK-AI', place: 'footer' },
+      { src: '/logo-makai-white-154.webp', srcset: MAKAI_SET, alt: '', place: 'other' },
+      { src: '/logo-dswb-white-125.webp', srcset: '/logo-dswb-white-125.webp 1x, /logo-dswb-white-250.webp 2x', alt: 'Data Science Without Borders', place: 'rail-brand' },
+      { src: '/logo-makai-white-154.webp', srcset: '/logo-makai-white-154.webp 1x, /stray-2x.webp 2x', alt: '', place: 'rail-brand' },
+    ])).toHaveLength(5);
   });
 
   test('UX-33 NFR-A11Y-02: a focused form field has a visible focus outline', async ({ page }) => {

@@ -208,10 +208,14 @@ describe('the rail, ported from the sidebar (UX-02, UX-41)', () => {
       '/orgs/a/dashboard', '/orgs/a/projects', '/orgs/a/projects?for=findings', '/explore/framework', '/help',
       '/orgs/a/settings/members', '/orgs/a/settings/organisation', '/account',
     ]);
-    // Members and Organisation, then the person, then My account, in the lower list.
+    // Members and Organisation in the lower list; then, in the rail's pinned foot (fix round 3, review D4), the person, then
+    // My account.
     const lower = /<ul class="shell-rail__lower">([\s\S]*?)<\/ul>/.exec(html)?.[1] ?? '';
-    expect(lower.indexOf('Organisation<')).toBeLessThan(lower.indexOf('shell-rail__person'));
-    expect(lower.indexOf('shell-rail__person')).toBeLessThan(lower.indexOf('My account'));
+    expect(lower.indexOf('Members<')).toBeGreaterThanOrEqual(0);
+    expect(lower.indexOf('Organisation<')).toBeGreaterThan(lower.indexOf('Members<'));
+    const foot = /<ul class="shell-rail__account">([\s\S]*?)<\/ul>/.exec(html)?.[1] ?? '';
+    expect(foot.indexOf('shell-rail__person')).toBeGreaterThanOrEqual(0);
+    expect(foot.indexOf('shell-rail__person')).toBeLessThan(foot.indexOf('My account'));
   });
 
   it('S4: on Help, My account and Guidance the five organisation links go to the person\'s home organisation, not to Home', () => {

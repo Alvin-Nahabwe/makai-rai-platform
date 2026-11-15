@@ -231,6 +231,62 @@ test('one gutter round the page (fix round 2): each signed-in page\'s content st
   }
 });
 
+test('the shell leaves the question page\'s Save row as it is (fix round 3): fixed to the foot at 375; main the scroller at 1280', async ({ browser }) => {
+  const page = await signedIn(browser, fx.members.assessor, { viewport: { width: 375, height: 812 } });
+  await page.goto(questionPath());
+  const bar = page.locator('.decision-save-bar');
+  await expect(bar).toBeVisible();
+  const foot = () => bar.evaluate((el) => Math.round(el.getBoundingClientRect().bottom - window.innerHeight));
+  expect(await bar.evaluate((el) => getComputedStyle(el).position)).toBe('fixed');
+  expect(await foot(), 'the row sits on the screen\'s foot').toBe(0);
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight / 2));
+  await page.waitForFunction(() => window.scrollY > 0);
+  expect(await foot(), 'and stays there while the content scrolls').toBe(0);
+
+  // From 1024 px the shell's main is the content's scroller, with its 32 px padding: the frame lane 2's pinned Save row
+  // (sticky, its inset taking main's padding back) is built against. The shell keeps it.
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(questionPath());
+  const main = await page.evaluate(() => {
+    const m = document.querySelector('main#main-content') as HTMLElement;
+    const cs = getComputedStyle(m);
+    return { overflowY: cs.overflowY, maxHeight: cs.maxHeight, padBottom: cs.paddingBottom, vh: window.innerHeight,
+      holdsRow: m.contains(document.querySelector('.decision-save-bar')) };
+  });
+  expect(main).toEqual({ overflowY: 'auto', maxHeight: `${main.vh}px`, padBottom: '32px', vh: main.vh, holdsRow: true });
+});
+
+for (const [width, height] of [[1366, 768], [1280, 800], [1440, 900]] as const) {
+  test(`D4 D5 (fix round 3): at ${width}x${height} the rail's foot is whole in the first view, and an overflowing upper part shows a cue`, async ({ browser }) => {
+    const page = await signedIn(browser, fx.members.viewer, { viewport: { width, height } });
+    for (const path of [questionPath(), projectPath(), `/orgs/${fx.org.slug}/dashboard`]) {
+      await page.goto(path);
+      await hydrated(page);
+      const foot = page.locator('.shell-rail__foot');
+      for (const part of [foot.locator('.shell-rail__person'), foot.getByRole('link', { name: 'My account' }),
+        foot.getByRole('button', { name: 'Sign out' }), foot.locator('.shell-theme')]) {
+        const b = (await part.boundingBox())!;
+        expect(b.y + b.height, `${path} at ${width}x${height}: the foot is in the first view`).toBeLessThanOrEqual(height + 0.5);
+      }
+      for (const control of [foot.getByRole('link', { name: 'My account' }), foot.getByRole('button', { name: 'Sign out' })]) {
+        expect((await control.boundingBox())!.height, 'a 44 px target').toBeGreaterThanOrEqual(44);
+      }
+      const scroller = page.locator('.shell-rail__scroll');
+      expect(await scroller.evaluate((el) => getComputedStyle(el).scrollbarWidth)).toBe('thin');
+      const overflowing = await scroller.evaluate((el) => el.scrollHeight > el.clientHeight + 1);
+      const cue = (which: '::before' | '::after') => scroller.evaluate((el, w) => Number(getComputedStyle(el, w).opacity), which);
+      if (overflowing) {
+        await expect.poll(() => cue('::after'), `${path}: more below, so the bottom cue shows`).toBeGreaterThan(0.5);
+        await scroller.evaluate((el) => { el.scrollTop = el.scrollHeight; });
+        await expect.poll(() => cue('::before'), `${path}: more above, so the top cue shows`).toBeGreaterThan(0.5);
+        await expect.poll(() => cue('::after'), `${path}: nothing below, so no bottom cue`).toBeLessThan(0.5);
+      } else {
+        expect(await cue('::after'), `${path}: nothing hidden, no cue`).toBeLessThan(0.5);
+      }
+    }
+  });
+}
+
 test('the footer: both logos, named, on a signed-in page and on the public pages', async ({ browser }) => {
   const check = async (page: Page, where: string) => {
     const footer = page.locator('footer.shell-footer');

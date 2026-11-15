@@ -37,9 +37,10 @@ function Item({ item }: { item: RailItem }) {
  * The rail (plan 1A Task 11, rulings L2-52 and L2-60): the one navigation landmark, holding the brand (the MAK-AI logo and the
  * platform's name under it, one link to Home, as the locked sketch draws it), the organisation switcher (not for the platform
  * administrator, L2-61), the items, the project block when a project is in context (the `@project` slot, owner ruling R4,
- * between the main items and the lower group), Sign out and the theme switch, so a person moving by
+ * between the main items and the lower group), and, in a foot that stays put while the part above scrolls (review D4), the
+ * person and their role, My account, Sign out and the theme switch, so a person moving by
  * landmarks reaches all of them. Navy in both themes, with the current item a filled orange shape and white text; no text on it
- * is ever orange.
+ * is in the action orange (the project block's "You are here" takes the on-shell accent token, see shell.css).
  *
  * Under the person's name it shows their role in the organisation whose page is open, or "MAK-AI administrator" outside any
  * organisation (UX-02); the account's platform role field is not in ShellData, so it cannot be shown. The role and the
@@ -76,47 +77,59 @@ export default function Rail({ shell, project }: { shell: ShellData; project?: R
     findingsHref: slug ? findingsHref(slug, last) : '/',
   });
   const role = roleUnderName(pathname, shell.roleLabels, shell.platformLabel);
+  const lower = items.filter((i) => i.group === 'lower' && i.key !== 'account');
 
   return (
     <nav className="shell-rail" aria-label={SHELL_COPY.nav}>
-      {/* The logo is decorative beside the visible name inside the one link, so the link is read once: "MAK-AI RAI Platform".
-          `/` only redirects (to the chooser, a gate or /login), so it is not prefetched, as in PublicHeader. */}
-      <Link href={orgHref(slug, '/dashboard')} className="shell-rail__brand" prefetch={slug === null ? false : undefined}>
-        {/* eslint-disable-next-line @next/next/no-img-element -- a file already sized for the drawn logo (logos.ts). */}
-        <img src={MAKAI_LOGO.src} srcSet={MAKAI_LOGO.srcSet} width={MAKAI_LOGO.width} height={MAKAI_LOGO.height} alt=""
-          decoding="async" className="shell-rail__logo" />
-        <span className="shell-rail__product">{PRODUCT_NAME}</span>
-      </Link>
-      {shell.platformLabel === null && shell.orgs.length > 0 ? (
-        <div className="shell-rail__org">
-          <OrgSwitcher orgs={shell.orgs} currentSlug={addressSlug ?? null} />
+      {/* From 1024 px this part scrolls when it must (shell.css: a thin scrollbar and a cue at each edge with more beyond);
+          the foot below it stays put. Below 1024 px the Menu panel scrolls as a whole. */}
+      <div className="shell-rail__scroll">
+        {/* The logo is decorative beside the visible name inside the one link, so the link is read once: "MAK-AI RAI Platform".
+            `/` only redirects (to the chooser, a gate or /login), so it is not prefetched, as in PublicHeader. */}
+        <Link href={orgHref(slug, '/dashboard')} className="shell-rail__brand" prefetch={slug === null ? false : undefined}>
+          {/* eslint-disable-next-line @next/next/no-img-element -- a file already sized for the drawn logo (logos.ts). */}
+          <img src={MAKAI_LOGO.src} srcSet={MAKAI_LOGO.srcSet} width={MAKAI_LOGO.width} height={MAKAI_LOGO.height} alt=""
+            decoding="async" className="shell-rail__logo" />
+          <span className="shell-rail__product">{PRODUCT_NAME}</span>
+        </Link>
+        {shell.platformLabel === null && shell.orgs.length > 0 ? (
+          <div className="shell-rail__org">
+            <OrgSwitcher orgs={shell.orgs} currentSlug={addressSlug ?? null} />
+          </div>
+        ) : null}
+        <div className="shell-rail__nav">
+          <ul className="shell-rail__main">
+            {items.filter((i) => i.group === 'main').map((item) => <Item key={item.key} item={item} />)}
+          </ul>
+          {project ? <ShellPlace name="rail">{project}</ShellPlace> : null}
+          {lower.length > 0 ? (
+            <ul className="shell-rail__lower">
+              {lower.map((item) => <Item key={item.key} item={item} />)}
+            </ul>
+          ) : null}
         </div>
-      ) : null}
-      <div className="shell-rail__nav">
-        <ul className="shell-rail__main">
-          {items.filter((i) => i.group === 'main').map((item) => <Item key={item.key} item={item} />)}
-        </ul>
-        {project ? <ShellPlace name="rail">{project}</ShellPlace> : null}
-        <ul className="shell-rail__lower">
-          {items.filter((i) => i.group === 'lower' && i.key !== 'account').map((item) => <Item key={item.key} item={item} />)}
+      </div>
+      {/* The pinned foot (design review D4): the person and their role, My account, Sign out and the theme switch. */}
+      <div className="shell-rail__foot">
+        <ul className="shell-rail__account">
           <li className="shell-rail__person">
             <span className="shell-rail__name">{shell.userName}</span>
             {role !== null ? <span className="shell-rail__role">{role}</span> : null}
           </li>
           {items.filter((i) => i.key === 'account').map((item) => <Item key={item.key} item={item} />)}
         </ul>
-      </div>
-      <div className="shell-rail__actions">
-        <SignOutWithDraftsGuard userId={shell.userId}>
-          <button type="button" className="shell-rail__signout" onClick={() => {
-            clearLastProjects(shell.userId);
-            void signOut({ callbackUrl: '/login' });
-          }}>
-            <Icon name="log-out" />
-            {SHELL_COPY.signOut}
-          </button>
-        </SignOutWithDraftsGuard>
-        <ThemeToggle />
+        <div className="shell-rail__actions">
+          <SignOutWithDraftsGuard userId={shell.userId}>
+            <button type="button" className="shell-rail__signout" onClick={() => {
+              clearLastProjects(shell.userId);
+              void signOut({ callbackUrl: '/login' });
+            }}>
+              <Icon name="log-out" />
+              {SHELL_COPY.signOut}
+            </button>
+          </SignOutWithDraftsGuard>
+          <ThemeToggle />
+        </div>
       </div>
     </nav>
   );

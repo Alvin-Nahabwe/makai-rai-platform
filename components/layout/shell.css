@@ -1,8 +1,8 @@
 /* The shell (plan 1A Task 11; spec 7.1 and 8): the navy rail, the top bar and its menu panel below 1024 px, the
    organisation switcher, the theme switch, the public header, the footer and the session dialogs' wrapper. Role tokens
    only. The rail is navy in both themes; its current item is an orange fill with white text, and no text on the rail or
-   the bar is ever orange. Focus is the global :focus-visible ring (--color-focus), kept clear of every overflow edge.
-   Nothing animates. */
+   the bar is in the action orange (spec 7.1; "You are here" takes lane 7's on-shell accent, peach, when it lands). Focus is the global :focus-visible ring (--color-focus), kept clear of every overflow edge.
+   Nothing animates on a timer: the rail's scroll cue follows the scroll position only. */
 
 /* ── The frame ── */
 .shell {
@@ -35,7 +35,8 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-4);
+  /* One inline padding on every page (review D21), so the Menu button never moves between pages. */
+  padding: var(--space-2) var(--space-3);
   /* The bar's bottom edge, for the same reason as the rail's (the dark theme's navy against its ground). An inset shadow,
      not a border, so the bar stays 60 px high: the Menu panel opens at 3.75rem without JavaScript. */
   box-shadow: inset 0 -1px 0 var(--color-border-container);
@@ -120,12 +121,8 @@
   color: var(--color-shell-ink);
 }
 
-/* With a project in the bar, its three parts share the row: the bar's and the controls' inline padding step down one size
-   so that "Pre-processing" stays whole at 375 px. */
-.shell-topbar:has(.shell-bar-project) {
-  padding-inline: var(--space-3);
-}
-
+/* With a project in the bar, its three parts share the row: the controls' inline padding steps down one size so that
+   "Pre-processing" stays whole at 375 px. */
 .shell-topbar:has(.shell-bar-project) .shell-topbar__menu-button,
 .shell-bar-project__all {
   padding-inline: var(--space-2);
@@ -167,6 +164,11 @@
   font: inherit;
   font-weight: var(--font-weight-semibold);
   cursor: pointer;
+}
+
+.shell-topbar__menu-button[aria-expanded="true"] {
+  /* The panel is open (review D20): the button shows it, as the rail shows a hovered item. */
+  background-color: var(--color-shell-hover);
 }
 
 .shell-topbar__menu-button:hover {
@@ -233,7 +235,8 @@
     z-index: 1;
     width: auto;
     height: 100vh;
-    overflow-y: auto;
+    /* The rail's own parts scroll, not the panel: the upper part when it must, beside a pinned foot (review D4). */
+    overflow: hidden;
     /* In the dark theme the shell navy and the page ground are 1.04:1 apart: the edge keeps the rail from merging into
        the page. A container border, so it is quiet in the light theme, where the navy already stands apart. */
     border-inline-end: 1px solid var(--color-border-container);
@@ -249,14 +252,119 @@
   }
 }
 
-/* ── The rail ── */
+/* ── The rail: a part that scrolls when it must, and a pinned foot ── */
 .shell-rail {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
   min-block-size: 100%;
-  /* Room on every side for the 3 px focus ring and its offset, inside the panel's scroll edge. */
-  padding: var(--space-4) var(--space-3);
+}
+
+/* Room on every side for the 3 px focus ring and its offset, inside the scroll edge; 8 px between groups (review D4 c). */
+.shell-rail__scroll {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+}
+
+.shell-rail__foot {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-block-start: 1px solid var(--color-shell-hover);
+}
+
+.shell-rail__account {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+}
+
+@media (min-width: 1024px) {
+  .shell-rail {
+    block-size: 100%;
+  }
+
+  /* The upper part scrolls when the screen is too short for it; the foot stays. A thin scrollbar in the rail's colours
+     (thumb 8.6:1 on the navy), and a cue at each edge that has more beyond it (modern-web-guidance
+     scrollability-affordance-hints): the navy fades over the content there, with a hairline. */
+  .shell-rail__scroll {
+    flex: 1 1 auto;
+    min-block-size: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    /* A focused item scrolled into view stops clear of the cue at either edge. */
+    scroll-padding-block: var(--space-6);
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-shell-muted) transparent;
+    container-type: scroll-state;
+  }
+
+  .shell-rail__scroll::before,
+  .shell-rail__scroll::after {
+    content: "";
+    display: block;
+    flex: none;
+    position: sticky;
+    z-index: 1;
+    block-size: var(--space-6);
+    pointer-events: none;
+    opacity: 0;
+  }
+
+  .shell-rail__scroll::before {
+    inset-block-start: 0;
+    margin-block-end: calc(-1 * var(--space-6));
+    border-block-start: 1px solid var(--color-shell-muted);
+    background: linear-gradient(var(--color-shell), transparent);
+  }
+
+  .shell-rail__scroll::after {
+    inset-block-end: 0;
+    margin-block-start: calc(-1 * var(--space-6));
+    border-block-end: 1px solid var(--color-shell-muted);
+    background: linear-gradient(transparent, var(--color-shell));
+  }
+
+  @container scroll-state(scrollable: block-start) {
+    .shell-rail__scroll::before {
+      opacity: 1;
+    }
+  }
+
+  @container scroll-state(scrollable: block-end) {
+    .shell-rail__scroll::after {
+      opacity: 1;
+    }
+  }
+
+  /* Without scroll-state queries: the same cue, shown by the scroll position (a scroll-driven animation; it follows the
+     scroll, never a timer). */
+  @supports not (container-type: scroll-state) {
+    .shell-rail__scroll::before,
+    .shell-rail__scroll::after {
+      animation: shell-rail-cue linear both;
+      animation-timeline: scroll();
+    }
+
+    .shell-rail__scroll::before {
+      animation-range: 0 2rem;
+    }
+
+    .shell-rail__scroll::after {
+      animation-direction: reverse;
+      animation-range: calc(100% - 2rem) 100%;
+    }
+  }
+}
+
+@keyframes shell-rail-cue {
+  to {
+    opacity: 1;
+  }
 }
 
 /* The sign-out warning (SignOutWithDraftsGuard) is a surface box inside the rail: it takes the page's ink, not the rail's. */
@@ -299,19 +407,20 @@
   display: flex;
   flex: 1 0 auto;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-2);
 }
 
+/* Items at the sketch's 44 px pitch, with no gap between them (review D4 a, D8). */
 .shell-rail__nav ul {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: 0;
   list-style: none;
 }
 
 .shell-rail__lower {
   margin-block-start: auto;
-  padding-block-start: var(--space-4);
+  padding-block-start: var(--space-2);
   border-block-start: 1px solid var(--color-shell-hover);
 }
 
@@ -368,7 +477,7 @@
 .shell-rail__actions {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-1);
 }
 
 /* ── The rail's project block (owner ruling R4; the locked sketch's `.lines`): the project, the stage sentence, the three
@@ -422,10 +531,20 @@
   text-decoration: none;
 }
 
-.shell-project__stage:hover,
+/* The lighter plate marks the current stage alone; a hovered stage underlines its name (review D13). */
 .shell-project__stage--current {
   background-color: var(--color-shell-hover);
   color: var(--color-shell-ink);
+}
+
+.shell-project__stage:hover {
+  /* a:hover in app/globals.css (0,1,1) would paint it the link colour, navy on navy. */
+  color: var(--color-shell-ink);
+}
+
+.shell-project__stage:hover .shell-project__stage-name {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
 }
 
 .shell-project__stage-text {
@@ -444,7 +563,9 @@
 }
 
 .shell-project__stage--current .shell-project__state {
-  color: var(--color-shell-ink);
+  /* Peach once lane 7's role token lands (--color-on-shell-accent, #F4B983 in both themes, only on the navy shell; the
+     coordinator's ruling reversing D12); the shell ink until then. */
+  color: var(--color-on-shell-accent, var(--color-shell-ink));
   font-weight: var(--font-weight-semibold);
 }
 
@@ -495,8 +616,9 @@
 }
 
 .shell-org > .shell-org__name {
-  padding: var(--space-2) var(--space-3);
-  font-weight: var(--font-weight-semibold);
+  padding: var(--space-1) var(--space-3);
+  /* A quieter line than the brand above it (review D3): 14 px, regular. */
+  font-size: var(--font-size-small);
   overflow-wrap: anywhere;
 }
 

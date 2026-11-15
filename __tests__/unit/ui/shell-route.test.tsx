@@ -292,3 +292,79 @@ describe('the shell\'s frame (route task 1, fix round 2)', () => {
     expect(rule('.shell-topbar')).not.toMatch(/border(-[a-z-]+)?:/);
   });
 });
+
+describe('fix round 3: the rail fits a laptop, the footer sits in the content column', () => {
+  const css = readFileSync('components/layout/shell.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const wide = css.slice(css.indexOf('@media (min-width: 1024px)'));
+  /** Every rule body for `selector` in `source`, joined (a selector can have a base rule and a wide one). */
+  const ruleIn = (source: string, selector: string) => {
+    const bodies: string[] = [];
+    for (let at = source.indexOf(`${selector} {`); at >= 0; at = source.indexOf(`${selector} {`, at + 1)) {
+      bodies.push(source.slice(at, source.indexOf('}', at)));
+    }
+    expect(bodies.length, selector).toBeGreaterThan(0);
+    return bodies.join('\n');
+  };
+
+  it('D4: the rail is a scrolling part and a pinned foot; the foot holds the person, My account, Sign out and the theme switch', () => {
+    at('/orgs/a/projects');
+    const html = renderToStaticMarkup(<Rail shell={shell} />).replace(/^(<link rel="preload"[^>]*>)+/, '');
+    const scroll = /<div class="shell-rail__scroll">([\s\S]*)<\/div><div class="shell-rail__foot">/.exec(html);
+    expect(scroll, 'the scrolling part, then the foot').not.toBeNull();
+    for (const part of ['shell-rail__brand', 'shell-rail__org', 'shell-rail__main', 'shell-rail__lower']) expect(scroll![1]).toContain(part);
+    const foot = html.slice(html.indexOf('<div class="shell-rail__foot">'));
+    for (const part of ['shell-rail__person', 'href="/account"', 'shell-rail__signout', 'shell-theme']) expect(foot, part).toContain(part);
+    expect(scroll![1]).not.toContain('shell-rail__person');
+    // Members and Organisation stay in the scrolling part's lower group.
+    const lower = /<ul class="shell-rail__lower">([\s\S]*?)<\/ul>/.exec(html)![1];
+    expect(lower).toContain('/orgs/a/settings/members');
+    expect(lower).toContain('/orgs/a/settings/organisation');
+  });
+
+  it('D4 D5: from 1024 px only the upper part scrolls, with a thin navy scrollbar and a cue at each edge with more beyond', () => {
+    expect(ruleIn(wide, '.shell-topbar__panel')).toMatch(/overflow: hidden;/);
+    const scroll = ruleIn(wide, '.shell-rail__scroll');
+    expect(scroll).toMatch(/overflow-y: auto;/);
+    expect(scroll).toMatch(/scrollbar-width: thin;/);
+    expect(scroll).toMatch(/scrollbar-color: var\(--color-shell-muted\) transparent;/);
+    expect(scroll).toMatch(/container-type: scroll-state;/);
+    expect(ruleIn(wide, '.shell-rail__foot')).toMatch(/flex: none;/);
+    expect(css).toMatch(/@container scroll-state\(scrollable: block-end\)/);
+    expect(css).toMatch(/@container scroll-state\(scrollable: block-start\)/);
+    // Browsers without scroll-state queries: the same cue from a scroll-driven animation.
+    expect(css).toMatch(/animation-timeline: scroll\(\);/);
+  });
+
+  it('D4 (a)(c): the items sit at a 44 px pitch with no gap, and the rail\'s padding and group gaps are 8 px', () => {
+    expect(ruleIn(css, '.shell-rail__nav ul')).toMatch(/gap: 0;/);
+    expect(ruleIn(css, '.shell-rail__item')).toMatch(/min-block-size: var\(--target-primary\);/);
+    expect(ruleIn(css, '.shell-rail__scroll')).toMatch(/gap: var\(--space-2\);/);
+    expect(ruleIn(css, '.shell-rail__scroll')).toMatch(/padding: var\(--space-2\) var\(--space-3\);/);
+    expect(ruleIn(css, '.shell-rail__nav')).toMatch(/gap: var\(--space-2\);/);
+  });
+
+  it('D23 not taken (fix round 3): main stays the content column\'s scroller from 1024 px, the one lane 2\'s pinned Save row is built against', () => {
+    const main = ruleIn(wide, '.shell__main');
+    expect(main).toMatch(/overflow-y: auto;/);
+    expect(main).toMatch(/max-height: 100vh;/);
+    expect(css).not.toMatch(/body:has\(> \.shell\)/);
+  });
+
+  it('D12 (coordinator, fix round 3): "You are here" takes lane 7\'s on-shell accent token when it lands, the shell ink until then', () => {
+    expect(ruleIn(css, '.shell-project__stage--current .shell-project__state')).toMatch(/color: var\(--color-on-shell-accent, var\(--color-shell-ink\)\);/);
+  });
+
+  it('D20 D21 D26: the Menu button shows it is open; the bar keeps one inline padding; the footer\'s top rule is the rail\'s edge token', () => {
+    expect(ruleIn(css, '.shell-topbar__menu-button[aria-expanded="true"]')).toMatch(/background-color: var\(--color-shell-hover\);/);
+    expect(ruleIn(css, '.shell-topbar')).toMatch(/padding: var\(--space-2\) var\(--space-3\);/);
+    expect(css).not.toMatch(/\.shell-topbar:has\(\.shell-bar-project\) \{\s*padding-inline/);
+    const footerCss = readFileSync('components/layout/footer.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(ruleIn(footerCss, '.shell-footer')).toMatch(/border-block-start: 1px solid var\(--color-border-container\);/);
+  });
+
+  it('D13: hovering a stage underlines its name; the lighter plate stays the current stage\'s alone', () => {
+    expect(ruleIn(css, '.shell-project__stage--current')).toMatch(/background-color: var\(--color-shell-hover\);/);
+    expect(css).not.toMatch(/\.shell-project__stage:hover,\s*\.shell-project__stage--current/);
+    expect(ruleIn(css, '.shell-project__stage:hover .shell-project__stage-name')).toMatch(/text-decoration: underline;/);
+  });
+});

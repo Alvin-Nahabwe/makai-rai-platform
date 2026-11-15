@@ -6,8 +6,9 @@
 
 .shell-footer {
   padding: var(--space-8) var(--space-4);
-  /* In the dark theme the band and the page are both near-black navy: the rule marks where the band starts. */
-  border-block-start: 1px solid var(--color-shell-hover);
+  /* In the dark theme the band and the page are both near-black navy: the rule marks where the band starts, in the
+     rail's edge token (review D26: 1.72:1 on the dark ground, where --color-shell-hover gave 1.20:1). */
+  border-block-start: 1px solid var(--color-border-container);
   background-color: var(--color-shell);
   color: var(--color-shell-ink);
   font-size: var(--font-size-small);

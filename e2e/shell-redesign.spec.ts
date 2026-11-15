@@ -75,7 +75,8 @@ async function scrollSettled(page: Page): Promise<void> {
   await page.evaluate(
     () =>
       new Promise<void>((resolve) => {
-        const position = () => `${window.scrollY}:${document.querySelector('.shell-topbar__panel')?.scrollTop ?? 0}`;
+        // The panel scrolls below 1024 px; from 1024 px the rail's upper part does (route task 1, fix round 3).
+        const position = () => `${window.scrollY}:${document.querySelector('.shell-topbar__panel')?.scrollTop ?? 0}:${document.querySelector('.shell-rail__scroll')?.scrollTop ?? 0}`;
         let last = position();
         let still = 0;
         const tick = () => {
