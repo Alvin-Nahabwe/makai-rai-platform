@@ -4,7 +4,7 @@ import { STAGES } from '@/types/record';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Definition, Term } from '@/components/ui/Definition';
 import { ArchivedBanner } from '@/components/project/ArchivedBanner';
-import { StageLine } from '@/components/project/StageLine';
+import { NextStep, StageLine } from '@/components/project/StageLine';
 import { ProjectActions } from '@/components/project/ProjectActions';
 import { firstUses } from '@/components/project/firstUse';
 import type { ProjectOverviewData } from '@/lib/data/projects';
@@ -53,6 +53,11 @@ export function ProjectPage({ data, routes, continueTo, children }: {
       />
       <ArchivedBanner archived={project.archived} />
       <div className="project-lines-frame">
+        {/* The next step once, above the stacked lines (owner's ruling on C3); hidden once the lines sit side by side, where the
+            target line's head stop carries it. Its own slot, so nothing on the foot row's path changes with it. */}
+        {continueTo !== null ? (
+          <NextStep target={continueTo} base={base} route={routes[continueTo.stage]} counts={data.counts[continueTo.stage]} where="stacked" />
+        ) : null}
         <nav className="stage-list__jump" aria-label={P.overview.jumpTo}>
           {STAGES.map((s) => <a key={s} href={`#${s}`}>{P.stageNames[s]}</a>)}
         </nav>

@@ -87,8 +87,9 @@ describe('S-10 (Task 5)', () => {
   it('UX-06 (R12-16, spec 7.2): each status phrase of a stage column is the kit\'s mark with its words in ink, and none carries the warning class', () => {
     const line = preLine(COUNTS);
     const html = line.slice(line.indexOf('<div class="stage-line__stop stage-line__stop--recorded"'), line.indexOf('<div class="stage-line__stop stage-line__stop--reviews"'));
-    // Each question's stop is the kit's shape, hidden from assistive technology, in a stop that names its status in words.
-    expect(html.match(/<li class="ui-route-row__stop" data-mark-kind="[a-z_]+"><a [^>]*class="ui-route-row__point"[^>]*><svg class="ui-mark__shape"[^>]*aria-hidden="true"/g)).toHaveLength(24);
+    // Each question's stop is the kit's shape, hidden from assistive technology, in a stop that names its status in words
+    // (drawn without a link on S-10: lead's ruling on C5).
+    expect(html.match(/<li class="ui-route-row__stop" data-mark-kind="[a-z_]+"><span class="ui-route-row__point"><svg class="ui-mark__shape"[^>]*aria-hidden="true"/g)).toHaveLength(24);
     const tally = /<p class="ui-route-row__tally">([^<]*)<\/p>/.exec(html)?.[1].split(', ');
     expect(tally).toEqual(['7 done (2 with no evidence attached)', expect.stringMatching(/^\d+ partly$/), expect.stringMatching(/^\d+ not yet$/), expect.stringMatching(/^\d+ not applicable$/), '1 answered']);
     expect(html).not.toMatch(/status-label|warning/);

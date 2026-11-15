@@ -96,9 +96,27 @@ test('R5 at 1280 px: the three lines side by side, each stop on the same row acr
     expect(Math.max(...tops) - Math.min(...tops), `${stop}: ${tops.join(', ')}`).toBeLessThanOrEqual(1);
   }
   await expect(page.locator('.stage-list__jump')).toBeHidden();
-  await expect(page.locator('main .ui-button--primary')).toHaveCount(1);
   await expectNoHorizontalScroll(page);
 });
+
+/** The page's one primary action, by role: what assistive technology and a person can reach. */
+const PRIMARY = new RegExp(`^(${PROJECT_COPY.continue}|${PROJECT_COPY.start})$`);
+
+for (const [width, height] of [[1280, 800], [1440, 900], [375, 812]] as const) {
+  test(`C3 (owner's ruling): at ${width} px exactly one primary action is in the accessibility tree, inside the first view, with the next question`, async ({ browser }) => {
+    const page = await signedIn(browser, fx.members.owner);
+    await page.setViewportSize({ width, height });
+    await page.goto(projectPath(project.id));
+    const primary = page.getByRole('link', { name: PRIMARY });
+    await expect(primary).toHaveCount(1);
+    await expect(primary).toBeVisible();
+    // Side by side it sits in the target line's head stop; stacked, in the block above the lines.
+    await expect(primary.locator(width >= 1280 ? 'xpath=ancestor::div[contains(@class,"stage-line__stop--head")]' : 'xpath=ancestor::div[contains(@class,"next-step-block--stacked")]')).toHaveCount(1);
+    const box = await primary.boundingBox();
+    expect(box!.y + box!.height, `the button's foot (${Math.round(box!.y + box!.height)} px) is inside the ${height} px first view`).toBeLessThanOrEqual(height);
+    await expect(page.getByText(PROJECT_COPY.nextLabel, { exact: true }).filter({ visible: true })).toHaveCount(1);
+  });
+}
 
 test('R5 at 375 px: the lines stack in stage order, the jump links show, Archive is still last in the wrapped row', async ({ browser }) => {
   const page = await signedIn(browser, fx.members.owner);

@@ -36,6 +36,8 @@ const STAGE_TERM: Readonly<Record<Stage, DefinedEntry>> = { 'pre-processing': TE
 const used = (first: boolean, term: DefinedEntry, children: ReactNode): ReactNode => (first ? <Term of={term}>{children}</Term> : children);
 /** The term's definition beside its first use, or nothing. */
 const defined = (first: boolean, term: DefinedEntry): ReactNode => (first ? <>{' '}<Definition of={term} /></> : null);
+/** A stage's question list (S-11). */
+const stagePath = (base: string, stage: Stage): string => `${base}/stages/${stage}`;
 
 export type StageLineProps = {
   stage: Stage; base: string; counts: StageCounts; route: StageRoute;
@@ -47,9 +49,13 @@ export type StageLineProps = {
 
 /**
  * One stage of S-10 as a vertical line of stops (Route R5; spec 9.2; the sketch `surfaces/project.png`): exactly five
- * stops, always, so the three lines' stops share rows (a subgrid, ProjectPage.css): the stage, what is still open, what is
- * recorded so far, its reviews, and the last stop with the next question and the link to the stage's questions. Counts are
+ * stops, always, so the three lines' stops share rows (a subgrid, ProjectPage.css): the stage (with the next step and the
+ * page's primary action on the line the page continues), what is still open, what is recorded so far, its reviews, and the
+ * last stop with what is left and the link to the stage's questions. Counts are
  * words and numerals of this stage alone; no percentage, bar or total across stages (FR-RM-04).
+ *
+ * Where a defined term is first used is decided by components/project/firstUse.ts, which mirrors the order and the words
+ * of these stops: when a stop's words change here, update firstUse.ts with them.
  */
 export function StageLine(p: StageLineProps): ReactElement {
   const headingId = `${p.stage}-name`;
@@ -60,12 +66,22 @@ export function StageLine(p: StageLineProps): ReactElement {
         <h2 id={headingId}><Term of={STAGE_TERM[p.stage]}>{name}</Term></h2>
         <Definition of={STAGE_TERM[p.stage]} as="p" />
         <p className="stage-line__count">{plural(p.counts.questions, C.question, C.questions)}</p>
+        {/* Owner's ruling on C3 (option A): on the line the page continues, the next step and the one primary action sit in
+            the head stop, inside the first view. Hidden while the lines are stacked: ProjectPage shows the same block once
+            above them then, so exactly one primary is in the accessibility tree at any width (ProjectPage.css). */}
+        {p.primary !== null ? <NextStep target={p.primary} base={p.base} route={p.route} counts={p.counts} where="line" /> : null}
       </div>
       <StillOpen {...p} />
       <div className="stage-line__stop stage-line__stop--recorded">
         <h3>{C.recorded}</h3>
-        {/* What is recorded: the no-decision questions are still open, so the tally leaves them out ("No decisions recorded yet"). */}
-        <RouteRow label={P.routeLabel(name)} stops={p.route.stops} tally={{ ...p.route.tally, no_decision: undefined }} />
+        {/* What is recorded: the no-decision questions are still open, so the tally leaves them out ("No decisions recorded yet").
+            The marks are drawn without links (lead's ruling on C5): each question is reached by name under Still open, "and k
+            more" or "All questions in this stage", and the row stays one labelled list a reader can pass over. */}
+        <RouteRow
+          label={P.routeLabel(name)}
+          stops={p.route.stops.map(({ id, kind, title, current, scopeAnswer }) => ({ id, kind, title, current, scopeAnswer }))}
+          tally={{ ...p.route.tally, no_decision: undefined }}
+        />
         {p.counts.acceptedRisks + p.counts.documentsIssued > 0 ? (
           <p>
             {used(p.uses.acceptedRisk === p.stage, TERM_ACCEPTED_RISK, C.issued(plural(p.counts.acceptedRisks, C.acceptedRisk, C.acceptedRisks), plural(p.counts.documentsIssued, C.document, C.documents)))}
@@ -82,15 +98,16 @@ export function StageLine(p: StageLineProps): ReactElement {
 /** "Still open in this stage": the questions with no decision (the first three named), open findings, then the mitigations. */
 function StillOpen(p: StageLineProps): ReactElement {
   const c = p.counts;
-  const stageHref = `${p.base}/stages/${p.stage}`;
+  const stageHref = stagePath(p.base, p.stage);
   const named = p.route.noDecision.slice(0, NAMED);
-  const more = p.route.noDecision.length - named.length;
-  // An item in both lists is shown once, in FR-FUP-01's order (overdue first, then due date).
-  const all = [...new Map([...p.followUp.items, ...p.followUp.cannotAct].map((i) => [i.mitigationId, i])).values()].sort(compareFollowUp);
+  // Counted against the stage's count, the number the line states, so the count and the list always add up.
+  const more = Math.max(0, c.noDecision - named.length);
+  // FR-FUP-01's order (overdue first, then due date). The two lists are disjoint: lib/data/projects.ts splits one by ownerCanAct.
+  const all = [...p.followUp.items, ...p.followUp.cannotAct].sort(compareFollowUp);
   const overdue = all.filter((i) => i.overdue);
   const later = all.filter((i) => !i.overdue);
   const m = p.uses.mitigation?.stage === p.stage ? p.uses.mitigation.at : null;
-  const findingFirst = p.uses.finding === p.stage;
+  const findingFirst = p.uses.finding !== null && 'stage' in p.uses.finding && p.uses.finding.stage === p.stage;
   return (
     <div className="stage-line__stop stage-line__stop--open">
       <h3>{C.stillOpen}</h3>
@@ -186,10 +203,13 @@ function Reviews(p: StageLineProps): ReactElement {
           {p.reviews.map((r) => (
             <li key={r.id} className="review-list__item">
               <ListLink className="review-list__name" href={`${reviewsBase}/${r.id}`}>{r.name}</ListLink>
-              <p className="review-list__meta">{P.reviewNumber(r.numberInStage)}{SEP}<ReviewState review={r} {...p} isNewest={r.id === newest?.id} /></p>
+              <p className="review-list__meta">
+                {P.reviewNumber(r.numberInStage)}{SEP}
+                <ReviewState review={r} base={p.base} stage={p.stage} uses={p.uses} isNewest={r.id === newest?.id} />
+              </p>
               {r.preparedForErased !== null ? <p className="review-list__meta">{REVIEW_COPY.review.noteErased(formatDay(r.preparedForErased.erasedOn))}</p>
                 : r.preparedFor !== null ? <p className="review-list__meta">{REVIEW_COPY.review.note(r.preparedFor)}</p> : null}
-              {r.latestSeal === null ? <BeforeSealing {...p} /> : null}
+              {r.latestSeal === null ? <BeforeSealing counts={p.counts} base={p.base} stage={p.stage} /> : null}
             </li>
           ))}
         </ul>
@@ -206,31 +226,41 @@ function Reviews(p: StageLineProps): ReactElement {
 
 /**
  * A review's state after its number: not sealed yet; the damaged seal's sentence (said first, as reviewStateLine does);
- * or "sealed <date>" in the reader's zone and how many decisions changed since. Only the stage's newest review links its
- * change count, because the stage page's filter compares the stage with that review's seal.
+ * or "sealed <date>" in the reader's zone, then how many decisions and how many findings changed since, each on its own.
+ * Only the stage's newest review links its decisions, because the stage page's filter compares the stage with that
+ * review's seal; the findings part links to the review, which lists them.
  */
-function ReviewState({ review: r, isNewest, base, stage, uses }: StageLineProps & { review: StageReviewView; isNewest: boolean }): ReactElement {
+function ReviewState({ review: r, isNewest, base, stage, uses }: {
+  review: StageReviewView; isNewest: boolean; base: string; stage: Stage; uses: FirstUses;
+}): ReactElement {
   if (r.latestSeal === null) return <>{P.notSealedYet}</>;
   if (sealDamaged(r)) {
     const first = uses.seal !== 'share' && uses.seal.reviewId === r.id;
     return <>{used(first, TERM_SEAL, REVIEW_COPY.state.damaged)}{defined(first, TERM_SEAL)}</>;
   }
   const seal = r.latestSeal;
-  const questions = r.changed?.changedQuestions.length ?? 0;
-  const findings = r.changed?.changedFindings.length ?? 0;
+  const questions = r.changed === null ? 0 : r.changed.changedQuestions.length;
+  const findings = r.changed === null ? 0 : r.changed.changedFindings.length;
+  const findingFirst = uses.finding !== null && 'reviewId' in uses.finding && uses.finding.reviewId === r.id;
   return (
     <>
       {P.sealed}{' '}<DeviceDateTime iso={seal.sealedAt} form="day" serverText={formatDay(seal.sealedAt)} />
       {questions > 0 ? (
-        <>{SEP}{isNewest ? <ListLink href={`${base}/stages/${stage}?show=changed_since_seal`}>{P.changedSinceSeal(questions)}</ListLink> : P.changedSinceSeal(questions)}</>
-      ) : findings > 0 && r.changed !== null ? <>{SEP}{REVIEW_COPY.state.changed(r.changed.sealNumber, findings)}</> : null}
+        <>{SEP}{isNewest ? <ListLink href={`${stagePath(base, stage)}?show=changed_since_seal`}>{P.changedSinceSeal(questions)}</ListLink> : P.changedSinceSeal(questions)}</>
+      ) : null}
+      {findings > 0 ? (
+        <>
+          {SEP}{used(findingFirst, TERM_FINDING, <ListLink href={`${base}/reviews/${r.id}`}>{P.findingsChangedSinceSeal(findings)}</ListLink>)}
+          {defined(findingFirst, TERM_FINDING)}
+        </>
+      ) : null}
     </>
   );
 }
 
 /** M11: for a review not sealed yet, what is still open in its stage, each above zero and each a link; or that nothing is. */
-function BeforeSealing({ counts: c, base, stage }: StageLineProps): ReactElement {
-  const stageHref = `${base}/stages/${stage}`;
+function BeforeSealing({ counts: c, base, stage }: { counts: StageCounts; base: string; stage: Stage }): ReactElement {
+  const stageHref = stagePath(base, stage);
   const items: Array<{ key: string; href: string; words: string }> = [];
   if (c.noDecision > 0) items.push({ key: 'no-decision', href: `${stageHref}?show=no_decision`, words: C.noDecisionQuestions(c.noDecision) });
   if (c.doneWithoutEvidence > 0) items.push({ key: 'no-evidence', href: `${stageHref}?show=done_without_evidence`, words: P.doneNoEvidence(c.doneWithoutEvidence) });
@@ -245,32 +275,47 @@ function BeforeSealing({ counts: c, base, stage }: StageLineProps): ReactElement
 }
 
 /**
- * The last stop: on the line the page continues, "Next question" and that question in words with its place in the stage,
- * then the primary action; on every other line how many questions have no decision. Then "All questions in this stage".
+ * The next step (plan 1C C11; owner's ruling on C3): "Next question" and that question in words with its place in the
+ * stage when the question has no decision yet, then the page's one primary action. When the person is sent to a question
+ * already decided (C11's "last-saved" rule: a stage with nothing open), "Every question in this stage has a decision." (or,
+ * should the counts still hold open questions, how many) and the button. Rendered in the target line's head stop, and once
+ * above the lines for the stacked form (`where`), one of the two hidden by CSS at every width.
  */
-function LastStop(p: StageLineProps & { headingId: string }): ReactElement {
-  const target = p.primary;
-  const at = target?.questionId == null ? -1 : p.route.stops.findIndex((s) => s.id === target.questionId);
-  const next = at === -1 ? null : p.route.stops[at];
-  const href = target === null ? null : target.questionId === null ? `${p.base}/stages/${target.stage}` : `${p.base}/stages/${target.stage}/questions/${target.questionId}`;
+export function NextStep({ target, base, route, counts, where }: {
+  target: ContinueTarget; base: string; route: StageRoute; counts: StageCounts; where: 'line' | 'stacked';
+}): ReactElement {
+  const questionId = target.questionId;
+  const at = questionId === null ? -1 : route.stops.findIndex((s) => s.id === questionId);
+  const next = at !== -1 && route.stops[at].kind === 'no_decision' ? route.stops[at] : null;
+  const href = questionId === null ? stagePath(base, target.stage) : `${stagePath(base, target.stage)}/questions/${questionId}`;
   return (
-    <div className="stage-line__stop stage-line__stop--last">
+    <div className={`next-step-block next-step-block--${where}`}>
       <p className="stage-line__next">
         {next !== null ? (
           <>
-            <b className="stage-line__next-label">{P.nextLabel}</b>{' '}
-            <span className="stage-line__next-text">{next.title}</span>{' '}
-            <span className="stage-line__position">{positionWords(at + 1, p.route.stops.length)}</span>
+            {/* The label and the question, at most two lines (R7); the place in the stage under them, whole. */}
+            <span className="stage-line__next-words">
+              <b className="stage-line__next-label">{P.nextLabel}</b>{' '}
+              <span className="stage-line__next-text">{next.title}</span>
+            </span>{' '}
+            <span className="stage-line__position">{positionWords(at + 1, route.stops.length)}</span>
           </>
-        ) : p.counts.noDecision > 0 ? P.noDecisionYet(p.counts.noDecision) : P.allDecided}
+        ) : counts.noDecision > 0 ? P.noDecisionYet(counts.noDecision) : P.allDecided}
       </p>
-      {target !== null && href !== null ? (
-        <p className="stage-line__primary">
-          <ButtonLink variant="primary" href={href}>{target.label === 'continue' ? P.continue : P.start}</ButtonLink>
-        </p>
-      ) : null}
+      <p className="stage-line__primary">
+        <ButtonLink variant="primary" href={href}>{target.label === 'continue' ? P.continue : P.start}</ButtonLink>
+      </p>
+    </div>
+  );
+}
+
+/** The last stop of every line: how many questions have no decision (or that none is left), then "All questions in this stage". */
+function LastStop(p: StageLineProps & { headingId: string }): ReactElement {
+  return (
+    <div className="stage-line__stop stage-line__stop--last">
+      <p className="stage-line__next">{p.counts.noDecision > 0 ? P.noDecisionYet(p.counts.noDecision) : P.allDecided}</p>
       <p>
-        <ListLink href={`${p.base}/stages/${p.stage}`} aria-describedby={p.headingId}>{C.allQuestions}</ListLink>
+        <ListLink href={stagePath(p.base, p.stage)} aria-describedby={p.headingId}>{C.allQuestions}</ListLink>
       </p>
     </div>
   );

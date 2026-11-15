@@ -163,6 +163,20 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     expect(stop(l['post-processing'], 'open')).not.toContain('with no decision');
   });
 
+  it('9.2: "and k more" is the stage\'s count less the questions named, so the count and the list always add up', () => {
+    const d = data();
+    const routes = routesOf(d);
+    // The names come from the route; here it lists four of the nine the counts hold (two reads that disagree for a moment).
+    const short = { ...routes, 'pre-processing': { ...routes['pre-processing'], noDecision: routes['pre-processing'].noDecision.slice(0, 4) } };
+    const open = stop(lines(renderToStaticMarkup(<ProjectPage data={d} routes={short} continueTo={null} />))['pre-processing'], 'open');
+    expect([...open.matchAll(/stage-line__named-item/g)]).toHaveLength(3);
+    expect(open).toContain(`>${P.andMore(6)}</a>`);
+    // Fewer named than the count never goes below zero, and a count of three named shows no "and more".
+    const three = { ...routes, 'pre-processing': { ...routes['pre-processing'], noDecision: routes['pre-processing'].noDecision.slice(0, 3) } };
+    const d3 = data({ counts: { 'pre-processing': { ...COUNTS, noDecision: 3 } } });
+    expect(stop(lines(renderToStaticMarkup(<ProjectPage data={d3} routes={three} continueTo={null} />))['pre-processing'], 'open')).not.toContain('more</a>');
+  });
+
   it('9.2 FR-PRJ-02: open findings link to the stage\'s findings, keep "(k of them with no mitigation yet)"; nothing open reads "Nothing is open in this stage."', () => {
     const l = lines(render({ counts: { 'post-processing': { ...ALL_DECIDED } } }));
     expect(stop(l['pre-processing'], 'open')).toContain(`<a href="/orgs/o/projects/p1/findings?stage=pre-processing">${S.openFindings}`.replace(S.openFindings, '3 open findings'));
@@ -205,12 +219,15 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     expect(stop(lines(only)['pre-processing'], 'open')).not.toContain(S.nothingOpen);
   });
 
-  it('7.2: Recorded so far is the kit\'s route row, one stop per question linking to it, labelled with the stage, and the tally with the evidence caveat', () => {
+  it('7.2 C5: Recorded so far is the kit\'s route row, one stop per question with no link (each question is reached by name), labelled with the stage, and the tally with the evidence caveat', () => {
     const l = lines(render({ counts: { 'in-processing': { ...COUNTS, byStatus: { done: 1, partly: 0, not_yet: 0, not_applicable: 0 }, doneWithoutEvidence: 0, noDecision: 22, notApplicableByGate: 1 } } }));
     const pre = stop(l['pre-processing'], 'recorded');
     expect(pre).toContain(`<ol class="ui-route-row__stops" role="list" aria-label="${P.routeLabel('Pre-processing')}">`);
     expect(pre.match(/<li class="ui-route-row__stop/g)).toHaveLength(24);
-    expect(pre).toContain('href="/orgs/o/projects/p1/stages/pre-processing/questions/pre-processing-q1"');
+    expect(pre.match(/<span class="ui-route-row__point"><svg class="ui-mark__shape"/g)).toHaveLength(24);
+    // No link in the row: about 75 fewer keyboard stops before "This project" (lead's ruling on C5).
+    expect(pre).not.toContain('<a ');
+    expect(pre).toContain('<span class="visually-hidden"><span>Question 1 of pre-processing</span>: Done</span>');
     expect(pre).toContain('<p class="ui-route-row__tally">7 done (2 with no evidence attached), 3 partly, 2 not yet, 2 not applicable, 1 answered</p>');
     expect(stop(l['in-processing'], 'recorded')).toContain('<p class="ui-route-row__tally">1 done, 1 does not apply</p>');
     expect(text(pre)).toContain('1 accepted risk, 1 document issued');
@@ -249,34 +266,63 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     expect(html.indexOf('data-definition="seal"')).toBeGreaterThan(html.indexOf('<section class="stage-line" id="post-processing"'));
   });
 
-  it('C11: the one primary action sits on the line of the stage last saved in, with "Next question" and that question in words; none elsewhere', () => {
-    const html = render({}, { stage: 'in-processing', questionId: 'in-processing-q12', label: 'continue' });
+  /** The next-step block shown above the stacked lines (owner's ruling on C3), from its opening tag to the jump links. */
+  const stacked = (html: string) => {
+    const at = html.indexOf('<div class="next-step-block next-step-block--stacked">');
+    return at === -1 ? '' : html.slice(at, html.indexOf('<nav class="stage-list__jump"', at));
+  };
+
+  it('C11 C3: the one primary action and "Next question" sit in the head stop of the line of the stage last saved in; every last stop says what is left', () => {
+    // in-processing-q16 has no decision (routeFor: 14 decided, then the no-decision stops).
+    const html = render({}, { stage: 'in-processing', questionId: 'in-processing-q16', label: 'continue' });
     const l = lines(html);
-    const last = stop(l['in-processing'], 'last');
-    expect(last).toContain(`<a class="ui-button ui-button--primary" href="/orgs/o/projects/p1/stages/in-processing/questions/in-processing-q12">${P.continue}</a>`);
-    expect(last).toContain(`<b class="stage-line__next-label">${P.nextLabel}</b>`);
-    expect(text(last)).toContain(`${P.nextLabel} Question 12 of in-processing ${UI_COPY.position(12, 24)}`);
-    for (const s of ['pre-processing', 'post-processing'] as const) {
-      expect(stop(l[s], 'last')).not.toContain('ui-button');
-      expect(text(stop(l[s], 'last'))).toContain(P.noDecisionYet(9));
-      expect(stop(l[s], 'last')).not.toContain(P.nextLabel);
+    const head = stop(l['in-processing'], 'head');
+    const button = `<a class="ui-button ui-button--primary" href="/orgs/o/projects/p1/stages/in-processing/questions/in-processing-q16">${P.continue}</a>`;
+    expect(head).toContain('<div class="next-step-block next-step-block--line">');
+    expect(head).toContain(button);
+    expect(head).toContain(`<span class="stage-line__next-words"><b class="stage-line__next-label">${P.nextLabel}</b> <span class="stage-line__next-text">Question 16 of in-processing</span></span>`);
+    expect(text(head)).toContain(`${P.nextLabel} Question 16 of in-processing ${UI_COPY.position(16, 24)}`);
+    // The block comes after the stage's definition, under the name.
+    expect(head.indexOf('data-definition="stage-2"')).toBeLessThan(head.indexOf('next-step-block'));
+    // Every line's last stop, the target's included, keeps its sentence and the stage's questions, and no button.
+    for (const s of STAGES) {
+      const last = stop(l[s], 'last');
+      expect(last).not.toContain('ui-button');
+      expect(last).not.toContain(P.nextLabel);
+      expect(text(last)).toContain(P.noDecisionYet(9));
+      if (s !== 'in-processing') expect(stop(l[s], 'head')).not.toContain('next-step-block');
     }
-    expect(html.match(/ui-button--primary/g)).toHaveLength(1);
+    // The same block once above the stacked lines. The markup holds two copies; ProjectPage.css shows one at every width
+    // (display: none on the other), and e2e/project-page.spec.ts finds exactly one by role at 1280, 1440 and 375.
+    expect(stacked(html)).toContain(button);
+    expect(stacked(html)).toContain(P.nextLabel);
+    expect(html.match(/ui-button--primary/g)).toHaveLength(2);
   });
 
   it('C11: "Start recording" for a first save; a null question links to the stage, with the sentence and no label; all decided says so', () => {
-    const start = stop(lines(render({}, { stage: 'pre-processing', questionId: 'pre-processing-q16', label: 'start' }))['pre-processing'], 'last');
+    const start = stop(lines(render({}, { stage: 'pre-processing', questionId: 'pre-processing-q16', label: 'start' }))['pre-processing'], 'head');
     expect(start).toContain(`href="/orgs/o/projects/p1/stages/pre-processing/questions/pre-processing-q16">${P.start}</a>`);
     const done = render({ counts: { 'post-processing': ALL_DECIDED } }, { stage: 'post-processing', questionId: null, label: 'continue' });
-    const last = stop(lines(done)['post-processing'], 'last');
-    expect(last).toContain(`<a class="ui-button ui-button--primary" href="/orgs/o/projects/p1/stages/post-processing">${P.continue}</a>`);
-    expect(last).not.toContain(P.nextLabel);
-    expect(text(last)).toContain(P.allDecided);
+    const head = stop(lines(done)['post-processing'], 'head');
+    expect(head).toContain(`<a class="ui-button ui-button--primary" href="/orgs/o/projects/p1/stages/post-processing">${P.continue}</a>`);
+    expect(head).not.toContain(P.nextLabel);
+    expect(text(head)).toContain(P.allDecided);
+    expect(text(stop(lines(done)['post-processing'], 'last'))).toContain(P.allDecided);
+  });
+
+  it('C11 "last-saved": on a fully decided stage the target question is already decided, so the head stop says all are decided, not "Next question"; the button still goes to it', () => {
+    const html = render({ counts: { 'post-processing': ALL_DECIDED } }, { stage: 'post-processing', questionId: 'post-processing-q5', label: 'continue' });
+    for (const block of [stop(lines(html)['post-processing'], 'head'), stacked(html)]) {
+      expect(block).not.toContain(P.nextLabel);
+      expect(text(block)).toContain(P.allDecided);
+      expect(block).toContain(`<a class="ui-button ui-button--primary" href="/orgs/o/projects/p1/stages/post-processing/questions/post-processing-q5">${P.continue}</a>`);
+    }
   });
 
   it('C11: no target (a Reviewer, a Viewer, an archived project) renders no primary action anywhere', () => {
     for (const html of [render({ role: 'reviewer' }), render({ role: 'viewer' }), render({ archived: true })]) {
       expect(html).not.toContain('ui-button--primary');
+      expect(html).not.toContain('next-step-block');
       expect(html).not.toContain(P.continue);
       expect(html).not.toContain(P.start);
     }
@@ -320,6 +366,26 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     expect(pre).not.toContain(`>${P.changedSinceSeal(2)}</a>`);
     expect(pre).toContain(`<a href="/orgs/o/projects/p1/stages/pre-processing?show=changed_since_seal">${P.changedSinceSeal(1)}</a>`);
     expect(pre).not.toContain(P.beforeSealing);
+  });
+
+  it('9.2: a sealed review says how many decisions and how many findings changed since it was sealed, each on its own; the findings part links to the review', () => {
+    const both: StageReviewView = { ...REVIEW, latestSeal: SEAL, changedSinceLatestSeal: true,
+      changed: { sealNumber: 1, changedQuestions: ['Q-PP-01', 'Q-PP-02'], changedFindings: ['f1', 'f2', 'f3'] } };
+    const pre = stop(lines(render({ reviews: { 'pre-processing': [both] } }))['pre-processing'], 'reviews');
+    expect(text(pre)).toContain(`${P.reviewNumber(1)} · ${P.sealed} 11 Nov 2026 · ${P.changedSinceSeal(2)} · ${P.findingsChangedSinceSeal(3)}`);
+    expect(pre).toContain(`<a href="/orgs/o/projects/p1/stages/pre-processing?show=changed_since_seal">${P.changedSinceSeal(2)}</a>`);
+    expect(pre).toContain(`<a href="/orgs/o/projects/p1/reviews/r1">${P.findingsChangedSinceSeal(3)}</a>`);
+    // Findings only: the findings part alone, in the same words; never "Changed since seal 1 (n)."
+    const onlyFindings: StageReviewView = { ...both, changed: { sealNumber: 1, changedQuestions: [], changedFindings: ['f1'] } };
+    const html = render({ reviews: { 'pre-processing': [onlyFindings] }, counts: { 'pre-processing': { ...COUNTS, openFindings: 0, openFindingsWithoutMitigation: 0 } } });
+    const only = stop(lines(html)['pre-processing'], 'reviews');
+    expect(text(only)).toContain(`${P.reviewNumber(1)} · ${P.sealed} 11 Nov 2026 · ${P.findingsChangedSinceSeal(1)}`);
+    expect(only).not.toContain(P.changedSinceSeal(1));
+    expect(only).not.toContain('Changed since seal');
+    // With no open finding before it, this sentence is the page's first use of "finding": its definition is here, once.
+    expect(only).toContain('data-definition="finding"');
+    expect(html.split('data-definition="finding"')).toHaveLength(2);
+    expect([P.findingsChangedSinceSeal(1), P.findingsChangedSinceSeal(3)]).toEqual(['1 finding changed since it was sealed', '3 findings changed since it was sealed']);
   });
 
   it('9.2: a damaged seal says so first, an erased purpose says when; "Open a stage review" only where the role may and the project is live', () => {

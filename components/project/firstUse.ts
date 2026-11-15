@@ -6,10 +6,14 @@ import { STAGES, type Stage } from '@/types/record';
  * lib/vocabulary/firstUse.ts), so its definition shows there and nowhere else on the page. Pure: it reads the same counts
  * and reviews the page renders, in the page's order (the stages in order, and in each stage its stops in order), and
  * names the one place each term's words first appear. The stage names are each defined under their own heading, always.
+ * When a stop's words change in components/project/StageLine.tsx, this is the function to update.
  */
 export type FirstUses = {
-  /** The stage whose open-findings line first says "finding". */
-  finding: Stage | null;
+  /**
+   * The first sentence that says "finding": a stage's open-findings line in Still open, or (earlier in the page when its
+   * stage has no open finding) a sealed review's "{n} finding(s) changed since it was sealed".
+   */
+  finding: { stage: Stage } | { reviewId: string } | null;
   /** The first line of "Still open" that says "mitigation": the findings line's bracket, the Overdue line, or "No overdue mitigations". */
   mitigation: { stage: Stage; at: 'bracket' | 'overdue' | 'noOverdue' } | null;
   /** The stage whose "accepted risks, documents issued" line comes first. */
@@ -32,7 +36,7 @@ export function firstUses(i: { counts: Readonly<Record<Stage, StageCounts>>; rev
   for (const stage of STAGES) {
     const c = i.counts[stage];
     if (hasOpenWork(c)) {
-      if (out.finding === null && c.openFindings > 0) out.finding = stage;
+      if (out.finding === null && c.openFindings > 0) out.finding = { stage };
       if (out.mitigation === null) {
         out.mitigation = c.openFindings > 0 && c.openFindingsWithoutMitigation > 0 ? { stage, at: 'bracket' }
           : { stage, at: c.overdueMitigations > 0 ? 'overdue' : 'noOverdue' };
@@ -40,6 +44,12 @@ export function firstUses(i: { counts: Readonly<Record<Stage, StageCounts>>; rev
     }
     if (out.acceptedRisk === null && c.acceptedRisks + c.documentsIssued > 0) out.acceptedRisk = stage;
     const reviews = i.reviews[stage];
+    // Reviews come after Still open in a stage. "sealed" and "sealing" are not uses of "seal" (lib/vocabulary/firstUse.ts
+    // matches the whole word with an optional plural "s"), so a sealed review's line is a use of "finding" only.
+    if (out.finding === null) {
+      const changed = reviews.find((r) => r.latestSeal !== null && !sealDamaged(r) && (r.changed?.changedFindings.length ?? 0) > 0);
+      if (changed !== undefined) out.finding = { reviewId: changed.id };
+    }
     if (out.seal === 'share') {
       const damaged = reviews.find(sealDamaged);
       if (damaged !== undefined) out.seal = { reviewId: damaged.id };
