@@ -10,7 +10,7 @@ import { INVITATION_PAGE_COPY, ORG_COPY, roleTerm, roleWithArticle } from '@/lib
 import { GATE_COPY } from '@/lib/shell/copy';
 import { pageTitle } from '@/lib/ui/title';
 import { GateFrame, type GateStop } from '@/components/layout/GateFrame';
-import { AuthCard } from '@/components/auth/AuthCard';
+import { AuthCard } from '@/components/auth/AuthCardBase';
 import AcceptInvitationClient, { InvitationRoute } from './AcceptInvitationClient';
 
 export const metadata: Metadata = { title: pageTitle(ORG_COPY.titles.invitation) };

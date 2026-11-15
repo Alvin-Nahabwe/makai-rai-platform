@@ -1,17 +1,7 @@
-/* The door pages' card content (plan 1B Tasks 2 to 5): AuthCard's lead, footer and the password toggle. The gate frame
+/* The door pages' card content (plan 1B Tasks 2 to 5): AuthCard's footer and the password toggle. The gate frame
    (components/layout/gate.css) draws the card; these rules only space what is inside it. Role tokens only; nothing
-   animates. */
-
-.auth-view__lead {
-  display: grid;
-  gap: var(--space-3);
-  margin-block-end: var(--space-6);
-  color: var(--color-ink);
-}
-
-.auth-view__lead > p {
-  max-inline-size: 65ch;
-}
+   animates. AuthCard's lead and a form's status line are in components/layout/gate.css since the lean frame (owner,
+   15 Nov 15:35): S-04 uses them, and this sheet is not on S-04's first visit. */
 
 /* The footer: the links after the form, set off by a line, with room between them. */
 .auth-view__footer {
@@ -27,11 +17,6 @@
   display: inline-flex;
   align-items: center;
   min-block-size: var(--target-min);
-}
-
-/* The form's submit and its error line beside it (spec 9.7). */
-.auth-view form .ui-status:not(:empty) {
-  margin-block-start: var(--space-4);
 }
 
 /* Show password sits right under its box, pulled into the field's bottom margin. */

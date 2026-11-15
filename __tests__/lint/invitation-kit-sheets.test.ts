@@ -128,6 +128,13 @@ describe('NFR-PERF-02 X-7: S-04 loads kit stylesheets only through styles entrie
       + 'or pin it in PINNED with its reason, then update this list').toEqual(S04_KIT_SHEETS);
     for (const sheet of Object.keys(PINNED)) expect(S04_KIT_SHEETS, `${sheet} is pinned but S-04 no longer loads it`).toContain(sheet);
   });
+
+  it('NFR-PERF-02 (owner, 15 Nov 15:35, lean frame): S-04 loads the frame\'s public sheet only, no auth.css and no signed-in sheet', () => {
+    // The door pages' card rules S-04 uses (AuthCard's lead and a form's status line) are in the frame's sheet, and S-04
+    // draws the card from components/auth/AuthCardBase.tsx, which imports no stylesheet.
+    const sheets = [...importers(routeRoots()).keys()].filter((f) => f.endsWith('.css') && !isKitSheet(f)).sort();
+    expect(sheets).toEqual(['app/globals.css', 'components/layout/gate.css']);
+  });
 });
 
 function offences(reached: Map<string, Set<string>>): string[] {

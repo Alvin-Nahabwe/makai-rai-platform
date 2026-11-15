@@ -370,6 +370,25 @@ body:has(.gate--public) {
   }
 }
 
+/* ── The card's content: AuthCard's lead and a form's status line (components/auth/AuthCardBase.tsx) ──
+   Moved word for word from components/auth/auth.css by the lean frame (owner, 15 Nov 15:35): S-04 draws them, and every
+   page that draws AuthCard is in this frame, so they are here and auth.css stays off S-04's first visit. */
+.auth-view__lead {
+  display: grid;
+  gap: var(--space-3);
+  margin-block-end: var(--space-6);
+  color: var(--color-ink);
+}
+
+.auth-view__lead > p {
+  max-inline-size: 65ch;
+}
+
+/* The form's submit and its error line beside it (spec 9.7). */
+.auth-view form .ui-status:not(:empty) {
+  margin-block-start: var(--space-4);
+}
+
 /* ── Print: the card only ── */
 @media print {
   .gate__header {
