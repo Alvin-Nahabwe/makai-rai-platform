@@ -27,6 +27,7 @@ vi.mock('next-auth/react', () => ({ signOut: vi.fn() }));
 
 import { AcceptancesView } from '@/components/legal/AcceptancesView';
 import { ACCEPT_LABEL, ACCEPTANCES_COPY } from '@/lib/legal/acceptances/copy';
+import { AcceptancesFormView } from '@/components/legal/AcceptancesForm';
 import { LEGAL_CHANGE_SUMMARIES, LEGAL_COPY } from '@/lib/legal/copy';
 import { LEGAL_KIND_NAMES } from '@/lib/legal/kinds';
 import { textOf } from '@/__tests__/helpers/markup';
@@ -112,6 +113,14 @@ describe('AcceptancesView', () => {
       history.override = null;
       error.mockRestore();
     }
+  });
+
+  it('review A-3: a null before-node counts as none, so its box keeps its own link to the words', () => {
+    const t = { ...text('terms', '2'), text: '' };
+    const out = renderToStaticMarkup(<AcceptancesFormView texts={[t]} mode="required" userId="u1" submitLabel="Accept" before={{ terms: null }}
+      ticked={new Set()} errors={[]} onToggle={() => {}} onSubmit={() => {}} />);
+    expect(out.match(/target="_blank"/g)).toHaveLength(1);
+    expect(textOf(out)).toContain(ACCEPTANCES_COPY.readLink(LEGAL_KIND_NAMES.terms));
   });
 
   it('T7.3: no legal words reach the markup or the client props; only kind and version', () => {

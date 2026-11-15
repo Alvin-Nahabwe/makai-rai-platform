@@ -22,7 +22,13 @@ const soft = vi.hoisted(() => ({ identity: vi.fn() }));
 vi.mock('@/lib/auth/identity', () => ({ requireIdentity: async () => identity.current, tryResolveIdentity: soft.identity }));
 vi.mock('@/lib/data/preauth', () => ({ membershipsForUser: data.memberships }));
 vi.mock('@/lib/data/identity', () => ({ identityDb: { user: { findUnique: data.findUser } } }));
-vi.mock('@/lib/data/acceptances', () => ({ missingAcceptances: data.missing, offeredAcceptances: data.offered }));
+// Since plan 1B Task 7 S-05 reads acceptanceChanges: built here from `missing` (each kind missing, first acceptance).
+vi.mock('@/lib/data/acceptances', () => ({
+  missingAcceptances: data.missing, offeredAcceptances: data.offered,
+  acceptanceChanges: async () => ((await data.missing()) as string[]).map((kind) => ({
+    kind, current: { kind, version: '1', publishedOn: '2026-10-30', acceptance: 'required', sha256: 'x', text: 'words' }, lastAccepted: null, state: 'missing',
+  })),
+}));
 const idle = vi.hoisted(() => ({ read: vi.fn() }));
 vi.mock('@/lib/auth/idleDeadline', () => ({ readSessionDeadlines: idle.read }));
 vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
