@@ -92,7 +92,7 @@ function fakeBuild(opts: FakeOptions = {}): string {
     }
   }
   if (opts.questionRoute) {
-    for (const dir of ['(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]', '(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]']) {
+    for (const dir of ['(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]', '(authenticated)/@project/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]', '(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]']) {
       write(`server/app/${dir}/page_client-reference-manifest.js`, manifestFor(`/${dir}/page`, { [`[project]/app/${dir}/page`]: ['static/chunks/question.js'] }));
     }
   }
@@ -274,6 +274,8 @@ it('owner ruling 15 Nov 2026 18:25: the question page alone is held to 195 KB; i
   expect(Number(Q_KB)).toBeLessThan(195);
   const r = run([fakeBuild({ dashboard: false, questionRoute: true }), '--exceptions', exceptionsFile([])]);
   expect(r.stdout).toContain(`route=/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId] firstLoadKB=${Q_KB} budgetKB=195`);
+  // The same page under the rail's parallel slot carries the same budget.
+  expect(r.stdout).toContain(`route=/@project/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId] firstLoadKB=${Q_KB} budgetKB=195`);
   expect(r.stdout).toContain(`route=/orgs/[slug]/projects/[id]/stages/[stage] firstLoadKB=${Q_KB} budgetKB=190`);
   expect(r.status).toBe(1);
   expect(r.stderr).toContain('/orgs/[slug]/projects/[id]/stages/[stage] is');

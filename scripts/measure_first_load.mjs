@@ -33,7 +33,13 @@ const SIGNED_IN_BUDGET_KB = 190;
 // The owner's ruling of 15 Nov 2026, 18:25 EAT (box "195 KB, covering the last merges"; it superseded the 18:00 ruling's
 // 192 KB): the question page's signed-in first-load budget is 195 KB; every other route keeps its budget. Trimming the page
 // is on the next release's list.
-const ROUTE_BUDGET_KB = new Map([['/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]', 195]]);
+const QUESTION_PAGE_KB = 195;
+// The same page also appears under the rail's parallel slot (app/(authenticated)/@project/...), which the build lists as its
+// own route; it is the question page, so it carries the same budget.
+const ROUTE_BUDGET_KB = new Map([
+  ['/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]', QUESTION_PAGE_KB],
+  ['/@project/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]', QUESTION_PAGE_KB],
+]);
 // NFR-PERF-01 (SRS line 3189) gives every public page (S-01 to S-06, S-28) 160 KB, but a page's group in the
 // build says "public" only for the ones under app/(public). S-05, the acceptances page, is a public page that
 // lives at app/(gate)/acceptances/page.tsx (contract, S-05 row; the gate frame's group since plan 1B Task 1), so it is
