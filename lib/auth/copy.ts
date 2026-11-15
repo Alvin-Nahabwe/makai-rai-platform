@@ -40,18 +40,24 @@ export const AUTH_COPY = Object.freeze({
     askForLink: 'Ask for a link',
     setNewPassword: 'Set a new password',
   }),
+  /** S-01's route while D16 asks (ruling L5-27): Sign in is done, and the question is the current stop. */
+  loginStops: Object.freeze({
+    unsavedText: 'Unsaved text in this browser',
+  }),
   logoAlt: 'MAK-AI',
   loading: 'Loading...',
   /** The heading of the forgot-password page: the action, not the problem (audit A 138). */
   resetHeading: 'Reset your password',
   backToSignIn: 'Back to sign in',
+  /** S-03's heading when its link is used, expired or unknown (design review I-6), with M-22 under it. */
+  linkUnusableHeading: 'This link cannot be used',
   showPassword: SHOW_PASSWORD,
   /** S-01's footer (A page verdict, S-01): accounts come only from an invitation; "Owner" is the role's name (§2). */
   noAccount: 'No account? You need an invitation. Ask an Owner of your organisation to invite you.',
-  /** S-01 after the idle sign-out (C12), read from the hint IdleWarning leaves (lib/auth/idle.ts). */
-  signedOutIdle: 'You were signed out because 12 hours passed since you signed in or last chose Stay signed in.',
-  /** S-01 after the 7-day limit (C12). */
-  signedOutAbsolute: 'You were signed out because 7 days passed since you signed in.',
+  /** S-01 after the idle sign-out (C12), read from the hint IdleWarning leaves (lib/auth/idle.ts): the notice's sentence. */
+  signedOutIdle: IDLE_TEXTS.endedIdle,
+  /** S-01 after the 7-day limit (C12): the in-page notice's sentence, one sentence per fact (design review M-5). */
+  signedOutAbsolute: IDLE_TEXTS.endedAbsolute,
   /** Under either signed-out line. */
   signedOutKept: 'Sign in again to carry on. Unsaved decisions and mitigations you typed in this browser come back when you open them again.',
   tooManyAttempts: TOO_MANY_SIGN_INS,

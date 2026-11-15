@@ -9,9 +9,12 @@ import { DRAFT_PREFIX, openDraftStore } from '@/lib/client/drafts';
 import { LAST_PROJECT_PREFIX } from '@/lib/client/lastProject';
 import { useSignOutPress } from '@/lib/client/signOutPress';
 import { AUTH_COPY, AUTH_MESSAGE_COPY, SIGN_IN_COPY } from '@/lib/auth/copy';
-import { SIGNED_OUT_HINT_KEY } from '@/lib/auth/idle';
+import { SIGNED_OUT_HINT_KEY, tabStorage } from '@/lib/auth/idle';
 import { useHydrated } from '@/lib/client/useHydrated';
 import { AuthCard } from '@/components/auth/AuthCard';
+import { createDoorStep, useDoorStep } from '@/components/auth/doorStep';
+import { GateRoute, type GateStop } from '@/components/layout/GateRoute';
+import { GATE_COPY } from '@/lib/shell/copy';
 import { OtherAccountTextConfirm } from '@/components/auth/OtherAccountTextConfirm';
 import { PasswordField } from '@/components/auth/PasswordField';
 import { Banner } from '@/components/ui/Banner';
@@ -223,15 +226,6 @@ export function readSignedOutHint(storage: Storage | null, now: number): SignedO
   return decodeSignedOutHint(text, now);
 }
 
-/** This tab's sessionStorage, or null where reading the property throws (blocked site data). */
-function tabStorage(): Storage | null {
-  try {
-    return typeof window === 'undefined' ? null : window.sessionStorage;
-  } catch {
-    return null;
-  }
-}
-
 export interface LoginViewProps {
   email: string;
   password: string;
@@ -242,7 +236,7 @@ export interface LoginViewProps {
   /** C12: why the last session in this tab ended, read after hydration (readSignedOutHint); null shows no line. */
   signedOut?: SignedOutReason | null;
   /** D16: signed in, and this browser keeps another account's unsaved text: the question shown in place of the form. */
-  confirm?: { who: 'other' | 'unknown'; busy: boolean; message: string | null; onRemove: () => void; onSignOut: () => void } | null;
+  confirm?: { who: 'other' | 'unknown'; removing: boolean; leaving: boolean; message: string | null; onRemove: () => void; onSignOut: () => void } | null;
   /** False until React has hydrated; the submit button is disabled till then (default true for a static render). */
   hydrated?: boolean;
   onEmail: (v: string) => void;
@@ -259,10 +253,10 @@ export interface LoginViewProps {
  */
 export function LoginView(v: LoginViewProps) {
   if (v.confirm) {
-    // Signed in already: only the question is left on this page (D16), with no link away from it.
+    // Signed in already: only the question is left on this page (D16), as its heading (ruling L5-27), with no link away.
     return (
-      <AuthCard title={SIGN_IN_COPY.heading}>
-        <OtherAccountTextConfirm kind={v.confirm.who} busy={v.confirm.busy} message={v.confirm.message}
+      <AuthCard title={v.confirm.who === 'other' ? AUTH_COPY.otherTextTitle : AUTH_COPY.unknownTextTitle}>
+        <OtherAccountTextConfirm kind={v.confirm.who} removing={v.confirm.removing} leaving={v.confirm.leaving} message={v.confirm.message}
           onRemove={v.confirm.onRemove} onSignOut={v.confirm.onSignOut} />
       </AuthCard>
     );
@@ -296,6 +290,26 @@ export function LoginView(v: LoginViewProps) {
   );
 }
 
+/** S-01's step, for the frame's route (page.tsx renders LoginRoute beside the form): signing in, or D16's question. */
+export const loginStep = createDoorStep<'signIn' | 'confirm'>('signIn');
+
+const SIGN_IN_ROUTE: readonly GateStop[] = [{ label: GATE_COPY.stops.signIn, state: 'current' }];
+/** While D16 asks, the sign-in has worked: Sign in is done and the question is where the person is (ruling L5-27). */
+const QUESTION_ROUTE: readonly GateStop[] = [
+  { label: GATE_COPY.stops.signIn, state: 'done' },
+  { label: AUTH_COPY.loginStops.unsavedText, state: 'current' },
+];
+
+/** S-01's route for a given step. */
+export function LoginRouteView({ step }: { step: 'signIn' | 'confirm' }) {
+  return <GateRoute route={step === 'confirm' ? QUESTION_ROUTE : SIGN_IN_ROUTE} />;
+}
+
+/** S-01's route in the gate frame's column, following the form's step. */
+export function LoginRoute() {
+  return <LoginRouteView step={useDoorStep(loginStep)} />;
+}
+
 /** S-01: signs in through next-auth, then removes other accounts' drafts and goes to the page asked for. */
 export function LoginForm() {
   const router = useRouter();
@@ -317,6 +331,9 @@ export function LoginForm() {
   // Sign out and leave it: S-05's press (lib/client/signOutPress.ts), which removes this account's own drafts only
   // (NFR-PRIV-06; T5.6) and, when the sign-out fails, says the person is still signed in and stays here.
   const leave = useSignOutPress(pending?.userId ?? '', '/login');
+  // The frame's route follows the question, and goes back to Sign in when this form leaves the page.
+  useEffect(() => { loginStep.set(pending === null ? 'signIn' : 'confirm'); }, [pending]);
+  useEffect(() => () => loginStep.set('signIn'), []);
 
   // C12: the hint is read once, after hydration, so the server's render never depends on storage. The ref keeps a second
   // run of the effect (React's development double run) from reading the removed hint as none.
@@ -367,7 +384,7 @@ export function LoginForm() {
   return (
     <LoginView email={email} password={password} showPassword={showPassword} error={error} notice={notice} loading={loading} hydrated={hydrated}
       signedOut={signedOut}
-      confirm={pending === null ? null : { who: pending.who, busy: removing || leave.busy, message: leave.message, onRemove: removeAndGoOn, onSignOut: leave.press }}
+      confirm={pending === null ? null : { who: pending.who, removing, leaving: leave.busy, message: leave.message, onRemove: removeAndGoOn, onSignOut: leave.press }}
       onEmail={setEmail} onPassword={setPassword} onToggleShow={() => setShowPassword((s) => !s)} onSubmit={onSubmit} />
   );
 }

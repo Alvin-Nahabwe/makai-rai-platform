@@ -9,8 +9,8 @@
 export const IDLE_TEXTS = Object.freeze({
   /** The dialog's title, its accessible name. */
   warningTitle: 'You will be signed out in 2 minutes',
-  /** The rule and what to do now (R10, lead's ruling L5-10). */
-  warningBody: 'For your security, you are signed out 12 hours after you sign in, or after you last chose Stay signed in. Save your work now, or choose Stay signed in.',
+  /** The rule and what to do now (R10, lead's ruling L5-10, amended by design review I-4: the dialog makes the page inert). */
+  warningBody: 'For your security, you are signed out 12 hours after you sign in, or after you last chose Stay signed in. Choose Stay signed in, then save your work.',
   warningKept: 'Unsaved decisions and mitigations stay in this browser and come back when you sign in again here.',
   stay: 'Stay signed in',
   /** A session read that failed (audit A 34; defect 7). */

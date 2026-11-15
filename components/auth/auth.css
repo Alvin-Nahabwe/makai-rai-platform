@@ -48,6 +48,23 @@
   list-style: disc;
 }
 
+.other-text__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
 .other-text .ui-status:not(:empty) {
   margin-block-start: var(--space-4);
+}
+
+/* A card whose one way forward is a link drawn as the kit's primary button (S-03's used link: design review I-6). */
+.auth-view__action {
+  margin-block-start: var(--space-6);
+}
+
+/* Show password lines up with the field's left edge (design review M-1): the quiet button's inline padding is drawn
+   outside the column, so its words start where the box starts. */
+.password-field__toggle .ui-button {
+  margin-inline-start: calc(-1 * var(--space-3));
 }

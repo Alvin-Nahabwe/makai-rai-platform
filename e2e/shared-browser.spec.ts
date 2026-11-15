@@ -4,6 +4,7 @@ import { buildOrg, type FixtureAccount, type OrgFixture } from '../__tests__/hel
 import { draftKeys, signInWith } from './helpers/session';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { AUTH_COPY } from '../lib/auth/copy';
+import { ACCEPTANCES_COPY } from '../lib/legal/acceptances/copy';
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
 import { FIELD_COPY } from '../lib/ui/field/copy';
 
@@ -35,7 +36,8 @@ async function pressSignIn(page: Page, account: Pick<FixtureAccount, 'email' | '
   await page.locator('button[type="submit"]').click();
 }
 
-const question = (page: Page) => page.getByRole('group', { name: AUTH_COPY.otherTextTitle });
+/** The question is the page's h1 once the sign-in has worked (ruling L5-27). */
+const question = (page: Page) => page.getByRole('heading', { level: 1, name: AUTH_COPY.otherTextTitle });
 
 test.describe('D16: unsaved text of another account on a shared browser', () => {
   test('D16: a second account is warned before the first account\'s text is removed, and the warning names nobody', async ({ browser }) => {
@@ -47,9 +49,11 @@ test.describe('D16: unsaved text of another account on a shared browser', () => 
     await page.evaluate(([k, v]) => localStorage.setItem(k, v), [keyOf(fx, a.userId), DRAFT()] as const);
     await pressSignIn(page, b);
     await expect(question(page)).toBeVisible();
-    await expect(question(page)).toHaveText(
-      `${AUTH_COPY.otherTextTitle}${AUTH_COPY.otherTextBody}${AUTH_COPY.signOutAndLeave}: ${AUTH_COPY.consequenceLeave}${AUTH_COPY.removeAndContinue}: ${AUTH_COPY.consequenceRemove}${AUTH_COPY.signOutAndLeave}${AUTH_COPY.removeAndContinue}`,
+    await expect(page.locator('.other-text')).toHaveText(
+      `${AUTH_COPY.otherTextBody}${AUTH_COPY.signOutAndLeave}: ${AUTH_COPY.consequenceLeave}${AUTH_COPY.removeAndContinue}: ${AUTH_COPY.consequenceRemove}${AUTH_COPY.signOutAndLeave}${AUTH_COPY.removeAndContinue}`,
     );
+    // The route says the sign-in is done and the question is where the person is (ruling L5-27).
+    await expect(page.locator('[aria-current="step"]')).toContainText(AUTH_COPY.loginStops.unsavedText);
     expect(new URL(page.url()).pathname).toBe('/login');
     const content = await page.content();
     for (const secret of [a.email, a.name, a.userId, fx.org.name, fx.org.slug, 'left by the first account']) expect(content, secret).not.toContain(secret);
@@ -144,8 +148,7 @@ test.describe('D16: unsaved text of another account on a shared browser', () => 
     await page.evaluate(([k, v]) => localStorage.setItem(k, v), [keyOf(fx, a.userId), DRAFT()] as const);
     await pressSignIn(page, b);
     await expect(question(page)).toBeVisible();
-    // The title is InlineConfirm's first paragraph (its words are in a <strong> inside it).
-    await expect(question(page).locator('p').filter({ hasText: AUTH_COPY.otherTextTitle })).toBeFocused();
+    await expect(question(page)).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(page.getByRole('button', { name: AUTH_COPY.signOutAndLeave })).toBeFocused();
     await page.keyboard.press('Tab');
@@ -155,6 +158,34 @@ test.describe('D16: unsaved text of another account on a shared browser', () => 
     await page.keyboard.press('Escape');
     await expect(question(page)).toBeVisible();
     expect(await draftKeys(page, a.userId)).toEqual([keyOf(fx, a.userId)]);
+    await page.context().close();
+  });
+
+  test('D16 (L5-11): Sign out and leave it when the CSRF token cannot be fetched stays, says still signed in, keeps the text, and the retry works', async ({ browser }) => {
+    const fx = await buildOrg({ label: 'd16csrf' });
+    const a = fx.members.assessor;
+    const b = fx.members.reviewer;
+    const page = await newPage(browser);
+    await page.goto('/login');
+    await page.evaluate(([k, v]) => localStorage.setItem(k, v), [keyOf(fx, a.userId), DRAFT()] as const);
+    await pressSignIn(page, b);
+    await expect(question(page)).toBeVisible();
+    const CSRF = /\/api\/auth\/csrf(\?|$)/;
+    await page.route(CSRF, (r) => r.fulfill({ status: 502, contentType: 'text/html', body: '<html><body>502 Bad Gateway</body></html>' }));
+    await page.getByRole('button', { name: AUTH_COPY.signOutAndLeave }).click();
+    await expect(page.getByRole('alert').filter({ hasText: ACCEPTANCES_COPY.stillSignedIn })).toBeVisible({ timeout: 30_000 });
+    await expect(question(page)).toBeVisible();
+    expect(new URL(page.url()).searchParams.has('error')).toBe(false);
+    expect(await draftKeys(page, a.userId)).toEqual([keyOf(fx, a.userId)]);
+    const res = await page.request.get('/account', { maxRedirects: 0 });
+    expect(res.status(), 'still signed in, as the line says').toBe(200);
+
+    await page.unroute(CSRF);
+    await page.getByRole('button', { name: AUTH_COPY.signOutAndLeave }).click();
+    await expect(page.locator('#email')).toBeVisible({ timeout: 30_000 });
+    expect(await draftKeys(page, a.userId)).toEqual([keyOf(fx, a.userId)]);
+    await page.goto('/account');
+    await expect(page).toHaveURL(/\/login/);
     await page.context().close();
   });
 });

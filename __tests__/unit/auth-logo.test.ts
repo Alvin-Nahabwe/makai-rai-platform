@@ -28,7 +28,7 @@ describe('the logo on S-01, S-02 and S-03', () => {
     expect(AUTH_COPY.logoAlt, 'the logo\'s accessible name, for the pages that still draw it').toBe('MAK-AI');
   });
 
-  it('NFR-PERF-02: the logo files are sized for the drawn 48 px height, at 1x and 2x, and small', () => {
+  it('NFR-PERF-02: the old logo files keep their sizes and stay small, and no rule draws them as .auth-logo any more', () => {
     expect(pngSize('public/logo-makai-252.png')).toEqual({ width: 252, height: 48 });
     expect(pngSize('public/logo-makai-504.png')).toEqual({ width: 504, height: 96 });
     expect(readFileSync('public/logo-makai-252.png').length).toBeLessThan(8_000);

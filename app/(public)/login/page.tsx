@@ -1,15 +1,11 @@
 import { Suspense } from 'react';
 import { AuthCard } from '@/components/auth/AuthCard';
-import { GateFrame, type GateStop } from '@/components/layout/GateFrame';
+import { GateFrame } from '@/components/layout/GateFrame';
 import { AUTH_COPY } from '@/lib/auth/copy';
-import { GATE_COPY } from '@/lib/shell/copy';
 import { pageTitle } from '@/lib/ui/title';
-import { LoginForm } from './LoginClient';
+import { LoginForm, LoginRoute } from './LoginClient';
 
 export const metadata = { title: pageTitle(AUTH_COPY.titles.signIn) };
-
-/** One stop: sign in. Too many sign-ins is a state of this page, on the same route (ruling L5-6). */
-const ROUTE: readonly GateStop[] = [{ label: GATE_COPY.stops.signIn, state: 'current' }];
 
 /**
  * S-01 Sign in (FR-ACC-05), in the public gate frame (plan 1B Task 2, ruling L5-6). The form is LoginClient.tsx's;
@@ -18,7 +14,9 @@ const ROUTE: readonly GateStop[] = [{ label: GATE_COPY.stops.signIn, state: 'cur
  */
 export default function LoginPage() {
   return (
-    <GateFrame variant="public" route={ROUTE}>
+    // The route is Sign in (ruling L5-6; too many sign-ins is a state of this page), then D16's question once the sign-in
+    // has worked (ruling L5-27): LoginRoute follows the form's step.
+    <GateFrame variant="public" routeSlot={<LoginRoute />}>
       <Suspense fallback={<AuthCard title={AUTH_COPY.titles.signIn}><p>{AUTH_COPY.loading}</p></AuthCard>}>
         <LoginForm />
       </Suspense>

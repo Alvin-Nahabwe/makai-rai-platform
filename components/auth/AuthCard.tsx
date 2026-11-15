@@ -1,7 +1,7 @@
 import type { ReactElement, ReactNode } from 'react';
 import './auth.css';
 
-export type AuthCardProps = { title: string; lead?: ReactNode; children: ReactNode; footer?: ReactNode };
+export type AuthCardProps = { title: ReactNode; lead?: ReactNode; children: ReactNode; footer?: ReactNode };
 
 /**
  * The content of a door page's card (plan 1B Task 2, lead's ruling L5-7): the page's one <h1>, its lead, the form, and the
