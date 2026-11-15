@@ -216,6 +216,17 @@
   font-size: 0.9375rem;
 }
 
+/* A phone: the card and its quotation keep more of the width for the words. */
+@media (width < 40rem) {
+  .reading-decision {
+    padding-inline: var(--space-4);
+  }
+
+  .reading-decision__reason {
+    padding-inline: var(--space-3);
+  }
+}
+
 /* One column: the way on fills the width, so the one primary action is an easy target with a thumb. */
 @media (width < 72.5rem) {
   .reading-aside__next .ui-button {

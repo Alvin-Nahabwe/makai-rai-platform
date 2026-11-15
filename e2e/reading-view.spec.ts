@@ -110,6 +110,18 @@ for (const role of ['viewer', 'reviewer'] as const) {
       await page.screenshot({ path: `test-results/reading-view/${role}-${width}x${height}.png` });
       await page.screenshot({ path: `test-results/reading-view/${role}-${width}x${height}-full.png`, fullPage: true });
     }
+    // The parts below the first view (the main column scrolls inside the shell, so a full-page capture stops at the fold),
+    // and the dark theme, for the design review.
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.locator('section[data-region="open-work"]').screenshot({ path: `test-results/reading-view/${role}-1280-open-work.png` });
+    await page.locator('[data-region="reading-aside"]').screenshot({ path: `test-results/reading-view/${role}-1280-aside.png` });
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await card.screenshot({ path: `test-results/reading-view/${role}-1280-card-dark.png` });
+    await page.locator('section[data-region="open-work"]').screenshot({ path: `test-results/reading-view/${role}-1280-open-work-dark.png` });
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.locator('section[data-region="open-work"]').screenshot({ path: `test-results/reading-view/${role}-375-open-work.png` });
+    await page.locator('[data-region="reading-aside"]').screenshot({ path: `test-results/reading-view/${role}-375-aside.png` });
     // At 375 the reading order is the card, what is still open, then the aside, then the guidance (the frame's order).
     const y = async (sel: string) => (await page.locator(sel).first().boundingBox())!.y;
     const order = [await y('section[data-region="current-decision"]'), await y('section[data-region="open-work"]'),

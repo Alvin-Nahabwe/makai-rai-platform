@@ -27,14 +27,15 @@ export type ReadingAsideProps = {
 
 /**
  * The eye beside the role note (directions/surfaces/viewer-reading.png). The kit has no eye among its 28 icons
- * (components/ui/types.ts IconName), and components/ui is not this lane's to change, so it is drawn here: the sketch's own
- * path, stroked in currentColor at the kit's weight, hidden from assistive technology like every kit icon.
+ * (components/ui/types.ts IconName), and components/ui is not this lane's to change, so it is drawn here from the kit's own
+ * family: Lucide's "eye" (ISC, components/ui/LICENSE-lucide.txt), stroked in currentColor at the kit's weight, hidden from
+ * assistive technology like every kit icon.
  */
 function EyeMark(): ReactElement {
   return (
     <svg className="reading-aside__eye" width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
       strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
-      <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" />
+      <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" />
       <circle cx={12} cy={12} r={3} />
     </svg>
   );
