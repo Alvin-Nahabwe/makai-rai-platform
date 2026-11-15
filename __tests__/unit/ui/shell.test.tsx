@@ -268,7 +268,7 @@ describe('the rail, ported from the sidebar (UX-02, UX-41)', () => {
 
   it('M-41 UX-26: the Sign out button sits inside the SignOutWithDraftsGuard slot, with the person\'s own id', () => {
     const source = readFileSync('components/layout/Rail.tsx', 'utf8');
-    expect(source).toMatch(/<SignOutWithDraftsGuard userId=\{shell\.userId\}>\s*<button type="button" className="shell-rail__signout"[\s\S]*?SHELL_COPY\.signOut[\s\S]*?<\/button>\s*<\/SignOutWithDraftsGuard>/);
+    expect(source).toMatch(/<SignOutWithDraftsGuard userId=\{shell\.userId\} onPhase=\{showSignOut\}>\s*<button type="button" className="shell-rail__signout"[\s\S]*?SHELL_COPY\.signOut[\s\S]*?<\/button>\s*<\/SignOutWithDraftsGuard>/);
     expect(rail('/orgs/a/dashboard')).toMatch(/<button type="button" class="shell-rail__signout">[\s\S]*?Sign out<\/button>/);
   });
 
@@ -327,8 +327,10 @@ describe('the rail, ported from the sidebar (UX-02, UX-41)', () => {
   it('1A Task 12 L2-66 S4: the rail\'s Sign out clears this person\'s last-project keys before signing out', () => {
     const source = readFileSync('components/layout/Rail.tsx', 'utf8');
     // Since ruling L5-11 the sign-out goes through signOutClearingDrafts, which also sweeps the keys and navigates only
-    // when the session ended; a refusal is logged by name and the person stays on the page.
-    expect(source).toMatch(/onClick=\{\(\) => \{\s*clearLastProjects\(shell\.userId\);\s*void signOutClearingDrafts\(shell\.userId, '\/login'\)\.catch\(/);
+    // when the session ended; a refusal is logged by name, the person stays on the page, and the rail says they are still
+    // signed in (__tests__/unit/sign-out-refused.test.tsx).
+    expect(source).toMatch(/onClick=\{\(\) => \{ void signOutFromRail\(shell\.userId, showSignOut\); \}\}/);
+    expect(source).toMatch(/clearLastProjects\(userId\);\s*try \{\s*await signOutClearingDrafts\(userId, '\/login'\);\s*\} catch/);
   });
 });
 

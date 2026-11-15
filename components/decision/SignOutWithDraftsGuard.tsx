@@ -2,13 +2,38 @@
 
 import { useEffect, useRef, useState, type MouseEvent, type ReactElement, type ReactNode } from 'react';
 import { signOutClearingDrafts } from '@/lib/client/signOutClearingDrafts';
+import type { SignOutPhase } from '@/lib/client/signOutPress';
 import { Button } from '@/components/ui/Button';
 import '@/components/ui/buttonStyles';
 import { openDraftStore } from '@/lib/client/drafts';
 import { DRAFTS_COPY } from '@/lib/decision/drafts/copy';
 import { clearLastProjects } from '@/lib/client/lastProject';
 
-export type SignOutWithDraftsGuardProps = { userId: string; children: ReactNode };
+export type SignOutWithDraftsGuardProps = {
+  userId: string;
+  children: ReactNode;
+  /** Hears `working` when Delete them and sign out starts and `stillSignedIn` when the sign-out is refused (the rail's status line speaks it). */
+  onPhase?: (phase: SignOutPhase) => void;
+};
+
+/**
+ * Deletes this account's drafts and last-project keys, then signs out. True when the sign-out went on (the browser is
+ * leaving); false when it was refused (signOutClearingDrafts rejected: no navigation, still signed in), reported to
+ * `onPhase` as `stillSignedIn`. The drafts are already gone by then (M-41).
+ */
+export async function deleteDraftsAndSignOut(userId: string, onPhase?: (phase: SignOutPhase) => void): Promise<boolean> {
+  onPhase?.('working');
+  openDraftStore()?.purgeAccount(userId);
+  clearLastProjects(userId);
+  try {
+    await signOutClearingDrafts(userId, '/login');
+    return true;
+  } catch (err: unknown) {
+    console.warn('drafts guard: a sign-out press was rejected', err instanceof Error ? err.name : typeof err);
+    onPhase?.('stillSignedIn');
+    return false;
+  }
+}
 
 /** M-41 (SRS 7.5.7), without its two bracketed actions, which are the buttons below it (answer Q11). */
 export const m41 = (n: number): string => DRAFTS_COPY.signOut.warning(n);
@@ -24,7 +49,7 @@ export const m41 = (n: number): string => DRAFTS_COPY.signOut.warning(n);
  * runs no client code, so it keeps them (R-53, SRS line 5907), and the next account's sign-in removes them (ACC-b's
  * `purgeOtherAccounts`).
  */
-export function SignOutWithDraftsGuard({ userId, children }: SignOutWithDraftsGuardProps): ReactElement {
+export function SignOutWithDraftsGuard({ userId, children, onPhase }: SignOutWithDraftsGuardProps): ReactElement {
   const [count, setCount] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   // An alert dialog takes focus when it opens, so a keyboard or screen-reader user is at the warning, not behind it.
@@ -41,13 +66,9 @@ export function SignOutWithDraftsGuard({ userId, children }: SignOutWithDraftsGu
 
   async function deleteAndSignOut(): Promise<void> {
     setBusy(true);
-    openDraftStore()?.purgeAccount(userId);
-    clearLastProjects(userId);
-    try {
-      await signOutClearingDrafts(userId, '/login');
-    } catch (err: unknown) {
-      // Not signed out (ruling L5-11): no navigation. The drafts are already gone, so the warning closes (d2-sfh-2 finding 2).
-      console.warn('drafts guard: a sign-out press was rejected', err instanceof Error ? err.name : typeof err);
+    // Not signed out (ruling L5-11): no navigation. The drafts are already gone, so the warning closes (d2-sfh-2 finding 2)
+    // and the rail's status line says the person is still signed in.
+    if (!(await deleteDraftsAndSignOut(userId, onPhase))) {
       setBusy(false);
       setCount(null);
     }

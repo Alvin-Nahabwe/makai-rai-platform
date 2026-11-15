@@ -1,10 +1,13 @@
 'use client';
 
 import { useState, useSyncExternalStore, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { signOutClearingDrafts } from '@/lib/client/signOutClearingDrafts';
 import { Icon } from '@/components/ui/Icon';
+import { StatusRegion } from '@/components/ui/StatusRegion';
+import { signOutMessage, type SignOutPhase } from '@/lib/client/signOutPress';
 import OrgSwitcher from '@/components/layout/OrgSwitcher';
 import ThemeToggle from '@/components/layout/ThemeToggle';
 import { ShellPlace } from '@/components/layout/ShellPlace';
@@ -17,6 +20,23 @@ import { SHELL_COPY } from '@/lib/shell/copy';
 import { PRODUCT_NAME } from '@/lib/ui/title';
 import type { RailItem, ShellData } from '@/lib/shell/types';
 import './shell.css';
+
+/**
+ * The rail's Sign out press. `show` hears `working` first (it empties the line, so a second identical refusal is announced
+ * again), then `stillSignedIn` when signOutClearingDrafts REJECTS (SignOutNotEnded, SignOutTimedOut or the request's own
+ * error: the session did not end and nothing navigated). Success leaves the phase at `working`, as the browser is leaving.
+ * The kind of error is logged, never its message: the callbackUrl can hold a token.
+ */
+export async function signOutFromRail(userId: string, show: (phase: SignOutPhase) => void): Promise<void> {
+  show('working');
+  clearLastProjects(userId);
+  try {
+    await signOutClearingDrafts(userId, '/login');
+  } catch (err: unknown) {
+    console.warn('rail: a sign-out press was rejected', err instanceof Error ? err.name : typeof err);
+    show('stillSignedIn');
+  }
+}
 
 function Item({ item }: { item: RailItem }) {
   return (
@@ -60,6 +80,9 @@ function Item({ item }: { item: RailItem }) {
 export default function Rail({ shell, project }: { shell: ShellData; project?: ReactNode }) {
   const pathname = usePathname();
   const addressSlug = currentOrgSlug(pathname);
+  const [signOutPhase, setSignOutPhase] = useState<SignOutPhase>('idle');
+  // `working` is committed at once, so the line is empty in the page before a later refusal fills it again.
+  const showSignOut = (next: SignOutPhase) => { if (next === 'working') flushSync(() => setSignOutPhase(next)); else setSignOutPhase(next); };
   const [lastSeen, setLastSeen] = useState<string | null>(null);
   const seen = rememberOrgSlug(lastSeen, pathname, shell.orgs);
   if (seen !== lastSeen) setLastSeen(seen);
@@ -119,17 +142,16 @@ export default function Rail({ shell, project }: { shell: ShellData; project?: R
           {items.filter((i) => i.key === 'account').map((item) => <Item key={item.key} item={item} />)}
         </ul>
         <div className="shell-rail__actions">
-          <SignOutWithDraftsGuard userId={shell.userId}>
-            <button type="button" className="shell-rail__signout" onClick={() => {
-              clearLastProjects(shell.userId);
-              void signOutClearingDrafts(shell.userId, '/login').catch((err: unknown) => { console.warn('rail: a sign-out press was rejected', err instanceof Error ? err.name : typeof err); });
-            }}>
+          <SignOutWithDraftsGuard userId={shell.userId} onPhase={showSignOut}>
+            <button type="button" className="shell-rail__signout" onClick={() => { void signOutFromRail(shell.userId, showSignOut); }}>
               <Icon name="log-out" />
               {SHELL_COPY.signOut}
             </button>
           </SignOutWithDraftsGuard>
           <ThemeToggle />
         </div>
+        {/* Always in the page, empty until a sign-out is refused (the same sentence as S-05's), so it is announced when it fills. */}
+        <StatusRegion message={signOutMessage(signOutPhase)} tone="error" />
       </div>
     </nav>
   );
