@@ -128,9 +128,10 @@ test('at 375 the column follows the main content and shows the same line, folded
   await expect(row(page, 'Q-PP-04')).toContainText(STAGE_LIST_COPY.line.youAreHere);
   await expect(col.locator('details.route-line__run')).toHaveCount(2);
   await expect(col.getByRole('link', { name: QUESTION_COPY.stage.allQuestionsInStage, exact: true })).toBeVisible();
-  const finding = (await page.locator('section[data-region="finding-link"]').boundingBox())!;
+  // A writer's finding link sits in the decision card (no separate finding-link section), so the main content is measured whole.
+  const main = (await page.locator('.question-workspace__main').boundingBox())!;
   const c = (await col.boundingBox())!;
-  expect(c.y, 'the column comes after the main content').toBeGreaterThanOrEqual(finding.y + finding.height);
+  expect(c.y, 'the column comes after the main content').toBeGreaterThanOrEqual(main.y + main.height);
   await expectNoHorizontalScroll(page);
 });
 
