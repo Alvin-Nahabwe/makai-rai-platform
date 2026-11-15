@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import ControlsPage from '@/app/(authenticated)/explore/controls/page';
+import { requireIdentity } from '@/lib/auth/identity';
 import { runningContent } from '@/lib/content/loader';
 import { GUIDANCE_COPY } from '@/lib/guidance/copy';
 import { TERM_CONTROL } from '@/lib/vocabulary/terms';
@@ -19,6 +20,14 @@ vi.mock('@/lib/content/resources', async () => {
 const GUARD_PATTERNS = ['-e', '["\'`]/templates/', '-e', '["\'`]/notebooks/', '-e', 'notebooks/technical', '-e', 'NOTEBOOK_BASE_URL'];
 
 describe('S-27, the controls page', () => {
+  it('UX-01 FR-ACC-04 (L-1): S-27 runs the gates itself, and a redirect from them stops the page before it renders', async () => {
+    vi.mocked(requireIdentity).mockClear();
+    await ControlsPage();
+    expect(requireIdentity).toHaveBeenCalledTimes(1);
+    vi.mocked(requireIdentity).mockRejectedValueOnce(new Error('NEXT_REDIRECT'));
+    await expect(ControlsPage()).rejects.toThrow('NEXT_REDIRECT');
+  });
+
   it('FR-SUG-04 FR-SUG-05 FR-SUG-06: S-27 lists every control with only released notebooks and passed templates', async () => {
     const html = renderToStaticMarkup(await ControlsPage());
     const c = runningContent();

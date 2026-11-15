@@ -668,7 +668,8 @@ export async function withdrawFinding(
  * R11, security review 0.7.0 L-2; S-14 and S-15 already hide the action then), and the request names the decision version
  * `findingsToCloseByDecision` gives for it, read in the same transaction (else 422 on `decisionVersionId`, one fixed text
  * for a version that does not qualify, is stale or is of another organisation). It inserts version 1 of a new mitigation:
- * kind `decision_withdrawn` for a withdrawal, otherwise `decision_changed`; status done; owned by the person acting; due today (East Africa Time); no `what`; `closureDecisionVersionId` the version.
+ * kind `decision_withdrawn` for a withdrawal, otherwise `decision_changed`; status done; owned by the person acting; due
+ * today (East Africa Time); no `what`; `closureDecisionVersionId` the version.
  * FINDING_CLOSED is logged after the commit when it closed the finding.
  */
 export async function closeByDecision(

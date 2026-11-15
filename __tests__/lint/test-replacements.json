@@ -2158,5 +2158,13 @@
     "property": "A decision version whose closing record exists is not offered to close its finding again, and a second close by it answers 422 on decisionVersionId and writes nothing. The old case reached that state by closing while a Planned mitigation kept the finding open, which route 11 now refuses (route decision R11, security review 0.7.0 L-2: 409 finding_has_open_work); the case now reaches it the only way left, closing the finding and then reopening it.",
     "proof": "The case closes the finding by version 2, reopens it, requires the state open, findingsToCloseByDecision empty, and the second close by version 2 rejected with status 422 on decisionVersionId with the mitigation count unchanged. The refusal itself is pinned by __tests__/integration/findings-close-by-decision.test.ts::FR-FND-06 (R11, L-2): while a mitigation is Planned or In progress the close answers 409 finding_has_open_work with the sentence and writes nothing, which fails with the server check removed (shown in the lane 7 close).",
     "task": "lane 7 R11"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/integration/findings-routes.test.ts::B2 (the server as it stands): a close while a mitigation is Planned answers 201, writes the record, and the finding stays open",
+    "replacedBy": "__tests__/integration/findings-routes.test.ts::R11 (B2, L-2): a close while a mitigation is Planned answers 409 finding_has_open_work with the sentence, writes nothing, and the finding stays open",
+    "property": "Route 11 posted for an open shortfall finding whose mitigation is Planned leaves the finding open. The old case pinned the server as it stood in 0.7.0 (201 and a closing record written); route decision R11 (security review 0.7.0 L-2) makes the server refuse that close, so the case now pins the refusal through the route handler: 409, the body {error: the close box's sentence, code: finding_has_open_work}, no row written.",
+    "proof": "The case posts route 11 through the real handler as an assessor for a finding with one Planned mitigation and a qualifying done decision, and requires status 409, the JSON body to equal exactly { error: FINDINGS_COPY.failures.openWork, code: 'finding_has_open_work' } (FINDINGS_COPY.failures.openWork is the close box's FINDINGS_COPY.finding.closeBlocked, asserted equal in findings-close-by-decision.test.ts), mitigation_versions still 1 (the Planned one), and openShortfallForQuestion still naming the finding. The stuck record the old case produced is still built for the page tests by __tests__/helpers/recordFixture.ts addPreR11ClosingRecord.",
+    "task": "lane 7 R11"
   }
 ]
