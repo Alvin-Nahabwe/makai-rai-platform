@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactElement } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { EvidenceBlock } from '@/components/evidence/EvidenceBlock';
 import { ConflictView } from '@/components/decision/ConflictView';
@@ -8,13 +9,16 @@ import { DecisionFields, FIELD_LABEL, FIELD_TARGET } from '@/components/decision
 import { SaveStatus } from '@/components/decision/SaveStatus';
 import { Button } from '@/components/ui/Button';
 import { Callout } from '@/components/ui/Callout';
+import { Definition } from '@/components/ui/Definition';
 import { decisionFormNote } from '@/lib/authz/permissionNotes';
 import { signInAgainHref } from '@/lib/auth/idle';
 import { openDraftStore, type DraftStore, type StoredDraft } from '@/lib/client/drafts';
 import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafeWrite';
-import { OUTSIDE_ROLE_LABELS, problemSummary } from '@/lib/decision/copy';
+import { FINDING_NOTE, OUTSIDE_ROLE_LABELS, STATUS_OPTIONS, problemSummary } from '@/lib/decision/copy';
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
 import { EVIDENCE_COPY } from '@/lib/evidence/copy';
+import { QUESTION_COPY } from '@/lib/question/copy';
+import { TERM_FINDING } from '@/lib/vocabulary/terms';
 import { formatTime } from '@/lib/format/dates';
 import { draftErrors, draftFromCurrent, draftHeldForGate, draftKeyFor, isDecision, isDraftValue, keptEvidenceLine, toSaveBody, type DecisionDraft } from '@/lib/question/draft';
 import type { QuestionPanelData } from '@/lib/question/panel';
@@ -24,7 +28,14 @@ import type { DecisionVersionView, EvidenceItemView } from '@/types/api';
 import type { FieldError, UtcInstant } from '@/types/record';
 import '@/components/ui/buttonStyles';
 
-export type DecisionFormProps = { data: QuestionPanelData };
+/** The way on beside Save (R2): the next question that applies in this stage, or null on the stage's last question. */
+export type NextQuestion = { questionId: string; text: string; href: string; number: number; total: number };
+
+/**
+ * `next`, `stageHref` and `openFindings` come from the decision card (DecisionCard.tsx); without them (a unit test of the
+ * form alone) the save bar has no way on and the consequence line counts no open finding.
+ */
+export type DecisionFormProps = { data: QuestionPanelData; next?: NextQuestion | null; stageHref?: string; openFindings?: number };
 
 const NO_RETRY: RetryState = { requestId: null, sentBody: null };
 const F = DECISION_FORM_COPY;
@@ -55,15 +66,33 @@ const fileList = (names: readonly string[]) => names.join(', ');
  * form. The evidence block lives in this client tree, so its callbacks are this form's (EVD RE-1), and it is
  * remounted with the current version's id so a save that made a new version gives it the new `initial` (EVD RE-4).
  */
-export function DecisionForm({ data }: DecisionFormProps): ReactElement | null {
+export function DecisionForm({ data, next = null, stageHref, openFindings = 0 }: DecisionFormProps): ReactElement | null {
   if (!data.canWrite) {
     const note = decisionFormNote(data.viewer.role, data.projectArchived);
     return note === null ? null : <p data-permission-note>{note}</p>;
   }
-  return <WritableDecisionForm data={data} />;
+  return <WritableDecisionForm data={data} next={next} stageHref={stageHref} openFindings={openFindings} />;
 }
 
-function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
+/**
+ * What this save will do (R2; spec 9.3 item 6), as one sentence, then the version it becomes: the base it is sent on plus
+ * one. The words are DECISION_FORM_COPY.consequence's, each true of lib/data/findings.ts (that file's comment says how).
+ * `finding` is true when the sentence uses the word, so its definition goes beside it.
+ */
+function consequenceOf(d: DecisionDraft, data: QuestionPanelData, base: number | null, openFindings: number): { text: string; finding: boolean } {
+  const C = F.consequence;
+  const version = C.version((base ?? 0) + 1);
+  if (data.question.type === 'gate') {
+    return { text: d.scopeAnswer === null ? version : `${C.scope[d.scopeAnswer]} ${version}`, finding: false };
+  }
+  const label = STATUS_OPTIONS.find((o) => o.value === d.status)?.label;
+  if (d.status === null || label === undefined) return { text: `${FINDING_NOTE} ${version}`, finding: true };
+  const open = openFindings > 0;
+  if (d.status === 'partly' || d.status === 'not_yet') return { text: `${open ? C.keepsOpen(label) : C.raises(label)} ${version}`, finding: true };
+  return { text: `${open ? C.closesNot(label) : C.raisesNone(label)} ${version}`, finding: open };
+}
+
+function WritableDecisionForm({ data, next = null, stageHref, openFindings = 0 }: DecisionFormProps): ReactElement {
   const router = useRouter();
   const key = draftKeyFor(data);
   const currentNumber = data.current?.versionNumber ?? null;
@@ -458,6 +487,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
 
   const signInHref = signInAgainHref(value.href, '');
   const waitingFiles = [...uploads.uploading, ...uploads.failed];
+  const consequence = consequenceOf(value, data, base, openFindings);
 
   return (
     // SC 2.4.11: a control that takes focus anywhere in the answer form, the evidence block included, is brought wholly
@@ -534,6 +564,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
             unaddedLinkRefusals={linkRefusals}
             initialLink={typedLink}
             onLinkInput={(l) => setTypedLink((o) => (o.url === l.url && o.label === l.label ? o : l))}
+            examples={data.runningQuestion.evidenceExamples} decisionCard
           />
         </section>
 
@@ -567,8 +598,21 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
         ) : null}
         </div>
 
+        {/* R2: one line on what this save will do, after the fields and the evidence and before Save. Not a live region: it
+            follows the choice as the person makes it, and the save's own status line announces what happened. */}
+        <div className="decision-consequence">
+          <svg className="decision-consequence__icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
+            <circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7.5v.5" />
+          </svg>
+          <div>
+            <p data-consequence>{consequence.text}</p>
+            {consequence.finding ? <Definition of={TERM_FINDING} as="p" /> : null}
+          </div>
+        </div>
+
         {/* tabIndex -1: after a Retry's answer removes the Retry, focus comes here, beside the status line, not to the page. */}
         <div className="decision-save-bar" ref={saveBar} tabIndex={-1}>
+          <div className="decision-save-bar__row">
           <div className="form-actions">
             <Button variant="primary" type="submit" disabled={saving}>{F.save}</Button>
             {status?.next === 'retry' || (status === null && restoredPressed) || (saving && retrying)
@@ -577,6 +621,18 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
             {/* Native links in the kit's button classes: ButtonLink is next/link, and the gate link carries data-gate-link. */}
             {status?.next === 'sign_in' ? <a className="ui-button ui-button--secondary" href={signInHref}>{F.signInAgain}</a> : null}
             {status?.next === 'go' && status.action !== undefined ? <a className="ui-button ui-button--secondary" href={status.action.href} data-gate-link>{status.action.label}</a> : null}
+          </div>
+          {/* R2, R9: the way on beside Save, a quiet link, never a second orange control. On the stage's last question, the
+              line that says so and All questions. */}
+          {next !== null ? (
+            <Link className="decision-next" href={next.href}>
+              <span className="decision-next__words">{F.card.next(next.text)}</span><span className="decision-next__position">{F.card.position(next.number, next.total)}</span>
+            </Link>
+          ) : stageHref !== undefined ? (
+            <p className="decision-next decision-next--last">
+              {QUESTION_COPY.foot.last} <Link href={stageHref}>{QUESTION_COPY.nav.allQuestions}</Link>
+            </p>
+          ) : null}
           </div>
           <SaveStatus status={status} draftSavedAt={draftSavedAt} storageUnavailable={storageUnavailable} />
           {leftOut.length > 0 && status !== null && (status.id === 'M-03' || status.id === 'M-04')

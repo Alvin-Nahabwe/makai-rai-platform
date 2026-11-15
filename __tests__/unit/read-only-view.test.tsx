@@ -169,16 +169,18 @@ describe('the read-only question page (plan 1C Task 7)', () => {
     for (const s of ['Grace W.', 'Run the rules-engine baseline', 'Have you evaluated']) expect(overdue.join('')).not.toContain(s);
   });
 
-  it('7.2: the Done mark draws no tick', async () => {
+  it('7.2 R8: the Done mark is the filled green check, a disc and a check painted by CSS, with its word', async () => {
     const html = await render(VIEWER);
     const decision = html.match(/<section data-region="current-decision"[\s\S]*?<\/section>/)![0];
     expect(decision).toContain('data-mark-kind="done"');
     const svg = /<svg[^>]*>([\s\S]*?)<\/svg>/.exec(decision)![1];
-    // The kit's shape for done (status-mark.test.tsx's EXPECTED_SHAPES): one filled circle, no other primitive, so no tick.
+    // The kit's shape for done (status-mark.test.tsx's EXPECTED_SHAPES; owner's ruling R8, 15 Nov 2026): the disc and the
+    // check, each painted by its own class in StatusMark.css, no colour in the markup.
     const shapes = [...svg.matchAll(/<(\w+)\b/g)].map((m) => m[1]);
-    expect(shapes).toEqual(['circle']);
-    expect(svg).toMatch(/r="8"/);
-    expect(svg).toMatch(/fill="currentColor"/);
+    expect(shapes).toEqual(['circle', 'path']);
+    expect(svg).toMatch(/<circle class="ui-mark__done-disc"/);
+    expect(svg).toMatch(/<path class="ui-mark__done-check"/);
+    expect(svg).not.toMatch(/#[0-9a-f]{3,6}|rgb\(|green/i);
     expect(textOf(decision)).toContain('Done');
   });
 

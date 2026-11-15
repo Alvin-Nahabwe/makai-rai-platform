@@ -99,4 +99,8 @@ export const EVIDENCE_COPY = Object.freeze({
     zip: 'ZIP',
     office: 'Office document',
   }),
+  /** The decision card (spec 9.3 item 5; design spec D11): the question's own examples, the stored sentence, and an empty list. */
+  examples: 'For example:',
+  stored: 'Your file is stored as it is. The platform checks its type and records a fingerprint. It does not open or run the file.',
+  noneYet: 'None yet.',
 });

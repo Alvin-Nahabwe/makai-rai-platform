@@ -1,0 +1,158 @@
+/*
+ * "Your decision" (owner's ruling R2; the locked sketch's form{}, .fh and .saved): one white card on the ground, a 1 px
+ * container border, the surface radius, 24 px padding and the kit's soft surface shadow. The header holds the heading and,
+ * in its corner, the saved mark; who decided and entered, and the history link, sit quietly under it.
+ */
+.decision-card {
+  box-sizing: border-box;
+  padding: var(--space-6);
+  border: 1px solid var(--color-border-container);
+  border-radius: var(--radius-surface);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-surface);
+}
+
+.decision-card__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  margin-block-end: var(--space-2);
+}
+
+.decision-card__head > h2 {
+  margin: 0;
+  font-size: var(--font-size-h2);
+}
+
+.decision-card__none {
+  margin: 0;
+  font-size: var(--font-size-small);
+  color: var(--color-ink-muted);
+}
+
+/*
+ * The corner (spec 7.3, every part at every width). Wide, the header is a grid and the saved mark's parts are its items:
+ * the heading, then in the corner the saved shape and "Saved as version N" in the saved green (the sketch's .saved), the
+ * decided and saved dates under them, and the line on the platform and the history across the card, quiet, with who
+ * decided and entered under it. The mark keeps its own markup (SavedMark); only its box steps out (display: contents).
+ */
+@media (min-width: 769px) {
+  .decision-card__head {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    column-gap: var(--space-2);
+    row-gap: 0;
+    align-items: baseline;
+  }
+
+  .decision-card__head > h2 {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    align-self: start;
+  }
+
+  .decision-card__corner,
+  .decision-card__corner .ui-saved {
+    display: contents;
+  }
+
+  .decision-card__corner > .decision-card__none {
+    grid-column: 2 / -1;
+    grid-row: 1;
+    text-align: end;
+  }
+
+  .decision-card__corner .ui-saved__shape {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: center;
+    justify-self: end;
+    color: var(--color-saved);
+  }
+
+  .decision-card__corner .ui-saved__shape svg {
+    display: block;
+    inline-size: 18px;
+    block-size: 18px;
+  }
+
+  .decision-card__corner .ui-saved__title {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-saved);
+  }
+
+  .decision-card__corner .ui-saved__when {
+    grid-column: 2 / -1;
+    grid-row: 2;
+    text-align: end;
+    font-size: var(--font-size-small);
+    color: var(--color-ink-muted);
+  }
+
+  .decision-card__corner .ui-saved__line {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    margin-block-start: var(--space-3);
+    font-size: var(--font-size-small);
+    color: var(--color-ink-muted);
+  }
+}
+
+.decision-card__meta {
+  margin-block-end: var(--space-6);
+  font-size: var(--font-size-small);
+  color: var(--color-ink-muted);
+}
+
+.decision-card__meta > p {
+  margin: 0;
+}
+
+.decision-card__meta a {
+  color: var(--color-link);
+}
+
+/* More actions, quiet, after the Save row. */
+.decision-card__more {
+  margin-block-start: var(--space-4);
+}
+
+/*
+ * A phone (spec 7.3: "the most visible thing after the question"; workspace-phone-saved.png): the saved mark is the full
+ * block, first in the card, above the heading; the card keeps 16 px of padding so the fields keep their width.
+ */
+@media (max-width: 768px) {
+  .decision-card {
+    padding: var(--space-4);
+  }
+}
+
+/* A small phone (the page keeps 16 px each side at 768 px and below, app/globals.css): the card runs to the screen's edges, its
+   side borders and corners dropped, so its 16 px padding stands where the page's was and the fields, the error summary
+   and an open withdrawal keep the whole width of the screen (SC 1.4.10 at 320 px; register D-398 item 1). */
+@media (max-width: 640px) {
+  .decision-card {
+    margin-inline: calc(-1 * var(--space-4));
+    border-inline: 0;
+    border-radius: 0;
+  }
+}
+
+@media (max-width: 768px) {
+
+  .decision-card__head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .decision-card__corner {
+    order: -1;
+  }
+
+}

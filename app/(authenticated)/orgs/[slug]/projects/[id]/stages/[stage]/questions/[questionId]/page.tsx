@@ -11,19 +11,18 @@ import { eatDate } from '@/lib/followup/overdue';
 import { decisionFormNote } from '@/lib/authz/permissionNotes';
 import { OpenWorkList } from '@/components/question/OpenWorkList';
 import { STAGES, type Stage } from '@/types/record';
-import { questionApplies, runningContent } from '@/lib/content/loader';
+import { questionApplies, questionsInStage, runningContent } from '@/lib/content/loader';
 import { ArchivedBanner } from '@/components/project/ArchivedBanner';
 import { QuestionContent } from '@/components/question/QuestionContent';
 import { CurrentDecision } from '@/components/decision/CurrentDecision';
 import { SealNote } from '@/components/review/SealNote';
-import { DecisionForm } from '@/components/decision/DecisionForm';
+import { DecisionCard } from '@/components/decision/DecisionCard';
 import { FocusOnArrival } from '@/components/decision/FocusOnArrival';
-import { WithdrawDecision } from '@/components/decision/WithdrawDecision';
 import { QuestionFindingLink } from '@/components/findings/QuestionFindingLink';
 import { SuggestedControls, suggestionCount } from '@/components/suggestions/SuggestedControls';
 import { isReworded } from '@/lib/question/reworded';
 import { STAGE_TITLE } from '@/lib/question/stageList';
-import { canWithdrawVersion, questionHref } from '@/lib/question/draft';
+import { questionHref } from '@/lib/question/draft';
 import { DECISION_COPY } from '@/lib/decision/copy';
 import { QUESTION_COPY } from '@/lib/question/copy';
 import { orNotFound } from '@/lib/auth/titleGate';
@@ -158,41 +157,27 @@ export function QuestionPanelRegions({ data, openWork, route }: { data: Question
           </section>
           {/* A person who may record sees the regions as before; a reader, the reading regions (R4). The main column keeps
               four children in both, each in the writer's place, so React's ids inside the form (useId) stay as they were. */}
-          {reading === null ? (
-            <section data-region="current-decision" aria-labelledby="s12-current-decision">
-              <h2 id="s12-current-decision">{Q.headings.current}</h2>
-              <CurrentDecision
-                orgSlug={data.orgSlug}
-                current={data.current}
-                historyCount={data.historyCount}
-                historyHref={historyHref}
-                seals={data.seals}
-                isScopeQuestion={question.type === 'gate'}
-              />
-            </section>
-          ) : reading.decision}
+          {/* Lane 2 stub: lane 1's DecisionSlot replaces this at merge. */}
+          {reading === null ? null : reading.decision}
           {reading === null ? sealNote : reading.openWorkAndNote}
           {reading === null ? (
-            <section data-region="answer-form" aria-labelledby="s12-answer-form">
-              <h2 id="s12-answer-form">{Q.headings.record}</h2>
-              <DecisionForm key={`${data.projectId}:${question.id}`} data={data} />
-              {/* Mounted whenever there is a current version, with the permission as a prop, so after a withdrawal it stays to
-                  say "Withdrawn..." and to take focus (F12); it shows the More menu only while it can act. */}
-              {data.current !== null ? (
-                <WithdrawDecision
-                  key={question.id} orgSlug={data.orgSlug} projectId={data.projectId} stage={data.stage} questionId={question.id}
-                  current={data.current} canWithdraw={canWithdrawVersion(data.viewer.role, data.viewer.userId, data.current, data.projectArchived)} inMoreMenu
-                />
-              ) : null}
-            </section>
+            <DecisionCard
+              data={data} stageHref={stageHref} openFindingsOnQuestion={data.openFinding === null ? 0 : 1}
+              next={nextId === null ? null : {
+                questionId: nextId, text: nextQuestionText(nextId), href: questionHref(data, nextId), total,
+                number: questionsInStage(runningContent(), data.stage).findIndex((q) => q.id === nextId) + 1,
+              }}
+            />
           ) : sealNote}
           {/* The way on after a save at the foot of a long page (workshop walk S9): a paragraph, so the page keeps one navigation landmark. */}
-          <p className="question-foot" data-region="way-on">
-            {nextId !== null
-              ? <Link href={questionHref(data, nextId)}>{Q.foot.next(nextQuestionText(nextId))}</Link>
-              : <span>{Q.foot.last}</span>}
-            <Link href={stageHref}>{Q.nav.allQuestions}</Link>
-          </p>
+          {reading === null ? null : (
+            <p className="question-foot" data-region="way-on">
+              {nextId !== null
+                ? <Link href={questionHref(data, nextId)}>{Q.foot.next(nextQuestionText(nextId))}</Link>
+                : <span>{Q.foot.last}</span>}
+              <Link href={stageHref}>{Q.nav.allQuestions}</Link>
+            </p>
+          )}
         </div>
         <div className="question-workspace__guide">
           {/* The guidance of the running wording (FR-CNT-08, ruling on SPEC-1), as an aside (plan 1C decision C1, cut). */}

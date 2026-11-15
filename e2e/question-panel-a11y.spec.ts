@@ -78,6 +78,9 @@ test('NFR-A11Y-02: J-05 by keyboard alone: status, reason, decided by, Today, Sa
   await page.keyboard.type('Compared a rule-based alert with the model, by keyboard.');
   await tabTo(page, 'Decided by', (e) => e.tag === 'select' && e.label === 'Decided by (required)');
   await expectFocusVisibleAndUncovered(page);
+  // Decided by starts empty on a first decision (spec 9.3 item 4, owner OQ1 (a)): typing chooses the person, "You (...)".
+  await page.keyboard.type('You');
+  await expect(page.locator('#decision-decided-by option:checked')).toHaveText(/^You \(/);
   await tabTo(page, 'Today', (e) => e.tag === 'button' && e.name === 'Today');
   await expectFocusVisibleAndUncovered(page);
   await page.keyboard.press('Enter');
@@ -111,6 +114,8 @@ for (const height of [800, 568]) test(`SPEC-2 W-3 NFR-A11Y-02 SC 2.4.11: at 320 
     // The first edit adds the unsaved line to the bar, which grows over the field that has focus: it must be scrolled clear.
     if (what === 'the first status radio') { await page.keyboard.press('Space'); await expectFocusVisibleAndUncovered(page); }
     if (what === 'the reason') await page.keyboard.type('Compared a rule-based alert with the model, at 320 px.');
+    // Decided by starts empty on a first decision (owner OQ1 (a)): typing chooses the person, "You (...)".
+    if (what === 'Decided by') await page.keyboard.type('You');
     if (what === 'Today') await page.keyboard.press('Enter');
   }
   await page.keyboard.press('Enter');

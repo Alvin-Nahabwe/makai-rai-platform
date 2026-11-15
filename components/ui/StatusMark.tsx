@@ -16,9 +16,13 @@ export type StatusMarkProps = {
 const RING = { cx: 12, cy: 12, r: 8 } as const;
 const SLASH = <line x1={6.3} y1={17.7} x2={17.7} y2={6.3} stroke="currentColor" strokeWidth={2} strokeLinecap="round" />;
 
-/** The shape of each kind (plan 1A, StatusMark): viewBox 24, all in currentColor, so the colour comes from CSS alone. */
+/**
+ * The shape of each kind (plan 1A, StatusMark): viewBox 24, the colour from CSS alone. Every kind is drawn in currentColor
+ * but done, which is the sketch's filled green check (owner's ruling R8, 15 Nov 2026, over spec D4): a disc and a check,
+ * each painted by its own class in StatusMark.css, so the green holds wherever the mark is drawn.
+ */
 const SHAPES: Readonly<Record<StatusMarkKind, ReactElement>> = {
-  done: <circle {...RING} fill="currentColor" />,
+  done: <><circle className="ui-mark__done-disc" cx={12} cy={12} r={9} /><path className="ui-mark__done-check" d="M8 12.5l2.7 2.7L16 9.8" fill="none" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" /></>,
   partly: <><circle {...RING} fill="none" stroke="currentColor" strokeWidth={2} /><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" /></>,
   not_yet: <circle {...RING} fill="none" stroke="currentColor" strokeWidth={2.5} />,
   not_applicable: <><circle {...RING} fill="none" stroke="currentColor" strokeWidth={2} />{SLASH}</>,
@@ -47,7 +51,7 @@ export function MarkShape({ kind, size = 16 }: { kind: StatusMarkKind; size?: 16
   );
 }
 
-/** A status as a shape and its words, in ink (spec 7.2). There is no tick and no colour per status. */
+/** A status as a shape and its words (spec 7.2): ink for every status but done, the filled green check (R8). */
 export function StatusMark({ kind, size = 16, words = 'visible', noEvidence = false, scopeAnswer }: StatusMarkProps): ReactElement {
   return (
     <span className={`ui-mark ui-mark--${kind}`} data-mark-kind={kind}>

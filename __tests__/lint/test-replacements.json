@@ -2150,5 +2150,45 @@
     "property": "The in-page link down to the suggestions shows exactly while the guidance (and the suggestions in it) is not beside the form, is a target of at least 24 by 24 pixels, and keeps a visible focus ring; it is hidden by the same media query that puts the guidance beside the form in components/question/workspace.css.",
     "proof": "With the route column (owner's decision of 14 November 2026) the guidance sits beside the form only from 90rem; from 72.5rem to under 90rem it is below the form. The case now requires `@media (width >= 90rem) { .question-content__jump { display: none;` in QuestionContent.css and the same query in workspace.css opening the three-column grid (`grid-template-columns: minmax(16rem, 1fr) minmax(0, 2fr) minmax(16rem, 1fr); grid-template-areas: \"route main guide\";`), in place of the 72.5rem pair; the 24 px, focus-ring, colour-role and no-75rem expectations are unchanged. Seen RED on the old pattern after the CSS moved to 90rem, GREEN with the new one; e2e/question-frame.spec.ts sees the link visible at 1160 and hidden at 1440.",
     "task": "lane 7 part 2 (the route column on the question page)"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/decision-components.test.tsx::UX-09: a native radio group named Status, four options in order, the finding note, and the reason code only with Not applicable or Not yet",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::UX-09 R2: a native radio group named Status, four options in order, and the reason code only with Not applicable or Not yet; the finding note is no longer under the legend",
+    "property": "DecisionFields renders the Status group as a native radio group named Status with the four options in order, and the main reason only for Not yet and Not applicable (the codes of the chosen status only). The finding note no longer sits under the Status legend: the owner's ruling R2 (15 Nov 2026) puts one line on what this save will do after the fields and the evidence and before Save, and with no status chosen that line is the same FINDING_NOTE followed by the version this save becomes.",
+    "proof": "Every assertion of the case is unchanged but one: `expect(h).toContain(FINDING_NOTE)` became `expect(h).not.toContain(FINDING_NOTE)`, so the note cannot come back under the legend as well. The note's new place is pinned by __tests__/unit/decision-card.test.tsx::no status chosen keeps the meaning of the old note; a first decision becomes version 1, which requires the card's [data-consequence] line to hold `${FINDING_NOTE} This save becomes version 1.`, and by the case 'every status, with and without an open finding, ends with this save's version'. Seen RED (the old assertion failed once the hint left the legend), GREEN after the change.",
+    "task": "Route rebuild lane 2 task 1 (the decision card)"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/decision-components.test.tsx::UX-12: the reason helper and the count in text, linked to the field",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::UX-12 ruling (a): the reason hint is the own prompt of the question, and the count in text, linked to the field",
+    "property": "The reason's hint is the question's own signed-off prompt (runningQuestion.reasonPrompt, content 5.1.0) in the element decision-reason-help, which the textarea names in aria-describedby, and the count reads as text (212 / 4,000 characters). Coordinator's ruling (a) of 15 Nov 2026 and spec 9.3 item 3 replace the one generic line, REASON_HELP, that every question showed (design-target gap 9).",
+    "proof": "The count and aria-describedby assertions are unchanged; `expect(h).toContain('Say what is in place, where it is recorded, and what is missing.')` became `expect(h).toContain(`<p id=\"decision-reason-help\" class=\"decision-fields__help\">${PANEL.runningQuestion.reasonPrompt}</p>`)`, which pins the element, its id and the prompt as its whole text. __tests__/unit/decision-card.test.tsx::ruling (a): the label is \"Reason\" and its hint is the question's own prompt, with the count requires the same with a real prompt and that the generic sentence appears nowhere, and 'a chosen main reason shows when to use it under the select and adds what the reason must say to the hint' pins the added sentence. The server's M11.reasonMissing still names the generic sentence (__tests__/unit/decision-rules.test.ts, unchanged).",
+    "task": "Route rebuild lane 2 task 1 (the decision card)"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/decision-components.test.tsx::plan 1A Task 17: every control keeps its id and name, and each status card shows one symbol, its radio button",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::plan 1A Task 17 R3: every control keeps its id and name, and each status card shows its radio button and its status mark",
+    "property": "Every control of the decision form keeps its id and name, and each status card shows the native radio button, the status mark and the word: the owner's ruling R3 (15 Nov 2026, the locked sketch's .opts) puts the mark back in each card, and spec 7.5 asks for selection as a thicker border plus the mark. Workshop finding S12-d (two empty circles before a choice, Done's disc read as chosen) is answered by R8's filled green check for Done, which no longer resembles a chosen radio, and by the chosen card's 2 px border and tint.",
+    "proof": "The radio, option, reason-code, select, textarea and date assertions are unchanged; `expect(h.match(/class=\"ui-mark__shape\"/g)).toBeNull()` became `.toHaveLength(4)`, one mark per status card. __tests__/unit/decision-card.test.tsx::four short cards in two columns, each the radio, the mark and the word; its sentence kept as the radio's description requires, for each status, the label to hold exactly the radio, then the hidden mark's svg, then the word, and the help paragraph with its id; __tests__/unit/ui/status-mark.test.tsx pins Done's new shape.",
+    "task": "Route rebuild lane 2 task 1 (the decision card)"
+  },
+  {
+    "kind": "rule",
+    "changed": "e2e/helpers/session.ts::fillValid",
+    "replacedBy": "e2e/decision-save.spec.ts::UX-09 UX-11 M-03: choosing Not yet shows the reason code; Ethics committee is named in the confirmation",
+    "property": "Every protected spec that fills the question page's form with fillValid (e2e/decision-save.spec.ts and e2e/decision-conflict.spec.ts; `grep -ln fillValid e2e` on 15 Nov 2026, the other callers are not protected) still saves an answer with a decider: Decided by now starts empty on a first decision (spec 9.3 item 4, owner OQ1 (a), plan 1C Task 12 Step 3), so fillValid chooses \"You (<name>)\" when the field is empty and no decidedBy is given, and leaves a re-decision's decider as it opened, exactly as before. The reason box is found by its exact name, because the label is now \"Reason\" (spec 9.3 item 3) and \"Reason (required)\" is also part of \"Main reason (required)\".",
+    "proof": "e2e/helpers/session.ts fillValid: the reason locator gains `{ exact: true }`; the Decided by locator is held in `decider`, `over.decidedBy` still selects by label, and otherwise `if ((await decider.inputValue()) === '')` selects the option whose text starts with \"You (\". No spec file changes. The named case chooses Not yet (the main reason select shows) and then calls fillValid, which would be ambiguous without the exact name; the e2e/decision-save.spec.ts and e2e/decision-conflict.spec.ts runs on the remote machine pass unchanged (lane 2 task 1 report).",
+    "task": "Route rebuild lane 2 task 1 (the decision card)"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/read-only-view.test.tsx::7.2: the Done mark draws no tick",
+    "replacedBy": "__tests__/unit/read-only-view.test.tsx::7.2 R8: the Done mark is the filled green check, a disc and a check painted by CSS, with its word",
+    "property": "The reading view's Done mark is the kit's done shape with its word Done. The owner's ruling R8 (15 Nov 2026) overrules spec D4: Done is the sketch's filled green check, so the case now requires the disc and the check, each with its own class (StatusMark.css paints the disc in --color-saved and the check in --color-surface), and still no colour in the markup.",
+    "proof": "Same render, same section, same `data-mark-kind=\"done\"` and the word Done; the primitives are now ['circle', 'path'] with the classes ui-mark__done-disc and ui-mark__done-check, and the markup holds no hex, rgb() or 'green'. __tests__/unit/ui/status-mark.test.tsx pins the exact primitives and that only those two classes may set a fill or a stroke, with exactly those colours.",
+    "task": "Route rebuild lane 2 task 1 (the decision card)"
   }
 ]

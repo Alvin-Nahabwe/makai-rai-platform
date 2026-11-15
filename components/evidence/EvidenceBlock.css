@@ -91,3 +91,25 @@
 .evidence-block__link .ui-button[aria-disabled='true'] {
   cursor: progress;
 }
+
+/* The decision card's evidence (spec 9.3 item 5): the question's own examples, a short list in the help's muted ink, and
+   "None yet." where the list of items would be. */
+.evidence-block__examples {
+  max-inline-size: var(--measure-reading);
+  margin-block-end: var(--space-3);
+  color: var(--color-ink-muted);
+}
+
+.evidence-block__examples > p {
+  margin: 0;
+}
+
+.evidence-block__examples > ul {
+  margin: var(--space-1) 0 0;
+  padding-inline-start: var(--space-5);
+}
+
+.evidence-block__none {
+  margin: 0 0 var(--space-4);
+  color: var(--color-ink);
+}

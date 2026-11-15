@@ -45,6 +45,10 @@ export interface EvidenceBlockViewProps {
   onRemoveUpload?: (key: string) => void;
   registerAddFileButton?: (el: HTMLButtonElement | null) => void;
   registerFileInput?: (el: HTMLInputElement | null) => void;
+  /** The decision card only (spec 9.3 item 5): the question's own examples of what to attach, as a list after the legend. */
+  examples?: readonly string[];
+  /** The decision card only: the sentence on how a file is stored, after the accepted types; and "None yet." with nothing attached. */
+  decisionCard?: boolean;
 }
 
 /** A line with the file name in `<bdi>` (E14). */
@@ -98,12 +102,22 @@ export function EvidenceBlockView(p: EvidenceBlockViewProps): ReactElement {
   return (
     <fieldset className="evidence-block">
       <legend>{EVIDENCE_COPY.legend}</legend>
+      {p.disabled || p.examples === undefined || p.examples.length === 0 ? null : (
+        <div className="evidence-block__examples">
+          <p>{EVIDENCE_COPY.examples}</p>
+          <ul>{p.examples.map((e) => <li key={e}>{e}</li>)}</ul>
+        </div>
+      )}
       {p.disabled ? null : (
         <div id={helpId} className="evidence-block__help">
           <p>{EVIDENCE_COPY.help.keep}</p>
           <p className="evidence-block__types">{EVIDENCE_COPY.help.types}</p>
+          {p.decisionCard === true ? <p className="evidence-block__types">{EVIDENCE_COPY.stored}</p> : null}
         </div>
       )}
+
+      {p.decisionCard === true && p.notUploaded.length + p.items.length + p.added.length + p.uploads.length === 0
+        ? <p className="evidence-block__none">{EVIDENCE_COPY.noneYet}</p> : null}
 
       {p.notUploaded.length > 0 ? (
         <ul className="evidence-block__list">{p.notUploaded.map((name) => <li key={name} className="evidence-block__item"><span className="evidence-block__name"><NamedText line={notUploadedLine(name)} /></span></li>)}</ul>

@@ -57,11 +57,11 @@ const html = (p: Partial<QuestionPanelData> = {}, v: Partial<DecisionDraft> = {}
   renderToStaticMarkup(<DecisionFields data={{ ...PANEL, ...p }} value={{ ...EMPTY, ...v }} errors={[]} disabled={false} onChange={() => {}} />);
 
 describe('S-12 decision fields', () => {
-  it('UX-09: a native radio group named Status, four options in order, the finding note, and the reason code only with Not applicable or Not yet', () => {
+  it('UX-09 R2: a native radio group named Status, four options in order, and the reason code only with Not applicable or Not yet; the finding note is no longer under the legend', () => {
     const h = html();
     expect(h).toMatch(/<fieldset[^>]*>\s*<legend[^>]*>Status<\/legend>/);
     expect([...h.matchAll(/<input[^>]*type="radio"[^>]*value="([a-z_]+)"/g)].map((m) => m[1])).toEqual(['done', 'partly', 'not_yet', 'not_applicable']);
-    expect(h).toContain(FINDING_NOTE);
+    expect(h).not.toContain(FINDING_NOTE);
     expect(h).not.toContain(DECISION_FORM_COPY.fields.reasonCode);
     const ny = html({}, { status: 'not_yet' });
     expect(ny).toContain(DECISION_FORM_COPY.fields.reasonCode);
@@ -94,11 +94,11 @@ describe('S-12 decision fields', () => {
     expect(h).toMatch(/<option[^>]*>You \(Amina N\.\)<\/option>\s*<option[^>]*>Joseph K\.<\/option>\s*<optgroup label="Someone without a platform account">\s*<option[^>]*>Principal investigator<\/option>/);
   });
 
-  it('UX-12: the reason helper and the count in text, linked to the field', () => {
+  it('UX-12 ruling (a): the reason hint is the own prompt of the question, and the count in text, linked to the field', () => {
     const h = html({}, { reason: 'x'.repeat(212) });
     expect(h).toContain('212 / 4,000 characters');
     expect(h).toMatch(/<textarea[^>]*aria-describedby="[^"]*reason-help[^"]*"/);
-    expect(h).toContain('Say what is in place, where it is recorded, and what is missing.');
+    expect(h).toContain(`<p id="decision-reason-help" class="decision-fields__help">${PANEL.runningQuestion.reasonPrompt}</p>`);
   });
 
   it('FR-CNT-04 FR-CNT-03 (screen): the gate takes a scope answer, a checklist its options with the count in text', () => {
@@ -120,13 +120,13 @@ describe('S-12 decision fields', () => {
     expect(h).toMatch(/id="decision-reason-error"[^>]*>Write a reason\.</);
   });
 
-  it('plan 1A Task 17: every control keeps its id and name, and each status card shows one symbol, its radio button', () => {
+  it('plan 1A Task 17 R3: every control keeps its id and name, and each status card shows its radio button and its status mark', () => {
     const h = html({ question: { ...QUESTION, type: 'checklist', options: ['A', 'B'] } }, { status: 'not_yet' });
     for (const v of ['done', 'partly', 'not_yet', 'not_applicable']) {
       const radio = h.match(new RegExp(`<input[^>]*id="decision-status-${v}"[^>]*>`))?.[0] ?? '';
       for (const attr of ['type="radio"', 'name="status"', `value="${v}"`, `aria-describedby="decision-status-${v}-help"`]) expect(radio).toContain(attr);
     }
-    expect(h.match(/class="ui-mark__shape"/g)).toBeNull();
+    expect(h.match(/class="ui-mark__shape"/g)).toHaveLength(4);
     expect(h).toMatch(/<input[^>]*id="decision-option-0"[^>]*name="optionsInPlace"/);
     expect(h).toMatch(/<select[^>]*id="decision-reason-code"[^>]*name="reasonCode"/);
     expect(h).toMatch(/<option value=""[^>]*>Choose one<\/option>/);

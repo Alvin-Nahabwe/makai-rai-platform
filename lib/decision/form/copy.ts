@@ -12,9 +12,9 @@ export const DECISION_FORM_COPY = Object.freeze({
     scopeAnswer: 'Answer',
     optionsInPlace: 'Which of these are in place?',
     reasonCode: 'Main reason',
-    reason: 'Explain your decision',
+    reason: 'Reason',
     decidedBy: 'Decided by',
-    declaredDate: 'When was this decided?',
+    declaredDate: 'Decided on',
   }),
   scopeLegend: 'Answer (required)',
   /** Spec 6's line for the personal data question: the vocabulary's own definition. */
@@ -65,5 +65,31 @@ export const DECISION_FORM_COPY = Object.freeze({
     saveMine: 'Save my version',
     editMine: 'Edit my version',
     discardMine: 'Discard my version',
+  }),
+  /** The decision card (owner's ruling R2, 15 Nov 2026; the locked sketch's form): its heading and the way on beside Save. */
+  card: Object.freeze({
+    heading: 'Your decision',
+    next: (title: string): string => `Next: ${title}`,
+    position: (n: number, of: number): string => `Question ${n} of ${of}`,
+  }),
+  /**
+   * The line before Save on what this save will do (R2; spec 9.3 item 6). Each sentence is true of the code that decides
+   * findings (lib/data/findings.ts): only Partly and Not yet raise a finding, and only when the question has no open one
+   * (raiseShortfall); a finding closed by an accepted risk is not raised again unless the decision improved and fell back
+   * or got worse (raisesAfterAcceptance); Done and Not applicable never close a finding themselves, they let the team close
+   * it (findingsToCloseByDecision). The personal data answer switches the conditional questions (lib/content/loader.ts,
+   * questionApplies): Yes and Not sure keep them, No switches them off.
+   */
+  consequence: Object.freeze({
+    version: (n: number): string => `This save becomes version ${n}.`,
+    raises: (status: string): string => `Saving \u2018${status}\u2019 raises a finding for this question, unless your team has already accepted this risk.`,
+    keepsOpen: (status: string): string => `Saving \u2018${status}\u2019 keeps a finding open for this question until your team closes it.`,
+    raisesNone: (status: string): string => `Saving \u2018${status}\u2019 raises no finding.`,
+    closesNot: (status: string): string => `Saving \u2018${status}\u2019 does not close the open finding by itself. Your team closes it on the finding's page.`,
+    scope: Object.freeze({
+      yes: 'Saving \u2018Yes\u2019 means the questions about consent and anonymisation apply to this project.',
+      no: 'Saving \u2018No\u2019 means the questions about consent and anonymisation do not apply to this project.',
+      not_sure: 'Saving \u2018Not sure\u2019 means the questions about consent and anonymisation still apply.',
+    }),
   }),
 });

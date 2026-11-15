@@ -16,3 +16,93 @@
   max-inline-size: var(--measure-reading);
   color: var(--color-ink-muted);
 }
+
+/* The main reason's line on when to use it, under its select: close under the field, the field's space after it. */
+.decision-fields__reason-code > .ui-field {
+  margin-block-end: var(--space-2);
+}
+
+/*
+ * R3 (owner, 15 Nov 2026; the sketch's .opts): the status, or the personal data answer, as short cards in two columns,
+ * each the radio, the mark and the word, 44 px high; chosen, a 2 px border in the selected colour and its tint, the mark
+ * still beside the word, so the choice never rests on colour alone. RadioCards renders the sentences after the grid
+ * (helpBelow), in option order, and one shows: the sentence of the card that has focus, or else of the chosen card, or
+ * none. A hidden sentence still describes its radio (aria-describedby names it). Where :has() does not work, all show.
+ */
+.decision-fields__choice .ui-radio-cards__list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.decision-fields__choice .ui-radio-card {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--target-primary);
+  padding: var(--space-1) var(--space-3);
+}
+
+.decision-fields__choice .ui-radio-card:has(:checked) {
+  padding: calc(var(--space-1) - 2px) calc(var(--space-3) - 2px);
+  background-color: color-mix(in srgb, var(--color-selected) 8%, var(--color-surface));
+}
+
+.decision-fields__choice .ui-radio-card__label {
+  flex: 1;
+  line-height: 1.2;
+}
+
+.decision-fields__choice .ui-radio-cards__helps > .ui-radio-card__help {
+  margin: var(--space-2) 0 0;
+  padding: 0;
+}
+
+@supports selector(:has(*)) {
+  .decision-fields__choice .ui-radio-cards__helps > .ui-radio-card__help {
+    display: none;
+  }
+
+  .ui-radio-cards:has(.ui-radio-card:nth-child(1) :focus) .ui-radio-cards__helps > :nth-child(1),
+  .ui-radio-cards:has(.ui-radio-card:nth-child(2) :focus) .ui-radio-cards__helps > :nth-child(2),
+  .ui-radio-cards:has(.ui-radio-card:nth-child(3) :focus) .ui-radio-cards__helps > :nth-child(3),
+  .ui-radio-cards:has(.ui-radio-card:nth-child(4) :focus) .ui-radio-cards__helps > :nth-child(4),
+  .ui-radio-cards:not(:has(:focus)):has(.ui-radio-card:nth-child(1) :checked) .ui-radio-cards__helps > :nth-child(1),
+  .ui-radio-cards:not(:has(:focus)):has(.ui-radio-card:nth-child(2) :checked) .ui-radio-cards__helps > :nth-child(2),
+  .ui-radio-cards:not(:has(:focus)):has(.ui-radio-card:nth-child(3) :checked) .ui-radio-cards__helps > :nth-child(3),
+  .ui-radio-cards:not(:has(:focus)):has(.ui-radio-card:nth-child(4) :checked) .ui-radio-cards__helps > :nth-child(4) {
+    display: block;
+  }
+}
+
+/* A phone narrower than 360 px: one card per row, so "Not applicable" keeps one line. */
+@media (max-width: 359px) {
+  .decision-fields__choice .ui-radio-cards__list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/*
+ * One row (the sketch's .row): Decided by beside Decided on, both from the top; the date's three boxes sit in the row and
+ * its Today and "Same date as" buttons wrap under them inside its column. The card is the container: below 27rem of it
+ * (about 430 px, where the select and the three boxes no longer fit side by side) the two stack.
+ */
+.decision-fields {
+  container-type: inline-size;
+}
+
+.decision-fields__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  column-gap: var(--space-4);
+  align-items: start;
+}
+
+@container (min-width: 27rem) {
+  .decision-fields__row {
+    grid-template-columns: minmax(11rem, 1fr) minmax(0, 1.3fr);
+  }
+}
+
+/* The starting note ("The form shows the current decision...") sits clear of the first group under it. */
+.decision-fields__note {
+  margin: 0 0 var(--space-4);
+  max-inline-size: var(--measure-reading);
+}

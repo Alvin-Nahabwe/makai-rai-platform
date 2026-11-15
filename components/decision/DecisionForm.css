@@ -43,6 +43,20 @@
   color: var(--color-link);
 }
 
+/* A phone of 400 px or less: the summary sits tighter (12 px padding, its first line at the body size), so at 320 by 568
+   its whole list, the empty Decided by of a first decision included, stays above the fixed save bar (SC 2.4.11). */
+@media (max-width: 400px) {
+  [data-error-summary].card,
+  [data-error-summary].card:hover {
+    padding: var(--space-3);
+  }
+
+  [data-error-summary] > p {
+    margin-block-end: var(--space-1);
+    font-size: var(--font-size-body);
+  }
+}
+
 /* The save bar takes focus after a send removed its focused control (D-398 item 4): a programmatic focus shows no
    :focus-visible ring, so the bar draws one, as the summary's first line does. */
 .decision-save-bar:focus {
@@ -110,5 +124,106 @@
 
   html:has([data-region="answer-form"] .more-menu[open] .ui-confirm) {
     scroll-padding-block-end: 0;
+  }
+}
+
+/* R2 (the sketch's .guide): the line on what this save will do, after the fields and the evidence and before Save. The
+   info icon in navy and the sentence in ink on the ground's tint; the definition of "finding" under it, muted. */
+.decision-consequence {
+  display: flex;
+  gap: var(--space-2);
+  margin-block-end: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-control);
+  background-color: var(--color-ground);
+  color: var(--color-ink);
+}
+
+.decision-consequence__icon {
+  flex: none;
+  margin-block-start: 2px;
+  fill: none;
+  stroke: var(--color-heading);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.decision-consequence p {
+  margin: 0;
+  max-inline-size: var(--measure-reading);
+}
+
+/* R2 (the sketch's .act): Save on the left, the next question on the right with "Question n of N" under it. */
+.decision-save-bar__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-4);
+}
+
+.decision-save-bar__row > .form-actions {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* Beside Save while 12rem is left for it (a line break is decided on that basis), up to 26rem wide; under Save, at the
+   right, when the card is narrower. */
+.decision-next {
+  flex: 1 1 12rem;
+  max-inline-size: 26rem;
+  margin-inline-start: auto;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.35;
+  text-align: end;
+  color: var(--color-link);
+}
+
+.decision-next--last {
+  margin: 0;
+  font-weight: var(--font-weight-regular);
+  color: var(--color-ink-muted);
+}
+
+/* The next question's words on two lines at most; the whole text stays the link's name. */
+.decision-next__words {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.decision-next__position {
+  display: block;
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-ink-muted);
+}
+
+/* R9, a phone: Save stays the one orange control in the fixed bar; the next question is a quiet link beside it, its words
+   on two lines at most and without the position, so the bar stays short. */
+@media (max-width: 768px) {
+  .decision-save-bar__row {
+    flex-wrap: nowrap;
+  }
+
+  /* Save keeps its label on one line; the link takes what is left. */
+  .decision-save-bar__row > .form-actions {
+    flex: none;
+  }
+
+  .decision-save-bar__row .ui-button {
+    white-space: nowrap;
+  }
+
+  .decision-next {
+    flex: 1 1 0;
+    min-inline-size: 0;
+    font-size: var(--font-size-small);
+  }
+
+  a.decision-next .decision-next__position {
+    display: none;
   }
 }
