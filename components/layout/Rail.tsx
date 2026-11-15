@@ -11,7 +11,7 @@ import { signOutMessage, type SignOutPhase } from '@/lib/client/signOutPress';
 import OrgSwitcher from '@/components/layout/OrgSwitcher';
 import ThemeToggle from '@/components/layout/ThemeToggle';
 import { ShellPlace } from '@/components/layout/ShellPlace';
-import { MAKAI_LOGO } from '@/components/layout/logos';
+import { MAKAI_LOGO_RAIL } from '@/components/layout/logos';
 import { SignOutWithDraftsGuard } from '@/components/decision/SignOutWithDraftsGuard';
 import { currentOrgSlug, orgHref } from '@/lib/org-nav';
 import { clearLastProjects, readLastProject, subscribeLastProject } from '@/lib/client/lastProject';
@@ -116,7 +116,7 @@ export default function Rail({ shell, project }: { shell: ShellData; project?: R
             `/` only redirects (to the chooser, a gate or /login), so it is not prefetched, as in PublicHeader. */}
         <Link href={orgHref(slug, '/dashboard')} className="shell-rail__brand" prefetch={slug === null ? false : undefined}>
           {/* eslint-disable-next-line @next/next/no-img-element -- a file already sized for the drawn logo (logos.ts). */}
-          <img src={MAKAI_LOGO.src} srcSet={MAKAI_LOGO.srcSet} width={MAKAI_LOGO.width} height={MAKAI_LOGO.height} alt=""
+          <img src={MAKAI_LOGO_RAIL.src} srcSet={MAKAI_LOGO_RAIL.srcSet} width={MAKAI_LOGO_RAIL.width} height={MAKAI_LOGO_RAIL.height} alt=""
             decoding="async" className="shell-rail__logo" />
           <span className="shell-rail__product">{PRODUCT_NAME}</span>
         </Link>
