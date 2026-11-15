@@ -329,7 +329,7 @@ describe('the rail, ported from the sidebar (UX-02, UX-41)', () => {
     // Since ruling L5-11 the sign-out goes through signOutClearingDrafts, which also sweeps the keys and navigates only
     // when the session ended; a refusal is logged by name, the person stays on the page, and the rail says they are still
     // signed in (__tests__/unit/sign-out-refused.test.tsx).
-    expect(source).toMatch(/onClick=\{\(\) => \{ void signOutFromRail\(shell\.userId, showSignOut\); \}\}/);
+    expect(source).toMatch(/onClick=\{\(\) => \{ void signOutFromRail\(shell\.userId, showSignOut, signOutPending\); \}\}/);
     expect(source).toMatch(/clearLastProjects\(userId\);\s*try \{\s*await signOutClearingDrafts\(userId, '\/login'\);\s*\} catch/);
   });
 });
