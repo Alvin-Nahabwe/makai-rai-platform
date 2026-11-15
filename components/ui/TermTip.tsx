@@ -4,6 +4,7 @@ import { useEffect, useRef, type ReactElement } from 'react';
 import { Definition } from '@/components/ui/Definition';
 import { Icon } from '@/components/ui/Icon';
 import type { DefinedEntry } from '@/lib/vocabulary/types';
+import { termTipIds } from '@/components/ui/termTipIds';
 import './TermTip.css';
 
 export type TermTipProps = {
@@ -11,18 +12,9 @@ export type TermTipProps = {
   of: DefinedEntry;
   /** The button's accessible name, from the caller's copy module, e.g. "What is a finding?". The icon alone is not a name. */
   label: string;
-  /** Unique on the page when the same term has two tips; defaults to `term-tip-<entry id>`. `termTipIds` gives both ids. */
+  /** Unique on the page when the same term has two tips; defaults to `term-tip-<entry id>`. `termTipIds` (components/ui/termTipIds.ts) gives both ids. */
   id?: string;
 };
-
-/**
- * The ids a TermTip gives its popover and its definition: a caller that describes another element by the definition
- * (`aria-describedby`) takes the id from here, so the two cannot drift.
- */
-export function termTipIds(of: Pick<DefinedEntry, 'id'>, id?: string): { tip: string; definition: string } {
-  const tip = id ?? `term-tip-${of.id}`;
-  return { tip, definition: `${tip}-def` };
-}
 
 /** The part of a popover element the tip drives (a structural type, so a test can hand in a stand-in). */
 export type TipPopover = { hidePopover(): void; matches(selector: string): boolean };
