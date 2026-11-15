@@ -32,11 +32,11 @@ const PUBLIC_BUDGET_KB = 160;
 const SIGNED_IN_BUDGET_KB = 190;
 // NFR-PERF-01 (SRS line 3189) gives every public page (S-01 to S-06, S-28) 160 KB, but a page's group in the
 // build says "public" only for the ones under app/(public). S-05, the acceptances page, is a public page that
-// lives at app/(authenticated)/acceptances/page.tsx (contract, S-05 row), so it is listed here by its route
-// directory as the build writes it. The match is exact: a child such as (authenticated)/acceptances/history is not
-// S-05 and keeps 190 KB.
+// lives at app/(gate)/acceptances/page.tsx (contract, S-05 row; the gate frame's group since plan 1B Task 1), so it is
+// listed here by its route directory as the build writes it. The match is exact: a child such as (gate)/acceptances/history
+// is not S-05 and keeps 190 KB.
 const PUBLIC_OUTSIDE_PUBLIC_GROUP = [
-  '(authenticated)/acceptances',
+  '(gate)/acceptances',
   // Help (plan 1A Task 12): a public page outside (public) that shows the whole shell to a signed-in person, as S-05 does.
   'help',
 ];

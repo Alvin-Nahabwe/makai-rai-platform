@@ -664,7 +664,7 @@ h5 { font-size: var(--font-size-body); }
   padding: var(--space-4) var(--space-3);
 }
 
-/* The organisation chooser on a light card (app/page.tsx): .sidebar-link is for the dark sidebar. */
+/* The organisation chooser on a light card (app/(gate)/page.tsx): .sidebar-link is for the dark sidebar. */
 .chooser-link {
   display: block;
   padding: var(--space-3) var(--space-4);

@@ -34,13 +34,17 @@ test.afterAll(async () => {
 test('UX-01: a must-change-password account cannot skip the gate with a forged x-pathname on an image path', async ({ browser }) => {
   const context = await browser.newContext({ storageState: seat.storageStatePath });
   try {
+    // The markers are real: before the flag, the seat's own Home serves the shell, and its HTML holds every one of them.
+    const home = await context.request.get(`/orgs/${org.slug}/dashboard`, { maxRedirects: 0 });
+    expect(home.status()).toBe(200);
+    const homeBody = await home.text();
+    for (const marker of SHELL_MARKERS) expect(homeBody, marker).toContain(marker);
     await testDb.user.update({ where: { id: seat.userId }, data: { mustChangePassword: true } });
     const forged = { 'x-pathname': '/change-password' };
-    // The markers are real: the page the gate allows serves the shell, and its HTML holds every one of them.
+    // The page the gate allows answers; since plan 1B Task 1 it is in the gate frame, not the shell.
     const allowed = await context.request.get('/change-password', { maxRedirects: 0 });
     expect(allowed.status()).toBe(200);
-    const allowedBody = await allowed.text();
-    for (const marker of SHELL_MARKERS) expect(allowedBody, marker).toContain(marker);
+    expect(await allowed.text()).toContain('class="gate gate--signed-in');
     // A project id may end in any extension, so these paths reach `(authenticated)/layout.tsx` (which calls
     // requireIdentity() before the page looks the project up and answers not-found), and used to skip the proxy.
     for (const ext of ['png', 'jpg', 'jpeg', 'svg', 'ico', 'webp']) {
@@ -81,11 +85,13 @@ test('UX-01 FR-ACC-04: an account missing an acceptance cannot skip gate 3 with 
     await login.locator('button[type="submit"]').click();
     await login.waitForURL((url) => url.pathname !== '/login');
     await login.close();
-    // The markers are real: S-05, the page gate 3 allows, serves the shell and its HTML holds every one of them.
-    const allowed = await context.request.get('/acceptances', { maxRedirects: 0 });
+    // The markers are real: S-21, a page gate 3 allows, serves the shell and its HTML holds every one of them. (S-05, the
+    // other, is in the gate frame since plan 1B Task 1.)
+    const allowed = await context.request.get('/account', { maxRedirects: 0 });
     expect(allowed.status()).toBe(200);
     const allowedBody = await allowed.text();
     for (const marker of SHELL_MARKERS) expect(allowedBody, marker).toContain(marker);
+    expect((await context.request.get('/acceptances', { maxRedirects: 0 })).status()).toBe(200);
     for (const ext of ['png', 'svg']) {
       const path = `/orgs/${fx.org.slug}/projects/missing.${ext}`;
       const res = await context.request.get(path, { headers: { 'x-pathname': '/account' }, maxRedirects: 0 });

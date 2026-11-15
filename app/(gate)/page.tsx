@@ -1,18 +1,21 @@
 import Link from 'next/link';
-import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { requireIdentity } from '@/lib/auth/identity';
-import { readSessionDeadlines } from '@/lib/auth/idleDeadline';
-import { idleLimitSeconds } from '@/lib/auth/idle';
 import { identityDb } from '@/lib/data/identity';
 import { membershipsForUser } from '@/lib/data/preauth';
 import { resolveOrgDispatch } from '@/lib/org-dispatch';
-import IdleWarning from '@/components/layout/IdleWarning';
-import { MAIN_CONTENT_ID } from '@/components/layout/SkipLink';
+import { GateFrame, type GateStop } from '@/components/layout/GateFrame';
 import { ORG_COPY } from '@/lib/org/copy';
+import { GATE_COPY } from '@/lib/shell/copy';
 import { pageTitle } from '@/lib/ui/title';
 
 export const metadata = { title: pageTitle(ORG_COPY.titles.chooser) };
+
+/** A person with organisations to choose from chooses one, then lands on its Home. The empty state names no step. */
+const CHOOSER_ROUTE: readonly GateStop[] = [
+  { label: GATE_COPY.stops.chooseOrganisation, state: 'current' },
+  { label: GATE_COPY.stops.home, state: 'upcoming' },
+];
 
 /**
  * The active org is a URL segment now, not ambient session state (Task 6).
@@ -27,9 +30,8 @@ export const metadata = { title: pageTitle(ORG_COPY.titles.chooser) };
  * The MAK-AI administrator holds no membership (FR-ORG-03) and lands on S-23 before the membership
  * dispatch (UX-01 gate 4, SRS line 1540). An account in no organisation sees S-07's empty state (SRS
  * line 311): organisations are created by the administrator only (FR-ORG-04), so it offers no way to make
- * one. `/` is outside the (authenticated) layout, so when it renders it shows the idle warning itself
- * (UX-43); when the session deadlines cannot be read it shows none, and the layout's fixed log line stays
- * the one source of `idle_deadline_unreadable`.
+ * one. Since plan 1B Task 1 `/` is in app/(gate): the group layout shows the idle warning (UX-43), and the page renders
+ * the gate frame with the chooser in its wide card.
  */
 export default async function LandingPage() {
   const identity = await requireIdentity();
@@ -49,35 +51,27 @@ export default async function LandingPage() {
     redirect(`/orgs/${dispatch.slug}/dashboard`);
   }
 
-  const deadlines = await readSessionDeadlines(await headers());
   const hasOrgs = dispatch.orgs.length > 0;
 
   return (
-    <>
-      {deadlines ? (
-        <IdleWarning idleSeconds={idleLimitSeconds()} secondsLeft={deadlines.secondsLeft} absoluteSecondsLeft={deadlines.absoluteSecondsLeft} />
-      ) : null}
-      <main id={MAIN_CONTENT_ID} tabIndex={-1} className="page-content">
-        <div className="auth-card" style={{ maxWidth: 460, margin: '3rem auto' }}>
-          {hasOrgs ? (
-            <>
-              <h1>{ORG_COPY.chooser.heading}</h1>
-              <nav aria-label={ORG_COPY.chooser.listLabel} className="sidebar-nav">
-                {dispatch.orgs.map((org) => (
-                  <Link key={org.slug} href={`/orgs/${org.slug}/dashboard`} className="chooser-link">
-                    {org.name}
-                  </Link>
-                ))}
-              </nav>
-            </>
-          ) : (
-            <>
-              <h1>{ORG_COPY.chooser.emptyHeading}</h1>
-              <p className="text-muted">{ORG_COPY.chooser.emptyBody}</p>
-            </>
-          )}
-        </div>
-      </main>
-    </>
+    <GateFrame variant="signed-in" userName={identity.name ?? ''} userId={identity.userId} accountReachable route={hasOrgs ? CHOOSER_ROUTE : undefined} wide>
+      {hasOrgs ? (
+        <>
+          <h1>{ORG_COPY.chooser.heading}</h1>
+          <nav aria-label={ORG_COPY.chooser.listLabel} className="sidebar-nav">
+            {dispatch.orgs.map((org) => (
+              <Link key={org.slug} href={`/orgs/${org.slug}/dashboard`} className="chooser-link">
+                {org.name}
+              </Link>
+            ))}
+          </nav>
+        </>
+      ) : (
+        <>
+          <h1>{ORG_COPY.chooser.emptyHeading}</h1>
+          <p className="text-muted">{ORG_COPY.chooser.emptyBody}</p>
+        </>
+      )}
+    </GateFrame>
   );
 }

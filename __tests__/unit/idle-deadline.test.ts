@@ -106,10 +106,10 @@ describe('who imports the deadline reader', () => {
 
   it('UX-43 NFR-SEC-07: only server pages import lib/auth/idleDeadline.ts, and no client component does', () => {
     // The file reads the session cookie, so it must stay out of the client bundle (it is "server only" in
-    // the contract). The importers are the signed-in layout and the not-found page; S-07 (app/page.tsx)
-    // renders the warning too once its owner merges, so it is allowed and not required.
+    // the contract). The importers are the signed-in layout and the not-found page; the gate group's layout (plan 1B
+    // Task 1: S-05, S-29 and S-07) and Help's layout render the warning too, so they are allowed and not required.
     const importers = files.filter((f) => f !== 'lib/auth/idleDeadline.ts' && importsDeadline(readFileSync(f, 'utf8'))).sort();
-    const allowed = ['app/(authenticated)/layout.tsx', 'app/help/layout.tsx', 'app/not-found.tsx', 'app/page.tsx'];
+    const allowed = ['app/(authenticated)/layout.tsx', 'app/(gate)/layout.tsx', 'app/help/layout.tsx', 'app/not-found.tsx'];
     for (const f of importers) expect(allowed, f).toContain(f);
     expect(importers).toEqual(expect.arrayContaining(['app/(authenticated)/layout.tsx', 'app/not-found.tsx']));
     for (const f of importers) expect(readFileSync(f, 'utf8'), f).not.toMatch(/^['"]use client['"]/m);

@@ -25,7 +25,7 @@ export function currentOrgSlug(pathname: string): string | undefined {
  * from `pathname`), never a stale unprefixed path. When there is no current
  * org — the sidebar renders on `/explore/*`, `/admin/*` and
  * `/change-password` too, none of which carry a slug — falls back to `/`,
- * the redirect dispatcher (app/page.tsx), which resolves the right org from
+ * the redirect dispatcher (app/(gate)/page.tsx), which resolves the right org from
  * `lastActiveOrgId` (a hint only) or shows an org picker. Never falls back
  * to the old unprefixed path (e.g. `/dashboard`), which no longer exists.
  */
