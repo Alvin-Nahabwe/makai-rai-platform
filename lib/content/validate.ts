@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { principleSlugMap } from '@/data/constants';
 import { buildLoadedContent } from '@/lib/content/loader';
+import { riskAreaIdsOf } from '@/lib/content/riskAreas';
 import { SEMVER_RE } from '@/lib/content/semver';
 import { SIGN_OFF_BATCHES, signOffHash, signOffItems, signOffPayload, type SignOffBatch } from '@/lib/content/signoffs';
 import type { LoadedContent, LoadedQuestion, RevisionAction } from '@/types/content';
@@ -24,7 +25,6 @@ import { STAGES } from '@/types/record';
 
 type Json = Record<string, unknown>;
 type Read = Parameters<typeof buildLoadedContent>[1];
-type Mapping = string | { area?: unknown };
 
 /** The backbone that does not change (FR-CNT-01, SRS 10.1.1): 3 stages, 6 modules, 21 risk areas, 28 controls. */
 const MODULE_COUNT = 6;
@@ -83,20 +83,8 @@ function readJson(path: string, label: string): { value: unknown } | { problem: 
   }
 }
 
-/** The risk areas a question maps to, through `gaps` and every option of `optionGapMap` (QC-02's FULL reading). */
-function areasOf(q: { gaps?: unknown; optionGapMap?: unknown }): Set<string> {
-  const out = new Set<string>(Array.isArray(q.gaps) ? q.gaps.filter((a): a is string => typeof a === 'string') : []);
-  if (isRecord(q.optionGapMap)) {
-    for (const list of Object.values(q.optionGapMap)) {
-      if (!Array.isArray(list)) continue;
-      for (const e of list as Mapping[]) {
-        const area = typeof e === 'string' ? e : e?.area;
-        if (typeof area === 'string') out.add(area);
-      }
-    }
-  }
-  return out;
-}
+/** The risk areas a question maps to, through `gaps` and every option of `optionGapMap` (QC-02's FULL reading): one reading, lib/content/riskAreas.ts. */
+const areasOf = (q: { gaps?: unknown; optionGapMap?: unknown }): Set<string> => new Set(riskAreaIdsOf(q));
 
 /** The (risk area, control) pairs of a question, as `area>control` strings, through the areas' control lists. */
 function pairsOf(q: { gaps?: unknown; optionGapMap?: unknown }, areaControls: ReadonlyMap<string, readonly string[]>): Set<string> {

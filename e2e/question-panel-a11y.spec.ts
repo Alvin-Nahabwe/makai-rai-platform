@@ -57,13 +57,48 @@ async function placeAt(control: Locator, top: number): Promise<void> {
 
 test('UX-42 NFR-A11Y-02: keyboard-only Next moves focus to the new question heading', async ({ page, baseURL }) => {
   await openQuestion(page, 'assessor', Q, baseURL!);
-  await page.getByRole('link', { name: 'Next question', exact: true }).focus();
+  // The way on after the decision (the decision slot; lane 2's card holds its own Next link at the merge).
+  await page.locator('[data-region="way-on"]').getByRole('link', { name: `Next question: ${Q2_TEXT}`, exact: true }).focus();
   await page.keyboard.press('Enter');
   // The h1 is the question in words (plan 1C decision C1, cut); its code line "Q-PP-02 · {module}" follows it.
   const heading = page.getByRole('heading', { level: 1, name: Q2_TEXT, exact: true });
   await expect(heading).toBeFocused();
   await expect(page.locator('#question-heading + .question-frame__code')).toHaveText(/^Q-PP-02 \u00b7 /);
   await expectFocusVisibleAndUncovered(page);
+});
+
+/** The heading's outline as drawn now: a ring is a style other than none with a width of 2px or more. */
+const ringOf = (page: Page) => page.locator('#question-heading').evaluate((h) => {
+  const cs = getComputedStyle(h);
+  return { focused: document.activeElement === h, ring: cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) >= 2 };
+});
+
+test('Shell gap 3: arriving at a question by loading it, or by a click, focuses the heading with no ring round it', async ({ page, baseURL }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openQuestion(page, 'assessor', Q, baseURL!);
+  await expect(page.locator('#question-heading')).toBeFocused();
+  expect(await ringOf(page)).toEqual({ focused: true, ring: false });
+  await page.screenshot({ path: 'test-results/route-T1/arrival-load-1280.png' });
+  // A click on the way on: the next question's heading takes focus, still with no ring.
+  await page.locator('[data-region="way-on"]').getByRole('link', { name: `Next question: ${Q2_TEXT}`, exact: true }).click();
+  await expect(page.getByRole('heading', { level: 1, name: Q2_TEXT, exact: true })).toBeFocused();
+  expect(await ringOf(page)).toEqual({ focused: true, ring: false });
+  await page.screenshot({ path: 'test-results/route-T1/arrival-click-1280.png' });
+});
+
+test('plan 1C Task 4: Tab, Enter on "Skip to content" lands focus on the question heading, with the ring drawn', async ({ page, baseURL }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openQuestion(page, 'assessor', Q, baseURL!);
+  // The heading holds focus after arrival, so the skip link (the page's first focusable element, which a first Tab
+  // reaches) is focused directly, then pressed with the keyboard.
+  const skip = page.getByRole('link', { name: 'Skip to content' });
+  await skip.focus();
+  await expect(skip).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#question-heading')).toBeFocused();
+  expect(await ringOf(page)).toEqual({ focused: true, ring: true });
+  await expectFocusVisibleAndUncovered(page);
+  await page.screenshot({ path: 'test-results/route-T1/arrival-skip-link-1280.png' });
 });
 
 test('NFR-A11Y-02: J-05 by keyboard alone: status, reason, decided by, Today, Save', async ({ page, baseURL }) => {
