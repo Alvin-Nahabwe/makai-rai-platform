@@ -12,6 +12,7 @@ import { abortPendingBackgroundRequests, assertNoStalePendingTargets } from './h
 import { reachablePages } from './helpers/reachablePages';
 import { isLegalTextRoute, pageFiles, staticPagesIn, templateRegExp, unaccounted } from './helpers/pageFiles';
 import { ownProject, seedCrawlProject } from './helpers/crawlProject';
+import { projectTexts, type ProjectList } from './helpers/projectTexts';
 import { ERRORS_COPY } from '../lib/errors/copy';
 
 /**
@@ -284,23 +285,6 @@ function claimsIn(words: Words, teamText: readonly string[] = [], allowedTitles:
 /** Read when the test runs, because `setup` writes the manifest after Playwright has collected the specs. */
 function readManifest(): FixtureManifest {
   return JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf-8')) as FixtureManifest;
-}
-
-/** Lists the projects of the organisation over the owner's API. */
-type ProjectList = () => Promise<Array<{ name: string; description: string | null }>>;
-
-/**
- * The names and descriptions of the organisation's projects, with the whitespace collapsed the way
- * `readWords` collapses it. It fails when the list is empty, because an empty list would pass for an
- * organisation with nothing in it (the crawl creates a project first, so there is one).
- */
-async function projectTexts(list: ProjectList): Promise<string[]> {
-  const projects = await list();
-  expect(projects.length, 'the organisation has the crawl project at least').toBeGreaterThan(0);
-  return projects
-    .flatMap((p) => [p.name, p.description ?? ''])
-    .map((t) => cleanText(t))
-    .filter((t) => t.length > 0);
 }
 
 /**

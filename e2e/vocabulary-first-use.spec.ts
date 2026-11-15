@@ -9,6 +9,9 @@ import { abortPendingBackgroundRequests } from './helpers/pendingLinks';
 import { reachablePages, routePattern } from './helpers/reachablePages';
 import { isLegalTextRoute, staticPagesIn, unaccounted } from './helpers/pageFiles';
 import { ownProject, seedCrawlProject } from './helpers/crawlProject';
+import { projectTexts, type ProjectList } from './helpers/projectTexts';
+import { readFrameworkNames, runningFrameworkFile } from '../__tests__/helpers/frameworkNames';
+import { cleanText } from '../__tests__/helpers/contentQuestions';
 import { firstUseViolations, type TextNodeInfo } from '../lib/vocabulary/firstUse';
 import * as terms from '../lib/vocabulary/terms';
 
@@ -30,6 +33,11 @@ import * as terms from '../lib/vocabulary/terms';
  * marked `test.fail()`. No screen uses Term and Definition yet, so it fails until the copy tasks do; Task 20 removes the
  * mark (the same deferral as the vocabulary lint's worklist case in __tests__/lint/vocabulary.test.ts). With
  * VOCABULARY_HITS_DIR set, the worklist is also written to vocabulary-first-use-hits.txt in that directory.
+ *
+ * Ruling X-1 (3): a text node whose whole text is what the team typed (a project's name or description, read as the claims
+ * crawl reads it, e2e/helpers/projectTexts.ts, for pages under `/orgs/` only), a framework area or control name
+ * (`readFrameworkNames`) or a source title is not read. Names and titles come from the running version of both content
+ * roots, data/content and the fixture bundle the test server serves (playwright.config.ts, MAKRAI_CONTENT_ROOT).
  */
 
 const MAX_PAGES = 60;
@@ -39,6 +47,24 @@ const BLOCK_SELECTOR = 'p, li, dt, dd, label, legend, th, td, h1, h2, h3, h4, h5
 
 /** Every concept of the vocabulary; the rule checks those whose `defineOnFirstUse` is true. */
 const CONCEPTS = Object.values(terms);
+
+/** The two content roots: the repository's own and the fixture bundle the test server serves (playwright.config.ts). */
+const CONTENT_ROOTS = [path.join(process.cwd(), 'data', 'content'), path.join(process.cwd(), '__tests__', 'fixtures', 'content')];
+
+/** The resource titles (the sources a control cites) of an assessmentAreas.json, in file order. */
+function sourceTitles(file: string): string[] {
+  const areas = JSON.parse(fs.readFileSync(file, 'utf8')) as { controls?: Array<{ resources?: Array<{ title?: unknown }> }> };
+  return (areas.controls ?? []).flatMap((c) => (c.resources ?? []).flatMap((r) => (typeof r.title === 'string' ? [r.title] : [])));
+}
+
+/**
+ * The framework's area and control names and the source titles of both content roots, cleaned as a text node is: a node
+ * whose whole text is one of them is not read (ruling X-1 (3)).
+ */
+const CONTENT_NAMES: ReadonlySet<string> = new Set(CONTENT_ROOTS.flatMap((root) => {
+  const file = runningFrameworkFile(root);
+  return [...readFrameworkNames(file), ...sourceTitles(file)];
+}).map(cleanText).filter((t) => t.length > 0));
 
 /**
  * Authenticated page files this crawl does not read, each with why. A key that is not a page file, or that a seat
@@ -72,7 +98,8 @@ function worklist(hits: readonly Hit[]): string[] {
  * whitespace collapsed, empty ones dropped, `null` when the page has no `main`. Not collected: a node inside `nav`, a
  * script or a style; one the reader cannot see (its parent fails `checkVisibility({ visibilityProperty: true })`,
  * L2-30, L2-30a); a definition's own text (inside `[data-definition]`, L2-27); and, on S-06's legal routes only, the
- * quoted legal text (`[data-legal-text]`, L2-25). A definition element D counts for a node whose closest block is B
+ * quoted legal text (`[data-legal-text]`, L2-25). Each node records whether it is inside `[data-role-choice]` and inside
+ * `[data-decision-version]` (ruling X-1 (2)). A definition element D counts for a node whose closest block is B
  * only when D is inside `main` and visible (L2-30a), and one of these holds (L2-29a): D is B, or D's nearest block
  * ancestor is B; D is the element right after B, or that element's first element child; D is a direct child of B's
  * closest `.ui-field` or `.ui-callout`, or its nearest block ancestor is that element; D's id is named by
@@ -123,7 +150,11 @@ function collectTextNodes({ blockSelector, legalRoute }: { blockSelector: string
       const candidates = [...near(block, false), next, next?.firstElementChild, ...(field ? near(field, true) : []), ...describedBy(block)];
       for (const id of shown(candidates)) ids.add(id);
     }
-    nodes.push({ text, termIds, blockKey, definitionIdsInBlock: [...ids], inRoleChoice: parent.closest('[data-role-choice]') !== null });
+    nodes.push({
+      text, termIds, blockKey, definitionIdsInBlock: [...ids],
+      inRoleChoice: parent.closest('[data-role-choice]') !== null,
+      inDecisionVersion: parent.closest('[data-decision-version]') !== null,
+    });
   }
   return nodes;
 }
@@ -145,7 +176,7 @@ test('vocabulary first use (helper): the collector reads main outside nav, in or
   const nodes = await page.evaluate(collectTextNodes, { blockSelector: BLOCK_SELECTOR, legalRoute: false });
   expect(nodes?.map((n) => n.text)).toEqual(['finding', 'Open the finding', 'Role', 'Owner', 'Loose text']);
   const [term, later, legend, owner, loose] = nodes!;
-  expect(term).toEqual({ text: 'finding', termIds: ['finding'], blockKey: 'block-0', definitionIdsInBlock: ['finding'], inRoleChoice: false });
+  expect(term).toEqual({ text: 'finding', termIds: ['finding'], blockKey: 'block-0', definitionIdsInBlock: ['finding'], inRoleChoice: false, inDecisionVersion: false });
   expect(later).toMatchObject({ termIds: [], blockKey: 'block-1', definitionIdsInBlock: [], inRoleChoice: false });
   expect(legend.inRoleChoice).toBe(true);
   expect(owner).toMatchObject({ blockKey: 'block-3', inRoleChoice: true });
@@ -167,6 +198,37 @@ test('vocabulary first use (helper): legal text on a legal route, a definition\'
   // Text the reader cannot see is not where a term first appears on a screen.
   const hidden = await collect(page, '<main><p hidden>A seal, hidden.</p><p style="display:none">A seal, not shown.</p><details><summary>More</summary><p>A seal, folded.</p></details><p>A seal, shown.</p></main>');
   expect(hidden?.map((n) => n.text)).toEqual(['More', 'A seal, shown.']);
+});
+
+test('vocabulary first use (helper): "version" counts only inside [data-decision-version] (ruling X-1 (2))', async ({ page }) => {
+  const nodes = await collect(page, `<main>
+    <p>Terms of service, version 2</p>
+    <ol><li data-decision-version><span>Version 3</span>, saved by Amina</li></ol>
+  </main>`);
+  expect(nodes?.map((n) => [n.text, n.inDecisionVersion])).toEqual([['Terms of service, version 2', false], ['Version 3', true], [', saved by Amina', true]]);
+  // The legal page's "version 2" is not a use; the decision history's "Version 3" is, and has no definition beside it.
+  expect(firstUseViolations(nodes!, [terms.TERM_VERSION_OF_A_DECISION])).toEqual([{ id: 'version-of-a-decision', text: 'Version 3' }]);
+});
+
+test('vocabulary first use (helper): a status help sentence rendered as a Definition is not a use of "Does not apply" (L2-27)', async ({ page }) => {
+  // Not applicable's definition holds the words "does not apply"; inside [data-definition] it is not collected.
+  const html = `<main><p><span data-term="not-applicable">Not applicable</span> <span data-definition="not-applicable">${terms.TERM_NOT_APPLICABLE.definition}</span></p></main>`;
+  const nodes = await collect(page, html);
+  expect(nodes?.map((n) => n.text)).toEqual(['Not applicable']);
+  expect(firstUseViolations(nodes!, [terms.TERM_DOES_NOT_APPLY, terms.TERM_NOT_APPLICABLE])).toEqual([]);
+  // The same sentence outside a definition would be read as a use, so it is the marker that keeps it out.
+  const loose = await collect(page, `<main><p>${terms.TERM_NOT_APPLICABLE.definition}</p></main>`);
+  expect(firstUseViolations(loose!, [terms.TERM_DOES_NOT_APPLY])).toEqual([{ id: 'does-not-apply', text: terms.TERM_NOT_APPLICABLE.definition }]);
+});
+
+test('vocabulary first use (helper): a node that equals a framework or source name is not read (ruling X-1 (3))', async ({ page }) => {
+  const [name] = [...CONTENT_NAMES];
+  expect(name, 'the content roots give names to skip').toBeDefined();
+  expect(CONTENT_NAMES.has(cleanText(readFrameworkNames()[0]))).toBe(true);
+  // A made-up name holding a checked term: skipped as a whole node, read inside a longer sentence.
+  const skip = new Set([...CONTENT_NAMES, 'Seal the loan model']);
+  const nodes = await collect(page, '<main><p><a>Seal the loan model</a></p><p>Open Seal the loan model now.</p></main>');
+  expect(firstUseViolations(nodes!, [terms.TERM_SEAL], skip)).toEqual([{ id: 'seal', text: 'Open Seal the loan model now.' }]);
 });
 
 test('vocabulary first use (helper): a definition is beside its term in the block, the next element or its first child, the field or callout, or by aria-describedby; nowhere else (L2-29a)', async ({ page }) => {
@@ -224,7 +286,12 @@ test.describe.serial('vocabulary first use', () => {
     // seeding posts go out as absolute URLs on the test server with maxRedirects: 0.
     const post: Pick<typeof api, 'post'>['post'] = (url, options) => api.post(new URL(url, baseURL).href, { ...options, maxRedirects: 0 });
     const crawlProject = await seedCrawlProject({ post }, baseURL, slug, `Vocabulary first-use crawl project ${Date.now()}`);
-    await api.dispose();
+    // Ruling X-1 (3): what the organisation's people typed, read as the claims crawl reads it, over the same owner's API.
+    const list: ProjectList = async () => {
+      const response = await api.get(new URL(`/api/v1/orgs/${slug}/projects`, baseURL).href, { maxRedirects: 0 });
+      expect(response.status(), 'listing the projects of the organisation').toBe(200);
+      return (await response.json()) as Array<{ name: string; description: string | null }>;
+    };
 
     const starts = ['/', `/orgs/${slug}/projects/${crawlProject.id}`, ...staticPagesIn('(authenticated)').filter((p) => !(p in NOT_CRAWLED))];
     const follows = (pathname: string) => ownProject(pathname, crawlProject);
@@ -253,16 +320,24 @@ test.describe.serial('vocabulary first use', () => {
       const page = await context.newPage();
       failOnDialog(page);
       let found = 0;
+      const collected: Array<{ key: string; pathname: string; nodes: TextNodeInfo[] }> = [];
       const pages = await reachablePages(page, seat.starts, { max: MAX_PAGES, label: seat.label, follows }, async (key) => {
-        const legalRoute = isLegalTextRoute(new URL(page.url()).pathname);
-        const nodes = await page.evaluate(collectTextNodes, { blockSelector: BLOCK_SELECTOR, legalRoute });
+        const pathname = new URL(page.url()).pathname;
+        const nodes = await page.evaluate(collectTextNodes, { blockSelector: BLOCK_SELECTOR, legalRoute: isLegalTextRoute(pathname) });
         expect(nodes, `${seat.label} ${key}: the page has no main`).not.toBeNull();
         expect(nodes!.length, `${seat.label} ${key}: no visible text node in main outside nav`).toBeGreaterThan(0);
-        for (const v of firstUseViolations(nodes!, CONCEPTS)) {
-          hits.push({ seat: seat.label, page: key, id: v.id, text: v.text });
+        collected.push({ key, pathname, nodes: nodes! });
+      });
+      // The team text is read ONCE per seat, after its pages, as the claims crawl does (pageChecker's finish): it stays
+      // under the rate limit, and a list read later than every page holds every project those pages can show.
+      const own = collected.some((c) => c.pathname.startsWith('/orgs/')) ? await projectTexts(list) : [];
+      const withTeam: ReadonlySet<string> = new Set([...CONTENT_NAMES, ...own]);
+      for (const c of collected) {
+        for (const v of firstUseViolations(c.nodes, CONCEPTS, c.pathname.startsWith('/orgs/') ? withTeam : CONTENT_NAMES)) {
+          hits.push({ seat: seat.label, page: c.key, id: v.id, text: v.text });
           found += 1;
         }
-      });
+      }
       for (const must of seat.mustReach) {
         const reached = typeof must === 'string' ? pages.includes(must) : pages.some((p) => must.test(p));
         expect(reached, `${seat.label} reached ${must}`).toBe(true);
@@ -271,6 +346,7 @@ test.describe.serial('vocabulary first use', () => {
       console.log(`[vocabulary-first-use] ${seat.label}: ${pages.length} pages, ${found} violations: ${pages.join(' ')}`);
       await context.close();
     }
+    await api.dispose();
     expect(unaccounted('(authenticated)', reachedBySomeSeat, NOT_CRAWLED), 'authenticated page files no seat crawl reads').toEqual([]);
 
     const lines = worklist(hits);

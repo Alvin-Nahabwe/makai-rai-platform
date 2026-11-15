@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { firstUseViolations, ROLE_IDS, type TextNodeInfo } from '@/lib/vocabulary/firstUse';
+import { DECISION_VERSION_IDS, firstUseViolations, ROLE_IDS, type TextNodeInfo } from '@/lib/vocabulary/firstUse';
 import * as terms from '@/lib/vocabulary/terms';
 
 /**
@@ -15,10 +15,11 @@ const SEAL: Concept = { id: 'seal', term: 'seal', defineOnFirstUse: true };
 const PROJECT: Concept = { id: 'project', term: 'project', defineOnFirstUse: false };
 const SCOPE: Concept = { id: 'personal-data-question-scope-question', term: 'the personal data question', defineOnFirstUse: true };
 const OWNER: Concept = { id: 'owner', term: 'Owner', defineOnFirstUse: true };
+const VERSION: Concept = { id: 'version-of-a-decision', term: 'version', defineOnFirstUse: true };
 
 /** A node: plain text in block `block` unless told otherwise. */
-function node(text: string, o: { block?: string; termIds?: string[]; defs?: string[]; role?: boolean } = {}): TextNodeInfo {
-  return { text, termIds: o.termIds ?? [], blockKey: o.block ?? 'b0', definitionIdsInBlock: o.defs ?? [], inRoleChoice: o.role ?? false };
+function node(text: string, o: { block?: string; termIds?: string[]; defs?: string[]; role?: boolean; version?: boolean } = {}): TextNodeInfo {
+  return { text, termIds: o.termIds ?? [], blockKey: o.block ?? 'b0', definitionIdsInBlock: o.defs ?? [], inRoleChoice: o.role ?? false, inDecisionVersion: o.version ?? false };
 }
 
 /** The first use, marked with Term and with the definition in its block. */
@@ -60,6 +61,44 @@ describe('firstUseViolations', () => {
     const nodes = [node('Ask an Owner.'), node('Owner', { block: 'b1', role: true, termIds: ['owner'], defs: ['owner'] })];
     expect(firstUseViolations(nodes, [OWNER])).toEqual([]);
     expect(ROLE_IDS).toEqual(['owner', 'admin', 'assessor', 'reviewer', 'viewer']);
+  });
+
+  it('ignores "version" outside [data-decision-version] and checks it inside (ruling X-1 (2))', () => {
+    // "version 2 of the terms", "the questions' version": other senses of the word, not a decision's version.
+    expect(firstUseViolations([node('Terms of service, version 2')], [VERSION])).toEqual([]);
+    expect(firstUseViolations([node('Saved as version 3.', { version: true })], [VERSION])).toEqual([{ id: 'version-of-a-decision', text: 'Saved as version 3.' }]);
+    // The first use is the first one inside the marker, even when a plain mention comes before it.
+    const nodes = [node('Read version 2 of the terms.'), node('Version 3', { block: 'b1', version: true, termIds: ['version-of-a-decision'], defs: ['version-of-a-decision'] })];
+    expect(firstUseViolations(nodes, [VERSION])).toEqual([]);
+    expect(DECISION_VERSION_IDS).toEqual(['version-of-a-decision']);
+  });
+
+  it('checks a concept that is not a decision version inside [data-decision-version] as anywhere else', () => {
+    expect(firstUseViolations([node('Raise a finding on version 3.', { version: true })], [FINDING])).toEqual([{ id: 'finding', text: 'Raise a finding on version 3.' }]);
+  });
+
+  it('does not check a role inside [data-decision-version] unless it is also inside [data-role-choice]', () => {
+    expect(firstUseViolations([node('Decided by an Owner, version 3.', { version: true })], [OWNER])).toEqual([]);
+  });
+
+  it('skips a node whose whole text equals a skipped text: team-typed text, a framework or source name (ruling X-1 (3))', () => {
+    const skip = new Set(['Seal the loan model', 'Finding Aid Review']);
+    expect(firstUseViolations([node('Seal the loan model')], [SEAL], skip)).toEqual([]);
+    expect(firstUseViolations([node('Finding Aid Review')], [FINDING], skip)).toEqual([]);
+    // The first use is then the next node that holds the term.
+    expect(firstUseViolations([node('Seal the loan model'), node('Each seal is final.', { block: 'b1' })], [SEAL], skip))
+      .toEqual([{ id: 'seal', text: 'Each seal is final.' }]);
+  });
+
+  it('skips only an exact match: a node that holds a skipped text inside a longer sentence is still read', () => {
+    const skip = new Set(['Seal the loan model']);
+    expect(firstUseViolations([node('Open Seal the loan model.')], [SEAL], skip)).toEqual([{ id: 'seal', text: 'Open Seal the loan model.' }]);
+    expect(firstUseViolations([node('seal the loan model')], [SEAL], skip)).toEqual([{ id: 'seal', text: 'seal the loan model' }]);
+  });
+
+  it('skips nothing when no skipped texts are given', () => {
+    expect(firstUseViolations([node('Seal the loan model')], [SEAL])).toEqual([{ id: 'seal', text: 'Seal the loan model' }]);
+    expect(firstUseViolations([node('Seal the loan model')], [SEAL], new Set())).toEqual([{ id: 'seal', text: 'Seal the loan model' }]);
   });
 
   it('matches a term of several words within one text node only', () => {
@@ -140,7 +179,8 @@ describe('firstUseViolations', () => {
     expect(checked).toHaveLength(26);
     for (const c of checked) {
       const role = (ROLE_IDS as readonly string[]).includes(c.id);
-      expect(firstUseViolations([node(`Before ${c.term}, after.`, { role })], [c]), c.id).toEqual([{ id: c.id, text: `Before ${c.term}, after.` }]);
+      const version = (DECISION_VERSION_IDS as readonly string[]).includes(c.id);
+      expect(firstUseViolations([node(`Before ${c.term}, after.`, { role, version })], [c]), c.id).toEqual([{ id: c.id, text: `Before ${c.term}, after.` }]);
     }
   });
 });
