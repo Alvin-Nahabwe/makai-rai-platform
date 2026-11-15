@@ -24,8 +24,10 @@ export const STAGE_LIST_COPY = Object.freeze({
     shortfalls: 'Partly or not yet',
     doneNoEvidence: 'Done, no evidence attached',
     changedSinceSeal: (n: number | null): string => (n === null ? 'Changed since the last seal' : `Changed since seal ${n}`),
-    reworded: 'Good practice changed',
-    drafts: 'Not saved yet',
+    /** Spec 8's words (lane 1 Task 2): the filter names what changed and since when. */
+    reworded: 'Good practice changed since the decision',
+    /** Spec 8 and 9.7's words: where the unsaved text is kept. */
+    drafts: 'Not saved in this browser',
   }),
   form: Object.freeze({
     label: 'Show questions',
@@ -40,6 +42,30 @@ export const STAGE_LIST_COPY = Object.freeze({
     (saved === n ? `${n} saved.` : `${saved} of ${n} saved. ${n - saved} not saved: see each question.`),
   noMatch: (label: string): string => `No questions match '${label}'. `,
   showAll: (n: number): string => `Show all ${n}`,
+  /**
+   * The route's line (owner's answer R1, 15 November 2026; lane 1 Task 2): the words a question's row and a folded run
+   * add. The interface never says "stop" or "line" (spec principle 4). `youAreHere` is the kit's UI_COPY.plate.youAreHere,
+   * repeated here because this list imports only its own copy module (ruling X-2); __tests__/unit/route-column.test.tsx
+   * holds the two equal.
+   */
+  line: Object.freeze({
+    youAreHere: 'You are here',
+    next: 'Next question',
+    version: (n: number): string => `version ${n}`,
+    /**
+     * A tally's item for the personal data question once answered: the vocabulary's term (lane 6's wording ruling, as the
+     * question page's strip reads it: QUESTION_COPY.frame.personalDataAnswered), never "scope" or a bare "answered".
+     */
+    personalDataAnswered: (n: number): string => `${n} personal data ${n === 1 ? 'question' : 'questions'} answered`,
+    /** The name of a row's (i) for a term its question first uses (fix round 4), as the question page's strip names it. */
+    whatMeans: (term: string): string => `What does "${term}" mean?`,
+    /** Between a folded run's tally items, as the sketch writes them. */
+    tallySeparator: ' · ',
+    /** A folded run of questions, by their places in the stage. */
+    run: (first: number, last: number): string => (last === first + 1 ? `Questions ${first} and ${last}` : `Questions ${first} to ${last}`),
+  }),
+  /** The stage page's count of its questions, beside the tally. */
+  count: (n: number): string => `${n} questions`,
   /** A count line: the stage's under its heading, and each topic's under its own. */
   summary: (n: number, noDecision: number): string => `${n} questions · ${noDecision} with no decision`,
   /**

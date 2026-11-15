@@ -4,17 +4,26 @@ import { dirname, join } from 'node:path';
 
 /**
  * Threat A7 (UX-01, SRS 7.1.2): the gates run on every page request, and Next does not re-render a layout shared by
- * the page a client-side navigation leaves and the page it opens. So the group's root layout
- * (app/(authenticated)/layout.tsx) is not enough: each page calls requireIdentity itself, or a layout between it and the
- * group root does (as explore/layout.tsx and orgs/new/layout.tsx do), or it is on the named exempt list below.
+ * the page a client-side navigation leaves and the page it opens. So a group's root layout (app/(authenticated)/layout.tsx,
+ * app/(gate)/layout.tsx) is not enough: each page calls requireIdentity itself, or a layout between it and the group root
+ * does (as change-password/layout.tsx does for its one page), or it is on the named exempt list below. A layout that holds
+ * two or more pages does not stand in for them: layout-gate-siblings.test.ts (L-1). Since plan 1B Task 1 the signed-in
+ * pages outside the shell (S-05, S-29, S-07) are the group app/(gate), and A7 covers it too.
  */
 const GROUP = 'app/(authenticated)';
+const GROUPS = ['app/(authenticated)', 'app/(gate)'];
 // S-29 (change-password) left this list with S-21's Change password link: change-password/layout.tsx gates it (ACC-b).
 const EXEMPT: Record<string, string> = {
-  [`${GROUP}/acceptances/page.tsx`]: 'S-05, gate 3\'s own destination (exempt from it by exact path, lib/auth/identity.ts); it calls requireIdentity itself',
+  'app/(gate)/acceptances/page.tsx': 'S-05, gate 3\'s own destination (exempt from it by exact path, lib/auth/identity.ts); it calls requireIdentity itself',
 };
 
 const CALLS_GATE = /\brequireIdentity\(/;
+/**
+ * A page of a parallel-route slot (`@slot/`, owner ruling R4's `@project`) that renders nothing and imports nothing reads
+ * nothing, so it needs no gate: it is exactly `export default function Name() { return null; }` once comments are gone.
+ * A slot page that reads anything is held to the rule like any page (the project block's page calls requireIdentity).
+ */
+const EMPTY_SLOT_PAGE = /^\s*export default function \w+\(\) \{\s*return null;\s*\}\s*$/;
 
 /** The pages of `files` (path -> source) that neither call the gate nor sit under a gating layout below the group root. */
 function ungatedPages(files: ReadonlyMap<string, string>, group = GROUP): string[] {
@@ -23,6 +32,7 @@ function ungatedPages(files: ReadonlyMap<string, string>, group = GROUP): string
   const gates = (f: string) => CALLS_GATE.test(code(f));
   return [...files.keys()].filter((f) => f.endsWith('/page.tsx')).sort().filter((page) => {
     if (gates(page)) return false;
+    if (page.split('/').some((seg) => seg.startsWith('@')) && EMPTY_SLOT_PAGE.test(code(page))) return false;
     // Each directory from the page's own up to, but not including, the group root.
     for (let dir = dirname(page); dir !== group && dir.startsWith(`${group}/`); dir = dirname(dir)) {
       if (gates(`${dir}/layout.tsx`)) return false;
@@ -39,10 +49,15 @@ function filesUnder(dir: string): string[] {
 }
 
 describe('every signed-in page runs the gates on a client-side navigation (A7)', () => {
-  it('UX-01 FR-ACC-04 (A7): each page under app/(authenticated) calls requireIdentity, or a layout below the group root does, or is exempt with a reason', () => {
-    const files = new Map(filesUnder(GROUP).map((f) => [f, readFileSync(f, 'utf8')]));
-    expect([...files.keys()].filter((f) => f.endsWith('page.tsx')).length).toBeGreaterThan(8);
-    expect(ungatedPages(files).filter((p) => !(p in EXEMPT))).toEqual([]);
+  it('UX-01 FR-ACC-04 (A7): each page under app/(authenticated) and app/(gate) calls requireIdentity, or a layout below its group root does, or is exempt with a reason', () => {
+    const pages: Record<string, number> = {};
+    for (const group of GROUPS) {
+      const files = new Map(filesUnder(group).map((f) => [f, readFileSync(f, 'utf8')]));
+      pages[group] = [...files.keys()].filter((f) => f.endsWith('page.tsx')).length;
+      expect(ungatedPages(files, group).filter((p) => !(p in EXEMPT)), group).toEqual([]);
+    }
+    expect(pages['app/(authenticated)']).toBeGreaterThan(8);
+    expect(pages['app/(gate)']).toBe(3);
     for (const [f, reason] of Object.entries(EXEMPT)) expect({ f, exists: existsSync(f), reason: reason.length > 0 }).toEqual({ f, exists: true, reason: true });
   });
 
@@ -61,5 +76,13 @@ describe('every signed-in page runs the gates on a client-side navigation (A7)',
       .toEqual(['g/a/page.tsx', 'g/c/d/page.tsx']);
     // requireIdentityForApi is the API gate, not the page gate.
     expect(ungatedPages(tree({ 'g/a/layout.tsx': 'await requireIdentityForApi();' }), 'g')).toEqual(['g/a/page.tsx', 'g/c/d/page.tsx']);
+    // Route task 1: an empty page in a parallel-route slot reads nothing and needs no gate; a slot page that reads does,
+    // and an empty page outside a slot is still a page.
+    const slots = tree({
+      'g/@s/x/page.tsx': '/** nothing */\nexport default function NoProject() {\n  return null;\n}\n',
+      'g/@s/y/page.tsx': "import { load } from '@/lib/x';\nexport default async function P() { return load(); }",
+      'g/e/page.tsx': 'export default function E() { return null; }',
+    });
+    expect(ungatedPages(slots, 'g')).toEqual(['g/@s/y/page.tsx', 'g/a/page.tsx', 'g/c/d/page.tsx', 'g/e/page.tsx']);
   });
 });

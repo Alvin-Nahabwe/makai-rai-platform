@@ -9,6 +9,7 @@ import { lookupUserNames } from '@/lib/data/identity';
 import { toResponse } from '@/lib/http/toResponse';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { logSecurityEvent } from '@/lib/security-logger';
+import { GONE_NAME_COPY } from '@/lib/http/copy';
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -31,7 +32,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
     const names = await lookupUserNames(members.map((m) => m.userId));
     const withNames = members.map((m) => ({
       ...m,
-      user: { id: m.userId, name: names.get(m.userId)?.name ?? 'Unknown' },
+      user: { id: m.userId, name: names.get(m.userId)?.name ?? GONE_NAME_COPY.deletedAccount },
     }));
     return NextResponse.json(withNames);
   } catch (e) {

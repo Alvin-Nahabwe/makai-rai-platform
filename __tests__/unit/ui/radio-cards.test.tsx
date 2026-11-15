@@ -63,6 +63,16 @@ describe('RadioCards', () => {
     expect(render().match(/class="ui-mark__shape"/g)).toHaveLength(2);
   });
 
+  it('helpBelow (additive): each sentence moves after the grid, in option order, keeping its id and still describing its radio; without it the markup is unchanged', () => {
+    const below = render({ helpBelow: true });
+    const cards = below.split('<div class="ui-radio-card">').slice(1);
+    for (const card of cards) expect(card.split('</div>')[0]).not.toContain('ui-radio-card__help');
+    expect(below).toMatch(/<\/div><div class="ui-radio-cards__helps"><p class="ui-radio-card__help" id="status-done-help">The expected practice is in place\.<\/p><p class="ui-radio-card__help" id="status-partly-help">Some of the expected practice is in place\.<\/p><\/div><\/fieldset>$/);
+    expect(below).toMatch(/<input[^>]*id="status-done"[^>]*aria-describedby="status-done-help"/);
+    expect(render({ helpBelow: false })).toBe(render());
+    expect(render()).not.toContain('ui-radio-cards__helps');
+  });
+
   it('two columns when asked; required reaches each radio', () => {
     expect(render({ columns: 2 })).toContain('class="ui-radio-cards ui-radio-cards--columns-2"');
     expect(render({ required: true }).match(/<input [^>]*required=""/g)).toHaveLength(3);

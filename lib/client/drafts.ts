@@ -54,6 +54,8 @@ export interface DraftStore {
   /** This account's live drafts, newest first. */
   list(userId: string, now: Date, filter?: { orgId?: string; projectId?: string }): Array<{ key: DraftKey; draft: StoredDraft<unknown>; keptUntil: CalendarDate }>;
   count(userId: string, now: Date, filter?: { orgId?: string; projectId?: string }): number;
+  /** True when a live draft of another account is kept here (D16); false for an empty id. Reads only, removing nothing. */
+  hasOtherAccounts(userId: string, now: Date): boolean;
   /** Removes every draft that is not this account's; returns how many. */
   purgeOtherAccounts(userId: string): number;
   purgeAccount(userId: string): number;
@@ -204,6 +206,12 @@ export function openDraftStore(storage?: Storage | null): DraftStore | null {
     },
     list: listLive,
     count: (userId, now, filter) => listLive(userId, now, filter).length,
+    hasOtherAccounts: (userId, now) => userId !== '' && draftStorageKeys().some((raw) => {
+      const key = parseKey(raw);
+      if (key === null || key.userId === userId) return false;
+      const draft = parseDraft(getRaw(raw));
+      return draft !== null && !expired(draft, now);
+    }),
     purgeOtherAccounts(userId: string): number {
       // An empty account id is a caller's mistake; deleting everyone's drafts for it is the wrong answer.
       if (userId === '') return 0;

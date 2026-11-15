@@ -7,6 +7,7 @@ import { MANIFEST_PATH, adminSeat, type FixtureManifest, type FixtureManifestUse
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { expectNoHorizontalScroll } from './helpers/reflow';
+import { IDLE_TEXTS } from '../lib/auth/session/copy';
 
 /**
  * Plan 1A Task 11: the shell in a browser (the lead's additions, section 8). Each case says where a thing is, not only that
@@ -18,9 +19,9 @@ import { expectNoHorizontalScroll } from './helpers/reflow';
  * buildOrg and testDb on rows no other spec uses (FR-ACC-04's way in e2e/acceptances.spec.ts).
  */
 
-const WARNING = 'You will be signed out in 2 minutes because nothing has happened for a while.';
-const ENDED = 'You have been signed out. What you typed is still on this page.';
-const ORG_ITEMS = ['Home', 'Projects', 'Findings', 'Guidance', 'Help', 'Members', 'Organisation details', 'My account'];
+const WARNING = IDLE_TEXTS.warningTitle;
+const ENDED = IDLE_TEXTS.endedKept;
+const ORG_ITEMS = ['Home', 'Projects', 'Findings', 'Guidance', 'Help', 'Members', 'Organisation', 'My account'];
 /** 70 characters, no hyphen and no space: the hardest organisation name to fit in the rail. */
 const LONG_ORG_NAME = 'Kampalanakasongolaresponsibleartificialintelligencelaboratoryformakere';
 const PERSON_NAME = 'Ssekandi Nnaŋŋa';
@@ -75,7 +76,8 @@ async function scrollSettled(page: Page): Promise<void> {
   await page.evaluate(
     () =>
       new Promise<void>((resolve) => {
-        const position = () => `${window.scrollY}:${document.querySelector('.shell-topbar__panel')?.scrollTop ?? 0}`;
+        // The panel scrolls below 1024 px; from 1024 px the rail's upper part does (route task 1, fix round 3).
+        const position = () => `${window.scrollY}:${document.querySelector('.shell-topbar__panel')?.scrollTop ?? 0}:${document.querySelector('.shell-rail__scroll')?.scrollTop ?? 0}`;
         let last = position();
         let still = 0;
         const tick = () => {
@@ -94,7 +96,8 @@ async function scrollSettled(page: Page): Promise<void> {
   );
 }
 
-const railLinks = (page: Page) => page.getByRole('navigation', { name: 'Main', exact: true }).getByRole('link');
+/** The rail's items: its links but the brand (the MAK-AI logo and the platform's name, e2e/shell-project.spec.ts). */
+const railLinks = (page: Page) => page.getByRole('navigation', { name: 'Main', exact: true }).locator('a.shell-rail__item');
 
 // ── The person in two organisations, with long names, made for this spec ─────────────────────────────────────────────
 
@@ -404,7 +407,7 @@ async function expectNamesFit(page: Page, names: readonly string[]): Promise<voi
       .filter((e) => getComputedStyle(e).display !== 'none')
       .filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && (r.right > vw + 0.5 || r.left < -0.5); })
       .map((e) => `${e.tagName.toLowerCase()}.${(e as HTMLElement).className}`);
-    const overflowing = [...document.querySelectorAll('.shell-rail__name, .shell-org__name, .shell-topbar__title, .shell-rail__product')]
+    const overflowing = [...document.querySelectorAll('.shell-rail__name, .shell-org__name, .shell-rail__product')]
       .filter((e) => getComputedStyle(e).display !== 'none')
       .filter((e) => (e as HTMLElement).scrollWidth > (e as HTMLElement).clientWidth + 0.5)
       .map((e) => `${(e as HTMLElement).className}: ${(e as HTMLElement).scrollWidth} > ${(e as HTMLElement).clientWidth}`);
@@ -540,10 +543,10 @@ test('1A Task 11 (5) F3: a hovered organisation in the open switcher keeps the s
   }
 });
 
-/** The addresses of the rail's five organisation links (Home, Projects, Findings, Members, Organisation details). */
+/** The addresses of the rail's five organisation links (Home, Projects, Findings, Members, Organisation). */
 async function orgLinkHrefs(page: Page): Promise<string[]> {
   const out: string[] = [];
-  for (const label of ['Home', 'Projects', 'Findings', 'Members', 'Organisation details']) {
+  for (const label of ['Home', 'Projects', 'Findings', 'Members', 'Organisation']) {
     out.push((await railLinks(page).filter({ hasText: new RegExp(`^${label}$`) }).getAttribute('href')) ?? 'MISSING');
   }
   return out;
@@ -646,7 +649,8 @@ async function watchFirstTheme(page: Page): Promise<void> {
 }
 
 async function shownThemeWords(page: Page, scope: string): Promise<string[]> {
-  return page.locator(`${scope} .shell-theme span`).evaluateAll((els) => els.filter((e) => getComputedStyle(e).display !== 'none').map((e) => (e as HTMLElement).innerText.trim()));
+  // The two labels, each the button's child; the words sit in a span inside each (fix round 4).
+  return page.locator(`${scope} .shell-theme > span`).evaluateAll((els) => els.filter((e) => getComputedStyle(e).display !== 'none').map((e) => (e as HTMLElement).innerText.trim()));
 }
 
 for (const where of [{ name: 'the rail', signedIn: true, scope: '.shell-rail' }, { name: 'the public header', signedIn: false, scope: '.shell-public-header' }]) {
@@ -950,6 +954,51 @@ test('1A Task 11 (12): at 375 px every control of the bar and the open panel is 
       checked += 1;
     }
     expect(checked, 'controls of the panel reached by Tab').toBeGreaterThanOrEqual(10);
+  } finally {
+    await context.close();
+  }
+});
+
+// ── Public pages: the root frame must not break the door pages' full-height column (re-review round 4, N1) ───────────
+for (const [path, width, height] of [
+  ['/login', 1280, 900], ['/forgot-password', 1280, 900], ['/reset-password', 1280, 900],
+  ['/login', 1440, 900], ['/forgot-password', 1440, 900], ['/reset-password', 1440, 900],
+] as const) {
+  test(`final fix 1: at ${width}x${height} the footer of ${path} ends on the foot of the viewport`, async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width, height } });
+    try {
+      const page = await context.newPage();
+      await page.goto(path);
+      const door = await page.getByRole('contentinfo').evaluate((footer) => ({
+        bottom: footer.getBoundingClientRect().bottom, inner: window.innerHeight, scrolls: document.documentElement.scrollHeight > window.innerHeight,
+      }));
+      expect(Math.abs(door.bottom - door.inner), `${path} footer bottom against the viewport foot`).toBeLessThanOrEqual(1);
+      expect(door.scrolls, `${path} does not scroll`).toBe(false);
+    } finally {
+      await context.close();
+    }
+  });
+}
+
+test('final fix 1: at 1280x900 on /about the footer follows the content and ends the document', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  try {
+    const page = await context.newPage();
+    await page.goto('/about');
+    const about = await page.evaluate(() => {
+      const footer = document.querySelector('footer');
+      const main = document.querySelector('main');
+      return {
+        footerTop: footer ? footer.getBoundingClientRect().top + window.scrollY : -1,
+        mainBottom: main ? main.getBoundingClientRect().bottom + window.scrollY : -1,
+        footerBottom: footer ? footer.getBoundingClientRect().bottom + window.scrollY : -1,
+        docHeight: document.documentElement.scrollHeight,
+        inner: window.innerHeight,
+      };
+    });
+    expect(about.docHeight, '/about is longer than the viewport').toBeGreaterThan(about.inner);
+    expect(about.footerTop, '/about footer starts at the content end').toBeGreaterThanOrEqual(about.mainBottom - 1);
+    expect(Math.abs(about.footerBottom - about.docHeight), '/about footer ends the document').toBeLessThanOrEqual(1);
   } finally {
     await context.close();
   }

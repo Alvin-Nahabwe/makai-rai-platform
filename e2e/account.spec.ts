@@ -10,7 +10,7 @@ import { e2eBaseURL } from './helpers/port';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { expectNoHorizontalScroll } from './helpers/reflow';
-import { AUTH_COPY, AUTH_MESSAGE_COPY, FORGOT_COPY, RESET_COPY, SIGN_IN_COPY } from '../lib/auth/copy';
+import { AUTH_COPY, AUTH_MESSAGE_COPY, CHANGE_PASSWORD_COPY, FORGOT_COPY, RESET_COPY, SIGN_IN_COPY } from '../lib/auth/copy';
 import { expectTargetsAtLeast24px } from './helpers/targetSize';
 import { ACCOUNT_COPY, PERSONAL_DATA_COPY, SIGN_OUT_EVERYWHERE_COPY, phraseLabel } from '../lib/account/copy';
 import { DELETE_PHRASE, DELETION_UNCONFIRMED } from '../lib/export/messages';
@@ -124,7 +124,8 @@ async function signInPage(page: Page, account: Pick<FixtureAccount, 'email' | 'p
 
 /**
  * Waits for the scroll to stop: `html { scroll-behavior: smooth }` means a box measured right after a focus or a key press is
- * read on a page in motion (ruling T16-22). From 1024 px the scroller is `main.shell__main`, below it the window. Settled is
+ * read on a page in motion (ruling T16-22). From 1024 px the scroller is the root layout's `.page-frame` (it held main.shell__main
+ * until the shell's fix round 4, D23), below it the window. Settled is
  * the same position on two polls 100 ms apart; the predicate is synchronous because waitForFunction takes a returned Promise
  * as a truthy answer at once.
  */
@@ -132,8 +133,8 @@ async function scrollSettled(page: Page): Promise<void> {
   await page.evaluate(() => { (window as unknown as { lastScrollAt?: number }).lastScrollAt = Number.NaN; });
   await page.waitForFunction(() => {
     const w = window as unknown as { lastScrollAt?: number };
-    const main = document.querySelector('.shell__main');
-    const at = window.scrollY + (main ? main.scrollTop : 0);
+    // Every page has the frame (app/layout.tsx), so a missing one throws rather than reading as settled.
+    const at = window.scrollY + document.querySelector('.page-frame')!.scrollTop;
     const settled = w.lastScrollAt === at;
     w.lastScrollAt = at;
     return settled;
@@ -200,7 +201,7 @@ test.describe('My account and sessions', () => {
     const password = page.getByLabel(PERSONAL_DATA_COPY.passwordLabel);
     await expect(password).toBeFocused();
     await scrollSettled(page);
-    // At 1280 px the scroller is main.shell__main, so a box is placed against the window's viewport, never against the scroller.
+    // At 1280 px the scroller is the page frame, so a box is placed against the window's viewport, never against the scroller.
     const view = page.viewportSize()!;
     const confirm = page.locator('.ui-confirm');
     const boxes: Array<[string, { x: number; y: number; width: number; height: number }]> = [
@@ -264,6 +265,7 @@ test.describe('My account and sessions', () => {
     await page.fill('#email', b.email);
     await page.fill('#password', b.password);
     await page.locator('button[type="submit"]').click();
+    await page.getByRole('button', { name: AUTH_COPY.removeAndContinue }).click(); // D16 asks first (plan 1B Task 5)
     await page.waitForURL((url) => url.pathname !== '/login');
     const keys = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('makrai.draft.v1:')));
     expect(keys).toEqual([keyOf(b.userId)]);
@@ -290,7 +292,10 @@ test.describe('My account and sessions', () => {
     await page.goto('/account');
     await page.getByRole('link', { name: 'Change password' }).click();
     await page.waitForURL(/\/change-password$/);
-    await expect(page.getByRole('heading', { level: 1, name: 'Change your password' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: AUTH_COPY.titles.changePassword })).toBeVisible();
+    // Plan 1B Task 3 (T3.2): the voluntary view leads back to My account, and does not say the change is forced.
+    await expect(page.getByRole('link', { name: CHANGE_PASSWORD_COPY.backToAccount })).toHaveAttribute('href', '/account');
+    await expect(page.getByText(AUTH_COPY.forcedLead)).toHaveCount(0);
     // A hard load of the page gets the same.
     await page.goto('/change-password');
     await expect(page).toHaveURL(/\/change-password$/);
@@ -306,9 +311,12 @@ test.describe('My account and sessions', () => {
       await page.goto(path);
       await expect(page, path).toHaveURL(/\/change-password$/);
     }
-    await expect(page.getByRole('heading', { level: 1, name: 'Change your password' })).toBeVisible();
-    await expect(page.getByLabel('Current password')).toHaveAttribute('autocomplete', 'current-password');
-    await expect(page.getByLabel('New password')).toHaveAttribute('autocomplete', 'new-password');
+    await expect(page.getByRole('heading', { level: 1, name: AUTH_COPY.titles.changePassword })).toBeVisible();
+    await expect(page.getByLabel(CHANGE_PASSWORD_COPY.currentPassword)).toHaveAttribute('autocomplete', 'current-password');
+    await expect(page.getByLabel(CHANGE_PASSWORD_COPY.newPassword)).toHaveAttribute('autocomplete', 'new-password');
+    // Plan 1B Task 3 (T3.2): the forced view says why and links nowhere.
+    await expect(page.getByText(AUTH_COPY.forcedLead)).toBeVisible();
+    await expect(page.getByRole('main').getByRole('link')).toHaveCount(0);
   });
 
   test('NFR-SEC-07 FR-ACC-07 FR-ACC-08 B21: after sign out everywhere, a password change, deactivation and 7 days, GET /api/auth/session answers null and sets no fresh session cookie', async () => {
@@ -459,7 +467,7 @@ test.describe('My account and sessions', () => {
     }
     // S-03's token is out of the address before any request, and a link with no token says M-22.
     await anon.goto(`/reset-password#token=${await resetTokenFor(fx.members.reviewer)}`);
-    await expect(anon.getByLabel('New password')).toBeVisible();
+    await expect(anon.getByLabel(RESET_COPY.newPassword)).toBeVisible();
     expect(new URL(anon.url()).hash).toBe('');
     await anon.goto('/reset-password');
     await expect(anon.locator('.ui-status--error')).toHaveText(M22);
@@ -499,7 +507,7 @@ test.describe('J-15 with a mail catcher', { tag: '@nginx' }, () => {
     // A client-side navigation: wait for S-02 itself, or the fill can land in S-01's Email field on its way out.
     await page.waitForURL(/\/forgot-password$/);
     await expect(page.getByRole('heading', { level: 1, name: AUTH_COPY.resetHeading })).toBeVisible();
-    await page.getByLabel('Email').fill(a.email);
+    await page.getByLabel(SIGN_IN_COPY.email).fill(a.email);
     await page.getByRole('button', { name: FORGOT_COPY.submit }).click();
     // The page's own status, not the shell's offline banner (also role="status").
     await expect(page.getByRole('status').filter({ hasText: AUTH_MESSAGE_COPY.resetLinkSent })).toHaveText(AUTH_MESSAGE_COPY.resetLinkSent);
@@ -507,7 +515,7 @@ test.describe('J-15 with a mail catcher', { tag: '@nginx' }, () => {
     const token = mailedResetToken(a.email)!;
 
     await page.goto(`/reset-password#token=${token}`);
-    await page.getByLabel('New password').fill('j'.repeat(12));
+    await page.getByLabel(RESET_COPY.newPassword).fill('j'.repeat(12));
     await page.getByRole('button', { name: RESET_COPY.submit }).click();
     await page.waitForURL(/\/login\?passwordChanged=1$/);
 
@@ -523,24 +531,26 @@ test.describe('J-15 with a mail catcher', { tag: '@nginx' }, () => {
     const a = (await buildOrg({ label: 'j15k' })).members.assessor;
     const page = await newPage(browser);
     await page.goto('/forgot-password');
-    await tabTo(page, page.getByLabel('Email'));
+    await tabTo(page, page.getByLabel(SIGN_IN_COPY.email));
     await page.keyboard.type(a.email);
     await tabTo(page, page.getByRole('button', { name: FORGOT_COPY.submit }));
     await page.keyboard.press('Enter');
     await expect(page.getByRole('status').filter({ hasText: AUTH_MESSAGE_COPY.resetLinkSent })).toBeVisible();
+    // The form and its button are gone: focus is on the card's h1 above the answer, not in the live region (A-L1).
+    await expect(page.getByRole('heading', { level: 1, name: AUTH_COPY.resetHeading })).toBeFocused();
     await expect.poll(() => mailedResetToken(a.email), { timeout: 15_000 }).not.toBeNull();
 
     await page.goto(`/reset-password#token=${mailedResetToken(a.email)!}`);
-    await tabTo(page, page.getByLabel('New password'));
+    await tabTo(page, page.getByLabel(RESET_COPY.newPassword));
     await page.keyboard.type('k'.repeat(12));
     await tabTo(page, page.getByRole('button', { name: RESET_COPY.submit }));
     await page.keyboard.press('Enter');
     await page.waitForURL(/\/login\?passwordChanged=1$/);
     // The URL can change while S-01 still shows its Suspense fallback (LoginForm's useSearchParams boundary). Since the
     // logo became a plain <img> (NFR-PERF-02) that window was measured here, and a Tab pressed in it went to the footer.
-    await expect(page.getByLabel('Email')).toBeVisible();
+    await expect(page.getByLabel(SIGN_IN_COPY.email)).toBeVisible();
 
-    await tabTo(page, page.getByLabel('Email'));
+    await tabTo(page, page.getByLabel(SIGN_IN_COPY.email));
     await page.keyboard.type(a.email);
     await tabTo(page, page.locator('#password'));
     await page.keyboard.type('k'.repeat(12));

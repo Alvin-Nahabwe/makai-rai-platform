@@ -16,3 +16,24 @@
 .ui-mark__words {
   color: var(--color-ink);
 }
+
+/* Done (owner's ruling R8, 15 Nov 2026, over spec D4): the sketch's filled green check. The disc is the saved green, which
+   holds 3:1 or more on the surface and the ground in both themes; the check is the surface colour on it. In forced colours
+   the disc is the system text colour and the check the canvas, so the shape stays. */
+.ui-mark__done-disc {
+  fill: var(--color-saved);
+}
+
+.ui-mark__done-check {
+  stroke: var(--color-surface);
+}
+
+@media (forced-colors: active) {
+  .ui-mark__done-disc {
+    fill: CanvasText;
+  }
+
+  .ui-mark__done-check {
+    stroke: Canvas;
+  }
+}

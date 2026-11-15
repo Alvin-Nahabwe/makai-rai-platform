@@ -1,0 +1,55 @@
+/* The door pages' card content (plan 1B Tasks 2 to 5): AuthCard's footer and the password toggle. The gate frame
+   (components/layout/gate.css) draws the card; these rules only space what is inside it. Role tokens only; nothing
+   animates. AuthCard's lead and a form's status line are in components/layout/gate.css since the lean frame (owner,
+   15 Nov 15:35): S-04 uses them, and this sheet is not on S-04's first visit. */
+
+/* The footer: the links after the form, set off by a line, with room between them. */
+.auth-view__footer {
+  display: grid;
+  gap: var(--space-3);
+  margin-block-start: var(--space-6);
+  padding-block-start: var(--space-4);
+  border-block-start: 1px solid var(--color-border-container);
+  color: var(--color-ink-muted);
+}
+
+.auth-view__footer a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--target-min);
+}
+
+/* Show password sits right under its box, pulled into the field's bottom margin. */
+.password-field__toggle {
+  margin-block: calc(-1 * var(--space-4)) var(--space-6);
+}
+
+/* D16's confirmation in place of S-01's form: the two consequences, one per choice, in the buttons' order. */
+.other-text__consequences {
+  display: grid;
+  gap: var(--space-2);
+  margin-block: var(--space-4);
+  padding-inline-start: var(--space-5);
+  list-style: disc;
+}
+
+.other-text__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.other-text .ui-status:not(:empty) {
+  margin-block-start: var(--space-4);
+}
+
+/* A card whose one way forward is a link drawn as the kit's primary button (S-03's used link: design review I-6). */
+.auth-view__action {
+  margin-block-start: var(--space-6);
+}
+
+/* Show password lines up with the field's left edge (design review M-1): the quiet button's inline padding is drawn
+   outside the column, so its words start where the box starts. */
+.password-field__toggle .ui-button {
+  margin-inline-start: calc(-1 * var(--space-3));
+}

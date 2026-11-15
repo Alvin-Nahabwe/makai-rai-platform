@@ -5,12 +5,18 @@ import { pageTitle } from '@/lib/ui/title';
 import { readHelpEmail } from '@/lib/help/contact';
 import { HELP_COPY } from '@/lib/help/copy';
 import { SEAL_PROOF_HREF } from '@/components/review/reviewText';
+import { Definition, Term } from '@/components/ui/Definition';
+import { TERM_RISK_AREA, TERM_STAGE_1, TERM_STAGE_2, TERM_STAGE_3 } from '@/lib/vocabulary/terms';
+import type { DefinedEntry } from '@/lib/vocabulary/types';
 import './AboutPage.css';
 
 /**
  * S-28, the public About page. It says what the platform is and is not,
  * credits GIZ, and gives Help and contact. What a seal does and does not show
  * is on Help (plan 1A Task 12, ruling R10); this page links there.
+ *
+ * Each defined term (spec 6) is first used beside its definition: the stage names in the stage list, the four words of
+ * what can follow a decision in their own list, and "risk areas" in the principles' lead (lane 6 B5).
  *
  * Section ids are linked from other pages and are part of the contract:
  * `credit`, `help-and-contact` and `principle-<slug>`.
@@ -21,7 +27,7 @@ import './AboutPage.css';
  */
 export const metadata = { title: pageTitle(ABOUT_COPY.titles.about) };
 
-type PrincipleSlug = Exclude<keyof typeof ABOUT_COPY.principles, 'heading' | 'lead' | 'asks' | 'areas' | 'sourceBefore' | 'sourceLink'>;
+type PrincipleSlug = Exclude<keyof typeof ABOUT_COPY.principles, 'heading' | 'lead' | 'areasLine' | 'asks' | 'areas' | 'sourceBefore' | 'sourceLink'>;
 
 /** The titles and the risk areas are the content's (`data/constants.ts`); the words about each are the copy module's. */
 const PRINCIPLES: Array<{ slug: PrincipleSlug; title: string; areas: Array<[code: string, name: string]> }> = [
@@ -92,8 +98,23 @@ const PRINCIPLES: Array<{ slug: PrincipleSlug; title: string; areas: Array<[code
   },
 ];
 
-/** The stage names are the content's; the meaning beside each is the vocabulary's, through the copy module. */
-const STAGE_NAMES = ['Pre-processing', 'In-processing', 'Post-processing'] as const;
+/** The stage names are the content's; the meaning beside each is the vocabulary's `Definition` (D1). */
+const STAGES: ReadonlyArray<readonly [name: string, entry: DefinedEntry]> = [
+  ['Pre-processing', TERM_STAGE_1],
+  ['In-processing', TERM_STAGE_2],
+  ['Post-processing', TERM_STAGE_3],
+];
+
+/** One line of a term list: the term as its first use on the page, then its definition (spec 6; the Members role list). */
+function TermLine({ entry, label }: { entry: DefinedEntry; label: string }) {
+  return (
+    <li>
+      <strong><Term of={entry}>{label}</Term>.</strong> <Definition of={entry} />
+    </li>
+  );
+}
+
+const capitalised = (s: string): string => `${s[0].toUpperCase()}${s.slice(1)}`;
 
 /** The awareness principle's first sentence names a model's "60% likely", so it alone sits in the marker. */
 function PrincipleBody({ slug }: { slug: PrincipleSlug }) {
@@ -128,13 +149,14 @@ export default function AboutPage() {
           <h2 id="what-this-is">{whatItDoes.heading}</h2>
           <p>{whatItDoes.intro}</p>
           <ul className="about-stages">
-            {STAGE_NAMES.map((name, i) => (
-              <li key={name}>
-                <strong>{name}.</strong> {whatItDoes.stageMeanings[i]}
-              </li>
-            ))}
+            {STAGES.map(([name, entry]) => <TermLine key={entry.id} entry={entry} label={name} />)}
           </ul>
           <p>{whatItDoes.record}</p>
+          <p>{whatItDoes.termsLead}</p>
+          <ul className="about-stages">
+            {whatItDoes.terms.map((entry) => <TermLine key={entry.id} entry={entry} label={capitalised(entry.term)} />)}
+          </ul>
+          <p>{whatItDoes.followUp}</p>
           <p data-claims-allowed="not-an-approval-service">{whatItDoes.notApproval}</p>
           <p>
             <Link href={SEAL_PROOF_HREF}>{HELP_COPY.sealing.heading}</Link>
@@ -149,7 +171,11 @@ export default function AboutPage() {
           aria-labelledby="principles-heading"
         >
           <h2 id="principles-heading">{principles.heading}</h2>
-          <p className="about-lead">{principles.lead}</p>
+          {/* The definition on its own line, the element after its sentence (FX4, DF I4). */}
+          <p className="about-lead">
+            {principles.lead} {principles.areasLine[0]}<Term of={TERM_RISK_AREA}>{principles.areasLine[1]}</Term>{principles.areasLine[2]}
+          </p>
+          <Definition of={TERM_RISK_AREA} as="p" />
 
           <div className="stage-details">
             {PRINCIPLES.map((p) => (

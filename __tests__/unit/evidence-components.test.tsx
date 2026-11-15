@@ -30,10 +30,22 @@ const text = (html: string) => html.replace(/<[^>]+>/g, '').replace(/&#x27;/g, "
 const list = (items: EvidenceItemView[]) => renderToStaticMarkup(<VersionEvidenceList orgSlug="acme" items={items} />);
 
 describe('the evidence block and the version evidence list', () => {
-  it('UX-30 FR-RM-01: upload lines are text and no progress element exists', () => {
+  it('UX-30 FR-RM-01 C5: an uploading line is text, with one native progress element inside [data-upload-progress], labelled with the file', () => {
     const html = view({ uploads: [up({ state: 'uploading', loaded: 800_000, size: 2_400_000 })] });
     expect(text(html)).toContain('Uploading costing.xlsx: 0.8 of 2.4 MB.');
-    expect(html).not.toMatch(/<progress|role="progressbar"/);
+    expect(html.match(/<progress/g)).toHaveLength(1);
+    expect(html).toMatch(/<span data-upload-progress[^>]*><progress[^>]*value="800000"[^>]*max="2400000"[^>]*aria-label="Uploading costing\.xlsx"[^>]*><\/progress><\/span>/);
+    expect(html).not.toMatch(/role="progressbar"/);
+    // A file that failed or finished has no progress element.
+    expect(view({ uploads: [up({ state: 'failed', failure: 'cut_off' }), up({ key: 'k2', state: 'uploaded', size: 412_000 })] })).not.toMatch(/<progress/);
+  });
+  it('C5: "Save without" beside an uploading file while no Save waits, one button for the block; none while a Save waits', () => {
+    const saveWithout = { label: 'Save without these files', onPress: () => {} };
+    const two = view({ uploads: [up(), up({ key: 'k2', fileName: 'b.pdf' })], saveWithout });
+    expect(two.match(/>Save without these files</g)).toHaveLength(1);
+    expect(two.indexOf('Save without these files')).toBeGreaterThan(two.indexOf('b.pdf'));
+    expect(view({ uploads: [up()], saveWithout: null })).not.toContain('Save without');
+    expect(view({ uploads: [up({ state: 'failed', failure: 'cut_off' })], saveWithout })).not.toContain('Save without');
   });
   it('M-18 UX-30: names left uploading before the page closed are listed after reload', () => {
     expect(text(view({ notUploaded: ['costing.xlsx'] }))).toContain('costing.xlsx was not uploaded before the page closed. Choose the file again.');
@@ -62,15 +74,44 @@ describe('the evidence block and the version evidence list', () => {
     expect(html).toMatch(/<a [^>]*href="https:\/\/example.org\/ethics.pdf"[^>]*rel="noopener noreferrer"/);
     expect(html).not.toMatch(/<(img|iframe|link|script)[^>]*example\.org/);
   });
-  it('NFR-SEC-11 E14 F2: a link address with a right-to-left override shows without it, inside bdi; the href stays as stored', () => {
+  it('NFR-SEC-11 E14 F2: a link address with a right-to-left override shows without it, inside bdi; the href is the one parse of the stored address', () => {
     const url = 'https://e.org/\u202Eexe.pdf';
     for (const label of [null, 'Ethics']) {
       const html = list([{ ...LINK_VIEW, url, label }]);
       expect(text(html)).not.toMatch(/[\u202A-\u202E\u2066-\u2069]/);
-      expect(text(html)).toContain('https://e.org/exe.pdf');
+      expect(text(html)).toContain(label === null ? 'https://e.org/exe.pdf' : 'Ethics (e.org, opens another site)');
       expect(html).toMatch(/<bdi>[^<]*(https:\/\/e\.org\/exe\.pdf|Ethics)[^<]*<\/bdi>/);
-      expect(html).toContain(`href="${url}"`);
+      // webLink (lib/evidence/format.ts): the parsed address, the control percent-encoded in the path, as the browser sends it.
+      expect(html).toContain('href="https://e.org/%E2%80%AEexe.pdf"');
     }
+  });
+
+  describe('T3 item 8: one rule for an evidence link, webLink (the same parse gives the href and the host shown)', () => {
+    it('a name that claims another site is followed by the host the link really goes to', () => {
+      const html = list([{ ...LINK_VIEW, url: 'https://evil.example/login', label: 'https://bank.example' }]);
+      expect(html).toMatch(/<a href="https:\/\/evil\.example\/login" rel="noopener noreferrer"><bdi>https:\/\/bank\.example<\/bdi> <span class="evidence-item__host">\(evil\.example, opens another site\)<\/span><\/a>/);
+      expect(text(html)).toBe(`https://bank.example ${EVIDENCE_COPY.list.linkTo('evil.example')}`);
+    });
+
+    it('"https:evil.example" goes to evil.example and says so; it is never a same-site path', () => {
+      for (const label of [null, 'Our policy']) {
+        const html = list([{ ...LINK_VIEW, url: 'https:evil.example', label }]);
+        expect(html).toContain('href="https://evil.example/"');
+        expect(html).not.toContain('href="https:evil.example"');
+        expect(text(html)).toContain(EVIDENCE_COPY.list.linkTo('evil.example'));
+      }
+    });
+
+    it('bidi controls in the host: no link at all, the cleaned address shown whole as text', () => {
+      const url = `https://ex${String.fromCharCode(0x202e)}ample.org/`;
+      for (const label of [null, 'Guide']) {
+        const html = list([{ ...LINK_VIEW, url, label }]);
+        expect(html).not.toMatch(/<a /);
+        expect(text(html)).not.toMatch(/[\u202A-\u202E\u2066-\u2069]/);
+        expect(text(html)).toBe(label === null ? 'https://example.org/' : 'Guide (https://example.org/)');
+        expect(text(html)).not.toContain('opens another site');
+      }
+    });
   });
   it('NFR-SEC-11: hostile names and labels render as text', () => {
     const items: EvidenceItemView[] = [...HOSTILE_FILE_NAMES.map((n, i) => ({ ...FILE_VIEW, id: `e${i}`, fileName: n })), { ...LINK_VIEW, url: 'javascript:alert(1)', label: '<script>alert(1)</script>' }];

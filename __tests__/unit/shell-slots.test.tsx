@@ -12,7 +12,7 @@ import { NewerLegalTextNotice } from '@/components/legal/NewerLegalTextNotice';
 describe('the slots the shell carries (ported unchanged from the sidebar test)', () => {
   it('M-41: before any press the guard renders its children, and no warning', () => {
     // DEC-b filled the slot: the guard wraps the button to catch a press, and shows M-41 only when this device holds drafts.
-    const html = renderToStaticMarkup(<SignOutWithDraftsGuard userId="u1"><button>Sign out</button></SignOutWithDraftsGuard>);
+    const html = renderToStaticMarkup(<SignOutWithDraftsGuard userId="u1" onPhase={() => {}}><button>Sign out</button></SignOutWithDraftsGuard>);
     expect(html).toContain('<button>Sign out</button>');
     expect(html).not.toContain('answers on this device');
   });

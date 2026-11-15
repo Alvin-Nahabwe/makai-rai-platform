@@ -41,7 +41,15 @@ import type { PerfManifest } from '../scripts/load/seed-perf-fixture';
  */
 
 const S11_BUDGET = 300_000;
+// The owner's ruling of 15 Nov 2026, 20:50 EAT (box): S-12, the question page, may transfer 315,000 B on first visit; S-11
+// keeps 300,000. S-12 measured 312,535 B on lane 8's head e422129c, over 300,000 since lane 2's decision card (integration
+// 70460e70: JS +7,886, CSS +4,839, HTML +784); nothing was trimmed.
+const S12_BUDGET = 315_000;
 const PUBLIC_BUDGET = 220_000;
+/** S-04's own first-visit limit, plain names: owner's ruling of 15 Nov 2026 15:35 (box: "Raise the limit ~4 KB"): 224,000 B. */
+const S04_BUDGET = 224_000;
+/** The /help page's own first-visit limit: owner's ruling of 15 Nov 2026 18:28: 223,000 B. */
+const HELP_BUDGET = 223_000;
 /** The sign-in rate limit keys on the client address (e2e/fixtures/auth.setup.ts), so these sign-ins get their own. */
 const SIGN_IN_IP = '10.47.0.1';
 const ACCEPTANCES_IP = '10.47.0.2';
@@ -60,7 +68,7 @@ const SIGNED_IN = /^\/(orgs\/[^/]+\/dashboard)?$/;
  */
 const LIMITS = {
   nginx: { s04Accented: 243_700, s05: 227_800 },     // the owner's production limits, through nginx on HTTP/2 (6 Nov)
-  direct: { s04Accented: 237_700, s05: 221_500 },    // regression guard for the direct run, the direct figures plus 1 KB (6 Nov)
+  direct: { s04Accented: 241_500, s05: 221_500 },    // regression guard for the direct run; S-04 accented raised by the owner, 15 Nov 15:35 (box: Raise the limit ~4 KB); S-05 as of 6 Nov
 } as const;
 /** S-04 rendered the invitation: its heading, not the "Invitation" page of an unusable link (app/(public)/invitations/[token]/page.tsx). */
 async function invitedHeading(page: Page): Promise<void> {
@@ -247,19 +255,19 @@ test.describe('the signed-in budget', () => {
     const project = await addProject(fx, { name: 'First visit' });
     storageState = 'test-results/first-visit-owner.json';
     // A signed-in account lands on its dashboard, or on the organisation picker at `/` when it has no last organisation
-    // yet (app/page.tsx, lib/org-dispatch.ts:17-31), as a fresh fixture owner has not.
+    // yet (app/(gate)/page.tsx, lib/org-dispatch.ts:17-31), as a fresh fixture owner has not.
     await signInAndSave(browser, baseURL, fx.members.owner, storageState, SIGN_IN_IP, SIGNED_IN);
     s11 = `/orgs/${fx.org.slug}/projects/${project.id}/stages/post-processing`;
     s12 = `${s11}/questions/Q-PO-01`;
   });
 
-  test('NFR-PERF-02: S-11 and S-12 of a 28-question stage transfer at most 300 KB on first visit', async ({ browser }) => {
+  test('NFR-PERF-02: S-11 of a 28-question stage transfers at most 300 KB and S-12 at most 315 KB on first visit', async ({ browser }) => {
     const baseURL = test.info().project.use.baseURL!;
-    for (const path of [s11, s12]) {
+    for (const [path, budget] of [[s11, S11_BUDGET], [s12, S12_BUDGET]] as const) {
       const m = await measure(browser, baseURL, path, storageState);
-      report(path, m, S11_BUDGET);
+      report(path, m, budget);
       expectRendered(m, path, path, path);
-      expect(m.total, `${path} first-visit bytes`).toBeLessThanOrEqual(S11_BUDGET);
+      expect(m.total, `${path} first-visit bytes`).toBeLessThanOrEqual(budget);
     }
   });
 });
@@ -267,7 +275,7 @@ test.describe('the signed-in budget', () => {
 test.describe('the public budget', () => {
   /** Page files that answer with a permanent redirect; the visit lands on the target (ACC-a). */
   const REDIRECTS_TO: Record<string, string> = { '/terms': '/legal/terms', '/privacy': '/legal/privacy' };
-  const S05 = 'app/(authenticated)/acceptances/page.tsx';
+  const S05 = 'app/(gate)/acceptances/page.tsx';
   let token: string;
   let acceptancesState: string;
 
@@ -309,7 +317,7 @@ test.describe('the public budget', () => {
     await signInAndSave(browser, baseURL, unaccepted, acceptancesState, ACCEPTANCES_IP, /^\/acceptances$/);
   });
 
-  test('NFR-PERF-02: every public page transfers at most 220 KB on first visit', async ({ browser }) => {
+  test('NFR-PERF-02: every public page transfers at most 220 KB on first visit, and S-04 at most 224 KB', async ({ browser }) => {
     const baseURL = test.info().project.use.baseURL!;
     const over: string[] = [];
     for (const file of publicPages()) {
@@ -318,11 +326,14 @@ test.describe('the public budget', () => {
       // S-04 must be the invitation itself, not its "Invitation" error page, which renders at the same address.
       const check = path.startsWith('/invitations/') ? invitedHeading : undefined;
       const m = await measure(browser, baseURL, path, undefined, check);
-      report(shown, m, PUBLIC_BUDGET);
+      // S-04 has its own limit, raised by the owner (15 Nov 15:35, box: Raise the limit ~4 KB), and /help has its own
+      // (owner's ruling of 15 Nov 2026 18:28, 223,000 B); every other page keeps 220,000.
+      const budget = path.startsWith('/invitations/') ? S04_BUDGET : path === '/help' ? HELP_BUDGET : PUBLIC_BUDGET;
+      report(shown, m, budget);
       expectRendered(m, path, REDIRECTS_TO[path] ?? path, shown);
-      if (m.total > PUBLIC_BUDGET) over.push(`${shown} ${m.total}`);
+      if (m.total > budget) over.push(`${shown} ${m.total} (limit ${budget})`);
     }
-    expect(over, 'public pages over 220000 bytes').toEqual([]);
+    expect(over, 'public pages over their limits (220000 B; S-04 224000 B; /help 223000 B)').toEqual([]);
   });
 
   test('NFR-PERF-02 (ACCEPTED-RISK): S-05, signed in without a v1 acceptance, stays within the owner\'s limit on first visit', async ({ browser }) => {

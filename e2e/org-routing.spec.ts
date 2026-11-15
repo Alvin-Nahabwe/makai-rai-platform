@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test';
 import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
 import { testDb } from '../__tests__/helpers/db';
 import { buildOrg } from '../__tests__/helpers/recordFixture';
-import { ORG_COPY } from '../lib/org/copy';
+import { ORG_COPY, roleWithArticle } from '../lib/org/copy';
 
 /**
  * The members are fixture seats (e2e/fixtures/auth.setup.ts, K0a's buildTwoOrgFixture) with their
@@ -38,6 +38,30 @@ test.describe('Org URL routing', () => {
     await expect(page).toHaveURL('/');
     await expect(page.locator('h1')).toHaveText(ORG_COPY.chooser.heading);
     await expect(page.locator(`a[href="/orgs/${fx.org.slug}/dashboard"]`)).toHaveCount(1);
+    // Plan 1B Task 8: the plate names the organisation and says the person's role there, in the labelled list.
+    const list = page.getByRole('list', { name: ORG_COPY.chooser.listLabel });
+    await expect(list.getByRole('listitem')).toHaveCount(1);
+    await expect(list).toContainText(fx.org.name);
+    await expect(list).toContainText(ORG_COPY.chooser.youAre(roleWithArticle('viewer')));
+    await context.close();
+    await testDb.$disconnect();
+  });
+
+  test('plan 1B Task 8: an account in no organisation sees the empty state, with no organisation link and no way to make one', async ({ browser }) => {
+    const fx = await buildOrg({ label: 'noorg' });
+    await testDb.membership.deleteMany({ where: { userId: fx.members.viewer.userId } });
+    const context = await browser.newContext({ extraHTTPHeaders: { 'x-forwarded-for': '10.49.0.2' } });
+    const page = await context.newPage();
+    await page.goto('/login');
+    await page.fill('#email', fx.members.viewer.email);
+    await page.fill('#password', fx.members.viewer.password);
+    await page.locator('button[type="submit"]').click();
+    await page.waitForURL((url) => url.pathname !== '/login');
+    await page.goto('/');
+    await expect(page.locator('h1')).toHaveText(ORG_COPY.chooser.emptyHeading);
+    await expect(page.getByRole('main')).toContainText(ORG_COPY.chooser.emptyTitle);
+    await expect(page.getByRole('main')).toContainText(ORG_COPY.chooser.emptyBody);
+    await expect(page.locator('a[href^="/orgs/"]')).toHaveCount(0);
     await context.close();
     await testDb.$disconnect();
   });

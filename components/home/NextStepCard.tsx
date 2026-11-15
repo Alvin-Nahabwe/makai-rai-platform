@@ -1,21 +1,14 @@
-import './NextStepCard.css';
 import type { ReactElement, ReactNode } from 'react';
 import { ButtonLink } from '@/components/ui/Button';
 import { LocalTime } from '@/components/ui/LocalTime';
 import { STAGE_NAME } from '@/components/project/StageColumn';
 import { HOME_COPY } from '@/lib/home/copy';
+import { PROJECT_COPY } from '@/lib/project/copy';
 import { positionWords } from '@/lib/ui/copy';
+import { questionHref } from '@/lib/question/draft';
 import type { NextStep } from '@/lib/home/types';
 import type { UtcInstant } from '@/types/record';
-
-/** Stands where a sentence of HOME_COPY takes a value that is rendered as an element; never shown. */
-const SLOT = '\u0000';
-
-/** A sentence of HOME_COPY with `node` placed where it took `SLOT`, so the words stay in the copy module alone. */
-function withSlot(sentence: string, node: ReactNode): ReactNode {
-  const [before, after] = sentence.split(SLOT);
-  return <>{before}{node}{after}</>;
-}
+import { SLOT, StageName, withSlot } from '@/components/home/parts';
 
 /** The day of the person's last save, in the reader's zone once hydrated. Rules next-open and last-saved always carry it. */
 function savedDay(at: UtcInstant | null): ReactNode {
@@ -30,27 +23,44 @@ function reasonOf(next: NextStep): ReactNode {
 }
 
 /**
- * Home's "Your next step" (spec 9.1; plan 1B rule C2): one question, named in words with its code small after them, where
- * it is, why it was chosen, and two controls of one height (plan C7): the primary to the question, the secondary to its
- * stage's questions, in that order on every width. A server
- * component: no state and no handler of its own.
+ * The primary control's words (owner's ruling, 15 November, through the lane lead): "Start recording" for a person who
+ * has never saved a decision in this organisation, "Continue recording" for anyone who has (spec 9.1). The signal is
+ * `lastSavedOn === null`: `loadNextStep` gives a step with no last save only to an Assessor for whom `hasSavedAny` is
+ * false (no decision version of theirs in the organisation, archived projects included), which is also the only case of
+ * rule 'first-open'. A save in a project archived since gives no next step at all, so never "Start" by mistake.
+ */
+function primaryWords(next: NextStep): string {
+  return next.lastSavedOn === null ? PROJECT_COPY.start : HOME_COPY.continueRecording;
+}
+
+/**
+ * Home's "Your next step" (spec 9.1; sketch home.png): the "you are here" ring, then where the question is (its stage, its
+ * place in the stage, its project), the question in words with its code small after them, why it was chosen, and two
+ * controls of one size (plan C7; the spec's two equal controls in place of the sketch's small link): the primary to the
+ * question, the secondary to its stage's questions, in that order on every width. The controls span the card's width
+ * under the ring, so both fit on one row at 1280. The stage named here is a reference: its definition is on its plate.
+ * A server component.
  */
 export function NextStepCard({ orgSlug, next }: { orgSlug: string; next: NextStep }): ReactElement {
   const stage = `/orgs/${orgSlug}/projects/${next.projectId}/stages/${next.stage}`;
   return (
-    <section className="next-step" aria-labelledby="next-step">
-      <h2 id="next-step">{HOME_COPY.nextStepHeading}</h2>
-      <div className="next-step__where">
-        <p>{withSlot(HOME_COPY.projectOf(SLOT), <bdi>{next.projectName}</bdi>)}</p>
-        <p>{STAGE_NAME[next.stage]}</p>
+    <section className="home-next" aria-labelledby="next-step">
+      <svg className="home-next__here" width="40" height="40" viewBox="0 0 40 40" aria-hidden="true" focusable="false">
+        <circle cx="20" cy="20" r="17" fill="none" stroke="currentColor" strokeWidth="4" />
+        <circle className="home-next__here-dot" cx="20" cy="20" r="5" />
+      </svg>
+      <div className="home-next__body">
+        <h2 id="next-step" className="home-next__heading">{HOME_COPY.nextStepHeading}</h2>
+        <p className="home-next__where">
+          <StageName stage={next.stage} /> · {positionWords(next.position.n, next.position.of)} · <bdi>{next.projectName}</bdi>
+        </p>
+        <p className="home-next__question">
+          <bdi>{next.questionText}</bdi> <span className="home-next__code">{next.questionId}</span>
+        </p>
+        <p className="home-next__reason">{reasonOf(next)}</p>
       </div>
-      <p className="next-step__question">
-        <bdi>{next.questionText}</bdi> <span className="next-step__code">{next.questionId}</span>
-      </p>
-      <p>{positionWords(next.position.n, next.position.of)}</p>
-      <p>{reasonOf(next)}</p>
-      <div className="next-step__actions">
-        <ButtonLink variant="primary" href={`${stage}/questions/${next.questionId}`}>{HOME_COPY.continueRecording}</ButtonLink>
+      <div className="home-next__actions">
+        <ButtonLink variant="primary" href={questionHref({ orgSlug, projectId: next.projectId, stage: next.stage }, next.questionId)}>{primaryWords(next)}</ButtonLink>
         <ButtonLink variant="secondary" href={stage}>{HOME_COPY.chooseAnother}</ButtonLink>
       </div>
     </section>

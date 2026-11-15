@@ -75,7 +75,7 @@ const overpass = localFont({
 
 export const metadata: Metadata = {
   title: PRODUCT_NAME,
-  description: 'Assess and improve responsible AI practices across the ML lifecycle',
+  description: 'Record and review the decisions your team makes about its AI system.',
   icons: { icon: '/favicon.png', apple: '/favicon-192.png' },
 };
 
@@ -92,9 +92,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <SkipLink />
-        <OfflineBanner />
-        {children}
-        <Footer />
+        {/* The page and its one footer in one frame. On a public page the frame draws nothing; on a signed-in page from
+            1024 px it is the content's one scroller, so the footer ends the content column beside the rail
+            (components/layout/shell.css, review D23). The offline notice is the frame's first box: there it takes one of
+            the frame's rows before the shell, so the frame stays the window's height when it shows (lane 8 I2). */}
+        <div className="page-frame">
+          <OfflineBanner />
+          {children}
+          <Footer />
+        </div>
       </body>
     </html>
   );

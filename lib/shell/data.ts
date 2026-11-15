@@ -38,7 +38,7 @@ export function roleWord(label: string): string {
  *
  * homeSlug (workshop walk finding S4) is the organisation `/` would send the person to, for the rail's links on pages whose
  * address carries no slug: the only organisation of a person in one; for a person in two or more, the one their
- * last-active hint names, chosen by resolveOrgDispatch exactly as app/page.tsx does, so the hint (unconstrained text,
+ * last-active hint names, chosen by resolveOrgDispatch exactly as app/(gate)/page.tsx does, so the hint (unconstrained text,
  * D-069) only ever selects among these memberships and is never itself a slug. The hint is read, by the person's own id,
  * only when there are two or more memberships. Null for the administrator, for a person in none, and with no usable hint.
  *

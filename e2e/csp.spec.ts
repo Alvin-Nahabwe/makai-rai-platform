@@ -66,9 +66,11 @@ function productionCsp(): string {
 /** Every `page.tsx` git tracks: the source of the route list. Never empty, or the sweep
  * would visit nothing and pass. */
 function pageFiles(): string[] {
-  const files = execFileSync('git', ['ls-files', 'app/**/page.tsx', 'app/page.tsx'], { encoding: 'utf8' })
+  const files = execFileSync('git', ['ls-files', 'app/**/page.tsx'], { encoding: 'utf8' })
     .split('\n')
-    .filter(Boolean);
+    .filter(Boolean)
+    // A parallel-route slot (`@name`) mirrors pages that already have an address; it is not one.
+    .filter((f) => !f.split('/').some((s) => s.startsWith('@')));
   if (files.length === 0) throw new Error('git ls-files found no page.tsx under app/, so there is nothing to sweep');
   return files;
 }
@@ -79,7 +81,8 @@ function pageFiles(): string[] {
 function pageFileCount(): number {
   return fs
     .readdirSync('app', { recursive: true, encoding: 'utf8' })
-    .filter((entry) => /(^|[\\/])page\.(tsx?|jsx?|mdx?)$/.test(entry)).length;
+    .filter((entry) => /(^|[\\/])page\.(tsx?|jsx?|mdx?)$/.test(entry) && !entry.split(/[\\/]/).some((s) => s.startsWith('@')))
+    .length;
 }
 
 /**
@@ -175,8 +178,8 @@ function whoFor(file: string): Who {
   // The signed-in shell it shows a member is the shell every signed-in page shows, which the owner's sweep covers.
   if (file.startsWith('app/help/')) return 'anonymous';
   if (file.startsWith('app/(authenticated)/admin/')) return 'admin';
-  if (file === 'app/(authenticated)/acceptances/page.tsx') return 'unaccepted';
-  if (file === 'app/page.tsx' || file.startsWith('app/(authenticated)/')) return 'owner';
+  if (file === 'app/(gate)/acceptances/page.tsx') return 'unaccepted';
+  if (file.startsWith('app/(gate)/') || file.startsWith('app/(authenticated)/')) return 'owner';
   throw new Error(`${file}: not under a route group this spec knows how to sign in for`);
 }
 
@@ -332,7 +335,7 @@ async function visit(context: BrowserContext, route: Route): Promise<Visit> {
     // Follow one link to somewhere else, so the navigation itself (including the client
     // router's own fetches, which `connect-src` governs) runs under the policy too. A page
     // with no such link is recorded, and must be listed in NO_LINK_TO_FOLLOW.
-    const href = await page.locator('a[href^="/"]').evaluateAll(
+    const pick = (scope: string) => page.locator(`${scope}a[href^="/"]:visible`).evaluateAll(
       (links, { here, only }) =>
         links
           .map((a) => a as HTMLAnchorElement)
@@ -342,11 +345,15 @@ async function visit(context: BrowserContext, route: Route): Promise<Visit> {
           .map((a) => a.getAttribute('href'))[0] ?? null,
       { here: landed, only: FOLLOW_ONLY[route.who] ?? null },
     );
+    // A link in the page's own content first (the rail's can sit clipped in its scrolling block), else any visible link.
+    const inMain = await pick('main ');
+    const scope = inMain !== null ? 'main ' : '';
+    const href = inMain ?? (await pick(''));
     if (href !== null) {
       followed = href;
       await Promise.all([
         page.waitForURL((url) => url.pathname !== landed, { timeout: 10_000 }),
-        page.locator(`a[href="${href}"]`).first().click(),
+        page.locator(`${scope}a[href="${href}"]:visible`).first().click(),
       ]);
       await page.waitForLoadState('networkidle');
     }

@@ -1,0 +1,359 @@
+/* The gate frame (plan 1B Task 1, lead's ruling L5-1): the Route's rail with no navigation in it. A navy column at the
+   rail's width (from 1024 px, the shell's breakpoint) with the product name, the route of this door and the person's
+   block; the page's content in a white card on the ground beside it. Below 1024 px the column is a navy band above the
+   card. Role tokens only; the column's text is white or the shell's muted ink, never orange (spec 7.1). Marks are
+   borders, so forced colours keep them (spec 7.2). Nothing animates.
+   The signed-in frame's own rules (the platform's name, the person's block, Help, Sign out, M-41) are in
+   ./gate-signed-in.css, which only GateFrame imports (the lean frame, owner, 15 Nov 15:35): this sheet is what a public
+   door page loads. */
+
+/* ── The frame ── */
+/* It fills the viewport at every width, as the shell does, so the site footer never floats mid-screen (review M-3). */
+.gate {
+  min-block-size: 100vh;
+  background-color: var(--color-ground);
+}
+
+/* The (public) layout's <main> centres its child in a flex row (app/globals.css .public-layout): the frame fills it. That
+   <main> is 100vh tall under a light header, so a short door page scrolled by the header's height (design review M-2). On
+   a door page the body becomes a column the height of the viewport, the <main> takes what the header and the footer
+   leave, and the frame fills the <main>; on every other public page nothing changes. */
+body:has(.gate--public) {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 100dvh;
+}
+
+.public-layout:has(> .gate--public) {
+  flex: 1 0 auto;
+  min-block-size: 0;
+}
+
+.gate--public {
+  align-self: stretch;
+  flex: 1 1 auto;
+  inline-size: 100%;
+  min-block-size: 0;
+}
+
+.gate__header {
+  background-color: var(--color-shell);
+  color: var(--color-shell-ink);
+  /* A 1 px edge between the navy and the page (review I-5): in dark mode the shell and the ground are 1.04:1 apart. A border,
+     so forced colours keep the edge too (M-2). The band's is on its block end; the column's, on its inline end (below). */
+  border-block-end: 1px solid var(--color-border-container);
+}
+
+/* ── The column's contents (the rail's sizes, components/layout/shell.css) ── */
+.gate__column {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-3) var(--space-4);
+}
+
+/* The brand: lane 3's MAK-AI logo (components/layout/logos.ts; owner's ruling I-3), then, signed in, the platform's name as
+   the column's title, white at the 16 px step. A public page has the light header's name instead (ruling L5-26). */
+.gate__brand {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.gate__logo {
+  display: block;
+  /* Narrower than the logo (a band at 200 % zoom), it shrinks whole instead of squashing (D1 closing review CR-1). */
+  max-inline-size: 100%;
+  block-size: auto;
+  margin-block-end: var(--space-1);
+}
+
+/* Below 1024 px the band says where the person is; the list is the wide column's. */
+.gate-route {
+  display: none;
+}
+
+.gate__where,
+.gate__next {
+  flex: 1 0 100%;
+  order: 3;
+  overflow-wrap: anywhere;
+}
+
+.gate__where {
+  font-weight: var(--font-weight-semibold);
+}
+
+.gate__next {
+  margin-block-start: calc(-1 * var(--space-2));
+  color: var(--color-shell-muted);
+  font-size: var(--font-size-small);
+}
+
+/* A route that follows a step changed in the browser without route code (S-04 signed out,
+   app/(public)/invitations/[token]/InvitationRoute.tsx; the lean frame, owner, 15 Nov 15:35): the server draws the route
+   of each step and the form names its step in data-step, and only that step's route is drawn, so the other's list and
+   aria-current are out of the accessibility tree. The wrappers lay their contents out as the column's own children: the
+   band's two lines stay its flex items. */
+.gate-steps,
+.gate-steps__step {
+  display: contents;
+}
+
+.gate-steps[data-step="details"] > [data-for="acceptances"],
+.gate-steps[data-step="acceptances"] > [data-for="details"] {
+  display: none;
+}
+
+/* ── The card ── */
+.gate__main {
+  min-width: 0;
+  padding: var(--space-4);
+  background-color: var(--color-ground);
+}
+
+.gate__card {
+  container-type: inline-size;
+  max-inline-size: 30rem;
+  padding: var(--space-6) var(--space-4);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-container);
+  border-radius: var(--radius-surface);
+  overflow-wrap: break-word;
+}
+
+/* The page's one heading wraps by whole words only (review I-4: at 200 % zoom it broke inside words): the size steps down
+   the ramp as the card narrows, so the longest word of a heading fits. */
+.gate__card h1 {
+  margin-block-end: var(--space-4);
+  font-size: var(--font-size-h1);
+  line-height: var(--line-height-heading);
+  color: var(--color-heading);
+  overflow-wrap: normal;
+}
+
+/* A card's second-level heading sits below its h1 at every width: one step down the ramp, and a step more wherever the h1
+   has stepped down. */
+.gate__subheading {
+  font-size: var(--font-size-h2);
+}
+
+/* 24rem, not 30rem: the query measures the card's content box, which is under 30rem on every default card (review R2-1). */
+@container (width < 24rem) {
+  .gate__card h1 {
+    font-size: var(--font-size-h2);
+  }
+
+  .gate__subheading {
+    font-size: var(--font-size-h3);
+  }
+}
+
+@container (width < 12rem) {
+  .gate__card h1 {
+    font-size: var(--font-size-h3);
+  }
+
+  .gate__subheading {
+    font-size: var(--font-size-body);
+  }
+}
+
+/* Below 320 CSS px (a phone at 200 % zoom) the card meets the viewport's edges: no gutter, no side borders, a narrower
+   padding, so a heading's longest word has room. */
+@media (max-width: 19.98rem) {
+  .gate__main {
+    padding-inline: 0;
+  }
+
+  .gate__card {
+    padding-inline: var(--space-3);
+    border-inline: 0;
+    border-radius: 0;
+  }
+}
+
+@media (max-width: 1023.98px) {
+  .gate--public .gate__brand {
+    display: none;
+  }
+
+  /* A public page with no route (M-23, M-24) has nothing left in its band: draw none, not an empty navy strip. */
+  .gate--public .gate__header:not(:has(.gate__where)) {
+    display: none;
+  }
+
+  .gate__card,
+  .gate--wide .gate__card {
+    max-inline-size: none;
+  }
+}
+
+/* ── Wide: the navy column beside the card ── */
+@media (min-width: 1024px) {
+  .gate {
+    display: grid;
+    grid-template-columns: var(--rail-width) minmax(0, 1fr);
+  }
+
+  .gate__header {
+    border-block-end: 0;
+    border-inline-end: 1px solid var(--color-border-container);
+  }
+
+  /* The column scrolls with nothing: it stays in view beside a long card (the acceptances), as the rail does. */
+  .gate__column {
+    position: sticky;
+    top: 0;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: var(--space-6);
+    max-block-size: 100vh;
+    min-block-size: 100vh;
+    overflow-y: auto;
+    padding: var(--space-6) var(--space-3);
+  }
+
+  .gate__brand {
+    flex: none;
+    padding-inline: var(--space-3);
+  }
+
+  /* A door page's column is as tall as the frame, not a viewport under the light header (M-2). */
+  .gate--public .gate__column {
+    min-block-size: 0;
+  }
+
+  .gate-route {
+    display: block;
+  }
+
+  .gate__where,
+  .gate__next {
+    display: none;
+  }
+
+  .gate__main {
+    padding: var(--space-12);
+  }
+
+  .gate__card {
+    padding: var(--space-8);
+  }
+
+  .gate--wide .gate__card {
+    max-inline-size: 40rem;
+  }
+}
+
+/* ── The route: the stops joined by a line, the current one enlarged ── */
+.gate-route__stop {
+  position: relative;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-shell-ink);
+  overflow-wrap: anywhere;
+}
+
+/* The line: a 2 px border in the shell's muted ink, from mark to mark (a border, so forced colours keep it). */
+.gate-route__stop:not(:first-child)::before,
+.gate-route__stop:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  inset-inline-start: calc(var(--space-3) + 11px);
+  border-inline-start: 2px solid var(--color-shell-muted);
+}
+
+.gate-route__stop:not(:first-child)::before {
+  top: 0;
+  height: calc(50% - 8px);
+}
+
+.gate-route__stop:not(:last-child)::after {
+  bottom: 0;
+  height: calc(50% - 8px);
+}
+
+/* The current mark is 24 px: the line stops at its edge. */
+.gate-route__stop--current:not(:first-child)::before,
+.gate-route__stop--current:not(:last-child)::after {
+  height: calc(50% - 12px);
+}
+
+.gate-route__mark {
+  justify-self: center;
+  box-sizing: border-box;
+  inline-size: 16px;
+  block-size: 16px;
+  border: 2px solid var(--color-shell-ink);
+  border-radius: var(--radius-pill);
+}
+
+.gate-route__stop--done .gate-route__mark {
+  border-width: 8px;
+}
+
+.gate-route__stop--current {
+  padding-block: var(--space-3);
+  border-radius: var(--radius-control);
+  background-color: var(--color-shell-hover);
+  font-weight: var(--font-weight-semibold);
+}
+
+.gate-route__stop--current .gate-route__mark {
+  inline-size: 24px;
+  block-size: 24px;
+  border-width: 4px;
+}
+
+.gate-route__label {
+  display: block;
+  min-width: 0;
+}
+
+.gate-route__here {
+  display: block;
+  color: var(--color-shell-muted);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-regular);
+}
+
+@media (forced-colors: active) {
+  .gate-route__stop--current {
+    border: 1px solid CanvasText;
+  }
+}
+
+/* ── The card's content: AuthCard's lead and a form's status line (components/auth/AuthCardBase.tsx) ──
+   Moved word for word from components/auth/auth.css by the lean frame (owner, 15 Nov 15:35): S-04 draws them, and every
+   page that draws AuthCard is in this frame, so they are here and auth.css stays off S-04's first visit. */
+.auth-view__lead {
+  display: grid;
+  gap: var(--space-3);
+  margin-block-end: var(--space-6);
+  color: var(--color-ink);
+}
+
+.auth-view__lead > p {
+  max-inline-size: 65ch;
+}
+
+/* The form's submit and its error line beside it (spec 9.7). */
+.auth-view form .ui-status:not(:empty) {
+  margin-block-start: var(--space-4);
+}
+
+/* ── Print: the card only ── */
+@media print {
+  .gate__header {
+    display: none;
+  }
+
+  .gate {
+    display: block;
+  }
+}

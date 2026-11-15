@@ -439,3 +439,41 @@ it("The project page's primary action (plan 1C C11, cut): under ctx A for B's pr
   expect(JSON.stringify(target ?? null)).not.toContain(pb.id);
   expect(JSON.stringify(target ?? null)).not.toContain(b.org.id);
 });
+
+it("Home's changes and loader (plan 1B Task 9): changesSince and loadHome under ctx A return no row, id or name of B, whose changes are newer", async () => {
+  // U is an assessor of A and of B. B holds newer changes, by U and by a member of B only. Imports are local so the cases
+  // above keep theirs unchanged.
+  await resetDb();
+  const { useFixtureContent } = await import('../helpers/content');
+  const { addDecision, addFinding, addProject, addSealRow, addStageReview, buildOrg } = await import('../helpers/recordFixture');
+  const { changesSince } = await import('../../lib/home/queries');
+  const { loadHome } = await import('../../lib/home/load');
+  const cv = (await useFixtureContent('0.0.1-fixture')).contentVersionId;
+  const a = await buildOrg({ label: 'iso-chg-a' });
+  const b = await buildOrg({ label: 'iso-chg-b' });
+  const u = a.members.assessor;
+  await testDb.membership.create({ data: { orgId: b.org.id, userId: u.userId, role: 'assessor' } });
+  const asUInB = { ...b, members: { ...b.members, assessor: { ...u, orgId: b.org.id, orgSlug: b.org.slug } } };
+  const pa = await addProject(a, { name: 'Changes isolation project of A' });
+  const pb = await addProject(b, { name: 'Changes isolation project of B' });
+  const since = new Date(Date.now() - 60_000);
+  await addDecision(a, pa.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId: cv, status: 'done', by: 'owner' });
+  await addDecision(asUInB, pb.id, { stage: 'pre-processing', questionId: 'Q-PP-02', contentVersionId: cv, status: 'done' });
+  await addDecision(b, pb.id, { stage: 'in-processing', questionId: 'Q-IP-01', contentVersionId: cv, status: 'done', by: 'owner' });
+  await addFinding(b, pb.id, { stage: 'pre-processing', source: 'team', by: 'reviewer' });
+  await addSealRow(b, (await addStageReview(b, pb.id, { stage: 'pre-processing' })).id);
+  const namesB = (value: unknown) => [pb.id, 'Changes isolation project of B', b.org.id, b.members.owner.userId, b.members.owner.name,
+    b.members.reviewer.userId, b.members.reviewer.name].some((s) => JSON.stringify(value).includes(s));
+
+  // Under B, B's changes are found: the rows exist, so A's answers below are the policy's doing.
+  const inB = await changesSince(ctx(b.org.id, 'viewer'), { since, excludeUserId: null, limitGroups: 10 });
+  expect(inB.groups.map((g) => g.kind).sort()).toEqual(['decisions', 'decisions', 'finding', 'seal']);
+  const inA = await changesSince(ctx(a.org.id, 'viewer'), { since, excludeUserId: null, limitGroups: 10 });
+  expect(inA.groups.map((g) => [g.projectId, g.who.userId])).toEqual([[pa.id, a.members.owner.userId]]);
+  expect(namesB(inA)).toBe(false);
+  for (const role of ['owner', 'admin', 'assessor', 'reviewer', 'viewer'] as const) {
+    const userId = role === 'assessor' ? u.userId : a.members[role].userId;
+    const data = await loadHome(ctx(a.org.id, role), { userId, name: 'Reader' }, { orgSlug: a.org.slug, welcome: false, today: '2026-11-15', now: new Date() });
+    expect(namesB(data), role).toBe(false);
+  }
+});

@@ -29,8 +29,14 @@ export const INVITATION_COPY = Object.freeze({
   showPassword: 'Show password',
   passwordHint: (min: number): string => `At least ${min} characters.`,
   continue: 'Continue',
+  /** Step 2's first line and the way back to step 1 (ruling L5-29): step 1 says the name cannot be changed later. */
+  creatingFor: (name: string): string => `Creating an account for ${name}.`,
+  changeDetails: 'Change your details',
   createAccount: 'Create account',
   creating: 'Creating your account...',
   alreadyHave: 'Already have an account with this email?',
   signInToAccept: 'Sign in to accept',
+  /** The steps of joining in the gate frame's route (plan 1B Task 6, ruling L5-14), drawn in the browser as the step
+   * changes (ruling L5-28); "Accept the terms" is GATE_COPY's. */
+  stops: Object.freeze({ details: 'Your details', join: 'Join' }),
 });

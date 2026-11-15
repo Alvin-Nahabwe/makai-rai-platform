@@ -564,7 +564,7 @@ test('UX-30: a failed upload is never waited out by itself; Save without it leav
   await expect(page.getByText(CONNECTION_LOST_TEXT)).toBeVisible();
   await context.setOffline(false);
   await page.getByRole('button', { name: 'Save decision' }).click();
-  await expect(page.getByText('Waiting for kept-eight-bad.pdf to finish uploading.')).toBeVisible();
+  await expect(page.getByText('kept-eight-bad.pdf did not upload. Retry it, remove it, or save without it.')).toBeVisible();
   expect(bodies).toEqual([]);
   const sent = page.waitForRequest(isDecisionPost);
   await page.getByRole('button', { name: DECISION_FORM_COPY.saveWithout(1) }).click();

@@ -24,8 +24,12 @@ import { NewerLegalTextNotice } from '@/components/legal/NewerLegalTextNotice';
  * asks `orgRoleLabel` once per organisation the person is in, and once with no organisation for the platform
  * label; the rail picks one by the address. Only each organisation's slug and name, and never the account's
  * platform role field, are passed on (lib/shell/data.ts). The warning stays outside AppShell, before it.
+ *
+ * `project` is the `@project` parallel-route slot (owner ruling R4): on a project's pages, the rail's project block and the
+ * narrow top bar's project context, read on the server past the project page's own gates (app/(authenticated)/@project/…,
+ * lib/shell/project.ts); on every other address nothing, including after a client-side navigation away from a project.
  */
-export default async function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
+export default async function AuthenticatedLayout({ children, project }: { children: React.ReactNode; project?: React.ReactNode }) {
   const identity = await requireIdentity();
   const deadlines = await readSessionDeadlines(await headers());
   if (!deadlines) console.error('idle_deadline_unreadable');
@@ -33,7 +37,7 @@ export default async function AuthenticatedLayout({ children }: { children: Reac
   return (
     <>
       {deadlines ? <IdleWarning idleSeconds={idleLimitSeconds()} {...deadlines} /> : null}
-      <AppShell shell={shell}>
+      <AppShell shell={shell} project={project}>
         <NewerLegalTextNotice userId={identity.userId} />
         {children}
       </AppShell>

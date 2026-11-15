@@ -30,6 +30,8 @@ export type DateFieldProps = {
   errorId?: string;
   /** On the fieldset: it disables the boxes and the buttons. */
   disabled?: boolean;
+  /** Further ids that describe every box (a line the caller places itself, outside the fieldset), after the hint, before the error. */
+  'aria-describedby'?: string;
 };
 
 const PARTS = ['day', 'month', 'year'] as const;
@@ -42,10 +44,11 @@ const PARTS = ['day', 'month', 'year'] as const;
  */
 export function DateField({
   idPrefix, legend, hint, value, onChange, error, required = false, shortcuts = [], showToday = false, errorId, disabled = false,
+  'aria-describedby': callerDescribedBy,
 }: DateFieldProps): ReactElement {
   const hintId = given(hint) ? `${idPrefix}-hint` : undefined;
   const errorElementId = errorId ?? `${idPrefix}-error`;
-  const describe = describedBy(hintId, given(error) ? errorElementId : undefined);
+  const describe = describedBy(hintId, callerDescribedBy, given(error) ? errorElementId : undefined);
   return (
     <fieldset className="ui-date" disabled={disabled}>
       <legend className="ui-date__legend">

@@ -6,7 +6,7 @@
 // For each server/app/**/page_client-reference-manifest.js it takes the union of build-manifest.json
 // `rootMainFiles` and every chunk listed under `entryJSFiles` (the page and its layouts), and prints
 //
-//   route=<path> firstLoadKB=<n> budgetKB=<160|190>
+//   route=<path> firstLoadKB=<n> budgetKB=<160|190|195>
 //
 // where <n> is the gzip (level 9) size of those chunks in KiB. Polyfill files, CSS, fonts, images, the
 // HTML and lazily loaded chunks are not counted: this measures the JavaScript a first visit with an empty
@@ -30,13 +30,23 @@ import { gzipSync } from 'node:zlib';
 
 const PUBLIC_BUDGET_KB = 160;
 const SIGNED_IN_BUDGET_KB = 190;
+// The owner's ruling of 15 Nov 2026, 18:25 EAT (box "195 KB, covering the last merges"; it superseded the 18:00 ruling's
+// 192 KB): the question page's signed-in first-load budget is 195 KB; every other route keeps its budget. Trimming the page
+// is on the next release's list.
+const QUESTION_PAGE_KB = 195;
+// The same page also appears under the rail's parallel slot (app/(authenticated)/@project/...), which the build lists as its
+// own route; it is the question page, so it carries the same budget.
+const ROUTE_BUDGET_KB = new Map([
+  ['/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]', QUESTION_PAGE_KB],
+  ['/@project/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]', QUESTION_PAGE_KB],
+]);
 // NFR-PERF-01 (SRS line 3189) gives every public page (S-01 to S-06, S-28) 160 KB, but a page's group in the
 // build says "public" only for the ones under app/(public). S-05, the acceptances page, is a public page that
-// lives at app/(authenticated)/acceptances/page.tsx (contract, S-05 row), so it is listed here by its route
-// directory as the build writes it. The match is exact: a child such as (authenticated)/acceptances/history is not
-// S-05 and keeps 190 KB.
+// lives at app/(gate)/acceptances/page.tsx (contract, S-05 row; the gate frame's group since plan 1B Task 1), so it is
+// listed here by its route directory as the build writes it. The match is exact: a child such as (gate)/acceptances/history
+// is not S-05 and keeps 190 KB.
 const PUBLIC_OUTSIDE_PUBLIC_GROUP = [
-  '(authenticated)/acceptances',
+  '(gate)/acceptances',
   // Help (plan 1A Task 12): a public page outside (public) that shows the whole shell to a signed-in person, as S-05 does.
   'help',
 ];
@@ -98,7 +108,8 @@ function routeOf(manifestRel) {
   const segments = manifestRel.split('/').slice(0, -1);
   const visible = segments.filter((s) => !/^\(.*\)$/.test(s));
   const isPublic = segments[0] === '(public)' || PUBLIC_OUTSIDE_PUBLIC_GROUP.includes(segments.join('/'));
-  return { route: `/${visible.join('/')}`, budgetKB: isPublic ? PUBLIC_BUDGET_KB : SIGNED_IN_BUDGET_KB };
+  const route = `/${visible.join('/')}`;
+  return { route, budgetKB: isPublic ? PUBLIC_BUDGET_KB : ROUTE_BUDGET_KB.get(route) ?? SIGNED_IN_BUDGET_KB };
 }
 
 function gzipBytes(nextDir, chunk, cache) {

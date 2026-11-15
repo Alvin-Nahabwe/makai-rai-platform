@@ -25,7 +25,7 @@ const SENTINELS = { 'pre-processing': [37], 'in-processing': [23], 'post-process
 // graphics set their own fill and stroke in the snippets, as the kit's markup does.
 const TOKENS =
   '<style>:root{--color-mark:rgb(26, 31, 54);--color-ink:rgb(27, 27, 31);--color-ink-muted:rgb(74, 80, 96);--color-saved:rgb(31, 122, 77);' +
-  '--color-tint:rgb(230, 233, 240);--color-action-text:rgb(154, 77, 16)}' +
+  '--color-tint:rgb(230, 233, 240);--color-action-text:rgb(154, 77, 16);--color-surface:rgb(255, 255, 255)}' +
   '.ui-mark,[data-mark-kind]{color:var(--color-mark)}.ui-mark__words{color:var(--color-ink)}' +
   '.ui-route-row__point{color:inherit}.ui-saved__shape{color:var(--color-saved)}' +
   '.ink{color:var(--color-ink)}.muted{color:var(--color-ink-muted)}.green{color:rgb(22, 163, 74)}.red{color:rgb(180, 35, 24)}</style>';
@@ -206,13 +206,17 @@ test('FR-RM-04 UX-07 (helper): text the test wrote itself is left out of the cou
 // What the kit draws, written out as the kit writes it (components/ui StatusMark, RouteRow, SavedMark). Each graphic
 // sets its own fill and stroke from the mark's colour, as the kit's do.
 const page_ = (inner: string) => `${TOKENS}<main>${inner}</main>`;
-const shape = (inner: string) => `<svg class="ui-mark__shape" aria-hidden="true" viewBox="0 0 24 24">${inner}</svg>`;
+const shape = (inner: string, kind = '') => `<svg class="ui-mark__shape"${kind === '' ? '' : ` data-shape-kind="${kind}"`} aria-hidden="true" viewBox="0 0 24 24">${inner}</svg>`;
 const DISC = '<circle cx="12" cy="12" r="8" fill="currentColor"/>';
 const HALF = '<path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/>';
 const RING_SLASH = '<circle cx="12" cy="12" r="8" fill="none" stroke="currentColor"/><line x1="6" y1="18" x2="18" y2="6" stroke="currentColor"/>';
 const TICK_PATH = '<path d="M8 12.5l2.7 2.7L16 9.8" fill="none" stroke="currentColor"/>';
+// Done's filled green check as the kit draws it (R8, owner 15 Nov 2026): StatusMark.css paints the two classes.
+const DONE_CHECK = (disc = 'var(--color-saved)', check = 'var(--color-surface)') =>
+  `<circle class="ui-mark__done-disc" cx="12" cy="12" r="9" style="fill: ${disc}"/>` +
+  `<path class="ui-mark__done-check" d="M8 12.5l2.7 2.7L16 9.8" fill="none" stroke-width="2.2" style="stroke: ${check}"/>`;
 const mark = (inner = DISC, words = 'Done', attrs = '') =>
-  `<span class="ui-mark ui-mark--done" data-mark-kind="done"${attrs}>${shape(inner)}<span class="ui-mark__words">${words}</span></span>`;
+  `<span class="ui-mark ui-mark--done" data-mark-kind="done"${attrs}>${shape(inner, 'done')}<span class="ui-mark__words">${words}</span></span>`;
 const stop = (kind: string, inner: string, word: string, point = '<span class="ui-route-row__point">', liStyle = '') =>
   `<li class="ui-route-row__stop" data-mark-kind="${kind}"${liStyle}>${point}${shape(inner)}<span class="visually-hidden">${word}</span>${point.startsWith('<a') ? '</a>' : '</span>'}</li>`;
 // The connector between two stops is the first stop's ::after, as the kit draws it.
@@ -233,10 +237,13 @@ const AMBER = 'rgb(253, 230, 138)';
 const BARE_STOP = (css: string) =>
   `<style>${css}</style><ol><li class="ui-route-row__stop" data-mark-kind="done"><span class="visually-hidden">Done</span></li></ol>`;
 
-test('spec 7.2 NFR-A11Y-05 (helper): a status mark is a shape and words in ink, with no tick and no green', async ({ page }) => {
+test('spec 7.2 R8 NFR-A11Y-05 (helper): a status mark is a shape and words in ink, with no tick and no green, but for Done\'s filled green check', async ({ page }) => {
   // The kit's own markup passes, with a saved mark beside the row (its tick and its green are outside any mark).
   for (const [name, html] of [
     ['a mark', page_(mark())],
+    ['Done\'s filled green check (R8)', page_(mark(DONE_CHECK()))],
+    // A shape alone, its words beside it (the stage column's tally, a status card's label): no element names a kind but the shape.
+    ['Done\'s filled green check drawn alone, its words beside it (R8)', page_(`<ul><li style="color: var(--color-mark)">${shape(DONE_CHECK(), 'done')}<span>Done 3</span></li></ul>`)],
     ['a route row', page_(routeRow())],
     ['a route row and a saved mark', page_(routeRow() + SAVED)],
     ['legacy labels', page_(
@@ -262,6 +269,14 @@ test('spec 7.2 NFR-A11Y-05 (helper): a status mark is a shape and words in ink, 
     ['tick polyline', page_(mark('<polyline points="8,12.5 10.7,15.2 16,9.8" fill="none" stroke="currentColor"/>')), /tick-shaped polyline/],
     ['tick polyline with a repeated point', page_(mark('<polyline points="8,12.5 10.7,15.2 10.7,15.2 16,9.8" fill="none" stroke="currentColor"/>')), /tick-shaped polyline/],
     ['tick character', page_(mark(DISC, '\u2713 Done')), /tick character/],
+    // R8: only Done's two graphics are exempt, and only with their own paints.
+    ['R8: Done\'s disc in another green', page_(mark(DONE_CHECK(GREEN))), /fill rgb\(22, 163, 74\) of Done's disc is not --color-saved/],
+    ['R8: Done\'s check in ink', page_(mark(DONE_CHECK(undefined, 'rgb(27, 27, 31)'))), /stroke rgb\(27, 27, 31\) of Done's check is not --color-surface/],
+    ['R8: a tick without the class is still a tick', page_(mark(`<circle class="ui-mark__done-disc" cx="12" cy="12" r="9" style="fill: var(--color-saved)"/>${TICK_PATH}`)), /tick-shaped path/],
+    ['R8: a green mark colour is still green', page_(mark(DONE_CHECK(), 'Done', ' style="color: rgb(31, 122, 77)"')), /color rgb\(31, 122, 77\) is green in/],
+    // R8 belongs to Done alone: a Partly mark drawn with Done's check and paints (a kind-mapping slip) is green and a tick.
+    ['R8: a Partly mark drawn with Done\'s check', page_(`<span class="ui-mark ui-mark--partly" data-mark-kind="partly">${shape(DONE_CHECK(), 'partly')}<span class="ui-mark__words">Partly</span></span>`), /tick-shaped path in <path class="ui-mark__done-check"/],
+    ['R8: a shape drawn for Done inside a Partly mark', page_(`<span class="ui-mark ui-mark--partly" data-mark-kind="partly">${shape(DONE_CHECK(), 'done')}<span class="ui-mark__words">Partly</span></span>`), /tick-shaped path in <path class="ui-mark__done-check"/],
     ['unreadable path', page_(mark('<path d="M2 2c1 1 2 2 3 3m2 2 2 2 4-4" fill="none" stroke="currentColor"/>')), /cannot read path/],
     // No green, anywhere in a mark.
     ['green colour', page_(mark(DISC, 'Done', ` style="color: ${GREEN}"`)), /color rgb\(22, 163, 74\) is green in/],
@@ -303,6 +318,7 @@ test('spec 7.2 NFR-A11Y-05 (helper): a status mark is a shape and words in ink, 
     ['--color-saved undefined', page_('<span class="status-label ink">Done</span>').replace('--color-saved:', '--other:'), /--color-saved is not defined/],
     ['--color-tint undefined', page_('<span class="status-label ink">Done</span>').replace('--color-tint:', '--other:'), /--color-tint is not defined/],
     ['--color-action-text undefined', page_('<span class="status-label ink">Done</span>').replace('--color-action-text:', '--other:'), /--color-action-text is not defined/],
+    ['--color-surface undefined', page_('<span class="status-label ink">Done</span>').replace('--color-surface:', '--other:'), /--color-surface is not defined/],
   ];
   for (const [name, html, finding] of bad) {
     await page.setContent(html);

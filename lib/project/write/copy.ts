@@ -37,5 +37,7 @@ export const PROJECT_WRITE_COPY = Object.freeze({
     lost: 'Not unarchived yet. We did not get a reply in time, so it may already be unarchived. Select Retry. It will not unarchive twice.',
     failed: 'Not unarchived. Something went wrong. Please try again.',
     retry: 'Retry',
+    /** After a 204, or a 409 that means another person unarchived it first: said in the list's status line (design review 16). */
+    unarchived: (project: string) => `${project} is active again. Your team can change it.`,
   }),
 });

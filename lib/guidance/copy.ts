@@ -1,16 +1,19 @@
-import { TERM_CONTROL } from '@/lib/vocabulary/terms';
-
 /**
  * The words of Guidance: the framework page (S-26), the controls page (S-27) and the research sources list on S-26
- * (copy audit D, EX1 to EX24, as ruled for plan 1A Task 19). Server only: it reads the vocabulary, so no client file
- * may import it (ruling X-2).
+ * (copy audit D, EX1 to EX24, as ruled for plan 1A Task 19). Server only: no client file may import it (ruling X-2).
  */
 export const GUIDANCE_COPY = Object.freeze({
   titles: Object.freeze({ framework: 'Framework', controls: 'Controls' }),
   framework: Object.freeze({
     heading: 'The question framework',
-    lead: (stages: number, topics: number) =>
-      `The questions are grouped into ${stages} stages and ${topics} topics. Each question links to a risk area, and each risk area to controls that reduce the risk.`,
+    /**
+     * The lead's first sentence, then its two lines on risk areas and controls, each in three parts around its one defined
+     * term (B5): the page marks the term with `Term` and follows the line with its `Definition`. The ruled sentence "Each
+     * question links to a risk area, and each risk area to controls that reduce the risk." is split in two for that.
+     */
+    lead: (stages: number, topics: number) => `The questions are grouped into ${stages} stages and ${topics} topics.`,
+    areasLine: Object.freeze(['Each question links to a ', 'risk area', '.'] as const),
+    controlsLine: Object.freeze(['Each risk area links to ', 'controls', ' that reduce the risk.'] as const),
     counts: (stages: number, topics: number, areas: number, controls: number) =>
       `${stages} stages, ${topics} topics, ${areas} risk areas, ${controls} controls`,
     scope: Object.freeze({
@@ -51,7 +54,13 @@ export const GUIDANCE_COPY = Object.freeze({
     book: 'Book',
   }),
   controls: Object.freeze({
-    intro: `${TERM_CONTROL.definition} When your team closes a finding with a mitigation, it can follow one of these.`,
+    /**
+     * B5: under the h1 (the first use of "control"), the page shows the control's `Definition`, then these two lines, each
+     * in three parts around its one defined term, which the page marks with `Term` and follows with its `Definition`. The
+     * line was "When your team closes a finding with a mitigation, …": "finding" is left out so each line holds one term.
+     */
+    introLine: Object.freeze(['When your team adds a ', 'mitigation', ', it can follow one of these.'] as const),
+    areasLine: Object.freeze(['Each control lists the ', 'risk areas', ' it addresses.'] as const),
     count: (n: number) => `${n} controls`,
     types: Object.freeze({
       technical: Object.freeze({ label: 'Technical', line: 'Changes to data, model or code.' }),

@@ -9,8 +9,14 @@
   overflow-wrap: break-word;
 }
 
+/* Each definition on its own line under its sentence, then a little space before the next sentence (DF I4). The counts
+   stand apart, so they do not read as one more definition. */
+.framework-page .ui-page-header__lead > .ui-definition {
+  margin-block-end: var(--space-2);
+}
+
 .framework-page__counts {
-  margin: 0;
+  margin: var(--space-4) 0 0;
   font-size: var(--font-size-small);
   color: var(--color-ink-muted);
 }
@@ -120,6 +126,16 @@
   font-size: var(--font-size-small);
   line-height: var(--line-height-body);
   color: var(--color-ink);
+}
+
+/* The model card's line follows the text that uses the term, close under it (DF I5). */
+.area-card__desc:has(+ .term-line),
+.area-card__context:has(+ .term-line) {
+  margin-block-end: var(--space-2);
+}
+
+.area-card > .term-line {
+  margin: 0 0 var(--space-4);
 }
 
 .area-card__context {

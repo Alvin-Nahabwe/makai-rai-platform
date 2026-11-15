@@ -3,12 +3,14 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { questionsInStage, runningContent } from '@/lib/content/loader';
-import { listProjectRows, loadDashboard, loadProjectOverview, stageView } from '@/lib/data/projects';
+import { listProjectRows, loadProjectOverview, stageView } from '@/lib/data/projects';
 import { NotFoundError } from '@/lib/data/tenant';
 import { myMitigations, openMitigationsByStage, stageFollowUpCounts } from '@/lib/data/followup';
-import { DashboardView } from '@/components/project/DashboardView';
-import { AllProjectsView } from '@/components/project/AllProjectsView';
+import { loadHome } from '@/lib/home/load';
+import { HomeView } from '@/components/home/HomeView';
+import { ProjectsTable } from '@/components/project/ProjectsTable';
 import { HOME_COPY } from '@/lib/home/copy';
+import { PROJECT_COPY } from '@/lib/project/copy';
 import { resetDb, testDb } from '../helpers/db';
 import { sessionFor } from '../helpers/authSession';
 import { useFixtureContent } from '../helpers/content';
@@ -135,8 +137,11 @@ describe('stageView counts, C4 round 1', () => {
   });
 });
 
+/** Home (plan 1B Task 10) as the role sees it: loadHome, then HomeView, as the page renders them. */
+const homeData = (f: OrgFixture, role: 'owner' | 'assessor' | 'viewer', today: string) =>
+  loadHome(ctxFor(f, role), { userId: f.members[role].userId, name: role }, { orgSlug: f.org.slug, welcome: false, today, now: new Date(`${today}T09:00:00.000Z`) });
 const renderDashboard = async (f: OrgFixture, role: 'owner' | 'assessor' | 'viewer', today: string) =>
-  renderToStaticMarkup(createElement(DashboardView, { data: await loadDashboard(ctxFor(f, role), { userId: f.members[role].userId }, { orgSlug: f.org.slug, welcome: false, today }) }));
+  renderToStaticMarkup(createElement(HomeView, { data: await homeData(f, role, today) }));
 
 describe('S-10 and S-32 pages (Task 5, Task 7)', () => {
   it('NFR-SEC-02: S-10 for a project of organisation B is not found', async () => {
@@ -171,15 +176,51 @@ describe('S-10 and S-32 pages (Task 5, Task 7)', () => {
     expect(all).not.toContain('Show more');
   });
 
+  it('plan 1B Task 12 C8: S-32 is one list, active projects first, then archived ones, each most recently changed first', async () => {
+    const one = await buildOrg({ label: 'order' });
+    // created in this order, so each is more recently changed than the one before it
+    for (const [name, archived] of [['Old active', false], ['Old shelved', true], ['New active', false], ['New shelved', true]] as const) {
+      await addProject(one, { name, archived });
+    }
+    sessionFor(one.members.viewer.userId);
+    const { default: AllProjectsPage } = await import('@/app/(authenticated)/orgs/[slug]/projects/page');
+    const html = renderToStaticMarkup(await AllProjectsPage({ params: Promise.resolve({ slug: one.org.slug }), searchParams: Promise.resolve({}) }));
+    expect(html.match(/<table\b/g)).toHaveLength(1);
+    expect([...html.matchAll(/(Old|New) (active|shelved)/g)].map((m) => m[0])).toEqual(['New active', 'Old active', 'New shelved', 'Old shelved']);
+  });
+
+  it('plan 1B Task 12 C8: the one list pages 50 at a time across active and archived, with one "Show more"', async () => {
+    const mixed = await buildOrg({ label: 'mixed' });
+    for (let i = 0; i < 30; i++) await addProject(mixed, { name: `Active ${String(i).padStart(3, '0')}` });
+    for (let i = 0; i < 30; i++) await addProject(mixed, { name: `Shelved ${String(i).padStart(3, '0')}`, archived: true });
+    sessionFor(mixed.members.owner.userId);
+    const { default: AllProjectsPage } = await import('@/app/(authenticated)/orgs/[slug]/projects/page');
+    const at = async (searchParams: { shown?: string }) =>
+      renderToStaticMarkup(await AllProjectsPage({ params: Promise.resolve({ slug: mixed.org.slug }), searchParams: Promise.resolve(searchParams) }));
+    const first = await at({});
+    expect(new Set(first.match(/Active \d{3}/g)).size).toBe(30);
+    expect(new Set(first.match(/Shelved \d{3}/g)).size).toBe(20);
+    expect(first.match(/>Show more<\/a>/g)).toHaveLength(1);
+    expect(first).toMatch(/<a [^>]*href="\?shown=100"[^>]*>Show more<\/a>/);
+    // design review 15: the line by the link counts what is shown and says the archived ones not shown yet
+    expect(first).toContain(`${PROJECT_COPY.allProjects.showing(50, 60)} ${PROJECT_COPY.allProjects.archivedNotShown(10)}`);
+    const all = await at({ shown: '100' });
+    expect(new Set(all.match(/Shelved \d{3}/g)).size).toBe(30);
+    expect(all).not.toContain('Showing');
+    expect(all).not.toContain('Show more');
+  });
+
   it('FR-PRJ-03: S-32 lists the archived project under Archived with Unarchive for an owner, and the dashboard leaves it out', async () => {
     await addProject(fx, { name: 'Shelved project', archived: true });
     const { active, archived } = await listProjectRows(ctxFor(fx, 'owner'));
     expect(archived.map((r) => r.name)).toEqual(['Shelved project']);
     expect(active.map((r) => r.name)).toContain('Counted project');
-    expect(renderToStaticMarkup(createElement(AllProjectsView, { data: { orgSlug: fx.org.slug, canUnarchive: true, active, archived } }))).toContain('Unarchive');
+    const rows = [...active.map((r) => ({ ...r, archived: false })), ...archived.map((r) => ({ ...r, archived: true }))];
+    expect(renderToStaticMarkup(createElement(ProjectsTable, { orgSlug: fx.org.slug, rows, canUnarchive: true, canCreate: true, target: 'project' }))).toContain('Unarchive');
     const dash = await renderDashboard(fx, 'viewer', '2026-11-02');
     expect(dash).toContain('Counted project'); expect(dash).not.toContain('Shelved project');
-    expect(dash.replace(/<[^>]+>/g, '')).toMatch(/Pre-processing: \d+ open findings?, \d+ overdue mitigations?/);   // R5: the count may be a link
+    // Home's stage plate (plan 1B Task 10): the open findings as a link to that stage's findings, no zero count.
+    expect(dash).toMatch(/data-stage="pre-processing"[\s\S]*?<a[^>]*href="[^"]*\/findings\?stage=pre-processing"[^>]*>\d+ open findings?<\/a>/);
     expect(dash).not.toMatch(/score|%|maturity/i);
   });
 
@@ -209,9 +250,10 @@ describe('follow-up reads on S-08 and S-10 (Task 9: FUP\'s real bodies)', () => 
     const f = await addFinding(fx, q.id, { stage: 'pre-processing', source: 'team' });
     await addMitigationVersion(fx, f.id, { status: 'planned', owner: 'assessor', dueDate: '2026-10-28' });
     const html = await renderDashboard(fx, 'assessor', '2026-11-02');
-    expect(html).toContain(HOME_COPY.myMitigations);
-    expect(html).toMatch(/>Overdue<\/span>: was due 28 Oct 2026/);
-    expect(html).not.toContain(HOME_COPY.noMitigations);
+    expect(html).toContain(HOME_COPY.assignedHeading);
+    // Spec 7.1 and 9.1: the word "Overdue" and the overdue date are red (lane 3 fix round 2).
+    expect(html).toMatch(/>Overdue<\/span>: was due <span class="home-overdue">28 Oct 2026<\/span>/);
+    expect(html).not.toContain(HOME_COPY.assignedNone);
   });
 
   it('FR-PRJ-04 NFR-SEC-02: my mitigations lists only the signed-in person\'s, and is not empty', async () => {
@@ -222,6 +264,7 @@ describe('follow-up reads on S-08 and S-10 (Task 9: FUP\'s real bodies)', () => 
     const items = await myMitigations(ctxFor(fx, 'viewer'), fx.members.viewer.userId, '2026-11-02');
     expect(items).toHaveLength(1);
     expect(items[0].owner.userId).toBe(fx.members.viewer.userId);
+    // A Viewer's Home has "Assigned to you" when something is assigned to them (lane 3 fix round 1): theirs, never another's.
     const html = await renderDashboard(fx, 'viewer', '2026-11-02');
     expect(html).toContain('Due 20 Nov 2026');
     expect(html).not.toMatch(/was due 28 Oct 2026/);
@@ -248,6 +291,8 @@ describe('page wiring (C4 round 1)', () => {
     const q = await addProject(fx);
     const f = await addFinding(fx, q.id, { stage: 'pre-processing', source: 'team' });
     await addMitigationVersion(fx, f.id, { status: 'planned', owner: 'assessor', dueDate: '2099-01-01' });
+    // The Viewer, who owns no mitigation here: their Home shows no "Assigned to you" at all (lane 3 fix round 1), and
+    // never the assessor's that the query names.
     sessionFor(fx.members.viewer.userId);
     const { default: DashboardPage } = await import('@/app/(authenticated)/orgs/[slug]/dashboard/page');
     const element = await DashboardPage({
@@ -256,7 +301,8 @@ describe('page wiring (C4 round 1)', () => {
     });
     const html = renderToStaticMarkup(element);
     expect(html).not.toContain('Due 1 Jan 2099');   // the assessor's mitigation
-    expect(html).toContain(HOME_COPY.noMitigations);
+    expect(html).not.toContain(HOME_COPY.assignedHeading);
+    expect(html).not.toContain(HOME_COPY.assignedNone);
   });
 
   it('FR-PRJ-03 (P1): S-32 gives Unarchive to owner and admin and to no other role', async () => {
@@ -272,15 +318,16 @@ describe('page wiring (C4 round 1)', () => {
   it('FR-PRJ-04: S-08 counts the archived projects, so an organisation with only archived ones is not told it has none', async () => {
     const only = await buildOrg({ label: 'onlyarch' });
     await addProject(only, { name: 'Only shelved', archived: true });
-    const data = await loadDashboard(ctxFor(only, 'owner'), { userId: only.members.owner.userId }, { orgSlug: only.org.slug, welcome: false, today: '2026-11-02' });
-    expect(data.projects).toHaveLength(0);
-    expect(data.archivedCount).toBe(1);
-    const html = renderToStaticMarkup(createElement(DashboardView, { data }));
-    expect(html).toContain(`<p>${HOME_COPY.noActiveProjects}</p>`);   // plain text: the page's All projects link follows it
-    expect(html).not.toContain(HOME_COPY.noProjects);
+    const data = await homeData(only, 'owner', '2026-11-02');
+    if (data.variant !== 'first-time') throw new Error(`expected first-time, got ${data.variant}`);
+    expect(data.base.projects).toHaveLength(0);
+    expect(data.base.archivedCount).toBe(1);
+    const html = renderToStaticMarkup(createElement(HomeView, { data }));
     const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const links = [...html.matchAll(new RegExp(`<a[^>]*href="/orgs/${esc(only.org.slug)}/projects/new"[^>]*>${esc(HOME_COPY.newProject)}</a>`, 'g'))];
-    expect(links).toHaveLength(1);   // the header's New project, for a creator
-    expect(links[0].index).toBeLessThan(html.indexOf(`<p>${HOME_COPY.noActiveProjects}</p>`));   // that link, before the sentence
+    // The sentence, then the All projects link to where the archived projects are.
+    expect(html).toMatch(new RegExp(`<p>${esc(HOME_COPY.noActiveProjects)} <a[^>]*href="/orgs/${esc(only.org.slug)}/projects"[^>]*>${esc(HOME_COPY.allProjects)}</a></p>`));
+    expect(html).not.toContain('No projects yet');
+    const links = [...html.matchAll(new RegExp(`<a[^>]*href="/orgs/${esc(only.org.slug)}/projects/new"[^>]*>${esc(HOME_COPY.firstTimeCreate)}</a>`, 'g'))];
+    expect(links).toHaveLength(1);   // the one action, for a creator
   });
 });

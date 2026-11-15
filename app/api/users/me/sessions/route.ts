@@ -10,7 +10,7 @@ import { logSecurityEvent } from '@/lib/security-logger';
  * admin action that should end outstanding sessions). Ends every session
  * for the CALLING user, including the one making this request — the client
  * is expected to also clear its own cookie via `signOut()` immediately
- * after (mirrors `app/(authenticated)/change-password/page.tsx`'s own
+ * after (mirrors `app/(gate)/change-password/page.tsx`'s own
  * pattern), since bumping the epoch does not retroactively un-issue an
  * already-delivered cookie, only make it fail the next `resolveIdentity`
  * check.

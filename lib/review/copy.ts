@@ -1,3 +1,4 @@
+
 /**
  * The words of stage reviews and seals: the open form, the review, the seal page, the seal check, and the review
  * components other pages mount (plan 1A Task 18, part 18b; audit C, as ruled in Task 18's answers Q1, Q3, Q6, Q9).
@@ -49,16 +50,16 @@ export const REVIEW_COPY = Object.freeze({
     notSealed: 'Not sealed yet.',
     /** A seal whose stored copy no longer holds together (Q3 (b)): the state line and the line under that seal. */
     damaged: 'Something in this seal has changed since it was sealed. Contact MAK-AI through Help and contact.',
+    /** The first sentence of `damaged`, for the project page's one-line review (owner's ruling of 15 Nov 2026, 21:32). */
+    damagedShort: 'Something in this seal has changed since it was sealed.',
     changed: (sealNumber: number, count: number): string => `Changed since seal ${sealNumber} (${count}).`,
     sealed: (sealNumber: number, day: string): string => `Sealed as seal ${sealNumber} on ${day}.`,
     contentChanged: (sealNumber: number): string => `MAK-AI updated the questions after seal ${sealNumber}. Changes are compared with the current questions.`,
   }),
 
   review: Object.freeze({
-    stage: (stageName: string): string => `Stage: ${stageName}`,
-    noteErased: (day: string): string => `Prepared for: (note erased on ${day})`,
-    note: (note: string): string => `Prepared for: ${note}`,
-    openedBy: (name: string): string => `Opened by ${name} on`,
+    /** S5 (C 7): the review's facts as a description list, one term each; an erased note reads `mounted.noteErased`. */
+    facts: Object.freeze({ stage: 'Stage', preparedFor: 'Prepared for', openedBy: 'Opened by', on: 'on' }),
     statusHeading: 'Status',
     /** After "Not sealed yet." while the review has no seal: who may seal it (lib/authz/policy.ts, `review:seal`). */
     whoSeals: 'An Owner, an Admin or a Reviewer seals this review.',
@@ -82,6 +83,10 @@ export const REVIEW_COPY = Object.freeze({
     byStatus: (done: number, partly: number, notYet: number, notApplicable: number): string =>
       `Decisions by status: Done ${done}\u00a0· Partly ${partly}\u00a0· Not yet ${notYet}\u00a0· Not applicable ${notApplicable}`,
     byReason: (parts: string): string => `Not applicable and Not yet by reason: ${parts}`,
+    /** S7 (C 182): the decisions by status as a table, each status beside its definition. */
+    statusTable: Object.freeze({ caption: 'Decisions by status', status: 'Status', count: 'Decisions' }),
+    /** S7 (C 183): Not applicable and Not yet by reason as a small table. */
+    reasonTable: Object.freeze({ caption: 'Not applicable and Not yet by reason', reason: 'Reason', count: 'Decisions' }),
     gateAnswer: (answer: string): string => `Answer to the personal data question: ${answer}`,
     doneNoEvidence: (n: number): string => `Done, no evidence attached: ${n}`,
     openFindings: (n: number): string => `Open findings: ${n}`,

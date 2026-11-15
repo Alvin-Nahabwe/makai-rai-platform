@@ -47,6 +47,8 @@ export const EVIDENCE_COPY = Object.freeze({
   removeNamed: (name: string): string => `Remove ${name}`,
   cancelUpload: 'Cancel upload',
   cancelUploadNamed: (name: string): string => `Cancel upload ${name}`,
+  /** Plan 1C C5: the name of an uploading file's progress element. */
+  uploadingNamed: (name: string): string => `Uploading ${name}`,
   retryUpload: 'Retry upload',
   retryUploadNamed: (name: string): string => `Retry upload ${name}`,
   chooseFiles: 'Choose files to add as evidence',
@@ -64,6 +66,9 @@ export const EVIDENCE_COPY = Object.freeze({
     notUploadedBefore: 'Not uploaded. ',
     tooLargeAfter: ' is larger than 10 MB. Add a link to where it is kept instead.',
     wrongTypeAfter: ' is not a PDF, PNG, JPEG, Word (.docx), Excel (.xlsx), PowerPoint (.pptx) or ZIP file.',
+    /** An upload the server refused with 422: the same file cannot succeed, so no Retry (defect 14). */
+    notAcceptedBefore: 'Not uploaded: ',
+    notAcceptedAfter: ' was not accepted. Check the file, then add it again.',
     closedAfter: ' was not uploaded before the page closed. Choose the file again.',
     /** NFR-PERF-06, for a file over 2 MB. */
     largeFile: (megabytes: string): string => `This file is large (${megabytes} MB) and may upload slowly. You can add a link to it instead.`,
@@ -90,6 +95,13 @@ export const EVIDENCE_COPY = Object.freeze({
     fileNameErased: 'File name erased',
     /** Follows the file's name (or "File name erased"): a full stop, a space, then the sentence. */
     fileErased: (date: string): string => `. File erased on ${date} at your organisation's request.`,
+    /**
+     * After a web link's name: the host it really goes to, from the same parse as its href (lib/evidence/format.ts webLink),
+     * so a name cannot claim another site. The same words as lane 1's reading card (QUESTION_COPY.reading.linkTo there).
+     */
+    linkTo: (host: string): string => `(${host}, opens another site)`,
+    /** A link to the platform's own host (isOwnHost): the host alone, since it does not go to another site (coordinator, T3c). */
+    linkToOwn: (host: string): string => `(${host})`,
   }),
   /** The kind of a stored file, by its type (lib/evidence/format.ts `evidenceKind`). */
   kinds: Object.freeze({
@@ -99,4 +111,14 @@ export const EVIDENCE_COPY = Object.freeze({
     zip: 'ZIP',
     office: 'Office document',
   }),
+  /** The decision card (spec 9.3 item 5; design spec D11): the question's own examples, the stored sentence, and an empty list. */
+  examples: 'For example:',
+  stored: 'Your file is stored as it is. The platform checks its type and records a fingerprint. It does not open or run the file.',
+  noneYet: 'None yet.',
+  /**
+   * The decision card's closed disclosure over the accepted types and the stored sentence (lead's ruling D4, 15 Nov 2026).
+   * "Accepted files", not "What to attach": the question's examples of what to attach sit outside it, visible (review round
+   * 2, A N-1).
+   */
+  acceptedFiles: 'Accepted files',
 });

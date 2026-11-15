@@ -1,4 +1,5 @@
 import type { IconName } from '@/components/ui/types';
+import type { Stage } from '@/types/record';
 
 /**
  * The shell's data (plan 1A Task 11, ruling L2-50). Types only, so a client component can import them. What reaches the client
@@ -34,3 +35,16 @@ export type RailItem = {
   current: boolean;
   group: 'main' | 'lower';
 };
+
+/**
+ * One stage of the project in context, as the rail's project block shows it (owner ruling R4): the number of questions
+ * of the stage and how many of them have no decision, both stageView's own counts (lib/data/projects.ts, `questions` and
+ * `noDecision`). A stage is started when fewer questions have no decision than it holds.
+ */
+export type ShellProjectStage = { stage: Stage; questions: number; noDecision: number };
+
+/**
+ * The project in context (S5): its id, its name and the per-stage numbers, and nothing else of its row. Read on the server
+ * by lib/shell/project.ts, past the project page's own gates.
+ */
+export type ShellProject = { id: string; name: string; stages: readonly ShellProjectStage[] };

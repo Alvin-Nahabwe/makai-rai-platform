@@ -12,6 +12,7 @@ import { abortPendingBackgroundRequests, assertNoStalePendingTargets } from './h
 import { reachablePages } from './helpers/reachablePages';
 import { isLegalTextRoute, pageFiles, staticPagesIn, templateRegExp, unaccounted } from './helpers/pageFiles';
 import { ownProject, seedCrawlProject } from './helpers/crawlProject';
+import { projectTexts, type ProjectList } from './helpers/projectTexts';
 import { ERRORS_COPY } from '../lib/errors/copy';
 
 /**
@@ -284,23 +285,6 @@ function claimsIn(words: Words, teamText: readonly string[] = [], allowedTitles:
 /** Read when the test runs, because `setup` writes the manifest after Playwright has collected the specs. */
 function readManifest(): FixtureManifest {
   return JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf-8')) as FixtureManifest;
-}
-
-/** Lists the projects of the organisation over the owner's API. */
-type ProjectList = () => Promise<Array<{ name: string; description: string | null }>>;
-
-/**
- * The names and descriptions of the organisation's projects, with the whitespace collapsed the way
- * `readWords` collapses it. It fails when the list is empty, because an empty list would pass for an
- * organisation with nothing in it (the crawl creates a project first, so there is one).
- */
-async function projectTexts(list: ProjectList): Promise<string[]> {
-  const projects = await list();
-  expect(projects.length, 'the organisation has the crawl project at least').toBeGreaterThan(0);
-  return projects
-    .flatMap((p) => [p.name, p.description ?? ''])
-    .map((t) => cleanText(t))
-    .filter((t) => t.length > 0);
 }
 
 /**
@@ -639,7 +623,11 @@ test('FR-PUB-01: no page reachable as any organisation role shows a product clai
 
   // Pages no sidebar link leads to are started from their files: the authenticated pages with no dynamic
   // segment, but not those NOT_CRAWLED names, so a deleted page leaves the list by itself.
-  const starts = ['/', `/orgs/${slug}/projects/${crawlProject.id}`, ...staticPagesIn('(authenticated)').filter((p) => !(p in NOT_CRAWLED))];
+  // The crawl reads one page per route pattern, the first it meets. S-10 names its questions with no decision, as links, before
+  // anything else that leads to a question (Route R5), so the decided question (Q-PP-01, e2e/helpers/crawlProject.ts), whose page links its history (S-13),
+  // is a start of its own: otherwise the question pattern is read on a question with no history to link.
+  const decided = `/orgs/${slug}/projects/${crawlProject.id}/stages/pre-processing/questions/Q-PP-01`;
+  const starts = ['/', decided, `/orgs/${slug}/projects/${crawlProject.id}`, ...staticPagesIn('(authenticated)').filter((p) => !(p in NOT_CRAWLED))];
   const reachedBySomeSeat: string[] = [];
   const claims: string[] = [];
   for (const role of FIXTURE_ROLES) {

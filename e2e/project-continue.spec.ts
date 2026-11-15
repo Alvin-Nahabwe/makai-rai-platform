@@ -72,7 +72,7 @@ test('C11: after a saved decision, Continue recording opens the next question wi
   });
   if (!res.ok()) throw new Error(`seeding ${IP[1]} answered ${res.status()}: ${await res.text()}`);
   await page.goto(`/orgs/${fx.org.slug}/dashboard`);
-  const homeCode = (await page.locator('.next-step__code').textContent())?.trim() ?? '';
+  const homeCode = (await page.locator('.home-next__code').textContent())?.trim() ?? '';
   expect(homeCode).toBe(IP[2]);
   await page.goto(projectPage(project.id));
   await expect(primary(page, PROJECT_COPY.start)).toHaveCount(0);
@@ -85,7 +85,7 @@ for (const role of ['reviewer', 'viewer'] as const) {
   test(`C11: a ${role} sees neither Start recording nor Continue recording`, async ({ browser }) => {
     const page = await signedIn(browser, fx.members[role]);
     await page.goto(projectPage(project.id));
-    await expect(page.getByRole('link', { name: PROJECT_COPY.overview.findings })).toBeVisible();
+    await expect(page.locator('nav.project-actions').getByRole('link', { name: PROJECT_COPY.findings, exact: true })).toBeVisible();   // the page rendered, the role's own row
     await expect(page.getByText(PROJECT_COPY.start)).toHaveCount(0);
     await expect(page.getByText(PROJECT_COPY.continue)).toHaveCount(0);
   });

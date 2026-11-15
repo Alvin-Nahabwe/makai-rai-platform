@@ -35,6 +35,19 @@ export type EvidenceBlockProps = {
   initialLink?: { url: string; label: string };
   /** Each change of the two link boxes, so a parent that replaces the block can hand them to the next one. */
   onLinkInput?: (link: { url: string; label: string }) => void;
+  /** The decision card only: the question's own examples of what to attach (EvidenceBlockView). */
+  examples?: readonly string[];
+  /** The decision card only: its one-line layout, "None yet." and the closed "Accepted files" (EvidenceBlockView). */
+  decisionCard?: boolean;
+  /** The decision card only: evidence the form holds that the block cannot name (EvidenceBlockView). */
+  keptCount?: number;
+  /** The decision form only: "Save without" beside the uploading files while no Save waits (plan 1C C5; EvidenceBlockView). */
+  saveWithout?: { label: string; onPress: () => void } | null;
+  /**
+   * The platform's public origin, read on the server (VersionEvidenceList `platformOrigin`): a link to its host is not
+   * called another site. Absent or null: no link is the platform's own (the warning stays), as for MitigationForm today.
+   */
+  ownOrigin?: string | null;
 };
 
 /** The server's limit (lib/evidence/inspect.ts MAX_BYTES, which cannot load in a browser): a larger file is not sent. */
@@ -192,7 +205,8 @@ export function EvidenceBlock(props: EvidenceBlockProps): ReactElement {
       orgSlug={props.orgSlug} idBase={idBase} items={carried} added={added} fromVersionNumber={props.fromVersionNumber}
       uploads={uploads} notUploaded={props.notUploaded ?? []} disabled={props.disabled}
       linkFormOpen={linkFormOpen} linkUrl={linkUrl} linkLabel={linkLabel} linkError={linkError} linkRefused={linkRefused} linkPending={linkPending}
-      held={props.saveOut === true}
+      held={props.saveOut === true} examples={props.examples} decisionCard={props.decisionCard} keptCount={props.keptCount}
+      saveWithout={props.saveWithout} ownOrigin={props.ownOrigin ?? null}
       onChooseFiles={chooseFiles}
       onOpenFilePicker={() => { fileInput.current?.click(); }}
       onOpenLink={() => setLinkFormOpen((o) => !o)}

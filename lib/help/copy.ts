@@ -7,7 +7,18 @@ import { TERM_PRODUCT } from '@/lib/vocabulary/terms';
  */
 export const HELP_COPY = Object.freeze({
   titles: Object.freeze({ help: 'Help' }),
-  words: Object.freeze({ heading: 'Words used on the platform' }),
+  words: Object.freeze({
+    heading: 'Words used on the platform',
+    /**
+     * Help's own heading for a vocabulary group whose name holds a defined term (B5, ruling D5): under the vocabulary's
+     * name the heading would be the term's first use on the page, before the term's own entry. A group not listed here
+     * is shown under its vocabulary name. The vocabulary's data is unchanged.
+     */
+    groupHeadings: Object.freeze({
+      'Findings and follow-up': 'Follow-up',
+      'Stage reviews, seals and documents': 'Reviews and documents',
+    } as Readonly<Record<string, string>>),
+  }),
   sealing: Object.freeze({
     heading: 'What sealing means',
     paragraphs: Object.freeze([

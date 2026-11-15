@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, type CSSProperties, type FormEvent } from 'react';
+import { useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { LEGAL_KIND_NAMES, acceptanceError, type AcceptancePair } from '@/lib/legal/kinds';
 import { ACCEPT_LABEL, ACCEPTANCES_COPY } from '@/lib/legal/acceptances/copy';
@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { ErrorSummary } from '@/components/ui/ErrorSummary';
 import { StatusRegion } from '@/components/ui/StatusRegion';
+import { useSignOutPress } from '@/lib/client/signOutPress';
 
 /**
  * S-05's form (FR-ACC-03, UX-22; W-11 notes 2 and 3, SRS lines 2229-2250): one unticked box per
@@ -26,6 +27,11 @@ interface AcceptancesFormBase {
   /** Sends the accepted kinds and shows its own outcome; it should not reject. */
   onAccepted: (kinds: AcceptedKind[]) => Promise<void>;
   busy?: boolean;
+  /** The heading in place of the mode's own (S-05 when a text changed: plan 1B Task 7). */
+  heading?: string;
+  /** What S-05 shows before a text's box when it changed (which text, which versions, what changed, its full words); such
+   * a box then carries only its version line, as the link to the words is in what comes before it. */
+  before?: Partial<Record<AcceptedKind, ReactNode>>;
 }
 
 /**
@@ -171,63 +177,9 @@ export function SendStatus({ send, what, sendingText, onRetry }: { send: SendSta
   );
 }
 
-/** Where a sign-out press stands: not pressed, being carried out (until the browser leaves), or failed: still signed in, and said so. */
-export type SignOutPhase = 'idle' | 'working' | 'stillSignedIn';
-
-/** The sign-out module, loaded when a sign out is pressed (ruling T16-Q11); a test passes its own. */
-export type LoadSignOut = () => Promise<Pick<typeof import('@/lib/client/signOutClearingDrafts'), 'signOutClearingDrafts'>>;
-
-/**
- * NFR-PERF-02: the sign-out module (and next-auth/react with it) is not in S-04's first visit; it is loaded here, at
- * the press. Written as import() inside the function so the bundler splits it into its own chunk. (On S-05 the
- * signed-in shell loads next-auth/react anyway, so there it changes where the code arrives, not the page's weight.)
- */
-const loadSignOutClearingDrafts: LoadSignOut = () => import('@/lib/client/signOutClearingDrafts');
-
-/**
- * One sign-out press for the two sign out controls of S-04 and S-05 (rulings T16-Q11, T16-30): `show` hears `working`
- * first (which empties the failure line, so a second identical failure is announced again), then `stillSignedIn` if the load
- * or the sign-out itself rejects (T16-31). A press while one is working starts nothing: one load, one sign-out request.
- * Success leaves the phase at `working`, because the browser is leaving the page. There is no fallback: a press that
- * fails never navigates, so the account's drafts are removed only by signOutClearingDrafts (NFR-PRIV-06).
- */
-export function signOutPress(load: LoadSignOut, show: (phase: SignOutPhase) => void): (userId: string, callbackUrl: string) => Promise<void> {
-  let working = false;
-  return async (userId, callbackUrl) => {
-    if (working) return;
-    working = true;
-    try {
-      show('working');
-      const { signOutClearingDrafts } = await load();
-      await signOutClearingDrafts(userId, callbackUrl);
-    } catch (err: unknown) {
-      // The person is still signed in and the line says so (ruling T16-31); the control is pressable again. The kind of
-      // error is reported for whoever maintains this, never its message: the callbackUrl can hold an invitation token.
-      console.warn('acceptances: a sign-out press was rejected', err instanceof Error ? err.name : typeof err);
-      working = false;
-      show('stillSignedIn');
-    }
-  };
-}
-
-/** The failure line's words for a phase: the ruled sentence once a press has failed, else nothing (the region stays, empty). */
-export function signOutMessage(phase: SignOutPhase): string | null {
-  return phase === 'stillSignedIn' ? ACCEPTANCES_COPY.stillSignedIn : null;
-}
-
-/** A sign out control's state and press, for S-04's M-24 button and S-05's link-styled button alike (ruling T16-30). */
-export function useSignOutPress(userId: string, callbackUrl: string): { busy: boolean; message: string | null; press: () => void } {
-  const [phase, setPhase] = useState<SignOutPhase>('idle');
-  const pressRef = useRef<ReturnType<typeof signOutPress> | null>(null);
-  function press() {
-    // `working` is committed at once, so the failure line is empty in the page before any later failure fills it again.
-    pressRef.current ??= signOutPress(loadSignOutClearingDrafts, (next) => {
-      if (next === 'working') flushSync(() => setPhase(next)); else setPhase(next);
-    });
-    void pressRef.current(userId, callbackUrl);
-  }
-  return { busy: phase === 'working', message: signOutMessage(phase), press };
-}
+// The sign-out press of S-04 and S-05 (rulings T16-Q11, T16-30, T16-31) is lib/client/signOutPress.ts, shared with the gate
+// frame's Sign out; re-exported here for this module's existing importers.
+export { signOutMessage, signOutPress, useSignOutPress, type LoadSignOut, type SignOutPhase } from '@/lib/client/signOutPress';
 
 /**
  * Mode `required`'s two ways out (W-11 note 3). "sign out" sits inside the sentence, so it stays a link-styled native
@@ -258,7 +210,7 @@ export type AcceptancesFormViewProps = Omit<AcceptancesFormBase, 'onAccepted'> &
 /** The markup of the form for a given state; `AcceptancesForm` holds the state. */
 export function AcceptancesFormView(p: AcceptancesFormViewProps) {
   const names = p.texts.map((t) => LEGAL_KIND_NAMES[acceptedKindOf(t)]);
-  const legend = p.mode === 'offer' ? ACCEPTANCES_COPY.offerLegend(names) : ACCEPTANCES_COPY.legend;
+  const legend = p.heading ?? (p.mode === 'offer' ? ACCEPTANCES_COPY.offerLegend(names) : ACCEPTANCES_COPY.legend);
   return (
     <form method="post" noValidate onSubmit={p.onSubmit}>
       <ErrorSummary title={ACCEPTANCES_COPY.summaryTitle} errors={p.errors.map((kind) => ({ fieldId: `accept-${kind}`, message: acceptanceError(kind) }))} />
@@ -272,18 +224,28 @@ export function AcceptancesFormView(p: AcceptancesFormViewProps) {
           {p.texts.map((text) => {
             const kind = acceptedKindOf(text);
             const name = LEGAL_KIND_NAMES[kind];
+            // null counts as nothing before the box, as undefined does, so the box keeps its own link to the words.
+            const before = p.before?.[kind] ?? undefined;
             return (
-              <Checkbox key={kind} id={`accept-${kind}`} name="acceptances" value={kind} label={ACCEPT_LABEL[kind]}
-                checked={p.ticked.has(kind)} onChange={(e) => p.onToggle(kind, e.currentTarget.checked)}
-                error={p.errors.includes(kind) ? ACCEPTANCES_COPY.tickThis : undefined}
-                hint={(
-                  <>
-                    <span>{ACCEPTANCES_COPY.version(text.version, formatDay(text.publishedOn))}</span>{' '}
-                    <a href={`/legal/${kind}/${text.version}`} target="_blank" rel="noopener" style={LINK_TARGET}>
-                      {ACCEPTANCES_COPY.readLink(name)}<span>{' '}{ACCEPTANCES_COPY.opensInNewTab}</span>
-                    </a>
-                  </>
-                )} />
+              <div key={kind}>
+                {before}
+                <Checkbox id={`accept-${kind}`} name="acceptances" value={kind} label={ACCEPT_LABEL[kind]}
+                  checked={p.ticked.has(kind)} onChange={(e) => p.onToggle(kind, e.currentTarget.checked)}
+                  error={p.errors.includes(kind) ? ACCEPTANCES_COPY.tickThis : undefined}
+                  hint={(
+                    <>
+                      <span>{ACCEPTANCES_COPY.version(text.version, formatDay(text.publishedOn))}</span>
+                      {before === undefined ? (
+                        <>
+                          {' '}
+                          <a href={`/legal/${kind}/${text.version}`} target="_blank" rel="noopener" style={LINK_TARGET}>
+                            {ACCEPTANCES_COPY.readLink(name)}<span>{' '}{ACCEPTANCES_COPY.opensInNewTab}</span>
+                          </a>
+                        </>
+                      ) : null}
+                    </>
+                  )} />
+              </div>
             );
           })}
         </div>

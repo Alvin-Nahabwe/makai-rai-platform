@@ -1,7 +1,15 @@
+import 'dotenv/config';
+import { createHash, randomBytes } from 'node:crypto';
 import { test, expect } from '@playwright/test';
+import { testDb } from '../__tests__/helpers/db';
+import { buildOrg } from '../__tests__/helpers/recordFixture';
+import { welcomeLine } from '../lib/org/copy';
+import { INVITATION_COPY } from '../lib/invitations/copy';
 import { INVITATION_PAGE_COPY } from '../lib/org/copy';
 import { roleWithArticle } from '../lib/org/copy';
 import { MEMBERS_COPY } from '../lib/org/members/copy';
+import { HOME_COPY } from '../lib/home/copy';
+import { PROJECT_COPY } from '../lib/project/copy';
 import fs from 'node:fs';
 import type { OrgRole } from '@prisma/client';
 import { can } from '../lib/authz/policy';
@@ -127,12 +135,19 @@ test.describe('an invitation moves a third person into an org, at the invited ro
     // --- Step C: land in org A, at the role that was actually granted —
     // checked two ways: (1) org A is reachable and org B is not (this
     // person was never invited to B), (2) the role-appropriate UI renders
-    // — `assessor` has `project:create`, so "New project" is
-    // visible, tying this back to the same O-13 control this suite checks
-    // elsewhere and proving the GRANTED role, not just membership.
+    // — the rebuilt Home has two variants, by whether org A has an active
+    // project (other specs create one there before this file runs in CI):
+    // the first-time page (FirstTimeHome) offers "Create a project" for a
+    // role with `project:create`; the recorder's Home offers "Start
+    // recording" / "Continue recording" for a role with `decision:write`.
+    // Either control, role-gated, proves the GRANTED role, not just
+    // membership. ("New project" no longer sits on Home: spec 9.1.)
     await thirdPage.waitForURL(`**/orgs/${orgA.slug}/dashboard?welcome=1`);
-    const startLink = thirdPage.getByRole('link', { name: 'New project' });
-    if (can('assessor', 'project:create')) {
+    const escapeRe = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const startLink = thirdPage.getByRole('link', {
+      name: new RegExp(`^(${[HOME_COPY.firstTimeCreate, PROJECT_COPY.start, HOME_COPY.continueRecording].map(escapeRe).join('|')})$`),
+    }).first();
+    if (can('assessor', 'project:create') && can('assessor', 'decision:write')) {
       await expect(startLink).toBeVisible();
     } else {
       await expect(startLink).toHaveCount(0);
@@ -142,5 +157,42 @@ test.describe('an invitation moves a third person into an org, at the invited ro
     expect(res?.status()).toBe(404);
 
     await thirdContext.close();
+  });
+});
+
+test.describe('a member of one organisation joins a second (plan 1B Task 6, spec 9.8)', () => {
+  test('9.8: a member of A accepts an invitation to B while signed in, lands on B\'s Home with the welcome, and the switcher lists A and B', async ({ browser }) => {
+    // Fresh organisations, so the fixture seats the cases above rely on are not moved into a second organisation.
+    const a = await buildOrg({ label: 'joina' });
+    const b = await buildOrg({ label: 'joinb' });
+    const person = a.members.viewer;
+    const raw = randomBytes(32).toString('hex');
+    await testDb.invitation.create({ data: {
+      orgId: b.org.id, email: person.email, role: 'assessor', tokenHash: createHash('sha256').update(raw).digest('hex'),
+      invitedById: b.members.owner.userId, expiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000),
+    } });
+    const context = await browser.newContext({ extraHTTPHeaders: { 'x-forwarded-for': '10.52.0.1' } });
+    const page = await context.newPage();
+    await page.goto('/login');
+    await page.waitForLoadState('networkidle');
+    await page.fill('#email', person.email);
+    await page.fill('#password', person.password);
+    await page.locator('button[type="submit"]').click();
+    await page.waitForURL((url) => url.pathname !== '/login');
+
+    await page.goto(`/invitations/${raw}`);
+    await expect(page.locator('h1')).toHaveText(`You are invited to ${b.org.name}`);
+    await page.getByRole('button', { name: INVITATION_COPY.accept }).click();
+    await page.waitForURL(`**/orgs/${b.org.slug}/dashboard?welcome=1`);
+    await expect(page.getByText(welcomeLine(b.org.name, roleWithArticle('assessor')))).toBeVisible();
+
+    const nav = page.getByRole('navigation', { name: 'Main', exact: true });
+    // The switcher's list (the rail's Home also links to B's Home, the open organisation).
+    await nav.locator('.shell-org__button').click();
+    const list = nav.locator('.shell-org__list');
+    await expect(list.locator(`a[href="/orgs/${a.org.slug}/dashboard"]`)).toHaveCount(1);
+    await expect(list.locator(`a[href="/orgs/${b.org.slug}/dashboard"]`)).toHaveCount(1);
+    await context.close();
+    await testDb.$disconnect();
   });
 });

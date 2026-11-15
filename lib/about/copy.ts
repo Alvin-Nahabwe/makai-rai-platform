@@ -1,8 +1,8 @@
-import { TERM_STAGE_1, TERM_STAGE_2, TERM_STAGE_3 } from '@/lib/vocabulary/terms';
+import { TERM_FINDING, TERM_MITIGATION, TERM_SEAL, TERM_STAGE_REVIEW } from '@/lib/vocabulary/terms';
 
 /**
- * The words of About, S-28 (copy audit D, AB3 to AB52, as ruled for plan 1A Task 19 part 19d). Server only: it reads
- * the vocabulary, so no client file may import it (ruling X-2).
+ * The words of About, S-28 (copy audit D, AB3 to AB52, as ruled for plan 1A Task 19 part 19d; first-use definitions,
+ * lane 6 B5). Server only: it reads the vocabulary, so no client file may import it (ruling X-2).
  *
  * Not here, on purpose: the eight principle titles and the risk area names (content-tied, kept in the page), the
  * credit line (`data/credit.json`, read by `lib/credit.ts`) and the link to Help's "What sealing means" (lane 2's).
@@ -18,10 +18,17 @@ export const ABOUT_COPY = Object.freeze({
   whatItDoes: Object.freeze({
     heading: 'What the platform does',
     intro: 'Your team records a decision on each question about one AI system. The questions come in three stages:',
-    /** The plain meaning beside each stage name, in the content's stage order; the vocabulary's words, never retyped. */
-    stageMeanings: Object.freeze([TERM_STAGE_1.definition, TERM_STAGE_2.definition, TERM_STAGE_3.definition] as const),
-    record:
-      'For each question, your team records a decision, the reason, who decided, when, and any evidence. The team decides; the platform records. If a decision does not meet good practice, a finding is raised. Your team closes each finding in one of two ways: it fixes the problem (a mitigation), or it records that it accepts the risk. When your team is ready, it seals a stage review. Sealing fixes the record so it cannot change. The platform then makes documents from it for your ethics committee or funder. The platform does not test your model or calculate anything from your data.',
+    /**
+     * The ruled paragraph (Q17) in two parts around the four terms it introduces (B5): each term is first used in its own
+     * line beside its definition, then `followUp` says how they fit. "Sealing fixes the record so it cannot change." is
+     * dropped: the record can still change after a seal, and the seal's definition says what does not.
+     */
+    record: 'For each question, your team records a decision, the reason, who decided, when, and any evidence. The team decides; the platform records.',
+    termsLead: 'Four more words name what can follow a decision:',
+    /** The four terms in the order `followUp` uses them; the page prints each with the vocabulary's `Definition`. */
+    terms: Object.freeze([TERM_FINDING, TERM_MITIGATION, TERM_STAGE_REVIEW, TERM_SEAL] as const),
+    followUp:
+      'If a decision does not meet good practice, a finding is raised. Your team closes each finding in one of two ways: it fixes the problem (a mitigation), or it records that it accepts the risk. When your team is ready, it seals a stage review. The platform then makes documents from it for your ethics committee or funder. The platform does not test your model or calculate anything from your data.',
     /** Holds "audit" and "certify": shown only inside the marker `not-an-approval-service` (AL-3). */
     notApproval:
       "The platform does not approve, audit or certify AI systems. Its documents are your team's own record, not an approval.",
@@ -34,6 +41,8 @@ export const ABOUT_COPY = Object.freeze({
   principles: Object.freeze({
     heading: 'Eight responsible AI principles',
     lead: 'Each question in the platform belongs to one of these eight principles. Read a principle to see why its questions are asked.',
+    /** B5: the first use of "risk area" on About, in three parts around the `Term`; the page adds its `Definition`. */
+    areasLine: Object.freeze(['Each principle lists its ', 'risk areas', '.'] as const),
     asks: 'What the platform asks about',
     areas: 'Risk areas',
     sourceBefore: 'These principles are drawn from the',

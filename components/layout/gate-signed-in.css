@@ -1,0 +1,87 @@
+/* The gate frame's signed-in rules (components/layout/GateFrame.tsx, variant signed-in): the platform's name as the
+   column's title, and the person's block, Help, Sign out and M-41. Moved word for word out of ./gate.css by the lean
+   frame (owner, 15 Nov 15:35), so that a public door page, which draws none of them, does not download them: GateFrame
+   imports this sheet, GatePublicFrame (S-04) does not. The frame's own rules, its column, band, route and card, are in
+   ./gate.css, which loads first. */
+
+.gate__product {
+  color: var(--color-shell-ink);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+/* The person's block: Help and Sign out in the band; the name only in the wide column. */
+.gate__footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  min-width: 0;
+}
+
+.gate__name {
+  display: none;
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.gate__help,
+.gate__help:hover {
+  /* a:hover in app/globals.css would paint it the link colour, navy on navy. */
+  color: var(--color-shell-ink);
+}
+
+.gate__help {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--target-min);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.gate__signout {
+  min-width: 0;
+  max-inline-size: 100%;
+}
+
+.gate__signout .shell-rail__signout {
+  inline-size: auto;
+}
+
+/* M-41 (the drafts warning) is a surface box laid over the page from inside the column: it takes the page's ink. */
+.gate__header [data-sign-out-drafts] {
+  color: var(--color-ink);
+}
+
+/* The sign-out failure line sits on the navy: white words, bold with the icon (the kit's error tone, never red). */
+.gate__signout .ui-status {
+  color: var(--color-shell-ink);
+}
+
+/* ── Wide: the person's block at the foot of the navy column ── */
+@media (min-width: 1024px) {
+  .gate__footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-2);
+    margin-block-start: auto;
+    padding-block-start: var(--space-4);
+    /* A control-border line (review M-1: the hover navy was 1.19:1 on the column). */
+    border-block-start: 1px solid var(--color-border-control);
+  }
+
+  .gate__name {
+    display: block;
+    padding-inline: var(--space-3);
+  }
+
+  .gate__help {
+    min-block-size: var(--target-primary);
+    padding-inline: var(--space-3);
+  }
+
+  .gate__signout .shell-rail__signout {
+    inline-size: 100%;
+  }
+}

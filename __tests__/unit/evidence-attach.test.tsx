@@ -75,7 +75,14 @@ describe('DecisionForm -- EvidenceBlock wiring', () => {
     // out (nothing is added meanwhile) and that it refused a save for an address typed and not added (the block says so at the box).
     // `initialLink` and `onLinkInput` joined it on 15 November 2026: when a new version replaces the block, an address typed
     // and not added is handed to the next block, not lost.
-    const allowed = ['orgSlug', 'projectId', 'initial', 'disabled', 'onChange', 'onUploadState', 'onItemsChange', 'notUploaded', 'fromVersionNumber', 'saveOut', 'unaddedLinkRefusals', 'initialLink', 'onLinkInput'];
+    // `examples` and `decisionCard` joined it on 15 November 2026 (the decision card, spec 9.3 item 5): words only, the
+    // question's own examples, the stored sentence and "None yet."; neither changes what the block sends or keeps. `keptCount`
+    // (review round 1): how much evidence the form keeps that the block cannot name, so "None yet." is not said then.
+    // `saveWithout` (plan 1C C5, lane 2 T3b): the form's own "Save without" (its existing save(true)) beside the uploading
+    // files while no Save waits; null while one waits, when the wait card holds the one such button. It sends nothing itself.
+    // `ownOrigin` (coordinator, lane 2 T3c item 8): the platform's public origin, read on the server, so a link to the
+    // platform's own host is not named "opens another site". Words only; it sends nothing.
+    const allowed = ['orgSlug', 'projectId', 'initial', 'disabled', 'onChange', 'onUploadState', 'onItemsChange', 'notUploaded', 'fromVersionNumber', 'saveOut', 'unaddedLinkRefusals', 'initialLink', 'onLinkInput', 'examples', 'decisionCard', 'keptCount', 'saveWithout', 'ownOrigin'];
     expect(Object.keys(props).filter((k) => !allowed.includes(k))).toEqual([]);
   });
 

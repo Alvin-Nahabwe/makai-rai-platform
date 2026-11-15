@@ -10,7 +10,11 @@ export type RadioCardsProps = {
   legend: string;
   /** Rendered after the legend, outside it, so the legend's text stays the group's name alone. */
   legendHint?: ReactNode;
-  options: ReadonlyArray<{ value: string; label: string; help?: string; mark?: StatusMarkKind; id?: string }>;
+  /**
+   * `term` (lane 2 T3c item 10a, additive): the vocabulary id whose word the label is and whose definition the help is (spec 6
+   * first use): the label's words carry `data-term` and the help sentence `data-definition`. Absent: markup unchanged.
+   */
+  options: ReadonlyArray<{ value: string; label: string; help?: string; mark?: StatusMarkKind; id?: string; term?: string }>;
   /** Pass `value` (controlled, with `onChange`) or `defaultValue`, never both. */
   value?: string;
   defaultValue?: string;
@@ -26,6 +30,13 @@ export type RadioCardsProps = {
   disabled?: boolean;
   /** On the fieldset, after the legend hint and before the error. */
   'aria-describedby'?: string;
+  /**
+   * The decision card's layout (owner's ruling R3, 15 Nov 2026): each option's help sentence is rendered after the grid,
+   * in option order, with the same id and class, instead of inside its card, so the caller's stylesheet can show one
+   * under the grid. Each radio still names its sentence in aria-describedby. Off by default: every other caller's
+   * markup is unchanged.
+   */
+  helpBelow?: boolean;
 };
 
 /**
@@ -40,8 +51,9 @@ export type RadioCardsProps = {
  */
 export function RadioCards({
   name, legend, legendHint, options, value, defaultValue, onChange, error, required = false, columns = 1, disabled = false,
-  'aria-describedby': callerDescribedBy,
+  'aria-describedby': callerDescribedBy, helpBelow = false,
 }: RadioCardsProps): ReactElement {
+  const helpIdOf = (o: RadioCardsProps['options'][number]) => (o.help === undefined ? undefined : `${o.id ?? `${name}-${o.value}`}-help`);
   const hintId = given(legendHint) ? `${name}-hint` : undefined;
   const errorId = `${name}-error`;
   return (
@@ -55,7 +67,7 @@ export function RadioCards({
       <div className="ui-radio-cards__list">
         {options.map((o) => {
           const inputId = o.id ?? `${name}-${o.value}`;
-          const helpId = o.help === undefined ? undefined : `${inputId}-help`;
+          const helpId = helpIdOf(o);
           return (
             <div key={o.value} className="ui-radio-card">
               <label className="ui-radio-card__label" htmlFor={inputId}>
@@ -67,13 +79,18 @@ export function RadioCards({
                   aria-describedby={helpId}
                 />
                 {o.mark === undefined ? null : <MarkShape kind={o.mark} size={20} />}
-                {o.label}
+                {o.term === undefined ? o.label : <span data-term={o.term}>{o.label}</span>}
               </label>
-              {helpId === undefined ? null : <p className="ui-radio-card__help" id={helpId}>{o.help}</p>}
+              {helpId === undefined || helpBelow ? null : <p className="ui-radio-card__help" id={helpId} data-definition={o.term}>{o.help}</p>}
             </div>
           );
         })}
       </div>
+      {helpBelow ? (
+        <div className="ui-radio-cards__helps">
+          {options.map((o) => (o.help === undefined ? null : <p key={o.value} className="ui-radio-card__help" id={helpIdOf(o)} data-definition={o.term}>{o.help}</p>))}
+        </div>
+      ) : null}
     </fieldset>
   );
 }

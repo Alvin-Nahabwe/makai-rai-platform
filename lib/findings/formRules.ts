@@ -83,6 +83,7 @@ export function writeFailure(outcome: SendOutcome<unknown>, kept: string, timeZo
     if (body.code === 'finding_already_open') return { ...base, text: FINDINGS_COPY.failures.alreadyOpen };
     if (body.code === 'finding_withdrawn') return { ...base, text: FINDINGS_COPY.failures.withdrawn };
     if (body.code === 'cannot_withdraw_shortfall') return { ...base, text: FINDINGS_COPY.failures.cannotWithdrawShortfall };
+    if (body.code === 'finding_has_open_work') return { ...base, text: FINDINGS_COPY.failures.openWork };
   }
   if (status === 422 && body.fields !== undefined && body.fields.length > 0) {
     const fields = body.fields.map((f) => ({ field: f.field, message: fieldText(f.message) }));

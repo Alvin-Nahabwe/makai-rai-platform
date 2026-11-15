@@ -25,7 +25,7 @@ const { DraftsOnThisDevice } = await import('@/components/decision/DraftsOnThisD
 const { AccountRegions } = await import('@/components/account/AccountRegions');
 const { signOutEverywhere } = await import('@/components/account/SignOutEverywhere');
 const { DeleteConfirm, PersonalExportAndDeletionForm } = await import('@/components/account/PersonalExportAndDeletionForm');
-const { ChangePasswordView, changePasswordOutcome } = await import('@/app/(authenticated)/change-password/ChangePasswordForm');
+const { ChangePasswordView, changePasswordOutcome } = await import('@/app/(gate)/change-password/ChangePasswordForm');
 const { CHANGE_PASSWORD_COPY } = await import('@/lib/auth/copy');
 const { ACCOUNT_COPY, SIGN_OUT_EVERYWHERE_COPY, PERSONAL_DATA_COPY, phraseLabel } = await import('@/lib/account/copy');
 const { ORG_COPY, welcomeLine } = await import('@/lib/org/copy');
@@ -51,7 +51,8 @@ describe('S-21 My account', () => {
     expect(markup).toContain(SIGN_OUT_EVERYWHERE_COPY.explains);
     expect(markup).toMatch(new RegExp(`<a [^>]*href="/change-password"[^>]*>${escapeRe(ACCOUNT_COPY.page.changePassword)}</a>`));
     expect(vi.mocked(MyAcceptances)).toHaveBeenLastCalledWith({ userId: id.userId }, undefined);
-    expect(vi.mocked(ReminderEmailsSetting)).toHaveBeenLastCalledWith({ enabled: false }, undefined);
+    // FX2: the page also hands the setting its label with "mitigation" marked, and that term's definition (account-terms.test.tsx).
+    expect(vi.mocked(ReminderEmailsSetting)).toHaveBeenLastCalledWith({ enabled: false, label: expect.anything(), hint: { id: 'account-mitigation-definition', node: expect.anything() } }, undefined);
     expect(vi.mocked(DraftsOnThisDevice)).toHaveBeenLastCalledWith({ userId: id.userId }, undefined);
     expect(vi.mocked(PersonalExportAndDeletion)).toHaveBeenLastCalledWith({ userId: 'u1', lastActiveOwnerOf: [] }, undefined);
   });
@@ -118,7 +119,7 @@ describe('S-21 My account', () => {
 
 describe('S-29 and S-21\'s password change', () => {
   it('FR-ACC-08 NFR-SEC-18: one new-password field with the hint, the current password, and Show on both', () => {
-    const markup = html(<ChangePasswordView currentPassword="" newPassword="" show={false} state={{ kind: 'idle' }}
+    const markup = html(<ChangePasswordView forced={false} currentPassword="" newPassword="" show={false} state={{ kind: 'idle' }}
       onCurrent={noop} onNew={noop} onToggleShow={noop} onSubmit={noop} />);
     expect(tagOf(markup, 'currentPassword')).toMatch(/autocomplete="current-password"/i);
     expect(tagOf(markup, 'newPassword')).toMatch(/autocomplete="new-password"/i);
@@ -134,13 +135,13 @@ describe('S-29 and S-21\'s password change', () => {
     const tooShort = VALIDATION_COPY.passwordTooShort(12);
     const r422 = await changePasswordOutcome(new Response(JSON.stringify({ code: 'validation', fields: [{ field: 'newPassword', message: tooShort }] }), { status: 422 }));
     expect(r422).toEqual({ kind: 'invalid', field: 'newPassword', message: tooShort });
-    const markup = html(<ChangePasswordView currentPassword="x" newPassword="y" show={false} state={r422} onCurrent={noop} onNew={noop} onToggleShow={noop} onSubmit={noop} />);
+    const markup = html(<ChangePasswordView forced={false} currentPassword="x" newPassword="y" show={false} state={r422} onCurrent={noop} onNew={noop} onToggleShow={noop} onSubmit={noop} />);
     expect(tagOf(markup, 'newPassword')).toMatch(/aria-describedby="newPassword-hint newPassword-error"/);
     expect(tagOf(markup, 'newPassword')).toMatch(/aria-invalid="true"/);
     expect(markup).toMatch(new RegExp(`id="newPassword-error"[^>]*>${escapeRe(tooShort)}<`));
     const r400 = await changePasswordOutcome(new Response(JSON.stringify({ error: 'Current password is incorrect' }), { status: 400 }));
     expect(r400).toEqual({ kind: 'error', message: 'Current password is incorrect' });
-    expect(regionText(html(<ChangePasswordView currentPassword="x" newPassword="y" show={false} state={r400} onCurrent={noop} onNew={noop} onToggleShow={noop} onSubmit={noop} />), 'alert'))
+    expect(regionText(html(<ChangePasswordView forced={false} currentPassword="x" newPassword="y" show={false} state={r400} onCurrent={noop} onNew={noop} onToggleShow={noop} onSubmit={noop} />), 'alert'))
       .toBe('Current password is incorrect');
     expect(await changePasswordOutcome(new Response('{"success":true}', { status: 200 }))).toEqual({ kind: 'done' });
     // A failure on the server is said as such, with its support reference, and never as "your password is as it was".
@@ -172,8 +173,8 @@ describe('1A-16c: the words of My account, word for word (audit A 78 to 87)', ()
 describe('1A-16c: the words of My data and Delete my account, word for word (audit A 88 to 98)', () => {
   it('A 89, 90, 94, 96: the rewritten texts', () => {
     expect(PERSONAL_DATA_COPY.downloadIntro).toBe('You can download a file with your data. It has your account details, your memberships, the legal texts you accepted and your reminder setting. It also lists the records you entered or were named in. It does not include the text of those records. That text belongs to your organisation.');
-    // The vocabulary retires "Deleted user"; the name the platform writes is still "Deleted user" until plan 1A Task 20 (lib/data/identity.ts).
-    expect(PERSONAL_DATA_COPY.deleteConsequence).toBe('Your name and email are removed and you are signed out everywhere. Records you entered stay with your organisations, shown as entered by "Deleted account". This cannot be undone.');
+    // Owner's written exception (15 Nov 2026): a deleted account is shown as "Deleted user", the name lib/data/identity.ts writes and the approved legal texts promise.
+    expect(PERSONAL_DATA_COPY.deleteConsequence).toBe('Your name and email are removed and you are signed out everywhere. Records you entered stay with your organisations, shown as entered by "Deleted user". This cannot be undone.');
     expect(PERSONAL_DATA_COPY.passwordLabel).toBe('Your current password');
     expect(PERSONAL_DATA_COPY.download).toBe('Download my data');
   });

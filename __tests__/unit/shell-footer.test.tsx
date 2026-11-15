@@ -37,7 +37,8 @@ describe('footer', () => {
       [credit.current.licence, credit.current.href],
       ['Terms and privacy', '/help#terms-and-privacy'],
       ['About', '/about'],
-      ['Help and contact', '/about#help-and-contact'],
+      // Help's contact section (spec 8 line 271; route task 1, fix round 2): contact lives in Help.
+      ['Help and contact', '/help#contact'],
     ]);
   });
 

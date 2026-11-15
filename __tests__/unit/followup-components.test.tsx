@@ -42,6 +42,16 @@ describe('reminder emails setting view (S-21)', () => {
     expect(html).toMatch(/<input[^>]*style="[^"]*opacity:0\.5/);
   });
 
+  it('FX2: by default the label is the copy\'s words and the box names nothing; given a label and a hint, the box names the hint', () => {
+    const plain = view(false);
+    expect(plain).not.toContain('aria-describedby');
+    expect(plain).toContain(`<label for="x" style="justify-self:start">${REMINDER_SETTING_COPY.label}</label><p`);
+    const html = renderToStaticMarkup(<ReminderEmailsSettingView id="x" state={initialSetting(true)} onChange={() => undefined}
+      label={<b>Label node</b>} hint={{ id: 'h1', node: <span id="h1">Hint node</span> }} />);
+    expect(html).toMatch(/<input id="x" type="checkbox"[^>]*aria-describedby="h1"/);
+    expect(html).toContain('<label for="x" style="justify-self:start"><b>Label node</b></label><p style="grid-column:1 / -1"><span id="h1">Hint node</span></p>');
+  });
+
   it('FR-FUP-06: with no save in flight the box is not marked disabled', () => {
     const html = view(false);
     expect(html).not.toMatch(/aria-disabled="true"/);

@@ -217,3 +217,35 @@ it("NFR-SEC-02 Home's next step (plan 1B Task 9, slice 3): a member of B naming 
   sessionAs(a.members.assessor.userId);
   await expect(open(a.org.slug)).resolves.toBeDefined();
 });
+
+it("NFR-SEC-02 Home's data (plan 1B Task 9): under every role of B, loadHome and changesSince read nothing of A, whose records are newer", async () => {
+  // Home's data has no route of its own, so ROUTE_ACTIONS cannot hold it; this file's cross-organisation rule applied to
+  // its reads: every role of B, its context from B's membership, gets B's Home only. Imports are local so the cases above
+  // keep theirs unchanged.
+  await resetDb();
+  const { useFixtureContent } = await import('../helpers/content');
+  const { addDecision, addFinding, addProject } = await import('../helpers/recordFixture');
+  const { changesSince } = await import('../../lib/home/queries');
+  const { loadHome } = await import('../../lib/home/load');
+  const { ctxFor } = await import('../helpers/recordFixture');
+  const cv = (await useFixtureContent('0.0.1-fixture')).contentVersionId;
+  const a = await buildOrg({ label: 'xorg-data-a' });
+  const b = await buildOrg({ label: 'xorg-data-b' });
+  const pb = await addProject(b, { name: 'Home data project of B' });
+  const pa = await addProject(a, { name: 'Home data project of A' });
+  const since = new Date(Date.now() - 60_000);
+  await addDecision(b, pb.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId: cv, status: 'done' });
+  await addDecision(a, pa.id, { stage: 'pre-processing', questionId: 'Q-PP-02', contentVersionId: cv, status: 'done' });
+  await addFinding(a, pa.id, { stage: 'pre-processing', source: 'team', by: 'reviewer' });
+  const namesA = (value: unknown) => [pa.id, 'Home data project of A', a.org.id, ...ALL_ORG_ROLES.flatMap((r) => [a.members[r].userId, a.members[r].name])]
+    .some((s) => JSON.stringify(value).includes(s));
+  for (const role of ALL_ORG_ROLES) {
+    const data = await loadHome(ctxFor(b, role), { userId: b.members[role].userId, name: b.members[role].name },
+      { orgSlug: b.org.slug, welcome: false, today: '2026-11-15', now: new Date() });
+    expect({ role, names: namesA(data) }).toEqual({ role, names: false });
+    expect({ role, orgId: data.base.orgId }).toEqual({ role, orgId: b.org.id });
+  }
+  const changes = await changesSince(ctxFor(b, 'viewer'), { since, excludeUserId: null, limitGroups: 10 });
+  expect(changes.groups.map((g) => g.projectId)).toEqual([pb.id]);
+  expect(namesA(changes)).toBe(false);
+});

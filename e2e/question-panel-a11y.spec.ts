@@ -23,6 +23,9 @@ const Q2_TEXT = (JSON.parse(readFileSync('__tests__/fixtures/content/0.0.1-fixtu
   stages: Record<string, { modules: Array<{ questions: Array<{ id: string; text: string }> }> }>;
 }).stages['pre-processing'].modules.flatMap((m) => m.questions).find((q) => q.id === 'Q-PP-02')!.text;
 
+/** The words as a literal in a pattern. */
+const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 test.beforeEach(async ({ page }) => { failOnDialog(page); });
 
 /** Presses Tab until the focused element satisfies `match`; fails after 80 presses. */
@@ -57,13 +60,48 @@ async function placeAt(control: Locator, top: number): Promise<void> {
 
 test('UX-42 NFR-A11Y-02: keyboard-only Next moves focus to the new question heading', async ({ page, baseURL }) => {
   await openQuestion(page, 'assessor', Q, baseURL!);
-  await page.getByRole('link', { name: 'Next question', exact: true }).focus();
+  // The way on is the merged card's "Next: <question>" link in its Save row (lane 2's card, at the merge).
+  await page.locator('.decision-save-bar').getByRole('link', { name: new RegExp(`^Next: ${escapeRe(Q2_TEXT)}`) }).focus();
   await page.keyboard.press('Enter');
   // The h1 is the question in words (plan 1C decision C1, cut); its code line "Q-PP-02 · {module}" follows it.
   const heading = page.getByRole('heading', { level: 1, name: Q2_TEXT, exact: true });
   await expect(heading).toBeFocused();
   await expect(page.locator('#question-heading + .question-frame__code')).toHaveText(/^Q-PP-02 \u00b7 /);
   await expectFocusVisibleAndUncovered(page);
+});
+
+/** The heading's outline as drawn now: a ring is a style other than none with a width of 2px or more. */
+const ringOf = (page: Page) => page.locator('#question-heading').evaluate((h) => {
+  const cs = getComputedStyle(h);
+  return { focused: document.activeElement === h, ring: cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) >= 2 };
+});
+
+test('Shell gap 3: arriving at a question by loading it, or by a click, focuses the heading with no ring round it', async ({ page, baseURL }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openQuestion(page, 'assessor', Q, baseURL!);
+  await expect(page.locator('#question-heading')).toBeFocused();
+  expect(await ringOf(page)).toEqual({ focused: true, ring: false });
+  await page.screenshot({ path: 'test-results/route-T1/arrival-load-1280.png' });
+  // A click on the way on: the next question's heading takes focus, still with no ring.
+  await page.locator('.decision-save-bar').getByRole('link', { name: new RegExp(`^Next: ${escapeRe(Q2_TEXT)}`) }).click();
+  await expect(page.getByRole('heading', { level: 1, name: Q2_TEXT, exact: true })).toBeFocused();
+  expect(await ringOf(page)).toEqual({ focused: true, ring: false });
+  await page.screenshot({ path: 'test-results/route-T1/arrival-click-1280.png' });
+});
+
+test('plan 1C Task 4: Tab, Enter on "Skip to content" lands focus on the question heading, with the ring drawn', async ({ page, baseURL }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openQuestion(page, 'assessor', Q, baseURL!);
+  // The heading holds focus after arrival, so the skip link (the page's first focusable element, which a first Tab
+  // reaches) is focused directly, then pressed with the keyboard.
+  const skip = page.getByRole('link', { name: 'Skip to content' });
+  await skip.focus();
+  await expect(skip).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#question-heading')).toBeFocused();
+  expect(await ringOf(page)).toEqual({ focused: true, ring: true });
+  await expectFocusVisibleAndUncovered(page);
+  await page.screenshot({ path: 'test-results/route-T1/arrival-skip-link-1280.png' });
 });
 
 test('NFR-A11Y-02: J-05 by keyboard alone: status, reason, decided by, Today, Save', async ({ page, baseURL }) => {
@@ -78,6 +116,9 @@ test('NFR-A11Y-02: J-05 by keyboard alone: status, reason, decided by, Today, Sa
   await page.keyboard.type('Compared a rule-based alert with the model, by keyboard.');
   await tabTo(page, 'Decided by', (e) => e.tag === 'select' && e.label === 'Decided by (required)');
   await expectFocusVisibleAndUncovered(page);
+  // Decided by starts empty on a first decision (spec 9.3 item 4, owner OQ1 (a)): typing chooses the person, "You (...)".
+  await page.keyboard.type('You');
+  await expect(page.locator('#decision-decided-by option:checked')).toHaveText(/^You \(/);
   await tabTo(page, 'Today', (e) => e.tag === 'button' && e.name === 'Today');
   await expectFocusVisibleAndUncovered(page);
   await page.keyboard.press('Enter');
@@ -111,6 +152,8 @@ for (const height of [800, 568]) test(`SPEC-2 W-3 NFR-A11Y-02 SC 2.4.11: at 320 
     // The first edit adds the unsaved line to the bar, which grows over the field that has focus: it must be scrolled clear.
     if (what === 'the first status radio') { await page.keyboard.press('Space'); await expectFocusVisibleAndUncovered(page); }
     if (what === 'the reason') await page.keyboard.type('Compared a rule-based alert with the model, at 320 px.');
+    // Decided by starts empty on a first decision (owner OQ1 (a)): typing chooses the person, "You (...)".
+    if (what === 'Decided by') await page.keyboard.type('You');
     if (what === 'Today') await page.keyboard.press('Enter');
   }
   await page.keyboard.press('Enter');

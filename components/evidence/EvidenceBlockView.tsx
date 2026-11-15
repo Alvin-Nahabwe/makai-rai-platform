@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { EvidenceItemText, evidenceDisplayName } from '@/components/evidence/VersionEvidenceList';
+import { EvidenceItemText, evidenceDisplayName } from '@/components/evidence/EvidenceItemText';
 import { Button } from '@/components/ui/Button';
 import { FieldError, FieldLabel } from '@/components/ui/TextInput';
 import { EVIDENCE_COPY } from '@/lib/evidence/copy';
@@ -13,6 +13,8 @@ import '@/components/ui/buttonStyles';
 
 export interface EvidenceBlockViewProps {
   orgSlug: string;
+  /** The platform's public origin (EvidenceBlock `ownOrigin`); absent or null: no link is the platform's own. */
+  ownOrigin?: string | null;
   /** Prefix of the ids the labels and descriptions point at. */
   idBase: string;
   /** Items carried from the version being edited, not removed. */
@@ -45,6 +47,18 @@ export interface EvidenceBlockViewProps {
   onRemoveUpload?: (key: string) => void;
   registerAddFileButton?: (el: HTMLButtonElement | null) => void;
   registerFileInput?: (el: HTMLInputElement | null) => void;
+  /** The decision card only (spec 9.3 item 5): the question's own examples of what to attach, as a list after the legend. */
+  examples?: readonly string[];
+  /** The decision card only: its one-line layout, "None yet." with nothing attached, and the closed "Accepted files". */
+  decisionCard?: boolean;
+  /** The decision card only: evidence the form holds that the block cannot name (a restored draft's), so not "None yet.". */
+  keptCount?: number;
+  /**
+   * The decision form only (plan 1C C5): "Save without this file / these files" after the uploading files, its label and
+   * its press the form's (its existing `save(true)`). Null or absent while a Save waits: the wait card then holds the one
+   * such button (the protected e2e/decision-save.spec.ts UX-30 case finds it by its name).
+   */
+  saveWithout?: { label: string; onPress: () => void } | null;
 }
 
 /** A line with the file name in `<bdi>` (E14). */
@@ -61,11 +75,14 @@ const NAMED_BUTTON = 'ui-button ui-button--secondary ui-button--compact';
 
 /**
  * The evidence block of a decision form, hookless so a unit test can render it. A fieldset nested in the form, so every
- * button is `type="button"`. Progress is text, never a progress element (UX-30). `disabled` is its only gate: it
+ * button is `type="button"`. Progress is text, and an uploading file also has a native `<progress>` inside
+ * `[data-upload-progress]`, named "Uploading {file}" (plan 1C C5; the no-score checks allow it there only, and no live
+ * region: the line's text is not announced as it changes, interstitial progress is not). `disabled` is its only gate: it
  * renders items and no control (UX-31). Whether a person may add evidence is the server's answer, not this component's.
  */
 export function EvidenceBlockView(p: EvidenceBlockViewProps): ReactElement {
   const helpId = `${p.idBase}-help`;
+  const typesId = `${p.idBase}-types`;
   const fileInputId = `${p.idBase}-file`;
   const urlId = `${p.idBase}-link-url`;
   const labelId = `${p.idBase}-link-label`;
@@ -83,7 +100,7 @@ export function EvidenceBlockView(p: EvidenceBlockViewProps): ReactElement {
   const removable = (item: EvidenceItemView, carried: boolean): ReactElement => (
     <li key={item.id} className="evidence-block__item">
       <span className="evidence-block__name">
-        <EvidenceItemText orgSlug={p.orgSlug} item={item} />
+        <EvidenceItemText orgSlug={p.orgSlug} item={item} ownOrigin={p.ownOrigin ?? null} />
         {carried && p.fromVersionNumber != null ? <>{' '}<span className="evidence-block__from">{EVIDENCE_COPY.fromCurrent}</span></> : null}
       </span>
       {p.disabled ? null : (
@@ -95,16 +112,35 @@ export function EvidenceBlockView(p: EvidenceBlockViewProps): ReactElement {
     if (e.key === 'Enter') { e.preventDefault(); p.onAddLink?.(); }
   };
 
-  return (
-    <fieldset className="evidence-block">
-      <legend>{EVIDENCE_COPY.legend}</legend>
-      {p.disabled ? null : (
-        <div id={helpId} className="evidence-block__help">
-          <p>{EVIDENCE_COPY.help.keep}</p>
-          <p className="evidence-block__types">{EVIDENCE_COPY.help.types}</p>
-        </div>
-      )}
-
+  // The decision card (lead's ruling D4, 15 Nov 2026): one line, the legend, "None yet." (or the items under it) and the two
+  // add buttons; the link form under them; the question's own examples, visible; the private-data line; the accepted types
+  // and the stored sentence in a closed "Accepted files". "None yet." is false while the form holds evidence the block
+  // cannot name (keptCount, the kept-evidence box under the block), so it is not said then (review round 1, A-I2).
+  const card = p.decisionCard === true;
+  // Review round 2, A N-1: in the card the types line sits in a closed disclosure, and a description computed from the help
+  // skips a hidden descendant; a hidden element named directly is read. So the add controls name the types line itself.
+  const addDescribedBy = card ? `${helpId} ${typesId}` : helpId;
+  const noneYet = card && p.notUploaded.length + p.items.length + p.added.length + p.uploads.length + (p.keptCount ?? 0) === 0;
+  const examples = p.disabled || p.examples === undefined || p.examples.length === 0 ? null : (
+    <div className="evidence-block__examples">
+      <p>{EVIDENCE_COPY.examples}</p>
+      <ul>{p.examples.map((e) => <li key={e}>{e}</li>)}</ul>
+    </div>
+  );
+  const help = p.disabled ? null : (
+    <div id={helpId} className="evidence-block__help">
+      <p>{EVIDENCE_COPY.help.keep}</p>
+      {card ? (
+        <details className="evidence-block__more">
+          <summary>{EVIDENCE_COPY.acceptedFiles}</summary>
+          <p id={typesId} className="evidence-block__types">{EVIDENCE_COPY.help.types}</p>
+          <p className="evidence-block__types">{EVIDENCE_COPY.stored}</p>
+        </details>
+      ) : <p className="evidence-block__types">{EVIDENCE_COPY.help.types}</p>}
+    </div>
+  );
+  const lists = (
+    <>
       {p.notUploaded.length > 0 ? (
         <ul className="evidence-block__list">{p.notUploaded.map((name) => <li key={name} className="evidence-block__item"><span className="evidence-block__name"><NamedText line={notUploadedLine(name)} /></span></li>)}</ul>
       ) : null}
@@ -124,6 +160,11 @@ export function EvidenceBlockView(p: EvidenceBlockViewProps): ReactElement {
               <li key={u.key} className="evidence-block__item">
                 <span className="evidence-block__name">
                   <span role={role}><NamedText line={line} /></span>
+                  {u.state === 'uploading' ? (
+                    <span data-upload-progress className="evidence-block__progress">
+                      <progress value={Math.min(u.loaded, u.size)} max={Math.max(u.size, 1)} aria-label={EVIDENCE_COPY.uploadingNamed(name)} />
+                    </span>
+                  ) : null}
                   {/* The space sits outside the note, so the note's own text is the ruled sentence alone (NFR-PERF-06). */}
                   {note === null ? null : <>{' '}<span className="evidence-block__note">{note}</span></>}
                 </span>
@@ -145,15 +186,23 @@ export function EvidenceBlockView(p: EvidenceBlockViewProps): ReactElement {
           })}
         </ul>
       ) : null}
-
-      {p.disabled ? null : (
-        <div className="evidence-block__add">
+      {/* C5: one "Save without" for the block, after the files still uploading, while no Save waits. */}
+      {!p.disabled && p.saveWithout != null && p.uploads.some((u) => u.state === 'uploading') ? (
+        <div className="evidence-block__save-without">
+          <Button variant="secondary" size="compact" onClick={p.saveWithout.onPress}>{p.saveWithout.label}</Button>
+        </div>
+      ) : null}
+    </>
+  );
+  const addBlock = p.disabled ? null : (
+    <div className="evidence-block__add">
+      {noneYet ? <p className="evidence-block__none">{EVIDENCE_COPY.noneYet}</p> : null}
           <label htmlFor={fileInputId} className="visually-hidden">{EVIDENCE_COPY.chooseFiles}</label>
-          <input id={fileInputId} type="file" multiple tabIndex={-1} ref={(el) => p.registerFileInput?.(el)} aria-describedby={helpId} className="visually-hidden"
+          <input id={fileInputId} type="file" multiple tabIndex={-1} ref={(el) => p.registerFileInput?.(el)} aria-describedby={addDescribedBy} className="visually-hidden"
             onChange={(e) => { p.onChooseFiles?.(e.target.files); e.target.value = ''; }} />
           <div className="evidence-block__actions">
-            <Button variant="secondary" ref={(el) => p.registerAddFileButton?.(el)} aria-describedby={helpId} onClick={() => p.onOpenFilePicker?.()}>{EVIDENCE_COPY.addFile}</Button>
-            <button type="button" className="ui-button ui-button--secondary" aria-describedby={helpId} aria-expanded={p.linkFormOpen} onClick={() => p.onOpenLink?.()}>{EVIDENCE_COPY.addLinkToggle}</button>
+            <Button variant="secondary" ref={(el) => p.registerAddFileButton?.(el)} aria-describedby={addDescribedBy} onClick={() => p.onOpenFilePicker?.()}>{EVIDENCE_COPY.addFile}</Button>
+            <button type="button" className="ui-button ui-button--secondary" aria-describedby={addDescribedBy} aria-expanded={p.linkFormOpen} onClick={() => p.onOpenLink?.()}>{EVIDENCE_COPY.addLinkToggle}</button>
           </div>
           {p.linkFormOpen ? (
             <div className="evidence-block__link">
@@ -185,8 +234,23 @@ export function EvidenceBlockView(p: EvidenceBlockViewProps): ReactElement {
               )}
             </div>
           ) : null}
-        </div>
-      )}
+    </div>
+  );
+
+  return card ? (
+    <fieldset className="evidence-block evidence-block--card">
+      <legend>{EVIDENCE_COPY.legend}</legend>
+      {addBlock}
+      {lists}
+      {examples}
+      {help}
+    </fieldset>
+  ) : (
+    <fieldset className="evidence-block">
+      <legend>{EVIDENCE_COPY.legend}</legend>
+      {help}
+      {lists}
+      {addBlock}
     </fieldset>
   );
 }

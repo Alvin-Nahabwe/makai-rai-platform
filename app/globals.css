@@ -1,8 +1,7 @@
 /* =================================================================
    MAK-AI Responsible AI Toolkit — Design System
    Colour roles, type, space and motion are tokens (ADR 0022). A screen
-   reads the roles; the LEGACY ALIASES block keeps screens not yet
-   restyled resolving until Task 21 deletes it.
+   reads the roles. The block of legacy aliases is gone (Task 21).
    ================================================================= */
 
 /* ── Design Tokens ── */
@@ -13,6 +12,7 @@
   --color-shell-ink: #FFFFFF;
   --color-shell-muted: #B7BCD3;
   --color-shell-hover: #262C4A;
+  --color-on-shell-accent: #F4B983; /* "You are here" on the rail: 9.37:1 on the shell, 7.86:1 on shell-hover */
   --color-action: #9A4D10;          /* a fill: never text */
   --color-action-hover: #7F3F0C;
   --color-on-action: #FFFFFF;
@@ -78,95 +78,6 @@
   --max-width: 1200px;
   --max-width-narrow: 900px;
 
-  /* LEGACY ALIASES: deleted by Task 21 */
-  --surface-base: var(--color-ground);
-  --surface-card: var(--color-surface);
-  --surface-raised: var(--color-tint);
-  --text-primary: var(--color-heading);
-  --text-body: var(--color-ink);
-  --text-muted: var(--color-ink-muted);
-  --border: var(--color-border-container);
-  --border-strong: var(--color-border-control);
-  --form-field-border: var(--color-border-control);
-  --link: var(--color-link);
-  --focus-ring: var(--color-focus);
-  --stage-fg: var(--color-ink);
-  --stage-bg: var(--color-tint);
-  --tint-critical-bg: var(--color-tint);
-  --tint-critical-fg: var(--color-ink);
-  --tint-high-bg: var(--color-tint);
-  --tint-high-fg: var(--color-ink);
-  --tint-moderate-bg: var(--color-tint);
-  --tint-moderate-fg: var(--color-ink);
-  --tint-low-bg: var(--color-tint);
-  --tint-low-fg: var(--color-ink);
-  --tint-info-bg: var(--color-tint);
-  --tint-info-fg: var(--color-ink);
-  --tint-accent-bg: var(--color-tint);
-  --tint-accent-fg: var(--color-ink);
-  --tint-brand-bg: var(--color-tint);
-  --tint-brand-fg: var(--color-action-text);
-  --color-risk-critical: var(--color-ink);   /* not overdue: the readers are field errors and a required mark */
-  --color-risk-high: var(--color-ink);
-  --color-risk-moderate: var(--color-ink);
-  --color-risk-low: var(--color-ink);
-  --color-info: var(--color-ink);
-  --color-primary: var(--color-action);
-  --color-primary-dark: var(--color-action-hover);
-  /* Read only by AboutPage.css, as text on dark grounds, where it was the light brand orange in both themes
-     (the action-text role is dark orange in light). Its readers go in Task 19. */
-  --color-primary-light: #F0A35E;
-  --color-navy: var(--color-shell);
-  --color-navy-light: var(--color-shell-hover);
-  /* Not the surface role the plan names: white is #FFFFFF in every theme at the base and is read as text on
-     navy and on the action fill, while the surface role is dark in the dark theme. An alias keeps that. */
-  --color-white: var(--color-on-action);
-  --color-off-white: var(--color-ground);
-  --color-gray-200: var(--color-border-container);
-  --color-gray-300: var(--color-border-container);
-  --color-gray-400: var(--color-border-container);
-  --color-gray-500: var(--color-border-container);
-  --color-gray-600: var(--color-ink-muted);
-  --color-gray-700: var(--color-ink-muted);
-  --color-charcoal: var(--color-ink-muted);
-  --color-black: var(--color-ink);
-  --color-pre-processing: var(--color-ink);
-  --color-in-processing: var(--color-ink);
-  --color-post-processing: var(--color-ink);
-  --color-cross-cutting: var(--color-ink);
-  --gradient-brand: none;
-  /* One family now: the display face is the body face. Alias only; nothing reads it after the About page change. */
-  --font-display: var(--font-family);
-  --font-size-xs: var(--font-size-small);
-  --font-size-sm: var(--font-size-small);
-  --font-size-base: var(--font-size-body);
-  --font-size-lg: var(--font-size-h3);
-  --font-size-xl: var(--font-size-h3);
-  --font-size-2xl: var(--font-size-h2);
-  --font-size-3xl: var(--font-size-h1);
-  --font-size-4xl: var(--font-size-h1);
-  --font-size-5xl: var(--font-size-h1);
-  --font-size-6xl: var(--font-size-h1);
-  --font-weight-medium: var(--font-weight-semibold);
-  --font-weight-extrabold: var(--font-weight-bold);
-  --line-height-tight: var(--line-height-heading);
-  --line-height-normal: var(--line-height-body);
-  --line-height-relaxed: var(--line-height-body);
-  --border-radius-sm: var(--radius-control);
-  --border-radius-md: var(--radius-control);
-  --border-radius-lg: var(--radius-surface);
-  --border-radius-xl: var(--radius-surface);
-  --border-radius-full: var(--radius-pill);
-  --shadow-sm: var(--shadow-surface);
-  --shadow-md: var(--shadow-surface);
-  --shadow-lg: var(--shadow-surface);
-  --shadow-xl: var(--shadow-surface);
-  --shadow-glow: var(--shadow-surface);
-  --transition-fast: var(--duration-state) var(--easing-state);
-  --transition-base: var(--duration-state) var(--easing-state);
-  --transition-slow: var(--duration-state) var(--easing-state);
-  --transition-spring: var(--duration-state) var(--easing-state);
-
   color-scheme: light;
 }
 
@@ -182,6 +93,7 @@
     --color-shell-ink: #ECEEF4;
     --color-shell-muted: #AEB4C4;
     --color-shell-hover: #1E2338;
+    --color-on-shell-accent: #F4B983; /* 11.18:1 on the shell, 8.96:1 on shell-hover */
     --color-action: #9A4D10;
     --color-action-hover: #7F3F0C;
     --color-on-action: #FFFFFF;
@@ -212,6 +124,7 @@
   --color-shell-ink: #ECEEF4;
   --color-shell-muted: #AEB4C4;
   --color-shell-hover: #1E2338;
+  --color-on-shell-accent: #F4B983; /* 11.18:1 on the shell, 8.96:1 on shell-hover */
   --color-action: #9A4D10;
   --color-action-hover: #7F3F0C;
   --color-on-action: #FFFFFF;
@@ -292,12 +205,12 @@ img, svg {
 }
 
 a {
-  color: var(--link);
-  transition: color var(--transition-fast);
+  color: var(--color-link);
+  transition: color var(--duration-state) var(--easing-state);
 }
 
 a:hover {
-  color: var(--link);
+  color: var(--color-link);
 }
 
 /* Links in running text are underlined, because the link colour and the body
@@ -339,7 +252,7 @@ h5 { font-size: var(--font-size-body); }
 }
 
 .text-muted {
-  color: var(--text-muted);
+  color: var(--color-ink-muted);
 }
 
 /* ── Buttons ── */
@@ -349,55 +262,55 @@ h5 { font-size: var(--font-size-body); }
   gap: var(--space-2);
   padding: var(--space-3) var(--space-6);
   font-family: var(--font-family);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   border: 2px solid transparent;
   border-radius: 0;
   cursor: pointer;
-  transition: all var(--transition-base);
+  transition: all var(--duration-state) var(--easing-state);
   text-decoration: none;
 }
 
 .btn--primary {
-  background-color: var(--color-primary);
-  color: var(--color-white);
-  border-color: var(--color-primary);
+  background-color: var(--color-action);
+  color: var(--color-on-action);
+  border-color: var(--color-action);
 }
 
 .btn--primary:hover {
-  background-color: var(--color-primary-dark);
-  border-color: var(--color-primary-dark);
-  color: var(--color-white);
+  background-color: var(--color-action-hover);
+  border-color: var(--color-action-hover);
+  color: var(--color-on-action);
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(192, 96, 20, 0.3);
 }
 
 .btn--secondary {
   background-color: transparent;
-  color: var(--text-primary);
-  border-color: var(--text-primary);
+  color: var(--color-heading);
+  border-color: var(--color-heading);
 }
 
 .btn--secondary:hover {
-  background-color: var(--text-primary);
-  color: var(--surface-base);   /* the page colour on the text colour: --color-white is not light-on-dark in the dark theme */
+  background-color: var(--color-heading);
+  color: var(--color-ground);   /* the page colour on the heading colour: --color-on-action is not light-on-dark in the dark theme */
 }
 
 /* ── Cards ── */
 .card {
-  background: var(--surface-card);
-  border-radius: var(--border-radius-md);
+  background: var(--color-surface);
+  border-radius: var(--radius-control);
   padding: var(--space-8);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-surface);
   border: 1px solid transparent;
   text-decoration: none; /* a card that is a link is navigation, not running text (D-4) */
-  transition: transform var(--transition-spring), box-shadow var(--transition-base), border-color var(--transition-base);
+  transition: transform var(--duration-state) var(--easing-state), box-shadow var(--duration-state) var(--easing-state), border-color var(--duration-state) var(--easing-state);
 }
 
 .card:hover {
-  box-shadow: var(--shadow-lg), var(--shadow-glow);
+  box-shadow: var(--shadow-surface), var(--shadow-surface);
   transform: translateY(-4px);
   border-color: rgba(192, 96, 20, 0.12);
 }
@@ -408,8 +321,8 @@ h5 { font-size: var(--font-size-body); }
   align-items: center;
   gap: var(--space-1);
   padding: var(--space-1) var(--space-3);
-  border-radius: var(--border-radius-full);
-  font-size: var(--font-size-xs);
+  border-radius: var(--radius-pill);
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -421,8 +334,8 @@ h5 { font-size: var(--font-size-body); }
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-1) var(--space-3);
-  border-radius: var(--border-radius-full);
-  font-size: var(--font-size-sm);
+  border-radius: var(--radius-pill);
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -435,15 +348,15 @@ h5 { font-size: var(--font-size-body); }
 .stage-indicator--in,
 .stage-indicator--post,
 .stage-indicator--cross {
-  background-color: var(--stage-bg);
-  color: var(--stage-fg);
+  background-color: var(--color-tint);
+  color: var(--color-ink);
 }
 
 /* ── Responsive ── */
 @media (max-width: 768px) {
-  h1 { font-size: var(--font-size-3xl); }
-  h2 { font-size: var(--font-size-2xl); }
-  h3 { font-size: var(--font-size-xl); }
+  h1 { font-size: var(--font-size-h1); }
+  h2 { font-size: var(--font-size-h2); }
+  h3 { font-size: var(--font-size-h3); }
 
   .section {
     padding: var(--space-12) 0;
@@ -472,10 +385,10 @@ h5 { font-size: var(--font-size-body); }
   top: -100%;
   left: var(--space-4);
   padding: var(--space-2) var(--space-4);
-  background: var(--color-navy);
-  color: var(--color-white);
+  background: var(--color-shell);
+  color: var(--color-on-action);
   z-index: 10000;
-  border-radius: var(--border-radius-md);
+  border-radius: var(--radius-control);
   font-weight: var(--font-weight-semibold);
   text-decoration: none;
 }
@@ -503,26 +416,26 @@ h5 { font-size: var(--font-size-body); }
 
 .back-link {
   display: inline-block;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-semibold);
-  color: var(--text-muted);
+  color: var(--color-ink-muted);
   margin-bottom: var(--space-2);
   text-decoration: none;
-  transition: color var(--transition-fast);
+  transition: color var(--duration-state) var(--easing-state);
 }
 
 .back-link:hover {
-  color: var(--link);
+  color: var(--color-link);
 }
 
 /* ── Form Styles (authenticated pages) ── */
 .form-error {
-  background-color: var(--tint-critical-bg);
-  /* The foreground paired with --tint-critical-bg in both themes: 5.30:1 light, 8.38:1 dark (risk-critical gave 3.95 and 3.29). */
-  color: var(--tint-critical-fg);
+  background-color: var(--color-tint);
+  /* The ink role on the tint role in both themes, a pair __tests__/unit/design-tokens.test.ts holds at 4.5:1 or more. */
+  color: var(--color-ink);
   padding: var(--space-3) var(--space-4);
-  border-radius: var(--border-radius-md);
-  font-size: var(--font-size-sm);
+  border-radius: var(--radius-control);
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-semibold);
   margin-bottom: var(--space-6);
 }
@@ -539,7 +452,7 @@ h5 { font-size: var(--font-size-body); }
   gap: var(--space-4);
   margin-top: var(--space-8);
   padding-top: var(--space-6);
-  border-top: 1px solid var(--color-gray-300);
+  border-top: 1px solid var(--color-border-container);
 }
 
 /* ── Responsive: Authenticated Pages ── */
@@ -587,7 +500,7 @@ h5 { font-size: var(--font-size-body); }
 
   /* Hero simplification */
   .page-hero {
-    background: var(--color-navy) !important;
+    background: var(--color-shell) !important;
     padding: 1cm 0 !important;
     min-height: auto !important;
   }
@@ -653,28 +566,7 @@ h5 { font-size: var(--font-size-body); }
 /* ── Small buttons for admin actions ── */
 .btn--small {
   padding: var(--space-1) var(--space-3);
-  font-size: var(--font-size-xs);
-}
-
-.sidebar-nav {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-4) var(--space-3);
-}
-
-/* The organisation chooser on a light card (app/page.tsx): .sidebar-link is for the dark sidebar. */
-.chooser-link {
-  display: block;
-  padding: var(--space-3) var(--space-4);
-  font-weight: var(--font-weight-semibold);
-  color: var(--link);
-  border-radius: var(--border-radius-md);
-}
-
-.chooser-link:hover {
-  background-color: var(--surface-raised);
+  font-size: var(--font-size-small);
 }
 
 /* ═══════════════════════════════════════════
@@ -685,36 +577,23 @@ h5 { font-size: var(--font-size-body); }
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: var(--color-off-white);
+  background-color: var(--color-ground);
 }
 
 /* ── Auth Forms ── */
-.auth-container {
-  width: 100%;
-  max-width: 440px;
-  padding: var(--space-6);
-}
-
 .auth-card {
-  background: var(--surface-card);
-  border-radius: var(--border-radius-lg);
+  background: var(--color-surface);
+  border-radius: var(--radius-surface);
   padding: var(--space-10) var(--space-8);
-  box-shadow: var(--shadow-lg);
-  border: 1px solid var(--color-gray-300);
+  box-shadow: var(--shadow-surface);
+  border: 1px solid var(--color-border-container);
 }
 
 .auth-card h1 {
-  font-size: var(--font-size-2xl);
-  color: var(--text-primary);
+  font-size: var(--font-size-h2);
+  color: var(--color-heading);
   margin-bottom: var(--space-6);
   text-align: center;
-}
-
-.auth-logo {
-  display: block;
-  height: 48px;
-  width: auto;
-  margin: 0 auto var(--space-6);
 }
 
 .auth-card form {
@@ -725,12 +604,12 @@ h5 { font-size: var(--font-size-body); }
 .auth-footer {
   text-align: center;
   margin-top: var(--space-6);
-  font-size: var(--font-size-sm);
-  color: var(--text-muted);
+  font-size: var(--font-size-small);
+  color: var(--color-ink-muted);
 }
 
 .auth-footer a {
-  color: var(--link);
+  color: var(--color-link);
   font-weight: var(--font-weight-semibold);
 }
 
@@ -876,7 +755,7 @@ dialog::backdrop {
   background-color: var(--color-tint);
 }
 
-/* ── The public header and the footer: plain flow content on the surface, links underlined and 24 px high ── */
+/* ── The public header: plain flow content on the surface, links underlined and 24 px high (the footer: components/layout/footer.css) ── */
 .shell-public-header {
   display: flex;
   flex-wrap: wrap;
@@ -899,16 +778,14 @@ dialog::backdrop {
   overflow-wrap: anywhere;
 }
 
-.shell-public-header__nav,
-.shell-footer__nav {
+.shell-public-header__nav {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2) var(--space-6);
 }
 
-.shell-public-header__nav a,
-.shell-footer__nav a {
+.shell-public-header__nav a {
   display: inline-flex;
   align-items: center;
   min-block-size: var(--target-min);
@@ -916,27 +793,8 @@ dialog::backdrop {
   text-underline-offset: 0.15em;
 }
 
-.shell-public-header__nav a,
-.shell-footer__nav a {
+.shell-public-header__nav a {
   text-decoration: underline;
-}
-
-.shell-footer {
-  padding: var(--space-6) var(--space-4);
-  border-block-start: 1px solid var(--color-border-container);
-  background-color: var(--color-surface);
-  color: var(--color-ink);
-  font-size: var(--font-size-small);
-}
-
-.shell-footer__credit {
-  max-width: var(--max-width);
-  margin: 0 auto var(--space-3);
-}
-
-.shell-footer__nav {
-  max-width: var(--max-width);
-  margin: 0 auto;
 }
 
 /* ── The session dialogs: the warning is the kit's Dialog; the signed-out notice is a Banner at the top of the page ── */

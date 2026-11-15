@@ -1,0 +1,264 @@
+/*
+ * The reading view for a Reviewer or a Viewer (components/question/ReadingDecision.tsx and ReadingAside.tsx), to
+ * directions/surfaces/viewer-reading.html: its values copied onto the kit's roles (app/globals.css), so both themes hold.
+ * The sketch's 15 px steps (figcaption, evidence rows, aside text) are the body size, 16 px, and its 13 px small text is
+ * the small size, 14 px: the spec's ramp (7.4, body 16, small 14) over the sketch's values (design reviews 1 and 2).
+ */
+
+/* The card: one white surface with its border, radius 8 and soft shadow (sketch .rec). */
+.reading-decision {
+  padding: var(--space-4) var(--space-6) var(--space-3);
+  border: 1px solid var(--color-border-container);
+  border-radius: var(--radius-surface);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-surface);
+  overflow-wrap: anywhere;
+}
+
+/* The heading left, the status mark and its words right (sketch .rh, .state); they wrap under each other when narrow. */
+.reading-decision__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  margin-block-end: var(--space-3);
+}
+
+.reading-decision__head h2 {
+  margin: 0;
+  font-size: var(--font-size-h2);
+  line-height: var(--line-height-heading);
+}
+
+.reading-decision__state {
+  margin: 0;
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-bold);
+}
+
+.reading-decision__figure {
+  margin: 0;
+}
+
+/* The reason as a quotation on the paper ground (sketch blockquote). */
+.reading-decision__reason {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-control);
+  background-color: var(--color-ground);
+  line-height: 1.6;
+  white-space: pre-line;
+  text-wrap: pretty;
+  quotes: '“' '”';
+}
+
+/* The sketch's quotation marks (design review S4-2): the reason is what the team wrote, quoted. */
+.reading-decision__reason::before {
+  content: open-quote;
+}
+
+.reading-decision__reason::after {
+  content: close-quote;
+}
+
+.reading-decision__decided {
+  margin-block-start: var(--space-2);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+}
+
+.reading-decision__version,
+.reading-decision__entered,
+.reading-decision__withdrawn {
+  margin: 2px 0 0;
+  color: var(--color-ink-muted);
+  font-size: var(--font-size-small);
+}
+
+.reading-decision__version a {
+  color: var(--color-link);
+  font-weight: var(--font-weight-semibold);
+}
+
+.reading-decision__withdrawn {
+  margin-block-end: var(--space-2);
+  color: var(--color-ink);
+  font-size: var(--font-size-body);
+}
+
+.reading-decision .seal-markers {
+  margin: var(--space-1) 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--color-ink-muted);
+  font-size: var(--font-size-small);
+}
+
+/* The evidence under a rule (sketch .ev). */
+.reading-evidence {
+  margin-block-start: var(--space-3);
+  padding-block-start: var(--space-2);
+  border-block-start: 1px solid var(--color-border-container);
+}
+
+.reading-evidence h3 {
+  margin: 0;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-bold);
+}
+
+.reading-evidence p {
+  margin: var(--space-1) 0 0;
+  color: var(--color-ink-muted);
+}
+
+.reading-evidence ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reading-evidence__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+  min-height: var(--target-primary);
+  padding: 6px 0;
+  font-size: var(--font-size-body);
+  line-height: 1.35;
+}
+
+.reading-evidence__item + .reading-evidence__item {
+  border-block-start: 1px solid var(--color-border-container);
+}
+
+.reading-evidence__file {
+  min-width: 0;
+}
+
+.reading-evidence__file small {
+  display: block;
+  color: var(--color-ink-muted);
+  font-size: var(--font-size-small);
+}
+
+.reading-evidence__download {
+  flex: none;
+}
+
+/* Inline text, so the name and the host wrap as one run (design review S4-3), never as two columns of a flex box. */
+.reading-evidence__link {
+  min-width: 0;
+  color: var(--color-link);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* The host the link really goes to, quieter than the author's name for it, so a name that copies this suffix cannot pass
+   for it (review M1): regular weight in muted ink. */
+.reading-evidence__host {
+  color: var(--color-ink-muted);
+  font-weight: var(--font-weight-regular);
+}
+
+.reading-evidence__link .ui-icon {
+  margin-inline-start: 6px;
+}
+
+/* The reader's aside (sketch aside): the sealed copy, the role note, the way on, 16 px apart. */
+.reading-aside {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.reading-aside h2 {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-h3);
+  line-height: 1.3;
+}
+
+.reading-aside p {
+  margin: 0;
+  font-size: var(--font-size-body);
+  line-height: 1.55;
+}
+
+.reading-aside__seal p + p {
+  margin-block-start: var(--space-1);
+}
+
+/* A definition with its term (design review S4-1), in the reading view's small text wherever it sits (design review 3
+   S4-N8): `p.` matches `.reading-aside p` in specificity and this rule comes after it, so the aside's body size does not
+   reach it. */
+p.reading-def {
+  margin: var(--space-1) 0 0;
+  color: var(--color-ink-muted);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-body);
+}
+
+.reading-def__term {
+  color: var(--color-ink);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* The role note in a small bordered box with the eye (sketch .role). */
+.reading-aside__note {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border-container);
+  border-radius: var(--radius-control);
+  background-color: var(--color-surface);
+}
+
+.reading-aside__eye {
+  flex: none;
+  margin-block-start: 3px;
+  color: var(--color-heading);
+}
+
+/* The way on: the one primary link, 48 px high as sketched, and the position under it (sketch .nextq). */
+.reading-aside__next {
+  margin-block-start: var(--space-1);
+}
+
+.reading-aside__next .ui-button {
+  min-height: 48px;
+  padding-inline: var(--space-6);
+  white-space: nowrap;
+}
+
+.reading-aside__next p {
+  margin-block-start: var(--space-1);
+  color: var(--color-ink-muted);
+  font-size: var(--font-size-small);
+}
+
+.reading-aside__next p:first-child {
+  margin-block-start: 0;
+  color: var(--color-ink);
+  font-size: var(--font-size-body);
+}
+
+/* A phone: the card and its quotation keep more of the width for the words. */
+@media (width < 40rem) {
+  .reading-decision {
+    padding-inline: var(--space-4);
+  }
+
+  .reading-decision__reason {
+    padding-inline: var(--space-3);
+  }
+}
+
+/* One column: the way on fills the width, so the one primary action is an easy target with a thumb. */
+@media (width < 72.5rem) {
+  .reading-aside__next .ui-button {
+    display: flex;
+    width: 100%;
+  }
+}

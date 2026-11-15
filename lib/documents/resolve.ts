@@ -10,6 +10,7 @@ import type { SealManifestV1, SealRef } from '@/types/seal';
 import { loadContent, runningContent } from '@/lib/content/loader';
 import { controlsForArea, controlsForQuestion, questionAreaIds, type ControlGroup } from '@/lib/content/suggestions';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
+import { AppError } from '@/lib/http/errors';
 import { isOverdue } from '@/lib/followup/overdue';
 import { formatDay, formatDeclaredDate } from '@/lib/format/dates';
 import { DATASET_SIZE_WORDS, PERSONAL_DATA_WORDS } from '@/lib/project/labels';
@@ -19,8 +20,8 @@ import { formatFingerprint } from '@/lib/seal/format';
 import {
   CLOSED_NO_LONGER_APPLIES, ETHICS_APPROVED, ETHICS_NOT_REQUIRED, ETHICS_SUBMITTED, FILE_NAME_ERASED, FINDING_CLOSED, GATE_DERIVED_NA, assignedToLine, closedByLine,
   noDecisionLine, checkAgainLine, decidedByLine, decidedInLine, decisionSource,
-  doneEvidenceLine, evidenceFileLine, fileErasedLine, findingStatusLine, formatUtcDay, fromQuestion, lastCheckNoteLine, outsideOtherBodyLine, outsideRoleLine, personalDataAnswerLine,
-  reviewLineText, textErasedLine, utcSecond,
+  doneEvidenceLine, evidenceFileLine, fileErasedLine, findingOnQuestion, findingStatusLine, formatUtcDay, fromQuestion, lastCheckNoteLine, outsideOtherBodyLine, outsideRoleLine, personalDataAnswerLine,
+  questionSource, reviewLineText, docTextErasedLine, utcSecond, wordsThenCode,
 } from './copy';
 import type { ResolvedField } from './render';
 
@@ -69,7 +70,7 @@ export interface DocumentSnapshot {
 
 // ─── Field resolution (FR-DOC-02, FR-DOC-03, FR-DOC-05; SRS 10.3.1 D1 to D9) ─────────────────────────────────
 
-/** The companion text field of each project value that can be "other" (as `components/dashboard/ProjectCard.tsx` shows it). */
+/** The companion text field of each project value that can be "other" (as the project form and the descriptive line show it). */
 export const OTHER_COMPANIONS: Readonly<Record<string, string>> = { aiSystemType: 'aiSystemTypeOther', deploymentSector: 'deploymentSectorOther', datasetType: 'datasetTypeOther' };
 
 type RowRef = { sourceTable: string; sourceId: string; field: string | null };
@@ -110,7 +111,7 @@ function textOf(snap: DocumentSnapshot, table: keyof DocumentSnapshot['erasures'
   if (value !== null) return value;
   const on = erasedAt(snap, table, id, field);
   if (on === null) throw new Error(`documents: ${table} ${id} has no ${field} and no tombstone for it`);
-  return textErasedLine(on);
+  return docTextErasedLine(on);
 }
 /** FR-DOC-02 / D7: the sentence that stops a team's entry reading as the outside body's own record. */
 export const outsideRoleSentence = (member: string, role: OutsideRole): string =>
@@ -178,13 +179,13 @@ const linkOf = (e: EvidenceItemView): string | null => e['url'];
 
 /**
  * One evidence item as a document prints it, with the SRS 7.5.6 lines for erasure (silent-failure review H6, H7): erased link text
- * reads "Text erased on <date> on the organisation's instruction.", an erased file name "File name erased", and a file whose bytes were
- * erased "<file name> . File erased on <date> on the organisation's instruction. Its fingerprint is kept, so seals that include it still check."
+ * reads `docTextErasedLine` ("Text erased on <date> at the organisation's request."), an erased file name "File name erased", and a file
+ * whose bytes were erased `fileErasedLine` ("<file name>: file erased on <date> at the organisation's request. ...").
  * A text that is null with no tombstone is a broken row and throws.
  */
 function evidenceItem(e: EvidenceItemView, snap: DocumentSnapshot): string {
   if (e.kind === 'link') {
-    const label = e.label !== null ? `'${e.label}'` : erasedAt(snap, 'evidence', e.id, 'label') !== null ? textErasedLine(erasedAt(snap, 'evidence', e.id, 'label') as string) : '';
+    const label = e.label !== null ? `'${e.label}'` : erasedAt(snap, 'evidence', e.id, 'label') !== null ? docTextErasedLine(erasedAt(snap, 'evidence', e.id, 'label') as string) : '';
     const url = linkOf(e) ?? textOf(snap, 'evidence', e.id, 'url', null);
     return `link ${label} ${url}`.replace(/ {2,}/g, ' ');
   }
@@ -195,7 +196,7 @@ function evidenceItem(e: EvidenceItemView, snap: DocumentSnapshot): string {
 
 /** D2: "Not applicable (<the code's label>). Reason: '<reason>'", the reason read from the decision's own content; an erased reason prints the SRS 7.5.6 line without quotes. */
 function notApplicableLine(d: SealedDecision, content: LoadedContent): string {
-  const reasonText = d.reasonErased !== null ? textErasedLine(d.reasonErased.erasedOn) : d.row.reason ?? NOT_RECORDED;
+  const reasonText = d.reasonErased !== null ? docTextErasedLine(d.reasonErased.erasedOn) : d.row.reason ?? NOT_RECORDED;
   const code = content.reasonCodes.find((c) => c.code === d.row.reasonCode);
   if (code === undefined) throw new Error(`documents: reason code ${String(d.row.reasonCode)} of ${d.row.id} is not in content ${content.semver}`);
   return d.reasonErased !== null ? `Not applicable (${code.label}). Reason: ${reasonText}` : `Not applicable (${code.label}). Reason: '${reasonText}'`;
@@ -217,7 +218,7 @@ function extract(d: SealedDecision, snap: DocumentSnapshot, parts: ReadonlySet<P
   if (own === undefined) throw new Error(`documents: question ${d.row.questionId} is not in its own content ${content.semver}`);
   const lines: string[] = [own.text];
   const sources: RowRef[] = [];
-  const reasonText = d.reasonErased !== null ? textErasedLine(d.reasonErased.erasedOn) : d.row.reason ?? NOT_RECORDED;
+  const reasonText = d.reasonErased !== null ? docTextErasedLine(d.reasonErased.erasedOn) : d.row.reason ?? NOT_RECORDED;
   const wantsReason = parts.has('reason') || parts.has('status');
   if (d.row.status === 'not_applicable' && wantsReason) {
     lines.push(notApplicableLine(d, content));
@@ -324,16 +325,39 @@ function typedPart(entry: FieldMapEntry, structured: 'ethics_approval' | undefin
 
 const NONE = 'None';
 
+/** A risk area as a document prints it: its name, then its code (lane 6 row C12, voice rule 8); the code alone when the content has no name. */
 function areaText(snap: DocumentSnapshot, id: string | null): string {
   if (id === null) return 'none';
   const name = running(snap).areas.get(id)?.name;
-  return name === undefined ? id : `${id} ${name}`;
+  return name === undefined ? id : wordsThenCode(name, id);
 }
 
-/** A finding's title: a shortfall finding is raised with none (its question is its subject); a null on any other is an erasure. */
-function findingTitle(f: FindingView, snap: DocumentSnapshot): string {
-  const shortfall = f.source === 'shortfall' && f.questionId !== null;
-  return f.title ?? (shortfall ? `Finding on ${f.questionId}` : textOf(snap, 'findings', f.id, 'title', null));
+/**
+ * A question's words as the seal's content held them (its manifest names the version, as MP-07 reads it). When this deployment does not list
+ * that version (`loadContent` answers `unknown_content_version`), the manifest names none, or the version lacks the question, the running
+ * content's words are printed:
+ * the question's current wording, beside its code (lane 6 rows C1, C2). Any other failure to read content is a fault and is thrown.
+ */
+function sealedQuestionWords(sealed: SealedStage, snap: DocumentSnapshot, questionId: string): string {
+  // A stored seal's manifest always names its content (trustedManifest checks it); a snapshot built by hand may not, and reads as unlisted.
+  const semver = (sealed.manifest as Partial<SealManifestV1>).content?.semver;
+  let content: LoadedContent | null = null;
+  try {
+    if (semver !== undefined) content = loadContent(semver);
+  } catch (e) {
+    if (!(e instanceof AppError && e.code === 'unknown_content_version')) throw e;
+  }
+  return content?.questions.get(questionId)?.text ?? runningQuestion(snap, questionId).text;
+}
+
+/**
+ * A finding's title: a shortfall finding is raised with none, so it is named by its question's words and code (lane 6 rows C1, C2); a null on
+ * any other is an erasure. `sealed` is the stage whose seal lists the finding.
+ */
+function findingTitle(f: FindingView, sealed: SealedStage, snap: DocumentSnapshot): string {
+  if (f.title !== null) return f.title;
+  if (f.source === 'shortfall' && f.questionId !== null) return findingOnQuestion(sealedQuestionWords(sealed, snap, f.questionId), f.questionId);
+  return textOf(snap, 'findings', f.id, 'title', null);
 }
 
 /**
@@ -437,10 +461,10 @@ function resolveFindings(source: Extract<FieldSource, { kind: 'findings' }>, sna
   const text = items.length === 0 ? NONE : items.map((sf, i) => {
     const f = sf.finding;
     const version = f.decisionVersionId === null ? undefined : versions.get(f.decisionVersionId);
-    const origin = f.source === 'team' || f.questionId === null ? 'Raised by the team' : fromQuestion(f.questionId, version);
+    const origin = f.source === 'team' || f.questionId === null ? 'Raised by the team' : questionSource(f.questionId, version);
     sources.push({ sourceTable: 'findings', sourceId: f.id, field: 'title' }, { sourceTable: 'findings', sourceId: f.id, field: 'description' });
     const shortfall = f.source === 'shortfall' && f.questionId !== null;
-    return [`${i + 1}. ${findingTitle(f, snap)}`, `Source: ${origin}`, `Risk area: ${areaText(snap, f.riskArea)}`,
+    return [`${i + 1}. ${findingTitle(f, sealed, snap)}`, `Source: ${origin}`, `Risk area: ${areaText(snap, f.riskArea)}`,
       ...(f.description === null && shortfall ? [] : [`Description: ${textOf(snap, 'findings', f.id, 'description', f.description)}`]),
       ...(source.filter === 'open' ? [`Raised on: ${formatUtcDay(f.raisedAt)}`] : []),
       findingStatusLine(findingStateWord(sf, snap)), ...closingLines(sf, snap)].join('\n');
@@ -506,7 +530,7 @@ function currentMitigations(sealed: SealedStage, snap: DocumentSnapshot): Resolv
       const [what, ...rest] = mitigationLines(m, snap, sources);
       return [`Mitigation ${j + 1}: ${what}`, ...rest, `Status: ${status}${late}`].join('\n');
     });
-    return [`${i + 1}. ${findingTitle(finding, snap)}`, ...(blocks.length === 0 ? ['Mitigations: None'] : blocks)].join('\n');
+    return [`${i + 1}. ${findingTitle(finding, sealed, snap)}`, ...(blocks.length === 0 ? ['Mitigations: None'] : blocks)].join('\n');
   }).join('\n\n');
   return part({ text, sources, sealIds: [sealed.seal.sealId] });
 }
@@ -528,7 +552,7 @@ function resolveMitigations(source: Extract<FieldSource, { kind: 'mitigations' }
   if (done.length === 0 && plan) return part({ sources, sealIds: [sealed.seal.sealId] });
   const text = done.length === 0 ? NONE : done.map(({ finding, m }, i) => {
     const [what, ...rest] = mitigationLines(m, snap, sources);
-    const lines = [`${i + 1}. ${what}`, ...(plan ? [`Finding: ${findingTitle(finding, snap)}`] : []), ...rest];
+    const lines = [`${i + 1}. ${what}`, ...(plan ? [`Finding: ${findingTitle(finding, sealed, snap)}`] : []), ...rest];
     if (plan && finding.title !== null) sources.push({ sourceTable: 'findings', sourceId: finding.id, field: 'title' });
     if (m.closureNote !== null || erasedAt(snap, 'mitigation_versions', m.id, 'closureNote') !== null) {
       lines.push(`Closure note: ${textOf(snap, 'mitigation_versions', m.id, 'closureNote', m.closureNote)}`);
@@ -552,7 +576,7 @@ function resolveAcceptedRisks(source: Extract<FieldSource, { kind: 'accepted_ris
     const r = acceptedRisk as NonNullable<typeof acceptedRisk>;
     const who = r.acceptedBy.kind === 'member' ? r.acceptedBy.user.name : ROLE_LABEL[r.acceptedBy.role];
     const labelled = finding.title === null && finding.source === 'shortfall' && finding.questionId !== null;
-    const lines = [`${i + 1}. ${labelled ? `Finding on ${finding.questionId}` : textOf(snap, 'findings', finding.id, 'title', finding.title)}`, `Accepted by: ${who}`];
+    const lines = [`${i + 1}. ${labelled ? findingTitle(finding, sealed, snap) : textOf(snap, 'findings', finding.id, 'title', finding.title)}`, `Accepted by: ${who}`];
     // The title is printed here whether or not MC-23 lists this finding, so erasing it must reach this document too (D13).
     if (!labelled) sources.push({ sourceTable: 'findings', sourceId: finding.id, field: 'title' });
     if (r.acceptedBy.kind === 'outside_role') lines.push(outsideRoleSentence(r.enteredBy.name, r.acceptedBy.role));
@@ -602,7 +626,7 @@ function resolveMeta(source: Extract<FieldSource, { kind: 'meta' }>, snap: Docum
  */
 function reviewLine(s: SealedStage, snap: DocumentSnapshot): ResolvedPart {
   const erasedOn = erasedAt(snap, 'stage_reviews', s.seal.reviewId, 'preparedFor');
-  const note = s.preparedFor !== null && s.preparedFor.trim() !== '' ? s.preparedFor : erasedOn !== null ? textErasedLine(erasedOn) : null;
+  const note = s.preparedFor !== null && s.preparedFor.trim() !== '' ? s.preparedFor : erasedOn !== null ? docTextErasedLine(erasedOn) : null;
   // The note is team text that an operator may erase, so its row is a source of this document (D13).
   const sources: RowRef[] = note === null ? [] : [{ sourceTable: 'stage_reviews', sourceId: s.seal.reviewId, field: 'preparedFor' }];
   return part({ text: reviewLineText(FINDINGS_COPY.stages[s.stage], s.seal.reviewName, note), sources, sealIds: [s.seal.sealId] });
@@ -663,12 +687,12 @@ function mappedControls(snap: DocumentSnapshot): ResolvedPart {
     const names = (groups: ControlGroup[]) => groups.flatMap((g) => g.controls.map((x) => `${x.control.id} ${x.control.name}`));
     const listOf = (xs: string[]) => (xs.length === 0 ? NONE : xs.join('; '));
     if (finding.riskArea !== null) {
-      return [findingTitle(finding, snap), `Risk area: ${areaText(snap, finding.riskArea)}`, `Controls: ${listOf(names(controlsForArea(c, finding.riskArea)))}`];
+      return [findingTitle(finding, s, snap), `Risk area: ${areaText(snap, finding.riskArea)}`, `Controls: ${listOf(names(controlsForArea(c, finding.riskArea)))}`];
     }
     const q = finding.questionId as string;
     const { first, rest } = controlsForQuestion(c, q, []);
     const areas = questionAreaIds(c, q).map((a) => areaText(snap, a));
-    return [findingTitle(finding, snap), `Risk areas of question ${q}: ${listOf(areas)}`, `Controls: ${listOf(names([...first, ...rest]))}`];
+    return [findingTitle(finding, s, snap), `Risk areas of question ${q}: ${listOf(areas)}`, `Controls: ${listOf(names([...first, ...rest]))}`];
   });
   const text = blocks.length === 0 ? NONE : blocks.map((b, i) => [`${i + 1}. ${b[0]}`, ...b.slice(1)].join('\n')).join('\n\n');
   return part({ text, sources, sealIds: [s.seal.sealId] });

@@ -43,6 +43,7 @@ const CHUNKS = {
   login: noise(40_000, 13), // /login: 100 000 + 40 000 bytes stays under 160 KB
   dash: noise(95_000, 14), // dashboard: 100 000 + 95 000 bytes is over 190 KB
   mid: noise(78_000, 15), // 100 000 + 78 000 bytes is about 174 KB: over 160, under 190
+  question: noise(95_800, 16), // 100 000 + 95 800 bytes is about 191 KB: over 190, under 195
 };
 
 function manifestFor(key: string, entries: Record<string, string[]>): string {
@@ -57,8 +58,10 @@ function manifestFor(key: string, entries: Record<string, string[]>): string {
 
 interface FakeOptions {
   dashboard?: boolean;
-  /** Adds three routes of about 174 KB each: (authenticated)/acceptances, its child, and the neighbour (authenticated)/account. */
+  /** Adds three routes of about 174 KB each: (gate)/acceptances, its child, and the neighbour (authenticated)/account. */
   midRoutes?: boolean;
+  /** Adds the question page and a neighbouring signed-in route, both with the ~191 KB question chunk. */
+  questionRoute?: boolean;
   /** Skips writing this chunk file although the manifests name it. */
   omitChunk?: keyof typeof CHUNKS;
 }
@@ -81,11 +84,16 @@ function fakeBuild(opts: FakeOptions = {}): string {
     }),
   );
   if (opts.midRoutes) {
-    for (const dir of ['acceptances', 'acceptances/history', 'account']) {
+    for (const dir of ['(gate)/acceptances', '(gate)/acceptances/history', '(authenticated)/account']) {
       write(
-        `server/app/(authenticated)/${dir}/page_client-reference-manifest.js`,
-        manifestFor(`/(authenticated)/${dir}/page`, { [`[project]/app/(authenticated)/${dir}/page`]: ['static/chunks/mid.js'] }),
+        `server/app/${dir}/page_client-reference-manifest.js`,
+        manifestFor(`/${dir}/page`, { [`[project]/app/${dir}/page`]: ['static/chunks/mid.js'] }),
       );
+    }
+  }
+  if (opts.questionRoute) {
+    for (const dir of ['(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]', '(authenticated)/@project/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]', '(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]']) {
+      write(`server/app/${dir}/page_client-reference-manifest.js`, manifestFor(`/${dir}/page`, { [`[project]/app/${dir}/page`]: ['static/chunks/question.js'] }));
     }
   }
   if (opts.dashboard !== false) {
@@ -145,7 +153,7 @@ it('NFR-PERF-01: a build within budget exits 0, polyfills and CSS are not counte
 
 it('NFR-PERF-01: S-05 sits in the signed-in group but is a public page, so it is held to 160 KB while its neighbours keep 190', () => {
   // SRS line 3189: every public page (S-01 to S-06, S-28) is held to 160 KB. S-05, the acceptances page, is at
-  // app/(authenticated)/acceptances/page.tsx (contract S-05 row), so the group of the route directory cannot tell.
+  // app/(gate)/acceptances/page.tsx (contract S-05 row), so the group of the route directory cannot tell.
   expect(Number(MID_KB)).toBeGreaterThan(160);
   expect(Number(MID_KB)).toBeLessThan(190);
   const r = run([fakeBuild({ dashboard: false, midRoutes: true }), '--exceptions', exceptionsFile([])]);
@@ -157,7 +165,7 @@ it('NFR-PERF-01: S-05 sits in the signed-in group but is a public page, so it is
   expect(r.stderr).not.toContain('/account');
   expect(r.stderr).not.toContain('/acceptances/history');
   // The list is a named constant of the script, with the route directory as the build writes it.
-  expect(readFileSync('scripts/measure_first_load.mjs', 'utf8')).toMatch(/PUBLIC_OUTSIDE_PUBLIC_GROUP = \[\s*'\(authenticated\)\/acceptances',\s*\/\/[^\n]*\n\s*'help',?\s*\]/);
+  expect(readFileSync('scripts/measure_first_load.mjs', 'utf8')).toMatch(/PUBLIC_OUTSIDE_PUBLIC_GROUP = \[\s*'\(gate\)\/acceptances',\s*\/\/[^\n]*\n\s*'help',?\s*\]/);
 });
 
 it('NFR-PERF-01: a listed exception passes until its route is gone, then the stale entry fails', () => {
@@ -258,4 +266,18 @@ it('NFR-PERF-01: the verify job measures first-load JavaScript right after the s
   expect(measure?.run?.trim()).toBe('node scripts/measure_first_load.mjs .next');
   expect(measure).not.toHaveProperty('continue-on-error');
   expect(measure).not.toHaveProperty('if');
+});
+
+it('owner ruling 15 Nov 2026 18:25: the question page alone is held to 195 KB; its neighbour with the same weight keeps 190', () => {
+  const Q_KB = kb(gz(CHUNKS.root) + gz(CHUNKS.question));
+  expect(Number(Q_KB)).toBeGreaterThan(190); // the fixture is over 190, so a pass proves the 195 budget is applied
+  expect(Number(Q_KB)).toBeLessThan(195);
+  const r = run([fakeBuild({ dashboard: false, questionRoute: true }), '--exceptions', exceptionsFile([])]);
+  expect(r.stdout).toContain(`route=/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId] firstLoadKB=${Q_KB} budgetKB=195`);
+  // The same page under the rail's parallel slot carries the same budget.
+  expect(r.stdout).toContain(`route=/@project/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId] firstLoadKB=${Q_KB} budgetKB=195`);
+  expect(r.stdout).toContain(`route=/orgs/[slug]/projects/[id]/stages/[stage] firstLoadKB=${Q_KB} budgetKB=190`);
+  expect(r.status).toBe(1);
+  expect(r.stderr).toContain('/orgs/[slug]/projects/[id]/stages/[stage] is');
+  expect(r.stderr).not.toContain('/questions/[questionId]');
 });

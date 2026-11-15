@@ -15,8 +15,11 @@ export const metadata = { title: pageTitle(HELP_COPY.titles.help) };
  * who passes the sign-in gates (app/help/layout.tsx). In order: the words used on the platform, from data/vocabulary.json;
  * what sealing means (W1); the three texts every account accepts, each named as its own page heads it (W4); the contact
  * address (About's, read by the same function); a link to About. A server component with no client code of its own. Terms,
- * definitions and the address are React text (S8). Each `<dt data-term>` is followed by its `<dd data-definition>`, which
- * lets the first-use reader count every term on this page as defined (ruling L2-29a).
+ * definitions and the address are React text (S8). Each term's `<dt>` is followed by its `<dd>`, which lets the first-use
+ * reader count every term on this page as defined (ruling L2-29a). Every entry, the 26 the first-use rule checks among
+ * them, carries `data-term` and `data-definition` on the `dt` and `dd` themselves, so the glossary reads as one list in one
+ * style (lead's ruling, FX2), never through the kit's term and definition components. Each group sits under the heading
+ * Help gives it (ruling D5), so no heading is the first use of a defined term.
  */
 export default function HelpPage() {
   const groups = helpVocabulary();
@@ -28,7 +31,7 @@ export default function HelpPage() {
         <h2 id="words-used-on-the-platform">{HELP_COPY.words.heading}</h2>
         {groups.map((group, i) => (
           <section key={group.name}>
-            <h3 id={`help-group-${i + 1}`}>{group.name}</h3>
+            <h3 id={`help-group-${i + 1}`}>{group.heading}</h3>
             <dl className="help__list">
               {group.entries.flatMap((e) => [
                 <dt key={`t-${e.id}`} data-term={e.id}>{e.term}</dt>,

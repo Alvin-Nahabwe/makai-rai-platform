@@ -183,7 +183,7 @@ describe('L2-66 S4: every person-started sign-out clears this person\'s last-pro
 
   it('L2-66 (3): the drafts guard\'s "Delete them and sign out" clears them beside purgeAccount, before signOut', () => {
     expect(read('components/decision/SignOutWithDraftsGuard.tsx')).toMatch(
-      /openDraftStore\(\)\?\.purgeAccount\(userId\);\s*clearLastProjects\(userId\);\s*await signOut\(/,
+      /openDraftStore\(\)\?\.purgeAccount\(userId\);\s*clearLastProjects\(userId\);\s*try \{\s*await signOutClearingDrafts\(userId, '\/login'\);/,
     );
   });
 
@@ -204,26 +204,30 @@ describe('L2-66 S4: every person-started sign-out clears this person\'s last-pro
       .filter((f) => /\.(ts|tsx)$/.test(f) && !f.startsWith('app/api/'));
     const callers = files.filter((f) => /\bsignOut\(/.test(read(f))).sort();
     expect(callers).toEqual([
-      'app/(authenticated)/change-password/ChangePasswordForm.tsx',
+      'app/(gate)/change-password/ChangePasswordForm.tsx',
       'components/account/PersonalExportAndDeletionForm.tsx',
       'components/account/SignOutEverywhere.tsx',
-      'components/decision/SignOutWithDraftsGuard.tsx',
-      'components/layout/Rail.tsx',
       'lib/client/signOutClearingDrafts.ts',
     ]);
+    // The rail's and the drafts guard's sign-outs go through signOutClearingDrafts since ruling L5-11; it sweeps the keys
+    // itself (below), and both still clear them first too.
+    const viaStrict = files.filter((f) => /\bsignOutClearingDrafts\(/.test(read(f)) && !f.endsWith('signOutClearingDrafts.ts')).sort();
+    expect(viaStrict).toEqual(['components/decision/SignOutWithDraftsGuard.tsx', 'components/layout/Rail.tsx', 'lib/client/signOutPress.ts']);
+    for (const f of ['components/decision/SignOutWithDraftsGuard.tsx', 'components/layout/Rail.tsx']) expect(read(f), f).toMatch(/clearLastProjects\(/);
     for (const f of callers.filter((c) => !c.includes('change-password') && !c.endsWith('signOutClearingDrafts.ts'))) expect(read(f), f).toMatch(/clearLastProjects\(/);
     // signOutClearingDrafts is on two public pages, so it sweeps the keys itself (fix round 1, F1c), with no import of the store.
     expect(read('lib/client/signOutClearingDrafts.ts')).toMatch(/sweepLastProjects\(userId\);/);
     expect(read('lib/client/signOutClearingDrafts.ts')).not.toMatch(/from '@\/lib\/client\/lastProject'/);
-    expect(read('app/(authenticated)/change-password/ChangePasswordForm.tsx')).not.toMatch(/clearLastProjects/);
+    expect(read('app/(gate)/change-password/ChangePasswordForm.tsx')).not.toMatch(/clearLastProjects/);
   });
 });
 
 describe('signOutClearingDrafts sweeps the keys itself (fix round 1, F1c)', () => {
   async function signOutWith(storage: Storage) {
     vi.resetModules();
-    const signOut = vi.fn(async () => {});
+    const signOut = vi.fn(async () => ({ url: 'http://localhost/login' }));   // next-auth's answer when the session ended
     vi.doMock('next-auth/react', () => ({ signOut }));
+    vi.stubGlobal('window', { location: { href: '', reload: () => {} } });
     vi.doMock('@/lib/client/drafts', () => ({ openDraftStore: () => null }));
     vi.stubGlobal('localStorage', storage);
     const { signOutClearingDrafts } = await import('@/lib/client/signOutClearingDrafts');
@@ -237,7 +241,7 @@ describe('signOutClearingDrafts sweeps the keys itself (fix round 1, F1c)', () =
     const { storage } = memoryStorage([['makrai:last-project:u1:a', P1]]);
     storage.key = (() => { throw new DOMException('denied', 'SecurityError'); }) as never;
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    expect(await signOutWith(storage)).toHaveBeenCalledWith({ callbackUrl: '/login' });
+    expect(await signOutWith(storage)).toHaveBeenCalledWith({ callbackUrl: '/login', redirect: false });
     expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
   });
@@ -251,7 +255,7 @@ describe('signOutClearingDrafts sweeps the keys itself (fix round 1, F1c)', () =
       remove(k);
     };
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    expect(await signOutWith(storage)).toHaveBeenCalledWith({ callbackUrl: '/login' });
+    expect(await signOutWith(storage)).toHaveBeenCalledWith({ callbackUrl: '/login', redirect: false });
     expect([...map.keys()].filter((k) => k.includes(':u1:'))).toHaveLength(1);
     expect(map.has('makrai:last-project:u2:a')).toBe(true);
     expect(warn).toHaveBeenCalledTimes(1);

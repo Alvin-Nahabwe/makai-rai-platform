@@ -1,3 +1,4 @@
+import { textErasedLine } from '@/lib/documents/copy';
 import { describe, it, expect, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { QuestionPanelData } from '@/lib/question/panel';
@@ -16,7 +17,7 @@ import { STATUS_MARK_COPY } from '@/lib/ui/copy';
  * The S-12 regions DEC-b fills (W-3, W-4; UX-09 to UX-12, UX-25, UX-28; NFR-A11Y-03, NFR-A11Y-04), rendered as
  * static markup: hooks run, effects do not, so this is the first markup a browser receives.
  */
-vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh() {} }), usePathname: () => '/x' }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh() {} }), usePathname: () => '/x', useParams: () => ({ slug: 'acme' }) }));
 
 const { DecisionFields } = await import('@/components/decision/DecisionFields');
 const { SaveStatus } = await import('@/components/decision/SaveStatus');
@@ -42,7 +43,7 @@ const V2: DecisionVersionView = {
 };
 const PANEL: QuestionPanelData = {
   orgSlug: 'acme', projectId: 'p1', projectArchived: false, stage: 'pre-processing', question: QUESTION, runningQuestion: QUESTION,
-  position: { index: 1, total: 24, previousId: 'Q-PP-00', nextId: 'Q-PP-02' }, current: null, historyCount: 0, seals: [],
+  position: { index: 0, total: 24, previousId: null, nextId: 'Q-PP-02' }, current: null, historyCount: 0, seals: [],
   reasonCodes: [
     { code: 'ny_planned_later', status: 'not_yet', label: 'Planned for later', useWhen: '', reasonMustSay: '' },
     { code: 'na_other', status: 'not_applicable', label: 'Other reason', useWhen: '', reasonMustSay: '' },
@@ -57,11 +58,11 @@ const html = (p: Partial<QuestionPanelData> = {}, v: Partial<DecisionDraft> = {}
   renderToStaticMarkup(<DecisionFields data={{ ...PANEL, ...p }} value={{ ...EMPTY, ...v }} errors={[]} disabled={false} onChange={() => {}} />);
 
 describe('S-12 decision fields', () => {
-  it('UX-09: a native radio group named Status, four options in order, the finding note, and the reason code only with Not applicable or Not yet', () => {
+  it('UX-09 R2: a native radio group named Status, four options in order, and the reason code only with Not applicable or Not yet; the finding note is no longer under the legend', () => {
     const h = html();
     expect(h).toMatch(/<fieldset[^>]*>\s*<legend[^>]*>Status<\/legend>/);
     expect([...h.matchAll(/<input[^>]*type="radio"[^>]*value="([a-z_]+)"/g)].map((m) => m[1])).toEqual(['done', 'partly', 'not_yet', 'not_applicable']);
-    expect(h).toContain(FINDING_NOTE);
+    expect(h).not.toContain(FINDING_NOTE);
     expect(h).not.toContain(DECISION_FORM_COPY.fields.reasonCode);
     const ny = html({}, { status: 'not_yet' });
     expect(ny).toContain(DECISION_FORM_COPY.fields.reasonCode);
@@ -94,11 +95,11 @@ describe('S-12 decision fields', () => {
     expect(h).toMatch(/<option[^>]*>You \(Amina N\.\)<\/option>\s*<option[^>]*>Joseph K\.<\/option>\s*<optgroup label="Someone without a platform account">\s*<option[^>]*>Principal investigator<\/option>/);
   });
 
-  it('UX-12: the reason helper and the count in text, linked to the field', () => {
+  it('UX-12 ruling (a): the reason hint is the own prompt of the question, and the count in text, linked to the field', () => {
     const h = html({}, { reason: 'x'.repeat(212) });
     expect(h).toContain('212 / 4,000 characters');
     expect(h).toMatch(/<textarea[^>]*aria-describedby="[^"]*reason-help[^"]*"/);
-    expect(h).toContain('Say what is in place, where it is recorded, and what is missing.');
+    expect(h).toContain(`<p id="decision-reason-help" class="decision-fields__help">${PANEL.runningQuestion.reasonPrompt}</p>`);
   });
 
   it('FR-CNT-04 FR-CNT-03 (screen): the gate takes a scope answer, a checklist its options with the count in text', () => {
@@ -120,13 +121,13 @@ describe('S-12 decision fields', () => {
     expect(h).toMatch(/id="decision-reason-error"[^>]*>Write a reason\.</);
   });
 
-  it('plan 1A Task 17: every control keeps its id and name, and each status card shows one symbol, its radio button', () => {
+  it('plan 1A Task 17 R3: every control keeps its id and name, and each status card shows its radio button and its status mark', () => {
     const h = html({ question: { ...QUESTION, type: 'checklist', options: ['A', 'B'] } }, { status: 'not_yet' });
     for (const v of ['done', 'partly', 'not_yet', 'not_applicable']) {
       const radio = h.match(new RegExp(`<input[^>]*id="decision-status-${v}"[^>]*>`))?.[0] ?? '';
       for (const attr of ['type="radio"', 'name="status"', `value="${v}"`, `aria-describedby="decision-status-${v}-help"`]) expect(radio).toContain(attr);
     }
-    expect(h.match(/class="ui-mark__shape"/g)).toBeNull();
+    expect(h.match(/class="ui-mark__shape"/g)).toHaveLength(4);
     expect(h).toMatch(/<input[^>]*id="decision-option-0"[^>]*name="optionsInPlace"/);
     expect(h).toMatch(/<select[^>]*id="decision-reason-code"[^>]*name="reasonCode"/);
     expect(h).toMatch(/<option value=""[^>]*>Choose one<\/option>/);
@@ -233,15 +234,17 @@ describe('S-12 status line and conflict view', () => {
 
 describe('S-12 regions', () => {
   it('FR-DEC-01 UX-31 UX-14: a viewer and an archived project get no form', async () => {
-    const viewer = renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, canWrite: false, viewer: { ...PANEL.viewer, role: 'viewer' } } }));
+    const { stageFixture } = await import('../helpers/stageFixture');
+    const viewer = renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, canWrite: false, viewer: { ...PANEL.viewer, role: 'viewer' } } , stage: stageFixture() }));
     expect(viewer).toContain(AUTHZ_COPY.decisionFormNote.viewer);
     expect(viewer).not.toMatch(/Save decision/);
     expect(viewer).not.toMatch(/<form/);
-    expect(renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, canWrite: false, projectArchived: true } }))).not.toMatch(/<form/);
+    expect(renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, canWrite: false, projectArchived: true } , stage: stageFixture() }))).not.toMatch(/<form/);
   });
 
   it('FR-CNT-08: S-12 shows the reworded line when the running wording differs', async () => {
-    const h = renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, current: V2, runningQuestion: { ...PANEL.question, expectedPractice: 'New wording.' }, contentSemver: '0.0.2-fixture' } }));
+    const { stageFixture } = await import('../helpers/stageFixture');
+    const h = renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, current: V2, runningQuestion: { ...PANEL.question, expectedPractice: 'New wording.' }, contentSemver: '0.0.2-fixture' } , stage: stageFixture() }));
     const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const line = QUESTION_COPY.reworded.line.replaceAll("'", '&#x27;');
     expect(h).toContain(line);
@@ -253,19 +256,29 @@ describe('S-12 regions', () => {
     // Plan 1C decision C1 (cut): the running wording is the guidance aside's; the earlier one is only in the disclosure.
     expect(h).toMatch(/<aside[^>]*data-region="guidance"[^>]*>[\s\S]*New wording\.[\s\S]*<\/aside>/);
     expect(h).toMatch(/<details[^>]*>(?:(?!<\/details>)[\s\S])*Old wording\./);
-    const same = renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, current: V2 } }));
+    const same = renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, current: V2 } , stage: stageFixture() }));
     expect(same).not.toContain(QUESTION_COPY.reworded.summary);
     expect(same).not.toContain(line);   // with the same wording there is no line (the property's own words), not only no summary
   });
 
   it('UX-42 W-3: one h1 for the question that takes focus, and Previous and Next go to the neighbouring questions', async () => {
-    const h = renderToStaticMarkup(await QuestionPanelRegions({ data: PANEL }));
+    // Lane 1 Task 1: Previous and Next are the position strip's (under 1160px; the breadcrumb and the route column above
+    // it), which needs the stage's data: each link is named by its question in words, its place and its status.
+    const { stageFixture } = await import('../helpers/stageFixture');
+    const data = { ...PANEL, position: { index: 1, total: 24, previousId: 'Q-PP-01', nextId: 'Q-PP-03' } };
+    const h = renderToStaticMarkup(await QuestionPanelRegions({ data, stage: stageFixture({ marks: { 'Q-PP-01': 'done' } }) }));
     expect(h.match(/<h1/g)).toHaveLength(1);
     expect(h).toMatch(/<h1 id="question-heading" tabindex="-1"[^>]*>Have you evaluated whether AI is the right approach\?<\/h1><p[^>]*>Q-PP-01 \u00b7 Problem Formulation<\/p>/i);
-    expect(h).toMatch(/<a[^>]*href="\/orgs\/acme\/projects\/p1\/stages\/pre-processing\/questions\/Q-PP-00"[^>]*>Previous question<\/a>/);
-    expect(h).toMatch(/<a[^>]*href="\/orgs\/acme\/projects\/p1\/stages\/pre-processing\/questions\/Q-PP-02"[^>]*>Next question<\/a>/);
-    expect(h).toContain('Question 2 of 24 in Pre-processing');   // the stage's name, not its address segment (CR-7)
-    expect(renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, position: { index: 0, total: 24, previousId: null, nextId: 'Q-PP-02' } } }))).not.toContain('Previous question');
+    const links = [...h.matchAll(/<a class="position-strip__step[^"]*"[^>]*>[\s\S]*?<\/a>/g)].map((m) => m[0]);
+    const named = (l: string) => l.replace(/<svg[\s\S]*?<\/svg>/g, '').replace(/<[^>]+>/g, '');
+    expect(links).toHaveLength(2);
+    expect(links[0]).toContain('href="/orgs/acme/projects/p1/stages/pre-processing/questions/Q-PP-01"');
+    expect(named(links[0])).toMatch(/^Previous question: .+ \(question 1, Done\)$/);
+    expect(links[1]).toContain('href="/orgs/acme/projects/p1/stages/pre-processing/questions/Q-PP-03"');
+    expect(named(links[1])).toMatch(/^Next question: .+ \(question 3, No decision\)$/);
+    expect(h).toContain('<b><span class="position-strip__word">Question </span>2 of 24</b>');   // the position in words, not the question's code
+    const first = renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, position: { index: 0, total: 24, previousId: null, nextId: 'Q-PP-02' } }, stage: stageFixture() }));
+    expect(first).not.toContain('Previous question');
   });
 
   it('FR-DEC-01 FR-DEC-03 (screen): with no version, Current decision reads "No decision yet."', () => {
@@ -287,7 +300,7 @@ describe('S-12 regions', () => {
     const none = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={{ ...V2, reason: null, evidence: [] }} historyCount={2} historyHref="/h" seals={[]} isScopeQuestion={false} />);
     expect(none).toMatch(/<dt>Evidence<\/dt><dd>None<\/dd>/);
     const erased = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={{ ...V2, reason: null, reasonErased: { erasedOn: '2026-11-01' } as never, evidence: [] }} historyCount={2} historyHref="/h" seals={[]} isScopeQuestion={false} />);
-    expect(erased).toContain("on the organisation&#x27;s instruction.");
+    expect(erased).toContain(textErasedLine('2026-11-01').replace(/'/g, '&#x27;'));
   });
 
   it('FR-DEC-08 (screen): a withdrawal as the current version reads as no decision, with its history link', () => {

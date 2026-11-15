@@ -14,10 +14,10 @@ const current = (items: ReturnType<typeof railItems>) => items.filter((i) => i.c
 const UUID = '3f2b8c1e-9a4d-4e6f-8b2a-1c3d5e7f9a0b';
 
 describe('railItems', () => {
-  it('1A Task 12 L2-48: a member of an organisation gets Home, Projects, Findings, Guidance, Help, then Members, Organisation details, My account', () => {
+  it('1A Task 12 L2-48: a member of an organisation gets Home, Projects, Findings, Guidance, Help, then Members, Organisation, My account', () => {
     const items = member('/orgs/a/dashboard');
     expect(keys(items)).toEqual(['main:home', 'main:projects', 'main:findings', 'main:guidance', 'main:help', 'lower:members', 'lower:organisation', 'lower:account']);
-    expect(items.map((i) => i.label)).toEqual(['Home', 'Projects', 'Findings', 'Guidance', 'Help', 'Members', 'Organisation details', 'My account']);
+    expect(items.map((i) => i.label)).toEqual(['Home', 'Projects', 'Findings', 'Guidance', 'Help', 'Members', 'Organisation', 'My account']);
     expect(items.map((i) => i.href)).toEqual([
       '/orgs/a/dashboard', '/orgs/a/projects', '/orgs/a/projects?for=findings', '/explore/framework', '/help',
       '/orgs/a/settings/members', '/orgs/a/settings/organisation', '/account',
@@ -54,7 +54,7 @@ describe('railItems', () => {
     for (const item of all) expect(item.label, item.key).toBe(SHELL_COPY.items[item.key]);
     expect(SHELL_COPY.items).toEqual({
       home: 'Home', projects: 'Projects', findings: 'Findings', guidance: 'Guidance', help: 'Help', members: 'Members',
-      organisation: 'Organisation details', account: 'My account', 'admin-organisations': 'Organisations', 'admin-accounts': 'Accounts',
+      organisation: 'Organisation', account: 'My account', 'admin-organisations': 'Organisations', 'admin-accounts': 'Accounts',
     });
   });
 

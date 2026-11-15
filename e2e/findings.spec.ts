@@ -7,7 +7,7 @@ import type { OrgRole } from '@prisma/client';
 import { testDb } from '../__tests__/helpers/db';
 import { HOSTILE_STRINGS } from '../__tests__/helpers/hostile';
 import {
-  addAcceptedRisk, addDecision, addFinding, addMitigationVersion, addProject, buildOrg, type OrgFixture,
+  addAcceptedRisk, addDecision, addFinding, addMitigationVersion, addPreR11ClosingRecord, addProject, buildOrg, type OrgFixture,
 } from '../__tests__/helpers/recordFixture';
 import type { Stage } from '../types/record';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
@@ -369,11 +369,14 @@ test('B2 (stuck): a finding whose close was pressed while a mitigation was Plann
   failOnDialog(page);
   const url = `/orgs/${fx.org.slug}/projects/${project.id}/findings/${f.id}`;
   await page.goto(url);
-  // The close an earlier page (v0.6.2) sent while the mitigation was Planned: the server still answers 201 and the finding stays open.
+  // The close an earlier page (v0.6.2) sent while the mitigation was Planned: the server now refuses it (route decision R11).
   const pressed = await page.request.post(`/api/v1${url}/close-by-decision`, {
     data: { requestId: crypto.randomUUID(), decisionVersionId: done.id }, headers: { origin: new URL(page.url()).origin },
   });
-  expect(pressed.status()).toBe(201);
+  expect(pressed.status()).toBe(409);
+  expect(await pressed.json()).toEqual({ error: FINDINGS_COPY.failures.openWork, code: 'finding_has_open_work' });
+  // Releases up to 0.7.0 accepted it, so stored data can hold the record that close wrote; the page still explains it.
+  await addPreR11ClosingRecord(fx, f.id, { decisionVersionId: done.id, dueDate: '2027-03-20' });
   await page.reload();
   await expect(page.locator('.finding-close-box p')).toHaveText([FINDINGS_COPY.finding.closeBlocked]);
   await expect(page.getByRole('button', { name: FINDINGS_COPY.closeByDecision.label })).toHaveCount(0);
@@ -439,7 +442,7 @@ test('R4: on the question page the line reads that the finding can now be closed
   let loads = 0;
   page.on('load', () => { loads++; });
   await page.getByRole('radio', { name: 'Done', exact: true }).check();
-  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`).fill('The labels were checked again.');
+  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`, { exact: true }).fill('The labels were checked again.');
   await page.getByRole('button', { name: 'Today', exact: true }).click();
   await page.getByRole('button', { name: 'Save decision' }).click();
   await expect(region.getByText(QUESTION_COPY.findingLink.closable)).toBeVisible();

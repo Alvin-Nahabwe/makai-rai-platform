@@ -11,7 +11,9 @@ import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
 import { pageOf, LIST_PAGE_SIZE } from '@/lib/ui/showMore';
 import { ShowMoreLink } from '@/components/ui/ShowMoreLink';
-import { AllProjectsView } from '@/components/project/AllProjectsView';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { ButtonLink } from '@/components/ui/Button';
+import { ProjectsTable } from '@/components/project/ProjectsTable';
 import { PROJECT_COPY } from '@/lib/project/copy';
 import { isUuid } from '@/lib/shell/nav';
 
@@ -39,8 +41,10 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
 }
 
 /**
- * S-32, all projects, active and archived: a long list (UX-37, UX-40), so each list shows 50 and a "Show more" link asks
- * for more with `?shown=`. Every member reads; unarchive is for owners and admins.
+ * S-32, Projects: one list, active and archived (plan 1B Task 12; spec 8; rule C8), active rows first and then archived
+ * ones, each group most recently changed first. A long list (UX-37, UX-40), so the one list shows 50 and one "Show more"
+ * link asks for more with `?shown=`, after a line that counts what is shown and the archived projects not shown yet. With
+ * no project at all, New project is the empty state's own action, not the header's (design review 20). Every member reads; unarchive is for owners and admins (T12.1).
  *
  * `?for=findings` is the rail's Findings link (plan 1A Task 12, L2-65). It goes to the findings of the project in `last`
  * when that is one of the rows this organisation's own read just returned (S1), else of the organisation's only project;
@@ -68,14 +72,30 @@ export default async function ProjectsPage({
     if (target !== undefined) redirect(`/orgs/${slug}/projects/${target.id}/findings`);
   }
   const shown = typeof query.shown === 'string' ? query.shown : null;
-  const a = pageOf(active, shown, LIST_PAGE_SIZE);
-  const b = pageOf(archived, shown, LIST_PAGE_SIZE);
-  const more = a.hasMore ? a : b.hasMore ? b : null;
+  const rows = [...active.map((p) => ({ ...p, archived: false })), ...archived.map((p) => ({ ...p, archived: true }))];
+  const page = pageOf(rows, shown, LIST_PAGE_SIZE);
+  const canCreate = can(ctx.role, 'project:create');
+  // While more remain: how many are shown, and the archived ones not shown yet, as C8 lists them last (design review 15).
+  const archivedHidden = archived.length - page.items.filter((p) => p.archived).length;
   return (
-    <AllProjectsView
-      data={{ orgSlug: slug, canCreate: can(ctx.role, 'project:create'), canUnarchive: can(ctx.role, 'project:archive'), active: a.items, archived: b.items, forFindings }}
-    >
-      {more !== null ? <ShowMoreLink href={`?${forFindings ? 'for=findings&' : ''}shown=${more.nextShown}`} label={PROJECT_COPY.allProjects.showMore} /> : null}
-    </AllProjectsView>
+    <div className="page-content">
+      <PageHeader
+        title={PROJECT_COPY.allProjects.heading}
+        lead={forFindings ? <p>{PROJECT_COPY.chooseForFindings}</p> : null}
+        actions={canCreate && rows.length > 0 ? <ButtonLink variant="primary" href={`/orgs/${slug}/projects/new`}>{PROJECT_COPY.allProjects.newProject}</ButtonLink> : null}
+      />
+      <ProjectsTable
+        orgSlug={slug} rows={page.items} canUnarchive={can(ctx.role, 'project:archive')} canCreate={canCreate}
+        target={forFindings ? 'findings' : 'project'}
+      />
+      {page.hasMore ? (
+        <p className="projects-more">
+          {PROJECT_COPY.allProjects.showing(page.items.length, rows.length)}
+          {archivedHidden > 0 ? ` ${PROJECT_COPY.allProjects.archivedNotShown(archivedHidden)}` : null}
+          {' '}
+          <ShowMoreLink href={`?${forFindings ? 'for=findings&' : ''}shown=${page.nextShown}`} label={PROJECT_COPY.allProjects.showMore} />
+        </p>
+      ) : null}
+    </div>
   );
 }

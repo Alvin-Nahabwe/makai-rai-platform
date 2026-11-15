@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OrgRole } from '@prisma/client';
 import type { DecisionVersionView, SaveDecisionRequest } from '@/types/api';
 import { requestDigest } from '@/lib/data/idempotency';
+import { GONE_NAME_COPY } from '@/lib/http/copy';
 import { decisionHistory, saveDecision } from '@/lib/data/decisions';
 import { resetDb, testDb } from '../helpers/db';
 import { useFixtureContent } from '../helpers/content';
@@ -121,10 +122,10 @@ describe('NFR-PERF-04 FIX-14: a save answers the view a read gives', () => {
 
   it('NFR-PERF-04 FIX-14 FR-DEC-01 FR-EXP-03: a scrubbed former member as decider keeps the scrubbed name and the former-member mark', async () => {
     const former = await removeMember('reviewer');
-    await testDb.user.update({ where: { id: former }, data: { name: 'Deleted user', isActive: false } });
+    await testDb.user.update({ where: { id: former }, data: { name: GONE_NAME_COPY.deletedAccount, isActive: false } });
     const out = await save('owner', body({ decidedBy: { kind: 'member', userId: former } }));
     expect(out.value).toEqual(await readBack(out.value));
-    expect(out.value.decidedBy).toEqual({ kind: 'member', user: { userId: former, name: 'Deleted user', formerMember: true } });
+    expect(out.value.decidedBy).toEqual({ kind: 'member', user: { userId: former, name: GONE_NAME_COPY.deletedAccount, formerMember: true } });
   });
 
   it('NFR-PERF-04 FIX-14 FR-DEC-01: an outside-role decider', async () => {

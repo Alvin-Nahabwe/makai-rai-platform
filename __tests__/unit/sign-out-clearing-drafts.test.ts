@@ -5,15 +5,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * and a draft store that cannot load never stops the sign-out.
  */
 const calls: string[] = [];
-const signOut = vi.fn(async (o: unknown) => { calls.push(`signOut ${JSON.stringify(o)}`); });
+/** next-auth's answer when the session ended (lead's ruling L5-11: the sign-out is asked without its redirect). */
+const ENDED = { url: 'http://localhost/login' };
+const signOut = vi.fn(async (o: unknown) => { calls.push(`signOut ${JSON.stringify(o)}`); return ENDED; });
 
 beforeEach(() => {
   calls.length = 0;
   signOut.mockClear();
   vi.resetModules();
   vi.doMock('next-auth/react', () => ({ signOut }));
+  // A success navigates (window.location.href = its url). Set directly, not with vi.stubGlobal, which the cases below undo.
+  (globalThis as { window?: unknown }).window = { location: { href: '', reload: () => {} } };
 });
-afterEach(() => { vi.doUnmock('@/lib/client/drafts'); });
+afterEach(() => { vi.doUnmock('@/lib/client/drafts'); delete (globalThis as { window?: unknown }).window; });
 
 describe('NFR-PRIV-06 CR-1 SFH-4: signOutClearingDrafts', () => {
   it('NFR-PRIV-06 SPEC-1: the purge runs before signOut, with the callback URL, when the store loads', async () => {
@@ -22,21 +26,21 @@ describe('NFR-PRIV-06 CR-1 SFH-4: signOutClearingDrafts', () => {
     }));
     const { signOutClearingDrafts } = await import('@/lib/client/signOutClearingDrafts');
     await signOutClearingDrafts('u-1', '/invitations/tok');
-    expect(calls).toEqual(['purge u-1', 'signOut {"callbackUrl":"/invitations/tok"}']);
+    expect(calls).toEqual(['purge u-1', 'signOut {"callbackUrl":"/invitations/tok","redirect":false}']);
   });
 
   it('NFR-PRIV-06 CR-1 SFH-4: a draft store whose import rejects still signs out, with the callback URL', async () => {
     vi.doMock('@/lib/client/drafts', () => { throw new Error('ChunkLoadError'); });
     const { signOutClearingDrafts } = await import('@/lib/client/signOutClearingDrafts');
     await expect(signOutClearingDrafts('u-1', '/login')).resolves.toBeUndefined();
-    expect(signOut).toHaveBeenCalledWith({ callbackUrl: '/login' });
+    expect(signOut).toHaveBeenCalledWith({ callbackUrl: '/login', redirect: false });
   });
 
   it('NFR-PRIV-06 SFH-4: no store in this browser (null) still signs out', async () => {
     vi.doMock('@/lib/client/drafts', () => ({ openDraftStore: () => null }));
     const { signOutClearingDrafts } = await import('@/lib/client/signOutClearingDrafts');
     await signOutClearingDrafts('u-1', '/login');
-    expect(signOut).toHaveBeenCalledWith({ callbackUrl: '/login' });
+    expect(signOut).toHaveBeenCalledWith({ callbackUrl: '/login', redirect: false });
   });
 
   it('NFR-PRIV-06 FIX-7: when the store cannot load, this account\'s drafts are still removed, and only this account\'s', async () => {
@@ -58,7 +62,7 @@ describe('NFR-PRIV-06 CR-1 SFH-4: signOutClearingDrafts', () => {
       const { signOutClearingDrafts } = await import('@/lib/client/signOutClearingDrafts');
       await signOutClearingDrafts('u-1', '/login');
       expect([...keys.keys()].sort()).toEqual(['makrai.draft.v1:u-2:o:p:q:Q-PP-01', 'other']);
-      expect(signOut).toHaveBeenCalledWith({ callbackUrl: '/login' });
+      expect(signOut).toHaveBeenCalledWith({ callbackUrl: '/login', redirect: false });
       expect(warn).toHaveBeenCalledTimes(1);
       expect(String(warn.mock.calls[0][0])).not.toMatch(/u-1/); // a fixed text, no account id
     } finally {
@@ -74,7 +78,7 @@ describe('NFR-PRIV-06 CR-1 SFH-4: signOutClearingDrafts', () => {
         ['makrai:last-project:u-10:acme', 'p'], ['makrai:last-project:u-2:acme', 'p'], ['other', 'kept'],
       ]);
       let atSignOut: string[] = [];
-      signOut.mockImplementationOnce(async () => { atSignOut = [...keys.keys()].sort(); });
+      signOut.mockImplementationOnce(async () => { atSignOut = [...keys.keys()].sort(); return ENDED; });
       vi.stubGlobal('localStorage', {
         get length() { return keys.size; },
         key: (i: number) => [...keys.keys()][i] ?? null,

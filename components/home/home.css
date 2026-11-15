@@ -1,0 +1,610 @@
+/* Home (spec 9.1), to the sketch directions/surfaces/home.png and its home.html: the welcome over a rule, then two
+   columns from 1024 px (the sketch's 600 and 456, kept as a ratio, 56 px apart), one column below in reading order.
+   Sizes are the sketch's, through the kit's tokens where one exists; 15 px (0.9375rem) is the sketch's own step between
+   the small and the body size. Colours are roles only: the action orange on the one primary button and the "you are
+   here" marks, red only on the word "Overdue" and an overdue date (spec 7.1), marks in the mark ink. Every name and
+   question wraps rather than widening the page (320 px with a 70-character name: no sideways scroll).
+
+   One gutter (fix round 2, #2): Home's root is `.page-content home`, and `.home` adds no top or side padding of its own.
+   The shell branch zeroes `.page-content`'s padding inside the shell, so after that merge the shell's 32 px is the only
+   gutter; until then `.page-content` keeps its own. */
+
+.home {
+  box-sizing: border-box;
+  padding-block-end: var(--space-12);
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+
+/* The welcome: the page's h1, its one lead line, the unsaved line; a rule under it. */
+.home-hello {
+  padding-block-end: var(--space-6);
+  border-block-end: 1px solid var(--color-border-container);
+}
+
+.home-hello__title {
+  margin: 0;
+  font-size: var(--font-size-h1);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-heading);
+  letter-spacing: -0.01em;
+  color: var(--color-heading);
+  text-wrap: balance;
+}
+
+.home-hello__lead {
+  margin: var(--space-1) 0 0;
+  font-size: 0.9375rem;
+  color: var(--color-ink-muted);
+  max-inline-size: 70ch;
+}
+
+.home-unsaved {
+  margin: var(--space-3) 0 0;
+  font-size: 0.9375rem;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-ink);
+}
+
+/* The two columns. Each column is a stack with the sketch's 28 px between sections. */
+.home-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: var(--space-8);
+  padding-block-start: var(--space-6);
+}
+
+.home-column {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+  min-inline-size: 0;
+}
+
+@media (width >= 64rem) {
+  .home-columns {
+    grid-template-columns: minmax(0, 600fr) minmax(0, 456fr);
+    column-gap: 3.5rem;
+  }
+}
+
+.home-section h2,
+.home-project__name {
+  margin: 0;
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-heading);
+  color: var(--color-heading);
+  text-wrap: balance;
+}
+
+.home-note,
+.home-empty {
+  margin: 2px 0 0;
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-body);
+  color: var(--color-ink-muted);
+}
+
+.home-empty {
+  margin-block-start: var(--space-3);
+}
+
+/* Terms with their definitions under a heading (the sketch's note under "Waiting on you"). */
+.home-terms {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-body);
+}
+
+.home-terms {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: var(--space-3);
+  row-gap: 2px;
+}
+
+.home-terms__pair {
+  display: contents;
+}
+
+.home-terms dt {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-ink);
+}
+
+.home-terms dd {
+  margin: 0;
+  min-inline-size: 0;
+}
+
+/* The next step: the one primary action of the page (sketch .next). */
+.home-next {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  column-gap: var(--space-4);
+  padding: var(--space-6);
+  border: 1px solid var(--color-border-container);
+  border-radius: var(--radius-surface);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-surface);
+}
+
+.home-next__here {
+  color: var(--color-action-text);   /* the lighter action tint in dark, the action orange in light (design review #17) */
+}
+
+.home-next__here-dot {
+  fill: var(--color-mark);
+}
+
+.home-next__heading {
+  margin: 0;
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.3;
+  color: var(--color-action-text);
+}
+
+.home-next__where {
+  margin: var(--space-1) 0 0;
+  font-size: 0.9375rem;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-ink-muted);
+}
+
+.home-next__question {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.3;
+  color: var(--color-heading);
+  text-wrap: balance;
+}
+
+.home-next__code {
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-ink-muted);
+  white-space: nowrap;
+}
+
+.home-next__reason {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-small);
+  color: var(--color-ink-muted);
+}
+
+/* Two controls of one height, primary first, each label on one line. They span the card's width under the ring (fix
+   round 2, #1), so both sit on one row at 1280; when the two do not fit, each takes the full width. */
+.home-next__actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-block-start: var(--space-4);
+}
+
+.home-next__actions > * {
+  flex: 1 0 auto;
+  max-inline-size: 100%;
+  white-space: nowrap;
+}
+
+/* Lists of plates: a mitigation, a finding, a review (sketch .plate). */
+.home-plates {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.home-plate {
+  position: relative;
+  margin-block-start: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border-container);
+  border-radius: var(--radius-surface);
+  background-color: var(--color-surface);
+  transition: border-color var(--duration-state) var(--easing-state);
+}
+
+.home-plate:hover {
+  border-color: var(--color-mark);
+}
+
+.home-plate__title {
+  display: block;
+  font-size: 0.9375rem;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.4;
+  color: var(--color-link);
+  text-decoration: none;
+}
+
+/* The title's link covers the whole plate; its underline shows on hover and focus. */
+.home-plate__title::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.home-plate:hover .home-plate__title,
+.home-plate__title:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.home-plate__meta {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-legal);
+  line-height: var(--line-height-body);
+  color: var(--color-ink-muted);
+}
+
+.home-plate__status {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-ink);
+}
+
+/* Red on the word "Overdue" and on an overdue date (spec 7.1, 9.1); the clock beside the word is the word's own. Inline,
+   so a link's underline runs under the word and the words after it as one line. */
+.home-overdue {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-overdue);
+}
+
+.home-overdue .ui-icon {
+  margin-inline-end: var(--space-1);
+  vertical-align: -0.2em;
+}
+
+/* The changes (sketch .since): the day in a narrow column, a rule over the list and under each row. */
+.home-changes__list {
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+  border-block-start: 1px solid var(--color-border-container);
+}
+
+.home-changes__row {
+  display: grid;
+  grid-template-columns: 6.5rem minmax(0, 1fr);
+  column-gap: var(--space-3);
+  padding-block: 0.625rem;
+  border-block-end: 1px solid var(--color-border-container);
+  font-size: 0.9375rem;
+  line-height: 1.45;
+}
+
+.home-changes__what p {
+  margin: 0;
+}
+
+.home-changes__day {
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-ink-muted);
+  white-space: nowrap;
+}
+
+.home-changes__meta,
+.home-changes__what .ui-definition {
+  margin-block-start: 2px;
+  font-size: var(--font-size-legal);
+  color: var(--color-ink-muted);
+}
+
+.home-changes__more {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-small);
+  color: var(--color-ink-muted);
+}
+
+/* The project and its three stages (sketch .proj, .stage). */
+.home-project__name a {
+  color: var(--color-heading);
+  text-decoration: none;
+}
+
+.home-project__name a:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.home-section .home-project + .home-project,
+.home-section .home-terms + .home-project {
+  margin-block-start: var(--space-5);
+}
+
+/* A Viewer's projects are h3s under "Still open": stage-name size. The recorder's project name is an h2 at h2 size. */
+h3.home-project__name {
+  font-size: var(--font-size-h3);
+}
+
+.home-stages {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-block-start: var(--space-3);
+}
+
+.home-stage {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border-container);
+  border-radius: var(--radius-surface);
+  background-color: var(--color-surface);
+}
+
+/* The line mark, the name and the question count on one line; on a narrow plate the count moves under them rather than
+   breaking the stage's name at its hyphen. */
+.home-stage__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--space-3);
+}
+
+.home-stage__line {
+  flex: none;
+}
+
+.home-stage__count {
+  margin-inline-start: auto;
+}
+
+.home-stage__line {
+  color: var(--color-mark);
+}
+
+.home-stage__here {
+  fill: var(--color-action);
+  stroke: var(--color-surface);
+  stroke-width: 2;
+}
+
+.home-stage__name {
+  margin: 0;
+  white-space: nowrap;
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.3;
+}
+
+.home-stage__name a {
+  color: var(--color-heading);
+  text-decoration: none;
+}
+
+.home-stage__name a:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.home-stage__count {
+  font-size: var(--font-size-legal);
+  color: var(--color-ink-muted);
+  white-space: nowrap;
+}
+
+.home-stage > .ui-definition {
+  display: block;
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-legal);
+}
+
+.home-stage__open {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: var(--space-2) 0 var(--space-1);
+  font-size: 0.9375rem;
+}
+
+.home-stage__open a {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-link);
+  text-underline-offset: 0.15em;
+}
+
+.home-tally {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--space-3);
+  margin: var(--space-1) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--font-size-legal);
+  color: var(--color-ink-muted);
+}
+
+.home-tally__item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.home-tally__item > .ui-mark__shape {
+  color: var(--color-mark);
+}
+
+/* The count in bold ink, as the sketch sets it ("9 done", design review #10). */
+.home-tally__count {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-ink);
+}
+
+.home-tally__none {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-legal);
+  color: var(--color-ink-muted);
+}
+
+.home-stage__next {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-legal);
+  line-height: 1.45;
+  color: var(--color-ink-muted);
+}
+
+.home-stage__next b {
+  color: var(--color-ink);
+}
+
+.home-stage__next a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 24px;   /* the way into a stage's recording: at least a 24 px target (design review #23) */
+  color: var(--color-link);
+  text-underline-offset: 0.15em;
+}
+
+/* The other projects and All projects (sketch .more). */
+.home-more {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  font-size: 0.9375rem;
+}
+
+.home-more p {
+  margin: 0;
+  font-size: var(--font-size-legal);
+  color: var(--color-ink-muted);
+}
+
+.home-more a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 32px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-link);
+  text-underline-offset: 0.15em;
+}
+
+/* First visit: one sentence and one action. */
+.home-first {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-4);
+  max-inline-size: 40rem;
+  padding-block-start: var(--space-6);
+}
+
+.home-first p {
+  margin: 0;
+}
+
+.home-first__lead {
+  font-size: var(--font-size-h3);
+  line-height: 1.4;
+  color: var(--color-ink);
+}
+
+@media (width < 48rem) {
+  .home-next__question {
+    font-size: var(--font-size-h3);
+  }
+
+  .home-next {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--space-3);
+    padding: var(--space-5) var(--space-4);
+  }
+
+  .home-changes__row {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 2px;
+  }
+}
+
+
+/* A term's definition at its first use inside a card, a plate or a list row (spec 6): the kit's hint line, one step
+   smaller where the line around it is small. */
+.home-next .ui-definition,
+.home-plate .ui-definition {
+  display: block;
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-legal);
+}
+
+/* The link under a lead list cut at five plates, to the whole list. */
+.home-more-link {
+  margin: var(--space-3) 0 0;
+  font-size: 0.9375rem;
+}
+
+.home-more-link a {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-link);
+  text-underline-offset: 0.15em;
+}
+
+.home-section > .ui-definition {
+  margin: 2px 0 0;
+}
+
+/* A stage's name never breaks at its hyphen (design review #14). */
+.home-stage-name {
+  white-space: nowrap;
+}
+
+/* Each plate's stage definition, in its named form ("Pre-processing: The work before training…"). */
+.home-stage__def {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-legal);
+  line-height: var(--line-height-body);
+  color: var(--color-ink-muted);
+}
+
+.home-stage__def .ui-definition {
+  font-size: inherit;
+}
+
+/* An Owner's or Admin's lists as compact rows (design review #7): the title on one line, the state line under it, a rule
+   between rows, as the sketch's "Since" rows. */
+.home-rows {
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+  border-block-start: 1px solid var(--color-border-container);
+}
+
+.home-row {
+  padding-block: var(--space-2);
+  border-block-end: 1px solid var(--color-border-container);
+}
+
+.home-row__title {
+  display: block;
+  overflow: clip;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 0.9375rem;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.4;
+  color: var(--color-link);
+  text-underline-offset: 0.15em;
+}
+
+.home-row .home-plate__meta {
+  margin-block-start: 2px;
+}
+
+/* A Viewer's first project under "Still open" keeps a little air under the section's heading. */
+.home-section > h2 + .home-project {
+  margin-block-start: var(--space-3);
+}
+
+/* "New project": one control at the inline end, above the columns; the columns' own top padding then follows it. */
+.home-new {
+  display: flex;
+  justify-content: flex-end;
+  padding-block-start: var(--space-4);
+}
+
+.home-new + .home-columns {
+  padding-block-start: var(--space-4);
+}

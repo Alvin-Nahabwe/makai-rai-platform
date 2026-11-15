@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { LocalTime } from '@/components/ui/LocalTime';
 import { formatDeclaredDate } from '@/lib/format/dates';
@@ -16,6 +16,18 @@ export type SavedMarkProps = {
    * form whose own status line already announces the save, passes `live={false}`, which drops the three attributes.
    */
   live?: boolean;
+  /**
+   * Additive (T3 item 9): the saved time as the caller writes it, in place of LocalTime's (a caller that shows another zone
+   * near the mark passes a time that names its zone). Absent, the mark is exactly as before.
+   */
+  savedTime?: ReactNode;
+  /**
+   * Additive (lane 2 T5, review A A3c-2): the history link as the caller renders it, in place of the plain anchor built from
+   * `historyHref` (the decision card passes one that a held Save turns into text). Absent, the mark is exactly as before.
+   */
+  historyLink?: ReactNode;
+  /** Additive (lane 2 T5, design N4): the saved shape as the caller draws it, in place of the kit's outline check. */
+  shape?: ReactNode;
 };
 
 /**
@@ -24,24 +36,25 @@ export type SavedMarkProps = {
  * mounted and empty while nothing is saved, so a polite live region exists before its words arrive and announces them.
  * It is not a client component: it has no state or handler, and LocalTime inside it is its own client boundary.
  */
-export function SavedMark({ saved, historyHref, live = true }: SavedMarkProps): ReactElement {
+export function SavedMark({ saved, historyHref, live = true, savedTime, historyLink, shape }: SavedMarkProps): ReactElement {
   const region = live ? ({ role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' } as const) : {};
   const copy = UI_COPY.saved;
   return (
-    <div className="ui-saved" {...region}>
+    // data-decision-version (additive, lane 6's copy rule X-1 via the coordinator): the version the mark speaks of, while it shows one.
+    <div className="ui-saved" data-decision-version={saved === null ? undefined : saved.version} {...region}>
       {saved === null ? null : (
         <>
-          <span className="ui-saved__shape"><Icon name="circle-check" size={24} /></span>
+          <span className="ui-saved__shape">{shape ?? <Icon name="circle-check" size={24} />}</span>
           <p className="ui-saved__title">{copy.title(saved.version)}</p>
           <p className="ui-saved__when">
             {saved.decidedOn === null ? null : `${copy.decidedOn} ${formatDeclaredDate(saved.decidedOn)} · `}
-            {`${copy.savedAt} `}<LocalTime at={saved.savedAt} />
+            {`${copy.savedAt} `}{savedTime ?? <LocalTime at={saved.savedAt} />}
           </p>
           <p className="ui-saved__line">
             {copy.onPlatform}
             {saved.version > 1 ? (
               <span className="ui-saved__history">
-                {` ${copy.keptBefore(saved.version - 1)}`}{historyHref ? <a href={historyHref}>{copy.keptLink}</a> : copy.keptLink}.
+                {` ${copy.keptBefore(saved.version - 1)}`}{historyLink ?? (historyHref ? <a href={historyHref}>{copy.keptLink}</a> : copy.keptLink)}.
               </span>
             ) : null}
           </p>

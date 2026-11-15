@@ -85,7 +85,7 @@ function decisionRequests(page: Page): () => number {
   return () => n;
 }
 
-test('UX-30 NFR-PERF-06: under the Poor profile the line shows changing byte counts as text and no progress element', async ({ page, baseURL }) => {
+test('UX-30 NFR-PERF-06 C5: under the Poor profile the line shows changing byte counts as text, and its one progress element sits in [data-upload-progress]', async ({ page, baseURL }) => {
   await applyNetworkProfile(page, 'Poor');
   await openS12(page, 'assessor', baseURL as string);
   await chooseFile(page, pdfOf(2_400_000, 'costing.pdf'));
@@ -94,7 +94,9 @@ test('UX-30 NFR-PERF-06: under the Poor profile the line shows changing byte cou
   await page.waitForTimeout(3000);
   expect(await uploadLine(page, 'costing.pdf')).not.toBe(first);
   expect(first).toMatch(/^Uploading costing\.pdf: \d\.\d of 2\.4 MB\.$/);
-  await expect(page.locator('progress, [role="progressbar"]')).toHaveCount(0);
+  // Plan 1C C5: the file's own native progress element, inside [data-upload-progress], and no other.
+  await expect(page.locator('[data-upload-progress] > progress')).toHaveCount(1);
+  await expect(page.locator('progress, [role="progressbar"]')).toHaveCount(1);
 });
 
 test('M-18 UX-30: reloading mid-upload names the file that was not uploaded', async ({ page, baseURL }) => {
