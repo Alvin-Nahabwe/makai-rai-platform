@@ -37,8 +37,8 @@ describe('webLink', () => {
   });
 
   it('a host carrying bidi controls (E14) is no web link at all: the URL parser refuses it, so it is never an anchor', () => {
-    expect(webLink('https://ex‮ample.org/')).toBeNull();
-    expect(webLink('https://example.org⁦/')).toBeNull();
+    expect(webLink(`https://ex${String.fromCharCode(0x202e)}ample.org/`)).toBeNull();
+    expect(webLink(`https://example.org${String.fromCharCode(0x2066)}/`)).toBeNull();
   });
 
   it('is null for anything that is not an http or https URL, so the caller shows it as text', () => {
