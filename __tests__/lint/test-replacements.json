@@ -2616,7 +2616,7 @@
     "task": "plan 1B Task 1 (the gate frame and the (gate) route group), ruling L5-3"
   },
   {
-    "kind": "wording",
+    "kind": "rule",
     "changed": "e2e/decision-save.spec.ts::UX-30: a failed upload is never waited out by itself; Save without it leaves it out and names it",
     "replacedBy": "e2e/decision-save.spec.ts::UX-30: a failed upload is never waited out by itself; Save without it leaves it out and names it",
     "property": "A failed upload is never waited out: Save waits and names the file, Save without this file leaves it out, and the line after the save names it. The owner's ruling of 15 Nov 2026, 14:30 (review B-M5): the wait card says a failed or refused file did not upload and what the person can do, \"<name> did not upload. Retry it, remove it, or save without it.\", instead of waiting for it to finish uploading, which it will not do by itself.",
@@ -2648,7 +2648,7 @@
     "task": "Route rebuild lane 2 task 4 (the join with lane 1's question page)"
   },
   {
-    "kind": "wording",
+    "kind": "structure",
     "changed": "__tests__/unit/s12-shell.test.tsx::UX-31 FR-PRJ-03: an archived project shows the archived banner on S-12",
     "replacedBy": "__tests__/unit/s12-shell.test.tsx::UX-31 FR-PRJ-03: an archived project shows the archived banner on S-12",
     "property": "An archived project shows the archived banner on S-12, above the regions.",
@@ -2672,11 +2672,27 @@
     "task": "Route rebuild lane 2 task 4 (the join with lane 1's question page)"
   },
   {
-    "kind": "wording",
+    "kind": "structure",
     "changed": "__tests__/unit/s12-shell.test.tsx::NFR-SEC-02 FR-DEC-01: the page asks for record:read in this organisation, then loads the panel for this question",
     "replacedBy": "__tests__/unit/s12-shell.test.tsx::NFR-SEC-02 FR-DEC-01: the page asks for record:read in this organisation, then loads the panel for this question",
     "property": "The page asks for record:read in this organisation, then loads the panel for this question and the stage list with the same context.",
     "proof": "No assertion changed. The fixture's current version gains receivedAt, which the decision card formats (the card is real in this file, not mocked).",
     "task": "Route rebuild lane 2 task 4 (the join with lane 1's question page)"
+  },
+  {
+    "kind": "rule",
+    "changed": "e2e/question-frame.spec.ts::at 375 by 812 the page is one column in reading order: heading, current decision, form, finding link (in the decision), guidance; nothing scrolls sideways; the end of the page clears the fixed save bar",
+    "replacedBy": "e2e/question-frame.spec.ts::at 375 by 812 the page is one column in reading order: heading, the decision card, guidance; nothing scrolls sideways; the end of the page clears the fixed save bar",
+    "property": "At 375 by 812 the page is one column whose regions follow each other on the screen and in the document in reading order, nothing scrolls sideways, and the end of the page clears the fixed save bar. The merged decision card (owner's ruling R2) is one region holding the current decision, the form and, after a save, the finding link, so the order is heading, the decision card, guidance.",
+    "proof": "The case now requires no section[data-region=\"current-decision\"] or section[data-region=\"finding-link\"] on the page (toHaveCount(0)), then the same box-below-box and compareDocumentPosition checks over #question-heading, section[data-region=\"answer-form\"] and aside[data-region=\"guidance\"] (follows equals [true, true]); the no-horizontal-scroll and route-column-above-the-fixed-bar checks are unchanged. It failed 10 of 10 at b4a9dc00 waiting for the stub's current-decision section (x10 diagnosis class (a)).",
+    "task": "Route rebuild lane 2 task 5 (lane 1's cases re-expressed on the merged card)"
+  },
+  {
+    "kind": "rule",
+    "changed": "e2e/question-frame.spec.ts::S9: at ${width} by ${height}, after a save on the first question, the foot's Next question link is below the form, scrolls into view clear of the save bar, and opens the next question",
+    "replacedBy": "e2e/question-frame.spec.ts::S9: at ${width} by ${height}, after a save on the first question, the card's Next link in its Save row is on the screen, clear of the save bar, and opens the next question",
+    "property": "After a save on the first question, at 1280 by 900 and 375 by 812, the way on to the next question is one link, a target of at least 24 px, wholly on the screen once scrolled to, and it opens Q-PP-02. With the merged card (owner's ruling R2, R9) the way on is the card's \"Next: <question>\" link in its Save row (.decision-save-bar), inside the card, not a foot below the form; in the fixed or pinned bar it is the bar's own control, so it cannot be under it.",
+    "proof": "The case waits for the card's saved mark to leave \"No decision yet.\", requires [data-region=\"way-on\"] to be absent, one link named /^Next: / in .decision-save-bar, contained in section[data-region=\"answer-form\"], its box on the screen with height >= 24 and bottom <= the viewport height after scrollIntoView, then clicks it and requires the Q-PP-02 code line. It failed 10 of 10 at b4a9dc00 on the stub's current-decision section (x10 diagnosis class (a)).",
+    "task": "Route rebuild lane 2 task 5 (lane 1's cases re-expressed on the merged card)"
   }
 ]

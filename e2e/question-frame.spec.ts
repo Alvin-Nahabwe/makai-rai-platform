@@ -116,22 +116,22 @@ test('the column starts at 72.5rem: at 1160 the main column keeps 30rem beside a
   expect(guide4.y, 'at 1430 the guide is below the main column').toBeGreaterThanOrEqual(main4.y + main4.height);
 });
 
-test('at 375 by 812 the page is one column in reading order: heading, current decision, form, finding link (in the decision), guidance; nothing scrolls sideways; the end of the page clears the fixed save bar', async ({ page, baseURL }) => {
+test('at 375 by 812 the page is one column in reading order: heading, the decision card, guidance; nothing scrolls sideways; the end of the page clears the fixed save bar', async ({ page, baseURL }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await openQuestion(page, 'assessor', Q, baseURL!);
-  const order = [
-    heading(page), page.locator('section[data-region="current-decision"]'), form(page), page.locator('section[data-region="finding-link"]'), aside(page),
-  ];
+  // The merged card (lane 2) holds the current decision, the form and, after a save, the finding link: one region.
+  await expect(page.locator('section[data-region="current-decision"], section[data-region="finding-link"]')).toHaveCount(0);
+  const order = [heading(page), form(page), aside(page)];
   const boxes = await Promise.all(order.map(box));
   for (let i = 1; i < boxes.length; i++) {
     expect(boxes[i].y, `region ${i} is below region ${i - 1}`).toBeGreaterThanOrEqual(boxes[i - 1].y + boxes[i - 1].height);
   }
   const follows = await page.evaluate(() => {
-    const els = ['#question-heading', 'section[data-region="current-decision"]', 'section[data-region="answer-form"]', 'section[data-region="finding-link"]', 'aside[data-region="guidance"]']
+    const els = ['#question-heading', 'section[data-region="answer-form"]', 'aside[data-region="guidance"]']
       .map((s) => document.querySelector(s)!);
     return els.slice(1).map((el, i) => (els[i].compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0);
   });
-  expect(follows).toEqual([true, true, true, true]);
+  expect(follows).toEqual([true, true]);
   await expectNoHorizontalScroll(page);
   // The page's last content (the route column, last in reading order) scrolls clear of the bar fixed to the bottom.
   const bar = page.locator('.decision-save-bar');
@@ -269,32 +269,26 @@ test('S3: after the personal data answer is No, Q-PP-13 and Q-PP-14 say they do 
 });
 
 for (const [width, height] of [[1280, 900], [375, 812]] as const) {
-  test(`S9: at ${width} by ${height}, after a save on the first question, the foot's Next question link is below the form, scrolls into view clear of the save bar, and opens the next question`, async ({ page, baseURL }) => {
+  test(`S9: at ${width} by ${height}, after a save on the first question, the card's Next link in its Save row is on the screen, clear of the save bar, and opens the next question`, async ({ page, baseURL }) => {
     await page.setViewportSize({ width, height });
     await openQuestion(page, 'assessor', Q, baseURL!);
     await fillValid(page);
     await page.getByRole('button', { name: 'Save decision', exact: true }).click();
     await expect(saveStatus(page)).toHaveText(/^Saved at /);
-    // The save refreshes the page from the server, which fills "Current decision" above the form and moves the way on down
-    // by its height; measure after that, not between the two (a race seen once in five runs at 375, fix round 3).
-    await expect(page.locator('section[data-region="current-decision"]')).not.toContainText(QUESTION_COPY.current.none);
-    const next = wayOn(page).getByRole('link', { name: /^Next question: / });
+    // The save refreshes the page from the server, which fills the card's saved mark; measure after that, not between the
+    // two (a race seen once in five runs at 375, fix round 3).
+    await expect(form(page).locator('.decision-card__corner, .decision-card__saved-block').first()).not.toContainText(QUESTION_COPY.current.none);
+    // The way on is the merged card's "Next: <question>" link in its Save row (lane 2); the old foot is gone.
+    await expect(wayOn(page)).toHaveCount(0);
+    const next = page.locator('.decision-save-bar').getByRole('link', { name: /^Next: / });
     await expect(next).toHaveCount(1);
-    await expect(wayOn(page).getByRole('link', { name: QUESTION_COPY.nav.allQuestions, exact: true })).toBeVisible();
-    const f = await box(form(page));
-    const n = await box(next);
-    expect(n.y, 'the link is below the form').toBeGreaterThanOrEqual(f.y + f.height);
+    expect(await next.evaluate((el, f) => f.contains(el), await form(page).elementHandle()), 'the link is inside the decision card').toBe(true);
     await next.evaluate((el) => el.scrollIntoView({ block: 'end', behavior: 'instant' }));
     const seen = await box(next);
     expect(seen.y, 'the link is on the screen').toBeGreaterThanOrEqual(0);
     expect(seen.height, 'the link is a target of at least 24px').toBeGreaterThanOrEqual(24);
-    const bar = page.locator('.decision-save-bar');
-    if (await bar.evaluate((el) => getComputedStyle(el).position) === 'fixed') {
-      const b = await box(bar);
-      expect(seen.y + seen.height, 'the link ends above the fixed save bar').toBeLessThanOrEqual(b.y);
-    } else {
-      expect(seen.y + seen.height, 'the link ends on the screen').toBeLessThanOrEqual(height);
-    }
+    // In the save bar (fixed on a phone, pinned or in its place on a wide screen) the link is the bar's, so it ends on the screen.
+    expect(seen.y + seen.height, 'the link ends on the screen').toBeLessThanOrEqual(height);
     await next.click();
     await expect(page.locator('#question-heading + .question-frame__code')).toHaveText(/^Q-PP-02 \u00b7 /);
   });

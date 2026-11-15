@@ -1,7 +1,7 @@
 import { appendFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { failOnDialog } from './helpers/dialogs';
-import { actAsSeat, fillValid, newProject, openQuestion, openQuestionIn, saveStatus, saveViaApi, waitForQuestionPage } from './helpers/session';
+import { actAsSeat, fillValid, openQuestion, openQuestionIn, saveStatus, saveViaApi, waitForQuestionPage } from './helpers/session';
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
 import { WITHDRAW_COPY } from '../lib/decision/copy';
 import { EVIDENCE_COPY } from '../lib/evidence/copy';
@@ -56,10 +56,10 @@ async function expectFocusClear(page: Page): Promise<boolean> {
   return p.pinned && !p.inBar;
 }
 
-test('Option A: at 1280 by 800 the Save row pins to the screen\'s foot while its place is below, returns to it at the card\'s end, and there is one Save', async ({ page, baseURL }) => {
+test('Option A: at 1280 by 800 the Save row pins to the screen\'s foot while its place is below, returns to it at the card\'s end, and there is one Save', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await openQuestion(page, 'assessor', Q, baseURL!);
+  await actAsSeat(page, 'admin'); await openQuestionIn(page, Q);
   const first = await bar(page);
   expect(first.position).toBe('sticky');
   expect(first.pinned).toBe(true);
@@ -80,9 +80,9 @@ test('Option A: at 1280 by 800 the Save row pins to the screen\'s foot while its
   expect(end.top).toBeGreaterThanOrEqual(consequence.y + consequence.height - 0.5);
 });
 
-test('Option A SC 2.4.11: at 1280 by 800 every control from the status choices to the evidence controls, reached by Tab, is above the pinned row', async ({ page, baseURL }) => {
+test('Option A SC 2.4.11: at 1280 by 800 every control from the status choices to the evidence controls, reached by Tab, is above the pinned row', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  await openQuestion(page, 'assessor', Q, baseURL!);
+  await actAsSeat(page, 'admin'); await openQuestionIn(page, Q);
   await page.getByRole('radio', { name: 'Done', exact: true }).focus();
   let pinnedChecks = 0;
   const seen: string[] = [];
@@ -108,9 +108,64 @@ test('Option A SC 2.4.11: at 1280 by 800 every control from the status choices t
   expect(pinnedChecks).toBeGreaterThanOrEqual(5);
 });
 
-test('Option A SC 2.4.11: at 1280 by 800 each error summary link lands its field above the pinned row', async ({ page, baseURL }) => {
+for (const [w, h] of [[1280, 800], [1440, 900]] as const) {
+  test(`N1 SC 2.4.11: at ${w} by ${h}, while an edit is unsaved the pinned row stays one line taller at most, the focused Reason and every control after it by Tab are above it, and the whole unsaved sentence is still read`, async ({ page }) => {
+    await page.setViewportSize({ width: w, height: h });
+    await actAsSeat(page, 'admin'); await openQuestionIn(page, Q);
+    const row = page.locator('.decision-save-bar');
+    const before = await row.evaluate((el) => el.getBoundingClientRect().height);
+    const reason = page.getByLabel(`${F.fields.reason} ${FIELD_COPY.required}`, { exact: true });
+    await reason.focus();
+    await page.keyboard.type('Typed and not saved');
+    // C7: the live span holds the whole sentence (its accessible text), and the unsaved line is showing.
+    await expect(page.locator('.save-status [aria-live="polite"]')).toHaveText(F.unsaved);
+    await expect(reason).toBeFocused();
+    expect((await bar(page)).pinned, 'the row is pinned while the person types').toBe(true);
+    const grown = await row.evaluate((el) => el.getBoundingClientRect().height);
+    // While pinned the row shows the line's first sentence only: one line more than before, not three (design N1).
+    expect(grown, `pinned row ${before} px before the edit, ${grown} px with the unsaved line`).toBeLessThanOrEqual(before + 32);
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    const place = await reason.evaluate((el) => ({ bottom: el.getBoundingClientRect().bottom, barTop: document.querySelector('.decision-save-bar')!.getBoundingClientRect().top }));
+    expect(place.bottom, `Reason's foot ${place.bottom}, row's top ${place.barTop}`).toBeLessThanOrEqual(place.barTop + 0.5);
+    // Tab through the remaining fields and the evidence controls with the unsaved line showing.
+    let pinnedChecks = 0;
+    const seen: string[] = [];
+    for (let i = 0; i < 60; i++) {
+      await page.keyboard.press('Tab');
+      const p = await focusPlace(page);
+      if (p.inBar || !p.inForm) break;
+      if (await expectFocusClear(page)) pinnedChecks++;
+      seen.push(p.what);
+      if (p.what.startsWith('button') && p.what.includes(EVIDENCE_COPY.addLinkToggle)) {
+        await page.keyboard.press('Enter');
+        if (await expectFocusClear(page)) pinnedChecks++;
+      }
+      if (p.what.startsWith('summary')) { await page.keyboard.press('Enter'); if (await expectFocusClear(page)) pinnedChecks++; }
+    }
+    for (const want of ['select#decision-decided-by', EVIDENCE_COPY.addFile, EVIDENCE_COPY.addLinkToggle, '-link-url', EVIDENCE_COPY.addLink]) {
+      expect(seen.some((s) => s.includes(want)), `focus reached ${want} (seen: ${seen.join(' | ')})`).toBe(true);
+    }
+    expect(pinnedChecks).toBeGreaterThanOrEqual(3);
+    await expect(page.locator('.save-status [aria-live="polite"]')).toHaveText(F.unsaved);
+    // Back in its place at the card's end, the whole sentence shows.
+    await page.locator('section.decision-card').evaluate((el) => el.scrollIntoView({ block: 'end', behavior: 'instant' }));
+    expect((await bar(page)).pinned).toBe(false);
+    // Each of its parts is drawn (not only in a one-pixel box for a screen reader) and wholly on the screen.
+    const first = F.unsaved.slice(0, F.unsaved.indexOf('.') + 1);
+    for (const part of [first, F.unsaved.slice(first.length + 1)]) {
+      const drawn = await page.locator('section.decision-card').evaluate((card, text) => [...card.querySelectorAll('*')].some((el) => {
+        if (el.children.length > 0 || !(el.textContent ?? '').includes(text)) return false;
+        const r = el.getBoundingClientRect();
+        return r.height > 10 && r.width > 50 && r.top >= 0 && r.bottom <= document.documentElement.clientHeight;
+      }), part);
+      expect(drawn, `"${part}" is drawn in the card`).toBe(true);
+    }
+  });
+}
+
+test('Option A SC 2.4.11: at 1280 by 800 each error summary link lands its field above the pinned row', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  await openQuestion(page, 'assessor', Q, baseURL!);
+  await actAsSeat(page, 'admin'); await openQuestionIn(page, Q);
   await page.locator('.decision-save-bar').getByRole('button', { name: F.save, exact: true }).click();
   const links = page.locator('[data-error-summary] a');
   await expect(links.first()).toBeVisible();
@@ -125,8 +180,9 @@ test('Option A SC 2.4.11: at 1280 by 800 each error summary link lands its field
 
 test('Option A, register D-398 item 1 at the wide width: an open withdrawal confirmation is never under the Save row', async ({ page, baseURL }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  const projectId = await openQuestion(page, 'assessor', Q, baseURL!);
-  expect((await saveViaApi(baseURL!, 'assessor', projectId, Q, { reason: 'Version 1' })).status).toBe(201);
+  await actAsSeat(page, 'admin');
+  const projectId = await openQuestionIn(page, Q);
+  expect((await saveViaApi(baseURL!, 'admin', projectId, Q, { reason: 'Version 1' })).status).toBe(201);
   await page.reload(); await waitForQuestionPage(page);
   await page.locator('details.more-menu > summary').click();
   await page.getByRole('button', { name: WITHDRAW_COPY.trigger }).click();
@@ -145,12 +201,14 @@ for (const [w, h] of [[1280, 800], [1440, 900], [1160, 800]] as const) {
     test(`Option A first view: at ${w} by ${h} Save's whole box is in the viewport on load, no scroll (${which})`, async ({ page, baseURL }) => {
       await page.setViewportSize({ width: w, height: h });
       const question = which.startsWith('Q-PP-01') ? 'Q-PP-01' : 'Q-PP-03';
-      const projectId = await newProject(baseURL!);
+      // The admin seat makes the project (openQuestionIn), not the owner, whose project creations the other specs share.
+      await actAsSeat(page, 'admin');
+      const projectId = await openQuestionIn(page, question);
       if (question === 'Q-PP-03') {
-        expect((await saveViaApi(baseURL!, 'assessor', projectId, question, { status: 'partly', reason: 'Version 1' })).status).toBe(201);
-        expect((await saveViaApi(baseURL!, 'assessor', projectId, question, { status: 'partly', reason: 'Version 2', baseVersionNumber: 1 })).status).toBe(201);
+        expect((await saveViaApi(baseURL!, 'admin', projectId, question, { status: 'partly', reason: 'Version 1' })).status).toBe(201);
+        expect((await saveViaApi(baseURL!, 'admin', projectId, question, { status: 'partly', reason: 'Version 2', baseVersionNumber: 1 })).status).toBe(201);
+        await page.reload(); await waitForQuestionPage(page);
       }
-      await openQuestion(page, 'assessor', question, baseURL!, projectId);
       const save = page.locator('.decision-save-bar').getByRole('button', { name: F.save, exact: true });
       const box = (await save.boundingBox())!;
       const natural = await page.locator('.decision-save-bar').evaluate((el) => {
@@ -168,9 +226,9 @@ for (const [w, h] of [[1280, 800], [1440, 900], [1160, 800]] as const) {
   }
 }
 
-test('B-I1 C5: while a Save waits for an upload the way on is text, not a link; the upload shows its progress and one "Save without"; after it, the save goes and the link returns', async ({ page, baseURL }) => {
+test('B-I1 C5: while a Save waits for an upload the way on is text, not a link; the upload shows its progress and one "Save without"; after it, the save goes and the link returns', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  await openQuestion(page, 'assessor', Q, baseURL!); await fillValid(page);
+  await actAsSeat(page, 'admin'); await openQuestionIn(page, Q); await fillValid(page);
   let release: () => void = () => {};
   const held = new Promise<void>((r) => { release = r; });
   await page.route('**/evidence', async (route) => {
@@ -195,9 +253,9 @@ test('B-I1 C5: while a Save waits for an upload the way on is text, not a link; 
   await expect(page.locator('.decision-save-bar a.decision-next')).toHaveAttribute('href', /questions\//);
 });
 
-test('C4: after a lost save the one control reads Retry; an edit turns it back to Save decision; never two', async ({ page, baseURL, context }) => {
+test('C4: after a lost save the one control reads Retry; an edit turns it back to Save decision; never two', async ({ page, context }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  await openQuestion(page, 'assessor', Q, baseURL!); await fillValid(page);
+  await actAsSeat(page, 'admin'); await openQuestionIn(page, Q); await fillValid(page);
   await context.setOffline(true);
   await page.getByRole('button', { name: F.save, exact: true }).click();
   const submit = page.locator('[data-region="answer-form"] [type="submit"]');
