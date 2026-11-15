@@ -1,7 +1,8 @@
 /*
  * The reading view for a Reviewer or a Viewer (components/question/ReadingDecision.tsx and ReadingAside.tsx), to
  * directions/surfaces/viewer-reading.html: its values copied onto the kit's roles (app/globals.css), so both themes hold.
- * The sketch's 15 px steps (figcaption, evidence rows, aside text) are 0.9375rem; its 13 px small text is the legal size.
+ * The sketch's 15 px steps (figcaption, evidence rows, aside text) are the body size, 16 px, and its 13 px small text is
+ * the small size, 14 px: the spec's ramp (7.4, body 16, small 14) over the sketch's values (design reviews 1 and 2).
  */
 
 /* The card: one white surface with its border, radius 8 and soft shadow (sketch .rec). */
@@ -63,7 +64,7 @@
 
 .reading-decision__decided {
   margin-block-start: var(--space-2);
-  font-size: 0.9375rem;
+  font-size: var(--font-size-body);
   font-weight: var(--font-weight-semibold);
 }
 
@@ -103,7 +104,7 @@
 
 .reading-evidence h3 {
   margin: 0;
-  font-size: 0.9375rem;
+  font-size: var(--font-size-body);
   font-weight: var(--font-weight-bold);
 }
 
@@ -126,7 +127,7 @@
   gap: var(--space-2) var(--space-3);
   min-height: var(--target-primary);
   padding: 6px 0;
-  font-size: 0.9375rem;
+  font-size: var(--font-size-body);
   line-height: 1.35;
 }
 
@@ -181,7 +182,7 @@
 
 .reading-aside p {
   margin: 0;
-  font-size: 0.9375rem;
+  font-size: var(--font-size-body);
   line-height: 1.55;
 }
 
@@ -238,7 +239,7 @@
 .reading-aside__next p:first-child {
   margin-block-start: 0;
   color: var(--color-ink);
-  font-size: 0.9375rem;
+  font-size: var(--font-size-body);
 }
 
 /* A phone: the card and its quotation keep more of the width for the words. */

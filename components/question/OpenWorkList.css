@@ -37,7 +37,7 @@
 
 .still-open__title {
   color: var(--color-ink);
-  font-size: 0.9375rem;
+  font-size: var(--font-size-body);
   font-weight: var(--font-weight-bold);
 }
 
