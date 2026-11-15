@@ -72,11 +72,15 @@ describe('the words (R10, L5-10)', () => {
     const all = Object.values(IDLE_TEXTS).join(' ');
     expect(all).not.toMatch(/nothing has happened|inactiv/i);
     expect(IDLE_TEXTS.warningBody).toMatch(/12 hours after you sign in, or after you last chose Stay signed in/);
-    expect(IDLE_TEXTS.warningBody).toMatch(/Save your work now, or choose Stay signed in\./);
+    // I-4 (amends L5-10): the dialog makes the page inert, so the person stays signed in first, then saves.
+    expect(IDLE_TEXTS.warningBody).toMatch(/Choose Stay signed in, then save your work\.$/);
+    expect(IDLE_TEXTS.warningBody).not.toMatch(/Save your work now/);
     expect(all).not.toMatch(/[–—]/);
   });
 
-  it('AUTH_COPY carries the same session words', () => {
+  it('AUTH_COPY carries the same session words, and S-01 says the same reason sentence as the notice (M-5)', () => {
+    expect(AUTH_COPY.signedOutIdle).toBe(IDLE_TEXTS.endedIdle);
+    expect(AUTH_COPY.signedOutAbsolute).toBe(IDLE_TEXTS.endedAbsolute);
     expect(AUTH_COPY.endedIdle).toBe(IDLE_TEXTS.endedIdle);
     expect(AUTH_COPY.endedAbsolute).toBe(IDLE_TEXTS.endedAbsolute);
     expect(AUTH_COPY.warningBody).toBe(IDLE_TEXTS.warningBody);
@@ -98,7 +102,10 @@ describe('the warning and the notice', () => {
     expect(h).toMatch(/^<div[^>]*role="alert"/);
     expect(h).toContain(AUTH_COPY.endedAbsolute);
     expect(h).toContain(IDLE_TEXTS.endedKept);
-    expect(h).toMatch(new RegExp(`<a [^>]*href="/login\\?x"[^>]*>${IDLE_TEXTS.signInAgain}</a>`));
+    // I-7: Sign in again is a link drawn as the kit's primary button (44 px), under the text at every width.
+    expect(h).toMatch(new RegExp(`<a class="ui-button ui-button--primary" href="/login\\?x"[^>]*>${IDLE_TEXTS.signInAgain}</a>`));
+    expect(h).not.toContain('ui-banner__action');
+    expect(h.indexOf(IDLE_TEXTS.endedKept)).toBeLessThan(h.indexOf(IDLE_TEXTS.signInAgain));
     expect(h).toContain('ui-banner--session');
   });
 
@@ -116,6 +123,9 @@ describe('the warning and the notice', () => {
     expect(src.match(/writeSignedOutHint\(/g)).toHaveLength(1);
     expect(src).toMatch(/if \(reason !== null\) writeSignedOutHint\(tabStorage\(\), reason, Date\.now\(\)\)/);
     expect(src.match(/clearSignedOutHint\(tabStorage\(\)\)/g)).toHaveLength(2);
+    // B-1: one tabStorage, beside the hint's key in lib/auth/idle.ts.
+    expect(src).toMatch(/import \{[^}]*\btabStorage\b[^}]*\} from '@\/lib\/auth\/idle'/);
+    expect(src).not.toMatch(/function tabStorage/);
     const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
     expect(code).not.toMatch(/localStorage|makrai\.draft|purge|removeItem|setItem/);
   });

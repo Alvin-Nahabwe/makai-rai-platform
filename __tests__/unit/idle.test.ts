@@ -342,7 +342,7 @@ describe('IdleWarning', () => {
     // SignOutWithDraftsGuard stays the only purge path (R-53); the 'ended' state leaves the page as it is. Plan 1B Task 4 (C12)
     // adds one storage: the signed-out hint in this tab's sessionStorage, written and removed only through lib/auth/idle.ts.
     expect(src).not.toMatch(/localStorage|indexedDB|location\.(assign|replace|href\s*=)|router\.(push|replace|refresh)|useRouter|location\.reload|signOut\(/);
-    expect(src.match(/sessionStorage/g)).toHaveLength(1);
+    expect(src).not.toMatch(/sessionStorage/);   // reached only through lib/auth/idle.ts's tabStorage (code review B-1)
     expect(src).not.toMatch(/\.(setItem|removeItem|getItem|clear)\(/);
     const idle = stripComments(readFileSync('lib/auth/idle.ts', 'utf8'));
     expect(idle.match(/\.(setItem|removeItem)\(SIGNED_OUT_HINT_KEY/g)).toHaveLength(2);

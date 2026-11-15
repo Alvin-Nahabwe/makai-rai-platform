@@ -174,6 +174,15 @@ export function endReason(p: { secondsLeft: number; absoluteSecondsLeft: number;
   return null;
 }
 
+/** This tab's sessionStorage, or null where reading the property throws (blocked site data) or there is no window. */
+export function tabStorage(): Storage | null {
+  try {
+    return typeof window === 'undefined' ? null : window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * C12: leaves S-01 the reason the session ended in this tab (`{ reason, at }` under SIGNED_OUT_HINT_KEY; S-01 reads it once,
  * LoginClient.tsx readSignedOutHint). Storage that is absent or refuses the write leaves no hint: S-01 then says no

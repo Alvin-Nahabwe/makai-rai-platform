@@ -11,6 +11,7 @@ import {
   settleStay,
   signInAgainHref,
   stayOutcome,
+  tabStorage,
   withMargin,
   writeSignedOutHint,
   type IdleDeadlines,
@@ -23,15 +24,6 @@ import { Dialog } from '@/components/ui/Dialog';
 /** Why the session ended, as the clock tells it; null when the server ended it before either deadline. */
 export type EndedReason = 'idle' | 'absolute' | null;
 
-/** This tab's sessionStorage, or null where reading the property throws (blocked site data). */
-function tabStorage(): Storage | null {
-  try {
-    return window.sessionStorage;
-  } catch {
-    return null;
-  }
-}
-
 /**
  * The signed-out notice (owner default B35; plan 1B Task 4, C12). It is ordinary page content, not a dialog: nothing is
  * inert, so a mouse or touch user can still select and copy what they typed, and the link goes back to the same address
@@ -42,8 +34,11 @@ export function IdleEndedNotice({ signInHref, reason }: { signInHref: string; re
   const why = reason === 'idle' ? IDLE_TEXTS.endedIdle : reason === 'absolute' ? IDLE_TEXTS.endedAbsolute : IDLE_TEXTS.endedElsewhere;
   return (
     <div role="alert" className="shell-idle__ended">
-      <Banner kind="session" action={<a href={signInHref}>{IDLE_TEXTS.signInAgain}</a>}>
+      <Banner kind="session">
         <p>{why} {IDLE_TEXTS.endedKept}</p>
+        {/* The one way forward, a link drawn as the kit's primary button (44 px; design review I-7), under the text at every
+            width. A plain link: it is a full load, which reads the session afresh. */}
+        <a className="ui-button ui-button--primary" href={signInHref} style={{ marginBlockStart: 'var(--space-3)' }}>{IDLE_TEXTS.signInAgain}</a>
       </Banner>
     </div>
   );
