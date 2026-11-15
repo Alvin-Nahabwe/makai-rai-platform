@@ -68,7 +68,9 @@ function productionCsp(): string {
 function pageFiles(): string[] {
   const files = execFileSync('git', ['ls-files', 'app/**/page.tsx'], { encoding: 'utf8' })
     .split('\n')
-    .filter(Boolean);
+    .filter(Boolean)
+    // A parallel-route slot (`@name`) mirrors pages that already have an address; it is not one.
+    .filter((f) => !f.split('/').some((s) => s.startsWith('@')));
   if (files.length === 0) throw new Error('git ls-files found no page.tsx under app/, so there is nothing to sweep');
   return files;
 }
@@ -79,7 +81,8 @@ function pageFiles(): string[] {
 function pageFileCount(): number {
   return fs
     .readdirSync('app', { recursive: true, encoding: 'utf8' })
-    .filter((entry) => /(^|[\\/])page\.(tsx?|jsx?|mdx?)$/.test(entry)).length;
+    .filter((entry) => /(^|[\\/])page\.(tsx?|jsx?|mdx?)$/.test(entry) && !entry.split(/[\\/]/).some((s) => s.startsWith('@')))
+    .length;
 }
 
 /**
@@ -332,7 +335,7 @@ async function visit(context: BrowserContext, route: Route): Promise<Visit> {
     // Follow one link to somewhere else, so the navigation itself (including the client
     // router's own fetches, which `connect-src` governs) runs under the policy too. A page
     // with no such link is recorded, and must be listed in NO_LINK_TO_FOLLOW.
-    const href = await page.locator('a[href^="/"]').evaluateAll(
+    const href = await page.locator('main a[href^="/"]:visible').evaluateAll(
       (links, { here, only }) =>
         links
           .map((a) => a as HTMLAnchorElement)
@@ -346,7 +349,7 @@ async function visit(context: BrowserContext, route: Route): Promise<Visit> {
       followed = href;
       await Promise.all([
         page.waitForURL((url) => url.pathname !== landed, { timeout: 10_000 }),
-        page.locator(`a[href="${href}"]`).first().click(),
+        page.locator(`main a[href="${href}"]:visible`).first().click(),
       ]);
       await page.waitForLoadState('networkidle');
     }
