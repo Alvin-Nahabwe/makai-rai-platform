@@ -25,11 +25,31 @@ const pagesOf = (dir: string, skipSlots: boolean) => filesUnder(dir)
   .map((f) => f.slice(dir.length + 1)).sort();
 const isProjectPage = (rel: string) => rel.startsWith('orgs/[slug]/projects/[id]/');
 
+/**
+ * What breaks the mirror, as lines that say what to do: each signed-in page without a slot page names the slot page to
+ * create, and each slot page without a signed-in page names itself (Next.js 16's strict route matching refuses it).
+ */
+function mirrorProblems(pages: readonly string[], slotPages: readonly string[]): string[] {
+  const missing = pages.filter((p) => !slotPages.includes(p))
+    .map((p) => `missing ${SLOT}/${p} (mirror of ${GROUP}/${p})`);
+  const extra = slotPages.filter((p) => !pages.includes(p))
+    .map((p) => `${SLOT}/${p} has no signed-in page at ${GROUP}/${p}: delete it`);
+  return [...missing, ...extra];
+}
+
 describe('the @project slot mirrors every signed-in page', () => {
   it('R4: every page of app/(authenticated) has a page at the same path in the slot, and the slot has no other page', () => {
     const pages = pagesOf(GROUP, true);
     expect(pages.length).toBeGreaterThanOrEqual(27);
-    expect(pagesOf(SLOT, false)).toEqual(pages);
+    expect(mirrorProblems(pages, pagesOf(SLOT, false)), 'the @project slot must mirror app/(authenticated) page for page').toEqual([]);
+  });
+
+  it('(self-test) a missing mirror is named by the path to create, and a slot page with no signed-in page by its own path', () => {
+    expect(mirrorProblems(['account/page.tsx', 'orgs/[slug]/settings/members/page.tsx'], ['account/page.tsx', 'explore/old/page.tsx'])).toEqual([
+      'missing app/(authenticated)/@project/orgs/[slug]/settings/members/page.tsx (mirror of app/(authenticated)/orgs/[slug]/settings/members/page.tsx)',
+      'app/(authenticated)/@project/explore/old/page.tsx has no signed-in page at app/(authenticated)/explore/old/page.tsx: delete it',
+    ]);
+    expect(mirrorProblems(['a/page.tsx'], ['a/page.tsx'])).toEqual([]);
   });
 
   it('R4: outside a project, the slot\'s page renders nothing and reads nothing', () => {

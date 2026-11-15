@@ -251,12 +251,14 @@ describe('the logo files are sized WebP copies, no larger than drawn at 1x and 2
     expect(chunk).toBe('VP8 ');
     return { width: b.readUInt16LE(26) & 0x3fff, height: b.readUInt16LE(28) & 0x3fff, bytes: b.length };
   }
+  // The byte ceilings hold the coordinator's ruling of 15 November 2026 (lossy WebP q70 for both logos): with the footer
+  // in the first view, S-04's first visit fetches both 1x files, and S-04 had about 2.6 KB to find (NFR-PERF-02).
   it.each([
-    ['public/logo-makai-white-154.webp', 154, 36], ['public/logo-makai-white-308.webp', 308, 72],
-    ['public/logo-dswb-white-125.webp', 125, 40], ['public/logo-dswb-white-250.webp', 250, 80],
-  ])('%s is %i x %i, and small', (path, width, height) => {
+    ['public/logo-makai-white-154.webp', 154, 36, 2_000], ['public/logo-makai-white-308.webp', 308, 72, 4_500],
+    ['public/logo-dswb-white-125.webp', 125, 40, 2_000], ['public/logo-dswb-white-250.webp', 250, 80, 4_500],
+  ])('%s is %i x %i, and under %i bytes', (path, width, height, ceiling) => {
     const size = webpSize(path);
     expect(size).toMatchObject({ width, height });
-    expect(size.bytes).toBeLessThan(8_000);
+    expect(size.bytes).toBeLessThan(ceiling);
   });
 });
