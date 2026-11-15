@@ -34,7 +34,7 @@ describe('E-04 and E-05', () => {
       'A mitigation assigned to you in Makerere CAI Lab is due today, 2 Nov 2026.\n\nOpen Home to see it:\nhttps://makrai.org/orgs/makerere-cai/dashboard\n\n' +
         'You get this email because this mitigation is assigned to you. You can turn these emails off in My account.',
     );
-    expect(mitigationOverdueEmail(IN).text.split('\n\n')[0]).toBe('A mitigation assigned to you in Makerere CAI Lab was due on 2 Nov 2026. It is now 7 days late.');
+    expect(mitigationOverdueEmail(IN).text.split('\n\n')[0]).toBe(EMAIL_COPY.reminder.overdueIntro('Makerere CAI Lab', '2 Nov 2026'));
   });
 
   it('16d: with & and < in the organisation name the HTML part is escaped and equals the copy', () => {

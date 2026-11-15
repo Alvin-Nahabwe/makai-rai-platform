@@ -2150,5 +2150,21 @@
     "property": "The in-page link down to the suggestions shows exactly while the guidance (and the suggestions in it) is not beside the form, is a target of at least 24 by 24 pixels, and keeps a visible focus ring; it is hidden by the same media query that puts the guidance beside the form in components/question/workspace.css.",
     "proof": "With the route column (owner's decision of 14 November 2026) the guidance sits beside the form only from 90rem; from 72.5rem to under 90rem it is below the form. The case now requires `@media (width >= 90rem) { .question-content__jump { display: none;` in QuestionContent.css and the same query in workspace.css opening the three-column grid (`grid-template-columns: minmax(16rem, 1fr) minmax(0, 2fr) minmax(16rem, 1fr); grid-template-areas: \"route main guide\";`), in place of the 72.5rem pair; the 24 px, focus-ring, colour-role and no-75rem expectations are unchanged. Seen RED on the old pattern after the CSS moved to 90rem, GREEN with the new one; e2e/question-frame.spec.ts sees the link visible at 1160 and hidden at 1440.",
     "task": "lane 7 part 2 (the route column on the question page)"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/integration/documents-routes.test.ts::FR-DOC-04 FR-REV-08: an erased document answers 410 with its date and no bytes",
+    "replacedBy": "__tests__/integration/documents-routes.test.ts::FR-DOC-04 FR-REV-08: an erased document answers 410 with its date and no bytes",
+    "property": "An erased document answers 410 with code `erased` and the date it was erased, and no bytes.",
+    "proof": "The same case: `error` was the literal 'Erased' and is now HTTP_COPY.erased(<that day>), 'This record was erased on <day>.' (audit E-API-11); the status, `code` and `erasedOn` expectations are unchanged.",
+    "task": "lane 6 B2 (plan 1A Task 20, E6)"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/integration/documents-routes.test.ts::FR-DOC-04 FR-REV-08 (C4 D11, SO-1): after erase_text_field on the file name a document printed, route 17 answers 410 with the date, not 500",
+    "replacedBy": "__tests__/integration/documents-routes.test.ts::FR-DOC-04 FR-REV-08 (C4 D11, SO-1): after erase_text_field on the file name a document printed, route 17 answers 410 with the date, not 500",
+    "property": "An erased document answers 410 with code `erased` and the date it was erased, and no bytes.",
+    "proof": "The same case: `error` was the literal 'Erased' and is now HTTP_COPY.erased(<that day>), 'This record was erased on <day>.' (audit E-API-11); the status, `code` and `erasedOn` expectations are unchanged.",
+    "task": "lane 6 B2 (plan 1A Task 20, E6)"
   }
 ]

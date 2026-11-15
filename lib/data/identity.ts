@@ -2,6 +2,7 @@ import { PrismaClient, type Prisma } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 import { withUnavailableStamp } from '../http/supportReference';
+import { GONE_NAME_COPY } from '../http/copy';
 import { hmrSingleton, requireDatabaseUrl } from './connection';
 
 /**
@@ -392,7 +393,7 @@ export async function scrubUserOnDeactivation(
     where: { id: userId },
     data: {
       email: `deleted-${userId}@invalid`,
-      name: 'Deleted user',
+      name: GONE_NAME_COPY.deletedAccount,
       passwordHash: randomPasswordHash,
       isActive: false,
       sessionEpoch: { increment: 1 },

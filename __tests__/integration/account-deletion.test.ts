@@ -14,6 +14,7 @@ import { deleteAccount } from '../../lib/data/export';
 import { authorizeCredentials } from '../../lib/auth/credentials';
 import { withOrg } from '../../lib/data/tenant';
 import { userRefs } from '../../lib/data/views';
+import { GONE_NAME_COPY } from '../../lib/http/copy';
 import * as identityReads from '../../lib/data/identityReads';
 
 /**
@@ -140,7 +141,7 @@ describe('route 39, DELETE /api/users/me', () => {
     expect(await authorizeCredentials({ email: assessor.email, password: assessor.password },
       new Request('http://localhost/api/auth/callback/credentials', { method: 'POST' }))).toBeNull();
     expect(await testDb.membership.count({ where: { userId: assessor.userId } })).toBe(0);
-    expect((await withOrg(ctxFor(fx, 'admin'), (tx) => userRefs(tx, [assessor.userId]))).get(assessor.userId)).toMatchObject({ name: 'Deleted user', formerMember: true });
+    expect((await withOrg(ctxFor(fx, 'admin'), (tx) => userRefs(tx, [assessor.userId]))).get(assessor.userId)).toMatchObject({ name: GONE_NAME_COPY.deletedAccount, formerMember: true });
     const after = await testDb.user.findUniqueOrThrow({ where: { id: assessor.userId } });
     expect([after.sessionEpoch, after.isActive, after.email === assessor.email]).toEqual([epochBefore + 1, false, false]);
     // The records stay, attributed to the scrubbed account (FR-EXP-03 "keep the records they entered").

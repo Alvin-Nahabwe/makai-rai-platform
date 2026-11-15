@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireIdentityForApi } from '@/lib/auth/identity';
 import { AppError } from '@/lib/http/errors';
+import { ADMIN_ROUTE_COPY } from '@/lib/http/api/copy';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { toResponse } from '@/lib/http/toResponse';
 import { readJsonBody } from '@/lib/http/jsonBody';
@@ -22,11 +23,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ org
   try {
     assertSameOrigin(req);
     const identity = await requireIdentityForApi();
-    if (identity.platformRole !== 'admin') throw new AppError(403, 'not_platform_admin');
+    if (identity.platformRole !== 'admin') throw new AppError(403, 'not_platform_admin', ADMIN_ROUTE_COPY.notPlatformAdmin);
     const { orgId } = await params;
     const body = parseIssueOwnerInvitation(await readJsonBody(req));
     // An archived organisation gives its invitee S-31 on every page: no first owner is invited into it (C4 ORG-SF-5).
-    if (await organisationArchivedForAdmin(orgId)) throw new AppError(409, 'organisation_archived');
+    if (await organisationArchivedForAdmin(orgId)) throw new AppError(409, 'organisation_archived', ADMIN_ROUTE_COPY.organisationArchived);
     const orgName = await organisationNameForAdmin(orgId);
     const rawToken = randomBytes(32).toString('hex');
     invitationAcceptUrl(rawToken);   // throws now, before any write, when the public origin is not configured

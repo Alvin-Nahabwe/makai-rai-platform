@@ -10,6 +10,7 @@ import { listOrganisationEvents } from '../../lib/data/orgEvents';
 import { ALL_ORG_EVENT_ACTIONS, OrganisationEventsList, actionWords } from '../../components/org/OrganisationEventsList';
 import type { OrgEventView } from '../../types/api';
 import { ORG_COPY } from '../../lib/org/copy';
+import { GONE_NAME_COPY } from '../../lib/http/copy';
 
 /**
  * S-30's read and its slot (FR-ORG-09; SRS lines 333, 577): the organisation's own administrator and membership
@@ -88,8 +89,8 @@ describe('listOrganisationEvents', () => {
     const g = await event(fxA, { actorId: ghost, actorRole: 'platform_admin', action: 'owner_invitation_revoked', targetInvitationId: ghost, at: new Date(Date.now() + 1000) });
     const { result, lines } = await captureLogs(() => listOrganisationEvents(ctxFor(fxA, 'owner'), { limit: 2 }));
     expect(result.events.map((x) => x.id)).toEqual([g.id, e.id]);
-    expect(result.events[0]).toMatchObject({ actorName: 'An account no longer on the platform', targetName: 'An invitation no longer recorded' });
-    expect(result.events[1]).toMatchObject({ actorName: admin.name, targetName: 'An account no longer on the platform' });
+    expect(result.events[0]).toMatchObject({ actorName: GONE_NAME_COPY.deletedAccount, targetName: GONE_NAME_COPY.removedInvitation });
+    expect(result.events[1]).toMatchObject({ actorName: admin.name, targetName: GONE_NAME_COPY.deletedAccount });
     const logged = lines.filter((l) => l.includes('org_event_reference_missing'));
     expect(logged).toEqual([
       `org_event_reference_missing event=${g.id} field=actorId id=${ghost}`,
