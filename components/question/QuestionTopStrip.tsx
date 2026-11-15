@@ -4,7 +4,7 @@ import { Breadcrumb } from '@/components/ui/Breadcrumb';
 import { Term } from '@/components/ui/Definition';
 import { Icon } from '@/components/ui/Icon';
 import { MarkShape } from '@/components/ui/StatusMark';
-import { TermTip } from '@/components/ui/TermTip';
+import { TermTip, termTipIds } from '@/components/ui/TermTip';
 import type { StatusMarkKind } from '@/components/ui/types';
 import { tallyWords, positionWords } from '@/lib/ui/copy';
 import { tallyOfRows } from '@/lib/question/route';
@@ -15,6 +15,7 @@ import { PROJECT_COPY } from '@/lib/project/copy';
 import type { DefinedEntry } from '@/lib/vocabulary/types';
 import {
   TERM_DONE, TERM_DOES_NOT_APPLY, TERM_FINDING, TERM_MITIGATION, TERM_NOT_APPLICABLE, TERM_NOT_YET, TERM_PARTLY,
+  TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION,
 } from '@/lib/vocabulary/terms';
 
 const F = QUESTION_COPY.frame;
@@ -25,9 +26,9 @@ const KINDS: readonly StatusMarkKind[] = ['done', 'partly', 'not_yet', 'not_appl
 
 /**
  * The vocabulary entry each tally word is defined by (owner's ruling of 15 November 2026, 11:00: an (i) beside each
- * defined word). "answered" has no entry of its own (the personal data question's entry defines the question, not the
- * word), and "No decision" is defined but marked not to be defined at first use (`defineOnFirstUse: false`, which
- * `Definition` refuses), so neither gets a tip.
+ * defined word). The personal data question's item reads "1 personal data question answered" and its tip defines the
+ * personal data question (lane 6's wording ruling, fix round 2; rendered below). "No decision" is defined but marked not
+ * to be defined at first use (`defineOnFirstUse: false`, which `Definition` refuses), so it gets no tip.
  */
 const DEFINED: Readonly<Partial<Record<StatusMarkKind, DefinedEntry>>> = {
   done: TERM_DONE, partly: TERM_PARTLY, not_yet: TERM_NOT_YET, not_applicable: TERM_NOT_APPLICABLE, does_not_apply: TERM_DOES_NOT_APPLY,
@@ -45,7 +46,7 @@ function FollowUpCount({ href, words, of, className, icon }: {
 }): ReactElement {
   return (
     <span className="question-top__count">
-      <Link className={className} href={href} prefetch={false} aria-describedby={`term-tip-${of.id}-def`}>{icon}<Term of={of}>{words}</Term></Link>
+      <Link className={className} href={href} prefetch={false} aria-describedby={termTipIds(of).definition}>{icon}<Term of={of}>{words}</Term></Link>
       <TermTip of={of} label={F.whatIs(of.term)} />
     </span>
   );
@@ -96,6 +97,15 @@ export function QuestionTopStrip({ stage, n, total }: QuestionTopStripProps): Re
           const all = tallyWords({ [k]: count });
           if (!all.startsWith(`${count} `)) throw new Error(`QuestionTopStrip: the tally's words for ${k} do not start with the count`);
           const words = all.slice(String(count).length + 1);
+          if (k === 'scope_answered') {
+            const pd = TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION;
+            return (
+              <li key={k} className="ui-mark" data-mark-kind={k}>
+                <MarkShape kind={k} size={16} /><b>{count}</b> <Term of={pd}>{F.personalDataAnswered.term}</Term>{F.personalDataAnswered.after}
+                <TermTip of={pd} label={F.whatIsTerm(pd.term)} />
+              </li>
+            );
+          }
           const entry = DEFINED[k];
           return (
             <li key={k} className="ui-mark" data-mark-kind={k}>

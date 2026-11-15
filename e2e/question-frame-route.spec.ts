@@ -156,14 +156,20 @@ async function fullTally(page: Page, baseURL: string, info: TestInfo, label: str
   return all;
 }
 
-test('fix round 1 (I1, owner 11:00): the full tally with every (i) at 1280x800 and 1440x900: the strip\'s rows and the slot', async ({ page, baseURL }, info) => {
-  const projectId = await newProject(baseURL!);
-  for (const id of ['Q-PP-02', 'Q-PP-03', 'Q-PP-04']) await decide(baseURL!, projectId, id, 'done');
-  for (const id of ['Q-PP-05', 'Q-PP-06']) await decide(baseURL!, projectId, id, 'partly');
-  await decide(baseURL!, projectId, 'Q-PP-07', 'not_yet', 'ny_planned_later');
-  await decide(baseURL!, projectId, 'Q-PP-08', 'not_applicable', 'na_other');
-  await decide(baseURL!, projectId, 'Q-PP-GATE-SENSITIVE', 'scope');
+/** Seeds one real decision of every kind in a new project named `name`, for the full tally. */
+async function seedEveryKind(baseURL: string, name?: string): Promise<string> {
+  const projectId = await newProject(baseURL, name);
+  for (const id of ['Q-PP-02', 'Q-PP-03', 'Q-PP-04']) await decide(baseURL, projectId, id, 'done');
+  for (const id of ['Q-PP-05', 'Q-PP-06']) await decide(baseURL, projectId, id, 'partly');
+  await decide(baseURL, projectId, 'Q-PP-07', 'not_yet', 'ny_planned_later');
+  await decide(baseURL, projectId, 'Q-PP-08', 'not_applicable', 'na_other');
+  await decide(baseURL, projectId, 'Q-PP-GATE-SENSITIVE', 'scope');
+  return projectId;
+}
+
+test('fix rounds 1-2 (I1, N1, owner 11:00): the full tally with every (i) at 1280x800 and 1440x900, and long project names at 1280: the strip\'s rows and the slot', async ({ page, baseURL }, info) => {
   const results: Record<string, Awaited<ReturnType<typeof fullTally>>> = {};
+  const projectId = await seedEveryKind(baseURL!);
   for (const [w, h] of [[1280, 800], [1440, 900], [1160, 800]] as const) {
     await page.setViewportSize({ width: w, height: h });
     await openQuestion(page, 'assessor', Q, baseURL!, projectId);
@@ -173,9 +179,26 @@ test('fix round 1 (I1, owner 11:00): the full tally with every (i) at 1280x800 a
     results[`${w}x${h}`] = await fullTally(page, baseURL!, info, `${w}x${h}`);
     await shot(page, info, `full-tally-${w}x${h}`);
   }
+  // N1: project names of 60 and 200 characters (the limit) at 1280: the breadcrumb stays one line, cut with an ellipsis.
+  for (const length of [60, 200]) {
+    const name = `Antenatal Risk Triage Model ${'for the fourteen centres of the region '.repeat(6)}`.slice(0, length - 6).trimEnd().padEnd(length - 6, 's')
+      + ` ${String(Date.now()).slice(-5)}`;
+    expect(name.length).toBe(length);
+    const longId = await seedEveryKind(baseURL!, name);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await openQuestion(page, 'assessor', Q, baseURL!, longId);
+    await page.locator('#question-heading').evaluate((el, text) => { el.textContent = text; }, REAL_Q01);
+    const project = page.locator('.question-top .ui-breadcrumb').getByRole('link', { name, exact: true });
+    await expect(project, 'the link keeps the whole name as its text').toHaveCount(1);
+    results[`1280x800-name${length}`] = await fullTally(page, baseURL!, info, `1280x800-name${length}`);
+    const crumbs = await box(page.locator('.question-top .ui-breadcrumb'));
+    expect(crumbs.height, `the breadcrumb is one line with a ${length}-character name`).toBeLessThanOrEqual(30);
+    expect(results[`1280x800-name${length}`].slotTop, `slot with a ${length}-character name`).toBeLessThanOrEqual(230);
+    await shot(page, info, `full-tally-1280x800-name${length}`);
+  }
   const r1280 = results['1280x800'];
-  // Every (i): two follow-up counts and five defined status words.
-  expect(r1280.tips).toBe(7);
+  // Every (i): two follow-up counts, five defined status words and the personal data question.
+  expect(r1280.tips).toBe(8);
   expect(r1280.tallyRows, `the tally needs ${r1280.tallyNeeds}px of ${r1280.tallyHas}px at 1280`).toBe(1);
   expect(r1280.followTop, 'the follow-up counts are on the breadcrumb\'s row').toBeLessThanOrEqual(r1280.crumbsRowTop + 4);
   expect(r1280.slotTop, `the decision slot starts at ${r1280.slotTop}px at 1280x800`).toBeLessThanOrEqual(230);
@@ -203,27 +226,42 @@ test('R4: the top strip at 1280 is one line of breadcrumb and one of tally, with
   // One line each: the tally's line is no taller than one 24px line plus its leading.
   const line = await box(strip.locator('.question-top__tally'));
   expect(line.height, 'the tally is one line at 1280').toBeLessThanOrEqual(30);
-  // TermTip (owner's ruling of 11:00): keyboard focus opens the definition, Escape closes it, a press opens it; the link is
-  // described by it. The sentence is the vocabulary's.
+  // TermTip, a toggletip (coordinator's ruling, fix round 2): focus alone opens nothing; Enter or Space on the focused (i)
+  // opens it and a second press closes it; Escape closes it; a click opens it; a press inside keeps it open; focus leaving
+  // closes it. The link is described by it. The sentence is the vocabulary's.
   const def = page.locator('#term-tip-finding-def');
   const tip = strip.getByRole('button', { name: QUESTION_COPY.frame.whatIs('finding') });
   await expect(def).toBeHidden();
   await tip.focus();
-  await expect(def, 'focus opens it').toBeVisible();
+  await page.waitForTimeout(300);
+  await expect(def, 'focus alone opens nothing').toBeHidden();
+  await page.keyboard.press('Enter');
+  await expect(def, 'Enter opens it').toBeVisible();
   await expect(def).toHaveText('A gap your team has noted for a question, so it can be dealt with and closed.');
-  // Taken with the tip's button focused (the shared helper blurs first, which would close a tip opened by focus).
+  await expect(tip).toHaveAttribute('aria-describedby', 'term-tip-finding-def');
   await page.screenshot({ path: 'test-results/route-T1/top-strip-1280-definition-open.png' });
   await page.keyboard.press('Escape');
   await expect(def, 'Escape closes it').toBeHidden();
-  await page.mouse.click(5, 5);
+  await expect(tip).toBeFocused();
+  await page.keyboard.press('Space');
+  await expect(def, 'Space opens it').toBeVisible();
+  await page.keyboard.press('Space');
+  await expect(def, 'a second press closes it').toBeHidden();
   await tip.click();
-  await expect(def, 'a press opens it').toBeVisible();
+  await expect(def, 'a click opens it').toBeVisible();
+  const d = await box(def);
+  await page.mouse.click(d.x + 8, d.y + d.height / 2);
+  await expect(def, 'a press inside the open tip keeps it open').toBeVisible();
   await page.mouse.click(700, 600);
   await expect(def, 'a press elsewhere closes it').toBeHidden();
+  await tip.click();
+  await expect(def).toBeVisible();
+  await page.keyboard.press('Tab');
+  await expect(def, 'focus leaving closes it').toBeHidden();
   await expect(findings).toHaveAccessibleDescription(/A gap your team has noted/);
-  // A status word's (i): "Partly" is defined, so it has one; tab to it from the finding's (i)... it opens on focus too.
+  // A status word's (i): "Partly" is defined, so it has one; a press opens its sentence.
   const partly = strip.getByRole('button', { name: QUESTION_COPY.frame.whatMeans('Partly') });
-  await partly.focus();
+  await partly.click();
   await expect(page.locator('#term-tip-partly-def')).toHaveText('Some of it is in place, but not all of it.');
   await expect(page.locator('#term-tip-partly-def')).toBeVisible();
   const box24 = await box(partly);

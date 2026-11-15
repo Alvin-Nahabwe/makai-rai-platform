@@ -142,8 +142,8 @@ describe('the top strip (R4), shown from 1160px', () => {
     /** An item's visible words: its tip (button and popover) and its mark left out. */
     const visible = (i: string) => i.replace(/<span class="ui-term-tip">[\s\S]*?<\/span><\/span><\/span>/, '').replace(/<svg[\s\S]*?<\/svg>/, '').replace(/<[^>]+>/g, '');
     const words = items.map(visible);
-    // 3 done, 2 partly, 1 not yet, 1 not applicable, 1 answered (the personal data question), 16 with no decision.
-    expect(words).toEqual(['3 done', '2 partly', '1 not yet', '1 not applicable', '1 answered', '16 no decision']);
+    // 3 done, 2 partly, 1 not yet, 1 not applicable, the personal data question answered (its vocabulary term, lane 6), 16 with no decision.
+    expect(words).toEqual(['3 done', '2 partly', '1 not yet', '1 not applicable', '1 personal data question answered', '16 no decision']);
     for (const i of items) expect(i).toMatch(/^<svg class="ui-mark__shape" width="16" height="16"[\s\S]*<\/svg><b>\d+<\/b> /);
     expect(tally).toContain('data-mark-kind="done"');
     // Named by a label, not a heading: no heading comes before the page's h1 (fix round 1, M2).
@@ -167,7 +167,7 @@ describe('the top strip (R4), shown from 1160px', () => {
     expect(none).not.toContain('question-top__follow');
   });
 
-  it('owner 11:00 ruling: each defined word carries a TermTip with the vocabulary\'s sentence: finding, mitigation, and the status words the vocabulary defines; not "answered" or "no decision"', async () => {
+  it('owner 11:00 ruling: each defined word carries a TermTip with the vocabulary\'s sentence: finding, mitigation, the status words and the personal data question; not "no decision"', async () => {
     const html = top(await render());
     for (const id of ['finding', 'mitigation']) {
       expect(html).toMatch(new RegExp(`<a[^>]*aria-describedby="term-tip-${id}-def"[^>]*>[\\s\\S]*?<span data-term="${id}">`));
@@ -178,10 +178,13 @@ describe('the top strip (R4), shown from 1160px', () => {
       expect(html, id).toContain(`aria-label="${esc(QUESTION_COPY.frame.whatMeans(term))}"`);
       expect(html, id).toMatch(new RegExp(`<span class="ui-definition" id="term-tip-${id}-def" data-definition="${id}">`));
     }
-    // One tip per defined word: six here (two counts, four statuses); "answered" and "no decision" have none.
-    expect(html.match(/class="ui-term-tip__button"/g)).toHaveLength(6);
+    // One tip per defined word: seven here (two counts, four statuses, the personal data question); "no decision" has none.
+    expect(html.match(/class="ui-term-tip__button"/g)).toHaveLength(7);
     const answered = between(html, 'data-mark-kind="scope_answered"', '</li>');
-    expect(answered).not.toContain('ui-term-tip');
+    expect(answered).toContain('<span data-term="personal-data-question-scope-question">personal data question</span> answered');
+    expect(answered).toContain(`aria-label="${esc(QUESTION_COPY.frame.whatIsTerm('the personal data question'))}"`);
+    expect(answered).toMatch(/<span class="ui-definition" id="term-tip-personal-data-question-scope-question-def" data-definition="personal-data-question-scope-question">If you answer No, the questions about consent and anonymisation do not apply\.<\/span>/);
+    expect(html).not.toMatch(/scope question/i);
     expect(between(html, 'data-mark-kind="no_decision"', '</li>')).not.toContain('ui-term-tip');
   });
 

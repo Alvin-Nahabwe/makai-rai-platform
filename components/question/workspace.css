@@ -57,6 +57,34 @@
 
 .question-top .ui-breadcrumb {
   margin: 0;
+  min-inline-size: 0;
+}
+
+/*
+ * The breadcrumb stays one line beside the follow-up counts (fix round 2, N1): a long project name (they run to 200
+ * characters) is cut with an ellipsis rather than wrapping the row and pushing the decision past the 230px gate. The link
+ * keeps the whole name as its text, so a screen reader and the address are unchanged; the stage and the position never
+ * shrink. Scoped to this strip: the kit's Breadcrumb wraps everywhere else.
+ */
+.question-top .ui-breadcrumb__list {
+  flex-wrap: nowrap;
+}
+
+.question-top .ui-breadcrumb__item {
+  flex: none;
+}
+
+.question-top .ui-breadcrumb__item:first-child {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+}
+
+.question-top .ui-breadcrumb__item:first-child a {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: var(--target-min);
 }
 
 .question-top__tally {

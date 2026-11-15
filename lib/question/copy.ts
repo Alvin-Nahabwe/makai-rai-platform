@@ -23,6 +23,14 @@ export const QUESTION_COPY = Object.freeze({
     tallyHeading: "Your team's work in this stage",
     /** The accessible name of the (i) beside a noun the vocabulary defines (spec 6; owner's ruling of 15 Nov, 11:00). */
     whatIs: (term: string): string => `What is a ${term}?`,
+    /** The accessible name of the (i) beside a term that carries its own article: "What is the personal data question?". */
+    whatIsTerm: (term: string): string => `What is ${term}?`,
+    /**
+     * The tally's words for the personal data question once answered (lane 6, vocabulary owner: the vocabulary's term,
+     * never "scope question"), after its bold count: "1 personal data question answered": the term without its article,
+     * marked so its (i) can follow, then `after`.
+     */
+    personalDataAnswered: Object.freeze({ term: 'personal data question', after: ' answered' }),
     /** The accessible name of the (i) beside a status word the vocabulary defines: 'What does "Not yet" mean?'. */
     whatMeans: (term: string): string => `What does "${term}" mean?`,
     /**
