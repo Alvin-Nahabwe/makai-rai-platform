@@ -2166,5 +2166,117 @@
     "property": "Route 11 posted for an open shortfall finding whose mitigation is Planned leaves the finding open. The old case pinned the server as it stood in 0.7.0 (201 and a closing record written); route decision R11 (security review 0.7.0 L-2) makes the server refuse that close, so the case now pins the refusal through the route handler: 409, the body {error: the close box's sentence, code: finding_has_open_work}, no row written.",
     "proof": "The case posts route 11 through the real handler as an assessor for a finding with one Planned mitigation and a qualifying done decision, and requires status 409, the JSON body to equal exactly { error: FINDINGS_COPY.failures.openWork, code: 'finding_has_open_work' } (FINDINGS_COPY.failures.openWork is the close box's FINDINGS_COPY.finding.closeBlocked, asserted equal in findings-close-by-decision.test.ts), mitigation_versions still 1 (the Planned one), and openShortfallForQuestion still naming the finding. The stuck record the old case produced is still built for the page tests by __tests__/helpers/recordFixture.ts addPreR11ClosingRecord.",
     "task": "lane 7 R11"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::(module)",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::UX-06 FR-PRJ-02: to-do counts come before recorded counts in each stage column",
+    "property": "The S-10 cases render the project page as it ships, from data the test builds, and read each stage where it is. The page is now components/project/ProjectPage.tsx (three StageLine lines of stops, Route R5); ProjectOverview.tsx and the StageColumn component are deleted, and StageReviewsSummary is no longer mounted on S-10 (the reviews are each line's own Reviews stop), so its mock and the props it recorded go. The page takes each stage's row of marks (lib/project/routes.ts), so the helper builds them from the same counts the cases already pass.",
+    "proof": "Module changes only: the imports of StatusMarkKind, tallyOf and ProjectRoutes; the StageReviewsSummary vi.mock and its vi.hoisted list removed; ProjectPage imported in place of StageColumn and ProjectOverview; routesOf(d), the test's own helper, builds one stop per question from d.counts (done, partly, not yet, not applicable, does not apply, no decision, the rest answered) and the tally with tallyOf(kinds, doneWithoutEvidence), as lib/project/routes.ts shapes them; renderPage renders ProjectPage with those routes and no primary action; preLine slices the pre-processing line; textOf strips tags. Every S-08, S-09, S-32 and writer case is byte for byte as before. So these cases prove what the page renders from given routes, not how the routes are read: that the real routes hold the stored decisions (the marks, the gated questions as not applying, the named questions with no decision) is __tests__/integration/project-routes.test.ts, case \"each stage's marks are the stage page's marks, in its order; the named questions are its no-decision rows; their count is the page's count\", which fails when the gate read is removed.",
+    "task": "lane 4 Task A (Route R5: S-10 as three lines of stops)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::FR-PRJ-03: S-10 passes canOpen to each stage's review summary and shows Export project only with team:export",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::FR-PRJ-03: S-10 offers Open a stage review on each stage's line only with review:open on a live project, and Download records only with team:export",
+    "property": "Each stage offers \"Open a stage review\" exactly when the role has review:open and the project is not archived, and \"Download records\" shows exactly with team:export. The page no longer mounts StageReviewsSummary (whose canOpen prop the old case read through a mock): each line renders its own Reviews stop, so the property is read from the rendered links.",
+    "proof": "For owner, reviewer and viewer, live and archived, the case renders the page and requires, per stage in STAGES order, the presence of href=\"/orgs/o/projects/p1/reviews/new?stage=<stage>\" to equal can(role, 'review:open') && !archived, and the presence of PROJECT_COPY.overview.downloadRecords to equal can(role, 'team:export') (unchanged). Dropping the archived check or the role check in StageLine's Reviews stop fails it.",
+    "task": "lane 4 Task A (Route R5: S-10 as three lines of stops)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::UX-06 FR-PRJ-02: to-do counts come before recorded counts in each stage column",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::UX-06 FR-PRJ-02: to-do counts come before recorded counts in each stage column",
+    "property": "In each stage the to-do counts come before the recorded counts and none is a percentage, score or \"complete\". The stage is now a line of stops, rendered as the page renders it; its overdue count reads \"Overdue: 1 mitigation\" (the red word and its count, spec 7.1) where the old column said \"1 overdue mitigation\".",
+    "proof": "The case renders the page with COUNTS and slices the pre-processing line; it requires \"Still open in this stage\" before \"9 questions with no decision\", that before \"Recorded so far\", and that before \"7 done (2 with no evidence attached)\"; \"3 open findings\"; and, tags stripped, PROJECT_COPY.followUp.overdue + ': ' + PROJECT_COPY.mitigationCount(1). The no-%/score/complete line is unchanged. The recorded counts in the tally are those the test's routesOf helper built from COUNTS; that the real routes hold the stored decisions is __tests__/integration/project-routes.test.ts, case \"each stage's marks are the stage page's marks, in its order; the named questions are its no-decision rows; their count is the page's count\".",
+    "task": "lane 4 Task A (Route R5: S-10 as three lines of stops)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::UX-06 (R12-16, spec 7.2): each status phrase of a stage column is the kit's mark with its words in ink, and none carries the warning class",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::UX-06 (R12-16, spec 7.2): each status phrase of a stage column is the kit's mark with its words in ink, and none carries the warning class",
+    "property": "Recorded so far shows each status as the kit's mark, hidden from assistive technology, with words, never a warning style. It is now the kit's RouteRow (plan 1C Task 8): one stop per question (drawn without a link on S-10, lead's ruling on C5), each holding the hidden MarkShape and the question's status in words, and the tally in words after the row; the old list of one item per kind is gone.",
+    "proof": "The case slices the pre-processing line's Recorded so far stop and requires 24 <li class=\"ui-route-row__stop\" data-mark-kind=...> stops whose <span class=\"ui-route-row__point\"> holds <svg class=\"ui-mark__shape\" ... aria-hidden=\"true\">; the tally paragraph <p class=\"ui-route-row__tally\"> split on ', ' to read exactly \"7 done (2 with no evidence attached)\", \"n partly\", \"n not yet\", \"n not applicable\", \"1 answered\"; and no status-label or warning in the stop. The ink is checked in the browser by expectStatusMarksInk (e2e/prj-screens.spec.ts).",
+    "task": "lane 4 Task A (Route R5: S-10 as three lines of stops)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::FR-PRJ-02: the stage column says how many open findings have no mitigation yet, and counts gated questions as not applying, beside those marked not applicable",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::FR-PRJ-02: the stage column says how many open findings have no mitigation yet, and counts gated questions as not applying, beside those marked not applicable",
+    "property": "The stage says how many open findings have no mitigation yet, and counts questions the personal data answer gates as not applying, beside those marked not applicable. The first use of \"finding\" and \"mitigation\" is now marked as the term with its definition beside it (spec 6), so the link and the bracket are no longer adjacent in the markup; the tally is the route row's.",
+    "proof": "The case renders the pre-processing line with notApplicableByGate: 2 and requires the link <a href=\"/orgs/o/projects/p1/findings?stage=pre-processing\">3 open findings</a>, the text (tags stripped) \"3 open findings (1 of them with no mitigation yet)\", and the route row's tally paragraph holding \"2 not applicable\" and \"2 do not apply\" as whole phrases. That proves the bracket and that a gated count is printed apart from not applicable; the routes here are built by the test's routesOf helper, so it does not prove that S-10 reads gated questions as not applying. That half is __tests__/integration/project-routes.test.ts, case \"each stage's marks are the stage page's marks, in its order; the named questions are its no-decision rows; their count is the page's count\", which requires Q-PP-13 (gated by a No answer) to be does_not_apply on S-10 as on the stage page, and fails when the gate read in lib/project/routes.ts is removed (mutation run, 15 Nov 2026).",
+    "task": "lane 4 Task A (Route R5: S-10 as three lines of stops)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::FR-PRJ-02: S-10 says how to share the record once, right after the stages and their reviews, before the findings link",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::FR-PRJ-02: S-10 says how to share the record once, right after the stages and their reviews, before the findings link",
+    "property": "S-10 says how to share the record once, after the stages and their reviews and before the link to the findings. The stages' frame is now <div class=\"project-lines-frame\"> (the jump links and the three lines) and the one findings link is the \"This project\" row's \"Findings\" (the old foot link \"Findings for this project\" is gone, spec 9.2).",
+    "proof": "The case requires the share line exactly once, balances the <div>s from <div class=\"project-lines-frame\"> to find its end, and requires the share line after that end and before '>' + PROJECT_COPY.findings + '</a>'. \"Team working view\" stays absent.",
+    "task": "lane 4 Task A (Route R5: S-10 as three lines of stops)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::S-10 (kit page header): a person with no action on the project gets no empty actions wrapper; an owner gets it, with Archive",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::S-10 (Route R5): the page header has no actions wrapper for any role; the owner's Archive control sits in the \"This project\" row",
+    "property": "No empty actions wrapper is left in the page header, and the owner's Archive control is on the page. Under R5 the header carries no actions at all (the primary action sits on a stage's line; the project actions are the quiet \"This project\" row at the foot), so no role gets the header's wrapper, and the control is in that row.",
+    "proof": "The case requires 'ui-page-header__actions' absent for a viewer and for an owner, and class=\"archive-control\" inside the markup from <nav class=\"project-actions\" on. Moving the control back into the header, or adding an empty actions slot, fails it.",
+    "task": "lane 4 Task A (Route R5: S-10 as three lines of stops)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::FR-PRJ-02: a new project shows \"No decisions recorded yet\" in each stage",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::FR-PRJ-02: a new project shows \"No decisions recorded yet\" in each stage",
+    "property": "A new project's page says in each of its three stages that nothing is recorded, with the kit's words UI_COPY.tally.none. The words are now the kit's RouteRow tally paragraph, under each stage's row of No decision marks.",
+    "proof": "The case renders the page with ZERO counts and requires <p class=\"ui-route-row__tally\">No decisions recorded yet</p> exactly three times (split length 4).",
+    "task": "lane 4 Task A (Route R5: S-10 as three lines of stops)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::UX-36: each stage is a plain block, named by its heading, that names its three to-do counts",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::UX-36: each stage is a plain block, named by its heading, that names its three to-do counts",
+    "property": "Each of the three stages is one section a person can find, named by its <h2>, that states its to-do counts. The section is now a line of stops (class stage-line); its heading's name is marked as the first use of the stage's term (spec 6), and the overdue count reads \"Overdue: 1 mitigation\".",
+    "proof": "The case requires three <section class=\"stage-line\" id=… data-stage=… aria-labelledby=…>, no <details>, the pre-processing <h2 id=…><span data-term=\"stage-1\">Pre-processing</span></h2>, and in its text \"9 questions with no decision\", \"3 open findings\" and PROJECT_COPY.followUp.overdue + ': ' + PROJECT_COPY.mitigationCount(1).",
+    "task": "lane 4 Task A (Route R5: S-10 as three lines of stops)"
+  },
+  {
+    "kind": "structure",
+    "changed": "e2e/role-matrix.spec.ts::(module)",
+    "replacedBy": "e2e/role-matrix.spec.ts::dashboard, projects, projects/new, project detail and members render only the controls this role may use",
+    "property": "O-13 on the project page after Route R5: every control in main is classified, and the role-gated ones show only for the roles that may use them. The page's one findings link is now the \"This project\" row's \"Findings\" (the foot link \"Findings for this project\" is gone, spec 9.2); each stage's Still open starts with a link \"N questions with no decision\" to the stage's filtered list, then the first three of those questions by name and \"and k more\". The rows of marks have no links on S-10 (lead's ruling on C5).",
+    "proof": "PROJECT_DETAIL_CONTROLS: the 'Findings for this project' entry becomes { name: PROJECT_COPY.findings, exact: true, action: null, located in nav.project-actions by role link and exact name }, so every role must see it, and the census classifies only a control whose whole text is \"Findings\" by it (a Control's new optional `exact`, passed to findUnclassifiedControls with each name; every other entry keeps the `includes` match). A new entry { name: 'questions with no decision', action: null, located in [data-stage=\"pre-processing\"] by a link whose name ends 'question(s) with no decision' } (the fixture's project is fresh, so every stage has one). findUnclassifiedControls ignores exactly the links of .stage-line__named (el.matches('.stage-line__named a[href]')): read-only navigation whose words are the questions', varying with data and the same for every role, as .project-card already is; any other control in that list stays in the census. Every role-gated entry (Start recording, Edit project, Download records, Archive project, Open a stage review) is unchanged; \"Edit project details\" still matches 'Edit project' by includes and by the link locator's substring name.",
+    "task": "lane 4 Task A (Route R5: S-10 as three lines of stops)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::UX-06 FR-PRJ-02: to-do counts come before recorded counts in each stage column",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::UX-06 FR-PRJ-02: to-do counts come before recorded counts in each stage column",
+    "property": "In each stage the to-do counts come before the recorded counts and none is a percentage, score or \"complete\". The recorded counts are now the kit's tally list: the count is bold and the status word may be marked as its term's first use, so \"7 done (2 with no evidence attached)\" is no longer one run of markup, only one run of text.",
+    "proof": "The case renders the page with COUNTS, slices the pre-processing line and reads its text (each (i), <span class=\"ui-term-tip\">, removed with its definition, then tags stripped): \"Still open in this stage\" before \"9 questions with no decision\", that before \"Recorded so far\", and that before \"7 done (2 with no evidence attached)\". \"3 open findings\", the overdue count's text and the no-%/score/complete line are unchanged. Moving the tally above Still open, or dropping the evidence caveat, fails it.",
+    "task": "lane 4 Task B (the kit RouteRow tally keyed by its marks, kept whole, with the status words' (i))"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::UX-06 (R12-16, spec 7.2): each status phrase of a stage column is the kit's mark with its words in ink, and none carries the warning class",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::UX-06 (R12-16, spec 7.2): each status phrase of a stage column is the kit's mark with its words in ink, and none carries the warning class",
+    "property": "Recorded so far shows each status as the kit's mark, hidden from assistive technology, with words, never a warning style. The tally after the row is now the kit's list keyed by the marks (owner's design finish review K1): one item per kind with a count, each its 16 px shape, the count and the words; a defined status word's item ends with its (i).",
+    "proof": "The case slices the pre-processing line's Recorded so far stop and requires the 24 stops as before; the tally is read as the text of each <li class=\"ui-route-row__tally-item\"> without its <span class=\"ui-term-tip\"> and must equal exactly \"7 done (2 with no evidence attached)\", \"n partly\", \"n not yet\", \"n not applicable\", \"1 answered\", in that order; no status-label or warning in the stop. The ink of the tally's shapes is checked in the browser by expectStatusMarksInk (e2e/project-page.spec.ts, e2e/prj-screens.spec.ts).",
+    "task": "lane 4 Task B (the kit RouteRow tally keyed by its marks, kept whole, with the status words' (i))"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::FR-PRJ-02: the stage column says how many open findings have no mitigation yet, and counts gated questions as not applying, beside those marked not applicable",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::FR-PRJ-02: the stage column says how many open findings have no mitigation yet, and counts gated questions as not applying, beside those marked not applicable",
+    "property": "The stage says how many open findings have no mitigation yet, and counts questions the personal data answer gates as not applying, beside those marked not applicable. The tally is now the kit's list, one item per kind.",
+    "proof": "The case renders the pre-processing line with notApplicableByGate: 2 and requires the findings link and the bracket's text as before, and among the tally items' texts (each <li class=\"ui-route-row__tally-item\"> without its (i)) the whole items \"2 not applicable\" and \"2 do not apply\": a gated count is printed apart from not applicable. That S-10 reads gated questions as not applying stays proved by __tests__/integration/project-routes.test.ts, as the lane 4 Task A row says.",
+    "task": "lane 4 Task B (the kit RouteRow tally keyed by its marks, kept whole, with the status words' (i))"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::UX-31 FR-PRJ-03: an archived project shows the banner and no form or Archive control on S-10",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::UX-31 FR-PRJ-03: an archived project shows the banner and no form or Archive control on S-10",
+    "property": "An archived project's page shows the archived banner's sentence, and no form and no Archive control. The sentence's words \"All projects page\" are now a link to the organisation's projects (lane 1's design review S5-1), so the sentence is no longer one run of markup, only one run of text.",
+    "proof": "The case renders S-10 archived for an owner and requires PROJECT_COPY.archivedBanner in its text (tags stripped by the file's textOf), and no <form, \"Archive project\" or \"Edit project\" in the markup, as before. PROJECT_COPY.archivedBanner is built from archivedBannerParts, and __tests__/unit/project-page.test.tsx \"UX-31 S5-1: …\" pins the joined parts to the sentence word for word and the banner body's markup to before + <a href=\"/orgs/o/projects\">All projects page</a> + after for every role.",
+    "task": "lane 4 Task B round 1 (the archived banner's \"All projects page\" links to the organisation's projects, S5-1)"
   }
 ]
