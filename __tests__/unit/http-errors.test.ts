@@ -101,7 +101,7 @@ describe('lib/http/errors, toResponse, assertSameOrigin, pgErrors', () => {
     expect(new RateLimitedError(30).message).toBe('Too many attempts. Wait 1 minute, then try again.');
     expect(new RateLimitedError(60).message).toBe('Too many attempts. Wait 1 minute, then try again.');
     expect(new RateLimitedError(61).message).toBe('Too many attempts. Wait 2 minutes, then try again.');
-    expect(new RateLimitedError(30, 'export_busy').message).toBe(HTTP_COPY.rateLimited(30));
+    expect(new RateLimitedError(30, 'export_busy').message).toBe(HTTP_COPY.exportBusy);
     expect(new ErasedError('2026-11-02').message).toBe('This record was erased on 2 Nov 2026.');
     expect(new AcceptancesRequiredError(['terms']).message).toBe('Accept the updated terms before you continue.');
     const cross = toResponse(await Promise.resolve().then(() => { try { assertSameOrigin(req({ origin: 'https://evil.example', host: 'makrai.org' })); } catch (e) { return e; } }));

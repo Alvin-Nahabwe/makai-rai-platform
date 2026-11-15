@@ -11,6 +11,7 @@ import { callRoute, sessionAs } from '../helpers/routeDriver';
 import { captureLogs } from '../helpers/logCapture';
 import { API_COPY } from '@/lib/http/api/copy';
 import { HTTP_COPY } from '@/lib/http/copy';
+import { MSG_DOCUMENT_CHECK_FAILED } from '@/lib/documents/copy';
 
 vi.setConfig({ testTimeout: 60_000 });
 
@@ -114,7 +115,7 @@ describe('preview, issue and download routes', () => {
     } });
     const { result: r, lines } = await captureLogs(() => get(bad.id));
     expect(r.status).toBe(500);
-    expect(await r.json()).toMatchObject({ error: 'Document integrity check failed', code: 'integrity_failure', reference: expect.any(String) });
+    expect(await r.json()).toMatchObject({ error: MSG_DOCUMENT_CHECK_FAILED, code: 'integrity_failure', reference: expect.any(String) });
     expect(lines.filter((l) => l.includes('DOCUMENT_INTEGRITY_FAILURE'))).toHaveLength(1);
   });
 

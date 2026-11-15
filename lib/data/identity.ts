@@ -2,7 +2,6 @@ import { PrismaClient, type Prisma } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 import { withUnavailableStamp } from '../http/supportReference';
-import { GONE_NAME_COPY } from '../http/copy';
 import { hmrSingleton, requireDatabaseUrl } from './connection';
 
 /**
@@ -359,6 +358,14 @@ export async function lookupUserNames(
 }
 
 /**
+ * The name written to an account when it is deleted. Held at "Deleted user" (plan 1A Task 20 row F8 held, review B2 I2):
+ * the approved legal texts promise that name (data/legal/privacy/2.md lines 233, 240 and 243; data/legal/terms/2.md line
+ * 189), so it changes only with them, by the owner's decision. Not in a copy module: the vocabulary lint retires the
+ * phrase there, and this is stored data the legal texts name, not a screen's words.
+ */
+export const DELETED_USER_NAME = 'Deleted user';
+
+/**
  * Deactivate-and-scrub the caller's OWN account (`DELETE /api/users/me`).
  *
  * The account's `ConsentRecord` rows are KEPT, linked to the scrubbed account
@@ -393,7 +400,7 @@ export async function scrubUserOnDeactivation(
     where: { id: userId },
     data: {
       email: `deleted-${userId}@invalid`,
-      name: GONE_NAME_COPY.deletedAccount,
+      name: DELETED_USER_NAME,
       passwordHash: randomPasswordHash,
       isActive: false,
       sessionEpoch: { increment: 1 },

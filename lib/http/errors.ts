@@ -46,7 +46,8 @@ export class RateLimitedError extends AppError {
     if (!Number.isFinite(retryAfterSeconds) || retryAfterSeconds <= 0) {
       throw new RangeError(`RateLimitedError needs a positive, finite retryAfterSeconds, got ${retryAfterSeconds}`);
     }
-    super(429, code, HTTP_COPY.rateLimited(retryAfterSeconds), { retryAfterSeconds: Math.ceil(retryAfterSeconds) });
+    // The text by code: `export_busy` is the platform's two running exports, not this person's attempts (review B2 I1).
+    super(429, code, code === 'export_busy' ? HTTP_COPY.exportBusy : HTTP_COPY.rateLimited(retryAfterSeconds), { retryAfterSeconds: Math.ceil(retryAfterSeconds) });
   }
 }
 

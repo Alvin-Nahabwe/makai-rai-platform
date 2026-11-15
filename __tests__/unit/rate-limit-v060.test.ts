@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { NextRequest } from 'next/server';
 import { checkRateLimit, resetRateLimitStore, RATE_LIMITS } from '@/lib/rate-limit';
+import { HTTP_COPY } from '@/lib/http/copy';
 
 /**
  * `proxy` is driven for real. The token is the only thing stubbed: `getToken` answers with the user named in
@@ -124,7 +125,7 @@ describe('the proxy 429', () => {
     const res = await exhaustAndCall(proxy, 'POST', '/api/v1/orgs/a/projects/p/evidence');
     expect(res.status).toBe(429);
     const body = await res.json();
-    expect(body).toEqual({ error: 'Too many requests. Please try again later.', code: 'rate_limited', retryAfterSeconds: Number(res.headers.get('Retry-After')) });
+    expect(body).toEqual({ error: HTTP_COPY.rateLimited(Number(res.headers.get('Retry-After'))), code: 'rate_limited', retryAfterSeconds: Number(res.headers.get('Retry-After')) });
     expect(Number.isInteger(body.retryAfterSeconds) && body.retryAfterSeconds >= 1).toBe(true);
     expect(res.headers.get('content-type')).toContain('application/json');
     expect(res.headers.get('X-RateLimit-Remaining')).toBe('0');

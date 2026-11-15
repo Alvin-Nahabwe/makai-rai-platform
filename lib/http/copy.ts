@@ -27,11 +27,19 @@ export const VALIDATION_COPY = Object.freeze({
  * `lib/http/api/copy.ts`, because `lib/http/errors.ts` reads it and client files reach that module.
  */
 export const HTTP_COPY = Object.freeze({
-  /** 429 `rate_limited` and `export_busy` (E-API-9, E-API-10): the wait is the body's `retryAfterSeconds`, rounded up to whole minutes. */
+  /** 429 `rate_limited` (E-API-9): the wait is the body's `retryAfterSeconds`, rounded up to whole minutes. */
   rateLimited: (retryAfterSeconds: number): string => {
     const minutes = Math.max(1, Math.ceil(retryAfterSeconds / 60));
     return `Too many attempts. Wait ${minutes === 1 ? '1 minute' : `${minutes} minutes`}, then try again.`;
   },
+  /**
+   * 429 `export_busy` (E-API-10, review B2 I1): the platform already holds `MAX_RUNNING_EXPORTS` (2) exports, whoever
+   * started them (lib/data/export.ts), so it is not this person's attempts, and its 60 seconds are a guess, not a time a
+   * slot is sure to be free. S-20's ruled sentence for the same refusal (`EXPORT_COPY.panel.refused.export_busy`),
+   * written here because client files reach this module and lib/export/copy.ts holds S-20's words (X-2); a unit test
+   * holds the two equal.
+   */
+  exportBusy: 'Two exports are already being prepared. Try again when one has finished.',
   /** 410 `erased` (E-API-11): `erasedOn` is the body's own, written as "2 Nov 2026". */
   erased: (erasedOn: CalendarDate): string => `This record was erased on ${formatDay(erasedOn)}.`,
   /** 403 `acceptances_required` (E-API-13). */
@@ -44,7 +52,8 @@ export const HTTP_COPY = Object.freeze({
 
 /**
  * The names shown for a person or an invitation that is no longer there (audit E-API-47, E-S25, LD-28, LD-32 to LD-34;
- * CONSOLIDATED section 8 row 13). `deletedAccount` is also the name written to a scrubbed account.
+ * CONSOLIDATED section 8 row 13). `deletedAccount` and `removedInvitation` are shown where the row itself is missing; the
+ * name written to a deleted account is `DELETED_USER_NAME` (lib/data/identity.ts), held while row F8 is (review B2 I2).
  */
 export const GONE_NAME_COPY = Object.freeze({
   deletedAccount: 'Deleted account',
