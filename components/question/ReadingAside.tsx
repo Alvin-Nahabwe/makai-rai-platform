@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { ReactElement } from 'react';
 import { ButtonLink } from '@/components/ui/Button';
-import { Definition } from '@/components/ui/Definition';
+import { ReadingDefinition } from './ReadingDefinition';
 import { QUESTION_COPY } from '@/lib/question/copy';
 import { TERM_SEAL, TERM_STAGE_REVIEW } from '@/lib/vocabulary/terms';
 import type { SealRef } from '@/types/seal';
@@ -68,7 +68,8 @@ export function ReadingAside({ seals, versionNumber, note, next, stageTitle, sta
         <div className="reading-aside__seal">
           <h2>{R.sealedHeading}</h2>
           {sealed.map((s) => <p key={s.reviewId}>{R.sealKeeps(s.sealNumber, s.reviewName, versionNumber)}</p>)}
-          <p className="reading-aside__defs"><Definition of={TERM_STAGE_REVIEW} /> <Definition of={TERM_SEAL} /></p>
+          <ReadingDefinition of={TERM_STAGE_REVIEW} />
+          <ReadingDefinition of={TERM_SEAL} />
         </div>
       ) : null}
       {note === null ? null : <p className="reading-aside__note" data-permission-note><EyeMark /><span>{note}</span></p>}
