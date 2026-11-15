@@ -31,15 +31,23 @@ export function closeOnBlur(
 ): () => void {
   let pressedInside = false;
   const press = () => { pressedInside = true; };
+  // The flag lives only for the press: a browser that does not focus a button on a click (Safari, Firefox on macOS)
+  // sends no blur, and a second press after the first blur would otherwise leave it set for a later focus-leave.
+  const release = () => { pressedInside = false; };
   const hide = () => {
-    if (pressedInside) { pressedInside = false; return; }
+    if (pressedInside) return;
     if (tip.matches(':popover-open')) tip.hidePopover();
   };
-  // A press inside the tip blurs the button before the click lands; the pointerdown on the tip comes first.
+  // A press inside the tip blurs the button before the click lands; the pointerdown on the tip comes first, its pointerup
+  // (or pointercancel) after the blur.
   tip.addEventListener('pointerdown', press);
+  tip.addEventListener('pointerup', release);
+  tip.addEventListener('pointercancel', release);
   button.addEventListener('blur', hide);
   return () => {
     tip.removeEventListener('pointerdown', press);
+    tip.removeEventListener('pointerup', release);
+    tip.removeEventListener('pointercancel', release);
     button.removeEventListener('blur', hide);
   };
 }
