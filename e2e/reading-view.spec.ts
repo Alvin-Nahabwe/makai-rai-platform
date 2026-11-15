@@ -79,7 +79,7 @@ async function addOverdueMitigation(page: Page, baseURL: string): Promise<void> 
 }
 
 for (const role of ['viewer', 'reviewer'] as const) {
-  test(`a ${role} reads the decision card, what is still open and the sealed copy, with no form, at 1440, 1280 and 375`, async ({ page, baseURL }) => {
+  test(`a ${role} reads the decision card, what is still open and the sealed copy, with no form, at 1440, 1280 and 375`, async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await actAsSeat(page, role);
     await page.goto(questionPath(projectId, Q));
