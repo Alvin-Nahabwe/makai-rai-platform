@@ -296,6 +296,7 @@ States the kit draws (from the sheets named): hover and active change colours on
 | `<Table>` | `TableProps` | Data. Sortable headers are buttons; under 640 px of container width the rows become cards. |
 | `<ItemPlate>` | `ItemPlateProps` | One item of a list: name, small code, status mark and one line of state. With an address the whole plate is the link. `current` adds a 2 px border and the pin "You are here". |
 | `<RouteRow>` | `RouteRowProps` | A stage as one row of marks with its tally. |
+| `<RouteTally>` | inline | The tally alone, without the row of marks: a list of a 16 px shape, a bold count and the words, with an (i) `<TermTip>` where `define` gives one. |
 | `<StatusMark>` | `StatusMarkProps` | A status as a shape and its words. |
 | `<MarkShape>` | inline | A status shape alone, for a caller that writes the words. |
 | `<SavedMark>` | `SavedMarkProps` | The confirmation of a save. |
@@ -350,7 +351,9 @@ S-10, `components/project/ProjectPage.tsx`, `StageLine.tsx`, `ProjectPage.css` (
 
 **Owner ruling of 15 November 2026, 20:50** (`progress.md`, line "20:50 OWNER RULED"): S-10 has no row of marks. Its tally is in words with marks, as sketched. Its mitigations are the overdue ones as plates, plus one line "{n} other open mitigations" linking to Findings. This departs from SRS FR-FUP-01 and FR-FUP-05.
 
-**Not yet built at `c4e0367e`.** At this commit "Recorded so far" still draws a `<RouteRow>` (marks joined by a line and a tally), and the open mitigations that are not overdue are listed as plates under "Not overdue". The screenshots above show this state. When the ruling is built, this section and the screenshots change; the inventory test will not notice, because both parts use names that stay.
+**Built** (owner rulings of 19:25, 20:50 and 21:32). "Still open in this stage" shows a count. Overdue mitigations are `<ItemPlate>`s, followed by one line "{n} other open mitigations" linking to Findings. "Recorded so far" is `<RouteTally>`: the tally in words with a mark beside each count and no row of marks. First-use definitions are (i) `<TermTip>`s. Each review is one line, "Review n · sealed <date> · k changed since". A busy project still runs about 1,098 px tall at 1440 by 900 (known, deferred).
+
+Home has one "New project" for an Owner, an Admin and an Assessor.
 
 What is built and stays: counts are words and numerals for one stage, with no percentage, bar or total across stages; an overdue plate is an `<ItemPlate>` whose "was due <date>" alone is in `--color-overdue`.
 
