@@ -11,9 +11,18 @@ export type TermTipProps = {
   of: DefinedEntry;
   /** The button's accessible name, from the caller's copy module, e.g. "What is a finding?". The icon alone is not a name. */
   label: string;
-  /** Unique on the page when the same term has two tips; defaults to the entry's id. The definition's element id is `${id}-def`. */
+  /** Unique on the page when the same term has two tips; defaults to `term-tip-<entry id>`. `termTipIds` gives both ids. */
   id?: string;
 };
+
+/**
+ * The ids a TermTip gives its popover and its definition: a caller that describes another element by the definition
+ * (`aria-describedby`) takes the id from here, so the two cannot drift.
+ */
+export function termTipIds(of: Pick<DefinedEntry, 'id'>, id?: string): { tip: string; definition: string } {
+  const tip = id ?? `term-tip-${of.id}`;
+  return { tip, definition: `${tip}-def` };
+}
 
 /** The part of a popover element the tip drives (a structural type, so a test can hand in a stand-in). */
 export type TipPopover = { hidePopover(): void; matches(selector: string): boolean };
@@ -57,7 +66,7 @@ export function closeOnBlur(
  * only, both themes; hidden in print).
  */
 export function TermTip({ of, label, id }: TermTipProps): ReactElement {
-  const tipId = id ?? `term-tip-${of.id}`;
+  const { tip: tipId, definition: definitionId } = termTipIds(of, id);
   const button = useRef<HTMLButtonElement>(null);
   const tip = useRef<HTMLSpanElement>(null);
   useEffect(() => {
@@ -67,11 +76,11 @@ export function TermTip({ of, label, id }: TermTipProps): ReactElement {
   return (
     <span className="ui-term-tip">
       <button ref={button} type="button" className="ui-term-tip__button" popoverTarget={tipId} popoverTargetAction="toggle"
-        aria-label={label} aria-describedby={`${tipId}-def`}>
+        aria-label={label} aria-describedby={definitionId}>
         <Icon name="info" size={16} />
       </button>
       <span ref={tip} id={tipId} popover="auto" className="ui-term-tip__body">
-        <Definition of={of} id={`${tipId}-def`} />
+        <Definition of={of} id={definitionId} />
       </span>
     </span>
   );

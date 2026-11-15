@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { closeOnBlur, TermTip, type TipPopover } from '@/components/ui/TermTip';
+import { closeOnBlur, TermTip, termTipIds, type TipPopover } from '@/components/ui/TermTip';
 import { TERM_FINDING, TERM_NOT_YET } from '@/lib/vocabulary/terms';
 
 /**
@@ -45,6 +45,9 @@ describe('TermTip', () => {
     expect(button).toMatch(/popoverTargetAction="toggle"/i);
     expect(html).toMatch(/<span id="strip-finding" popover="auto" class="ui-term-tip__body">/);
     expect(html).toMatch(/<svg class="ui-icon"[^>]*aria-hidden="true"/);
+    // The ids a caller describes another element by come from termTipIds, the same function the tip uses.
+    expect(termTipIds(TERM_FINDING, 'strip-finding')).toEqual({ tip: 'strip-finding', definition: 'strip-finding-def' });
+    expect(termTipIds(TERM_FINDING)).toEqual({ tip: 'term-tip-finding', definition: 'term-tip-finding-def' });
   });
 
   it('toggletip: focus alone opens nothing; focus leaving closes an open tip, unless the press that took focus away was inside the tip; the cleanup removes both listeners', () => {
