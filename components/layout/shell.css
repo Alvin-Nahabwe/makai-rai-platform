@@ -268,6 +268,11 @@
     block-size: 100vh;
     overflow-y: auto;
     padding-block-end: var(--space-8);
+    /* The containing block of its clipped absolute content (the evidence uploader's file input and label, any
+       .visually-hidden text with no positioned box above it): overflow alone does not make one, so that content took the
+       initial containing block, and its place below the fold made the window scroll past the frame (lane 8 I2). Offsets
+       stay where they were; fixed boxes, sticky boxes and the top layer are unchanged. */
+    position: relative;
   }
 
   .page-frame:has(> .shell) > * {
