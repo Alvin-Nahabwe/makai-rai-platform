@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { closeOnBlur, TermTip, termTipIds, type TipPopover } from '@/components/ui/TermTip';
+import { closeOnBlur, TermTip, type TipPopover } from '@/components/ui/TermTip';
+import { termTipIds } from '@/components/ui/termTipIds';
 import { TERM_FINDING, TERM_NOT_YET } from '@/lib/vocabulary/terms';
 
 /**
@@ -48,6 +49,8 @@ describe('TermTip', () => {
     // The ids a caller describes another element by come from termTipIds, the same function the tip uses.
     expect(termTipIds(TERM_FINDING, 'strip-finding')).toEqual({ tip: 'strip-finding', definition: 'strip-finding-def' });
     expect(termTipIds(TERM_FINDING)).toEqual({ tip: 'term-tip-finding', definition: 'term-tip-finding-def' });
+    // A server component calls it, so it is not in a client module.
+    expect(readFileSync('components/ui/termTipIds.ts', 'utf8')).not.toMatch(/['"]use client['"]/);
   });
 
   it('toggletip: focus alone opens nothing; focus leaving closes an open tip, unless the press that took focus away was inside the tip; the cleanup removes both listeners', () => {
