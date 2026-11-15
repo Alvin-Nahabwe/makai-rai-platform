@@ -35,7 +35,7 @@ const box = async (l: Locator) => {
  */
 const shot = async (page: Page, _info: TestInfo, name: string, fullPage = false) => {
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-  await page.screenshot({ path: `test-results/route-T1/${name}.png`, fullPage });
+  await page.screenshot({ path: `test-results/route-T1/${name}.png`, fullPage, animations: 'disabled' });
 };
 
 /** The Owner archives the project (route 21). */
@@ -246,7 +246,7 @@ test('R4: the top strip at 1280 is one line of breadcrumb and one of tally, with
   await expect(def, 'Enter opens it').toBeVisible();
   await expect(def).toHaveText('A gap your team has noted for a question, so it can be dealt with and closed.');
   await expect(tip).toHaveAttribute('aria-describedby', 'term-tip-finding-def');
-  await page.screenshot({ path: 'test-results/route-T1/top-strip-1280-definition-open.png' });
+  await page.screenshot({ path: 'test-results/route-T1/top-strip-1280-definition-open.png', animations: 'disabled' });
   await page.keyboard.press('Escape');
   await expect(def, 'Escape closes it').toBeHidden();
   await expect(tip).toBeFocused();
