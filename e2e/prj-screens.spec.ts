@@ -618,7 +618,9 @@ test('FR-RM-04 UX-06 UX-07: each stage count on S-10 and S-08 is a whole number 
   test.setTimeout(120_000);
   const sentinels = { 'pre-processing': [41], 'in-processing': [29], 'post-processing': [13] };
   const sum = Object.values(sentinels).reduce((n, [count]) => n + count, 0);
-  const sentinelOrg = await buildOrg({ label: 'prjsent' });
+  // Fixture text with no digits: Home (plan 1B Task 10) lists an Owner's findings with no mitigation by title, and the
+  // default titles ("Fixture title 83") would put the sum on the page as the team's own words, not as a count.
+  const sentinelOrg = await buildOrg({ label: 'prjsent', text: (field) => `Sentinel ${field}` });
   // S-10 prints the organisation's name in its breadcrumb, and the name carries buildOrg's random run id, whose digits
   // can be the sum (about one id in 150 holds a whole "83"). The name is the test's own text, so the check is told to
   // leave it out (`ownText`). Here the name always holds the sum, so a run that stops leaving it out fails every time.
