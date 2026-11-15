@@ -21,6 +21,7 @@ const { INVITATION_PAGE_COPY, roleTerm } = await import('@/lib/org/copy');
 const { INVITATION_COPY } = await import('@/lib/invitations/copy');
 const { TERM_ASSESSOR } = await import('@/lib/vocabulary/terms');
 const { GATE_COPY } = await import('@/lib/shell/copy');
+const { GatePublicFrame } = await import('@/components/layout/GatePublicFrame');
 
 /**
  * Plan 1B Task 6 (rulings L5-14, L5-15): S-04 in the gate frame's public variant. The card says who invited the person, as
@@ -33,7 +34,7 @@ const invitation: Invitation & { org: { name: string; slug: string }; invitedBy:
   invitedById: 'u0', expiresAt: new Date('2026-11-04T09:00:00Z'), createdAt: new Date('2026-10-28T09:00:00Z'), acceptedAt: null,
   kind: 'member', linkShownAt: null, requestReference: null, org: { name: 'Makerere CAI Lab', slug: 'makerere-cai-lab' }, invitedBy: { name: 'Amina N.' },
 };
-type FrameProps = { variant: string; route?: ReadonlyArray<{ label: string; state: string }>; routeSlot?: ReactElement };
+type FrameProps = { route?: ReadonlyArray<{ label: string; state: string }>; routeSlot?: ReactElement };
 const page = async () => (await InvitationPage({ params: Promise.resolve({ token: TOKEN }) })) as ReactElement<FrameProps>;
 
 beforeEach(() => {
@@ -59,7 +60,7 @@ describe('S-04 in the gate frame (plan 1B Task 6)', () => {
   it('L5-14 L5-28: signed out, the frame\'s route is drawn from the client\'s step (routeSlot): the three steps of a new account', async () => {
     vi.mocked(invitationByToken).mockResolvedValue(invitation);
     const el = await page();
-    expect(el.props.variant).toBe('public');
+    expect(el.type).toBe(GatePublicFrame);
     expect(el.props.route).toBeUndefined();
     expect(el.props.routeSlot?.type).toBe(InvitationRoute);
     const steps = (html: string) => [...html.matchAll(/gate-route__stop--(\w+)"><span class="gate-route__mark" aria-hidden="true"><\/span><span class="gate-route__label"[^>]*>(?:<span class="gate-route__here">[^<]*<\/span> )?([^<]+)/g)].map((m) => [m[2].trim(), m[1]]);
@@ -95,7 +96,7 @@ describe('S-04 in the gate frame (plan 1B Task 6)', () => {
   it('T6.1: an unusable link shows only M-23 under its heading: no route, and nothing about the organisation, role or inviter', async () => {
     vi.mocked(invitationByToken).mockResolvedValue(null);
     const el = await page();
-    expect(el.props.variant).toBe('public');
+    expect(el.type).toBe(GatePublicFrame);
     expect(el.props.route).toBeUndefined();
     expect(el.props.routeSlot).toBeUndefined();
     const markup = renderToStaticMarkup(el);

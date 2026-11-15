@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import type { ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
@@ -34,6 +35,7 @@ vi.mock('@/lib/auth/idleDeadline', () => ({ readSessionDeadlines: idle.read }));
 vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
 
 import { GateFrame, type GateStop } from '@/components/layout/GateFrame';
+import { GatePublicFrame } from '@/components/layout/GatePublicFrame';
 import { DraftsWarning } from '@/components/layout/GateSignOut';
 import { countAccountDrafts } from '@/lib/client/draftKeys';
 import { DRAFTS_COPY } from '@/lib/decision/drafts/copy';
@@ -141,6 +143,15 @@ describe('GateFrame, public (inside the (public) layout\'s own header and main)'
   it('CR-1: the logo keeps its proportions when the column is narrower than it', () => {
     expect(css).toMatch(/\.gate__logo \{[^}]*max-inline-size: 100%;[^}]*block-size: auto;/);
   });
+
+  it('lean frame (owner, 15 Nov 15:35): GatePublicFrame, which S-04 renders, draws exactly the public variant of GateFrame', () => {
+    const lean = (route?: readonly GateStop[]) => frameOnly(renderToStaticMarkup(<GatePublicFrame route={route}><h1>Title</h1></GatePublicFrame>));
+    expect(lean(ROUTE)).toBe(publicFrame(ROUTE));
+    expect(lean()).toBe(publicFrame());
+    const slot = <p id="slot">S</p>;
+    expect(frameOnly(renderToStaticMarkup(<GatePublicFrame routeSlot={slot} wide><h1>T</h1></GatePublicFrame>)))
+      .toBe(frameOnly(renderToStaticMarkup(<GateFrame variant="public" routeSlot={slot} wide><h1>T</h1></GateFrame>)));
+  });
 });
 
 describe('GateRoute: the steps of this door, drawn as a short route', () => {
@@ -185,11 +196,29 @@ describe('GateRoute: the steps of this door, drawn as a short route', () => {
 });
 
 describe('gate.css', () => {
-  const css = readFileSync('components/layout/gate.css', 'utf8');
+  // The frame's rules, in two sheets since the lean frame (owner, 15 Nov 15:35): the public sheet every door page loads,
+  // and the signed-in frame's own (the person block, Help, Sign out, M-41), which S-04 does not load.
+  const publicCss = readFileSync('components/layout/gate.css', 'utf8');
+  const signedInCss = readFileSync('components/layout/gate-signed-in.css', 'utf8');
+  const css = `${publicCss}\n${signedInCss}`;
   const src = readFileSync('components/layout/GateFrame.tsx', 'utf8');
 
   it('GateFrame imports its own stylesheet; it is not a kit sheet', () => {
-    expect(src).toMatch(/^import '\.\/gate\.css';$/m);
+    expect(readFileSync('components/layout/GatePublicFrame.tsx', 'utf8')).toMatch(/^import '\.\/gate\.css';$/m);
+    expect(src).toMatch(/^import '\.\/gate-signed-in\.css';$/m);
+    expect(src).toMatch(/from '@\/components\/layout\/GatePublicFrame'/);
+  });
+
+  it('lean frame (owner, 15 Nov 15:35): the public sheet holds no rule of the signed-in frame, and only GateFrame loads that sheet', () => {
+    const SIGNED_IN = /\.gate__(?:footer|name|help|signout|product)\b|data-sign-out-drafts/;
+    expect(publicCss.replace(/\/\*[\s\S]*?\*\//g, '')).not.toMatch(SIGNED_IN);
+    // Every selector of the signed-in sheet names a part only the signed-in frame draws.
+    const selectors = [...signedInCss.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{/g)].map((m) => m[1].trim()).filter((sel) => !sel.startsWith('@'));
+    expect(selectors.length).toBeGreaterThan(0);
+    expect(selectors.flatMap((sel) => sel.split(',')).map((sel) => sel.trim()).filter((sel) => !SIGNED_IN.test(sel))).toEqual([]);
+    const importers = execFileSync('git', ['grep', '-l', '--untracked', '-E', '-e', String.raw`import\s+['"][^'"]*gate-signed-in\.css`, '--', 'app', 'components', 'lib'], { encoding: 'utf8' })
+      .split('\n').filter(Boolean);
+    expect(importers).toEqual(['components/layout/GateFrame.tsx']);
   });
 
   it('wide from 1024 px, the shell\'s breakpoint: the navy column at the rail\'s width beside the ground', () => {

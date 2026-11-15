@@ -2,7 +2,10 @@
    rail's width (from 1024 px, the shell's breakpoint) with the product name, the route of this door and the person's
    block; the page's content in a white card on the ground beside it. Below 1024 px the column is a navy band above the
    card. Role tokens only; the column's text is white or the shell's muted ink, never orange (spec 7.1). Marks are
-   borders, so forced colours keep them (spec 7.2). Nothing animates. */
+   borders, so forced colours keep them (spec 7.2). Nothing animates.
+   The signed-in frame's own rules (the platform's name, the person's block, Help, Sign out, M-41) are in
+   ./gate-signed-in.css, which only GateFrame imports (the lean frame, owner, 15 Nov 15:35): this sheet is what a public
+   door page loads. */
 
 /* ── The frame ── */
 /* It fills the viewport at every width, as the shell does, so the site footer never floats mid-screen (review M-3). */
@@ -65,13 +68,6 @@ body:has(.gate--public) {
   margin-block-end: var(--space-1);
 }
 
-.gate__product {
-  color: var(--color-shell-ink);
-  font-size: var(--font-size-body);
-  font-weight: var(--font-weight-semibold);
-  overflow-wrap: anywhere;
-}
-
 /* Below 1024 px the band says where the person is; the list is the wide column's. */
 .gate-route {
   display: none;
@@ -92,54 +88,6 @@ body:has(.gate--public) {
   margin-block-start: calc(-1 * var(--space-2));
   color: var(--color-shell-muted);
   font-size: var(--font-size-small);
-}
-
-/* The person's block: Help and Sign out in the band; the name only in the wide column. */
-.gate__footer {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2) var(--space-4);
-  min-width: 0;
-}
-
-.gate__name {
-  display: none;
-  font-weight: var(--font-weight-semibold);
-  overflow-wrap: anywhere;
-}
-
-.gate__help,
-.gate__help:hover {
-  /* a:hover in app/globals.css would paint it the link colour, navy on navy. */
-  color: var(--color-shell-ink);
-}
-
-.gate__help {
-  display: inline-flex;
-  align-items: center;
-  min-block-size: var(--target-min);
-  text-decoration: underline;
-  text-underline-offset: 0.15em;
-}
-
-.gate__signout {
-  min-width: 0;
-  max-inline-size: 100%;
-}
-
-.gate__signout .shell-rail__signout {
-  inline-size: auto;
-}
-
-/* M-41 (the drafts warning) is a surface box laid over the page from inside the column: it takes the page's ink. */
-.gate__header [data-sign-out-drafts] {
-  color: var(--color-ink);
-}
-
-/* The sign-out failure line sits on the navy: white words, bold with the icon (the kit's error tone, never red). */
-.gate__signout .ui-status {
-  color: var(--color-shell-ink);
 }
 
 /* ── The card ── */
@@ -250,30 +198,6 @@ body:has(.gate--public) {
   .gate__where,
   .gate__next {
     display: none;
-  }
-
-  .gate__footer {
-    flex-direction: column;
-    align-items: stretch;
-    gap: var(--space-2);
-    margin-block-start: auto;
-    padding-block-start: var(--space-4);
-    /* A control-border line (review M-1: the hover navy was 1.19:1 on the column). */
-    border-block-start: 1px solid var(--color-border-control);
-  }
-
-  .gate__name {
-    display: block;
-    padding-inline: var(--space-3);
-  }
-
-  .gate__help {
-    min-block-size: var(--target-primary);
-    padding-inline: var(--space-3);
-  }
-
-  .gate__signout .shell-rail__signout {
-    inline-size: 100%;
   }
 
   .gate__main {

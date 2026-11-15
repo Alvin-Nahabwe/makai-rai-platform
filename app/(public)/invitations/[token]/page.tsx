@@ -9,7 +9,8 @@ import { formatDay } from '@/lib/format/dates';
 import { INVITATION_PAGE_COPY, ORG_COPY, roleTerm, roleWithArticle } from '@/lib/org/copy';
 import { GATE_COPY } from '@/lib/shell/copy';
 import { pageTitle } from '@/lib/ui/title';
-import { GateFrame, type GateStop } from '@/components/layout/GateFrame';
+import { GatePublicFrame } from '@/components/layout/GatePublicFrame';
+import type { GateStop } from '@/components/layout/GateRoute';
 import { AuthCard } from '@/components/auth/AuthCardBase';
 import AcceptInvitationClient, { InvitationRoute } from './AcceptInvitationClient';
 
@@ -42,7 +43,9 @@ export const metadata: Metadata = { title: pageTitle(ORG_COPY.titles.invitation)
  * In the gate frame's public variant since plan 1B Task 6 (rulings L5-14, L5-15): the card says who invited the person, as
  * what, what that role means (the vocabulary's sentence, plain text) and until when; the frame's route is this door's
  * steps. Signed out: Your details, Accept the terms, Join, drawn in the browser from the new-account form's step
- * (InvitationRoute in the frame's routeSlot, ruling L5-28). Signed in as the invited email: Join alone when it is the one
+ * (InvitationRoute in the frame's routeSlot, ruling L5-28). The frame is GatePublicFrame and the card AuthCardBase, so the
+ * first visit carries neither the signed-in frame's sheet and code nor components/auth/auth.css (the lean frame, owner,
+ * 15 Nov 15:35). Signed in as the invited email: Join alone when it is the one
  * step left, or Accept the terms then Join while one of the person's own acceptances is missing (route 32 asks for it
  * first). Signed in as someone else (M-24) and an unusable link: none.
  */
@@ -61,11 +64,11 @@ export default async function InvitationPage({
 
   if (!invitation) {
     return (
-      <GateFrame variant="public">
+      <GatePublicFrame>
         <AuthCard title={INVITATION_PAGE_COPY.unusableHeading}>
           <p>{INVITATION_PAGE_COPY.unusable}</p>
         </AuthCard>
-      </GateFrame>
+      </GatePublicFrame>
     );
   }
 
@@ -82,7 +85,7 @@ export default async function InvitationPage({
   const route = invitee === null ? undefined : (await missingAcceptances(invitee.userId)).length > 0 ? ACCEPT_THEN_JOIN_ROUTE : JOIN_ROUTE;
 
   return (
-    <GateFrame variant="public" route={route} routeSlot={identity === null ? <InvitationRoute /> : undefined}>
+    <GatePublicFrame route={route} routeSlot={identity === null ? <InvitationRoute /> : undefined}>
       <AuthCard
         title={INVITATION_PAGE_COPY.heading(invitation.org.name)}
         lead={(
@@ -105,6 +108,6 @@ export default async function InvitationPage({
           texts={texts}
         />
       </AuthCard>
-    </GateFrame>
+    </GatePublicFrame>
   );
 }

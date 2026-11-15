@@ -130,8 +130,9 @@ describe('NFR-PERF-02 X-7: S-04 loads kit stylesheets only through styles entrie
   });
 
   it('NFR-PERF-02 (owner, 15 Nov 15:35, lean frame): S-04 loads the frame\'s public sheet only, no auth.css and no signed-in sheet', () => {
-    // The door pages' card rules S-04 uses (AuthCard's lead and a form's status line) are in the frame's sheet, and S-04
-    // draws the card from components/auth/AuthCardBase.tsx, which imports no stylesheet.
+    // The door pages' card rules S-04 uses (AuthCard's lead and a form's status line) are in the public sheet; the signed-in
+    // frame's rules (the person block, Help, Sign out, M-41) are in components/layout/gate-signed-in.css, which GateFrame
+    // imports and S-04's GatePublicFrame does not.
     const sheets = [...importers(routeRoots()).keys()].filter((f) => f.endsWith('.css') && !isKitSheet(f)).sort();
     expect(sheets).toEqual(['app/globals.css', 'components/layout/gate.css']);
   });
