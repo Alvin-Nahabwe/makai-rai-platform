@@ -7,7 +7,7 @@ import { evidenceDisplayName } from '@/components/evidence/VersionEvidenceList';
 import { WITHDRAWAL_CODE_LABELS, deciderLabel } from '@/lib/decision/copy';
 import { textErasedLine } from '@/lib/documents/copy';
 import { EVIDENCE_COPY } from '@/lib/evidence/copy';
-import { stripBidiControls } from '@/lib/evidence/format';
+import { linkHost, stripBidiControls } from '@/lib/evidence/format';
 import { isHttpUrl } from '@/lib/evidence/link';
 import { QUESTION_COPY } from '@/lib/question/copy';
 import { markKindOf } from '@/lib/ui/marks';
@@ -33,22 +33,25 @@ export type ReadingDecisionProps = {
 /**
  * One item of the decision's evidence (directions/surfaces/viewer-reading.png; gap 2 of design-target section 8). A file:
  * its name, "<size> · added <date>", and a secondary Download button whose accessible name carries the file's name; an
- * erased file its erased line and no button. A link: its name, "(opens another site)" and the external mark, as a plain
- * anchor only when its address is http or https (never next/link, which prefetches: FR-EVD-03); any other address is its
- * name as text with no claim to open a site; never its raw address in brackets; a link with no name is named by its
- * address once. Every name sits in `<bdi>` with bidi controls removed (E14).
+ * erased file its erased line and no button. A link: its name, then the host it really goes to and "opens another site"
+ * (so a name cannot claim another site: link spoofing), and the external mark, as a plain anchor only when its address is
+ * http or https (never next/link, which prefetches: FR-EVD-03); never the whole address in brackets; a link with no name
+ * is named by its address once. Any other address is its name and the cleaned address as text, with no claim to open a
+ * site. Every name sits in `<bdi>` with bidi controls removed (E14).
  */
 function EvidenceItem({ orgSlug, item }: { orgSlug: string; item: EvidenceItemView }): ReactElement {
   if (item.kind === 'link') {
     if (item.url === null) return <li className="reading-evidence__item">{EVIDENCE_COPY.list.linkAddressErased}</li>;
     const name = <bdi>{evidenceDisplayName(item)}</bdi>;
+    // Where it goes, beside the author's name for it (link spoofing). A link with no name is named by its address already.
+    const where = item.label === null ? null : <bdi>{linkHost(item.url)}</bdi>;
     return (
       <li className="reading-evidence__item">
         {isHttpUrl(item.url) ? (
           <a className="reading-evidence__link" href={item.url} rel="noopener noreferrer">
-            {name}{R.opensAnotherSite}<Icon name="external-link" size={18} />
+            {name}{where === null ? R.opensAnotherSite : <>{R.linkTo.before}{where}{R.linkTo.after}</>}<Icon name="external-link" size={18} />
           </a>
-        ) : <span>{name}</span>}
+        ) : <span>{name}{where === null ? null : <>{R.notWebLink.before}{where}{R.notWebLink.after}</>}</span>}
       </li>
     );
   }

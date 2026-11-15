@@ -87,8 +87,9 @@ for (const role of ['viewer', 'reviewer'] as const) {
     await expect(card.locator('blockquote.reading-decision__reason')).toHaveText(REASON);
     await expect(card.locator('.reading-decision__state')).toContainText('Partly');
     await expect(card.getByRole('link', { name: `Download ${FILE_NAME}` })).toBeVisible();
-    await expect(card.getByRole('link', { name: `${LINK_LABEL}${R.opensAnotherSite}` })).toBeVisible();
-    await expect(card).not.toContainText('example.org');
+    // The link's name, then the host it really goes to (link spoofing), never the whole address.
+    await expect(card.getByRole('link', { name: `${LINK_LABEL}${R.linkTo.before}example.org${R.linkTo.after}` })).toBeVisible();
+    await expect(card).not.toContainText('example.org/district-register');
 
     const open = page.locator('section[data-region="open-work"]');
     await expect(open.getByRole('heading', { level: 2 })).toHaveText(R.stillOpen(1));

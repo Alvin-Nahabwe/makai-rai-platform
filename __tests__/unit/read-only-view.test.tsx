@@ -9,6 +9,7 @@ import { AUTHZ_COPY } from '@/lib/authz/copy';
 import { QUESTION_COPY } from '@/lib/question/copy';
 import { runningContent } from '@/lib/content/loader';
 import { TERM_FINDING, TERM_MITIGATION, TERM_SEAL, TERM_STAGE_REVIEW } from '@/lib/vocabulary/terms';
+import { linkHost } from '@/lib/evidence/format';
 
 /**
  * The read-only question page (plan 1C Task 7, decision C12; the Route rebuild's lane 1 Task 3, to
@@ -175,14 +176,39 @@ describe('the read-only question page (plan 1C Task 7)', () => {
     expect(await render({ ...VIEWER, historyCount: 1 })).toContain('>History: 1 version</a>');
   });
 
-  it('gap 2: a link is its name with "(opens another site)" and the external mark, never its raw address', async () => {
+  it('gap 2: a link is its name, then the host it goes to and "opens another site", with the external mark; never the whole address', async () => {
     const c = card(await render(VIEWER));
-    expect(c).toMatch(/<a class="reading-evidence__link" href="https:\/\/example.org\/a" rel="noopener noreferrer"><bdi>Audit report<\/bdi> \(opens another site\)<svg class="ui-icon"/);
-    expect(textOf(c)).not.toContain('example.org');
+    expect(c).toMatch(/<a class="reading-evidence__link" href="https:\/\/example.org\/a" rel="noopener noreferrer"><bdi>Audit report<\/bdi> \(<bdi>example.org<\/bdi>, opens another site\)<svg class="ui-icon"/);
+    expect(textOf(c)).not.toContain('https://example.org/a');
     // A link the person gave no name is named by its address once, as its name, not again in brackets.
     const bare = card(await render({ ...VIEWER, current: { ...CURRENT, evidence: [{ ...LINK, label: null }] } }));
     expect(textOf(bare).split('https://example.org/a')).toHaveLength(2);
     expect(textOf(bare)).not.toContain('(https://');
+    expect(textOf(bare)).toContain('https://example.org/a (opens another site)');
+  });
+
+  it('link spoofing (a): a name that claims another site shows the host the link really goes to', async () => {
+    const spoof = { ...LINK, label: 'gov.example \u2014 official', url: 'https://evil.example/login' };
+    const c = card(await render({ ...VIEWER, current: { ...CURRENT, evidence: [spoof] } }));
+    expect(c).toContain('<bdi>evil.example</bdi>, opens another site)');
+    expect(c).toMatch(/href="https:\/\/evil.example\/login"/);
+    // A look-alike host is shown in the form the browser resolves (punycode), not as the letters that imitate another.
+    const idn = card(await render({ ...VIEWER, current: { ...CURRENT, evidence: [{ ...LINK, url: 'https://\u0440\u0430ypal.example/' }] } }));
+    expect(idn).toContain('<bdi>xn--ypal-43d9g.example</bdi>');
+  });
+
+  it('link spoofing (b) and (c): an address that does not parse is shown whole, its bidi controls removed, as text, and nothing throws', async () => {
+    for (const url of ['https://evil\u202Eelpmaxe.vog/a', 'not a web address \u2066x\u2069']) {
+      const c = card(await render({ ...VIEWER, current: { ...CURRENT, evidence: [{ ...LINK, url }] } }));
+      expect(c).not.toContain('reading-evidence__link');
+      expect(c).not.toMatch(/[\u202A-\u202E\u2066-\u2069]/);
+      expect(c).toContain(`<bdi>Audit report</bdi> (<bdi>${url.replace(/[\u202A-\u202E\u2066-\u2069]/g, '')}</bdi>)`);
+      expect(c).not.toContain('opens another site');
+    }
+    expect(linkHost('https://ex\u2066ample.org/x')).toBe('https://example.org/x');
+    expect(linkHost('not a url')).toBe('not a url');
+    expect(linkHost('https://user:pw@evil.example:8443/p')).toBe('evil.example');
+    expect(linkHost('javascript:alert(1)')).toBe('javascript:alert(1)');
   });
 
   it('a file is its name, "<size> · added <date>", and a secondary Download button that names the file to a screen reader', async () => {
@@ -350,7 +376,7 @@ describe('the read-only question page (plan 1C Task 7)', () => {
   it('a link whose address is not http or https is shown as text, never as a link, and does not claim to open another site', async () => {
     const c = card(await render({ ...VIEWER, current: { ...CURRENT, evidence: [{ ...LINK, url: 'javascript:alert(1)' }] } }));
     expect(c).not.toContain('href="javascript');
-    expect(c).toContain('<bdi>Audit report</bdi>');
+    expect(c).toContain('<bdi>Audit report</bdi> (<bdi>javascript:alert(1)</bdi>)');
     expect(c).not.toContain('opens another site');
   });
 

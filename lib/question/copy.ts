@@ -73,8 +73,15 @@ export const QUESTION_COPY = Object.freeze({
     /** A file's line under its name: the size, a separator the page draws, then this. */
     added: (day: string): string => `added ${day}`,
     download: 'Download',
-    /** After a link's name (gap 2: never its raw address in brackets); the words of lib/suggestions/copy.ts's resource line. */
+    /** After a link's name when the name is its address (gap 2: never the address twice); lib/suggestions/copy.ts's words. */
     opensAnotherSite: ' (opens another site)',
+    /**
+     * After a link's own name: the host it goes to, so a name cannot claim another site (link spoofing), in the pattern of
+     * lib/suggestions/copy.ts's resource line "(PDF, opens another site)". The page wraps the host in `<bdi>`.
+     */
+    linkTo: Object.freeze({ before: ' (', after: ', opens another site)' }),
+    /** After the name of a link that is not a web address (shown as text, not as a link): the address, cleaned. */
+    notWebLink: Object.freeze({ before: ' (', after: ')' }),
     stillOpen: (n: number): string => `Still open on this question: ${n} ${n === 1 ? 'finding' : 'findings'}`,
     mitigation: (what: string): string => `Mitigation: ${what}`,
     noMitigationYet: 'No mitigation yet',

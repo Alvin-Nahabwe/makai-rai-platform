@@ -13,6 +13,23 @@ export function stripBidiControls(name: string): string {
   return name.replace(BIDI_CONTROLS, '');
 }
 
+/**
+ * Where a link goes, as a reader sees it beside the name its author gave it (link spoofing: a name can claim any site).
+ * The address's host as the URL parser reads it (a look-alike international name in its punycode form, the form the
+ * browser resolves; no user, password or port), bidi controls removed (E14). An address with no host, or one that does
+ * not parse as a URL, is returned whole with its bidi controls removed, so the reader still sees what was stored; it
+ * never throws. Pure: `URL` is a global on the server and in the browser.
+ */
+export function linkHost(url: string): string {
+  let host = '';
+  try {
+    host = new URL(url).hostname;
+  } catch {
+    // Not a URL: the whole address is what the reader is shown (below). No link is drawn for it (isHttpUrl is false).
+  }
+  return stripBidiControls(host === '' ? url : host);
+}
+
 /** M-13's two numbers: megabytes (1,000,000 bytes) with one decimal. */
 export function formatMbPair(loaded: number, total: number): { x: string; y: string } {
   return { x: (loaded / 1e6).toFixed(1), y: (total / 1e6).toFixed(1) };
