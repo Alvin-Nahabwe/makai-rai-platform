@@ -95,7 +95,8 @@ for (const role of ['owner', 'admin'] as const) {
     ]);
     expect(overdueTop).toBeLessThan(stagesTop);
     expect(missingTop).toBeLessThan(stagesTop);
-    await expect(page.getByText('New project', { exact: true })).toHaveCount(0);
+    // Exactly one "New project" for a role that may create (coordinator's ruling for the owner, 15 Nov 2026 22:20; O-13).
+    await expect(page.getByText('New project', { exact: true })).toHaveCount(1);
   });
 }
 

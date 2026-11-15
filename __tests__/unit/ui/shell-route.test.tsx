@@ -307,17 +307,19 @@ describe('fix round 3: the rail fits a laptop (D4, D5) and the minor design item
     return bodies.join('\n');
   };
 
-  it('D4: the rail is a scrolling part and a pinned foot; the foot holds the person, My account, Sign out and the theme switch', () => {
+  it('D4 I1: the rail is a scrolling part, then the pinned lower group and the pinned foot; the foot holds the person, My account, Sign out and the theme switch', () => {
     at('/orgs/a/projects');
     const html = renderToStaticMarkup(<Rail shell={shell} />).replace(/^(<link rel="preload"[^>]*>)+/, '');
-    const scroll = /<div class="shell-rail__scroll">([\s\S]*)<\/div><div class="shell-rail__foot">/.exec(html);
-    expect(scroll, 'the scrolling part, then the foot').not.toBeNull();
-    for (const part of ['shell-rail__brand', 'shell-rail__org', 'shell-rail__main', 'shell-rail__lower']) expect(scroll![1]).toContain(part);
+    const parts = /<div class="shell-rail__scroll">([\s\S]*)<\/div><ul class="shell-rail__lower">([\s\S]*?)<\/ul><div class="shell-rail__foot">/.exec(html);
+    expect(parts, 'the scrolling part, then the lower group, then the foot').not.toBeNull();
+    const [, scroll, lower] = parts!;
+    for (const part of ['shell-rail__brand', 'shell-rail__org', 'shell-rail__main']) expect(scroll).toContain(part);
     const foot = html.slice(html.indexOf('<div class="shell-rail__foot">'));
     for (const part of ['shell-rail__person', 'href="/account"', 'shell-rail__signout', 'shell-theme']) expect(foot, part).toContain(part);
-    expect(scroll![1]).not.toContain('shell-rail__person');
-    // Members and Organisation stay in the scrolling part's lower group.
-    const lower = /<ul class="shell-rail__lower">([\s\S]*?)<\/ul>/.exec(html)![1];
+    expect(scroll).not.toContain('shell-rail__person');
+    // I1 (final review): Members and Organisation sit outside the scrolling part, so a tall project block cannot push them
+    // out of view; they stay in reading order between the project block and the foot.
+    expect(scroll).not.toContain('settings/members');
     expect(lower).toContain('/orgs/a/settings/members');
     expect(lower).toContain('/orgs/a/settings/organisation');
   });
@@ -339,7 +341,8 @@ describe('fix round 3: the rail fits a laptop (D4, D5) and the minor design item
   });
 
   it('D4 (a)(c): the items sit at a 44 px pitch with no gap, and the rail\'s padding and group gaps are 8 px', () => {
-    expect(ruleIn(css, '.shell-rail__nav ul')).toMatch(/gap: 0;/);
+    // The scrolling part's lists and the pinned lower group share one rule (review 1, Minor: one copy of the list styles).
+    expect(ruleIn(css, '.shell-rail__nav ul,\n.shell-rail__lower')).toMatch(/gap: 0;/);
     expect(ruleIn(css, '.shell-rail__item')).toMatch(/min-block-size: var\(--target-primary\);/);
     expect(ruleIn(css, '.shell-rail__scroll')).toMatch(/gap: var\(--space-2\);/);
     expect(ruleIn(css, '.shell-rail__scroll')).toMatch(/padding: var\(--space-2\) var\(--space-3\);/);
@@ -373,9 +376,9 @@ describe('fix round 4: the footer in the content column (D23, coordinator\'s opt
     return bodies.join('\n');
   };
 
-  it('D23: the root layout puts the page and its one footer in one frame, after the skip link and the offline banner', () => {
+  it('D23: the root layout puts the page and its one footer in one frame, after the skip link; the offline banner is the frame\'s first box (lane 8 I2)', () => {
     const layout = readFileSync('app/layout.tsx', 'utf8');
-    expect(layout).toMatch(/<SkipLink \/>\s*<OfflineBanner \/>\s*(\{\/\*[\s\S]*?\*\/\}\s*)?<div className="page-frame">\s*\{children\}\s*<Footer \/>\s*<\/div>/);
+    expect(layout).toMatch(/<SkipLink \/>\s*(\{\/\*[\s\S]*?\*\/\}\s*)?<div className="page-frame">\s*<OfflineBanner \/>\s*\{children\}\s*<Footer \/>\s*<\/div>/);
     expect([...layout.matchAll(/<Footer \/>/g)]).toHaveLength(1);
   });
 
@@ -391,6 +394,12 @@ describe('fix round 4: the footer in the content column (D23, coordinator\'s opt
     expect(main).not.toMatch(/overflow-y: auto;/);
     expect(main).not.toMatch(/max-height: 100vh;/);
     expect(main).toMatch(/padding: var\(--space-8\);/);
+  });
+
+  it('I2: from 1024 px the frame of a shell page is the containing block of its clipped absolute content, so none of it scrolls the window', () => {
+    // overflow alone does not make the frame a containing block: without a position, the evidence uploader's clipped
+    // file input took the initial containing block and its place below the fold made the document scroll (lane 8 I2).
+    expect(ruleIn(wide, '.page-frame:has(> .shell)')).toMatch(/position: relative;/);
   });
 
   it('D23: the shell is a subgrid of the frame, the rail spans main\'s row and the footer\'s, the footer takes the content column', () => {
@@ -417,11 +426,23 @@ describe('fix round 4: the footer in the content column (D23, coordinator\'s opt
     expect(css).not.toMatch(/@supports not \(container-type: scroll-state\)/);
   });
 
-  it('I3 M2: each cue sits on the scroller\'s real edge, past its 8 px padding; the bottom fade ends on the foot rule with no hairline', () => {
+  it('I3 M2 I1: each cue sits on the scroller\'s real edge, past its 8 px padding, with the same hairline at either edge', () => {
     expect(ruleIn(wide, '.shell-rail__scroll::before')).toMatch(/inset-block-start: calc\(-1 \* var\(--space-2\)\);/);
     expect(ruleIn(wide, '.shell-rail__scroll::after')).toMatch(/inset-block-end: calc\(-1 \* var\(--space-2\)\);/);
-    expect(ruleIn(wide, '.shell-rail__scroll::after')).not.toMatch(/border-block-end/);
+    // Final review I1: the bottom edge now meets the lower group's rule (1.2:1 on the navy), which alone does not show that
+    // stage lines lie below it; the bottom cue carries the top cue's hairline, shown only while more is below.
+    expect(ruleIn(wide, '.shell-rail__scroll::before')).toMatch(/border-block-start: 1px solid var\(--color-shell-muted\);/);
+    expect(ruleIn(wide, '.shell-rail__scroll::after')).toMatch(/border-block-end: 1px solid var\(--color-shell-muted\);/);
     expect(ruleIn(css, '.shell-rail__foot')).toMatch(/border-block-start: 1px solid var\(--color-border-container\);/);
+  });
+
+  it('I1 round 2: the bottom fade is 48 px, taller than any text-free gap in the project block, and takes its own height back', () => {
+    // The e2e rail-fit case holds the property (some of the block's words lie in the fade's denser half at 1280x800 and
+    // 1366x768); this pins the means, so a later edit to the shared cue rule cannot shrink it unseen.
+    const after = ruleIn(wide, '.shell-rail__scroll::after');
+    expect(after).toMatch(/block-size: var\(--space-12\);/);
+    expect(after).toMatch(/margin-block-start: calc\(-1 \* var\(--space-12\)\);/);
+    expect(ruleIn(wide, '.shell-rail__scroll')).toMatch(/scroll-padding-block: var\(--space-6\) var\(--space-12\);/);
   });
 
   it('rail fit: Sign out and the theme switch share one row; the switch is a 44 px square whose words are its accessible name', () => {

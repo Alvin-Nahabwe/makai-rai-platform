@@ -230,8 +230,9 @@
     z-index: 1;
     width: auto;
     height: 100vh;
-    /* The rail's own parts scroll: the upper part when it must, beside a pinned foot (review D4). The panel scrolls as a
-       whole only when the foot alone is taller than the window (under about 230 px), so Sign out stays reachable (M3). */
+    /* The rail's own parts scroll: the upper part when it must, above the pinned lower group and foot (review D4, final
+       review I1). The panel scrolls as a whole only when those two alone are taller than the window (under about 270 px),
+       so Sign out stays reachable (M3). */
     overflow-y: auto;
     /* In the dark theme the shell navy and the page ground are 1.04:1 apart: the edge keeps the rail from merging into
        the page. A container border, so it is quiet in the light theme, where the navy already stands apart. */
@@ -260,14 +261,20 @@
   .page-frame:has(> .shell) {
     display: grid;
     grid-template-columns: var(--rail-width) minmax(0, 1fr);
-    /* Two rows for boxes a layout puts before the shell inside the frame (today one: the idle warning's, which also holds
-       its signed-out notice; e2e/shell-project.spec.ts holds the count), then main's row, which takes the rest of a short
+    /* Two rows for boxes a layout puts before the shell inside the frame (today two: the offline notice's region, which
+       app/layout.tsx puts first so the frame stays the window's height when the notice shows, and the idle warning's,
+       which also holds its signed-out notice; e2e/shell-project.spec.ts holds the count), then main's row, which takes the rest of a short
        page so the band still ends on the screen's foot, then the band's. :has() and subgrid are Baseline widely
        available, so there is no fallback for a browser without them. */
     grid-template-rows: repeat(2, auto) [shell-start] 1fr [footer-start] auto [shell-end];
     block-size: 100vh;
     overflow-y: auto;
     padding-block-end: var(--space-8);
+    /* The containing block of its clipped absolute content (the evidence uploader's file input and label, any
+       .visually-hidden text with no positioned box above it): overflow alone does not make one, so that content took the
+       initial containing block, and its place below the fold made the window scroll past the frame (lane 8 I2). Offsets
+       stay where they were; fixed boxes, sticky boxes and the top layer are unchanged. */
+    position: relative;
   }
 
   .page-frame:has(> .shell) > * {
@@ -343,8 +350,8 @@
     block-size: 100%;
   }
 
-  /* The upper part scrolls when the screen is too short for it; the foot stays. A thin scrollbar in the rail's colours
-     (thumb 8.6:1 on the navy), and a cue at each edge that has more beyond it (modern-web-guidance
+  /* The upper part scrolls when the screen is too short for it; the lower group and the foot stay. A thin scrollbar in the
+     rail's colours (thumb 8.6:1 on the navy), and a cue at each edge that has more beyond it (modern-web-guidance
      scrollability-affordance-hints): the navy fades over the content there, with a hairline. */
   .shell-rail__scroll {
     flex: 1 1 auto;
@@ -352,7 +359,7 @@
     overflow-y: auto;
     overscroll-behavior: contain;
     /* A focused item scrolled into view stops clear of the cue at either edge. */
-    scroll-padding-block: var(--space-6);
+    scroll-padding-block: var(--space-6) var(--space-12);
     scrollbar-width: thin;
     scrollbar-color: var(--color-shell-muted) transparent;
     container-type: scroll-state;
@@ -379,10 +386,15 @@
     background: linear-gradient(var(--color-shell), transparent);
   }
 
-  /* The bottom fade ends on the foot's rule, with no hairline of its own, so there is one rule there, not two (M2). */
+  /* The bottom fade ends on the lower group's rule (the foot's when there is no lower group), 1.2:1 on the navy, so the cue
+     carries the top cue's hairline (final review I1). It is twice the top cue's height (I1 round 2): taller than any gap
+     between the block's lines of text (13 px measured at 1280x800 and 1366x768), so wherever the edge falls, some words fade
+     out under it and a person sees the block go on, not a rule over empty navy. */
   .shell-rail__scroll::after {
     inset-block-end: calc(-1 * var(--space-2));
-    margin-block-start: calc(-1 * var(--space-6));
+    block-size: var(--space-12);
+    margin-block-start: calc(-1 * var(--space-12));
+    border-block-end: 1px solid var(--color-shell-muted);
     background: linear-gradient(transparent, var(--color-shell));
   }
 
@@ -469,16 +481,20 @@
 }
 
 /* Items at the sketch's 44 px pitch, with no gap between them (review D4 a, D8). */
-.shell-rail__nav ul {
+.shell-rail__nav ul,
+.shell-rail__lower {
   display: flex;
   flex-direction: column;
   gap: 0;
   list-style: none;
 }
 
+/* Members and Organisation, between the scrolling part and the foot (final review I1): never scrolled away. The rule and the
+   inset are the ones they had at the end of the scrolling part, so the rail looks the same when nothing overflows. */
 .shell-rail__lower {
-  margin-block-start: auto;
-  padding-block-start: var(--space-2);
+  flex: none;
+  margin-inline: var(--space-3);
+  padding-block: var(--space-2);
   border-block-start: 1px solid var(--color-shell-hover);
 }
 

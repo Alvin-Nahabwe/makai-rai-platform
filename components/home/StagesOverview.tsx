@@ -138,7 +138,9 @@ export function StagesOverview({ orgSlug, projectId, projectName, stages, next, 
 }): ReactElement {
   const Heading = heading;
   return (
-    <section className="home-section home-project">
+    // `project-card`: the plate is Home's card for one project (it replaced ProjectCard in the Home rebuild); its links vary
+    // with the data, so e2e/role-matrix.spec.ts's control census exempts it as it does every project card (O-13).
+    <section className="home-section home-project project-card">
       <Heading className="home-project__name">
         <ListLink href={`/orgs/${orgSlug}/projects/${projectId}`}><bdi>{projectName}</bdi></ListLink>
       </Heading>

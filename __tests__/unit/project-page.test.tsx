@@ -149,43 +149,19 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     expect(JSON.stringify(P)).not.toContain('Problem formulation; data collection');
   });
 
-  it('9.2: the questions with no decision are counted as a link to the filtered list and the first three are named, then "and k more"', () => {
+  it('9.2 (owner 15 Nov 19:20, "Count, not names"): Still open counts the questions with no decision as one link to the filtered list and names none of them', () => {
     const l = lines(render({ counts: { 'in-processing': { ...COUNTS, noDecision: 2 }, 'post-processing': { ...COUNTS, noDecision: 0 } } }));
     const pre = stop(l['pre-processing'], 'open');
     expect(pre).toContain(`<a href="/orgs/o/projects/p1/stages/pre-processing?show=no_decision">${S.noDecisionQuestions(9)}</a>`);
-    const named = [...pre.matchAll(/<li class="stage-line__named-item"><a href="([^"]+)">([^<]+)<\/a><\/li>/g)].map((m) => [m[1], m[2]]);
-    expect(named).toEqual([15, 16, 17].map((n) => [`/orgs/o/projects/p1/stages/pre-processing/questions/pre-processing-q${n}`, `Question ${n} of pre-processing`]));
-    expect(pre).toContain(`<a href="/orgs/o/projects/p1/stages/pre-processing?show=no_decision">${P.andMore(6)}</a>`);
-    // Two open: both named, no "and more".
+    // No question title from the route's list, no list of them, and no "and k more".
+    for (const n of [15, 16, 17]) expect(pre).not.toContain(`Question ${n} of pre-processing`);
+    expect(pre).not.toContain('stage-line__named');
+    expect(pre).not.toMatch(/and \d+ more/);
     const inp = stop(l['in-processing'], 'open');
-    expect([...inp.matchAll(/stage-line__named-item/g)]).toHaveLength(2);
-    expect(inp).not.toContain('more</a>');
+    expect(inp).toContain(`>${S.noDecisionQuestions(2)}</a>`);
+    expect(inp).not.toContain('stage-line__named');
     // None open: the line is left out.
     expect(stop(l['post-processing'], 'open')).not.toContain('with no decision');
-  });
-
-  it('9.2: "and k more" is the stage\'s count less the questions named, so the count and the list always add up', () => {
-    const d = data();
-    const routes = routesOf(d);
-    // The names come from the route; here it lists four of the nine the counts hold (two reads that disagree for a moment).
-    const short = { ...routes, 'pre-processing': { ...routes['pre-processing'], noDecision: routes['pre-processing'].noDecision.slice(0, 4) } };
-    const open = stop(lines(renderToStaticMarkup(<ProjectPage data={d} routes={short} continueTo={null} />))['pre-processing'], 'open');
-    expect([...open.matchAll(/stage-line__named-item/g)]).toHaveLength(3);
-    expect(open).toContain(`>${P.andMore(6)}</a>`);
-    // Fewer named than the count never goes below zero, and a count of three named shows no "and more".
-    const three = { ...routes, 'pre-processing': { ...routes['pre-processing'], noDecision: routes['pre-processing'].noDecision.slice(0, 3) } };
-    const d3 = data({ counts: { 'pre-processing': { ...COUNTS, noDecision: 3 } } });
-    expect(stop(lines(renderToStaticMarkup(<ProjectPage data={d3} routes={three} continueTo={null} />))['pre-processing'], 'open')).not.toContain('more</a>');
-  });
-
-  it('N2: the route lists more no-decision questions than the count holds: no more are named than the count says', () => {
-    // The counts say two; the route (another read) still lists nine. The line says 2 and names 2, never 3.
-    const routes = routesOf(data());
-    const d2 = data({ counts: { 'pre-processing': { ...COUNTS, noDecision: 2 } } });
-    const open = stop(lines(renderToStaticMarkup(<ProjectPage data={d2} routes={routes} continueTo={null} />))['pre-processing'], 'open');
-    expect(open).toContain(`>${S.noDecisionQuestions(2)}</a>`);
-    expect([...open.matchAll(/stage-line__named-item/g)]).toHaveLength(2);
-    expect(open).not.toContain('more</a>');
   });
 
   it('9.2 FR-PRJ-02: open findings link to the stage\'s findings, keep "(k of them with no mitigation yet)"; nothing open reads "Nothing is open in this stage."', () => {
@@ -216,30 +192,42 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     expect(open).toMatch(/<span class="status-label">Planned<\/span>/);
   });
 
-  it('FR-FUP-01 FR-FUP-05: open mitigations that are not overdue, and those whose person can no longer act, stay on the page as plates', () => {
+  it('owner 15 Nov 20:50: Still open shows the overdue plates, then one line "{n} other open mitigations" to the Findings page; no plate for one not due or whose person cannot act', () => {
     const later: FollowUpItem = { ...ITEM, mitigationId: 'm3', findingId: 'f3', what: 'Re-run the check', overdue: false, dueDate: '2026-12-20', status: 'planned' };
     const stuck: FollowUpItem = { ...ITEM, mitigationId: 'm4', findingId: 'f4', what: 'Write the guide', overdue: false, dueDate: '2026-12-21', ownerCanAct: false, owner: { userId: 'u9', name: 'Former Person', formerMember: true } };
     const html = render({ followUp: { 'pre-processing': { items: [later], cannotAct: [stuck] } }, counts: { 'pre-processing': { ...COUNTS, overdueMitigations: 0, openMitigations: 2 } } });
-    const open = text(stop(lines(html)['pre-processing'], 'open'));
-    expect(open).toContain(P.noOverdue);
-    expect(open).toContain(`${P.notOverdue}: ${P.mitigationCount(2)}`);
-    expect(open).toContain(`Re-run the check${PROJECT_COPY.followUp.assignedTo('Joseph Mugisha')} · Planned · ${PROJECT_COPY.followUp.due('20 Dec 2026')}`);
-    expect(open).toContain(`${PROJECT_COPY.followUp.cannotAct('Former Person')} ${PROJECT_COPY.followUp.reassign}`);
+    const open = stop(lines(html)['pre-processing'], 'open');
+    expect(text(open)).toContain(P.noOverdue);
+    expect(open).not.toContain('Not overdue');
+    expect(open).not.toContain('ui-plate');
+    expect(open).not.toContain('Re-run the check');
+    expect(open).toContain(`<a href="/orgs/o/projects/p1/findings?stage=pre-processing">${P.otherOpenMitigations(2)}</a>`);
+    // With overdue ones: their plates, then the others as one line (singular for one).
+    const both = render({ followUp: { 'pre-processing': { items: [ITEM, later], cannotAct: [] } }, counts: { 'pre-processing': { ...COUNTS, overdueMitigations: 1, openMitigations: 2 } } });
+    const open2 = stop(lines(both)['pre-processing'], 'open');
+    expect(open2.match(/class="ui-plate /g)).toHaveLength(1);
+    expect(text(open2)).toContain(P.otherOpenMitigations(1));
+    expect(open2.indexOf('ui-plate ')).toBeLessThan(open2.indexOf(P.otherOpenMitigations(1)));
+    // None other open: no line.
+    const none = render({ followUp: { 'pre-processing': { items: [ITEM], cannotAct: [] } } });
+    expect(stop(lines(none)['pre-processing'], 'open')).not.toMatch(/other open mitigation/);
     // An open mitigation that is not overdue keeps "Nothing is open" away.
     const only = render({ counts: { 'pre-processing': { ...ZERO, noDecision: 0, openMitigations: 1 } }, followUp: { 'pre-processing': { items: [later], cannotAct: [] } } });
     expect(stop(lines(only)['pre-processing'], 'open')).not.toContain(S.nothingOpen);
   });
 
-  it('7.2 C5: Recorded so far is the kit\'s route row, one stop per question with no link (each question is reached by name), labelled with the stage, and the tally with the evidence caveat', () => {
+  it('owner 15 Nov 20:50: Recorded so far is the tally in words with the kit\'s mark beside each count, no row of marks per question; the no-decision count stays in Still open', () => {
     const l = lines(render({ counts: { 'in-processing': { ...COUNTS, byStatus: { done: 1, partly: 0, not_yet: 0, not_applicable: 0 }, doneWithoutEvidence: 0, noDecision: 22, notApplicableByGate: 1 } } }));
     const pre = stop(l['pre-processing'], 'recorded');
-    expect(pre).toContain(`<ol class="ui-route-row__stops" role="list" aria-label="${P.routeLabel('Pre-processing')}">`);
-    expect(pre.match(/<li class="ui-route-row__stop/g)).toHaveLength(24);
-    expect(pre.match(/<span class="ui-route-row__point"><svg class="ui-mark__shape"/g)).toHaveLength(24);
-    // No link in the row: about 75 fewer keyboard stops before "This project" (lead's ruling on C5).
+    // The row of marks per question is gone: no stops, no per-question words, no list named "Questions in <stage>".
+    expect(pre).not.toContain('ui-route-row__stops');
+    expect(pre).not.toContain('ui-route-row__stop');
+    expect(pre).not.toContain(P.routeLabel('Pre-processing'));
+    expect(pre).not.toContain('Question 1 of pre-processing');
     expect(pre).not.toContain('<a ');
-    expect(pre).toContain('<span class="visually-hidden"><span>Question 1 of pre-processing</span>: Done</span>');
-    // The tally as the kit's list keyed by the marks, read in the tally's words and order (no decision is left out here).
+    // The tally: one item per kind with a count, each its kit mark (hidden from assistive technology) then the count in words.
+    const items = [...pre.matchAll(/<li class="ui-route-row__tally-item"[^>]*>(.*?)<\/li>/g)].map((m) => m[1]);
+    for (const it of items) expect(it).toMatch(/^<svg class="ui-mark__shape"[^>]*aria-hidden="true"/);
     const tally = (rec: string) => [...rec.matchAll(/<li class="ui-route-row__tally-item"[^>]*>(.*?)<\/li>/g)].map((m) => text(m[1].replace(/<span class="ui-term-tip">.*?<\/span><\/span><\/span>/, ''))).join(', ');
     expect(tally(pre)).toBe('7 done (2 with no evidence attached), 3 partly, 2 not yet, 2 not applicable, 1 answered');
     expect(tally(stop(l['in-processing'], 'recorded'))).toBe('1 done, 1 does not apply');
@@ -247,16 +235,15 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     expect(render()).not.toMatch(/\b(total|overall|in all)\b|%|\b21 done\b/i);
   });
 
-  it('barely started: every line shows its row of No decision marks and "No decisions recorded yet"', () => {
+  it('barely started: every line reads "No decisions recorded yet", with no row of marks', () => {
     const html = render({ counts: { 'pre-processing': ZERO, 'in-processing': ZERO, 'post-processing': ZERO } });
     for (const line of Object.values(lines(html))) {
       const rec = stop(line, 'recorded');
-      expect(rec.match(/data-mark-kind="no_decision"/g)).toHaveLength(24);
+      expect(rec).not.toContain('ui-route-row__stop');
       expect(rec).toContain(`<p class="ui-route-row__tally">${UI_COPY.tally.none}</p>`);
       expect(rec).not.toMatch(/accepted risk|issued/);
       expect(text(stop(line, 'last'))).toContain(P.noDecisionYet(24));
     }
-    expect(html.split(UI_COPY.tally.none)).toHaveLength(4);
   });
 
   it('first use: each defined term\'s definition shows once on the page, beside the first use, which is marked as the term', () => {
@@ -279,9 +266,28 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     expect(html.indexOf('data-definition="seal"')).toBeGreaterThan(html.indexOf('<section class="stage-line" id="post-processing"'));
   });
 
+  it('owner 15 Nov 21:32 (A): every first-use definition below the stage heads is a (i) toggletip with the exact sentence; only the stage meanings stay as text', () => {
+    const reviews = { 'in-processing': [{ ...REVIEW, stage: 'in-processing' as const }] };
+    const html = render({ reviews, counts: { 'pre-processing': { ...COUNTS, openFindings: 0, openFindingsWithoutMitigation: 0 } } });
+    for (const term of [TERM_FINDING, TERM_MITIGATION, TERM_ACCEPTED_RISK, TERM_STAGE_REVIEW, TERM_SEAL]) {
+      // No bare Definition (it has no id); one tip, named by whatMeans, whose popover holds the vocabulary's sentence.
+      expect(html, term.id).not.toMatch(new RegExp(`class="ui-definition" data-definition="${term.id}"`));
+      expect(html, term.id).toContain(`data-definition="${term.id}">${term.definition?.replace(/'/g, '&#x27;')}</span>`);
+      expect(html, term.id).toContain(`aria-label="${P.whatMeans(term.term).replace(/"/g, '&quot;')}"`);
+      // The tip follows its term in the same block (a toggletip beside the exact definition counts, owner 11:00).
+      expect(html.indexOf('<span class="ui-term-tip">', html.indexOf(`data-term="${term.id}"`)), term.id).toBeGreaterThan(-1);
+    }
+    for (const term of [TERM_STAGE_1, TERM_STAGE_2, TERM_STAGE_3]) expect(html).toMatch(new RegExp(`<p class="ui-definition" data-definition="${term.id}">`));
+    // The share line's two tips sit in its own p.
+    const share = html.slice(html.indexOf('<p class="project-page__share">'), html.indexOf('</p>', html.indexOf('<p class="project-page__share">')));
+    expect(share).toContain('ui-term-tip');
+  });
+
   it('first use: each status word of a tally carries its (i) once on the page, on the first line whose tally shows it', () => {
     const STATUS_TERMS = [TERM_DONE, TERM_PARTLY, TERM_NOT_YET, TERM_NOT_APPLICABLE, TERM_DOES_NOT_APPLY];
-    const tipsIn = (markup: string) => [...markup.matchAll(/<span class="ui-term-tip">.*?data-definition="([a-z-]+)"/g)].map((m) => m[1]);
+    // Only the status words' tips: the page's other first-use tips (finding, mitigation, ...) sit beside them in the same lines.
+    const tipsIn = (markup: string) => [...markup.matchAll(/<span class="ui-term-tip">.*?data-definition="([a-z-]+)"/g)].map((m) => m[1])
+      .filter((id) => STATUS_TERMS.some((t) => t.id === id));
     // Pre-processing counts done, partly, not yet and not applicable; only in-processing has a question that does not apply.
     const html = render({ counts: { 'in-processing': { ...COUNTS, notApplicableByGate: 1, noDecision: 8 } } });
     for (const term of STATUS_TERMS) {
@@ -432,11 +438,13 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     const newer: StageReviewView = { ...REVIEW, id: 'r2', numberInStage: 2, name: 'Team check-in, November', latestSeal: { ...SEAL, id: 's2', reviewId: 'r2' }, changedSinceLatestSeal: true,
       changed: { sealNumber: 1, changedQuestions: ['Q-PP-03'], changedFindings: [] } };
     const pre = stop(lines(render({ reviews: { 'pre-processing': [sealed, newer] } }))['pre-processing'], 'reviews');
-    expect(text(pre)).toContain(`${P.reviewNumber(1)} · ${P.sealed} 11 Nov 2026 · ${P.changedSinceSeal(2)}`);
+    // Owner 15 Nov 21:32 (C): one line per review, "Review n · sealed <date> · k changed since", the count linking to the review.
+    expect(text(pre)).toContain(`${P.reviewNumber(1)} · ${P.sealed} 11 Nov 2026 · ${P.changedSince(2)}`);
+    expect(text(pre)).toContain(`${P.reviewNumber(2)} · ${P.sealed} 11 Nov 2026 · ${P.changedSince(1)}`);
     expect(text(pre)).toContain(`${REVIEW_COPY.review.facts.preparedFor}: Ethics committee`);
-    // Only the newest review's change count is a link: the stage page's filter compares against the newest review.
-    expect(pre).not.toContain(`>${P.changedSinceSeal(2)}</a>`);
-    expect(pre).toContain(`<a href="/orgs/o/projects/p1/stages/pre-processing?show=changed_since_seal">${P.changedSinceSeal(1)}</a>`);
+    expect(pre).toContain(`<a href="/orgs/o/projects/p1/reviews/r1">${P.changedSince(2)}</a>`);
+    expect(pre).toContain(`<a href="/orgs/o/projects/p1/reviews/r2">${P.changedSince(1)}</a>`);
+    expect(pre).not.toContain('it was sealed');
     expect(pre).not.toContain(P.beforeSealing);
   });
 
@@ -447,30 +455,30 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     expect(pre.match(/<bdi>/g)).toHaveLength(1);
   });
 
-  it('9.2: a sealed review says how many decisions and how many findings changed since it was sealed, each on its own; the findings part links to the review', () => {
+  it('owner 15 Nov 21:32 (C): decisions and findings changed since the seal are one count, "k changed since"; none changed adds nothing', () => {
     const both: StageReviewView = { ...REVIEW, latestSeal: SEAL, changedSinceLatestSeal: true,
       changed: { sealNumber: 1, changedQuestions: ['Q-PP-01', 'Q-PP-02'], changedFindings: ['f1', 'f2', 'f3'] } };
     const pre = stop(lines(render({ reviews: { 'pre-processing': [both] } }))['pre-processing'], 'reviews');
-    expect(text(pre)).toContain(`${P.reviewNumber(1)} · ${P.sealed} 11 Nov 2026 · ${P.changedSinceSeal(2)} · ${P.findingsChangedSinceSeal(3)}`);
-    expect(pre).toContain(`<a href="/orgs/o/projects/p1/stages/pre-processing?show=changed_since_seal">${P.changedSinceSeal(2)}</a>`);
-    expect(pre).toContain(`<a href="/orgs/o/projects/p1/reviews/r1">${P.findingsChangedSinceSeal(3)}</a>`);
-    // Findings only: the findings part alone, in the same words; never "Changed since seal 1 (n)."
-    const onlyFindings: StageReviewView = { ...both, changed: { sealNumber: 1, changedQuestions: [], changedFindings: ['f1'] } };
-    const html = render({ reviews: { 'pre-processing': [onlyFindings] }, counts: { 'pre-processing': { ...COUNTS, openFindings: 0, openFindingsWithoutMitigation: 0 } } });
-    const only = stop(lines(html)['pre-processing'], 'reviews');
-    expect(text(only)).toContain(`${P.reviewNumber(1)} · ${P.sealed} 11 Nov 2026 · ${P.findingsChangedSinceSeal(1)}`);
-    expect(only).not.toContain(P.changedSinceSeal(1));
-    expect(only).not.toContain('Changed since seal');
-    // With no open finding before it, this sentence is the page's first use of "finding": its definition is here, once.
-    expect(only).toContain('data-definition="finding"');
+    expect(text(pre)).toContain(`${P.reviewNumber(1)} · ${P.sealed} 11 Nov 2026 · ${P.changedSince(5)}`);
+    expect(pre).toContain(`<a href="/orgs/o/projects/p1/reviews/r1">${P.changedSince(5)}</a>`);
+    // The review's meta is one p: no second sentence about findings, so the review adds no first use of "finding".
+    expect(pre.match(/class="review-list__meta"/g)).toHaveLength(1);
+    const html = render({ reviews: { 'pre-processing': [{ ...both, changed: { sealNumber: 1, changedQuestions: [], changedFindings: ['f1'] } }] }, counts: { 'pre-processing': { ...COUNTS, openFindings: 0, openFindingsWithoutMitigation: 0 } } });
+    expect(text(stop(lines(html)['pre-processing'], 'reviews'))).toContain(`${P.reviewNumber(1)} · ${P.sealed} 11 Nov 2026 · ${P.changedSince(1)}`);
+    // With no open finding in pre-processing, the first use of "finding" is in-processing's Still open, as for any page.
+    expect(lines(html)['pre-processing']).not.toContain('data-definition="finding"');
     expect(html.split('data-definition="finding"')).toHaveLength(2);
-    expect([P.findingsChangedSinceSeal(1), P.findingsChangedSinceSeal(3)]).toEqual(['1 finding changed since it was sealed', '3 findings changed since it was sealed']);
+    const none = stop(lines(render({ reviews: { 'pre-processing': [{ ...both, changed: { sealNumber: 1, changedQuestions: [], changedFindings: [] } }] } }))['pre-processing'], 'reviews');
+    expect(text(none)).toContain(`${P.reviewNumber(1)} · ${P.sealed} 11 Nov 2026`);
+    expect(none).not.toContain('changed since');
   });
 
   it('9.2: a damaged seal says so first, an erased purpose says when; "Open a stage review" only where the role may and the project is live', () => {
     const damaged: StageReviewView = { ...REVIEW, latestSeal: SEAL, latestSealUnreadable: true, preparedForErased: { erasedOn: '2026-11-12' } };
     const pre = text(stop(lines(render({ reviews: { 'pre-processing': [damaged] } }))['pre-processing'], 'reviews'));
-    expect(pre).toContain(`${P.reviewNumber(1)} · ${REVIEW_COPY.state.damaged}`);
+    // One line, in the first sentence of the damaged-seal words (the review page keeps the whole of it).
+    expect(pre).toContain(`${P.reviewNumber(1)} · ${REVIEW_COPY.state.damagedShort}`);
+    expect(pre).not.toContain('Contact MAK-AI');
     expect(pre).toContain(`${REVIEW_COPY.review.facts.preparedFor}: ${REVIEW_COPY.mounted.noteErased('12 Nov 2026')}`);
     for (const [o, shown] of [[{ role: 'owner' }, true], [{ role: 'assessor' }, true], [{ role: 'viewer' }, false], [{ role: 'owner', archived: true }, false]] as const) {
       const html = render(o);
@@ -577,12 +585,12 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     expect([P.whatMeans('Done'), P.whatMeans('Not yet')]).toEqual(['What does "Done" mean?', 'What does "Not yet" mean?']);
     expect([P.noDecisionYet(1), P.noDecisionYet(3)]).toEqual(['1 question has no decision yet.', '3 questions have no decision yet.']);
     expect(P.allDecided).toBe('Every question in this stage has a decision.');
-    expect(P.andMore(4)).toBe('and 4 more');
     expect([P.beforeSealing, P.nothingLeftOpen]).toEqual(['Before sealing, look at:', 'Nothing is left open in this stage.']);
     expect([P.doneNoEvidence(1), P.doneNoEvidence(2)]).toEqual(['1 decision marked Done with no evidence attached', '2 decisions marked Done with no evidence attached']);
     expect([P.overdueMitigations(1), P.overdueMitigations(2)]).toEqual(['1 overdue mitigation', '2 overdue mitigations']);
-    expect([P.changedSinceSeal(1), P.changedSinceSeal(2)]).toEqual(['1 decision changed since it was sealed', '2 decisions changed since it was sealed']);
+    expect([P.changedSince(1), P.changedSince(5)]).toEqual(['1 changed since', '5 changed since']);
     expect([P.reviewsHeading, P.thisProject, P.findings, P.editProjectDetails, P.noOverdue]).toEqual(['Reviews', 'This project', 'Findings', 'Edit project details', 'No overdue mitigations']);
+    expect([P.otherOpenMitigations(1), P.otherOpenMitigations(4)]).toEqual(['1 other open mitigation', '4 other open mitigations']);
     const words: string[] = [];
     const walk = (v: unknown): void => {
       if (typeof v === 'string') words.push(v);

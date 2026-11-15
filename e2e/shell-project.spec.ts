@@ -388,7 +388,7 @@ for (const [width, height] of [[1366, 768], [1280, 800], [1440, 900], [1280, 560
 }
 
 for (const [width, height] of [[1280, 800], [1366, 768]] as const) {
-  test(`rail fit (fix round 4): at ${width}x${height} all three stage lines are in the rail's first view, and the foot's two controls share a row`, async ({ browser }) => {
+  test(`rail fit (fix round 4, final review I1): at ${width}x${height} the first stage line is in the rail's first view and a third one past it shows the cue; the foot's two controls share a row`, async ({ browser }) => {
     const page = await signedIn(browser, fx.members.owner, { viewport: { width, height } });
     const typicalPath = `/orgs/${fx.org.slug}/projects/${typical.id}`;
     // How far the third stage line ends past the rail's first view (negative: inside it, with room to spare).
@@ -401,7 +401,36 @@ for (const [width, height] of [[1280, 800], [1366, 768]] as const) {
       await page.goto(path);
       await hydrated(page);
       await expect(block(page).locator('.shell-project__stage')).toHaveCount(3);
-      expect(await overshoot(), `${path}: the third stage line ends inside the rail's first view`).toBeLessThanOrEqual(0);
+      // Final review I1: Members and Organisation now stay put above the foot, so the scrolling part is 97 px shorter and the
+      // third stage line can end past its first view at these sizes. The first stage line ("You are here" on the question
+      // page) stays in view, and whatever is past the edge is signalled by the bottom cue.
+      const view = await rectOf(page, '.shell-rail__scroll');
+      const first = (await block(page).locator('.shell-project__stage').first().boundingBox())!;
+      expect(Math.round(first.y + first.height), `${path}: the first stage line ends inside the rail's first view`).toBeLessThanOrEqual(view.bottom);
+      const past = await overshoot();
+      test.info().annotations.push({ type: 'rail fit, typical name', description: `${width}x${height} ${path}: third stage line ends ${past} px past the first view` });
+      if (past > 0) {
+        await expect.poll(() => page.locator('.shell-rail__scroll').evaluate((el) => Number(getComputedStyle(el, '::after').opacity)),
+          `${path}: the third stage line is past the edge, so the bottom cue shows`).toBeGreaterThan(0.5);
+        // I1 round 2: the cut never falls in a gap. Some of the block's text lies in the fade's denser half (the edge's half,
+        // at least half navy), so a person sees the block's words fade out at the edge, not a rule over empty navy.
+        const inFade = await page.locator('.shell-rail__scroll').evaluate((el) => {
+          const bottom = el.getBoundingClientRect().bottom;
+          const band = parseFloat(getComputedStyle(el, '::after').blockSize);
+          const top = bottom - band / 2;
+          const walker = document.createTreeWalker(el.querySelector('.shell-project')!, NodeFilter.SHOW_TEXT);
+          let most = 0;
+          for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+            if (!n.textContent?.trim()) continue;
+            const range = document.createRange();
+            range.selectNodeContents(n);
+            for (const r of Array.from(range.getClientRects())) most = Math.max(most, Math.min(r.bottom, bottom) - Math.max(r.top, top));
+          }
+          return { band, overlap: Math.round(most) };
+        });
+        test.info().annotations.push({ type: 'rail fit, text under the fade', description: `${width}x${height} ${path}: band ${inFade.band} px, text ${inFade.overlap} px into its denser half` });
+        expect(inFade.overlap, `${path}: some of the block's text lies in the fade's denser half (band ${inFade.band} px)`).toBeGreaterThanOrEqual(4);
+      }
       const foot = page.locator('.shell-rail__foot');
       const out = (await foot.getByRole('button', { name: 'Sign out' }).boundingBox())!;
       const theme = foot.locator('.shell-theme');
@@ -419,6 +448,42 @@ for (const [width, height] of [[1280, 800], [1366, 768]] as const) {
       const description = `${width}x${height} ${path.includes('/questions/') ? 'question' : 'project'} page: third stage line ends ${await overshoot()} px past the first view`;
       test.info().annotations.push({ type: 'rail fit, 70-character name', description });
       console.log(`rail fit, 70-character name: ${description}`);
+    }
+  });
+}
+
+for (const [width, height] of [[1280, 800], [1366, 768], [1440, 900]] as const) {
+  test(`I1 (final review): at ${width}x${height} Members and Organisation are in view beside the project block, and the foot stays pinned`, async ({ browser }) => {
+    const page = await signedIn(browser, fx.members.owner, { viewport: { width, height } });
+    const typicalPath = `/orgs/${fx.org.slug}/projects/${typical.id}`;
+    for (const path of [`${typicalPath}/stages/pre-processing`, `${typicalPath}/stages/pre-processing/questions/Q-PP-01`, questionPath()]) {
+      await page.goto(path);
+      await hydrated(page);
+      await expect(block(page).locator('.shell-project__stage')).toHaveCount(3);
+      const nav = page.locator('nav.shell-rail');
+      for (const name of ['Members', 'Organisation']) {
+        const link = nav.getByRole('link', { name, exact: true });
+        // In view: inside the window and inside every box above it that clips (a scrolled-away link is not "in view").
+        const where = await link.evaluate((el) => {
+          const r = el.getBoundingClientRect();
+          let clip = { top: 0, bottom: window.innerHeight };
+          for (let box = el.parentElement; box !== null && box !== document.body; box = box.parentElement) {
+            if (/(auto|scroll|hidden|clip)/.test(getComputedStyle(box).overflowY)) {
+              const b = box.getBoundingClientRect();
+              clip = { top: Math.max(clip.top, b.top), bottom: Math.min(clip.bottom, b.bottom) };
+            }
+          }
+          return { top: Math.round(r.top), bottom: Math.round(r.bottom), clipTop: Math.round(clip.top), clipBottom: Math.round(clip.bottom) };
+        });
+        expect(where.top, `${path} at ${width}x${height}: ${name} starts inside its clipping boxes`).toBeGreaterThanOrEqual(where.clipTop);
+        expect(where.bottom, `${path} at ${width}x${height}: ${name} ends inside its clipping boxes`).toBeLessThanOrEqual(where.clipBottom);
+        expect((await link.boundingBox())!.height, 'a 44 px target').toBeGreaterThanOrEqual(44);
+      }
+      // The foot is pinned: it ends on the window's foot, and scrolling the rail's upper part does not move it.
+      const footBottom = () => page.locator('.shell-rail__foot').evaluate((el) => Math.round(el.getBoundingClientRect().bottom));
+      expect(Math.abs(await footBottom() - height), `${path}: the foot ends on the window's foot`).toBeLessThanOrEqual(1);
+      await page.locator('.shell-rail__scroll').evaluate((el) => { el.scrollTop = el.scrollHeight; });
+      expect(Math.abs(await footBottom() - height), `${path}: the foot stays put while the upper part scrolls`).toBeLessThanOrEqual(1);
     }
   });
 }

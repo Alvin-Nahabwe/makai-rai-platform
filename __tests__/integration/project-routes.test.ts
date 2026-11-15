@@ -72,7 +72,7 @@ describe('loadProjectRoutes', () => {
     sessionFor(fx.members.owner.userId);
     const html = renderToStaticMarkup(await Page({ params: Promise.resolve({ slug: fx.org.slug, id: p.id }) }) as ReactElement);
     expect(html.match(/<section class="stage-line"/g)).toHaveLength(3);
-    expect(html).toContain('data-mark-kind="partly"');
+    expect(html).toContain('data-tally-kind="partly"');
     clearSession();
     sessionFor(other.members.owner.userId);
     await expect(Page({ params: Promise.resolve({ slug: other.org.slug, id: p.id }) })).rejects.toMatchObject(NOT_FOUND);

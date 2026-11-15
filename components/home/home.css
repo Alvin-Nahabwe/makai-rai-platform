@@ -597,3 +597,14 @@ h3.home-project__name {
 .home-section > h2 + .home-project {
   margin-block-start: var(--space-3);
 }
+
+/* "New project": one control at the inline end, above the columns; the columns' own top padding then follows it. */
+.home-new {
+  display: flex;
+  justify-content: flex-end;
+  padding-block-start: var(--space-4);
+}
+
+.home-new + .home-columns {
+  padding-block-start: var(--space-4);
+}

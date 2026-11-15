@@ -5,7 +5,7 @@ import { ListLink } from '@/components/ui/ListLink';
 import { ButtonLink } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
 import { ItemPlate } from '@/components/ui/ItemPlate';
-import { RouteRow, type DefinedTallyKind } from '@/components/ui/RouteRow';
+import { RouteTally, type DefinedTallyKind } from '@/components/ui/RouteRow';
 import { Definition, Term } from '@/components/ui/Definition';
 import { TermTip } from '@/components/ui/TermTip';
 import { STATUS_WORD } from '@/components/followup/StageFollowUp';
@@ -29,7 +29,6 @@ const P = PROJECT_COPY;
 const C = PROJECT_COPY.stage;
 const F = PROJECT_COPY.followUp;
 const SEP = ' · ';
-const NAMED = 3;
 
 /** Each stage's plain meaning, the vocabulary's sentence (decision D1, X-5), shown under its name. */
 const STAGE_TERM: Readonly<Record<Stage, DefinedEntry>> = { 'pre-processing': TERM_STAGE_1, 'in-processing': TERM_STAGE_2, 'post-processing': TERM_STAGE_3 };
@@ -41,8 +40,8 @@ const STATUS_TERM: Readonly<Record<DefinedTallyKind, DefinedEntry>> = {
 
 /** `children` marked as the first use of `term` when `first`, else as they are. */
 const used = (first: boolean, term: DefinedEntry, children: ReactNode): ReactNode => (first ? <Term of={term}>{children}</Term> : children);
-/** The term's definition beside its first use, or nothing. */
-const defined = (first: boolean, term: DefinedEntry): ReactNode => (first ? <>{' '}<Definition of={term} /></> : null);
+/** The term's definition one step away, as the (i) toggletip right after its first use (owner's ruling of 15 Nov 2026, 21:32), or nothing. */
+const defined = (first: boolean, term: DefinedEntry): ReactNode => (first ? <TermTip of={term} label={P.whatMeans(term.term)} /> : null);
 /** A stage's question list (S-11). */
 const stagePath = (base: string, stage: Stage): string => `${base}/stages/${stage}`;
 
@@ -81,15 +80,12 @@ export function StageLine(p: StageLineProps): ReactElement {
       <StillOpen {...p} />
       <div className="stage-line__stop stage-line__stop--recorded">
         <h3>{C.recorded}</h3>
-        {/* What is recorded: the no-decision questions are still open, so the tally leaves them out ("No decisions recorded yet").
-            The marks are drawn without links (lead's ruling on C5): each question is reached by name under Still open, "and k
-            more" or "All questions in this stage", and the row stays one labelled list a reader can pass over. */}
-        <RouteRow
-          label={P.routeLabel(name)}
-          stops={p.route.stops.map(({ id, kind, title, current, scopeAnswer }) => ({ id, kind, title, current, scopeAnswer }))}
-          tally={{ ...p.route.tally, no_decision: undefined }}
-          define={tallyDefinitions(p.uses, p.stage)}
-        />
+        {/* What is recorded, as the tally in words with the kit's mark beside each count; no row of marks per question (owner's
+            ruling of 15 Nov 2026 20:50, the sketch's counts). The no-decision questions are still open, so the tally leaves
+            them out ("No decisions recorded yet", FR-PRJ-02); Still open counts them and links to them. */}
+        <div className="ui-route-row">
+          <RouteTally tally={{ ...p.route.tally, no_decision: undefined }} define={tallyDefinitions(p.uses, p.stage)} />
+        </div>
         {p.counts.acceptedRisks + p.counts.documentsIssued > 0 ? (
           <p>
             {used(p.uses.acceptedRisk === p.stage, TERM_ACCEPTED_RISK, C.issued(plural(p.counts.acceptedRisks, C.acceptedRisk, C.acceptedRisks), plural(p.counts.documentsIssued, C.document, C.documents)))}
@@ -112,33 +108,29 @@ function tallyDefinitions(uses: FirstUses, stage: Stage): Partial<Record<Defined
   return out;
 }
 
-/** "Still open in this stage": the questions with no decision (the first three named), open findings, then the mitigations. */
+/**
+ * "Still open in this stage": the count of questions with no decision, open findings, the overdue mitigations (or that none
+ * is overdue), then how many other open mitigations the stage has.
+ */
 function StillOpen(p: StageLineProps): ReactElement {
   const c = p.counts;
   const stageHref = stagePath(p.base, p.stage);
-  // Never more names than the count the line states (N2): the route and the counts are two reads.
-  const named = p.route.noDecision.slice(0, Math.min(NAMED, c.noDecision));
-  // Counted against the stage's count, the number the line states, so the count and the list always add up.
-  const more = Math.max(0, c.noDecision - named.length);
   // FR-FUP-01's order (overdue first, then due date). The two lists are disjoint: lib/data/projects.ts splits one by ownerCanAct.
   const all = [...p.followUp.items, ...p.followUp.cannotAct].sort(compareFollowUp);
   const overdue = all.filter((i) => i.overdue);
-  const later = all.filter((i) => !i.overdue);
+  // The rest of the stage's open mitigations, one line to the Findings page, where each is listed and can be reassigned
+  // (owner's ruling of 15 Nov 2026 20:50; a departure from FR-FUP-01/05's list on S-10, which the owner made).
+  const others = all.length - overdue.length;
   const m = p.uses.mitigation?.stage === p.stage ? p.uses.mitigation.at : null;
-  const findingFirst = p.uses.finding !== null && 'stage' in p.uses.finding && p.uses.finding.stage === p.stage;
+  const findingFirst = p.uses.finding !== null && p.uses.finding.stage === p.stage;
   return (
     <div className="stage-line__stop stage-line__stop--open">
       <h3>{C.stillOpen}</h3>
       {!hasOpenWork(c) ? <p>{C.nothingOpen}</p> : (
         <ul className="stage-line__open" role="list">
           {c.noDecision > 0 ? (
-            <li>
-              <ListLink href={`${stageHref}?show=no_decision`}>{C.noDecisionQuestions(c.noDecision)}</ListLink>
-              <ul className="stage-line__named" role="list">
-                {named.map((q) => <li key={q.id} className="stage-line__named-item"><ListLink href={q.href}>{q.text}</ListLink></li>)}
-                {more > 0 ? <li className="stage-line__more"><ListLink href={`${stageHref}?show=no_decision`}>{P.andMore(more)}</ListLink></li> : null}
-              </ul>
-            </li>
+            // A count, not the questions' names (owner's ruling, 15 Nov 2026 19:20): the link leads to the filtered list.
+            <li><ListLink href={`${stageHref}?show=no_decision`}>{C.noDecisionQuestions(c.noDecision)}</ListLink></li>
           ) : null}
           {c.openFindings > 0 ? (
             // The findings page filtered to this stage lists every open finding the count holds.
@@ -164,12 +156,8 @@ function StillOpen(p: StageLineProps): ReactElement {
               {defined(m === 'noOverdue', TERM_MITIGATION)}
             </li>
           )}
-          {later.length > 0 ? (
-            // Open mitigations that are not overdue, and those whose person can no longer act (FR-FUP-05), stay on the page.
-            <li className="stage-line__mitigations">
-              <p>{P.notOverdue}{': '}{P.mitigationCount(later.length)}</p>
-              <Plates items={later} base={p.base} />
-            </li>
+          {others > 0 ? (
+            <li><ListLink href={`${p.base}/findings?stage=${p.stage}`}>{P.otherOpenMitigations(others)}</ListLink></li>
           ) : null}
         </ul>
       )}
@@ -209,7 +197,6 @@ function Plates({ items, base }: { items: readonly FollowUpItem[]; base: string 
 /** The stage's reviews (spec 9.2): each one's name, its number and state, its purpose, and for one not sealed what to look at first. */
 function Reviews(p: StageLineProps): ReactElement {
   const reviewsBase = `${p.base}/reviews`;
-  const newest = p.reviews.reduce<StageReviewView | null>((a, r) => (a === null || r.numberInStage > a.numberInStage ? r : a), null);
   const sr = p.uses.stageReview !== 'share' && p.uses.stageReview.stage === p.stage ? p.uses.stageReview.at : null;
   return (
     <div className="stage-line__stop stage-line__stop--reviews">
@@ -223,7 +210,7 @@ function Reviews(p: StageLineProps): ReactElement {
               <ListLink className="review-list__name" href={`${reviewsBase}/${r.id}`}>{r.name}</ListLink>
               <p className="review-list__meta">
                 {P.reviewNumber(r.numberInStage)}{SEP}
-                <ReviewState review={r} base={p.base} stage={p.stage} uses={p.uses} isNewest={r.id === newest?.id} />
+                <ReviewState review={r} base={p.base} uses={p.uses} />
               </p>
               {r.preparedForErased !== null ? <p className="review-list__meta">{REVIEW_COPY.review.facts.preparedFor}: {REVIEW_COPY.mounted.noteErased(formatDay(r.preparedForErased.erasedOn))}</p>
                 // The note is team-typed: only it sits in <bdi>, so right-to-left text cannot reorder the line (merge review M-2).
@@ -244,35 +231,22 @@ function Reviews(p: StageLineProps): ReactElement {
 }
 
 /**
- * A review's state after its number: not sealed yet; the damaged seal's sentence (said first, as reviewStateLine does);
- * or "sealed <date>" in the reader's zone, then how many decisions and how many findings changed since, each on its own.
- * Only the stage's newest review links its decisions, because the stage page's filter compares the stage with that
- * review's seal; the findings part links to the review, which lists them.
+ * A review's state after its number, all in the one line (owner's ruling of 15 Nov 2026, 21:32): not sealed yet; the damaged
+ * seal's first sentence (said first, as reviewStateLine does; the review page holds the rest); or "sealed <date>" in the
+ * reader's zone, then how many decisions and findings changed since, as one count linking to the review, which lists them.
  */
-function ReviewState({ review: r, isNewest, base, stage, uses }: {
-  review: StageReviewView; isNewest: boolean; base: string; stage: Stage; uses: FirstUses;
-}): ReactElement {
+function ReviewState({ review: r, base, uses }: { review: StageReviewView; base: string; uses: FirstUses }): ReactElement {
   if (r.latestSeal === null) return <>{P.notSealedYet}</>;
   if (sealDamaged(r)) {
     const first = uses.seal !== 'share' && uses.seal.reviewId === r.id;
-    return <>{used(first, TERM_SEAL, REVIEW_COPY.state.damaged)}{defined(first, TERM_SEAL)}</>;
+    return <>{used(first, TERM_SEAL, REVIEW_COPY.state.damagedShort)}{defined(first, TERM_SEAL)}</>;
   }
   const seal = r.latestSeal;
-  const questions = r.changed === null ? 0 : r.changed.changedQuestions.length;
-  const findings = r.changed === null ? 0 : r.changed.changedFindings.length;
-  const findingFirst = uses.finding !== null && 'reviewId' in uses.finding && uses.finding.reviewId === r.id;
+  const changed = r.changed === null ? 0 : r.changed.changedQuestions.length + r.changed.changedFindings.length;
   return (
     <>
       {P.sealed}{' '}<DeviceDateTime iso={seal.sealedAt} form="day" serverText={formatDay(seal.sealedAt)} />
-      {questions > 0 ? (
-        <>{SEP}{isNewest ? <ListLink href={`${stagePath(base, stage)}?show=changed_since_seal`}>{P.changedSinceSeal(questions)}</ListLink> : P.changedSinceSeal(questions)}</>
-      ) : null}
-      {findings > 0 ? (
-        <>
-          {SEP}{used(findingFirst, TERM_FINDING, <ListLink href={`${base}/reviews/${r.id}`}>{P.findingsChangedSinceSeal(findings)}</ListLink>)}
-          {defined(findingFirst, TERM_FINDING)}
-        </>
-      ) : null}
+      {changed > 0 ? <>{SEP}<ListLink href={`${base}/reviews/${r.id}`}>{P.changedSince(changed)}</ListLink></> : null}
     </>
   );
 }

@@ -136,8 +136,11 @@ describe('recorder (spec 9.1, sketch home.png)', () => {
     expect(t.indexOf('Q-PP-05')).toBeGreaterThan(t.indexOf(NEXT.questionText));   // the code is small and after the words
   });
 
-  it('gap 2: no "New project" or "Create a project" anywhere on the Home of a person who records', () => {
-    for (const data of [RECORDER, RECORDER_WITH_LEAD]) expect(textOf(home(data))).not.toMatch(/New project|Create a project/);
+  it('gap 2, as ruled again on 15 November (role-matrix O-13): the Home of a person who records has one "New project" and no "Create a project"', () => {
+    for (const data of [RECORDER, RECORDER_WITH_LEAD]) {
+      expect(textOf(home(data))).not.toMatch(/Create a project/);
+      expect(linksNamed(home(data), [PROJECT_COPY.allProjects.newProject])).toHaveLength(1);
+    }
   });
 
   it('gap 3: "Assigned to you" holds the person\'s mitigations with their status and due date, linked to the finding', () => {
@@ -348,7 +351,9 @@ describe('fix round 1 (lane lead, 15 November)', () => {
       expect(linksNamed(saved, [PROJECT_COPY.start])).toHaveLength(0);
     }
     // Both controls keep one primary and one secondary, primary first.
-    const controls = [...never.matchAll(/<a\b[^>]*class="([^"]*ui-button[^"]*)"[^>]*>([\s\S]*?)<\/a>/g)].map((m) => [textOf(m[2]).trim(), m[1].includes('ui-button--primary')]);
+    // (The page's own "New project" is its quieter button, outside the card: left out of this card's pair.)
+    const controls = [...never.matchAll(/<a\b[^>]*class="([^"]*ui-button[^"]*)"[^>]*>([\s\S]*?)<\/a>/g)].map((m) => [textOf(m[2]).trim(), m[1].includes('ui-button--primary')])
+      .filter(([t]) => t !== PROJECT_COPY.allProjects.newProject);
     expect(controls).toEqual([[PROJECT_COPY.start, true], [HOME_COPY.chooseAnother, false]]);
   });
 
@@ -545,4 +550,33 @@ describe('HomeUnsavedLine (spec 9.7 line 459; defect 23)', () => {
     expect(unsavedSentence(openDraftStore(throwing), 'u', 'o1', now)).toBeNull();
     expect(DRAFT_PREFIX).toBe('makrai.draft.v1:');
   });
+});
+
+describe('Home\'s "New project" (role-matrix O-13; coordinator ruling, 15 November)', () => {
+  const NEW = PROJECT_COPY.allProjects.newProject;
+  const newLinks = (h: string) => links(h).filter(([t]) => t === NEW);
+  const noNext: HomeData = { ...RECORDER, next: null };
+  for (const role of ['owner', 'admin', 'assessor'] as const) {
+    it(`${role}: exactly one "New project" link, to the new-project page, quieter beside a next-step card`, () => {
+      const h = home({ ...RECORDER, base: base({ role }) });
+      expect(newLinks(h)).toEqual([[NEW, `/orgs/${ORG}/projects/new`]]);
+      expect(h).toMatch(/<a\b[^>]*class="ui-button ui-button--secondary"[^>]*href="[^"]*\/projects\/new"/);
+    });
+    it(`${role}: with no next-step card it is the one primary control, still only one`, () => {
+      const h = home({ ...noNext, base: base({ role }) });
+      expect(newLinks(h)).toHaveLength(1);
+      expect(h).toMatch(/<a\b[^>]*class="ui-button ui-button--primary"[^>]*href="[^"]*\/projects\/new"/);
+    });
+  }
+  it('the first-time state keeps its single "Create a project" and gains no second link', () => {
+    const h = home(firstTime('owner', true));
+    expect(newLinks(h)).toHaveLength(0);
+    expect(links(h).filter(([, href]) => href.endsWith('/projects/new'))).toHaveLength(1);
+  });
+  for (const data of [REVIEWER, VIEWER]) {
+    it(`${data.base.role}: no "New project" link`, () => {
+      expect(newLinks(home(data))).toHaveLength(0);
+      expect(links(home(data)).filter(([, href]) => href.endsWith('/projects/new'))).toHaveLength(0);
+    });
+  }
 });

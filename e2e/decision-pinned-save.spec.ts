@@ -276,6 +276,29 @@ test('C4: after a lost save the one control reads Retry; an edit turns it back t
 });
 
 /**
+ * Lane 8 I2 round 2: the offline notice is a box above the shell. From 1024 px the frame is the window's height and the
+ * one scroller, so the notice must sit inside it (one of the frame's rows before the shell), or the window scrolls by
+ * the notice's height and the pinned row ends below the screen.
+ */
+for (const [w, h] of [[1280, 720], [1280, 800]] as const) {
+  test(`I2: at ${w} by ${h} with the offline notice showing, the window does not scroll and the pinned Save row ends on the screen`, async ({ page, context }) => {
+    await page.setViewportSize({ width: w, height: h });
+    await actAsSeat(page, 'admin'); await openQuestionIn(page, Q);
+    await context.setOffline(true);
+    await expect(page.locator('.offline-banner-region .ui-banner')).toBeVisible();
+    const place = await page.evaluate(() => ({
+      document: document.documentElement.scrollHeight,
+      window: window.innerHeight,
+      row: document.querySelector('.decision-save-bar')!.getBoundingClientRect().bottom,
+    }));
+    expect(place.document, `the document is ${place.document}px for a ${place.window}px window`).toBeLessThanOrEqual(place.window);
+    expect(place.row, `the pinned row ends at ${place.row} in a ${place.window}px window`).toBeLessThanOrEqual(place.window);
+    expect((await bar(page)).pinned, 'the row is still pinned to the screen\'s foot').toBe(true);
+    await context.setOffline(false);
+  });
+}
+
+/**
  * Reviews A M-1 and B M-r4-3 (T3c items 2 and 3): when a way off the page that has focus becomes text because a Save goes
  * out (here the automatic retry when the browser is back online, NFR-REL-05, which no press of Save starts), focus goes to
  * the save bar, never to the page body; and the card's foot links are text while that Save is out. The admin seat makes

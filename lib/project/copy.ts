@@ -28,15 +28,12 @@ export const PROJECT_COPY = Object.freeze({
   nextLabel: 'Next question',
   noDecisionYet: (n: number) => (n === 1 ? '1 question has no decision yet.' : `${n} questions have no decision yet.`),
   allDecided: 'Every question in this stage has a decision.',
-  /** After the first three questions with no decision, named; links to the stage's no-decision list. */
-  andMore: (k: number) => `and ${k} more`,
   beforeSealing: 'Before sealing, look at:',
   nothingLeftOpen: 'Nothing is left open in this stage.',
   doneNoEvidence: (n: number) => (n === 1 ? '1 decision marked Done with no evidence attached' : `${n} decisions marked Done with no evidence attached`),
   overdueMitigations: (n: number) => (n === 1 ? '1 overdue mitigation' : `${n} overdue mitigations`),
-  changedSinceSeal: (n: number) => (n === 1 ? '1 decision changed since it was sealed' : `${n} decisions changed since it was sealed`),
-  /** After the decisions part of a sealed review's line; links to the review, which lists them. */
-  findingsChangedSinceSeal: (n: number) => (n === 1 ? '1 finding changed since it was sealed' : `${n} findings changed since it was sealed`),
+  /** A review's one line, after its date: how many decisions and findings changed since the seal (owner's ruling of 15 Nov 2026, 21:32). */
+  changedSince: (k: number) => `${k} changed since`,
   reviewsHeading: 'Reviews',
   /** A review's quiet line: "Review 1 · sealed 11 Nov 2026" or "Review 2 · not sealed yet". */
   reviewNumber: (n: number) => `Review ${n}`,
@@ -46,10 +43,14 @@ export const PROJECT_COPY = Object.freeze({
   thisProject: 'This project',
   findings: 'Findings',
   editProjectDetails: 'Edit project details',
-  /** "Overdue: 1 mitigation", "Not overdue: 2 mitigations"; the word Overdue is followUp.overdue. */
+  /** "Overdue: 1 mitigation"; the word Overdue is followUp.overdue. */
   mitigationCount: (n: number) => (n === 1 ? '1 mitigation' : `${n} mitigations`),
   noOverdue: 'No overdue mitigations',
-  notOverdue: 'Not overdue',
+  /**
+   * After the overdue plates (or "No overdue mitigations"): the stage's open mitigations not yet overdue, as one line linked
+   * to the Findings page, where each is listed and can be reassigned (owner's ruling of 15 Nov 2026 20:50).
+   */
+  otherOpenMitigations: (n: number) => (n === 1 ? '1 other open mitigation' : `${n} other open mitigations`),
   /** The red part of an overdue mitigation's plate (spec 7.1: red only on "Overdue" and the date). */
   wasDue: (day: string) => `was due ${day}`,
   /** The name of a stage's row of marks, one per question. */
