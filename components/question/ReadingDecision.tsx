@@ -19,6 +19,14 @@ import './reading.css';
 const C = QUESTION_COPY.current;
 const R = QUESTION_COPY.reading;
 
+/**
+ * The zone the card writes its instants in: East Africa Time, the zone of the platform's teams, because the card is
+ * rendered on the server, whose own zone is the host's (UTC in production). The same helpers and the same zone as the
+ * server-rendered organisation events (components/org/OrganisationEventsList.tsx); lib/format/dates.ts formatTime names
+ * it ("10:42 EAT"). A calendar date (the declared date, an erasure date) is written from its digits and takes no zone.
+ */
+const ZONE = 'Africa/Kampala';
+
 /** A separator the eye reads and a screen reader skips: each side is its own text node (spec 9.3 accessibility). */
 const DOT = <span aria-hidden="true"> · </span>;
 
@@ -56,7 +64,9 @@ function EvidenceItem({ orgSlug, item }: { orgSlug: string; item: EvidenceItemVi
       <li className="reading-evidence__item">
         <a className="reading-evidence__link" href={web.href} rel="noopener noreferrer">
           <bdi>{item.label === null ? stripBidiControls(item.url) : stripBidiControls(item.label)}</bdi>
-          {R.linkTo.before}<bdi>{web.host}</bdi>{R.linkTo.after}<Icon name="external-link" size={18} />
+          {/* The host of an http or https address is plain ASCII (punycode), so it needs no <bdi>, which a browser would
+              set apart with spaces in the link's accessible name. */}
+          {R.linkTo.before}{web.host}{R.linkTo.after}<Icon name="external-link" size={18} />
         </a>
       </li>
     );
@@ -72,7 +82,7 @@ function EvidenceItem({ orgSlug, item }: { orgSlug: string; item: EvidenceItemVi
   }
   // A stored file always has a size; were it missing, the line drops it and the Download stays, so the download route's
   // own integrity check is what answers (silent-failure review of c46d69f4, finding 2).
-  const added = R.added(formatDay(item.uploadedAt));
+  const added = R.added(formatDay(item.uploadedAt, ZONE));
   return (
     <li className="reading-evidence__item">
       <span className="reading-evidence__file">
@@ -123,7 +133,7 @@ export function ReadingDecision({ orgSlug, current, historyCount, historyHref, s
     state = <StatusMark kind="no_decision" size={20} />;
     const who = current.enteredBy.formerMember ? C.formerMember(current.enteredBy.name) : current.enteredBy.name;
     const kind = current.withdrawalCode === null ? null : WITHDRAWAL_CODE_LABELS[current.withdrawalCode];
-    const day = formatDay(current.receivedAt);
+    const day = formatDay(current.receivedAt, ZONE);
     body = (
       <>
         <p className="reading-decision__withdrawn">
@@ -155,9 +165,9 @@ export function ReadingDecision({ orgSlug, current, historyCount, historyHref, s
           </figure>
         ) : null}
         <p className="reading-decision__version">
-          <span>{R.version(current.versionNumber)}</span>{DOT}<span>{R.saved(formatDay(current.receivedAt))}</span>{DOT}{history}
+          <span>{R.version(current.versionNumber)}</span>{DOT}<span>{R.saved(formatDay(current.receivedAt, ZONE))}</span>{DOT}{history}
         </p>
-        <p className="reading-decision__entered">{C.enteredBy(enteredBy, formatDay(current.receivedAt), formatTime(current.receivedAt))}</p>
+        <p className="reading-decision__entered">{C.enteredBy(enteredBy, formatDay(current.receivedAt, ZONE), formatTime(current.receivedAt, ZONE))}</p>
         <SealMarker seals={seals} />
         <section className="reading-evidence" aria-labelledby="s12-evidence">
           <h3 id="s12-evidence">{R.evidence}</h3>

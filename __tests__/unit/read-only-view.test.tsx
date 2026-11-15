@@ -178,7 +178,7 @@ describe('the read-only question page (plan 1C Task 7)', () => {
 
   it('gap 2: a link is its name, then the host it goes to and "opens another site", with the external mark; never the whole address', async () => {
     const c = card(await render(VIEWER));
-    expect(c).toMatch(/<a class="reading-evidence__link" href="https:\/\/example.org\/a" rel="noopener noreferrer"><bdi>Audit report<\/bdi> \(<bdi>example.org<\/bdi>, opens another site\)<svg class="ui-icon"/);
+    expect(c).toMatch(/<a class="reading-evidence__link" href="https:\/\/example.org\/a" rel="noopener noreferrer"><bdi>Audit report<\/bdi> \(example.org, opens another site\)<svg class="ui-icon"/);
     expect(textOf(c)).not.toContain('https://example.org/a');
     // A link the person gave no name is named by its address once, and still shows its host (silent-failure review of
     // 4e544208, finding 2: a look-alike or user:password@ address fools the eye without it).
@@ -187,17 +187,17 @@ describe('the read-only question page (plan 1C Task 7)', () => {
     expect(textOf(bare)).not.toContain('(https://');
     expect(textOf(bare)).toContain('https://example.org/a (example.org, opens another site)');
     const trick = card(await render({ ...VIEWER, current: { ...CURRENT, evidence: [{ ...LINK, label: null, url: 'https://gov.example@evil.example/' }] } }));
-    expect(trick).toContain('<bdi>evil.example</bdi>, opens another site)');
+    expect(trick).toContain(' (evil.example, opens another site)');
   });
 
   it('link spoofing (a): a name that claims another site shows the host the link really goes to', async () => {
     const spoof = { ...LINK, label: 'gov.example \u2014 official', url: 'https://evil.example/login' };
     const c = card(await render({ ...VIEWER, current: { ...CURRENT, evidence: [spoof] } }));
-    expect(c).toContain('<bdi>evil.example</bdi>, opens another site)');
+    expect(c).toContain(' (evil.example, opens another site)');
     expect(c).toMatch(/href="https:\/\/evil.example\/login"/);
     // A look-alike host is shown in the form the browser resolves (punycode), not as the letters that imitate another.
     const idn = card(await render({ ...VIEWER, current: { ...CURRENT, evidence: [{ ...LINK, url: 'https://\u0440\u0430ypal.example/' }] } }));
-    expect(idn).toContain('<bdi>xn--ypal-43d9g.example</bdi>');
+    expect(idn).toContain('(xn--ypal-43d9g.example,');
   });
 
   it('link spoofing: the address is parsed once, so the href the browser follows and the host shown are the same (silent-failure review of 4e544208, finding 1)', async () => {
@@ -206,7 +206,7 @@ describe('the read-only question page (plan 1C Task 7)', () => {
     const c = card(await render({ ...VIEWER, current: { ...CURRENT, evidence: [{ ...LINK, url: 'https:evil.example' }] } }));
     expect(c).toContain('href="https://evil.example/"');
     expect(c).not.toContain('href="https:evil.example"');
-    expect(c).toContain('<bdi>evil.example</bdi>, opens another site)');
+    expect(c).toContain(' (evil.example, opens another site)');
     expect(webLink('https:/api/logout?x')).toEqual({ href: 'https://api/logout?x', host: 'api' });
   });
 
@@ -223,6 +223,15 @@ describe('the read-only question page (plan 1C Task 7)', () => {
     expect(webLink('javascript:alert(1)')).toBeNull();
     expect(webLink('ftp://files.example/a')).toBeNull();
     expect(webLink('https://user:pw@evil.example:8443/p')).toEqual({ href: 'https://user:pw@evil.example:8443/p', host: 'evil.example' });
+  });
+
+  it('times on the card are East Africa Time, as the server-rendered organisation events write them (formatDay and formatTime with Africa/Kampala)', async () => {
+    const c = card(await render({ ...VIEWER, current: { ...CURRENT, receivedAt: '2026-11-10T22:30:00.000Z', evidence: [{ ...FILE, uploadedAt: '2026-02-18T21:30:00.000Z' }] } as never }));
+    // 22:30 UTC is 01:30 EAT on the next day: the day and the time both follow the zone, and the zone is named.
+    expect(c).toContain('Entered by: Joseph K. on 11 Nov 2026 at 01:30 EAT');
+    expect(c).toContain('<span>saved 11 Nov 2026</span>');
+    expect(c).toContain('added 19 Feb 2026');
+    expect(c).not.toContain('UTC');
   });
 
   it('a file is its name, "<size> · added <date>", and a secondary Download button that names the file to a screen reader', async () => {
