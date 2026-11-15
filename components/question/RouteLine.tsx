@@ -5,8 +5,7 @@ import { MarkShape, StatusMark, statusMarkWords } from '@/components/ui/StatusMa
 import type { ScopeAnswer, StatusMarkKind } from '@/components/ui/types';
 import { STAGE_LIST_COPY as L } from '@/lib/question/list/copy';
 import { tallyOf } from '@/lib/ui/marks';
-import { tallyWords } from '@/lib/ui/copy';
-import type { RoutePart } from '@/lib/question/route';
+import { lineTallyWords, type RoutePart } from '@/lib/question/route';
 import './route-line.css';
 
 /** One question as the line shows it. The caller (StageQuestionList) shapes it; this file holds markup only. */
@@ -78,7 +77,7 @@ function Run({ part }: { part: Extract<RoutePart<RouteLineItem>, { kind: 'run' }
             <span className="visually-hidden">, </span>
             <span className="route-line__tally">
               {items.map((i) => <MarkShape key={i.questionId} kind={i.mark} size={16} />)}
-              <span className="route-line__tally-words">{tallyWords(tally)}</span>
+              <span className="route-line__tally-words">{lineTallyWords(tally)}</span>
             </span>
           </span>
         </summary>

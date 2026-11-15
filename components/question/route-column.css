@@ -5,7 +5,8 @@
  * the locked sketch's `.route` rules. Design tokens only; no kit class restyled.
  */
 .route-column {
-  padding-block-start: var(--space-4);
+  /* The heading starts on the main column's top edge (design fix round 1, S1a-1): the grid's own gap is the only space. */
+  padding-block-start: 0;
 }
 
 .route-column__heading {
@@ -22,7 +23,8 @@
 }
 
 /* The filter: a small labelled select above the line (the kit's Select is a 44 px form field; this one is the list's own
-   compact control, 40 px tall at 14 px, with the kit's chevron). The native picker opens, so a phone keeps its own. */
+   compact control: as wide as its words, 32 px tall at 14 px, with the kit's chevron; design fix round 1, S2-2). On a
+   touch screen it is 16 px and 44 px tall. The native picker opens, so a phone keeps its own. */
 .route-filter {
   display: flex;
   flex-wrap: wrap;
@@ -39,17 +41,19 @@
 .route-filter__wrap {
   position: relative;
   display: grid;
-  flex: 1 1 10rem;
   min-inline-size: 0;
-  max-inline-size: 20rem;
+  max-inline-size: 100%;
 }
 
 .route-filter__select {
   appearance: none;
   box-sizing: border-box;
-  inline-size: 100%;
-  min-block-size: 40px;
-  padding: var(--space-1) calc(var(--space-2) + 16px + var(--space-2)) var(--space-1) var(--space-3);
+  inline-size: auto;
+  max-inline-size: 100%;
+  /* As wide as the chosen option where the browser can (Chromium); elsewhere as wide as the longest option. */
+  field-sizing: content;
+  min-block-size: 32px;
+  padding: 2px calc(var(--space-2) + 16px + var(--space-1)) 2px var(--space-2);
   border: 1px solid var(--color-border-control);
   border-radius: var(--radius-control);
   background-color: var(--color-surface);
@@ -65,6 +69,7 @@
 @media (pointer: coarse) {
   .route-filter__select {
     font-size: var(--font-size-body);
+    min-block-size: var(--target-primary);
   }
 }
 

@@ -7,7 +7,7 @@ import type { StagePageData } from '@/lib/question/stagePage';
 import { STAGE_LIST_COPY } from '@/lib/question/list/copy';
 import { QUESTION_COPY } from '@/lib/question/copy';
 import { PROJECT_COPY } from '@/lib/project/copy';
-import { tallyWords, UI_COPY } from '@/lib/ui/copy';
+import { UI_COPY } from '@/lib/ui/copy';
 import { TERM_STAGE_1 } from '@/lib/vocabulary/terms';
 import { readFileSync } from 'node:fs';
 
@@ -123,10 +123,40 @@ describe('The route column: one line of the stage\'s questions', () => {
     expect(css).toMatch(/\.route-line__title\s*\{[^}]*overflow:\s*hidden;[^}]*\}/);
   });
 
+  it('design fix 1: every mark on the line has a ground halo of at least 3 px round its shape, the no-decision dot a 16 px disc (S2-1)', () => {
+    const css = readFileSync('components/question/route-line.css', 'utf8');
+    const radius = (sel: string) => Number(css.match(new RegExp(`${sel}\\s*\\{[^}]*radial-gradient\\(circle closest-side, var\\(--color-ground\\) (\\d+(?:\\.\\d+)?)px`))?.[1]);
+    // The kit's ring shapes reach about 9.5 px from their centre at 24 px; the no-decision dot 3.5 px.
+    expect(radius('\\.route-line__node')).toBeGreaterThanOrEqual(9.5 + 3);
+    expect(radius('\\.route-line__node--dot')).toBeGreaterThanOrEqual(8);
+  });
+
+  it('design fix 1: the column starts on the main column\'s top edge (no top padding of its own, S1a-1)', () => {
+    const css = readFileSync('components/question/route-column.css', 'utf8');
+    expect(css).toMatch(/\.route-column\s*\{[^}]*padding-block-start:\s*0;/);
+  });
+
+  it('design fix 1: the filter is a small control: an auto-width select, 14 px, at least 24 px tall (S2-2)', () => {
+    const css = readFileSync('components/question/route-column.css', 'utf8');
+    const select = css.match(/\.route-filter__select\s*\{([^}]*)\}/)![1];
+    expect(select).toMatch(/inline-size:\s*auto;/);
+    expect(select).toMatch(/font-size:\s*var\(--font-size-small\);/);
+    expect(Number(select.match(/min-block-size:\s*(\d+)px;/)![1])).toBeGreaterThanOrEqual(24);
+    expect(css).not.toMatch(/\.route-filter__wrap\s*\{[^}]*flex:\s*1/);
+  });
+
+  it('design fix 1: the meta line and a run\'s tally are 14 px (spec 7.4: 13 only for legal small print, S2-5)', () => {
+    const css = readFileSync('components/question/route-line.css', 'utf8');
+    expect(css).not.toContain('--font-size-legal');
+    for (const sel of ['route-line__meta', 'route-line__tally-words']) {
+      expect(css).toMatch(new RegExp(`\\.${sel}\\s*\\{[^}]*font-size:\\s*var\\(--font-size-small\\);`));
+    }
+  });
+
   it('the small filter keeps 16 px text on a touch screen, so a phone does not zoom on it; 14 px elsewhere', () => {
     const css = readFileSync('components/question/route-column.css', 'utf8');
     expect(css).toMatch(/\.route-filter__select\s*\{[^}]*font-size:\s*var\(--font-size-small\);/);
-    expect(css).toMatch(/@media \(pointer: coarse\)\s*\{\s*\.route-filter__select\s*\{\s*font-size:\s*var\(--font-size-body\);\s*\}\s*\}/);
+    expect(css).toMatch(/@media \(pointer: coarse\)\s*\{\s*\.route-filter__select\s*\{[^}]*font-size:\s*var\(--font-size-body\);[^}]*\}\s*\}/);
   });
 
   it('the column is a nav named by its heading, the stage\'s name, and ends with the link to all the stage\'s questions', async () => {
@@ -184,8 +214,9 @@ describe('The route column: folded runs', () => {
     const marks = [...run.summary.matchAll(/<svg class="ui-mark__shape" width="(\d+)"/g)].map((m) => Number(m[1]));
     expect(marks).toEqual(Array(16).fill(16));
     const runRows = STAGE22.slice(6);
-    const { tallyOfRows } = await import('@/lib/question/route');
-    expect(run.summary).toContain(`class="route-line__tally-words">${tallyWords(tallyOfRows(runRows, d.marks))}<`);
+    const { tallyOfRows, lineTallyWords } = await import('@/lib/question/route');
+    expect(run.summary).toContain(`class="route-line__tally-words">${lineTallyWords(tallyOfRows(runRows, d.marks))}<`);
+    expect(lineTallyWords(tallyOfRows(runRows, d.marks))).toContain(' · ');
   });
 
   it('the open and the next question are never folded; a short stage folds nothing', async () => {

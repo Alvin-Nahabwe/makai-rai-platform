@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { StatusMarkKind } from '@/components/ui/types';
@@ -102,6 +103,24 @@ describe('All questions: a row per question on one line', () => {
   });
 });
 
+describe('All questions: design fix 1', () => {
+  const css = () => readFileSync('components/question/stage-route.css', 'utf8') + readFileSync('components/question/route-line.css', 'utf8');
+  it('the line has a reading measure on a wide screen (about 720 px, S3-2)', () => {
+    expect(css()).toMatch(/\.route-line--page\s*\{[^}]*max-inline-size:\s*45rem;/);
+  });
+
+  it('a topic is a quiet label on the line, tied to it by a short tick, with no gap that breaks the line (S3-3)', () => {
+    expect(css()).toMatch(/\.stage-route__topic::before\s*\{[^}]*background-color:\s*var\(--color-mark\);/);
+    expect(css()).not.toMatch(/\.stage-route__section \+ \.stage-route__section/);
+  });
+
+  it('the chosen filter chip is an ink border and the radio\'s dot, never orange (S3-4)', () => {
+    const chosen = css().match(/\.stage-route__chip:has\(:checked\)\s*\{([^}]*)\}/)![1];
+    expect(chosen).toMatch(/border:\s*2px solid var\(--color-ink\);/);
+    expect(css()).not.toContain('--color-selected');
+  });
+});
+
 describe('All questions: the page\'s head', () => {
   it('a breadcrumb of the project and the stage, then the h1 with the stage\'s plain meaning, then the topics as a quiet line', () => {
     const h = render(data(ROWS));
@@ -114,11 +133,33 @@ describe('All questions: the page\'s head', () => {
     const d = data(ROWS, { scopeAnswer: 'yes' });
     const h = render(d);
     expect(h).toContain(`<p class="stage-route__count" data-stage-summary="">${ROWS.length} questions</p>`);
-    const parts = [...h.matchAll(/<li class="stage-route__tally-part" data-mark-kind="([a-z_]+)"><svg class="ui-mark__shape" width="16"[\s\S]*?<\/svg>([^<]*)<\/li>/g)].map((m) => m[2]);
-    expect(parts.join(', ')).toBe(tallyWords(tallyOfRows(ROWS, d.marks)));
+    // Each part's words, without the tips' own text (a tip's button and its popover sentence are not the tally's words).
+    const parts = [...h.matchAll(/<li class="stage-route__tally-part">([\s\S]*?)<\/li>/g)]
+      .map((m) => m[1].replace(/<span class="ui-term-tip">[\s\S]*?<\/span><\/span>/g, '').replace(/<[^>]+>/g, ''));
+    expect(parts.join(', ')).toBe(tallyWords(tallyOfRows(ROWS, d.marks)).replace('1 answered', '1 personal data question answered'));
+    // Each mark sits in a wrapper with its count and word, so the shape always has its words beside it.
+    expect([...h.matchAll(/<span class="stage-route__tally-mark" data-mark-kind="[a-z_]+"><svg class="ui-mark__shape" width="16"/g)]).toHaveLength(parts.length);
     expect(h).not.toContain('ui-route-row');
     expect(h).not.toContain('<progress');
     expect(h).not.toMatch(/\d\s?%/);
+  });
+
+  it('owner 11:00: an (i) beside each tally word the vocabulary defines at first use (the status words and the personal data question), none beside "No decision"; the (i) stays with its count and word', () => {
+    const many = [
+      row('A', { kind: 'done', evidenceCount: 1 }), row('B', { kind: 'shortfall' }), row('C', { kind: 'not_applicable' }),
+      row('Q-PP-GATE-SENSITIVE', { questionType: 'gate', kind: 'scope' }), row('E', { kind: 'none' }),
+    ];
+    const d = data(many, { marks: { A: 'done', B: 'not_yet', C: 'not_applicable', 'Q-PP-GATE-SENSITIVE': 'scope_answered', E: 'no_decision' }, scopeAnswer: 'yes' });
+    const h = render(d);
+    const tips = [...h.matchAll(/<li class="stage-route__tally-part"><span class="stage-route__tally-head"><span class="stage-route__tally-mark" data-mark-kind="([a-z_]+)">([\s\S]*?)<\/li>/g)]
+      .map((m) => [m[1], (m[2].match(/class="ui-term-tip"/g) ?? []).length === 1]);
+    // No tip sits inside the mark's wrapper: the tip is not a status mark.
+    for (const m of h.matchAll(/<span class="stage-route__tally-mark"[^>]*>([\s\S]*?)<\/span><(span class="ui-term-tip"|\/span)/g)) expect(m[1]).not.toContain('ui-term-tip');
+    expect(tips).toEqual([['done', true], ['not_yet', true], ['not_applicable', true], ['scope_answered', true], ['no_decision', false]]);
+    expect(h).toContain('aria-label="What is the personal data question?"');
+    expect(h).toContain('aria-label="What does &quot;Not yet&quot; mean?"');
+    const css = readFileSync('components/question/stage-route.css', 'utf8');
+    expect(css).toMatch(/\.stage-route__tally-head\s*\{[^}]*white-space:\s*nowrap;/);
   });
 
   it('the open findings and overdue mitigations are links only above zero', () => {

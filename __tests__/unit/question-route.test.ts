@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { foldRoute, nextApplyingId, ROUTE_FOLD, tallyOfRows, tallyParts } from '@/lib/question/route';
+import { foldRoute, lineTallyWords, nextApplyingId, ROUTE_FOLD, tallyOfRows, tallyParts } from '@/lib/question/route';
 import { tallyWords } from '@/lib/ui/copy';
 import type { StatusMarkKind } from '@/components/ui/types';
 import type { StageRow } from '@/lib/question/stageList';
@@ -102,15 +102,29 @@ describe('nextApplyingId', () => {
   });
 });
 
+describe('lineTallyWords (a folded run\'s tally)', () => {
+  it('one line with middots, no parenthetical: the row keeps "no evidence attached"; the personal data question by its term', () => {
+    const tally = { done: 2, doneNoEvidence: 2, not_yet: 1, scope_answered: 1, no_decision: 14 };
+    expect(lineTallyWords(tally)).toBe('2 done · 1 not yet · 1 personal data question answered · 14 no decision');
+    expect(lineTallyWords(tally)).not.toMatch(/\(|\bscope\b/);
+  });
+});
+
 describe('tallyParts', () => {
   it('one part per kind that occurs, in the tally\'s order, each in the tally\'s own words', () => {
     const tally = { no_decision: 3, done: 4, doneNoEvidence: 1, partly: 2 };
     expect(tallyParts(tally)).toEqual([
-      { kind: 'done', words: '4 done (1 with no evidence attached)' },
-      { kind: 'partly', words: '2 partly' },
-      { kind: 'no_decision', words: '3 no decision' },
+      { kind: 'done', n: 4, word: 'done', extra: '(1 with no evidence attached)', words: '4 done (1 with no evidence attached)' },
+      { kind: 'partly', n: 2, word: 'partly', extra: null, words: '2 partly' },
+      { kind: 'no_decision', n: 3, word: 'no decision', extra: null, words: '3 no decision' },
     ]);
     expect(tallyParts(tally).map((p) => p.words).join(', ')).toBe(tallyWords(tally));
+  });
+
+  it('the personal data question\'s part names it by the vocabulary\'s term, never "scope" or a bare "answered"', () => {
+    expect(tallyParts({ scope_answered: 1 })).toEqual([
+      { kind: 'scope_answered', n: 1, word: 'personal data question answered', extra: null, words: '1 personal data question answered' },
+    ]);
   });
 
   it('every kind of mark has a part: with all seven present, the parts\' counts add up to the rows (silent-failure review F4)', () => {
