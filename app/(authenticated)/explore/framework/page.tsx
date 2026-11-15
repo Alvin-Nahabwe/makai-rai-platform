@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { requireIdentity } from '@/lib/auth/identity';
 import { questionsInStage, runningContent } from '@/lib/content/loader';
 import { principleSlugMap, stageLabels } from '@/data/constants';
 import ReferencesList from '@/components/report/ReferencesList';
@@ -73,7 +74,9 @@ function AreaCard({ area, c }: { area: ContentArea; c: LoadedContent }) {
   );
 }
 
-export default function FrameworkPage() {
+export default async function FrameworkPage() {
+  // explore/layout.tsx gates a navigation into /explore, not one between its two pages (security review 0.7.0, L-1).
+  await requireIdentity();
   const c = runningContent();
   const stages = STAGES.map((stage) => ({
     stage,
