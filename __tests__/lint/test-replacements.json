@@ -674,7 +674,7 @@
   {
     "kind": "rule",
     "deleted": "__tests__/unit/s12-shell.test.tsx::UX-08: every region is named by a heading of the page that it points to, and the suggestions section is the in-page target",
-    "replacedBy": "__tests__/unit/s12-shell.test.tsx::UX-08: every labelled region is named by a heading of the page that it points to, the evidence block has no heading of its own, and the suggestions section is the in-page target",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::UX-08: every labelled region is named by a heading of the page that it points to, and the evidence block has no heading of its own",
     "property": "every labelled region of S-12 is named by a heading it points to; the evidence block is named once, by its fieldset legend (audit B #151): the \"Evidence\" h3 and the evidence section's aria-labelledby are removed, so S-12 has 6 labelled regions (5 for the gate question), and the evidence block still sits inside the answer form",
     "proof": "__tests__/unit/s12-shell.test.tsx::UX-08: every labelled region is named by a heading of the page that it points to, the evidence block has no heading of its own, and the suggestions section is the in-page target; __tests__/unit/evidence-components.test.tsx::UX-30: the block names itself once: one legend \"Evidence\" and no heading",
     "task": "1A-14"
@@ -1610,7 +1610,7 @@
   {
     "kind": "structure",
     "changed": "__tests__/integration/decision-pages.test.ts::UX-08 FR-CNT-02 (screen): QuestionContent gets the suggestion count and the suggestions section carries id=\"suggestions\"",
-    "replacedBy": "__tests__/integration/decision-pages.test.ts::UX-08 FR-CNT-02 (screen): QuestionContent gets the suggestion count and the suggestions section carries id=\"suggestions\"",
+    "replacedBy": "__tests__/integration/decision-pages.test.ts::UX-08 FR-CNT-02 (screen): QuestionContent gets the suggestion count and the folded list of ways carries id=\"suggestions\"",
     "property": "On the question page the content region's link carries the number of suggestions (\"Ways teams address this (3)\"), the suggestions section has its h2 and id=\"suggestions\", and the suggestions slot is rendered in it. The slot's own count line (\"3 controls for this question's risk area\") is removed (copy audit B#279, plan 1A Task 17 part 17c): the number is stated once, in the link.",
     "proof": "The case still requires href=\"#suggestions\">Ways teams address this (3)</a> (the number, from suggestionCount), <h2 id=\"s12-suggestions\">Ways teams address this</h2> and <section … id=\"suggestions\">; the removed count-line assertion is replaced by the slot's introduction (SUGGESTIONS_COPY.intro), which SuggestedControls renders only when it has at least one card, so the slot's presence is still proven. The count line's absence is pinned in __tests__/unit/suggestion-slots.test.tsx.",
     "task": "plan 1A Task 17"
@@ -1874,7 +1874,7 @@
   {
     "kind": "structure",
     "changed": "__tests__/unit/s12-shell.test.tsx::UX-08: every labelled region is named by a heading of the page that it points to, the evidence block has no heading of its own, and the suggestions section is the in-page target",
-    "replacedBy": "__tests__/unit/s12-shell.test.tsx::UX-08: every labelled region is named by a heading of the page that it points to, the evidence block has no heading of its own, and the suggestions section is the in-page target",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::UX-08: every labelled region is named by a heading of the page that it points to, and the evidence block has no heading of its own",
     "property": "Every region the page labels is named by a heading of the page that it points to; the evidence block has no heading of its own; the suggestions section is the one in-page target, headed \"Ways teams address this\". Slice 1 makes the question region's name the page's h1 (#question-heading, the question in words, which carries tabindex=\"-1\" and its class) instead of the removed h2 \"Question\" (s12-question), so the heading a label points to can now be an h1 with further attributes.",
     "proof": "The case renders QuestionPanelRegions with PANEL (QuestionContent mocked to nothing, so the guidance aside is not in its markup; question-frame.test.tsx carries the aside), collects every aria-labelledby value, requires six distinct ones and no s12-evidence, and for each id an h1, h2 or h3 element carrying that id (other attributes allowed) whose closing tag is of the same level and which holds text; it still requires the one id=\"suggestions\" on the suggestions section and <h2 id=\"s12-suggestions\">Ways teams address this</h2>. A label pointing to a missing heading, or to an id on anything but a heading, fails it.",
     "task": "plan 1C Task 4 (cut), slice 1"
@@ -1898,7 +1898,7 @@
   {
     "kind": "structure",
     "changed": "__tests__/unit/question-content.test.tsx::UX-08 FR-CNT-02: question, link, What good looks like, then Why this is asked, with no form control",
-    "replacedBy": "__tests__/unit/question-content.test.tsx::UX-08 FR-CNT-02: What good looks like, then Why this is asked, the principle, then the link, with no form control",
+    "replacedBy": "__tests__/unit/question-content.test.tsx::UX-08 FR-CNT-02: What good looks like, then Why this is asked, the risk areas, then the folded list, with no form control",
     "property": "QuestionContent shows its texts in a fixed order and holds no form control. Slice 1 (plan 1C decision C1, cut, ruling R2) makes it the guidance aside: the question text is the page's h1 and no longer printed here, and the order is \"What good looks like\" and its text, \"Why this is asked\" and its text, the principle, then the jump link.",
     "proof": "The case renders QuestionContent with Q-PP-01 of 0.0.1-fixture and suggestionCount 3 and requires the indexes of 'What good looks like', the expected practice, 'Why this is asked', the reason for asking, 'Principle:' and 'Ways teams address this (3)' to be present and increasing, the principle line, href=\"#suggestions\", and no input, select, textarea, form or button.",
     "task": "plan 1C Task 4 (cut), slice 1"
@@ -2146,10 +2146,346 @@
   {
     "kind": "structure",
     "deleted": "__tests__/unit/question-content.test.tsx::UX-08 NFR-A11Y-05 (UX-34): the jump link is shown only below the two-column width, is at least 24 by 24 pixels, and keeps a visible focus ring",
-    "replacedBy": "__tests__/unit/question-content.test.tsx::UX-08 NFR-A11Y-05 (UX-34): the jump link is shown only while the guidance is not beside the form, is at least 24 by 24 pixels, and keeps a visible focus ring",
+    "replacedBy": "__tests__/unit/question-content.test.tsx::UX-08 NFR-A11Y-05 (UX-34): Ways teams address this is one details, folded by default, whose 44px summary is link-styled with the book icon",
     "property": "The in-page link down to the suggestions shows exactly while the guidance (and the suggestions in it) is not beside the form, is a target of at least 24 by 24 pixels, and keeps a visible focus ring; it is hidden by the same media query that puts the guidance beside the form in components/question/workspace.css.",
     "proof": "With the route column (owner's decision of 14 November 2026) the guidance sits beside the form only from 90rem; from 72.5rem to under 90rem it is below the form. The case now requires `@media (width >= 90rem) { .question-content__jump { display: none;` in QuestionContent.css and the same query in workspace.css opening the three-column grid (`grid-template-columns: minmax(16rem, 1fr) minmax(0, 2fr) minmax(16rem, 1fr); grid-template-areas: \"route main guide\";`), in place of the 72.5rem pair; the 24 px, focus-ring, colour-role and no-75rem expectations are unchanged. Seen RED on the old pattern after the CSS moved to 90rem, GREEN with the new one; e2e/question-frame.spec.ts sees the link visible at 1160 and hidden at 1440.",
     "task": "lane 7 part 2 (the route column on the question page)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 UX-08: S-12 shell regions in order, each but the evidence block labelled by a heading, evidence block inside the answer form",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 UX-08: S-12 shell regions in order, each but the evidence block labelled by a heading, evidence block inside the answer form",
+    "property": "S-12 renders its regions in one fixed DOM order, each named by a heading except the evidence block, which is named by its legend and sits inside the answer form.",
+    "proof": "The Route frame (lane 1 Task 1, coordinator's seam ruling of 15 November 2026) puts the seal note above the decision, and the decision's regions inside the decision slot (components/question/DecisionSlot.tsx, whose stub renders current-decision, answer-form with the evidence block, and way-on until lane 2's card merges); the list of ways teams address this moved inside the guidance aside as one folded details (spec 9.3), so there is no suggestions section. The expected order is now question, seal-note, decision-slot, current-decision, answer-form, evidence-block, way-on, finding-link, and the labelled sections 5 (the suggestions section was the sixth). The evidence-inside-the-form regex is unchanged. Seen RED against the new page before the order was updated, GREEN after; question-frame.test.tsx pins the frame's own order (strip, h1, code, seal note, slot, guidance, finding link, route). (Superseded by the entry for this case with task \"1B-route-L1-T1 fix round 3 (I-A2)\": since 277356f4 the finding link sits between evidence-block and way-on.)",
+    "task": "1B-route-L1-T1"
+  },
+  {
+    "kind": "structure",
+    "deleted": "__tests__/unit/s12-shell.test.tsx::UX-08: every labelled region is named by a heading of the page that it points to, the evidence block has no heading of its own, and the suggestions section is the in-page target",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::UX-08: every labelled region is named by a heading of the page that it points to, and the evidence block has no heading of its own",
+    "property": "Every aria-labelledby of S-12 points to a heading of the page, and the evidence block has no heading of its own; the list of ways teams address this is reachable in the page.",
+    "proof": "The suggestions section with its h2 and id=\"suggestions\" is gone: spec 9.3 and the sketch make \"Ways teams address this (n)\" one control that opens the list in place, so the list is inside the aside's <details id=\"suggestions\"> (question-content.test.tsx 'UX-08 NFR-A11Y-05 (UX-34): Ways teams address this is one details...' asserts the details, its id and its summary; question-frame.test.tsx asserts the list is inside it and printed once). The replacement keeps the heading-target check for every labelled region (now 5) and the no-s12-evidence check, and asserts there is no suggestions section and no s12-suggestions id.",
+    "task": "1B-route-L1-T1"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::FR-SUG-02 UX-08: for the gate question (nothing to suggest) the page renders no Ways teams address this section and no link to it",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::FR-SUG-02 UX-08: for the gate question (nothing to suggest) the page renders no Ways teams address this section and no link to it",
+    "property": "For the personal data question, which has nothing to suggest, the page has no Ways teams address this section, link or list, and the aside is told the count is 0.",
+    "proof": "One line changed: QuestionContent's recorded props now also carry riskAreas (the owner's 17.5 labels, none for the personal data question) and children (the list, null at a count of 0), so the toEqual reads { question: gate, suggestionCount: 0, riskAreas: [], children: null }. The other assertions, including the five labelled sections, are unchanged.",
+    "task": "1B-route-L1-T1"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 (helper): each region's component gets the props its contract row names, from the panel data",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 (helper): each region's component gets the props its contract row names, from the panel data",
+    "property": "Each slot component of S-12 receives the props its contract row names, taken from the panel data.",
+    "proof": "QuestionContent now receives riskAreas and the list (SuggestedControls) as its children, which it shows inside the folded details; with QuestionContent mocked the list is not rendered, so SuggestedControls' props are read from QuestionContent's children (same expected object: contentSemver, questionId, tickedOptions ['Alternatives analysis']) instead of from propsSeen.SuggestedControls. The CurrentDecision, SealNote, EvidenceBlock and QuestionFindingLink expectations are unchanged.",
+    "task": "1B-route-L1-T1"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 FR-DEC-06 UX-14 (helper): with no decision yet the next version is 1, and a read-only or archived panel has no evidence block to change",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 FR-DEC-06 UX-14 (helper): with no decision yet the next version is 1, and a read-only or archived panel has no evidence block to change",
+    "property": "With no decision the seal note offers version 1, the evidence block starts empty, the suggestions see no ticked options and the finding link no version; a read-only or archived panel has no evidence block.",
+    "proof": "One line changed, for the same reason as the props case: the suggestions' tickedOptions [] is read from QuestionContent's children's props, since the list is now passed into the aside rather than rendered as a section of the page.",
+    "task": "1B-route-L1-T1"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/decision-components.test.tsx::UX-42 W-3: one h1 for the question that takes focus, and Previous and Next go to the neighbouring questions",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::UX-42 W-3: one h1 for the question that takes focus, and Previous and Next go to the neighbouring questions",
+    "property": "S-12 has one h1, the question that takes focus, and its Previous and Next links go to the neighbouring questions; the first question has no Previous.",
+    "proof": "Previous and Next are now the position strip's (phone sketch workspace-phone-saved.html; lane 1 Task 1), which reads the stage's marks, so the case renders with a stage fixture (__tests__/helpers/stageFixture.ts, imported inside the case) and with real fixture neighbours (Q-PP-01, Q-PP-03 in place of the made-up Q-PP-00, which the strip looks up). Each link is named 'Previous question: <words> (question n, <status>)' / 'Next question: ...' instead of the bare 'Previous question' / 'Next question', and the position is 'Question 2 of 24' (the breadcrumb and strip's words, positionWords) instead of 'Question 2 of 24 in Pre-processing'. The single h1, its text and its code line are asserted as before; question 1 still has no Previous.",
+    "task": "1B-route-L1-T1"
+  },
+  {
+    "kind": "structure",
+    "deleted": "__tests__/unit/question-content.test.tsx::UX-08 FR-CNT-02: What good looks like, then Why this is asked, the principle, then the link, with no form control",
+    "replacedBy": "__tests__/unit/question-content.test.tsx::UX-08 FR-CNT-02: What good looks like, then Why this is asked, the risk areas, then the folded list, with no form control",
+    "property": "The aside shows What good looks like, then Why this is asked, then the risk areas under it (owner 17.5), then Ways teams address this, and holds no form control; the grey 'Principle: ...' line is replaced by the risk areas (brief item 4).",
+    "proof": "Rewritten with the frame (lane 1 Task 1): the replacement renders QuestionContent with riskAreas and the list as children and asserts the new order and markup; RED on the old component (no Risk areas, an <a href=\"#suggestions\"> link), GREEN on the new one; question-frame.test.tsx checks the same in the page.",
+    "task": "1B-route-L1-T1"
+  },
+  {
+    "kind": "structure",
+    "deleted": "__tests__/unit/question-content.test.tsx::UX-08 NFR-A11Y-05 (UX-34): the jump link is shown only while the guidance is not beside the form, is at least 24 by 24 pixels, and keeps a visible focus ring",
+    "replacedBy": "__tests__/unit/question-content.test.tsx::UX-08 NFR-A11Y-05 (UX-34): Ways teams address this is one details, folded by default, whose 44px summary is link-styled with the book icon",
+    "property": "The in-page jump link and the separate suggestions section are replaced by one <details id=\"suggestions\"> folded by default (spec 9.3, sketch .help), whose summary is a 44px link-styled control with the book icon and whose content is the list; the focus ring is the global rule's and is never removed.",
+    "proof": "Rewritten with the frame (lane 1 Task 1): the replacement renders QuestionContent with riskAreas and the list as children and asserts the new order and markup; RED on the old component (no Risk areas, an <a href=\"#suggestions\"> link), GREEN on the new one; question-frame.test.tsx checks the same in the page.",
+    "task": "1B-route-L1-T1"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::(module)",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::lane 1 Task 1: a stage list of null for a project the panel found fails the page loudly, never a page without its strips",
+    "property": "The S-12 page is rendered in a unit test with its auth and its loaders mocked, so no case reaches a database; the stage list the page reads is a known value.",
+    "proof": "The stage loader's mock now resolves the fixture stage (__tests__/helpers/stageFixture.ts: the fixture bundle's pre-processing questions, nothing recorded) instead of null, with one import line for the helper and the comment updated. Lane 1 Task 1 makes the page throw on a null stage list for a project the panel found (the top strip and the position strip need it; the silent-failure review of the change, task-1-silent-failure.md finding 2, asked that a null not render a page without them), so null would fail every page case. The new case 'lane 1 Task 1: a stage list of null ... fails the page loudly' covers null; the existing page cases still assert the gate's context and identity on loadStagePage's call.",
+    "task": "1B-route-L1-T1"
+  },
+  {
+    "kind": "structure",
+    "deleted": "__tests__/integration/decision-pages.test.ts::UX-08 FR-CNT-02 (screen): QuestionContent gets the suggestion count and the suggestions section carries id=\"suggestions\"",
+    "replacedBy": "__tests__/integration/decision-pages.test.ts::UX-08 FR-CNT-02 (screen): QuestionContent gets the suggestion count and the folded list of ways carries id=\"suggestions\"",
+    "property": "On a real panel, the guidance gets the question's suggestion count, \"Ways teams address this (3)\" is shown, the list's introduction is in the page, and exactly one element carries id=\"suggestions\".",
+    "proof": "Spec 9.3 and the Route sketch (owner's target, gap wide 12): \"Ways teams address this (n)\" is one control that opens the list in place, so the in-page link <a href=\"#suggestions\"> and the separate <section id=\"suggestions\"> with its h2 are replaced by one <details class=\"question-content__ways\" id=\"suggestions\"> in the aside, folded by default, whose summary reads \"Ways teams address this (3)\" and whose content is the list. The replacement asserts the summary with the same count 3 from the real panel, that SUGGESTIONS_COPY.intro is inside that details, and that id=\"suggestions\" occurs once. Seen RED on the new page with the old body, GREEN with the new one, against the b5 database slot.",
+    "task": "1B-route-L1-T1"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/integration/decision-pages.test.ts::FR-DEC-06 (screen): a new project's stage shows every question as No decision and the W-2 empty line",
+    "replacedBy": "__tests__/integration/decision-pages.test.ts::FR-DEC-06 (screen): a new project's stage shows every question as No decision and the W-2 empty line",
+    "property": "On a new project's stage page every question reads No decision, once per question, beside the stage's count, its topics and each topic's count line.",
+    "proof": "One expectation's pattern changes and none is removed: the count of `>No decision<` becomes the count of `class=\"status-label\">No decision<`. Lane 1 Task 2 (owner's answer R1) draws each question as a row of the route's line: the kit's StatusMark sits on the line inside an aria-hidden node with its words visually hidden, and the status is read once, in words, in the row's meta line as `<span class=\"status-label\">`. The old pattern now also counts the mark's hidden words, so it would read 48 for 24 questions; the new one counts the words a person reads, one per question, and still equals STAGE_QUESTION_COUNT. The other expectations of the case (the empty line, the count, the topic heading with its count line, the topics line) are unchanged. __tests__/unit/stage-route.test.tsx::each row shows its StatusMark with words and its code after the question in words; no \"v3\" or other version number holds the mark and the status label per row.",
+    "task": "1B-route-L1-T2"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/integration/decision-pages.test.ts::FR-DEC-06 (screen): with a decision recorded the empty line goes and the row shows its status and version",
+    "replacedBy": "__tests__/integration/decision-pages.test.ts::FR-DEC-06 (screen): with a decision recorded the empty line goes and the row shows its status and version",
+    "property": "With a decision recorded, the empty line goes and Q-PP-01's row shows its status in words (Partly) followed by its decided-on date (Oct 2026).",
+    "proof": "One expectation's pattern changes and none is removed: `class=\"ui-mark__words\">Partly</span>[\\s\\S]*?class=\"ui-plate__state\">Oct 2026<` becomes `class=\"status-label\">Partly</span> · Oct 2026<`. The row is no longer the kit's ItemPlate (lane 1 Task 2, owner's answer R1: each question a row on the route's line); its meta line is the code, the status in words in a status-label, then the state parts joined by ' · ', the decided-on date first. The new pattern is stricter: the date must follow the status directly. __tests__/unit/stage-route.test.tsx::the state line: the decided-on date, \"{n} of {m} in place\", open findings only above zero, the seal and good-practice markers, with no leading separator holds the whole meta line.",
+    "task": "1B-route-L1-T2"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/integration/decision-pages.test.ts::FR-DEC-06 FR-DEC-10 (screen): a new project's S-12 shows No decision yet, an empty form with empty date fields and Save decision",
+    "replacedBy": "__tests__/integration/decision-pages.test.ts::FR-DEC-06 FR-DEC-10 (screen): a new project's S-12 shows No decision yet, an empty form with empty date fields and Save decision",
+    "property": "A new project's S-12, rendered from the real panel, shows No decision yet, an empty form with empty date fields, and Save decision.",
+    "proof": "Fix round 1 (review M4): QuestionPanelRegions' `stage` (the stage page's data) is now required, so no render can invent \"0 open findings\" or drop the strips; the page already refuses a null stage list. The case passes the fixture stage (__tests__/helpers/stageFixture.ts: the fixture bundle's questions, nothing recorded) by a dynamic import inside the case, so the module's imports are unchanged. One line changed: the render call adds `stage`. The three expectations are unchanged and pass against the b5 slot.",
+    "task": "1B-route-L1-T1 fix round 1"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/decision-components.test.tsx::FR-DEC-01 UX-31 UX-14: a viewer and an archived project get no form",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::FR-DEC-01 UX-31 UX-14: a viewer and an archived project get no form",
+    "property": "A Viewer and anyone in an archived project get no decision form on S-12, and the Viewer reads the one line that says why.",
+    "proof": "Fix round 1 (review M4): QuestionPanelRegions' `stage` (the stage page's data) is now required, so no render can invent \"0 open findings\" or drop the strips; the page already refuses a null stage list. The case passes the fixture stage (__tests__/helpers/stageFixture.ts: the fixture bundle's questions, nothing recorded) by a dynamic import inside the case, so the module's imports are unchanged. The two render calls add `stage: stageFixture()` after the import line; the three expectations (the Viewer's note, no Save decision, no <form> for either) are unchanged.",
+    "task": "1B-route-L1-T1 fix round 1"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/decision-components.test.tsx::(module)",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::UX-42 W-3: one h1 for the question that takes focus, and Previous and Next go to the neighbouring questions",
+    "property": "The S-12 regions cases render a panel for Q-PP-01 whose neighbours the page can name.",
+    "proof": "Fix round 1 (review M4): QuestionPanelRegions' `stage` (the stage page's data) is now required, so no render can invent \"0 open findings\" or drop the strips; the page already refuses a null stage list. The case passes the fixture stage (__tests__/helpers/stageFixture.ts: the fixture bundle's questions, nothing recorded) by a dynamic import inside the case, so the module's imports are unchanged. One line of the module's PANEL changed: position { index: 1, previousId: 'Q-PP-00' } became { index: 0, previousId: null }. The position strip now names the previous question in words (neighbourOf reads its text and place from the content), and 'Q-PP-00' is no question, so the page rightly throws naming it; Q-PP-01 is the stage's first question (index 0), which has no previous. The UX-42 case still sets its own neighbours (Q-PP-01, Q-PP-03).",
+    "task": "1B-route-L1-T1 fix round 1"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::UX-31 FR-PRJ-03: an archived project shows the archived banner on S-12",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::UX-31 FR-PRJ-03: an archived project shows the archived banner on S-12",
+    "property": "An archived project's S-12 shows the archived banner above the regions; a live one does not.",
+    "proof": "Fix round 1 (review M4): QuestionPanelRegions' `stage` (the stage page's data) is now required, so no render can invent \"0 open findings\" or drop the strips; the page already refuses a null stage list. The case passes the fixture stage (__tests__/helpers/stageFixture.ts: the fixture bundle's questions, nothing recorded) by a dynamic import inside the case, so the module's imports are unchanged. The two render calls add `stage: stageFixture()` (the helper is already imported by this file); the expectations are unchanged.",
+    "task": "1B-route-L1-T1 fix round 1"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::(module)",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 FR-DEC-06 UX-14 (helper): with no decision yet the next version is 1, and a read-only or archived panel has no evidence block to change",
+    "property": "The S-12 page is rendered in a unit test with its auth and its loaders mocked, so no case reaches a database; every slot records its props.",
+    "proof": "Two lines are added and none removed: a comment and `vi.mock('@/components/question/ReadingDecision', () => ({ ReadingDecision: slot('ReadingDecision') }));`. A reader's panel now renders the reader's card (components/question/ReadingDecision.tsx) where it rendered CurrentDecision's reading mode, and CurrentDecision is already a slot here; the file's fixture version carries no receivedAt, so the real card's date throws (RangeError: not an instant). As a slot it records its props like the others; the helper case still checks that a read-only or archived panel has no evidence block, and every other case renders a writer's panel, which does not reach the card. No expectation was removed or loosened; the file's ten cases pass.",
+    "task": "1B-route-L1-T3"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 UX-08: S-12 shell regions in order, each but the evidence block labelled by a heading, evidence block inside the answer form",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 UX-08: S-12 shell regions in order, each but the evidence block labelled by a heading, evidence block inside the answer form",
+    "property": "S-12 renders its regions in one fixed DOM order. Each region is named by a heading, except the evidence block, which is named by its legend and sits inside the answer form.",
+    "proof": "The case now expects, in DOM order: question, seal-note, decision-slot, current-decision, answer-form, evidence-block, finding-link, way-on; five labelled sections; the evidence block inside the answer form; and the finding link after both closing section tags (the evidence block's and the answer form's). Why: lane 1 Task 1 puts the seal note above the decision slot (components/question/DecisionSlot.tsx), which holds the decision's regions as a stub until lane 2's card merges. The list of ways teams address this moved into the guidance aside as one folded details (spec 9.3), so there is no suggestions section, and the labelled sections went from six to five. In 277356f4 the coordinator's ruling on design review S1a-4 moved 'Raise a finding about this question' out of the guidance column into the slot's stub, after the answer form and before the way on (lane 2's card carries it at the merge). So finding-link now sits between evidence-block and way-on, where 254babc0 had put it after way-on. The evidence-inside-the-form assertion and the five labelled sections are unchanged by that move. Seen GREEN on the lane head 18c6f5bd plus fix round 4: `npx vitest run __tests__/unit/s12-shell.test.tsx` printed 'Test Files  1 passed (1)' and 'Tests  11 passed (11)'.",
+    "task": "1B-route-L1-T1 fix round 3 (I-A2)"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/integration/findings-close-by-decision.test.ts::FR-FND-06: a decision that already closed its mitigation is not offered again, and a second close writes nothing",
+    "replacedBy": "__tests__/integration/findings-close-by-decision.test.ts::FR-FND-06: a decision that already closed its finding is not offered again after a reopen, and a second close writes nothing",
+    "property": "A decision version whose closing record exists is not offered to close its finding again, and a second close by it answers 422 on decisionVersionId and writes nothing. The old case reached that state by closing while a Planned mitigation kept the finding open, which route 11 now refuses (route decision R11, security review 0.7.0 L-2: 409 finding_has_open_work); the case now reaches it the only way left, closing the finding and then reopening it.",
+    "proof": "The case closes the finding by version 2, reopens it, requires the state open, findingsToCloseByDecision empty, and the second close by version 2 rejected with status 422 on decisionVersionId with the mitigation count unchanged. The refusal itself is pinned by __tests__/integration/findings-close-by-decision.test.ts::FR-FND-06 (R11, L-2): while a mitigation is Planned or In progress the close answers 409 finding_has_open_work with the sentence and writes nothing, which fails with the server check removed (shown in the lane 7 close).",
+    "task": "lane 7 R11"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/integration/findings-routes.test.ts::B2 (the server as it stands): a close while a mitigation is Planned answers 201, writes the record, and the finding stays open",
+    "replacedBy": "__tests__/integration/findings-routes.test.ts::R11 (B2, L-2): a close while a mitigation is Planned answers 409 finding_has_open_work with the sentence, writes nothing, and the finding stays open",
+    "property": "Route 11 posted for an open shortfall finding whose mitigation is Planned leaves the finding open. The old case pinned the server as it stood in 0.7.0 (201 and a closing record written); route decision R11 (security review 0.7.0 L-2) makes the server refuse that close, so the case now pins the refusal through the route handler: 409, the body {error: the close box's sentence, code: finding_has_open_work}, no row written.",
+    "proof": "The case posts route 11 through the real handler as an assessor for a finding with one Planned mitigation and a qualifying done decision, and requires status 409, the JSON body to equal exactly { error: FINDINGS_COPY.failures.openWork, code: 'finding_has_open_work' } (FINDINGS_COPY.failures.openWork is the close box's FINDINGS_COPY.finding.closeBlocked, asserted equal in findings-close-by-decision.test.ts), mitigation_versions still 1 (the Planned one), and openShortfallForQuestion still naming the finding. The stuck record the old case produced is still built for the page tests by __tests__/helpers/recordFixture.ts addPreR11ClosingRecord.",
+    "task": "lane 7 R11"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::(module)",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::UX-06 FR-PRJ-02: to-do counts come before recorded counts in each stage column",
+    "property": "The S-10 cases render the project page as it ships, from data the test builds, and read each stage where it is. The page is now components/project/ProjectPage.tsx (three StageLine lines of stops, Route R5); ProjectOverview.tsx and the StageColumn component are deleted, and StageReviewsSummary is no longer mounted on S-10 (the reviews are each line's own Reviews stop), so its mock and the props it recorded go. The page takes each stage's row of marks (lib/project/routes.ts), so the helper builds them from the same counts the cases already pass.",
+    "proof": "Module changes only: the imports of StatusMarkKind, tallyOf and ProjectRoutes; the StageReviewsSummary vi.mock and its vi.hoisted list removed; ProjectPage imported in place of StageColumn and ProjectOverview; routesOf(d), the test's own helper, builds one stop per question from d.counts (done, partly, not yet, not applicable, does not apply, no decision, the rest answered) and the tally with tallyOf(kinds, doneWithoutEvidence), as lib/project/routes.ts shapes them; renderPage renders ProjectPage with those routes and no primary action; preLine slices the pre-processing line; textOf strips tags. Every S-08, S-09, S-32 and writer case is byte for byte as before. So these cases prove what the page renders from given routes, not how the routes are read: that the real routes hold the stored decisions (the marks, the gated questions as not applying, the named questions with no decision) is __tests__/integration/project-routes.test.ts, case \"each stage's marks are the stage page's marks, in its order; the named questions are its no-decision rows; their count is the page's count\", which fails when the gate read is removed.",
+    "task": "lane 4 Task A (Route R5: S-10 as three lines of stops)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::FR-PRJ-03: S-10 passes canOpen to each stage's review summary and shows Export project only with team:export",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::FR-PRJ-03: S-10 offers Open a stage review on each stage's line only with review:open on a live project, and Download records only with team:export",
+    "property": "Each stage offers \"Open a stage review\" exactly when the role has review:open and the project is not archived, and \"Download records\" shows exactly with team:export. The page no longer mounts StageReviewsSummary (whose canOpen prop the old case read through a mock): each line renders its own Reviews stop, so the property is read from the rendered links.",
+    "proof": "For owner, reviewer and viewer, live and archived, the case renders the page and requires, per stage in STAGES order, the presence of href=\"/orgs/o/projects/p1/reviews/new?stage=<stage>\" to equal can(role, 'review:open') && !archived, and the presence of PROJECT_COPY.overview.downloadRecords to equal can(role, 'team:export') (unchanged). Dropping the archived check or the role check in StageLine's Reviews stop fails it.",
+    "task": "lane 4 Task A (Route R5: S-10 as three lines of stops)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::UX-06 FR-PRJ-02: to-do counts come before recorded counts in each stage column",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::UX-06 FR-PRJ-02: to-do counts come before recorded counts in each stage column",
+    "property": "In each stage the to-do counts come before the recorded counts and none is a percentage, score or \"complete\". The stage is now a line of stops, rendered as the page renders it; its overdue count reads \"Overdue: 1 mitigation\" (the red word and its count, spec 7.1) where the old column said \"1 overdue mitigation\".",
+    "proof": "The case renders the page with COUNTS and slices the pre-processing line; it requires \"Still open in this stage\" before \"9 questions with no decision\", that before \"Recorded so far\", and that before \"7 done (2 with no evidence attached)\"; \"3 open findings\"; and, tags stripped, PROJECT_COPY.followUp.overdue + ': ' + PROJECT_COPY.mitigationCount(1). The no-%/score/complete line is unchanged. The recorded counts in the tally are those the test's routesOf helper built from COUNTS; that the real routes hold the stored decisions is __tests__/integration/project-routes.test.ts, case \"each stage's marks are the stage page's marks, in its order; the named questions are its no-decision rows; their count is the page's count\".",
+    "task": "lane 4 Task A (Route R5: S-10 as three lines of stops)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::UX-06 (R12-16, spec 7.2): each status phrase of a stage column is the kit's mark with its words in ink, and none carries the warning class",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::UX-06 (R12-16, spec 7.2): each status phrase of a stage column is the kit's mark with its words in ink, and none carries the warning class",
+    "property": "Recorded so far shows each status as the kit's mark, hidden from assistive technology, with words, never a warning style. It is now the kit's RouteRow (plan 1C Task 8): one stop per question (drawn without a link on S-10, lead's ruling on C5), each holding the hidden MarkShape and the question's status in words, and the tally in words after the row; the old list of one item per kind is gone.",
+    "proof": "The case slices the pre-processing line's Recorded so far stop and requires 24 <li class=\"ui-route-row__stop\" data-mark-kind=...> stops whose <span class=\"ui-route-row__point\"> holds <svg class=\"ui-mark__shape\" ... aria-hidden=\"true\">; the tally paragraph <p class=\"ui-route-row__tally\"> split on ', ' to read exactly \"7 done (2 with no evidence attached)\", \"n partly\", \"n not yet\", \"n not applicable\", \"1 answered\"; and no status-label or warning in the stop. The ink is checked in the browser by expectStatusMarksInk (e2e/prj-screens.spec.ts).",
+    "task": "lane 4 Task A (Route R5: S-10 as three lines of stops)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::FR-PRJ-02: the stage column says how many open findings have no mitigation yet, and counts gated questions as not applying, beside those marked not applicable",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::FR-PRJ-02: the stage column says how many open findings have no mitigation yet, and counts gated questions as not applying, beside those marked not applicable",
+    "property": "The stage says how many open findings have no mitigation yet, and counts questions the personal data answer gates as not applying, beside those marked not applicable. The first use of \"finding\" and \"mitigation\" is now marked as the term with its definition beside it (spec 6), so the link and the bracket are no longer adjacent in the markup; the tally is the route row's.",
+    "proof": "The case renders the pre-processing line with notApplicableByGate: 2 and requires the link <a href=\"/orgs/o/projects/p1/findings?stage=pre-processing\">3 open findings</a>, the text (tags stripped) \"3 open findings (1 of them with no mitigation yet)\", and the route row's tally paragraph holding \"2 not applicable\" and \"2 do not apply\" as whole phrases. That proves the bracket and that a gated count is printed apart from not applicable; the routes here are built by the test's routesOf helper, so it does not prove that S-10 reads gated questions as not applying. That half is __tests__/integration/project-routes.test.ts, case \"each stage's marks are the stage page's marks, in its order; the named questions are its no-decision rows; their count is the page's count\", which requires Q-PP-13 (gated by a No answer) to be does_not_apply on S-10 as on the stage page, and fails when the gate read in lib/project/routes.ts is removed (mutation run, 15 Nov 2026).",
+    "task": "lane 4 Task A (Route R5: S-10 as three lines of stops)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::FR-PRJ-02: S-10 says how to share the record once, right after the stages and their reviews, before the findings link",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::FR-PRJ-02: S-10 says how to share the record once, right after the stages and their reviews, before the findings link",
+    "property": "S-10 says how to share the record once, after the stages and their reviews and before the link to the findings. The stages' frame is now <div class=\"project-lines-frame\"> (the jump links and the three lines) and the one findings link is the \"This project\" row's \"Findings\" (the old foot link \"Findings for this project\" is gone, spec 9.2).",
+    "proof": "The case requires the share line exactly once, balances the <div>s from <div class=\"project-lines-frame\"> to find its end, and requires the share line after that end and before '>' + PROJECT_COPY.findings + '</a>'. \"Team working view\" stays absent.",
+    "task": "lane 4 Task A (Route R5: S-10 as three lines of stops)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::S-10 (kit page header): a person with no action on the project gets no empty actions wrapper; an owner gets it, with Archive",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::S-10 (Route R5): the page header has no actions wrapper for any role; the owner's Archive control sits in the \"This project\" row",
+    "property": "No empty actions wrapper is left in the page header, and the owner's Archive control is on the page. Under R5 the header carries no actions at all (the primary action sits on a stage's line; the project actions are the quiet \"This project\" row at the foot), so no role gets the header's wrapper, and the control is in that row.",
+    "proof": "The case requires 'ui-page-header__actions' absent for a viewer and for an owner, and class=\"archive-control\" inside the markup from <nav class=\"project-actions\" on. Moving the control back into the header, or adding an empty actions slot, fails it.",
+    "task": "lane 4 Task A (Route R5: S-10 as three lines of stops)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::FR-PRJ-02: a new project shows \"No decisions recorded yet\" in each stage",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::FR-PRJ-02: a new project shows \"No decisions recorded yet\" in each stage",
+    "property": "A new project's page says in each of its three stages that nothing is recorded, with the kit's words UI_COPY.tally.none. The words are now the kit's RouteRow tally paragraph, under each stage's row of No decision marks.",
+    "proof": "The case renders the page with ZERO counts and requires <p class=\"ui-route-row__tally\">No decisions recorded yet</p> exactly three times (split length 4).",
+    "task": "lane 4 Task A (Route R5: S-10 as three lines of stops)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::UX-36: each stage is a plain block, named by its heading, that names its three to-do counts",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::UX-36: each stage is a plain block, named by its heading, that names its three to-do counts",
+    "property": "Each of the three stages is one section a person can find, named by its <h2>, that states its to-do counts. The section is now a line of stops (class stage-line); its heading's name is marked as the first use of the stage's term (spec 6), and the overdue count reads \"Overdue: 1 mitigation\".",
+    "proof": "The case requires three <section class=\"stage-line\" id=… data-stage=… aria-labelledby=…>, no <details>, the pre-processing <h2 id=…><span data-term=\"stage-1\">Pre-processing</span></h2>, and in its text \"9 questions with no decision\", \"3 open findings\" and PROJECT_COPY.followUp.overdue + ': ' + PROJECT_COPY.mitigationCount(1).",
+    "task": "lane 4 Task A (Route R5: S-10 as three lines of stops)"
+  },
+  {
+    "kind": "structure",
+    "changed": "e2e/role-matrix.spec.ts::(module)",
+    "replacedBy": "e2e/role-matrix.spec.ts::dashboard, projects, projects/new, project detail and members render only the controls this role may use",
+    "property": "O-13 on the project page after Route R5: every control in main is classified, and the role-gated ones show only for the roles that may use them. The page's one findings link is now the \"This project\" row's \"Findings\" (the foot link \"Findings for this project\" is gone, spec 9.2); each stage's Still open starts with a link \"N questions with no decision\" to the stage's filtered list, then the first three of those questions by name and \"and k more\". The rows of marks have no links on S-10 (lead's ruling on C5).",
+    "proof": "PROJECT_DETAIL_CONTROLS: the 'Findings for this project' entry becomes { name: PROJECT_COPY.findings, exact: true, action: null, located in nav.project-actions by role link and exact name }, so every role must see it, and the census classifies only a control whose whole text is \"Findings\" by it (a Control's new optional `exact`, passed to findUnclassifiedControls with each name; every other entry keeps the `includes` match). A new entry { name: 'questions with no decision', action: null, located in [data-stage=\"pre-processing\"] by a link whose name ends 'question(s) with no decision' } (the fixture's project is fresh, so every stage has one). findUnclassifiedControls ignores exactly the links of .stage-line__named (el.matches('.stage-line__named a[href]')): read-only navigation whose words are the questions', varying with data and the same for every role, as .project-card already is; any other control in that list stays in the census. Every role-gated entry (Start recording, Edit project, Download records, Archive project, Open a stage review) is unchanged; \"Edit project details\" still matches 'Edit project' by includes and by the link locator's substring name.",
+    "task": "lane 4 Task A (Route R5: S-10 as three lines of stops)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::UX-06 FR-PRJ-02: to-do counts come before recorded counts in each stage column",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::UX-06 FR-PRJ-02: to-do counts come before recorded counts in each stage column",
+    "property": "In each stage the to-do counts come before the recorded counts and none is a percentage, score or \"complete\". The recorded counts are now the kit's tally list: the count is bold and the status word may be marked as its term's first use, so \"7 done (2 with no evidence attached)\" is no longer one run of markup, only one run of text.",
+    "proof": "The case renders the page with COUNTS, slices the pre-processing line and reads its text (each (i), <span class=\"ui-term-tip\">, removed with its definition, then tags stripped): \"Still open in this stage\" before \"9 questions with no decision\", that before \"Recorded so far\", and that before \"7 done (2 with no evidence attached)\". \"3 open findings\", the overdue count's text and the no-%/score/complete line are unchanged. Moving the tally above Still open, or dropping the evidence caveat, fails it.",
+    "task": "lane 4 Task B (the kit RouteRow tally keyed by its marks, kept whole, with the status words' (i))"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::UX-06 (R12-16, spec 7.2): each status phrase of a stage column is the kit's mark with its words in ink, and none carries the warning class",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::UX-06 (R12-16, spec 7.2): each status phrase of a stage column is the kit's mark with its words in ink, and none carries the warning class",
+    "property": "Recorded so far shows each status as the kit's mark, hidden from assistive technology, with words, never a warning style. The tally after the row is now the kit's list keyed by the marks (owner's design finish review K1): one item per kind with a count, each its 16 px shape, the count and the words; a defined status word's item ends with its (i).",
+    "proof": "The case slices the pre-processing line's Recorded so far stop and requires the 24 stops as before; the tally is read as the text of each <li class=\"ui-route-row__tally-item\"> without its <span class=\"ui-term-tip\"> and must equal exactly \"7 done (2 with no evidence attached)\", \"n partly\", \"n not yet\", \"n not applicable\", \"1 answered\", in that order; no status-label or warning in the stop. The ink of the tally's shapes is checked in the browser by expectStatusMarksInk (e2e/project-page.spec.ts, e2e/prj-screens.spec.ts).",
+    "task": "lane 4 Task B (the kit RouteRow tally keyed by its marks, kept whole, with the status words' (i))"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::FR-PRJ-02: the stage column says how many open findings have no mitigation yet, and counts gated questions as not applying, beside those marked not applicable",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::FR-PRJ-02: the stage column says how many open findings have no mitigation yet, and counts gated questions as not applying, beside those marked not applicable",
+    "property": "The stage says how many open findings have no mitigation yet, and counts questions the personal data answer gates as not applying, beside those marked not applicable. The tally is now the kit's list, one item per kind.",
+    "proof": "The case renders the pre-processing line with notApplicableByGate: 2 and requires the findings link and the bracket's text as before, and among the tally items' texts (each <li class=\"ui-route-row__tally-item\"> without its (i)) the whole items \"2 not applicable\" and \"2 do not apply\": a gated count is printed apart from not applicable. That S-10 reads gated questions as not applying stays proved by __tests__/integration/project-routes.test.ts, as the lane 4 Task A row says.",
+    "task": "lane 4 Task B (the kit RouteRow tally keyed by its marks, kept whole, with the status words' (i))"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::UX-31 FR-PRJ-03: an archived project shows the banner and no form or Archive control on S-10",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::UX-31 FR-PRJ-03: an archived project shows the banner and no form or Archive control on S-10",
+    "property": "An archived project's page shows the archived banner's sentence, and no form and no Archive control. The sentence's words \"All projects page\" are now a link to the organisation's projects (lane 1's design review S5-1), so the sentence is no longer one run of markup, only one run of text.",
+    "proof": "The case renders S-10 archived for an owner and requires PROJECT_COPY.archivedBanner in its text (tags stripped by the file's textOf), and no <form, \"Archive project\" or \"Edit project\" in the markup, as before. PROJECT_COPY.archivedBanner is built from archivedBannerParts, and __tests__/unit/project-page.test.tsx \"UX-31 S5-1: …\" pins the joined parts to the sentence word for word and the banner body's markup to before + <a href=\"/orgs/o/projects\">All projects page</a> + after for every role.",
+    "task": "lane 4 Task B round 1 (the archived banner's \"All projects page\" links to the organisation's projects, S5-1)"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/integration/documents-routes.test.ts::FR-DOC-04 FR-REV-08: an erased document answers 410 with its date and no bytes",
+    "replacedBy": "__tests__/integration/documents-routes.test.ts::FR-DOC-04 FR-REV-08: an erased document answers 410 with its date and no bytes",
+    "property": "An erased document answers 410 with code `erased` and the date it was erased, and no bytes.",
+    "proof": "The same case: `error` was the literal 'Erased' and is now HTTP_COPY.erased(<that day>), 'This record was erased on <day>.' (audit E-API-11); the status, `code` and `erasedOn` expectations are unchanged.",
+    "task": "lane 6 B2 (plan 1A Task 20, E6)"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/integration/documents-routes.test.ts::FR-DOC-04 FR-REV-08 (C4 D11, SO-1): after erase_text_field on the file name a document printed, route 17 answers 410 with the date, not 500",
+    "replacedBy": "__tests__/integration/documents-routes.test.ts::FR-DOC-04 FR-REV-08 (C4 D11, SO-1): after erase_text_field on the file name a document printed, route 17 answers 410 with the date, not 500",
+    "property": "An erased document answers 410 with code `erased` and the date it was erased, and no bytes.",
+    "proof": "The same case: `error` was the literal 'Erased' and is now HTTP_COPY.erased(<that day>), 'This record was erased on <day>.' (audit E-API-11); the status, `code` and `erasedOn` expectations are unchanged.",
+    "task": "lane 6 B2 (plan 1A Task 20, E6)"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/integration/findings-accepted-risk.test.ts::FR-FND-05: a planned mitigation gets a cancelled version with reason \"risk accepted\"",
+    "replacedBy": "__tests__/integration/findings-accepted-risk.test.ts::FR-FND-05: a planned mitigation gets a cancelled version with reason \"risk accepted\"",
+    "property": "Accepting a risk gives every planned or in-progress mitigation a cancelled version, based on its current one, entered by the person accepting, with the platform's stored acceptance reason and a request id derived from the acceptance's; a done mitigation is left as it is.",
+    "proof": "The same case: `cancelReason` was the literal 'risk accepted' and is now STORED_CANCEL_REASONS.riskAccepted (lib/findings/storedCancelReasons.ts), 'The risk was accepted, so this work was cancelled.', the value LD-25 gives (F7). It is a stored-data constant marked never reword, not a copy constant, so a later copy edit cannot change what the case pins (B4 review I3). Every other expectation is unchanged. The title still names the pre-LD-25 value; rows written before LD-25 hold it, and the finding page shows both values in the copy sentence (cancelReasonText, tested in __tests__/unit/finding-labels.test.ts).",
+    "task": "lane 6 FX2 (B4 review I3)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/integration/findings-accepted-risk.test.ts::(module)",
+    "replacedBy": "__tests__/integration/findings-accepted-risk.test.ts::FR-FND-05: a planned mitigation gets a cancelled version with reason \"risk accepted\"",
+    "property": "The module imports what the cases read.",
+    "proof": "One line: the import of FINDINGS_COPY, which only the case above read, is replaced by the import of STORED_CANCEL_REASONS, which that case now reads. Nothing else of the module changes.",
+    "task": "lane 6 FX2 (B4 review I3)"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/integration/documents-service.test.ts::FR-REV-08 (I1, M4): an erasure that holds the lock first is seen by the issue: it redoes from a fresh snapshot and the stored text holds the erasure line",
+    "replacedBy": "__tests__/integration/documents-service.test.ts::FR-REV-08 (I1, M4): an erasure that holds the lock first is seen by the issue: it redoes from a fresh snapshot and the stored text holds the erasure line",
+    "property": "An issue that waits behind an erasure redoes from a fresh snapshot, and the stored plain text holds the document's erasure line for that day.",
+    "proof": "The same case: the expectation read textErasedLine and now reads docTextErasedLine (lib/documents/copy.ts). The coordinator's ruling of 15 Nov 2026 split the line: textErasedLine is the screen form ('at your organisation's request.', the vocabulary term erased, shown by components/decision/**) and docTextErasedLine is the document form ('at the organisation's request.', read by outsiders), which lib/documents/resolve.ts now prints. Only the constant's name changed; what the case pins (the document prints the erasure line for that day) is unchanged.",
+    "task": "lane 6 lead (erased-line split, coordinator ruling 15 Nov 2026)"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/integration/mitigation-plan.test.ts::FR-REV-08 (SRS 7.5.6): a mitigation text erased before issue prints the erasure line",
+    "replacedBy": "__tests__/integration/mitigation-plan.test.ts::FR-REV-08 (SRS 7.5.6): a mitigation text erased before issue prints the erasure line",
+    "property": "A mitigation text erased before issue prints the document's erasure line for that day in the mitigation plan.",
+    "proof": "The same case: the expectation read textErasedLine and now reads docTextErasedLine (lib/documents/copy.ts). The coordinator's ruling of 15 Nov 2026 split the line: textErasedLine is the screen form ('at your organisation's request.', the vocabulary term erased, shown by components/decision/**) and docTextErasedLine is the document form ('at the organisation's request.', read by outsiders), which lib/documents/resolve.ts now prints. Only the constant's name changed; what the case pins (the document prints the erasure line for that day) is unchanged.",
+    "task": "lane 6 lead (erased-line split, coordinator ruling 15 Nov 2026)"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/integration/mitigation-plan.test.ts::FR-REV-08 (SRS 7.5.6): a Prepared-for note erased before issue prints the erasure line in MP-01",
+    "replacedBy": "__tests__/integration/mitigation-plan.test.ts::FR-REV-08 (SRS 7.5.6): a Prepared-for note erased before issue prints the erasure line in MP-01",
+    "property": "A Prepared-for note erased before issue prints 'Prepared for: ' and the document's erasure line in MP-01.",
+    "proof": "The same case: the expectation read textErasedLine and now reads docTextErasedLine (lib/documents/copy.ts). The coordinator's ruling of 15 Nov 2026 split the line: textErasedLine is the screen form ('at your organisation's request.', the vocabulary term erased, shown by components/decision/**) and docTextErasedLine is the document form ('at the organisation's request.', read by outsiders), which lib/documents/resolve.ts now prints. Only the constant's name changed; what the case pins (the document prints the erasure line for that day) is unchanged.",
+    "task": "lane 6 lead (erased-line split, coordinator ruling 15 Nov 2026)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/decision-components.test.tsx::(module)",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::FR-DEC-01 UX-31 UX-14: a viewer and an archived project get no form",
+    "property": "The file's module code serves the cases below: next/navigation is mocked so the S-12 regions render outside a request, with the readers the rendered components call.",
+    "proof": "One module line changes: the next/navigation mock also returns useParams () => ({ slug: 'acme' }). Lane 4's ArchivedBanner (merged from design/route-stage1 f7997a58) now renders OrgProjectsLink, a client component that calls useParams, so the archived case threw \"No useParams export is defined on the next/navigation mock\" before any expectation ran. No case and no expectation changed. After the line: decision-components.test.tsx, protected-tests.test.ts and test-replacements.test.ts gave 'Test Files  3 passed (3)' and 'Tests  57 passed (57)' at TZ=UTC.",
+    "task": "1B-route-L1 lead (merge of design/route-stage1 f7997a58)"
   },
   {
     "kind": "structure",

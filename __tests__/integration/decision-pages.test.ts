@@ -44,16 +44,16 @@ const panelData = (role: OrgRole, questionId: string) =>
   loadQuestionPanel(ctxFor(fx, role), identity(role), { projectId: project.id, stage: 'pre-processing', questionId });
 
 describe('S-12 page', () => {
-  it('UX-08 FR-CNT-02 (screen): QuestionContent gets the suggestion count and the suggestions section carries id="suggestions"', async () => {
-    const h = renderToStaticMarkup(createElement(QuestionPanelRegions, { data: await panelData('assessor', 'Q-PP-01') }));
-    expect(h).toContain('href="#suggestions">Ways teams address this (3)</a>');
-    expect(h).toContain('<h2 id="s12-suggestions">Ways teams address this</h2>');
-    expect(h).toContain(SUGGESTIONS_COPY.intro);
-    expect(h).toMatch(/<section[^>]*id="suggestions"/);
+  it('UX-08 FR-CNT-02 (screen): QuestionContent gets the suggestion count and the folded list of ways carries id="suggestions"', async () => {
+    const h = renderToStaticMarkup(createElement(QuestionPanelRegions, { data: await panelData('assessor', 'Q-PP-01'), stage: (await import('../helpers/stageFixture')).stageFixture() }));
+    // Lane 1 Task 1 (spec 9.3): one folded control in the guidance aside whose summary carries the count; the list opens in place.
+    expect(h).toMatch(/<details class="question-content__ways" id="suggestions"><summary class="question-content__ways-summary">[\s\S]*?Ways teams address this \(3\)<\/summary>/);
+    expect(h.slice(h.indexOf('<details class="question-content__ways"'), h.indexOf('</details>', h.indexOf('<details class="question-content__ways"')))).toContain(SUGGESTIONS_COPY.intro);
+    expect(h.match(/id="suggestions"/g)).toHaveLength(1);
   });
 
   it('FR-DEC-06 FR-DEC-10 (screen): a new project\'s S-12 shows No decision yet, an empty form with empty date fields and Save decision', async () => {
-    const h = renderToStaticMarkup(createElement(QuestionPanelRegions, { data: await panelData('assessor', 'Q-PP-01') }));
+    const h = renderToStaticMarkup(createElement(QuestionPanelRegions, { data: await panelData('assessor', 'Q-PP-01'), stage: (await import('../helpers/stageFixture')).stageFixture() }));
     expect(h).toContain('No decision yet.');
     expect(h).toMatch(/<button[^>]*type="submit"[^>]*>Save decision<\/button>/);
     expect([...h.matchAll(/<input[^>]*inputmode="numeric"[^>]*>/gi)].every((m) => !/value="[^"]+"/.test(m[0]))).toBe(true);
@@ -87,7 +87,7 @@ describe('S-11 page', () => {
   it('FR-DEC-06 (screen): a new project\'s stage shows every question as No decision and the W-2 empty line', async () => {
     const h = await renderS11('?show=all');
     expect(h).toContain(QUESTION_COPY.stage.nothingRecorded);
-    expect([...h.matchAll(/>No decision</g)].length).toBe(STAGE_QUESTION_COUNT);
+    expect([...h.matchAll(/class="status-label">No decision</g)].length).toBe(STAGE_QUESTION_COUNT);
     expect(h).toContain(`${STAGE_QUESTION_COUNT} questions`);
     // SPEC-4 W-2: module headings with their own counts, under a stage subtitle
     expect(h).toMatch(/<h2[^>]*>Problem Formulation<\/h2>\s*<p[^>]*>7 questions · 7 with no decision<\/p>/);
@@ -98,7 +98,7 @@ describe('S-11 page', () => {
     await addDecision(fx, project.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId: c1.contentVersionId, status: 'partly', declaredDate: '2026-10' });
     const h = await renderS11('?show=all');
     expect(h).not.toContain('Nothing is recorded for this stage yet.');
-    expect(h).toMatch(/data-question-id="Q-PP-01"[\s\S]*?class="ui-mark__words">Partly<\/span>[\s\S]*?class="ui-plate__state">Oct 2026</);
+    expect(h).toMatch(/data-question-id="Q-PP-01"[\s\S]*?class="status-label">Partly<\/span> · Oct 2026</);
   });
 
   it('FR-DEC-06 (screen): a filter with no results says so and links to all', async () => {

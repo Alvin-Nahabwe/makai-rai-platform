@@ -9,6 +9,7 @@ import { ALL_ORG_ROLES } from '../authz/roles';
 import { recordOrgEvent } from './orgEvents';
 import { invitationState } from './invitationState';
 import { ConflictError, RateLimitedError, ValidationFailed } from '../http/errors';
+import { GONE_NAME_COPY, HTTP_COPY } from '../http/copy';
 import { invitationAcceptUrl } from '../publicOrigin';
 import { invitationEmail } from '../email/templates';
 import { sendEmail } from '../email/send';
@@ -22,12 +23,12 @@ import type { InvitationView, MemberView, InviteMemberRequest, InviteMemberRespo
 
 function asObject(raw: unknown): Record<string, unknown> {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-    throw new ValidationFailed([{ field: 'body', message: 'The request body must be a JSON object.' }]);
+    throw new ValidationFailed([{ field: 'body', message: HTTP_COPY.unreadable }]);
   }
   return raw as Record<string, unknown>;
 }
 const requestIdError = (o: Record<string, unknown>): FieldError[] =>
-  isRequestId(o.requestId) ? [] : [{ field: 'requestId', message: 'requestId must be a UUID (8-4-4-4-12 hexadecimal).' }];
+  isRequestId(o.requestId) ? [] : [{ field: 'requestId', message: HTTP_COPY.outOfDate }];
 const roleError = (v: unknown): FieldError[] =>
   typeof v === 'string' && ALL_ORG_ROLES.includes(v as OrgRole) ? [] : [{ field: 'role', message: 'Choose a role.' }];
 function showLinkOf(o: Record<string, unknown>, errors: FieldError[]): boolean {
@@ -253,7 +254,7 @@ export function listMembers(ctx: OrgContext): Promise<MemberView[]> {
       const inv = invitationOf.get(m.userId);
       const fromShownLink = inv !== undefined && inv.linkShownAt !== null && user !== undefined && user.createdAt.getTime() >= inv.createdAt.getTime();
       return {
-        userId: m.userId, name: user?.name ?? 'Unknown', role: m.role, joinedAt: m.createdAt.toISOString(), createdFromShownLink: fromShownLink,
+        userId: m.userId, name: user?.name ?? GONE_NAME_COPY.deletedAccount, role: m.role, joinedAt: m.createdAt.toISOString(), createdFromShownLink: fromShownLink,
       };
     });
   });

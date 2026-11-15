@@ -1,0 +1,73 @@
+/*
+ * TermTip (components/ui/TermTip.tsx): a 24px (i) button that opens a term's definition in a popover. Colour roles and
+ * spaces only, so both themes hold; the focus ring is the global :focus-visible rule's.
+ */
+.ui-term-tip {
+  display: inline-flex;
+  align-items: center;
+  /* Each tip's anchor name is its own: a page with several tips places each popover under its own button. */
+  anchor-scope: --ui-term-tip;
+}
+
+.ui-term-tip__button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--target-min);
+  block-size: var(--target-min);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-ink-muted);
+  cursor: pointer;
+  anchor-name: --ui-term-tip;
+}
+
+.ui-term-tip__button:hover {
+  color: var(--color-ink);
+}
+
+.ui-term-tip__body {
+  max-inline-size: 20rem;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border-container);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  box-shadow: var(--shadow-surface);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-body);
+  text-align: start;
+  white-space: normal;
+}
+
+.ui-term-tip__body .ui-definition {
+  color: var(--color-ink);
+}
+
+/*
+ * Under its button where anchor positioning AND anchor-scope are supported (without anchor-scope every button would share
+ * the one anchor name, and each tip would open under the last); elsewhere the browser centres the popover. The try order
+ * takes the placement with the most room across, so on a narrow screen the tip flips rather than squeezing into the space
+ * beside its button.
+ */
+@supports (anchor-name: --a) and (anchor-scope: all) {
+  .ui-term-tip__body {
+    position-anchor: --ui-term-tip;
+    inset: auto;
+    margin: var(--space-1) 0 0;
+    position-area: block-end span-inline-end;
+    position-try-fallbacks: flip-inline, flip-block;
+    position-try-order: most-inline-size;
+  }
+}
+
+/* The (i) and its popover are screen furniture: neither prints. */
+@media print {
+  .ui-term-tip {
+    display: none;
+  }
+}

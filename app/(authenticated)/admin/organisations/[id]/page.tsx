@@ -59,10 +59,11 @@ export default async function OrganisationPage({ params }: { params: Params }) {
   return (
     <div className="page-content">
       <PageHeader title={row.name} />
+      {/* Each state is its own label on its own line (R1 S1, S2), as in the Organisations list's cells. */}
       <p>
         {O.summary(formatDay(row.createdAt, 'Africa/Kampala'), row.memberCount)}
-        {row.archived ? O.archived : ''}
-        {row.hasActiveOwner ? null : <strong> · {ADMIN_COPY.organisations.noActiveOwner}</strong>}
+        {row.archived ? <span className="admin-flag">{O.archived}</span> : null}
+        {row.hasActiveOwner ? null : <strong className="admin-flag">{ADMIN_COPY.organisations.noActiveOwner}</strong>}
       </p>
       <p className="admin-facts">{row.legalName === null ? <strong>{ADMIN_COPY.organisations.legalNameMissing}</strong> : O.legalName(row.legalName)}</p>
       <CorrectNameForm orgId={row.orgId} name={row.name} />

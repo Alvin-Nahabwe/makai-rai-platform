@@ -77,7 +77,8 @@ test('FR-REV-01 FR-REV-02 FR-REV-03 FR-REV-05 M-28 NFR-A11Y-02: J-08 by keyboard
   await expect(page.getByText(REVIEW_COPY.open.count(25, 120))).toBeVisible();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Pre-processing review 1');
-  await expect(page.getByText('Prepared for: Ethics board submission 1')).toBeVisible();
+  // S5 (C 7): the facts are a description list; the note is the value after its term.
+  await expect(page.getByRole('term').filter({ hasText: REVIEW_COPY.review.facts.preparedFor }).locator('xpath=following-sibling::dd[1]')).toHaveText('Ethics board submission 1');
   await expect(page.getByText(REVIEW_COPY.state.notSealed)).toBeVisible();
   const s16 = page.url();
   expect(urls.length).toBeGreaterThan(1);

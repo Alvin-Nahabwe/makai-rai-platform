@@ -12,7 +12,8 @@ import { REVIEW_COPY } from '@/lib/review/copy';
 import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
 import RememberProject from '@/components/layout/RememberProject';
-import { PageHeader } from '@/components/ui/PageHeader';
+import { ReviewPageHeader } from '@/components/review/ReviewPageHeader';
+import { TERM_STAGE_REVIEW } from '@/lib/vocabulary/terms';
 
 interface PageProps {
   params: Promise<{ slug: string; id: string }>;
@@ -48,7 +49,13 @@ export default async function OpenReviewPage({ params, searchParams }: PageProps
   const { identity, ctx, project } = await load(slug, id);
   const base = `/orgs/${encodeURIComponent(slug)}/projects/${encodeURIComponent(id)}`;
   // The breadcrumb leads back to the project, on the refusal view too (workshop walk S5-1).
-  const heading = <PageHeader breadcrumb={[{ label: project.name, href: base }, { label: REVIEW_COPY.titles.openReview }]} title={REVIEW_COPY.titles.openReview} />;
+  // The heading holds the page's first use of "stage review": its definition sits under it (spec 6).
+  const heading = (
+    <ReviewPageHeader
+      idPrefix="open-review-term" breadcrumb={[{ label: project.name, href: base }, { label: REVIEW_COPY.titles.openReview }]}
+      title={REVIEW_COPY.titles.openReview} titleTerms={[TERM_STAGE_REVIEW]}
+    />
+  );
   const remember = <RememberProject userId={identity.userId} orgSlug={slug} projectId={project.id} />;
   if (!can(ctx.role, 'review:open')) {
     return <div className="page-content">{heading}<p>{REVIEW_COPY.open.refusal}</p>{remember}</div>;

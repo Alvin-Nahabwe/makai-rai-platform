@@ -42,10 +42,10 @@ export const PERSONAL_DATA_COPY = Object.freeze({
   downloadIntro: 'You can download a file with your data. It has your account details, your memberships, the legal texts you accepted and your reminder setting. It also lists the records you entered or were named in. It does not include the text of those records. That text belongs to your organisation.',
   deleteHeading: 'Delete my account',
   /**
-   * A 90. The shown name is written by `lib/data/identity.ts:395`, which still says "Deleted user" until plan 1A Task 20; the
-   * vocabulary retires "Deleted user", so this sentence already says "Deleted account".
+   * A 90. The shown name is written by `lib/data/identity.ts` (`DELETED_USER_NAME`): "Deleted user", as the approved
+   * legal texts say (owner's written exception, 15 Nov 2026).
    */
-  deleteConsequence: 'Your name and email are removed and you are signed out everywhere. Records you entered stay with your organisations, shown as entered by "Deleted account". This cannot be undone.',
+  deleteConsequence: 'Your name and email are removed and you are signed out everywhere. Records you entered stay with your organisations, shown as entered by "Deleted user". This cannot be undone.',
   objectName: 'Your account',
   deleteAction: 'Delete my account',
   deleteTrigger: 'Delete my account...',

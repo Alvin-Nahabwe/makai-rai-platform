@@ -1,6 +1,7 @@
 import { ValidationFailed } from '@/lib/http/errors';
 import { isRequestId } from '@/lib/data/idempotency';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
+import { HTTP_COPY } from '@/lib/http/copy';
 import { OUTSIDE_ROLES, type CalendarDate, type Decider, type FieldError, type MitigationStatus, type OutsideRole } from '@/types/record';
 import type {
   AcceptRiskRequest, AddMitigationRequest, CloseByDecisionRequest, FindingEventRequest, UpdateMitigationRequest,
@@ -35,8 +36,10 @@ export function textLength(s: string): number {
  */
 const F = FINDINGS_COPY.fields;
 export const FINDING_MESSAGES = Object.freeze({
-  body: 'The request body must be a JSON object.',
-  requestId: 'requestId must be a UUID (8-4-4-4-12 hexadecimal).',
+  // E12, E14 (E-API-17, E-API-19): the words every route gives a body that is not a JSON object and a request id that is
+  // not a UUID. A form never shows them (`fieldText` shows its fixed sentence), so a person meets them only through a broken page.
+  body: HTTP_COPY.unreadable,
+  requestId: HTTP_COPY.outOfDate,
   what: F.what,
   ownerUserId: F.ownerUserId,
   dueDate: F.dueDate,

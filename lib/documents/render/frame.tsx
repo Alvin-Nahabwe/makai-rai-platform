@@ -1,6 +1,7 @@
 import { Document, Page, renderToBuffer, StyleSheet, Text, View } from '@react-pdf/renderer';
 import type { ReactElement } from 'react';
-import { NOT_RECORDED, SEALED_NOTE, STATEMENT, utcSecond } from '../resolve';
+import { NOT_RECORDED, STATEMENT, utcSecond } from '../resolve';
+import { sealedNote } from '../copy';
 import { PDF_FONT_FAMILY, UNPRINTABLE_NOTE, printable, registerPdfFont } from './font';
 import type { RenderInput, ResolvedField } from './index';
 
@@ -29,7 +30,8 @@ const styles = StyleSheet.create({
 
 export async function renderFieldDocument(input: RenderInput, title: string): Promise<{ pdf: Buffer; plainText: string }> {
   registerPdfFont();
-  const footer = [`${title}, issued ${utcSecond(input.issuedAt)}`, STATEMENT, SEALED_NOTE];
+  // The sealed note names as many seals as the document drew on (lane 6 row D18): `input.seals` are the seals its fields used.
+  const footer = [`${title}, issued ${utcSecond(input.issuedAt)}`, STATEMENT, sealedNote(input.seals.length)];
 
   let replaced = false;
   const print = (text: string): string => {

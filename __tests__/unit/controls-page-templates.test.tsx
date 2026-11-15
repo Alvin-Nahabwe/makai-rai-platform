@@ -4,6 +4,9 @@ import ControlsPage from '@/app/(authenticated)/explore/controls/page';
 import resources from '@/data/resources.json';
 import type { ResourcesFile } from '@/types/content';
 
+// The page calls the gate first (security review 0.7.0, L-1); here it lets every render through.
+vi.mock('@/lib/auth/identity', () => ({ requireIdentity: vi.fn(async () => ({ userId: 'u-1' })) }));
+
 /**
  * FR-SUG-06: a template that did not pass review "is not linked anywhere". The controls page links a control's template
  * only when it is the file of a passed data/resources.json entry (the ControlCard rule), so a held-back template, C-11's
@@ -14,8 +17,8 @@ const SERVED = new Set(real.templates.filter((t) => t.review.outcome === 'passed
 const hrefs = (html: string) => [...html.matchAll(/href="(\/templates\/[^"]+)"/g)].map((m) => m[1]);
 
 describe('controls page template links', () => {
-  it('FR-SUG-06: every template link on the rendered page is the file of a passed entry, and C-11 has none', () => {
-    const html = renderToStaticMarkup(<ControlsPage />);
+  it('FR-SUG-06: every template link on the rendered page is the file of a passed entry, and C-11 has none', async () => {
+    const html = renderToStaticMarkup(await ControlsPage());
     const linked = hrefs(html);
     expect(linked.length).toBeGreaterThan(0);
     for (const h of linked) expect(SERVED.has(h), h).toBe(true);
@@ -38,7 +41,7 @@ describe('controls page template links', () => {
     try {
       const { renderToStaticMarkup: render } = await import('react-dom/server');
       const { default: Page } = await import('@/app/(authenticated)/explore/controls/page');
-      const linked = hrefs(render(<Page />));
+      const linked = hrefs(render(await Page()));
       expect(linked).not.toContain('/templates/C-01_alternatives-analysis.html');
       expect(linked).not.toContain('/templates/C-11_informed-consent.html');
       expect(linked).toContain('/templates/C-02_cost-benefit-impact.html');

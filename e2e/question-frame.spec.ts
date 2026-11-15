@@ -5,11 +5,14 @@ import { failOnDialog } from './helpers/dialogs';
 import { expectNoHorizontalScroll } from './helpers/reflow';
 import { fillValid, fixtureOrgSlug, newProject, openQuestion, saveStatus, saveViaApi, seatRequest } from './helpers/session';
 import { QUESTION_COPY } from '../lib/question/copy';
+import { UI_COPY } from '../lib/ui/copy';
 
 /**
- * The question page's frame (plan 1C decision C1, cut to slice 1): the question in words is the h1, the form follows it
- * in the main column, and the guidance is an aside, below the form from 72.5rem with the stage's questions as a column on
- * the left, beside the form from 90rem, and after it on a narrow one (owner's decision "Route column", 14 November 2026).
+ * The question page's frame (lane 1 Task 1, the Route sketch): the question in words is the h1, the decision follows it
+ * in the main column, and the guidance is an aside, below the decision from 72.5rem with the stage's questions as a column
+ * on the left, beside it from 90rem, and after it on a narrow one (owner's decision "Route column", 14 November 2026). From
+ * 72.5rem the top strip (breadcrumb and tally) runs across; under it the position strip. e2e/question-frame-route.spec.ts
+ * holds the strips, the 1280 by 800 gate, the focus ring and the frame's states.
  * Every project is new, so no question has a decision. Q-PP-01 has the longest text of the fixture bundle the server
  * runs on; the longest text of the real bundles (data/content) is put into the h1 in place to measure it too.
  */
@@ -85,54 +88,58 @@ test('the column starts at 72.5rem: at 1160 the main column keeps 30rem beside a
   expect(route.width, 'the stage\'s column').toBeGreaterThanOrEqual(256);
   expect(main.x).toBeGreaterThanOrEqual(route.x + route.width);
   expect(guide.y, 'the guide is below the main column').toBeGreaterThanOrEqual(main.y + main.height);
-  await expect(page.locator('.question-content__jump'), 'the guidance is not beside the form: the jump link shows').toBeVisible();
+  await expect(page.locator('.question-top'), 'the top strip runs across from 1160').toBeVisible();
+  await expect(page.locator('.position-strip')).toBeHidden();
   await page.setViewportSize({ width: 1150, height: 900 });
   const main2 = await box(page.locator('.question-workspace__main'));
   const guide2 = await box(page.locator('.question-workspace__guide'));
   const route2 = await box(routeCol(page));
   expect(guide2.y, 'the guide follows the main column').toBeGreaterThanOrEqual(main2.y + main2.height);
   expect(route2.y, 'the stage\'s short form follows the guide').toBeGreaterThanOrEqual(guide2.y + guide2.height);
-  await expect(page.locator('.question-content__jump')).toBeVisible();
+  await expect(page.locator('.question-top')).toBeHidden();
+  await expect(page.locator('.position-strip'), 'under 1160 the position strip does the top strip\'s job').toBeVisible();
   await page.setViewportSize({ width: 1440, height: 900 });
   const main3 = await box(page.locator('.question-workspace__main'));
   const route3 = await box(routeCol(page));
   const guide3 = await box(page.locator('.question-workspace__guide'));
   expect(main3.width, 'the main column at 1440').toBeGreaterThanOrEqual(480);
   expect(route3.width).toBeGreaterThanOrEqual(256);
-  expect(guide3.width).toBeGreaterThanOrEqual(256);
+  // The sketch's 240px guidance column from 1440 (design fix S1a-2).
+  expect(guide3.width).toBeGreaterThanOrEqual(232);
   expect(main3.x).toBeGreaterThanOrEqual(route3.x + route3.width);
   expect(guide3.x).toBeGreaterThanOrEqual(main3.x + main3.width);
-  await expect(page.locator('.question-content__jump')).toBeHidden();
+  // The ways teams address this are one folded control at every width (spec 9.3): closed until pressed.
+  await expect(page.locator('details.question-content__ways')).not.toHaveAttribute('open', /.*/);
   await page.setViewportSize({ width: 1430, height: 900 });
   const main4 = await box(page.locator('.question-workspace__main'));
   const guide4 = await box(page.locator('.question-workspace__guide'));
   expect(guide4.y, 'at 1430 the guide is below the main column').toBeGreaterThanOrEqual(main4.y + main4.height);
 });
 
-test('at 375 by 812 the page is one column in reading order: heading, current decision, form, guidance, finding link; nothing scrolls sideways; the end of the page clears the fixed save bar', async ({ page, baseURL }) => {
+test('at 375 by 812 the page is one column in reading order: heading, current decision, form, finding link (in the decision), guidance; nothing scrolls sideways; the end of the page clears the fixed save bar', async ({ page, baseURL }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await openQuestion(page, 'assessor', Q, baseURL!);
   const order = [
-    heading(page), page.locator('section[data-region="current-decision"]'), form(page), aside(page), page.locator('section[data-region="finding-link"]'),
+    heading(page), page.locator('section[data-region="current-decision"]'), form(page), page.locator('section[data-region="finding-link"]'), aside(page),
   ];
   const boxes = await Promise.all(order.map(box));
   for (let i = 1; i < boxes.length; i++) {
     expect(boxes[i].y, `region ${i} is below region ${i - 1}`).toBeGreaterThanOrEqual(boxes[i - 1].y + boxes[i - 1].height);
   }
   const follows = await page.evaluate(() => {
-    const els = ['#question-heading', 'section[data-region="current-decision"]', 'section[data-region="answer-form"]', 'aside[data-region="guidance"]', 'section[data-region="finding-link"]']
+    const els = ['#question-heading', 'section[data-region="current-decision"]', 'section[data-region="answer-form"]', 'section[data-region="finding-link"]', 'aside[data-region="guidance"]']
       .map((s) => document.querySelector(s)!);
     return els.slice(1).map((el, i) => (els[i].compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0);
   });
   expect(follows).toEqual([true, true, true, true]);
   await expectNoHorizontalScroll(page);
-  // The page's last content (the suggestions here; Q-PP-01 has some) scrolls clear of the bar fixed to the bottom.
+  // The page's last content (the route column, last in reading order) scrolls clear of the bar fixed to the bottom.
   const bar = page.locator('.decision-save-bar');
   expect(await bar.evaluate((el) => getComputedStyle(el).position)).toBe('fixed');
   await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }));
-  const last = await box(page.locator('section[data-region="suggestions"]'));
+  const last = await box(routeCol(page));
   const b = await box(bar);
-  expect(last.y + last.height, 'the end of the suggestions is above the save bar').toBeLessThanOrEqual(b.y);
+  expect(last.y + last.height, 'the end of the route column is above the save bar').toBeLessThanOrEqual(b.y);
 });
 
 test('at 320 by 640 nothing scrolls sideways', async ({ page, baseURL }) => {
@@ -162,11 +169,13 @@ test('a Viewer sees the same frame with no form controls', async ({ page, baseUR
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(LONGEST_FIXTURE);
   await expect(page.locator('#question-heading + .question-frame__code')).toHaveText(/^Q-PP-01 · /);
   await expect(page.getByRole('complementary', { name: QUESTION_COPY.content.goodPractice })).toBeVisible();
-  await expect(page.getByRole('navigation', { name: QUESTION_COPY.nav.label }).getByRole('link', { name: QUESTION_COPY.nav.allQuestions, exact: true })).toBeVisible();
-  // The read-only view (plan 1C Task 7): no answer-form region; the one line sits in the main column, which holds no control.
+  // From 1160 the breadcrumb leads back to the stage's questions (on narrow screens the top bar does).
+  await expect(page.getByRole('navigation', { name: UI_COPY.breadcrumbLabel }).getByRole('link', { name: 'Pre-processing', exact: true })).toBeVisible();
+  // The read-only view (plan 1C Task 7; lane 1 Task 3): no answer-form region; the one line sits in the reader's aside at the
+  // top of the guidance column, and the main column holds no control.
   const main = page.locator('.question-workspace__main');
   await expect(form(page)).toHaveCount(0);
-  await expect(main.locator('[data-permission-note]')).toBeVisible();
+  await expect(page.locator('[data-region="reading-aside"] [data-permission-note]')).toBeVisible();
   await expect(main.locator('input, select, textarea, button')).toHaveCount(0);
   const f = await box(page.locator('section[data-region="current-decision"]'));
   const a = await box(aside(page));
@@ -185,18 +194,28 @@ for (const role of ['viewer', 'reviewer'] as const) {
     await page.setViewportSize({ width: 1280, height: 900 });
     await openQuestion(page, role, Q, baseURL!, projectId);
     await expect(page.getByRole('heading', { level: 2, name: QUESTION_COPY.reading.title })).toBeVisible();
-    await expect(page.locator('blockquote.current-decision__reason')).toHaveText(reason);
+    await expect(page.locator('blockquote.reading-decision__reason')).toHaveText(reason);
     const open = page.locator('section[data-region="open-work"]');
     await expect(open.getByRole('heading', { level: 2 })).toHaveText(QUESTION_COPY.reading.stillOpen(1));
     // No decision form; the route column's GET filter ("Show") is a form of its own and stays for every role.
     await expect(page.locator('form:not(.route-column__filter)')).toHaveCount(0);
     await expect(page.locator('[data-region="answer-form"]')).toHaveCount(0);
     await expect(page.locator('.decision-save-bar')).toHaveCount(0);
+    // Coordinator's ruling on review S1a-4 and design fix S4-N2: a Reviewer's raise link sits in the main column after what
+    // is still open (spec 9.3: open findings directly under the decision); none in the guidance column; a Viewer has none.
     const raise = page.getByRole('link', { name: QUESTION_COPY.findingLink.raise });
     await expect(raise).toHaveCount(role === 'reviewer' ? 1 : 0);
-    // The open finding is listed once, in the main column, not again in the aside (review M2); the way on closes the column.
+    await expect(page.locator('.question-workspace__guide [data-region="finding-link"]')).toHaveCount(0);
+    if (role === 'reviewer') {
+      const stillOpen = await box(open);
+      const raised = await box(raise);
+      expect(raised.y, 'the raise link comes after what is still open').toBeGreaterThanOrEqual(stillOpen.y + stillOpen.height);
+    }
+    // The open finding is listed once, in the main column, not again in the aside (review M2); what is still open closes the
+    // column, and the way on is the reader's aside's one primary link (lane 1 Task 3, viewer-reading.png).
     await expect(page.getByRole('link', { name: QUESTION_COPY.findingLink.view })).toHaveCount(0);
-    await expect(page.locator('.question-workspace__main > :last-child')).toHaveAttribute('data-region', 'way-on');
+    await expect(page.locator('.question-workspace__main > :last-child')).toHaveAttribute('data-region', role === 'reviewer' ? 'finding-link' : 'open-work');
+    await expect(page.locator('[data-region="reading-aside"] .ui-button--primary')).toHaveCount(1);
     for (const [width, height] of [[1280, 900], [375, 812], [320, 640]] as const) {
       await page.setViewportSize({ width, height });
       await expectNoHorizontalScroll(page);
@@ -229,7 +248,8 @@ async function answerGateNo(baseURL: string, projectId: string): Promise<void> {
     await ctx.dispose();
   }
 }
-const stripPosition = (page: Page) => page.locator('nav.question-strip > span');
+/** The position in the breadcrumb's current item (shown from 1160px; the position strip says the same under it). */
+const stripPosition = (page: Page) => page.locator('.question-top .ui-breadcrumb__current');
 const wayOn = (page: Page) => page.locator('[data-region="way-on"]');
 
 test('S3: after the personal data answer is No, Q-PP-13 and Q-PP-14 say they do not apply, keep the form, and hold their own places of 24', async ({ page, baseURL }) => {
@@ -241,11 +261,11 @@ test('S3: after the personal data answer is No, Q-PP-13 and Q-PP-14 say they do 
     const note = page.locator('#question-heading ~ [data-does-not-apply]');
     await expect(note, id).toHaveText(QUESTION_COPY.doesNotApply);
     await expect(page.getByRole('group', { name: 'Status' }), id).toBeVisible();
-    await expect(stripPosition(page), id).toHaveText(`Question ${n} of 24 in Pre-processing`);
+    await expect(stripPosition(page), id).toHaveText(`Question ${n} of 24`);
   }
   await openQuestion(page, 'assessor', 'Q-PP-12', baseURL!, projectId);
   await expect(page.locator('[data-does-not-apply]')).toHaveCount(0);
-  await expect(stripPosition(page)).toHaveText('Question 12 of 24 in Pre-processing');
+  await expect(stripPosition(page)).toHaveText('Question 12 of 24');
 });
 
 for (const [width, height] of [[1280, 900], [375, 812]] as const) {
@@ -255,6 +275,9 @@ for (const [width, height] of [[1280, 900], [375, 812]] as const) {
     await fillValid(page);
     await page.getByRole('button', { name: 'Save decision', exact: true }).click();
     await expect(saveStatus(page)).toHaveText(/^Saved at /);
+    // The save refreshes the page from the server, which fills "Current decision" above the form and moves the way on down
+    // by its height; measure after that, not between the two (a race seen once in five runs at 375, fix round 3).
+    await expect(page.locator('section[data-region="current-decision"]')).not.toContainText(QUESTION_COPY.current.none);
     const next = wayOn(page).getByRole('link', { name: /^Next question: / });
     await expect(next).toHaveCount(1);
     await expect(wayOn(page).getByRole('link', { name: QUESTION_COPY.nav.allQuestions, exact: true })).toBeVisible();

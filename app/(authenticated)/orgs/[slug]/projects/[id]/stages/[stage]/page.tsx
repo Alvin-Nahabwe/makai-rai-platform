@@ -1,22 +1,32 @@
-import { cache } from 'react';
+import { cache, type ReactNode } from 'react';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { requireIdentity } from '@/lib/auth/identity';
 import { requireOrgContextFor } from '@/lib/auth/context';
 import { isStageFilter, moduleGroups, STAGE_TITLE, type StageFilter } from '@/lib/question/stageList';
 import { loadStagePage, type StagePageData } from '@/lib/question/stagePage';
-import { stageFilterSet, stopsOf, tallyOfRows } from '@/lib/question/route';
-import { questionHref } from '@/lib/question/draft';
+import { stageFilterSet, tallyOfRows, tallyParts } from '@/lib/question/route';
 import { LIST_PAGE_SIZE, pageOf } from '@/lib/ui/showMore';
 import { ArchivedBanner } from '@/components/project/ArchivedBanner';
 import { StageSealBanner } from '@/components/review/StageSealBanner';
-import { StageFollowUpCounts } from '@/components/followup/StageFollowUpCounts';
 import { StageQuestionList } from '@/components/decision/StageQuestionList';
-import { RouteRow } from '@/components/ui/RouteRow';
+import { StageMeaning, stageTerm } from '@/components/question/StageMeaning';
+import { routeTermTips } from '@/components/question/termTips';
+import { Breadcrumb } from '@/components/ui/Breadcrumb';
+import { MarkShape } from '@/components/ui/StatusMark';
+import { Icon } from '@/components/ui/Icon';
+import { Term } from '@/components/ui/Definition';
+import { TermTip } from '@/components/ui/TermTip';
+import type { StatusMarkKind } from '@/components/ui/types';
+import type { DefinedEntry } from '@/lib/vocabulary/types';
+import {
+  TERM_DONE, TERM_DOES_NOT_APPLY, TERM_NOT_APPLICABLE, TERM_NOT_YET, TERM_PARTLY, TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION,
+} from '@/lib/vocabulary/terms';
 import { ShowMoreLink } from '@/components/ui/ShowMoreLink';
 import { QUESTION_COPY } from '@/lib/question/copy';
 import { STAGE_LIST_COPY } from '@/lib/question/list/copy';
 import { ListLink } from '@/components/ui/ListLink';
+import { PROJECT_COPY } from '@/lib/project/copy';
 import { STAGES, type Stage } from '@/types/record';
 import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
@@ -28,6 +38,17 @@ export { loadStagePage } from '@/lib/question/stagePage';
 export type { StagePageData };
 
 type Params = Promise<{ slug: string; id: string; stage: string }>;
+
+/** The words of the question page's strip (its tips' names and the personal data question's tally words). */
+const FR = QUESTION_COPY.frame;
+
+/**
+ * The vocabulary entry each tally word is defined by, as components/question/QuestionTopStrip.tsx reads it. "No decision"
+ * is not defined at first use (defineOnFirstUse false), so it has no (i); the personal data question's tip is its own.
+ */
+const TALLY_TERM: Readonly<Partial<Record<StatusMarkKind, DefinedEntry>>> = {
+  done: TERM_DONE, partly: TERM_PARTLY, not_yet: TERM_NOT_YET, not_applicable: TERM_NOT_APPLICABLE, does_not_apply: TERM_DOES_NOT_APPLY,
+};
 
 /**
  * The gates and the loader, once per request: the page and its title both read through this (React `cache()`), so an
@@ -74,37 +95,83 @@ export default async function StagePage({
   );
 }
 
+/** The overdue count's words with the word "overdue" in its own element, which the stylesheet draws in the overdue red. */
+function overdueWords(words: string): ReactNode {
+  const at = words.indexOf(FR.overdueWord);
+  if (at < 0) throw new Error(`StageWorkspace: "${words}" does not hold "${FR.overdueWord}"`);
+  return <>{words.slice(0, at)}<span className="stage-route__overdue-word">{FR.overdueWord}</span>{words.slice(at + FR.overdueWord.length)}</>;
+}
+
 /** The markup of S-11, exported so a test renders it from real data without the request. */
 export function StageWorkspace({ data, show, shown }: { data: StagePageData; show: StageFilter; shown: string | null }) {
   const base = `/orgs/${data.orgSlug}/projects/${data.projectId}`;
   // The counts and options, and the RE-4 rule for the changed filter: lib/question/route.ts, shared with the question page's column.
   const { counts, filters, sealNumber } = stageFilterSet(data.rows, data.changed);
-  const noDecision = counts.no_decision;
   const page = pageOf(data.rows, shown, LIST_PAGE_SIZE);
+  const { openFindings, overdueMitigations } = data.followUp;
+  const F = PROJECT_COPY.followUpCounts;
   return (
-    <div className="page-content">
+    <div className="page-content stage-route">
       <ArchivedBanner archived={data.projectArchived} />
-      <p><ListLink href={base}>{data.projectName}</ListLink></p>
-      <h1>{STAGE_TITLE[data.stage]}</h1>
-      {/* W-2's subtitle: the stage's topics, in module order. */}
-      <p className="text-muted">{QUESTION_COPY.stage.topics(moduleGroups(data.rows).map((g) => g.moduleTitle))}</p>
-      <p data-stage-summary>{STAGE_LIST_COPY.summary(data.rows.length, noDecision)}</p>
-      {/* Spec 7.2: the whole stage as a row of marks, every question (not the page the list shows), with its tally. */}
-      <div className="stage-route__marks">
-        <RouteRow
-          label={QUESTION_COPY.stage.routeLabel}
-          stops={stopsOf(data.rows, data.marks, (q) => questionHref(data, q), undefined, data.scopeAnswer)}
-          tally={tallyOfRows(data.rows, data.marks)}
-        />
+      <Breadcrumb items={[{ label: data.projectName, href: base }, { label: STAGE_TITLE[data.stage] }]} />
+      <h1><Term of={stageTerm(data.stage)}>{STAGE_TITLE[data.stage]}</Term></h1>
+      {/* D1: the stage's name with its plain meaning. Then W-2's subtitle: the stage's topics, in module order. */}
+      <StageMeaning stage={data.stage} />
+      <p className="stage-route__topics">{QUESTION_COPY.stage.topics(moduleGroups(data.rows).map((g) => g.moduleTitle))}</p>
+      {/* Spec 7.2: the whole stage's tally in words, each kind beside its mark (every question, not the page the list shows). */}
+      <div className="stage-route__tally">
+        <p className="stage-route__count" data-stage-summary="">{STAGE_LIST_COPY.count(data.rows.length)}</p>
+        <ul className="stage-route__tally-parts" role="list">
+          {tallyParts(tallyOfRows(data.rows, data.marks)).map((t) => {
+            // The owner's ruling of 15 Nov, 11:00: an (i) beside each word the vocabulary defines at first use, as the question
+            // page's strip does. Reflow at 320 px (fix round 3, S3-N1): the words may wrap, but the mark, the count and the
+            // first word stay together, and the last word stays with its (i). The mark is the kit's shape alone, beside its
+            // words (fix round 4, N3: no hidden words to read twice or to copy); the words are the list copy's (M-A3).
+            const of = t.kind === 'scope_answered' ? TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION : TALLY_TERM[t.kind];
+            const tip = of === undefined ? null
+              : <TermTip of={of} label={t.kind === 'scope_answered' ? FR.whatIsTerm(of.term) : FR.whatMeans(of.term)} />;
+            const [first, ...rest] = t.word.split(' ');
+            const last = rest.length > 0 ? rest[rest.length - 1] : null;
+            const middle = rest.slice(0, -1).join(' ');
+            const words = (
+              <>
+                <span className="stage-route__keep stage-route__lead">
+                  <MarkShape kind={t.kind} size={16} /><span className="stage-route__words">{`${t.n}\u00A0${first}`}</span>{last === null ? tip : null}
+                </span>
+                {last === null ? null : <>{` ${middle}${middle === '' ? '' : ' '}`}{tip === null ? last : <span className="stage-route__keep">{last}{tip}</span>}</>}
+              </>
+            );
+            return (
+              <li key={t.kind} className="stage-route__tally-part">
+                {of === undefined ? words : <Term of={of}>{words}</Term>}
+                {t.extra !== null ? ` ${t.extra}` : null}
+              </li>
+            );
+          })}
+        </ul>
       </div>
-      <StageFollowUpCounts orgSlug={data.orgSlug} projectId={data.projectId} stage={data.stage} counts={data.followUp} />
+      {/* The follow-up counts as links, each only above zero (plan 1C Task 3): the findings list and the stage's follow-up. */}
+      {openFindings > 0 || overdueMitigations > 0 ? (
+        <p className="stage-route__followup">
+          {openFindings > 0 ? <ListLink href={`${base}/findings`}>{`${openFindings} ${openFindings === 1 ? F.openFinding : F.openFindings}`}</ListLink> : null}
+          {/* The gap shows the two apart; in text (copied, or read without styles) they are a list, as they were before. */}
+          {openFindings > 0 && overdueMitigations > 0 ? <span className="visually-hidden">, </span> : null}
+          {overdueMitigations > 0 ? (
+            // As the question page's strip draws it (fix round 3, S3-N4; spec 7.1): an ink link, red only on the clock and the
+            // word "overdue".
+            <ListLink className="stage-route__overdue" href={`${base}#${data.stage}`}>
+              <Icon name="clock" size={16} />{overdueWords(`${overdueMitigations} ${overdueMitigations === 1 ? F.overdueMitigation : F.overdueMitigations}`)}
+            </ListLink>
+          ) : null}
+        </p>
+      ) : null}
       {data.nothingRecorded
         ? <p>{QUESTION_COPY.stage.nothingRecorded}</p>
         : null}
       {data.changed !== null && data.review !== null ? (
         // W-2: "<review name>: changed since seal N in M questions. [Open review >]"; the banner prints all but the name.
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', alignItems: 'baseline' }}>
-          <strong>{QUESTION_COPY.stage.reviewName(data.review.name)}</strong>
+        <div className="stage-route__seal">
+          <strong>{QUESTION_COPY.stage.reviewName(data.review.name)}</strong>{' '}
           <StageSealBanner changed={data.changed} reviewHref={`${base}/reviews/${data.review.id}`} />
         </div>
       ) : null}
@@ -112,6 +179,17 @@ export function StageWorkspace({ data, show, shown }: { data: StagePageData; sho
         orgSlug={data.orgSlug} orgId={data.orgId} projectId={data.projectId} stage={data.stage} viewerId={data.viewerId}
         rows={page.items} show={show} counts={counts} filters={filters}
         total={data.rows.length} sealNumber={sealNumber} marks={data.marks} scopeAnswer={data.scopeAnswer}
+        termTips={routeTermTips([
+          // The page's words ahead of the rows, in reading order (fix round 4): a term they use is not first used in a row.
+          STAGE_TITLE[data.stage], QUESTION_COPY.stage.topics(moduleGroups(data.rows).map((g) => g.moduleTitle)),
+          STAGE_LIST_COPY.count(data.rows.length), ...tallyParts(tallyOfRows(data.rows, data.marks)).map((t) => t.words),
+          ...(openFindings > 0 ? [F.openFindings] : []), ...(overdueMitigations > 0 ? [F.overdueMitigations] : []),
+          ...(data.nothingRecorded ? [QUESTION_COPY.stage.nothingRecorded] : []),
+          ...(data.review !== null ? [QUESTION_COPY.stage.reviewName(data.review.name)] : []),
+          ...filters.map((f) => f.label),
+          // Then each topic's name and count line, and its rows.
+          ...moduleGroups(page.items).flatMap((g) => [g.moduleTitle, STAGE_LIST_COPY.summary(g.rows.length, g.noDecision), ...g.rows]),
+        ], data.marks, data.scopeAnswer)}
       />
       {page.hasMore ? <ShowMoreLink href={`?show=${show}&shown=${page.nextShown}`} label={QUESTION_COPY.stage.showMore} /> : null}
     </div>

@@ -1,32 +1,86 @@
 /*
- * What is still open on a question, on the read-only question page (components/question/OpenWorkList.tsx): each open
- * finding as a link, its open mitigations under it. Role tokens and spaces only, so both themes hold; long words wrap
- * inside the column at 320px.
+ * What is still open on a question, on the read-only question page (components/question/OpenWorkList.tsx), to
+ * directions/surfaces/viewer-reading.html (.open, .plate, .sl, .late): each open finding a white bordered plate. Role
+ * tokens and spaces only, so both themes hold; long words wrap inside the column at 320px.
  */
-.open-work,
-.open-work__mitigations {
+.still-open {
+  margin-block-start: var(--space-6);
+}
+
+.still-open h2 {
+  margin: 0;
+  font-size: var(--font-size-h3);
+  line-height: 1.3;
+}
+
+/* The definitions under the heading (components/question/ReadingDefinition.tsx, styled in reading.css), then the plates. */
+.still-open .reading-def:last-of-type {
+  margin-block-end: var(--space-2);
+}
+
+.still-open__list {
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+.still-open__plate {
+  margin-block-end: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border-container);
+  border-radius: var(--radius-control);
+  background-color: var(--color-surface);
+  font-size: var(--font-size-small);
+  line-height: 1.5;
   overflow-wrap: anywhere;
 }
 
-.open-work__finding + .open-work__finding {
-  margin-block-start: var(--space-4);
+.still-open__title {
+  color: var(--color-ink);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-bold);
 }
 
-.open-work__finding > p,
-.open-work__mitigations {
-  margin: var(--space-1) 0 0;
+.still-open__plate p {
+  margin: 0;
 }
 
-.open-work__mitigations > li + li {
+.still-open__mitigation + .still-open__mitigation {
   margin-block-start: var(--space-1);
 }
 
-/* The word "Overdue" alone (spec 7.1: red on the word only, never a status label, a name or a title); the same role as
-   the project page's .followup-overdue. */
-.open-work__overdue {
+/* "Mitigation: <what>" on one line; the full text stays in the DOM (it is what a screen reader and find-in-page read) and
+   the finding's own page shows it whole. */
+.still-open__what {
+  overflow: hidden;
+  color: var(--color-ink-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Who, status and due as separate pieces with a dot between them that a screen reader does not read. */
+.still-open__line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-2);
+  color: var(--color-ink);
+}
+
+.still-open__line > span + span::before {
+  /* The single value first, for a browser without the alternative-text form (it then shows the dot and may read it). */
+  content: '·';
+  content: '·' / '';
+  margin-inline-end: var(--space-2);
+  color: var(--color-ink-muted);
+  font-weight: var(--font-weight-regular);
+}
+
+/* The overdue phrase: the clock, the word Overdue and the date (spec 7.1: red on an overdue date and the word only,
+   never a name or a title); the same role as the project page's .followup-overdue. */
+.still-open__overdue {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
   color: var(--color-overdue);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-bold);
 }

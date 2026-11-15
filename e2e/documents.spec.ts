@@ -6,7 +6,7 @@ import type { OrgRole } from '@prisma/client';
 import { testDb } from '../__tests__/helpers/db';
 import { expectNoSeriousA11yViolations, settleHover } from './helpers/a11y';
 import { expectMainDoesNotScroll, org, seat, signIn, tabTo } from './helpers/s18';
-import { DOCUMENTS_COPY } from '../lib/documents/copy';
+import { DOCUMENTS_COPY, MSG_ISSUE_NO_REPLY } from '../lib/documents/copy';
 import { failOnDialog } from './helpers/dialogs';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { expectNoHorizontalScroll } from './helpers/reflow';
@@ -87,7 +87,10 @@ test('FR-DOC-08 FR-DOC-04 FR-DOC-01 NFR-A11Y-02 NFR-A11Y-05 NFR-SEC-11: generate
   await expect(issuedStatus(page)).toBeFocused();
   // N3: router.refresh() after the Issue brings the new document into the list below with no reload.
   await expect(page.getByText('No documents issued from this review yet.')).toHaveCount(0);
-  await expect(page.getByText(/^Data card[\u00a0 ]· seal 1[\u00a0 ]· /)).toBeVisible();
+  // Lane 6 S9: the issued list states its facts as a description list under the document's title.
+  const issued = page.locator('.documents-issued__title', { hasText: /^Data card$/ });
+  await expect(issued).toBeVisible();
+  await expect(page.locator('.documents-issued__facts').first()).toContainText('1');
   await expectFocusVisibleAndUncovered(page);
   // The status line (M-35) and the refreshed list (W-9) each carry a link to the same file.
   const downloads = page.getByRole('link', { name: /^Download PDF \(\d+ KB\)$/ });
@@ -102,7 +105,8 @@ test('FR-DOC-08 FR-DOC-04 FR-DOC-01 NFR-A11Y-02 NFR-A11Y-05 NFR-SEC-11: generate
   await page.goto(s18);
   const row = await testDb.issuedDocument.findFirstOrThrow({ where: { stageReviewId: reviewId } });
   const short = `${row.sha256.slice(0, 4)} ${row.sha256.slice(4, 8)} ... ${row.sha256.slice(60)}`;
-  await expect(page.getByText(`Fingerprint ${short}`)).toBeVisible();
+  // The list states each fact as a term and its value (lane 6 row S9): the fingerprint is the value after "Fingerprint".
+  await expect(page.getByRole('definition').filter({ hasText: short })).toBeVisible();
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: /^Download PDF \(\d+ KB\)$/ }).click()]);
   const bytes = readFileSync((await download.path()) as string);
   expect(createHash('sha256').update(bytes).digest('hex')).toBe(row.sha256);
@@ -170,7 +174,7 @@ test('UX-20 UX-27: a lost Issue says it may have arrived, with [Retry], and Retr
   });
   await page.getByRole('button', { name: 'Issue this document' }).click();
   const alert = page.getByRole('alert').filter({ hasText: 'Not issued yet' });
-  await expect(alert).toContainText('Not issued yet: no reply from the server. It may have arrived. Retry is safe: it will not issue twice.');
+  await expect(alert).toContainText(MSG_ISSUE_NO_REPLY);
   await expect(alert.getByRole('button', { name: 'Retry' })).toBeVisible();
   expect(await testDb.issuedDocument.count({ where: { stageReviewId: reviewId } })).toBe(0);
   await alert.getByRole('button', { name: 'Retry' }).click();

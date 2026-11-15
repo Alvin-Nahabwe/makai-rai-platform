@@ -8,12 +8,14 @@ import type { IconName } from '@/components/ui/types';
 
 const NAMES: readonly IconName[] = ['home', 'folder', 'flag', 'book-open', 'circle-help', 'users', 'building-2', 'user', 'log-out',
   'sun', 'moon', 'menu', 'x', 'chevron-left', 'chevron-right', 'chevron-down', 'chevrons-up-down', 'arrow-up',
-  'paperclip', 'download', 'plus', 'info', 'triangle-alert', 'wifi-off', 'archive', 'clock', 'external-link', 'circle-check'];
+  'paperclip', 'download', 'plus', 'info', 'triangle-alert', 'wifi-off', 'archive', 'clock', 'external-link', 'circle-check',
+  // Lane 4 Task B round 1: "Edit project details" on S-10 (fetched 15 Nov 2026 with the owner's approval).
+  'pencil'];
 
 describe('Icon', () => {
   it('Icon is hidden from assistive technology', () => expect(renderToStaticMarkup(<Icon name="home" />)).toMatch(/aria-hidden="true"[^>]*focusable="false"/));
 
-  it('the registry holds exactly the 28 names of plan B7, each drawn', () => {
+  it('the registry holds exactly the 28 names of plan B7 and pencil, each drawn', () => {
     expect(Object.keys(ICONS).sort()).toEqual([...NAMES].sort());
     for (const name of NAMES) expect(ICONS[name].length, name).toBeGreaterThan(0);
   });
@@ -25,6 +27,13 @@ describe('Icon', () => {
       expect(html).not.toMatch(/#[0-9a-f]{3,6}|rgb\(|<title|role=/i);
       expect(html.match(/stroke-width=/g)).toHaveLength(1);
     }
+  });
+
+  it('pencil is Lucide 1.72.0\'s pencil.svg, its two paths as published', () => {
+    expect(ICONS.pencil).toEqual([
+      ['path', { d: 'M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z' }],
+      ['path', { d: 'm15 5 4 4' }],
+    ]);
   });
 
   it('size sets the drawn size, 20 by default', () => {

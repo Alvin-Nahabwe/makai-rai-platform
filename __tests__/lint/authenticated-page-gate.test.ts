@@ -6,8 +6,9 @@ import { dirname, join } from 'node:path';
  * Threat A7 (UX-01, SRS 7.1.2): the gates run on every page request, and Next does not re-render a layout shared by
  * the page a client-side navigation leaves and the page it opens. So a group's root layout (app/(authenticated)/layout.tsx,
  * app/(gate)/layout.tsx) is not enough: each page calls requireIdentity itself, or a layout between it and the group root
- * does (as explore/layout.tsx and orgs/new/layout.tsx do), or it is on the named exempt list below. Since plan 1B Task 1 the
- * signed-in pages outside the shell (S-05, S-29, S-07) are the group app/(gate), and A7 covers it too.
+ * does (as change-password/layout.tsx does for its one page), or it is on the named exempt list below. A layout that holds
+ * two or more pages does not stand in for them: layout-gate-siblings.test.ts (L-1). Since plan 1B Task 1 the signed-in
+ * pages outside the shell (S-05, S-29, S-07) are the group app/(gate), and A7 covers it too.
  */
 const GROUP = 'app/(authenticated)';
 const GROUPS = ['app/(authenticated)', 'app/(gate)'];

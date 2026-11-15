@@ -31,6 +31,11 @@ describe('form failures and field texts (7.4.4, 7.5.7, FND-a RE-2)', () => {
     expect(writeFailure(rejected(409, 'finding_not_open', { current: CLOSED }), KEPT_IN_FORM, 'UTC')?.text).toBe(FINDINGS_COPY.failures.closedBy('Grace A.', '07:42 UTC'));
   });
 
+  it('FR-FND-06 (R11): a close refused because a mitigation became Planned or In progress reads the close box\'s sentence', () => {
+    const f = writeFailure(rejected(409, 'finding_has_open_work'), '', undefined, FINDINGS_COPY.closeByDecision.label);
+    expect(f).toMatchObject({ text: FINDINGS_COPY.finding.closeBlocked, retry: false, fields: [] });
+  });
+
   it('FND-a RE-2 NFR-SEC-11: a field text that is not one of ours is replaced by one fixed sentence, a known one is kept', () => {
     expect(fieldText(FINDINGS_COPY.fields.ownerUserId)).toBe(FINDINGS_COPY.fields.ownerUserId);
     expect(fieldText('This is 4,001 characters. The limit is 4,000.')).toBe('This is 4,001 characters. The limit is 4,000.');

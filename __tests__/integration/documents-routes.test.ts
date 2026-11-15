@@ -10,6 +10,8 @@ import { sealFixture } from '../helpers/sealFixture';
 import { callRoute, sessionAs } from '../helpers/routeDriver';
 import { captureLogs } from '../helpers/logCapture';
 import { API_COPY } from '@/lib/http/api/copy';
+import { HTTP_COPY } from '@/lib/http/copy';
+import { MSG_DOCUMENT_CHECK_FAILED } from '@/lib/documents/copy';
 
 vi.setConfig({ testTimeout: 60_000 });
 
@@ -113,7 +115,7 @@ describe('preview, issue and download routes', () => {
     } });
     const { result: r, lines } = await captureLogs(() => get(bad.id));
     expect(r.status).toBe(500);
-    expect(await r.json()).toMatchObject({ error: 'Document integrity check failed', code: 'integrity_failure', reference: expect.any(String) });
+    expect(await r.json()).toMatchObject({ error: MSG_DOCUMENT_CHECK_FAILED, code: 'integrity_failure', reference: expect.any(String) });
     expect(lines.filter((l) => l.includes('DOCUMENT_INTEGRITY_FAILURE'))).toHaveLength(1);
   });
 
@@ -128,7 +130,7 @@ describe('preview, issue and download routes', () => {
     });
     const r = await get(doc.id);
     expect(r.status).toBe(410);
-    expect(await r.json()).toEqual({ error: 'Erased', code: 'erased', erasedOn: new Date().toISOString().slice(0, 10) });
+    expect(await r.json()).toEqual({ error: HTTP_COPY.erased(new Date().toISOString().slice(0, 10)), code: 'erased', erasedOn: new Date().toISOString().slice(0, 10) });
   });
 
   it('FR-DOC-04 NFR-SEC-02: a document of organisation B answers 404 to a member of A', async () => {
@@ -195,6 +197,6 @@ describe('preview, issue and download routes', () => {
     });
     const r = await get(doc.id);
     expect(r.status).toBe(410);
-    expect(await r.json()).toEqual({ error: 'Erased', code: 'erased', erasedOn: new Date().toISOString().slice(0, 10) });
+    expect(await r.json()).toEqual({ error: HTTP_COPY.erased(new Date().toISOString().slice(0, 10)), code: 'erased', erasedOn: new Date().toISOString().slice(0, 10) });
   });
 });
