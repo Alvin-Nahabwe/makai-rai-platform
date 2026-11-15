@@ -31,6 +31,15 @@ export const AUTH_COPY = Object.freeze({
     resetPassword: 'Set a new password',
     changePassword: 'Change your password',
   }),
+  /**
+   * S-02 and S-03's route stops in the gate frame (ruling L5-6): ask for the link, set the new password, then GATE_COPY's
+   * Sign in. Kept here, not in GATE_COPY: lib/shell/copy.ts is in every public page's first visit through PublicHeader,
+   * S-04's included, whose weight may not grow (lead's weight rule); these two pages load this module already.
+   */
+  recoveryStops: Object.freeze({
+    askForLink: 'Ask for a link',
+    setNewPassword: 'Set a new password',
+  }),
   logoAlt: 'MAK-AI',
   loading: 'Loading...',
   /** The heading of the forgot-password page: the action, not the problem (audit A 138). */

@@ -8,8 +8,8 @@ export const metadata = { title: pageTitle(AUTH_COPY.titles.forgotPassword) };
 
 /** Ask for the link here, set the new password from it, then sign in with it (ruling L5-6). */
 const ROUTE: readonly GateStop[] = [
-  { label: GATE_COPY.stops.askForLink, state: 'current' },
-  { label: GATE_COPY.stops.setNewPassword, state: 'upcoming' },
+  { label: AUTH_COPY.recoveryStops.askForLink, state: 'current' },
+  { label: AUTH_COPY.recoveryStops.setNewPassword, state: 'upcoming' },
   { label: GATE_COPY.stops.signIn, state: 'upcoming' },
 ];
 

@@ -66,8 +66,8 @@ describe('S-03 in the gate frame', () => {
 describe('L5-6 and L5-8: the three door pages render the public gate frame, its route, and no logo in the card', () => {
   const PAGES: Array<[string, string[]]> = [
     ['app/(public)/login/page.tsx', ['GATE_COPY.stops.signIn']],
-    ['app/(public)/forgot-password/page.tsx', ['GATE_COPY.stops.askForLink', 'GATE_COPY.stops.setNewPassword', 'GATE_COPY.stops.signIn']],
-    ['app/(public)/reset-password/page.tsx', ['GATE_COPY.stops.askForLink', 'GATE_COPY.stops.setNewPassword', 'GATE_COPY.stops.signIn']],
+    ['app/(public)/forgot-password/page.tsx', ['AUTH_COPY.recoveryStops.askForLink', 'AUTH_COPY.recoveryStops.setNewPassword', 'GATE_COPY.stops.signIn']],
+    ['app/(public)/reset-password/page.tsx', ['AUTH_COPY.recoveryStops.askForLink', 'AUTH_COPY.recoveryStops.setNewPassword', 'GATE_COPY.stops.signIn']],
   ];
   it.each(PAGES)('%s', (page, stops) => {
     const src = readFileSync(page, 'utf8');
@@ -82,9 +82,10 @@ describe('L5-6 and L5-8: the three door pages render the public gate frame, its 
     expect(src).not.toMatch(/from 'next\/image'/);
   });
 
-  it('the route words are GATE_COPY\'s', () => {
-    expect(GATE_COPY.stops.askForLink).toBe('Ask for a link');
-    expect(GATE_COPY.stops.setNewPassword).toBe('Set a new password');
+  it('the route words: S-02 and S-03\'s own stops are AUTH_COPY\'s (off S-04\'s first visit), Sign in is GATE_COPY\'s', () => {
+    expect(AUTH_COPY.recoveryStops.askForLink).toBe('Ask for a link');
+    expect(AUTH_COPY.recoveryStops.setNewPassword).toBe('Set a new password');
     expect(GATE_COPY.stops.signIn).toBe('Sign in');
+    expect(JSON.stringify(GATE_COPY)).not.toMatch(/Ask for a link|Set a new password/);
   });
 });

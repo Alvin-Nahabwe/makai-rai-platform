@@ -9,8 +9,8 @@ export const metadata = { title: pageTitle(AUTH_COPY.titles.resetPassword), refe
 
 /** The link was asked for on S-02; the new password is set here; then the person signs in with it (ruling L5-6). */
 const ROUTE: readonly GateStop[] = [
-  { label: GATE_COPY.stops.askForLink, state: 'done' },
-  { label: GATE_COPY.stops.setNewPassword, state: 'current' },
+  { label: AUTH_COPY.recoveryStops.askForLink, state: 'done' },
+  { label: AUTH_COPY.recoveryStops.setNewPassword, state: 'current' },
   { label: GATE_COPY.stops.signIn, state: 'upcoming' },
 ];
 

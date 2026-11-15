@@ -43,9 +43,6 @@ export const GATE_COPY = Object.freeze({
     changePassword: 'Change your password',
     signInAgain: 'Sign in again',
     signIn: 'Sign in',
-    /** S-02 and S-03's route (ruling L5-6): ask for the link, set the new password, sign in with it. */
-    askForLink: 'Ask for a link',
-    setNewPassword: 'Set a new password',
     accept: 'Accept the terms',
     chooseOrganisation: 'Choose an organisation',
     home: SHELL_COPY.items.home,
