@@ -268,6 +268,19 @@ describe('the read-only question page (plan 1C Task 7)', () => {
     expect(erased).not.toContain('reading-evidence__download');
   });
 
+  it('design review S4-2, S4-3, S2-5: the reason is a quotation, a link\'s name and host are one run of text, and nothing in the reading view is under 14 px', () => {
+    const css = readFileSync('components/question/reading.css', 'utf8');
+    // Every rule whose whole selector is `sel`, bodies joined.
+    const rule = (sel: string): string => [...css.matchAll(new RegExp(`(?<![\\w:-])${sel.replace(/[.[\]()]/g, '\\$&')}\\s*\\{([^}]*)\\}`, 'g'))].map((m) => m[1]).join(';');
+    expect(rule('.reading-decision__reason')).toMatch(/quotes:\s*'\u201C'\s*'\u201D'/);
+    expect(rule('.reading-decision__reason::before')).toMatch(/content:\s*open-quote/);
+    expect(rule('.reading-decision__reason::after')).toMatch(/content:\s*close-quote/);
+    // The link is inline text, so its name and the host wrap as one run, never as two columns.
+    expect(rule('.reading-evidence__link')).not.toMatch(/display:\s*inline-flex/);
+    expect(css).not.toContain('--font-size-legal');
+    expect(readFileSync('components/question/OpenWorkList.css', 'utf8')).not.toContain('--font-size-legal');
+  });
+
   it('with no evidence the card says "None yet"', async () => {
     const c = card(await render({ ...VIEWER, current: { ...CURRENT, evidence: [] } }));
     expect(c).toContain(`<p>${R.noEvidence}</p>`);
@@ -298,7 +311,9 @@ describe('the read-only question page (plan 1C Task 7)', () => {
 
   it('the first use of "finding" and "mitigation" on the page sits beside their vocabulary definitions, under the heading', async () => {
     const open = main(await render(VIEWER)).match(/<section data-region="open-work"[\s\S]*?<\/section>/)![0];
-    expect(open).toMatch(/<\/h2><p class="still-open__defs"><span class="ui-definition" data-definition="finding">/);
+    // Each definition shows its term (design review S4-1): a reader can tell which sentence defines which word.
+    expect(open).toContain(`</h2><p class="reading-def"><b class="reading-def__term">Finding:</b> <span class="ui-definition" data-definition="finding">${TERM_FINDING.definition}</span></p>`);
+    expect(open).toContain(`<p class="reading-def"><b class="reading-def__term">Mitigation:</b> <span class="ui-definition" data-definition="mitigation">${TERM_MITIGATION.definition}</span></p>`);
     expect(open).toContain(TERM_FINDING.definition);
     expect(open).toContain(TERM_MITIGATION.definition);
   });
@@ -360,8 +375,9 @@ describe('the read-only question page (plan 1C Task 7)', () => {
     // A part of the reader's aside, not a landmark of its own (review M7): a div with its heading.
     expect(a).toMatch(/<div class="reading-aside__seal"><h2>In a sealed copy<\/h2><p>Seal 1 of Pre-processing review 1 keeps version 2 of this decision.<\/p>/);
     expect(a).not.toContain('<section');
-    expect(a).toContain(TERM_STAGE_REVIEW.definition);
-    expect(a).toContain(TERM_SEAL.definition.replace("'", '&#x27;'));
+    // Each definition shows its term, the vocabulary's own word (design review S4-1).
+    expect(a).toContain(`<p class="reading-def"><b class="reading-def__term">Stage review:</b> <span class="ui-definition" data-definition="stage-review">${TERM_STAGE_REVIEW.definition}</span></p>`);
+    expect(a).toContain(`<p class="reading-def"><b class="reading-def__term">Seal:</b> <span class="ui-definition" data-definition="seal">${TERM_SEAL.definition.replace("'", '&#x27;')}</span></p>`);
     // Two seals of one review: the highest speaks.
     const two = aside(await render({ ...VIEWER, seals: [SEAL, { ...SEAL, sealId: 's2', sealNumber: 2 }] }));
     expect(two).toContain('Seal 2 of Pre-processing review 1 keeps');

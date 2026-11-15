@@ -118,6 +118,8 @@ export const QUESTION_COPY = Object.freeze({
     notAssignedYet: 'Not assigned yet',
     /** After the word Overdue and a separator the page draws. */
     wasDue: (day: string): string => `was due ${day}`,
+    /** The term before its definition in the reading view (design review S4-1): the vocabulary's word, capitalised. */
+    defTerm: (term: string): string => `${term.charAt(0).toUpperCase()}${term.slice(1)}:`,
     sealedHeading: 'In a sealed copy',
     /** One per review, its highest seal holding the current version (spec 9.7 "Sealed copy exists"). */
     sealKeeps: (sealNumber: number, reviewName: string, versionNumber: number): string =>

@@ -1,5 +1,4 @@
 import type { ReactElement } from 'react';
-import { Definition } from '@/components/ui/Definition';
 import { Icon } from '@/components/ui/Icon';
 import { ListLink } from '@/components/ui/ListLink';
 import { formatDay } from '@/lib/format/dates';
@@ -7,6 +6,7 @@ import { PROJECT_COPY } from '@/lib/project/copy';
 import { QUESTION_COPY } from '@/lib/question/copy';
 import type { QuestionOpenWork } from '@/lib/question/openWork';
 import { TERM_FINDING, TERM_MITIGATION } from '@/lib/vocabulary/terms';
+import { ReadingDefinition } from './ReadingDefinition';
 import './OpenWorkList.css';
 
 export type OpenWorkListProps = { work: QuestionOpenWork; orgSlug: string; projectId: string };
@@ -60,7 +60,8 @@ export function OpenWorkList({ work, orgSlug, projectId }: OpenWorkListProps): R
 
 /**
  * "Still open on this question: n findings" (spec 9.3: "open findings sit directly under it"), with the vocabulary's
- * definitions of finding and mitigation under the heading (their first use on the page, spec 6), then the plates. Only
+ * definitions of finding and mitigation under the heading, each with its term (their first use on the page, spec 6;
+ * design review S4-1), then the plates. Only
  * when something is open: null otherwise, so no heading stands over nothing.
  */
 export function StillOpen({ work, orgSlug, projectId }: { work: QuestionOpenWork | null; orgSlug: string; projectId: string }): ReactElement | null {
@@ -68,7 +69,8 @@ export function StillOpen({ work, orgSlug, projectId }: { work: QuestionOpenWork
   return (
     <section data-region="open-work" aria-labelledby="s12-open-work" className="still-open">
       <h2 id="s12-open-work">{R.stillOpen(work.findings.length)}</h2>
-      <p className="still-open__defs"><Definition of={TERM_FINDING} /> <Definition of={TERM_MITIGATION} /></p>
+      <ReadingDefinition of={TERM_FINDING} />
+      <ReadingDefinition of={TERM_MITIGATION} />
       <OpenWorkList work={work} orgSlug={orgSlug} projectId={projectId} />
     </section>
   );

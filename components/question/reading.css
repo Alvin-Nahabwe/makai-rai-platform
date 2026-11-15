@@ -49,6 +49,16 @@
   line-height: 1.6;
   white-space: pre-line;
   text-wrap: pretty;
+  quotes: '“' '”';
+}
+
+/* The sketch's quotation marks (design review S4-2): the reason is what the team wrote, quoted. */
+.reading-decision__reason::before {
+  content: open-quote;
+}
+
+.reading-decision__reason::after {
+  content: close-quote;
 }
 
 .reading-decision__decided {
@@ -131,17 +141,16 @@
 .reading-evidence__file small {
   display: block;
   color: var(--color-ink-muted);
-  font-size: var(--font-size-legal);
+  font-size: var(--font-size-small);
 }
 
 .reading-evidence__download {
   flex: none;
 }
 
+/* Inline text, so the name and the host wrap as one run (design review S4-3), never as two columns of a flex box. */
 .reading-evidence__link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  min-width: 0;
   color: var(--color-link);
   font-weight: var(--font-weight-semibold);
 }
@@ -154,7 +163,7 @@
 }
 
 .reading-evidence__link .ui-icon {
-  flex: none;
+  margin-inline-start: 6px;
 }
 
 /* The reader's aside (sketch aside): the sealed copy, the role note, the way on, 16 px apart. */
@@ -180,8 +189,17 @@
   margin-block-start: var(--space-1);
 }
 
-.reading-aside__defs .ui-definition {
+/* A definition with its term (design review S4-1), in the reading view's small text. */
+.reading-def {
+  margin: var(--space-1) 0 0;
+  color: var(--color-ink-muted);
   font-size: var(--font-size-small);
+  line-height: var(--line-height-body);
+}
+
+.reading-def__term {
+  color: var(--color-ink);
+  font-weight: var(--font-weight-semibold);
 }
 
 /* The role note in a small bordered box with the eye (sketch .role). */
@@ -214,7 +232,7 @@
 .reading-aside__next p {
   margin-block-start: var(--space-1);
   color: var(--color-ink-muted);
-  font-size: var(--font-size-legal);
+  font-size: var(--font-size-small);
 }
 
 .reading-aside__next p:first-child {
