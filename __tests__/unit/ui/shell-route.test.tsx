@@ -173,11 +173,11 @@ describe('the rail\'s brand: the MAK-AI logo and the platform name, one link to 
     expect(stripTags(brand![1])).toBe('MAK-AI RAI Platform');
     const img = /<img [^>]*>/.exec(brand![1])![0];
     expect(img).toContain('alt=""');
-    // The rail draws the logo at its full content width (207 px) so the tagline reads as large as the rail allows.
-    expect(img).toContain('src="/logo-makai-white-207.webp"');
-    expect(img).toContain('srcSet="/logo-makai-white-207.webp 1x, /logo-makai-white-414.webp 2x"');
-    expect(img).toMatch(/width="207"/);
-    expect(img).toMatch(/height="48"/);
+    // The rail draws the logo at its full content width (208 px) so the tagline reads as large as the rail allows.
+    expect(img).toContain('src="/logo-makai-white-208.webp"');
+    expect(img).toContain('srcSet="/logo-makai-white-208.webp 1x, /logo-makai-white-416.webp 2x"');
+    expect(img).toMatch(/width="208"/);
+    expect(img).toMatch(/height="49"/);
     expect(img).toContain('decoding="async"');
     expect(img).not.toMatch(/loading=|fetchpriority/i);
     // It comes first in the rail, before the switcher and the items.
@@ -257,7 +257,7 @@ describe('the logo files are sized WebP copies, no larger than drawn at 1x and 2
   // in the first view, S-04's first visit fetches both 1x files, and S-04 had about 2.6 KB to find (NFR-PERF-02).
   it.each([
     ['public/logo-makai-white-154.webp', 154, 36, 2_000], ['public/logo-makai-white-308.webp', 308, 72, 4_500],
-    ['public/logo-makai-white-207.webp', 207, 48, 3_000], ['public/logo-makai-white-414.webp', 414, 97, 6_500],
+    ['public/logo-makai-white-208.webp', 208, 49, 3_000], ['public/logo-makai-white-416.webp', 416, 97, 6_500],
     ['public/logo-dswb-white-125.webp', 125, 40, 2_000], ['public/logo-dswb-white-250.webp', 250, 80, 4_500],
   ])('%s is %i x %i, and under %i bytes', (path, width, height, ceiling) => {
     const size = webpSize(path);

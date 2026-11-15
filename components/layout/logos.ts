@@ -15,14 +15,14 @@ export const MAKAI_LOGO = Object.freeze({
 
 /**
  * The same white logo at the rail's full content width (248 px rail, less 2 x 12 px of scroll padding and 2 x 8 px of brand
- * padding = 208 px, less the rail's 1 px edge = 207 px), so its tagline is as large as the rail allows. Sized copies of logo-makai-white.png made as above
- * (ImageMagick, WebP q70, 207 and 414 px wide). Drawn only in the rail's brand.
+ * padding = 208 px), so its tagline is as large as the rail allows. Sized copies of logo-makai-white.png made as above
+ * (ImageMagick, WebP q70, 208 and 416 px wide). Drawn only in the rail's brand.
  */
 export const MAKAI_LOGO_RAIL = Object.freeze({
-  src: '/logo-makai-white-207.webp',
-  srcSet: '/logo-makai-white-207.webp 1x, /logo-makai-white-414.webp 2x',
-  width: 207,
-  height: 48,
+  src: '/logo-makai-white-208.webp',
+  srcSet: '/logo-makai-white-208.webp 1x, /logo-makai-white-416.webp 2x',
+  width: 208,
+  height: 49,
 });
 
 export const DSWB_LOGO = Object.freeze({

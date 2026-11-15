@@ -435,10 +435,7 @@
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-1);
-  /* No block padding: the logo is 12 px taller than before (207 px wide, for its tagline), and 1 px of that pushed the third
-     stage line out of the rail's first view at 1366x768 (e2e/shell-project.spec.ts, rail fit). The rail's scroll padding
-     above and below still leaves room for the focus ring. */
-  padding: 0 var(--space-2);
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-control);
   color: var(--color-shell-ink);
   text-decoration: none;
@@ -456,7 +453,7 @@
 
 .shell-rail__logo {
   display: block;
-  /* Drawn at the rail's content width (207 px); a narrower panel scales it with its aspect ratio kept. */
+  /* Drawn at the rail's content width (208 px); a narrower panel scales it with its aspect ratio kept. */
   max-inline-size: 100%;
   block-size: auto;
 }

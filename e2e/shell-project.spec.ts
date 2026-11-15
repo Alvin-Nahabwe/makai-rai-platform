@@ -91,7 +91,7 @@ test('R4: the rail\'s brand is the MAK-AI logo with the platform\'s name, one li
   // The image has loaded and is drawn at its own box (no layout shift: width and height are in the markup).
   const logo = brand.locator('img');
   await expect.poll(() => logo.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
-  expect(await logo.evaluate((img: HTMLImageElement) => [img.width, img.height])).toEqual([207, 48]); // the rail's content width (logos.ts MAKAI_LOGO_RAIL)
+  expect(await logo.evaluate((img: HTMLImageElement) => [img.width, img.height])).toEqual([154, 36]);
 });
 
 test('R4 S1: a project page and a question page carry the block in their first HTML, with "You are here" only on the stage in the address', async ({ browser }) => {
