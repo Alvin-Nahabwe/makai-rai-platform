@@ -2166,5 +2166,21 @@
     "property": "An erased document answers 410 with code `erased` and the date it was erased, and no bytes.",
     "proof": "The same case: `error` was the literal 'Erased' and is now HTTP_COPY.erased(<that day>), 'This record was erased on <day>.' (audit E-API-11); the status, `code` and `erasedOn` expectations are unchanged.",
     "task": "lane 6 B2 (plan 1A Task 20, E6)"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/integration/findings-accepted-risk.test.ts::FR-FND-05: a planned mitigation gets a cancelled version with reason \"risk accepted\"",
+    "replacedBy": "__tests__/integration/findings-accepted-risk.test.ts::FR-FND-05: a planned mitigation gets a cancelled version with reason \"risk accepted\"",
+    "property": "Accepting a risk gives every planned or in-progress mitigation a cancelled version, based on its current one, entered by the person accepting, with the platform's stored acceptance reason and a request id derived from the acceptance's; a done mitigation is left as it is.",
+    "proof": "The same case: `cancelReason` was the literal 'risk accepted' and is now STORED_CANCEL_REASONS.riskAccepted (lib/findings/storedCancelReasons.ts), 'The risk was accepted, so this work was cancelled.', the value LD-25 gives (F7). It is a stored-data constant marked never reword, not a copy constant, so a later copy edit cannot change what the case pins (B4 review I3). Every other expectation is unchanged. The title still names the pre-LD-25 value; rows written before LD-25 hold it, and the finding page shows both values in the copy sentence (cancelReasonText, tested in __tests__/unit/finding-labels.test.ts).",
+    "task": "lane 6 FX2 (B4 review I3)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/integration/findings-accepted-risk.test.ts::(module)",
+    "replacedBy": "__tests__/integration/findings-accepted-risk.test.ts::FR-FND-05: a planned mitigation gets a cancelled version with reason \"risk accepted\"",
+    "property": "The module imports what the cases read.",
+    "proof": "One line: the import of FINDINGS_COPY, which only the case above read, is replaced by the import of STORED_CANCEL_REASONS, which that case now reads. Nothing else of the module changes.",
+    "task": "lane 6 FX2 (B4 review I3)"
   }
 ]

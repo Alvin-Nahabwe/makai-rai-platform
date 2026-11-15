@@ -240,8 +240,9 @@ export const FINDINGS_COPY = Object.freeze({
     controlUsed: 'Suggested control used:',
     cancelReason: 'Why it is cancelled:',
     /**
-     * F7 (LD-25): the reason written on each open mitigation when a risk is accepted (lib/data/findings.ts). Rows written
-     * before it hold "risk accepted"; the finding page shows those in these words too (`cancelReasonText`).
+     * F7 (LD-25): what the finding page shows for the reason an acceptance stores on each open mitigation. The stored
+     * values are data (lib/findings/storedCancelReasons.ts, never reworded); `cancelReasonText` maps each to this sentence,
+     * so rewording it here changes what is shown, never what is stored (B4 I3).
      */
     riskAcceptedCancel: 'The risk was accepted, so this work was cancelled.',
     historySummary: (n: number): string => `History: ${n} ${n === 1 ? 'version' : 'versions'}`,

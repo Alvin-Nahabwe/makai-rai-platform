@@ -19,7 +19,7 @@ import { erasedFields, evidenceViews, userRefs } from '@/lib/data/views';
 import { sealsIncludingRows } from '@/lib/data/seals';
 import { runningContent } from '@/lib/content/loader';
 import { deriveFindingState } from '@/lib/findings/state';
-import { FINDINGS_COPY } from '@/lib/findings/copy';
+import { STORED_CANCEL_REASONS } from '@/lib/findings/storedCancelReasons';
 import { FINDING_MESSAGES, parseAcceptRisk, parseAddMitigation, parseCloseByDecision, parseFindingEvent, parseUpdateMitigation } from '@/lib/findings/validate';
 import { eatDate, isOverdue } from '@/lib/followup/overdue';
 import { logSecurityEvent } from '@/lib/security-logger';
@@ -218,10 +218,11 @@ async function eventViews(tx: TenantTx, rows: readonly EventRow[]): Promise<Find
 }
 
 /**
- * The cancel reason of the versions an acceptance saves (FR-FND-05, 5.3 item 11 rule 2), in LD-25's words (F7). Rows
- * saved before hold "risk accepted"; the finding page shows those in these words (`cancelReasonText`, lib/findings/labels.ts).
+ * The cancel reason of the versions an acceptance saves (FR-FND-05, 5.3 item 11 rule 2). STORED: NEVER REWORD. It is a
+ * data constant (lib/findings/storedCancelReasons.ts), not the copy sentence, so a copy edit cannot change what is stored
+ * (B4 I3). Rows saved before LD-25 hold "risk accepted"; the finding page shows both in the copy sentence (`cancelReasonText`).
  */
-const RISK_ACCEPTED_REASON = FINDINGS_COPY.mitigation.riskAcceptedCancel;
+const RISK_ACCEPTED_REASON = STORED_CANCEL_REASONS.riskAccepted;
 
 const isOpenWork = (m: { status: string }) => m.status === 'planned' || m.status === 'in_progress';
 
@@ -516,7 +517,7 @@ async function riskViewById(tx: TenantTx, id: string): Promise<AcceptedRiskView>
  * finding. Under the finding lock, in one transaction: the accepted risk, entered by the session's account and role,
  * with `accepterRole` the role at the time of a member who accepted (a current member, else 422; an outside role is
  * stored as itself); then, for every mitigation whose current version is planned or in progress, a cancelled version
- * with reason "risk accepted" based on it (5.3 item 11 rule 2), whose request id is
+ * with the stored acceptance reason (`RISK_ACCEPTED_REASON`) based on it (5.3 item 11 rule 2), whose request id is
  * `derivedRequestId(requestId, 'mitigation_versions:' + mitigationId)`. RISK_ACCEPTED, and for `accept` FINDING_CLOSED,
  * are logged after the commit.
  */

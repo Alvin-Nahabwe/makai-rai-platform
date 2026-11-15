@@ -10,6 +10,7 @@ import {
   TERM_ACCEPTED_RISK, TERM_DOES_NOT_APPLY, TERM_FINDING, TERM_MITIGATION, TERM_NOT_YET, TERM_PARTLY, TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION,
   TERM_RISK_AREA, TERM_STAGE_1, TERM_STAGE_2,
 } from '@/lib/vocabulary/terms';
+import { STORED_CANCEL_REASONS } from '@/lib/findings/storedCancelReasons';
 import { firstUseProblems } from '../helpers/firstUseHtml';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh() {}, push() {} }) }));
@@ -197,8 +198,8 @@ describe('F7: the cancel reason an acceptance writes', () => {
   it('shows the stored "risk accepted" of earlier rows in the new words, and the new words as they are', () => {
     const card = (cancelReason: string) => findingPage(finding({ mitigations: [{ current: mitigation({ status: 'cancelled', cancelReason }), versions: 2, history: [], overdue: false }] }));
     const shown = `${FINDINGS_COPY.mitigation.cancelReason} <bdi>${esc(FINDINGS_COPY.mitigation.riskAcceptedCancel)}</bdi>`;
-    expect(card('risk accepted')).toContain(shown);
-    expect(card(FINDINGS_COPY.mitigation.riskAcceptedCancel)).toContain(shown);
+    expect(card(STORED_CANCEL_REASONS.riskAcceptedBeforeLd25)).toContain(shown);
+    expect(card(STORED_CANCEL_REASONS.riskAccepted)).toContain(shown);
     expect(card('Budget moved to Q2')).toContain(`${FINDINGS_COPY.mitigation.cancelReason} <bdi>Budget moved to Q2</bdi>`);
     expect(FINDINGS_COPY.mitigation.riskAcceptedCancel).toBe('The risk was accepted, so this work was cancelled.');
   });
