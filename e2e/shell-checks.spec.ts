@@ -163,10 +163,13 @@ test.describe('shell pages, checked with the harness helpers', () => {
     });
   }
 
-  test('UX-41: no image but the logo, and every icon hidden from assistive technology', async ({ browser }) => {
+  test('UX-41: no image but the logos, and every icon hidden from assistive technology', async ({ browser }) => {
     await onEveryShellPage(browser, 'light', 1280, async (page, label) => {
       const images = await page.locator('img').evaluateAll((els) => els.map((e) => e.getAttribute('alt')));
-      expect(images.filter((alt) => alt !== 'MAK-AI'), `${label}: images other than the logo`).toEqual([]);
+      // The logos (route task 1): the MAK-AI logo (alt "MAK-AI" on the sign-in pages and in the footer; alt "" beside the
+      // visible name in the rail, alt "MAK-AI RAI Platform" as the narrow bar's link) and the DSWB logo in the footer.
+      const LOGOS = ['MAK-AI', '', 'MAK-AI RAI Platform', 'Data Science Without Borders'];
+      expect(images.filter((alt) => !LOGOS.includes(alt ?? 'MISSING')), `${label}: images other than the logos`).toEqual([]);
       const exposed = await page
         .locator('svg:not([aria-hidden="true"]), .icon:not([aria-hidden="true"])')
         // The Next.js development indicator is not part of the product and exists only under `next dev`.
@@ -213,7 +216,10 @@ test.describe('shell pages, checked with the harness helpers', () => {
       const own = `/orgs/${slug}/dashboard`;
       const urls = requests.urls();
       const ownIndex = urls.findIndex((u) => u.endsWith(own));
-      const left = urls.filter((u, i) => i !== ownIndex && !u.includes('/_next/') && !prefetches.has(u) && !/\/favicon[^/]*\.png$/.test(u));
+      // The logo files (route task 1: the rail's, and the footer's, which load lazily) are the page's images, not requests of
+      // the warning.
+      const left = urls.filter((u, i) => i !== ownIndex && !u.includes('/_next/') && !prefetches.has(u) && !/\/favicon[^/]*\.png$/.test(u)
+        && !/\/logo-(makai|dswb)-white-\d+\.webp$/.test(u));
       expect(left).toEqual([]);
     } finally {
       await context.close();

@@ -2198,5 +2198,13 @@
     "property": "Each item of the shell points at its address under the open organisation, or at a fixed application path. About and Controls leave the rail (About is in the footer; Controls is reached from Guidance), and switching organisation is a list of the person's organisations' dashboards instead of a link to /.",
     "proof": "The new case reads every href of the navigation in order and asserts the eight addresses for /orgs/a, /help among them (Task 12). __tests__/unit/shell-nav.test.ts::1A Task 11 L2-49: outside an organisation the organisation items fall back to / and none of them is current checks the fallback. Route task 1 (lane 3): the replacing case was renamed when the rail's label became 'Organisation' (spec 7.5 line 237); this entry points at its new title, the earlier one is kept as written (the ledger is append only).",
     "task": "lane 3 task 1 (route: the rail logo and project block, the narrow top bar, the footer)"
+  },
+  {
+    "kind": "wording",
+    "deleted": "e2e/shell-checks.spec.ts::UX-41: no image but the logo, and every icon hidden from assistive technology",
+    "replacedBy": "e2e/shell-checks.spec.ts::UX-41: no image but the logos, and every icon hidden from assistive technology",
+    "property": "Every shell page shows no image but the platform's own logos, and every icon is hidden from assistive technology.",
+    "proof": "The owner asked for the MAK-AI logo back in the rail and in the footer, with the DSWB logo beside it (15 November 2026, 09:14). The allowed alt texts are now the four the shell writes: 'MAK-AI' (sign-in pages, footer), '' (the rail's logo, decorative beside the visible name), 'MAK-AI RAI Platform' (the narrow bar's logo link) and 'Data Science Without Borders' (footer); the icon check is unchanged. Each alt is pinned by __tests__/unit/ui/shell-route.test.tsx.",
+    "task": "lane 3 task 1 (route: the rail logo and project block, the narrow top bar, the footer)"
   }
 ]
