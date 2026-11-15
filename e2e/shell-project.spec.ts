@@ -412,6 +412,24 @@ for (const [width, height] of [[1280, 800], [1366, 768]] as const) {
       if (past > 0) {
         await expect.poll(() => page.locator('.shell-rail__scroll').evaluate((el) => Number(getComputedStyle(el, '::after').opacity)),
           `${path}: the third stage line is past the edge, so the bottom cue shows`).toBeGreaterThan(0.5);
+        // I1 round 2: the cut never falls in a gap. Some of the block's text lies in the fade's denser half (the edge's half,
+        // at least half navy), so a person sees the block's words fade out at the edge, not a rule over empty navy.
+        const inFade = await page.locator('.shell-rail__scroll').evaluate((el) => {
+          const bottom = el.getBoundingClientRect().bottom;
+          const band = parseFloat(getComputedStyle(el, '::after').blockSize);
+          const top = bottom - band / 2;
+          const walker = document.createTreeWalker(el.querySelector('.shell-project')!, NodeFilter.SHOW_TEXT);
+          let most = 0;
+          for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+            if (!n.textContent?.trim()) continue;
+            const range = document.createRange();
+            range.selectNodeContents(n);
+            for (const r of Array.from(range.getClientRects())) most = Math.max(most, Math.min(r.bottom, bottom) - Math.max(r.top, top));
+          }
+          return { band, overlap: Math.round(most) };
+        });
+        test.info().annotations.push({ type: 'rail fit, text under the fade', description: `${width}x${height} ${path}: band ${inFade.band} px, text ${inFade.overlap} px into its denser half` });
+        expect(inFade.overlap, `${path}: some of the block's text lies in the fade's denser half (band ${inFade.band} px)`).toBeGreaterThanOrEqual(4);
       }
       const foot = page.locator('.shell-rail__foot');
       const out = (await foot.getByRole('button', { name: 'Sign out' }).boundingBox())!;

@@ -341,7 +341,8 @@ describe('fix round 3: the rail fits a laptop (D4, D5) and the minor design item
   });
 
   it('D4 (a)(c): the items sit at a 44 px pitch with no gap, and the rail\'s padding and group gaps are 8 px', () => {
-    expect(ruleIn(css, '.shell-rail__nav ul')).toMatch(/gap: 0;/);
+    // The scrolling part's lists and the pinned lower group share one rule (review 1, Minor: one copy of the list styles).
+    expect(ruleIn(css, '.shell-rail__nav ul,\n.shell-rail__lower')).toMatch(/gap: 0;/);
     expect(ruleIn(css, '.shell-rail__item')).toMatch(/min-block-size: var\(--target-primary\);/);
     expect(ruleIn(css, '.shell-rail__scroll')).toMatch(/gap: var\(--space-2\);/);
     expect(ruleIn(css, '.shell-rail__scroll')).toMatch(/padding: var\(--space-2\) var\(--space-3\);/);
@@ -433,6 +434,15 @@ describe('fix round 4: the footer in the content column (D23, coordinator\'s opt
     expect(ruleIn(wide, '.shell-rail__scroll::before')).toMatch(/border-block-start: 1px solid var\(--color-shell-muted\);/);
     expect(ruleIn(wide, '.shell-rail__scroll::after')).toMatch(/border-block-end: 1px solid var\(--color-shell-muted\);/);
     expect(ruleIn(css, '.shell-rail__foot')).toMatch(/border-block-start: 1px solid var\(--color-border-container\);/);
+  });
+
+  it('I1 round 2: the bottom fade is 48 px, taller than any text-free gap in the project block, and takes its own height back', () => {
+    // The e2e rail-fit case holds the property (some of the block's words lie in the fade's denser half at 1280x800 and
+    // 1366x768); this pins the means, so a later edit to the shared cue rule cannot shrink it unseen.
+    const after = ruleIn(wide, '.shell-rail__scroll::after');
+    expect(after).toMatch(/block-size: var\(--space-12\);/);
+    expect(after).toMatch(/margin-block-start: calc\(-1 \* var\(--space-12\)\);/);
+    expect(ruleIn(wide, '.shell-rail__scroll')).toMatch(/scroll-padding-block: var\(--space-6\) var\(--space-12\);/);
   });
 
   it('rail fit: Sign out and the theme switch share one row; the switch is a 44 px square whose words are its accessible name', () => {

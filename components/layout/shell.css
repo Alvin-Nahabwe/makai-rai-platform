@@ -359,7 +359,7 @@
     overflow-y: auto;
     overscroll-behavior: contain;
     /* A focused item scrolled into view stops clear of the cue at either edge. */
-    scroll-padding-block: var(--space-6);
+    scroll-padding-block: var(--space-6) var(--space-12);
     scrollbar-width: thin;
     scrollbar-color: var(--color-shell-muted) transparent;
     container-type: scroll-state;
@@ -386,12 +386,14 @@
     background: linear-gradient(var(--color-shell), transparent);
   }
 
-  /* The bottom fade ends on the lower group's rule (the foot's when there is no lower group). That rule is 1.2:1 on the
-     navy, and a cut can fall between two stage lines with no text under the fade, so the cue carries the top cue's hairline
-     (final review I1): while more is below, the edge reads as one bright rule over the quiet one. */
+  /* The bottom fade ends on the lower group's rule (the foot's when there is no lower group), 1.2:1 on the navy, so the cue
+     carries the top cue's hairline (final review I1). It is twice the top cue's height (I1 round 2): taller than any gap
+     between the block's lines of text (13 px measured at 1280x800 and 1366x768), so wherever the edge falls, some words fade
+     out under it and a person sees the block go on, not a rule over empty navy. */
   .shell-rail__scroll::after {
     inset-block-end: calc(-1 * var(--space-2));
-    margin-block-start: calc(-1 * var(--space-6));
+    block-size: var(--space-12);
+    margin-block-start: calc(-1 * var(--space-12));
     border-block-end: 1px solid var(--color-shell-muted);
     background: linear-gradient(transparent, var(--color-shell));
   }
@@ -479,7 +481,8 @@
 }
 
 /* Items at the sketch's 44 px pitch, with no gap between them (review D4 a, D8). */
-.shell-rail__nav ul {
+.shell-rail__nav ul,
+.shell-rail__lower {
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -489,14 +492,10 @@
 /* Members and Organisation, between the scrolling part and the foot (final review I1): never scrolled away. The rule and the
    inset are the ones they had at the end of the scrolling part, so the rail looks the same when nothing overflows. */
 .shell-rail__lower {
-  display: flex;
   flex: none;
-  flex-direction: column;
-  gap: 0;
   margin-inline: var(--space-3);
   padding-block: var(--space-2);
   border-block-start: 1px solid var(--color-shell-hover);
-  list-style: none;
 }
 
 .shell-rail__item {
