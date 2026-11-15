@@ -215,7 +215,8 @@ describe('follow-up reads on S-08 and S-10 (Task 9: FUP\'s real bodies)', () => 
     await addMitigationVersion(fx, f.id, { status: 'planned', owner: 'assessor', dueDate: '2026-10-28' });
     const html = await renderDashboard(fx, 'assessor', '2026-11-02');
     expect(html).toContain(HOME_COPY.assignedHeading);
-    expect(html).toMatch(/>Overdue<\/span>: was due 28 Oct 2026/);
+    // Spec 7.1 and 9.1: the word "Overdue" and the overdue date are red (lane 3 fix round 2).
+    expect(html).toMatch(/>Overdue<\/span>: was due <span class="home-overdue">28 Oct 2026<\/span>/);
     expect(html).not.toContain(HOME_COPY.assignedNone);
   });
 
@@ -227,10 +228,10 @@ describe('follow-up reads on S-08 and S-10 (Task 9: FUP\'s real bodies)', () => 
     const items = await myMitigations(ctxFor(fx, 'viewer'), fx.members.viewer.userId, '2026-11-02');
     expect(items).toHaveLength(1);
     expect(items[0].owner.userId).toBe(fx.members.viewer.userId);
-    // A Viewer's Home has no "Assigned to you" (spec 9.1), so the page half is read as the assessor, who owns the other one.
-    const html = await renderDashboard(fx, 'assessor', '2026-11-02');
-    expect(html).toMatch(/was due 28 Oct 2026/);
-    expect(html).not.toContain('Due 20 Nov 2026');
+    // A Viewer's Home has "Assigned to you" when something is assigned to them (lane 3 fix round 1): theirs, never another's.
+    const html = await renderDashboard(fx, 'viewer', '2026-11-02');
+    expect(html).toContain('Due 20 Nov 2026');
+    expect(html).not.toMatch(/was due 28 Oct 2026/);
   });
 
   it('FR-PRJ-02 FR-FUP-01: open findings, open and overdue mitigations come from the follow-up service', async () => {
@@ -254,8 +255,9 @@ describe('page wiring (C4 round 1)', () => {
     const q = await addProject(fx);
     const f = await addFinding(fx, q.id, { stage: 'pre-processing', source: 'team' });
     await addMitigationVersion(fx, f.id, { status: 'planned', owner: 'assessor', dueDate: '2099-01-01' });
-    // An Owner: a person who records, whose Home has "Assigned to you" (a Viewer's has none, spec 9.1).
-    sessionFor(fx.members.owner.userId);
+    // The Viewer, who owns no mitigation here: their Home shows no "Assigned to you" at all (lane 3 fix round 1), and
+    // never the assessor's that the query names.
+    sessionFor(fx.members.viewer.userId);
     const { default: DashboardPage } = await import('@/app/(authenticated)/orgs/[slug]/dashboard/page');
     const element = await DashboardPage({
       params: Promise.resolve({ slug: fx.org.slug }),
@@ -263,7 +265,8 @@ describe('page wiring (C4 round 1)', () => {
     });
     const html = renderToStaticMarkup(element);
     expect(html).not.toContain('Due 1 Jan 2099');   // the assessor's mitigation
-    expect(html).toContain(HOME_COPY.assignedNone);
+    expect(html).not.toContain(HOME_COPY.assignedHeading);
+    expect(html).not.toContain(HOME_COPY.assignedNone);
   });
 
   it('FR-PRJ-03 (P1): S-32 gives Unarchive to owner and admin and to no other role', async () => {

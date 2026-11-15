@@ -2254,5 +2254,45 @@
     "property": "Home is rendered as the page renders it, from the real database, for the cases that read it.",
     "proof": "loadDashboard and DashboardView are deleted (plan 1B Task 10); the module imports loadHome and HomeView, and renderDashboard renders HomeView over loadHome (a new homeData helper, now the day given at 09:00 UTC). No other module line changed.",
     "task": "lane 3 Task 3 (plan 1B Task 10: Home rebuilt as the welcome, every variant)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-04 NFR-SEC-02: my mitigations lists only the signed-in person's, and is not empty",
+    "replacedBy": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-04 NFR-SEC-02: my mitigations lists only the signed-in person's, and is not empty",
+    "property": "myMitigations lists only the signed-in person's open mitigations and is not empty, and the Viewer's Home shows the Viewer's own mitigation and never the assessor's.",
+    "proof": "Supersedes the earlier entry for this case, whose premise (\"A Viewer's Home has no 'Assigned to you'\") fix round 1 overtook: a Viewer's Home now shows 'Assigned to you' when something is assigned to them. The page half is rendered as the Viewer again, as at the base: it requires 'Due 20 Nov 2026' (the Viewer's) and forbids 'was due 28 Oct 2026' (the assessor's). The data half is unchanged.",
+    "task": "lane 3 Task 3, fix round 2 (code review I1; design review #4, #12)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-04 NFR-SEC-02 (P7): the dashboard page lists the signed-in person's mitigations whatever the query says",
+    "replacedBy": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-04 NFR-SEC-02 (P7): the dashboard page lists the signed-in person's mitigations whatever the query says",
+    "property": "The Home page shows only the signed-in person's mitigations and never those of an id passed in the query.",
+    "proof": "Supersedes the earlier entry, whose premise (a Viewer's Home lists no mitigations) fix round 1 overtook. The session is the Viewer's again, as at the base, with the query naming the assessor, whose mitigation is due 1 Jan 2099. The Viewer owns none here, so the page shows no 'Assigned to you' section at all: the case forbids 'Due 1 Jan 2099', HOME_COPY.assignedHeading and HOME_COPY.assignedNone.",
+    "task": "lane 3 Task 3, fix round 2 (code review I1; design review #4, #12)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-04: a person owning one overdue mitigation sees it in \"my mitigations\" with its due date",
+    "replacedBy": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-04: a person owning one overdue mitigation sees it in \"my mitigations\" with its due date",
+    "property": "A person owning one overdue mitigation sees it on Home under 'Assigned to you' with the word Overdue and its due date, both red (spec 7.1, 9.1).",
+    "proof": "The pattern now requires the date in its own red span: '>Overdue</span>: was due <span class=\"home-overdue\">28 Oct 2026</span>' (design review #4: spec 7.1 and 9.1 make an overdue date red too). The heading and empty-sentence expectations are unchanged.",
+    "task": "lane 3 Task 3, fix round 2 (code review I1; design review #4, #12)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::UX-06 (R12-16, R13-7): in an overdue mitigation line only the word Overdue is a status-label--warning element, a due one is plain text, and each status word is a status-label",
+    "replacedBy": "__tests__/unit/home/home-view.test.tsx::UX-06 (spec 7.1, 9.1): in a mitigation line the word Overdue and the overdue date are red, outside any status word; a due one is plain text; no status word carries a warning class",
+    "property": "On Home an overdue mitigation is said in words: the word Overdue and the overdue date are red (spec 7.1, 9.1), the words between them are ink; a mitigation not yet due reads 'Due <date>' in plain text; each status word is plain ink with no warning class.",
+    "proof": "Supersedes the earlier entry's replacement, which held 'only the word Overdue' red (design review #4: spec 7.1 and 9.1 make the date red too). The replacement case renders one overdue and one due mitigation in 'Assigned to you' and requires exactly two red spans, the word then the date, with ': was due ' between them as plain text, 'Due 20 Nov 2026' outside any red element, the status words Planned and In progress, and no status-label--warning or badge--moderate class.",
+    "task": "lane 3 Task 3, fix round 2 (code review I1; design review #4, #12)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::FR-FUP-02 (page half) FR-PRJ-02: S-10 states the zone and that stages can be recorded in any order",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::no time-zone sentence on Home or the project page",
+    "property": "No country-specific time-zone line on screen: neither Home nor S-10 says East Africa, UTC+3 or EAT, and S-10 still says that stages can be recorded in any order.",
+    "proof": "The replacement's not-vacuous check now expects the first visit's h1, HOME_COPY.welcomeFirst ('Welcome, <name>.'), because a first visit no longer says 'Welcome back' (design review #12). The zone and any-order expectations are unchanged.",
+    "task": "lane 3 Task 3, fix round 2 (code review I1; design review #4, #12)"
   }
 ]

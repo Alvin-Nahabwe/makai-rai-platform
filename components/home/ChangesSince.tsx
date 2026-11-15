@@ -5,7 +5,7 @@ import { formatDay } from '@/lib/format/dates';
 import { STAGES } from '@/types/record';
 import { Term } from '@/components/ui/Definition';
 import type { FirstUses } from '@/components/home/firstUse';
-import { Defs, SLOT, SLOT_2, StageName, TERM_OF, personName, withSlots } from '@/components/home/parts';
+import { SLOT, SLOT_2, StageName, TERM_OF, TermList, personName, withSlots } from '@/components/home/parts';
 
 /** Every kind named, so a kind the query starts returning fails here instead of reading as a seal. */
 function wordsOf(g: ChangeGroup): string {
@@ -33,27 +33,26 @@ function sentenceOf(g: ChangeGroup): ReactNode {
 /**
  * A dated list of changes (spec 9.1 (4) for a person who records, "what the team recorded in the last 14 days" for a
  * Viewer), as the sketch draws it: the day in a narrow column, the sentence beside it, a rule under each row. The day is
- * the change's calendar day as the loader grouped it (D5), so it is written as a date, not through LocalTime. A row that
- * is the first use of a stage name, of "finding" or of "seal" carries its definition under the sentence, as the sketch
- * shows the seal's. With more groups than shown, one line says so.
+ * the change's calendar day as the loader grouped it (D5), so it is written as a date, not through LocalTime. When the
+ * list is the page's first use of "finding" or "seal", their named definitions sit under the heading (stage names are
+ * defined on the stage plates). With more groups than shown, one line says so.
  */
-export function ChangesSince({ base, heading, groups, more, none, uses }: {
-  base: HomeBase; heading: ReactNode; groups: readonly ChangeGroup[]; more: boolean; none: string; uses: FirstUses;
+export function ChangesSince({ base, heading, groups, more, none, uses, terms }: {
+  base: HomeBase; heading: ReactNode; groups: readonly ChangeGroup[]; more: boolean; none: string; uses: FirstUses; terms: string;
 }): ReactElement {
   return (
     <section className="home-section home-changes">
       <h2>{heading}</h2>
+      <TermList uses={uses} where={terms} />
       {groups.length === 0 ? <p className="home-empty">{none}</p> : (
         <ol className="home-changes__list" role="list">
-          {groups.map((g, i) => {
+          {groups.map((g) => {
             const project = base.projects.length > 1 ? g.projectName : null;
             return (
               <li key={`${g.day}:${g.who.userId}:${g.kind}:${g.projectId}:${g.stage}`} className="home-changes__row">
                 <time className="home-changes__day" dateTime={g.day}>{formatDay(g.day)}</time>
                 <div className="home-changes__what">
                   <p>{sentenceOf(g)}</p>
-                  {/* Right after the sentence: a definition belongs beside the use (lib/vocabulary/firstUse.ts). */}
-                  <Defs uses={uses} where={`change:${i}`} />
                   {project === null ? null : <p className="home-changes__meta"><bdi>{project}</bdi></p>}
                 </div>
               </li>

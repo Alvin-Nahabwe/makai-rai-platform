@@ -2,13 +2,16 @@
    columns from 1024 px (the sketch's 600 and 456, kept as a ratio, 56 px apart), one column below in reading order.
    Sizes are the sketch's, through the kit's tokens where one exists; 15 px (0.9375rem) is the sketch's own step between
    the small and the body size. Colours are roles only: the action orange on the one primary button and the "you are
-   here" marks, red only on the word "Overdue" (spec 7.1), marks in the mark ink. Every name and question wraps rather
-   than widening the page (320 px with a 70-character name: no sideways scroll). */
+   here" marks, red only on the word "Overdue" and an overdue date (spec 7.1), marks in the mark ink. Every name and
+   question wraps rather than widening the page (320 px with a 70-character name: no sideways scroll).
+
+   One gutter (fix round 2, #2): Home's root is `.page-content home`, and `.home` adds no top or side padding of its own.
+   The shell branch zeroes `.page-content`'s padding inside the shell, so after that merge the shell's 32 px is the only
+   gutter; until then `.page-content` keeps its own. */
 
 .home {
   box-sizing: border-box;
-  max-inline-size: 72rem;
-  padding: var(--space-10) var(--space-10) var(--space-12);
+  padding-block-end: var(--space-12);
   color: var(--color-ink);
   overflow-wrap: anywhere;
 }
@@ -128,7 +131,7 @@
 }
 
 .home-next__here {
-  color: var(--color-action);
+  color: var(--color-action-text);   /* the lighter action tint in dark, the action orange in light (design review #17) */
 }
 
 .home-next__here-dot {
@@ -172,9 +175,10 @@
   color: var(--color-ink-muted);
 }
 
-/* Two controls of one height, primary first, each label on one line; side by side they share the row, and when the two
-   do not fit each takes the full width. */
+/* Two controls of one height, primary first, each label on one line. They span the card's width under the ring (fix
+   round 2, #1), so both sit on one row at 1280; when the two do not fit, each takes the full width. */
 .home-next__actions {
+  grid-column: 1 / -1;
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3);
@@ -243,8 +247,8 @@
   color: var(--color-ink);
 }
 
-/* Red on the word "Overdue" alone; the clock beside it is the word's own. Inline, so a link's underline runs under the
-   word and the words after it as one line. */
+/* Red on the word "Overdue" and on an overdue date (spec 7.1, 9.1); the clock beside the word is the word's own. Inline,
+   so a link's underline runs under the word and the words after it as one line. */
 .home-overdue {
   font-weight: var(--font-weight-bold);
   color: var(--color-overdue);
@@ -313,7 +317,8 @@
   margin-block-start: var(--space-5);
 }
 
-.home-section .home-project__name {
+/* A Viewer's projects are h3s under "Still open": stage-name size. The recorder's project name is an h2 at h2 size. */
+h3.home-project__name {
   font-size: var(--font-size-h3);
 }
 
@@ -423,6 +428,12 @@
   color: var(--color-mark);
 }
 
+/* The count in bold ink, as the sketch sets it ("9 done", design review #10). */
+.home-tally__count {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-ink);
+}
+
 .home-tally__none {
   margin: var(--space-1) 0 0;
   font-size: var(--font-size-legal);
@@ -441,6 +452,9 @@
 }
 
 .home-stage__next a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 24px;   /* the way into a stage's recording: at least a 24 px target (design review #23) */
   color: var(--color-link);
   text-underline-offset: 0.15em;
 }
@@ -490,10 +504,6 @@
 }
 
 @media (width < 48rem) {
-  .home {
-    padding: var(--space-6) var(--space-4) var(--space-10);
-  }
-
   .home-next__question {
     font-size: var(--font-size-h3);
   }
@@ -534,4 +544,56 @@
 
 .home-section > .ui-definition {
   margin: 2px 0 0;
+}
+
+/* A stage's name never breaks at its hyphen (design review #14). */
+.home-stage-name {
+  white-space: nowrap;
+}
+
+/* Each plate's stage definition, in its named form ("Pre-processing: The work before training…"). */
+.home-stage__def {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-legal);
+  line-height: var(--line-height-body);
+  color: var(--color-ink-muted);
+}
+
+.home-stage__def .ui-definition {
+  font-size: inherit;
+}
+
+/* An Owner's or Admin's lists as compact rows (design review #7): the title on one line, the state line under it, a rule
+   between rows, as the sketch's "Since" rows. */
+.home-rows {
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+  border-block-start: 1px solid var(--color-border-container);
+}
+
+.home-row {
+  padding-block: var(--space-2);
+  border-block-end: 1px solid var(--color-border-container);
+}
+
+.home-row__title {
+  display: block;
+  overflow: clip;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 0.9375rem;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.4;
+  color: var(--color-link);
+  text-underline-offset: 0.15em;
+}
+
+.home-row .home-plate__meta {
+  margin-block-start: 2px;
+}
+
+/* A Viewer's first project under "Still open" keeps a little air under the section's heading. */
+.home-section > h2 + .home-project {
+  margin-block-start: var(--space-3);
 }

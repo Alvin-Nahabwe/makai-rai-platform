@@ -1,17 +1,32 @@
 import type { Stage } from '@/types/record';
 import type { HomeData } from '@/lib/home/types';
 
-/** How many plates each of an Owner's or Admin's lists shows before its link to the whole list (lane lead, fix round 1). */
-export const LEAD_CAP = 5;
-
-/** The terms Home defines at their first use (spec 6): the three stage names, "finding", "mitigation" and "seal". */
+/**
+ * The terms Home defines in named term lists at their first use (spec 6; lane lead's ruling of fix round 2): "finding",
+ * "mitigation" and "seal", plus the three stage names on a Reviewer's Home, which has no stage plates. Every stage plate
+ * carries its own stage's definition, so stage names need no walk where there are plates.
+ */
 export type UseTerm = Stage | 'finding' | 'mitigation' | 'seal';
 
+/** The three stage names in their order, for the Reviewer's one stage term list. */
+const STAGE_TERMS: readonly Stage[] = ['pre-processing', 'in-processing', 'post-processing'];
+
+/** The order of a recorder's sections (one source for HomeView's layout and this walk). */
+export type RecorderSection = 'next' | 'assigned' | 'since' | 'lead' | 'stages';
+
 /**
- * Where each term is first used on a Home, in reading order (spec 6: "the definition of a term is shown where it first
- * appears on a screen"). A place is a string key that the component drawing it asks about: `next` (the next-step card's
- * "where" line), `terms:<section>` (a section's term list under its heading), `assigned:<id>`, `change:<i>`,
- * `lead-overdue:<id>`, `lead-finding:<id>`, `review:<id>`, `raised:<id>`, `plate:<project>:<stage>`.
+ * The recorder's two columns, in document order (= reading order). With a next step, the sketch's composition: the next
+ * step, "Assigned to you" and "Since…" on the left; the lead lists and the stages on the right. Without one (an Owner or
+ * Admin who has not recorded, spec 9.1), the stages and the lead lists take the left, main column so the stages start in
+ * the first view and their "Next:" links are the way in; "Assigned to you" and "Since…" move to the right (fix round 2, #8).
+ */
+export function recorderColumns(data: Extract<HomeData, { variant: 'recorder' }>): [RecorderSection[], RecorderSection[]] {
+  return data.next === null ? [['lead', 'stages'], ['assigned', 'since']] : [['next', 'assigned', 'since'], ['lead', 'stages']];
+}
+
+/**
+ * Where each term is first used, as the name of the section whose term list defines it (`terms:<section>` keys). A section
+ * counts only when it shows an item that uses the term (no term list over an empty list, design review #13).
  */
 export class FirstUses {
   private readonly at = new Map<UseTerm, string>();
@@ -27,55 +42,56 @@ export class FirstUses {
   }
 }
 
+type Changes = ReadonlyArray<{ kind: 'decisions' | 'finding' | 'seal' }>;
+type Plates = ReadonlyArray<{ openFindings: number; overdueMitigations: number }>;
+
+const changeTerms = (groups: Changes): UseTerm[] => [
+  ...(groups.some((g) => g.kind === 'finding') ? ['finding' as const] : []),
+  ...(groups.some((g) => g.kind === 'seal') ? ['seal' as const] : []),
+];
+const plateTerms = (stages: Plates): UseTerm[] => [
+  ...(stages.some((s) => s.openFindings > 0) ? ['finding' as const] : []),
+  ...(stages.some((s) => s.overdueMitigations > 0) ? ['mitigation' as const] : []),
+];
+
 /**
- * Walks a Home's data in the order the page shows it, which is the order HomeView renders: the welcome header uses none
- * of the terms (its words are the person's name and fixed sentences), so the walk starts at the variant's first column.
- * A component change that moves a use must move it here too; home-view.test.tsx reads the rendered page to check that
- * each definition follows its term's first use.
+ * Walks a Home's sections in the order the page shows them and records the first section that uses each term. A change
+ * to a section's content or order must move here too; home-view.test.tsx reads the rendered page to check it.
  */
 export function firstUsesOf(data: HomeData): FirstUses {
   const uses = new FirstUses();
-  const assigned = (items: ReadonlyArray<{ mitigationId: string; stage: Stage }>, always: boolean) => {
-    if (!always && items.length === 0) return;
-    uses.use('terms:assigned', 'mitigation', 'finding');
-    for (const i of items) uses.use(`assigned:${i.mitigationId}`, i.stage);
-  };
-  const changes = (groups: ReadonlyArray<{ kind: 'decisions' | 'finding' | 'seal'; stage: Stage }>) => {
-    groups.forEach((g, i) => uses.use(`change:${i}`, ...(g.kind === 'finding' ? ['finding' as const] : g.kind === 'seal' ? ['seal' as const] : []), g.stage));
-  };
-  const plates = (projectId: string, stages: ReadonlyArray<{ stage: Stage; openFindings: number; overdueMitigations: number }>) => {
-    for (const s of stages) {
-      uses.use(`plate:${projectId}:${s.stage}`, s.stage, ...(s.openFindings > 0 ? ['finding' as const] : []), ...(s.overdueMitigations > 0 ? ['mitigation' as const] : []));
-    }
-  };
   switch (data.variant) {
     case 'recorder': {
-      if (data.next !== null) uses.use('next', data.next.stage);
-      assigned(data.assigned, true);
-      if (data.since !== null) changes(data.since.groups);
-      if (data.lead !== null) {
-        if (data.lead.overdue.length > 0) uses.use('terms:lead-overdue', 'mitigation');
-        for (const i of data.lead.overdue.slice(0, LEAD_CAP)) uses.use(`lead-overdue:${i.mitigationId}`, i.stage);
-        if (data.lead.withoutMitigation.length > 0) uses.use('terms:lead-none', 'finding', 'mitigation');
-        for (const f of data.lead.withoutMitigation.slice(0, LEAD_CAP)) uses.use(`lead-finding:${f.id}`, f.stage);
+      for (const section of recorderColumns(data).flat()) {
+        if (section === 'assigned' && data.assigned.length > 0) uses.use('terms:assigned', 'mitigation', 'finding');
+        if (section === 'since' && data.since !== null) uses.use('terms:since', ...changeTerms(data.since.groups));
+        if (section === 'lead' && data.lead !== null) {
+          if (data.lead.overdue.length > 0) uses.use('terms:lead-overdue', 'mitigation');
+          if (data.lead.withoutMitigation.length > 0) uses.use('terms:lead-none', 'finding', 'mitigation');
+        }
+        if (section === 'stages' && data.focus !== null) uses.use(`terms:project:${data.focus.projectId}`, ...plateTerms(data.focus.stages));
       }
-      if (data.focus !== null) plates(data.focus.projectId, data.focus.stages);
       return uses;
     }
     case 'reviewer': {
-      assigned(data.assigned, false);
-      for (const r of data.unsealed) uses.use(`review:${r.id}`, r.stage);
-      uses.use('terms:changed', 'seal');
-      for (const r of data.changedSinceSeal) uses.use(`review:${r.id}`, r.stage);
-      uses.use('terms:raised', 'finding');
-      for (const f of data.raisedByMe) uses.use(`raised:${f.id}`, f.stage);
+      // The three stage definitions go once, as one list, at the first section that names a stage (it has no plates).
+      const sections: Array<[string, number, UseTerm[]]> = [
+        ['assigned', data.assigned.length, ['mitigation', 'finding']],
+        ['unsealed', data.unsealed.length, []],
+        ['changed', data.changedSinceSeal.length, ['seal']],
+        ['raised', data.raisedByMe.length, ['finding']],
+      ];
+      for (const [name, items, terms] of sections) {
+        if (items === 0) continue;
+        uses.use(`terms:${name}`, ...terms);
+        uses.use(`stages:${name}`, ...STAGE_TERMS);
+      }
       return uses;
     }
     case 'viewer': {
-      assigned(data.assigned, false);
-      changes(data.recent.groups);
-      uses.use('terms:still-open', 'mitigation', 'finding');
-      for (const p of data.open) plates(p.projectId, p.stages);
+      if (data.assigned.length > 0) uses.use('terms:assigned', 'mitigation', 'finding');
+      uses.use('terms:recent', ...changeTerms(data.recent.groups));
+      for (const p of data.open) uses.use(`terms:project:${p.projectId}`, ...plateTerms(p.stages));
       return uses;
     }
     case 'first-time':

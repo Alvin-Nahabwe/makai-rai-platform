@@ -10,7 +10,7 @@ import { ListLink } from '@/components/ui/ListLink';
 import { MarkShape } from '@/components/ui/StatusMark';
 import { STAGE_NAME, plural } from '@/components/project/StageColumn';
 import type { FirstUses } from '@/components/home/firstUse';
-import { Defs, OverdueWord, StageName } from '@/components/home/parts';
+import { OverdueWord, StageDefinition, StageName, TermList } from '@/components/home/parts';
 
 const C = PROJECT_COPY.stage;
 /**
@@ -38,6 +38,13 @@ function LineMark({ here }: { here: boolean }): ReactElement {
   );
 }
 
+/** One tally item's words with its count in bold ink, as the sketch sets it ("**9** done"). The words are the kit's. */
+function TallyWords({ words }: { words: string }): ReactElement {
+  const count = /^\d+/.exec(words);
+  if (count === null) throw new Error(`Home: a tally item has no count: ${words}`);
+  return <span><b className="home-tally__count">{count[0]}</b>{words.slice(count[0].length)}</span>;
+}
+
 /** The tally as the sketch lists it: one item per kind that occurs, the kit's mark beside its count in words. */
 function Tally({ stage }: { stage: StageOpen }): ReactElement {
   const t = stage.tally;
@@ -48,7 +55,7 @@ function Tally({ stage }: { stage: StageOpen }): ReactElement {
       {kinds.map((k) => (
         <li key={k} className="home-tally__item" data-tally-kind={k}>
           <MarkShape kind={k} size={16} />
-          <span>{tallyWords(k === 'done' ? { done: t.done, doneNoEvidence: t.doneNoEvidence } : { [k]: t[k] })}</span>
+          <TallyWords words={tallyWords(k === 'done' ? { done: t.done, doneNoEvidence: t.doneNoEvidence } : { [k]: t[k] })} />
         </li>
       ))}
     </ul>
@@ -87,8 +94,8 @@ function NextLink({ orgSlug, projectId, stage, questionId, words }: { orgSlug: s
  * the overdue mitigations, "Overdue" red), then the tally in words with a mark per kind, then the "Next:" line for a person
  * who records. No count of zero is shown: a stage with nothing open has no open line.
  */
-function StagePlate({ orgSlug, projectId, stage, next, recording, heading, uses }: {
-  orgSlug: string; projectId: string; stage: StageOpen; next: NextStep | null; recording: boolean; heading: 'h3' | 'h4'; uses: FirstUses;
+function StagePlate({ orgSlug, projectId, stage, next, recording, heading }: {
+  orgSlug: string; projectId: string; stage: StageOpen; next: NextStep | null; recording: boolean; heading: 'h3' | 'h4';
 }): ReactElement {
   const Heading = heading;
   const here = recording && next !== null && next.projectId === projectId && next.stage === stage.stage;
@@ -103,8 +110,8 @@ function StagePlate({ orgSlug, projectId, stage, next, recording, heading, uses 
         </Heading>
         <span className="home-stage__count">{plural(stage.stops.length, C.question, C.questions)}</span>
       </div>
-      {/* The stage's definition (and any other term first used on this plate), when the page has not given it earlier. */}
-      <Defs uses={uses} where={`plate:${projectId}:${stage.stage}`} />
+      {/* Every plate defines its stage, all three alike (lane lead's ruling, fix round 2). */}
+      <StageDefinition stage={stage.stage} />
       {open ? (
         <p className="home-stage__open">
           {stage.openFindings > 0
@@ -137,9 +144,10 @@ export function StagesOverview({ orgSlug, projectId, projectName, stages, next, 
       </Heading>
       {/* "You can work on the stages in any order" speaks to a person who records; a Viewer reads, so it is left out. */}
       {recording ? <p className="home-note">{HOME_COPY.stagesLead}</p> : null}
+      <TermList uses={uses} where={`terms:project:${projectId}`} />
       <div className="home-stages">
         {stages.map((s) => (
-          <StagePlate key={s.stage} orgSlug={orgSlug} projectId={projectId} stage={s} next={next} recording={recording} heading={below(heading)} uses={uses} />
+          <StagePlate key={s.stage} orgSlug={orgSlug} projectId={projectId} stage={s} next={next} recording={recording} heading={below(heading)} />
         ))}
       </div>
     </section>

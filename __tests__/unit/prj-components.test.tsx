@@ -98,7 +98,7 @@ describe('S-10 (Task 5)', () => {
     const home = renderToStaticMarkup(<HomeView data={{ variant: 'first-time', canCreate: true, base: {
       orgSlug: 'o', orgId: 'o1', orgName: 'Org', role: 'owner', userId: 'u1', userName: 'Amina', welcome: false, archivedCount: 0, projects: [],
     } }} />);
-    expect(home).toMatch(new RegExp(`<h1[^>]*>${HOME_COPY.welcomeBack('<bdi>Amina</bdi>')}</h1>`));   // not vacuous: Home rendered, its welcome the page's h1
+    expect(home).toMatch(new RegExp(`<h1[^>]*>${HOME_COPY.welcomeFirst('<bdi>Amina</bdi>')}</h1>`));   // not vacuous: Home rendered, its welcome the page's h1 (a first visit's)
     expect(project).toContain(PROJECT_COPY.overview.anyOrder);
     for (const html of [home, project]) expect(html).not.toMatch(/East Africa|UTC\+3|\bEAT\b/);
   });

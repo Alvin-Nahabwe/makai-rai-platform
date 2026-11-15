@@ -12,6 +12,8 @@ export const HOME_COPY = Object.freeze({
   titles: Object.freeze({ home: 'Home' }),
   /** 9.1 (1). The page's one h1, except after joining, when the welcome line is (`lib/org/copy.ts` welcomeLine). */
   welcomeBack: (name: string) => `Welcome back, ${name}.`,
+  /** New (design review #12): the first visit's h1; "back" is not true on a person's first sight of an empty organisation. */
+  welcomeFirst: (name: string) => `Welcome, ${name}.`,
   /** New (the sketch's lead, with spec 9.1's "since your last saved change"): shown only when all three parts are on the page. */
   recorderLead: "Here is your next step, what others have done since your last saved change, and where your team's project stands.",
   nextStepHeading: 'Your next step',
@@ -48,7 +50,10 @@ export const HOME_COPY = Object.freeze({
   overdueCount: (n: number) => (n === 1 ? ': 1 mitigation' : `: ${n} mitigations`),
   leadOverdueHeading: 'Overdue mitigations',
   leadNoMitigationHeading: 'Findings with no mitigation yet',
-  /** New (lane lead, fix round 1): each lead list shows 5 plates, then this link to the whole list. */
+  /** New (fix round 2, design review #7): a lead row's owner, in ink; the reader's own item says "you". */
+  assignedToName: (name: string) => `Assigned to ${name}`,
+  assignedToReader: 'Assigned to you',
+  /** New (lane lead, fix round 1): each lead list shows its first rows, then this link to the whole list. */
   leadOverdueAll: (n: number) => (n === 1 ? 'See the 1 overdue mitigation' : `See all ${n} overdue mitigations`),
   leadNoMitigationAll: (n: number) => (n === 1 ? 'See the 1 finding with no mitigation yet' : `See all ${n} findings with no mitigation yet`),
   reviewerUnsealed: 'Reviews not sealed yet',

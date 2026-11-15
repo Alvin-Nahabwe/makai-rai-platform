@@ -46,30 +46,32 @@ export const TERM_OF: Readonly<Record<UseTerm, DefinedEntry>> = {
   finding: TERM_FINDING, mitigation: TERM_MITIGATION, seal: TERM_SEAL,
 };
 
-/** A stage's name, marked as a use of its term (spec 6), so its first use can carry the definition beside it. */
+/** A stage's name, marked as a use of its term (spec 6), kept whole on one line (it never breaks at its hyphen). */
 export function StageName({ stage }: { stage: Stage }): ReactElement {
-  return <Term of={TERM_OF[stage]}>{STAGE_NAME[stage]}</Term>;
-}
-
-/** The definitions of the terms first used at `where`, each as its own line (spec 6). Nothing when none is. */
-export function Defs({ uses, where }: { uses: FirstUses; where: string }): ReactElement | null {
-  const terms = uses.definedAt(where);
-  if (terms.length === 0) return null;
-  return <>{terms.map((t) => <Definition key={t} of={TERM_OF[t]} as="p" />)}</>;
+  return <span className="home-stage-name"><Term of={TERM_OF[stage]}>{STAGE_NAME[stage]}</Term></span>;
 }
 
 /**
- * A section heading that itself uses terms ("Findings you raised", "Overdue mitigations"): when the heading is a term's
- * first use, its words are marked with each such term and the definitions follow it as lines (spec 6). A term list would
- * repeat the word after the heading, so these sections use this instead.
+ * A stage's definition in its named form, "Pre-processing: The work before training…", as each stage plate carries it
+ * (lane lead's ruling, fix round 2: a stage's defining use is its plate heading; all three plates alike).
  */
-export function TermHeading({ uses, where, text }: { uses: FirstUses; where: string; text: string }): ReactElement {
+export function StageDefinition({ stage }: { stage: Stage }): ReactElement {
+  return (
+    <p className="home-stage__def"><StageName stage={stage} />: <Definition of={TERM_OF[stage]} /></p>
+  );
+}
+
+/**
+ * A section heading that itself uses terms ("Findings you raised", "Overdue mitigations"): when its section is a term's
+ * first use, the heading's words are marked with each such term and the named term list follows it (spec 6).
+ */
+export function TermHeading({ uses, where, text, also = [] }: { uses: FirstUses; where: string; text: string; also?: readonly string[] }): ReactElement {
   const terms = uses.definedAt(where);
   const marked = terms.reduce<ReactNode>((inner, t) => <Term of={TERM_OF[t]}>{inner}</Term>, text);
   return (
     <>
       <h2>{marked}</h2>
-      <Defs uses={uses} where={where} />
+      <TermList uses={uses} where={[where, ...also]} />
     </>
   );
 }
@@ -85,8 +87,8 @@ const TERM_WORD: Readonly<Record<UseTerm, string>> = {
  * "mitigation" and "finding" under "Assigned to you"). Each term is a <dt> marked with `Term`, its definition the <dd>
  * right after it. Nothing when the section uses no term for the first time.
  */
-export function TermList({ uses, where }: { uses: FirstUses; where: string }): ReactElement | null {
-  const terms = uses.definedAt(where);
+export function TermList({ uses, where }: { uses: FirstUses; where: string | readonly string[] }): ReactElement | null {
+  const terms = (typeof where === 'string' ? [where] : where).flatMap((w) => uses.definedAt(w));
   if (terms.length === 0) return null;
   return (
     <dl className="home-terms">
@@ -131,6 +133,14 @@ export function findingLabel(f: Pick<FindingView, 'source' | 'title' | 'question
 /** The red word (spec 7.1: red only on an overdue date and the word "Overdue"), with the clock drawn in the same red. */
 export function OverdueWord(): ReactElement {
   return <span className="home-overdue"><Icon name="clock" size={16} />{PROJECT_COPY.followUp.overdue}</span>;
+}
+
+/**
+ * "Overdue: was due 30 Sep 2026" with the word and the date red and the words between them in ink (spec 7.1 and 9.1:
+ * red on an overdue date and on the word "Overdue"; plan 1B Task 10's layout line).
+ */
+export function OverdueDue({ day }: { day: string }): ReactElement {
+  return <><OverdueWord />{withSlot(PROJECT_COPY.followUp.wasDue(SLOT), <span className="home-overdue">{day}</span>)}</>;
 }
 
 /** The parts of a plate's one line of state, joined by the findings list's separator. Parts that are null are left out. */

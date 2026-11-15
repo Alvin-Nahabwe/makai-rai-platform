@@ -1,5 +1,5 @@
 import './home.css';
-import type { ReactElement } from 'react';
+import { Fragment, type ReactElement } from 'react';
 import type { HomeData } from '@/lib/home/types';
 import { HOME_COPY } from '@/lib/home/copy';
 import { LocalTime } from '@/components/ui/LocalTime';
@@ -13,41 +13,52 @@ import { TeamLeadAdditions } from '@/components/home/TeamLeadAdditions';
 import { AllProjects, ReviewerHome } from '@/components/home/ReviewerHome';
 import { ViewerHome } from '@/components/home/ViewerHome';
 import { FirstTimeHome } from '@/components/home/FirstTimeHome';
-import { firstUsesOf, type FirstUses } from '@/components/home/firstUse';
+import { firstUsesOf, recorderColumns, type FirstUses, type RecorderSection } from '@/components/home/firstUse';
 import { SLOT, withSlot } from '@/components/home/parts';
 
 type Recorder = Extract<HomeData, { variant: 'recorder' }>;
 
 /**
- * The person who records (spec 9.1; sketch home.png), in the sketch's two columns from 1024 px: on the left the next
- * step, "Assigned to you" and "Since your last saved change"; on the right, an Owner's or Admin's lists above the
- * project's three stages, then the other projects. The document order is the reading order at every width, so on a narrow
- * screen the right column follows the left.
+ * The person who records (spec 9.1; sketch home.png), in two columns from 1024 px, laid out by `recorderColumns`: with a
+ * next step, the sketch's composition (left: next step, "Assigned to you", "Since…"; right: an Owner's or Admin's lists,
+ * then the project's stages); without one, the stages and the lead lists take the left, main column (fix round 2, #8).
+ * The document order is the reading order at every width; on a narrow screen the second column follows the first.
  */
 function RecorderHome({ data, uses }: { data: Recorder; uses: FirstUses }): ReactElement {
   const { base } = data;
+  const section = (s: RecorderSection): ReactElement | null => {
+    switch (s) {
+      case 'next': return data.next === null ? null : <NextStepCard key={s} orgSlug={base.orgSlug} next={data.next} />;
+      case 'assigned': return <AssignedToYou key={s} base={base} items={data.assigned} uses={uses} />;
+      case 'since': return data.since === null ? null : (
+        <ChangesSince
+          key={s} base={base} heading={withSlot(HOME_COPY.sinceHeading(SLOT), <LocalTime at={data.since.from} dateOnly />)}
+          groups={data.since.groups} more={data.since.more} none={HOME_COPY.sinceNone} uses={uses} terms="terms:since"
+        />
+      );
+      case 'lead': return data.lead === null ? null : <TeamLeadAdditions key={s} base={base} lead={data.lead} uses={uses} />;
+      case 'stages': return (
+        <Fragment key={s}>
+          {data.focus === null ? null : (
+            <StagesOverview
+              orgSlug={base.orgSlug} projectId={data.focus.projectId} projectName={data.focus.projectName} stages={data.focus.stages}
+              next={data.next} recording heading="h2" uses={uses}
+            />
+          )}
+          <AllProjects orgSlug={base.orgSlug} others={data.otherProjects} />
+        </Fragment>
+      );
+      default: {
+        const unknown: never = s;
+        throw new Error(`RecorderHome: no section ${String(unknown)}`);
+      }
+    }
+  };
+  const [first, second] = recorderColumns(data);
   return (
     <div className="home-columns">
-      <div className="home-column">
-        {data.next === null ? null : <NextStepCard orgSlug={base.orgSlug} next={data.next} uses={uses} />}
-        <AssignedToYou base={base} items={data.assigned} uses={uses} />
-        {data.since === null ? null : (
-          <ChangesSince
-            base={base} heading={withSlot(HOME_COPY.sinceHeading(SLOT), <LocalTime at={data.since.from} dateOnly />)}
-            groups={data.since.groups} more={data.since.more} none={HOME_COPY.sinceNone} uses={uses}
-          />
-        )}
-      </div>
-      <div className="home-column">
-        {data.lead === null ? null : <TeamLeadAdditions base={base} lead={data.lead} uses={uses} />}
-        {data.focus === null ? null : (
-          <StagesOverview
-            orgSlug={base.orgSlug} projectId={data.focus.projectId} projectName={data.focus.projectName} stages={data.focus.stages}
-            next={data.next} recording heading="h2" uses={uses}
-          />
-        )}
-        <AllProjects orgSlug={base.orgSlug} others={data.otherProjects} />
-      </div>
+      <div className="home-column">{first.map(section)}</div>
+      <div className="home-column">{second.map(section)}</div>
     </div>
   );
 }
@@ -69,11 +80,11 @@ export function HomeView({ data }: { data: HomeData }): ReactElement {
   // Where each defined term is first used, in reading order (spec 6): the components draw the definitions there.
   const uses = firstUsesOf(data);
   return (
-    <div className="home">
+    <div className="page-content home">
       <header className="home-hello">
         {base.welcome
           ? <WelcomeLine orgName={base.orgName} role={base.role} />
-          : <h1 className="home-hello__title">{withSlot(HOME_COPY.welcomeBack(SLOT), <bdi>{base.userName}</bdi>)}</h1>}
+          : <h1 className="home-hello__title">{withSlot((data.variant === 'first-time' ? HOME_COPY.welcomeFirst : HOME_COPY.welcomeBack)(SLOT), <bdi>{base.userName}</bdi>)}</h1>}
         {!base.welcome && lead !== null ? <p className="home-hello__lead">{lead}</p> : null}
         <HomeUnsavedLine userId={base.userId} orgId={base.orgId} />
       </header>

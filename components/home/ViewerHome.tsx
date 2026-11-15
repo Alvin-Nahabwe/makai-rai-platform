@@ -6,7 +6,6 @@ import { ChangesSince } from '@/components/home/ChangesSince';
 import { StagesOverview } from '@/components/home/StagesOverview';
 import { AllProjects } from '@/components/home/ReviewerHome';
 import type { FirstUses } from '@/components/home/firstUse';
-import { TermList } from '@/components/home/parts';
 
 /**
  * A Viewer's Home (spec 9.1): the mitigations assigned to them when there are any (their own work; lane lead, fix
@@ -20,12 +19,11 @@ export function ViewerHome({ data, uses }: { data: Extract<HomeData, { variant: 
     <div className="home-columns">
       <div className="home-column">
         {data.assigned.length === 0 ? null : <AssignedToYou base={base} items={data.assigned} uses={uses} />}
-        <ChangesSince base={base} heading={HOME_COPY.viewerRecent} groups={data.recent.groups} more={data.recent.more} none={HOME_COPY.viewerRecentNone} uses={uses} />
+        <ChangesSince base={base} heading={HOME_COPY.viewerRecent} groups={data.recent.groups} more={data.recent.more} none={HOME_COPY.viewerRecentNone} uses={uses} terms="terms:recent" />
       </div>
       <div className="home-column">
         <section className="home-section">
           <h2>{HOME_COPY.viewerOpen}</h2>
-          <TermList uses={uses} where="terms:still-open" />
           {data.open.map((p) => (
             <StagesOverview
               key={p.projectId} orgSlug={base.orgSlug} projectId={p.projectId} projectName={p.projectName} stages={p.stages}

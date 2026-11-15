@@ -13,7 +13,6 @@ import { HOSTILE_STRINGS } from '../../helpers/hostile';
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }), useParams: () => ({ slug: 'o' }) }));
 
 const { NextStepCard } = await import('@/components/home/NextStepCard');
-const { FirstUses } = await import('@/components/home/firstUse');
 
 const NEXT: NextStep = {
   projectId: 'p1', projectName: 'Antenatal risk triage', stage: 'pre-processing', questionId: 'Q-PP-05',
@@ -21,7 +20,7 @@ const NEXT: NextStep = {
   lastSavedOn: '2026-11-03T09:15:00.000Z',
 };
 const html = (el: ReactElement) => renderToStaticMarkup(el);
-const card = (next: Partial<NextStep> = {}) => html(<NextStepCard orgSlug="org-a" next={{ ...NEXT, ...next }} uses={new FirstUses()} />);
+const card = (next: Partial<NextStep> = {}) => html(<NextStepCard orgSlug="org-a" next={{ ...NEXT, ...next }} />);
 /** The links of the markup, by their text: [text, href]. */
 const links = (h: string): Array<[string, string]> =>
   [...h.matchAll(/<a\b[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/g)].map((m) => [textOf(m[2]).trim(), decode(m[1])]);
@@ -43,7 +42,7 @@ describe('NextStepCard', () => {
   it('the sketch\'s "where" line: the stage, the question\'s place, then the project, each kept whole', () => {
     const h = card();
     expect(textOf(h)).toContain(`Pre-processing · ${positionWords(5, 22)} · Antenatal risk triage`);
-    expect(h).toMatch(/<p class="home-next__where"><span data-term="stage-1">Pre-processing<\/span> · Question 5 of 22 · <bdi>Antenatal risk triage<\/bdi><\/p>/);
+    expect(h).toMatch(/<p class="home-next__where"><span class="home-stage-name"><span data-term="stage-1">Pre-processing<\/span><\/span> · Question 5 of 22 · <bdi>Antenatal risk triage<\/bdi><\/p>/);
   });
 
   it('is a section labelled by its h2 #next-step', () => {

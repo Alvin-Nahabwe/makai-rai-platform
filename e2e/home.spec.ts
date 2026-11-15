@@ -151,6 +151,20 @@ test('owner ruling (15 Nov): an Assessor who has never saved sees Start recordin
   await page.waitForURL('**/stages/pre-processing/questions/*');
 });
 
+test('NFR-A11Y-02 (code review M8): keyboard only, an Assessor reaches the project from Home and opens it', async ({ browser }) => {
+  const page = await signedIn(browser, fx.members.assessor);
+  await page.goto(homeOf(fx));
+  const target = LONG_NAME.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  for (let i = 0; ; i += 1) {
+    if (i === 80) throw new Error('no focus stop reached the project name in 80 presses');
+    await page.keyboard.press('Tab');
+    const name = await page.evaluate(() => (document.activeElement?.textContent ?? '').trim());
+    if (new RegExp(`^${target}$`).test(name)) break;
+  }
+  await page.keyboard.press('Enter');
+  await page.waitForURL(`**/orgs/${fx.org.slug}/projects/${project.id}`);
+});
+
 for (const role of ['owner', 'reviewer', 'viewer'] as const) {
   for (const width of [1280, 375, 320]) {
     for (const theme of ['light', 'dark'] as const) {

@@ -195,9 +195,9 @@ describe('recorder (spec 9.1, sketch home.png)', () => {
     expect(textOf(h)).not.toMatch(/(^|\D)0 (open|overdue|mitigation|question|decision)/);
   });
 
-  it('only the word "Overdue" is red: the count after it is ink, and the overdue class never wraps a name', () => {
+  it('only the word "Overdue" and an overdue date are red: the count after the word is ink, and the overdue class never wraps a name', () => {
     const h = home(RECORDER_WITH_LEAD);
-    for (const m of h.matchAll(/<span class="home-overdue"[^>]*>([\s\S]*?)<\/span>/g)) expect(textOf(m[1]).trim()).toBe(PROJECT_COPY.followUp.overdue);
+    for (const m of h.matchAll(/<span class="home-overdue"[^>]*>([\s\S]*?)<\/span>/g)) expect(textOf(m[1]).trim()).toMatch(new RegExp(`^(${PROJECT_COPY.followUp.overdue}|\\d{1,2} [A-Z][a-z]{2} \\d{4})$`));
     expect(textOf(h)).toContain(`${PROJECT_COPY.followUp.overdue}${HOME_COPY.overdueCount(1)}`);
   });
 
@@ -207,14 +207,22 @@ describe('recorder (spec 9.1, sketch home.png)', () => {
     expect(h).not.toMatch(/class="[^"]*overdue[^"]*"[^>]*>\s*[A-Z][a-z]+ [A-Z]/);
   });
 
-  it('owner/admin: overdue and no-mitigation lists sit above the stages and show Assigned to', () => {
+  it('owner/admin: overdue and no-mitigation lists sit above the stages as compact rows and show Assigned to', () => {
     const h = home(RECORDER_WITH_LEAD);
     const t = textOf(h);
     expect(headings(h)).toEqual(expect.arrayContaining([`h2 ${HOME_COPY.leadOverdueHeading}`, `h2 ${HOME_COPY.leadNoMitigationHeading}`]));
     expect(t.indexOf(HOME_COPY.leadOverdueHeading)).toBeLessThan(t.indexOf(HOME_COPY.stagesLead));
     expect(t.indexOf(HOME_COPY.leadNoMitigationHeading)).toBeLessThan(t.indexOf(HOME_COPY.stagesLead));
-    expect(t).toContain(PROJECT_COPY.followUp.assignedTo(JOSEPH.name));
+    expect(t).toContain(HOME_COPY.assignedToName(JOSEPH.name));
     expect(t).toContain(`${PROJECT_COPY.followUp.overdue}${PROJECT_COPY.followUp.wasDue('30 Sep 2026')}`);
+    // Compact rows, not plates (design review #7); the reader's own overdue item says "Assigned to you".
+    const lead = h.slice(h.indexOf(HOME_COPY.leadOverdueHeading), h.indexOf(HOME_COPY.stagesLead));
+    expect(lead).not.toContain('class="home-plate"');
+    expect((lead.match(/class="home-row"/g) ?? []).length).toBe(2);
+    const own = home({ ...RECORDER_WITH_LEAD, lead: { ...RECORDER_WITH_LEAD.lead!, overdue: [item({ owner: AMINA, overdue: true, dueDate: '2026-09-30' })] } });
+    const ownLead = textOf(own.slice(own.indexOf(HOME_COPY.leadOverdueHeading), own.indexOf(HOME_COPY.leadNoMitigationHeading)));
+    expect(ownLead).toContain(HOME_COPY.assignedToReader);
+    expect(ownLead).not.toContain(AMINA.name);
     expect(linksNamed(h, ['Labels are not checked'])).toEqual([['Labels are not checked', `/orgs/${ORG}/projects/${P1}/findings/f9`]]);
     // A team finding's title is null only once erased: it says so, as an erased mitigation does, never "Untitled".
     const erased = home({ ...RECORDER_WITH_LEAD, lead: { ...RECORDER_WITH_LEAD.lead!, withoutMitigation: [finding({ title: null })] } });
@@ -344,26 +352,29 @@ describe('fix round 1 (lane lead, 15 November)', () => {
     expect(controls).toEqual([[PROJECT_COPY.start, true], [HOME_COPY.chooseAnother, false]]);
   });
 
-  it('owner/admin lists stop at 5 plates and then link to the full list with a count, in number', () => {
+  it('owner/admin lists stop at 3 rows and then link to the full list with a count, in number', () => {
     const overdue = Array.from({ length: 7 }, (_, i) => item({ mitigationId: `m${i}`, owner: JOSEPH, overdue: true, dueDate: '2026-09-30', what: `Overdue ${i}` }));
     const findings = Array.from({ length: 82 }, (_, i) => finding({ id: `f${i}`, title: `Gap ${i}` }));
     const one = home({ ...RECORDER_WITH_LEAD, lead: { overdue, withoutMitigation: findings, multiProject: false } });
-    const plates = (h: string, heading: string, next: string) => (h.slice(h.indexOf(heading), h.indexOf(next)).match(/class="home-plate"/g) ?? []).length;
-    expect(plates(one, HOME_COPY.leadOverdueHeading, HOME_COPY.leadNoMitigationHeading)).toBe(5);
-    expect(plates(one, HOME_COPY.leadNoMitigationHeading, HOME_COPY.stagesLead)).toBe(5);
+    const rows = (h: string, heading: string, next: string) => (h.slice(h.indexOf(heading), h.indexOf(next)).match(/class="home-row"/g) ?? []).length;
+    expect(rows(one, HOME_COPY.leadOverdueHeading, HOME_COPY.leadNoMitigationHeading)).toBe(3);
+    expect(rows(one, HOME_COPY.leadNoMitigationHeading, HOME_COPY.stagesLead)).toBe(3);
     expect(linksNamed(one, [HOME_COPY.leadOverdueAll(7), HOME_COPY.leadNoMitigationAll(82)])).toEqual([
       [HOME_COPY.leadOverdueAll(7), `/orgs/${ORG}/projects/${P1}/findings`],
       [HOME_COPY.leadNoMitigationAll(82), `/orgs/${ORG}/projects/${P1}/findings`],
     ]);
     expect(HOME_COPY.leadNoMitigationAll(82)).toBe('See all 82 findings with no mitigation yet');
     expect(HOME_COPY.leadOverdueAll(1)).toBe('See the 1 overdue mitigation');
-    // Several projects: the link is the rail's Findings entry (choose a project for its findings).
+    // Several projects: the link is the rail's Findings entry, in its own words (code review M2: no count it cannot show).
     const many = base({ role: 'owner', projects: [{ id: P1, name: 'Antenatal Risk Triage Model' }, { id: 'p2', name: 'Maize' }] });
     const h = home({ ...RECORDER_WITH_LEAD, base: many, otherProjects: 1, lead: { overdue, withoutMitigation: findings, multiProject: true } });
-    expect(linksNamed(h, [HOME_COPY.leadNoMitigationAll(82)])).toEqual([[HOME_COPY.leadNoMitigationAll(82), `/orgs/${ORG}/projects?for=findings`]]);
-    // Five or fewer: every plate, no link.
-    const few = home({ ...RECORDER_WITH_LEAD, lead: { overdue: overdue.slice(0, 5), withoutMitigation: findings.slice(0, 5), multiProject: false } });
-    expect(textOf(few)).not.toMatch(/See (all|the)/);
+    expect(linksNamed(h, [PROJECT_COPY.chooseForFindings])).toEqual([
+      [PROJECT_COPY.chooseForFindings, `/orgs/${ORG}/projects?for=findings`], [PROJECT_COPY.chooseForFindings, `/orgs/${ORG}/projects?for=findings`],
+    ]);
+    expect(textOf(h)).not.toContain(HOME_COPY.leadNoMitigationAll(82));
+    // Three or fewer: every row, no link.
+    const few = home({ ...RECORDER_WITH_LEAD, lead: { overdue: overdue.slice(0, 3), withoutMitigation: findings.slice(0, 3), multiProject: false } });
+    expect(textOf(few)).not.toMatch(/See (all|the)|Choose a project/);
   });
 
   it('a Reviewer or Viewer with mitigations assigned sees "Assigned to you" first; with none, no such section', () => {
@@ -385,56 +396,85 @@ describe('fix round 1 (lane lead, 15 November)', () => {
 });
 
 /**
- * Spec 6 / lane lead fix round 1: each stage name, "finding", "mitigation" and "seal" carries its definition at its FIRST
- * use in reading order, and that use is marked with Term (the rule of lib/vocabulary/firstUse.ts, read on static markup:
- * the definition must come after the first use and before any second one).
+ * Spec 6, as the lane lead ruled in fix round 2: a stage's defining use is its plate heading, so every plate carries its
+ * stage's definition in a named form, all three alike; the next-step card and the rows carry none. "finding",
+ * "mitigation" and "seal" are defined in named term lists (dt + dd) under the heading of the first section that shows an
+ * item using them; never over an empty list, never stacked in a row. A Reviewer (no plates) gets the three stage
+ * definitions once, as one named list, at the first section that names a stage.
  */
-describe('first use in reading order', () => {
-  const TERMS = [
-    { id: TERM_STAGE_1.id, word: 'Pre-processing' }, { id: TERM_STAGE_2.id, word: 'In-processing' }, { id: TERM_STAGE_3.id, word: 'Post-processing' },
-    { id: TERM_FINDING.id, word: 'finding' }, { id: TERM_MITIGATION.id, word: 'mitigation' }, { id: TERM_SEAL.id, word: 'seal' },
-  ];
-  /** The page's reading text with each definition replaced by ⟦D n⟧ and each Term opening by ⟦T n⟧ (n = index in TERMS). */
-  function reading(h: string): string {
-    let out = h;
-    TERMS.forEach((t, n) => {
-      out = out.replace(new RegExp(`<(span|p) class="ui-definition"[^>]*data-definition="${t.id}"[^>]*>[^<]*</(span|p)>`, 'g'), `⟦D${n}⟧`);
-      out = out.split(`<span data-term="${t.id}">`).join(`⟦T${n}⟧`);
-    });
-    // The page's h1 and lead name the person and say what the page holds; a person's name and a question's words are not
-    // uses (they are the team's text), so the check starts after the welcome header and leaves question text out.
-    out = out.slice(out.indexOf('</header>'));
-    out = out.replace(/<p class="home-next__question">[\s\S]*?<\/p>/g, ' ');
-    return textOf(out.replace(/<[^>]+>/g, ' '));
-  }
-  const termRe = (word: string) => new RegExp(`(?<![\\p{L}\\p{N}])${word}s?(?![\\p{L}\\p{N}])`, 'giu');
-  function check(name: string, data: HomeData) {
-    const text = reading(home(data));
-    TERMS.forEach((t, n) => {
-      const uses = [...text.matchAll(termRe(t.word))].map((m) => m.index!);
-      if (uses.length === 0) return;
-      const first = uses[0];
-      const def = text.indexOf(`⟦D${n}⟧`);
-      expect(def, `${name}: ${t.word} first used at ${first} but defined nowhere`).toBeGreaterThan(-1);
-      expect(def, `${name}: ${t.word}'s definition comes before its first use`).toBeGreaterThan(first);
-      if (uses.length > 1) expect(def, `${name}: ${t.word}'s definition comes after its second use`).toBeLessThan(uses[1]);
-      expect(text.lastIndexOf(`⟦T${n}⟧`, first), `${name}: ${t.word}'s first use is not marked with Term`).toBeGreaterThan(-1);
-      // The nearest marker before the first use is this term's Term (no other marker between them).
-      expect(text.slice(text.lastIndexOf(`⟦T${n}⟧`, first) + `⟦T${n}⟧`.length, first), `${name}: ${t.word}'s first use is not inside its Term`).not.toContain('⟦');
-    });
-  }
-  it('recorder, owner with lead lists, recorder with nothing assigned or since', () => {
-    check('recorder', RECORDER);
-    check('owner', RECORDER_WITH_LEAD);
-    check('nothing saved', { ...RECORDER, next: null, since: null, assigned: [] });
-    check('seal first', { ...RECORDER, since: { ...RECORDER.since!, groups: [group({ kind: 'seal', count: 1, stage: 'post-processing' }), group({ kind: 'finding', count: 2, stage: 'in-processing' })] } });
+describe('definitions (fix round 2 ruling)', () => {
+  const STAGE_IDS = [TERM_STAGE_1.id, TERM_STAGE_2.id, TERM_STAGE_3.id];
+  const defs = (h: string, id: string) => (h.match(new RegExp(`data-definition="${id}"`, 'g')) ?? []).length;
+  /** The definitions inside a part of the page, by id. */
+  const defsIn = (part: string) => [...part.matchAll(/data-definition="([a-z0-9-]+)"/g)].map((m) => m[1]);
+  /** Each `<dl class="home-terms">` as its [dt words, dd definition id] pairs. */
+  const termLists = (h: string) => [...h.matchAll(/<dl class="home-terms">([\s\S]*?)<\/dl>/g)].map((m) =>
+    [...m[1].matchAll(/<dt>([\s\S]*?)<\/dt><dd>[\s\S]*?data-definition="([a-z0-9-]+)"/g)].map((p) => [textOf(p[1]), p[2]]));
+
+  it('every stage plate carries its own stage definition, named; the next-step card and the rows carry none', () => {
+    for (const data of [RECORDER, RECORDER_WITH_LEAD, VIEWER]) {
+      const h = home(data);
+      for (const [i, stage] of (['pre-processing', 'in-processing', 'post-processing'] as const).entries()) {
+        const plate = h.slice(h.indexOf(`data-stage="${stage}"`), i < 2 ? h.indexOf(`data-stage="${['in-processing', 'post-processing'][i]}"`) : undefined);
+        expect(plate).toMatch(new RegExp(`<p class="home-stage__def"><span class="home-stage-name"><span data-term="${STAGE_IDS[i]}">[^<]+</span></span>: <span class="ui-definition" data-definition="${STAGE_IDS[i]}">`));
+      }
+      const card = h.includes('class="home-next"') ? h.slice(h.indexOf('class="home-next"'), h.indexOf('</section>', h.indexOf('class="home-next"'))) : '';
+      expect(defsIn(card)).toEqual([]);
+      for (const row of h.matchAll(/<li class="(home-plate|home-row|home-changes__row)"[\s\S]*?<\/li>/g)) expect(defsIn(row[0])).toEqual([]);
+      for (const id of STAGE_IDS) expect(defs(h, id)).toBe(1);   // one project's plates: each stage defined once
+    }
   });
-  it('reviewer and viewer, with and without assigned mitigations', () => {
-    check('reviewer', REVIEWER);
-    check('reviewer assigned', { ...REVIEWER, assigned: [item()] } as HomeData);
-    check('viewer', VIEWER);
-    check('viewer with a finding first', { ...VIEWER, recent: { groups: [group({ kind: 'finding', count: 1, stage: 'post-processing' })], more: false } } as HomeData);
-    check('viewer assigned', { ...VIEWER, assigned: [item()] } as HomeData);
+
+  it('"Mitigation" and "Finding" are a named list under "Assigned to you", not over an empty list; "Seal" under the first list with a seal', () => {
+    expect(termLists(home(RECORDER))[0]).toEqual([['Mitigation', TERM_MITIGATION.id], ['Finding', TERM_FINDING.id]]);
+    const empty = home({ ...RECORDER, assigned: [] });
+    expect(empty.slice(empty.indexOf(HOME_COPY.assignedHeading), empty.indexOf(HOME_COPY.assignedNone))).not.toContain('home-terms');
+    // With nothing assigned, the first use moves on: here the stages' open findings and overdue mitigations.
+    expect(termLists(empty).flat().map(([, id]) => id)).toEqual(expect.arrayContaining([TERM_FINDING.id, TERM_MITIGATION.id]));
+    const since = home(RECORDER);
+    const sinceList = since.slice(since.indexOf('Since your last saved change'));
+    expect(termLists(sinceList)[0]).toEqual([['Seal', TERM_SEAL.id]]);
+    for (const id of [TERM_FINDING.id, TERM_MITIGATION.id, TERM_SEAL.id]) expect(defs(since, id)).toBeLessThanOrEqual(1);
+  });
+
+  it('a Reviewer gets the three stage definitions once, as one named list at the first section naming a stage', () => {
+    const h = home(REVIEWER);
+    for (const id of STAGE_IDS) expect(defs(h, id)).toBe(1);
+    const first = h.slice(h.indexOf(HOME_COPY.reviewerUnsealed), h.indexOf(HOME_COPY.reviewerChanged));
+    expect(termLists(first)[0].map(([, id]) => id)).toEqual(STAGE_IDS);
+    const assigned = home({ ...REVIEWER, assigned: [item()] } as HomeData);
+    const top = assigned.slice(assigned.indexOf(HOME_COPY.assignedHeading), assigned.indexOf(HOME_COPY.reviewerUnsealed));
+    expect(termLists(top)[0].map(([, id]) => id)).toEqual([TERM_MITIGATION.id, TERM_FINDING.id, ...STAGE_IDS]);
+    // No "Seal" list over the empty changed list (design review #13).
+    const none = home({ ...REVIEWER, changedSinceSeal: [] });
+    expect(defs(none, TERM_SEAL.id)).toBe(0);
+  });
+});
+
+describe('fix round 2', () => {
+  it('#8: with no next step, the stages (and the lead lists) take the first column, before "Assigned to you"', () => {
+    const t = textOf(home({ ...RECORDER_WITH_LEAD, next: null, since: null }));
+    expect(t.indexOf(HOME_COPY.leadOverdueHeading)).toBeLessThan(t.indexOf(HOME_COPY.stagesLead));
+    expect(t.indexOf(HOME_COPY.stagesLead)).toBeLessThan(t.indexOf(HOME_COPY.assignedHeading));
+    const withNext = textOf(home(RECORDER_WITH_LEAD));
+    expect(withNext.indexOf(HOME_COPY.assignedHeading)).toBeLessThan(withNext.indexOf(HOME_COPY.stagesLead));
+  });
+
+  it('#12: a first visit says "Welcome, <name>.", not "Welcome back"', () => {
+    const h = home(firstTime('owner', true));
+    expect(headings(h).filter((x) => x.startsWith('h1'))).toEqual([`h1 ${HOME_COPY.welcomeFirst(AMINA.name)}`]);
+    expect(textOf(h)).not.toContain('Welcome back');
+  });
+
+  it('#10: each tally count is bold ink', () => {
+    expect(home(RECORDER)).toMatch(/<li class="home-tally__item" data-tally-kind="done">[\s\S]*?<b class="home-tally__count">1<\/b> done<\/span>/);
+  });
+
+  it('M6: a single open finding links to its stage\'s findings too', () => {
+    const one = home({ ...RECORDER, focus: { ...RECORDER.focus!, stages: STAGES_OPEN.map((s) => (s.stage === 'post-processing' ? { ...s, openFindings: 1 } : s)) } });
+    expect(linksNamed(one, ['1 open finding'])).toEqual([
+      ['1 open finding', `/orgs/${ORG}/projects/${P1}/findings?stage=in-processing`], ['1 open finding', `/orgs/${ORG}/projects/${P1}/findings?stage=post-processing`],
+    ]);
   });
 });
 
@@ -451,13 +491,14 @@ describe('S-08\'s protected cases, on the rebuilt Home (plan 1B Task 10; ledger 
     for (const f of files) expect(readFileSync(f, 'utf8'), f).not.toMatch(/\.assessments\b|\bassessments\s*:|\btx\.assessment\b/);
   });
 
-  it('UX-06 (spec 7.1): in a mitigation line only the word Overdue is red, outside any status word; a due one is plain text; no status word carries a warning class', () => {
+  it('UX-06 (spec 7.1, 9.1): in a mitigation line the word Overdue and the overdue date are red, outside any status word; a due one is plain text; no status word carries a warning class', () => {
     const page = home({ ...RECORDER, assigned: [item({ overdue: true, dueDate: '2026-10-28' }), item({ mitigationId: 'm2', what: 'Re-run check', dueDate: '2026-11-20', status: 'in_progress' })] });
     const h = page.slice(page.indexOf(HOME_COPY.assignedHeading), page.indexOf('Since your last saved change'));   // the "Assigned to you" section
-    expect(h.match(/class="home-overdue"/g)).toHaveLength(1);
     expect(textOf(h)).toContain(`${PROJECT_COPY.followUp.overdue}${PROJECT_COPY.followUp.wasDue('28 Oct 2026')}`);
-    // The red span holds the word alone; ": was due <date>" follows it as plain text.
-    expect([...h.matchAll(/<span class="home-overdue">([\s\S]*?)<\/span>([^<]*)/g)].map((m) => [textOf(m[1]), m[2]])).toEqual([[PROJECT_COPY.followUp.overdue, PROJECT_COPY.followUp.wasDue('28 Oct 2026')]]);
+    // Two red spans: the word, then the date; ": was due " between them is plain text (spec 7.1: red on an overdue date and the word).
+    expect([...h.matchAll(/<span class="home-overdue">([\s\S]*?)<\/span>([^<]*)/g)].map((m) => [textOf(m[1]), m[2]])).toEqual([
+      [PROJECT_COPY.followUp.overdue, ': was due '], ['28 Oct 2026', ''],
+    ]);
     expect(textOf(h)).toContain(PROJECT_COPY.followUp.due('20 Nov 2026'));
     expect(h).not.toMatch(/<[^>]*home-overdue[^>]*>[^<]*Due /);
     expect([...h.matchAll(/class="home-plate__status"[^>]*>([^<]*)</g)].map((m) => m[1])).toEqual(['Planned', 'In progress']);
