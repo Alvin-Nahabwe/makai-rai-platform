@@ -4,7 +4,7 @@ import { STAGES } from '@/types/record';
 import type { FindingView, MitigationVersionView, UserRef } from '@/types/api';
 import { loadContent } from '@/lib/content/loader';
 import { loadFieldMap } from '@/lib/documents/fieldMaps';
-import { textErasedLine } from '@/lib/documents/copy';
+import { docTextErasedLine } from '@/lib/documents/copy';
 import { resolveFields, type DocumentSnapshot, type SealedStage } from '@/lib/documents/resolve';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
 
@@ -80,7 +80,7 @@ describe('a mitigation closed by a decision, as a document prints it (D-408)', (
 
   it('FR-REV-08 (SRS 7.5.6): a decision-kind row with a tombstone prints the erased line, not the sentence', () => {
     const text = fieldText(plan({ what: null, kind: 'decision_changed', erasedOn: '2026-11-02' }), 'MP-05');
-    expect(text).toContain(`1. ${textErasedLine('2026-11-02')}`);
+    expect(text).toContain(`1. ${docTextErasedLine('2026-11-02')}`);
     expect(text).not.toContain(CHANGED);
   });
 

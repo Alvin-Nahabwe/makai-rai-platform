@@ -5,7 +5,7 @@ import type { FindingView, UserRef } from '@/types/api';
 import { loadContent, runningContent } from '@/lib/content/loader';
 import { loadFieldMap } from '@/lib/documents/fieldMaps';
 import {
-  DOCUMENTS_COPY, MSG_DOCUMENT_CHECK_FAILED, MSG_ISSUE_NO_REPLY, MSG_OTHER_SEAL_CHECK_FAILED, SEALED_NOTE,
+  DOCUMENTS_COPY, MSG_DOCUMENT_CHECK_FAILED, MSG_ISSUE_NO_REPLY, MSG_OTHER_SEAL_CHECK_FAILED, OTHER_SEAL_NEXT_STEP, SEALED_NOTE,
   fileErasedLine, findingOnQuestion, questionSource, sealedNote, docTextErasedLine, textErasedLine, wordsThenCode,
 } from '@/lib/documents/copy';
 import { resolveFields, type DocumentSnapshot, type SealedStage } from '@/lib/documents/resolve';
@@ -93,7 +93,7 @@ describe('B3 rows A3, A4: a lost reply says what did not happen, why, and what t
     for (const phase of ['generating', 'issuing'] as const) {
       const sending = { phase, typed: {}, message: null, retry: false };
       const after = generateReducer(sending, { kind: 'outcome', outcome: { kind: 'rejected', status: 500, body: { error: MSG_OTHER_SEAL_CHECK_FAILED, code: 'integrity_failure' } } });
-      expect(after.message).toBe(DOCUMENTS_COPY.refusal.field(phase, MSG_OTHER_SEAL_CHECK_FAILED));
+      expect(after.message).toBe(DOCUMENTS_COPY.refusal.field(phase, `${MSG_OTHER_SEAL_CHECK_FAILED} ${OTHER_SEAL_NEXT_STEP}`));
       expect(after.message).not.toBe(MSG_ISSUE_NO_REPLY);
       expect(after.retry).toBe(false);
     }

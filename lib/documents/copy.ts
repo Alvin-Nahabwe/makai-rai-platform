@@ -164,10 +164,13 @@ export const MSG_SEAL_CHECK_FAILED = 'This seal cannot be used because it no lon
  */
 export const MSG_DOCUMENT_CHECK_FAILED = 'This document failed its safety check, so it was not opened. Write to MAK-AI and give the reference shown with this message.';
 /**
- * Lane 6 row F3, preview and issue: another stage's latest seal no longer matches its rows. S-18 never shows this text (it shows its own line
- * for any 5xx), so it names no reference.
+ * Lane 6 row F3, preview and issue: another stage's latest seal no longer matches its rows. The route answers it (500
+ * integrity_failure); S-18 shows it with `OTHER_SEAL_NEXT_STEP` and no Retry (lib/documents/generate.ts), since a retry meets the
+ * same seal.
  */
 export const MSG_OTHER_SEAL_CHECK_FAILED = 'This document was not made because a seal of another stage no longer matches the record.';
+/** What to do next after `MSG_OTHER_SEAL_CHECK_FAILED` on S-18 (voice rule 3), as `MSG_SEAL_CHECK_FAILED` says it. */
+export const OTHER_SEAL_NEXT_STEP = 'Contact MAK-AI through Help and contact.';
 
 /** One "<day> hh:mm:ss UTC" for an instant (FR-DOC-02: UTC, to the second). */
 export function utcSecond(iso: string): string {

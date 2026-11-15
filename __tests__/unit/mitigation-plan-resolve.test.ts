@@ -8,7 +8,7 @@ import { loadContent } from '@/lib/content/loader';
 import { controlsForArea, controlsForQuestion } from '@/lib/content/suggestions';
 import { loadFieldMap } from '@/lib/documents/fieldMaps';
 import {
-  GATE_DERIVED_NA, textErasedLine, NOT_RECORDED_AT_ISSUE, SEALED_NOTE, STATEMENT,
+  GATE_DERIVED_NA, docTextErasedLine, NOT_RECORDED_AT_ISSUE, SEALED_NOTE, STATEMENT,
   PROJECT_MARK, decisionSource, findingOnQuestion, fromQuestion, outsideRoleLine, personalDataAnswerLine, wordsThenCode,
 } from '@/lib/documents/copy';
 import { SOURCE_RESOLVERS, resolveFields, type DocumentSnapshot, type SealedDecision, type SealedFinding, type SealedStage } from '@/lib/documents/resolve';
@@ -276,13 +276,13 @@ describe('the mitigation plan records what it prints, so an erasure reaches it (
       },
       notApplicable: { 'Q-PP-18': ['na_no_personal_data', null] }, reasonErased: { 'Q-PP-18': '2026-11-04' },
     });
-    expect(text(r, 'MP-03')).toContain(textErasedLine('2026-11-04'));
-    expect(text(r, 'MP-08')).toContain(`Reason: ${textErasedLine('2026-11-04')}`);
+    expect(text(r, 'MP-03')).toContain(docTextErasedLine('2026-11-04'));
+    expect(text(r, 'MP-08')).toContain(`Reason: ${docTextErasedLine('2026-11-04')}`);
   });
 
   it('FR-REV-08 (SRS 7.5.6): a Prepared-for note erased before issue prints the erasure line, still as a source row, and an empty note still prints no line', () => {
     const erased = resolve({ preparedFor: null, erasures: { stage_reviews: new Map([['review-pp', new Map([['preparedFor', '2026-11-04']])]]) } });
-    expect(text(erased, 'MP-01')).toBe(`Stage: Pre-processing. Review: Pre-processing review 1. Prepared for: ${textErasedLine('2026-11-04')}`);
+    expect(text(erased, 'MP-01')).toBe(`Stage: Pre-processing. Review: Pre-processing review 1. Prepared for: ${docTextErasedLine('2026-11-04')}`);
     expect(erased.sources).toContainEqual({ sourceTable: 'stage_reviews', sourceId: 'review-pp', field: 'preparedFor' });
     expect(text(resolve({ preparedFor: null }), 'MP-01')).toBe('Stage: Pre-processing. Review: Pre-processing review 1.');
   });

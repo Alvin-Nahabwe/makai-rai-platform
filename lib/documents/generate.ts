@@ -1,5 +1,5 @@
 import type { SendOutcome } from '@/lib/client/retrySafeWrite';
-import { DOCUMENTS_COPY, ETHICS_APPROVED, ETHICS_NOT_REQUIRED, MSG_ISSUE_NO_REPLY, MSG_OTHER_SEAL_CHECK_FAILED, MSG_PREVIEW_SERVER, MSG_SEAL_CHECK_FAILED, type DocumentPhase } from './copy';
+import { DOCUMENTS_COPY, ETHICS_APPROVED, ETHICS_NOT_REQUIRED, MSG_ISSUE_NO_REPLY, MSG_OTHER_SEAL_CHECK_FAILED, MSG_PREVIEW_SERVER, OTHER_SEAL_NEXT_STEP, MSG_SEAL_CHECK_FAILED, type DocumentPhase } from './copy';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
 
 /**
@@ -58,7 +58,7 @@ function refusalMessage(outcome: Exclude<SendOutcome<unknown>, { kind: 'saved' }
   if (status === 401) return R.signedOut(inPhase);
   // A seal of another stage failed its check (lib/data/documents.ts, 500 integrity_failure). The check runs before anything is
   // written, so nothing was issued, and a retry meets the same seal: say why, and offer no Retry (see `isIntegrityFailure`).
-  if (isIntegrityFailure(outcome)) return R.field(inPhase, MSG_OTHER_SEAL_CHECK_FAILED);
+  if (isIntegrityFailure(outcome)) return R.field(inPhase, `${MSG_OTHER_SEAL_CHECK_FAILED} ${OTHER_SEAL_NEXT_STEP}`);
   if (status >= 500) return inPhase === 'issuing' ? MSG_ISSUE_NO_REPLY : MSG_PREVIEW_SERVER;
   if (status === 422 && body.fields !== undefined && body.fields.length > 0) {
     const message = body.fields[0].message;

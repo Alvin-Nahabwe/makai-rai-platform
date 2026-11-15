@@ -4,7 +4,7 @@ import { STAGES } from '@/types/record';
 import type { FindingView, MitigationVersionView, UserRef } from '@/types/api';
 import { loadContent } from '@/lib/content/loader';
 import { loadFieldMap } from '@/lib/documents/fieldMaps';
-import { CLOSED_NO_LONGER_APPLIES, closedByLine, findingOnQuestion, textErasedLine } from '@/lib/documents/copy';
+import { CLOSED_NO_LONGER_APPLIES, closedByLine, findingOnQuestion, docTextErasedLine } from '@/lib/documents/copy';
 import { resolveFields, type DocumentSnapshot, type SealedDecision, type SealedStage } from '@/lib/documents/resolve';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
 
@@ -221,7 +221,7 @@ describe('a closing-kind row that is not a closing record takes the ordinary pat
     expect(withText).toContain(`\n1. Recheck\nFinding: ${T('Q-PP-01')}`);
     expect(withText).not.toContain('Closed by Asha');
     const erased = fieldText(plan([{ id: 'f-1', questionId: 'Q-PP-01', state: 'closed_mitigation', mitigations: [{ id: 'mv-1', seq: 1, kind: 'decision_changed', closes: 'dv-1' }] }], { erased: ['mv-1'] }), 'MP-05') as string;
-    expect(erased).toContain(`\n1. ${textErasedLine('2026-11-14')}\nFinding: ${T('Q-PP-01')}`);
+    expect(erased).toContain(`\n1. ${docTextErasedLine('2026-11-14')}\nFinding: ${T('Q-PP-01')}`);
     expect(erased).not.toContain('Closed by Asha');
   });
 
