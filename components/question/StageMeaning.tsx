@@ -6,6 +6,11 @@ import type { Stage } from '@/types/record';
 /** Each stage's term in the vocabulary: its name and its plain meaning. */
 const STAGE_TERM = { 'pre-processing': TERM_STAGE_1, 'in-processing': TERM_STAGE_2, 'post-processing': TERM_STAGE_3 } as const satisfies Record<Stage, unknown>;
 
+/** The stage's term in the vocabulary, so a page can mark its first use of the stage's name (fix round 4). */
+export function stageTerm(stage: Stage): (typeof STAGE_TERM)[Stage] {
+  return STAGE_TERM[stage];
+}
+
 /**
  * A stage's plain meaning under its name (spec 6 D1, line 495: stage names always with their plain meaning; plan 1C Task 3),
  * as the vocabulary's first-use definition. The stage page's `h1` and the question page's column heading use it.

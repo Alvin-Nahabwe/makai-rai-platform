@@ -10,10 +10,10 @@ import { LIST_PAGE_SIZE, pageOf } from '@/lib/ui/showMore';
 import { ArchivedBanner } from '@/components/project/ArchivedBanner';
 import { StageSealBanner } from '@/components/review/StageSealBanner';
 import { StageQuestionList } from '@/components/decision/StageQuestionList';
-import { StageMeaning } from '@/components/question/StageMeaning';
+import { StageMeaning, stageTerm } from '@/components/question/StageMeaning';
 import { routeTermTips } from '@/components/question/termTips';
 import { Breadcrumb } from '@/components/ui/Breadcrumb';
-import { StatusMark } from '@/components/ui/StatusMark';
+import { MarkShape } from '@/components/ui/StatusMark';
 import { Icon } from '@/components/ui/Icon';
 import { Term } from '@/components/ui/Definition';
 import { TermTip } from '@/components/ui/TermTip';
@@ -114,7 +114,7 @@ export function StageWorkspace({ data, show, shown }: { data: StagePageData; sho
     <div className="page-content stage-route">
       <ArchivedBanner archived={data.projectArchived} />
       <Breadcrumb items={[{ label: data.projectName, href: base }, { label: STAGE_TITLE[data.stage] }]} />
-      <h1>{STAGE_TITLE[data.stage]}</h1>
+      <h1><Term of={stageTerm(data.stage)}>{STAGE_TITLE[data.stage]}</Term></h1>
       {/* D1: the stage's name with its plain meaning. Then W-2's subtitle: the stage's topics, in module order. */}
       <StageMeaning stage={data.stage} />
       <p className="stage-route__topics">{QUESTION_COPY.stage.topics(moduleGroups(data.rows).map((g) => g.moduleTitle))}</p>
@@ -124,24 +124,26 @@ export function StageWorkspace({ data, show, shown }: { data: StagePageData; sho
         <ul className="stage-route__tally-parts" role="list">
           {tallyParts(tallyOfRows(data.rows, data.marks)).map((t) => {
             // The owner's ruling of 15 Nov, 11:00: an (i) beside each word the vocabulary defines at first use, as the question
-            // page's strip does. Reflow at 320 px (fix round 3, S3-N1): the words may wrap, but the mark and the count stay
-            // together and with the first word (a no-break space), and the last word stays with its (i). The mark is the kit's
-            // StatusMark, hidden: its words are the visible ones beside it.
-            const pd = t.kind === 'scope_answered' ? TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION : null;
-            const entry = TALLY_TERM[t.kind];
-            const at = t.word.lastIndexOf(' ');
-            const head = at < 0 ? '' : t.word.slice(0, at + 1);
-            const last = t.word.slice(at + 1);
+            // page's strip does. Reflow at 320 px (fix round 3, S3-N1): the words may wrap, but the mark, the count and the
+            // first word stay together, and the last word stays with its (i). The mark is the kit's shape alone, beside its
+            // words (fix round 4, N3: no hidden words to read twice or to copy); the words are the list copy's (M-A3).
+            const of = t.kind === 'scope_answered' ? TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION : TALLY_TERM[t.kind];
+            const tip = of === undefined ? null
+              : <TermTip of={of} label={t.kind === 'scope_answered' ? FR.whatIsTerm(of.term) : FR.whatMeans(of.term)} />;
+            const [first, ...rest] = t.word.split(' ');
+            const last = rest.length > 0 ? rest[rest.length - 1] : null;
+            const middle = rest.slice(0, -1).join(' ');
+            const words = (
+              <>
+                <span className="stage-route__keep stage-route__lead">
+                  <MarkShape kind={t.kind} size={16} /><span className="stage-route__words">{`${t.n}\u00A0${first}`}</span>{last === null ? tip : null}
+                </span>
+                {last === null ? null : <>{` ${middle}${middle === '' ? '' : ' '}`}{tip === null ? last : <span className="stage-route__keep">{last}{tip}</span>}</>}
+              </>
+            );
             return (
               <li key={t.kind} className="stage-route__tally-part">
-                <span className="stage-route__keep">
-                  <span className="stage-route__tally-mark" aria-hidden="true"><StatusMark kind={t.kind} size={16} words="hidden" /></span>{t.n}
-                </span>{'\u00A0'}
-                {pd !== null
-                  ? <><Term of={pd}>{FR.personalDataAnswered.term}</Term>{' '}<span className="stage-route__keep">{FR.personalDataAnswered.after.trim()}<TermTip of={pd} label={FR.whatIsTerm(pd.term)} /></span></>
-                  : entry === undefined
-                    ? t.word
-                    : <Term of={entry}>{head}<span className="stage-route__keep">{last}<TermTip of={entry} label={FR.whatMeans(entry.term)} /></span></Term>}
+                {of === undefined ? words : <Term of={of}>{words}</Term>}
                 {t.extra !== null ? ` ${t.extra}` : null}
               </li>
             );
