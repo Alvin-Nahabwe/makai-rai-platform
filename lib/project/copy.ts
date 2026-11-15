@@ -19,8 +19,8 @@ export const PROJECT_COPY = Object.freeze({
     newProject: 'New project',
     /** The table's caption, which also names its region: what the list holds and its fixed order (C8: no sorting). */
     caption: 'Active projects first, then archived ones',
-    columns: Object.freeze({ project: 'Project', state: 'State', actions: 'Actions' }),
-    /** A row's state: the word, and for an archived project the archive icon beside it. */
+    columns: Object.freeze({ project: 'Project', actions: 'Actions' }),
+    /** A plate's line of state: the word, and for an archived project the archive icon before it. */
     active: 'Active',
     archived: 'Archived',
     /** No project at all: the title, then TERM_PROJECT's definition and one of the two sentences (plan 1B Task 12). */
@@ -31,6 +31,13 @@ export const PROJECT_COPY = Object.freeze({
       ask: 'Ask an Owner, Admin or Assessor to create your project.',
     }),
     showMore: 'Show more',
+    /** The line before "Show more" while more projects remain (design review 15; voice rule 11). */
+    showing: (shown: number, total: number) => `Showing ${shown} of ${total} projects.`,
+    archivedNotShown: (n: number) => (n === 1
+      ? '1 archived project is not shown yet. Archived projects come last.'
+      : `${n} archived projects are not shown yet. Archived projects come last.`),
+    /** For a person who cannot unarchive, once, when an archived project is listed (spec 9.7; lane 3 lead's ruling). */
+    whoCanUnarchive: 'Owners and Admins can unarchive a project.',
   }),
   /** The words of a project's descriptive line (S-08, S-10, S-32; audit B rows 364 to 369). */
   descriptive: Object.freeze({

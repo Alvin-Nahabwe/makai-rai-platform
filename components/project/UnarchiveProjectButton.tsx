@@ -9,6 +9,7 @@ import { signInAgainHref } from '@/lib/auth/idle';
 import { refusalOf } from '@/lib/projects/writeRefusal';
 import { PROJECT_WRITE_COPY } from '@/lib/project/write/copy';
 import { PROJECTS_LIST_ID } from '@/components/project/projectsListId';
+import { useProjectsListAnnounce } from '@/components/project/ProjectsListAnnouncer';
 import '@/components/ui/buttonStyles';
 
 const FRESH: RetryState = { requestId: null, sentBody: null };
@@ -21,8 +22,15 @@ const C = PROJECT_WRITE_COPY.unarchive;
 function focusList(): void {
   const region = document.getElementById(PROJECTS_LIST_ID)?.querySelector<HTMLElement>('[role="region"]');
   // Not found means the list's markup changed under this control: say so (fixed words, no data), then refresh anyway.
-  if (region === null || region === undefined) console.error('UnarchiveProjectButton: no list region to move focus to');
-  else region.focus();
+  if (region === null || region === undefined) {
+    console.error('UnarchiveProjectButton: no list region to move focus to');
+    return;
+  }
+  // The region shows its focus ring while focus is there because of this move, even after a mouse press, when
+  // :focus-visible would not match (design review 16; ProjectsTable.css). The mark goes when focus leaves.
+  region.setAttribute('data-focus-moved', '');
+  region.addEventListener('blur', () => region.removeAttribute('data-focus-moved'), { once: true });
+  region.focus();
 }
 
 /**
@@ -41,10 +49,17 @@ function focusList(): void {
  * active rows, above the archived ones (rule C8), and this control (and whatever in it had focus) is gone. So just before
  * the refresh, while the pressed button or Retry still exists, focus moves to the list itself (`focusList`), which
  * outlives the refresh and holds the project where it now appears (ruling L5-13, carried to the one list of plan 1B
- * Task 12).
+ * Task 12). The list's status line (ProjectsListAnnouncer, above the table) then says what happened, "<name> is active
+ * again. Your team can change it.": this control's own line goes with it, but the list's line outlives the refresh.
  */
 export function UnarchiveProjectButton(p: { orgSlug: string; projectId: string; projectName?: string }): ReactElement {
   const router = useRouter();
+  const announce = useProjectsListAnnounce();
+  /** Writes `sentence` into the list's status line; outside a Projects list there is none, which on S-32 is a mistake. */
+  function say(sentence: string): void {
+    if (announce === null) console.error('UnarchiveProjectButton: no Projects list status line to write in');
+    else announce(sentence);
+  }
   const retry = useRef<RetryState>(FRESH);
   const box = useRef<HTMLSpanElement>(null);
   const retryButton = useRef<HTMLButtonElement>(null);
@@ -69,6 +84,7 @@ export function UnarchiveProjectButton(p: { orgSlug: string; projectId: string; 
     inFlight.current = true;
     setBusy(true);
     setLine('');
+    if (announce !== null) announce('');   // the list's line spoke of an earlier Unarchive: clear it before this one's answer
     const { requestId, state } = requestIdFor(retry.current, {});
     retry.current = state;
     const outcome = await sendWrite(`/api/v1/orgs/${p.orgSlug}/projects/${p.projectId}/unarchive`, 'POST', { requestId }, { onSlow: () => setLine(C.slow) });
@@ -85,6 +101,7 @@ export function UnarchiveProjectButton(p: { orgSlug: string; projectId: string; 
       focusList();
       setLine('');
       setCanRetry(false);
+      if (p.projectName !== undefined) say(C.unarchived(p.projectName));   // S-32 always names it
       router.refresh();
       return;
     }
@@ -98,10 +115,13 @@ export function UnarchiveProjectButton(p: { orgSlug: string; projectId: string; 
       setStopped(true);
       setCanRetry(false);
     } else if (r.kind === 'refresh') {
-      retry.current = FRESH;   // 409: another person unarchived it first; the refreshed page lists it among the active rows
+      retry.current = FRESH;   // 409: another state; the refreshed page shows what applies now
       focusList();
       setLine('');
       setCanRetry(false);
+      // Only `not_archived` (another person unarchived it first) means it is active again; `request_id_reused` wrote nothing.
+      const code = outcome.kind === 'rejected' ? outcome.body.code : null;
+      if (code === 'not_archived' && p.projectName !== undefined) say(C.unarchived(p.projectName));
       router.refresh();
     } else {
       focusNext.current = 'retry';

@@ -9,6 +9,7 @@ import { myMitigations, openMitigationsByStage, stageFollowUpCounts } from '@/li
 import { DashboardView } from '@/components/project/DashboardView';
 import { ProjectsTable } from '@/components/project/ProjectsTable';
 import { HOME_COPY } from '@/lib/home/copy';
+import { PROJECT_COPY } from '@/lib/project/copy';
 import { resetDb, testDb } from '../helpers/db';
 import { sessionFor } from '../helpers/authSession';
 import { useFixtureContent } from '../helpers/content';
@@ -197,8 +198,11 @@ describe('S-10 and S-32 pages (Task 5, Task 7)', () => {
     expect(new Set(first.match(/Shelved \d{3}/g)).size).toBe(20);
     expect(first.match(/>Show more<\/a>/g)).toHaveLength(1);
     expect(first).toMatch(/<a [^>]*href="\?shown=100"[^>]*>Show more<\/a>/);
+    // design review 15: the line by the link counts what is shown and says the archived ones not shown yet
+    expect(first).toContain(`${PROJECT_COPY.allProjects.showing(50, 60)} ${PROJECT_COPY.allProjects.archivedNotShown(10)}`);
     const all = await at({ shown: '100' });
     expect(new Set(all.match(/Shelved \d{3}/g)).size).toBe(30);
+    expect(all).not.toContain('Showing');
     expect(all).not.toContain('Show more');
   });
 

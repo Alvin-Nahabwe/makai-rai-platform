@@ -304,6 +304,9 @@ test('L5-4 L5-13: after a successful unarchive the row says Active and focus is 
   await expect(page.locator('#projects-list tr', { hasText: name }).locator('.projects-list__state')).toHaveText(PROJECT_COPY.allProjects.active);
   await expect(page.locator('#projects-list [role="region"]')).toBeFocused();
   expect(await page.evaluate(() => document.activeElement === document.body)).toBe(false);
+  // design review 16: the list's status line says what happened, after the refresh, and the focused region shows its ring
+  await expect(page.locator('#projects-list .projects-list__status[role="status"]')).toHaveText(PROJECT_WRITE_COPY.unarchive.unarchived(name));
+  expect(await page.locator('#projects-list [role="region"]').evaluate((el) => getComputedStyle(el).outlineStyle)).toBe('solid');
 });
 
 test('UX-27 L5-14: after a successful create the form stays busy until the new page has loaded, and a second Enter sends nothing', async ({ browser }) => {

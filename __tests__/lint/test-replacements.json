@@ -2246,5 +2246,13 @@
     "property": "An archived project is read as archived by listProjectRows, S-32 offers it Unarchive for an owner, and the dashboard leaves it out. The rendering step now passes listProjectRows' active and archived rows, each marked, to ProjectsTable (plan 1B Task 12's one list) in place of AllProjectsView's two lists.",
     "proof": "The case's reads and assertions are as before (archived names exactly ['Shelved project'], active contains 'Counted project', the dashboard shows the one and not the other, no score); only the render call changed, to ProjectsTable with rows marked archived: false or true, canUnarchive true, and it still requires 'Unarchive'.",
     "task": "plan 1B Task 12 (lane 3 task 4: Projects as one list)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/integration/prj-stage-view.test.ts::(module)",
+    "replacedBy": "__tests__/integration/prj-stage-view.test.ts::plan 1B Task 12 C8: the one list pages 50 at a time across active and archived, with one \"Show more\"",
+    "property": "Outside its cases the file now also imports PROJECT_COPY (lib/project/copy.ts), for the paging case added by plan 1B Task 12, which reads the count line's words through the copy constant. The earlier (module) entry of this task covers the AllProjectsView to ProjectsTable import; nothing else outside the cases changed.",
+    "proof": "__tests__/integration/prj-stage-view.test.ts::plan 1B Task 12 C8: the one list pages 50 at a time across active and archived, with one \"Show more\" requires PROJECT_COPY.allProjects.showing(50, 60) followed by PROJECT_COPY.allProjects.archivedNotShown(10) on the first page and no 'Showing' once all 60 are shown.",
+    "task": "plan 1B Task 12 (lane 3 task 4, fix round 1: design review 15)"
   }
 ]
