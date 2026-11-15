@@ -275,6 +275,9 @@ for (const [width, height] of [[1280, 900], [375, 812]] as const) {
     await fillValid(page);
     await page.getByRole('button', { name: 'Save decision', exact: true }).click();
     await expect(saveStatus(page)).toHaveText(/^Saved at /);
+    // The save refreshes the page from the server, which fills "Current decision" above the form and moves the way on down
+    // by its height; measure after that, not between the two (a race seen once in five runs at 375, fix round 3).
+    await expect(page.locator('section[data-region="current-decision"]')).not.toContainText(QUESTION_COPY.current.none);
     const next = wayOn(page).getByRole('link', { name: /^Next question: / });
     await expect(next).toHaveCount(1);
     await expect(wayOn(page).getByRole('link', { name: QUESTION_COPY.nav.allQuestions, exact: true })).toBeVisible();
