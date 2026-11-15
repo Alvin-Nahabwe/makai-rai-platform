@@ -105,12 +105,35 @@ describe('GateFrame, signed in', () => {
 });
 
 describe('GateFrame, public (inside the (public) layout\'s own header and main)', () => {
+  const css = readFileSync('components/layout/gate.css', 'utf8');
   it('renders no header, no main, no Help, no Sign out and no link at all: the public layout has those', () => {
     const html = publicFrame(ROUTE);
     expect(html).not.toMatch(/<header|<main|<form|<a /);
     expect(hrefs(html)).toEqual([]);
-    expect(html).toMatch(/^<div class="gate gate--public"><div class="gate__header"><div class="gate__column"><div class="gate__brand"><img src="\/logo-makai-white-154\.webp" srcSet="\/logo-makai-white-154\.webp 1x, \/logo-makai-white-308\.webp 2x" width="154" height="36" alt="" decoding="async" class="gate__logo"\/><p class="gate__product">MAK-AI RAI Platform<\/p><\/div>/);
+    // Ruling L5-26 (design review I-2): the light header names the platform, so the public column shows the logo alone.
+    expect(html).toMatch(/^<div class="gate gate--public"><div class="gate__header"><div class="gate__column"><div class="gate__brand"><img src="\/logo-makai-white-154\.webp" srcSet="\/logo-makai-white-154\.webp 1x, \/logo-makai-white-308\.webp 2x" width="154" height="36" alt="" decoding="async" class="gate__logo"\/><\/div>/);
+    expect(html).not.toContain('gate__product');
     expect(html).toContain('<div class="gate__main"><div class="gate__card"><h1>Title</h1></div></div>');
+  });
+
+  it('L5-26: the platform is named once per viewport: below 1024 px the public band shows no logo, only where the person is', () => {
+    expect(css).toMatch(/@media \(max-width: 1023\.98px\) \{\s*\.gate--public \.gate__brand \{\s*display: none;/);
+  });
+
+  it('a page whose route changes in the browser passes its own route element in place of the list (D16, a used reset link)', () => {
+    const html = frameOnly(renderToStaticMarkup(<GateFrame variant="public" routeSlot={<p id="slot">S</p>}><h1>T</h1></GateFrame>));
+    expect(html).toContain('<p id="slot">S</p>');
+    expect(html).not.toContain('gate-route');
+  });
+
+  it('M-2: on a public page the frame fills what the light header leaves, not a whole viewport under it', () => {
+    expect(css).toMatch(/body:has\(\.gate--public\) \{[^}]*display: flex;[^}]*flex-direction: column;[^}]*min-block-size: 100dvh;/);
+    expect(css).toMatch(/\.public-layout:has\(> \.gate--public\) \{[^}]*flex: 1 0 auto;[^}]*min-block-size: 0;/);
+    expect(css).toMatch(/\.gate--public \{[^}]*min-block-size: 0;/);
+  });
+
+  it('CR-1: the logo keeps its proportions when the column is narrower than it', () => {
+    expect(css).toMatch(/\.gate__logo \{[^}]*max-inline-size: 100%;[^}]*block-size: auto;/);
   });
 });
 
