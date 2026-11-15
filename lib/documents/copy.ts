@@ -5,6 +5,8 @@
  */
 
 import { formatDay } from '@/lib/format/dates';
+import { TERM_DATA_CARD, TERM_MITIGATION_PLAN, TERM_MODEL_CARD, TERM_STAGE_1, TERM_STAGE_2, TERM_STAGE_3 } from '@/lib/vocabulary/terms';
+import type { DocumentType, Stage } from '@/types/record';
 
 /** The owner's decision (C8 #21, audit C#270) over FR-DOC-02's SRS line 1025. */
 export const STATEMENT = 'Made from this team\'s own records in the MAK-AI RAI Platform. It is not an ethics approval, audit, certification or compliance statement.';
@@ -36,6 +38,10 @@ export function formatUtcDay(iso: string): string {
 
 /** The names of the three documents (FR-DOC-01), in S-18's fixed order. */
 export const DOCUMENT_TITLES = { data_card: 'Data card', model_card: 'Model card', mitigation_plan: 'Mitigation plan' } as const;
+/** The vocabulary entry of each document, for its first use on S-18 (spec 6): the choice in the form carries its definition. */
+export const DOCUMENT_TERMS = Object.freeze({ data_card: TERM_DATA_CARD, model_card: TERM_MODEL_CARD, mitigation_plan: TERM_MITIGATION_PLAN } satisfies Record<DocumentType, unknown>);
+/** The vocabulary entry of each stage's name (D1: a stage name always has its plain meaning beside it). */
+export const STAGE_TERMS = Object.freeze({ 'pre-processing': TERM_STAGE_1, 'in-processing': TERM_STAGE_2, 'post-processing': TERM_STAGE_3 } satisfies Record<Stage, unknown>);
 
 /** The values the data card's ethics review (DC-15, CG-10) takes, and the words S-18 shows for them. */
 export const ETHICS_APPROVED = 'approved';
@@ -177,6 +183,8 @@ export const DOCUMENTS_COPY = Object.freeze({
   titles: Object.freeze({
     documentsOf: (reviewName: string): string => `Documents of ${reviewName}`,
   }),
+  /** The words that introduce a term under the page heading, each followed by its definition (spec 6; the house pattern of lane 6). */
+  terms: Object.freeze({ seal: 'Seal', finding: 'Finding' }),
   page: Object.freeze({
     heading: 'Create a document',
     chooseHeading: 'Choose a document',
@@ -244,7 +252,8 @@ export const DOCUMENTS_COPY = Object.freeze({
   }),
   list: Object.freeze({
     empty: 'No documents issued from this review yet.',
-    line: (title: string, sealNumber: number, day: string, by: string, short: string): string => `${title}\u00a0· seal ${sealNumber}\u00a0· ${day}\u00a0· by ${by}\u00a0· Fingerprint ${short}`,
+    /** The facts of one issued document, a description list in place of a line joined with " · " (lane 6 row S9; C 318). */
+    facts: Object.freeze({ seal: 'From seal', issuedOn: 'Issued on', issuedBy: 'Issued by', fingerprint: 'Fingerprint' }),
     olderSeal: 'Made from an older seal. A newer seal exists.',
     withdrawn: (day: string, reason: string): string => `Withdrawn on ${day}: ${reason}`,
     erased: (day: string): string => `File erased on ${day}`,

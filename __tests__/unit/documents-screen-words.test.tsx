@@ -105,7 +105,11 @@ describe('S-18 words (plan 1A Task 18c (c))', () => {
 
   it('the issued list and the S-16 slot', () => {
     const html = renderToStaticMarkup(<IssuedDocumentsList orgSlug="o" documents={[doc()]} latestSealNumber={2} canWithdraw />);
-    expect(html).toContain('Data card\u00a0· seal 1\u00a0· 3 Nov 2026\u00a0· by Amina N.\u00a0· Fingerprint a1b2 c3d4 ... 8f90');
+    const F = DOCUMENTS_COPY.list.facts;
+    expect(html).toContain('<p class="documents-issued__title">Data card</p>');
+    for (const [term, value] of [[F.seal, '1'], [F.issuedOn, '3 Nov 2026'], [F.issuedBy, 'Amina N.']]) expect(html).toContain(`<dt>${term}</dt><dd>${value}</dd>`);
+    expect(html).toMatch(new RegExp(`<dt><span data-term="fingerprint">${F.fingerprint}</span></dt><dd>a1b2 c3d4 \\.\\.\\. 8f90<span class="ui-definition" data-definition="fingerprint">`));
+    expect(html).not.toContain(' · ');
     expect(html).toContain('Made from an older seal. A newer seal exists.');
     expect(renderToStaticMarkup(<IssuedDocumentsList orgSlug="o" documents={[doc({ erased: { erasedOn: '2026-11-04' } })]} latestSealNumber={1} canWithdraw />)).toContain('File erased on 4 Nov 2026');
     expect(renderToStaticMarkup(<ReviewDocumentsList orgSlug="o" projectId="p" reviewId="r" documents={[doc()]} />))

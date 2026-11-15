@@ -102,7 +102,8 @@ test('FR-DOC-08 FR-DOC-04 FR-DOC-01 NFR-A11Y-02 NFR-A11Y-05 NFR-SEC-11: generate
   await page.goto(s18);
   const row = await testDb.issuedDocument.findFirstOrThrow({ where: { stageReviewId: reviewId } });
   const short = `${row.sha256.slice(0, 4)} ${row.sha256.slice(4, 8)} ... ${row.sha256.slice(60)}`;
-  await expect(page.getByText(`Fingerprint ${short}`)).toBeVisible();
+  // The list states each fact as a term and its value (lane 6 row S9): the fingerprint is the value after "Fingerprint".
+  await expect(page.getByRole('definition').filter({ hasText: short })).toBeVisible();
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: /^Download PDF \(\d+ KB\)$/ }).click()]);
   const bytes = readFileSync((await download.path()) as string);
   expect(createHash('sha256').update(bytes).digest('hex')).toBe(row.sha256);

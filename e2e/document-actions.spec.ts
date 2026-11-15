@@ -140,7 +140,8 @@ test('FR-DOC-06 FR-DOC-07 UX-29 NFR-A11Y-02 NFR-A11Y-05: copy and withdraw a doc
 
   // The document stays: the PDF still downloads and hashes to the SHA-256 S-18 shows.
   const short = `${row.sha256.slice(0, 4)} ${row.sha256.slice(4, 8)} ... ${row.sha256.slice(60)}`;
-  await expect(page.getByText(`Fingerprint ${short}`)).toBeVisible();
+  // The list states each fact as a term and its value (lane 6 row S9): the fingerprint is the value after "Fingerprint".
+  await expect(page.getByRole('definition').filter({ hasText: short })).toBeVisible();
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: /^Download PDF \(\d+ KB\)$/ }).click()]);
   expect(createHash('sha256').update(readFileSync((await download.path()) as string)).digest('hex')).toBe(row.sha256);
 
