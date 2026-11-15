@@ -4,8 +4,11 @@ import { tryResolveIdentity } from '@/lib/auth/identity';
 import { currentLegalText } from '@/lib/legal/registry';
 import { ACCEPTED_KINDS } from '@/types/legal';
 import { formatDay } from '@/lib/format/dates';
-import { INVITATION_PAGE_COPY, ORG_COPY, roleWithArticle } from '@/lib/org/copy';
+import { INVITATION_PAGE_COPY, ORG_COPY, roleTerm, roleWithArticle } from '@/lib/org/copy';
+import { GATE_COPY } from '@/lib/shell/copy';
 import { pageTitle } from '@/lib/ui/title';
+import { GateFrame, type GateStop } from '@/components/layout/GateFrame';
+import { AuthCard } from '@/components/auth/AuthCard';
 import AcceptInvitationClient from './AcceptInvitationClient';
 
 export const metadata: Metadata = { title: pageTitle(ORG_COPY.titles.invitation) };
@@ -33,7 +36,19 @@ export const metadata: Metadata = { title: pageTitle(ORG_COPY.titles.invitation)
  * eslint.config.mjs), so nothing caught it. `tryResolveIdentity` keeps the
  * same soft-identity behaviour (an invalid/expired/revoked session is
  * "anonymous" here, not an error) without this page ever seeing the token.
+ *
+ * In the gate frame's public variant since plan 1B Task 6 (rulings L5-14, L5-15): the card says who invited the person, as
+ * what, what that role means (the vocabulary's sentence, plain text) and until when; the frame's route is this door's
+ * steps: signed out, Your details, Accept the terms, Join; signed in as the invited email, Join alone; signed in as
+ * someone else (M-24) and an unusable link, none. The route shows the first step; it follows the client's step once the
+ * frame takes a client-drawn route (ruling pending, see the D3 report).
  */
+const NEW_ACCOUNT_ROUTE: readonly GateStop[] = [
+  { label: INVITATION_PAGE_COPY.stops.details, state: 'current' },
+  { label: GATE_COPY.stops.accept, state: 'upcoming' },
+  { label: INVITATION_PAGE_COPY.stops.join, state: 'upcoming' },
+];
+const JOIN_ROUTE: readonly GateStop[] = [{ label: INVITATION_PAGE_COPY.stops.join, state: 'current' }];
 export default async function InvitationPage({
   params,
 }: {
@@ -44,12 +59,11 @@ export default async function InvitationPage({
 
   if (!invitation) {
     return (
-      <div className="auth-container">
-        <div className="auth-card">
-          <h1>{INVITATION_PAGE_COPY.unusableHeading}</h1>
+      <GateFrame variant="public">
+        <AuthCard title={INVITATION_PAGE_COPY.unusableHeading}>
           <p>{INVITATION_PAGE_COPY.unusable}</p>
-        </div>
-      </div>
+        </AuthCard>
+      </GateFrame>
     );
   }
 
@@ -62,11 +76,21 @@ export default async function InvitationPage({
   // The form shows each text's version and date and links its words on S-06, so the words stay on the server.
   const texts = ACCEPTED_KINDS.map((k) => ({ ...currentLegalText(k), text: '' }));
 
+  const signedInAs = identity === null ? null : identity.email.toLowerCase() === invitation.email.toLowerCase() ? 'invitee' : 'other';
+  const route = signedInAs === null ? NEW_ACCOUNT_ROUTE : signedInAs === 'invitee' ? JOIN_ROUTE : undefined;
+
   return (
-    <div className="auth-container">
-      <div className="auth-card">
-        <h1>{INVITATION_PAGE_COPY.heading(invitation.org.name)}</h1>
-        <p>{INVITATION_PAGE_COPY.invitedLine(invitation.invitedBy.name, roleWithArticle(invitation.role), formatDay(expiresOn))}</p>
+    <GateFrame variant="public" route={route}>
+      <AuthCard
+        title={INVITATION_PAGE_COPY.heading(invitation.org.name)}
+        lead={(
+          <>
+            <p>{INVITATION_PAGE_COPY.invitedBy(invitation.invitedBy.name, roleWithArticle(invitation.role))}</p>
+            <p>{roleTerm(invitation.role).definition}</p>
+            <p>{INVITATION_PAGE_COPY.endsOn(formatDay(expiresOn))}</p>
+          </>
+        )}
+      >
         <AcceptInvitationClient
           token={token}
           invitedEmail={invitation.email}
@@ -78,7 +102,7 @@ export default async function InvitationPage({
           expiresOn={expiresOn}
           texts={texts}
         />
-      </div>
-    </div>
+      </AuthCard>
+    </GateFrame>
   );
 }

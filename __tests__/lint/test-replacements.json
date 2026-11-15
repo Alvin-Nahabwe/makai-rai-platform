@@ -2198,5 +2198,13 @@
     "property": "IdleWarning removes no draft and no other page state (SignOutWithDraftsGuard stays the only purge path, R-53) and never navigates or signs out when the session ends.",
     "proof": "Plan 1B Task 4 (C12) makes IdleWarning leave S-01 the reason a session ended: the signed-out hint in this tab's sessionStorage under SIGNED_OUT_HINT_KEY ('makrai.signedOut', not a draft key), written at an ending the clock explains and removed at mount and on an extension. The case keeps every other ban (localStorage, indexedDB, location changes, the router, signOut) and now pins the one storage: sessionStorage is named once in IdleWarning.tsx (its accessor), which calls no storage method itself, and lib/auth/idle.ts holds exactly two storage calls, setItem and removeItem of SIGNED_OUT_HINT_KEY. __tests__/unit/idle-copy.test.tsx proves the hint is written once with the reason, never under a draft key, and that the removal leaves a draft key in place.",
     "task": "plan 1B Task 4 (session states: the true reason, and the signed-out notice)"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/account-created-email.test.ts::FR-ACC-10 (6.1): E-06 holds no marker, escapes the organisation name, and links only to the reset page",
+    "replacedBy": "__tests__/unit/account-created-email.test.ts::FR-ACC-10 (6.1) C9: E-06 holds no marker, escapes the organisation name, and links to the reset page then the sign-in page",
+    "property": "E-06 carries no marker, escapes the organisation name in the HTML part, and links only to fixed pages whose addresses carry nothing (SRS 6.1).",
+    "proof": "Plan 1B Task 6 (C9; ruling L5-19) adds the sign-in link after the reset link (lib/email/templates/accountCreated.ts). The case now expects the hrefs to be exactly [the reset page, the sign-in page], in that order; the marker, subject and escaping assertions are unchanged. The new case 'C9 T6.5: the links are the reset page then the sign-in page, each alone on its line; no query string and no address' checks both parts have no '@' and no '?'. Seen RED with the one-link template, GREEN after.",
+    "task": "plan 1B Task 6 (joining)"
   }
 ]

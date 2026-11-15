@@ -67,15 +67,20 @@ describe('S-04, the invitation page (FR-ACC-01)', () => {
     vi.mocked(invitationByToken).mockResolvedValue(pendingInvitation);
     const markup = html(await InvitationPage({ params: Promise.resolve({ token: 't'.repeat(64) }) }));
     expect(markup).toContain('<h1>You are invited to Makerere CAI Lab</h1>');
-    expect(text(markup)).toContain(INVITATION_PAGE_COPY.invitedLine('Amina N.', 'an Assessor', '4 Nov 2026'));
-    expect(text(markup)).toContain('Amina N. invited you to join as an Assessor. This invitation ends on 4 Nov 2026.');
+    // Since plan 1B Task 6 the invited line and the end date are their own sentences, with the role's meaning between them.
+    expect(text(markup)).toContain(INVITATION_PAGE_COPY.invitedBy('Amina N.', 'an Assessor'));
+    expect(text(markup)).toContain('Amina N. invited you to join as an Assessor.');
+    expect(text(markup)).toContain(INVITATION_PAGE_COPY.endsOn('4 Nov 2026'));
+    expect(text(markup)).toContain('This invitation ends on 4 Nov 2026.');
     expect(markup).toContain('value="head.of.lab@example.ac.ug"');
   });
 
   it('FR-MEM-01 NFR-SEC-11: the organisation and inviter names are rendered as text', async () => {
     vi.mocked(invitationByToken).mockResolvedValue({ ...pendingInvitation, org: { name: '<script>alert(1)</script>', slug: 'lab' }, invitedBy: { name: '"><img src=x onerror=alert(1)>' } });
     const markup = html(await InvitationPage({ params: Promise.resolve({ token: 't'.repeat(64) }) }));
-    expect(markup).not.toMatch(/<script|<img/);
+    // The one <img> is the gate frame's own logo (plan 1B Task 6): the hostile names arrive as escaped text, never as elements.
+    expect(markup).not.toMatch(/<script|<img(?![^>]*class="gate__logo")/);
+    expect(markup.match(/<img/g)).toHaveLength(1);
   });
 
   it('FR-MEM-01: the invited line uses "a" or "an" for the role', async () => {
@@ -83,7 +88,7 @@ describe('S-04, the invitation page (FR-ACC-01)', () => {
       expect(roleWithArticle(role)).toBe(withArticle);
       vi.mocked(invitationByToken).mockResolvedValue({ ...pendingInvitation, role });
       const markup = html(await InvitationPage({ params: Promise.resolve({ token: 't'.repeat(64) }) }));
-      expect(text(markup)).toContain(`Amina N. invited you to join as ${withArticle}. This invitation ends on 4 Nov 2026.`);
+      expect(text(markup)).toContain(`Amina N. invited you to join as ${withArticle}.`);
     }
   });
 

@@ -88,8 +88,11 @@ export const INVITATION_PAGE_COPY = Object.freeze({
   heading: (org: string): string => `You are invited to ${org}`,
   /** `roleWithArticle` is "an Owner", "a Viewer" and so on, from `roleWithArticle` below (audit A 159). */
   invitedAs: INVITED_AS,
-  invitedLine: (inviter: string, roleWithArticle: string, date: string): string =>
-    `${inviter} ${INVITED_AS(roleWithArticle)}. This invitation ends on ${date}.`,
+  /** "Amina N. invited you to join as an Assessor." (audit A 159); the role's meaning and the end date follow it. */
+  invitedBy: (inviter: string, roleWithArticle: string): string => `${inviter} ${INVITED_AS(roleWithArticle)}.`,
+  endsOn: (date: string): string => `This invitation ends on ${date}.`,
+  /** The steps of joining in the gate frame's route (plan 1B Task 6, ruling L5-14); "Accept the terms" is GATE_COPY's. */
+  stops: Object.freeze({ details: 'Your details', join: 'Join' }),
 });
 
 const ROLE_TERMS: Readonly<Record<OrgRole, DefinedEntry>> = Object.freeze({
