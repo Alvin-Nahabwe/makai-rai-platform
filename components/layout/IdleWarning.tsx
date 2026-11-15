@@ -19,6 +19,7 @@ import { IDLE_TEXTS } from '@/lib/auth/session/copy';
 import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
+import './idle.css';
 
 /** Why the session ended, as the clock tells it; null when the server ended it before either deadline. */
 export type EndedReason = 'idle' | 'absolute' | null;
@@ -261,9 +262,11 @@ export default function IdleWarning({
           </Button>
         }
       >
-        <p>{IDLE_TEXTS.warningBody}</p>
-        <p>{IDLE_TEXTS.warningKept}</p>
-        {failed ? <p role="alert" className="shell-idle__failed">{IDLE_TEXTS.stayFailed}</p> : null}
+        <div className="shell-idle__body">
+          <p>{IDLE_TEXTS.warningBody}</p>
+          <p>{IDLE_TEXTS.warningKept}</p>
+          {failed ? <p role="alert" className="shell-idle__failed">{IDLE_TEXTS.stayFailed}</p> : null}
+        </div>
       </Dialog>
     </div>
   );

@@ -1,0 +1,11 @@
+/* The session warning's body and the signed-out notice (plan 1B Task 4): the rule, then what is kept, as two paragraphs
+   with room between them. Role tokens only; nothing animates. */
+.shell-idle__body {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.shell-idle__ended .ui-banner__body {
+  display: grid;
+  gap: var(--space-1);
+}

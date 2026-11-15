@@ -13,6 +13,12 @@
   max-inline-size: 65ch;
 }
 
+/* The signed-out line (C12) and what is kept: two paragraphs in the session banner. */
+.auth-view__lead .ui-banner__body {
+  display: grid;
+  gap: var(--space-2);
+}
+
 /* The footer: the links after the form, set off by a line, with room between them. */
 .auth-view__footer {
   display: grid;
