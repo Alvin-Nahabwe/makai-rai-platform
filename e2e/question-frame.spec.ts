@@ -49,7 +49,9 @@ const lastStatus = (page: Page) => page.locator('.ui-radio-card:has(#decision-st
 
 /** The status choice is wholly in the first view: nothing has scrolled, and its last option's card ends above the fold. */
 async function expectStatusInFirstView(page: Page, height: number, what: string): Promise<void> {
-  const scrolled = await page.evaluate(() => window.scrollY + (document.querySelector('.shell__main')?.scrollTop ?? 0));
+  // From 1024 px the content's scroller is the root layout's frame (the shell's fix round 4, D23; main before it). Every
+  // page has the frame, so a missing one throws rather than reading as "not scrolled".
+  const scrolled = await page.evaluate(() => window.scrollY + document.querySelector('.page-frame')!.scrollTop);
   expect(scrolled, `${what}: the page has not scrolled`).toBe(0);
   const b = await box(lastStatus(page));
   expect(b.y + b.height, `${what}: the status choice ends at ${b.y + b.height}px of ${height}`).toBeLessThanOrEqual(height);

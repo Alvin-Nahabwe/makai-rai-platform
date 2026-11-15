@@ -7,7 +7,8 @@ import { SHELL_COPY } from '@/lib/shell/copy';
  * The theme switch (plan 1A Task 11, ruling L2-47; modern-web-guidance `dark-mode-toggle`). Both labels are in the markup and
  * CSS shows the one that names the other theme (app/globals.css, moved there from components/layout/shell.css), so the server and the client render the same
  * thing and the words are right on first paint, before any script. The control's name changes with the state, so it carries
- * no aria-pressed. A press sets <html data-theme> and stores the choice under `theme`, which the root layout's inline script
+ * no aria-pressed. The words sit in their own span, so the rail can show the switch as an icon in a 44 px square beside Sign
+ * out and keep the words as its accessible name (shell.css, the rail-fit ruling). A press sets <html data-theme> and stores the choice under `theme`, which the root layout's inline script
  * reads before paint.
  */
 export default function ThemeToggle({ onLight = false }: { onLight?: boolean }) {
@@ -26,8 +27,8 @@ export default function ThemeToggle({ onLight = false }: { onLight?: boolean }) 
 
   return (
     <button type="button" className={onLight ? 'shell-theme shell-theme--on-light' : 'shell-theme'} onClick={toggle}>
-      <span className="shell-theme__to-dark"><Icon name="moon" />{SHELL_COPY.theme.toDark}</span>
-      <span className="shell-theme__to-light"><Icon name="sun" />{SHELL_COPY.theme.toLight}</span>
+      <span className="shell-theme__to-dark"><Icon name="moon" /><span className="shell-theme__label">{SHELL_COPY.theme.toDark}</span></span>
+      <span className="shell-theme__to-light"><Icon name="sun" /><span className="shell-theme__label">{SHELL_COPY.theme.toLight}</span></span>
     </button>
   );
 }

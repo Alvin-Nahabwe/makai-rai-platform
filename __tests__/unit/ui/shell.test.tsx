@@ -457,8 +457,9 @@ describe('the theme switch (L2-47)', () => {
     for (const onLight of [false, true]) {
       const html = renderToStaticMarkup(<ThemeToggle onLight={onLight} />);
       expect(html).toMatch(new RegExp(`^<button type="button" class="${onLight ? 'shell-theme shell-theme--on-light' : 'shell-theme'}">`));
-      expect(html).toMatch(/<span class="shell-theme__to-dark"><svg[^>]*aria-hidden="true"[\s\S]*?<\/svg>Switch to dark theme<\/span>/);
-      expect(html).toMatch(/<span class="shell-theme__to-light"><svg[^>]*aria-hidden="true"[\s\S]*?<\/svg>Switch to light theme<\/span>/);
+      // The words in their own span (fix round 4: the rail shows the switch as an icon and keeps the words as its name).
+      expect(html).toMatch(/<span class="shell-theme__to-dark"><svg[^>]*aria-hidden="true"[\s\S]*?<\/svg><span class="shell-theme__label">Switch to dark theme<\/span><\/span>/);
+      expect(html).toMatch(/<span class="shell-theme__to-light"><svg[^>]*aria-hidden="true"[\s\S]*?<\/svg><span class="shell-theme__label">Switch to light theme<\/span><\/span>/);
       expect(html).not.toMatch(/aria-pressed|aria-label|title=/);
       expect(html).not.toMatch(/\p{Extended_Pictographic}|◐/u);
       for (const m of html.matchAll(/<svg[^>]*>/g)) expect(m[0]).toContain('aria-hidden="true"');

@@ -1,5 +1,4 @@
 import type { ShellProjectStage } from '@/lib/shell/types';
-import { PROJECT_COPY } from '@/lib/project/copy';
 import { STAGE_LIST_COPY } from '@/lib/question/list/copy';
 import { QUESTION_COPY } from '@/lib/question/copy';
 
@@ -8,12 +7,11 @@ import { QUESTION_COPY } from '@/lib/question/copy';
  * block and the bar context are server components (components/layout/ShellProject.tsx), so none of these words reach a
  * browser bundle; lib/shell/copy.ts holds the words the client shell shows.
  *
- * The stage sentence is the project page's own ("You can work on the stages in any order.", PROJECT_COPY), not the
- * sketch's "Three stages. Record them in any order."; the stage names are the stage list's; "All questions" is the
- * question page's link. The state lines follow spec 5 principle 7: counts in words, no percentage, no total across stages.
+ * The block carries no stage sentence: the project page's own ("You can work on the stages in any order.") stays on that
+ * page, so the three stage lines fit a laptop's first view (the lead's rail-fit ruling, fix round 4). The stage names are
+ * the stage list's; "All questions" is the question page's link. The state lines follow spec 5 principle 7: counts in words, no percentage, no total across stages.
  */
 export const SHELL_PROJECT_COPY = Object.freeze({
-  stagesLead: PROJECT_COPY.overview.anyOrder,
   stageTitle: STAGE_LIST_COPY.stageTitle,
   allQuestions: QUESTION_COPY.nav.allQuestions,
   youAreHere: 'You are here',

@@ -124,7 +124,8 @@ async function signInPage(page: Page, account: Pick<FixtureAccount, 'email' | 'p
 
 /**
  * Waits for the scroll to stop: `html { scroll-behavior: smooth }` means a box measured right after a focus or a key press is
- * read on a page in motion (ruling T16-22). From 1024 px the scroller is `main.shell__main`, below it the window. Settled is
+ * read on a page in motion (ruling T16-22). From 1024 px the scroller is the root layout's `.page-frame` (it held main.shell__main
+ * until the shell's fix round 4, D23), below it the window. Settled is
  * the same position on two polls 100 ms apart; the predicate is synchronous because waitForFunction takes a returned Promise
  * as a truthy answer at once.
  */
@@ -132,8 +133,8 @@ async function scrollSettled(page: Page): Promise<void> {
   await page.evaluate(() => { (window as unknown as { lastScrollAt?: number }).lastScrollAt = Number.NaN; });
   await page.waitForFunction(() => {
     const w = window as unknown as { lastScrollAt?: number };
-    const main = document.querySelector('.shell__main');
-    const at = window.scrollY + (main ? main.scrollTop : 0);
+    // Every page has the frame (app/layout.tsx), so a missing one throws rather than reading as settled.
+    const at = window.scrollY + document.querySelector('.page-frame')!.scrollTop;
     const settled = w.lastScrollAt === at;
     w.lastScrollAt = at;
     return settled;
@@ -200,7 +201,7 @@ test.describe('My account and sessions', () => {
     const password = page.getByLabel(PERSONAL_DATA_COPY.passwordLabel);
     await expect(password).toBeFocused();
     await scrollSettled(page);
-    // At 1280 px the scroller is main.shell__main, so a box is placed against the window's viewport, never against the scroller.
+    // At 1280 px the scroller is the page frame, so a box is placed against the window's viewport, never against the scroller.
     const view = page.viewportSize()!;
     const confirm = page.locator('.ui-confirm');
     const boxes: Array<[string, { x: number; y: number; width: number; height: number }]> = [

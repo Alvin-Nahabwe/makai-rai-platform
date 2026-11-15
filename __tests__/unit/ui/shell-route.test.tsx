@@ -77,8 +77,9 @@ describe('the rail project block (R4)', () => {
     expect(links[0].attrs).toContain(`href="/orgs/a/projects/${ID}"`);
     expect(links.slice(1).map((l) => /href="([^"]+)"/.exec(l.attrs)![1])).toEqual(
       ['pre-processing', 'in-processing', 'post-processing'].map((s) => `/orgs/a/projects/${ID}/stages/${s}`));
-    expect(SHELL_PROJECT_COPY.stagesLead).toBe(PROJECT_COPY.overview.anyOrder);
-    expect(stripTags(html)).toContain('You can work on the stages in any order.');
+    // Fix round 4 (lead's ruling, rail fit): the stage sentence stays on the project page and leaves the rail's block.
+    expect(stripTags(html)).not.toContain(PROJECT_COPY.overview.anyOrder);
+    expect(html).not.toContain('shell-project__lead');
     expect(html).not.toContain('%');
   });
 
@@ -293,7 +294,7 @@ describe('the shell\'s frame (route task 1, fix round 2)', () => {
   });
 });
 
-describe('fix round 3: the rail fits a laptop, the footer sits in the content column', () => {
+describe('fix round 3: the rail fits a laptop (D4, D5) and the minor design items', () => {
   const css = readFileSync('components/layout/shell.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   const wide = css.slice(css.indexOf('@media (min-width: 1024px)'));
   /** Every rule body for `selector` in `source`, joined (a selector can have a base rule and a wide one). */
@@ -322,7 +323,9 @@ describe('fix round 3: the rail fits a laptop, the footer sits in the content co
   });
 
   it('D4 D5: from 1024 px only the upper part scrolls, with a thin navy scrollbar and a cue at each edge with more beyond', () => {
-    expect(ruleIn(wide, '.shell-topbar__panel')).toMatch(/overflow: hidden;/);
+    // Fix round 4 (M3): the panel scrolls as a whole only when the foot alone outgrows it (a window under ~230 px tall).
+    expect(ruleIn(wide, '.shell-topbar__panel')).toMatch(/overflow-y: auto;/);
+    expect(ruleIn(wide, '.shell-topbar__panel')).not.toMatch(/overflow: hidden;/);
     const scroll = ruleIn(wide, '.shell-rail__scroll');
     expect(scroll).toMatch(/overflow-y: auto;/);
     expect(scroll).toMatch(/scrollbar-width: thin;/);
@@ -343,17 +346,6 @@ describe('fix round 3: the rail fits a laptop, the footer sits in the content co
     expect(ruleIn(css, '.shell-rail__nav')).toMatch(/gap: var\(--space-2\);/);
   });
 
-  it('D23 not taken (fix round 3): main stays the content column\'s scroller from 1024 px, the one lane 2\'s pinned Save row is built against', () => {
-    const main = ruleIn(wide, '.shell__main');
-    expect(main).toMatch(/overflow-y: auto;/);
-    expect(main).toMatch(/max-height: 100vh;/);
-    expect(css).not.toMatch(/body:has\(> \.shell\)/);
-  });
-
-  it('D12 (coordinator, fix round 3): "You are here" takes lane 7\'s on-shell accent token when it lands, the shell ink until then', () => {
-    expect(ruleIn(css, '.shell-project__stage--current .shell-project__state')).toMatch(/color: var\(--color-on-shell-accent, var\(--color-shell-ink\)\);/);
-  });
-
   it('D20 D21 D26: the Menu button shows it is open; the bar keeps one inline padding; the footer\'s top rule is the rail\'s edge token', () => {
     expect(ruleIn(css, '.shell-topbar__menu-button[aria-expanded="true"]')).toMatch(/background-color: var\(--color-shell-hover\);/);
     expect(ruleIn(css, '.shell-topbar')).toMatch(/padding: var\(--space-2\) var\(--space-3\);/);
@@ -366,5 +358,84 @@ describe('fix round 3: the rail fits a laptop, the footer sits in the content co
     expect(ruleIn(css, '.shell-project__stage--current')).toMatch(/background-color: var\(--color-shell-hover\);/);
     expect(css).not.toMatch(/\.shell-project__stage:hover,\s*\.shell-project__stage--current/);
     expect(ruleIn(css, '.shell-project__stage:hover .shell-project__stage-name')).toMatch(/text-decoration: underline;/);
+  });
+});
+
+describe('fix round 4: the footer in the content column (D23, coordinator\'s option iii), the cue on the real edge, the rail fits', () => {
+  const css = readFileSync('components/layout/shell.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const wide = css.slice(css.indexOf('@media (min-width: 1024px)'));
+  const ruleIn = (source: string, selector: string) => {
+    const bodies: string[] = [];
+    for (let at = source.indexOf(`${selector} {`); at >= 0; at = source.indexOf(`${selector} {`, at + 1)) {
+      bodies.push(source.slice(at, source.indexOf('}', at)));
+    }
+    expect(bodies.length, selector).toBeGreaterThan(0);
+    return bodies.join('\n');
+  };
+
+  it('D23: the root layout puts the page and its one footer in one frame, after the skip link and the offline banner', () => {
+    const layout = readFileSync('app/layout.tsx', 'utf8');
+    expect(layout).toMatch(/<SkipLink \/>\s*<OfflineBanner \/>\s*(\{\/\*[\s\S]*?\*\/\}\s*)?<div className="page-frame">\s*\{children\}\s*<Footer \/>\s*<\/div>/);
+    expect([...layout.matchAll(/<Footer \/>/g)]).toHaveLength(1);
+  });
+
+  it('D23: from 1024 px the frame of a shell page is the one content scroller, 32 px of end padding for lane 2\'s pinned row; main no longer scrolls', () => {
+    const frame = ruleIn(wide, '.page-frame:has(> .shell)');
+    expect(frame).toMatch(/overflow-y: auto;/);
+    expect(frame).toMatch(/block-size: 100vh;/);
+    expect(frame).toMatch(/padding-block-end: var\(--space-8\);/);
+    expect(frame).toMatch(/grid-template-columns: var\(--rail-width\) minmax\(0, 1fr\);/);
+    // No smooth scroll of its own: scroll-behavior is not inherited from html, and nothing here sets it.
+    expect(css).not.toMatch(/[\s;{]scroll-behavior:/);
+    const main = ruleIn(wide, '.shell__main');
+    expect(main).not.toMatch(/overflow-y: auto;/);
+    expect(main).not.toMatch(/max-height: 100vh;/);
+    expect(main).toMatch(/padding: var\(--space-8\);/);
+  });
+
+  it('D23: the shell is a subgrid of the frame, the rail spans main\'s row and the footer\'s, the footer takes the content column', () => {
+    expect(ruleIn(wide, '.page-frame > .shell')).toMatch(/grid-template-rows: subgrid;/);
+    expect(ruleIn(wide, '.page-frame > .shell')).toMatch(/grid-template-columns: subgrid;/);
+    expect(ruleIn(wide, '.page-frame > .shell')).toMatch(/grid-row: shell-start \/ shell-end;/);
+    expect(ruleIn(wide, '.shell-topbar__panel')).toMatch(/grid-row: 1 \/ -1;/);
+    const footer = ruleIn(wide, '.page-frame > .shell ~ .shell-footer');
+    expect(footer).toMatch(/grid-column: 2;/);
+    expect(footer).toMatch(/grid-row: footer-start \/ shell-end;/);
+    // It and the rail take back the frame's end padding, so the band ends on the screen's foot with the rail whole beside it.
+    expect(footer).toMatch(/margin-block-end: calc\(-1 \* var\(--space-8\)\);/);
+    expect(ruleIn(wide, '.shell-topbar__panel')).toMatch(/margin-block-end: calc\(-1 \* var\(--space-8\)\);/);
+  });
+
+  it('D24: in the content column the band\'s content starts at the page\'s gutter, not centred', () => {
+    const footer = ruleIn(wide, '.page-frame > .shell ~ .shell-footer');
+    expect(footer).toMatch(/padding-inline: var\(--space-8\);/);
+    expect(ruleIn(wide, '.page-frame > .shell ~ .shell-footer .shell-footer__inner')).toMatch(/margin-inline: 0;/);
+  });
+
+  it('I2: the scroll-driven fallback applies only where animation-timeline exists; with neither feature there is no cue', () => {
+    expect(css).toMatch(/@supports \(animation-timeline: scroll\(\)\) and \(not \(container-type: scroll-state\)\) \{/);
+    expect(css).not.toMatch(/@supports not \(container-type: scroll-state\)/);
+  });
+
+  it('I3 M2: each cue sits on the scroller\'s real edge, past its 8 px padding; the bottom fade ends on the foot rule with no hairline', () => {
+    expect(ruleIn(wide, '.shell-rail__scroll::before')).toMatch(/inset-block-start: calc\(-1 \* var\(--space-2\)\);/);
+    expect(ruleIn(wide, '.shell-rail__scroll::after')).toMatch(/inset-block-end: calc\(-1 \* var\(--space-2\)\);/);
+    expect(ruleIn(wide, '.shell-rail__scroll::after')).not.toMatch(/border-block-end/);
+    expect(ruleIn(css, '.shell-rail__foot')).toMatch(/border-block-start: 1px solid var\(--color-border-container\);/);
+  });
+
+  it('rail fit: Sign out and the theme switch share one row; the switch is a 44 px square whose words are its accessible name', () => {
+    expect(ruleIn(css, '.shell-rail__actions')).toMatch(/flex-direction: row;/);
+    const square = ruleIn(css, '.shell-rail__actions .shell-theme');
+    expect(square).toMatch(/inline-size: var\(--target-primary\);/);
+    expect(ruleIn(css, '.shell-rail__actions .shell-theme__label')).toMatch(/clip-path: inset\(50%\);/);
+    at('/orgs/a/projects');
+    const html = renderToStaticMarkup(<Rail shell={shell} />);
+    expect(html).toMatch(/<span class="shell-theme__to-dark"><svg[^>]*aria-hidden="true"[\s\S]*?<\/svg><span class="shell-theme__label">Switch to dark theme<\/span><\/span>/);
+  });
+
+  it('I1: the shell reads no variable that globals.css does not define (lane 7\'s on-shell accent comes with its own merge)', () => {
+    expect(css).not.toMatch(/--color-on-shell-accent/);
+    expect(ruleIn(css, '.shell-project__stage--current .shell-project__state')).toMatch(/color: var\(--color-shell-ink\);/);
   });
 });

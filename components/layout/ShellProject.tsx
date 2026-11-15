@@ -34,7 +34,8 @@ function LineMark({ current }: { current: boolean }) {
 
 /**
  * The rail's project block (owner ruling R4; sketch `1-the-route.png`, left column under the navigation): the project's name
- * linking to its page, the project page's sentence about the stages, then the three stages in order, each linking to its
+ * linking to its page, then the three stages in order (the sentence about the stages stays on the project page: the lead's
+ * rail-fit ruling, so the three lines fit a laptop's first view), each linking to its
  * All questions page with one line of state (lib/shell/project/copy.ts). The stage in the address is `aria-current=
  * "location"`: it is where the open page sits in the project, while the stages themselves are no sequence of steps (they
  * are worked in any order), and "page" stays the rail item's (Projects). The list is named by the project's name.
@@ -45,7 +46,6 @@ export function RailProjectBlock({ project, orgSlug, currentStage }: Props) {
       <p className="shell-project__name" id={NAME_ID}>
         <Link href={projectHref(orgSlug, project.id)}>{project.name}</Link>
       </p>
-      <p className="shell-project__lead">{SHELL_PROJECT_COPY.stagesLead}</p>
       <ul className="shell-project__stages" aria-labelledby={NAME_ID}>
         {project.stages.map((s) => {
           const current = s.stage === currentStage;

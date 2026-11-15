@@ -93,8 +93,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <SkipLink />
         <OfflineBanner />
-        {children}
-        <Footer />
+        {/* The page and its one footer in one frame. On a public page the frame draws nothing; on a signed-in page from
+            1024 px it is the content's one scroller, so the footer ends the content column beside the rail
+            (components/layout/shell.css, review D23). */}
+        <div className="page-frame">
+          {children}
+          <Footer />
+        </div>
       </body>
     </html>
   );

@@ -216,11 +216,6 @@
 }
 
 @media (min-width: 1024px) {
-  .shell {
-    display: grid;
-    grid-template-columns: var(--rail-width) minmax(0, 1fr);
-  }
-
   .shell-topbar {
     display: none;
   }
@@ -235,20 +230,79 @@
     z-index: 1;
     width: auto;
     height: 100vh;
-    /* The rail's own parts scroll, not the panel: the upper part when it must, beside a pinned foot (review D4). */
-    overflow: hidden;
+    /* The rail's own parts scroll: the upper part when it must, beside a pinned foot (review D4). The panel scrolls as a
+       whole only when the foot alone is taller than the window (under about 230 px), so Sign out stays reachable (M3). */
+    overflow-y: auto;
     /* In the dark theme the shell navy and the page ground are 1.04:1 apart: the edge keeps the rail from merging into
        the page. A container border, so it is quiet in the light theme, where the navy already stands apart. */
     border-inline-end: 1px solid var(--color-border-container);
   }
 
   .shell__main {
-    overflow-y: auto;
-    max-height: 100vh;
     padding: var(--space-8);
     /* One stacking context for main at level auto: no z-index inside it, however high, can pass the rail's z-index 1
        (and the sign-out warning in it). It makes no containing block, so fixed and sticky descendants are unchanged. */
     isolation: isolate;
+  }
+}
+
+/* ── From 1024 px on screen: the footer in the content column (review D23; the coordinator's option iii) ──
+   The root layout's frame (app/layout.tsx: the page, then its one footer) is the content's one scroller: a grid of the
+   rail's column and the content column. The shell is a subgrid of it, so the rail spans main's row and the footer's and
+   stays whole beside the band, sticky at the top; main and the band share the content column, and the band ends it.
+   The frame's 32 px end padding is the edge lane 2's pinned Save row is built against (sticky, its end inset of -32 px
+   takes the padding back: it pins on the screen's foot, as when main scrolled itself with 32 px of padding). The band
+   and the rail take that padding back with a negative end margin, so at the end of the scroll the band ends on the
+   screen's foot and the rail is still 100vh. The frame sets no scroll-behavior and does not inherit the document's
+   smooth scroll, so focus moves scroll it at once, as main did. Screen only: print keeps the plain flow (the print rule
+   at the end of this file is a byte copy of globals.css's). Below 1024 px nothing here applies: the document scrolls. */
+@media screen and (min-width: 1024px) {
+  .page-frame:has(> .shell) {
+    display: grid;
+    grid-template-columns: var(--rail-width) minmax(0, 1fr);
+    /* Two rows for boxes a layout puts before the shell inside the frame (today one: the idle warning's, which also holds
+       its signed-out notice; e2e/shell-project.spec.ts holds the count), then main's row, which takes the rest of a short
+       page so the band still ends on the screen's foot, then the band's. :has() and subgrid are Baseline widely
+       available, so there is no fallback for a browser without them. */
+    grid-template-rows: repeat(2, auto) [shell-start] 1fr [footer-start] auto [shell-end];
+    block-size: 100vh;
+    overflow-y: auto;
+    padding-block-end: var(--space-8);
+  }
+
+  .page-frame:has(> .shell) > * {
+    grid-column: 1 / -1;
+  }
+
+  .page-frame > .shell {
+    display: grid;
+    grid-template-columns: subgrid;
+    grid-template-rows: subgrid;
+    grid-row: shell-start / shell-end;
+    min-height: 0;
+  }
+
+  .shell-topbar__panel {
+    grid-column: 1;
+    grid-row: 1 / -1;
+    margin-block-end: calc(-1 * var(--space-8));
+  }
+
+  .shell__main {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  /* The band in the content column, its content on the page's gutter (review D24), where main's content starts. */
+  .page-frame > .shell ~ .shell-footer {
+    grid-column: 2;
+    grid-row: footer-start / shell-end;
+    margin-block-end: calc(-1 * var(--space-8));
+    padding-inline: var(--space-8);
+  }
+
+  .page-frame > .shell ~ .shell-footer .shell-footer__inner {
+    margin-inline: 0;
   }
 }
 
@@ -274,7 +328,8 @@
   flex-direction: column;
   gap: var(--space-1);
   padding: var(--space-2) var(--space-3);
-  border-block-start: 1px solid var(--color-shell-hover);
+  /* The rail's edge token, as the footer's top rule (review M2; --color-shell-hover is 1.2:1 on the navy). */
+  border-block-start: 1px solid var(--color-border-container);
 }
 
 .shell-rail__account {
@@ -315,17 +370,19 @@
     opacity: 0;
   }
 
+  /* A sticky box's inset resolves inside the scroller's padding: each cue takes back the 8 px, so it sits on the real
+     edge and no sliced line of text shows between it and the edge (review I3). */
   .shell-rail__scroll::before {
-    inset-block-start: 0;
+    inset-block-start: calc(-1 * var(--space-2));
     margin-block-end: calc(-1 * var(--space-6));
     border-block-start: 1px solid var(--color-shell-muted);
     background: linear-gradient(var(--color-shell), transparent);
   }
 
+  /* The bottom fade ends on the foot's rule, with no hairline of its own, so there is one rule there, not two (M2). */
   .shell-rail__scroll::after {
-    inset-block-end: 0;
+    inset-block-end: calc(-1 * var(--space-2));
     margin-block-start: calc(-1 * var(--space-6));
-    border-block-end: 1px solid var(--color-shell-muted);
     background: linear-gradient(transparent, var(--color-shell));
   }
 
@@ -341,9 +398,10 @@
     }
   }
 
-  /* Without scroll-state queries: the same cue, shown by the scroll position (a scroll-driven animation; it follows the
-     scroll, never a timer). */
-  @supports not (container-type: scroll-state) {
+  /* Without scroll-state queries but with scroll-driven animations: the same cue, shown by the scroll position (it follows
+     the scroll, never a timer). A browser with neither keeps the cues at opacity 0: the thin scrollbar alone says the part
+     scrolls (review I2; a zero-length animation on the document timeline would hold the top cue on for good). */
+  @supports (animation-timeline: scroll()) and (not (container-type: scroll-state)) {
     .shell-rail__scroll::before,
     .shell-rail__scroll::after {
       animation: shell-rail-cue linear both;
@@ -476,8 +534,31 @@
 
 .shell-rail__actions {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: var(--space-1);
+}
+
+/* Sign out and the theme switch share one row (lead's ruling, rail fit): Sign out takes the room and keeps its words; the
+   switch is a 44 px square showing its icon, its words kept as its accessible name (they change with the theme). */
+.shell-rail__actions > :first-child {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+
+.shell-rail__actions .shell-theme {
+  flex: none;
+  justify-content: center;
+  inline-size: var(--target-primary);
+  padding-inline: 0;
+}
+
+.shell-rail__actions .shell-theme__label {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /* ── The rail's project block (owner ruling R4; the locked sketch's `.lines`): the project, the stage sentence, the three
@@ -497,6 +578,10 @@
 }
 
 .shell-project__name a {
+  /* A 24 px target (UX-34): the stage sentence that spaced it from the first stage line has left the rail. */
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--target-min);
   color: var(--color-shell-ink);
   text-decoration: none;
 }
@@ -505,12 +590,6 @@
   color: var(--color-shell-ink);
   text-decoration: underline;
   text-underline-offset: 0.15em;
-}
-
-.shell-project__lead {
-  padding: 0 var(--space-2) var(--space-2);
-  color: var(--color-shell-muted);
-  font-size: var(--font-size-small);
 }
 
 .shell-rail__nav .shell-project__stages {
@@ -563,9 +642,9 @@
 }
 
 .shell-project__stage--current .shell-project__state {
-  /* Peach once lane 7's role token lands (--color-on-shell-accent, #F4B983 in both themes, only on the navy shell; the
-     coordinator's ruling reversing D12); the shell ink until then. */
-  color: var(--color-on-shell-accent, var(--color-shell-ink));
+  /* The shell ink. Lane 7's peach role token for this line (the coordinator's ruling reversing D12) is read here once its
+     merge defines it in globals.css: a read of an undefined name fails the legacy-tokens lint (review I1). */
+  color: var(--color-shell-ink);
   font-weight: var(--font-weight-semibold);
 }
 

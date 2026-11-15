@@ -648,7 +648,8 @@ async function watchFirstTheme(page: Page): Promise<void> {
 }
 
 async function shownThemeWords(page: Page, scope: string): Promise<string[]> {
-  return page.locator(`${scope} .shell-theme span`).evaluateAll((els) => els.filter((e) => getComputedStyle(e).display !== 'none').map((e) => (e as HTMLElement).innerText.trim()));
+  // The two labels, each the button's child; the words sit in a span inside each (fix round 4).
+  return page.locator(`${scope} .shell-theme > span`).evaluateAll((els) => els.filter((e) => getComputedStyle(e).display !== 'none').map((e) => (e as HTMLElement).innerText.trim()));
 }
 
 for (const where of [{ name: 'the rail', signedIn: true, scope: '.shell-rail' }, { name: 'the public header', signedIn: false, scope: '.shell-public-header' }]) {
