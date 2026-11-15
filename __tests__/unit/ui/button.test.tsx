@@ -19,13 +19,18 @@ describe('Button', () => {
     const globals = readFileSync('app/globals.css', 'utf8');
     const block = (selector: string) => {
       const at = globals.indexOf(`${selector} {`);
+      expect(at, selector).toBeGreaterThanOrEqual(0);
       return globals.slice(at, globals.indexOf('}', at));
     };
     const value = (b: string, name: string) => new RegExp(`--color-${name}:\\s*(#[0-9A-Fa-f]{6})`).exec(b)?.[1];
     const light = block(':root');
+    expect(value(light, 'heading')).toMatch(/^#/);
     expect(value(light, 'heading')).toBe(value(light, 'link'));
     for (const dark of [block(":root:not([data-theme='light'])"), block(":root[data-theme='dark']")]) {
+      expect(value(dark, 'heading')).toMatch(/^#/);
       expect(value(dark, 'heading')).toBe(value(dark, 'ink'));
+      // The enabled label is not the disabled one's muted ink.
+      expect(value(dark, 'heading')).not.toBe(value(dark, 'ink-muted'));
       expect(value(dark, 'heading')).not.toBe(value(dark, 'link'));
     }
   });
