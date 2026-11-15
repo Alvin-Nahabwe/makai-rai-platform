@@ -14,20 +14,22 @@ export function stripBidiControls(name: string): string {
 }
 
 /**
- * Where a link goes, as a reader sees it beside the name its author gave it (link spoofing: a name can claim any site).
- * The address's host as the URL parser reads it (a look-alike international name in its punycode form, the form the
- * browser resolves; no user, password or port), bidi controls removed (E14). An address with no host, or one that does
- * not parse as a URL, is returned whole with its bidi controls removed, so the reader still sees what was stored; it
- * never throws. Pure: `URL` is a global on the server and in the browser.
+ * A stored link address as the reader's page uses it, parsed ONCE so the address the browser follows and the host the
+ * reader is shown cannot disagree (link spoofing: "https:evil.example" is relative in a browser on an https page but reads
+ * as evil.example to a parse without a base). `href` is the parsed absolute address, `host` its host as the browser
+ * resolves it (a look-alike international name in punycode; no user, password or port), bidi controls removed (E14).
+ * Null when the address does not parse or is not http or https: the caller shows it as text, never as a link. Pure:
+ * `URL` is a global on the server and in the browser.
  */
-export function linkHost(url: string): string {
-  let host = '';
+export function webLink(url: string): { href: string; host: string } | null {
+  let u: URL;
   try {
-    host = new URL(url).hostname;
+    u = new URL(url);
   } catch {
-    // Not a URL: the whole address is what the reader is shown (below). No link is drawn for it (isHttpUrl is false).
+    return null; // Not a URL: the caller shows the cleaned address as text, so nothing is hidden from the reader.
   }
-  return stripBidiControls(host === '' ? url : host);
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+  return { href: u.href, host: stripBidiControls(u.hostname) };
 }
 
 /** M-13's two numbers: megabytes (1,000,000 bytes) with one decimal. */

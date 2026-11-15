@@ -3,12 +3,10 @@ import type { ReactElement } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { StatusMark } from '@/components/ui/StatusMark';
 import { SealMarker } from '@/components/review/SealMarker';
-import { evidenceDisplayName } from '@/components/evidence/VersionEvidenceList';
 import { WITHDRAWAL_CODE_LABELS, deciderLabel } from '@/lib/decision/copy';
 import { textErasedLine } from '@/lib/documents/copy';
 import { EVIDENCE_COPY } from '@/lib/evidence/copy';
-import { linkHost, stripBidiControls } from '@/lib/evidence/format';
-import { isHttpUrl } from '@/lib/evidence/link';
+import { stripBidiControls, webLink } from '@/lib/evidence/format';
 import { QUESTION_COPY } from '@/lib/question/copy';
 import { markKindOf } from '@/lib/ui/marks';
 import { formatDay, formatDeclaredDate, formatTime } from '@/lib/format/dates';
@@ -33,25 +31,33 @@ export type ReadingDecisionProps = {
 /**
  * One item of the decision's evidence (directions/surfaces/viewer-reading.png; gap 2 of design-target section 8). A file:
  * its name, "<size> · added <date>", and a secondary Download button whose accessible name carries the file's name; an
- * erased file its erased line and no button. A link: its name, then the host it really goes to and "opens another site"
- * (so a name cannot claim another site: link spoofing), and the external mark, as a plain anchor only when its address is
- * http or https (never next/link, which prefetches: FR-EVD-03); never the whole address in brackets; a link with no name
- * is named by its address once. Any other address is its name and the cleaned address as text, with no claim to open a
- * site. Every name sits in `<bdi>` with bidi controls removed (E14).
+ * erased file its erased line and no button. A link: its name (the author's, or else its address), then the host it
+ * really goes to and "opens another site" (so a name cannot claim another site: link spoofing), and the external mark, as
+ * a plain anchor only when its address is http or https (never next/link, which prefetches: FR-EVD-03), whose href is the
+ * same parse the host comes from (lib/evidence/format.ts webLink); never the whole address in brackets. Any other
+ * address is its name and the whole cleaned address as text, with no claim to open a site. Every name sits in `<bdi>` with bidi controls removed (E14).
  */
 function EvidenceItem({ orgSlug, item }: { orgSlug: string; item: EvidenceItemView }): ReactElement {
   if (item.kind === 'link') {
     if (item.url === null) return <li className="reading-evidence__item">{EVIDENCE_COPY.list.linkAddressErased}</li>;
-    const name = <bdi>{evidenceDisplayName(item)}</bdi>;
-    // Where it goes, beside the author's name for it (link spoofing). A link with no name is named by its address already.
-    const where = item.label === null ? null : <bdi>{linkHost(item.url)}</bdi>;
+    const web = webLink(item.url);
+    if (web === null) {
+      // Not a web address: its name and the whole address, cleaned, as text; no link and no claim to open a site.
+      const address = stripBidiControls(item.url);
+      return (
+        <li className="reading-evidence__item">
+          <span>{item.label === null ? <bdi>{address}</bdi>
+            : <><bdi>{stripBidiControls(item.label)}</bdi>{R.notWebLink.before}<bdi>{address}</bdi>{R.notWebLink.after}</>}</span>
+        </li>
+      );
+    }
+    // Its name (the author's, or else its address), then the host it really goes to: a name cannot claim another site.
     return (
       <li className="reading-evidence__item">
-        {isHttpUrl(item.url) ? (
-          <a className="reading-evidence__link" href={item.url} rel="noopener noreferrer">
-            {name}{where === null ? R.opensAnotherSite : <>{R.linkTo.before}{where}{R.linkTo.after}</>}<Icon name="external-link" size={18} />
-          </a>
-        ) : <span>{name}{where === null ? null : <>{R.notWebLink.before}{where}{R.notWebLink.after}</>}</span>}
+        <a className="reading-evidence__link" href={web.href} rel="noopener noreferrer">
+          <bdi>{item.label === null ? stripBidiControls(item.url) : stripBidiControls(item.label)}</bdi>
+          {R.linkTo.before}<bdi>{web.host}</bdi>{R.linkTo.after}<Icon name="external-link" size={18} />
+        </a>
       </li>
     );
   }
