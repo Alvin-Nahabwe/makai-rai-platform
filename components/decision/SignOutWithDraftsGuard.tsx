@@ -13,7 +13,7 @@ export type SignOutWithDraftsGuardProps = {
   userId: string;
   children: ReactNode;
   /** Hears `working` when Delete them and sign out starts and `stillSignedIn` when the sign-out is refused (the rail's status line speaks it). */
-  onPhase?: (phase: SignOutPhase) => void;
+  onPhase: (phase: SignOutPhase) => void;
 };
 
 /**
@@ -21,8 +21,8 @@ export type SignOutWithDraftsGuardProps = {
  * leaving); false when it was refused (signOutClearingDrafts rejected: no navigation, still signed in), reported to
  * `onPhase` as `stillSignedIn`. The drafts are already gone by then (M-41).
  */
-export async function deleteDraftsAndSignOut(userId: string, onPhase?: (phase: SignOutPhase) => void): Promise<boolean> {
-  onPhase?.('working');
+export async function deleteDraftsAndSignOut(userId: string, onPhase: (phase: SignOutPhase) => void): Promise<boolean> {
+  onPhase('working');
   openDraftStore()?.purgeAccount(userId);
   clearLastProjects(userId);
   try {
@@ -30,7 +30,7 @@ export async function deleteDraftsAndSignOut(userId: string, onPhase?: (phase: S
     return true;
   } catch (err: unknown) {
     console.warn('drafts guard: a sign-out press was rejected', err instanceof Error ? err.name : typeof err);
-    onPhase?.('stillSignedIn');
+    onPhase('stillSignedIn');
     return false;
   }
 }

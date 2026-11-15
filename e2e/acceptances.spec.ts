@@ -263,8 +263,10 @@ test.describe('S-04 and S-05 in a browser', () => {
     // S-21 keeps the shell, as for a person in no organisation: Guidance, Help and My account.
     await page.goto('/account');
     await expect(nav).toBeVisible();
-    // The logo's link (`.shell-rail__brand`, to `/`, which sends this person back to the gate) names no organisation.
-    expect(await nav.locator('a:not(.shell-rail__brand)').evaluateAll((els) => els.map((e) => e.getAttribute('href')))).toEqual(['/explore/framework', '/help', '/account']);
+    // The logo's link (`.shell-rail__brand`) is the one link built from the organisation's slug when there is one: for this
+    // person it must go to `/` (which sends them back to the gate), never to `/orgs/...`. It is first in DOM order.
+    expect(await nav.getByRole('link').evaluateAll((els) => els.map((e) => e.getAttribute('href')))).toEqual(['/', '/explore/framework', '/help', '/account']);
+    await expect(nav.locator('a.shell-rail__brand')).toHaveAttribute('href', '/');
     await expect(nav).not.toContainText(fx.org.name);
     // Accepting moves on by a client-side navigation to /, which sends a person whose last organisation is known straight to
     // its dashboard; the shared signed-in layout must then give the rail that organisation without a reload.

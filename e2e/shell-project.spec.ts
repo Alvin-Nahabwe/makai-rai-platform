@@ -231,9 +231,11 @@ test('one gutter round the page (fix round 2): each signed-in page\'s content st
       expect(at, `${path}: a .page-content, .help or .question-page root`).not.toBeNull();
       expect(at!.main, `${path} at ${width}: main's padding is the gutter`).toEqual([gutter, gutter]);
       expect(at!.root, `${path} at ${width}: the page root adds none`).toEqual([0, 0]);
-      // The question page's frame lays its top strip into the shell's padding on purpose (workspace.css), so its box does
-      // not start one gutter down: its one gutter is the shell's, and it adds none (the two checks above).
-      if (!at!.frame) expect(at!.top, `${path} at ${width}: content starts one gutter down`).toBe(gutter);
+      // The question page's frame lays its top strip into the shell's padding on purpose: components/question/workspace.css
+      // takes 16 px back from 1160 px (line 41) and below 1024 px (line 174), so its box starts at or above one gutter down.
+      // Its one gutter is the shell's: it must add no second top gutter (a margin, or a positive offset on its first child).
+      if (at!.frame) expect(at!.top, `${path} at ${width}: the frame adds no second top gutter`).toBeLessThanOrEqual(gutter);
+      else expect(at!.top, `${path} at ${width}: content starts one gutter down`).toBe(gutter);
     }
   }
 });

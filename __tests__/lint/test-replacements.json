@@ -2894,5 +2894,21 @@
     "property": "The invited person lands on Home with ?welcome=1 and the landing renders the role's own controls, which proves the GRANTED role and not only membership: an assessor (project:create) sees the first-time Home's role-gated control and a role without project:create would see none. Org A is reachable and org B answers 404, as before.",
     "proof": "The role-gated control is now Home's \"Create a project\" link (HOME_COPY.firstTimeCreate, FirstTimeHome), asserted visible when can('assessor', 'project:create') and absent (count 0) otherwise, in place of the \"New project\" link gated by the same project:create. \"New project\" left Home: DESIGN-SPEC 9.1 and design-target Home gap 2 replace Home's header control with the next step, and for an organisation with no project the first-time page offers \"Create a project\" (org A of the fixture has no project, so the next step's \"Start recording\" / \"Continue recording\", the control the owner's 11:15 ruling of 15 November 2026 names, is not on this page). The two checks of the case (org A reachable, org B 404) are unchanged.",
     "task": "plan 1B (lane 3 task 6: final fixes, fix 7)"
+  },
+  {
+    "kind": "structure",
+    "changed": "e2e/two-orgs.spec.ts::a brand-new person accepts a live invitation into org A as assessor",
+    "replacedBy": "e2e/two-orgs.spec.ts::a brand-new person accepts a live invitation into org A as assessor",
+    "property": "Supersedes the entry of lane 3 task 6 (fix 7), which held only while org A has no active project. The invited person lands on Home with ?welcome=1 and the landing renders the role's own control, which proves the GRANTED role and not only membership: whichever Home variant org A has, the one role-gated control is present for an assessor and a role lacking the permission would see none. Org A is reachable and org B answers 404, as before.",
+    "proof": "The control is now matched as either Home variant's link: HOME_COPY.firstTimeCreate (FirstTimeHome, gated project:create) or PROJECT_COPY.start / HOME_COPY.continueRecording (the recorder's Home, gated decision:write), one anchored regular expression, .first(), asserted visible when can('assessor','project:create') && can('assessor','decision:write') and count 0 otherwise. The two variants divide the roles as before, and the case no longer depends on whether earlier specs created a project in org A. The two checks of the case (org A reachable, org B 404) are unchanged.",
+    "task": "plan 1B (lane 3 task 7: hand-in fixes, I1)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/ui/shell-route.test.tsx::the logo (decorative beside the name) and \"MAK-AI RAI Platform\" are one link to the organisation's Home",
+    "replacedBy": "__tests__/unit/ui/shell-route.test.tsx::the logo (decorative beside the name) and \"MAK-AI RAI Platform\" are one link to the organisation's Home",
+    "property": "The rail's brand is one link to the organisation's Home holding the MAK-AI logo (decorative, alt \"\") and the platform's name, first in the rail, decoding async, no loading or fetchpriority attribute. Only the logo's file and drawn size changed: the tagline of the logo was about 4 px high at 154 px wide.",
+    "proof": "The case still reads the brand link's href, its text 'MAK-AI RAI Platform', alt \"\", decoding=\"async\", no loading/fetchpriority, and the brand before the switcher; the img's src, srcSet, width and height now name /logo-makai-white-208.webp, its 2x /logo-makai-white-416.webp, 208 and 49 (the rail's content width), and the file sizes are held by the it.each cases added beside the existing ones in the same file.",
+    "task": "plan 1B (lane 3 task 7: hand-in fixes, logo)"
   }
 ]

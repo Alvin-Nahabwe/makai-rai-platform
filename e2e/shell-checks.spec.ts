@@ -68,8 +68,9 @@ async function contextFor(browser: Browser, signedIn: boolean, colorScheme: 'lig
 type Place = 'rail-brand' | 'bar-brand' | 'footer' | 'sign-in' | 'gate-brand' | 'other';
 type ShownImage = { src: string; srcset: string | null; alt: string | null; place: Place };
 const MAKAI_SET = '/logo-makai-white-154.webp 1x, /logo-makai-white-308.webp 2x';
+const RAIL_SET = '/logo-makai-white-208.webp 1x, /logo-makai-white-416.webp 2x';
 const LOGO_PLACES: ReadonlyArray<ShownImage> = [
-  { src: '/logo-makai-white-154.webp', srcset: MAKAI_SET, alt: '', place: 'rail-brand' },
+  { src: '/logo-makai-white-208.webp', srcset: RAIL_SET, alt: '', place: 'rail-brand' },
   { src: '/logo-makai-white-154.webp', srcset: MAKAI_SET, alt: 'MAK-AI RAI Platform', place: 'bar-brand' },
   { src: '/logo-makai-white-154.webp', srcset: MAKAI_SET, alt: 'MAK-AI', place: 'footer' },
   // Lane 5's gate frame (components/layout/GateFrame.tsx, `.gate__brand`; the not-found page draws the same brand in `[data-gate-look]`, app/not-found.tsx): the same logo, decorative beside the name (ruling I-3).
@@ -194,7 +195,7 @@ test.describe('shell pages, checked with the harness helpers', () => {
         src: e.getAttribute('src') ?? '', srcset: e.getAttribute('srcset'), alt: e.getAttribute('alt'),
         place: (e.closest('.shell-rail__brand') ? 'rail-brand' : e.closest('.shell-topbar__brand') ? 'bar-brand'
           : e.closest('footer.shell-footer') ? 'footer' : e.classList.contains('auth-logo') ? 'sign-in'
-          : e.closest('.gate__brand, [data-gate-look]') ? 'gate-brand' : 'other') as Place,
+          : e.closest('.gate__brand, [data-gate-look] > :first-child') ? 'gate-brand' : 'other') as Place,
       })));
       expect(strayImages(images), `${label}: images other than the logos, each in its own place`).toEqual([]);
       const exposed = await page
@@ -208,15 +209,16 @@ test.describe('shell pages, checked with the harness helpers', () => {
   test('UX-41 (self-test): a stray image is reported, whatever its alt, a logo out of its place, and a foreign 2x file', () => {
     expect(strayImages(LOGO_PLACES)).toEqual([]);
     // A decorative image anywhere else, an image that borrows a logo's alt, a logo file in the wrong place, and a logo's
-    // own src and alt in its own place but another file for 2x screens each fail.
+    // own src and alt in its own place but another file for 2x screens, and the footer's size of logo in the rail, each fail.
     expect(strayImages([
       { src: '/uploads/chart.png', srcset: null, alt: '', place: 'other' },
       { src: '/x.png', srcset: null, alt: 'MAK-AI', place: 'footer' },
       { src: '/logo-makai-white-154.webp', srcset: MAKAI_SET, alt: '', place: 'other' },
       { src: '/logo-dswb-white-125.webp', srcset: '/logo-dswb-white-125.webp 1x, /logo-dswb-white-250.webp 2x', alt: 'Data Science Without Borders', place: 'rail-brand' },
+      { src: '/logo-makai-white-154.webp', srcset: MAKAI_SET, alt: '', place: 'rail-brand' },
       { src: '/logo-makai-white-154.webp', srcset: '/logo-makai-white-154.webp 1x, /stray-2x.webp 2x', alt: '', place: 'rail-brand' },
       { src: '/logo-makai-white-154.webp', srcset: MAKAI_SET, alt: 'MAK-AI', place: 'gate-brand' },
-    ])).toHaveLength(6);
+    ])).toHaveLength(7);
   });
 
   test('UX-33 NFR-A11Y-02: a focused form field has a visible focus outline', async ({ page }) => {
