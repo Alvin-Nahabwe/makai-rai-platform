@@ -357,7 +357,7 @@ describe('fix round 1 (lane lead, 15 November)', () => {
     expect(controls).toEqual([[PROJECT_COPY.start, true], [HOME_COPY.chooseAnother, false]]);
   });
 
-  it('owner/admin lists stop at 3 rows and then link to the full list with a count, in number', () => {
+  it('owner/admin lists stop at 3 rows and then link to the full list, with no cross-stage count (FR-RM-04)', () => {
     const overdue = Array.from({ length: 7 }, (_, i) => item({ mitigationId: `m${i}`, owner: JOSEPH, overdue: true, dueDate: '2026-09-30', what: `Overdue ${i}` }));
     const findings = Array.from({ length: 82 }, (_, i) => finding({ id: `f${i}`, title: `Gap ${i}` }));
     const one = home({ ...RECORDER_WITH_LEAD, lead: { overdue, withoutMitigation: findings, multiProject: false } });
@@ -368,8 +368,8 @@ describe('fix round 1 (lane lead, 15 November)', () => {
       [HOME_COPY.leadOverdueAll(7), `/orgs/${ORG}/projects/${P1}/findings`],
       [HOME_COPY.leadNoMitigationAll(82), `/orgs/${ORG}/projects/${P1}/findings`],
     ]);
-    expect(HOME_COPY.leadNoMitigationAll(82)).toBe('See all 82 findings with no mitigation yet');
-    expect(HOME_COPY.leadOverdueAll(1)).toBe('See the 1 overdue mitigation');
+    expect(HOME_COPY.leadNoMitigationAll(82)).toBe('See all findings with no mitigation yet'); // FR-RM-04: no cross-stage total
+    expect(HOME_COPY.leadOverdueAll(1)).toBe('See the overdue mitigation');
     // Several projects: the link is the rail's Findings entry, in its own words (code review M2: no count it cannot show).
     const many = base({ role: 'owner', projects: [{ id: P1, name: 'Antenatal Risk Triage Model' }, { id: 'p2', name: 'Maize' }] });
     const h = home({ ...RECORDER_WITH_LEAD, base: many, otherProjects: 1, lead: { overdue, withoutMitigation: findings, multiProject: true } });

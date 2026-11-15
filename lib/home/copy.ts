@@ -54,8 +54,8 @@ export const HOME_COPY = Object.freeze({
   assignedToName: (name: string) => `Assigned to ${name}`,
   assignedToReader: 'Assigned to you',
   /** New (lane lead, fix round 1): each lead list shows its first rows, then this link to the whole list. */
-  leadOverdueAll: (n: number) => (n === 1 ? 'See the 1 overdue mitigation' : `See all ${n} overdue mitigations`),
-  leadNoMitigationAll: (n: number) => (n === 1 ? 'See the 1 finding with no mitigation yet' : `See all ${n} findings with no mitigation yet`),
+  leadOverdueAll: (n: number) => (n === 1 ? 'See the overdue mitigation' : 'See all overdue mitigations'),
+  leadNoMitigationAll: (n: number) => (n === 1 ? 'See the finding with no mitigation yet' : 'See all findings with no mitigation yet'),
   reviewerUnsealed: 'Reviews not sealed yet',
   reviewerChanged: 'Sealed reviews with changes since',
   reviewerRaised: 'Findings you raised',

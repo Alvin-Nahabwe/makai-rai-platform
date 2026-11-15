@@ -335,7 +335,7 @@ async function visit(context: BrowserContext, route: Route): Promise<Visit> {
     // Follow one link to somewhere else, so the navigation itself (including the client
     // router's own fetches, which `connect-src` governs) runs under the policy too. A page
     // with no such link is recorded, and must be listed in NO_LINK_TO_FOLLOW.
-    const href = await page.locator('a[href^="/"]').evaluateAll(
+    const href = await page.locator('main a[href^="/"]:visible').evaluateAll(
       (links, { here, only }) =>
         links
           .map((a) => a as HTMLAnchorElement)
@@ -349,7 +349,7 @@ async function visit(context: BrowserContext, route: Route): Promise<Visit> {
       followed = href;
       await Promise.all([
         page.waitForURL((url) => url.pathname !== landed, { timeout: 10_000 }),
-        page.locator(`a[href="${href}"]`).first().click(),
+        page.locator(`main a[href="${href}"]:visible`).first().click(),
       ]);
       await page.waitForLoadState('networkidle');
     }
