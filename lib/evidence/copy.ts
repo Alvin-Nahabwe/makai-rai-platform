@@ -64,6 +64,9 @@ export const EVIDENCE_COPY = Object.freeze({
     notUploadedBefore: 'Not uploaded. ',
     tooLargeAfter: ' is larger than 10 MB. Add a link to where it is kept instead.',
     wrongTypeAfter: ' is not a PDF, PNG, JPEG, Word (.docx), Excel (.xlsx), PowerPoint (.pptx) or ZIP file.',
+    /** An upload the server refused with 422: the same file cannot succeed, so no Retry (defect 14). */
+    notAcceptedBefore: 'Not uploaded: ',
+    notAcceptedAfter: ' was not accepted. Check the file, then add it again.',
     closedAfter: ' was not uploaded before the page closed. Choose the file again.',
     /** NFR-PERF-06, for a file over 2 MB. */
     largeFile: (megabytes: string): string => `This file is large (${megabytes} MB) and may upload slowly. You can add a link to it instead.`,

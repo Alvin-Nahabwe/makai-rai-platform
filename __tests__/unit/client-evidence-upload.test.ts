@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   evidenceUploadUrl, failureOf, linkFailureText, postEvidenceLink, requestIdForFile, uploadEvidenceFile, UPLOAD_STALL_MS, type UploadOutcome,
 } from '@/lib/client/evidenceUpload';
+import { statusLine, type UploadItem } from '@/lib/evidence/uploadQueue';
 import type { EvidenceItemView } from '@/types/api';
 
 const R1 = '0b3f6c1e-5a2d-4f7b-9d41-6a1f2c3d4e51';
@@ -121,6 +122,15 @@ describe('the client upload module', () => {
       rej(403, 'forbidden'), rej(401, 'unauthenticated'), rej(500, 'integrity_failure'), rej(503, 'database_unavailable'),
       failureOf({ kind: 'not_uploaded', reason: 'network' }), failureOf({ kind: 'not_uploaded', reason: 'stalled' }),
     ]).toEqual(['wrong_type', 'rate_limited', 'storage_full', 'archived', 'role_changed', 'signed_out', 'cut_off', 'cut_off', 'cut_off', 'cut_off']);
+  });
+
+  it('defect 14: a 422 is "refused", not "cut_off", and its line names the file without saying the connection was lost', () => {
+    const kind = failureOf({ kind: 'rejected', status: 422, body: { error: 'x', code: 'validation' } });
+    expect(kind).toBe('refused');
+    const line = statusLine({ key: 'k1', fileName: 'report.pdf', size: 10, retry: { requestId: null, sentBody: null }, state: 'failed', loaded: 0, failure: kind, item: null } satisfies UploadItem);
+    expect(line.text).toBe('Not uploaded: report.pdf was not accepted. Check the file, then add it again.');
+    expect(line.text.toLowerCase()).not.toContain('connection');
+    expect(line.retry).toBe(false);
   });
 
   it('FR-EVD-03: a link is posted as JSON to the given url and its 201 is uploaded', async () => {

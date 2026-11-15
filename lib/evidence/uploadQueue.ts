@@ -12,7 +12,7 @@ import type { EvidenceItemView } from '@/types/api';
  */
 
 export type UploadFailure =
-  | 'too_large' | 'wrong_type' | 'cut_off' | 'rate_limited' | 'storage_full' | 'archived' | 'role_changed' | 'signed_out';
+  | 'too_large' | 'wrong_type' | 'cut_off' | 'rate_limited' | 'storage_full' | 'archived' | 'role_changed' | 'signed_out' | 'refused';
 
 export interface UploadItem {
   key: string;
@@ -55,6 +55,7 @@ export function statusLine(i: UploadItem): NamedLine & { retry: boolean } {
     case 'archived': return { ...plain(ARCHIVED_TEXT), retry: false };                                              // M-12
     case 'role_changed': return { ...plain(ROLE_CHANGED_TEXT), retry: false };                                      // M-09
     case 'signed_out': return { ...plain(SIGNED_OUT_TEXT), retry: false };                                          // M-08
+    case 'refused': return { ...named(words.notAcceptedBefore, name, words.notAcceptedAfter), retry: false };      // defect 14
     case 'cut_off':
     case null:
       return { ...plain(CONNECTION_LOST_TEXT), retry: true };                                                       // M-17
