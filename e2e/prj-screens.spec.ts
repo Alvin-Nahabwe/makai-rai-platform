@@ -63,9 +63,12 @@ function requestIdsOf(page: Page, pattern: RegExp): string[] {
   return ids;
 }
 
-/** Presses Tab until the focused control's accessible name matches, failing after 60 presses. */
+/**
+ * Presses Tab until the focused control's accessible name matches, failing after 200 presses. S-10 puts each stage's row of
+ * marks before the "This project" row (Route R5), one link per question, so Archive is about a hundred stops from the top.
+ */
 async function tabUntil(page: Page, name: RegExp): Promise<void> {
-  for (let i = 0; i < 60; i += 1) {
+  for (let i = 0; i < 200; i += 1) {
     await page.keyboard.press('Tab');
     const found = await page.evaluate(() => {
       const el = document.activeElement as HTMLElement | null;
@@ -74,7 +77,7 @@ async function tabUntil(page: Page, name: RegExp): Promise<void> {
     });
     if (name.test(found)) return;
   }
-  throw new Error(`tabUntil: no focus stop matched ${name} in 60 presses`);
+  throw new Error(`tabUntil: no focus stop matched ${name} in 200 presses`);
 }
 
 const path = (rest: string) => `/orgs/${fx.org.slug}${rest}`;
@@ -581,7 +584,7 @@ test('FR-PRJ-02: a new project\'s S-10 shows the 7.4.2 empty texts in each stage
   const page = await signedIn(browser, fx.members.owner);
   await page.goto(path(`/projects/${empty.id}`));
   await expect(page.getByText('No decisions recorded yet', { exact: true })).toHaveCount(3);
-  await expect(page.getByText(PROJECT_COPY.followUp.none)).toHaveCount(3);
+  await expect(page.getByText(PROJECT_COPY.noOverdue)).toHaveCount(3);   // each line's Still open (Route R5)
   await expect(page.getByText('No stage review yet.')).toHaveCount(3);
 });
 
@@ -616,13 +619,15 @@ test('FR-RM-04 UX-06 UX-07: each stage count on S-10 and S-08 is a whole number 
   const sentinels = { 'pre-processing': [41], 'in-processing': [29], 'post-processing': [13] };
   const sum = Object.values(sentinels).reduce((n, [count]) => n + count, 0);
   const sentinelOrg = await buildOrg({ label: 'prjsent' });
-  // S-10 prints the organisation's name in its breadcrumb, and the name carries buildOrg's random run id, whose digits
-  // can be the sum (about one id in 150 holds a whole "83"). The name is the test's own text, so the check is told to
-  // leave it out (`ownText`). Here the name always holds the sum, so a run that stops leaving it out fails every time.
+  // The organisation's name carries buildOrg's random run id, whose digits can be the sum (about one id in 150 holds a whole
+  // "83"), and S-10 prints the project's name in its heading and breadcrumb ("Projects › name", Route R5). Both are the
+  // test's own text, so the check is told to leave them out (`ownText`). Here the project's name always holds the sum, so a
+  // run that stops leaving it out fails every time.
   const orgName = `${sentinelOrg.org.name} (${sum})`;
   await testDb.organization.update({ where: { id: sentinelOrg.org.id }, data: { name: orgName } });
-  const own = { ownText: [orgName, sentinelOrg.org.slug] };
-  const project = await addProject(sentinelOrg, { name: 'Sentinel counts' });
+  const projectName = `Sentinel counts (${sum})`;
+  const own = { ownText: [orgName, sentinelOrg.org.slug, projectName] };
+  const project = await addProject(sentinelOrg, { name: projectName });
   for (const [stage, n] of Object.entries(SENTINELS)) {
     for (let i = 0; i < n; i += 1) await addFinding(sentinelOrg, project.id, { stage: stage as Stage, source: 'team' });
   }
@@ -634,7 +639,7 @@ test('FR-RM-04 UX-06 UX-07: each stage count on S-10 and S-08 is a whole number 
   const s10 = `/orgs/${sentinelOrg.org.slug}/projects/${project.id}`;
   for (const p of [s10, `/orgs/${sentinelOrg.org.slug}/dashboard`]) {
     await page.goto(p);
-    if (p === s10) await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toContainText(orgName);
+    if (p === s10) await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toContainText(projectName);
     await expectCountsAsWholeNumbersPerStage(page, sentinels, own);
     await expectStatusMarksInk(page);
   }

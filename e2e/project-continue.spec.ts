@@ -85,7 +85,7 @@ for (const role of ['reviewer', 'viewer'] as const) {
   test(`C11: a ${role} sees neither Start recording nor Continue recording`, async ({ browser }) => {
     const page = await signedIn(browser, fx.members[role]);
     await page.goto(projectPage(project.id));
-    await expect(page.getByRole('link', { name: PROJECT_COPY.overview.findings })).toBeVisible();
+    await expect(page.locator('nav.project-actions').getByRole('link', { name: PROJECT_COPY.findings, exact: true })).toBeVisible();   // the page rendered, the role's own row
     await expect(page.getByText(PROJECT_COPY.start)).toHaveCount(0);
     await expect(page.getByText(PROJECT_COPY.continue)).toHaveCount(0);
   });
