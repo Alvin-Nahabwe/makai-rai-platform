@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { EvidenceBlock } from '@/components/evidence/EvidenceBlock';
 import { ConflictView } from '@/components/decision/ConflictView';
 import { DecisionFields, FIELD_LABEL, FIELD_TARGET } from '@/components/decision/DecisionFields';
-import { SaveStatus } from '@/components/decision/SaveStatus';
+import { SaveStatus, unsavedShown } from '@/components/decision/SaveStatus';
 import { HELD_ON_SAVE, SaveHeldContext } from '@/components/decision/SaveHeld';
 import { Button } from '@/components/ui/Button';
 import { Callout } from '@/components/ui/Callout';
@@ -41,9 +41,10 @@ export type NextQuestion = { questionId: string; text: string; href: string; num
  * alone) the save bar has no way on. The line on what this save will do reads the panel's own shortfall finding.
  * `foot` is the card's foot (its History and finding links), rendered after the form inside SaveHeldContext so its links
  * are text while a Save waits or is out. `ownOrigin` is the platform's public origin, read on the server, for the
- * evidence block's link names (VersionEvidenceList `platformOrigin`; null: no link is the platform's own).
+ * evidence block's link names (VersionEvidenceList `platformOrigin`; null: no link is the platform's own). `lead` is the
+ * card's phone saved block, rendered before the form inside SaveHeldContext so its history link is held too (review A A3c-2).
  */
-export type DecisionFormProps = { data: QuestionPanelData; nextQuestion?: NextQuestion | null; stageHref?: string; foot?: ReactNode; ownOrigin?: string | null };
+export type DecisionFormProps = { data: QuestionPanelData; nextQuestion?: NextQuestion | null; stageHref?: string; foot?: ReactNode; lead?: ReactNode; ownOrigin?: string | null };
 
 const NO_RETRY: RetryState = { requestId: null, sentBody: null };
 const F = DECISION_FORM_COPY;
@@ -74,12 +75,12 @@ const fileList = (names: readonly string[]) => names.join(', ');
  * form. The evidence block lives in this client tree, so its callbacks are this form's (EVD RE-1), and it is
  * remounted with the current version's id so a save that made a new version gives it the new `initial` (EVD RE-4).
  */
-export function DecisionForm({ data, nextQuestion = null, stageHref, foot, ownOrigin = null }: DecisionFormProps): ReactElement | null {
+export function DecisionForm({ data, nextQuestion = null, stageHref, foot, lead, ownOrigin = null }: DecisionFormProps): ReactElement | null {
   if (!data.canWrite) {
     const note = decisionFormNote(data.viewer.role, data.projectArchived);
     return note === null ? null : <p data-permission-note>{note}</p>;
   }
-  return <WritableDecisionForm data={data} nextQuestion={nextQuestion} stageHref={stageHref} foot={foot} ownOrigin={ownOrigin} />;
+  return <WritableDecisionForm data={data} nextQuestion={nextQuestion} stageHref={stageHref} foot={foot} lead={lead} ownOrigin={ownOrigin} />;
 }
 
 /**
@@ -142,11 +143,14 @@ export function ConsequenceWords({ text, finding, tips }: { text: string; findin
  * Whether the form's answer differs from the saved version (the coordinator's rule for the version line, T3c item 7): any
  * answer differs when there is no saved decision (none yet, or a withdrawal); otherwise any field the save sends, the
  * evidence in any order, and the date when one is typed (the date opens empty, and an empty date is not a different
- * answer). Render only: what a save sends, and the server's own "unchanged" refusal (lib/data/decisions.ts), are untouched.
+ * answer); and every answer while the saved version was answered against other wording (its content version). Render only: what a save sends, and the server's own "unchanged" refusal (lib/data/decisions.ts), are untouched.
  */
 export function answerDiffers(d: DecisionDraft, data: QuestionPanelData): boolean {
   const c = data.current;
   if (!isDecision(c)) return true;
+  // Review A A3c-3: the server's "unchanged" rule also needs the same content version (lib/data/decisions.ts `repeats`), so
+  // the same answer saved against newer wording than the current version's is a new version.
+  if (c.content.semver !== data.contentSemver) return true;
   const o = draftFromCurrent(data);
   const sorted = (a: readonly string[]) => [...a].sort().join('\n');
   if (d.status !== o.status || d.scopeAnswer !== o.scopeAnswer || d.reasonCode !== o.reasonCode || d.reason !== o.reason) return true;
@@ -229,7 +233,7 @@ function pinnedBar(bar: HTMLElement): boolean {
   return r.top < foot && r.bottom >= foot - 1;
 }
 
-function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, ownOrigin = null }: DecisionFormProps): ReactElement {
+function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead, ownOrigin = null }: DecisionFormProps): ReactElement {
   const router = useRouter();
   const key = draftKeyFor(data);
   const currentNumber = data.current?.versionNumber ?? null;
@@ -664,6 +668,7 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, ownO
   const held = waiting || saving;
   return (
     <SaveHeldContext.Provider value={held}>
+    {lead}
     {/* SC 2.4.11: a control that takes focus anywhere in the answer form, the evidence block included, is brought wholly
         into view, instantly rather than with the page's smooth scroll (app/globals.css:225): the browser reveals a focused
         text control's caret, not its box, in a scroll it issues after this handler, and when both animate the browser's
@@ -810,6 +815,12 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, ownO
             : null}
           </div>
         </div>
+        {/* Design N1: the unsaved line's words after its first sentence, under the bar's own place in the card, so the pinned
+            bar stays one line taller and these show when it is back in its place. Hidden from assistive technology: the bar's
+            live span reads the whole sentence. Not drawn on a phone, whose fixed bar shows the whole line (DecisionForm.css). */}
+        {unsavedShown({ status, draftSavedAt, storageUnavailable })
+          ? <p className="text-muted decision-unsaved-more" aria-hidden="true" data-unsaved-more>{F.unsavedMore}</p>
+          : null}
         </fieldset>
       </div>
     </form>

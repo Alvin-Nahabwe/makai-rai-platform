@@ -129,7 +129,7 @@ describe('the saved mark in the card\'s corner (spec 7.3)', () => {
   it('version 2: "Version 1 is kept in the history." with its link', () => {
     const h = card({ current: V2, historyCount: 2 });
     expect(words(h)).toContain(UI_COPY.saved.title(2));
-    expect(h).toMatch(new RegExp(`${esc(UI_COPY.saved.keptBefore(1))}<a href="${esc(HISTORY)}">${UI_COPY.saved.keptLink}</a>`));
+    expect(h).toMatch(new RegExp(`${esc(UI_COPY.saved.keptBefore(1))}<a [^>]*href="${esc(HISTORY)}"[^>]*>${UI_COPY.saved.keptLink}</a>`));
   });
 
   it('D1: the header is the heading and one line in the corner, "Saved as version N · <date>"; who decided, who entered, the dates, the platform line and "History: n versions" are at the foot, after Save and before More', () => {
@@ -683,5 +683,70 @@ describe('T3c: the fix round on T3b, the owner\'s 14:30 rulings and the routed i
     expect(none).toContain('<span data-term="finding">finding</span>');
     // the card's first seal marker defines its terms (lane 6's defineTerms)
     expect(card({ current: V2, historyCount: 2, seals })).toMatch(/class="seal-markers"[\s\S]*data-definition="seal"/);
+  });
+});
+
+describe('T5: the last fix round before the hand-in', () => {
+  it('N1: the unsaved line\'s live span still holds the whole sentence; beside it, hidden from assistive technology, its first sentence alone', async () => {
+    const { SaveStatus } = await import('@/components/decision/SaveStatus');
+    const shown = renderToStaticMarkup(<SaveStatus status={null} draftSavedAt="2026-10-12T07:43:00.000Z" storageUnavailable={false} />);
+    expect(shown).toMatch(new RegExp(`<span aria-live="polite" aria-atomic="true"[^>]*>${esc(F.unsaved)}</span>`));
+    expect(shown).toMatch(new RegExp(`<span class="save-status__unsaved-short" aria-hidden="true">${esc(F.unsavedShort)}</span>`));
+    expect(`${F.unsavedShort} ${F.unsavedMore}`).toBe(F.unsaved);
+    const none = renderToStaticMarkup(<SaveStatus status={null} draftSavedAt={null} storageUnavailable={false} />);
+    expect(none).not.toContain(F.unsavedShort);
+    // the words after the first sentence follow the bar's place in the card, out of the bar (DecisionForm.css hides them on a phone)
+    const css = readFileSync('components/decision/DecisionForm.css', 'utf8');
+    expect(css).toMatch(/\.save-status__unsaved-short,\s*\.decision-unsaved-more\s*\{\s*display: none;/);
+  });
+
+  it('A3c-2: the phone\'s saved block\'s history link is one a held Save turns into text, like the card\'s other ways', () => {
+    const h = card({ current: V2, historyCount: 2 });
+    const block = /<div class="decision-card__saved-block">([\s\S]*?)<form/.exec(h);
+    expect(block, 'the saved block, then the form').not.toBeNull();
+    const link = /<a [^>]*>the history<\/a>/.exec(block![1]);
+    expect(link, 'the saved block\'s history link').not.toBeNull();
+    expect(link![0]).toContain(`href="${HISTORY}"`);
+    expect(link![0]).toContain('data-held-on-save=""');
+  });
+
+  it('design N4: the phone\'s saved block draws the filled Done mark, as the wide corner does', () => {
+    const h = card({ current: V2, historyCount: 2 });
+    const block = /<div class="decision-card__saved-block">([\s\S]*?)<form/.exec(h)![1];
+    expect(block).toContain('class="decision-card__saved-disc"');
+    expect(block).not.toContain('class="ui-icon"');
+  });
+
+  it('A3c-2: the kit\'s SavedMark takes the caller\'s history link (additive); without it the mark is as before', async () => {
+    const { SavedMark } = await import('@/components/ui/SavedMark');
+    const saved = { version: 2, savedAt: '2026-10-12T07:42:00.000Z' as const, decidedOn: null };
+    const before = renderToStaticMarkup(<SavedMark saved={saved} historyHref="/h" live={false} savedTime="10:42 EAT" />);
+    expect(before).toContain('<a href="/h">');
+    expect(renderToStaticMarkup(<SavedMark saved={saved} historyHref="/h" live={false} savedTime="10:42 EAT" historyLink={<b>held</b>} />))
+      .toBe(before.replace(/<a href="\/h">([^<]*)<\/a>/, '<b>held</b>'));
+  });
+
+  it('A3c-3: re-saving the same answer against newer wording makes a new version (the server\'s rule), so the line says so', async () => {
+    const { answerDiffers } = await import('@/components/decision/DecisionForm');
+    const older = { ...V2, content: { ...V2.content, semver: '0.0.0-older' } };
+    const data = { ...PANEL, current: older };
+    expect(answerDiffers(draftFromCurrent(data), data)).toBe(true);
+    expect(consequence(card({ current: older, historyCount: 2 }))).toContain(C.version(3));
+    // the same wording and the same answer: no new version, no line
+    const same = { ...PANEL, current: V2 };
+    expect(answerDiffers(draftFromCurrent(same), same)).toBe(false);
+  });
+
+  it('design N2: every line of the card that gives a time names one zone, never two side by side', () => {
+    const h = card({ current: V2, historyCount: 2 });
+    const lines = [...h.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/g)].map((m) => words(m[1]));
+    const timed = lines.filter((l) => /\b(UTC|EAT)\b/.test(l));
+    expect(timed.length).toBeGreaterThanOrEqual(3);
+    for (const l of timed) expect(new Set(l.match(/\b(UTC|EAT)\b/g)).size, l).toBe(1);
+  });
+
+  it('design "to confirm": on the open-finding branch (Partly or Not yet) a changed answer\'s line ends with its version', async () => {
+    expect(await changed({ current: V2, historyCount: 2 }, 1)).toMatch(/until your team closes it\. This save becomes version 3\.$/);
+    expect(await changed({ current: { ...V2, status: 'not_yet', reasonCode: 'ny_planned_later' }, historyCount: 2 }, 1)).toMatch(/This save becomes version 3\.$/);
   });
 });

@@ -179,6 +179,35 @@
   }
 }
 
+/* Design N1 (SC 2.4.11): the unsaved line's first sentence beside its clipped live span; the rest under the bar's place. */
+.save-status__unsaved-short,
+.decision-unsaved-more {
+  display: none;
+}
+
+@media (min-width: 769px) {
+  .save-status__unsaved-live:not(:empty) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .save-status__unsaved-short {
+    display: inline;
+  }
+
+  .decision-unsaved-more {
+    display: block;
+    margin-block: 0;
+  }
+}
+
 /* From 1024 px the shell's main region scrolls and has 32 px of padding (shell.css), and a sticky box stops at its scroll
    container's padding edge: the row would float 32 px above the screen's foot with the card showing under it. Its inset
    takes that padding back, so it pins to the foot itself. */

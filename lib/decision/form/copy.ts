@@ -1,5 +1,9 @@
 import { TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION } from '@/lib/vocabulary/terms';
 
+/** The unsaved line's two parts (design N1): the first sentence alone is what the pinned Save row shows on a wide screen. */
+const UNSAVED_SHORT = 'Not saved yet.';
+const UNSAVED_MORE = 'Your text is kept in this browser for up to 7 days. Signing out here, or another person signing in on this browser, removes it.';
+
 /**
  * The words of the question page's decision form (components/decision/{DecisionForm, DecisionFields, ConflictView,
  * SaveStatus}) that lib/decision/copy.ts does not already hold: copy audit B rows 149 to 178 and 226 to 244, as the lead
@@ -54,7 +58,10 @@ export const DECISION_FORM_COPY = Object.freeze({
     afterMany: '. When the upload has finished, save again to add them.',
   }),
   /** Plan line 925, exact: under the form while the field holds text that is not saved. */
-  unsaved: 'Not saved yet. Your text is kept in this browser for up to 7 days. Signing out here, or another person signing in on this browser, removes it.',
+  unsaved: `${UNSAVED_SHORT} ${UNSAVED_MORE}`,
+  /** Design N1: the pinned row shows `unsavedShort` only; `unsavedMore` follows the row in the card, read once in `unsaved`. */
+  unsavedShort: UNSAVED_SHORT,
+  unsavedMore: UNSAVED_MORE,
   noStorage: 'This browser cannot keep a copy of your text. Save before you leave this page.',
   conflict: Object.freeze({
     heading: 'Not saved. A newer version was saved while you worked.',

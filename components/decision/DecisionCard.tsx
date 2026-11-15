@@ -24,12 +24,14 @@ const C = QUESTION_COPY.current;
  * status, so it is not a status mark (`ui-mark__shape`), which the no-score checks hold to the status rules
  * (e2e/helpers/noScore.ts); DecisionCard.css paints it. Hidden: the words beside it say what it means.
  */
-const SAVED_SHAPE = (
-  <svg className="decision-card__saved-svg" width={16} height={16} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+const savedShape = (size: number): ReactElement => (
+  <svg className="decision-card__saved-svg" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
     <circle className="decision-card__saved-disc" cx={12} cy={12} r={9} />
     <path className="decision-card__saved-check" d="M8 12.5l2.7 2.7L16 9.8" fill="none" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
+/** The corner's shape, 16 px; the phone's saved block draws the same shape at 24 px (design N4). */
+const SAVED_SHAPE = savedShape(16);
 
 export type DecisionCardProps = {
   data: QuestionPanelData;
@@ -115,20 +117,23 @@ export function DecisionCard({ data, next, stageHref }: DecisionCardProps): Reac
     </div>
   );
 
+  // A phone (spec 7.3: the most visible thing after the question): the whole saved mark, first in the card. Rendered by the
+  // form inside SaveHeldContext, before the form, so its history link is text while a Save waits or is out (A3c-2).
+  const savedBlock = decision === null ? null : (
+    <div className="decision-card__saved-block">
+      <SavedMark saved={{ version: decision.versionNumber, savedAt: decision.receivedAt, decidedOn: decision.declaredDate }} historyHref={historyHref} live={false}
+        savedTime={<ReaderZoneTime at={decision.receivedAt} />} historyLink={<HeldLink href={historyHref}>{UI_COPY.saved.keptLink}</HeldLink>}
+        shape={savedShape(24)} />
+    </div>
+  );
+
   return (
     <section data-region="answer-form" aria-labelledby="s12-answer-form" className="decision-card">
       <div className="decision-card__head">
         <h2 id="s12-answer-form">{DECISION_FORM_COPY.card.heading}</h2>
         <div className="decision-card__corner">{corner}</div>
       </div>
-      {/* A phone (spec 7.3: the most visible thing after the question): the whole saved mark, first in the card. */}
-      {decision === null ? null : (
-        <div className="decision-card__saved-block">
-          <SavedMark saved={{ version: decision.versionNumber, savedAt: decision.receivedAt, decidedOn: decision.declaredDate }} historyHref={historyHref} live={false}
-            savedTime={<ReaderZoneTime at={decision.receivedAt} />} />
-        </div>
-      )}
-      <DecisionForm key={`${data.projectId}:${data.question.id}`} data={data} nextQuestion={next} stageHref={stageHref} foot={foot} ownOrigin={platformOrigin()} />
+      <DecisionForm key={`${data.projectId}:${data.question.id}`} data={data} nextQuestion={next} stageHref={stageHref} foot={foot} lead={savedBlock} ownOrigin={platformOrigin()} />
       {/* Mounted whenever there is a current version, with the permission as a prop, so after a withdrawal it stays to say
           "Withdrawn..." and to take focus (F12); it shows the More menu only while it can act. */}
       {current !== null ? (

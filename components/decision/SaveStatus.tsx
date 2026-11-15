@@ -31,6 +31,11 @@ export type SaveStatusProps = { status: SaveStatusValue | null; draftSavedAt: Ut
  * the line appears and its words, the same on every key, change once. No `role` on it: `role="status"` stays one element
  * (e2e/helpers/session.ts `saveStatus`). The sentence carries no time today, so there is no time span beside it.
  */
+/** Whether the unsaved line shows: the field holds text not saved, kept in this browser (alone, or after "Saved" typed past). */
+export function unsavedShown({ status, draftSavedAt, storageUnavailable }: SaveStatusProps): boolean {
+  return !storageUnavailable && draftSavedAt !== null && (status === null || status.id === 'M-03' || status.id === 'M-04');
+}
+
 export function SaveStatus({ status, draftSavedAt, storageUnavailable }: SaveStatusProps): ReactElement {
   const text = status === null ? '' : (storageUnavailable ? WITHOUT_STORAGE[status.id] ?? status.text : status.text);
   const polite = status !== null && status.live === 'polite' ? text : '';
@@ -46,10 +51,15 @@ export function SaveStatus({ status, draftSavedAt, storageUnavailable }: SaveSta
       {storageUnavailable && assertive === '' ? <p className="text-muted">{NO_STORAGE}</p> : null}
       {/* The unsaved line also follows "Saved" when the person typed past the save: the field then holds newer text than
           the one saved, and it is in this browser only (ruling on CR-1). */}
+      {/* Design N1 (SC 2.4.11): on a wide screen the save bar can be pinned to the screen's foot, where the whole sentence
+          (three lines) grew it over the focused field. There the live span is clipped, not removed, so a screen reader still
+          reads the whole sentence once, and the eye sees its first sentence only, beside it; the rest follows the bar in
+          the card (DecisionForm), seen when the bar is back in its place. On a phone the live span shows as before. */}
       <p className="text-muted save-status__unsaved">
-        <span aria-live="polite" aria-atomic="true">
-          {!storageUnavailable && draftSavedAt !== null && (status === null || status.id === 'M-03' || status.id === 'M-04') ? DECISION_FORM_COPY.unsaved : ''}
+        <span aria-live="polite" aria-atomic="true" className="save-status__unsaved-live">
+          {unsavedShown({ status, draftSavedAt, storageUnavailable }) ? DECISION_FORM_COPY.unsaved : ''}
         </span>
+        {unsavedShown({ status, draftSavedAt, storageUnavailable }) ? <span className="save-status__unsaved-short" aria-hidden="true">{DECISION_FORM_COPY.unsavedShort}</span> : null}
       </p>
     </div>
   );
