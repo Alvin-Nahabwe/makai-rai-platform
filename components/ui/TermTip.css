@@ -48,13 +48,26 @@
   color: var(--color-ink);
 }
 
-/* Under its button where anchor positioning is supported; elsewhere the browser centres the popover. */
-@supports (anchor-name: --a) {
+/*
+ * Under its button where anchor positioning AND anchor-scope are supported (without anchor-scope every button would share
+ * the one anchor name, and each tip would open under the last); elsewhere the browser centres the popover. The try order
+ * takes the placement with the most room across, so on a narrow screen the tip flips rather than squeezing into the space
+ * beside its button.
+ */
+@supports (anchor-name: --a) and (anchor-scope: all) {
   .ui-term-tip__body {
     position-anchor: --ui-term-tip;
     inset: auto;
     margin: var(--space-1) 0 0;
     position-area: block-end span-inline-end;
     position-try-fallbacks: flip-inline, flip-block;
+    position-try-order: most-inline-size;
+  }
+}
+
+/* The (i) and its popover are screen furniture: neither prints. */
+@media print {
+  .ui-term-tip {
+    display: none;
   }
 }

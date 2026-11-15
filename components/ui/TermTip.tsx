@@ -16,33 +16,45 @@ export type TermTipProps = {
 };
 
 /** The part of a popover element the tip drives (a structural type, so a test can hand in a stand-in). */
-export type TipPopover = { showPopover(): void; hidePopover(): void; matches(selector: string): boolean };
+export type TipPopover = { hidePopover(): void; matches(selector: string): boolean };
 
 /**
- * Opens `tip` while `button` has focus and closes it when focus leaves: keyboard focus shows the definition without a
- * press. A tap or click also opens it, through the button's `popovertarget` (action "show", so a click after the focus
- * does not close it again). Escape and a press elsewhere close it (the popover's own light dismiss). Returns the cleanup.
+ * Closes `tip` when focus leaves `button` (the toggletip pattern: coordinator's ruling, fix round 2), except when the
+ * person pressed inside the open tip, so its sentence can be selected and copied. Focus alone never opens the tip: a
+ * click, a tap, or Enter or Space on the button opens it and a second press closes it (the button's `popovertarget`,
+ * toggling); Escape and a press elsewhere close it (the popover's own light dismiss). Returns the cleanup.
  */
-export function openOnFocus(button: Pick<EventTarget, 'addEventListener' | 'removeEventListener'>, tip: TipPopover): () => void {
-  const show = () => { if (!tip.matches(':popover-open')) tip.showPopover(); };
-  const hide = () => { if (tip.matches(':popover-open')) tip.hidePopover(); };
-  button.addEventListener('focus', show);
+export function closeOnBlur(
+  button: Pick<EventTarget, 'addEventListener' | 'removeEventListener'>,
+  tip: TipPopover & Pick<EventTarget, 'addEventListener' | 'removeEventListener'>,
+): () => void {
+  let pressedInside = false;
+  const press = () => { pressedInside = true; };
+  const hide = () => {
+    if (pressedInside) { pressedInside = false; return; }
+    if (tip.matches(':popover-open')) tip.hidePopover();
+  };
+  // A press inside the tip blurs the button before the click lands; the pointerdown on the tip comes first.
+  tip.addEventListener('pointerdown', press);
   button.addEventListener('blur', hide);
   return () => {
-    button.removeEventListener('focus', show);
+    tip.removeEventListener('pointerdown', press);
     button.removeEventListener('blur', hide);
   };
 }
 
 /**
  * A term's definition one step away (spec 6, the owner's ruling of 15 November 2026, 11:00): a small (i) button, a 24px
- * target, right after the term, that opens the vocabulary's own sentence for it in a popover on keyboard focus and on a
- * tap or click. The button is named by `label` and described by the definition, so a screen reader hears both; the
- * definition is the `Definition` component, so it is the data/vocabulary.json sentence word for word.
+ * target, right after the term. It is a toggletip (coordinator's ruling, fix round 2): a click, a tap, or Enter or Space
+ * on the focused button opens the vocabulary's own sentence for it in a popover, and a second press, Escape, a press
+ * elsewhere or focus leaving closes it. Focus alone does not open it, so a Tab passing through opens nothing. The button
+ * is named by `label` and described by the definition, so a screen reader hears both on focus; the definition is the
+ * `Definition` component, so it is the data/vocabulary.json sentence word for word.
  *
- * The popover is placed under its button where the browser supports anchor positioning (`anchor-scope` keeps each tip's
- * anchor its own) and centred by the browser elsewhere. Without script a press still opens it (`popovertarget`); focus
- * opening needs the script. Styles: components/ui/TermTip.css (colour roles and spaces only, both themes).
+ * The popover is placed under its button where the browser supports anchor positioning and `anchor-scope` (which keeps
+ * each tip's anchor its own), and centred by the browser elsewhere. Without script every press still works
+ * (`popovertarget`); only closing on blur needs the script. Styles: components/ui/TermTip.css (colour roles and spaces
+ * only, both themes; hidden in print).
  */
 export function TermTip({ of, label, id }: TermTipProps): ReactElement {
   const tipId = id ?? `term-tip-${of.id}`;
@@ -50,11 +62,11 @@ export function TermTip({ of, label, id }: TermTipProps): ReactElement {
   const tip = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     if (button.current === null || tip.current === null) return undefined;
-    return openOnFocus(button.current, tip.current);
+    return closeOnBlur(button.current, tip.current);
   }, []);
   return (
     <span className="ui-term-tip">
-      <button ref={button} type="button" className="ui-term-tip__button" popoverTarget={tipId} popoverTargetAction="show"
+      <button ref={button} type="button" className="ui-term-tip__button" popoverTarget={tipId} popoverTargetAction="toggle"
         aria-label={label} aria-describedby={`${tipId}-def`}>
         <Icon name="info" size={16} />
       </button>

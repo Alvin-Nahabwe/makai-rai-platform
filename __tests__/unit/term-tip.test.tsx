@@ -1,12 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { openOnFocus, TermTip, type TipPopover } from '@/components/ui/TermTip';
+import { closeOnBlur, TermTip, type TipPopover } from '@/components/ui/TermTip';
 import { TERM_FINDING, TERM_NOT_YET } from '@/lib/vocabulary/terms';
 
 /**
  * TermTip (components/ui/TermTip.tsx; the owner's ruling of 15 November 2026, 11:00): a 24px (i) button, named by the
- * caller, that opens a term's definition, the vocabulary's sentence verbatim, on keyboard focus and on a press.
+ * caller, that opens a term's definition, the vocabulary's sentence verbatim, as a toggletip: on a press (click, tap, Enter
+ * or Space), never on focus alone; a second press, Escape, a press elsewhere or focus leaving closes it.
  */
 const vocabulary = (JSON.parse(readFileSync('data/vocabulary.json', 'utf8')) as { concepts?: unknown }) as unknown;
 /** The definition data/vocabulary.json holds for `id`, wherever the file nests its entries. */
@@ -33,32 +34,38 @@ describe('TermTip', () => {
     }
   });
 
-  it('the button is named by the caller\'s label, described by the definition, a press shows the popover; the icon is hidden', () => {
+  it('the button is named by the caller\'s label, described by the definition, a press toggles the popover; the icon is hidden', () => {
     const html = renderToStaticMarkup(<TermTip of={TERM_FINDING} label="What is a finding?" id="strip-finding" />);
     const button = html.match(/<button[^>]*>/)![0];
     expect(button).toContain('type="button"');
     expect(button).toContain('aria-label="What is a finding?"');
     expect(button).toContain('aria-describedby="strip-finding-def"');
     expect(button).toMatch(/popoverTarget="strip-finding"/i);
-    expect(button).toMatch(/popoverTargetAction="show"/i);
+    // Toggle: a press (click, tap, Enter or Space on the button) opens it and a second press closes it.
+    expect(button).toMatch(/popoverTargetAction="toggle"/i);
     expect(html).toMatch(/<span id="strip-finding" popover="auto" class="ui-term-tip__body">/);
     expect(html).toMatch(/<svg class="ui-icon"[^>]*aria-hidden="true"/);
   });
 
-  it('opens on keyboard focus and closes when focus leaves; the cleanup removes both listeners', () => {
+  it('toggletip: focus alone opens nothing; focus leaving closes an open tip, unless the press that took focus away was inside the tip; the cleanup removes both listeners', () => {
     const button = new EventTarget();
     let open = false;
-    const tip: TipPopover = { showPopover: () => { open = true; }, hidePopover: () => { open = false; }, matches: () => open };
-    const cleanup = openOnFocus(button, tip);
+    const target = new EventTarget();
+    const tip: TipPopover & EventTarget = Object.assign(target, { hidePopover: () => { open = false; }, matches: () => open });
+    const cleanup = closeOnBlur(button, tip);
     button.dispatchEvent(new Event('focus'));
-    expect(open).toBe(true);
-    button.dispatchEvent(new Event('focus'));   // already open: shown once, no error
-    expect(open).toBe(true);
+    expect(open, 'a Tab passing through opens nothing').toBe(false);
+    open = true;   // opened by a press (popovertarget)
+    tip.dispatchEvent(new Event('pointerdown'));
     button.dispatchEvent(new Event('blur'));
-    expect(open).toBe(false);
+    expect(open, 'a press inside the tip keeps it open, so its sentence can be selected').toBe(true);
+    button.dispatchEvent(new Event('blur'));
+    expect(open, 'focus leaving closes it').toBe(false);
     cleanup();
-    button.dispatchEvent(new Event('focus'));
-    expect(open).toBe(false);
+    open = true;
+    button.dispatchEvent(new Event('blur'));
+    expect(open, 'after cleanup nothing listens').toBe(true);
+    expect(readFileSync('components/ui/TermTip.tsx', 'utf8')).not.toMatch(/addEventListener\('focus'/);
   });
 
   it('a 24px target, colour roles only, the focus ring left to the global rule', () => {
@@ -67,5 +74,9 @@ describe('TermTip', () => {
     expect(css).not.toMatch(/outline: none|outline: 0/);
     expect(css).not.toMatch(/#[0-9a-f]{3,6}\b/i);
     expect(readFileSync('components/ui/TermTip.tsx', 'utf8')).toMatch(/^'use client';/);
+    // Placed only where anchor-scope keeps each anchor its own; flips rather than squeezes; never printed.
+    expect(css).toMatch(/@supports \(anchor-name: --a\) and \(anchor-scope: all\)/);
+    expect(css).toMatch(/position-try-order: most-inline-size;/);
+    expect(css).toMatch(/@media print \{\s*\.ui-term-tip \{\s*display: none;/);
   });
 });
