@@ -3,7 +3,8 @@
    with the heading colour for its label and its 1 px border: the link colour's navy in light, and in dark the
    brightest ink, which sets an enabled button further apart from a disabled one (lane 1 review S4-6); quiet has no
    border and no fill; destructive is the surface, ink and the control border (decision B6: never orange, never red).
-   The ring is the base :focus-visible rule (app/globals.css). Only colours and borders change, over --duration-state; nothing moves. */
+   The ring is the base :focus-visible rule (app/globals.css). Only colours and borders change, over
+   --duration-state; nothing moves. */
 .ui-button {
   box-sizing: border-box;
   display: inline-flex;
