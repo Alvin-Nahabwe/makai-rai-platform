@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { QuestionPanelData } from '@/lib/question/panel';
@@ -113,7 +114,9 @@ describe('the read-only question page (plan 1C Task 7)', () => {
       expect(c).toContain('<blockquote class="reading-decision__reason">We compared a rules engine first.</blockquote>');
       expect(c).toContain('Audit report');
       expect(c).toContain('representativeness-check.pdf');
-      expect(c).toMatch(/<h3 id="s12-evidence">Evidence<\/h3>/);
+      // The evidence is a part of the card, not a landmark of its own (review M7): a div with its heading.
+      expect(c).toContain('<div class="reading-evidence"><h3>Evidence</h3>');
+      expect(c).not.toMatch(/<section[^>]*aria-labelledby="s12-evidence"/);
       // Who decided, bold under the quotation; who entered it, quietly, with the received time (principle 4: both pairs).
       expect(c).toMatch(/<figcaption class="reading-decision__decided">Decided by Joseph Mugisha<span aria-hidden="true"> · <\/span>18 Feb 2026<\/figcaption>/);
       expect(c).toContain('Entered by: Joseph K.');
@@ -178,7 +181,7 @@ describe('the read-only question page (plan 1C Task 7)', () => {
 
   it('gap 2: a link is its name, then the host it goes to and "opens another site", with the external mark; never the whole address', async () => {
     const c = card(await render(VIEWER));
-    expect(c).toMatch(/<a class="reading-evidence__link" href="https:\/\/example.org\/a" rel="noopener noreferrer"><bdi>Audit report<\/bdi> \(example.org, opens another site\)<svg class="ui-icon"/);
+    expect(c).toMatch(/<a class="reading-evidence__link" href="https:\/\/example.org\/a" rel="noopener noreferrer"><bdi>Audit report<\/bdi> <span class="reading-evidence__host">\(example.org, opens another site\)<\/span><svg class="ui-icon"/);
     expect(textOf(c)).not.toContain('https://example.org/a');
     // A link the person gave no name is named by its address once, and still shows its host (silent-failure review of
     // 4e544208, finding 2: a look-alike or user:password@ address fools the eye without it).
@@ -187,17 +190,28 @@ describe('the read-only question page (plan 1C Task 7)', () => {
     expect(textOf(bare)).not.toContain('(https://');
     expect(textOf(bare)).toContain('https://example.org/a (example.org, opens another site)');
     const trick = card(await render({ ...VIEWER, current: { ...CURRENT, evidence: [{ ...LINK, label: null, url: 'https://gov.example@evil.example/' }] } }));
-    expect(trick).toContain(' (evil.example, opens another site)');
+    expect(trick).toContain('>(evil.example, opens another site)</span>');
   });
 
   it('link spoofing (a): a name that claims another site shows the host the link really goes to', async () => {
     const spoof = { ...LINK, label: 'gov.example \u2014 official', url: 'https://evil.example/login' };
     const c = card(await render({ ...VIEWER, current: { ...CURRENT, evidence: [spoof] } }));
-    expect(c).toContain(' (evil.example, opens another site)');
+    expect(c).toContain('>(evil.example, opens another site)</span>');
     expect(c).toMatch(/href="https:\/\/evil.example\/login"/);
     // A look-alike host is shown in the form the browser resolves (punycode), not as the letters that imitate another.
     const idn = card(await render({ ...VIEWER, current: { ...CURRENT, evidence: [{ ...LINK, url: 'https://\u0440\u0430ypal.example/' }] } }));
     expect(idn).toContain('(xn--ypal-43d9g.example,');
+  });
+
+  it('link spoofing (review M1): a name that copies the suffix cannot pass for it; the real host is its own quieter element', async () => {
+    const copy = { ...LINK, label: 'Report (gov.example, opens another site)', url: 'https://evil.example/' };
+    const c = card(await render({ ...VIEWER, current: { ...CURRENT, evidence: [copy] } }));
+    expect(c).toContain('<bdi>Report (gov.example, opens another site)</bdi> <span class="reading-evidence__host">(evil.example, opens another site)</span>');
+    expect([...c.matchAll(/class="reading-evidence__host"/g)]).toHaveLength(1);
+    const css = readFileSync('components/question/reading.css', 'utf8');
+    const rule = /\.reading-evidence__host\s*\{([^}]*)\}/.exec(css)![1];
+    expect(rule).toMatch(/color:\s*var\(--color-ink-muted\)/);
+    expect(rule).toMatch(/font-weight:\s*var\(--font-weight-regular\)/);
   });
 
   it('link spoofing: the address is parsed once, so the href the browser follows and the host shown are the same (silent-failure review of 4e544208, finding 1)', async () => {
@@ -206,7 +220,7 @@ describe('the read-only question page (plan 1C Task 7)', () => {
     const c = card(await render({ ...VIEWER, current: { ...CURRENT, evidence: [{ ...LINK, url: 'https:evil.example' }] } }));
     expect(c).toContain('href="https://evil.example/"');
     expect(c).not.toContain('href="https:evil.example"');
-    expect(c).toContain(' (evil.example, opens another site)');
+    expect(c).toContain('>(evil.example, opens another site)</span>');
     expect(webLink('https:/api/logout?x')).toEqual({ href: 'https://api/logout?x', host: 'api' });
   });
 
@@ -263,6 +277,9 @@ describe('the read-only question page (plan 1C Task 7)', () => {
     // card keeps its seal marker and the aside its sealed copy (silent-failure review of c46d69f4, finding 1).
     expect(c).toContain('In seal 1 of Pre-processing review 1');
     expect(aside(await render({ ...VIEWER, current: withdrawn, historyCount: 3 }))).toContain('Seal 1 of Pre-processing review 1 keeps version 3 of this decision.');
+    // The version the seal keeps is the withdrawal, version 3: the card names it on its version line, as the history page
+    // lists a withdrawal as a version, so the aside names nothing the card does not show (review M2).
+    expect(c).toMatch(/<p class="reading-decision__version"><span>Version 3<\/span><span aria-hidden="true"> · <\/span><span>saved 10 Nov 2026<\/span>/);
   });
 
   it('with no decision yet the card says so and holds nothing else', async () => {
@@ -332,7 +349,9 @@ describe('the read-only question page (plan 1C Task 7)', () => {
 
   it('spec 9.7: in a sealed copy, one sentence per review names the seal and the version it keeps, with the vocabulary\'s definitions', async () => {
     const a = aside(await render(VIEWER));
-    expect(a).toMatch(/<section class="reading-aside__seal" aria-labelledby="s12-sealed-copy"><h2 id="s12-sealed-copy">In a sealed copy<\/h2><p>Seal 1 of Pre-processing review 1 keeps version 2 of this decision.<\/p>/);
+    // A part of the reader's aside, not a landmark of its own (review M7): a div with its heading.
+    expect(a).toMatch(/<div class="reading-aside__seal"><h2>In a sealed copy<\/h2><p>Seal 1 of Pre-processing review 1 keeps version 2 of this decision.<\/p>/);
+    expect(a).not.toContain('<section');
     expect(a).toContain(TERM_STAGE_REVIEW.definition);
     expect(a).toContain(TERM_SEAL.definition.replace("'", '&#x27;'));
     // Two seals of one review: the highest speaks.

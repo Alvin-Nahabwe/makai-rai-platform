@@ -74,10 +74,10 @@ export const QUESTION_COPY = Object.freeze({
     added: (day: string): string => `added ${day}`,
     download: 'Download',
     /**
-     * After a link's own name: the host it goes to, so a name cannot claim another site (link spoofing), in the pattern of
-     * lib/suggestions/copy.ts's resource line "(PDF, opens another site)". The page wraps the host in `<bdi>`.
+     * After a link's name: the host it really goes to, so a name cannot claim another site (link spoofing), in the pattern
+     * of lib/suggestions/copy.ts's resource line "(PDF, opens another site)". The page sets it in its own quieter element.
      */
-    linkTo: Object.freeze({ before: ' (', after: ', opens another site)' }),
+    linkTo: (host: string): string => `(${host}, opens another site)`,
     /** After the name of a link that is not a web address (shown as text, not as a link): the address, cleaned. */
     notWebLink: Object.freeze({ before: ' (', after: ')' }),
     stillOpen: (n: number): string => `Still open on this question: ${n} ${n === 1 ? 'finding' : 'findings'}`,

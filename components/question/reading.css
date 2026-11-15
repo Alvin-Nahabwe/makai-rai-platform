@@ -146,6 +146,13 @@
   font-weight: var(--font-weight-semibold);
 }
 
+/* The host the link really goes to, quieter than the author's name for it, so a name that copies this suffix cannot pass
+   for it (review M1): regular weight in muted ink. */
+.reading-evidence__host {
+  color: var(--color-ink-muted);
+  font-weight: var(--font-weight-regular);
+}
+
 .reading-evidence__link .ui-icon {
   flex: none;
 }

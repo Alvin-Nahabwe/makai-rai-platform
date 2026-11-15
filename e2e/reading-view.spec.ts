@@ -23,7 +23,7 @@ const PDF = Buffer.from('%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer 
 
 let projectId = '';
 
-test.beforeAll(async ({ baseURL }) => {
+test.beforeAll(async ({ baseURL, browser }) => {
   projectId = await newProject(baseURL!, `Reading view ${Date.now()}`);
   const org = fixtureOrgSlug();
   const owner = await seatRequest(baseURL!, 'owner');
@@ -50,6 +50,16 @@ test.beforeAll(async ({ baseURL }) => {
   } finally {
     await owner.dispose();
   }
+  // The overdue mitigation, here so each case stands alone (review M6): the finding is found through a reader's own page.
+  const page = await browser.newPage();
+  try {
+    await actAsSeat(page, 'viewer');
+    await page.goto(new URL(questionPath(projectId, Q), baseURL!).toString());
+    await waitForQuestionPage(page);
+    await addOverdueMitigation(page, baseURL!);
+  } finally {
+    await page.close();
+  }
 });
 
 /** The finding Partly raised, found through the reader's own page; then an overdue mitigation is added to it. */
@@ -68,19 +78,12 @@ async function addOverdueMitigation(page: Page, baseURL: string): Promise<void> 
   }
 }
 
-test.describe.configure({ mode: 'serial' });
-
 for (const role of ['viewer', 'reviewer'] as const) {
   test(`a ${role} reads the decision card, what is still open and the sealed copy, with no form, at 1440, 1280 and 375`, async ({ page, baseURL }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await actAsSeat(page, role);
     await page.goto(questionPath(projectId, Q));
     await waitForQuestionPage(page);
-    if (role === 'viewer') {
-      await addOverdueMitigation(page, baseURL!);
-      await page.reload();
-      await waitForQuestionPage(page);
-    }
 
     const card = page.locator('section[data-region="current-decision"]');
     await expect(card.getByRole('heading', { level: 2, name: R.title })).toBeVisible();
@@ -88,7 +91,7 @@ for (const role of ['viewer', 'reviewer'] as const) {
     await expect(card.locator('.reading-decision__state')).toContainText('Partly');
     await expect(card.getByRole('link', { name: `Download ${FILE_NAME}` })).toBeVisible();
     // The link's name, then the host it really goes to (link spoofing), never the whole address.
-    await expect(card.getByRole('link', { name: `${LINK_LABEL}${R.linkTo.before}example.org${R.linkTo.after}` })).toBeVisible();
+    await expect(card.getByRole('link', { name: `${LINK_LABEL} ${R.linkTo('example.org')}` })).toBeVisible();
     await expect(card).not.toContainText('example.org/district-register');
 
     const open = page.locator('section[data-region="open-work"]');

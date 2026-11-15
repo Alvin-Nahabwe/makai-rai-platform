@@ -64,11 +64,12 @@ export function ReadingAside({ seals, versionNumber, note, next, stageTitle, sta
   return (
     <div className="reading-aside" data-region="reading-aside">
       {sealed.length > 0 && versionNumber !== null ? (
-        <section className="reading-aside__seal" aria-labelledby="s12-sealed-copy">
-          <h2 id="s12-sealed-copy">{R.sealedHeading}</h2>
+        // A part of the reader's aside, not a landmark of its own (review M7).
+        <div className="reading-aside__seal">
+          <h2>{R.sealedHeading}</h2>
           {sealed.map((s) => <p key={s.reviewId}>{R.sealKeeps(s.sealNumber, s.reviewName, versionNumber)}</p>)}
           <p className="reading-aside__defs"><Definition of={TERM_STAGE_REVIEW} /> <Definition of={TERM_SEAL} /></p>
-        </section>
+        </div>
       ) : null}
       {note === null ? null : <p className="reading-aside__note" data-permission-note><EyeMark /><span>{note}</span></p>}
       <div className="reading-aside__next">

@@ -64,9 +64,10 @@ function EvidenceItem({ orgSlug, item }: { orgSlug: string; item: EvidenceItemVi
       <li className="reading-evidence__item">
         <a className="reading-evidence__link" href={web.href} rel="noopener noreferrer">
           <bdi>{item.label === null ? stripBidiControls(item.url) : stripBidiControls(item.label)}</bdi>
-          {/* The host of an http or https address is plain ASCII (punycode), so it needs no <bdi>, which a browser would
-              set apart with spaces in the link's accessible name. */}
-          {R.linkTo.before}{web.host}{R.linkTo.after}<Icon name="external-link" size={18} />
+          {/* The real host in its own quieter element (regular weight, muted ink), so a name that copies this suffix cannot
+              pass for it (review M1). An http or https host is plain ASCII (punycode), so it needs no <bdi>, which a browser
+              would set apart with spaces in the link's accessible name. */}
+          {' '}<span className="reading-evidence__host">{R.linkTo(web.host)}</span><Icon name="external-link" size={18} />
         </a>
       </li>
     );
@@ -141,7 +142,11 @@ export function ReadingDecision({ orgSlug, current, historyCount, historyHref, s
             : <><del>{R.withdrawnVersion(current.baseVersionNumber)}</del>{R.withdrawnBy(who, day, kind)}</>}
         </p>
         <Reason current={current} />
-        <p className="reading-decision__version">{history}</p>
+        {/* The withdrawal is a version of its own (the history lists it so), and a seal may keep it: the card names it, so
+            the aside's sealed copy names no version the card does not show (review M2). */}
+        <p className="reading-decision__version">
+          <span>{R.version(current.versionNumber)}</span>{DOT}<span>{R.saved(formatDay(current.receivedAt, ZONE))}</span>{DOT}{history}
+        </p>
         <SealMarker seals={seals} />
       </>
     );
@@ -169,12 +174,13 @@ export function ReadingDecision({ orgSlug, current, historyCount, historyHref, s
         </p>
         <p className="reading-decision__entered">{C.enteredBy(enteredBy, formatDay(current.receivedAt, ZONE), formatTime(current.receivedAt, ZONE))}</p>
         <SealMarker seals={seals} />
-        <section className="reading-evidence" aria-labelledby="s12-evidence">
-          <h3 id="s12-evidence">{R.evidence}</h3>
+        {/* A part of the card, not a landmark of its own (review M7). */}
+        <div className="reading-evidence">
+          <h3>{R.evidence}</h3>
           {current.evidence.length === 0 ? <p>{R.noEvidence}</p> : (
             <ul>{current.evidence.map((item) => <EvidenceItem key={item.id} orgSlug={orgSlug} item={item} />)}</ul>
           )}
-        </section>
+        </div>
       </>
     );
   }
