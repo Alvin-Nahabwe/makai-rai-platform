@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   acceptIdleMessage,
+  clearSignedOutHint,
+  endReason,
   idlePhase,
   msToNextPhase,
   readSessionResponse,
@@ -10,26 +12,40 @@ import {
   signInAgainHref,
   stayOutcome,
   withMargin,
+  writeSignedOutHint,
   type IdleDeadlines,
 } from '@/lib/auth/idle';
+import { IDLE_TEXTS } from '@/lib/auth/session/copy';
 import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
 
-const WARNING_TEXT = 'You will be signed out in 2 minutes because nothing has happened for a while.';
-const FAILED_TEXT = 'Could not keep you signed in just now. Try again.';
-const ENDED_TEXT = 'You have been signed out. What you typed is still on this page.';
+/** Why the session ended, as the clock tells it; null when the server ended it before either deadline. */
+export type EndedReason = 'idle' | 'absolute' | null;
+
+/** This tab's sessionStorage, or null where reading the property throws (blocked site data). */
+function tabStorage(): Storage | null {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
 
 /**
- * The signed-out notice (owner default B35). It is ordinary page content, not a dialog: nothing is
- * inert, so a mouse or touch user can still select and copy what they typed, and the link goes back
- * to the same address after signing in. `role="alert"` announces it when it appears: the kit's Banner is not a live
- * region, so the alert is this wrapper's.
+ * The signed-out notice (owner default B35; plan 1B Task 4, C12). It is ordinary page content, not a dialog: nothing is
+ * inert, so a mouse or touch user can still select and copy what they typed, and the link goes back to the same address
+ * after signing in. It says why the session ended, the 12-hour or the 7-day rule, or no reason when the clock cannot tell.
+ * `role="alert"` announces it when it appears: the kit's Banner is not a live region, so the alert is this wrapper's.
  */
-export function IdleEndedNotice({ signInHref }: { signInHref: string }) {
+export function IdleEndedNotice({ signInHref, reason }: { signInHref: string; reason: EndedReason }) {
+  const why = reason === 'idle' ? IDLE_TEXTS.endedIdle : reason === 'absolute' ? IDLE_TEXTS.endedAbsolute : IDLE_TEXTS.endedElsewhere;
   return (
     <div role="alert" className="shell-idle__ended">
-      <Banner kind="session" action={<a href={signInHref}>Sign in again</a>}>{ENDED_TEXT}</Banner>
+      <Banner kind="session" action={<a href={signInHref}>{IDLE_TEXTS.signInAgain}</a>}>
+        <p>{why}</p>
+        <p>{IDLE_TEXTS.endedKept}</p>
+      </Banner>
     </div>
   );
 }
@@ -61,10 +77,12 @@ export function IdleEndedNotice({ signInHref }: { signInHref: string }) {
  * request is the one "Stay signed in" sends (NFR-PERF-05: at most one poll a minute, and this is
  * none).
  *
- * When the deadline arrives the dialog closes and nothing else happens: no request, no navigation,
- * no storage access, no purge. The server has ended the session; the next Save shows M-08 and the
- * next navigation reaches /login, and an open modal would make DEC-b's Save inert (RF-3).
- * SignOutWithDraftsGuard stays the only purge path.
+ * When the deadline arrives the dialog closes and the signed-out notice takes its place, once per ending, with the
+ * reason endReason gives (plan 1B Task 4, C12). No request, no navigation, no purge. The one storage access is the
+ * signed-out hint in this tab's sessionStorage (lib/auth/idle.ts SIGNED_OUT_HINT_KEY, never a draft key): written at an
+ * ending the clock explains, so S-01 can say why, and removed at mount and on an extension, when the session is known to
+ * be alive. The server has ended the session; the next Save shows M-08 and the next navigation reaches /login, and an
+ * open modal would make DEC-b's Save inert (RF-3). SignOutWithDraftsGuard stays the only purge path.
  */
 export default function IdleWarning({
   idleSeconds,
@@ -90,13 +108,23 @@ export default function IdleWarning({
   const generationRef = useRef(0);
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [signInHref, setSignInHref] = useState<string | null>(null);
+  const [ended, setEnded] = useState<{ href: string; reason: EndedReason } | null>(null);
 
   const elapsedSeconds = () => (Date.now() - baseRef.current) / 1000;
   const setWarningOpen = useCallback((next: boolean) => {
     openRef.current = next;
     setOpen(next);
   }, []);
+
+  // The session has ended: once per ending, the modal gives way to the notice in the page, so what the person typed can
+  // still be read and copied, and S-01 is left the reason when the clock gives one.
+  const showEnded = useCallback((reason: EndedReason) => {
+    if (signedOutRef.current) return;
+    signedOutRef.current = true;
+    if (openRef.current) setWarningOpen(false);
+    setEnded({ href: signInAgainHref(window.location.pathname, window.location.search), reason });
+    if (reason !== null) writeSignedOutHint(tabStorage(), reason, Date.now());
+  }, [setWarningOpen]);
 
   // Decides what the clock says now and sets the next wake-up. Safe to call as often as is wanted.
   // (A named function expression: it schedules itself, and a const cannot be read inside its own initialiser.)
@@ -107,11 +135,11 @@ export default function IdleWarning({
     if (phase === 'warning') {
       if (!openRef.current && !signedOutRef.current && !readingRef.current) setWarningOpen(true);
     } else if (phase === 'ended') {
-      if (openRef.current) setWarningOpen(false);
+      showEnded(endReason(progress));
     }
     const wait = msToNextPhase(progress);
     if (wait !== null) timerRef.current = setTimeout(checkNow, wait);
-  }, [setWarningOpen]);
+  }, [setWarningOpen, showEnded]);
 
   // Starts a new countdown from these deadlines: after an extension, an accepted message from another tab. An extension means
   // the session is alive, so a signed-out notice from before it is stale and the warning may open again.
@@ -121,7 +149,8 @@ export default function IdleWarning({
       baseRef.current = Date.now();
       generationRef.current += 1;
       signedOutRef.current = false;
-      setSignInHref(null);
+      setEnded(null);
+      clearSignedOutHint(tabStorage());
       setFailed(false);
       if (openRef.current) setWarningOpen(false);
       check();
@@ -133,6 +162,8 @@ export default function IdleWarning({
   useEffect(() => {
     deadlinesRef.current = withMargin({ secondsLeft, absoluteSecondsLeft });
     baseRef.current = Date.now();
+    // The server has just read a live session: a hint from an earlier ending in this tab is stale.
+    clearSignedOutHint(tabStorage());
     check();
     return () => clearTimeout(timerRef.current);
   }, [secondsLeft, absoluteSecondsLeft, check]);
@@ -206,10 +237,8 @@ export default function IdleWarning({
       // Esc closed the dialog before the read came back: open it again so the line is seen.
       if (!openRef.current) setWarningOpen(true);
     } else {
-      // Ended: the modal gives way to a notice in the page, so what the person typed can still be read and copied.
-      signedOutRef.current = true;
-      if (openRef.current) setWarningOpen(false);
-      setSignInHref(signInAgainHref(window.location.pathname, window.location.search));
+      // Ended. Before either deadline the server ended it (sign out everywhere, a password change): no reason is given.
+      showEnded(endReason({ ...deadlinesRef.current, elapsedSeconds: elapsed }));
     }
   }
 
@@ -221,18 +250,20 @@ export default function IdleWarning({
 
   return (
     <div className="shell-idle" data-seconds-left={secondsLeft}>
-      {signInHref ? <IdleEndedNotice signInHref={signInHref} /> : null}
+      {ended ? <IdleEndedNotice signInHref={ended.href} reason={ended.reason} /> : null}
       <Dialog
         open={open}
-        title={WARNING_TEXT}
+        title={IDLE_TEXTS.warningTitle}
         onClose={onBrowserClose}
         actions={
           <Button variant="primary" busy={busy} onClick={() => void stay()}>
-            Stay signed in
+            {IDLE_TEXTS.stay}
           </Button>
         }
       >
-        {failed ? <p role="alert" className="shell-idle__failed">{FAILED_TEXT}</p> : null}
+        <p>{IDLE_TEXTS.warningBody}</p>
+        <p>{IDLE_TEXTS.warningKept}</p>
+        {failed ? <p role="alert" className="shell-idle__failed">{IDLE_TEXTS.stayFailed}</p> : null}
       </Dialog>
     </div>
   );

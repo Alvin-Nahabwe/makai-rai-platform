@@ -6,6 +6,7 @@ import { expectTargetsAtLeast24px } from './helpers/targetSize';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { recordRequests } from './helpers/requests';
 import { expectNoHorizontalScroll } from './helpers/reflow';
+import { IDLE_TEXTS } from '../lib/auth/session/copy';
 import { abortPendingBackgroundRequests } from './helpers/pendingLinks';
 
 /**
@@ -205,7 +206,7 @@ test.describe('shell pages, checked with the harness helpers', () => {
       const expires = (await context.cookies()).find((c) => /session-token/.test(c.name))!.expires;
       await page.clock.fastForward(expires * 1000 - Date.now() - 115_000); // 115 s before the cookie's expiry, 10 s inside the window
       await page.clock.runFor(31_000); // two 15 s ticks fire: a tick is a local check, not a request
-      await expect(page.getByRole('dialog')).toContainText('You will be signed out in 2 minutes because nothing has happened for a while.', { timeout: 10_000 });
+      await expect(page.getByRole('dialog')).toContainText(IDLE_TEXTS.warningTitle, { timeout: 10_000 });
       // Not requests of the warning: the page itself, Next's assets, the browser's own fetch of the page icons, and the Link
       // prefetches (marked by the router's own header) the rail's links make in a production build when they come into view.
       // A server refresh or any API call from the warning would be left in the list.

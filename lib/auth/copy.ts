@@ -5,6 +5,7 @@
  * reaches the browser. Words only the server prints do not belong here (the password route's answers are
  * `PASSWORD_ROUTE_COPY` in `lib/http/api/copy.ts`).
  */
+import { IDLE_TEXTS } from '@/lib/auth/session/copy';
 
 const SHOW_PASSWORD = 'Show password';
 const PASSWORD_CHANGED = 'Password changed. Please sign in with your new password.';
@@ -22,6 +23,8 @@ const TOO_MANY_SIGN_INS = (minutes: number): string =>
     : `Too many people are signing in right now. Wait ${minutes} minutes, then try again.`;
 
 export const AUTH_COPY = Object.freeze({
+  /** The session's warning and notice words (UX-43, plan 1B Task 4), the same as IdleWarning's. */
+  ...IDLE_TEXTS,
   titles: Object.freeze({
     signIn: 'Sign in',
     forgotPassword: 'Forgot password',

@@ -2,6 +2,8 @@ import { test, expect, type Browser, type BrowserContext, type Page, type Route 
 import fs from 'node:fs';
 import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from './fixtures/manifest';
 import { NOT_FOUND_COPY } from '../lib/errors/not-found/copy';
+import { IDLE_TEXTS } from '../lib/auth/session/copy';
+import { AUTH_COPY } from '../lib/auth/copy';
 
 /**
  * UX-43 (SRS 7.6.1, line 2645; WCAG 2.2.1): two minutes before the session cookie's expiry the
@@ -22,9 +24,10 @@ import { NOT_FOUND_COPY } from '../lib/errors/not-found/copy';
  * e2e/shell-checks.spec.ts, with the harness helpers.
  */
 
-const WARNING = 'You will be signed out in 2 minutes because nothing has happened for a while.';
-const FAILED = 'Could not keep you signed in just now. Try again.';
-const ENDED = 'You have been signed out. What you typed is still on this page.';
+const WARNING = IDLE_TEXTS.warningTitle;
+const FAILED = IDLE_TEXTS.stayFailed;
+/** Every signed-out notice says this, whatever the reason (plan 1B Task 4). */
+const ENDED = IDLE_TEXTS.endedKept;
 const SEAM_RUN = process.env.MAKRAI_TEST_IDLE_SECONDS === '180';
 const SHORT = { timeout: 10_000 };
 
@@ -98,7 +101,7 @@ function countSessionReads(page: Page): string[] {
   return reads;
 }
 
-const stayButton = (page: Page) => page.getByRole('button', { name: 'Stay signed in' });
+const stayButton = (page: Page) => page.getByRole('button', { name: IDLE_TEXTS.stay });
 
 test.describe('idle-sign-out warning on the 12-hour server', () => {
   test.skip(SEAM_RUN, 'the setup project signs the seats in, and with a 180 s limit those sessions end before these cases run');
@@ -211,8 +214,9 @@ test.describe('idle-sign-out warning on the 12-hour server', () => {
 
       const notice = page.getByRole('alert').filter({ hasText: ENDED });
       await expect(notice).toBeVisible(SHORT);
-      await expect(notice).toHaveText(new RegExp(`^${ENDED}\\s*Sign in again$`));
-      const link = notice.getByRole('link', { name: 'Sign in again' });
+      // The server ended it before the deadline (the cookies were cleared): the clock cannot say why, so no reason is given.
+      await expect(notice).toHaveText(`${IDLE_TEXTS.endedElsewhere}${ENDED}${IDLE_TEXTS.signInAgain}`);
+      const link = notice.getByRole('link', { name: IDLE_TEXTS.signInAgain });
       await expect(link).toHaveAttribute('href', `/login?callbackUrl=${encodeURIComponent(path)}`);
       expect(page.url()).toContain(path);
       expect(await field.inputValue()).toBe(typed);
@@ -251,7 +255,7 @@ test.describe('idle-sign-out warning on the 12-hour server', () => {
         await page.route('**/api/auth/session', variant.respond);
         const reads = countSessionReads(page);
         await stayButton(page).click();
-        await expect(page.getByRole('alert').filter({ hasText: 'Could not keep you signed in' })).toHaveText(FAILED, SHORT);
+        await expect(page.getByRole('alert').filter({ hasText: FAILED })).toHaveText(FAILED, SHORT);
         await expect(page.getByRole('dialog')).toBeVisible();
         await expect(stayButton(page)).toBeEnabled();
         expect(reads).toHaveLength(1);
@@ -293,7 +297,7 @@ test.describe('idle-sign-out warning on the 12-hour server', () => {
       await expect(page.getByRole('alert').filter({ hasText: ENDED })).toBeVisible(SHORT);
       await page.waitForTimeout(500);
       await expect(page.getByRole('dialog')).toHaveCount(0);
-      await expect(page.getByText('Could not keep you signed in')).toHaveCount(0);
+      await expect(page.getByText(FAILED)).toHaveCount(0);
     } finally {
       await context.close();
     }
@@ -390,7 +394,7 @@ test.describe('idle-sign-out warning on the 12-hour server', () => {
       await held!.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"x"}' });
       await page.waitForTimeout(1000);
       await expect(page.getByRole('dialog')).toHaveCount(0);
-      await expect(page.getByText('Could not keep you signed in')).toHaveCount(0);
+      await expect(page.getByText(FAILED)).toHaveCount(0);
       await expect(page.getByText(ENDED)).toHaveCount(0);
     } finally {
       await context.close();
@@ -548,6 +552,48 @@ test.describe('idle-sign-out warning on the seam server (MAKRAI_TEST_IDLE_SECOND
       await expect(page.getByRole('dialog')).toHaveCount(0, SHORT);
       await page.reload();
       await expect(page).toHaveURL(/\/login/);
+    } finally {
+      await context.close();
+    }
+  });
+  test('C12: when the deadline passes with no click, the signed-out notice appears with the 12-hour reason and its link returns to this page', async ({ browser }) => {
+    test.setTimeout(300_000);
+    const { slug, context, page } = await signedInOwner(browser, 13);
+    try {
+      const path = `/orgs/${slug}/dashboard`;
+      await open(page, path);
+      await expect(page.getByRole('dialog')).toContainText(WARNING, { timeout: 90_000 });
+      await expect(page.getByRole('dialog')).toContainText(IDLE_TEXTS.warningBody);
+      const expires = await expiry(context);
+      await page.waitForTimeout(Math.max(0, expires * 1000 + 5_000 - Date.now())); // real time, no request
+      await expect(page.getByRole('dialog')).toHaveCount(0, SHORT);
+      const notice = page.getByRole('alert').filter({ hasText: IDLE_TEXTS.endedIdle });
+      await expect(notice).toHaveText(`${IDLE_TEXTS.endedIdle}${ENDED}${IDLE_TEXTS.signInAgain}`, SHORT);
+      await expect(page.locator('main')).toBeVisible(); // the page stays as it was, behind no modal
+      expect(await page.evaluate(() => document.querySelector('main')?.closest('[inert]') !== null)).toBe(false);
+
+      // In a new tab nothing is said: the hint is this tab's.
+      const other = await context.newPage();
+      await other.goto('/login');
+      await expect(other.getByRole('heading', { level: 1 })).toBeVisible();
+      await other.waitForTimeout(500);
+      await expect(other.getByText(AUTH_COPY.signedOutIdle)).toHaveCount(0);
+      await other.close();
+
+      await notice.getByRole('link', { name: IDLE_TEXTS.signInAgain }).click();
+      await page.waitForURL(/\/login\?callbackUrl=/);
+      await expect(page.getByText(AUTH_COPY.signedOutIdle)).toBeVisible(SHORT);
+      await expect(page.getByText(AUTH_COPY.signedOutKept)).toBeVisible();
+      const { seat } = ownerSeat();
+      await page.fill('#email', seat.email);
+      await page.fill('#password', seat.password);
+      await page.locator('button[type="submit"]').click();
+      await page.waitForURL((url) => url.pathname === path, { timeout: 30_000 });
+      // Read once: S-01 says nothing the next time.
+      await page.goto('/login');
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+      await page.waitForTimeout(500);
+      await expect(page.getByText(AUTH_COPY.signedOutIdle)).toHaveCount(0);
     } finally {
       await context.close();
     }

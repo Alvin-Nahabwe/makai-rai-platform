@@ -20,6 +20,7 @@ import {
   withMargin,
 } from '@/lib/auth/idle';
 import IdleWarning, { IdleEndedNotice } from '@/components/layout/IdleWarning';
+import { IDLE_TEXTS } from '@/lib/auth/session/copy';
 import { jwtCallback } from '@/lib/auth/callbacks';
 import { resolveIdentity, SessionError } from '@/lib/auth/identity';
 
@@ -284,17 +285,18 @@ describe('IdleWarning', () => {
     // The seconds are on the wrapper (one per page), and the warning is the kit's native dialog inside it.
     expect(html).toMatch(/^<div class="shell-idle" data-seconds-left="600"><dialog class="ui-dialog"/);
     expect([...html.matchAll(/<dialog\b/g)]).toHaveLength(1);
-    expect(html).toContain('You will be signed out in 2 minutes because nothing has happened for a while.');
-    expect(html).toContain('Stay signed in');
+    expect(html).toContain(IDLE_TEXTS.warningTitle);
+    expect(html).toContain(IDLE_TEXTS.stay);
     expect(html).not.toMatch(/\brole=|aria-modal|\bopen(=|>|\s)/); // the platform keeps those; the dialog is closed in the server markup
-    expect(html).not.toContain('You have been signed out'); // the signed-out notice is a later state, not server markup
+    expect(html).not.toContain(IDLE_TEXTS.endedKept); // the signed-out notice is a later state, not server markup
   });
 
   it('UX-43: the signed-out notice is a non-modal alert with the B35 text and a link back to the same address', () => {
-    const html = renderToStaticMarkup(createElement(IdleEndedNotice, { signInHref: '/login?callbackUrl=%2Forgs%2Facme%2Fdashboard' }));
+    const html = renderToStaticMarkup(createElement(IdleEndedNotice, { signInHref: '/login?callbackUrl=%2Forgs%2Facme%2Fdashboard', reason: null }));
     expect(html).toMatch(/^<div[^>]*role="alert"/);
-    expect(html).toContain('You have been signed out. What you typed is still on this page.');
-    expect(html).toMatch(/<a [^>]*href="\/login\?callbackUrl=%2Forgs%2Facme%2Fdashboard"[^>]*>Sign in again<\/a>/);
+    expect(html).toContain(IDLE_TEXTS.endedElsewhere);
+    expect(html).toContain(IDLE_TEXTS.endedKept);
+    expect(html).toMatch(new RegExp(`<a [^>]*href="/login\\?callbackUrl=%2Forgs%2Facme%2Fdashboard"[^>]*>${IDLE_TEXTS.signInAgain}</a>`));
     // Nothing that would make the page behind it unreachable.
     expect(html).not.toMatch(/<dialog|aria-modal|\binert\b/);
   });
@@ -335,10 +337,16 @@ describe('IdleWarning', () => {
     expect(src).toMatch(/settleStay\(\s*stayOutcome\(/);
   });
 
-  it('UX-43: the component keeps no page state to purge: nothing is removed from storage and nothing is navigated', () => {
+  it('UX-43: the component keeps no page state to purge: no draft is removed, nothing is navigated, and its one storage is the signed-out hint', () => {
     const src = stripComments(readFileSync('components/layout/IdleWarning.tsx', 'utf8'));
-    // SignOutWithDraftsGuard stays the only purge path (R-53); the 'ended' state leaves the page as it is.
-    expect(src).not.toMatch(/localStorage|sessionStorage|indexedDB|location\.(assign|replace|href\s*=)|router\.(push|replace|refresh)|useRouter|location\.reload|signOut\(/);
+    // SignOutWithDraftsGuard stays the only purge path (R-53); the 'ended' state leaves the page as it is. Plan 1B Task 4 (C12)
+    // adds one storage: the signed-out hint in this tab's sessionStorage, written and removed only through lib/auth/idle.ts.
+    expect(src).not.toMatch(/localStorage|indexedDB|location\.(assign|replace|href\s*=)|router\.(push|replace|refresh)|useRouter|location\.reload|signOut\(/);
+    expect(src.match(/sessionStorage/g)).toHaveLength(1);
+    expect(src).not.toMatch(/\.(setItem|removeItem|getItem|clear)\(/);
+    const idle = stripComments(readFileSync('lib/auth/idle.ts', 'utf8'));
+    expect(idle.match(/\.(setItem|removeItem)\(SIGNED_OUT_HINT_KEY/g)).toHaveLength(2);
+    expect(idle.match(/\.(setItem|removeItem|getItem)\(/g)).toHaveLength(2);
   });
 
   it('UX-43: no comment in the shell and session files cites a path under records/ or reviews/ (AGENTS.md section 1 C7)', () => {

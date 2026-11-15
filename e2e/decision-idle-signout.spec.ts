@@ -5,6 +5,8 @@ import { draftKeys, fillValid, openQuestionIn, saveAlert, seatOf, signInAs, sign
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
 import { FIELD_COPY } from '../lib/ui/field/copy';
 import { DECISION_OUTCOME_COPY } from '../lib/decision/outcome/copy';
+import { IDLE_TEXTS } from '../lib/auth/session/copy';
+import { AUTH_COPY } from '../lib/auth/copy';
 
 /**
  * Review Focus RF-3 (FR-DEC-06, UX-26, UX-43; call R-53): a draft survives an idle sign-out and returns after sign-in
@@ -34,9 +36,13 @@ test('FR-DEC-06 UX-26 UX-43: a draft survives an idle sign-out and returns after
   expect(sessionCookie.expires).toBeGreaterThan(Date.now() / 1000);   // a dated cookie; -1 would be a session cookie and the wait below would not wait
   await page.waitForTimeout(sessionCookie.expires * 1000 - Date.now() + 5_000);   // the cookie's own expiry plus 5 s, no request in between
   await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 10_000 });     // UI's warning has closed itself
+  // Plan 1B Task 4 (C12): the signed-out notice says the 12-hour rule, outside the page's <main>; the form is not inert.
+  await expect(page.getByRole('alert').filter({ hasText: IDLE_TEXTS.endedIdle })).toBeVisible({ timeout: 10_000 });
   await page.getByRole('button', { name: 'Save decision' }).click();
   await expect(saveAlert(page)).toHaveText(DECISION_OUTCOME_COPY.save.signedOut);
-  await page.getByRole('link', { name: 'Sign in again' }).click();
+  // The form's own Sign in again (the notice's, outside <main>, goes to the same address).
+  await page.getByRole('main').getByRole('link', { name: IDLE_TEXTS.signInAgain }).click();
+  await expect(page.getByText(AUTH_COPY.signedOutIdle)).toBeVisible({ timeout: 10_000 });
   await signInOnLoginPage(page, 'assessor');
   await expect(page).toHaveURL(new RegExp(`^${escape(new URL(page.url()).origin)}${escape(questionPath)}$`));
   await waitForQuestionPage(page);

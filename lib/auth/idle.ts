@@ -163,6 +163,43 @@ export async function readSessionResponse(response: Response): Promise<{ status:
   }
 }
 
+/**
+ * Why the session has ended, by the clock: 'absolute' once the 7-day limit is reached (also when the idle deadline has
+ * passed too, since staying signed in could not have helped), else 'idle' once the idle deadline is reached, else null
+ * while the session lasts. Counted as idlePhase counts.
+ */
+export function endReason(p: { secondsLeft: number; absoluteSecondsLeft: number; elapsedSeconds: number }): 'idle' | 'absolute' | null {
+  if (p.absoluteSecondsLeft - p.elapsedSeconds <= 0) return 'absolute';
+  if (p.secondsLeft - p.elapsedSeconds <= 0) return 'idle';
+  return null;
+}
+
+/**
+ * C12: leaves S-01 the reason the session ended in this tab (`{ reason, at }` under SIGNED_OUT_HINT_KEY; S-01 reads it once,
+ * LoginClient.tsx readSignedOutHint). Storage that is absent or refuses the write leaves no hint: S-01 then says no
+ * reason, and the page's own notice has already said it, so nothing is logged.
+ */
+export function writeSignedOutHint(storage: Storage | null, reason: 'idle' | 'absolute', now: number): void {
+  try {
+    storage?.setItem(SIGNED_OUT_HINT_KEY, JSON.stringify({ reason, at: now }));
+  } catch {
+    // Refused (a full quota, blocked site data): S-01 shows no reason, which is true of what it knows.
+  }
+}
+
+/**
+ * Removes a hint once the session is known to be alive (a signed-in page loaded, or an extension), so a sign-out started
+ * later in this tab is never told as the clock's (silent-failure review d2-sfh-1, finding 5). A refusal leaves the hint,
+ * which S-01 still accepts only for 12 hours.
+ */
+export function clearSignedOutHint(storage: Storage | null): void {
+  try {
+    storage?.removeItem(SIGNED_OUT_HINT_KEY);
+  } catch {
+    // Refused: the hint stays until S-01 reads it or its 12 hours pass.
+  }
+}
+
 /** The sign-in address that returns the person to the page they are on. The value is one encoded path, so it cannot carry a second parameter. */
 export function signInAgainHref(pathname: string, search: string): string {
   return `/login?callbackUrl=${encodeURIComponent(pathname + search)}`;
