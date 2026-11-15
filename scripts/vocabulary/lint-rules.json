@@ -581,6 +581,11 @@
       "lint": "phrase",
       "pattern": "\\bcross[- ]border storage consent\\b",
       "caseSensitive": false
+    },
+    "consent to store data in other countries": {
+      "lint": "phrase",
+      "pattern": "\\bconsent to store data in other countries\\b",
+      "caseSensitive": false
     }
   },
   "accept-a-legal-text": {

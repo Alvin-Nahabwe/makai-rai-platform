@@ -98,7 +98,7 @@
       "group": "People, organisations and accounts",
       "concept": "Owner",
       "term": "Owner",
-      "definition": "Can do everything, including making other members owners and downloading all records.",
+      "definition": "Can do everything, including making other members Owners and downloading all records.",
       "ownerDecision": false,
       "defineOnFirstUse": true,
       "retired": []
@@ -306,6 +306,7 @@
       "definition": "The person at that institution to contact about personal data.",
       "ownerDecision": false,
       "defineOnFirstUse": false,
+      "historical": true,
       "retired": []
     },
     {
@@ -1618,7 +1619,7 @@
       "id": "cross-border-storage-consent",
       "group": "Legal texts",
       "concept": "Cross-border storage consent",
-      "term": "consent to store data in other countries",
+      "term": "consent to storage abroad",
       "definition": "Your agreement that your account and records are stored in the countries the text names.",
       "ownerDecision": false,
       "defineOnFirstUse": false,
@@ -1627,6 +1628,12 @@
           "text": "cross-border storage consent",
           "lint": "phrase",
           "pattern": "\\bcross[- ]border storage consent\\b",
+          "caseSensitive": false
+        },
+        {
+          "text": "consent to store data in other countries",
+          "lint": "phrase",
+          "pattern": "\\bconsent to store data in other countries\\b",
           "caseSensitive": false
         }
       ]

@@ -91,10 +91,10 @@ describe('the Help page', () => {
     expect(html).not.toMatch(/<main\b/);
   });
 
-  it('L2-69: 98 entries in 8 groups, in the file\'s order and with the file\'s group names', () => {
+  it('L2-69: 97 entries in 8 groups, in the file\'s order and with the file\'s group names', () => {
     const groups = helpVocabulary();
     expect(groups.map((g) => [g.name, g.entries.length])).toEqual([
-      ['People, organisations and accounts', 18], ['Projects, stages and questions', 16], ['Recording a decision', 19],
+      ['People, organisations and accounts', 17], ['Projects, stages and questions', 16], ['Recording a decision', 19],
       ['Findings and follow-up', 11], ['Stage reviews, seals and documents', 17], ['Guidance content', 5], ['Legal texts', 5],
       ['Using the platform', 7],
     ]);
@@ -114,8 +114,10 @@ describe('the Help page', () => {
     const vocab = JSON.parse(readFileSync('data/vocabulary.json', 'utf8')) as { concepts: Array<{ id: string; definition?: unknown; historical?: unknown }> };
     const shown = new Set(helpVocabulary().flatMap((g) => g.entries.map((e) => e.id)));
     const left = vocab.concepts.filter((c) => typeof c.definition !== 'string' || c.historical !== undefined);
-    expect(left.length).toBe(17);
+    expect(left.length).toBe(18);
     for (const c of left) expect(shown.has(c.id), c.id).toBe(false);
+    // The data-protection contact role is dropped (owner, 17 Oct): historical, so not on Help.
+    expect(left.map((c) => c.id)).toContain('data-protection-contact');
   });
 
   it('L2-69 Q2: no term on Help holds a brace; a placeholder becomes the one character U+2026', () => {
@@ -134,8 +136,8 @@ describe('the Help page', () => {
     const entries = helpVocabulary().flatMap((g) => g.entries);
     expect(pairs.map((m) => m[1])).toEqual(entries.map((e) => e.id));
     for (const m of pairs) expect(m[3]).toBe(m[1]);
-    expect(html.match(/<dt\b/g)).toHaveLength(98);
-    expect(html.match(/<dd\b/g)).toHaveLength(98);
+    expect(html.match(/<dt\b/g)).toHaveLength(97);
+    expect(html.match(/<dd\b/g)).toHaveLength(97);
     for (const m of pairs) expect(m[2] + m[4]).not.toMatch(/<[a-z]/i);
     const src = readFileSync('app/help/page.tsx', 'utf8');
     expect(src).not.toMatch(/Definition|<Term\b|dangerouslySetInnerHTML/);

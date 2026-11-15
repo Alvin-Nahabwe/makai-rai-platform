@@ -639,7 +639,17 @@
         "cross border storage consent"
       ],
       "passes": [
-        "consent to store data in other countries"
+        "consent to storage abroad"
+      ]
+    },
+    "consent to store data in other countries": {
+      "hits": [
+        "consent to store data in other countries",
+        "Consent to store data in other countries"
+      ],
+      "passes": [
+        "consent to storage abroad",
+        "Consent to storage abroad"
       ]
     }
   },
