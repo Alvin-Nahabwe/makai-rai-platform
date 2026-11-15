@@ -39,20 +39,24 @@ export interface ForgotPasswordViewProps {
 }
 
 /**
- * S-02's markup for a given state, in the gate frame's card (plan 1B Task 2): the heading and lead, M-21 once sent, the
- * form with its error line beside the button (spec 9.7), then the way back to S-01.
+ * S-02's markup for a given state, in the gate frame's card (plan 1B Task 2): the heading and lead, the form with its error
+ * line beside the button (spec 9.7), then the way back to S-01. Once sent, M-21 in its status region takes the form's
+ * place (design review I-5).
  */
 export function ForgotPasswordView(v: ForgotPasswordViewProps) {
   return (
     <AuthCard title={AUTH_COPY.resetHeading} lead={<p>{AUTH_COPY.forgotLead}</p>}
       footer={<p><Link href="/login">{AUTH_COPY.backToSignIn}</Link></p>}>
       <StatusRegion message={v.state.kind === 'sent' ? AUTH_MESSAGE_COPY.resetLinkSent : null} />
+      {/* Once sent, M-21 replaces the form (design review I-5): no field to fill again, no button to press again. */}
+      {v.state.kind === 'sent' ? null : (
       <form method="post" onSubmit={v.onSubmit}>
         <TextInput id="email" name="email" label={FORGOT_COPY.email} type="email" required autoComplete="username" spellCheck={false}
           value={v.email} onChange={(e) => v.onEmail(e.currentTarget.value)} />
         <Button variant="primary" type="submit" disabled={v.state.kind === 'sending' || v.hydrated === false}>{FORGOT_COPY.submit}</Button>
         <StatusRegion message={v.state.kind === 'error' ? v.state.message : null} politeness="assertive" tone="error" />
       </form>
+      )}
     </AuthCard>
   );
 }

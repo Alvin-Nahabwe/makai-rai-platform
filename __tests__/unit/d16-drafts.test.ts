@@ -16,7 +16,7 @@ vi.mock('next/navigation', async (orig) => ({
 vi.mock('next-auth/react', () => ({ signIn: vi.fn(), getSession: vi.fn() }));
 
 const { openDraftStore, draftKey } = await import('@/lib/client/drafts');
-const { afterSignIn, anyDrafts, LoginView, removeOtherLastProjectKeys } = await import('@/app/(public)/login/LoginClient');
+const { afterSignIn, anyDrafts, LoginView, LoginRouteView, removeOtherLastProjectKeys } = await import('@/app/(public)/login/LoginClient');
 const { OtherAccountTextConfirm } = await import('@/components/auth/OtherAccountTextConfirm');
 const { AUTH_COPY } = await import('@/lib/auth/copy');
 
@@ -104,7 +104,7 @@ describe('T5.7: other accounts\' last-project keys go with their drafts on Remov
 });
 
 describe('the confirmation (T5.2, Review Focus 4)', () => {
-  const props = { onRemove: noop, onSignOut: noop, busy: false, message: null };
+  const props = { onRemove: noop, onSignOut: noop, removing: false, leaving: false, message: null };
   /** The markup with React's generated ids and the icons' drawing taken out: what is left is what the page says and marks. */
   const said = (h: string) => h.replace(/ (id|aria-labelledby|aria-describedby)="[^"]*"/g, '').replace(/<svg[\s\S]*?<\/svg>/g, '');
 
@@ -117,10 +117,10 @@ describe('the confirmation (T5.2, Review Focus 4)', () => {
     }
   });
 
-  it('other: the title and body name no one; the choices in order, Sign out and leave it first, Remove destructive', () => {
+  it('other: the body names no one; the choices in order, Sign out and leave it first, Remove destructive; no box in the card (M-3)', () => {
     const h = html(createElement(OtherAccountTextConfirm, { kind: 'other', ...props }));
-    expect(h).toContain(AUTH_COPY.otherTextTitle);
     expect(h).toContain(AUTH_COPY.otherTextBody);
+    expect(h).not.toContain('ui-confirm');   // the two choices are drawn here, not in InlineConfirm's bordered box (L5-27)
     expect(h.indexOf(AUTH_COPY.consequenceLeave)).toBeLessThan(h.indexOf(AUTH_COPY.consequenceRemove));
     expect(h.indexOf(`>${AUTH_COPY.signOutAndLeave}</button>`)).toBeLessThan(h.indexOf(`>${AUTH_COPY.removeAndContinue}</button>`));
     expect(h).toMatch(new RegExp(`class="ui-button ui-button--destructive"[^>]*>${AUTH_COPY.removeAndContinue}</button>`));
@@ -129,7 +129,6 @@ describe('the confirmation (T5.2, Review Focus 4)', () => {
 
   it('Review Focus 4: unknown account warns with the cannot-check wording', () => {
     const t = html(createElement(OtherAccountTextConfirm, { kind: 'unknown', ...props }));
-    expect(t).toContain(AUTH_COPY.unknownTextTitle);
     expect(t).toContain(AUTH_COPY.unknownTextBody);
     expect(t).not.toContain(AUTH_COPY.otherTextBody);
   });
@@ -139,15 +138,32 @@ describe('the confirmation (T5.2, Review Focus 4)', () => {
     expect(html(createElement(OtherAccountTextConfirm, { kind: 'other', ...props, message: 'M-STILL' }))).toMatch(/<div role="alert"[^>]*>.*M-STILL/);
   });
 
-  it('S-01 shows the confirmation in place of the form, under the heading, with no footer', () => {
-    const h = html(createElement(LoginView, {
-      email: 'b@x.test', password: 'pw', showPassword: false, error: '', notice: null, loading: true, signedOut: null,
-      onEmail: noop, onPassword: noop, onToggleShow: noop, onSubmit: noop,
-      confirm: { who: 'other', ...props },
-    }));
-    expect(h).toContain(AUTH_COPY.otherTextTitle);
-    expect(h).not.toMatch(/<form\b|id="password"/);
-    expect(h).not.toContain(AUTH_COPY.noAccount);
+  it('L5-27 (I-3): S-01 shows the confirmation in place of the form; its question is the page\'s h1, not "Sign in"; no footer', () => {
+    for (const [who, title] of [['other', AUTH_COPY.otherTextTitle], ['unknown', AUTH_COPY.unknownTextTitle]] as const) {
+      const h = html(createElement(LoginView, {
+        email: 'b@x.test', password: 'pw', showPassword: false, error: '', notice: null, loading: true, signedOut: null,
+        onEmail: noop, onPassword: noop, onToggleShow: noop, onSubmit: noop,
+        confirm: { who, ...props },
+      }));
+      expect(h.match(/<h1\b[^>]*>([^<]*)<\/h1>/)?.[1]).toBe(title);
+      expect(h).not.toMatch(/<form\b|id="password"/);
+      expect(h).not.toContain(AUTH_COPY.noAccount);
+    }
+  });
+
+  it('A-2: each choice shows its own progress: Sign out and leave it while it runs, Remove only when pressed', () => {
+    const busyButtons = (h: string) => [...h.matchAll(/<button[^>]*aria-busy="true"[^>]*>(?:<span[^>]*><\/span>)?([^<]*)<\/button>/g)].map((m) => m[1]);
+    expect(busyButtons(html(createElement(OtherAccountTextConfirm, { kind: 'other', ...props, leaving: true })))).toEqual([AUTH_COPY.signOutAndLeave]);
+    expect(busyButtons(html(createElement(OtherAccountTextConfirm, { kind: 'other', ...props, removing: true })))).toEqual([AUTH_COPY.removeAndContinue]);
+    expect(busyButtons(html(createElement(OtherAccountTextConfirm, { kind: 'other', ...props })))).toEqual([]);
+  });
+
+  it('L5-27: the route marks Sign in done and names the question the current stop, while it is asked', () => {
+    const signIn = html(createElement(LoginRouteView, { step: 'signIn' }));
+    expect(signIn).toMatch(/aria-current="step"><span class="gate-route__here">[^<]*<\/span> Sign in</);
+    const asking = html(createElement(LoginRouteView, { step: 'confirm' }));
+    expect(asking).toMatch(new RegExp(`aria-current="step"><span class="gate-route__here">[^<]*</span> ${AUTH_COPY.loginStops.unsavedText}<`));
+    expect(asking).toMatch(/gate-route__stop--done[^>]*>.*?Sign in/);
   });
 });
 

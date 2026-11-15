@@ -13,7 +13,7 @@ vi.mock('next/navigation', async (orig) => ({
 }));
 
 const { ForgotPasswordView } = await import('@/app/(public)/forgot-password/ForgotPasswordClient');
-const { ResetPasswordView } = await import('@/app/(public)/reset-password/ResetPasswordClient');
+const { ResetPasswordView, ResetRouteView } = await import('@/app/(public)/reset-password/ResetPasswordClient');
 const { AUTH_COPY, AUTH_MESSAGE_COPY, FORGOT_COPY } = await import('@/lib/auth/copy');
 const { GATE_COPY } = await import('@/lib/shell/copy');
 
@@ -33,9 +33,13 @@ describe('S-02 in the gate frame', () => {
     expect(html(forgot({ kind: 'idle' }))).toMatch(new RegExp(`<a [^>]*href="/login"[^>]*>${AUTH_COPY.backToSignIn}</a>`));
   });
 
-  it('T2.5: the sent answer is M-21 whatever the address, in a status region before the form; an error sits after the button', () => {
+  it('T2.5 and I-5: the sent answer is M-21 whatever the address, in a status region that replaces the form; an error sits after the button', () => {
     const sent = html(forgot({ kind: 'sent' }));
-    expect(sent.indexOf(AUTH_MESSAGE_COPY.resetLinkSent)).toBeLessThan(sent.indexOf('<form'));
+    expect(sent).toMatch(new RegExp(`<div role="status"[^>]*>${AUTH_MESSAGE_COPY.resetLinkSent}</div>`));
+    expect(sent).not.toMatch(/<form\b|<input\b|ui-button--primary/);
+    expect(sent).toMatch(new RegExp(`<a [^>]*href="/login"[^>]*>${AUTH_COPY.backToSignIn}</a>`));
+    // The region is in the page before it is filled (ruling T16-6), so the sent answer is announced.
+    expect(html(forgot({ kind: 'idle' }))).toMatch(/<div role="status" class="ui-status"><\/div>/);
     const failed = html(forgot({ kind: 'error', message: FORGOT_COPY.serverProblem }));
     const form = /<form[^>]*>([\s\S]*?)<\/form>/.exec(failed)?.[1] ?? '';
     expect(form.indexOf('<div role="alert"')).toBeGreaterThan(form.indexOf('type="submit"'));
@@ -49,10 +53,23 @@ describe('S-03 in the gate frame', () => {
       .toMatch(/autocomplete="new-password"/i);
   });
 
-  it('M-22 with "Ask for a new link" when the link is used', () => {
+  it('I-6: M-22, then "Ask for a new link" as the card\'s primary button-link, and Back to sign in', () => {
     const h = html(<ResetPasswordView token="x" password="" showPassword={false} state={{ kind: 'unusable' }} onPassword={noop} onToggleShow={noop} onSubmit={noop} />);
     expect(h).toContain(AUTH_MESSAGE_COPY.resetLinkUnusable);
-    expect(h).toMatch(/<a [^>]*href="\/forgot-password"/);
+    expect(h).toMatch(/<a class="ui-button ui-button--primary" href="\/forgot-password">Ask for a new link<\/a>/);
+    expect(h).toMatch(new RegExp(`<a [^>]*href="/login"[^>]*>${AUTH_COPY.backToSignIn}</a>`));
+  });
+
+  it('I-6: a link that cannot be used makes Ask for a link the current stop again; a good one has it done', () => {
+    const current = (h: string) => /aria-current="step"><span class="gate-route__here">[^<]*<\/span> ([^<]*)</.exec(h)?.[1];
+    expect(current(html(<ResetRouteView step="unusable" />))).toBe(AUTH_COPY.recoveryStops.askForLink);
+    expect(current(html(<ResetRouteView step="form" />))).toBe(AUTH_COPY.recoveryStops.setNewPassword);
+    expect(AUTH_COPY.linkUnusableHeading).toBe('This link cannot be used');
+  });
+
+  it('M-8: the valid link\'s card leads back to sign in too', () => {
+    const h = html(<ResetPasswordView token="x" password="" showPassword={false} state={{ kind: 'idle' }} onPassword={noop} onToggleShow={noop} onSubmit={noop} />);
+    expect(h).toMatch(new RegExp(`<a [^>]*href="/login"[^>]*>${AUTH_COPY.backToSignIn}</a>`));
   });
 
   it('T2.6: the page source puts the token in no title, log or aria text', () => {
@@ -64,22 +81,24 @@ describe('S-03 in the gate frame', () => {
 });
 
 describe('L5-6 and L5-8: the three door pages render the public gate frame, its route, and no logo in the card', () => {
-  const PAGES: Array<[string, string[]]> = [
-    ['app/(public)/login/page.tsx', ['GATE_COPY.stops.signIn']],
-    ['app/(public)/forgot-password/page.tsx', ['AUTH_COPY.recoveryStops.askForLink', 'AUTH_COPY.recoveryStops.setNewPassword', 'GATE_COPY.stops.signIn']],
-    ['app/(public)/reset-password/page.tsx', ['AUTH_COPY.recoveryStops.askForLink', 'AUTH_COPY.recoveryStops.setNewPassword', 'GATE_COPY.stops.signIn']],
+  // A page whose step changes in the browser draws its route from its client module (routeSlot); the stops are there.
+  const PAGES: Array<[string, RegExp, string, string[]]> = [
+    ['app/(public)/login/page.tsx', /<GateFrame variant="public" routeSlot=\{<LoginRoute \/>\}>/, 'app/(public)/login/LoginClient.tsx', ['GATE_COPY.stops.signIn']],
+    ['app/(public)/forgot-password/page.tsx', /<GateFrame variant="public" route=\{ROUTE\}>/, 'app/(public)/forgot-password/page.tsx', ['AUTH_COPY.recoveryStops.askForLink', 'AUTH_COPY.recoveryStops.setNewPassword', 'GATE_COPY.stops.signIn']],
+    ['app/(public)/reset-password/page.tsx', /<GateFrame variant="public" routeSlot=\{<ResetRoute \/>\}>/, 'app/(public)/reset-password/ResetPasswordClient.tsx', ['AUTH_COPY.recoveryStops.askForLink', 'AUTH_COPY.recoveryStops.setNewPassword', 'GATE_COPY.stops.signIn']],
   ];
-  it.each(PAGES)('%s', (page, stops) => {
-    const src = readFileSync(page, 'utf8');
-    expect(src).toMatch(/<GateFrame variant="public" route=\{ROUTE\}>/);
+  it.each(PAGES)('%s', (page, frame, routeFile, stops) => {
+    expect(readFileSync(page, 'utf8')).toMatch(frame);
+    const src = readFileSync(routeFile, 'utf8');
     let at = -1;
     for (const s of stops) {
       const next = src.indexOf(s, at + 1);
       expect(next, s).toBeGreaterThan(at);
       at = next;
     }
-    expect(src).not.toMatch(/<img\b|auth-container|auth-card|auth-logo/);
-    expect(src).not.toMatch(/from 'next\/image'/);
+    const pageSrc = readFileSync(page, 'utf8');
+    expect(pageSrc).not.toMatch(/<img\b|auth-container|auth-card|auth-logo/);
+    expect(pageSrc).not.toMatch(/from 'next\/image'/);
   });
 
   it('the route words: S-02 and S-03\'s own stops are AUTH_COPY\'s (off S-04\'s first visit), Sign in is GATE_COPY\'s', () => {
