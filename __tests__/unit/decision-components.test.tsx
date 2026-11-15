@@ -259,13 +259,23 @@ describe('S-12 regions', () => {
   });
 
   it('UX-42 W-3: one h1 for the question that takes focus, and Previous and Next go to the neighbouring questions', async () => {
-    const h = renderToStaticMarkup(await QuestionPanelRegions({ data: PANEL }));
+    // Lane 1 Task 1: Previous and Next are the position strip's (under 1160px; the breadcrumb and the route column above
+    // it), which needs the stage's data: each link is named by its question in words, its place and its status.
+    const { stageFixture } = await import('../helpers/stageFixture');
+    const data = { ...PANEL, position: { index: 1, total: 24, previousId: 'Q-PP-01', nextId: 'Q-PP-03' } };
+    const h = renderToStaticMarkup(await QuestionPanelRegions({ data, stage: stageFixture({ marks: { 'Q-PP-01': 'done' } }) }));
     expect(h.match(/<h1/g)).toHaveLength(1);
     expect(h).toMatch(/<h1 id="question-heading" tabindex="-1"[^>]*>Have you evaluated whether AI is the right approach\?<\/h1><p[^>]*>Q-PP-01 \u00b7 Problem Formulation<\/p>/i);
-    expect(h).toMatch(/<a[^>]*href="\/orgs\/acme\/projects\/p1\/stages\/pre-processing\/questions\/Q-PP-00"[^>]*>Previous question<\/a>/);
-    expect(h).toMatch(/<a[^>]*href="\/orgs\/acme\/projects\/p1\/stages\/pre-processing\/questions\/Q-PP-02"[^>]*>Next question<\/a>/);
-    expect(h).toContain('Question 2 of 24 in Pre-processing');   // the stage's name, not its address segment (CR-7)
-    expect(renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, position: { index: 0, total: 24, previousId: null, nextId: 'Q-PP-02' } } }))).not.toContain('Previous question');
+    const links = [...h.matchAll(/<a class="position-strip__step[^"]*"[^>]*>[\s\S]*?<\/a>/g)].map((m) => m[0]);
+    const named = (l: string) => l.replace(/<svg[\s\S]*?<\/svg>/g, '').replace(/<[^>]+>/g, '');
+    expect(links).toHaveLength(2);
+    expect(links[0]).toContain('href="/orgs/acme/projects/p1/stages/pre-processing/questions/Q-PP-01"');
+    expect(named(links[0])).toMatch(/^Previous question: .+ \(question 1, Done\)$/);
+    expect(links[1]).toContain('href="/orgs/acme/projects/p1/stages/pre-processing/questions/Q-PP-03"');
+    expect(named(links[1])).toMatch(/^Next question: .+ \(question 3, No decision\)$/);
+    expect(h).toContain('<b>Question 2 of 24</b>');   // the position in words, not the question's code
+    const first = renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, position: { index: 0, total: 24, previousId: null, nextId: 'Q-PP-02' } }, stage: stageFixture() }));
+    expect(first).not.toContain('Previous question');
   });
 
   it('FR-DEC-01 FR-DEC-03 (screen): with no version, Current decision reads "No decision yet."', () => {

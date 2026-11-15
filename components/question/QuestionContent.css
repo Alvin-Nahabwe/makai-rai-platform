@@ -1,71 +1,99 @@
 /*
- * The guidance aside of the question page (components/question/QuestionContent.tsx; UX-08, FR-CNT-02).
- * Colours are the colour roles of app/globals.css, which both themes redefine, so text keeps 4.5:1 in light and
- * dark (NFR-A11Y-05). The link uses --color-action-text, the role the legacy --tint-brand-fg resolved to, so it looks
- * as before in both themes.
+ * The guidance aside of the question page (components/question/QuestionContent.tsx; sketch assigned.html `aside`,
+ * `.help`). Colours are the colour roles of app/globals.css, which both themes redefine, so text keeps 4.5:1 in light
+ * and dark (NFR-A11Y-05).
  */
 
 /* A long word or address in a content text wraps instead of widening the page at 320px (SC 1.4.10). */
 .question-content {
   overflow-wrap: break-word;
-  margin-block-end: var(--space-6);
 }
 
-/* The two headings are h2 (one level below the page's h1) at the size they had as h3 under the old "Question" h2. */
+/* The headings are h2 (one level below the page's h1), at the sketch's 18px. */
 .question-content > h2 {
-  margin: var(--space-4) 0 var(--space-1);
+  margin: 0 0 var(--space-2);
   color: var(--color-heading);
-  font-size: var(--font-size-body);
-}
-
-.question-content > h2:first-child {
-  margin-block-start: 0;
+  font-size: var(--font-size-h3);
+  line-height: 1.3;
 }
 
 .question-content__body {
-  margin: 0;
+  margin: 0 0 var(--space-6);
   color: var(--color-ink);
+  font-size: 0.9375rem;
+  line-height: 1.6;
 }
 
-.question-content__principle {
-  margin: var(--space-4) 0 0;
-  color: var(--color-ink-muted);
+/* The risk areas directly under "Why this is asked" (owner 17.5): the label with its definition, then one link each. */
+.question-content__areas {
+  margin: calc(-1 * var(--space-4)) 0 var(--space-6);
   font-size: var(--font-size-small);
 }
 
-.question-content__jump-line {
-  margin: var(--space-3) 0 0;
+.question-content__areas-label {
+  margin: 0 0 var(--space-1);
+  color: var(--color-ink);
+  font-weight: var(--font-weight-semibold);
 }
 
-/* At least 24 by 24 CSS pixels, grown by padding so longer text is never clipped (UX-34, SC 2.5.8). */
-.question-content__jump {
+.question-content__areas-label .ui-definition {
+  display: block;
+  font-weight: var(--font-weight-regular);
+}
+
+.question-content__area-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.question-content__area-list a {
   display: inline-flex;
-  align-items: center;
-  min-block-size: 24px;
-  min-inline-size: 24px;
-  padding-block: 2px;
-  color: var(--color-action-text);
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--space-1);
+  min-block-size: var(--target-min);
+  color: var(--color-link);
   text-decoration: underline;
-  text-underline-offset: 2px;
+  text-underline-offset: 3px;
 }
 
-.question-content__jump:hover {
-  color: var(--color-action-text);
+/* The area's code after its name, in small type (voice rule 8: words before codes). */
+.question-content__area-code {
+  color: var(--color-ink-muted);
+  font-size: 0.8125rem;
 }
 
-.question-content__jump:focus-visible {
-  outline: 3px solid var(--color-action-text);
-  outline-offset: 2px;
+/* "Ways teams address this (n)": one folded control, the list opening in place (spec 9.3; sketch `.help`). */
+.question-content__ways {
+  border-block-start: 1px solid var(--color-border-container);
 }
 
-/*
- * The suggestions are in the guidance column, just below this aside and the finding link, once that column sits
- * beside the form: the same media query as the three columns (components/question/workspace.css), so the link shows
- * exactly while the suggestions are below the form, and is never hidden where it is the way down to them. If the
- * owner's swap in workspace.css puts the guidance beside the form from 72.5rem, this query becomes (width >= 72.5rem).
- */
-@media (width >= 90rem) {
-  .question-content__jump {
-    display: none;
-  }
+.question-content__ways-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: 44px;
+  color: var(--color-link);
+  font-size: 0.9375rem;
+  font-weight: var(--font-weight-semibold);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.question-content__ways-summary::-webkit-details-marker {
+  display: none;
+}
+
+.question-content__ways-summary .ui-icon {
+  flex: none;
+}
+
+.question-content__ways-list {
+  padding-block: var(--space-2) var(--space-4);
 }

@@ -14,6 +14,27 @@ export const QUESTION_COPY = Object.freeze({
     /** The strip's link to the stage page (design spec 9.3; plan 1C `DECISION_COPY.allQuestionsLink`). */
     allQuestions: 'All questions',
   }),
+  /**
+   * The frame of the question page outside the decision card and the route column (lane 1 Task 1, the Route sketch
+   * assigned.html and workspace-phone-saved.html): the top strip from 1160px (breadcrumb and the stage's tally), the
+   * position strip under 1160px, and the guidance aside's risk areas and folded list.
+   */
+  frame: Object.freeze({
+    /** The tally's heading, read by a screen reader only (sketch `.tally h2.sr`). */
+    tallyHeading: "Your team's work in this stage",
+    /** The accessible name of the small button that shows a term's definition beside its first use (spec 6). */
+    whatIs: (term: string): string => `What is a ${term}?`,
+    /**
+     * The position strip's links (phone sketch): the neighbour's words, then its place (the number the link shows) and its
+     * status in words, never the mark alone.
+     */
+    previous: (text: string, n: number, status: string): string => `Previous question: ${text} (question ${n}, ${status})`,
+    next: (text: string, n: number, status: string): string => `Next question: ${text} (question ${n}, ${status})`,
+    /** After "Question n of N" in the position strip, read by a screen reader only: this question's status. */
+    hereStatus: (status: string): string => `, you are here, ${status}`,
+    /** The list of the question's risk areas under "Why this is asked" (plan 1C Task 4, DECISION_COPY.riskAreas). */
+    riskAreas: 'Risk areas',
+  }),
   headings: Object.freeze({
     current: 'Current decision',
     seals: 'Sealed reviews',
@@ -61,7 +82,7 @@ export const QUESTION_COPY = Object.freeze({
   }),
   /** components/question/QuestionContent.tsx. */
   content: Object.freeze({
-    principle: (principle: string): string => `Principle: ${principle}`,
+    /** The folded control's summary in the guidance aside (spec 9.3: one link that opens the list in place). */
     jump: (n: number): string => `Ways teams address this (${n})`,
     goodPractice: 'What good looks like',
     whyAsked: 'Why this is asked',

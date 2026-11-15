@@ -5,11 +5,14 @@ import { failOnDialog } from './helpers/dialogs';
 import { expectNoHorizontalScroll } from './helpers/reflow';
 import { fillValid, fixtureOrgSlug, newProject, openQuestion, saveStatus, saveViaApi, seatRequest } from './helpers/session';
 import { QUESTION_COPY } from '../lib/question/copy';
+import { UI_COPY } from '../lib/ui/copy';
 
 /**
- * The question page's frame (plan 1C decision C1, cut to slice 1): the question in words is the h1, the form follows it
- * in the main column, and the guidance is an aside, below the form from 72.5rem with the stage's questions as a column on
- * the left, beside the form from 90rem, and after it on a narrow one (owner's decision "Route column", 14 November 2026).
+ * The question page's frame (lane 1 Task 1, the Route sketch): the question in words is the h1, the decision follows it
+ * in the main column, and the guidance is an aside, below the decision from 72.5rem with the stage's questions as a column
+ * on the left, beside it from 90rem, and after it on a narrow one (owner's decision "Route column", 14 November 2026). From
+ * 72.5rem the top strip (breadcrumb and tally) runs across; under it the position strip. e2e/question-frame-route.spec.ts
+ * holds the strips, the 1280 by 800 gate, the focus ring and the frame's states.
  * Every project is new, so no question has a decision. Q-PP-01 has the longest text of the fixture bundle the server
  * runs on; the longest text of the real bundles (data/content) is put into the h1 in place to measure it too.
  */
@@ -85,14 +88,16 @@ test('the column starts at 72.5rem: at 1160 the main column keeps 30rem beside a
   expect(route.width, 'the stage\'s column').toBeGreaterThanOrEqual(256);
   expect(main.x).toBeGreaterThanOrEqual(route.x + route.width);
   expect(guide.y, 'the guide is below the main column').toBeGreaterThanOrEqual(main.y + main.height);
-  await expect(page.locator('.question-content__jump'), 'the guidance is not beside the form: the jump link shows').toBeVisible();
+  await expect(page.locator('.question-top'), 'the top strip runs across from 1160').toBeVisible();
+  await expect(page.locator('.position-strip')).toBeHidden();
   await page.setViewportSize({ width: 1150, height: 900 });
   const main2 = await box(page.locator('.question-workspace__main'));
   const guide2 = await box(page.locator('.question-workspace__guide'));
   const route2 = await box(routeCol(page));
   expect(guide2.y, 'the guide follows the main column').toBeGreaterThanOrEqual(main2.y + main2.height);
   expect(route2.y, 'the stage\'s short form follows the guide').toBeGreaterThanOrEqual(guide2.y + guide2.height);
-  await expect(page.locator('.question-content__jump')).toBeVisible();
+  await expect(page.locator('.question-top')).toBeHidden();
+  await expect(page.locator('.position-strip'), 'under 1160 the position strip does the top strip\'s job').toBeVisible();
   await page.setViewportSize({ width: 1440, height: 900 });
   const main3 = await box(page.locator('.question-workspace__main'));
   const route3 = await box(routeCol(page));
@@ -102,7 +107,8 @@ test('the column starts at 72.5rem: at 1160 the main column keeps 30rem beside a
   expect(guide3.width).toBeGreaterThanOrEqual(256);
   expect(main3.x).toBeGreaterThanOrEqual(route3.x + route3.width);
   expect(guide3.x).toBeGreaterThanOrEqual(main3.x + main3.width);
-  await expect(page.locator('.question-content__jump')).toBeHidden();
+  // The ways teams address this are one folded control at every width (spec 9.3): closed until pressed.
+  await expect(page.locator('details.question-content__ways')).not.toHaveAttribute('open', /.*/);
   await page.setViewportSize({ width: 1430, height: 900 });
   const main4 = await box(page.locator('.question-workspace__main'));
   const guide4 = await box(page.locator('.question-workspace__guide'));
@@ -126,13 +132,13 @@ test('at 375 by 812 the page is one column in reading order: heading, current de
   });
   expect(follows).toEqual([true, true, true, true]);
   await expectNoHorizontalScroll(page);
-  // The page's last content (the suggestions here; Q-PP-01 has some) scrolls clear of the bar fixed to the bottom.
+  // The page's last content (the route column, last in reading order) scrolls clear of the bar fixed to the bottom.
   const bar = page.locator('.decision-save-bar');
   expect(await bar.evaluate((el) => getComputedStyle(el).position)).toBe('fixed');
   await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }));
-  const last = await box(page.locator('section[data-region="suggestions"]'));
+  const last = await box(routeCol(page));
   const b = await box(bar);
-  expect(last.y + last.height, 'the end of the suggestions is above the save bar').toBeLessThanOrEqual(b.y);
+  expect(last.y + last.height, 'the end of the route column is above the save bar').toBeLessThanOrEqual(b.y);
 });
 
 test('at 320 by 640 nothing scrolls sideways', async ({ page, baseURL }) => {
@@ -162,7 +168,8 @@ test('a Viewer sees the same frame with no form controls', async ({ page, baseUR
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(LONGEST_FIXTURE);
   await expect(page.locator('#question-heading + .question-frame__code')).toHaveText(/^Q-PP-01 · /);
   await expect(page.getByRole('complementary', { name: QUESTION_COPY.content.goodPractice })).toBeVisible();
-  await expect(page.getByRole('navigation', { name: QUESTION_COPY.nav.label }).getByRole('link', { name: QUESTION_COPY.nav.allQuestions, exact: true })).toBeVisible();
+  // From 1160 the breadcrumb leads back to the stage's questions (on narrow screens the top bar does).
+  await expect(page.getByRole('navigation', { name: UI_COPY.breadcrumbLabel }).getByRole('link', { name: 'Pre-processing', exact: true })).toBeVisible();
   // The read-only view (plan 1C Task 7): no answer-form region; the one line sits in the main column, which holds no control.
   const main = page.locator('.question-workspace__main');
   await expect(form(page)).toHaveCount(0);
@@ -229,7 +236,8 @@ async function answerGateNo(baseURL: string, projectId: string): Promise<void> {
     await ctx.dispose();
   }
 }
-const stripPosition = (page: Page) => page.locator('nav.question-strip > span');
+/** The position in the breadcrumb's current item (shown from 1160px; the position strip says the same under it). */
+const stripPosition = (page: Page) => page.locator('.question-top .ui-breadcrumb__current');
 const wayOn = (page: Page) => page.locator('[data-region="way-on"]');
 
 test('S3: after the personal data answer is No, Q-PP-13 and Q-PP-14 say they do not apply, keep the form, and hold their own places of 24', async ({ page, baseURL }) => {
@@ -241,11 +249,11 @@ test('S3: after the personal data answer is No, Q-PP-13 and Q-PP-14 say they do 
     const note = page.locator('#question-heading ~ [data-does-not-apply]');
     await expect(note, id).toHaveText(QUESTION_COPY.doesNotApply);
     await expect(page.getByRole('group', { name: 'Status' }), id).toBeVisible();
-    await expect(stripPosition(page), id).toHaveText(`Question ${n} of 24 in Pre-processing`);
+    await expect(stripPosition(page), id).toHaveText(`Question ${n} of 24`);
   }
   await openQuestion(page, 'assessor', 'Q-PP-12', baseURL!, projectId);
   await expect(page.locator('[data-does-not-apply]')).toHaveCount(0);
-  await expect(stripPosition(page)).toHaveText('Question 12 of 24 in Pre-processing');
+  await expect(stripPosition(page)).toHaveText('Question 12 of 24');
 });
 
 for (const [width, height] of [[1280, 900], [375, 812]] as const) {

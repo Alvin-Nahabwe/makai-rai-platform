@@ -4,26 +4,27 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import type { QuestionPanelData } from '@/lib/question/panel';
 import type { LoadedQuestion } from '@/types/content';
 import type { DecisionVersionView } from '@/types/api';
-import { runningContent } from '@/lib/content/loader';
+import { questionsInStage, runningContent } from '@/lib/content/loader';
 import { QUESTION_COPY } from '@/lib/question/copy';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
+import { stageFixture } from '../helpers/stageFixture';
 
 /**
- * The question page's frame (plan 1C Task 4, cut to slice 1; decision C1 cut): the running question is the page's
- * `h1`, its code line follows it in small type, the form comes next in the main column, and "What good looks like"
- * and "Why this is asked" sit in an `<aside>` after it. `QuestionContent` is the REAL one here (s12-shell.test.tsx
- * mocks it to nothing), so the aside's place in the page is checked; the other slots record nothing and render
- * nothing, and the answer form is real, with the mocks s12-shell.test.tsx gives it.
+ * The question page's frame, rebuilt to the Route sketch (lane 1 Task 1; assigned.html, workspace-phone-saved.html): the
+ * top strip (breadcrumb and the stage's tally, shown from 1160px), the position strip (shown under 1160px), the question
+ * in words as the `h1` with its code line after it, the seal note, the decision slot, then the guidance aside, the
+ * finding link and the route column. `QuestionContent` and the decision slot's stub are the REAL ones here; the slots
+ * inside them record nothing and render nothing, and the answer form is real, with the mocks s12-shell.test.tsx gives it.
  */
 const empty = () => null;
 vi.mock('@/components/decision/CurrentDecision', () => ({ CurrentDecision: empty }));
 vi.mock('@/components/review/SealNote', () => ({ SealNote: empty }));
 vi.mock('next/navigation', async (original) => ({ ...(await original<typeof import('next/navigation')>()), useRouter: () => ({ refresh() {} }), usePathname: () => '/x' }));
 vi.mock('@/components/evidence/EvidenceBlock', () => ({ EvidenceBlock: empty }));
-vi.mock('@/components/findings/QuestionFindingLink', () => ({ QuestionFindingLink: empty }));
+vi.mock('@/components/findings/QuestionFindingLink', () => ({ QuestionFindingLink: () => <p>finding link</p> }));
 vi.mock('@/components/suggestions/SuggestedControls', async (original) => ({
   ...(await original<typeof import('@/components/suggestions/SuggestedControls')>()),
-  SuggestedControls: empty,
+  SuggestedControls: () => <p data-suggested-controls>the list</p>,
 }));
 vi.mock('@/lib/auth/identity', () => ({ requireIdentity: vi.fn() }));
 vi.mock('@/lib/auth/context', () => ({ requireOrgContextFor: vi.fn() }));
@@ -33,15 +34,16 @@ const { QuestionPanelRegions } = await import(
   '@/app/(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]/page'
 );
 
+const running = runningContent();
+const inStage = questionsInStage(running, 'pre-processing');
+const textOf = (id: string): string => running.questions.get(id)!.text;
+const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
+
 /** The version the current decision was answered against, and the running wording (FR-CNT-08): the h1 is the running one. */
-const QUESTION = {
-  id: 'Q-PP-01', type: 'likert-5', text: 'Have you evaluated whether AI is the right approach?', principle: 'Proportionality',
-  gaps: [], expectedPractice: 'Compare simpler options first.', whyAsked: 'A simpler tool may be safer.', reasonPrompt: 'z', evidenceExamples: [],
-  stage: 'pre-processing', moduleId: 'M1', moduleTitle: 'Problem Formulation', order: 0,
-} as LoadedQuestion;
-const RUNNING = { ...QUESTION, text: 'Have you checked whether AI is the best approach, compared with simpler options?' } as LoadedQuestion;
+const QUESTION = { ...running.questions.get('Q-PP-04')!, text: 'Have you evaluated whether AI is the right approach?', expectedPractice: 'Compare simpler options first.', whyAsked: 'A simpler tool may be safer.' } as LoadedQuestion;
+const RUNNING = { ...QUESTION, text: 'How could the system affect protected or vulnerable groups?' } as LoadedQuestion;
 const CURRENT = {
-  id: 'dv2', projectId: 'p1', stage: 'pre-processing', questionId: 'Q-PP-01', versionNumber: 2,
+  id: 'dv2', projectId: 'p1', stage: 'pre-processing', questionId: 'Q-PP-04', versionNumber: 2,
   optionsInPlace: ['Alternatives analysis'], evidence: [{ id: 'e1' }],
   status: 'done', scopeAnswer: null, reasonCode: null, reason: 'r', decidedBy: null, declaredDate: null,
   enteredBy: { userId: 'u2', name: 'Joseph K.', formerMember: false },
@@ -49,127 +51,224 @@ const CURRENT = {
 const SEAL = { sealId: 's1', sealNumber: 1, reviewId: 'r1', reviewName: 'Pre-processing review 1' };
 const PANEL: QuestionPanelData = {
   orgSlug: 'acme-health', projectId: 'p1', projectArchived: false, stage: 'pre-processing',
-  question: QUESTION, runningQuestion: RUNNING, position: { index: 3, total: 22, previousId: 'Q-PP-03', nextId: 'Q-PP-05' },
+  question: QUESTION, runningQuestion: RUNNING, position: { index: 3, total: 24, previousId: 'Q-PP-03', nextId: 'Q-PP-05' },
   current: CURRENT, historyCount: 2, seals: [SEAL],
   reasonCodes: [], members: [{ userId: 'u1', name: 'Amina N.' }], viewer: { userId: 'u1', name: 'Amina N.', role: 'assessor' },
   canWrite: true, canRaiseFinding: true, lastOwnSaveDate: null, openFinding: { findingId: 'f1' }, gateAnswer: null,
   contentSemver: '0.0.1-fixture', orgId: 'o1',
 };
+const STAGE_HREF = '/orgs/acme-health/projects/p1/stages/pre-processing';
+const STAGE = stageFixture({
+  marks: { 'Q-PP-01': 'done', 'Q-PP-02': 'done', 'Q-PP-03': 'done', 'Q-PP-04': 'partly', 'Q-PP-05': 'partly', 'Q-PP-06': 'not_yet', 'Q-PP-07': 'not_applicable', 'Q-PP-GATE-SENSITIVE': 'scope_answered' },
+  followUp: { openFindings: 11, overdueMitigations: 1 },
+});
 
-const render = async (data: QuestionPanelData = PANEL): Promise<string> => renderToStaticMarkup(await QuestionPanelRegions({ data }));
+const render = async (data: QuestionPanelData = PANEL, stage = STAGE): Promise<string> =>
+  renderToStaticMarkup(await QuestionPanelRegions({ data, stage, route: <nav aria-label="route">the route</nav> }));
 const inOrder = (ns: number[]): boolean => ns.every((n, i) => n >= 0 && (i === 0 || n > ns[i - 1]));
-const strip = (html: string): string => html.match(/<nav aria-label="Questions in this stage"[^>]*>([\s\S]*?)<\/nav>/)![1];
-/** The visible texts of the strip's children, in order. */
-const stripTexts = (html: string): string[] => [...strip(html).matchAll(/<(?:a|span)\b[^>]*>([^<]*)<\/(?:a|span)>/g)].map((m) => m[1]);
+const between = (html: string, start: string, end: string): string => html.slice(html.indexOf(start), html.indexOf(end, html.indexOf(start)) + end.length);
+const top = (html: string): string => between(html, '<div class="question-top"', '</div></div>');
+const strip = (html: string): string => between(html, '<nav class="position-strip"', '</nav>');
+/** A link's accessible name as its content gives it: its text, tags dropped (the marks and icons are aria-hidden SVGs). */
+const nameOf = (link: string): string => link.replace(/<svg[\s\S]*?<\/svg>/g, '').replace(/<[^>]+>/g, '');
 
-describe('the question page frame (slice 1)', () => {
-  it('C1 (cut): DOM order is the strip, the h1, current decision, seal note, the form, the way on, the guidance aside, the finding link, the suggestions', async () => {
+describe('the question page frame: DOM order', () => {
+  it('strip/breadcrumb, h1, code, seal note, decision slot, guidance, finding link, route; nothing reordered by CSS', async () => {
     const html = await render();
-    expect([...html.matchAll(/data-region="([a-z-]+)"/g)].map((m) => m[1]))
-      .toEqual(['question', 'current-decision', 'seal-note', 'answer-form', 'evidence-block', 'way-on', 'guidance', 'finding-link', 'suggestions']);
     const at = (s: string) => html.indexOf(s);
     expect(inOrder([
-      at('<nav aria-label="Questions in this stage"'), at('<h1 id="question-heading"'), at('data-region="current-decision"'),
-      at('data-region="seal-note"'), at('data-region="answer-form"'), at('<aside'), at('data-region="finding-link"'), at('data-region="suggestions"'),
+      at('<div class="question-top"'), at('<nav class="position-strip"'), at('<h1 id="question-heading"'), at('class="question-frame__code"'),
+      at('data-region="seal-note"'), at('data-region="decision-slot"'), at('<aside'), at('data-region="finding-link"'), at('<div class="question-workspace__route">'),
     ]), html).toBe(true);
-    // Two columns: the main one holds the question to the form, the guide one the aside, the finding link and the suggestions.
-    const main = html.match(/<div class="question-workspace__main">([\s\S]*?)<div class="question-workspace__guide">/)![1];
-    expect(main).toContain('data-region="answer-form"');
-    expect(main).not.toContain('<aside');
-    const guide = html.slice(html.indexOf('<div class="question-workspace__guide">'));
-    for (const s of ['<aside', 'data-region="finding-link"', 'data-region="suggestions"']) expect(guide).toContain(s);
-    // No inline style is left on the strip or the grid: workspace.css lays them out.
-    expect(html).not.toMatch(/<nav[^>]*style=/);
-    expect(html).not.toMatch(/<div style="display:grid/);
-  });
-
-  it('h1#question-heading is the running question\'s text; the code line is a separate smaller element after it; the question is printed once', async () => {
-    const html = await render();
-    expect(html).toContain(`<h1 id="question-heading" tabindex="-1" class="question-frame__title">${RUNNING.text}</h1>`);
-    expect(html.split(RUNNING.text)).toHaveLength(2);
-    expect(html).not.toContain(QUESTION.text);   // the question text the decision was answered against is printed nowhere (the reworded disclosure holds the earlier good practice, not the earlier question)
-    expect(html.match(/<h1\b/g)).toHaveLength(1);
-    // The code line: the page title's own words, in an element of its own directly after the h1 (FocusOnArrival renders nothing).
-    expect(html).toMatch(/<\/h1><p class="question-frame__code">Q-PP-01 · Problem Formulation<\/p>/);
-    expect(html).not.toMatch(/<h[1-6][^>]*>Q-PP-01 · /);
-    // The old visible "Question" heading is gone.
-    expect(html).not.toContain('s12-question');
-    expect(html).not.toMatch(/<h2[^>]*>Question<\/h2>/);
     const css = readFileSync('components/question/workspace.css', 'utf8');
-    expect(css).toMatch(/\.question-frame__code \{[^}]*font-size: var\(--font-size-small\);[^}]*color: var\(--color-ink-muted\);/);
-    expect(css).toMatch(/\.question-frame__title \{[^}]*font-size: var\(--font-size-h2\);/);
+    expect(css).not.toMatch(/^\s*order\s*:/m);
+    expect(css).not.toMatch(/flex-direction:\s*(row|column)-reverse/);
   });
 
-  it('the guidance is an aside named by its first heading, with What good looks like and Why this is asked as h2; no heading level is skipped', async () => {
+  it('the main column holds the question, the seal note and the slot; the guide column the aside and the finding link; the route its own', async () => {
     const html = await render();
-    const aside = html.match(/<aside class="question-content" data-region="guidance" aria-labelledby="([^"]+)">([\s\S]*?)<\/aside>/);
-    expect(aside, html).not.toBeNull();
-    const [, id, body] = aside!;
-    expect(body.startsWith(`<h2 id="${id}">What good looks like</h2>`), body).toBe(true);
-    const at = (s: string) => body.indexOf(s);
-    expect(inOrder([at('What good looks like'), at(QUESTION.expectedPractice), at('<h2>Why this is asked</h2>'), at(QUESTION.whyAsked),
-      at('Principle: Proportionality'), at('href="#suggestions">Ways teams address this (3)</a>')]), body).toBe(true);
-    expect(html.match(/aria-labelledby="([^"]+)"/g)!.filter((a) => a === `aria-labelledby="${id}"`)).toHaveLength(1);
-    // Every heading of the page, in order: the first is the h1, and none is more than one level below the one before.
-    const levels = [...html.matchAll(/<h([1-6])\b/g)].map((m) => Number(m[1]));
-    expect(levels[0]).toBe(1);
-    expect(levels.every((l, i) => i === 0 || l <= levels[i - 1] + 1), levels.join(',')).toBe(true);
-    expect(html).not.toMatch(/<h3[^>]*>(What good looks like|Why this is asked)<\/h3>/);
-  });
-
-  it('a question in no seal has no seal-note section and no "Sealed reviews" heading; one in a seal has both', async () => {
-    const none = await render({ ...PANEL, seals: [] });
-    expect(none).not.toContain('data-region="seal-note"');
-    expect(none).not.toContain('Sealed reviews');
-    expect(none).not.toContain('s12-seal-note');
-    const sealed = await render();
-    expect(sealed).toContain('<section data-region="seal-note" aria-labelledby="s12-seal-note"><h2 id="s12-seal-note">Sealed reviews</h2>');
-  });
-
-  it('the strip reads Previous question, the position, Next question, All questions; question 1 has no Previous and the last has no Next; All questions links to the stage page', async () => {
-    const stage = '/orgs/acme-health/projects/p1/stages/pre-processing';
-    const middle = await render();
-    expect(stripTexts(middle)).toEqual(['Previous question', 'Question 4 of 22 in Pre-processing', 'Next question', 'All questions']);
-    expect(strip(middle)).toContain(`<a href="${stage}">All questions</a>`);
-    expect(strip(middle).match(new RegExp(`href="${stage}"`, 'g'))).toHaveLength(1);
-    expect(middle).not.toContain('Back to');
-    const first = await render({ ...PANEL, position: { index: 0, total: 22, previousId: null, nextId: 'Q-PP-02' } });
-    expect(stripTexts(first)).toEqual(['Question 1 of 22 in Pre-processing', 'Next question', 'All questions']);
-    const last = await render({ ...PANEL, position: { index: 21, total: 22, previousId: 'Q-PP-21', nextId: null } });
-    expect(stripTexts(last)).toEqual(['Previous question', 'Question 22 of 22 in Pre-processing', 'All questions']);
+    const main = between(html, '<div class="question-workspace__main">', '<div class="question-workspace__guide">');
+    for (const s of ['data-region="question"', 'data-region="seal-note"', 'data-region="decision-slot"']) expect(main).toContain(s);
+    expect(main).not.toContain('<aside');
+    const guide = between(html, '<div class="question-workspace__guide">', '<div class="question-workspace__route">');
+    for (const s of ['<aside', 'data-region="finding-link"']) expect(guide).toContain(s);
+    expect(html.slice(html.indexOf('<div class="question-workspace__route">'))).toContain('the route');
+    expect(html).not.toMatch(/<(nav|div)[^>]*style=/);
   });
 });
 
-describe('three faults every recorder meets (workshop walk S3, S9)', () => {
-  const running = runningContent();
+describe('the heading', () => {
+  it('h1#question-heading is the running question\'s text, printed once; the code line is a separate smaller element after it', async () => {
+    const html = await render();
+    expect(html).toContain(`<h1 id="question-heading" tabindex="-1" class="question-frame__title">${RUNNING.text}</h1>`);
+    expect(html.split(RUNNING.text)).toHaveLength(2);
+    expect(html).not.toContain(QUESTION.text);
+    expect(html.match(/<h1\b/g)).toHaveLength(1);
+    expect(html).toMatch(new RegExp(`</h1><p class="question-frame__code">Q-PP-04 · ${esc(QUESTION.moduleTitle)}</p>`));
+  });
+
+  it('R7: 22px (one ramp step below the sketch\'s 30), the heaviest loaded weight (700: the layout loads 400 to 700), balanced; the code line in 14px', () => {
+    const css = readFileSync('components/question/workspace.css', 'utf8');
+    expect(css).toMatch(/\.question-frame__title \{[^}]*font-size: var\(--font-size-h2\);[^}]*font-weight: var\(--font-weight-bold\);[^}]*text-wrap: balance;/);
+    expect(css).toMatch(/\.question-frame__code \{[^}]*font-size: var\(--font-size-small\);[^}]*color: var\(--color-ink-muted\);/);
+  });
+
+  it('no ring on a script focus at load: the heading draws the focus ring only after keyboard use (HeadingFocusCue marks it)', async () => {
+    const css = readFileSync('components/question/workspace.css', 'utf8');
+    expect(css).toMatch(/\.question-frame__title:focus-visible \{\s*outline: none;/);
+    expect(css).toMatch(/\.question-frame__title\[data-keyboard-focus\]:focus-visible \{\s*outline: var\(--focus-width\) solid var\(--color-focus\);/);
+    const html = await render();
+    expect(readFileSync('components/question/HeadingFocusCue.tsx', 'utf8')).toMatch(/^'use client';/);
+    // The cue is mounted before FocusOnArrival, so its focus listener is in place when the heading takes focus.
+    expect(html).toContain('<h1 id="question-heading"');
+  });
+});
+
+describe('the top strip (R4), shown from 1160px', () => {
+  it('the breadcrumb: project to the project page, stage to the stage page, then "Question n of N", the current page, as text', async () => {
+    const html = top(await render());
+    expect(html).toMatch(/<nav class="ui-breadcrumb" aria-label="Breadcrumb">/);
+    const items = [...html.matchAll(/<li class="ui-breadcrumb__item">([\s\S]*?)<\/li>/g)].map((m) => m[1]);
+    expect(items).toHaveLength(3);
+    expect(items[0]).toMatch(/href="\/orgs\/acme-health\/projects\/p1"[^>]*>Antenatal Risk Triage Model<\/a>/);
+    expect(items[1]).toMatch(new RegExp(`href="${STAGE_HREF}"[^>]*>Pre-processing</a>`));
+    expect(items[2]).toBe('<span class="ui-breadcrumb__current" aria-current="page">Question 4 of 24</span>');
+  });
+
+  it('the tally: each kind above zero, in the kit\'s order, as its mark, the count in bold and the vocabulary\'s words; none at zero', async () => {
+    const html = top(await render());
+    const tally = between(html, '<ul class="question-top__tally"', '</ul>');
+    const items = [...tally.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/g)].map((m) => m[1]);
+    const words = items.map((i) => i.replace(/<svg[\s\S]*?<\/svg>/, '').replace(/<[^>]+>/g, ''));
+    // 3 done, 2 partly, 1 not yet, 1 not applicable, 1 answered (the personal data question), 16 with no decision.
+    expect(words).toEqual(['3 done', '2 partly', '1 not yet', '1 not applicable', '1 answered', '16 no decision']);
+    for (const i of items) expect(i).toMatch(/^<svg class="ui-mark__shape" width="16" height="16"[\s\S]*<\/svg><b>\d+<\/b> /);
+    expect(tally).toContain('data-mark-kind="done"');
+    expect(html).toContain(`<h2 class="visually-hidden">${esc(QUESTION_COPY.frame.tallyHeading)}</h2>`);
+    // The retired "scope question" never shows (vocabulary: personal-data-question-scope-question).
+    expect(html).not.toMatch(/scope question/i);
+    const few = top(await render(PANEL, stageFixture({ marks: Object.fromEntries(inStage.map((q) => [q.id, 'done'])) })));
+    expect([...between(few, '<ul class="question-top__tally"', '</ul>').matchAll(/<li/g)]).toHaveLength(1);
+  });
+
+  it('the open findings and the overdue mitigations, each a link only above zero, to the targets StageFollowUpCounts uses; the overdue one with the clock', async () => {
+    const html = top(await render());
+    expect(html).toMatch(/<a[^>]*href="\/orgs\/acme-health\/projects\/p1\/findings"[^>]*>[\s\S]*?11 open findings[\s\S]*?<\/a>/);
+    expect(html).toMatch(/<a[^>]*class="question-top__overdue"[^>]*href="\/orgs\/acme-health\/projects\/p1#pre-processing"[^>]*>[\s\S]*?<svg class="ui-icon"[\s\S]*?1 overdue mitigation[\s\S]*?<\/a>/);
+    const one = top(await render(PANEL, stageFixture({ followUp: { openFindings: 1, overdueMitigations: 0 } })));
+    expect(one).toContain('1 open finding<');
+    expect(one).not.toMatch(/overdue mitigation/);
+    const none = top(await render(PANEL, stageFixture({ followUp: { openFindings: 0, overdueMitigations: 0 } })));
+    expect(none).not.toMatch(/open finding|overdue mitigation/);
+    expect(none).not.toContain('question-top__follow');
+  });
+
+  it('spec 6: "finding" and "mitigation" at their first use carry their definitions, reachable from the term (a toggletip) and named by it', async () => {
+    const html = top(await render());
+    for (const [id, term] of [['finding', 'finding'], ['mitigation', 'mitigation']]) {
+      expect(html).toMatch(new RegExp(`<a[^>]*aria-describedby="question-top-def-${id}"[^>]*>[\\s\\S]*?<span data-term="${id}">`));
+      expect(html).toMatch(new RegExp(`<button type="button" class="question-top__tip" popoverTarget="question-top-tip-${id}" aria-label="${esc(QUESTION_COPY.frame.whatIs(term)).replace('?', '\\?')}"`, 'i'));
+      expect(html).toMatch(new RegExp(`<span id="question-top-tip-${id}" popover="auto" class="question-top__tip-body"><span class="ui-definition" id="question-top-def-${id}" data-definition="${id}">`));
+    }
+  });
+
+  it('without the stage\'s data (its own load refused) there is no top strip and no position strip, and the rest still renders', async () => {
+    const html = renderToStaticMarkup(await QuestionPanelRegions({ data: PANEL }));
+    expect(html).not.toContain('question-top');
+    expect(html).not.toContain('position-strip');
+    expect(html).toContain('<h1 id="question-heading"');
+  });
+});
+
+describe('the position strip, under 1160px (phone sketch)', () => {
+  it('previous: chevron, its mark and number; current: its mark and "Question n of N" in bold; next: number, mark, chevron; no All questions', async () => {
+    const html = strip(await render());
+    expect(html).toMatch(/^<nav class="position-strip" aria-label="Questions in this stage">/);
+    const links = [...html.matchAll(/<a\b[^>]*>[\s\S]*?<\/a>/g)].map((m) => m[0]);
+    expect(links).toHaveLength(2);
+    expect(links[0]).toContain(`href="${STAGE_HREF}/questions/Q-PP-03"`);
+    expect(nameOf(links[0])).toBe(esc(QUESTION_COPY.frame.previous(textOf('Q-PP-03'), 3, 'Done')));
+    // The number shows; the words around it are visually hidden, so the shown number is part of the name (WCAG 2.5.3).
+    expect(links[0]).toMatch(/data-mark-kind="done"[\s\S]*<span class="visually-hidden">[^<]*\(question <\/span>3<span class="visually-hidden">, Done\)<\/span>/);
+    expect(links[0]).not.toContain('aria-label');
+    expect(links[1]).toContain(`href="${STAGE_HREF}/questions/Q-PP-05"`);
+    expect(nameOf(links[1])).toBe(esc(QUESTION_COPY.frame.next(textOf('Q-PP-05'), 5, 'Partly')));
+    expect(html).toMatch(/<p class="position-strip__here" aria-current="step">[\s\S]*data-mark-kind="partly"[\s\S]*<b>Question 4 of 24<\/b>/);
+    expect(html).toContain(esc(QUESTION_COPY.frame.hereStatus('Partly')));
+    expect(html).not.toContain(QUESTION_COPY.nav.allQuestions);
+    expect(html).not.toContain(`href="${STAGE_HREF}"`);
+  });
+
+  it('question 1 has no previous link and the last no next; previous and next skip a question the personal data answer switched off', async () => {
+    const first = strip(await render({ ...PANEL, position: { index: 0, total: 24, previousId: null, nextId: 'Q-PP-02' } }));
+    expect([...first.matchAll(/<a\b/g)]).toHaveLength(1);
+    expect(first).toContain('Next question: ');
+    const last = strip(await render({ ...PANEL, position: { index: 23, total: 24, previousId: 'Q-PP-22', nextId: null } }));
+    expect([...last.matchAll(/<a\b/g)]).toHaveLength(1);
+    expect(last).toContain('Previous question: ');
+    // The gate at No: the personal data question's next is Q-PP-15, the 16th of the stage, not the 14th (Q-PP-13 is off).
+    const gate = running.questions.get('Q-PP-GATE-SENSITIVE')!;
+    const at = inStage.findIndex((q) => q.id === 'Q-PP-15');
+    const skip = strip(await render({ ...PANEL, question: gate, runningQuestion: gate, gateAnswer: 'no', current: null, seals: [], position: { index: 12, total: 24, previousId: 'Q-PP-12', nextId: 'Q-PP-15' } }));
+    expect(nameOf([...skip.matchAll(/<a\b[^>]*>[\s\S]*?<\/a>/g)].map((m) => m[0])[1])).toBe(esc(QUESTION_COPY.frame.next(textOf('Q-PP-15'), at + 1, 'No decision')));
+    expect(at + 1).toBe(16);
+  });
+});
+
+describe('the guidance aside', () => {
+  it('What good looks like, Why this is asked, the risk areas under it as linked labels (name, then code in small type), then Ways teams address this as one folded details with the list inside', async () => {
+    const html = await render();
+    const aside = between(html, '<aside', '</aside>');
+    const at = (s: string) => aside.indexOf(s);
+    const areas = running.questions.get('Q-PP-04')!.gaps;
+    expect(areas.length).toBeGreaterThan(0);
+    expect(inOrder([at('What good looks like'), at(esc(RUNNING.expectedPractice)), at('Why this is asked'), at(esc(RUNNING.whyAsked)),
+      at('Risk areas'), at(`href="/explore/framework#area-card-${areas[0]}"`), at('<details class="question-content__ways"'), at('the list')]), aside).toBe(true);
+    const name = running.areas.get(areas[0])!.name;
+    expect(aside).toContain(`<a href="/explore/framework#area-card-${areas[0]}">${esc(name)} <small class="question-content__area-code">${areas[0]}</small></a>`);
+    expect(aside).not.toContain('Principle:');
+    const details = between(aside, '<details class="question-content__ways"', '</details>');
+    expect(details).not.toMatch(/<details[^>]*\bopen\b/);
+    expect(details).toMatch(/<summary class="question-content__ways-summary"><svg class="ui-icon"[\s\S]*?<\/svg>Ways teams address this \(\d+\)<\/summary>/);
+    expect(details).toContain('the list');
+    // No second copy of the list, and no section of its own outside the aside.
+    expect(html.split('the list')).toHaveLength(2);
+    expect(html).not.toContain('data-region="suggestions"');
+  });
+
+  it('the personal data question: no risk areas and nothing to suggest, so no list, no label and no folded control', async () => {
+    const gate = running.questions.get('Q-PP-GATE-SENSITIVE')!;
+    const html = await render({ ...PANEL, question: gate, runningQuestion: gate, current: null, seals: [] });
+    const aside = between(html, '<aside', '</aside>');
+    expect(aside).not.toContain('Risk areas');
+    expect(aside).not.toContain('<details');
+    expect(html).not.toContain('Ways teams address this');
+  });
+
+  it('the finding link keeps its place in the guidance column after the aside', async () => {
+    const html = await render();
+    expect(html.indexOf('</aside>')).toBeLessThan(html.indexOf('data-region="finding-link"'));
+    expect(html).toContain('finding link');
+  });
+});
+
+describe('the frame states', () => {
   const Q13 = running.questions.get('Q-PP-13')!;
-  const Q01 = running.questions.get('Q-PP-01')!;
-  const stagePage = '/orgs/acme-health/projects/p1/stages/pre-processing';
   const sentence = 'Your team answered No to the personal data question, so this question does not apply.';
-  /** Q-PP-13, a question with the personal data condition, with the gate at `gateAnswer`. */
   const q13 = (gateAnswer: QuestionPanelData['gateAnswer']): QuestionPanelData =>
     ({ ...PANEL, question: Q13, runningQuestion: Q13, gateAnswer, current: null, historyCount: 0, seals: [] });
-  const main = (html: string): string => html.match(/<div class="question-workspace__main">([\s\S]*?)<div class="question-workspace__guide">/)![1];
 
-  it('S3 R1: with the gate at No, a question with the condition says it does not apply, under the code line and before the form; the form is still rendered', async () => {
-    expect(Q13.condition, 'Q-PP-13 is conditional in the fixture').toBeDefined();
+  it('S3 R1: with the gate at No, a question with the condition says it does not apply, under the code line and before the slot; the form is still there', async () => {
     const html = await render(q13('no'));
     expect(html.split(sentence)).toHaveLength(2);
     expect(html).toMatch(new RegExp(`<p class="question-frame__code">Q-PP-13 · [^<]*</p><p data-does-not-apply="true">${sentence}</p>`));
-    const at = (s: string) => html.indexOf(s);
-    expect(inOrder([at('class="question-frame__code"'), at('data-does-not-apply'), at('data-region="current-decision"'), at('data-region="answer-form"')]), html).toBe(true);
-    expect(html).toContain('<section data-region="answer-form"');
+    expect(html.indexOf('data-does-not-apply')).toBeLessThan(html.indexOf('data-region="decision-slot"'));
     expect(html).toMatch(/<form\b/);
   });
 
   it('S3 R1: the sentence is absent for a question without the condition, for an unanswered gate, and for Yes', async () => {
-    expect(Q01.condition).toBeUndefined();
-    expect(await render({ ...PANEL, question: Q01, runningQuestion: Q01, gateAnswer: 'no' })).not.toContain('data-does-not-apply');
-    for (const gate of [null, 'yes', 'not_sure'] as const) {
-      const html = await render(q13(gate));
-      expect(html, String(gate)).not.toContain('data-does-not-apply');
-      expect(html, String(gate)).not.toContain(sentence);
-    }
+    for (const gate of [null, 'yes', 'not_sure'] as const) expect(await render(q13(gate)), String(gate)).not.toContain('data-does-not-apply');
+    expect(await render({ ...PANEL, gateAnswer: 'no' })).not.toContain('data-does-not-apply');
   });
 
   it('S3 R1: the finding page\'s closeGate starts with the question page\'s sentence, so the two cannot drift', () => {
@@ -177,36 +276,38 @@ describe('three faults every recorder meets (workshop walk S3, S9)', () => {
     expect(FINDINGS_COPY.finding.closeGate.startsWith(QUESTION_COPY.doesNotApply)).toBe(true);
   });
 
-  it('S9 R3: the foot is the last child of the main column, after the answer form: "Next question: {running text}" to that question, then All questions to the stage page', async () => {
+  it('archived: the banner is at the top of the work area, above both strips', async () => {
+    const html = await render({ ...PANEL, projectArchived: true, canWrite: false, canRaiseFinding: false });
+    expect(html.indexOf('This project is archived')).toBeGreaterThan(-1);
+    expect(html.indexOf('This project is archived')).toBeLessThan(html.indexOf('<div class="question-top"'));
+  });
+
+  it('a question in no seal has no seal-note section; one in a seal has it, above the slot', async () => {
+    expect(await render({ ...PANEL, seals: [] })).not.toContain('data-region="seal-note"');
+    const sealed = await render();
+    expect(sealed).toContain('<section data-region="seal-note" aria-labelledby="s12-seal-note"><h2 id="s12-seal-note">Sealed reviews</h2>');
+    expect(sealed.indexOf('data-region="seal-note"')).toBeLessThan(sealed.indexOf('data-region="decision-slot"'));
+  });
+
+  it('S9 R4: the Findings section is absent when there is no open finding and the person cannot raise one; present otherwise', async () => {
+    expect(await render({ ...PANEL, openFinding: null, canRaiseFinding: false })).not.toContain('data-region="finding-link"');
+    expect(await render({ ...PANEL, openFinding: null, canRaiseFinding: true })).toContain('<section data-region="finding-link" aria-labelledby="s12-finding-link"><h2 id="s12-finding-link">Findings</h2>');
+  });
+
+  it('every heading of the page, in order, starts at the h1 and skips no level', async () => {
     const html = await render();
-    const m = main(html);
-    const foot = m.match(/<p class="question-foot" data-region="way-on">([\s\S]*?)<\/p><\/div>$/);
-    expect(foot, m.slice(-600)).not.toBeNull();
-    expect(m.indexOf('data-region="answer-form"')).toBeLessThan(m.indexOf('data-region="way-on"'));
-    const next = running.questions.get('Q-PP-05')!.text;
-    expect(foot![1]).toBe(`<a href="${stagePage}/questions/Q-PP-05">Next question: ${next}</a><a href="${stagePage}">All questions</a>`);
-    // One navigation landmark: the foot is a paragraph.
-    expect(html.match(/<nav\b/g)).toHaveLength(1);
+    const levels = [...html.slice(html.indexOf('<h1')).matchAll(/<h([1-6])\b/g)].map((m) => Number(m[1]));
+    expect(levels[0]).toBe(1);
+    expect(levels.every((l, i) => i === 0 || l <= levels[i - 1] + 1), levels.join(',')).toBe(true);
   });
+});
 
-  it('S9 R3: on the last question of the stage the foot says so, with no next link, then All questions', async () => {
-    const html = await render({ ...PANEL, position: { index: 21, total: 22, previousId: 'Q-PP-21', nextId: null } });
-    const foot = main(html).match(/<p class="question-foot" data-region="way-on">([\s\S]*?)<\/p><\/div>$/)![1];
-    expect(foot).toBe(`<span>This is the last question in this stage.</span><a href="${stagePage}">All questions</a>`);
-  });
-
-  it('S9 R3: a nextId the running content lacks is a defect: the page throws naming it', async () => {
-    await expect(render({ ...PANEL, position: { index: 3, total: 22, previousId: 'Q-PP-03', nextId: 'Q-NOPE-99' } })).rejects.toThrow(/Q-NOPE-99/);
-  });
-
-  it('S9 R4: the Findings section and heading are absent when there is no open finding and the person cannot raise one; present otherwise', async () => {
-    const none = await render({ ...PANEL, openFinding: null, canRaiseFinding: false });
-    expect(none).not.toContain('data-region="finding-link"');
-    expect(none).not.toContain('s12-finding-link');
-    expect(none).not.toMatch(/<h2[^>]*>Findings<\/h2>/);
-    for (const over of [{ openFinding: { findingId: 'f1' }, canRaiseFinding: false }, { openFinding: null, canRaiseFinding: true }]) {
-      const html = await render({ ...PANEL, ...over });
-      expect(html).toContain('<section data-region="finding-link" aria-labelledby="s12-finding-link"><h2 id="s12-finding-link">Findings</h2>');
-    }
+describe('print (plan 1C Task 4, spec 7.5)', () => {
+  it('@media print hides the strips, the route column and the form controls; keeps the question, the decision text and the guidance', () => {
+    const css = readFileSync('components/question/workspace.css', 'utf8');
+    const print = css.slice(css.indexOf('@media print'));
+    for (const s of ['.question-top', '.position-strip', '.question-workspace__route', '.decision-slot form', '.question-content__ways-summary']) expect(print).toContain(s);
+    expect(print).toMatch(/display: none/);
+    expect(print).toMatch(/\.question-content__ways > :not\(summary\) \{[^}]*display: block/);
   });
 });

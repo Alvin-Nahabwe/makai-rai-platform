@@ -44,12 +44,12 @@ const panelData = (role: OrgRole, questionId: string) =>
   loadQuestionPanel(ctxFor(fx, role), identity(role), { projectId: project.id, stage: 'pre-processing', questionId });
 
 describe('S-12 page', () => {
-  it('UX-08 FR-CNT-02 (screen): QuestionContent gets the suggestion count and the suggestions section carries id="suggestions"', async () => {
+  it('UX-08 FR-CNT-02 (screen): QuestionContent gets the suggestion count and the folded list of ways carries id="suggestions"', async () => {
     const h = renderToStaticMarkup(createElement(QuestionPanelRegions, { data: await panelData('assessor', 'Q-PP-01') }));
-    expect(h).toContain('href="#suggestions">Ways teams address this (3)</a>');
-    expect(h).toContain('<h2 id="s12-suggestions">Ways teams address this</h2>');
-    expect(h).toContain(SUGGESTIONS_COPY.intro);
-    expect(h).toMatch(/<section[^>]*id="suggestions"/);
+    // Lane 1 Task 1 (spec 9.3): one folded control in the guidance aside whose summary carries the count; the list opens in place.
+    expect(h).toMatch(/<details class="question-content__ways" id="suggestions"><summary class="question-content__ways-summary">[\s\S]*?Ways teams address this \(3\)<\/summary>/);
+    expect(h.slice(h.indexOf('<details class="question-content__ways"'), h.indexOf('</details>', h.indexOf('<details class="question-content__ways"')))).toContain(SUGGESTIONS_COPY.intro);
+    expect(h.match(/id="suggestions"/g)).toHaveLength(1);
   });
 
   it('FR-DEC-06 FR-DEC-10 (screen): a new project\'s S-12 shows No decision yet, an empty form with empty date fields and Save decision', async () => {

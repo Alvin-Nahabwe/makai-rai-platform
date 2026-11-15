@@ -1,20 +1,264 @@
 /*
- * The question page's frame (app/(authenticated)/.../questions/[questionId]/page.tsx; plan 1C decision C1, cut to
- * slice 1): the strip, the question as the page's h1 with its code line, and two columns, the main one (the question,
- * the current decision, the seal note, the form) and the guide one (the guidance aside, the finding link, the
- * suggestions). Role tokens and spaces only, so both themes hold.
+ * The question page's frame (app/(authenticated)/.../questions/[questionId]/page.tsx; lane 1 Task 1), built to the Route
+ * sketch (assigned.html, workspace-phone-saved.html) and the owner's layout ruling of 14 November 2026:
+ *   - under 1160px (72.5rem): the position strip, then one column in DOM order: the question, the seal note, the decision
+ *     slot, the guidance and the finding link, then the route column;
+ *   - 1160px to 1439px: the top strip across, then the route column on the left (the sketch's 312px) and, on the right,
+ *     the question, the decision slot and the guidance below the decision;
+ *   - from 1440px (90rem): three columns as the sketch, route | main | guidance (312 / 512 / 240, gap 32).
+ * The DOM order is the reading order at every width: areas place the columns, nothing is reordered. Role tokens and
+ * spaces only, so both themes hold.
+ *
+ * The arithmetic of the two breakpoints, as before: from 1024px the window holds the rail (248px), the main area's padding
+ * (2 x 2rem, components/layout/shell.css) and, where scroll bars take space, its scroll bar (15px in Chromium on Linux,
+ * 17px on Windows). At 1160px that leaves 1160 - 248 - 64 - 17 = 831px: a 16rem route column, the 2rem gap and a main
+ * column of 33.9rem. At 1440px it leaves 1111px: 312 + 32 + 30rem + 32 + 15rem = 1096, so the main column keeps 30rem
+ * beside both. The page no longer adds the old `.page-content` padding on top of the shell's (the sketch's work area is
+ * padded once, 0 32px), so the columns are the sketch's widths at 1440.
+ *
+ * The two strips cancel the shell's padding of the main area (shell.css: 1rem, 2rem from 1024px) to reach its edges, as
+ * the sketch draws them; the values below follow shell.css and change with it.
+ *
+ * Weights: the sketch's 800 is not a weight the layout loads (Overpass is loaded 400 to 700, __tests__/lint/fonts.test.ts),
+ * so the heavy texts use the bold token, which is what a browser draws for 800 from that file anyway.
  */
 
-/* The strip: Previous question, the position, Next question, All questions. */
-.question-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-4);
-  align-items: center;
-  margin-block-end: var(--space-4);
+.question-page {
+  min-width: 0;
+  overflow-wrap: break-word;
 }
 
-/* One column, in DOM order: the main column, the guide column, then the stage's questions in their short form. */
+/* ── The top strip, from 1160px (sketch `.top`, `.crumbs`, `.tally`, `.open`) ── */
+.question-top {
+  display: none;
+}
+
+/* The sketch's strip starts at the top of the work area: half the shell's top padding (2rem here) is kept above it, unless
+   the archived banner comes first. */
+@media (width >= 72.5rem) {
+  .question-top:first-child {
+    margin-block-start: calc(-1 * var(--space-4));
+  }
+
+  .question-top {
+    display: block;
+    padding-block: var(--space-2);
+    border-block-end: 1px solid var(--color-border-container);
+  }
+}
+
+.question-top .ui-breadcrumb {
+  margin-block-end: var(--space-2);
+}
+
+.question-top__line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-6);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+.question-top__tally {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Each kind: its mark, then the bold count and the words (the mark's colour is the kit's, StatusMark.css). */
+.question-top__tally > li {
+  gap: 6px;
+  color: var(--color-ink);
+}
+
+.question-top__tally > li > .ui-mark__shape {
+  color: var(--color-mark);
+}
+
+.question-top__tally b {
+  font-weight: var(--font-weight-bold);
+}
+
+/* The follow-up counts, pushed right on the tally's line. */
+.question-top__follow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-4);
+  margin: 0 0 0 auto;
+}
+
+.question-top__count {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.question-top__count > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-block-size: var(--target-min);
+  color: var(--color-link);
+  font-weight: var(--font-weight-semibold);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.question-top__count > a.question-top__overdue {
+  color: var(--color-overdue);
+}
+
+/* The toggletip that opens a term's definition (spec 6): a 24px target, quiet until hovered. */
+.question-top__tip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--target-min);
+  block-size: var(--target-min);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-ink-muted);
+  cursor: pointer;
+}
+
+.question-top__tip:hover {
+  color: var(--color-ink);
+}
+
+.question-top__tip-body {
+  max-inline-size: 20rem;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border-container);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  box-shadow: var(--shadow-surface);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-body);
+}
+
+.question-top__tip-body .ui-definition {
+  color: var(--color-ink);
+}
+
+/* Where anchor positioning is supported, the definition opens under its button; elsewhere the browser centres it. */
+@supports (anchor-name: --a) {
+  [popovertarget="question-top-tip-finding"] { anchor-name: --question-top-finding; }
+  [popovertarget="question-top-tip-mitigation"] { anchor-name: --question-top-mitigation; }
+  #question-top-tip-finding { position-anchor: --question-top-finding; }
+  #question-top-tip-mitigation { position-anchor: --question-top-mitigation; }
+
+  .question-top__tip-body {
+    inset: auto;
+    margin: var(--space-1) 0 0;
+    position-area: block-end span-inline-start;
+    position-try-fallbacks: flip-block, flip-inline;
+  }
+}
+
+/* ── The position strip, under 1160px (phone sketch `.strip`) ── */
+.position-strip {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr) minmax(0, auto);
+  align-items: center;
+  /* Edge to edge under the top bar: the shell pads the main area 1rem, 2rem from 1024px. Only the first child of the page
+     reaches up to the top bar (below); under the archived banner it keeps its place. */
+  margin: 0 calc(-1 * var(--space-4)) var(--space-3);
+  padding: var(--space-1) var(--space-2);
+  border-block-end: 1px solid var(--color-border-container);
+  background: var(--color-surface);
+  color: var(--color-ink);
+}
+
+/* The top strip, hidden here, comes first in the DOM; with no archived banner before it, the strip reaches the top bar. */
+.question-top:first-child + .position-strip {
+  margin-block-start: calc(-1 * var(--space-4));
+}
+
+@media (64rem <= width < 72.5rem) {
+  .position-strip {
+    margin: 0 calc(-1 * var(--space-8)) var(--space-4);
+  }
+
+  .question-top:first-child + .position-strip {
+    margin-block-start: calc(-1 * var(--space-8));
+  }
+}
+
+@media (width >= 72.5rem) {
+  .position-strip {
+    display: none;
+  }
+}
+
+.position-strip__step {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-block-size: 44px;
+  min-inline-size: 44px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-control);
+  color: var(--color-ink-muted);
+  font-size: 0.9375rem;
+  font-weight: var(--font-weight-semibold);
+  text-decoration: none;
+}
+
+.position-strip__step--next {
+  justify-content: flex-end;
+}
+
+a.position-strip__step:hover {
+  background: var(--color-ground);
+}
+
+/* The current question: its mark in the orange ring, between two short lengths of the navy line, and its place in bold. */
+.position-strip__here {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-bold);
+  white-space: nowrap;
+}
+
+.position-strip__here::before,
+.position-strip__here::after {
+  content: '';
+  flex: 1;
+  max-inline-size: 28px;
+  block-size: 4px;
+  border-radius: 2px;
+  background: var(--color-mark);
+}
+
+.position-strip__here b {
+  font-weight: var(--font-weight-bold);
+}
+
+.position-strip__ring {
+  display: inline-flex;
+  padding: 2px;
+  border: 3px solid var(--color-action);
+  border-radius: 50%;
+  background: var(--color-surface);
+}
+
+.position-strip__ring .ui-mark__shape {
+  display: block;
+}
+
+/* ── The columns ── */
 .question-workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -37,23 +281,52 @@
   min-width: 0;
 }
 
-/* The stage's questions (components/question/RouteColumn.tsx): last in the DOM at every width, placed here. */
+/* The stage's questions (components/question/RouteColumn.tsx, lane 1 Task 2's content): last in the DOM at every width. */
 .question-workspace__route {
   grid-area: route;
   min-width: 0;
 }
 
-/* Each region starts clear of the one above it: the current decision under the question, the form under the current
-   decision, and in the guide column the finding link and the suggestions under the guidance. */
-.question-workspace__main > section + section,
+@media (width >= 72.5rem) {
+  .question-workspace {
+    grid-template-columns: minmax(16rem, 19.5rem) minmax(30rem, 1fr);
+    /* A route column taller than the main one gives its extra height to the guidance's row, never a gap above it. */
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      "route main"
+      "route guide";
+    column-gap: var(--space-8);
+  }
+
+  .question-workspace__main,
+  .question-workspace__route {
+    padding-block-start: var(--space-3);
+  }
+}
+
+@media (width >= 90rem) {
+  .question-workspace {
+    grid-template-columns: 19.5rem minmax(30rem, 32rem) minmax(15rem, 20rem);
+    grid-template-rows: auto;
+    grid-template-areas: "route main guide";
+  }
+
+  .question-workspace__guide {
+    padding-block-start: var(--space-6);
+  }
+}
+
+/* Each region starts clear of the one above it; the decision sits closer under the question (the 1280 by 800 gate). */
+.question-workspace__main > * + *,
 .question-workspace__guide > * + * {
   margin-block-start: var(--space-6);
 }
 
-/* The read-only view (plan 1C Task 7): the one line that says why there is no form sits between the open work and the
-   seal note, clear of both. */
-.question-workspace__main > section + [data-permission-note],
-.question-workspace__main > [data-permission-note] + section {
+.question-workspace__main > [data-region="question"] + * {
+  margin-block-start: var(--space-4);
+}
+
+.decision-slot > * + * {
   margin-block-start: var(--space-6);
 }
 
@@ -66,63 +339,43 @@
   overflow-wrap: anywhere;
 }
 
-/*
- * Two columns once the main one keeps at least 30rem beside a column of 16rem and the 1.5rem gap: 47.5rem (760px) of
- * content. From 1024px the window also holds the rail (248px), the main area's padding (2 x 2rem), the page's padding
- * (2 x 2rem) and, where scroll bars take space, the main area's scroll bar (15px in Chromium on Linux, 17px on
- * Windows): 760 + 248 + 64 + 64 + 17 = 1153px, so 72.5rem (1160px) with a few pixels to spare. Below it, one column in
- * DOM order. e2e/question-frame.spec.ts measures the columns either side of it.
- *
- * THE OWNER'S CHOICE, ONE RULE (decision "Route column", 21:51 EAT 14 November 2026): from 72.5rem to under 90rem the
- * stage's questions are the column on the left, beside the question and its form, and the guidance drops below the
- * form. The other arrangement, the guidance beside the form and the stage's questions below both, is this one edit:
- *     grid-template-columns: minmax(0, 2fr) minmax(16rem, 1fr);
- *     grid-template-areas: "main guide" "route route";
- * (and QuestionContent.css's jump link query then becomes (width >= 72.5rem)).
- */
-@media (72.5rem <= width < 90rem) {
-  .question-workspace {
-    grid-template-columns: minmax(16rem, 1fr) minmax(0, 2fr);
-    /* A column taller than the form gives its extra height to the guidance's row, never a gap above the guidance. */
-    grid-template-rows: auto 1fr;
-    grid-template-areas:
-      "route main"
-      "route guide";
-  }
-}
-
-/*
- * Three columns from 90rem (1440px): the stage's questions, the question with its form, the guidance. 1440 less the rail,
- * the paddings and a scroll bar leaves 1049px; less two gaps, 1001px, which keeps two side columns of 16rem and the main
- * one above 30rem.
- */
-@media (width >= 90rem) {
-  .question-workspace {
-    grid-template-columns: minmax(16rem, 1fr) minmax(0, 2fr) minmax(16rem, 1fr);
-    grid-template-areas: "route main guide";
-  }
-}
-
-/* The question in words: the h2 step of the type ramp, so the longest question still leaves the form's first field in
-   the first view at 1280 by 900. */
+/* ── The question in words (R7: one ramp step below the sketch's 30px, so "Save decision" stays in the first view) ── */
 .question-frame__title {
-  margin: 0 0 var(--space-1);
+  margin: 0;
+  color: var(--color-heading);
   font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-heading);
+  letter-spacing: -0.01em;
+  text-wrap: balance;
   overflow-wrap: break-word;
 }
 
-/* The code line "{Q-ID} · {module}", directly under the h1. */
+/*
+ * No ring on a script focus at load (Shell gap 3): FocusOnArrival focuses the heading on every arrival, and Chrome draws
+ * :focus-visible for a script focus when nothing had focus before. HeadingFocusCue marks the heading when it takes focus
+ * after keyboard use (the skip link, Enter on a link), and only then is the ring drawn, as the global rule draws it.
+ */
+.question-frame__title:focus-visible {
+  outline: none;
+}
+
+.question-frame__title[data-keyboard-focus]:focus-visible {
+  outline: var(--focus-width) solid var(--color-focus);
+  outline-offset: var(--focus-offset);
+}
+
+/* The code line "{Q-ID} · {topic}", directly under the h1. */
 .question-frame__code {
-  margin: 0 0 var(--space-4);
+  margin: var(--space-1) 0 0;
   font-size: var(--font-size-small);
   color: var(--color-ink-muted);
 }
 
 /*
- * The way on at the foot of the main column, after the form (workshop walk S9): "Next question: {its words}" (or the
- * sentence that this is the stage's last question), then All questions. Clear of the form above it; the two items apart
- * and wrapping at 320px; each link a target of at least 24 by 24 CSS px (SC 2.5.8). At 768px and below the page reserves
- * the fixed save bar's height under its content (DecisionForm.css), so the foot scrolls clear of the bar.
+ * The way on at the foot of the decision slot's stub (workshop walk S9): "Next question: {its words}" (or the sentence
+ * that this is the stage's last question), then All questions. Lane 2's card replaces it at the merge. Each link a
+ * target of at least 24 by 24 CSS px (SC 2.5.8).
  */
 .question-foot {
   display: flex;
@@ -143,4 +396,40 @@
   min-block-size: var(--target-min);
   min-inline-size: var(--target-min);
   padding-block: 2px;
+}
+
+/* ── Print (plan 1C Task 4, spec 7.5): the question, the decision's text and the guidance; no strips, route or controls ── */
+@media print {
+  .question-top,
+  .position-strip,
+  .question-workspace__route,
+  .decision-slot form,
+  .decision-slot .question-foot,
+  .question-content__ways-summary,
+  .question-top__tip,
+  .question-top__tip-body {
+    display: none !important;
+  }
+
+  .question-page {
+    margin: 0;
+  }
+
+  .question-workspace {
+    display: block;
+  }
+
+  .question-workspace__guide {
+    margin-block-start: var(--space-6);
+  }
+
+  /* The folded list prints open: its text is guidance too. */
+  .question-content__ways::details-content {
+    content-visibility: visible;
+    display: block;
+  }
+
+  .question-content__ways > :not(summary) {
+    display: block !important;
+  }
 }

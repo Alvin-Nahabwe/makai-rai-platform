@@ -30,8 +30,12 @@ vi.mock('@/lib/auth/identity', () => ({ requireIdentity: (...a: unknown[]) => re
 vi.mock('@/lib/auth/context', () => ({ requireOrgContextFor: (...a: unknown[]) => requireOrgContextFor(...a) }));
 vi.mock('@/lib/question/panel', () => ({ loadQuestionPanel: (...a: unknown[]) => loadQuestionPanel(...a) }));
 vi.mock('@/lib/question/openWork', () => ({ loadQuestionOpenWork: (...a: unknown[]) => loadQuestionOpenWork(...a) }));
-// The route column's stage list (lane 7) is not this file's subject: its load answers null, so no column renders.
-vi.mock('@/lib/question/stagePage', () => ({ loadStagePage: async () => null }));
+// The route column's stage list (lane 7) is not this file's subject: its load answers the fixture stage with nothing
+// recorded (the page refuses a null one, lane 1 Task 1).
+vi.mock('@/lib/question/stagePage', async () => {
+  const { stageFixture } = await import('../helpers/stageFixture');
+  return { loadStagePage: async () => stageFixture() };
+});
 
 const { default: QuestionPage, QuestionPanelRegions } = await import(
   '@/app/(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]/page'
