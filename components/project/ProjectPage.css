@@ -216,34 +216,6 @@
   margin-block-start: var(--space-1);
 }
 
-/* The first three questions with no decision, named: each at most two lines (R7), the link leads to its whole text. A list
-   of links with no text around them, so a lighter underline still marks them. */
-.stage-line__named {
-  margin-block-start: var(--space-1);
-  padding-inline-start: var(--space-3);
-  border-inline-start: 1px solid var(--color-border-container);
-}
-
-.stage-line__named li + li {
-  margin-block-start: var(--space-1);
-}
-
-.stage-line__named-item a {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow: hidden;
-  font-weight: var(--font-weight-regular);
-  font-size: var(--font-size-small);
-  text-decoration-thickness: 1px;
-  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
-}
-
-.stage-line__more a {
-  font-size: var(--font-size-small);
-}
-
 .stage-line__quiet {
   color: var(--color-ink-muted);
 }

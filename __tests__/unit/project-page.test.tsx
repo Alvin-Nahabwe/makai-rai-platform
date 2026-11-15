@@ -149,43 +149,19 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     expect(JSON.stringify(P)).not.toContain('Problem formulation; data collection');
   });
 
-  it('9.2: the questions with no decision are counted as a link to the filtered list and the first three are named, then "and k more"', () => {
+  it('9.2 (owner 15 Nov 19:20, "Count, not names"): Still open counts the questions with no decision as one link to the filtered list and names none of them', () => {
     const l = lines(render({ counts: { 'in-processing': { ...COUNTS, noDecision: 2 }, 'post-processing': { ...COUNTS, noDecision: 0 } } }));
     const pre = stop(l['pre-processing'], 'open');
     expect(pre).toContain(`<a href="/orgs/o/projects/p1/stages/pre-processing?show=no_decision">${S.noDecisionQuestions(9)}</a>`);
-    const named = [...pre.matchAll(/<li class="stage-line__named-item"><a href="([^"]+)">([^<]+)<\/a><\/li>/g)].map((m) => [m[1], m[2]]);
-    expect(named).toEqual([15, 16, 17].map((n) => [`/orgs/o/projects/p1/stages/pre-processing/questions/pre-processing-q${n}`, `Question ${n} of pre-processing`]));
-    expect(pre).toContain(`<a href="/orgs/o/projects/p1/stages/pre-processing?show=no_decision">${P.andMore(6)}</a>`);
-    // Two open: both named, no "and more".
+    // No question title from the route's list, no list of them, and no "and k more".
+    for (const n of [15, 16, 17]) expect(pre).not.toContain(`Question ${n} of pre-processing`);
+    expect(pre).not.toContain('stage-line__named');
+    expect(pre).not.toMatch(/and \d+ more/);
     const inp = stop(l['in-processing'], 'open');
-    expect([...inp.matchAll(/stage-line__named-item/g)]).toHaveLength(2);
-    expect(inp).not.toContain('more</a>');
+    expect(inp).toContain(`>${S.noDecisionQuestions(2)}</a>`);
+    expect(inp).not.toContain('stage-line__named');
     // None open: the line is left out.
     expect(stop(l['post-processing'], 'open')).not.toContain('with no decision');
-  });
-
-  it('9.2: "and k more" is the stage\'s count less the questions named, so the count and the list always add up', () => {
-    const d = data();
-    const routes = routesOf(d);
-    // The names come from the route; here it lists four of the nine the counts hold (two reads that disagree for a moment).
-    const short = { ...routes, 'pre-processing': { ...routes['pre-processing'], noDecision: routes['pre-processing'].noDecision.slice(0, 4) } };
-    const open = stop(lines(renderToStaticMarkup(<ProjectPage data={d} routes={short} continueTo={null} />))['pre-processing'], 'open');
-    expect([...open.matchAll(/stage-line__named-item/g)]).toHaveLength(3);
-    expect(open).toContain(`>${P.andMore(6)}</a>`);
-    // Fewer named than the count never goes below zero, and a count of three named shows no "and more".
-    const three = { ...routes, 'pre-processing': { ...routes['pre-processing'], noDecision: routes['pre-processing'].noDecision.slice(0, 3) } };
-    const d3 = data({ counts: { 'pre-processing': { ...COUNTS, noDecision: 3 } } });
-    expect(stop(lines(renderToStaticMarkup(<ProjectPage data={d3} routes={three} continueTo={null} />))['pre-processing'], 'open')).not.toContain('more</a>');
-  });
-
-  it('N2: the route lists more no-decision questions than the count holds: no more are named than the count says', () => {
-    // The counts say two; the route (another read) still lists nine. The line says 2 and names 2, never 3.
-    const routes = routesOf(data());
-    const d2 = data({ counts: { 'pre-processing': { ...COUNTS, noDecision: 2 } } });
-    const open = stop(lines(renderToStaticMarkup(<ProjectPage data={d2} routes={routes} continueTo={null} />))['pre-processing'], 'open');
-    expect(open).toContain(`>${S.noDecisionQuestions(2)}</a>`);
-    expect([...open.matchAll(/stage-line__named-item/g)]).toHaveLength(2);
-    expect(open).not.toContain('more</a>');
   });
 
   it('9.2 FR-PRJ-02: open findings link to the stage\'s findings, keep "(k of them with no mitigation yet)"; nothing open reads "Nothing is open in this stage."', () => {
@@ -216,15 +192,15 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     expect(open).toMatch(/<span class="status-label">Planned<\/span>/);
   });
 
-  it('FR-FUP-01 FR-FUP-05: open mitigations that are not overdue, and those whose person can no longer act, stay on the page as plates', () => {
+  it('owner 15 Nov 19:20: Still open shows overdue mitigations only; a mitigation not yet due, or whose person can no longer act, adds no "Not overdue" line and no plate', () => {
     const later: FollowUpItem = { ...ITEM, mitigationId: 'm3', findingId: 'f3', what: 'Re-run the check', overdue: false, dueDate: '2026-12-20', status: 'planned' };
     const stuck: FollowUpItem = { ...ITEM, mitigationId: 'm4', findingId: 'f4', what: 'Write the guide', overdue: false, dueDate: '2026-12-21', ownerCanAct: false, owner: { userId: 'u9', name: 'Former Person', formerMember: true } };
     const html = render({ followUp: { 'pre-processing': { items: [later], cannotAct: [stuck] } }, counts: { 'pre-processing': { ...COUNTS, overdueMitigations: 0, openMitigations: 2 } } });
-    const open = text(stop(lines(html)['pre-processing'], 'open'));
-    expect(open).toContain(P.noOverdue);
-    expect(open).toContain(`${P.notOverdue}: ${P.mitigationCount(2)}`);
-    expect(open).toContain(`Re-run the check${PROJECT_COPY.followUp.assignedTo('Joseph Mugisha')} · Planned · ${PROJECT_COPY.followUp.due('20 Dec 2026')}`);
-    expect(open).toContain(`${PROJECT_COPY.followUp.cannotAct('Former Person')} ${PROJECT_COPY.followUp.reassign}`);
+    const open = stop(lines(html)['pre-processing'], 'open');
+    expect(text(open)).toContain(P.noOverdue);
+    expect(open).not.toContain('Not overdue');
+    expect(open).not.toContain('ui-plate');
+    expect(open).not.toContain('Re-run the check');
     // An open mitigation that is not overdue keeps "Nothing is open" away.
     const only = render({ counts: { 'pre-processing': { ...ZERO, noDecision: 0, openMitigations: 1 } }, followUp: { 'pre-processing': { items: [later], cannotAct: [] } } });
     expect(stop(lines(only)['pre-processing'], 'open')).not.toContain(S.nothingOpen);
@@ -577,7 +553,6 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     expect([P.whatMeans('Done'), P.whatMeans('Not yet')]).toEqual(['What does "Done" mean?', 'What does "Not yet" mean?']);
     expect([P.noDecisionYet(1), P.noDecisionYet(3)]).toEqual(['1 question has no decision yet.', '3 questions have no decision yet.']);
     expect(P.allDecided).toBe('Every question in this stage has a decision.');
-    expect(P.andMore(4)).toBe('and 4 more');
     expect([P.beforeSealing, P.nothingLeftOpen]).toEqual(['Before sealing, look at:', 'Nothing is left open in this stage.']);
     expect([P.doneNoEvidence(1), P.doneNoEvidence(2)]).toEqual(['1 decision marked Done with no evidence attached', '2 decisions marked Done with no evidence attached']);
     expect([P.overdueMitigations(1), P.overdueMitigations(2)]).toEqual(['1 overdue mitigation', '2 overdue mitigations']);
