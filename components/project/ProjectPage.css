@@ -1,0 +1,453 @@
+/* S-10, the project page as the Route sketch draws it (directions/surfaces/project.html; owner ruling R5). Every colour is a
+   kit token (app/globals.css), so the dark theme follows: the line and its rings take --color-mark (the route's ink in both
+   themes; --color-shell is darker than the dark ground), the last stop's ring the action orange as text and lines use it. */
+
+/* The header: the descriptive line at the left and "You can work on the stages in any order." with its three-bar glyph at
+   the right (the sketch's .sub), wrapping under each other when narrow. */
+.project-page .ui-page-header {
+  margin-block-end: var(--space-4);
+}
+
+.project-page .ui-page-header__lead {
+  max-inline-size: none;
+}
+
+.project-page__sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-6);
+}
+
+.project-page__facts {
+  margin: 0;
+  color: var(--color-ink-muted);
+}
+
+.project-page__order {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0;
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Three bars, the three stages as parallel lines; decorative, drawn from borders so forced colours keep it. */
+.project-page__glyph {
+  flex: none;
+  inline-size: 2.25rem;
+  block-size: 3px;
+  margin-block: 5px;
+  border-radius: 2px;
+  background-color: var(--color-mark);
+  box-shadow: 0 -5px 0 var(--color-mark), 0 5px 0 var(--color-mark);
+}
+
+@media (forced-colors: active) {
+  .project-page__glyph {
+    background-color: CanvasText;
+    box-shadow: 0 -5px 0 CanvasText, 0 5px 0 CanvasText;
+  }
+}
+
+/* The frame of the three lines: a 1 px rule under the header (the sketch's .lines border), and the container the
+   side-by-side query reads. */
+.project-lines-frame {
+  container-type: inline-size;
+  border-block-start: 1px solid var(--color-border-container);
+  padding-block-start: var(--space-4);
+}
+
+.stage-list__jump {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin-block-end: var(--space-4);
+}
+
+/* A stage name wraps to the next line whole, never at its hyphen. */
+.stage-list__jump a {
+  white-space: nowrap;
+}
+
+/* Narrow: the lines stack in stage order, each still a vertical line of stops. */
+.project-lines {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: var(--space-8);
+}
+
+/* One stage: five stops on a 4 px line. The rail is the column left of the stops; each stop draws its marker and the line
+   down to the next stop on its own pseudo-elements, so the line follows whatever height the stops take. Borders, not
+   backgrounds, draw both, so forced colours keep them. Geometry: the rail is 2.25rem wide; the line is 4 px wide with
+   its centre 1rem from the line's edge; each marker is centred on it; stops are --space-5 apart. */
+.stage-line {
+  position: relative;
+  display: grid;
+  grid-template-rows: repeat(5, auto);
+  row-gap: var(--space-5);
+  padding-inline-start: 2.25rem;
+  overflow-wrap: anywhere;
+  min-inline-size: 0;
+}
+
+.stage-line__stop {
+  position: relative;
+  min-inline-size: 0;
+}
+
+/* The line: from this stop's marker down to the next stop. */
+.stage-line__stop:not(.stage-line__stop--last)::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: calc(1rem - 2px - 2.25rem);
+  inset-block: 0.75rem calc(-1 * var(--space-5) - 0.75rem);
+  border-inline-start: 4px solid var(--color-mark);
+}
+
+/* A section's marker: a ring on the page's ground. */
+.stage-line__stop::after {
+  content: '';
+  position: absolute;
+  box-sizing: border-box;
+  inset-inline-start: calc(1rem - 2.25rem - 8px);
+  inset-block-start: 0.15rem;
+  inline-size: 16px;
+  block-size: 16px;
+  border: 3px solid var(--color-mark);
+  border-radius: 50%;
+  background-color: var(--color-ground);
+}
+
+/* The stage itself: a filled disc, ringed by the ground. */
+.stage-line__stop--head::after {
+  inset-inline-start: calc(1rem - 2.25rem - 12px);
+  inset-block-start: 0.2rem;
+  inline-size: 24px;
+  block-size: 24px;
+  border: 12px solid var(--color-mark);
+  box-shadow: 0 0 0 3px var(--color-ground);
+}
+
+/* The last stop: the orange ring, the surface inside, where the next question and the primary action are. */
+.stage-line__stop--last::after {
+  inset-inline-start: calc(1rem - 2.25rem - 11px);
+  inset-block-start: 0;
+  inline-size: 22px;
+  block-size: 22px;
+  border: 4px solid var(--color-action-text);
+  background-color: var(--color-surface);
+}
+
+/* The stage's name, its count at the right, and its meaning under it (the definition follows the heading in the markup,
+   so the first-use rule finds it beside the name; the grid puts the count beside the heading). */
+.stage-line__stop--head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: var(--space-3);
+}
+
+.stage-line__stop--head h2 {
+  grid-column: 1;
+  grid-row: 1;
+  margin: 0;
+  font-size: var(--font-size-h2);
+  line-height: 1.3;
+}
+
+.stage-line__count {
+  grid-column: 2;
+  grid-row: 1;
+  margin: 0;
+  font-size: var(--font-size-small);
+  color: var(--color-ink-muted);
+  white-space: nowrap;
+}
+
+.stage-line__stop--head .ui-definition {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  margin: var(--space-1) 0 0;
+}
+
+.stage-line h3 {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.4;
+  color: var(--color-heading);
+}
+
+.stage-line p {
+  margin: 0;
+}
+
+.stage-line ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stage-line__open > li + li {
+  margin-block-start: var(--space-2);
+}
+
+.stage-line__open a,
+.review-list__name {
+  font-weight: var(--font-weight-semibold);
+}
+
+.stage-line__open .ui-definition,
+.stage-line__stop--recorded .ui-definition,
+.stage-line__stop--reviews .ui-definition {
+  display: block;
+  margin-block-start: var(--space-1);
+}
+
+/* The first three questions with no decision, named: each at most two lines (R7), the link leads to its whole text. */
+.stage-line__named {
+  margin-block-start: var(--space-1);
+  padding-inline-start: var(--space-3);
+  border-inline-start: 1px solid var(--color-border-container);
+}
+
+.stage-line__named li + li {
+  margin-block-start: var(--space-1);
+}
+
+.stage-line__named-item a {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  font-weight: var(--font-weight-regular);
+  font-size: var(--font-size-small);
+}
+
+.stage-line__more a {
+  font-size: var(--font-size-small);
+}
+
+.stage-line__quiet {
+  color: var(--color-ink-muted);
+}
+
+/* "Overdue": the word and its clock in the overdue red (spec 7.1); the count after it in ink. */
+.stage-line__mitigations .followup-overdue {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-weight: var(--font-weight-bold);
+}
+
+.stage-line__plates {
+  display: grid;
+  gap: var(--space-2);
+  margin-block-start: var(--space-2);
+}
+
+/* A mitigation's plate (the kit's item plate): its text, then one quiet line of who, status and date. */
+.stage-line__plate .ui-plate {
+  padding: var(--space-2) var(--space-3);
+  box-shadow: var(--shadow-surface);
+}
+
+.stage-line__plate .ui-plate__title {
+  font-size: var(--font-size-small);
+  line-height: 1.4;
+}
+
+.stage-line__plate--overdue .ui-plate {
+  border-color: color-mix(in srgb, var(--color-overdue) 40%, var(--color-border-container));
+}
+
+.stage-line__plate .ui-plate__state {
+  font-size: var(--font-size-small);
+  color: var(--color-ink-muted);
+}
+
+.stage-line__plate-meta,
+.stage-line__plate-note {
+  display: block;
+}
+
+.stage-line__plate-meta .followup-overdue {
+  font-weight: var(--font-weight-bold);
+}
+
+.stage-line__plate-note {
+  margin-block-start: var(--space-1);
+  color: var(--color-ink);
+}
+
+/* Recorded so far: the kit's row of marks and its tally; the accepted-risk line under it. */
+.stage-line__stop--recorded > p {
+  margin-block-start: var(--space-2);
+  font-size: var(--font-size-small);
+}
+
+/* Reviews: one white list (the sketch's .rl), each review its name, then its quiet lines. */
+.review-list {
+  margin-block-start: var(--space-1);
+  border: 1px solid var(--color-border-container);
+  border-radius: var(--radius-control);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-surface);
+}
+
+.review-list__item {
+  padding: var(--space-2) var(--space-3);
+}
+
+.review-list__item + .review-list__item {
+  border-block-start: 1px solid var(--color-border-container);
+}
+
+.review-list__name {
+  display: inline-block;
+  font-size: var(--font-size-small);
+}
+
+.review-list__meta,
+.review-list__before {
+  font-size: var(--font-size-small);
+  color: var(--color-ink-muted);
+}
+
+.review-list__before {
+  margin-block-start: var(--space-1);
+}
+
+.stage-line__stop--reviews > p {
+  font-size: var(--font-size-small);
+}
+
+.stage-line__stop--reviews > p + p,
+.stage-line__stop--reviews > .review-list + p {
+  margin-block-start: var(--space-2);
+}
+
+/* The last stop: "Next question" in orange bold and the question in words, the primary action, the stage's questions. */
+.stage-line__next {
+  line-height: 1.45;
+}
+
+.stage-line__next-label {
+  margin-inline-end: var(--space-1);
+  color: var(--color-action-text);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-bold);
+}
+
+.stage-line__position {
+  display: block;
+  font-size: var(--font-size-small);
+  color: var(--color-ink-muted);
+}
+
+.stage-line__primary {
+  margin-block-start: var(--space-3);
+}
+
+.stage-line__primary .ui-button--primary {
+  min-block-size: 48px;
+  padding-inline: var(--space-6);
+}
+
+.stage-line__stop--last > p:last-child {
+  margin-block-start: var(--space-2);
+}
+
+.stage-line__stop--last > p:last-child a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--target-primary);
+  font-weight: var(--font-weight-bold);
+}
+
+/* Side by side once three lines fit (from a 1280 px window beside the rail): the five stops of each line share the page's
+   rows (subgrid), so "Recorded so far", "Reviews" and the last stop start at the same height on all three lines. The jump
+   links are for the stacked form only. */
+@container (min-width: 52rem) {
+  .project-lines {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: repeat(5, auto);
+    column-gap: var(--space-5);
+    row-gap: var(--space-5);
+  }
+
+  .stage-line {
+    grid-row: span 5;
+    grid-template-rows: repeat(5, auto);   /* where subgrid is not supported */
+    grid-template-rows: subgrid;
+  }
+
+  .stage-list__jump {
+    display: none;
+  }
+}
+
+/* The share line, once, after the stages. */
+.project-page__share {
+  margin-block: var(--space-6) var(--space-4);
+  max-inline-size: var(--measure-reading);
+  color: var(--color-ink-muted);
+}
+
+.project-page__share .ui-definition {
+  display: block;
+  margin-block-start: var(--space-1);
+}
+
+/* "This project": a quiet row at the foot under a rule; Archive last, pushed to the far end, the same order on every width. */
+.project-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-6);
+  border-block-start: 1px solid var(--color-border-container);
+  padding-block: var(--space-2);
+  font-size: var(--font-size-small);
+}
+
+.project-actions h2 {
+  margin: 0;
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-ink-muted);
+}
+
+.project-actions__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.project-actions__list a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: 40px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-link);
+}
+
+.project-actions__archive {
+  margin-inline-start: auto;
+}
+
+.project-actions__archive .ui-button--quiet {
+  color: var(--color-ink-muted);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-regular);
+}
+/* The control's status line is a live region: it stays in the page, empty and taking no room, so a later line is announced. */
+.project-actions__archive p[role='status'] {
+  margin: 0;
+}

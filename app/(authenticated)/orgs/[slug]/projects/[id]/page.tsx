@@ -9,7 +9,8 @@ import { eatDate } from '@/lib/followup/overdue';
 import { PROJECT_COPY } from '@/lib/project/copy';
 import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
-import { ProjectOverview } from '@/components/project/ProjectOverview';
+import { ProjectPage } from '@/components/project/ProjectPage';
+import { loadProjectRoutes } from '@/lib/project/routes';
 import RememberProject from '@/components/layout/RememberProject';
 
 interface PageProps {
@@ -25,9 +26,13 @@ const load = cache(async (slug: string, id: string) => {
   const ctx = await requireOrgContextFor(identity.userId, slug, 'project:read');
   const data = await loadProjectOverview(ctx, { orgSlug: slug, projectId: id, today: eatDate(new Date()) });
   if (data === null) notFound();
-  // The page's one primary action (plan 1C C11): only after the project is known visible, for the signed-in person.
-  const continueTo = await loadContinueTarget(ctx, identity.userId, { id: data.project.id, archived: data.project.archived });
-  return { data, continueTo, userId: identity.userId };
+  // Only after the project is known visible, under the same `ctx`: the page's one primary action (plan 1C C11), for the
+  // signed-in person, and each stage's marks and questions with no decision (one tenant-scoped read per stage).
+  const [continueTo, routes] = await Promise.all([
+    loadContinueTarget(ctx, identity.userId, { id: data.project.id, archived: data.project.archived }),
+    loadProjectRoutes(ctx, { orgSlug: slug, projectId: data.project.id }),
+  ]);
+  return { data, continueTo, routes, userId: identity.userId };
 });
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
@@ -36,16 +41,16 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 }
 
 /**
- * S-10, the stage view. No `createdById` check: every member with `project:read` may view every project of the
+ * S-10, the project page. No `createdById` check: every member with `project:read` may view every project of the
  * organisation (ADR-0001). The project is read inside `withOrg` first and `notFound()` follows when it is not visible,
  * before any other read, so another organisation's project is a 404 like a missing one (NFR-SEC-02).
  */
 export default async function ProjectDetailPage({ params }: PageProps) {
   const { slug, id } = await params;
-  const { data, continueTo, userId } = await load(slug, id);
+  const { data, continueTo, routes, userId } = await load(slug, id);
   return (
-    <ProjectOverview data={data} continueTo={continueTo}>
+    <ProjectPage data={data} routes={routes} continueTo={continueTo}>
       <RememberProject userId={userId} orgSlug={slug} projectId={data.project.id} />
-    </ProjectOverview>
+    </ProjectPage>
   );
 }
