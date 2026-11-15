@@ -181,10 +181,11 @@ test.describe('the gallery page', () => {
 });
 
 test.describe('Icon', () => {
-  test('all 28 icons draw, hidden from assistive technology, beside their names', async ({ page }) => {
+  test('all 29 icons draw, hidden from assistive technology, beside their names', async ({ page }) => {
     await openKit(page);
     const icons = section(page, 'icons').locator('[data-icon] svg.ui-icon');
-    await expect(icons).toHaveCount(28);
+    // Plan B7's 28 and pencil (lane 4 Task B round 1, "Edit project details").
+    await expect(icons).toHaveCount(29);
     for (const svg of await icons.all()) {
       await expect(svg).toHaveAttribute('aria-hidden', 'true');
       const box = await svg.boundingBox();

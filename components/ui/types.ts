@@ -2,7 +2,7 @@
 
 export type StatusMarkKind = 'done' | 'partly' | 'not_yet' | 'not_applicable' | 'does_not_apply' | 'scope_answered' | 'no_decision';
 
-/** The 28 icons of plan B7. Later stages add icons to the same registry (components/ui/icons.tsx), from the same set. */
+/** The 28 icons of plan B7, and pencil (lane 4 Task B round 1): 29. Later stages add icons to the same registry (components/ui/icons.tsx), from the same set. */
 export type IconName = 'home' | 'folder' | 'flag' | 'book-open' | 'circle-help' | 'users' | 'building-2' | 'user' | 'log-out'
   | 'sun' | 'moon' | 'menu' | 'x' | 'chevron-left' | 'chevron-right' | 'chevron-down' | 'chevrons-up-down' | 'arrow-up'
   | 'paperclip' | 'download' | 'plus' | 'info' | 'triangle-alert' | 'wifi-off' | 'archive' | 'clock' | 'external-link' | 'circle-check'
