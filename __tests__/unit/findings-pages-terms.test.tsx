@@ -7,7 +7,8 @@ import type { MitigationVersionView } from '@/types/api';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
 import type { FindingListItem, FindingPageData, FindingsPageData } from '@/lib/findings/pageData';
 import {
-  TERM_ACCEPTED_RISK, TERM_FINDING, TERM_MITIGATION, TERM_NOT_YET, TERM_PARTLY, TERM_RISK_AREA, TERM_STAGE_1, TERM_STAGE_2,
+  TERM_ACCEPTED_RISK, TERM_DOES_NOT_APPLY, TERM_FINDING, TERM_MITIGATION, TERM_NOT_YET, TERM_PARTLY, TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION,
+  TERM_RISK_AREA, TERM_STAGE_1, TERM_STAGE_2,
 } from '@/lib/vocabulary/terms';
 import { firstUseProblems } from '../helpers/firstUseHtml';
 
@@ -147,6 +148,48 @@ describe('S-15 first-use definitions', () => {
     const out = findingPage(finding({ stateLabel: FINDINGS_COPY.labels.closedByAcceptedRiskBy('Grace A.') }, { state: 'closed_accepted_risk', acceptedRisk: accepted, acceptedRisks: [accepted] }));
     expect(out).toContain('<dt><span data-term="accepted-risk">Accepted risk</span></dt>');
     expect(firstUseProblems(out, [...TEAM, 'Committee minutes'])).toEqual([]);
+  });
+
+  // B4 I2: the gate cause sentences. A gate's version stores a scope answer and no status (decision_versions_answer_check),
+  // so `status` is null for gate_no and the box defines no status.
+  const gateShortfall = { source: 'shortfall' as const, questionId: 'Q-PP-09', decisionVersionId: 'v1' };
+  const gateClosing = { reason: 'gate_no' as const, decisionVersionId: 'g1', questionId: 'Q-PP-GATE-SENSITIVE', versionNumber: 1, statusWord: '', status: null };
+  const PDQ = TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION;
+  const NOT_STATUSES = ['done', 'partly', 'not-yet', 'not-applicable'];
+
+  it('the gate_no close box defines the personal data question and Does not apply, and no status', () => {
+    const out = findingPage(finding({ closeByDecision: gateClosing, canMitigate: true }, gateShortfall));
+    expect(out).toContain(FINDINGS_COPY.finding.closeGate);
+    expect(out).toContain(`<dt><span data-term="${PDQ.id}">The personal data question</span></dt>`);
+    expect(out).toContain(`<dt><span data-term="${TERM_DOES_NOT_APPLY.id}">Does not apply</span></dt>`);
+    for (const id of NOT_STATUSES) expect(out).not.toContain(`data-definition="${id}"`);
+    expect(firstUseProblems(out, TEAM)).toEqual([]);
+  });
+
+  it('the blocked gate_no box (its cause alone) defines the same two terms', () => {
+    const out = findingPage(finding({ closeByDecision: gateClosing, closeBlocked: true, canMitigate: true }, gateShortfall));
+    expect(out).toContain(FINDINGS_COPY.finding.closeGateCause);
+    expect(out).toContain(`data-definition="${PDQ.id}"`);
+    expect(out).toContain(`data-definition="${TERM_DOES_NOT_APPLY.id}"`);
+    // Left for the lead (FX2 report): the blocked line's "Mark the mitigation Done" is a mitigation status, read as the
+    // decision status Done (X-1 (1), as B4 review M2); it is not a gate term.
+    expect(firstUseProblems(out, TEAM)).toEqual([{ id: 'done', text: FINDINGS_COPY.finding.closeBlocked }]);
+  });
+
+  it('a finding closed because the question no longer applies defines the personal data question (not Does not apply)', () => {
+    for (const closedBy of [null, { by: 'Grace A.', at: '2026-11-15T08:00:00.000Z' }]) {
+      const out = findingPage(finding({ stateLabel: FINDINGS_COPY.labels.closed, closure: { closedBy, cause: 'no_longer_applies' } }, { ...gateShortfall, state: 'closed_mitigation' }));
+      expect(out).toContain(esc(FINDINGS_COPY.mitigation.closedBecauseNoLongerApplies));
+      expect(out).toContain(`data-definition="${PDQ.id}"`);
+      expect(out).not.toContain(`data-definition="${TERM_DOES_NOT_APPLY.id}"`);
+      expect(firstUseProblems(out, TEAM)).toEqual([]);
+    }
+  });
+
+  it('a close by a changed decision defines neither gate term', () => {
+    const out = findingPage(finding({ closeByDecision: { ...gateClosing, reason: 'decision_done', statusWord: 'Done', status: 'done' }, canMitigate: true }, gateShortfall));
+    expect(out).not.toContain(`data-definition="${PDQ.id}"`);
+    expect(out).not.toContain(`data-definition="${TERM_DOES_NOT_APPLY.id}"`);
   });
 });
 

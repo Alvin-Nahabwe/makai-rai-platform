@@ -16,7 +16,9 @@ import { acceptedByName, cancelReasonText, overdueLabel, STAGE_NAMES } from '@/l
 import { markTerms } from '@/components/review/markTerms';
 import { TermList, termListId, type TermListItem } from '@/components/review/TermList';
 import { STAGE_TERMS, STATUS_TERMS } from '@/lib/review/copy';
-import { TERM_ACCEPTED_RISK, TERM_FINDING, TERM_MITIGATION, TERM_RISK_AREA, TERM_SEAL } from '@/lib/vocabulary/terms';
+import {
+  TERM_ACCEPTED_RISK, TERM_DOES_NOT_APPLY, TERM_FINDING, TERM_MITIGATION, TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION, TERM_RISK_AREA, TERM_SEAL,
+} from '@/lib/vocabulary/terms';
 import type { DecisionStatus } from '@/types/record';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
 import type { FindingPageData, MitigationOnPage } from '@/lib/findings/pageData';
@@ -150,10 +152,16 @@ function findingTerms(d: FindingPageData): TermListItem[] {
   const accepted = f.state === 'closed_accepted_risk' || (d.canAccept && f.state === 'open');
   const used = new Set<string>([f.source === 'shortfall' ? d.version?.status : null, d.closeByDecision?.status].filter((x): x is DecisionStatus => x !== null && x !== undefined && x !== 'withdrawn'));
   const statuses = (Object.keys(STATUS_TERMS) as DecisionStatus[]).filter((s) => used.has(s)).map((s) => STATUS_TERMS[s]);
+  // B4 I2: the gate's cause sentences. The header's closure line ("…no longer applies: the team answered No to the personal
+  // data question.") comes before the line with the stage; the close box's ("…the personal data question, so this question
+  // does not apply.") comes after the header. The box names no status: a gate's version has none.
+  const closedByGate = d.closure?.cause === 'no_longer_applies';
+  const gateBox = d.closeByDecision?.reason === 'gate_no';
   return [
     { of: TERM_FINDING, marked: false },
-    ...[...(accepted ? [TERM_ACCEPTED_RISK] : []), ...statuses, STAGE_TERMS[f.stage], ...(f.riskArea === null ? [] : [TERM_RISK_AREA]),
-      ...(f.seals.length === 0 ? [] : [TERM_SEAL]), TERM_MITIGATION].map((of) => ({ of, marked: true })),
+    ...[...(accepted ? [TERM_ACCEPTED_RISK] : []), ...(closedByGate ? [TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION] : []), ...statuses,
+      STAGE_TERMS[f.stage], ...(f.riskArea === null ? [] : [TERM_RISK_AREA]), ...(f.seals.length === 0 ? [] : [TERM_SEAL]),
+      ...(gateBox ? [TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION, TERM_DOES_NOT_APPLY] : []), TERM_MITIGATION].map((of) => ({ of, marked: true })),
   ];
 }
 
