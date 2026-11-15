@@ -590,6 +590,40 @@ test.describe('S-04 and S-05 in a browser', () => {
     await page.context().close();
   });
 
+  test('L5-29: step 2 goes back to step 1 with the name and password kept, focus on the first field and the route on Your details', async ({ browser }) => {
+    const fx = await buildOrg({ label: 'chgdet' });
+    const raw = await invitationFor(fx, `chgdet-${Date.now()}@fixture.test`, 'viewer');
+    const page = await newPage(browser);
+    await page.goto(`/invitations/${raw}`);
+    await page.getByLabel(INVITATION_COPY.name).fill('Back Again');
+    await page.locator('#new-password').fill('Back-again-ok-1');
+    await page.getByRole('button', { name: INVITATION_COPY.continue }).click();
+    await expect(page.locator('#acceptances-step')).toBeFocused();
+    await expect(page.getByText(INVITATION_COPY.creatingFor('Back Again'))).toBeVisible();
+    await page.getByRole('button', { name: INVITATION_COPY.changeDetails }).click();
+    await expect(page.getByLabel(INVITATION_COPY.name)).toBeFocused();
+    await expect(page.getByLabel(INVITATION_COPY.name)).toHaveValue('Back Again');
+    await expect(page.locator('#new-password')).toHaveValue('Back-again-ok-1');
+    await expect(page.locator('#invitation-route')).toHaveAttribute('data-step', 'details');
+    await page.getByRole('button', { name: INVITATION_COPY.continue }).click();
+    await expect(page.locator('#acceptances-step')).toBeFocused();
+    await expect(page.locator('#invitation-route')).toHaveAttribute('data-step', 'acceptances');
+    await page.context().close();
+  });
+
+  test('P2-I1 NFR-A11Y-05: M-24 (signed in as someone else) needs no sideways scroll at 160 CSS pixels, a 320 pixel phone at 200 % zoom', async ({ browser }) => {
+    const issuer = await buildOrg({ label: 'm24i' });
+    const other = await buildOrg({ label: 'm24o' });
+    const raw = await invitationFor(issuer, `m24-a-very-long-invited-address-${Date.now()}@fixture-example-organisation.test`, 'viewer');
+    const page = await newPage(browser);
+    await signIn(page, other.members.viewer);
+    await page.setViewportSize({ width: 160, height: 640 });
+    await page.goto(`/invitations/${raw}`);
+    await expect(page.getByRole('alert').filter({ hasText: other.members.viewer.email })).toBeVisible();
+    await expectNoHorizontalScroll(page);
+    await page.context().close();
+  });
+
   test('NFR-A11Y-04 NFR-A11Y-05: S-04, S-05 and S-06 have no serious axe violation in both themes at 1280 and 360 pixels, targets of 24 pixels, and no loss at 320 pixels', async ({ browser }) => {
     test.setTimeout(3 * 60_000);
     const fx = await buildOrg({ label: 'axe', acceptances: 'pre-v1' });

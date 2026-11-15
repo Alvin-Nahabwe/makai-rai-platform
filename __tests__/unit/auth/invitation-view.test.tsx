@@ -170,3 +170,50 @@ describe('the new-account form (F17, A row 173)', () => {
     expect(textOf(html)).toContain(INVITATION_COPY.nameHint);
   });
 });
+
+describe('step 2 has a way back to step 1 (ruling L5-29)', () => {
+  const view = (step: 'details' | 'acceptances', send: { state: 'idle' } | { state: 'sending' } = { state: 'idle' }) =>
+    renderToStaticMarkup(<NewAccountView token={TOKEN} invitedEmail="a@x.test" orgName="Lab" role="assessor" inviterName="A"
+      viewerEmail={null} expiresOn="2026-11-09" texts={STUB_LEGAL_TEXTS.slice()} step={step} name="  Jay Three " password="pw"
+      showPassword={false} errors={{}} send={send} onName={vi.fn()} onPassword={vi.fn()} onToggleShow={vi.fn()} onContinue={vi.fn()}
+      onChangeDetails={vi.fn()} onAccepted={vi.fn(async () => {})} onRetry={vi.fn()} />);
+
+  it('the words are fixed, and step 2 opens with the name it creates the account for and a quiet Change your details button', () => {
+    expect(INVITATION_COPY.creatingFor('Jay Three')).toBe('Creating an account for Jay Three.');
+    expect(INVITATION_COPY.changeDetails).toBe('Change your details');
+    const two = view('acceptances');
+    expect(textOf(two).indexOf('Creating an account for Jay Three.')).toBeGreaterThan(-1);
+    expect(two).toMatch(/<button type="button" class="ui-button ui-button--quiet ui-button--compact"[^>]*>Change your details<\/button>/);
+    expect(two.indexOf('Change your details')).toBeLessThan(two.indexOf('type="checkbox"'));
+    expect(two.indexOf('Creating an account for')).toBeLessThan(two.indexOf('Change your details'));
+    const one = view('details');
+    expect(one).not.toContain('Change your details');
+    expect(one).not.toContain('Creating an account for');
+  });
+
+  it('the button waits while the account is being created', () => {
+    expect(view('acceptances', { state: 'sending' })).toMatch(/<button type="button"[^>]*disabled=""[^>]*>Change your details<\/button>/);
+  });
+
+  it('the client goes back to step 1 keeping the name and password, focuses the first field, and posts the same body', () => {
+    const src = readFileSync('app/(public)/invitations/[token]/AcceptInvitationClient.tsx', 'utf8');
+    expect(src).toMatch(/function onChangeDetails\(\) \{\s*backToDetails\.current = true;\s*setSend\(\{ state: 'idle' \}\);\s*setStep\('details'\);\s*\}/);
+    expect(src).not.toMatch(/setName\(''\)|setPassword\(''\)/);
+    expect(src).toContain("else if (backToDetails.current) { backToDetails.current = false; nameEl.current?.focus(); }");
+    // T6.6: what is posted does not change.
+    expect(src).toContain("onAccepted={(kinds) => post(JSON.stringify({ name, password, acceptances: acceptancePairs(p.texts, kinds) }))}");
+  });
+
+  it('m9: the step-1 heading "Create your account" is below the h1 in size at every width', () => {
+    expect(view('details')).toMatch(/<h2 class="gate__subheading"/);
+    const css = readFileSync('components/layout/gate.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(css).toMatch(/\.gate__subheading\s*\{\s*font-size:\s*var\(--font-size-h2\)/);
+    expect(css).toMatch(/@container \(width < 24rem\)\s*\{[^@]*\.gate__subheading\s*\{\s*font-size:\s*var\(--font-size-h3\)/);
+    expect(css).toMatch(/@container \(width < 12rem\)\s*\{[^@]*\.gate__subheading\s*\{\s*font-size:\s*var\(--font-size-body\)/);
+  });
+
+  it('m8: below 1024 px a public frame with no route draws no band', () => {
+    const css = readFileSync('components/layout/gate.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(css).toMatch(/\.gate--public \.gate__header:not\(:has\(\.gate__where\)\)\s*\{\s*display:\s*none/);
+  });
+});

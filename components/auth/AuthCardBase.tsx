@@ -1,6 +1,10 @@
-import type { ReactElement, ReactNode } from 'react';
+import type { ReactElement, ReactNode, Ref } from 'react';
 
-export type AuthCardProps = { title: ReactNode; lead?: ReactNode; children: ReactNode; footer?: ReactNode };
+export type AuthCardProps = {
+  title: ReactNode; lead?: ReactNode; children: ReactNode; footer?: ReactNode;
+  /** For a page whose form is replaced by its answer: given, the heading takes focus by script only (tabindex -1), so the page can move focus to it. */
+  titleRef?: Ref<HTMLHeadingElement>;
+};
 
 /**
  * The content of a door page's card (plan 1B Task 2, lead's ruling L5-7): the page's one <h1>, its lead, the form, and the
@@ -13,10 +17,10 @@ export type AuthCardProps = { title: ReactNode; lead?: ReactNode; children: Reac
  * passes no footer, draws the card without auth.css (the lean frame, owner, 15 Nov 15:35); every other door page imports
  * it through ./AuthCard, which adds that sheet.
  */
-export function AuthCard({ title, lead, children, footer }: AuthCardProps): ReactElement {
+export function AuthCard({ title, lead, children, footer, titleRef }: AuthCardProps): ReactElement {
   return (
     <div className="auth-view">
-      <h1>{title}</h1>
+      <h1 tabIndex={titleRef === undefined ? undefined : -1} ref={titleRef}>{title}</h1>
       {lead === undefined || lead === null ? null : <div className="auth-view__lead">{lead}</div>}
       {children}
       {footer === undefined || footer === null ? null : <div className="auth-view__footer">{footer}</div>}

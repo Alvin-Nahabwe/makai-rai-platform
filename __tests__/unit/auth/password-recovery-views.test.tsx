@@ -33,16 +33,20 @@ describe('S-02 in the gate frame', () => {
     expect(html(forgot({ kind: 'idle' }))).toMatch(new RegExp(`<a [^>]*href="/login"[^>]*>${AUTH_COPY.backToSignIn}</a>`));
   });
 
-  it('D2 review A-r2-2: once the form is replaced by the sent answer, the status block can take focus (tabindex -1) and the client moves it there', () => {
-    // The Send reset link button is removed with the form, so focus would fall to the body (WCAG 2.4.3). No jsdom here (see
+  it('D2 review A-r2-2, A-L1: once the form is replaced by the sent answer, the card\'s h1 can take focus (tabindex -1), the status region does not, and the client moves focus to the h1', () => {
+    // The Send reset link button is removed with the form, so focus would fall to the body (WCAG 2.4.3). The target is the
+    // h1, not the status region: a screen reader would read M-21 again if focus went into its live region. No jsdom here (see
     // acceptances-form.test.tsx): the markup carries the target, and the client's source is read for the move.
     const sent = html(forgot({ kind: 'sent' }));
-    expect(sent).toMatch(new RegExp(`<div role="status" tabindex="-1"[^>]*>${AUTH_MESSAGE_COPY.resetLinkSent}</div>`));
-    // Before it is sent the region takes no focus: no tabindex on either region, so no tab stop or focus ring appears.
+    expect(sent).toMatch(new RegExp(`<h1 tabindex="-1">${AUTH_COPY.resetHeading}</h1>`));
+    expect(sent).toMatch(new RegExp(`<div role="status"[^>]*>${AUTH_MESSAGE_COPY.resetLinkSent}</div>`));
+    expect(sent.match(/tabindex/g)).toHaveLength(1);
+    // Before it is sent nothing takes focus: no tabindex, so no tab stop or focus ring appears.
     expect(html(forgot({ kind: 'idle' }))).not.toMatch(/tabindex/);
     expect(html(forgot({ kind: 'error', message: 'x' }))).not.toMatch(/tabindex/);
     const src = readFileSync('app/(public)/forgot-password/ForgotPasswordClient.tsx', 'utf8');
-    expect(src).toMatch(/useEffect\(\(\) => \{ if \(state\.kind === 'sent'\) statusEl\.current\?\.focus\(\); \}, \[state\.kind\]\)/);
+    expect(src).toMatch(/useEffect\(\(\) => \{ if \(state\.kind === 'sent'\) headingEl\.current\?\.focus\(\); \}, \[state\.kind\]\)/);
+    expect(src).not.toContain('focusRef');
   });
 
   it('T2.5 and I-5: the sent answer is M-21 whatever the address, in a status region that replaces the form; an error sits after the button', () => {

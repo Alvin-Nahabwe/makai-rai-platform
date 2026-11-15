@@ -34,8 +34,8 @@ export interface ForgotPasswordViewProps {
   state: ForgotState;
   /** False until React has hydrated; the submit button is disabled till then (default true for a static render). */
   hydrated?: boolean;
-  /** Called with the sent answer's region, which the client focuses when it replaces the form. */
-  statusRef?: Ref<HTMLDivElement>;
+  /** The card's heading, which the client focuses when the sent answer replaces the form (given, it takes focus by script only). */
+  headingRef?: Ref<HTMLHeadingElement>;
   onEmail: (v: string) => void;
   onSubmit: (e: FormEvent<HTMLFormElement>) => void;
 }
@@ -47,9 +47,9 @@ export interface ForgotPasswordViewProps {
  */
 export function ForgotPasswordView(v: ForgotPasswordViewProps) {
   return (
-    <AuthCard title={AUTH_COPY.resetHeading} lead={<p>{AUTH_COPY.forgotLead}</p>}
+    <AuthCard title={AUTH_COPY.resetHeading} titleRef={v.state.kind === 'sent' ? (v.headingRef ?? null) : undefined} lead={<p>{AUTH_COPY.forgotLead}</p>}
       footer={<p><Link href="/login">{AUTH_COPY.backToSignIn}</Link></p>}>
-      <StatusRegion message={v.state.kind === 'sent' ? AUTH_MESSAGE_COPY.resetLinkSent : null} focusRef={v.state.kind === 'sent' ? (v.statusRef ?? null) : undefined} />
+      <StatusRegion message={v.state.kind === 'sent' ? AUTH_MESSAGE_COPY.resetLinkSent : null} />
       {/* Once sent, M-21 replaces the form (design review I-5): no field to fill again, no button to press again. */}
       {v.state.kind === 'sent' ? null : (
       <form method="post" onSubmit={v.onSubmit}>
@@ -68,13 +68,13 @@ export function ForgotPasswordClient() {
   const [email, setEmail] = useState('');
   const [state, setState] = useState<ForgotState>({ kind: 'idle' });
   const hydrated = useHydrated();
-  const statusEl = useRef<HTMLDivElement>(null);
-  // The Send reset link button leaves with the form: move focus to the sent answer instead of letting it fall to the body (WCAG 2.4.3).
-  useEffect(() => { if (state.kind === 'sent') statusEl.current?.focus(); }, [state.kind]);
+  const headingEl = useRef<HTMLHeadingElement>(null);
+  // The Send reset link button leaves with the form: move focus to the card's heading, above the sent answer, instead of letting it fall to the body (WCAG 2.4.3); the status region is not the target, so a screen reader does not read M-21 twice.
+  useEffect(() => { if (state.kind === 'sent') headingEl.current?.focus(); }, [state.kind]);
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setState({ kind: 'sending' });
     setState(await requestResetLink(fetch, email));
   }
-  return <ForgotPasswordView email={email} state={state} hydrated={hydrated} statusRef={statusEl} onEmail={setEmail} onSubmit={onSubmit} />;
+  return <ForgotPasswordView email={email} state={state} hydrated={hydrated} headingRef={headingEl} onEmail={setEmail} onSubmit={onSubmit} />;
 }

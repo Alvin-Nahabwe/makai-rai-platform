@@ -37,7 +37,7 @@ function isAbandonedPrefetch(url: string, headers: Record<string, string>, error
 }
 
 /** S-04's limit with an inviter name: owner's ruling of 15 Nov 2026 15:35 (box: "Raise the limit ~4 KB"): 224,000 B. */
-const PUBLIC_BUDGET = 224_000;
+const S04_BUDGET = 224_000;
 /**
  * The stylesheets S-04's first visit receives, exactly. The kit's sheets reach S-04 through styles entries
  * (components/ui/<part>Styles.ts; the lints __tests__/lint/kit-styles-entries.test.ts and
@@ -152,7 +152,7 @@ for (const { language, inviter, letters, clientIp } of CASES) test(`NFR-PERF-02:
     const fonts = [...urls.values()].filter((u) => u.endsWith('.woff2')).map((u) => u.split('/').pop()!);
     const nameOf = (u: string) => new URL(u).pathname.split('/').pop()!;
     const sheets = [...stylesheets.keys()].map(nameOf).sort();
-    console.log(`route=/invitations/[token] inviter=${language} bytes=${measured} budget=${PUBLIC_BUDGET} abandoned_prefetches=${abandonedPrefetches.length} fonts=${fonts.join(',')} stylesheets=${sheets.length}:${sheets.join(',')}`);
+    console.log(`route=/invitations/[token] inviter=${language} bytes=${measured} budget=${S04_BUDGET} abandoned_prefetches=${abandonedPrefetches.length} fonts=${fonts.join(',')} stylesheets=${sheets.length}:${sheets.join(',')}`);
     // The bodies come from the browser's memory (CDP Network.getResponseBody): no request is made.
     const bodies = new Map<string, string>();
     for (const [url, requestId] of stylesheets) {
@@ -171,7 +171,7 @@ for (const { language, inviter, letters, clientIp } of CASES) test(`NFR-PERF-02:
     // The name's letters come from the small face; the large remainder face is not fetched.
     expect(fonts.some((f) => f.startsWith('overpass_latin_ext_common'))).toBe(true);
     expect(fonts.some((f) => f.startsWith('overpass_latin_ext_rest'))).toBe(false);
-    expect(measured, `first-visit bytes of S-04 with a ${language} inviter name`).toBeLessThanOrEqual(PUBLIC_BUDGET);
+    expect(measured, `first-visit bytes of S-04 with a ${language} inviter name`).toBeLessThanOrEqual(S04_BUDGET);
   } finally {
     await context.close();
   }

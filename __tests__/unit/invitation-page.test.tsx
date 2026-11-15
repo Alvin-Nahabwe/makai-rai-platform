@@ -166,7 +166,7 @@ describe('S-04, the invitation page (FR-ACC-01)', () => {
     expect(INVITATION_COPY.accountCreated).toBe('Your account was created. Sign in to continue.');
     // The link follows the alert region directly, outside it (a region holds a string only).
     const markup = html(<SendStatus send={'send' in failed ? failed.send : { state: 'idle' }} what="account" sendingText="x" onRetry={vi.fn()} />);
-    expect(markup).toMatch(/<div[^>]*role="alert"[^>]*>(<span[^>]*>.*?<\/span>)?Your account was created\. Sign in to continue\.<\/div><p[^>]*><a[^>]*href="\/login\?callbackUrl=%2Forgs%2Flab%2Fdashboard%3Fwelcome%3D1"[^>]*>Sign in<\/a>/);
+    expect(markup).toMatch(/<div[^>]*role="alert"[^>]*>(<span[^>]*>.*?<\/span>)?(<span class="ui-status__text">)?Your account was created\. Sign in to continue\.(<\/span>)?<\/div><p[^>]*><a[^>]*href="\/login\?callbackUrl=%2Forgs%2Flab%2Fdashboard%3Fwelcome%3D1"[^>]*>Sign in<\/a>/);
   });
 
   it('NFR-PERF-02 T16-Q11: a sign-in library that cannot load after the 201, a rejected sign-in and a refused one all count as not signed in', async () => {

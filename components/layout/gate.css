@@ -132,16 +132,30 @@ body:has(.gate--public) {
   overflow-wrap: normal;
 }
 
+/* A card's second-level heading sits below its h1 at every width: one step down the ramp, and a step more wherever the h1
+   has stepped down. */
+.gate__subheading {
+  font-size: var(--font-size-h2);
+}
+
 /* 24rem, not 30rem: the query measures the card's content box, which is under 30rem on every default card (review R2-1). */
 @container (width < 24rem) {
   .gate__card h1 {
     font-size: var(--font-size-h2);
+  }
+
+  .gate__subheading {
+    font-size: var(--font-size-h3);
   }
 }
 
 @container (width < 12rem) {
   .gate__card h1 {
     font-size: var(--font-size-h3);
+  }
+
+  .gate__subheading {
+    font-size: var(--font-size-body);
   }
 }
 
@@ -161,6 +175,11 @@ body:has(.gate--public) {
 
 @media (max-width: 1023.98px) {
   .gate--public .gate__brand {
+    display: none;
+  }
+
+  /* A public page with no route (M-23, M-24) has nothing left in its band: draw none, not an empty navy strip. */
+  .gate--public .gate__header:not(:has(.gate__where)) {
     display: none;
   }
 
