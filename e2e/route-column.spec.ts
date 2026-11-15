@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { failOnDialog } from './helpers/dialogs';
 import { expectNoHorizontalScroll } from './helpers/reflow';
-import { actAsSeat, fillValid, newProject, openQuestion, questionPath, saveStatus, saveViaApi, seatOf, stagePath } from './helpers/session';
+import { actAsSeat, fillValid, fixtureOrgSlug, newProject, openQuestion, questionPath, saveStatus, saveViaApi, seatOf, seatRequest, stagePath } from './helpers/session';
 import { QUESTION_COPY } from '../lib/question/copy';
 import { STAGE_LIST_COPY } from '../lib/question/list/copy';
 import { STATUS_MARK_COPY } from '../lib/ui/copy';
@@ -161,6 +161,44 @@ test('the stage page, as the route\'s page variant, has no horizontal scroll at 
   await page.goto(stagePath(projectId, 'pre-processing'));
   await expect(page.locator('[data-question-id]')).toHaveCount(24);
   await expectNoHorizontalScroll(page);
+});
+
+test('fix round 3 (S3-N1): with the personal data question answered and every kind in the tally, the stage page reflows at 320 by 640', async ({ page, baseURL }, testInfo) => {
+  test.setTimeout(90_000);
+  const projectId = await newProject(baseURL!);
+  const ctx = await seatRequest(baseURL!, 'assessor');
+  try {
+    const save = async (questionId: string, over: Record<string, unknown>) => {
+      const res = await ctx.post(`/api/v1/orgs/${fixtureOrgSlug()}/projects/${projectId}/decisions`, { data: {
+        requestId: crypto.randomUUID(), stage: 'pre-processing', questionId, baseVersionNumber: null, status: 'done', scopeAnswer: null,
+        optionsInPlace: [], reasonCode: null, reason: 'Saved through the API for the reflow check',
+        decidedBy: { kind: 'outside_role', role: 'supervisor' }, declaredDate: '2026-10-12', evidenceIds: [], ...over,
+      } });
+      expect(res.status(), `${questionId}: ${await res.text()}`).toBe(201);
+    };
+    await save('Q-PP-GATE-SENSITIVE', { status: null, scopeAnswer: 'yes' });
+    // Ten done (a two-digit count, with no evidence attached), then one of each other status.
+    for (const q of ['Q-PP-01', 'Q-PP-02', 'Q-PP-03', 'Q-PP-04', 'Q-PP-05', 'Q-PP-06', 'Q-PP-07', 'Q-PP-08', 'Q-PP-09', 'Q-PP-10']) await save(q, {});
+    await save('Q-PP-11', { status: 'partly' });
+    await save('Q-PP-12', { status: 'not_yet', reasonCode: 'ny_planned_later' });
+    await save('Q-PP-13', { status: 'not_applicable', reasonCode: 'na_other' });
+  } finally {
+    await ctx.dispose();
+  }
+  await actAsSeat(page, 'assessor');
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.goto(stagePath(projectId, 'pre-processing'));
+  const parts = page.locator('.stage-route__tally-part');
+  await expect(parts).toHaveCount(6);
+  await expect(page.locator('.stage-route__tally')).toContainText('personal data question answered');
+  for (const box of await parts.evaluateAll((els) => els.map((e) => e.getBoundingClientRect().right))) expect(box).toBeLessThanOrEqual(320);
+  // Every (i) is beside its word: none starts a line of its own.
+  for (const [tip, word] of await page.locator('.stage-route__keep:has(.ui-term-tip)').evaluateAll((els) => els.map((e) => {
+    const t = e.querySelector('.ui-term-tip')!.getBoundingClientRect(); const r = document.createRange(); r.selectNodeContents(e.firstChild!);
+    const w = r.getBoundingClientRect(); return [t.top, w.top];
+  }))) expect(Math.abs(tip - word)).toBeLessThan(12);
+  await expectNoHorizontalScroll(page);
+  await page.locator('.stage-route__tally').screenshot({ path: testInfo.outputPath('stage-tally-320.png') });
 });
 
 /**

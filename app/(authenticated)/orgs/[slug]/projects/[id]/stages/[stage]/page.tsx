@@ -1,4 +1,4 @@
-import { cache } from 'react';
+import { cache, type ReactNode } from 'react';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { requireIdentity } from '@/lib/auth/identity';
@@ -12,7 +12,8 @@ import { StageSealBanner } from '@/components/review/StageSealBanner';
 import { StageQuestionList } from '@/components/decision/StageQuestionList';
 import { StageMeaning } from '@/components/question/StageMeaning';
 import { Breadcrumb } from '@/components/ui/Breadcrumb';
-import { MarkShape } from '@/components/ui/StatusMark';
+import { StatusMark } from '@/components/ui/StatusMark';
+import { Icon } from '@/components/ui/Icon';
 import { Term } from '@/components/ui/Definition';
 import { TermTip } from '@/components/ui/TermTip';
 import type { StatusMarkKind } from '@/components/ui/types';
@@ -93,6 +94,13 @@ export default async function StagePage({
   );
 }
 
+/** The overdue count's words with the word "overdue" in its own element, which the stylesheet draws in the overdue red. */
+function overdueWords(words: string): ReactNode {
+  const at = words.indexOf(FR.overdueWord);
+  if (at < 0) throw new Error(`StageWorkspace: "${words}" does not hold "${FR.overdueWord}"`);
+  return <>{words.slice(0, at)}<span className="stage-route__overdue-word">{FR.overdueWord}</span>{words.slice(at + FR.overdueWord.length)}</>;
+}
+
 /** The markup of S-11, exported so a test renders it from real data without the request. */
 export function StageWorkspace({ data, show, shown }: { data: StagePageData; show: StageFilter; shown: string | null }) {
   const base = `/orgs/${data.orgSlug}/projects/${data.projectId}`;
@@ -115,21 +123,24 @@ export function StageWorkspace({ data, show, shown }: { data: StagePageData; sho
         <ul className="stage-route__tally-parts" role="list">
           {tallyParts(tallyOfRows(data.rows, data.marks)).map((t) => {
             // The owner's ruling of 15 Nov, 11:00: an (i) beside each word the vocabulary defines at first use, as the question
-            // page's strip does. It sits outside the mark's wrapper and stays on one line with the count and word.
+            // page's strip does. Reflow at 320 px (fix round 3, S3-N1): the words may wrap, but the mark and the count stay
+            // together and with the first word (a no-break space), and the last word stays with its (i). The mark is the kit's
+            // StatusMark, hidden: its words are the visible ones beside it.
             const pd = t.kind === 'scope_answered' ? TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION : null;
             const entry = TALLY_TERM[t.kind];
+            const at = t.word.lastIndexOf(' ');
+            const head = at < 0 ? '' : t.word.slice(0, at + 1);
+            const last = t.word.slice(at + 1);
             return (
               <li key={t.kind} className="stage-route__tally-part">
-                <span className="stage-route__tally-head">
-                  <span className="stage-route__tally-mark" data-mark-kind={t.kind}>
-                    <MarkShape kind={t.kind} size={16} />{`${t.n} `}
-                    {pd !== null
-                      ? <><Term of={pd}>{FR.personalDataAnswered.term}</Term>{FR.personalDataAnswered.after}</>
-                      : entry === undefined ? t.word : <Term of={entry}>{t.word}</Term>}
-                  </span>
-                  {pd !== null ? <TermTip of={pd} label={FR.whatIsTerm(pd.term)} /> : null}
-                  {entry !== undefined ? <TermTip of={entry} label={FR.whatMeans(entry.term)} /> : null}
-                </span>
+                <span className="stage-route__keep">
+                  <span className="stage-route__tally-mark" aria-hidden="true"><StatusMark kind={t.kind} size={16} words="hidden" /></span>{t.n}
+                </span>{'\u00A0'}
+                {pd !== null
+                  ? <><Term of={pd}>{FR.personalDataAnswered.term}</Term>{' '}<span className="stage-route__keep">{FR.personalDataAnswered.after.trim()}<TermTip of={pd} label={FR.whatIsTerm(pd.term)} /></span></>
+                  : entry === undefined
+                    ? t.word
+                    : <Term of={entry}>{head}<span className="stage-route__keep">{last}<TermTip of={entry} label={FR.whatMeans(entry.term)} /></span></Term>}
                 {t.extra !== null ? ` ${t.extra}` : null}
               </li>
             );
@@ -143,7 +154,11 @@ export function StageWorkspace({ data, show, shown }: { data: StagePageData; sho
           {/* The gap shows the two apart; in text (copied, or read without styles) they are a list, as they were before. */}
           {openFindings > 0 && overdueMitigations > 0 ? <span className="visually-hidden">, </span> : null}
           {overdueMitigations > 0 ? (
-            <ListLink href={`${base}#${data.stage}`}>{`${overdueMitigations} ${overdueMitigations === 1 ? F.overdueMitigation : F.overdueMitigations}`}</ListLink>
+            // As the question page's strip draws it (fix round 3, S3-N4; spec 7.1): an ink link, red only on the clock and the
+            // word "overdue".
+            <ListLink className="stage-route__overdue" href={`${base}#${data.stage}`}>
+              <Icon name="clock" size={16} />{overdueWords(`${overdueMitigations} ${overdueMitigations === 1 ? F.overdueMitigation : F.overdueMitigations}`)}
+            </ListLink>
           ) : null}
         </p>
       ) : null}
