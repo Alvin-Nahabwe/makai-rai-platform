@@ -307,3 +307,27 @@ test('S3: Q-PP-13 after the No has no serious accessibility violation and nothin
     await expectNoSeriousA11yViolations(page, `Q-PP-13 after No, ${width}`);
   }
 });
+
+/**
+ * Lane 8 I2: from 1024 px the root layout's frame is the content's one scroller, so on the writer's page (the form, with the
+ * evidence uploader's clipped file input and its label) the window itself does not scroll: nothing in the frame's content
+ * reaches past the window into the document, and the frame still scrolls this long page. Answered and empty, as the
+ * captures that found it.
+ */
+for (const state of ['answered', 'empty'] as const) {
+  test(`I2: a writer's question page (${state}) scrolls in the frame, not the window, at 1280 by 800 and 1440 by 900`, async ({ page, baseURL }) => {
+    const projectId = await newProject(baseURL!);
+    if (state === 'answered') expect((await saveViaApi(baseURL!, 'assessor', projectId, Q, { status: 'partly' })).status).toBe(201);
+    for (const [width, height] of [[1280, 800], [1440, 900]] as const) {
+      await page.setViewportSize({ width, height });
+      await openQuestion(page, 'assessor', Q, baseURL!, projectId);
+      await expect(form(page).locator('input[type="file"]'), 'the writer has the evidence uploader').toHaveCount(1);
+      const m = await page.evaluate(() => {
+        const f = document.querySelector('.page-frame')!;
+        return { doc: document.documentElement.scrollHeight, inner: window.innerHeight, frame: f.scrollHeight, frameView: f.clientHeight };
+      });
+      expect(m.doc, `${state} ${width}: the document is ${m.doc}px for a ${m.inner}px window`).toBeLessThanOrEqual(m.inner);
+      expect(m.frame, `${state} ${width}: the frame scrolls the page`).toBeGreaterThan(m.frameView);
+    }
+  });
+}

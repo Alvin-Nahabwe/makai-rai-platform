@@ -393,6 +393,12 @@ describe('fix round 4: the footer in the content column (D23, coordinator\'s opt
     expect(main).toMatch(/padding: var\(--space-8\);/);
   });
 
+  it('I2: from 1024 px the frame of a shell page is the containing block of its clipped absolute content, so none of it scrolls the window', () => {
+    // overflow alone does not make the frame a containing block: without a position, the evidence uploader's clipped
+    // file input took the initial containing block and its place below the fold made the document scroll (lane 8 I2).
+    expect(ruleIn(wide, '.page-frame:has(> .shell)')).toMatch(/position: relative;/);
+  });
+
   it('D23: the shell is a subgrid of the frame, the rail spans main\'s row and the footer\'s, the footer takes the content column', () => {
     expect(ruleIn(wide, '.page-frame > .shell')).toMatch(/grid-template-rows: subgrid;/);
     expect(ruleIn(wide, '.page-frame > .shell')).toMatch(/grid-template-columns: subgrid;/);
