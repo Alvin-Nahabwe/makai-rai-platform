@@ -28,8 +28,6 @@ export const PROJECT_COPY = Object.freeze({
   nextLabel: 'Next question',
   noDecisionYet: (n: number) => (n === 1 ? '1 question has no decision yet.' : `${n} questions have no decision yet.`),
   allDecided: 'Every question in this stage has a decision.',
-  /** After the first three questions with no decision, named; links to the stage's no-decision list. */
-  andMore: (k: number) => `and ${k} more`,
   beforeSealing: 'Before sealing, look at:',
   nothingLeftOpen: 'Nothing is left open in this stage.',
   doneNoEvidence: (n: number) => (n === 1 ? '1 decision marked Done with no evidence attached' : `${n} decisions marked Done with no evidence attached`),
@@ -46,10 +44,9 @@ export const PROJECT_COPY = Object.freeze({
   thisProject: 'This project',
   findings: 'Findings',
   editProjectDetails: 'Edit project details',
-  /** "Overdue: 1 mitigation", "Not overdue: 2 mitigations"; the word Overdue is followUp.overdue. */
+  /** "Overdue: 1 mitigation"; the word Overdue is followUp.overdue. */
   mitigationCount: (n: number) => (n === 1 ? '1 mitigation' : `${n} mitigations`),
   noOverdue: 'No overdue mitigations',
-  notOverdue: 'Not overdue',
   /** The red part of an overdue mitigation's plate (spec 7.1: red only on "Overdue" and the date). */
   wasDue: (day: string) => `was due ${day}`,
   /** The name of a stage's row of marks, one per question. */

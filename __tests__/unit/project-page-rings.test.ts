@@ -26,3 +26,22 @@ describe('S-10 stage line rings (owner 13:33)', () => {
     }
   });
 });
+
+/**
+ * I4 round 2 (lead's rulings 2 and 6): on S-10 the marks of "Recorded so far" are drawn compactly, with no connector between
+ * them (M8: the 2 px dash read as a mark of its own), so a stage's marks take at most two rows at 1440 px. Scoped to the
+ * stage line: the kit's RouteRow keeps its 28 px boxes and its connector everywhere else.
+ */
+describe('S-10 compact route row (I4 round 2)', () => {
+  const ROW = readFileSync(join(process.cwd(), 'components/ui/RouteRow.css'), 'utf8');
+
+  it('drops the connector and draws 16 px marks on the stage line only', () => {
+    expect(rule('.stage-line .ui-route-row__stop:not(:last-child)::after')).toMatch(/content:\s*none/);
+    expect(rule('.stage-line .ui-route-row__point')).toMatch(/inline-size:\s*16px/);
+  });
+
+  it('leaves the kit row as it is', () => {
+    expect(ROW).toMatch(/\.ui-route-row__stop:not\(:last-child\)::after \{[^}]*border-block-start: 2px solid var\(--color-mark\)/);
+    expect(ROW).toMatch(/\.ui-route-row__point \{[^}]*inline-size: 28px/);
+  });
+});

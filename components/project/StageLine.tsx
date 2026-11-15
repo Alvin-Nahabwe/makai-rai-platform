@@ -29,7 +29,6 @@ const P = PROJECT_COPY;
 const C = PROJECT_COPY.stage;
 const F = PROJECT_COPY.followUp;
 const SEP = ' · ';
-const NAMED = 3;
 
 /** Each stage's plain meaning, the vocabulary's sentence (decision D1, X-5), shown under its name. */
 const STAGE_TERM: Readonly<Record<Stage, DefinedEntry>> = { 'pre-processing': TERM_STAGE_1, 'in-processing': TERM_STAGE_2, 'post-processing': TERM_STAGE_3 };
@@ -112,18 +111,13 @@ function tallyDefinitions(uses: FirstUses, stage: Stage): Partial<Record<Defined
   return out;
 }
 
-/** "Still open in this stage": the questions with no decision (the first three named), open findings, then the mitigations. */
+/** "Still open in this stage": the count of questions with no decision, open findings, then the overdue mitigations (none, when none is overdue). */
 function StillOpen(p: StageLineProps): ReactElement {
   const c = p.counts;
   const stageHref = stagePath(p.base, p.stage);
-  // Never more names than the count the line states (N2): the route and the counts are two reads.
-  const named = p.route.noDecision.slice(0, Math.min(NAMED, c.noDecision));
-  // Counted against the stage's count, the number the line states, so the count and the list always add up.
-  const more = Math.max(0, c.noDecision - named.length);
   // FR-FUP-01's order (overdue first, then due date). The two lists are disjoint: lib/data/projects.ts splits one by ownerCanAct.
   const all = [...p.followUp.items, ...p.followUp.cannotAct].sort(compareFollowUp);
   const overdue = all.filter((i) => i.overdue);
-  const later = all.filter((i) => !i.overdue);
   const m = p.uses.mitigation?.stage === p.stage ? p.uses.mitigation.at : null;
   const findingFirst = p.uses.finding !== null && 'stage' in p.uses.finding && p.uses.finding.stage === p.stage;
   return (
@@ -132,13 +126,8 @@ function StillOpen(p: StageLineProps): ReactElement {
       {!hasOpenWork(c) ? <p>{C.nothingOpen}</p> : (
         <ul className="stage-line__open" role="list">
           {c.noDecision > 0 ? (
-            <li>
-              <ListLink href={`${stageHref}?show=no_decision`}>{C.noDecisionQuestions(c.noDecision)}</ListLink>
-              <ul className="stage-line__named" role="list">
-                {named.map((q) => <li key={q.id} className="stage-line__named-item"><ListLink href={q.href}>{q.text}</ListLink></li>)}
-                {more > 0 ? <li className="stage-line__more"><ListLink href={`${stageHref}?show=no_decision`}>{P.andMore(more)}</ListLink></li> : null}
-              </ul>
-            </li>
+            // A count, not the questions' names (owner's ruling, 15 Nov 2026 19:20): the link leads to the filtered list.
+            <li><ListLink href={`${stageHref}?show=no_decision`}>{C.noDecisionQuestions(c.noDecision)}</ListLink></li>
           ) : null}
           {c.openFindings > 0 ? (
             // The findings page filtered to this stage lists every open finding the count holds.
@@ -164,13 +153,6 @@ function StillOpen(p: StageLineProps): ReactElement {
               {defined(m === 'noOverdue', TERM_MITIGATION)}
             </li>
           )}
-          {later.length > 0 ? (
-            // Open mitigations that are not overdue, and those whose person can no longer act (FR-FUP-05), stay on the page.
-            <li className="stage-line__mitigations">
-              <p>{P.notOverdue}{': '}{P.mitigationCount(later.length)}</p>
-              <Plates items={later} base={p.base} />
-            </li>
-          ) : null}
         </ul>
       )}
     </div>
