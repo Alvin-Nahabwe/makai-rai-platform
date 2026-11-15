@@ -160,7 +160,7 @@ export function StageQuestionList(p: StageQuestionListProps): ReactElement {
   if (column) {
     // The question page's column: the filter as a small select above the line, then the line, folded round the open
     // question while no filter is active (lib/question/route.ts, foldRoute). No "Save all" card and no results here.
-    const parts = foldRoute(visible.map(itemOf), { currentId: p.currentQuestionId, nextId: p.nextQuestionId, filtered: show !== 'all' });
+    const parts = foldRoute(visible.map(itemOf), { currentId: p.currentQuestionId, nextId: p.nextQuestionId, fold: show === 'all' });
     return (
       <div className="stage-question-list stage-question-list--column">
         <form method="get" aria-label={L.form.label} className="route-filter route-column__filter">
@@ -216,7 +216,7 @@ export function StageQuestionList(p: StageQuestionListProps): ReactElement {
             <section key={g.moduleId} className="stage-route__section" aria-labelledby={`module-${g.moduleId}`}>
               <h2 id={`module-${g.moduleId}`} className="stage-route__topic">{g.moduleTitle}</h2>
               <p className="text-muted stage-route__topic-count">{L.summary(g.rows.length, g.noDecision)}</p>
-              <RouteLineList parts={foldRoute(g.rows.filter((r) => visible.includes(r)).map(itemOf), { filtered: true })} />
+              <RouteLineList parts={foldRoute(g.rows.filter((r) => visible.includes(r)).map(itemOf), { fold: false })} />
             </section>
           ))}
         </div>

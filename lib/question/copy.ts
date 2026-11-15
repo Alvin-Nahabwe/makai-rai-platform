@@ -90,8 +90,6 @@ export const QUESTION_COPY = Object.freeze({
     topics: (titles: readonly string[]): string => titles.join(' · '),
     nothingRecorded: 'Nothing is recorded for this stage yet. Open any question to start. You can work on the stages in any order.',
     reviewName: (name: string): string => `${name}:`,
-    /** The row of marks' label (plan 1C Task 3): the words of the question page's own navigation, nav.label. */
-    routeLabel: 'Questions in this stage',
     showMore: 'Show more' as const,
     /**
      * The question page's column: its link to the stage page. The strip's link already reads nav.allQuestions, so this one

@@ -61,6 +61,13 @@
   cursor: pointer;
 }
 
+/* On a touch screen the text is 16 px, so a phone's browser does not zoom the page when the select is tapped. */
+@media (pointer: coarse) {
+  .route-filter__select {
+    font-size: var(--font-size-body);
+  }
+}
+
 .route-filter__select:hover {
   border-color: var(--color-ink);
 }

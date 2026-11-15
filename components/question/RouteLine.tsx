@@ -74,6 +74,8 @@ function Run({ part }: { part: Extract<RoutePart<RouteLineItem>, { kind: 'run' }
           <span className="route-line__node route-line__node--run" aria-hidden="true"><Icon name="chevron-right" size={16} /></span>
           <span className="route-line__text">
             <span className="route-line__title">{L.line.run(part.first, part.last)}</span>
+            {/* Read as text, the label and the tally are two phrases ("Questions 7 to 24, 18 no decision"), not one number run. */}
+            <span className="visually-hidden">, </span>
             <span className="route-line__tally">
               {items.map((i) => <MarkShape key={i.questionId} kind={i.mark} size={16} />)}
               <span className="route-line__tally-words">{tallyWords(tally)}</span>
