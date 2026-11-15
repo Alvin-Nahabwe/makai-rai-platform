@@ -63,12 +63,9 @@ function requestIdsOf(page: Page, pattern: RegExp): string[] {
   return ids;
 }
 
-/**
- * Presses Tab until the focused control's accessible name matches, failing after 200 presses. S-10 puts each stage's row of
- * marks before the "This project" row (Route R5), one link per question, so Archive is about a hundred stops from the top.
- */
+/** Presses Tab until the focused control's accessible name matches, failing after 60 presses. */
 async function tabUntil(page: Page, name: RegExp): Promise<void> {
-  for (let i = 0; i < 200; i += 1) {
+  for (let i = 0; i < 60; i += 1) {
     await page.keyboard.press('Tab');
     const found = await page.evaluate(() => {
       const el = document.activeElement as HTMLElement | null;
@@ -77,7 +74,7 @@ async function tabUntil(page: Page, name: RegExp): Promise<void> {
     });
     if (name.test(found)) return;
   }
-  throw new Error(`tabUntil: no focus stop matched ${name} in 200 presses`);
+  throw new Error(`tabUntil: no focus stop matched ${name} in 60 presses`);
 }
 
 const path = (rest: string) => `/orgs/${fx.org.slug}${rest}`;

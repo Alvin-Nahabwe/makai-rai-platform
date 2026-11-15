@@ -639,8 +639,8 @@ test('FR-PUB-01: no page reachable as any organisation role shows a product clai
 
   // Pages no sidebar link leads to are started from their files: the authenticated pages with no dynamic
   // segment, but not those NOT_CRAWLED names, so a deleted page leaves the list by itself.
-  // The crawl reads one page per route pattern, the first it meets. S-10 links the questions with no decision before its rows
-  // of marks (Route R5), so the decided question (Q-PP-01, e2e/helpers/crawlProject.ts), whose page links its history (S-13),
+  // The crawl reads one page per route pattern, the first it meets. S-10 names its questions with no decision, as links, before
+  // anything else that leads to a question (Route R5), so the decided question (Q-PP-01, e2e/helpers/crawlProject.ts), whose page links its history (S-13),
   // is a start of its own: otherwise the question pattern is read on a question with no history to link.
   const decided = `/orgs/${slug}/projects/${crawlProject.id}/stages/pre-processing/questions/Q-PP-01`;
   const starts = ['/', decided, `/orgs/${slug}/projects/${crawlProject.id}`, ...staticPagesIn('(authenticated)').filter((p) => !(p in NOT_CRAWLED))];

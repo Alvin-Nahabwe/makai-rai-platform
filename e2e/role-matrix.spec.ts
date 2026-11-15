@@ -104,6 +104,8 @@ test.beforeAll(async () => {
 
 interface Control {
   name: string;
+  /** The census matches the name by `includes` unless this is set; then only a control whose whole text is the name. */
+  exact?: boolean;
   action: Action | null;
   mode: 'presence' | 'input';
   locator: (page: Page) => Locator;
@@ -135,7 +137,7 @@ const PROJECT_DETAIL_CONTROLS: Control[] = [
   { name: 'Edit project', action: 'project:update', mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Edit project' }) },
   { name: PROJECT_COPY.overview.downloadRecords, action: 'team:export', mode: 'presence', locator: (p) => p.getByRole('link', { name: PROJECT_COPY.overview.downloadRecords }) },
   { name: 'Archive project', action: 'project:archive', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Archive project', exact: true }) },
-  { name: PROJECT_COPY.findings, action: null, mode: 'presence', locator: (p) => p.locator('nav.project-actions').getByRole('link', { name: PROJECT_COPY.findings, exact: true }) },
+  { name: PROJECT_COPY.findings, exact: true, action: null, mode: 'presence', locator: (p) => p.locator('nav.project-actions').getByRole('link', { name: PROJECT_COPY.findings, exact: true }) },
   { name: 'questions with no decision', action: null, mode: 'presence', locator: (p) => p.locator('[data-stage="pre-processing"]').getByRole('link', { name: /questions? with no decision$/ }).first() },
   { name: 'All questions in this stage', action: null, mode: 'presence', locator: (p) => p.locator('[data-stage="pre-processing"]').getByRole('link', { name: 'All questions in this stage', exact: true }) },
   { name: 'All questions in this stage', action: null, mode: 'presence', locator: (p) => p.locator('[data-stage="in-processing"]').getByRole('link', { name: 'All questions in this stage', exact: true }) },
@@ -188,8 +190,8 @@ async function assertScreenControls(page: Page, role: OrgRole, controls: readonl
  * sets `display: none`), so this filters them out the same way it would
  * filter out `display: none` from any other cause.
  */
-async function findUnclassifiedControls(page: Page, knownNames: readonly string[]): Promise<string[]> {
-  return page.evaluate((names: readonly string[]) => {
+async function findUnclassifiedControls(page: Page, knownNames: ReadonlyArray<{ name: string; exact: boolean }>): Promise<string[]> {
+  return page.evaluate((names: ReadonlyArray<{ name: string; exact: boolean }>) => {
     function isIgnored(el: Element): boolean {
       if (el.closest('.project-card')) return true;
       // Home's next step is two navigation links (to one question and to its stage's questions), present only when the
@@ -201,9 +203,10 @@ async function findUnclassifiedControls(page: Page, knownNames: readonly string[
       // The buttons in S-32's rows (Unarchive) are not: they stay in the census.
       if (el.matches('a[href]') && el.closest('.projects-list')) return true;
       if (el.closest('nav[aria-label="Breadcrumb"]') || el.closest('.stage-list__jump')) return true;
-      // S-10's rows of marks (one link per question) and its named questions with no decision ("and k more" after them) are
-      // read-only navigation that varies with data, the same for every role, as the project cards are.
-      if (el.closest('.ui-route-row') || el.closest('.stage-line__named')) return true;
+      // S-10's named questions with no decision (links whose words are the questions', "and k more" after them) are read-only
+      // navigation that varies with data, the same for every role, as the project cards are. Only those links: any other
+      // control placed in that list stays in the census.
+      if (el.matches('.stage-line__named a[href]')) return true;
       // "Show more" appears on S-32 only once the organisation has more than 50 projects, which the shared fixture reaches as specs add them.
       if (el.matches('a[href]') && (el.textContent ?? '').trim() === 'Show more') return true;
       return false;
@@ -220,7 +223,7 @@ async function findUnclassifiedControls(page: Page, knownNames: readonly string[
       // `.includes`, not `.startsWith`: several buttons/links carry a
       // leading icon glyph ("← Back to Projects") the registry's `name`
       // deliberately omits for readability.
-      const matches = names.some((n) => text.includes(n));
+      const matches = names.some((n) => (n.exact ? text === n.name : text.includes(n.name)));
       if (!matches) unclassified.push(text);
     }
     return unclassified;
@@ -228,7 +231,7 @@ async function findUnclassifiedControls(page: Page, knownNames: readonly string[
 }
 
 async function assertNoUnclassifiedControls(page: Page, screenName: string, controls: readonly Control[]): Promise<void> {
-  const unclassified = await findUnclassifiedControls(page, controls.map((c) => c.name));
+  const unclassified = await findUnclassifiedControls(page, controls.map((c) => ({ name: c.name, exact: c.exact ?? false })));
   expect.soft(
     unclassified,
     `${screenName}: unclassified control(s) — add to the registry in e2e/role-matrix.spec.ts: ${unclassified.join(', ')}`,
