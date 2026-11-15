@@ -72,7 +72,7 @@ const LOGO_PLACES: ReadonlyArray<ShownImage> = [
   { src: '/logo-makai-white-154.webp', srcset: MAKAI_SET, alt: '', place: 'rail-brand' },
   { src: '/logo-makai-white-154.webp', srcset: MAKAI_SET, alt: 'MAK-AI RAI Platform', place: 'bar-brand' },
   { src: '/logo-makai-white-154.webp', srcset: MAKAI_SET, alt: 'MAK-AI', place: 'footer' },
-  // Lane 5's gate frame (components/layout/GateFrame.tsx, `.gate__brand`): the same logo, decorative beside the name (ruling I-3).
+  // Lane 5's gate frame (components/layout/GateFrame.tsx, `.gate__brand`; the not-found page draws the same brand in `[data-gate-look]`, app/not-found.tsx): the same logo, decorative beside the name (ruling I-3).
   { src: '/logo-makai-white-154.webp', srcset: MAKAI_SET, alt: '', place: 'gate-brand' },
   { src: '/logo-dswb-white-125.webp', srcset: '/logo-dswb-white-125.webp 1x, /logo-dswb-white-250.webp 2x', alt: 'Data Science Without Borders', place: 'footer' },
   { src: '/logo-makai-252.png', srcset: '/logo-makai-252.png 1x, /logo-makai-504.png 2x', alt: 'MAK-AI', place: 'sign-in' },
@@ -194,7 +194,7 @@ test.describe('shell pages, checked with the harness helpers', () => {
         src: e.getAttribute('src') ?? '', srcset: e.getAttribute('srcset'), alt: e.getAttribute('alt'),
         place: (e.closest('.shell-rail__brand') ? 'rail-brand' : e.closest('.shell-topbar__brand') ? 'bar-brand'
           : e.closest('footer.shell-footer') ? 'footer' : e.classList.contains('auth-logo') ? 'sign-in'
-          : e.closest('.gate__brand') ? 'gate-brand' : 'other') as Place,
+          : e.closest('.gate__brand, [data-gate-look]') ? 'gate-brand' : 'other') as Place,
       })));
       expect(strayImages(images), `${label}: images other than the logos, each in its own place`).toEqual([]);
       const exposed = await page
