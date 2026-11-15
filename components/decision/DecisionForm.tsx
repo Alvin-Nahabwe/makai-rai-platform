@@ -815,13 +815,17 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
             : null}
           </div>
         </div>
+        </fieldset>
         {/* Design N1: the unsaved line's words after its first sentence, under the bar's own place in the card, so the pinned
             bar stays one line taller and these show when it is back in its place. Hidden from assistive technology: the bar's
-            live span reads the whole sentence. Not drawn on a phone, whose fixed bar shows the whole line (DecisionForm.css). */}
+            live span reads the whole sentence. Not drawn on a phone, whose fixed bar shows the whole line (DecisionForm.css).
+            After the fieldset, not in it, so the bar stays the fieldset's last child: drawn inside it on the frame a restored
+            draft is read (the fieldset enabled, the fields refilled), Chromium left the fields' inline-size container
+            (.decision-fields, DecisionFields.css) 0 px tall, every field undrawn, until the next layout. Inside the div the
+            conflict view hides, so it is hidden with the form. */}
         {unsavedShown({ status, draftSavedAt, storageUnavailable })
           ? <p className="text-muted decision-unsaved-more" aria-hidden="true" data-unsaved-more>{F.unsavedMore}</p>
           : null}
-        </fieldset>
       </div>
     </form>
     {foot}
