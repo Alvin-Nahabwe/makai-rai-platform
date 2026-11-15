@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { EvidenceItemText, evidenceDisplayName } from '@/components/evidence/VersionEvidenceList';
+import { EvidenceItemText, evidenceDisplayName } from '@/components/evidence/EvidenceItemText';
 import { Button } from '@/components/ui/Button';
 import { FieldError, FieldLabel } from '@/components/ui/TextInput';
 import { EVIDENCE_COPY } from '@/lib/evidence/copy';

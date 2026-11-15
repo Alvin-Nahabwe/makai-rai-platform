@@ -7,7 +7,7 @@ import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
 import { statusText } from '@/lib/question/stageList';
 import { keptEvidenceLine } from '@/lib/question/draft';
 import { formatDeclaredDate, formatTime } from '@/lib/format/dates';
-import { evidenceDisplayName } from '@/components/evidence/VersionEvidenceList';
+import { evidenceDisplayName } from '@/components/evidence/EvidenceItemText';
 import { conflictText } from '@/lib/question/saveOutcome';
 import { declaredDateFromParts } from '@/lib/decision/rules';
 import type { DecisionDraft } from '@/lib/question/draft';
