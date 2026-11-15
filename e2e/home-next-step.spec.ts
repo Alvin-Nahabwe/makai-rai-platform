@@ -60,20 +60,20 @@ test.afterAll(async () => {
   await Promise.all(contexts.map((c) => c.close()));
 });
 
-test('spec 9.1: an assessor who saved sees the next step above Active projects; Continue recording opens the question it names', async ({ browser }) => {
+test('spec 9.1: an assessor who saved sees the next step above Assigned to you; Continue recording opens the question it names', async ({ browser }) => {
   const page = await signedIn(browser, fx.members.assessor);
   await page.goto(home());
   const card = section(page);
   await expect(card).toBeVisible();
-  await expect(card).toContainText(HOME_COPY.projectOf(LONG_NAME));
+  await expect(card).toContainText(LONG_NAME);
   await expect(card).toContainText('In-processing');
-  // The section comes before Active projects.
+  // The section comes first, before Assigned to you (sketch home.png).
   const [cardTop, activeTop] = await Promise.all([
     card.evaluate((el) => el.getBoundingClientRect().top),
-    page.getByRole('heading', { name: HOME_COPY.activeProjects }).evaluate((el) => el.getBoundingClientRect().top),
+    page.getByRole('heading', { name: HOME_COPY.assignedHeading }).evaluate((el) => el.getBoundingClientRect().top),
   ]);
   expect(cardTop).toBeLessThan(activeTop);
-  const code = (await card.locator('.next-step__code').textContent())?.trim() ?? '';
+  const code = (await card.locator('.home-next__code').textContent())?.trim() ?? '';
   expect(code).toMatch(/^Q-IP-/);
   expect(code).not.toBe('Q-IP-02');   // the next question with no decision, not the saved one
   await card.getByRole('link', { name: HOME_COPY.continueRecording }).click();
@@ -93,7 +93,7 @@ test('spec 9.1: Choose another question opens that stage\'s All questions', asyn
 test('T9.5: a viewer sees no next step and no Continue recording', async ({ browser }) => {
   const page = await signedIn(browser, fx.members.viewer);
   await page.goto(home());
-  await expect(page.getByRole('heading', { name: HOME_COPY.activeProjects })).toBeVisible();
+  await expect(page.getByRole('heading', { name: HOME_COPY.viewerRecent })).toBeVisible();
   await expect(page.getByText(HOME_COPY.nextStepHeading)).toHaveCount(0);
   await expect(page.getByRole('link', { name: HOME_COPY.continueRecording })).toHaveCount(0);
 });

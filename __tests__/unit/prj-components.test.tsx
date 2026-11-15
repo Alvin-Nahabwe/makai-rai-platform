@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { OrgRole } from '@prisma/client';
-import type { FollowUpItem, StageCounts } from '@/types/api';
+import type { StageCounts } from '@/types/api';
 import { STAGES, type Stage } from '@/types/record';
 import { can } from '@/lib/authz/policy';
 import { projectActions } from '@/lib/projects/can';
@@ -12,7 +12,7 @@ import { HOME_COPY } from '@/lib/home/copy';
 import { PROJECT_COPY } from '@/lib/project/copy';
 import { PROJECT_FORM_COPY } from '@/lib/project/form/copy';
 import { PROJECT_FIELD_MESSAGES } from '@/lib/projects/copy';
-import type { DashboardData, ProjectOverviewData } from '@/lib/data/projects';
+import type { ProjectOverviewData } from '@/lib/data/projects';
 
 /**
  * PRJ Tasks 5 to 7: the synchronous views of S-10, S-08, S-09 and S-32 render from loaded data (React 19's
@@ -20,16 +20,12 @@ import type { DashboardData, ProjectOverviewData } from '@/lib/data/projects';
  * clicks or moves focus: that is `e2e/prj-screens.spec.ts`.
  */
 const reviewSummaryProps = vi.hoisted(() => [] as Array<Record<string, unknown>>);
-const welcomeProps = vi.hoisted(() => [] as Array<Record<string, unknown>>);
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }), useParams: () => ({ slug: 'o' }) }));
 vi.mock('@/components/review/StageReviewsSummary', () => ({ StageReviewsSummary: (p: Record<string, unknown>) => { reviewSummaryProps.push(p); return null; } }));
-vi.mock('@/components/account/WelcomeNotice', () => ({ WelcomeNotice: (p: Record<string, unknown>) => { welcomeProps.push(p); return null; } }));
 
 const { StageColumn } = await import('@/components/project/StageColumn');
 const { ProjectOverview } = await import('@/components/project/ProjectOverview');
-const { DashboardView } = await import('@/components/project/DashboardView');
-const { MyMitigationsList } = await import('@/components/project/MyMitigationsList');
-const { ProjectCard } = await import('@/components/dashboard/ProjectCard');
+const { HomeView } = await import('@/components/home/HomeView');
 const { AllProjectsView } = await import('@/components/project/AllProjectsView');
 const { default: ProjectForm } = await import('@/components/project/ProjectForm');
 const { ArchiveProjectControl } = await import('@/components/project/ArchiveProjectControl');
@@ -99,8 +95,10 @@ describe('S-10 (Task 5)', () => {
   it('no time-zone sentence on Home or the project page', () => {
     // CONSOLIDATED section 4: the time-zone sentence is country-specific and internal; how overdue is counted is unchanged.
     const project = renderPage({});
-    const home = renderToStaticMarkup(<DashboardView data={{ orgSlug: 'o', orgName: 'Org', role: 'owner', welcome: false, canCreate: true, projects: [], mine: [], projectNames: new Map(), archivedCount: 0 }} />);
-    expect(home).toMatch(new RegExp(`<h1[^>]*>${HOME_COPY.heading}</h1>`));   // not vacuous: the view rendered, its heading inside the kit's page header
+    const home = renderToStaticMarkup(<HomeView data={{ variant: 'first-time', canCreate: true, base: {
+      orgSlug: 'o', orgId: 'o1', orgName: 'Org', role: 'owner', userId: 'u1', userName: 'Amina', welcome: false, archivedCount: 0, projects: [],
+    } }} />);
+    expect(home).toMatch(new RegExp(`<h1[^>]*>${HOME_COPY.welcomeBack('<bdi>Amina</bdi>')}</h1>`));   // not vacuous: Home rendered, its welcome the page's h1
     expect(project).toContain(PROJECT_COPY.overview.anyOrder);
     for (const html of [home, project]) expect(html).not.toMatch(/East Africa|UTC\+3|\bEAT\b/);
   });
@@ -169,70 +167,6 @@ describe('S-10 (Task 5)', () => {
       .toBe(['Classification', 'health', PROJECT_COPY.descriptive.usesPersonalData, 'Testing'].join(', '));
     expect(descriptiveLine({ processesPersonalData: false })).toBe(PROJECT_COPY.descriptive.noPersonalData);
     expect(descriptiveLine(null)).toBe('');
-  });
-});
-
-describe('S-08 (Task 6)', () => {
-  const OVERDUE_ITEM: FollowUpItem = {
-    mitigationId: 'm1', versionId: 'v1', findingId: 'f1', projectId: 'p1', stage: 'pre-processing', what: 'Write labelling guide',
-    owner: { userId: 'u1', name: 'Joseph K.', formerMember: false }, dueDate: '2026-10-28', status: 'planned', overdue: true, ownerCanAct: true,
-  };
-  const DUE_ITEM: FollowUpItem = { ...OVERDUE_ITEM, mitigationId: 'm2', what: 'Re-run check', dueDate: '2026-11-20', status: 'in_progress', overdue: false };
-  const emptyDashboard = (role: OrgRole): DashboardData => ({
-    orgSlug: 'o', orgName: 'Org', role, welcome: false, canCreate: can(role, 'project:create'), projects: [], mine: [], projectNames: new Map(), archivedCount: 0,
-  });
-
-  it('SRS 11.2 FR-PRJ-04: the project card shows per-stage counts, no assessment count and no completed count', () => {
-    const none = { openFindings: 0, overdueMitigations: 0 };
-    const html = renderToStaticMarkup(<ProjectCard orgSlug="o" project={{ id: 'p', name: 'P', descriptiveLine: 'Classification, health' }} counts={perStage(none)} />);
-    expect(html).not.toMatch(/\bAssessments?\b|\bcompleted\b/i);
-    expect(html).toMatch(/Pre-processing: \d+ open findings?, \d+ overdue mitigations?/);
-    for (const f of ['app/(authenticated)/orgs/[slug]/dashboard/page.tsx', 'components/dashboard/ProjectCard.tsx'])
-      expect(readFileSync(f, 'utf8'), f).not.toMatch(/\.assessments\b|\bassessments\s*:|\btx\.assessment\b/);
-  });
-
-  it('UX-06 (spec 7.1, plan 1A Task 15): in an overdue mitigation line only the word Overdue is red, outside any status label; a due one is plain text; each status word is a status-label with no warning class', () => {
-    const html = renderToStaticMarkup(<MyMitigationsList orgSlug="o" projectNames={new Map([['p1', 'P']])} items={[OVERDUE_ITEM, DUE_ITEM]} />);
-    expect(html).toContain(`<span class="followup-overdue">${PROJECT_COPY.followUp.overdue}</span>${PROJECT_COPY.followUp.wasDue('28 Oct 2026')}`);
-    expect(html.match(/class="followup-overdue"/g)).toHaveLength(1);
-    expect(html).not.toMatch(/status-label--warning|badge--moderate/);
-    expect(html).not.toMatch(/followup-overdue[^>]*>[^<]*was due/);
-    expect(html).toContain(PROJECT_COPY.followUp.due('20 Nov 2026')); expect(html).not.toMatch(/<[^>]*(status-label|followup-overdue)[^>]*>Due /);
-    expect([...html.matchAll(/<[a-z]+ [^>]*class="([^"]*\bstatus-label\b[^"]*)"[^>]*>([^<]*)</g)].map((m) => [m[1], m[2]])).toEqual([['status-label', 'Planned'], ['status-label', 'In progress']]);
-  });
-
-  it('FR-PRJ-04 F11: a mitigation with no text says "No text recorded." and a recorded one does not', () => {
-    const html = renderToStaticMarkup(<MyMitigationsList orgSlug="o" projectNames={new Map([['p1', 'P']])} items={[{ ...OVERDUE_ITEM, what: null }, DUE_ITEM]} />);
-    expect(html.match(new RegExp(PROJECT_COPY.followUp.erased.replace("'", '&#x27;'), 'g'))).toHaveLength(1);
-    expect(html).toContain('Re-run check');
-  });
-
-  it('FR-PRJ-04: S-08 empty states say who can create a project and that the person owns no open mitigations', () => {
-    for (const role of ['owner', 'admin', 'assessor'] as const) {
-      const html = renderToStaticMarkup(<DashboardView data={emptyDashboard(role)} />);
-      expect(html).toMatch(/No projects yet\.\s*<a[^>]*href="\/orgs\/o\/projects\/new"[^>]*>New project<\/a>/);
-      expect(html).not.toContain(HOME_COPY.whoCanCreate);
-    }
-    for (const role of ['reviewer', 'viewer'] as const) {
-      const html = renderToStaticMarkup(<DashboardView data={emptyDashboard(role)} />);
-      expect(html).toContain(`${HOME_COPY.noProjects} ${HOME_COPY.whoCanCreate}`);
-      expect(html).not.toContain('href="/orgs/o/projects/new"');
-    }
-    expect(renderToStaticMarkup(<DashboardView data={emptyDashboard('viewer')} />)).toContain(HOME_COPY.noMitigations);
-  });
-
-  it('FR-PRJ-04: the welcome notice appears only with welcome=1, with the organisation name and the role', () => {
-    welcomeProps.length = 0;
-    renderToStaticMarkup(<DashboardView data={{ ...emptyDashboard('assessor'), orgName: 'Makerere CAI Lab', welcome: true }} />);
-    expect(welcomeProps.splice(0)).toEqual([{ orgName: 'Makerere CAI Lab', role: 'assessor' }]);
-    renderToStaticMarkup(<DashboardView data={{ ...emptyDashboard('assessor'), welcome: false }} />);
-    expect(welcomeProps).toEqual([]);
-  });
-
-  it('UX-07 FR-PRJ-04: the dashboard shows no total of mitigations and no emoji', () => {
-    const html = renderToStaticMarkup(<DashboardView data={{ ...emptyDashboard('owner'), mine: [OVERDUE_ITEM, DUE_ITEM], projectNames: new Map([['p1', 'P']]) }} />);
-    expect(html).not.toMatch(/My open and overdue mitigations \(\d+\)|\d+ mitigations? in total/);
-    expect(html).not.toMatch(/\p{Extended_Pictographic}/u);
   });
 });
 

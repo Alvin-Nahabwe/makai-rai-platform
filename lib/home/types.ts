@@ -46,7 +46,14 @@ export type HomeData =
   | { variant: 'viewer'; base: HomeBase; recent: { groups: ChangeGroup[]; more: boolean }; open: Array<{ projectId: string; projectName: string; stages: StageOpen[] }> }
   | { variant: 'first-time'; base: HomeBase; canCreate: boolean };
 
-export type HomeBase = { orgSlug: string; orgId: string; orgName: string; role: OrgRole; userId: string; userName: string; welcome: boolean; archivedCount: number };
+/**
+ * `projects` is the organisation's active projects (id and name, listProjectRows' order), read with the rest: a Home item
+ * names its project by it when the organisation has more than one (plan 1B Task 10; an addition to the plan's type).
+ */
+export type HomeBase = {
+  orgSlug: string; orgId: string; orgName: string; role: OrgRole; userId: string; userName: string; welcome: boolean; archivedCount: number;
+  projects: ReadonlyArray<{ id: string; name: string }>;
+};
 
 /** The Owner's and Admin's addition: overdue mitigations and open findings with no mitigation, of active projects. */
 export type TeamLead = { overdue: FollowUpItem[]; withoutMitigation: FindingView[]; multiProject: boolean };

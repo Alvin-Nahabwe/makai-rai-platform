@@ -129,7 +129,7 @@ export async function loadHome(
   ]);
   const base: HomeBase = {
     orgSlug: opts.orgSlug, orgId: ctx.orgId, orgName: org.name, role: ctx.role, userId: identity.userId, userName: identity.name,
-    welcome: opts.welcome, archivedCount: archived.length,
+    welcome: opts.welcome, archivedCount: archived.length, projects: active.map((p) => ({ id: p.id, name: p.name })),
   };
   if (active.length === 0) return { variant: 'first-time', base, canCreate: can(ctx.role, 'project:create') };
   if (variant === 'viewer') return viewerHome(ctx, base, active, opts);
@@ -174,7 +174,7 @@ async function recorderHome(
   const lead = ctx.role === 'owner' || ctx.role === 'admin';
   const [since, stages, teamLead] = await Promise.all([
     saved === null ? null : changesSince(ctx, { since: new Date(saved.at), excludeUserId: userId, limitGroups: CHANGE_GROUPS }),
-    stagesOpen(ctx, project.id, opts.today, { orgSlug: opts.orgSlug, current: next === null ? null : { stage: next.stage, questionId: next.questionId } }),
+    stagesOpen(ctx, project.id, opts.today, { orgSlug: opts.orgSlug, recording: { current: next === null ? null : { stage: next.stage, questionId: next.questionId } } }),
     lead ? teamLeadOf(ctx, active, opts.today) : null,
   ]);
   return {
@@ -211,11 +211,19 @@ async function reviewerHome(ctx: OrgContext, base: HomeBase, active: readonly Pr
   };
 }
 
-/** A Viewer: what the team recorded in the last 14 days, and what is still open in each active project. Its stops carry no address (T9.5). */
-async function viewerHome(ctx: OrgContext, base: HomeBase, active: readonly ProjectRow[], opts: { today: CalendarDate; now: Date }): Promise<HomeData> {
+/**
+ * A Viewer: what the team recorded in the last 14 days, and what is still open in each active project. Its stops lead to
+ * the question page, which a Viewer reads as the reading view (record:read), and none is current: nothing here records
+ * (T9.5 forbids recording links, not reading ones; the lane lead's ruling on Task 2's point 4).
+ */
+async function viewerHome(
+  ctx: OrgContext, base: HomeBase, active: readonly ProjectRow[], opts: { orgSlug: string; today: CalendarDate; now: Date },
+): Promise<HomeData> {
   const [recent, open] = await Promise.all([
     changesSince(ctx, { since: new Date(opts.now.getTime() - RECENT_MS), excludeUserId: null, limitGroups: CHANGE_GROUPS }),
-    eachInTurn(active, async (p) => ({ projectId: p.id, projectName: p.name, stages: await stagesOpen(ctx, p.id, opts.today, null) })),
+    eachInTurn(active, async (p) => ({
+      projectId: p.id, projectName: p.name, stages: await stagesOpen(ctx, p.id, opts.today, { orgSlug: opts.orgSlug, recording: null }),
+    })),
   ]);
   return { variant: 'viewer', base, recent, open };
 }
@@ -224,12 +232,13 @@ async function viewerHome(ctx: OrgContext, base: HomeBase, active: readonly Proj
  * A project's three stages as Home shows them. The counts are `stageView`'s, so they equal the project page's; the stops
  * are every question of the stage in question order with the kit's mark (`markKindOf`, read as the stage page reads it:
  * a withdrawal is no decision, a question the personal data answer switches off does not apply), and the tally counts
- * them. With `links`, each stop carries its question page's address and the next step's question is `current`; without
- * (a Viewer), no stop carries either. `nextOpen` is `nextStep`'s first open question of the stage.
+ * them. Each stop carries its question page's address. With `recording` (a person who records), every stop also says
+ * whether it is the next step's question (`current`); without it (a Viewer), no stop carries `current`. `nextOpen` is
+ * `nextStep`'s first open question of the stage.
  */
 async function stagesOpen(
   ctx: OrgContext, projectId: string, today: CalendarDate,
-  links: { orgSlug: string; current: { stage: Stage; questionId: string } | null } | null,
+  links: { orgSlug: string; recording: { current: { stage: Stage; questionId: string } | null } | null },
 ): Promise<StageOpen[]> {
   const [counts, rows] = await Promise.all([
     stageView(ctx, projectId, today),
@@ -252,9 +261,10 @@ async function stagesOpen(
       const kind = markKindOf({ status: decided?.status ?? null, scopeAnswer: decided?.scopeAnswer ?? null, gated, isScopeQuestion: q.type === 'gate' });
       if (kind === 'done' && row !== undefined && row.evidenceIds.length === 0) doneNoEvidence += 1;
       const stop: RouteStop = { id: q.id, kind, title: q.text };
-      if (links !== null) {
-        stop.href = questionHref({ orgSlug: links.orgSlug, projectId, stage }, q.id);
-        stop.current = links.current !== null && links.current.stage === stage && links.current.questionId === q.id;
+      stop.href = questionHref({ orgSlug: links.orgSlug, projectId, stage }, q.id);
+      if (links.recording !== null) {
+        const { current } = links.recording;
+        stop.current = current !== null && current.stage === stage && current.questionId === q.id;
       }
       if (kind === 'scope_answered' && decided?.scopeAnswer != null) stop.scopeAnswer = decided.scopeAnswer;
       return stop;

@@ -69,7 +69,7 @@ export interface DocumentSnapshot {
 
 // ─── Field resolution (FR-DOC-02, FR-DOC-03, FR-DOC-05; SRS 10.3.1 D1 to D9) ─────────────────────────────────
 
-/** The companion text field of each project value that can be "other" (as `components/dashboard/ProjectCard.tsx` shows it). */
+/** The companion text field of each project value that can be "other" (as the project form and the descriptive line show it). */
 export const OTHER_COMPANIONS: Readonly<Record<string, string>> = { aiSystemType: 'aiSystemTypeOther', deploymentSector: 'deploymentSectorOther', datasetType: 'datasetTypeOther' };
 
 type RowRef = { sourceTable: string; sourceId: string; field: string | null };

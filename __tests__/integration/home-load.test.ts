@@ -274,7 +274,7 @@ describe('loadHome', () => {
       { orgSlug: fx.org.slug, welcome: true, today, now });
     expect(data.base).toEqual({
       orgSlug: fx.org.slug, orgId: fx.org.id, orgName: fx.org.name, role: 'assessor', userId: fx.members.assessor.userId,
-      userName: 'Shown name', welcome: true, archivedCount: 1,
+      userName: 'Shown name', welcome: true, archivedCount: 1, projects: [{ id: expect.any(String), name: 'Active' }],
     });
   });
 
@@ -291,8 +291,15 @@ describe('loadHome', () => {
     for (const data of [viewer, reviewer]) {
       expect('next' in data).toBe(false);
       expect('focus' in data).toBe(false);
-      expect(JSON.stringify(data)).not.toMatch(/"href"|"current"|\/questions\//);
+      expect(JSON.stringify(data)).not.toMatch(/"current"/);
     }
+    // The lead's ruling on Task 2's point 4: a Viewer's stops lead to the question page, which a Viewer reads as the
+    // reading view (record:read); none is "current" and nothing records. A Reviewer's Home has no stops at all.
+    expect(JSON.stringify(reviewer)).not.toMatch(/"href"|\/questions\//);
+    if (viewer.variant !== 'viewer') throw new Error('expected viewer');
+    const stops = viewer.open.flatMap((o) => o.stages.flatMap((s) => s.stops));
+    expect(stops.length).toBeGreaterThan(0);
+    for (const s of stops) expect(s.href).toBe(`/orgs/${fx.org.slug}/projects/${p.id}/stages/${s.id.startsWith('Q-PP') ? PP : s.id.startsWith('Q-IP') ? IP : 'post-processing'}/questions/${s.id}`);
   });
 
   it('recorder: the focus is the next step\'s project, its three stages with counts equal to stageView\'s, stops from the kit\'s marks and the next open question of each stage', async () => {
@@ -417,7 +424,9 @@ describe('loadHome', () => {
     expect(data.open.map((o) => [o.projectId, o.projectName])).toEqual([[p.id, 'Active']]);
     const counts = await stageView(ctxFor(fx, 'viewer'), p.id, today);
     expect(data.open[0].stages.map((s) => s.noDecision)).toEqual(STAGES.map((s) => counts[s].noDecision));
-    expect(data.open[0].stages[0].stops.find((x) => x.id === 'Q-PP-02')).toEqual({ id: 'Q-PP-02', kind: 'done', title: expect.any(String) });
+    expect(data.open[0].stages[0].stops.find((x) => x.id === 'Q-PP-02')).toEqual({
+      id: 'Q-PP-02', kind: 'done', title: expect.any(String), href: `/orgs/${fx.org.slug}/projects/${p.id}/stages/${PP}/questions/Q-PP-02`,
+    });
   });
 
   it('reviewer: reviews not sealed, sealed reviews with changes since, and the open findings they raised, of active projects', async () => {

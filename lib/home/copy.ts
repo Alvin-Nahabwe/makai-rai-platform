@@ -1,43 +1,70 @@
+import { TERM_PRODUCT } from '@/lib/vocabulary/terms';
+import { HOME_UNSAVED_COPY } from '@/lib/home/unsaved/copy';
+
 /**
- * The words of Home (spec 9.1; audit B rows 27 to 42, as plan 1A Task 17 rules them). Server only: no file with
- * 'use client' imports it (ruling X-2). The follow-up words Home shares with the project page (Overdue, the due lines,
- * the erased text, "View the finding") are the project page's, in lib/project/copy.ts.
+ * The words of Home (spec 9.1; plan 1B Task 10's HOME_COPY, verbatim where the plan gives them). Server only: no file
+ * with 'use client' imports it (ruling X-2); the unsaved-changes line's words are in lib/home/unsaved/copy.ts for that
+ * reason. The follow-up words Home shares with the project page (Overdue, the due lines, the erased text, "Assigned to")
+ * are the project page's, in lib/project/copy.ts. Sentences the plan does not give are marked "new" and listed in the
+ * task report for the owner.
  */
-
-/** A project card's line per stage in its two parts around the findings count (R5). */
-const cardLineStart = (stage: string): string => `${stage}: `;
-const cardLineEnd = (mitigations: string): string => `, ${mitigations}`;
-
 export const HOME_COPY = Object.freeze({
   titles: Object.freeze({ home: 'Home' }),
-  heading: 'Home',
-  newProject: 'New project',
-  activeProjects: 'Active projects',
-  /** Archived projects only, for every role (B#31, one word changed by the coordinator): plain text, the page's All projects link follows it. */
-  noActiveProjects: 'No active projects. Your archived projects are on the All projects page.',
-  /** No project at all (B#32, B#33): a creator's line is followed by a New project link, everyone else's by whoCanCreate. */
-  noProjects: 'No projects yet.',
-  whoCanCreate: 'Owners, Admins and Assessors can create one.',
-  allProjects: 'All projects',
-  myMitigations: 'Mitigations assigned to me',
-  noMitigations: 'No mitigations are assigned to you.',
-  projectOf: (name: string) => `Project: ${name}`,
-  /** "Your next step" (spec 9.1; plan 1B Task 10's words, rule C2): the reason line says which rule chose the question. */
+  /** 9.1 (1). The page's one h1, except after joining, when the welcome line is (`lib/org/copy.ts` welcomeLine). */
+  welcomeBack: (name: string) => `Welcome back, ${name}.`,
+  /** New (the sketch's lead, with spec 9.1's "since your last saved change"): shown only when all three parts are on the page. */
+  recorderLead: "Here is your next step, what others have done since your last saved change, and where your team's project stands.",
   nextStepHeading: 'Your next step',
   reasonNextOpen: (stage: string, day: string) => `You last saved in ${stage} on ${day}. This is the next question there with no decision.`,
   reasonLastSaved: (day: string) => `You last saved here on ${day}.`,
   reasonFirstOpen: 'You have not saved a decision in this organisation yet. This is the first question with no decision.',
   continueRecording: 'Continue recording',
   chooseAnother: 'Choose another question',
-  /** A project card's line per stage, through StageColumn's `plural`: "Pre-processing: 1 open finding, 0 overdue mitigations". */
-  card: Object.freeze({
-    openFinding: 'open finding',
-    openFindings: 'open findings',
-    overdueMitigation: 'overdue mitigation',
-    overdueMitigations: 'overdue mitigations',
-    line: (stage: string, findings: string, mitigations: string) => `${cardLineStart(stage)}${findings}${cardLineEnd(mitigations)}`,
-    /** R5: the line in its parts, so the findings count can be a link: `lineStart` + findings + `lineEnd`. */
-    lineStart: cardLineStart,
-    lineEnd: cardLineEnd,
-  }),
+  otherProjects: (n: number) => (n === 1 ? 'You have 1 other project.' : `You have ${n} other projects.`),
+  allProjects: 'All projects',
+  /** 9.1 (3); audit B row 36. */
+  assignedHeading: 'Assigned to you',
+  assignedNone: 'No mitigations are assigned to you.',
+  /** 9.1 (4). */
+  sinceHeading: (day: string) => `Since your last saved change (${day})`,
+  sinceDecisions: (who: string, n: number, stage: string) => (n === 1 ? `${who} saved 1 decision in ${stage}.` : `${who} saved ${n} decisions in ${stage}.`),
+  /** The plan's singular; the plural is new (a group counts every finding that person raised in that stage that day). */
+  sinceFindings: (who: string, n: number, stage: string) => (n === 1 ? `${who} raised a finding in ${stage}.` : `${who} raised ${n} findings in ${stage}.`),
+  /** The plan's singular; the plural is new. */
+  sinceSeals: (who: string, n: number, stage: string) => (n === 1 ? `${who} sealed a review of ${stage}.` : `${who} sealed ${n} reviews of ${stage}.`),
+  sinceNone: 'Nobody else has saved anything since then.',
+  sinceMore: 'Showing the 10 most recent changes.',
+  /** A person who left: the vocabulary's "former member", as the question page writes it. */
+  formerMember: (name: string) => `${name} (former member)`,
+  /** Audit B row on S-10. Each stage name is followed by its Definition (TERM_STAGE_1..3), review M9. */
+  stagesLead: 'You can work on the stages in any order.',
+  /** New: the stage plate's last line, "Next: …" (the sketch's "Next stop", in the spec's words). */
+  next: 'Next:',
+  /** New: the stage that holds the person's next step names it by its place, as the next-step card does. */
+  nextHere: (position: string) => `${position}, your next step`,
+  /** New: any other stage with an open question. */
+  nextFirstOf: (n: number) => (n === 1 ? 'the one question with no decision' : `the first of ${n} questions with no decision`),
+  /** New: after the red word "Overdue" (spec 7.1: red only on the word), the count in ink. */
+  overdueCount: (n: number) => (n === 1 ? ': 1 mitigation' : `: ${n} mitigations`),
+  leadOverdueHeading: 'Overdue mitigations',
+  leadNoMitigationHeading: 'Findings with no mitigation yet',
+  reviewerUnsealed: 'Reviews not sealed yet',
+  reviewerChanged: 'Sealed reviews with changes since',
+  reviewerRaised: 'Findings you raised',
+  /** New: each Reviewer list says so when it is empty, so the three headings always stand. */
+  reviewerUnsealedNone: 'No review is waiting to be sealed.',
+  reviewerChangedNone: 'No sealed review has changed since its seal.',
+  reviewerRaisedNone: 'No finding you raised is still open.',
+  viewerRecent: 'Recorded in the last 14 days',
+  /** New. */
+  viewerRecentNone: 'Nobody has saved anything in the last 14 days.',
+  viewerOpen: 'Still open',
+  /** "A place where your team records its decisions about one AI system, and why." */
+  firstTimeLead: TERM_PRODUCT.definition,
+  firstTimeCreate: 'Create a project',
+  /** 9.1 verbatim. */
+  firstTimeAsk: 'Ask an Owner, Admin or Assessor to create your project.',
+  /** Archived projects only (B#31, one word changed by the coordinator): the All projects link follows it. */
+  noActiveProjects: 'No active projects. Your archived projects are on the All projects page.',
+  unsaved: HOME_UNSAVED_COPY.unsaved,
 });

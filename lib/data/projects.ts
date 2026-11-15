@@ -1,8 +1,6 @@
 import type { OrgContext, TenantTx } from '@/lib/data/tenant';
 import { STAGES, type Actor, type CalendarDate, type DecisionStatus, type ScopeAnswer, type Stage, type StoredDecisionStatus } from '@/types/record';
-import type { OrgRole } from '@prisma/client';
 import type { FollowUpItem, StageCounts, StageReviewView } from '@/types/api';
-import { can } from '@/lib/authz/policy';
 import { descriptiveLine } from '@/lib/projects/metadataValues';
 import { projectActions, type ProjectActions } from '@/lib/projects/can';
 import { listStageReviews } from '@/lib/data/reviews';
@@ -11,9 +9,9 @@ import { NotFoundError, withOrg } from '@/lib/data/tenant';
 import { questionApplies, questionsInStage, runningContent } from '@/lib/content/loader';
 import { currentDecisionRows } from '@/lib/data/decisions';
 import { listFindings } from '@/lib/data/findings';
-import { myMitigations, projectFollowUp, projectFollowUpCounts, type StageFollowUpCounts } from '@/lib/data/followup';
+import { projectFollowUp, type StageFollowUpCounts } from '@/lib/data/followup';
 
-/** Projects, archive, stage view and dashboard (FR-PRJ). */
+/** Projects, archive and stage view (FR-PRJ). Home's data is lib/home/load.ts. */
 
 const DECISION_STATUSES: readonly DecisionStatus[] = ['done', 'partly', 'not_yet', 'not_applicable'];
 
@@ -200,14 +198,6 @@ export type ProjectOverviewData = {
   reviews: Record<Stage, StageReviewView[]>;
   can: ProjectActions;
 };
-export type DashboardData = {
-  orgSlug: string; orgName: string; role: OrgRole; welcome: boolean; canCreate: boolean;
-  projects: Array<{ project: ProjectRow; counts: Record<Stage, { openFindings: number; overdueMitigations: number }> }>;
-  mine: FollowUpItem[]; projectNames: Map<string, string>;
-  /** Archived projects of the organisation, so an empty active list can say there are none active, not none at all. */
-  archivedCount: number;
-};
-
 /** Active and archived projects of the organisation, most recently updated first (row-level security scopes them). */
 export async function listProjectRows(ctx: OrgContext): Promise<{ active: ProjectRow[]; archived: ProjectRow[] }> {
   const rows = await withOrg(ctx, (tx) => tx.project.findMany({ include: { metadata: true }, orderBy: { updatedAt: 'desc' } }));
@@ -215,23 +205,6 @@ export async function listProjectRows(ctx: OrgContext): Promise<{ active: Projec
   const archived: ProjectRow[] = [];
   for (const p of rows) (p.archivedAt === null ? active : archived).push({ id: p.id, name: p.name, descriptiveLine: descriptiveLine(p.metadata) });
   return { active, archived };
-}
-
-/** S-08 (FR-PRJ-04): every active project with its per-stage open findings and overdue mitigations, and the person's own open mitigations. */
-export async function loadDashboard(
-  ctx: OrgContext, identity: { userId: string }, opts: { orgSlug: string; welcome: boolean; today: CalendarDate },
-): Promise<DashboardData> {
-  const [{ active, archived }, org, mine] = await Promise.all([
-    listProjectRows(ctx),
-    withOrg(ctx, (tx) => tx.organization.findUniqueOrThrow({ where: { id: ctx.orgId }, select: { name: true } })),
-    myMitigations(ctx, identity.userId, opts.today),
-  ]);
-  // Every stage's counts of a project from one read of its follow-up rows, not one read per stage (C4 SI-3).
-  const projects = await Promise.all(active.map(async (project) => ({ project, counts: await projectFollowUpCounts(ctx, project.id, opts.today) })));
-  return {
-    orgSlug: opts.orgSlug, orgName: org.name, role: ctx.role, welcome: opts.welcome, canCreate: can(ctx.role, 'project:create'),
-    projects, mine, projectNames: new Map([...active, ...archived].map((p) => [p.id, p.name])), archivedCount: archived.length,
-  };
 }
 
 /**

@@ -137,7 +137,8 @@ test('UX-06: to-do counts come before recorded counts; status is words in ink, w
 
 test('NFR-A11Y-02 FR-PRJ-03: keyboard only, an owner opens S-10, archives with the inline confirmation, and sees the banner', async ({ browser }) => {
   const page = await signedIn(browser, fx.members.owner);
-  await page.goto(path('/dashboard'));
+  // From the projects list: Home now shows one project's stages (plan 1B Task 10), not a card per project.
+  await page.goto(path('/projects'));
   await tabUntil(page, new RegExp(KEYBOARD_NAME));
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(new RegExp(`/projects/${keyboardProject.id}$`));
