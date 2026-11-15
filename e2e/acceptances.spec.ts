@@ -108,7 +108,9 @@ test.describe('S-04 and S-05 in a browser', () => {
 
     await page.goto(`/invitations/${raw}`);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(INVITATION_PAGE_COPY.heading(fx.org.name));
-    await expect(page.getByText(new RegExp(`^${escapeRe(fx.members.owner.name)} ${escapeRe(INVITATION_PAGE_COPY.invitedAs(roleWithArticle('assessor')))}\\. This invitation ends on \\d{1,2} [A-Z][a-z]{2} \\d{4}\\.$`))).toBeVisible();
+    // Since plan 1B Task 6 the invited line and the end date are separate sentences, with the role's meaning between them.
+    await expect(page.getByText(new RegExp(`^${escapeRe(fx.members.owner.name)} ${escapeRe(INVITATION_PAGE_COPY.invitedAs(roleWithArticle('assessor')))}\\.$`))).toBeVisible();
+    await expect(page.getByText(/^This invitation ends on \d{1,2} [A-Z][a-z]{2} \d{4}\.$/)).toBeVisible();
     await expect(page.getByLabel(/^Email/)).toHaveValue(email);
 
     // 7.4.2 S-04 validation: Continue with nothing typed stays on step 1 and names both fields.

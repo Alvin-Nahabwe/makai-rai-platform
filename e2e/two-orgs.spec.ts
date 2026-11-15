@@ -178,9 +178,11 @@ test.describe('a member of one organisation joins a second (plan 1B Task 6, spec
     await expect(page.getByText(welcomeLine(b.org.name, roleWithArticle('assessor')))).toBeVisible();
 
     const nav = page.getByRole('navigation', { name: 'Main', exact: true });
+    // The switcher's list (the rail's Home also links to B's Home, the open organisation).
     await nav.locator('.shell-org__button').click();
-    await expect(nav.locator(`a[href="/orgs/${a.org.slug}/dashboard"]`)).toHaveCount(1);
-    await expect(nav.locator(`a[href="/orgs/${b.org.slug}/dashboard"]`)).toHaveCount(1);
+    const list = nav.locator('.shell-org__list');
+    await expect(list.locator(`a[href="/orgs/${a.org.slug}/dashboard"]`)).toHaveCount(1);
+    await expect(list.locator(`a[href="/orgs/${b.org.slug}/dashboard"]`)).toHaveCount(1);
     await context.close();
     await testDb.$disconnect();
   });
