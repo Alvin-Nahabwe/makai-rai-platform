@@ -5,7 +5,7 @@ import { ListLink } from '@/components/ui/ListLink';
 import { ButtonLink } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
 import { ItemPlate } from '@/components/ui/ItemPlate';
-import { RouteRow, type DefinedTallyKind } from '@/components/ui/RouteRow';
+import { RouteTally, type DefinedTallyKind } from '@/components/ui/RouteRow';
 import { Definition, Term } from '@/components/ui/Definition';
 import { TermTip } from '@/components/ui/TermTip';
 import { STATUS_WORD } from '@/components/followup/StageFollowUp';
@@ -80,15 +80,12 @@ export function StageLine(p: StageLineProps): ReactElement {
       <StillOpen {...p} />
       <div className="stage-line__stop stage-line__stop--recorded">
         <h3>{C.recorded}</h3>
-        {/* What is recorded: the no-decision questions are still open, so the tally leaves them out ("No decisions recorded yet").
-            The marks are drawn without links (lead's ruling on C5): each question is reached by name under Still open, "and k
-            more" or "All questions in this stage", and the row stays one labelled list a reader can pass over. */}
-        <RouteRow
-          label={P.routeLabel(name)}
-          stops={p.route.stops.map(({ id, kind, title, current, scopeAnswer }) => ({ id, kind, title, current, scopeAnswer }))}
-          tally={{ ...p.route.tally, no_decision: undefined }}
-          define={tallyDefinitions(p.uses, p.stage)}
-        />
+        {/* What is recorded, as the tally in words with the kit's mark beside each count; no row of marks per question (owner's
+            ruling of 15 Nov 2026 20:50, the sketch's counts). The no-decision questions are still open, so the tally leaves
+            them out ("No decisions recorded yet", FR-PRJ-02); Still open counts them and links to them. */}
+        <div className="ui-route-row">
+          <RouteTally tally={{ ...p.route.tally, no_decision: undefined }} define={tallyDefinitions(p.uses, p.stage)} />
+        </div>
         {p.counts.acceptedRisks + p.counts.documentsIssued > 0 ? (
           <p>
             {used(p.uses.acceptedRisk === p.stage, TERM_ACCEPTED_RISK, C.issued(plural(p.counts.acceptedRisks, C.acceptedRisk, C.acceptedRisks), plural(p.counts.documentsIssued, C.document, C.documents)))}
@@ -111,13 +108,19 @@ function tallyDefinitions(uses: FirstUses, stage: Stage): Partial<Record<Defined
   return out;
 }
 
-/** "Still open in this stage": the count of questions with no decision, open findings, then the overdue mitigations (none, when none is overdue). */
+/**
+ * "Still open in this stage": the count of questions with no decision, open findings, the overdue mitigations (or that none
+ * is overdue), then how many other open mitigations the stage has.
+ */
 function StillOpen(p: StageLineProps): ReactElement {
   const c = p.counts;
   const stageHref = stagePath(p.base, p.stage);
   // FR-FUP-01's order (overdue first, then due date). The two lists are disjoint: lib/data/projects.ts splits one by ownerCanAct.
   const all = [...p.followUp.items, ...p.followUp.cannotAct].sort(compareFollowUp);
   const overdue = all.filter((i) => i.overdue);
+  // The rest of the stage's open mitigations, one line to the Findings page, where each is listed and can be reassigned
+  // (owner's ruling of 15 Nov 2026 20:50; a departure from FR-FUP-01/05's list on S-10, which the owner made).
+  const others = all.length - overdue.length;
   const m = p.uses.mitigation?.stage === p.stage ? p.uses.mitigation.at : null;
   const findingFirst = p.uses.finding !== null && 'stage' in p.uses.finding && p.uses.finding.stage === p.stage;
   return (
@@ -153,6 +156,9 @@ function StillOpen(p: StageLineProps): ReactElement {
               {defined(m === 'noOverdue', TERM_MITIGATION)}
             </li>
           )}
+          {others > 0 ? (
+            <li><ListLink href={`${p.base}/findings?stage=${p.stage}`}>{P.otherOpenMitigations(others)}</ListLink></li>
+          ) : null}
         </ul>
       )}
     </div>

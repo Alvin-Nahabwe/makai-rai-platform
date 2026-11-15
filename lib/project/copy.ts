@@ -47,6 +47,11 @@ export const PROJECT_COPY = Object.freeze({
   /** "Overdue: 1 mitigation"; the word Overdue is followUp.overdue. */
   mitigationCount: (n: number) => (n === 1 ? '1 mitigation' : `${n} mitigations`),
   noOverdue: 'No overdue mitigations',
+  /**
+   * After the overdue plates (or "No overdue mitigations"): the stage's open mitigations not yet overdue, as one line linked
+   * to the Findings page, where each is listed and can be reassigned (owner's ruling of 15 Nov 2026 20:50).
+   */
+  otherOpenMitigations: (n: number) => (n === 1 ? '1 other open mitigation' : `${n} other open mitigations`),
   /** The red part of an overdue mitigation's plate (spec 7.1: red only on "Overdue" and the date). */
   wasDue: (day: string) => `was due ${day}`,
   /** The name of a stage's row of marks, one per question. */

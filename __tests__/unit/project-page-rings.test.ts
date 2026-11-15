@@ -28,16 +28,16 @@ describe('S-10 stage line rings (owner 13:33)', () => {
 });
 
 /**
- * I4 round 2 (lead's rulings 2 and 6): on S-10 the marks of "Recorded so far" are drawn compactly, with no connector between
- * them (M8: the 2 px dash read as a mark of its own), so a stage's marks take at most two rows at 1440 px. Scoped to the
- * stage line: the kit's RouteRow keeps its 28 px boxes and its connector everywhere else.
+ * I4 round 3 (owner's ruling of 15 Nov 2026 20:50): S-10 draws no row of marks per question, only the tally, so the page
+ * styles no stop of the kit's row (round 2's compact marks and the dead "current" outline are gone). The kit's RouteRow
+ * keeps its 28 px boxes and its connector everywhere else.
  */
-describe('S-10 compact route row (I4 round 2)', () => {
+describe('S-10 without the row of marks (I4 round 3)', () => {
   const ROW = readFileSync(join(process.cwd(), 'components/ui/RouteRow.css'), 'utf8');
+  const PAGE = readFileSync(join(process.cwd(), 'components/project/ProjectPage.css'), 'utf8');
 
-  it('drops the connector and draws 16 px marks on the stage line only', () => {
-    expect(rule('.stage-line .ui-route-row__stop:not(:last-child)::after')).toMatch(/content:\s*none/);
-    expect(rule('.stage-line .ui-route-row__point')).toMatch(/inline-size:\s*16px/);
+  it('styles no stop or point of the kit row on the stage line', () => {
+    expect(PAGE).not.toMatch(/ui-route-row__(stop|point)/);
   });
 
   it('leaves the kit row as it is', () => {
