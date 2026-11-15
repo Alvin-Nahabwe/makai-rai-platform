@@ -41,6 +41,10 @@ import type { PerfManifest } from '../scripts/load/seed-perf-fixture';
  */
 
 const S11_BUDGET = 300_000;
+// The owner's ruling of 15 Nov 2026, 20:50 EAT (box): S-12, the question page, may transfer 315,000 B on first visit; S-11
+// keeps 300,000. S-12 measured 312,535 B on lane 8's head e422129c, over 300,000 since lane 2's decision card (integration
+// 70460e70: JS +7,886, CSS +4,839, HTML +784); nothing was trimmed.
+const S12_BUDGET = 315_000;
 const PUBLIC_BUDGET = 220_000;
 /** S-04's own first-visit limit, plain names: owner's ruling of 15 Nov 2026 15:35 (box: "Raise the limit ~4 KB"): 224,000 B. */
 const S04_BUDGET = 224_000;
@@ -257,13 +261,13 @@ test.describe('the signed-in budget', () => {
     s12 = `${s11}/questions/Q-PO-01`;
   });
 
-  test('NFR-PERF-02: S-11 and S-12 of a 28-question stage transfer at most 300 KB on first visit', async ({ browser }) => {
+  test('NFR-PERF-02: S-11 of a 28-question stage transfers at most 300 KB and S-12 at most 315 KB on first visit', async ({ browser }) => {
     const baseURL = test.info().project.use.baseURL!;
-    for (const path of [s11, s12]) {
+    for (const [path, budget] of [[s11, S11_BUDGET], [s12, S12_BUDGET]] as const) {
       const m = await measure(browser, baseURL, path, storageState);
-      report(path, m, S11_BUDGET);
+      report(path, m, budget);
       expectRendered(m, path, path, path);
-      expect(m.total, `${path} first-visit bytes`).toBeLessThanOrEqual(S11_BUDGET);
+      expect(m.total, `${path} first-visit bytes`).toBeLessThanOrEqual(budget);
     }
   });
 });
