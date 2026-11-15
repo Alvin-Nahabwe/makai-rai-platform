@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireIdentityForApi } from '@/lib/auth/identity';
 import { AppError } from '@/lib/http/errors';
+import { ADMIN_ROUTE_COPY } from '@/lib/http/api/copy';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { toResponse } from '@/lib/http/toResponse';
 import { readJsonBody } from '@/lib/http/jsonBody';
@@ -27,12 +28,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ org
   try {
     assertSameOrigin(req);
     const identity = await requireIdentityForApi();
-    if (identity.platformRole !== 'admin') throw new AppError(403, 'not_platform_admin');
+    if (identity.platformRole !== 'admin') throw new AppError(403, 'not_platform_admin', ADMIN_ROUTE_COPY.notPlatformAdmin);
     const { orgId, invitationId } = await params;
     const body = parseResendRequest(await readJsonBody(req));
     const { email, orgName } = await firstOwnerInvitationOf(orgId, invitationId);
     // As route 44: no first owner is invited into an archived organisation (C4 ORG-SF-5).
-    if (await organisationArchivedForAdmin(orgId)) throw new AppError(409, 'organisation_archived');
+    if (await organisationArchivedForAdmin(orgId)) throw new AppError(409, 'organisation_archived', ADMIN_ROUTE_COPY.organisationArchived);
     const rawToken = randomBytes(32).toString('hex');
     invitationAcceptUrl(rawToken);   // throws now, before the old link is revoked, when the public origin is not configured
     const now = new Date();

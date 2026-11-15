@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { canonicalJson } from '../integrity/canonical.mjs';
 import { AppError, ValidationFailed } from '../http/errors';
+import { HTTP_COPY } from '../http/copy';
 import type { WriteOutcome } from '../../types/record';
 import { isDatabaseUnavailable } from './pgErrors';
 import { withOrg, type OrgContext, type TenantTx } from './tenant';
@@ -88,7 +89,8 @@ type ReceiptArgs<T> = {
 
 function requireRequestId(requestId: unknown): void {
   if (!isRequestId(requestId)) {
-    throw new ValidationFailed([{ field: 'requestId', message: 'requestId must be a UUID (8-4-4-4-12 hexadecimal).' }]);
+    // E-API-19, as lib/http/requestIdBody.ts words it (that module imports this one, so the text is read from the copy module).
+    throw new ValidationFailed([{ field: 'requestId', message: HTTP_COPY.outOfDate }]);
   }
 }
 

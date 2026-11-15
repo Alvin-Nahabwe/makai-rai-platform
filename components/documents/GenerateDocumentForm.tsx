@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useReducer, useRef, useState, type FormEvent, type ReactElement } from 'react';
+import { useEffect, useReducer, useRef, useState, type FormEvent, type ReactElement, type Ref } from 'react';
 import { DOCUMENT_TYPES, type DocumentType, type Stage } from '@/types/record';
 import type { DocumentPreview, IssuedDocumentView, PreviewDocumentRequest } from '@/types/api';
 import type { SealRef } from '@/types/seal';
@@ -8,11 +8,13 @@ import type { UtcInstant } from '@/types/record';
 import { requestIdFor, sendWrite, type RetryState, type SendOutcome } from '@/lib/client/retrySafeWrite';
 import { useRouter } from 'next/navigation';
 import { generateReducer, isFailed, typedToSend, type GenerateState } from '@/lib/documents/generate';
-import { DOCUMENTS_COPY, ETHICS_APPROVED, ETHICS_NOT_REQUIRED, ETHICS_STATES, STATEMENT, formatUtcDay } from '@/lib/documents/copy';
+import { DOCUMENT_TERMS, DOCUMENTS_COPY, ETHICS_APPROVED, ETHICS_NOT_REQUIRED, ETHICS_STATES, STATEMENT, formatUtcDay } from '@/lib/documents/copy';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
+import { TERM_FINGERPRINT } from '@/lib/vocabulary/terms';
 import { formatFingerprint } from '@/lib/seal/format';
 import { formatSize } from '@/lib/format/size';
 import { Button } from '@/components/ui/Button';
+import { Definition, Term } from '@/components/ui/Definition';
 import { Icon } from '@/components/ui/Icon';
 import '@/components/ui/formStyles';
 import '@/components/ui/selectStyles';
@@ -63,6 +65,23 @@ export function olderSealLine(chosen: number, latest: number): string | null {
 /** M-35's status text; the download link follows it. */
 export function issuedMessage(d: { sha256: string; byteSize: number }): string {
   return C.issued.status(formatFingerprint(d.sha256, 'short'));
+}
+
+/**
+ * The issued state (M-35): the status with the fingerprint, its definition right after it (ruling X-5: shown once, and above the issued
+ * list, so it holds the page's first "fingerprint"), the download and the way to create another.
+ */
+export function IssuedNotice({ orgSlug, projectId, reviewId, issued, statusRef }: {
+  orgSlug: string; projectId: string; reviewId: string; issued: IssuedDocumentView; statusRef?: Ref<HTMLParagraphElement>;
+}): ReactElement {
+  return (
+    <div className="documents-done">
+      <p role="status" className="documents-line" tabIndex={-1} ref={statusRef}><Term of={TERM_FINGERPRINT}>{issuedMessage(issued)}</Term></p>
+      <Definition of={TERM_FINGERPRINT} as="p" />
+      <p className="documents-line"><a href={`/api/v1/orgs/${encodeURIComponent(orgSlug)}/documents/${encodeURIComponent(issued.id)}/pdf`}>{C.issued.download(formatSize(issued.byteSize))}</a></p>
+      <p className="documents-line"><a href={`/orgs/${encodeURIComponent(orgSlug)}/projects/${encodeURIComponent(projectId)}/reviews/${encodeURIComponent(reviewId)}/documents`}>{C.issued.another}</a></p>
+    </div>
+  );
 }
 
 /** The review has no seal: only this line and the way to make one. */
@@ -223,13 +242,7 @@ export function GenerateDocumentForm(props: GenerateDocumentFormProps): ReactEle
   const inPreview = preview !== null && state.phase !== 'editing';
 
   if (issued !== null && state.phase === 'issued') {
-    return (
-      <div className="documents-done">
-        <p role="status" className="documents-line" tabIndex={-1} ref={issuedRef}>{issuedMessage(issued)}</p>
-        <p className="documents-line"><a href={`/api/v1/orgs/${encodeURIComponent(props.orgSlug)}/documents/${encodeURIComponent(issued.id)}/pdf`}>{C.issued.download(formatSize(issued.byteSize))}</a></p>
-        <p className="documents-line"><a href={`/orgs/${encodeURIComponent(props.orgSlug)}/projects/${encodeURIComponent(props.projectId)}/reviews/${encodeURIComponent(props.reviewId)}/documents`}>{C.issued.another}</a></p>
-      </div>
-    );
+    return <IssuedNotice orgSlug={props.orgSlug} projectId={props.projectId} reviewId={props.reviewId} issued={issued} statusRef={issuedRef} />;
   }
 
   if (inPreview && preview !== null) {
@@ -255,8 +268,10 @@ export function GenerateDocumentForm(props: GenerateDocumentFormProps): ReactEle
         <legend>{C.form.legend}</legend>
         {props.documents.map((d) => (
           <div key={d.type} className="documents-choice__option">
-            <input type="radio" name="document-type" id={`doc-${d.type}`} value={d.type} checked={selected === d.type} onChange={() => setSelected(d.type)} aria-describedby={`help-${d.type}`} />
-            <label htmlFor={`doc-${d.type}`}>{d.title}</label>
+            <input type="radio" name="document-type" id={`doc-${d.type}`} value={d.type} checked={selected === d.type} onChange={() => setSelected(d.type)} aria-describedby={`define-${d.type} help-${d.type}`} />
+            <label htmlFor={`doc-${d.type}`}><Term of={DOCUMENT_TERMS[d.type]}>{d.title}</Term></label>
+            {/* The document's name is first used here (spec 6): its definition, then the content's help, both describe the choice. */}
+            <Definition of={DOCUMENT_TERMS[d.type]} as="p" id={`define-${d.type}`} />
             <p id={`help-${d.type}`}>{d.help}</p>
             {d.neverSealedStages.length > 0 ? (
               <p>{C.form.neverSealedStages(d.neverSealedStages.map((st) => FINDINGS_COPY.stages[st]))}</p>

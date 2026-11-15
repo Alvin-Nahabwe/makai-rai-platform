@@ -225,8 +225,8 @@ function Reviews(p: StageLineProps): ReactElement {
                 {P.reviewNumber(r.numberInStage)}{SEP}
                 <ReviewState review={r} base={p.base} stage={p.stage} uses={p.uses} isNewest={r.id === newest?.id} />
               </p>
-              {r.preparedForErased !== null ? <p className="review-list__meta">{REVIEW_COPY.review.noteErased(formatDay(r.preparedForErased.erasedOn))}</p>
-                : r.preparedFor !== null ? <p className="review-list__meta">{REVIEW_COPY.review.note(r.preparedFor)}</p> : null}
+              {r.preparedForErased !== null ? <p className="review-list__meta">{REVIEW_COPY.review.facts.preparedFor}: {REVIEW_COPY.mounted.noteErased(formatDay(r.preparedForErased.erasedOn))}</p>
+                : r.preparedFor !== null ? <p className="review-list__meta">{REVIEW_COPY.review.facts.preparedFor}: {r.preparedFor}</p> : null}
               {r.latestSeal === null ? <BeforeSealing counts={p.counts} base={p.base} stage={p.stage} /> : null}
             </li>
           ))}

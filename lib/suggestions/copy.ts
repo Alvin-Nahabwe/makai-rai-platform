@@ -22,7 +22,8 @@ export const SUGGESTIONS_COPY = Object.freeze({
     downloadNotebook: 'Download notebook',
     downloadRequirements: 'Download the list of software it needs (requirements.txt)',
     runsOn: 'Run it on your own computer or in a notebook service.',
-    reviewed: (reviewer: string, date: string): string => `Reviewed by ${reviewer} on ${date}.`,
+    /** E-OUT-2: the reviewer's name in `data/resources.json` ("Product owner, MAK-AI") is not shown; the person reading needs only who stands behind it. */
+    reviewed: (_reviewer: string, date: string): string => `Checked by MAK-AI on ${date}.`,
     freeResources: 'Free resources',
     resourceTypeWords: Object.freeze({ framework: 'Framework', tool: 'Tool', paper: 'Paper', guidance: 'Guidance' }) as Readonly<Record<string, string>>,
     resource: (title: string, typeWord: string): string => `${title} (${typeWord})`,

@@ -6,7 +6,9 @@ import { Button } from '@/components/ui/Button';
 import { ListLink } from '@/components/ui/ListLink';
 import { Select } from '@/components/ui/Select';
 import { TextInput } from '@/components/ui/TextInput';
-import { ErrorSummary, Field, StatusLine, useFindingWrite } from '@/components/findings/FindingActions';
+import { ErrorSummary, Field, SelectBox, StatusLine, useFindingWrite } from '@/components/findings/FindingActions';
+import { Definition, Term } from '@/components/ui/Definition';
+import { TERM_RISK_AREA } from '@/lib/vocabulary/terms';
 import { characterCount, charCount, KEPT_IN_FORM, raiseFormErrors, raiseRequestBody, TEXT_MAX, type RaiseFormValue } from '@/lib/findings/formRules';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
 import { STAGE_NAMES } from '@/lib/findings/labels';
@@ -67,8 +69,16 @@ export function RaiseFindingForm({ orgSlug, projectId, data }: RaiseFindingFormP
         after={<p className="ui-count">{characterCount(charCount(v.description), TEXT_MAX)}</p>} />
       <Select id="stage" name="stage" label={C.stage} error={err('stage') ?? undefined} value={v.stage} placeholder={C.chooseStage}
         options={STAGES.map((s) => ({ value: s, label: STAGE_NAMES[s] }))} onChange={(e) => set({ stage: e.target.value, riskArea: '' })} />
-      <Select id="riskArea" name="riskArea" label={C.riskArea} error={err('riskArea') ?? undefined} value={v.riskArea} placeholder={C.noRiskArea}
-        options={ordered.map((area) => ({ value: area.id, label: C.areaOption(area.id, area.name) }))} onChange={(e) => set({ riskArea: e.target.value })} />
+      {/* The label holds the page's first use of "risk area": its definition is the field's help, which the select names. */}
+      <Field id="riskArea" label={<><Term of={TERM_RISK_AREA}>{C.riskAreaWord}</Term> {C.optional}</>} error={err('riskArea')} help={<Definition of={TERM_RISK_AREA} />}
+        render={(a) => (
+          <SelectBox>
+            <select {...a} className={err('riskArea') ? 'ui-select ui-select--invalid' : 'ui-select'} name="riskArea" value={v.riskArea} onChange={(e) => set({ riskArea: e.target.value })}>
+              <option value="">{C.noRiskArea}</option>
+              {ordered.map((area) => <option key={area.id} value={area.id}>{C.areaOption(area.id, area.name)}</option>)}
+            </select>
+          </SelectBox>
+        )} />
       <div className="finding-actions">
         <Button variant="primary" type="submit" busy={w.phase !== 'idle'}>{C.submit}</Button>
       </div>

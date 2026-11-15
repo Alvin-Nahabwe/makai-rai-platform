@@ -27,6 +27,13 @@
   margin-block-end: var(--space-6);
 }
 
+/* The stage's meaning belongs to the name line above it, not to the Stage field below (DF I3). With the stage fixed, the
+   stage line stands apart from the note's field in the same way. */
+.review-form > .ui-definition,
+.review-form > .ui-definition + p {
+  margin-block-end: var(--space-6);
+}
+
 /* The open form's note: the kit's input with its hint and count below it. */
 .review-form .ui-field__hint,
 .review-form .ui-count {
@@ -145,4 +152,25 @@
 
 .review-questions > li {
   margin-block-end: var(--space-1);
+}
+
+/* S-16's facts (S5, audit C 7): each term with its value on one row while they fit, the term in the weight of a label. */
+/* The same columns as the term list above them (TermList.css), so both lists' values start at one x (DF I2, M3). */
+.review-facts {
+  display: grid;
+  grid-template-columns: minmax(7.5rem, max-content) minmax(0, 1fr);
+  gap: var(--space-1) var(--space-3);
+}
+
+.review-facts dt {
+  font-weight: var(--font-weight-semibold);
+}
+
+.review-facts dd {
+  overflow-wrap: anywhere;
+}
+
+/* A definition in a row header keeps the definition's weight, as everywhere else (DF M1). */
+th .ui-definition {
+  font-weight: var(--font-weight-regular);
 }

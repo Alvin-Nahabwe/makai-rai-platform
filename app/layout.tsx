@@ -75,7 +75,7 @@ const overpass = localFont({
 
 export const metadata: Metadata = {
   title: PRODUCT_NAME,
-  description: 'Assess and improve responsible AI practices across the ML lifecycle',
+  description: 'Record and review the decisions your team makes about its AI system.',
   icons: { icon: '/favicon.png', apple: '/favicon-192.png' },
 };
 

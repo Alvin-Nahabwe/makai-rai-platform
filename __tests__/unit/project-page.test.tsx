@@ -433,7 +433,7 @@ describe('S-10 as three lines of stops (Route R5)', () => {
       changed: { sealNumber: 1, changedQuestions: ['Q-PP-03'], changedFindings: [] } };
     const pre = stop(lines(render({ reviews: { 'pre-processing': [sealed, newer] } }))['pre-processing'], 'reviews');
     expect(text(pre)).toContain(`${P.reviewNumber(1)} · ${P.sealed} 11 Nov 2026 · ${P.changedSinceSeal(2)}`);
-    expect(text(pre)).toContain(REVIEW_COPY.review.note('Ethics committee'));
+    expect(text(pre)).toContain(`${REVIEW_COPY.review.facts.preparedFor}: Ethics committee`);
     // Only the newest review's change count is a link: the stage page's filter compares against the newest review.
     expect(pre).not.toContain(`>${P.changedSinceSeal(2)}</a>`);
     expect(pre).toContain(`<a href="/orgs/o/projects/p1/stages/pre-processing?show=changed_since_seal">${P.changedSinceSeal(1)}</a>`);
@@ -464,7 +464,7 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     const damaged: StageReviewView = { ...REVIEW, latestSeal: SEAL, latestSealUnreadable: true, preparedForErased: { erasedOn: '2026-11-12' } };
     const pre = text(stop(lines(render({ reviews: { 'pre-processing': [damaged] } }))['pre-processing'], 'reviews'));
     expect(pre).toContain(`${P.reviewNumber(1)} · ${REVIEW_COPY.state.damaged}`);
-    expect(pre).toContain(REVIEW_COPY.review.noteErased('12 Nov 2026'));
+    expect(pre).toContain(`${REVIEW_COPY.review.facts.preparedFor}: ${REVIEW_COPY.mounted.noteErased('12 Nov 2026')}`);
     for (const [o, shown] of [[{ role: 'owner' }, true], [{ role: 'assessor' }, true], [{ role: 'viewer' }, false], [{ role: 'owner', archived: true }, false]] as const) {
       const html = render(o);
       expect(html.split(`>${REVIEW_COPY.mounted.openReview}</a>`).length - 1, JSON.stringify(o)).toBe(shown ? 3 : 0);

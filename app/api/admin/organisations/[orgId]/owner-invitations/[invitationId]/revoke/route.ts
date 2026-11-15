@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireIdentityForApi } from '@/lib/auth/identity';
 import { AppError } from '@/lib/http/errors';
+import { ADMIN_ROUTE_COPY } from '@/lib/http/api/copy';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { toResponse } from '@/lib/http/toResponse';
 import { logSecurityEvent } from '@/lib/security-logger';
@@ -17,7 +18,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ org
   try {
     assertSameOrigin(req);
     const identity = await requireIdentityForApi();
-    if (identity.platformRole !== 'admin') throw new AppError(403, 'not_platform_admin');
+    if (identity.platformRole !== 'admin') throw new AppError(403, 'not_platform_admin', ADMIN_ROUTE_COPY.notPlatformAdmin);
     const { orgId, invitationId } = await params;
     await firstOwnerInvitationOf(orgId, invitationId);
     await adminRevokeInvitation({ actorUserId: identity.userId, invitationId });

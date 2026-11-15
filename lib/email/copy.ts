@@ -47,7 +47,7 @@ export const EMAIL_COPY = Object.freeze({
     dueIntro: (organisation: string, date: string): string =>
       `A mitigation assigned to you in ${organisation} is due today, ${date}.`,
     overdueIntro: (organisation: string, date: string): string =>
-      `A mitigation assigned to you in ${organisation} was due on ${date}. It is now 7 days late.`,
+      `A mitigation assigned to you in ${organisation} was due on ${date}. It is now 7 days overdue.`,
     linkLead: 'Open Home to see it:',
     closing:
       'You get this email because this mitigation is assigned to you. You can turn these emails off in My account.',
