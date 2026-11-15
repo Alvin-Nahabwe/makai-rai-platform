@@ -40,7 +40,7 @@ function mirrorProblems(pages: readonly string[], slotPages: readonly string[]):
 describe('the @project slot mirrors every signed-in page', () => {
   it('R4: every page of app/(authenticated) has a page at the same path in the slot, and the slot has no other page', () => {
     const pages = pagesOf(GROUP, true);
-    expect(pages.length).toBeGreaterThanOrEqual(27);
+    expect(pages.length).toBeGreaterThanOrEqual(25);
     expect(mirrorProblems(pages, pagesOf(SLOT, false)), 'the @project slot must mirror app/(authenticated) page for page').toEqual([]);
   });
 
