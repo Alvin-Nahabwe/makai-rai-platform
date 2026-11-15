@@ -26,6 +26,8 @@ const routes = execFileSync('git', ['ls-files', 'app/*page.tsx'], { encoding: 'u
   .split('\n')
   // The glob also lists files such as `landingpage.tsx`; only a file named exactly page.tsx is a page.
   .filter((f) => /(^|\/)page\.tsx$/.test(f))
+  // A parallel-route slot (`@name`) mirrors pages that already have an address; it is not one.
+  .filter((f) => !f.split('/').some((s) => s.startsWith('@')))
   .map(
     (f) =>
       '/' +

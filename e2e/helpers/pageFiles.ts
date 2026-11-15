@@ -17,6 +17,8 @@ export function pageFiles(): PageFile[] {
   const walk = (dir: string, segments: string[]) => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       if (entry.isDirectory()) {
+        // A parallel-route slot (`@name`) mirrors pages that already have an address; it is not one.
+        if (entry.name.startsWith('@')) continue;
         walk(path.join(dir, entry.name), [...segments, entry.name]);
       } else if (/^page\.(tsx|ts|jsx|js)$/.test(entry.name)) {
         const group = segments.find((s) => /^\(.+\)$/.test(s)) ?? null;

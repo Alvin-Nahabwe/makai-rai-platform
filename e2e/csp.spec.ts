@@ -68,7 +68,9 @@ function productionCsp(): string {
 function pageFiles(): string[] {
   const files = execFileSync('git', ['ls-files', 'app/**/page.tsx'], { encoding: 'utf8' })
     .split('\n')
-    .filter(Boolean);
+    .filter(Boolean)
+    // A parallel-route slot (`@name`) mirrors pages that already have an address; it is not one.
+    .filter((f) => !f.split('/').some((s) => s.startsWith('@')));
   if (files.length === 0) throw new Error('git ls-files found no page.tsx under app/, so there is nothing to sweep');
   return files;
 }
@@ -79,7 +81,8 @@ function pageFiles(): string[] {
 function pageFileCount(): number {
   return fs
     .readdirSync('app', { recursive: true, encoding: 'utf8' })
-    .filter((entry) => /(^|[\\/])page\.(tsx?|jsx?|mdx?)$/.test(entry)).length;
+    .filter((entry) => /(^|[\\/])page\.(tsx?|jsx?|mdx?)$/.test(entry) && !entry.split(/[\\/]/).some((s) => s.startsWith('@')))
+    .length;
 }
 
 /**
