@@ -25,7 +25,7 @@ const SLASH = 'line stroke=currentColor stroke-linecap=round stroke-width=2 x1=6
 const EXPECTED_SHAPES: Record<StatusMarkKind, string[]> = {
   done: ['circle class=ui-mark__done-disc cx=12 cy=12 r=9', 'path class=ui-mark__done-check d=M8 12.5l2.7 2.7L16 9.8 fill=none stroke-linecap=round stroke-linejoin=round stroke-width=2.2'],
   partly: ['circle cx=12 cy=12 fill=none r=8 stroke=currentColor stroke-width=2', 'path d=M12 4a8 8 0 0 1 0 16z fill=currentColor'],
-  not_yet: ['circle cx=12 cy=12 fill=none r=8 stroke=currentColor stroke-width=2.5'],
+  not_yet: ['circle cx=12 cy=12 fill=none r=8 stroke=currentColor stroke-width=3.5'],
   not_applicable: ['circle cx=12 cy=12 fill=none r=8 stroke=currentColor stroke-width=2', SLASH],
   does_not_apply: ['circle cx=12 cy=12 fill=none r=8 stroke=currentColor stroke-dasharray=3 2.6 stroke-width=2', SLASH],
   scope_answered: ['rect fill=currentColor height=14 width=14 x=5 y=5'],

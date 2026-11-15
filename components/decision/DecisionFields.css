@@ -83,8 +83,10 @@
 
 /*
  * One row (the sketch's .row): Decided by beside Decided on, both from the top; the date's three boxes sit in the row and
- * its Today and "Same date as" buttons wrap under them inside its column. The card is the container: below 27rem of it
- * (about 430 px, where the select and the three boxes no longer fit side by side) the two stack.
+ * its Today and "Same date as" buttons wrap under them inside its column. The card is the container. Design finish
+ * review M2: the chosen name never wraps or is cut, so Decided by keeps at least 16rem; side by side needs that, the gap,
+ * and room for the three boxes and one shortcut on its line (about 25rem), so below 42rem of the card the two stack, each
+ * the card's width.
  */
 .decision-fields {
   container-type: inline-size;
@@ -97,10 +99,42 @@
   align-items: start;
 }
 
-@container (min-width: 27rem) {
+@container (min-width: 42rem) {
   .decision-fields__row {
-    grid-template-columns: minmax(11rem, 1fr) minmax(0, 1.3fr);
+    grid-template-columns: minmax(16rem, 1fr) minmax(0, 1.5fr);
   }
+}
+
+/*
+ * Design finish review M3: the two "Same date as" shortcuts are conveniences, so they are quiet, as the kit's quiet
+ * button (no fill, no border, the link colour, underlined), in small type so each keeps one line in the card; Today, the
+ * first button, stays the date's one bordered button. They stay native buttons, in the tab order, with their words
+ * (DateField draws every button after Today from `shortcuts`). On a screen too narrow for a shortcut's words they wrap
+ * rather than being cut.
+ */
+.decision-fields .ui-date__actions > .ui-button ~ .ui-button {
+  border-color: transparent;
+  background-color: transparent;
+  color: var(--color-link);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-regular);
+  text-align: start;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.decision-fields .ui-date__actions > .ui-button ~ .ui-button:hover {
+  background-color: var(--color-tint);
+}
+
+/*
+ * Design finish review m3: "(required)" in the label's own weight and ink (bold, --color-ink, as .ui-field__label and the
+ * legends) after every label of the card, as it is inside the personal data question's legend ("Answer (required)",
+ * whose words the legend holds as one text, pinned by a protected test).
+ */
+.decision-fields .ui-field__required {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-ink);
 }
 
 /* The starting note ("The form shows the current decision...") sits clear of the first group under it. */

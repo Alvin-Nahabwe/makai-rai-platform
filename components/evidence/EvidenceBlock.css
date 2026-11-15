@@ -117,7 +117,7 @@
 /*
  * The decision card's evidence (lead's ruling D4, 15 Nov 2026; the phone sketch's "Evidence: none yet [Add evidence]"):
  * one line, the legend beside "None yet." and the two add buttons; the link form under the line; then the question's
- * own examples, the private-data line, and the closed "What to attach". 16 px under it, as the sketch's groups.
+ * own examples, the private-data line, and the closed "Accepted files". 16 px under it, as the sketch's groups.
  */
 .evidence-block--card {
   margin-block-end: var(--space-4);
@@ -194,4 +194,11 @@
 
 .evidence-block__more > p {
   margin: var(--space-1) 0 0;
+}
+
+/* After a web link's name, the host it really goes to (T3 item 8, webLink): regular weight and muted ink, in its own
+   element, so a name that copies the words cannot pass for them. */
+.evidence-item__host {
+  font-weight: var(--font-weight-regular);
+  color: var(--color-ink-muted);
 }

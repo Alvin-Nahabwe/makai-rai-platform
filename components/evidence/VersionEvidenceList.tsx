@@ -2,8 +2,7 @@ import type { ReactElement } from 'react';
 import { DownloadLink } from '@/components/ui/DownloadLink';
 import { EVIDENCE_COPY } from '@/lib/evidence/copy';
 import { formatDay } from '@/lib/format/dates';
-import { evidenceKind, stripBidiControls } from '@/lib/evidence/format';
-import { isHttpUrl } from '@/lib/evidence/link';
+import { evidenceKind, stripBidiControls, webLink } from '@/lib/evidence/format';
 import type { EvidenceItemView } from '@/types/api';
 
 export type VersionEvidenceListProps = { orgSlug: string; items: EvidenceItemView[] };
@@ -15,21 +14,28 @@ export function evidenceDisplayName(item: EvidenceItemView): string {
 
 /**
  * One item as text: a file is a download link stating its kind and size (UX-39), a link is a plain anchor only when
- * its address is http or https (never next/link, which prefetches: FR-EVD-03), and an erased file reads its name, then
+ * its address parses as http or https (never next/link, which prefetches: FR-EVD-03), named "<name> (<host>, opens
+ * another site)" from webLink's one parse, and an erased file reads its name, then
  * "File erased on {date} at your organisation's request." (copy audit B#277, answer Q16) with no link. Every file name sits inside `<bdi>` so a right-to-left override cannot reorder its neighbours.
  */
 export function EvidenceItemText({ orgSlug, item }: { orgSlug: string; item: EvidenceItemView }): ReactElement {
   if (item.kind === 'link') {
     if (item.url === null) return <>{EVIDENCE_COPY.list.linkAddressErased}</>;
-    // The address shown has no bidi controls (E14); href keeps the stored address, which the browser percent-encodes.
+    // T3 item 8 (security, routed from lane 1): ONE parse gives the href and the host shown (webLink), so a name, or an
+    // address such as "https:evil.example" that a browser on this page reads as a same-site path, cannot show one site and
+    // go to another. Names and addresses shown have no bidi controls (E14).
     const address = stripBidiControls(item.url);
     const label = item.label === null ? null : stripBidiControls(item.label);
-    const shown = <bdi>{label ?? address}</bdi>;
+    const web = webLink(item.url);
+    if (web === null) {
+      // Not a web address: its name and the whole cleaned address as text; no link and no claim to open a site.
+      return label === null ? <bdi>{address}</bdi> : <><bdi>{label}</bdi>{' ('}<bdi>{address}</bdi>{')'}</>;
+    }
+    // The name (the author's, or else the address), then the host it really goes to, inside the link so its name says it.
     return (
-      <>
-        {isHttpUrl(item.url) ? <a href={item.url} rel="noopener noreferrer">{shown}</a> : shown}
-        {label === null ? null : <>{' ('}<bdi>{address}</bdi>{')'}</>}
-      </>
+      <a href={web.href} rel="noopener noreferrer">
+        <bdi>{label ?? address}</bdi>{' '}<span className="evidence-item__host">{EVIDENCE_COPY.list.linkTo(web.host)}</span>
+      </a>
     );
   }
   const name = item.fileName === null ? null : stripBidiControls(item.fileName);

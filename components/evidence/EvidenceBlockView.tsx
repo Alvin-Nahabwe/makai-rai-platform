@@ -47,7 +47,7 @@ export interface EvidenceBlockViewProps {
   registerFileInput?: (el: HTMLInputElement | null) => void;
   /** The decision card only (spec 9.3 item 5): the question's own examples of what to attach, as a list after the legend. */
   examples?: readonly string[];
-  /** The decision card only: its one-line layout, "None yet." with nothing attached, and the closed "What to attach". */
+  /** The decision card only: its one-line layout, "None yet." with nothing attached, and the closed "Accepted files". */
   decisionCard?: boolean;
   /** The decision card only: evidence the form holds that the block cannot name (a restored draft's), so not "None yet.". */
   keptCount?: number;
@@ -72,6 +72,7 @@ const NAMED_BUTTON = 'ui-button ui-button--secondary ui-button--compact';
  */
 export function EvidenceBlockView(p: EvidenceBlockViewProps): ReactElement {
   const helpId = `${p.idBase}-help`;
+  const typesId = `${p.idBase}-types`;
   const fileInputId = `${p.idBase}-file`;
   const urlId = `${p.idBase}-link-url`;
   const labelId = `${p.idBase}-link-label`;
@@ -103,9 +104,12 @@ export function EvidenceBlockView(p: EvidenceBlockViewProps): ReactElement {
 
   // The decision card (lead's ruling D4, 15 Nov 2026): one line, the legend, "None yet." (or the items under it) and the two
   // add buttons; the link form under them; the question's own examples, visible; the private-data line; the accepted types
-  // and the stored sentence in a closed "What to attach". "None yet." is false while the form holds evidence the block
+  // and the stored sentence in a closed "Accepted files". "None yet." is false while the form holds evidence the block
   // cannot name (keptCount, the kept-evidence box under the block), so it is not said then (review round 1, A-I2).
   const card = p.decisionCard === true;
+  // Review round 2, A N-1: in the card the types line sits in a closed disclosure, and a description computed from the help
+  // skips a hidden descendant; a hidden element named directly is read. So the add controls name the types line itself.
+  const addDescribedBy = card ? `${helpId} ${typesId}` : helpId;
   const noneYet = card && p.notUploaded.length + p.items.length + p.added.length + p.uploads.length + (p.keptCount ?? 0) === 0;
   const examples = p.disabled || p.examples === undefined || p.examples.length === 0 ? null : (
     <div className="evidence-block__examples">
@@ -118,8 +122,8 @@ export function EvidenceBlockView(p: EvidenceBlockViewProps): ReactElement {
       <p>{EVIDENCE_COPY.help.keep}</p>
       {card ? (
         <details className="evidence-block__more">
-          <summary>{EVIDENCE_COPY.whatToAttach}</summary>
-          <p className="evidence-block__types">{EVIDENCE_COPY.help.types}</p>
+          <summary>{EVIDENCE_COPY.acceptedFiles}</summary>
+          <p id={typesId} className="evidence-block__types">{EVIDENCE_COPY.help.types}</p>
           <p className="evidence-block__types">{EVIDENCE_COPY.stored}</p>
         </details>
       ) : <p className="evidence-block__types">{EVIDENCE_COPY.help.types}</p>}
@@ -173,11 +177,11 @@ export function EvidenceBlockView(p: EvidenceBlockViewProps): ReactElement {
     <div className="evidence-block__add">
       {noneYet ? <p className="evidence-block__none">{EVIDENCE_COPY.noneYet}</p> : null}
           <label htmlFor={fileInputId} className="visually-hidden">{EVIDENCE_COPY.chooseFiles}</label>
-          <input id={fileInputId} type="file" multiple tabIndex={-1} ref={(el) => p.registerFileInput?.(el)} aria-describedby={helpId} className="visually-hidden"
+          <input id={fileInputId} type="file" multiple tabIndex={-1} ref={(el) => p.registerFileInput?.(el)} aria-describedby={addDescribedBy} className="visually-hidden"
             onChange={(e) => { p.onChooseFiles?.(e.target.files); e.target.value = ''; }} />
           <div className="evidence-block__actions">
-            <Button variant="secondary" ref={(el) => p.registerAddFileButton?.(el)} aria-describedby={helpId} onClick={() => p.onOpenFilePicker?.()}>{EVIDENCE_COPY.addFile}</Button>
-            <button type="button" className="ui-button ui-button--secondary" aria-describedby={helpId} aria-expanded={p.linkFormOpen} onClick={() => p.onOpenLink?.()}>{EVIDENCE_COPY.addLinkToggle}</button>
+            <Button variant="secondary" ref={(el) => p.registerAddFileButton?.(el)} aria-describedby={addDescribedBy} onClick={() => p.onOpenFilePicker?.()}>{EVIDENCE_COPY.addFile}</Button>
+            <button type="button" className="ui-button ui-button--secondary" aria-describedby={addDescribedBy} aria-expanded={p.linkFormOpen} onClick={() => p.onOpenLink?.()}>{EVIDENCE_COPY.addLinkToggle}</button>
           </div>
           {p.linkFormOpen ? (
             <div className="evidence-block__link">

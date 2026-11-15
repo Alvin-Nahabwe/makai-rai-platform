@@ -451,7 +451,8 @@ type InkSnapshot = {
  *   - a legacy label has words and its own colour is `--color-ink` or `--color-ink-muted`.
  * One exception, the owner's ruling R8 (15 Nov 2026, over spec D4): Done's mark is the filled green check the kit draws,
  * a disc (`.ui-mark__done-disc`) filled with `--color-saved` and a check (`.ui-mark__done-check`) stroked with
- * `--color-surface`. Those two graphics, and only they, are held to exactly those paints instead of the rules above,
+ * `--color-surface`, inside a shape drawn for Done (`svg.ui-mark__shape[data-shape-kind="done"]`) whose nearest
+ * `[data-mark-kind]`, if any, is Done too. Those two graphics, and only they, are held to exactly those paints instead of the rules above,
  * and the check's tick shape is allowed; the mark's own colour, its words and every other mark stay ink.
  * A page with neither kind of element fails (a check that found nothing must not pass). Known limits: a tick drawn
  * as a closed outline, over two subpaths or two `line` elements, with a collinear extra point or with curves is not
@@ -496,8 +497,12 @@ export async function expectStatusMarksInk(page: Page): Promise<void> {
         d: tag === 'path' ? (el.getAttribute('d') ?? '') : null,
         points: tag === 'polyline' ? (el.getAttribute('points') ?? '') : null,
         content: null,
-        // R8: only inside a mark's shape, as the kit draws it (StatusMark's MarkShape).
-        done: el.closest('svg.ui-mark__shape') === null ? null
+        // R8: only inside a mark's shape drawn for Done, as the kit draws it (StatusMark's MarkShape writes
+        // data-shape-kind="done"), and, where a mark element around it names a kind (StatusMark's data-mark-kind, RouteRow's
+        // stop), only when that kind is Done too: Done's check drawn for a Partly mark is a green tick, not the ruling
+        // (review round 2, A N-2).
+        done: el.closest('svg.ui-mark__shape[data-shape-kind="done"]') === null
+          || (el.closest('[data-mark-kind]') !== null && el.closest('[data-mark-kind]')?.getAttribute('data-mark-kind') !== 'done') ? null
           : el.matches('.ui-mark__done-disc') ? ('disc' as const) : el.matches('.ui-mark__done-check') ? ('check' as const) : null,
       };
       const out: Array<typeof own | { html: string; tag: string; pseudo: '::before' | '::after'; color: string; background: string; borders: string[]; paint: null; d: null; points: null; content: string; done: null }> = [own];

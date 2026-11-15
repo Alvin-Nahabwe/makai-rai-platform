@@ -73,7 +73,7 @@ export const DECISION_FORM_COPY = Object.freeze({
     heading: 'Your decision',
     /** The corner on a wide screen: "Saved as version N · <saved date>" (R2's words); the date sits after the separator. */
     savedAs: (n: number): string => `Saved as version ${n} \u00b7 `,
-    /** The foot's "Entered by: <name> on <saved time>.": the time is the reader's (LocalTime), so it follows these words. */
+    /** The foot's "Entered by: <name> on <saved time>.": the time, in East Africa time with its zone, follows these words. */
     enteredBy: (name: string): string => `Entered by: ${name} on `,
     next: (title: string): string => `Next: ${title}`,
     position: (n: number, of: number): string => `Question ${n} of ${of}`,
@@ -81,15 +81,21 @@ export const DECISION_FORM_COPY = Object.freeze({
   /**
    * The line before Save on what this save will do (R2; spec 9.3 item 6). Each sentence is true of the code that decides
    * findings (lib/data/findings.ts): only Partly and Not yet raise a finding, and only when the question has no open one
-   * (onShortfallSaved, lib/data/findings.ts:311-334); after a finding closed by an accepted risk a new one is raised only
-   * when a version since was Done or Not applicable, or this status is worse than the accepted one (raisesAfterAcceptance,
-   * :337-360); Done and Not applicable never close a finding themselves, they let the team close it
+   * (onShortfallSaved, lib/data/findings.ts:311-334); after a finding closed by an accepted risk a new one is raised
+   * unless the risk was accepted at this level or a worse one and no version since was Done or Not applicable
+   * (raisesAfterAcceptance, :337-358); Done and Not applicable never close a finding themselves, they let the team close it
    * (findingsToCloseByDecision, :837). The personal data answer switches the conditional questions (lib/content/loader.ts,
    * questionApplies): Yes and Not sure keep them, No switches them off.
    */
   consequence: Object.freeze({
     version: (n: number): string => `This save becomes version ${n}.`,
-    raises: (status: string): string => `Saving \u2018${status}\u2019 raises a finding for this question. If your team accepted this risk earlier, it raises one only if a version since was Done or Not applicable, or this answer is worse than the one accepted.`,
+    /**
+     * The owner's sentence, exact (ruled 15 Nov 2026, 11:45; not to be reworded). True of raisesAfterAcceptance: a finding
+     * is withheld only when the version the risk was accepted on was Partly or Not yet ("at this level or a worse one"),
+     * no Done or Not applicable version lies between it and this one, and this status is not worse; a withdrawal has no
+     * level, so a risk accepted on one never withholds a finding (__tests__/integration/findings-consequence-sentence.test.ts).
+     */
+    raises: (status: string): string => `Saving \u2018${status}\u2019 raises a finding for this question, unless your team already accepted this risk at this level or a worse one and no version since was Done or Not applicable.`,
     keepsOpen: (status: string): string => `Saving \u2018${status}\u2019 keeps a finding open for this question until your team closes it.`,
     raisesNone: (status: string): string => `Saving \u2018${status}\u2019 raises no finding.`,
     closesNot: (status: string): string => `Saving \u2018${status}\u2019 does not close the open finding by itself. Your team closes it on the finding's page.`,

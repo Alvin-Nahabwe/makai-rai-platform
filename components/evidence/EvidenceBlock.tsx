@@ -37,7 +37,7 @@ export type EvidenceBlockProps = {
   onLinkInput?: (link: { url: string; label: string }) => void;
   /** The decision card only: the question's own examples of what to attach (EvidenceBlockView). */
   examples?: readonly string[];
-  /** The decision card only: its one-line layout, "None yet." and the closed "What to attach" (EvidenceBlockView). */
+  /** The decision card only: its one-line layout, "None yet." and the closed "Accepted files" (EvidenceBlockView). */
   decisionCard?: boolean;
   /** The decision card only: evidence the form holds that the block cannot name (EvidenceBlockView). */
   keptCount?: number;

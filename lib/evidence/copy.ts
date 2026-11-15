@@ -93,6 +93,11 @@ export const EVIDENCE_COPY = Object.freeze({
     fileNameErased: 'File name erased',
     /** Follows the file's name (or "File name erased"): a full stop, a space, then the sentence. */
     fileErased: (date: string): string => `. File erased on ${date} at your organisation's request.`,
+    /**
+     * After a web link's name: the host it really goes to, from the same parse as its href (lib/evidence/format.ts webLink),
+     * so a name cannot claim another site. The same words as lane 1's reading card (QUESTION_COPY.reading.linkTo there).
+     */
+    linkTo: (host: string): string => `(${host}, opens another site)`,
   }),
   /** The kind of a stored file, by its type (lib/evidence/format.ts `evidenceKind`). */
   kinds: Object.freeze({
@@ -106,6 +111,10 @@ export const EVIDENCE_COPY = Object.freeze({
   examples: 'For example:',
   stored: 'Your file is stored as it is. The platform checks its type and records a fingerprint. It does not open or run the file.',
   noneYet: 'None yet.',
-  /** The decision card's closed disclosure over the accepted types and the stored sentence (lead's ruling D4, 15 Nov 2026). */
-  whatToAttach: 'What to attach',
+  /**
+   * The decision card's closed disclosure over the accepted types and the stored sentence (lead's ruling D4, 15 Nov 2026).
+   * "Accepted files", not "What to attach": the question's examples of what to attach sit outside it, visible (review round
+   * 2, A N-1).
+   */
+  acceptedFiles: 'Accepted files',
 });

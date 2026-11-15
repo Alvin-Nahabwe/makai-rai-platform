@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { QuestionPanelData } from '@/lib/question/panel';
 import type { LoadedQuestion } from '@/types/content';
@@ -127,8 +128,8 @@ describe('the saved mark in the card\'s corner (spec 7.3)', () => {
     const foot = h.match(/<div class="decision-card__meta">[\s\S]*?<\/div><div class="decision-card__more">/)![0];
     expect(words(foot)).toContain(`${UI_COPY.saved.decidedOn} 12 Oct 2026 \u00b7 ${UI_COPY.saved.savedAt} 12 Oct 2026, 07:42 UTC`);
     expect(words(foot)).toContain(`${UI_COPY.saved.onPlatform} ${UI_COPY.saved.keptBefore(1)}${UI_COPY.saved.keptLink}.`);
-    // A-minor (review round 1): the entered time is the reader's, as the saved time (LocalTime: UTC until hydration).
-    expect(words(foot)).toContain('Decided by: Principal investigator (no platform account). Entered by: Joseph K. on 12 Oct 2026, 07:42 UTC.');
+    // T3 item 9 (coordinator's ruling): the entered time is East Africa time, with its zone, as lane 1's reading card.
+    expect(words(foot)).toContain('Decided by: Principal investigator (no platform account). Entered by: Joseph K. on 12 Oct 2026, 10:42 EAT.');
     expect(foot).toMatch(/<time dateTime="2026-10-12T07:42:00.000Z">/);
     expect(foot).toMatch(new RegExp(`<a href="${esc(HISTORY)}"[^>]*>${esc(QUESTION_COPY.reading.history(2))}</a>`));
     expect(h.indexOf('>Save decision</button>')).toBeLessThan(h.indexOf('class="decision-card__meta"'));
@@ -207,14 +208,14 @@ describe('the reason, the main reason and Decided by', () => {
 });
 
 describe('the evidence (spec 9.3 item 5)', () => {
-  it('D4: one line, "Evidence", "None yet." and the two add buttons; the examples visible; the private-data line; the types and the stored sentence in a closed "What to attach"', () => {
+  it('D4: one line, "Evidence", "None yet." and the two add buttons; the examples visible; the private-data line; the types and the stored sentence in a closed "Accepted files"', () => {
     const h = card();
     const ev = h.match(/<fieldset class="evidence-block evidence-block--card">[\s\S]*?<\/fieldset>/)![0];
     expect(ev).toMatch(/^<fieldset[^>]*><legend>Evidence<\/legend><div class="evidence-block__add"><p class="evidence-block__none">None yet\.<\/p>/);
     const examples = ev.match(/<div class="evidence-block__examples">[\s\S]*?<\/div>/)![0];
     for (const e of QUESTION.evidenceExamples) expect(examples).toContain(`<li>${e}</li>`);
     expect(examples).not.toMatch(/<details/);
-    expect(decode(ev)).toContain(`<p>${EVIDENCE_COPY.help.keep}</p><details class="evidence-block__more"><summary>${EVIDENCE_COPY.whatToAttach}</summary>`);
+    expect(decode(ev)).toContain(`<p>${EVIDENCE_COPY.help.keep}</p><details class="evidence-block__more"><summary>${EVIDENCE_COPY.acceptedFiles}</summary>`);
     const more = decode(ev.match(/<details[\s\S]*?<\/details>/)![0]);
     expect(more).not.toMatch(/<details[^>]*\bopen/);
     expect(more).toContain(EVIDENCE_COPY.help.types);
@@ -332,5 +333,116 @@ describe('review round 1', () => {
     expect(h).toMatch(/<textarea[^>]*id="decision-reason"[^>]*rows="4"/);
     expect(h).toMatch(/<\/fieldset><\/div><p id="decision-date-hint" class="decision-fields__date-hint">/);
     for (const part of ['day', 'month', 'year']) expect(h).toMatch(new RegExp(`<input[^>]*id="decision-${part}"[^>]*aria-describedby="decision-date-hint"`));
+  });
+});
+
+describe('T3a: the card\'s finish (owner\'s sentence, design must-fix and minors, review round 2, routed items)', () => {
+  const css = (p: string) => readFileSync(p, 'utf8');
+
+  it('item 1: Partly and Not yet with no open finding say the owner\'s sentence, exactly, then the version', () => {
+    const owner = (s: string) => `Saving ‘${s}’ raises a finding for this question, unless your team already accepted this risk at this level or a worse one and no version since was Done or Not applicable.`;
+    expect(consequence(card({ current: V2 }))).toBe(`${owner('Partly')} ${C.version(3)}`);
+    expect(consequence(card({ current: { ...V2, status: 'not_yet' } }))).toBe(`${owner('Not yet')} ${C.version(3)}`);
+  });
+
+  it('M2: Decided by keeps at least 16rem beside Decided on, and the two stack when the card is narrower than both', () => {
+    const fields = css('components/decision/DecisionFields.css');
+    expect(fields).toMatch(/\.decision-fields\s*\{[^}]*container-type:\s*inline-size/);
+    expect(fields).toMatch(/@container \(min-width: 42rem\)\s*\{\s*\.decision-fields__row\s*\{\s*grid-template-columns:\s*minmax\(16rem, 1fr\) minmax\(0, 1\.5fr\);/);
+    expect(fields).not.toMatch(/minmax\(11rem/);
+    expect(fields).toMatch(/\.decision-fields__row\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\);/);
+  });
+
+  it('M3: the two "Same date as" shortcuts are quiet single-line controls, still buttons with their names', () => {
+    const lastOwn = '2026-11-01';
+    const h = card({ current: V2, lastOwnSaveDate: lastOwn as never });
+    expect(h).toMatch(new RegExp(`<button class="ui-button ui-button--secondary ui-button--compact" type="button">${esc(F.sameAsMyLast('1 Nov 2026'))}</button>`));
+    expect(h).toMatch(new RegExp(`<button class="ui-button ui-button--secondary ui-button--compact" type="button">${esc(F.sameAsCurrent('12 Oct 2026'))}</button>`));
+    // Today stays the date's one bordered button; every button after it (the shortcuts) is drawn quiet: no fill, no border,
+    // the link colour, underlined, small type.
+    const quiet = /\.decision-fields \.ui-date__actions > \.ui-button ~ \.ui-button\s*\{([^}]*)\}/.exec(css('components/decision/DecisionFields.css'))?.[1] ?? '';
+    for (const rule of [/border-color:\s*transparent/, /background-color:\s*transparent/, /color:\s*var\(--color-link\)/, /text-decoration:\s*underline/, /font-size:\s*var\(--font-size-small\)/]) expect(quiet).toMatch(rule);
+  });
+
+  it('M4: the next question\'s words show an ellipsis when cut, and the phone keeps "Question n of N" visible in small type', () => {
+    const form = css('components/decision/DecisionForm.css');
+    const words = /\.decision-next__words\s*\{([^}]*)\}/.exec(form)?.[1] ?? '';
+    expect(words).toMatch(/line-clamp:\s*2/);
+    expect(words).toMatch(/text-overflow:\s*ellipsis/);
+    // Chromium draws no ellipsis on an end-aligned clamped line that ends on a whole word: start-aligned in a box pushed to the end.
+    expect(words).toMatch(/text-align:\s*start/);
+    expect(words).toMatch(/margin-inline-start:\s*auto/);
+    expect(form).not.toMatch(/\.decision-next__position\s*\{\s*display:\s*none/);
+    expect(form).toMatch(/@media \(max-width: 768px\)[\s\S]*\.decision-next__words\s*\{[^}]*white-space:\s*nowrap/);
+    // The whole text stays the link's name: the words and the position, never cut in the markup.
+    const link = card().match(/<a class="decision-next"[^>]*>([\s\S]*?)<\/a>/)![1];
+    expect(words.length).toBeGreaterThan(0);
+    expect(textOf(link)).toBe(`${F.card.next(NEXT.text)}${F.card.position(3, 24)}`);
+  });
+
+  it('m1: Save is 48 px high with 24 px each side, in the card\'s own stylesheet', () => {
+    const rule = /\.decision-card \.decision-save-bar__row \.ui-button--primary\s*\{([^}]*)\}/.exec(css('components/decision/DecisionCard.css'))?.[1] ?? '';
+    expect(rule).toMatch(/min-height:\s*48px/);
+    expect(rule).toMatch(/padding-inline:\s*var\(--space-6\)/);
+  });
+
+  it('m3: "(required)" is in the label\'s own weight and ink after every label of the card, as after "Answer"', () => {
+    const rule = /\.decision-fields \.ui-field__required\s*\{([^}]*)\}/.exec(css('components/decision/DecisionFields.css'))?.[1] ?? '';
+    expect(rule).toMatch(/font-weight:\s*var\(--font-weight-bold\)/);
+    expect(rule).toMatch(/color:\s*var\(--color-ink\)/);
+  });
+
+  it('m4: the corner\'s saved shape is Done\'s mark (the filled green disc with its check), not the outline check', () => {
+    const head = card({ current: V2, historyCount: 2 }).match(/<div class="decision-card__head">[\s\S]*?<\/div><\/div>/)![0];
+    // The kit's done geometry, in classes of its own: a saved shape, not a status mark the no-score checks would hold to ink.
+    expect(head).toMatch(/<svg class="decision-card__saved-svg"[^>]*aria-hidden="true"[^>]*><circle class="decision-card__saved-disc" cx="12" cy="12" r="9"><\/circle><path class="decision-card__saved-check" d="M8 12.5l2.7 2.7L16 9.8"/);
+    expect(head).not.toContain('ui-mark__shape');
+    const css = readFileSync('components/decision/DecisionCard.css', 'utf8');
+    expect(css).toMatch(/\.decision-card__saved-disc\s*\{\s*fill:\s*var\(--color-saved\);/);
+    expect(css).toMatch(/\.decision-card__saved-check\s*\{\s*stroke:\s*var\(--color-surface\);/);
+    expect(head).not.toContain('class="ui-icon"');
+    expect(words(head)).toBe(`${F.card.heading}${F.card.savedAs(2)}12 Oct 2026`);
+  });
+
+  it('A N-1: the accepted types line has its own id, and the add buttons and the file input name it directly', () => {
+    const ev = card().match(/<fieldset class="evidence-block evidence-block--card">[\s\S]*?<\/fieldset>/)![0];
+    const types = /<p id="([^"]+)" class="evidence-block__types">([^<]*)<\/p>/.exec(ev);
+    expect(types?.[2]).toBe(EVIDENCE_COPY.help.types);
+    const help = /<div id="([^"]+)" class="evidence-block__help">/.exec(ev)![1];
+    for (const control of [/<button[^>]*aria-describedby="([^"]+)"[^>]*>Add a file<\/button>/, /<button[^>]*aria-describedby="([^"]+)"[^>]*>Add a link<\/button>/, /<input[^>]*type="file"[^>]*aria-describedby="([^"]+)"/]) {
+      expect(control.exec(ev)?.[1]).toBe(`${help} ${types![1]}`);
+    }
+    expect(decode(ev)).toContain(`<summary>${EVIDENCE_COPY.acceptedFiles}</summary>`);
+  });
+
+  it('item 7: the seal marker of the current version sits in the card\'s foot, below the Save row', () => {
+    const h = card({ current: V2, historyCount: 2, seals: [{ sealId: 's1', sealNumber: 2, reviewName: 'Ethics board' }] as never });
+    const marker = h.indexOf('class="seal-markers"');
+    expect(marker).toBeGreaterThan(h.indexOf('>Save decision</button>'));
+    expect(marker).toBeGreaterThan(h.indexOf('class="decision-card__meta"'));
+    expect(card({ current: V2 })).not.toContain('seal-markers');
+  });
+
+  it('item 7: the phone\'s saved mark carries data-decision-version', () => {
+    expect(card({ current: V2, historyCount: 2 })).toMatch(/<div class="ui-saved" data-decision-version="2">/);
+  });
+
+  it('item 9: "Entered by" is in East Africa time and names its zone; the saved time beside it is the reader\'s and names its zone too', () => {
+    const h = card({ current: V2, historyCount: 2 });
+    const foot = h.match(/<div class="decision-card__meta">[\s\S]*?<\/div><div class="decision-card__more">/)![0];
+    // 07:42 UTC is 10:42 in Kampala; the reader's zone is UTC until hydration, and the server render says so.
+    expect(words(foot)).toContain('Entered by: Joseph K. on 12 Oct 2026, 10:42 EAT.');
+    expect(words(foot)).toContain(`${UI_COPY.saved.savedAt} 12 Oct 2026, 07:42 UTC`);
+    const mark = h.match(/<div class="ui-saved"[\s\S]*?<\/div>/)![0];
+    expect(words(mark)).toContain(`${UI_COPY.saved.savedAt} 12 Oct 2026, 07:42 UTC`);
+  });
+});
+
+describe('T3a: the history list (routed items 7 and 9)', () => {
+  it('the version line carries data-decision-version; "Entered by" is in East Africa time with its zone', async () => {
+    const { DecisionHistoryList } = await import('@/components/decision/DecisionHistoryList');
+    const h = renderToStaticMarkup(<DecisionHistoryList orgSlug="acme" entries={[{ version: V2, wording: null, seals: [] }]} />);
+    expect(h).toMatch(/<h2[^>]*data-decision-version="2"[^>]*>Version 2<\/h2>/);
+    expect(words(h)).toContain('Joseph K., 12 Oct 2026 10:42 EAT');
   });
 });

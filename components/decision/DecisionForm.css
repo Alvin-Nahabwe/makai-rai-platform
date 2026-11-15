@@ -186,12 +186,21 @@
   color: var(--color-ink-muted);
 }
 
-/* The next question's words on two lines at most; the whole text stays the link's name. */
+/* The next question's words on two lines at most, ending in an ellipsis when cut (design finish review M4), so a cut is
+   seen; the whole text stays the link's name. Chromium draws no ellipsis on a clamped last line that is aligned to the
+   end and ends on a whole word (seen at 1280 px in the T3a screenshots), so the words are aligned to the start inside a
+   box as wide as they are, pushed to the end: a short title still sits at the right. */
 .decision-next__words {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
+  text-overflow: ellipsis;
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  margin-inline-start: auto;
+  text-align: start;
 }
 
 .decision-next__position {
@@ -202,7 +211,8 @@
 }
 
 /* R9, a phone: Save stays the one orange control in the fixed bar; the next question is a quiet link beside it, its words
-   on two lines at most and without the position, so the bar stays short. */
+   on one line ending in an ellipsis and "Question n of N" under them in small type (design finish review M4), so the
+   bar stays as short as Save. */
 @media (max-width: 768px) {
   .decision-save-bar__row {
     flex-wrap: nowrap;
@@ -223,7 +233,11 @@
     font-size: var(--font-size-small);
   }
 
-  a.decision-next .decision-next__position {
-    display: none;
+  /* One line cut with an ellipsis (a one-line clamp drew none at 375 px in Chromium; seen in the T3a screenshots). */
+  .decision-next__words {
+    display: block;
+    -webkit-line-clamp: none;
+    line-clamp: none;
+    white-space: nowrap;
   }
 }
