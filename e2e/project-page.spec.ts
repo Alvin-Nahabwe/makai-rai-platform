@@ -127,6 +127,27 @@ for (const [width, height] of [[1280, 800], [1440, 900], [375, 812]] as const) {
   });
 }
 
+test('I4 (owner 15 Nov 19:20, count not names): at 1440x900 the actions row and every line\'s end stop are inside the first view, with the page scrolled to 0', async ({ browser }) => {
+  // A project of its own with nothing recorded yet, as the finish review captured it: every stage shows its full row of
+  // marks, the first-use definitions and the empty Reviews stop.
+  const fresh = await addProject(fx, { name: `Lines fit ${RUN}` });
+  const page = await signedIn(browser, fx.members.assessor);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(projectPath(fresh.id));
+  await expect(page.locator('.stage-line__named')).toHaveCount(0);
+  const feet = await page.evaluate(() => {
+    const bottom = (el: Element | null) => (el === null ? null : Math.round(el.getBoundingClientRect().bottom));
+    return {
+      scroll: document.querySelector('div.page-frame')?.scrollTop ?? 0,
+      lastStops: [...document.querySelectorAll('.stage-line__stop--last')].map(bottom),
+      actions: bottom(document.querySelector('nav.project-actions')),
+    };
+  });
+  expect(feet.scroll).toBe(0);
+  expect(feet.actions, `actions row foot ${feet.actions}`).not.toBeNull();
+  for (const b of [...feet.lastStops, feet.actions]) expect(b, `foot ${b} px of ${JSON.stringify(feet)}`).toBeLessThanOrEqual(900);
+});
+
 test('R5 at 375 px: the lines stack in stage order, the jump links show, Archive is still last in the wrapped row', async ({ browser }) => {
   const page = await signedIn(browser, fx.members.owner);
   await page.setViewportSize({ width: 375, height: 812 });

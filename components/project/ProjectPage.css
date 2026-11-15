@@ -6,7 +6,13 @@
 /* The header: the descriptive line at the left and "You can work on the stages in any order." with its three-bar glyph at
    the right (the sketch's .sub), wrapping under each other when narrow. */
 .project-page .ui-page-header {
-  margin-block: 0 var(--space-4);
+  margin-block: 0 var(--space-3);
+}
+
+/* The sketch's spacing between a line's stops (its 10 px row gap), shared by the grid rows and the line drawn between the
+   stops' markers, so the two never disagree. */
+.project-lines-frame {
+  --stage-line-gap: 0.625rem;
 }
 
 .project-page .ui-page-header__lead {
@@ -57,7 +63,7 @@
 .project-lines-frame {
   container-type: inline-size;
   border-block-start: 1px solid var(--color-border-container);
-  padding-block-start: var(--space-4);
+  padding-block-start: var(--space-3);
 }
 
 .stage-list__jump {
@@ -82,13 +88,13 @@
 /* One stage: five stops on a 4 px line. The rail is the column left of the stops; each stop draws its marker and the line
    down to the next stop on its own pseudo-elements, so the line follows whatever height the stops take. Borders, not
    backgrounds, draw both, so forced colours keep them. Geometry: the rail is 2.25rem wide; the line is 4 px wide with
-   its centre 1rem from the line's edge; each marker is centred on it; stops are --space-3 apart (the sketch's 10 px, on
-   the 4 px grid). */
+   its centre 1rem from the line's edge; each marker is centred on it; stops are --stage-line-gap apart (the sketch's
+   10 px). */
 .stage-line {
   position: relative;
   display: grid;
   grid-template-rows: repeat(5, auto);
-  row-gap: var(--space-3);
+  row-gap: var(--stage-line-gap);
   padding-inline-start: 2.25rem;
   overflow-wrap: anywhere;
   min-inline-size: 0;
@@ -104,7 +110,7 @@
   content: '';
   position: absolute;
   inset-inline-start: calc(1rem - 2px - 2.25rem);
-  inset-block: 0.75rem calc(-1 * var(--space-3) - 0.75rem);
+  inset-block: 0.75rem calc(-1 * var(--stage-line-gap) - 0.75rem);
   border-inline-start: 4px solid var(--color-mark);
 }
 
@@ -180,6 +186,7 @@
   order: 3;
   flex-basis: 100%;
   margin: var(--space-1) 0 0;
+  line-height: 1.45;
 }
 
 .stage-line h3 {
@@ -201,19 +208,23 @@
 }
 
 .stage-line__open > li + li {
-  margin-block-start: var(--space-2);
+  margin-block-start: var(--space-1);
 }
 
 .stage-line__open a {
   font-weight: var(--font-weight-semibold);
 }
 
+/* A first-use definition under its term: one small line where the words fit, the sketch's .def (13 px, 1.45), set tight
+   under the term it explains. The head stop's meaning keeps the small size (the sketch's header p). */
 .stage-line__open .ui-definition,
 .stage-line__stop--recorded .ui-definition,
 .stage-line__stop--reviews .ui-definition,
 .project-page__share .ui-definition {
   display: block;
-  margin-block-start: var(--space-1);
+  margin-block-start: 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
 }
 
 .stage-line__quiet {
@@ -276,8 +287,45 @@
 /* Recorded so far: the kit's row of marks and its tally (the kit sets the tally at the small size); the accepted-risk line
    under it, at the same size. */
 .stage-line__stop--recorded > p {
-  margin-block-start: var(--space-2);
+  margin-block-start: var(--space-1);
   font-size: var(--font-size-small);
+}
+
+/* The marks drawn compactly on this page only (I4; the kit's RouteRow.css keeps its 28 px boxes and connector elsewhere):
+   16 px shapes 4 px apart, so a stage of up to 28 questions takes two rows at 1440 px. The marks are not links here (lead's
+   ruling on C5), so the 24 px target does not apply. No connector: at this pitch the 2 px dash between two marks read as a
+   mark of its own (M8, "dot-dash"); evenly spaced in one wrapped row, the marks still read as the stage's questions in
+   order. The current stop keeps its ring, drawn as an outline so it takes no room. */
+.stage-line .ui-route-row {
+  gap: var(--space-1);
+}
+
+.stage-line .ui-route-row__stops {
+  gap: var(--space-1);
+}
+
+.stage-line .ui-route-row__stop {
+  padding-inline-end: 0;
+}
+
+.stage-line .ui-route-row__stop:not(:last-child)::after {
+  content: none;
+}
+
+.stage-line .ui-route-row__point {
+  inline-size: 16px;
+  block-size: 16px;
+}
+
+.stage-line .ui-route-row__point > .ui-mark__shape {
+  inline-size: 16px;
+  block-size: 16px;
+}
+
+.stage-line .ui-route-row__stop--current .ui-route-row__point {
+  border: 0;
+  outline: 2px solid var(--color-action-text);
+  outline-offset: 1px;
 }
 
 /* Reviews: one white list (the sketch's .rl), each review its name, then its quiet lines. */
@@ -319,7 +367,7 @@
 
 .stage-line__stop--reviews > p + p,
 .stage-line__stop--reviews > .review-list + p {
-  margin-block-start: var(--space-2);
+  margin-block-start: var(--space-1);
 }
 
 /* The next step (owner's ruling on C3): "Next question" in orange bold and the question in words (at most two lines, R7),
@@ -330,7 +378,7 @@
   display: none;
   order: 5;
   flex-basis: 100%;
-  margin-block-start: var(--space-3);
+  margin-block-start: var(--space-2);
 }
 
 .next-step-block--stacked {
@@ -367,7 +415,7 @@
 }
 
 .stage-line__primary {
-  margin-block-start: var(--space-3);
+  margin-block-start: var(--space-2);
 }
 
 .stage-line__primary .ui-button--primary {
@@ -376,7 +424,7 @@
 }
 
 .stage-line__stop--last > p:last-child {
-  margin-block-start: var(--space-2);
+  margin-block-start: 0;
 }
 
 .stage-line__stop--last > p:last-child a {
@@ -394,7 +442,7 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
     grid-template-rows: repeat(5, auto);
     column-gap: var(--space-5);
-    row-gap: var(--space-3);
+    row-gap: var(--stage-line-gap);
   }
 
   .stage-line {
@@ -429,7 +477,7 @@
 
 /* The share line, once, after the stages. */
 .project-page__share {
-  margin-block: var(--space-6) var(--space-4);
+  margin-block: var(--space-3) var(--space-2);
   max-inline-size: var(--measure-reading);
   color: var(--color-ink-muted);
 }
@@ -441,7 +489,7 @@
   align-items: center;
   gap: var(--space-2) var(--space-6);
   border-block-start: 1px solid var(--color-border-container);
-  padding-block: var(--space-2);
+  padding-block: 0.125rem var(--space-1);
   font-size: var(--font-size-small);
 }
 
