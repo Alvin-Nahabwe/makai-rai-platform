@@ -260,7 +260,7 @@ export default async function QuestionPage({
   // The project and stage the panel just found: the stage's load answers null only for a project it cannot see, which the
   // panel has already refused (notFound). A null here is a defect, not a page to show without its strips.
   if (stageData === null) throw new Error(`QuestionPage: the stage list of ${stage} was not found for a project the panel found`);
-  const route = <RouteColumn data={stageData} currentQuestionId={data.question.id} show={show} />;
+  const route = <RouteColumn data={stageData} currentQuestionId={data.question.id} nextQuestionId={data.position.nextId} show={show} />;
   return (
     <>
       <QuestionPanelRegions data={data} openWork={openWork} route={route} stage={stageData} />

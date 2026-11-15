@@ -87,7 +87,7 @@ describe('S-11 page', () => {
   it('FR-DEC-06 (screen): a new project\'s stage shows every question as No decision and the W-2 empty line', async () => {
     const h = await renderS11('?show=all');
     expect(h).toContain(QUESTION_COPY.stage.nothingRecorded);
-    expect([...h.matchAll(/>No decision</g)].length).toBe(STAGE_QUESTION_COUNT);
+    expect([...h.matchAll(/class="status-label">No decision</g)].length).toBe(STAGE_QUESTION_COUNT);
     expect(h).toContain(`${STAGE_QUESTION_COUNT} questions`);
     // SPEC-4 W-2: module headings with their own counts, under a stage subtitle
     expect(h).toMatch(/<h2[^>]*>Problem Formulation<\/h2>\s*<p[^>]*>7 questions · 7 with no decision<\/p>/);
@@ -98,7 +98,7 @@ describe('S-11 page', () => {
     await addDecision(fx, project.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId: c1.contentVersionId, status: 'partly', declaredDate: '2026-10' });
     const h = await renderS11('?show=all');
     expect(h).not.toContain('Nothing is recorded for this stage yet.');
-    expect(h).toMatch(/data-question-id="Q-PP-01"[\s\S]*?class="ui-mark__words">Partly<\/span>[\s\S]*?class="ui-plate__state">Oct 2026</);
+    expect(h).toMatch(/data-question-id="Q-PP-01"[\s\S]*?class="status-label">Partly<\/span> · Oct 2026</);
   });
 
   it('FR-DEC-06 (screen): a filter with no results says so and links to all', async () => {

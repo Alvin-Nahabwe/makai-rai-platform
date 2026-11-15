@@ -1,9 +1,95 @@
-/* All questions, the stage page (plan 1C Task 3, spec 7.2 and 8): the row of marks under the count line, the "Show"
-   filter as chips, and the question plates in their topic lists. Kit classes are not restyled here; these are the page's
-   own wrappers. Nothing here depends on script or storage, so nothing moves on load. */
+/* All questions, the stage page, as the route's page variant (plan 1C Task 3, spec 7.2 and 8; owner's answer R1, lane 1
+   Task 2): the head (breadcrumb, the stage with its meaning, topics, the tally in words with marks, follow-up links), the
+   "Show" filter as chips, "Save all", then every question on one line (route-line.css) with the topics as quiet headings
+   along it. Kit classes are not restyled here; these are the page's own wrappers. Nothing here depends on script or
+   storage, so nothing moves on load. */
 
-.stage-route__marks {
-  margin-block: var(--space-4) var(--space-6);
+.stage-route h1 {
+  margin-block-end: var(--space-1);
+}
+
+.stage-route__topics {
+  margin-block: var(--space-2) 0;
+  color: var(--color-ink-muted);
+}
+
+/* The tally: the count, then each kind with its mark (spec 7.2), as the sketch's top strip draws it. The mark's colour is
+   the marks' own (--color-mark), so each part is a status in words beside its shape. */
+.stage-route__tally {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-5);
+  margin-block: var(--space-4) 0;
+  padding-block: var(--space-3);
+  border-block: 1px solid var(--color-border-container);
+}
+
+.stage-route__count {
+  margin: 0;
+  font-weight: var(--font-weight-bold);
+}
+
+.stage-route__tally-parts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stage-route__tally-part {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-mark);
+}
+
+.stage-route__followup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  margin-block: var(--space-3) 0;
+  font-weight: var(--font-weight-semibold);
+}
+
+.stage-route__followup a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--target-min);
+}
+
+.stage-route__seal {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: baseline;
+  margin-block: var(--space-3) 0;
+}
+
+.stage-route__seal .stage-seal-banner {
+  margin: 0;
+}
+
+.stage-question-list:not(.stage-question-list--column) {
+  margin-block-start: var(--space-6);
+}
+
+/* "Save all n now": a tinted panel on the ground (no white box), the line and the button side by side where they fit. */
+.stage-route__save-all {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3) var(--space-4);
+  margin-block: 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-surface);
+  background-color: var(--color-tint);
+}
+
+.stage-route__save-all p {
+  margin: 0;
 }
 
 /* The filter group: a native fieldset of native radios, one chip each. */
@@ -73,24 +159,29 @@
   color: var(--color-ink);
 }
 
-/* A topic: its heading, its count line directly under it, then its plates. */
+/* A topic: a quiet heading on the line, in the text's column (the 42 px marks column and its gap), its count under it. */
+.stage-route__section + .stage-route__section {
+  margin-block-start: var(--space-5);
+}
+
+.stage-route__topic,
+.stage-route__topic-count {
+  padding-inline-start: calc(42px + var(--space-3));
+}
+
 .stage-route__topic {
-  margin-block: var(--space-6) 0;
+  margin-block: 0;
+  padding-block-start: var(--space-2);
   font-size: var(--font-size-h3);
 }
 
 .stage-route__topic-count {
   margin-block: 0 var(--space-2);
-}
-
-.stage-route__plates {
-  display: grid;
-  gap: var(--space-2);
-  margin: 0 0 var(--space-4);
-  padding: 0;
-  list-style: none;
+  font-size: var(--font-size-small);
 }
 
 .stage-route__result {
-  margin-block: var(--space-1) 0;
+  margin-block: 0 var(--space-2);
+  padding-inline-start: calc(42px + var(--space-3));
+  font-size: var(--font-size-small);
 }

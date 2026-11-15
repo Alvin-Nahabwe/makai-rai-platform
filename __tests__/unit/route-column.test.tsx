@@ -7,16 +7,17 @@ import type { StagePageData } from '@/lib/question/stagePage';
 import { STAGE_LIST_COPY } from '@/lib/question/list/copy';
 import { QUESTION_COPY } from '@/lib/question/copy';
 import { PROJECT_COPY } from '@/lib/project/copy';
-import { tallyWords } from '@/lib/ui/copy';
+import { tallyWords, UI_COPY } from '@/lib/ui/copy';
+import { TERM_STAGE_1 } from '@/lib/vocabulary/terms';
+import { readFileSync } from 'node:fs';
 
 /**
- * Lane 7 part 2, the question page's column (owner's decision "Route column", plan 1C decision C2), rendered from fixture
- * data without a database. vitest runs in `node` with no jsdom, so effects do not run: choosing in the select is driven in
- * a browser by e2e/route-column.spec.ts. The stage page's own markup (variant "page") is held against a file taken from
- * the base commit 5c917011, before the column existed.
+ * The question page's column (owner's decision "Route column", 14 November 2026; owner's answer R1, 15 November 2026: the
+ * stage's questions as one line, lane 1 Task 2), rendered from fixture data without a database. vitest runs in `node` with
+ * no jsdom, so effects do not run: choosing in the select and opening a folded run are driven in a browser by
+ * e2e/route-column.spec.ts.
  */
 vi.mock('next/navigation', async (original) => ({ ...(await original<typeof import('next/navigation')>()), useRouter: () => ({ refresh() {} }), usePathname: () => '/x' }));
-const { StageWorkspace } = await import('@/app/(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]/page');
 
 const row = (questionId: string, over: Partial<StageRow> = {}): StageRow => ({
   questionId, questionType: 'likert-5', text: `Question ${questionId} in words?`, moduleId: 'M1', moduleTitle: 'Problem Formulation', statusText: 'No decision',
@@ -40,45 +41,86 @@ const ROWS = [
   row('Q-PP-30', { kind: 'done', statusText: 'Done', evidenceCount: 2, moduleId: 'M3', moduleTitle: 'Model Development' }),
 ];
 
-type Show = Parameters<typeof StageWorkspace>[0]['show'];
+type Show = 'all' | 'no_decision' | 'shortfalls' | 'done_without_evidence' | 'changed_since_seal' | 'reworded' | 'drafts';
 const column = async (d: StagePageData, currentQuestionId: string, show: Show = 'all') => {
   const { RouteColumn } = await import('@/components/question/RouteColumn');
   return renderToStaticMarkup(createElement(RouteColumn, { data: d, currentQuestionId, show }));
 };
-/** The column's list (after the row of marks), its details and its plates. */
+/** The column's list (after the filter). */
 const listOf = (h: string) => h.slice(h.indexOf('stage-question-list'));
-const detailsOf = (h: string) => [...listOf(h).matchAll(/<details([^>]*)><summary>([\s\S]*?)<\/summary>([\s\S]*?)<\/details>/g)]
-  .map((m) => ({ open: /\bopen=""/.test(m[1]), summary: m[2], body: m[3] }));
-const platesOf = (h: string) => [...listOf(h).matchAll(/<li[^>]*data-question-id="([^"]+)"[^>]*>([\s\S]*?)<\/li>/g)].map((m) => ({ id: m[1], body: m[2] }));
+const detailsOf = (h: string) => [...listOf(h).matchAll(/<details([^>]*)><summary([^>]*)>([\s\S]*?)<\/summary>([\s\S]*?)<\/details>/g)]
+  .map((m) => ({ open: /\bopen=""/.test(m[1]), summary: m[3], body: m[4] }));
+/** Each question's row, by id, in document order. A row holds no nested <li>, so the lazy match ends at its own. */
+const rowsIn = (fragment: string) => [...fragment.matchAll(/<li[^>]*data-question-id="([^"]+)"[^>]*>([\s\S]*?)<\/li>/g)].map((m) => ({ id: m[1], body: m[2] }));
+const rowsOf = (h: string) => [...listOf(h).matchAll(/<li[^>]*data-question-id="([^"]+)"[^>]*>([\s\S]*?)<\/li>/g)].map((m) => ({ id: m[1], body: m[2] }));
+/** The parts of the line at its top level: a row's id, or a run's title. */
+const partsOf = (h: string) => {
+  const line = listOf(h);
+  const out: string[] = [];
+  const re = /<li class="route-line__item route-line__item--run">[\s\S]*?class="route-line__title">([^<]*)<[\s\S]*?<\/details><\/li>|<li[^>]*data-question-id="([^"]+)"[^>]*>[\s\S]*?<\/li>/g;
+  for (const m of line.matchAll(re)) out.push(m[1] ?? m[2]);
+  return out;
+};
 
-describe('The route column: the open question', () => {
-  it('the open question\'s plate is the kit\'s current plate (aria-current="step", "You are here"); no other plate is', async () => {
-    const plates = platesOf(await column(data(ROWS), 'Q-PP-17'));
-    const current = plates.filter((p) => p.body.includes('aria-current="step"'));
-    expect(current.map((p) => p.id)).toEqual(['Q-PP-17']);
-    expect(current[0].body).toContain('ui-plate--current');
-    expect(current[0].body).toContain('You are here');
+/** A 22-question stage, as Pre-processing holds: Q-01 to Q-22, two topics, a mix of statuses. */
+const STAGE22 = Array.from({ length: 22 }, (_, i) => {
+  const id = `Q-${String(i + 1).padStart(2, '0')}`;
+  const kinds: StageRow['kind'][] = ['done', 'done', 'done', 'shortfall', 'shortfall', 'not_applicable', 'none'];
+  return row(id, { kind: kinds[i % kinds.length], evidenceCount: 1, moduleId: i < 7 ? 'M1' : 'M2', moduleTitle: i < 7 ? 'Problem Formulation' : 'Data Collection & Preparation' });
+});
+
+describe('The route column: one line of the stage\'s questions', () => {
+  it('a short stage is one row per question, in stage order, each one link to its question, with no topic disclosure and no row of marks', async () => {
+    const h = await column(data(ROWS), 'Q-PP-17');
+    expect(rowsOf(h).map((r) => r.id)).toEqual(ROWS.map((r) => r.questionId));
+    expect(detailsOf(h)).toHaveLength(0);
+    expect(h).not.toContain('ui-route-row');
+    expect(h).not.toContain('ui-plate');
+    for (const r of rowsOf(h)) {
+      expect([...r.body.matchAll(/<a /g)], r.id).toHaveLength(1);
+      expect(r.body).toMatch(new RegExp(`^<a [^>]*href="/orgs/org-a/projects/p1/stages/pre-processing/questions/${r.id}"`));
+    }
   });
 
-  it('the open question\'s topic is open and every other topic closed, each summary with the topic\'s name and its tally in words', async () => {
-    const d = data(ROWS);
-    const ds = detailsOf(await column(d, 'Q-PP-17'));
-    expect(ds.map((x) => x.open)).toEqual([false, true, false]);
-    const tally = (ids: string[]) => tallyWords({ ...Object.fromEntries([...new Set(ids.map((i) => d.marks[i]))].map((k) => [k, ids.filter((i) => d.marks[i] === k).length])),
-      ...(ids.some((i) => d.marks[i] === 'done' && ROWS.find((r) => r.questionId === i)!.evidenceCount === 0) ? { doneNoEvidence: ids.filter((i) => d.marks[i] === 'done' && ROWS.find((r) => r.questionId === i)!.evidenceCount === 0).length } : {}) });
-    expect(ds[0].summary).toContain('>Problem Formulation<');
-    expect(ds[0].summary).toContain(`>${tally(['Q-PP-01', 'Q-PP-02', 'Q-PP-16'])}<`);
-    expect(ds[2].summary).toContain(`>${tally(['Q-PP-30'])}<`);
-    // In words, not a second row of marks (ruling L7-10).
-    for (const x of ds) expect(x.summary).not.toMatch(/ui-route-row|ui-mark/);
+  it('the open question is "You are here" with aria-current="step", and no other row is; its mark sits in the ring', async () => {
+    const rows = rowsOf(await column(data(ROWS), 'Q-PP-17'));
+    const current = rows.filter((r) => r.body.includes('aria-current="step"'));
+    expect(current.map((r) => r.id)).toEqual(['Q-PP-17']);
+    expect(current[0].body).toContain(`class="route-line__pin">${STAGE_LIST_COPY.line.youAreHere}<`);
+    expect(current[0].body).toMatch(/class="route-line__node route-line__node--here"/);
+    expect(rows.filter((r) => r.body.includes(STAGE_LIST_COPY.line.youAreHere)).map((r) => r.id)).toEqual(['Q-PP-17']);
+    expect(STAGE_LIST_COPY.line.youAreHere).toBe(UI_COPY.plate.youAreHere);
   });
 
-  it('the row of marks has one stop per question of the stage and exactly one aria-current="step", the open question\'s', async () => {
-    const h = await column(data(ROWS), 'Q-PP-16');
-    const routeRow = h.slice(h.indexOf('ui-route-row'), h.indexOf('stage-question-list'));
-    expect([...routeRow.matchAll(/class="ui-route-row__stop[ "]/g)]).toHaveLength(ROWS.length);
-    expect([...routeRow.matchAll(/aria-current="step"/g)]).toHaveLength(1);
-    expect(routeRow).toMatch(/ui-route-row__stop--current"[^>]*data-mark-kind="partly"/);
+  it('the open question\'s meta line gives its code, its status in words and its version', async () => {
+    const rows = rowsOf(await column(data(ROWS), 'Q-PP-16'));
+    const here = rows.find((r) => r.id === 'Q-PP-16')!;
+    expect(here.body).toMatch(/class="route-line__meta"><code class="route-line__code">Q-PP-16<\/code> · <span class="status-label">Partly<\/span> · version 2/);
+    // Only the open question names its version, as the sketch draws it.
+    expect(rows.find((r) => r.id === 'Q-PP-01')!.body).not.toMatch(/version \d/);
+  });
+
+  it('the next question that applies leads its meta line with "Next question"; a question switched off by the personal data answer is passed over', async () => {
+    const gated = [...ROWS.slice(0, 3), row('Q-PP-15', { kind: 'not_applicable_by_gate', statusText: 'Does not apply' }), ...ROWS.slice(3)];
+    const rows = rowsOf(await column(data(gated), 'Q-PP-02'));
+    const next = rows.filter((r) => r.body.includes(STAGE_LIST_COPY.line.next));
+    expect(next.map((r) => r.id)).toEqual(['Q-PP-16']);
+    expect(next[0].body).toMatch(new RegExp(`class="route-line__meta"><span class="route-line__next">${STAGE_LIST_COPY.line.next}</span> · <code`));
+    // The last question has no next.
+    expect((await column(data(ROWS), 'Q-PP-30')).includes(STAGE_LIST_COPY.line.next)).toBe(false);
+  });
+
+  it('every row\'s mark is the kit\'s StatusMark at 24 px (the open one inside the ring), hidden from assistive technology beside the status words', async () => {
+    for (const r of rowsOf(await column(data(ROWS), 'Q-PP-17'))) {
+      expect(r.body, r.id).toMatch(/<span class="route-line__node[^"]*" aria-hidden="true"><span class="ui-mark ui-mark--[a-z_]+" data-mark-kind="[a-z_]+"><svg class="ui-mark__shape" width="24" height="24"/);
+      expect(r.body, r.id).toMatch(/<span class="status-label">[^<]*\p{L}/u);
+    }
+  });
+
+  it('each question\'s words are clamped to two lines by its own class, the whole text still in the markup', () => {
+    const css = readFileSync('components/question/route-line.css', 'utf8');
+    expect(css).toMatch(/\.route-line__title\s*\{[^}]*-webkit-line-clamp:\s*2;[^}]*\}/);
+    expect(css).toMatch(/\.route-line__title\s*\{[^}]*overflow:\s*hidden;[^}]*\}/);
   });
 
   it('the column is a nav named by its heading, the stage\'s name, and ends with the link to all the stage\'s questions', async () => {
@@ -87,9 +129,66 @@ describe('The route column: the open question', () => {
     expect(h).toMatch(/<a href="\/orgs\/org-a\/projects\/p1\/stages\/pre-processing">All questions in this stage<\/a><\/p><\/nav>$/);
   });
 
+  it('under the heading, the stage\'s plain meaning (its first-use definition) and the line\'s one sentence, which never says "stop" or "line"', async () => {
+    const h = await column(data(ROWS), 'Q-PP-01');
+    expect(h).toMatch(new RegExp(`</h2><p class="ui-definition" data-definition="${TERM_STAGE_1.id}">${TERM_STAGE_1.definition}</p><p class="route-column__intro">${QUESTION_COPY.stage.routeIntro}</p>`));
+    const text = h.replace(/<[^>]+>/g, ' ');
+    expect(text).not.toMatch(/\b(stop|stops|line)\b/i);
+  });
+
   it('the column\'s link reads the words ruled for the project page\'s link to a stage, not the strip\'s "All questions"', () => {
     expect(QUESTION_COPY.stage.allQuestionsInStage).toBe(PROJECT_COPY.stage.allQuestions);
     expect(QUESTION_COPY.stage.allQuestionsInStage).not.toBe(QUESTION_COPY.nav.allQuestions);
+  });
+});
+
+describe('The route column: its open and next question', () => {
+  it('an open question that is not among the stage\'s rows is a mistake in the page: it fails loudly outside production, never a column with no "You are here" (silent-failure review F1)', async () => {
+    await expect(column(data(ROWS), 'Q-NOT-HERE')).rejects.toThrow(/RouteColumn: the open question is not in the stage's rows/);
+  });
+
+  it('the page may give the next question itself (the panel\'s position.nextId, the Next button\'s own); the column then marks that one (review F2)', async () => {
+    const { RouteColumn } = await import('@/components/question/RouteColumn');
+    const h = renderToStaticMarkup(createElement(RouteColumn, { data: data(ROWS), currentQuestionId: 'Q-PP-01', show: 'all', nextQuestionId: 'Q-PP-16' }));
+    expect(rowsOf(h).filter((r) => r.body.includes(STAGE_LIST_COPY.line.next)).map((r) => r.id)).toEqual(['Q-PP-16']);
+  });
+});
+
+describe('The route column: folded runs', () => {
+  it('in a 22-question stage, the questions away from the open one fold into one run before and one after; the open and the next show', async () => {
+    const h = await column(data(STAGE22), 'Q-04');
+    expect(partsOf(h)).toEqual(['Questions 1 and 2', 'Q-03', 'Q-04', 'Q-05', 'Q-06', 'Questions 7 to 22']);
+  });
+
+  it('a run is a disclosure that opens in place (works without script): every question of the stage stays one link away, in stage order', async () => {
+    const h = await column(data(STAGE22), 'Q-04');
+    const runs = detailsOf(h);
+    expect(runs).toHaveLength(2);
+    expect(runs.every((r) => !r.open)).toBe(true);
+    expect(rowsIn(runs[1].body).map((r) => r.id)).toEqual(STAGE22.slice(6).map((r) => r.questionId));
+    expect(rowsOf(h).map((r) => r.id)).toEqual(STAGE22.map((r) => r.questionId));
+  });
+
+  it('a run\'s summary: its questions\' numbers in bold words, one small mark per question in order (16 px), and its tally in words', async () => {
+    const d = data(STAGE22);
+    const run = detailsOf(await column(d, 'Q-04'))[1];
+    expect(run.summary).toContain('class="route-line__title">Questions 7 to 22<');
+    const marks = [...run.summary.matchAll(/<svg class="ui-mark__shape" width="(\d+)"/g)].map((m) => Number(m[1]));
+    expect(marks).toEqual(Array(16).fill(16));
+    const runRows = STAGE22.slice(6);
+    const { tallyOfRows } = await import('@/lib/question/route');
+    expect(run.summary).toContain(`class="route-line__tally-words">${tallyWords(tallyOfRows(runRows, d.marks))}<`);
+  });
+
+  it('the open and the next question are never folded; a short stage folds nothing', async () => {
+    for (const at of [1, 7, 15, 21, 22]) {
+      const cur = `Q-${String(at).padStart(2, '0')}`;
+      const nxt = at < 22 ? `Q-${String(at + 1).padStart(2, '0')}` : null;
+      const top = partsOf(await column(data(STAGE22), cur));
+      expect(top, cur).toContain(cur);
+      if (nxt !== null) expect(top, cur).toContain(nxt);
+    }
+    expect(detailsOf(await column(data(STAGE22.slice(0, 8)), 'Q-04'))).toHaveLength(0);
   });
 });
 
@@ -120,30 +219,35 @@ describe('The route column: after a save', () => {
 });
 
 describe('The route column: the filter', () => {
-  it('a <select> labelled "Show", one option per filter "{label} {count}" in the stage page\'s order, the given filter chosen; no count on "Not saved yet"', async () => {
+  it('a small <select> labelled "Show", one option per filter "{label} {count}" in spec 8\'s words and the stage page\'s order; no count on "Not saved in this browser"', async () => {
     const h = await column(data(ROWS), 'Q-PP-01', 'no_decision');
     expect(h).toMatch(/<label[^>]*for="route-column-show"[^>]*>Show<\/label>/);
+    expect(h).toMatch(/<select[^>]*class="route-filter__select"[^>]*id="route-column-show"|<select[^>]*id="route-column-show"[^>]*class="route-filter__select"/);
     const options = [...h.matchAll(/<option value="([a-z_]+)"( selected="")?>([^<]*)<\/option>/g)].map((m) => [m[1], m[3], m[2] !== undefined]);
     expect(options).toEqual([
       ['all', 'All 6', false], ['no_decision', 'No decision 2', true], ['shortfalls', 'Partly or not yet 1', false],
-      ['done_without_evidence', 'Done, no evidence attached 1', false], ['reworded', 'Good practice changed 1', false], ['drafts', STAGE_LIST_COPY.filters.drafts, false],
+      ['done_without_evidence', 'Done, no evidence attached 1', false], ['reworded', 'Good practice changed since the decision 1', false],
+      ['drafts', 'Not saved in this browser', false],
     ]);
-    expect(h).not.toMatch(/Not saved yet 0/);
+    expect(STAGE_LIST_COPY.filters.drafts).toBe('Not saved in this browser');
+    expect(h).not.toMatch(/Not saved in this browser 0/);
   });
 
   it('the select sits in the GET form with the noscript submit, so ?show works with scripts off', async () => {
     const h = await column(data(ROWS), 'Q-PP-01');
     expect(h).toMatch(/<form (?=[^>]*method="get")(?=[^>]*aria-label="Show questions")[^>]*>[\s\S]*<select[^>]*name="show"[\s\S]*<noscript>[\s\S]*<\/form>/);
+    // The filter comes before the line.
+    expect(h.indexOf('name="show"')).toBeLessThan(h.indexOf('data-question-id'));
   });
 
   it('with a filter given, the matching plates are one flat list and there is no <details>; the empty filter gives the stage page\'s line', async () => {
-    const h = await column(data(ROWS), 'Q-PP-01', 'no_decision');
+    const h = await column(data(STAGE22), 'Q-04', 'no_decision');
     expect(detailsOf(h)).toHaveLength(0);
-    expect(platesOf(h).map((p) => p.id)).toEqual(['Q-PP-17', 'Q-PP-18']);
-    expect([...listOf(h).matchAll(/<ul /g)]).toHaveLength(1);
+    expect(rowsOf(h).map((p) => p.id)).toEqual(STAGE22.filter((r) => r.kind === 'none').map((r) => r.questionId));
+    expect([...listOf(h).matchAll(/<ol /g)]).toHaveLength(1);
     const none = await column(data(ROWS.filter((r) => r.kind !== 'none')), 'Q-PP-01', 'no_decision');
     expect(none).toContain(STAGE_LIST_COPY.noMatch('No decision').replaceAll("'", '&#x27;'));
-    expect(platesOf(none)).toHaveLength(0);
+    expect(rowsOf(none)).toHaveLength(0);
   });
 
   it('no "Save all", no breadcrumb, no <progress>, no "%"', async () => {
@@ -161,17 +265,5 @@ describe('The route column: the filter', () => {
       expect(h).toContain(`>${r.text}<`);
       expect(h).not.toMatch(new RegExp(`="[^"]*${r.text.replace(/[?]/g, '\\?')}`));
     }
-  });
-});
-
-describe('The stage page is unchanged', () => {
-  it('variant "page" (the default) renders the stage page\'s markup as the base commit did, byte for byte', async () => {
-    const fixtures: Array<[StagePageData, Show]> = [
-      [data(ROWS), 'all'],
-      [data(ROWS, { changed: { sealNumber: 2, changedQuestions: ['Q-PP-16', 'Q-GONE'], changedFindings: [] }, review: { id: 'r1', name: 'Review A' } }), 'changed_since_seal'],
-      [data(ROWS.filter((r) => r.kind !== 'none')), 'no_decision'],
-    ];
-    const html = fixtures.map(([d, show]) => renderToStaticMarkup(createElement(StageWorkspace, { data: d, show, shown: null }))).join('\n');
-    await expect(html).toMatchFileSnapshot('./__snapshots__/route-column.stage-page-5c917011.html');
   });
 });
