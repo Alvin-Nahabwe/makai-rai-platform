@@ -34,8 +34,9 @@ export type ReadingDecisionProps = {
  * One item of the decision's evidence (directions/surfaces/viewer-reading.png; gap 2 of design-target section 8). A file:
  * its name, "<size> · added <date>", and a secondary Download button whose accessible name carries the file's name; an
  * erased file its erased line and no button. A link: its name, "(opens another site)" and the external mark, as a plain
- * anchor only when its address is http or https (never next/link, which prefetches: FR-EVD-03), never its raw address in
- * brackets; a link with no name is named by its address once. Every name sits in `<bdi>` with bidi controls removed (E14).
+ * anchor only when its address is http or https (never next/link, which prefetches: FR-EVD-03); any other address is its
+ * name as text with no claim to open a site; never its raw address in brackets; a link with no name is named by its
+ * address once. Every name sits in `<bdi>` with bidi controls removed (E14).
  */
 function EvidenceItem({ orgSlug, item }: { orgSlug: string; item: EvidenceItemView }): ReactElement {
   if (item.kind === 'link') {
@@ -47,7 +48,7 @@ function EvidenceItem({ orgSlug, item }: { orgSlug: string; item: EvidenceItemVi
           <a className="reading-evidence__link" href={item.url} rel="noopener noreferrer">
             {name}{R.opensAnotherSite}<Icon name="external-link" size={18} />
           </a>
-        ) : <span>{name}{R.opensAnotherSite}</span>}
+        ) : <span>{name}</span>}
       </li>
     );
   }
@@ -60,13 +61,14 @@ function EvidenceItem({ orgSlug, item }: { orgSlug: string; item: EvidenceItemVi
       </li>
     );
   }
-  // A stored file always has a size and a type; without them there is nothing to offer for download, only the name.
-  if (item.byteSize === null || item.mimeType === null) return <li className="reading-evidence__item"><bdi>{label}</bdi></li>;
+  // A stored file always has a size; were it missing, the line drops it and the Download stays, so the download route's
+  // own integrity check is what answers (silent-failure review of c46d69f4, finding 2).
+  const added = R.added(formatDay(item.uploadedAt));
   return (
     <li className="reading-evidence__item">
       <span className="reading-evidence__file">
         <bdi>{label}</bdi>
-        <small>{formatSize(item.byteSize)}{DOT}{R.added(formatDay(item.uploadedAt))}</small>
+        <small>{item.byteSize === null ? added : <>{formatSize(item.byteSize)}{DOT}{added}</>}</small>
       </span>
       <a className="ui-button ui-button--secondary reading-evidence__download"
         href={`/api/v1/orgs/${encodeURIComponent(orgSlug)}/evidence/${encodeURIComponent(item.id)}`} download>
@@ -121,6 +123,7 @@ export function ReadingDecision({ orgSlug, current, historyCount, historyHref, s
         </p>
         <Reason current={current} />
         <p className="reading-decision__version">{history}</p>
+        <SealMarker seals={seals} />
       </>
     );
   } else {
@@ -133,12 +136,15 @@ export function ReadingDecision({ orgSlug, current, historyCount, historyHref, s
         {current.declaredDate === null ? null : <>{DOT}{formatDeclaredDate(current.declaredDate)}</>}
       </figcaption>
     );
+    const hasReason = current.reasonErased !== null || (current.reason !== null && current.reason !== '');
     body = (
       <>
-        <figure className="reading-decision__figure">
-          <Reason current={current} />
-          {decided}
-        </figure>
+        {hasReason || decided !== null ? (
+          <figure className="reading-decision__figure">
+            <Reason current={current} />
+            {decided}
+          </figure>
+        ) : null}
         <p className="reading-decision__version">
           <span>{R.version(current.versionNumber)}</span>{DOT}<span>{R.saved(formatDay(current.receivedAt))}</span>{DOT}{history}
         </p>

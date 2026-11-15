@@ -69,7 +69,7 @@ function readingRegions(data: QuestionPanelData, openWork: QuestionOpenWork | nu
     ),
     openWork: <StillOpen work={openWork} orgSlug={data.orgSlug} projectId={data.projectId} />,
     aside: (
-      <ReadingAside seals={data.seals} versionNumber={data.current === null || data.current.status === 'withdrawn' ? null : data.current.versionNumber}
+      <ReadingAside seals={data.seals} versionNumber={data.current === null ? null : data.current.versionNumber}
         note={decisionFormNote(data.viewer.role, data.projectArchived)} next={next} stageTitle={STAGE_TITLE[data.stage]} stageHref={stageHref} />
     ),
   };

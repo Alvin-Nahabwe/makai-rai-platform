@@ -16,7 +16,7 @@ export type NextQuestion = { questionId: string; text: string; href: string; num
 export type ReadingAsideProps = {
   /** The seals holding the current version (QuestionPanelData.seals); empty when it is in none. */
   seals: SealRef[];
-  /** The current version's number, which those seals keep; null with no decision. */
+  /** The current version's number (a withdrawal too: a seal can keep it), which those seals keep; null with no decision. */
   versionNumber: number | null;
   /** decisionFormNote's line for this role; null in an archived project (its banner says it) or for a writer. */
   note: string | null;

@@ -210,6 +210,10 @@ describe('the read-only question page (plan 1C Task 7)', () => {
     expect(c).toContain('<blockquote class="reading-decision__reason">Saved twice by mistake.</blockquote>');
     expect(c).toContain('data-mark-kind="no_decision"');
     expect(c).toContain('>History: 3 versions</a>');
+    // A seal can hold the withdrawal (lib/seal/manifest.ts puts the current version in the seal whatever its status): the
+    // card keeps its seal marker and the aside its sealed copy (silent-failure review of c46d69f4, finding 1).
+    expect(c).toContain('In seal 1 of Pre-processing review 1');
+    expect(aside(await render({ ...VIEWER, current: withdrawn, historyCount: 3 }))).toContain('Seal 1 of Pre-processing review 1 keeps version 3 of this decision.');
   });
 
   it('with no decision yet the card says so and holds nothing else', async () => {
@@ -343,10 +347,23 @@ describe('the read-only question page (plan 1C Task 7)', () => {
     expect(html.split('&lt;img src=x onerror=alert(1)&gt;')).toHaveLength(8);
   });
 
-  it('a link whose address is not http or https is shown as text, never as a link', async () => {
+  it('a link whose address is not http or https is shown as text, never as a link, and does not claim to open another site', async () => {
     const c = card(await render({ ...VIEWER, current: { ...CURRENT, evidence: [{ ...LINK, url: 'javascript:alert(1)' }] } }));
     expect(c).not.toContain('href="javascript');
     expect(c).toContain('<bdi>Audit report</bdi>');
+    expect(c).not.toContain('opens another site');
+  });
+
+  it('a stored file whose size or type is not known keeps its Download (the download route checks it) and drops only the size line', async () => {
+    const c = card(await render({ ...VIEWER, current: { ...CURRENT, evidence: [{ ...FILE, byteSize: null, mimeType: null }] } as never }));
+    expect(c).toContain('reading-evidence__download');
+    expect(c).not.toContain('KB');
+    expect(c).toContain('added 18 Feb 2026');
+  });
+
+  it('with neither a reason nor who decided, the card draws no empty quotation figure', async () => {
+    const c = card(await render({ ...VIEWER, current: { ...CURRENT, reason: null, decidedBy: null } }));
+    expect(c).not.toContain('<figure');
   });
 
   it('a person who may record keeps the form: answer-form and "Current decision", no reading regions and no "What the team decided", even with openWork', async () => {
