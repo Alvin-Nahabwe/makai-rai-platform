@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type MouseEvent, type ReactElement, type ReactNode } from 'react';
-import { signOut } from 'next-auth/react';
+import { signOutClearingDrafts } from '@/lib/client/signOutClearingDrafts';
 import { Button } from '@/components/ui/Button';
 import '@/components/ui/buttonStyles';
 import { openDraftStore } from '@/lib/client/drafts';
@@ -43,7 +43,14 @@ export function SignOutWithDraftsGuard({ userId, children }: SignOutWithDraftsGu
     setBusy(true);
     openDraftStore()?.purgeAccount(userId);
     clearLastProjects(userId);
-    await signOut({ callbackUrl: '/login' });
+    try {
+      await signOutClearingDrafts(userId, '/login');
+    } catch (err: unknown) {
+      // Not signed out (ruling L5-11): no navigation. The drafts are already gone, so the warning closes (d2-sfh-2 finding 2).
+      console.warn('drafts guard: a sign-out press was rejected', err instanceof Error ? err.name : typeof err);
+      setBusy(false);
+      setCount(null);
+    }
   }
 
   return (

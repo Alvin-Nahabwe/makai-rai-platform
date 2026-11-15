@@ -312,7 +312,9 @@ describe('the rail, ported from the sidebar (UX-02, UX-41)', () => {
 
   it('1A Task 12 L2-66 S4: the rail\'s Sign out clears this person\'s last-project keys before signing out', () => {
     const source = readFileSync('components/layout/Rail.tsx', 'utf8');
-    expect(source).toMatch(/onClick=\{\(\) => \{\s*clearLastProjects\(shell\.userId\);\s*void signOut\(\{ callbackUrl: '\/login' \}\);\s*\}\}/);
+    // Since ruling L5-11 the sign-out goes through signOutClearingDrafts, which also sweeps the keys and navigates only
+    // when the session ended; a refusal is logged by name and the person stays on the page.
+    expect(source).toMatch(/onClick=\{\(\) => \{\s*clearLastProjects\(shell\.userId\);\s*void signOutClearingDrafts\(shell\.userId, '\/login'\)\.catch\(/);
   });
 });
 

@@ -22,6 +22,12 @@
  * keeps both variables out of the production images, compose files and runbooks.
  */
 
+/**
+ * The sessionStorage key of the signed-out hint (C12): IdleWarning writes `{ reason, at }` when a session ends by the
+ * clock, and S-01 reads it once, as one of two fixed words (LoginClient.tsx, readSignedOutHint). No draft key.
+ */
+export const SIGNED_OUT_HINT_KEY = 'makrai.signedOut';
+
 /** Seconds before the idle deadline at which the warning opens. */
 export const IDLE_WARNING_SECONDS = 120;
 
@@ -154,6 +160,52 @@ export async function readSessionResponse(response: Response): Promise<{ status:
   } catch {
     // A body that is not JSON is the same case as a wrong content type: not next-auth's answer.
     return unreadable;
+  }
+}
+
+/**
+ * Why the session has ended, by the clock: 'absolute' once the 7-day limit is reached (also when the idle deadline has
+ * passed too, since staying signed in could not have helped), else 'idle' once the idle deadline is reached, else null
+ * while the session lasts. Counted as idlePhase counts.
+ */
+export function endReason(p: { secondsLeft: number; absoluteSecondsLeft: number; elapsedSeconds: number }): 'idle' | 'absolute' | null {
+  if (p.absoluteSecondsLeft - p.elapsedSeconds <= 0) return 'absolute';
+  if (p.secondsLeft - p.elapsedSeconds <= 0) return 'idle';
+  return null;
+}
+
+/** This tab's sessionStorage, or null where reading the property throws (blocked site data) or there is no window. */
+export function tabStorage(): Storage | null {
+  try {
+    return typeof window === 'undefined' ? null : window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * C12: leaves S-01 the reason the session ended in this tab (`{ reason, at }` under SIGNED_OUT_HINT_KEY; S-01 reads it once,
+ * LoginClient.tsx readSignedOutHint). Storage that is absent or refuses the write leaves no hint: S-01 then says no
+ * reason, and the page's own notice has already said it, so nothing is logged.
+ */
+export function writeSignedOutHint(storage: Storage | null, reason: 'idle' | 'absolute', now: number): void {
+  try {
+    storage?.setItem(SIGNED_OUT_HINT_KEY, JSON.stringify({ reason, at: now }));
+  } catch {
+    // Refused (a full quota, blocked site data): S-01 shows no reason, which is true of what it knows.
+  }
+}
+
+/**
+ * Removes a hint once the session is known to be alive (a signed-in page loaded, or an extension), so a sign-out started
+ * later in this tab is never told as the clock's (silent-failure review d2-sfh-1, finding 5). A refusal leaves the hint,
+ * which S-01 still accepts only for 12 hours.
+ */
+export function clearSignedOutHint(storage: Storage | null): void {
+  try {
+    storage?.removeItem(SIGNED_OUT_HINT_KEY);
+  } catch {
+    // Refused: the hint stays until S-01 reads it or its 12 hours pass.
   }
 }
 

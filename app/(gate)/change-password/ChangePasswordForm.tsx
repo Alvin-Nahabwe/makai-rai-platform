@@ -3,9 +3,11 @@
 import { useState, type FormEvent } from 'react';
 import { signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { PASSWORD_MIN_LENGTH } from '@/lib/validate';
-import { CHANGE_PASSWORD_COPY } from '@/lib/auth/copy';
+import { AUTH_COPY, CHANGE_PASSWORD_COPY } from '@/lib/auth/copy';
 import { useHydrated } from '@/lib/client/useHydrated';
+import { AuthCard } from '@/components/auth/AuthCard';
 import { Button } from '@/components/ui/Button';
 import { StatusRegion } from '@/components/ui/StatusRegion';
 import { TextInput } from '@/components/ui/TextInput';
@@ -33,6 +35,8 @@ export async function changePasswordOutcome(res: Response): Promise<ChangeState>
 }
 
 export interface ChangePasswordViewProps {
+  /** Gate 2 sent the person here (identity.mustChangePassword, read on the server; T3.1): no way back is offered. */
+  forced: boolean;
   currentPassword: string;
   newPassword: string;
   show: boolean;
@@ -45,13 +49,24 @@ export interface ChangePasswordViewProps {
   onSubmit: (e: FormEvent<HTMLFormElement>) => void;
 }
 
-/** S-29's form, which S-21's **Change password** opens too: the current password and one new one, no confirm field. */
+/**
+ * S-29's form, which S-21's **Change password** opens too, in the gate frame's card (plan 1B Task 3): the current password
+ * and one new one, no confirm field, and one Show passwords toggle for both, which aria-controls names. Forced, the lead
+ * says so first and nothing links away (T3.2): the frame's Sign out is the only way out. Voluntary, the footer leads back
+ * to My account. The error line sits after the submit button (spec 9.7).
+ */
 export function ChangePasswordView(v: ChangePasswordViewProps) {
   const invalid = v.state.kind === 'invalid' ? v.state.message : null;
   const type = v.show ? 'text' : 'password';
-  return (
+  const lead = (
     <>
-      <StatusRegion message={v.state.kind === 'error' ? v.state.message : null} politeness="assertive" tone="error" />
+      {v.forced ? <p>{AUTH_COPY.forcedLead}</p> : null}
+      <p>{AUTH_COPY.changeLead}</p>
+    </>
+  );
+  const footer = v.forced ? null : <p><Link href="/account">{CHANGE_PASSWORD_COPY.backToAccount}</Link></p>;
+  return (
+    <AuthCard title={AUTH_COPY.titles.changePassword} lead={lead} footer={footer}>
       <form method="post" onSubmit={v.onSubmit} noValidate>
         <TextInput id="currentPassword" name="currentPassword" label={CHANGE_PASSWORD_COPY.currentPassword} type={type} required
           autoComplete="current-password" value={v.currentPassword} onChange={(e) => v.onCurrent(e.currentTarget.value)} />
@@ -59,20 +74,21 @@ export function ChangePasswordView(v: ChangePasswordViewProps) {
           autoComplete="new-password" value={v.newPassword} onChange={(e) => v.onNew(e.currentTarget.value)}
           hint={CHANGE_PASSWORD_COPY.hint(PASSWORD_MIN_LENGTH)} error={invalid ?? undefined} />
         {/* The kit's Button cannot carry aria-pressed or aria-controls (ruling T16-5), so this is a native button in the kit's classes. */}
-        <p style={{ margin: 'calc(-1 * var(--space-4)) 0 var(--space-6)' }}>
+        <p className="password-field__toggle">
           <button type="button" className="ui-button ui-button--quiet ui-button--compact" aria-controls="currentPassword newPassword"
             aria-pressed={v.show} onClick={v.onToggleShow}>{CHANGE_PASSWORD_COPY.showPasswords}</button>
         </p>
         <Button variant="primary" type="submit" disabled={v.state.kind === 'sending' || v.hydrated === false}>
           {v.state.kind === 'sending' ? CHANGE_PASSWORD_COPY.submitting : CHANGE_PASSWORD_COPY.submit}
         </Button>
+        <StatusRegion message={v.state.kind === 'error' ? v.state.message : null} politeness="assertive" tone="error" />
       </form>
-    </>
+    </AuthCard>
   );
 }
 
 /** Posts route 35; on success every session has ended, so this browser signs out and S-01 says the password changed. */
-export function ChangePasswordForm() {
+export function ChangePasswordForm({ forced }: { forced: boolean }) {
   const router = useRouter();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -110,7 +126,7 @@ export function ChangePasswordForm() {
   }
 
   return (
-    <ChangePasswordView currentPassword={currentPassword} newPassword={newPassword} show={show} state={state} hydrated={hydrated}
+    <ChangePasswordView forced={forced} currentPassword={currentPassword} newPassword={newPassword} show={show} state={state} hydrated={hydrated}
       onCurrent={setCurrentPassword} onNew={setNewPassword} onToggleShow={() => setShow((s) => !s)} onSubmit={onSubmit} />
   );
 }

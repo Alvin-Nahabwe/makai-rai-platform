@@ -348,6 +348,17 @@ test.describe('S-04 and S-05 in a browser', () => {
     }
   });
 
+  test('Design review I-1 (D2): the public door pages\' heading is the 30 px step at 1280 by 800', async ({ browser }) => {
+    const page = await newPage(browser);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    for (const path of ['/login', '/forgot-password', '/reset-password']) {
+      await page.goto(path);
+      await expect(page).toHaveURL(new RegExp(`${path}$`));
+      await expect(page.locator('.gate__card h1'), path).toHaveCSS('font-size', '30px');
+    }
+    await page.context().close();
+  });
+
   test('UX-35 (review I-4): at 320 px and 200 % zoom the gate frame\'s heading wraps by whole words and stays inside its card', async ({ browser }) => {
     const fx = await buildOrg({ label: 'gatezoom', acceptances: 'pre-v1' });
     const page = await newPage(browser);
@@ -357,6 +368,7 @@ test.describe('S-04 and S-05 in a browser', () => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await expect(page.locator('.gate__card h1')).toHaveCSS('font-size', '30px');
     await page.goto('/change-password');
+    await expect(page).toHaveURL(/\/change-password$/);   // D1 closing review CR-2: the size is read on the page meant
     await expect(page.locator('.gate__card h1')).toHaveCSS('font-size', '30px');
     await page.goto('/acceptances');
     for (const width of [320, 160]) {
