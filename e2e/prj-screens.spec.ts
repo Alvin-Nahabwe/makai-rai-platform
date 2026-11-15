@@ -6,6 +6,7 @@ import {
   addAcceptedRisk, addFinding, addMitigationVersion, addProject, buildOrg, type FixtureAccount, type OrgFixture,
 } from '../__tests__/helpers/recordFixture';
 import { testDb } from '../__tests__/helpers/db';
+import { escapeRe } from '../__tests__/helpers/escapeRe';
 import type { Stage } from '../types/record';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { failOnDialog } from './helpers/dialogs';
@@ -139,7 +140,8 @@ test('NFR-A11Y-02 FR-PRJ-03: keyboard only, an owner opens S-10, archives with t
   const page = await signedIn(browser, fx.members.owner);
   // From the projects list: Home now shows one project's stages (plan 1B Task 10), not a card per project.
   await page.goto(path('/projects'));
-  await tabUntil(page, new RegExp(KEYBOARD_NAME));
+  // Anchored to the whole text: the kit Table's focusable scroll region also holds the name in its text, and Enter does nothing there.
+  await tabUntil(page, new RegExp(`^${escapeRe(KEYBOARD_NAME)}$`));
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(new RegExp(`/projects/${keyboardProject.id}$`));
   await tabUntil(page, /^Archive project$/);
