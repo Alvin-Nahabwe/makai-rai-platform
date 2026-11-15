@@ -15,6 +15,12 @@ const EXEMPT: Record<string, string> = {
 };
 
 const CALLS_GATE = /\brequireIdentity\(/;
+/**
+ * A page of a parallel-route slot (`@slot/`, owner ruling R4's `@project`) that renders nothing and imports nothing reads
+ * nothing, so it needs no gate: it is exactly `export default function Name() { return null; }` once comments are gone.
+ * A slot page that reads anything is held to the rule like any page (the project block's page calls requireIdentity).
+ */
+const EMPTY_SLOT_PAGE = /^\s*export default function \w+\(\) \{\s*return null;\s*\}\s*$/;
 
 /** The pages of `files` (path -> source) that neither call the gate nor sit under a gating layout below the group root. */
 function ungatedPages(files: ReadonlyMap<string, string>, group = GROUP): string[] {
@@ -23,6 +29,7 @@ function ungatedPages(files: ReadonlyMap<string, string>, group = GROUP): string
   const gates = (f: string) => CALLS_GATE.test(code(f));
   return [...files.keys()].filter((f) => f.endsWith('/page.tsx')).sort().filter((page) => {
     if (gates(page)) return false;
+    if (page.split('/').some((seg) => seg.startsWith('@')) && EMPTY_SLOT_PAGE.test(code(page))) return false;
     // Each directory from the page's own up to, but not including, the group root.
     for (let dir = dirname(page); dir !== group && dir.startsWith(`${group}/`); dir = dirname(dir)) {
       if (gates(`${dir}/layout.tsx`)) return false;
@@ -61,5 +68,13 @@ describe('every signed-in page runs the gates on a client-side navigation (A7)',
       .toEqual(['g/a/page.tsx', 'g/c/d/page.tsx']);
     // requireIdentityForApi is the API gate, not the page gate.
     expect(ungatedPages(tree({ 'g/a/layout.tsx': 'await requireIdentityForApi();' }), 'g')).toEqual(['g/a/page.tsx', 'g/c/d/page.tsx']);
+    // Route task 1: an empty page in a parallel-route slot reads nothing and needs no gate; a slot page that reads does,
+    // and an empty page outside a slot is still a page.
+    const slots = tree({
+      'g/@s/x/page.tsx': '/** nothing */\nexport default function NoProject() {\n  return null;\n}\n',
+      'g/@s/y/page.tsx': "import { load } from '@/lib/x';\nexport default async function P() { return load(); }",
+      'g/e/page.tsx': 'export default function E() { return null; }',
+    });
+    expect(ungatedPages(slots, 'g')).toEqual(['g/@s/y/page.tsx', 'g/a/page.tsx', 'g/c/d/page.tsx', 'g/e/page.tsx']);
   });
 });

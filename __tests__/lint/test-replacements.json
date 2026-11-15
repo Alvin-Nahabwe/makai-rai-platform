@@ -2150,5 +2150,53 @@
     "property": "The in-page link down to the suggestions shows exactly while the guidance (and the suggestions in it) is not beside the form, is a target of at least 24 by 24 pixels, and keeps a visible focus ring; it is hidden by the same media query that puts the guidance beside the form in components/question/workspace.css.",
     "proof": "With the route column (owner's decision of 14 November 2026) the guidance sits beside the form only from 90rem; from 72.5rem to under 90rem it is below the form. The case now requires `@media (width >= 90rem) { .question-content__jump { display: none;` in QuestionContent.css and the same query in workspace.css opening the three-column grid (`grid-template-columns: minmax(16rem, 1fr) minmax(0, 2fr) minmax(16rem, 1fr); grid-template-areas: \"route main guide\";`), in place of the 72.5rem pair; the 24 px, focus-ring, colour-role and no-75rem expectations are unchanged. Seen RED on the old pattern after the CSS moved to 90rem, GREEN with the new one; e2e/question-frame.spec.ts sees the link visible at 1160 and hidden at 1440.",
     "task": "lane 7 part 2 (the route column on the question page)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/idle-layout.test.tsx::UX-02: the layout gives the Sidebar the person's role in each of their organisations, the platform label and no platform role",
+    "replacedBy": "__tests__/unit/idle-layout.test.tsx::UX-02: the layout gives the Sidebar the person's role in each of their organisations, the platform label and no platform role",
+    "property": "The signed-in layout hands AppShell the person's role in each of their organisations, the platform label and no platform role field, through any prop (D-10).",
+    "proof": "One literal changes: the list of AppShell's prop names is now ['children', 'project', 'shell']. The layout passes the new `@project` parallel-route slot (owner ruling R4, the rail's project block) to AppShell as `project`; in this test the layout is called with no slot, so the prop is undefined and carries nothing. The case still asserts the exact prop names (so any new prop fails it), the shell object, and that no prop's JSON contains 'assessor'. What the slot carries is pinned by __tests__/integration/shell-project.test.ts::S5: only the project's id, its name and the per-stage numbers are returned.",
+    "task": "lane 3 task 1 (route: the rail logo and project block, the narrow top bar, the footer)"
+  },
+  {
+    "kind": "wording",
+    "deleted": "__tests__/unit/ui/shell.test.tsx::1A Task 11 L2-52: the rail holds the product name, the switcher, the navigation, Sign out and the theme switch, in that order",
+    "replacedBy": "__tests__/unit/ui/shell.test.tsx::1A Task 11 L2-52: the rail holds the brand (the logo and the product name), the switcher, the navigation, Sign out and the theme switch, in that order",
+    "property": "The rail is the navigation landmark and holds, in order, the product name, the switcher, the navigation, the lower group, Sign out and the theme switch, and no aside.",
+    "proof": "The product name is now inside the brand link with the MAK-AI logo (the locked sketch's 'Mak-AI / MAK-AI RAI Platform'): the first marker is `<span class=\"shell-rail__product\">MAK-AI RAI Platform</span>` in place of the `<p>`, the order check is unchanged, and `not.toMatch(/<img|<aside/)` became exactly one <img> (the logo) and no aside. The logo link itself: __tests__/unit/ui/shell-route.test.tsx::the logo (decorative beside the name) and \"MAK-AI RAI Platform\" are one link to the organisation's Home.",
+    "task": "lane 3 task 1 (route: the rail logo and project block, the narrow top bar, the footer)"
+  },
+  {
+    "kind": "wording",
+    "deleted": "__tests__/unit/ui/shell.test.tsx::1A Task 12 L2-48: the organisation rail lists Home, Projects, Findings, Guidance, Help, Members, Organisation details, My account at their addresses",
+    "replacedBy": "__tests__/unit/ui/shell.test.tsx::1A Task 12 L2-48 (spec 7.5): the organisation rail lists Home, Projects, Findings, Guidance, Help, Members, Organisation, My account at their addresses",
+    "property": "A member's rail lists its eight items in order at their addresses, Members and the organisation item before the person, the person before My account.",
+    "proof": "The rail's label for the organisation page is now 'Organisation' (spec 7.5 line 237 and table line 272; design-target section 1 gap 1); the addresses and the order are unchanged. The helper navOf now cuts the brand link out of the rail's navigation, so the item lists stay the items.",
+    "task": "lane 3 task 1 (route: the rail logo and project block, the narrow top bar, the footer)"
+  },
+  {
+    "kind": "wording",
+    "deleted": "__tests__/unit/shell-nav.test.ts::1A Task 12 L2-48: a member of an organisation gets Home, Projects, Findings, Guidance, Help, then Members, Organisation details, My account",
+    "replacedBy": "__tests__/unit/shell-nav.test.ts::1A Task 12 L2-48: a member of an organisation gets Home, Projects, Findings, Guidance, Help, then Members, Organisation, My account",
+    "property": "A member of an organisation gets the eight rail items in order with their labels and groups.",
+    "proof": "Only the organisation item's label changes, 'Organisation details' to 'Organisation' (spec 7.5 line 237); the order, the keys and the groups are unchanged.",
+    "task": "lane 3 task 1 (route: the rail logo and project block, the narrow top bar, the footer)"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/sidebar-role.test.tsx::UX-02: the organisation shell lists the 7.1.1 items in order, Switch organisation only for more than one",
+    "replacedBy": "__tests__/unit/ui/shell.test.tsx::1A Task 12 L2-48 (spec 7.5): the organisation rail lists Home, Projects, Findings, Guidance, Help, Members, Organisation, My account at their addresses",
+    "property": "The organisation shell lists its items in a fixed order; switching organisation is offered only to a member of more than one. The item list itself is replaced by plan 1A's (Home, Projects, Findings, Guidance, Help, then Members, Organisation details, My account; Help added by Task 12, ruling L2-48).",
+    "proof": "The new case reads the rail's link labels in DOM order and asserts the list, and that the person block sits between Organisation details and My account. __tests__/unit/ui/shell.test.tsx::1A Task 11 L2-53: one organisation is a name, with no control and __tests__/unit/ui/shell.test.tsx::1A Task 11 L2-53: two organisations are a button naming the open one, and a closed, empty list carry the more-than-one rule; __tests__/unit/shell-nav.test.ts::1A Task 12 L2-48: a member of an organisation gets Home, Projects, Findings, Guidance, Help, then Members, Organisation details, My account checks the function's order. Route task 1 (lane 3): the replacing case was renamed when the rail's label became 'Organisation' (spec 7.5 line 237); this entry points at its new title, the earlier one is kept as written (the ledger is append only).",
+    "task": "lane 3 task 1 (route: the rail logo and project block, the narrow top bar, the footer)"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/sidebar-role.test.tsx::UX-02: the organisation items and the Explore items point at the 7.1.5 addresses",
+    "replacedBy": "__tests__/unit/ui/shell.test.tsx::1A Task 12 L2-48 (spec 7.5): the organisation rail lists Home, Projects, Findings, Guidance, Help, Members, Organisation, My account at their addresses",
+    "property": "Each item of the shell points at its address under the open organisation, or at a fixed application path. About and Controls leave the rail (About is in the footer; Controls is reached from Guidance), and switching organisation is a list of the person's organisations' dashboards instead of a link to /.",
+    "proof": "The new case reads every href of the navigation in order and asserts the eight addresses for /orgs/a, /help among them (Task 12). __tests__/unit/shell-nav.test.ts::1A Task 11 L2-49: outside an organisation the organisation items fall back to / and none of them is current checks the fallback. Route task 1 (lane 3): the replacing case was renamed when the rail's label became 'Organisation' (spec 7.5 line 237); this entry points at its new title, the earlier one is kept as written (the ledger is append only).",
+    "task": "lane 3 task 1 (route: the rail logo and project block, the narrow top bar, the footer)"
   }
 ]

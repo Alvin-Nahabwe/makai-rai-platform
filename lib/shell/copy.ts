@@ -14,11 +14,11 @@ export const SHELL_COPY = Object.freeze({
   switchOrganisation: 'Switch organisation',
   theme: Object.freeze({ toDark: 'Switch to dark theme', toLight: 'Switch to light theme' }),
   public: Object.freeze({ about: 'About', signIn: 'Sign in' }),
-  /** The footer's first site link, to Help's legal section (plan 1A Task 12, R7). */
-  footer: Object.freeze({ termsAndPrivacy: 'Terms and privacy' }),
+  /** The footer's first site link, to Help's legal section (plan 1A Task 12, R7), and the names of its two logos. */
+  footer: Object.freeze({ termsAndPrivacy: 'Terms and privacy', makaiLogo: 'MAK-AI', dswbLogo: 'Data Science Without Borders' }),
   items: Object.freeze({
     home: 'Home', projects: 'Projects', findings: 'Findings', guidance: 'Guidance', help: 'Help',
-    members: 'Members', organisation: 'Organisation details', account: 'My account',
+    members: 'Members', organisation: 'Organisation', account: 'My account',
     'admin-organisations': 'Organisations', 'admin-accounts': 'Accounts',
   } satisfies Record<RailItem['key'], string>),
 });

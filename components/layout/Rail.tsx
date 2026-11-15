@@ -1,14 +1,16 @@
 'use client';
 
-import { useState, useSyncExternalStore } from 'react';
+import { useState, useSyncExternalStore, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import { Icon } from '@/components/ui/Icon';
 import OrgSwitcher from '@/components/layout/OrgSwitcher';
 import ThemeToggle from '@/components/layout/ThemeToggle';
+import { ShellPlace } from '@/components/layout/ShellPlace';
+import { MAKAI_LOGO } from '@/components/layout/logos';
 import { SignOutWithDraftsGuard } from '@/components/decision/SignOutWithDraftsGuard';
-import { currentOrgSlug } from '@/lib/org-nav';
+import { currentOrgSlug, orgHref } from '@/lib/org-nav';
 import { clearLastProjects, readLastProject, subscribeLastProject } from '@/lib/client/lastProject';
 import { findingsHref, railItems, railOrgSlug, rememberOrgSlug, roleUnderName } from '@/lib/shell/nav';
 import { SHELL_COPY } from '@/lib/shell/copy';
@@ -32,8 +34,10 @@ function Item({ item }: { item: RailItem }) {
 }
 
 /**
- * The rail (plan 1A Task 11, rulings L2-52 and L2-60): the one navigation landmark, holding the product name, the organisation
- * switcher (not for the platform administrator, L2-61), the items, Sign out and the theme switch, so a person moving by
+ * The rail (plan 1A Task 11, rulings L2-52 and L2-60): the one navigation landmark, holding the brand (the MAK-AI logo and the
+ * platform's name under it, one link to Home, as the locked sketch draws it), the organisation switcher (not for the platform
+ * administrator, L2-61), the items, the project block when a project is in context (the `@project` slot, owner ruling R4,
+ * between the main items and the lower group), Sign out and the theme switch, so a person moving by
  * landmarks reaches all of them. Navy in both themes, with the current item a filled orange shape and white text; no text on it
  * is ever orange.
  *
@@ -52,7 +56,7 @@ function Item({ item }: { item: RailItem }) {
  * else the server's homeSlug. It is remembered in state, updated during render when the address names one of the person's
  * own organisations (React's "storing information from previous renders"), so the first render already has it.
  */
-export default function Rail({ shell }: { shell: ShellData }) {
+export default function Rail({ shell, project }: { shell: ShellData; project?: ReactNode }) {
   const pathname = usePathname();
   const addressSlug = currentOrgSlug(pathname);
   const [lastSeen, setLastSeen] = useState<string | null>(null);
@@ -75,7 +79,14 @@ export default function Rail({ shell }: { shell: ShellData }) {
 
   return (
     <nav className="shell-rail" aria-label={SHELL_COPY.nav}>
-      <p className="shell-rail__product">{PRODUCT_NAME}</p>
+      {/* The logo is decorative beside the visible name inside the one link, so the link is read once: "MAK-AI RAI Platform".
+          `/` only redirects (to the chooser, a gate or /login), so it is not prefetched, as in PublicHeader. */}
+      <Link href={orgHref(slug, '/dashboard')} className="shell-rail__brand" prefetch={slug === null ? false : undefined}>
+        {/* eslint-disable-next-line @next/next/no-img-element -- a file already sized for the drawn logo (logos.ts). */}
+        <img src={MAKAI_LOGO.src} srcSet={MAKAI_LOGO.srcSet} width={MAKAI_LOGO.width} height={MAKAI_LOGO.height} alt=""
+          decoding="async" className="shell-rail__logo" />
+        <span className="shell-rail__product">{PRODUCT_NAME}</span>
+      </Link>
       {shell.platformLabel === null && shell.orgs.length > 0 ? (
         <div className="shell-rail__org">
           <OrgSwitcher orgs={shell.orgs} currentSlug={addressSlug ?? null} />
@@ -85,6 +96,7 @@ export default function Rail({ shell }: { shell: ShellData }) {
         <ul className="shell-rail__main">
           {items.filter((i) => i.group === 'main').map((item) => <Item key={item.key} item={item} />)}
         </ul>
+        {project ? <ShellPlace name="rail">{project}</ShellPlace> : null}
         <ul className="shell-rail__lower">
           {items.filter((i) => i.group === 'lower' && i.key !== 'account').map((item) => <Item key={item.key} item={item} />)}
           <li className="shell-rail__person">

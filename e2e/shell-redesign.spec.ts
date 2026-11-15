@@ -20,7 +20,7 @@ import { expectNoHorizontalScroll } from './helpers/reflow';
 
 const WARNING = 'You will be signed out in 2 minutes because nothing has happened for a while.';
 const ENDED = 'You have been signed out. What you typed is still on this page.';
-const ORG_ITEMS = ['Home', 'Projects', 'Findings', 'Guidance', 'Help', 'Members', 'Organisation details', 'My account'];
+const ORG_ITEMS = ['Home', 'Projects', 'Findings', 'Guidance', 'Help', 'Members', 'Organisation', 'My account'];
 /** 70 characters, no hyphen and no space: the hardest organisation name to fit in the rail. */
 const LONG_ORG_NAME = 'Kampalanakasongolaresponsibleartificialintelligencelaboratoryformakere';
 const PERSON_NAME = 'Ssekandi Nnaŋŋa';
@@ -94,7 +94,8 @@ async function scrollSettled(page: Page): Promise<void> {
   );
 }
 
-const railLinks = (page: Page) => page.getByRole('navigation', { name: 'Main', exact: true }).getByRole('link');
+/** The rail's items: its links but the brand (the MAK-AI logo and the platform's name, e2e/shell-project.spec.ts). */
+const railLinks = (page: Page) => page.getByRole('navigation', { name: 'Main', exact: true }).locator('a.shell-rail__item');
 
 // ── The person in two organisations, with long names, made for this spec ─────────────────────────────────────────────
 
@@ -404,7 +405,7 @@ async function expectNamesFit(page: Page, names: readonly string[]): Promise<voi
       .filter((e) => getComputedStyle(e).display !== 'none')
       .filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && (r.right > vw + 0.5 || r.left < -0.5); })
       .map((e) => `${e.tagName.toLowerCase()}.${(e as HTMLElement).className}`);
-    const overflowing = [...document.querySelectorAll('.shell-rail__name, .shell-org__name, .shell-topbar__title, .shell-rail__product')]
+    const overflowing = [...document.querySelectorAll('.shell-rail__name, .shell-org__name, .shell-rail__product')]
       .filter((e) => getComputedStyle(e).display !== 'none')
       .filter((e) => (e as HTMLElement).scrollWidth > (e as HTMLElement).clientWidth + 0.5)
       .map((e) => `${(e as HTMLElement).className}: ${(e as HTMLElement).scrollWidth} > ${(e as HTMLElement).clientWidth}`);
@@ -540,10 +541,10 @@ test('1A Task 11 (5) F3: a hovered organisation in the open switcher keeps the s
   }
 });
 
-/** The addresses of the rail's five organisation links (Home, Projects, Findings, Members, Organisation details). */
+/** The addresses of the rail's five organisation links (Home, Projects, Findings, Members, Organisation). */
 async function orgLinkHrefs(page: Page): Promise<string[]> {
   const out: string[] = [];
-  for (const label of ['Home', 'Projects', 'Findings', 'Members', 'Organisation details']) {
+  for (const label of ['Home', 'Projects', 'Findings', 'Members', 'Organisation']) {
     out.push((await railLinks(page).filter({ hasText: new RegExp(`^${label}$`) }).getAttribute('href')) ?? 'MISSING');
   }
   return out;

@@ -175,7 +175,8 @@ test.describe('Findings from the rail (P2, L2-64 to L2-66)', () => {
     page.on('pageerror', (e) => errors.push(e.message));
     await page.goto(`/orgs/${fx.org.slug}/projects/${a.id}`);
     await hydrated(page, '.shell-rail__signout');
-    await expect(rail(page).getByRole('link')).toHaveText(['Home', 'Projects', 'Findings', 'Guidance', 'Help', 'Members', 'Organisation details', 'My account']);
+    // The rail's items (its brand and, on a project's page, the project block are links too: e2e/shell-project.spec.ts).
+    await expect(rail(page).locator('a.shell-rail__item')).toHaveText(['Home', 'Projects', 'Findings', 'Guidance', 'Help', 'Members', 'Organisation', 'My account']);
     const before = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
     await rail(page).locator('.shell-theme').click();
     await expect.poll(() => page.evaluate(() => document.documentElement.getAttribute('data-theme'))).not.toBe(before);

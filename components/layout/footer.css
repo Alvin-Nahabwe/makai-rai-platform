@@ -1,0 +1,89 @@
+/* The footer of every page (components/layout/Footer.tsx): a navy band in both themes, in the rail's language. The two
+   logos on the left, the credit line and the four links on the right; below 640 px, one column. Role tokens only: the
+   shell navy and its ink and muted ink, which hold 4.5:1 on it in every theme (__tests__/unit/design-tokens.test.ts). Links
+   are underlined, 24 px high, and keep the shell ink on hover (a:hover in app/globals.css would paint them the link colour,
+   navy on navy). Nothing animates. The print rule that hides it stays with the shell's (app/globals.css, shell.css). */
+
+.shell-footer {
+  padding: var(--space-8) var(--space-4);
+  /* In the dark theme the band and the page are both near-black navy: the rule marks where the band starts. */
+  border-block-start: 1px solid var(--color-shell-hover);
+  background-color: var(--color-shell);
+  color: var(--color-shell-ink);
+  font-size: var(--font-size-small);
+}
+
+.shell-footer__inner {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-6) var(--space-12);
+  max-width: var(--max-width);
+  margin: 0 auto;
+}
+
+.shell-footer__logos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4) var(--space-8);
+}
+
+.shell-footer__logos img {
+  display: block;
+  max-inline-size: 100%;
+  block-size: auto;
+}
+
+.shell-footer__text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  padding-inline-start: var(--space-12);
+  border-inline-start: 1px solid var(--color-shell-hover);
+}
+
+.shell-footer__credit {
+  max-inline-size: var(--measure-reading);
+  color: var(--color-shell-muted);
+  overflow-wrap: anywhere;
+}
+
+.shell-footer__nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-6);
+}
+
+.shell-footer__nav a,
+.shell-footer__nav span {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--target-min);
+  color: var(--color-shell-ink);
+}
+
+.shell-footer__nav a {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.shell-footer__nav a:hover {
+  color: var(--color-shell-ink);
+  text-decoration-thickness: 2px;
+}
+
+@media (max-width: 639.98px) {
+  .shell-footer__inner {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .shell-footer__text {
+    padding-inline-start: 0;
+    padding-block-start: var(--space-6);
+    border-inline-start: 0;
+    border-block-start: 1px solid var(--color-shell-hover);
+  }
+}

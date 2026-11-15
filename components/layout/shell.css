@@ -18,25 +18,128 @@
 /* ── The top bar (below 1024 px): ordinary flow content, neither sticky nor fixed ── */
 .shell-topbar {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2) var(--space-4);
+  gap: var(--space-2);
   padding: var(--space-2) var(--space-4);
   background-color: var(--color-shell);
   color: var(--color-shell-ink);
 }
 
-.shell-topbar__title {
+/* The MAK-AI logo, linking Home; replaced by the project context when one is in the bar (no room for both at 320 px). */
+.shell-topbar__brand {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  min-block-size: var(--target-primary);
+  margin-inline-start: var(--space-2);
+}
+
+.shell-topbar__logo {
+  display: block;
+}
+
+.shell-topbar:has(.shell-bar-project) .shell-topbar__brand {
+  display: none;
+}
+
+/* ── The narrow top bar's project context: the stage, the project under it (cut with an ellipsis), "All questions" ── */
+.shell-bar-project {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--space-2);
   min-width: 0;
-  overflow-wrap: anywhere;
+}
+
+.shell-bar-project__where {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  line-height: var(--line-height-heading);
+}
+
+.shell-bar-project__stage {
+  overflow: hidden;
+  font-weight: var(--font-weight-bold);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.shell-bar-project__name {
+  overflow: hidden;
+  color: var(--color-shell-muted);
+  font-size: var(--font-size-small);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* On a project-level page the name stands alone, on the first line. */
+.shell-bar-project__name:only-child {
+  color: var(--color-shell-ink);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-bold);
+}
+
+.shell-bar-project__all {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  min-block-size: var(--target-primary);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-shell-muted);
+  border-radius: var(--radius-control);
+  color: var(--color-shell-ink);
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-semibold);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.shell-bar-project__all:hover {
+  background-color: var(--color-shell-hover);
+  /* a:hover in app/globals.css (0,1,1) would paint it the link colour, navy on navy. */
+  color: var(--color-shell-ink);
+}
+
+/* With a project in the bar, its three parts share the row: the bar's and the controls' inline padding step down one size
+   so that "Pre-processing" stays whole at 375 px. */
+.shell-topbar:has(.shell-bar-project) {
+  padding-inline: var(--space-3);
+}
+
+.shell-topbar:has(.shell-bar-project) .shell-topbar__menu-button,
+.shell-bar-project__all {
+  padding-inline: var(--space-2);
+}
+
+/* Below 360 px one row cannot hold the Menu button, the stage and "All questions": the bar takes a second row, with the
+   stage and the project across it. Only the boxes move: the reading and focus order stay Menu, stage, All questions. */
+@media (max-width: 359.98px) {
+  .shell-topbar:has(.shell-bar-project) {
+    flex-wrap: wrap;
+  }
+
+  .shell-bar-project {
+    display: contents;
+  }
+
+  .shell-bar-project__all {
+    order: 1;
+    margin-inline-start: auto;
+  }
+
+  .shell-bar-project__where {
+    flex-basis: 100%;
+    order: 2;
+  }
 }
 
 .shell-topbar__menu-button {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
+  flex: none;
   min-block-size: var(--target-primary);
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--color-shell-muted);
@@ -85,7 +188,9 @@
     box-shadow: var(--shadow-surface);
   }
 
-  .shell-rail__product {
+  /* The bar shows the logo below 1024 px, and the rail in the Menu panel does not repeat it; when the bar holds a project's
+     context in the logo's place, the panel's rail keeps its brand, so the logo and the link Home are one press away. */
+  .shell-topbar:not(:has(.shell-bar-project)) + .shell-topbar__panel .shell-rail__brand {
     display: none;
   }
 }
@@ -137,11 +242,35 @@
 .shell-rail [data-sign-out-drafts] {
   color: var(--color-ink);
 }
+/* The brand (the locked sketch's "Mak-AI / MAK-AI RAI Platform"): the logo, the platform's name under it, one link Home. */
+.shell-rail__brand {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-control);
+  color: var(--color-shell-ink);
+  text-decoration: none;
+}
+
+.shell-rail__brand:hover {
+  /* a:hover in app/globals.css (0,1,1) would paint it the link colour, navy on navy. */
+  color: var(--color-shell-ink);
+}
+
+.shell-rail__brand:hover .shell-rail__product {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.shell-rail__logo {
+  display: block;
+}
+
 .shell-rail__product {
-  padding-inline: var(--space-3);
   color: var(--color-shell-muted);
   font-size: var(--font-size-small);
-  font-weight: var(--font-weight-semibold);
   overflow-wrap: anywhere;
 }
 
@@ -219,6 +348,122 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+}
+
+/* ── The rail's project block (owner ruling R4; the locked sketch's `.lines`): the project, the stage sentence, the three
+   stages with a line mark and one line of state. The stage in the address sits on the lighter navy plate; its "You are
+   here" is shell ink, not orange: spec 7.1 puts no orange text on the navy, so the orange is the disc on its line mark. ── */
+.shell-project {
+  display: flex;
+  flex-direction: column;
+  padding-block-start: var(--space-2);
+}
+
+.shell-project__name {
+  padding-inline: var(--space-2);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-bold);
+  overflow-wrap: anywhere;
+}
+
+.shell-project__name a {
+  color: var(--color-shell-ink);
+  text-decoration: none;
+}
+
+.shell-project__name a:hover {
+  color: var(--color-shell-ink);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.shell-project__lead {
+  padding: 0 var(--space-2) var(--space-2);
+  color: var(--color-shell-muted);
+  font-size: var(--font-size-small);
+}
+
+.shell-rail__nav .shell-project__stages {
+  gap: 0;
+}
+
+.shell-project__stage {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+  min-block-size: 48px;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  color: var(--color-shell-ink);
+  font-weight: var(--font-weight-semibold);
+  text-decoration: none;
+}
+
+.shell-project__stage:hover,
+.shell-project__stage--current {
+  background-color: var(--color-shell-hover);
+  color: var(--color-shell-ink);
+}
+
+.shell-project__stage-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  /* A word breaks only when it cannot fit at all, so "Post-processing" stays whole in the rail's column. */
+  overflow-wrap: break-word;
+}
+
+.shell-project__state {
+  color: var(--color-shell-muted);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-heading);
+}
+
+.shell-project__stage--current .shell-project__state {
+  color: var(--color-shell-ink);
+  font-weight: var(--font-weight-semibold);
+}
+
+.shell-project__mark {
+  overflow: visible;
+}
+
+.shell-project__mark path {
+  fill: none;
+  stroke: var(--color-shell-muted);
+  stroke-width: 4;
+  stroke-linecap: round;
+  opacity: 0.55;
+}
+
+.shell-project__stage--started .shell-project__mark path {
+  opacity: 1;
+}
+
+.shell-project__stage--current .shell-project__mark path {
+  stroke: var(--color-shell-ink);
+  opacity: 1;
+}
+
+.shell-project__mark circle {
+  fill: var(--color-action);
+  stroke: var(--color-shell-ink);
+  stroke-width: 2;
+}
+
+@media (forced-colors: active) {
+  .shell-project__stage--current {
+    border-color: CanvasText;
+    border-inline-start-width: 4px;
+  }
+
+  .shell-project__mark path,
+  .shell-project__mark circle {
+    stroke: CanvasText;
+  }
 }
 
 /* ── The organisation switcher ── */

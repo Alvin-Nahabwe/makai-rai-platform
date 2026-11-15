@@ -876,7 +876,7 @@ dialog::backdrop {
   background-color: var(--color-tint);
 }
 
-/* ── The public header and the footer: plain flow content on the surface, links underlined and 24 px high ── */
+/* ── The public header: plain flow content on the surface, links underlined and 24 px high (the footer: components/layout/footer.css) ── */
 .shell-public-header {
   display: flex;
   flex-wrap: wrap;
@@ -899,16 +899,14 @@ dialog::backdrop {
   overflow-wrap: anywhere;
 }
 
-.shell-public-header__nav,
-.shell-footer__nav {
+.shell-public-header__nav {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2) var(--space-6);
 }
 
-.shell-public-header__nav a,
-.shell-footer__nav a {
+.shell-public-header__nav a {
   display: inline-flex;
   align-items: center;
   min-block-size: var(--target-min);
@@ -916,27 +914,8 @@ dialog::backdrop {
   text-underline-offset: 0.15em;
 }
 
-.shell-public-header__nav a,
-.shell-footer__nav a {
+.shell-public-header__nav a {
   text-decoration: underline;
-}
-
-.shell-footer {
-  padding: var(--space-6) var(--space-4);
-  border-block-start: 1px solid var(--color-border-container);
-  background-color: var(--color-surface);
-  color: var(--color-ink);
-  font-size: var(--font-size-small);
-}
-
-.shell-footer__credit {
-  max-width: var(--max-width);
-  margin: 0 auto var(--space-3);
-}
-
-.shell-footer__nav {
-  max-width: var(--max-width);
-  margin: 0 auto;
 }
 
 /* ── The session dialogs: the warning is the kit's Dialog; the signed-out notice is a Banner at the top of the page ── */
