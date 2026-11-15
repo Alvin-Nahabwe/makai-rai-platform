@@ -1,0 +1,27 @@
+/* The terms a page uses near its top, each with its definition (lane 6, B4). A two-column list while it fits: the term
+   in ink, its definition in the kit's muted small style (.ui-definition) beside it, on the baseline. Under 30rem each
+   term sits above its definition. Colour and type roles only. */
+.term-list {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+  max-inline-size: var(--measure-reading);
+  font-size: var(--font-size-small);
+}
+
+.term-list dt {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-ink);
+}
+
+@media (max-width: 30rem) {
+  .term-list {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 0;
+  }
+
+  .term-list dd + dt {
+    margin-block-start: var(--space-2);
+  }
+}

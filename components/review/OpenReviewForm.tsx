@@ -6,6 +6,8 @@ import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafe
 import { OPEN_LOST, isReviewBody, openRefusal } from './reviewText';
 import { clearRetry, loadRetry, openRetryKey, retryAfter, saveRetry, sessionRetryStorage } from './retryStore';
 import { stageReviewName } from '@/lib/seal/reviewName';
+import { markTerms } from './markTerms';
+import { Definition } from '@/components/ui/Definition';
 import { STAGES, type Stage } from '@/types/record';
 import type { ApiErrorBody, StageReviewView } from '@/types/api';
 import { Button } from '@/components/ui/Button';
@@ -14,7 +16,7 @@ import { FieldError, FieldLabel } from '@/components/ui/TextInput';
 import { StatusRegion } from '@/components/ui/StatusRegion';
 import '@/components/ui/selectStyles';
 import '@/components/ui/textAreaStyles';
-import { REVIEW_COPY } from '@/lib/review/copy';
+import { REVIEW_COPY, STAGE_TERMS } from '@/lib/review/copy';
 
 const MAX = 120;
 const C = REVIEW_COPY.open;
@@ -107,7 +109,9 @@ export function OpenReviewForm(props: OpenReviewFormProps): ReactElement {
   const noteInvalid = fieldError?.field === 'preparedFor' || count > MAX;
   return (
     <form method="post" onSubmit={(e) => { void submit(e); }} noValidate className="review-form">
-      <p>{C.nameLabel} <strong>{stageReviewName(stage, props.nextNumbers[stage])}</strong></p>
+      {/* The name holds the page's first use of the stage's name: its meaning follows it, and changes with the stage (D1). */}
+      <p>{C.nameLabel} <strong>{markTerms(stageReviewName(stage, props.nextNumbers[stage]), [STAGE_TERMS[stage]])}</strong></p>
+      <Definition of={STAGE_TERMS[stage]} as="p" />
       {props.fixedStage === null ? (
         <div className="ui-field">
           <FieldLabel htmlFor="open-review-stage" label={C.stageLabel} />

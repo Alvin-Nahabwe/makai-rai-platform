@@ -22,7 +22,7 @@ import { SEAL_PROOF_HREF, contentChangedLine, reviewStateLine, sealAgainLabel } 
 import RememberProject from '@/components/layout/RememberProject';
 import { HELP_COPY } from '@/lib/help/copy';
 import { REVIEW_COPY } from '@/lib/review/copy';
-import { PageHeader } from '@/components/ui/PageHeader';
+import { ReviewPageTop } from '@/components/review/ReviewPageTop';
 import '@/components/review/review.css';
 
 interface PageProps {
@@ -78,17 +78,14 @@ export default async function StageReviewPage({ params }: PageProps) {
   // A heading is drawn only with something under it (workshop walk S5-2): Seals with a seal, Documents with a document or this link.
   const canCreateDocument = can(ctx.role, 'document:generate') && !archived && seals.length > 0;
   const contentLine = contentChangedLine(review.latestSeal, runningContent().semver);
-  const opened = [
-    r.stage(REVIEW_COPY.stageNames[review.stage]),
-    review.preparedForErased !== null ? r.noteErased(formatDay(review.preparedForErased.erasedOn))
-      : review.preparedFor !== null ? r.note(review.preparedFor) : null,
-    r.openedBy(review.openedBy.name),
-  ].filter((x): x is string => x !== null).join('\u00a0· ');
 
   return (
     <div className="page-content">
       <ArchivedBanner archived={archived} />
-      <PageHeader breadcrumb={[{ label: project.name, href: base }, { label: review.name }]} title={review.name} lead={<p>{opened} <DeviceDateTime iso={review.openedAt} form="day" serverText={formatDay(review.openedAt)} /></p>} />
+      <ReviewPageTop
+        name={review.name} breadcrumb={[{ label: project.name, href: base }, { label: review.name }]} view={review}
+        hasSeals={seals.length > 0} changedFindings={review.changed !== null && review.changed.changedFindings.length > 0}
+      />
 
       <section aria-labelledby="review-state" className="review-block">
         <h2 id="review-state">{r.statusHeading}</h2>

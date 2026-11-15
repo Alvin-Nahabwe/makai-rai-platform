@@ -146,3 +146,18 @@
 .review-questions > li {
   margin-block-end: var(--space-1);
 }
+
+/* S-16's facts (S5, audit C 7): each term with its value on one row while they fit, the term in the weight of a label. */
+.review-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--space-1) var(--space-4);
+}
+
+.review-facts dt {
+  font-weight: var(--font-weight-semibold);
+}
+
+.review-facts dd {
+  overflow-wrap: anywhere;
+}
