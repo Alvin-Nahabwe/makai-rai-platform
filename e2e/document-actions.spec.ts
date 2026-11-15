@@ -274,7 +274,7 @@ test('FR-DOC-01 (MP-04): an issued mitigation plan lists, for a finding raised f
     const res = await ctx.get(`/api/v1/orgs/${org.slug}/documents/${d.id}/text`);
     expect(res.status()).toBe(200);
     const text = await res.text();
-    expect(text).toContain('Risk areas of question Q-PP-12: PP-07 Labeling Bias');
+    expect(text).toContain('Risk areas of question Q-PP-12: Labeling Bias (PP-07)'); // lane 6 C12: an area's name first, its code after (wordsThenCode)
     expect(text).toContain('Controls: C-03 Data Quality & Representativeness Audit; C-04 Bias Detection in Data; C-12 Labeling Quality Assurance');
   } finally {
     await ctx.dispose();

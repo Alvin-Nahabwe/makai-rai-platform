@@ -2,8 +2,8 @@ import type { ReactElement } from 'react';
 import { statSync } from 'node:fs';
 import { join } from 'node:path';
 import { DownloadLink } from '@/components/ui/DownloadLink';
-import { markTerms, usesTerm } from '@/components/review/markTerms';
-import { TermLine } from '@/components/review/TermList';
+import { usesTerm } from '@/components/review/markTerms';
+import { TermLeadLine } from '@/components/review/TermList';
 import { formatDay } from '@/lib/format/dates';
 import { SUGGESTIONS_COPY } from '@/lib/suggestions/copy';
 import type { ContentArea, ContentControl, ResourceLink, ResourcesFile } from '@/types/content';
@@ -59,8 +59,9 @@ export type ControlCardProps = {
   headingLevel: 3 | 4;
   /**
    * Lane 6, FX2 (ruling X-5): the card repeats on a page, so it defines nothing unless the page asks. When true and the
-   * description uses "model card", that use is marked as the term, and the next line names the term and gives its
-   * definition (FX4, DF I5: a bare definition there read as a line about the control). The
+   * description uses "model card", a line before the description names the term (marked as its first use) and gives its
+   * definition (DF I5: the definition needs its subject); the description itself stays one whole text, as the claims
+   * crawl allows content (FR-PUB-01). The
    * controls page sets it on the first card whose description holds the page's first use (spec 6); S-12 and S-15 leave it off.
    */
   defineModelCard?: boolean;
@@ -80,8 +81,8 @@ export function ControlCard({ control, resources, alsoAddresses = [], usuallyApp
     <article className="ctl-card" data-control={control.id}>
       <Heading className="ctl-card__title">{control.name}</Heading>
       <p className="ctl-card__type">{WORDS.type(typeWord(control))}</p>
-      <p className="ctl-card__desc">{defineHere ? markTerms(control.description, [TERM_MODEL_CARD]) : control.description}</p>
-      {defineHere ? <TermLine of={TERM_MODEL_CARD} /> : null}
+      {defineHere ? <TermLeadLine of={TERM_MODEL_CARD} /> : null}
+      <p className="ctl-card__desc">{control.description}</p>
       {alsoAddresses.length > 0 && (
         <p className="ctl-card__note">{WORDS.alsoHelps(alsoAddresses.map((a) => a.name))}</p>
       )}

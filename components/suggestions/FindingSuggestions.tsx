@@ -1,8 +1,7 @@
 import type { ReactElement } from 'react';
 import { loadContent } from '@/lib/content/loader';
 import { loadResources } from '@/lib/content/resources';
-import { Definition } from '@/components/ui/Definition';
-import { markTerms, usesTerm } from '@/components/review/markTerms';
+import { usesTerm } from '@/components/review/markTerms';
 import { TERM_MODEL_CARD } from '@/lib/vocabulary/terms';
 import { controlsForArea } from '@/lib/content/suggestions';
 import { SUGGESTIONS_COPY } from '@/lib/suggestions/copy';
@@ -29,28 +28,26 @@ export function findingSuggestionCount(p: FindingSuggestionsProps): number {
  * no count line (SRS W-5, line 1996). SRS W-5 note 5: the controls are collapsed to their names on one line, with the full cards
  * in a closed "Show details".
  *
- * Lane 6, FX3 (ruling X-5, spec 6): the cards repeat on a page, so this slot defines "model card" once, at its first use.
- * The names line comes first, so a control name that uses the term (C-17, "Model Documentation (Model Card)") holds the
- * first use: the name marks it and the definition is the element right after the names line. Otherwise the first card
- * whose description uses it gets `defineModelCard`.
+ * Lane 6 (ruling X-5, spec 6): the cards repeat on a page, so this slot defines "model card" once: the first card whose
+ * description uses it gets `defineModelCard`, which prints the term as the line's subject before its definition. A control's
+ * name ("Model Documentation (Model Card)") is a framework name, not a use of the term (ruling X-1 (3)), so the names line
+ * marks nothing.
  */
 export function FindingSuggestions(p: FindingSuggestionsProps): ReactElement | null {
   const controls = controlsOf(p);
   if (controls.length === 0) return null;
   const resources = loadResources();
-  const inName = controls.findIndex((x) => usesTerm(x.control.name, TERM_MODEL_CARD));
-  const cardIndex = inName >= 0 ? -1 : controls.findIndex((x) => usesTerm(x.control.description, TERM_MODEL_CARD));
+  const cardIndex = controls.findIndex((x) => usesTerm(x.control.description, TERM_MODEL_CARD));
   return (
     <div className="suggested-controls">
       <p className="suggested-controls__names">
         {controls.map((x, i) => (
           <span key={x.control.id}>
             {i > 0 ? <span aria-hidden="true"> {'\u00b7'} </span> : null}
-            {i === inName ? markTerms(x.control.name, [TERM_MODEL_CARD]) : x.control.name}
+            {x.control.name}
           </span>
         ))}
       </p>
-      {inName >= 0 ? <Definition of={TERM_MODEL_CARD} as="p" /> : null}
       <details>
         <summary>{SUGGESTIONS_COPY.showDetails}</summary>
         {controls.map((x, i) => <ControlCard key={x.control.id} control={x.control} resources={resources} headingLevel={3} defineModelCard={i === cardIndex} />)}

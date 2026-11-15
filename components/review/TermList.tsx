@@ -50,3 +50,12 @@ export function TermList({ items, idPrefix }: { items: readonly TermListItem[]; 
 export function TermLine({ of }: { of: DefinedEntry }): ReactElement {
   return <p className="term-line">{`${labelOf(of)}. `}<Definition of={of} /></p>;
 }
+
+/**
+ * The same line, placed BEFORE the text that also uses the term (a control card's description): the label is the first
+ * use, marked as the term, with its `Definition` in the same paragraph. The text after it stays one whole node, so a
+ * content text the claims crawl allows as a whole node is not split (FR-PUB-01; the controls page, C-17).
+ */
+export function TermLeadLine({ of }: { of: DefinedEntry }): ReactElement {
+  return <p className="term-line"><Term of={of}>{labelOf(of)}</Term>{'. '}<Definition of={of} /></p>;
+}

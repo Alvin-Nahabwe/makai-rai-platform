@@ -87,7 +87,10 @@ test('FR-DOC-08 FR-DOC-04 FR-DOC-01 NFR-A11Y-02 NFR-A11Y-05 NFR-SEC-11: generate
   await expect(issuedStatus(page)).toBeFocused();
   // N3: router.refresh() after the Issue brings the new document into the list below with no reload.
   await expect(page.getByText('No documents issued from this review yet.')).toHaveCount(0);
-  await expect(page.getByText(/^Data card[\u00a0 ]· seal 1[\u00a0 ]· /)).toBeVisible();
+  // Lane 6 S9: the issued list states its facts as a description list under the document's title.
+  const issued = page.locator('.documents-issued__title', { hasText: /^Data card$/ });
+  await expect(issued).toBeVisible();
+  await expect(page.locator('.documents-issued__facts').first()).toContainText('1');
   await expectFocusVisibleAndUncovered(page);
   // The status line (M-35) and the refreshed list (W-9) each carry a link to the same file.
   const downloads = page.getByRole('link', { name: /^Download PDF \(\d+ KB\)$/ });

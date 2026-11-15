@@ -44,17 +44,17 @@ describe('S-15: "model card" is defined once, on the first card that uses it', (
     expect(count(out, DEF)).toBe(1);
     const c15 = out.slice(out.indexOf('data-control="C-15"'), out.indexOf('data-control="C-18"'));
     expect(c15).toContain(TERM);
-    expect(c15).toMatch(new RegExp(`</p><p class="term-line">Model card\\. <span class="ui-definition" ${DEF}>`));
+    expect(c15).toMatch(new RegExp(`<p class="term-line"><span ${TERM}>Model card</span>\\. <span class="ui-definition" ${DEF}>`));
     expect(out.slice(out.indexOf('data-control="C-18"'))).not.toMatch(/data-term|data-definition/);
   });
 
-  it('a control name uses the term (the names line is the first use): the name marks it, the definition follows the names line, no card repeats it', () => {
+  it('a control name uses the term: a name is a framework name, not a use (X-1 (3)), so the names line marks nothing and the first card whose description uses it (C-15) defines it', () => {
     const out = html('name');
     expect(count(out, TERM)).toBe(1);
     expect(count(out, DEF)).toBe(1);
-    const names = out.slice(0, out.indexOf('<details'));
-    expect(names).toContain(`<span ${TERM}>Model card</span> review`);
-    expect(names).toMatch(new RegExp(`</p><p class="ui-definition" ${DEF}>${TERM_MODEL_CARD.definition}</p>$`));
-    expect(out.slice(out.indexOf('<details'))).not.toMatch(/data-term|data-definition/);
+    expect(out.slice(0, out.indexOf('<details'))).not.toMatch(/data-term|data-definition/);
+    const c15 = out.slice(out.indexOf('data-control="C-15"'), out.indexOf('data-control="C-18"'));
+    expect(c15).toContain(TERM);
+    expect(c15).toContain(DEF);
   });
 });

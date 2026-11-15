@@ -22,7 +22,7 @@ vi.mock('@/lib/content/resources', async () => {
 const GUARD_PATTERNS = ['-e', '["\'`]/templates/', '-e', '["\'`]/notebooks/', '-e', 'notebooks/technical', '-e', 'NOTEBOOK_BASE_URL'];
 
 describe('S-27, the controls page', () => {
-  it('FX2 (B5 concern 2): the first card whose description says "model card" marks it, with its definition next; no other card does', () => {
+  it('FX2 (B5 concern 2): the first card whose description says "model card" leads with the term, marked, and its definition; no other card does', () => {
     const html = renderToStaticMarkup(<ControlsPage />);
     expect(html.match(new RegExp(`data-term="${TERM_MODEL_CARD.id}"`, 'g'))).toHaveLength(1);
     expect(html.match(new RegExp(`data-definition="${TERM_MODEL_CARD.id}"`, 'g'))).toHaveLength(1);
@@ -32,7 +32,7 @@ describe('S-27, the controls page', () => {
     const first = text.search(/model cards?(?![\p{L}\p{N}])/iu);
     expect(text.slice(first - 40, first)).toContain(`<span data-term="${TERM_MODEL_CARD.id}">`);
     // FX4 (DF I5): the line after the description names its subject before the definition.
-    expect(html).toMatch(new RegExp(`<span data-term="${TERM_MODEL_CARD.id}">model cards?</span>[^<]*</p><p class="term-line">Model card\\. <span class="ui-definition" data-definition="${TERM_MODEL_CARD.id}">`, 'i'));
+    expect(html).toMatch(new RegExp(`<p class="term-line"><span data-term="${TERM_MODEL_CARD.id}">Model card</span>\\. <span class="ui-definition" data-definition="${TERM_MODEL_CARD.id}">[^<]*</span></p><p class="ctl-card__desc">[^<]*model cards?`, 'i'));
   });
 
 
