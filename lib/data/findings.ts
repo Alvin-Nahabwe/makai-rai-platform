@@ -19,6 +19,7 @@ import { erasedFields, evidenceViews, userRefs } from '@/lib/data/views';
 import { sealsIncludingRows } from '@/lib/data/seals';
 import { runningContent } from '@/lib/content/loader';
 import { deriveFindingState } from '@/lib/findings/state';
+import { FINDINGS_COPY } from '@/lib/findings/copy';
 import { FINDING_MESSAGES, parseAcceptRisk, parseAddMitigation, parseCloseByDecision, parseFindingEvent, parseUpdateMitigation } from '@/lib/findings/validate';
 import { eatDate, isOverdue } from '@/lib/followup/overdue';
 import { logSecurityEvent } from '@/lib/security-logger';
@@ -662,11 +663,12 @@ export async function withdrawFinding(
 
 /**
  * Route 11 (FR-FND-06, FR-DEC-08): the one action that closes an open shortfall finding by the decision that resolved it.
- * Under the finding lock: the finding of this project is open (else 409 `finding_not_open`) and the request names the
- * decision version `findingsToCloseByDecision` gives for it, read in the same transaction (else 422 on
- * `decisionVersionId`, one fixed text for a version that does not qualify, is stale or is of another organisation). It
- * inserts version 1 of a new mitigation: kind `decision_withdrawn` for a withdrawal, otherwise `decision_changed`; status
- * done; owned by the person acting; due today (East Africa Time); no `what`; `closureDecisionVersionId` the version.
+ * Under the finding lock: the finding of this project is open (else 409 `finding_not_open`), none of its mitigations is
+ * Planned or In progress (else 409 `finding_has_open_work` with the close box's sentence as its message: route decision
+ * R11, security review 0.7.0 L-2; S-14 and S-15 already hide the action then), and the request names the decision version
+ * `findingsToCloseByDecision` gives for it, read in the same transaction (else 422 on `decisionVersionId`, one fixed text
+ * for a version that does not qualify, is stale or is of another organisation). It inserts version 1 of a new mitigation:
+ * kind `decision_withdrawn` for a withdrawal, otherwise `decision_changed`; status done; owned by the person acting; due today (East Africa Time); no `what`; `closureDecisionVersionId` the version.
  * FINDING_CLOSED is logged after the commit when it closed the finding.
  */
 export async function closeByDecision(
@@ -682,6 +684,7 @@ export async function closeByDecision(
       await lockFinding(tx, a.findingId);
       const record = await loadFinding(tx, a.projectId, a.findingId);
       if (record.state !== 'open') throw new ConflictError('finding_not_open', await closedConflict(tx, record));
+      if (record.current.some(isOpenWork)) throw new AppError(409, 'finding_has_open_work', FINDINGS_COPY.failures.openWork);
       const closure = (await decisionClosures(tx, a.projectId, [record])).get(a.findingId);
       if (closure === undefined || closure.decisionVersionId !== req.decisionVersionId) {
         throw new ValidationFailed([{ field: 'decisionVersionId', message: FINDING_MESSAGES.decisionVersionId }]);

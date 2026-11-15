@@ -2150,5 +2150,13 @@
     "property": "The in-page link down to the suggestions shows exactly while the guidance (and the suggestions in it) is not beside the form, is a target of at least 24 by 24 pixels, and keeps a visible focus ring; it is hidden by the same media query that puts the guidance beside the form in components/question/workspace.css.",
     "proof": "With the route column (owner's decision of 14 November 2026) the guidance sits beside the form only from 90rem; from 72.5rem to under 90rem it is below the form. The case now requires `@media (width >= 90rem) { .question-content__jump { display: none;` in QuestionContent.css and the same query in workspace.css opening the three-column grid (`grid-template-columns: minmax(16rem, 1fr) minmax(0, 2fr) minmax(16rem, 1fr); grid-template-areas: \"route main guide\";`), in place of the 72.5rem pair; the 24 px, focus-ring, colour-role and no-75rem expectations are unchanged. Seen RED on the old pattern after the CSS moved to 90rem, GREEN with the new one; e2e/question-frame.spec.ts sees the link visible at 1160 and hidden at 1440.",
     "task": "lane 7 part 2 (the route column on the question page)"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/integration/findings-close-by-decision.test.ts::FR-FND-06: a decision that already closed its mitigation is not offered again, and a second close writes nothing",
+    "replacedBy": "__tests__/integration/findings-close-by-decision.test.ts::FR-FND-06: a decision that already closed its finding is not offered again after a reopen, and a second close writes nothing",
+    "property": "A decision version whose closing record exists is not offered to close its finding again, and a second close by it answers 422 on decisionVersionId and writes nothing. The old case reached that state by closing while a Planned mitigation kept the finding open, which route 11 now refuses (route decision R11, security review 0.7.0 L-2: 409 finding_has_open_work); the case now reaches it the only way left, closing the finding and then reopening it.",
+    "proof": "The case closes the finding by version 2, reopens it, requires the state open, findingsToCloseByDecision empty, and the second close by version 2 rejected with status 422 on decisionVersionId with the mitigation count unchanged. The refusal itself is pinned by __tests__/integration/findings-close-by-decision.test.ts::FR-FND-06 (R11, L-2): while a mitigation is Planned or In progress the close answers 409 finding_has_open_work with the sentence and writes nothing, which fails with the server check removed (shown in the lane 7 close).",
+    "task": "lane 7 R11"
   }
 ]

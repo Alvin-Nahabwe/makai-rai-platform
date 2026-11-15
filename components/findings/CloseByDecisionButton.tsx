@@ -16,7 +16,8 @@ const C = FINDINGS_COPY.closeByDecision;
 /**
  * "Close finding" (FR-FND-06, FR-DEC-08, UX-15): the one action that closes a shortfall finding by the decision that
  * resolved it, posted to route 11. Nothing closes without this press. A 201 or 200 refreshes the page; a 409
- * `finding_not_open` shows 7.4.4's sentence from the answer. Nothing is typed here, so a failure says nothing about kept
+ * `finding_not_open` shows 7.4.4's sentence from the answer, and a 409 `finding_has_open_work` (a mitigation became Planned
+ * or In progress after the page loaded; R11) the close box's sentence. Nothing is typed here, so a failure says nothing about kept
  * words.
  *
  * A native button in the kit's classes: it needs `aria-label` (the finding's title, so a list of them is told apart),
