@@ -2254,5 +2254,13 @@
     "property": "The stage says how many open findings have no mitigation yet, and counts questions the personal data answer gates as not applying, beside those marked not applicable. The tally is now the kit's list, one item per kind.",
     "proof": "The case renders the pre-processing line with notApplicableByGate: 2 and requires the findings link and the bracket's text as before, and among the tally items' texts (each <li class=\"ui-route-row__tally-item\"> without its (i)) the whole items \"2 not applicable\" and \"2 do not apply\": a gated count is printed apart from not applicable. That S-10 reads gated questions as not applying stays proved by __tests__/integration/project-routes.test.ts, as the lane 4 Task A row says.",
     "task": "lane 4 Task B (the kit RouteRow tally keyed by its marks, kept whole, with the status words' (i))"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::UX-31 FR-PRJ-03: an archived project shows the banner and no form or Archive control on S-10",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::UX-31 FR-PRJ-03: an archived project shows the banner and no form or Archive control on S-10",
+    "property": "An archived project's page shows the archived banner's sentence, and no form and no Archive control. The sentence's words \"All projects page\" are now a link to the organisation's projects (lane 1's design review S5-1), so the sentence is no longer one run of markup, only one run of text.",
+    "proof": "The case renders S-10 archived for an owner and requires PROJECT_COPY.archivedBanner in its text (tags stripped by the file's textOf), and no <form, \"Archive project\" or \"Edit project\" in the markup, as before. PROJECT_COPY.archivedBanner is built from archivedBannerParts, and __tests__/unit/project-page.test.tsx \"UX-31 S5-1: …\" pins the joined parts to the sentence word for word and the banner body's markup to before + <a href=\"/orgs/o/projects\">All projects page</a> + after for every role.",
+    "task": "lane 4 Task B round 1 (the archived banner's \"All projects page\" links to the organisation's projects, S5-1)"
   }
 ]

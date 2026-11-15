@@ -114,7 +114,8 @@ describe('S-10 (Task 5)', () => {
 
   it('UX-31 FR-PRJ-03: an archived project shows the banner and no form or Archive control on S-10', () => {
     const html = renderPage({ archived: true, role: 'owner' });
-    expect(html).toContain(PROJECT_COPY.archivedBanner);
+    // Read as text: the words "All projects page" are a link inside the sentence (S5-1, lane 4 Task B round 1).
+    expect(textOf(html)).toContain(PROJECT_COPY.archivedBanner);
     expect(html).not.toMatch(/<form|Archive project|Edit project/);
   });
 

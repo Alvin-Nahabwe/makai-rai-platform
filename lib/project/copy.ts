@@ -6,6 +6,13 @@ import type { Stage } from '@/types/record';
  * 'use client' imports it (ruling X-2); the form's words are lib/project/form/copy.ts, Archive's and Unarchive's
  * lib/project/write/copy.ts.
  */
+/** The archived banner's sentence, split around the words that link to All projects (lane 1's design review S5-1). */
+const ARCHIVED_BANNER = Object.freeze({
+  before: 'This project is archived. Nothing in it can be changed. An Owner or Admin can unarchive it on the ',
+  link: 'All projects page',
+  after: '.',
+});
+
 export const PROJECT_COPY = Object.freeze({
   titles: Object.freeze({ project: 'Project', editProject: 'Edit project' }),
   /** S-10's one primary action (plan 1C C11): after a save of the person's in this project, and before one. */
@@ -74,7 +81,9 @@ export const PROJECT_COPY = Object.freeze({
     shareLine: 'To share your record outside the team, seal a stage review and create a document from it.',
   }),
   /** Every page of an archived project (coordinator Q5 (a): no link, the banner's props stay as they are). */
-  archivedBanner: 'This project is archived. Nothing in it can be changed. An Owner or Admin can unarchive it on the All projects page.',
+  archivedBanner: `${ARCHIVED_BANNER.before}${ARCHIVED_BANNER.link}${ARCHIVED_BANNER.after}`,
+  /** The same sentence in three parts: ArchivedBanner links only the middle one to the organisation's projects (S5-1). */
+  archivedBannerParts: ARCHIVED_BANNER,
   /** S-09 in edit mode for an archived project: the heading above the banner. */
   editArchivedHeading: 'Edit project',
   /** The stage names (decision D1); each stage's meaning is its vocabulary definition (TERM_STAGE_1 to 3). */

@@ -178,6 +178,16 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     expect(stop(lines(renderToStaticMarkup(<ProjectPage data={d3} routes={three} continueTo={null} />))['pre-processing'], 'open')).not.toContain('more</a>');
   });
 
+  it('N2: the route lists more no-decision questions than the count holds: no more are named than the count says', () => {
+    // The counts say two; the route (another read) still lists nine. The line says 2 and names 2, never 3.
+    const routes = routesOf(data());
+    const d2 = data({ counts: { 'pre-processing': { ...COUNTS, noDecision: 2 } } });
+    const open = stop(lines(renderToStaticMarkup(<ProjectPage data={d2} routes={routes} continueTo={null} />))['pre-processing'], 'open');
+    expect(open).toContain(`>${S.noDecisionQuestions(2)}</a>`);
+    expect([...open.matchAll(/stage-line__named-item/g)]).toHaveLength(2);
+    expect(open).not.toContain('more</a>');
+  });
+
   it('9.2 FR-PRJ-02: open findings link to the stage\'s findings, keep "(k of them with no mitigation yet)"; nothing open reads "Nothing is open in this stage."', () => {
     const l = lines(render({ counts: { 'post-processing': { ...ALL_DECIDED } } }));
     expect(stop(l['pre-processing'], 'open')).toContain(`<a href="/orgs/o/projects/p1/findings?stage=pre-processing">${S.openFindings}`.replace(S.openFindings, '3 open findings'));
@@ -295,6 +305,8 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     expect(tipsIn(stop(later['post-processing'], 'recorded'))).toEqual(['partly', 'not-yet', 'not-applicable']);
   });
 
+  /** Markup without lane 1's TermTips (the (i) and its popover's sentence), for reading the words around them. */
+  const noTip = (markup: string) => markup.replace(/<span class="ui-term-tip">.*?<\/span><\/span><\/span>/g, '');
   /** The next-step block shown above the stacked lines (owner's ruling on C3), from its opening tag to the jump links. */
   const stacked = (html: string) => {
     const at = html.indexOf('<div class="next-step-block next-step-block--stacked">');
@@ -327,8 +339,36 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     expect(stacked(html)).toContain(P.nextLabel);
     expect(html.match(/ui-button--primary/g)).toHaveLength(2);
     // Above the stacked lines the block sits outside its stage's line, so it names the stage; inside the line it does not.
-    expect(text(stacked(html))).toContain(`${P.stageNames['in-processing']} · Question`);
+    expect(text(noTip(stacked(html)))).toContain(`${P.stageNames['in-processing']} · Question`);
     expect(text(head)).not.toContain(`${P.stageNames['in-processing']} · Question`);
+  });
+
+  it('N1: below 52rem the stacked block names the stage first, so there the name is marked as the term with its (i) beside it in the same p', () => {
+    for (const [target, term] of [
+      [{ stage: 'in-processing', questionId: 'in-processing-q16', label: 'continue' }, TERM_STAGE_2],
+      [{ stage: 'post-processing', questionId: null, label: 'continue' }, TERM_STAGE_3],
+    ] as const) {
+      const html = render({}, target);
+      const block = stacked(html);
+      // In the block's one p: the name as the term, then lane 1's TermTip named by whatMeans, holding the vocabulary's sentence.
+      expect(block, term.id).toMatch(new RegExp(`<p class="stage-line__next">(?:(?!</p>).)*<span data-term="${term.id}">${term.term}</span><span class="ui-term-tip">`));
+      expect(block, term.id).toContain(`aria-label="${P.whatMeans(term.term).replace(/"/g, '&quot;')}"`);
+      expect(block, term.id).toContain(`data-definition="${term.id}">${term.definition}</span>`);
+      // What a reader sees, per width. Wide: the stacked block is display:none (ProjectPage.css), so outside it each stage
+      // term is marked once, its definition once, under its heading. Narrow: the block comes first and holds the
+      // continued stage's term with its sentence in the (i)'s closed popover; the head stop keeps its Definition.
+      const outside = html.replace(block, '');
+      for (const t of [TERM_STAGE_1, TERM_STAGE_2, TERM_STAGE_3]) {
+        expect(outside.split(`data-definition="${t.id}"`), `${term.id} wide: ${t.id}`).toHaveLength(2);
+        expect(outside.split(`data-term="${t.id}"`), `${term.id} wide: ${t.id}`).toHaveLength(2);
+      }
+      expect(block.split('data-term=').length - 1, `${term.id} narrow: one term in the block`).toBe(1);
+      expect(block.split('data-definition=').length - 1, `${term.id} narrow: one definition in the block, in the tip`).toBe(1);
+      expect(block.indexOf('data-definition=')).toBeGreaterThan(block.indexOf('<span class="ui-term-tip">'));
+    }
+    // On the line, the head stop has no (i): its Definition stays.
+    const head = stop(lines(render({}, { stage: 'in-processing', questionId: 'in-processing-q16', label: 'continue' }))['in-processing'], 'head');
+    expect(head).not.toContain('ui-term-tip');
   });
 
   it('C11: "Start recording" for a first save; a null question links to the stage, with the sentence and no label; all decided says so', () => {
@@ -443,6 +483,21 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     expect(render({ descriptiveLine: '' })).not.toContain('project-page__facts');
   });
 
+  it('UX-31 S5-1: the archived banner\'s words "All projects page" link to the organisation\'s projects, for every role; the sentence is today\'s', () => {
+    // The split is pinned: the parts joined are the sentence the banner said before round 1, word for word.
+    expect(P.archivedBannerParts.before + P.archivedBannerParts.link + P.archivedBannerParts.after)
+      .toBe('This project is archived. Nothing in it can be changed. An Owner or Admin can unarchive it on the All projects page.');
+    expect(P.archivedBanner).toBe(P.archivedBannerParts.before + P.archivedBannerParts.link + P.archivedBannerParts.after);
+    for (const role of ['owner', 'admin', 'assessor', 'reviewer', 'viewer'] as const) {
+      const html = render({ archived: true, role });
+      const banner = html.slice(html.indexOf('<div role="status"><div class="ui-banner ui-banner--archived">'));
+      expect(banner, role).toMatch(/^<div role="status"><div class="ui-banner ui-banner--archived">/);
+      const body = /<div class="ui-banner__body">(.*?)<\/div>/.exec(banner)![1];
+      expect(body, role).toBe(`${P.archivedBannerParts.before}<a href="/orgs/o/projects">${P.archivedBannerParts.link}</a>${P.archivedBannerParts.after}`);
+      expect(text(body), role).toBe(P.archivedBanner);
+    }
+  });
+
   it('share line once, after the three lines and before the "This project" row', () => {
     const html = render();
     expect(html.split(P.overview.shareLine)).toHaveLength(2);
@@ -455,6 +510,8 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     const row = owner.slice(owner.indexOf('<nav class="project-actions"'));
     expect(row).toMatch(new RegExp(`^<nav class="project-actions" aria-labelledby="project-actions-heading"><h2 id="project-actions-heading">${P.thisProject}</h2>`));
     const order = [`>${P.findings}</a>`, `>${P.overview.downloadRecords}</a>`, `>${P.editProjectDetails}</a>`, 'Archive project'].map((w) => row.indexOf(w));
+    // Each link of the row has its sketch icon; Edit project details has the pencil (round 1).
+    expect(row).toMatch(new RegExp(`href="/orgs/o/projects/p1/edit"><svg class="ui-icon"[^>]*><path d="M21\\.174 6\\.812[^"]*"></path><path d="m15 5 4 4"></path></svg>${P.editProjectDetails}</a>`));
     expect(order.every((i) => i > -1), order.join(',')).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     expect(row).toContain('href="/orgs/o/projects/p1/findings"');
@@ -473,7 +530,7 @@ describe('S-10 as three lines of stops (Route R5)', () => {
 
   it('archived: the banner, no primary, no Archive trigger (its slot stays), no Edit, no Open a stage review; the lines still read', () => {
     const html = render({ archived: true }, null);
-    expect(html).toContain(P.archivedBanner);
+    expect(text(html)).toContain(P.archivedBanner);
     expect(html).not.toMatch(/Archive project|Edit project details|ui-button--primary/);
     expect(html).toContain('<div class="project-actions__archive"></div>');
     expect(html).not.toContain(REVIEW_COPY.mounted.openReview);

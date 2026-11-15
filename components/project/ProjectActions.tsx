@@ -28,7 +28,7 @@ export function ProjectActions({ base, can, orgSlug, projectId, projectName, arc
       <ul className="project-actions__list" role="list">
         <li><ListLink href={`${base}/findings`}><Icon name="flag" size={18} />{P.findings}</ListLink></li>
         {can.export ? <li><ListLink href={`${base}/export`}><Icon name="download" size={18} />{P.overview.downloadRecords}</ListLink></li> : null}
-        {can.update ? <li><ListLink href={`${base}/edit`}>{P.editProjectDetails}</ListLink></li> : null}
+        {can.update ? <li><ListLink href={`${base}/edit`}><Icon name="pencil" size={18} />{P.editProjectDetails}</ListLink></li> : null}
       </ul>
       {can.archiveControl ? (
         <div className="project-actions__archive">

@@ -172,17 +172,22 @@ test('owner\'s ruling 11:05: each status word\'s (i), once on the page in the fi
     await expect(tip.locator(`[data-definition="${term.id}"]`)).toHaveText(term.definition);
     await expect(button).toHaveAccessibleDescription(term.definition);
     await expect(tip).toBeHidden();
-    // Keyboard: Tab onto the button from the element before it shows the sentence; Escape closes it.
+    // Keyboard (a toggletip, lane 1's 6eb9f584): Tab onto the button opens nothing; Enter (Space on the first) opens the
+    // sentence; Escape closes it and focus stays on the button.
     await button.evaluate((el) => {
       const all = Array.from(document.querySelectorAll<HTMLElement>('a[href], button, [tabindex]:not([tabindex="-1"])'));
       all[all.indexOf(el as HTMLElement) - 1].focus();
     });
     await page.keyboard.press('Tab');
     await expect(button).toBeFocused();
-    await expect(tip, `${term.id} by keyboard`).toBeVisible();
     await expectFocusVisibleAndUncovered(page);
+    await expect(tip, `${term.id}: focus alone opens nothing`).toBeHidden();
+    await page.keyboard.press(term === STATUS_TIPS[0][0] ? 'Space' : 'Enter');
+    await expect(tip, `${term.id} by keyboard`).toBeVisible();
+    await expect(tip.locator(`[data-definition="${term.id}"]`)).toHaveText(term.definition);
     await page.keyboard.press('Escape');
     await expect(tip).toBeHidden();
+    await expect(button, `${term.id}: focus stays on the (i)`).toBeFocused();
     // Pointer: a press shows it; a press elsewhere closes it.
     await button.click();
     await expect(tip, `${term.id} by pointer`).toBeVisible();
@@ -200,7 +205,7 @@ test('K2: at 320 px no count parts from its word, the (i) stays beside the word,
   const items = page.locator('main .ui-route-row__tally-item');
   expect(await items.count()).toBeGreaterThanOrEqual(STATUS_TIPS.length);
   const facts = await items.evaluateAll((els) => els.map((el) => {
-    const count = el.querySelector('.ui-route-row__tally-count')!;
+    const count = el.querySelector('.ui-route-row__tally-word')!;
     const tip = el.querySelector('.ui-term-tip');
     const caveat = el.querySelector('.ui-route-row__tally-caveat');
     const c = count.getBoundingClientRect();
@@ -221,6 +226,26 @@ test('K2: at 320 px no count parts from its word, the (i) stays beside the word,
     expect(f.right, `${f.text}: inside its list`).toBeLessThanOrEqual(f.listRight + 0.5);
   }
   await expectNoHorizontalScroll(page);
+
+  // M4: with only the text enlarged to 200% (the root font size), no tally item overlaps another, and within an item the
+  // count's unit and the caveat do not overlap: the line height is unitless and the 24 px is a minimum.
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+  const overlaps = await page.locator('main ul.ui-route-row__tally').evaluateAll((lists) => {
+    const hit = (a: DOMRect, b: DOMRect) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+    const out: string[] = [];
+    for (const list of lists) {
+      const items = Array.from(list.querySelectorAll('.ui-route-row__tally-item'));
+      items.forEach((a, i) => items.slice(i + 1).forEach((b) => { if (hit(a.getBoundingClientRect(), b.getBoundingClientRect())) out.push(`${a.textContent} / ${b.textContent}`); }));
+      for (const item of items) {
+        const count = item.querySelector('.ui-route-row__tally-count')!.getBoundingClientRect();
+        const caveat = item.querySelector('.ui-route-row__tally-caveat')?.getBoundingClientRect();
+        if (caveat !== undefined && hit(count, caveat)) out.push(`${item.textContent}: count and caveat`);
+      }
+    }
+    return out;
+  });
+  expect(overlaps, 'overlapping tally parts at 200% text').toEqual([]);
 });
 
 test('UX-36: with JavaScript off the page delivers every heading: the name, the three stages, each stop\'s heading and "This project"', async ({ browser }) => {

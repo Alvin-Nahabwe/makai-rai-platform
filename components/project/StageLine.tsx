@@ -7,6 +7,7 @@ import { Icon } from '@/components/ui/Icon';
 import { ItemPlate } from '@/components/ui/ItemPlate';
 import { RouteRow, type DefinedTallyKind } from '@/components/ui/RouteRow';
 import { Definition, Term } from '@/components/ui/Definition';
+import { TermTip } from '@/components/ui/TermTip';
 import { STATUS_WORD } from '@/components/followup/StageFollowUp';
 import { DeviceDateTime } from '@/components/review/DeviceTime';
 import { plural } from '@/components/project/StageColumn';
@@ -115,7 +116,8 @@ function tallyDefinitions(uses: FirstUses, stage: Stage): Partial<Record<Defined
 function StillOpen(p: StageLineProps): ReactElement {
   const c = p.counts;
   const stageHref = stagePath(p.base, p.stage);
-  const named = p.route.noDecision.slice(0, NAMED);
+  // Never more names than the count the line states (N2): the route and the counts are two reads.
+  const named = p.route.noDecision.slice(0, Math.min(NAMED, c.noDecision));
   // Counted against the stage's count, the number the line states, so the count and the list always add up.
   const more = Math.max(0, c.noDecision - named.length);
   // FR-FUP-01's order (overdue first, then due date). The two lists are disjoint: lib/data/projects.ts splits one by ownerCanAct.
@@ -304,8 +306,13 @@ export function NextStep({ target, base, route, counts, where }: {
   const at = questionId === null ? -1 : route.stops.findIndex((s) => s.id === questionId);
   const next = at !== -1 && route.stops[at].kind === 'no_decision' ? route.stops[at] : null;
   const href = questionId === null ? stagePath(base, target.stage) : `${stagePath(base, target.stage)}/questions/${questionId}`;
-  // Above the stacked lines the block is not inside its stage's line, so it names the stage before the place in it.
-  const stagePrefix = where === 'stacked' ? `${P.stageNames[target.stage]}${SEP}` : '';
+  // Above the stacked lines the block is not inside its stage's line, so it names the stage before the place in it. Below
+  // 52rem that is the page's first use of the stage's term (N1): the name is marked as the term with lane 1's (i) beside
+  // it, in the same p. The line's own head stop keeps its Definition under the heading.
+  const term = STAGE_TERM[target.stage];
+  const stagePrefix = where === 'stacked'
+    ? <><Term of={term}>{P.stageNames[target.stage]}</Term><TermTip of={term} label={P.whatMeans(term.term)} />{SEP}</>
+    : null;
   return (
     <div className={`next-step-block next-step-block--${where}`}>
       <p className="stage-line__next">

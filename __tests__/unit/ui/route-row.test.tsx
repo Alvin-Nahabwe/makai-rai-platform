@@ -78,6 +78,13 @@ describe('RouteRow', () => {
     expect(items(renderToStaticMarkup(<RouteRow label="x" stops={[]} tally={{ does_not_apply: 1 }} />)).map((i) => words(i.body))).toEqual(['does not apply']);
   });
 
+  it('M2: every kind of a full tally, each above zero, has its item, in the tally\'s order', () => {
+    const full: Tally = { done: 1, partly: 2, not_yet: 3, not_applicable: 4, does_not_apply: 5, scope_answered: 1, no_decision: 7 };
+    const html = renderToStaticMarkup(<RouteRow label="x" stops={[]} tally={full} />);
+    expect(items(html).map((i) => i.kind)).toEqual(['done', 'partly', 'not_yet', 'not_applicable', 'does_not_apply', 'scope_answered', 'no_decision']);
+    expect(items(html).map((i) => textOf(i.body)).join(', ')).toBe(tallyWords(full));
+  });
+
   it('a screen reader hears the tally\'s words, in its order: the items read together are tallyWords', () => {
     for (const t of [TALLY, WIDE, { done: 1 }, { done: 3, doneNoEvidence: 1 }, { does_not_apply: 1, scope_answered: 1 }, { not_applicable: 12 }] as Tally[]) {
       const html = renderToStaticMarkup(<RouteRow label="x" stops={[]} tally={t} define={ALL_DEFINED} />);
@@ -91,10 +98,16 @@ describe('RouteRow', () => {
     expect(css).toMatch(/\.ui-route-row__tally \{[^}]*display: flex;[^}]*flex-wrap: wrap;[^}]*gap: 0 var\(--space-3\);[^}]*\}/);
     expect(css).toMatch(/\.ui-route-row__tally \{[^}]*font-size: var\(--font-size-small\);[^}]*\}/);
     expect(css).toMatch(/\.ui-route-row__tally-count,\s*\.ui-route-row__tally-caveat \{[^}]*white-space: nowrap;[^}]*\}/);
-    // The count and its word are one element; the caveat is another, the only place an item may break.
+    // M1: the count, its word and the (i) are one nowrap flex unit, so the (i) never drops below its word; the caveat is
+    // another, the only place an item may break.
+    expect(css).toMatch(/\.ui-route-row__tally-count \{[^}]*display: inline-flex;[^}]*\}/);
     const one = renderToStaticMarkup(<RouteRow label="x" stops={[]} tally={{ done: 9, doneNoEvidence: 2, partly: 1 }} define={ALL_DEFINED} />);
-    expect(one).toContain('<span class="ui-route-row__tally-count"><b>9</b> <span data-term="done">done</span></span>');
-    expect(one).toContain('<span class="ui-route-row__tally-count"><b>1</b> <span data-term="partly">partly</span></span>');
+    expect(one).toContain('<span class="ui-route-row__tally-count"><span class="ui-route-row__tally-word"><b>9</b> <span data-term="done">done</span></span><span class="ui-term-tip">');
+    expect(one).toContain('<span class="ui-route-row__tally-count"><span class="ui-route-row__tally-word"><b>1</b> <span data-term="partly">partly</span></span><span class="ui-term-tip">');
+    // M4: the 24 px rhythm is a minimum block size, the line height unitless, so enlarged text grows its lines.
+    expect(css).toMatch(/\.ui-route-row__tally-item \{[^}]*line-height: var\(--line-height-body\);[^}]*\}/);
+    expect(css).toMatch(/\.ui-route-row__tally-count \{[^}]*min-block-size: var\(--target-min\);[^}]*\}/);
+    expect(css).not.toMatch(/line-height: var\(--target-min\)/);
     expect(one).toMatch(/<\/span><\/span> <span class="ui-route-row__tally-caveat">\(2 with no evidence attached\)<\/span><\/span>$|<\/span><\/span><\/span> <span class="ui-route-row__tally-caveat">\(2 with no evidence attached\)<\/span>/);
     // The shape is in the mark colour, as the stops' are; the item itself carries no mark class, so the (i) and its
     // popover are not read as part of a mark (e2e/helpers/noScore.ts expectStatusMarksInk).
@@ -119,7 +132,7 @@ describe('RouteRow', () => {
       expect(body, kind).toContain(`aria-label="${label}"`);
       expect(body, kind).toContain(`<span class="ui-definition" id="term-tip-${term.id}-def" data-definition="${term.id}">${term.definition}</span>`);
       // The tip sits right after the word (the owner's "beside the word"), before the evidence caveat on done.
-      expect(body, kind).toMatch(new RegExp(`<span data-term="${term.id}">[^<]*</span></span><span class="ui-term-tip">`));
+      expect(body, kind).toMatch(new RegExp(`<span class="ui-route-row__tally-count"><span class="ui-route-row__tally-word"><b>\\d+</b> <span data-term="${term.id}">[^<]*</span></span><span class="ui-term-tip">`));
       if (kind === 'done') expect(body.indexOf('ui-route-row__tally-caveat')).toBeGreaterThan(body.indexOf('ui-term-tip'));
     }
     for (const kind of ['partly', 'does_not_apply', 'scope_answered', 'no_decision']) {

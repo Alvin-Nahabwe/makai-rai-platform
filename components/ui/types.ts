@@ -5,7 +5,8 @@ export type StatusMarkKind = 'done' | 'partly' | 'not_yet' | 'not_applicable' | 
 /** The 28 icons of plan B7. Later stages add icons to the same registry (components/ui/icons.tsx), from the same set. */
 export type IconName = 'home' | 'folder' | 'flag' | 'book-open' | 'circle-help' | 'users' | 'building-2' | 'user' | 'log-out'
   | 'sun' | 'moon' | 'menu' | 'x' | 'chevron-left' | 'chevron-right' | 'chevron-down' | 'chevrons-up-down' | 'arrow-up'
-  | 'paperclip' | 'download' | 'plus' | 'info' | 'triangle-alert' | 'wifi-off' | 'archive' | 'clock' | 'external-link' | 'circle-check';
+  | 'paperclip' | 'download' | 'plus' | 'info' | 'triangle-alert' | 'wifi-off' | 'archive' | 'clock' | 'external-link' | 'circle-check'
+  | 'pencil';
 
 export type { ScopeAnswer } from '@/types/record';
 
