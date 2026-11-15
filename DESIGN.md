@@ -79,7 +79,7 @@ Decisions behind the foundation are in `docs/adr/0022-design-system-foundation.m
 
 ## Overview
 
-The platform records decisions a team makes about one AI system. The design carries two promises: it never scores a team, and a person always knows where they are.
+The platform records decisions a team makes about one AI system. The design has two rules: it never scores a team, and a person always knows where they are.
 
 - **Operate mode.** Almost every screen is a task: record a decision, read a finding, open a review. Scanning, consistency and plain words come before expression.
 - **The Route.** A project has three stages. A stage is a line of questions, each a mark. The person's position is "You are here". The words stay plain: the interface says "question" and "stage", not "stop" or "line" (spec principle 4; `route-target-decisions.md`, R1).
@@ -191,8 +191,8 @@ One family, Overpass, self-hosted in `app/fonts` and loaded in `app/layout.tsx` 
 | Step | Token | Size | Used by |
 |---|---|---|---|
 | Heading 1 | `--font-size-h1` | 30 px (1.875 rem) | The page's one h1. |
-| Heading 2 | `--font-size-h2` | 22 px (1.375 rem) | Section headings; the route column's stage name. |
-| Heading 3 | `--font-size-h3` | 18 px (1.125 rem) | Subheadings; h4; the question text on the question page (R7); the saved mark's title. |
+| Heading 2 | `--font-size-h2` | 22 px (1.375 rem) | Section headings; the route column's stage name; the question text on the question page (R7; `.question-frame__title` in `components/question/workspace.css`). |
+| Heading 3 | `--font-size-h3` | 18 px (1.125 rem) | Subheadings; h4; the saved mark's title. |
 | Body | `--font-size-body` | 16 px (1 rem) | Reading text, h5, buttons, plate titles. |
 | Small | `--font-size-small` | 14 px (0.875 rem) | Codes, hints, tallies, the "You are here" pin. |
 | Legal | `--font-size-legal` | 13 px (0.8125 rem) | Small print on Home (`components/home/home.css`). |
@@ -223,23 +223,23 @@ Status is a shape and its words, in ink, never a colour code (spec 7.2). The kin
 
 | Kind | Shape | Words |
 |---|---|---|
-| `done` | A filled green disc with a white check | Done (adds ", no evidence attached" when that is so) |
+| `done` | A filled green disc with a check in the surface colour (white in light, dark in dark) | Done (adds ", no evidence attached" when that is so) |
 | `partly` | A ring with its right half filled | Partly |
 | `not_yet` | A thick ring | Not yet |
 | `not_applicable` | A ring with a slash | Not applicable |
 | `does_not_apply` | A dashed ring with a slash | Does not apply (from your answer to the personal data question) |
-| `scope_answered` | A filled square | Answer: Yes, No or Not sure |
+| `scope_answered` | A filled square | Answer: Yes, No or Not sure ("Answered" where no answer is at hand, `lib/ui/copy.ts`) |
 | `no_decision` | A small dot | No decision |
 
 Done is the only mark with colour (owner ruling R8, 15 November 2026, over spec decision D4). The disc is `--color-saved` and the check is `--color-surface`, each painted by its own class (`.ui-mark__done-disc`, `.ui-mark__done-check`) so the green holds wherever `<MarkShape>` is drawn. In forced colours the disc is the system text colour and the check the canvas. Every other kind is drawn in `currentColor`, set to `--color-mark`; no rule may colour a `.ui-mark` except with that token (`__tests__/unit/ui/status-mark.test.tsx`).
 
-A mark is at least 16 px. A tally in words always goes with a row of marks, and the count never parts from its word. `<StatusMark>` draws the shape and its words; `<MarkShape>` draws the shape alone, hidden from assistive technology, for a caller that writes the words itself.
+A mark is at least 16 px. The count never parts from its word (`RouteRow.css`). `<StatusMark>` draws the shape and its words; `<MarkShape>` draws the shape alone, hidden from assistive technology, for a caller that writes the words itself.
 
 ## The route
 
 The route is the stage drawn as one line, a mark per question.
 
-**On the question page** (`components/question/RouteColumn.tsx`, `RouteLine.tsx`, `route-column.css`, `route-line.css`; ruling R1). The column holds the stage's name and plain meaning, a small "Show" filter above the line, the line, and "All questions in this stage". The line is a 2 px rule with a mark on it for each question, the question in words clamped to two lines (R7), and a meta line of code, status and state. The current question is a white plate with a 40 px ring, 4 px thick in `--color-action-text`, and the pin "You are here" above its words in the same colour. The next question that applies leads its meta line with "Next question". A run of questions folds into a native disclosure ("Questions 5 to 24") that shows one 16 px mark per question and its tally in words. On a phone the same line follows the main content. See `docs/design/screens/question-1280-light.webp`, `docs/design/screens/question-1280-dark.webp`, `docs/design/screens/question-375-light.webp` and `docs/design/screens/question-375-dark.webp`, and `docs/design/screens/stage-1280-light.webp` for the stage page.
+**On the question page** (`components/question/RouteColumn.tsx`, `RouteLine.tsx`, `route-column.css`, `route-line.css`; ruling R1). The column holds the stage's name and plain meaning, a small "Show" filter above the line, the line, and "All questions in this stage". The line is a 4 px rule (`route-line.css`) with a mark on it for each question, the question in words clamped to two lines (R7), and a meta line of code, status and state. The current question is a white plate with a 40 px ring, 4 px thick in `--color-action-text`, and the pin "You are here" above its words in the same colour. The next question that applies leads its meta line with "Next question". A run of questions folds into a native disclosure ("Questions 5 to 24") that shows one 16 px mark per question and its tally in words. From 1160 px a top strip (`QuestionTopStrip.tsx`; R4) holds the breadcrumb with "Question n of N", the open findings and overdue mitigations, and the stage's tally, one mark with a count and its word per kind above zero. Below 1160 px a position strip (`PositionStrip.tsx`) shows the previous and next question and "Question n of N", and the same line follows the main content. See `docs/design/screens/question-1280-light.webp`, `docs/design/screens/question-1280-dark.webp`, `docs/design/screens/question-375-light.webp` and `docs/design/screens/question-375-dark.webp`, and `docs/design/screens/stage-1280-light.webp` and `docs/design/screens/stage-1280-dark.webp` for the stage page.
 
 **The row of marks** (`<RouteRow>`). One mark per question in a wrapping row, joined by a 2 px line in `--color-mark`, then a tally list: a 16 px shape, a bold count and the words. Each stop's accessible text is "title: status words". The current stop is ringed 2 px in `--color-action-text` and carries `aria-current="step"`. There is no fill, percentage or total. A defined status word can carry an (i) `<TermTip>` on its first use.
 
@@ -247,13 +247,13 @@ The route is the stage drawn as one line, a mark per question.
 
 ## The saved mark
 
-`<SavedMark>` (`components/ui/SavedMark.tsx`, `SavedMark.css`) confirms a save: the outline `circle-check` icon in `--color-saved`, the title "Saved as version n", the decided and saved dates labelled apart, and the line saying the decision is on the platform with the earlier version kept in the history. The panel is `--color-saved-tint` with a 1 px `--color-saved` border; the words stay in ink and `--color-heading`. It is always mounted. Empty, it draws nothing but keeps its place as a polite, atomic status region, so the words are announced when they arrive. A caller that server-renders it filled passes `live` as false.
+`<SavedMark>` (`components/ui/SavedMark.tsx`, `SavedMark.css`) confirms a save: by default the outline `circle-check` icon in `--color-saved` (a `shape` prop replaces it), the title "Saved as version n", the decided and saved dates labelled apart, and the line saying the decision is on the platform with the earlier version kept in the history. The panel is `--color-saved-tint` with a 1 px `--color-saved` border; the words stay in ink and `--color-heading`. It is always mounted. Empty, it draws nothing but keeps its place as a polite, atomic status region, so the words are announced when they arrive. A caller that server-renders it filled passes `live` as false.
 
-The saved mark is not the Done mark. Done is a status of a question; the saved mark is the result of a save.
+On the question page the decision card passes its own shape (`components/decision/DecisionCard.tsx`, `DecisionCard.css`; design N4): a filled disc in `--color-saved` with a check in `--color-surface`, 16 px in the card's corner and 24 px in the phone's saved block. That is the same drawing as the Done mark, so on that page the two look alike. They are told apart by their words and place: Done is a status of a question, shown in the route and the tally, and the saved mark is the result of a save, shown with "Saved as version n". The outline icon is the kit default, used by every other caller of `<SavedMark>`.
 
 ## Components
 
-All kit components live in `components/ui/`, one file each with a sibling stylesheet, classes prefixed `ui-` (decision B1). The shell's classes are prefixed `shell-`. The inventory lists each component's props type; where the name is "inline", the props are written in the signature.
+Kit components live in `components/ui/`, grouped by file (for example `Button.tsx` holds `<Button>` and `<ButtonLink>`, `TextInput.tsx` holds `<FieldLabel>`, `<FieldHint>` and `<FieldError>`, `Definition.tsx` holds `<Term>`). Most have a sibling stylesheet; `<Banner>`, `<ListLink>`, `<ShowMoreLink>`, `<DownloadLink>` and `<LocalTime>` have none. Shared style bundles sit beside them: `buttonStyles.ts`, `formStyles.ts`, `selectStyles.ts`, `textAreaStyles.ts`, `dateFieldStyles.ts` and `pageHeaderStyles.ts`. Classes are prefixed `ui-` (decision B1). The shell's classes are prefixed `shell-`. The inventory lists each component's props type; where the name is "inline", the props are written in the signature.
 
 States the kit draws (from the sheets named): hover and active change colours only, over `--duration-state`; focus is the global 3 px ring; disabled uses a dashed `--color-border-control` border on `--color-tint`; busy keeps the label and shows a spinner; an error adds the `triangle-alert` icon, the word "Error:" for assistive technology and `aria-invalid`.
 
@@ -263,7 +263,7 @@ States the kit draws (from the sheets named): hover and active change colours on
 |---|---|---|
 | `<Button>` | `ButtonProps` | An action. Variants: `primary` (the one action of a view, orange fill, white text), `secondary` (surface with a heading-colour border), `quiet` (underlined link look), `destructive` (surface, ink, control border; never orange or red). Sizes `default` (44 px) and `compact` (32 px). States: busy, disabled. |
 | `<ButtonLink>` | `ButtonLinkProps` | A link that looks like a button, for navigation. |
-| `<ListLink>` | inline | A link that never prefetches, for lists of up to 22 items. |
+| `<ListLink>` | inline | A link that never prefetches, for long lists of links. |
 | `<ShowMoreLink>` | inline | "Show more" or "Show older" at the end of a list that has more. |
 | `<DownloadLink>` | inline | A file link whose text names its kind and size. |
 | `<InlineConfirm>` | `InlineConfirmProps` | Confirming an action that cannot be undone, in place. Cancel comes first; the button repeats the action; not a modal. |
@@ -326,9 +326,9 @@ Helpers exported beside the components (`statusMarkWords`, `closeOnBlur`, `given
 
 `components/layout/AppShell.tsx` and `Rail.tsx`, styled by `components/layout/shell.css` (classes `.shell`, `.shell-rail`, `.shell-topbar`, `.shell-project`, `.shell-org`).
 
-- **Wide (from 1024 px).** A navy rail: the MAK-AI logo and the platform's name, the organisation's name (with a switcher for a person in more than one), then Home, Projects, Findings, Guidance and Help, then the project block when a project is open, then Members and Organisation details in a lower group, the signed-in person and their role, My account, and a Sign out button beside the theme switch. Items are at least 44 px high. See `docs/design/screens/home-1280-light.webp`, `docs/design/screens/home-1280-dark.webp`, `docs/design/screens/project-1280-light.webp` and `docs/design/screens/findings-1280-light.webp`.
-- **Narrow.** A top bar with the logo and a labelled Menu button, which opens the rail in a panel built on the declarative `popover` attribute. With a project open the bar shows the stage, the project's name and "All questions" instead of the logo.
-- **Public pages.** A light header and the footer (`components/layout/PublicHeader.tsx`, `Footer.tsx`); see `docs/design/screens/help-1280-light.webp`.
+- **Wide (from 1024 px).** A navy rail: the MAK-AI logo and the platform's name, the organisation's name (with a switcher for a person in more than one), then Home, Projects, Findings, Guidance and Help, then the project block when a project is open, then Members and Organisation in a lower group, the signed-in person and their role, My account, and a Sign out button beside the theme switch. Items are at least 44 px high. See `docs/design/screens/home-1280-light.webp`, `docs/design/screens/home-1280-dark.webp`, `docs/design/screens/project-1280-light.webp`, `docs/design/screens/findings-1280-light.webp` and `docs/design/screens/findings-1280-dark.webp`.
+- **Narrow.** A top bar with the logo and a labelled Menu button, which opens the rail in a panel built on the declarative `popover` attribute. With a project open the bar shows the project's name instead of the logo; on a page with a stage in the address it also shows the stage and an "All questions" link (`components/layout/ShellProject.tsx`).
+- **Public pages.** A light header and the footer (`components/layout/PublicHeader.tsx`, `Footer.tsx`); see `docs/design/screens/help-1280-light.webp` and `docs/design/screens/help-1280-dark.webp`.
 - **Rail text.** Never orange except the peach "You are here" (see The route).
 - **Theme.** A switch in the rail's foot (`components/layout/ThemeToggle.tsx`); its words change with the theme and are its accessible name.
 
@@ -342,11 +342,11 @@ Screens that have no rail because the person has not arrived, or cannot yet go o
 
 **The root not-found page** cannot import the frame's component or its stylesheet without putting them on every page's first load. `lib/errors/frame.ts` therefore copies the frame's public variant as inline styles, rendered on the server into the 404 page only, using role tokens and no literal colour. Widths are stepped with `clamp()` in place of media queries. See `docs/design/screens/not-found-1280-light.webp` and `docs/design/screens/not-found-1280-dark.webp`.
 
-**The error pages keep the 0.7.0 look** (the owner's ruling of 15 November 2026, 14:05, as probe D). `app/error.tsx` still draws a centred `auth-card`; its words come from `lib/errors/copy.ts`. This is a recorded departure from the gate frame's look; a later release frames them.
+**The error pages keep the 0.7.0 look** (the owner's ruling of 15 November 2026, 14:05, as probe D). `app/error.tsx` still draws a centred `auth-card`, and `app/global-error.tsx` imports it, so it keeps the same look; its words come from `lib/errors/copy.ts`. This is a recorded departure from the gate frame's look; a later release frames them.
 
 ## The project page
 
-S-10, `components/project/ProjectPage.tsx`, `StageLine.tsx`, `ProjectPage.css` (ruling R5; spec 9.2). Three stages side by side, each a vertical line with exactly five stops: the stage (name, plain meaning, question count, and on the stage the person last saved in, the next question and the one primary button); what is still open; what is recorded so far; its reviews; and the last stop, with the link to the stage's questions. Below 1024 px of container width the lines stack and the next step is shown once above them. Under the lines are the share line and a quiet "This project" row with Archive last. See `docs/design/screens/project-1280-light.webp`.
+S-10, `components/project/ProjectPage.tsx`, `StageLine.tsx`, `ProjectPage.css` (ruling R5; spec 9.2). Three stages side by side, each a vertical line with exactly five stops: the stage (name, plain meaning, question count, and on the stage the person last saved in, the next question and the one primary button); what is still open; what is recorded so far; its reviews; and the last stop, with the link to the stage's questions. The lines go side by side from 52 rem (832 px) of container width (`ProjectPage.css`); below that they stack and the next step is shown once above them. Under the lines are the share line and a quiet "This project" row with Archive last. See `docs/design/screens/project-1280-light.webp` and `docs/design/screens/project-1280-dark.webp`.
 
 **Owner ruling of 15 November 2026, 20:50** (`progress.md`, line "20:50 OWNER RULED"): S-10 has no row of marks. Its tally is in words with marks, as sketched. Its mitigations are the overdue ones as plates, plus one line "{n} other open mitigations" linking to Findings. This departs from SRS FR-FUP-01 and FR-FUP-05.
 
@@ -367,7 +367,8 @@ What is built and stays: counts are words and numerals for one stage, with no pe
 
 - **State changes only.** `--duration-state` is 160 ms with `--easing-state` `cubic-bezier(0.2, 0, 0, 1)`. Kit components change colour, border or rotation over it. Nothing animates on page load, and no component animates on a timer (`shell.css`, `Skeleton.css`).
 - **Reduced motion.** `app/globals.css` sets animation and transition durations to 0.01 ms, one iteration and `scroll-behavior: auto` under `prefers-reduced-motion: reduce`. The button spinner turns (0.9 s, linear) only under `prefers-reduced-motion: no-preference`, and a folded run's chevron turns only under the same query.
-- **Left over.** `app/globals.css` still holds a `.reveal` class (0.6 s fade-in) and its keyframes from before the redesign. Whether any screen still uses it, and whether it conflicts with "nothing on page load", is not established here.
+- **Left over.** `app/globals.css` still holds a `.reveal` class (0.6 s fade and rise, keyframes `fadeInUp`) from before the redesign. No `.tsx` file under `app` or `components` uses it.
+- **Scroll cue.** The rail's scrolling part shows an edge cue that follows the scroll position, by scroll-state queries or, failing those, `animation-timeline: scroll()` (`components/layout/shell.css`). It never runs on a timer.
 
 ## Icons
 
