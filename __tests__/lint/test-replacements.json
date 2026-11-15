@@ -2622,5 +2622,61 @@
     "property": "A failed upload is never waited out: Save waits and names the file, Save without this file leaves it out, and the line after the save names it. The owner's ruling of 15 Nov 2026, 14:30 (review B-M5): the wait card says a failed or refused file did not upload and what the person can do, \"<name> did not upload. Retry it, remove it, or save without it.\", instead of waiting for it to finish uploading, which it will not do by itself.",
     "proof": "Only the wait card's expectation changed: `getByText('Waiting for kept-eight-bad.pdf to finish uploading.')` became `getByText('kept-eight-bad.pdf did not upload. Retry it, remove it, or save without it.')`. Every other step is unchanged: the failed upload, the press of Save, no decision request while it waits, DECISION_FORM_COPY.saveWithout(1), the request without the failed file's id, the saved line, DECISION_FORM_COPY.savedWithout with kept-eight-bad.pdf, and the history. WaitLines (components/decision/DecisionForm.tsx) writes the failed files' sentence (DECISION_FORM_COPY.waiting.failed) and keeps \"Waiting for … to finish uploading.\" for files still uploading; __tests__/unit/decision-card.test.tsx pins both lines, and e2e/decision-save-without-upload.spec.ts requires the new sentence for a file that failed after it was left out.",
     "task": "Route rebuild lane 2 task 3c (the owner's 14:30 rulings)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 UX-08: S-12 shell regions in order, each but the evidence block labelled by a heading, evidence block inside the answer form",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 UX-08: S-12 shell regions in order, each but the evidence block labelled by a heading, evidence block inside the answer form",
+    "property": "The page's writer regions are in a fixed DOM order, each labelled region by a heading, the evidence block inside the answer form. After the join the decision card replaces lane 1's stub: the order is question, seal note, answer-form (the one card, h2 \"Your decision\"), the evidence block inside it; the finding links sit in the card's foot, and there is no decision-slot, current-decision, finding-link or way-on region.",
+    "proof": "The case asserts the exact region order ['question','seal-note','answer-form','evidence-block'], 3 labelled sections, the h2 \"Your decision\", the evidence block inside the answer form followed by the card's foot (decision-card__raise). Seen red: dropping 'evidence-block' from the expected list fails it. The fixture's current version gains receivedAt, which the decision card formats (the card is real in this file, not mocked).",
+    "task": "Route rebuild lane 2 task 4 (the join with lane 1's question page)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::UX-08: every labelled region is named by a heading of the page that it points to, and the evidence block has no heading of its own",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::UX-08: every labelled region is named by a heading of the page that it points to, and the evidence block has no heading of its own",
+    "property": "Every labelled region is named by a heading of the page it points to; the evidence block has no heading of its own.",
+    "proof": "Only the count of labelled regions changed, 5 to 3 (question, seal note, answer-form: the stub's current-decision and finding-link sections are gone with the stub); the loop still requires each aria-labelledby id to match a heading in the rendered page. The fixture's current version gains receivedAt, which the decision card formats (the card is real in this file, not mocked).",
+    "task": "Route rebuild lane 2 task 4 (the join with lane 1's question page)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::FR-SUG-02 UX-08: for the gate question (nothing to suggest) the page renders no Ways teams address this section and no link to it",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::FR-SUG-02 UX-08: for the gate question (nothing to suggest) the page renders no Ways teams address this section and no link to it",
+    "property": "For the personal data question the page renders no Ways teams address this section and no link to it; the aside gets no count, no risk areas and no list.",
+    "proof": "Only the count of labelled sections changed, 5 to 3, for the same reason as the regions case; the not.toContain checks and the QuestionContent props expectation are unchanged. The fixture's current version gains receivedAt, which the decision card formats (the card is real in this file, not mocked).",
+    "task": "Route rebuild lane 2 task 4 (the join with lane 1's question page)"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/s12-shell.test.tsx::UX-31 FR-PRJ-03: an archived project shows the archived banner on S-12",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::UX-31 FR-PRJ-03: an archived project shows the archived banner on S-12",
+    "property": "An archived project shows the archived banner on S-12, above the regions.",
+    "proof": "No assertion changed. The fixture's current version gains receivedAt, which the decision card formats (the card is real in this file, not mocked).",
+    "task": "Route rebuild lane 2 task 4 (the join with lane 1's question page)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 (helper): each region's component gets the props its contract row names, from the panel data",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 (helper): each region's component gets the props its contract row names, from the panel data",
+    "property": "Each region's component gets the props its contract row names, from the panel data. The current decision is no longer a CurrentDecision slot for a writer: the card shows it from the same panel data.",
+    "proof": "The CurrentDecision props expectation is replaced by CurrentDecision being unrendered for a writer plus the card's output from the panel: \"Saved as version 2\", the history href /orgs/acme-health/projects/p1/stages/pre-processing/questions/Q-PP-01/history, and \"History: 2 versions\". The QuestionContent, SealNote, EvidenceBlock and QuestionFindingLink props expectations are unchanged. The fixture's current version gains receivedAt, which the decision card formats (the card is real in this file, not mocked).",
+    "task": "Route rebuild lane 2 task 4 (the join with lane 1's question page)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 FR-DEC-06 UX-14 (helper): with no decision yet the next version is 1, and a read-only or archived panel has no evidence block to change",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 FR-DEC-06 UX-14 (helper): with no decision yet the next version is 1, and a read-only or archived panel has no evidence block to change",
+    "property": "With no decision yet the next version is 1 (the seal note's nextVersionNumber), the evidence block starts empty and enabled, nothing is ticked, and a read-only or archived panel has no evidence block.",
+    "proof": "The SealNote, EvidenceBlock, tickedOptions and read-only expectations are unchanged. The expectation currentVersionId null on the QuestionFindingLink becomes: no finding link is rendered with no decision, because the card's foot (saved lines, history, finding links) is shown only once a version exists; the panel here is opened with its open finding still set, so the absence is the card's rule, not the data's. The fixture's current version gains receivedAt, which the decision card formats (the card is real in this file, not mocked).",
+    "task": "Route rebuild lane 2 task 4 (the join with lane 1's question page)"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/s12-shell.test.tsx::NFR-SEC-02 FR-DEC-01: the page asks for record:read in this organisation, then loads the panel for this question",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::NFR-SEC-02 FR-DEC-01: the page asks for record:read in this organisation, then loads the panel for this question",
+    "property": "The page asks for record:read in this organisation, then loads the panel for this question and the stage list with the same context.",
+    "proof": "No assertion changed. The fixture's current version gains receivedAt, which the decision card formats (the card is real in this file, not mocked).",
+    "task": "Route rebuild lane 2 task 4 (the join with lane 1's question page)"
   }
 ]

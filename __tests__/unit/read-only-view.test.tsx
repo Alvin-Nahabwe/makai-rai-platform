@@ -513,17 +513,21 @@ describe('the read-only question page (plan 1C Task 7)', () => {
     expect(c).not.toContain('<figure');
   });
 
-  it('a person who may record keeps the form: answer-form and "Current decision", no reading regions and no "What the team decided", even with openWork', async () => {
+  it('a person who may record keeps the form: the one answer-form card ("Your decision", no separate "Current decision"), no reading regions and no "What the team decided", even with openWork', async () => {
     const writer: QuestionPanelData = { ...PANEL, viewer: { ...PANEL.viewer, role: 'assessor' }, canWrite: true, canRaiseFinding: true };
     const withWork = await render(writer, WORK);
     expect(withWork).toContain('data-region="answer-form"');
-    expect(withWork).toContain(`<h2 id="s12-current-decision">${QUESTION_COPY.headings.current}</h2>`);
+    expect(withWork).toContain('<h2 id="s12-answer-form">Your decision</h2>');
+    expect(withWork).not.toContain('data-region="current-decision"');
+    expect(withWork).not.toContain(QUESTION_COPY.headings.current);
     expect(withWork).not.toContain('data-region="open-work"');
     expect(withWork).not.toContain('data-region="reading-aside"');
     expect(withWork).not.toContain('What the team decided');
-    expect(withWork).toContain('See all versions (2)');
+    expect(withWork).toContain(QUESTION_COPY.reading.history(2));
     expect(withWork).toContain('data-region="seal-note"');
-    expect(withWork).toContain('data-region="way-on"');
+    // The way on is inside the card's Save row now (Next: ..., Question n of N), not a region of its own.
+    expect(withWork).not.toContain('data-region="way-on"');
+    expect(withWork).toContain('Next: ');
     expect(withWork).toBe(await render(writer, null));
   });
 });

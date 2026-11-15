@@ -13,7 +13,7 @@ import { stageFixture } from '../helpers/stageFixture';
  * The question page's frame, rebuilt to the Route sketch (lane 1 Task 1; assigned.html, workspace-phone-saved.html): the
  * top strip (breadcrumb and the stage's tally, shown from 1160px), the position strip (shown under 1160px), the question
  * in words as the `h1` with its code line after it, the seal note, the decision slot, then the guidance aside, the
- * finding link and the route column. `QuestionContent` and the decision slot's stub are the REAL ones here; the slots
+ * finding link and the route column. `QuestionContent` and the decision card (through the slot) are the REAL ones here; the slots
  * inside them record nothing and render nothing, and the answer form is real, with the mocks s12-shell.test.tsx gives it.
  */
 const empty = () => null;
@@ -73,27 +73,29 @@ const strip = (html: string): string => between(html, '<nav class="position-stri
 const nameOf = (link: string): string => link.replace(/<svg[\s\S]*?<\/svg>/g, '').replace(/<[^>]+>/g, '');
 
 describe('the question page frame: DOM order', () => {
-  it('strip/breadcrumb, h1, code, seal note, decision slot (with the writer\'s finding link in the stub), guidance, route; nothing reordered by CSS', async () => {
+  it('strip/breadcrumb, h1, code, seal note, the decision card (with the writer\'s finding link in its foot), guidance, route; nothing reordered by CSS', async () => {
     const html = await render();
     const at = (s: string) => html.indexOf(s);
     expect(inOrder([
       at('<div class="question-top"'), at('<nav class="position-strip"'), at('<h1 id="question-heading"'), at('class="question-frame__code"'),
-      at('data-region="seal-note"'), at('data-region="decision-slot"'), at('data-region="finding-link"'), at('<aside'), at('<div class="question-workspace__route">'),
+      at('data-region="seal-note"'), at('data-region="answer-form"'), at('class="decision-card__raise"'), at('<aside'), at('<div class="question-workspace__route">'),
     ]), html).toBe(true);
+    // The card replaced the stub: no separate region for the slot, the current decision, the finding link or the way on.
+    for (const gone of ['data-region="decision-slot"', 'data-region="current-decision"', 'data-region="finding-link"', 'data-region="way-on"']) expect(html, gone).not.toContain(gone);
     const css = readFileSync('components/question/workspace.css', 'utf8');
     expect(css).not.toMatch(/^\s*order\s*:/m);
     expect(css).not.toMatch(/flex-direction:\s*(row|column)-reverse/);
   });
 
-  it('the main column holds the question, the seal note and the slot (the finding link inside it); the guide column the aside alone; the route its own', async () => {
+  it('the main column holds the question, the seal note and the decision card (the finding link inside it); the guide column the aside alone; the route its own', async () => {
     const html = await render();
     const main = between(html, '<div class="question-workspace__main">', '<div class="question-workspace__guide">');
-    for (const s of ['data-region="question"', 'data-region="seal-note"', 'data-region="decision-slot"']) expect(main).toContain(s);
+    for (const s of ['data-region="question"', 'data-region="seal-note"', 'data-region="answer-form"']) expect(main).toContain(s);
     expect(main).not.toContain('<aside');
     const guide = between(html, '<div class="question-workspace__guide">', '<div class="question-workspace__route">');
     expect(guide).toContain('<aside');
-    expect(guide).not.toContain('data-region="finding-link"');
-    expect(main).toContain('data-region="finding-link"');
+    expect(guide).not.toContain('finding link');
+    expect(main.slice(main.indexOf('data-region="answer-form"'))).toContain('finding link');
     expect(html.slice(html.indexOf('<div class="question-workspace__route">'))).toContain('the route');
     expect(html).not.toMatch(/<(nav|div)[^>]*style=/);
   });
@@ -146,7 +148,7 @@ describe('the top strip (R4), shown from 1160px', () => {
     const words = items.map(visible);
     // 3 done, 2 partly, 1 not yet, 1 not applicable, the personal data question answered (its vocabulary term, lane 6), 16 with no decision.
     expect(words).toEqual(['3 done', '2 partly', '1 not yet', '1 not applicable', '1 personal data question answered', '16 no decision']);
-    for (const i of items) expect(i).toMatch(/^<svg class="ui-mark__shape" width="16" height="16"[\s\S]*<\/svg><b>\d+<\/b> /);
+    for (const i of items) expect(i).toMatch(/^<svg class="ui-mark__shape" data-shape-kind="[a-z_]+" width="16" height="16"[\s\S]*<\/svg><b>\d+<\/b> /);
     expect(tally).toContain('data-mark-kind="done"');
     // Named by a label, not a heading: no heading comes before the page's h1 (fix round 1, M2).
     expect(html).toContain(`<ul class="question-top__tally" role="list" aria-label="${esc(QUESTION_COPY.frame.tallyHeading)}">`);
@@ -317,12 +319,14 @@ describe('the guidance aside', () => {
     expect(html).not.toContain('Ways teams address this');
   });
 
-  it('coordinator\'s ruling on review S1a-4: the writer\'s finding link is in the decision slot (the stub, until lane 2\'s card carries it), after the form and before the way on; none in the guidance column', async () => {
+  it('coordinator\'s ruling on review S1a-4: the writer\'s finding link is in the decision card\'s foot, after the form; none in the guidance column and no separate Findings section for a writer', async () => {
     const html = await render();
-    const slot = between(html, 'data-region="decision-slot"', 'data-region="way-on"');
-    expect(slot.indexOf('data-region="answer-form"')).toBeLessThan(slot.indexOf('data-region="finding-link"'));
-    expect(slot).toContain('finding link');
-    expect(html.split('data-region="finding-link"')).toHaveLength(2);
+    const card = between(html, 'data-region="answer-form"', 'class="decision-card__more"');
+    expect(card.indexOf('<form')).toBeLessThan(card.indexOf('class="decision-card__raise"'));
+    expect(card).toContain('finding link');
+    expect(html.split('finding link')).toHaveLength(2);
+    expect(html).not.toContain('data-region="finding-link"');
+    expect(between(html, '<div class="question-workspace__guide">', '<div class="question-workspace__route">')).not.toContain('finding link');
   });
 });
 
@@ -332,14 +336,14 @@ describe('the frame states', () => {
   const q13 = (gateAnswer: QuestionPanelData['gateAnswer']): QuestionPanelData =>
     ({ ...PANEL, question: Q13, runningQuestion: Q13, gateAnswer, current: null, historyCount: 0, seals: [] });
 
-  it('S3 R1: with the gate at No, a question with the condition says it does not apply, under the code line and before the slot; the form is still there', async () => {
+  it('S3 R1: with the gate at No, a question with the condition says it does not apply, under the code line and before the decision card; the form is still there', async () => {
     const html = await render(q13('no'));
     expect(html.split(sentence)).toHaveLength(2);
     // Design fix S5-N6: the switched-off mark beside the sentence, in ink and semibold (no orange, no red).
     expect(html).toMatch(new RegExp(`<p class="question-frame__code">Q-PP-13 · [^<]*</p><p data-does-not-apply="true" class="question-frame__does-not-apply"><svg class="ui-mark__shape"[^>]*>[\\s\\S]*?</svg>${sentence}</p>`));
     const css = readFileSync('components/question/workspace.css', 'utf8');
     expect(css).toMatch(/\.question-frame__does-not-apply \{[^}]*color: var\(--color-ink\);[^}]*font-weight: var\(--font-weight-semibold\);/);
-    expect(html.indexOf('data-does-not-apply')).toBeLessThan(html.indexOf('data-region="decision-slot"'));
+    expect(html.indexOf('data-does-not-apply')).toBeLessThan(html.indexOf('data-region="answer-form"'));
     expect(html).toMatch(/<form\b/);
   });
 
@@ -361,16 +365,20 @@ describe('the frame states', () => {
     expect(html.indexOf('This project is archived')).toBeLessThan(html.indexOf('<div class="question-top"'));
   });
 
-  it('a question in no seal has no seal-note section; one in a seal has it, above the slot', async () => {
+  it('a question in no seal has no seal-note section; one in a seal has it, above the decision card', async () => {
     expect(await render({ ...PANEL, seals: [] })).not.toContain('data-region="seal-note"');
     const sealed = await render();
     expect(sealed).toContain('<section data-region="seal-note" aria-labelledby="s12-seal-note"><h2 id="s12-seal-note">Sealed reviews</h2>');
-    expect(sealed.indexOf('data-region="seal-note"')).toBeLessThan(sealed.indexOf('data-region="decision-slot"'));
+    expect(sealed.indexOf('data-region="seal-note"')).toBeLessThan(sealed.indexOf('data-region="answer-form"'));
   });
 
-  it('S9 R4: the Findings section is absent when there is no open finding and the person cannot raise one; present otherwise', async () => {
-    expect(await render({ ...PANEL, openFinding: null, canRaiseFinding: false })).not.toContain('data-region="finding-link"');
-    expect(await render({ ...PANEL, openFinding: null, canRaiseFinding: true })).toContain('<section data-region="finding-link" aria-labelledby="s12-finding-link"><h2 id="s12-finding-link">Findings</h2>');
+  it('S9 R4: a reader\'s Findings section is absent when the person cannot raise one, present when they can; a writer has none (the card\'s foot carries the link)', async () => {
+    // A reader's page reads the version's whole shape, so the version here is complete (as in the archived case).
+    const current = { ...CURRENT, reasonErased: null, withdrawalCode: null, evidence: [] } as unknown as DecisionVersionView;
+    const reader = { ...PANEL, current, canWrite: false };
+    expect(await render({ ...reader, openFinding: null, canRaiseFinding: false })).not.toContain('data-region="finding-link"');
+    expect(await render({ ...PANEL, openFinding: null, canRaiseFinding: true })).not.toContain('data-region="finding-link"');
+    expect(await render({ ...reader, openFinding: null, canRaiseFinding: true })).toContain('<section data-region="finding-link" aria-labelledby="s12-finding-link"><h2 id="s12-finding-link">Findings</h2>');
   });
 
   it('every heading of the page, from the start of its markup, in order: the first is the h1 and none skips a level', async () => {
