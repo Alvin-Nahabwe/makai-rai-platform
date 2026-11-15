@@ -1,7 +1,8 @@
 import { ValidationFailed } from '@/lib/http/errors';
+import { HTTP_COPY } from '@/lib/http/copy';
 
 /** The field message of a body that is not JSON in UTF-8 (an API-only text: a form always sends JSON). */
-const NOT_JSON = 'The request body must be JSON, in UTF-8.';
+const NOT_JSON = HTTP_COPY.unreadable;
 
 /**
  * The request body as JSON, for a route that reads one. A body that is not valid UTF-8 or not JSON (an empty body, a

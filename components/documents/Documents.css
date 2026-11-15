@@ -4,6 +4,11 @@
    and the spacing between them. Colour roles only (no legacy alias), weights 400, 600 and 700, motion on state changes only
    and none under reduced motion. */
 
+/* The terms under the header belong to it: the header's own gap above them, not its bottom margin (DF I1). */
+.ui-page-header:has(+ .term-list) {
+  margin-block-end: var(--space-3);
+}
+
 .documents-section {
   margin-block-end: var(--space-10);
 }
@@ -156,6 +161,24 @@
 
 .documents-issued__meta {
   color: var(--color-ink-muted);
+}
+
+/* An issued document's facts (lane 6 row S9): label above value, the four side by side where they fit and wrapping on a phone. The
+   value's own lines stack, so a definition under the fingerprint sits on its own line. */
+.documents-issued__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-6);
+  margin: 0;
+}
+
+.documents-issued__facts dt {
+  color: var(--color-ink-muted);
+}
+
+.documents-issued__facts dd {
+  display: grid;
+  margin: 0;
 }
 
 .documents-issued a,

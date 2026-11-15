@@ -12,7 +12,14 @@ import { ListLink } from '@/components/ui/ListLink';
 import { onlyRolesCanText } from '@/lib/findings/messages';
 import { deciderLabel } from '@/lib/decision/copy';
 import { formatDay } from '@/lib/format/dates';
-import { acceptedByName, overdueLabel, STAGE_NAMES } from '@/lib/findings/labels';
+import { acceptedByName, cancelReasonText, overdueLabel, STAGE_NAMES } from '@/lib/findings/labels';
+import { markTerms } from '@/components/review/markTerms';
+import { TermList, termListId, type TermListItem } from '@/components/review/TermList';
+import { STAGE_TERMS, STATUS_TERMS } from '@/lib/vocabulary/maps';
+import {
+  TERM_ACCEPTED_RISK, TERM_DOES_NOT_APPLY, TERM_FINDING, TERM_MITIGATION, TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION, TERM_RISK_AREA, TERM_SEAL,
+} from '@/lib/vocabulary/terms';
+import type { DecisionStatus } from '@/types/record';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
 import type { FindingPageData, MitigationOnPage } from '@/lib/findings/pageData';
 import type { ClosureCause } from '@/lib/findings/closure';
@@ -73,7 +80,7 @@ function Mitigation({ d, m, controlName }: { d: FindingPageData; m: MitigationOn
       </p>
       {d.ownerCannotAct.includes(v.mitigationId) ? <p>{M.cannotAct}</p> : null}
       {v.followsControl === null ? null : <p>{M.controlUsed} <bdi>{named(v.followsControl, controlName(v.followsControl))}</bdi></p>}
-      {v.cancelReason === null ? null : <p>{M.cancelReason} <bdi>{v.cancelReason}</bdi></p>}
+      {v.cancelReason === null ? null : <p>{M.cancelReason} <bdi>{cancelReasonText(v.cancelReason)}</bdi></p>}
       <VersionEvidenceList orgSlug={d.orgSlug} items={v.evidence} />
       {d.canMitigate && d.detail.state === 'open' && v.status !== 'cancelled' ? (
         <MitigationFormToggle label={F.updateMitigation} {...formProps(d)} base={v} />
@@ -129,6 +136,35 @@ function historyOf(d: FindingPageData): HistoryEntry[] {
   return out.sort((x, y) => x.seq - y.seq);
 }
 
+/** The prefix of the ids of the definitions under the heading. */
+const TERMS_ID = 'finding-term';
+
+/**
+ * The terms defined under the finding's heading (spec 6; the house pattern for several terms first used near the top), in
+ * the order the page uses them: "finding" (the back link holds its first use and names this definition); "accepted risk"
+ * when the state says it or the accept form is offered; the decision statuses the header names (the status it was raised
+ * from, the status that lets it close); the finding's stage and its risk area (the line under the heading); "seal" when a
+ * seal holds the finding (its marker); and "mitigation", which the page always uses. The seal marker on this page stays
+ * plain: the stage it names is defined here already.
+ */
+function findingTerms(d: FindingPageData): TermListItem[] {
+  const f = d.detail;
+  const accepted = f.state === 'closed_accepted_risk' || (d.canAccept && f.state === 'open');
+  const used = new Set<string>([f.source === 'shortfall' ? d.version?.status : null, d.closeByDecision?.status].filter((x): x is DecisionStatus => x !== null && x !== undefined && x !== 'withdrawn'));
+  const statuses = (Object.keys(STATUS_TERMS) as DecisionStatus[]).filter((s) => used.has(s)).map((s) => STATUS_TERMS[s]);
+  // B4 I2: the gate's cause sentences. The header's closure line ("…no longer applies: the team answered No to the personal
+  // data question.") comes before the line with the stage; the close box's ("…the personal data question, so this question
+  // does not apply.") comes after the header. The box names no status: a gate's version has none.
+  const closedByGate = d.closure?.cause === 'no_longer_applies';
+  const gateBox = d.closeByDecision?.reason === 'gate_no';
+  return [
+    { of: TERM_FINDING, marked: false },
+    ...[...(accepted ? [TERM_ACCEPTED_RISK] : []), ...(closedByGate ? [TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION] : []), ...statuses,
+      STAGE_TERMS[f.stage], ...(f.riskArea === null ? [] : [TERM_RISK_AREA]), ...(f.seals.length === 0 ? [] : [TERM_SEAL]),
+      ...(gateBox ? [TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION, TERM_DOES_NOT_APPLY] : []), TERM_MITIGATION].map((of) => ({ of, marked: true })),
+  ];
+}
+
 export function FindingPageView({ data }: { data: FindingPageData }): ReactElement {
   const d = data;
   const f = d.detail;
@@ -144,9 +180,13 @@ export function FindingPageView({ data }: { data: FindingPageData }): ReactEleme
   return (
     <div className="page-content finding-page">
       <ArchivedBanner archived={d.archived} />
-      <ListLink href={`${base}/findings`} className="finding-back">{F.backToFindings}</ListLink>
+      {/* The link holds the page's first use of "finding": it names the definition under the heading (spec 6). */}
+      <p className="finding-back-line">
+        <ListLink href={`${base}/findings`} className="finding-back" aria-describedby={termListId(TERMS_ID, TERM_FINDING)}>{markTerms(F.backToFindings, [TERM_FINDING])}</ListLink>
+      </p>
       <header className="ui-page-header finding-header">
         <h1 className="ui-page-header__title"><bdi>{d.title}</bdi></h1>
+        <TermList idPrefix={TERMS_ID} items={findingTerms(d)} />
         <p><bdi className="status-label">{d.stateLabel}</bdi></p>
         {acceptedLine === null ? null : <p>{acceptedLine}</p>}
         {d.closure === null ? null : d.closure.closedBy !== null ? (

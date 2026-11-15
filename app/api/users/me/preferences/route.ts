@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireIdentityForApi } from '@/lib/auth/identity';
 import { identityDb } from '@/lib/data/identity';
 import { ValidationFailed } from '@/lib/http/errors';
+import { PREFERENCES_ROUTE_COPY } from '@/lib/http/api/copy';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { toResponse } from '@/lib/http/toResponse';
 import type { PreferencesRequest } from '@/types/api';
@@ -33,7 +34,7 @@ function preferencesOf(body: unknown): PreferencesRequest {
   const record = typeof body === 'object' && body !== null && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
   const unknownKey = Object.keys(record).find((k) => k !== 'reminderEmails');
   if (unknownKey !== undefined) {
-    throw new ValidationFailed([{ field: unknownKey, message: 'Only reminderEmails can be changed here.' }]);
+    throw new ValidationFailed([{ field: unknownKey, message: PREFERENCES_ROUTE_COPY.onlyReminder }]);
   }
   if (typeof record.reminderEmails !== 'boolean') {
     throw new ValidationFailed([{ field: 'reminderEmails', message: 'Choose on or off.' }]);

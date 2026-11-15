@@ -19,8 +19,9 @@ import { useFixtureContent } from '../helpers/content';
 import { sessionFor } from '../helpers/authSession';
 import { HOSTILE_STRINGS, hostileText } from '../helpers/hostile';
 import {
-  addAcceptedRisk, addDecision, addFinding, addFindingEvent, addMitigationVersion, addProject, buildOrg, ctxFor, type OrgFixture,
+  addAcceptedRisk, addDecision, addFinding, addFindingEvent, addMitigationVersion, addPreR11ClosingRecord, addProject, buildOrg, ctxFor, type OrgFixture,
 } from '../helpers/recordFixture';
+import { eatDate } from '@/lib/followup/overdue';
 
 vi.mock('next/navigation', async (importOriginal) => ({
   ...(await importOriginal<typeof import('next/navigation')>()),
@@ -99,12 +100,19 @@ const pressClose = (w: { f: { id: string; projectId: string }; done: { id: strin
   { requestId: randomUUID(), decisionVersionId: w.done.id, projectId: w.f.projectId, findingId: w.f.id }, 'd'.repeat(64),
 );
 
+/**
+ * The stuck state (B2): "Close finding" pressed while a mitigation was Planned. Route 11 refuses that close since route
+ * decision R11 (409 `finding_has_open_work`, pinned in findings-close-by-decision.test.ts and findings-routes.test.ts),
+ * so the record releases up to 0.7.0 wrote is put in directly, as stored data can still hold it.
+ */
+const closedWhileOpen = (w: { f: { id: string }; done: { id: string } }) => addPreR11ClosingRecord(fx, w.f.id, { decisionVersionId: w.done.id, dueDate: eatDate(new Date()) });
+
 describe('S-14 the findings list (UX-15, UX-06, UX-07, FR-FND-07, FR-FND-08)', () => {
   it('UX-15 FR-FND-07: S-14 shows each kind under its UX-15 heading in order, and withdrawn ones only under Withdrawn', async () => {
     const k = await everyKind();
     const html = await renderList('reviewer', k.p.id);
     const L = FINDINGS_COPY.list;
-    const order: Array<string | RegExp> = [L.decisionDone, L.decisionWithdrawn, /Pre-processing: \d+ findings?/, L.noMitigation,
+    const order: Array<string | RegExp> = [L.decisionDone, L.decisionWithdrawn, /Pre-processing<\/span>: \d+ findings?/, L.noMitigation,
       L.overdue, L.lookAgain, L.closed, L.withdrawn];   // the stage heading carries its count (R13-9)
     const at = (h: string | RegExp) => html.search(typeof h === 'string' ? new RegExp(`>${h}<`) : new RegExp(`>${h.source}<`));
     expect(order.map(at).every((i) => i >= 0)).toBe(true);
@@ -127,17 +135,19 @@ describe('S-14 the findings list (UX-15, UX-06, UX-07, FR-FND-07, FR-FND-08)', (
     for (let i = 0; i < 2; i++) await addFinding(fx, q.id, { stage: 'pre-processing', source: 'team' });
     await addFinding(fx, q.id, { stage: 'in-processing', source: 'team' });
     const html = await renderList('reviewer', q.id);
-    expect(html).toContain('>Pre-processing: 2 findings<'); expect(html).toContain('>In-processing: 1 finding<');
+    // The heading marks the stage's name as a defined term (spec 6), so the name ends in its Term's closing tag.
+    const heading = (stage: string, n: number) => `>${stage}</span>${FINDINGS_COPY.labels.stageCountRest(n)}<`;
+    expect(html).toContain(heading('Pre-processing', 2)); expect(html).toContain(heading('In-processing', 1));
     expect(html).not.toMatch(/\b3 findings?\b/);                                   // 2 + 1 appears on no element
     const filtered = await renderList('reviewer', q.id, 'pre-processing');
-    expect(filtered).toContain('>Pre-processing: 2 findings<'); expect(filtered).not.toContain('In-processing:');   // the stage filter keeps the count of what is listed
+    expect(filtered).toContain(heading('Pre-processing', 2)); expect(filtered).not.toContain('id="g-in-processing"');   // the stage filter keeps the count of what is listed
   });
 
   it('UX-40 UX-07: a list shows 50 findings and "Show more", and the stage heading still counts its whole group', async () => {
     const q = await addProject(fx, { name: 'Many' });
     for (let i = 0; i < 52; i++) await addFinding(fx, q.id, { stage: 'pre-processing', source: 'team' });
     const html = await renderList('reviewer', q.id);
-    expect(html).toContain('>Pre-processing: 52 findings<');
+    expect(html).toContain(`>Pre-processing</span>${FINDINGS_COPY.labels.stageCountRest(52)}<`);
     expect(html.match(/\/findings\/[0-9a-f-]{36}"/g)).toHaveLength(50);
     expect(html).toMatch(/href="\/orgs\/[^"]+\/findings\?shown=100"[^>]*>Show more</);
   });
@@ -389,7 +399,7 @@ describe('S-15 the finding page and the S-14 raise form (FR-FND-02, FR-FND-03, F
 
   it('B2 (stuck): after a close pressed while a mitigation was Planned, the box says why it stays open, with no cause and no button; Cancel then closes it', async () => {
     const w = await blockedWalk();
-    await pressClose(w);
+    await closedWhileOpen(w);
     expect((await pageData('assessor', w.f.projectId, w.f.id)).closeBlocked).toBe(true);
     const html = await renderFinding(w.f, 'assessor');
     const F = FINDINGS_COPY.finding;
@@ -647,7 +657,7 @@ describe('B2 review notes: the gate on the blocked box and what counts as a clos
 
   it('B2: a closing record at or below the latest reopen does not count', async () => {
     const w = await blockedWalk();
-    await pressClose(w);
+    await closedWhileOpen(w);
     await addMitigationVersion(fx, w.f.id, { mitigationId: w.m!.mitigationId, status: 'cancelled', owner: 'assessor', dueDate: '2099-01-01' });
     await reopen(w.f);
     await addMitigationVersion(fx, w.f.id, { status: 'planned', owner: 'assessor', dueDate: '2099-01-01' });
@@ -657,7 +667,7 @@ describe('B2 review notes: the gate on the blocked box and what counts as a clos
 
   it('B2 ruling C: a decision closure with two versions is not a closing record: it does not block, and it is shown as a card', async () => {
     const w = await blockedWalk();
-    await pressClose(w);
+    await closedWhileOpen(w);
     await addDecision(fx, w.f.projectId, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId, status: 'not_yet' });   // no closure now
     expect((await pageData('assessor', w.f.projectId, w.f.id)).closeBlocked).toBe(true);    // the record still counts
     const record = (await pageData('assessor', w.f.projectId, w.f.id)).detail.mitigations.find((m) => m.current.kind !== 'action')!;
@@ -718,7 +728,7 @@ describe('R2 R3: a closing record is not a mitigation, and the cause is true (ru
 
   it('R2 ruling B (stuck): the notice, one card, no closure line, and the history line that the finding stayed open', async () => {
     const w = await blockedWalk();
-    await pressClose(w);
+    await closedWhileOpen(w);
     const d = await pageData('assessor', w.f.projectId, w.f.id);
     expect(d.mitigations.map((m) => m.current.mitigationId)).toEqual([w.m!.mitigationId]);
     const html = renderToStaticMarkup(<FindingPageView data={d} />);
@@ -732,7 +742,7 @@ describe('R2 R3: a closing record is not a mitigation, and the cause is true (ru
 
   it('R2: after the stuck case is cancelled the label is "Closed" with the cause; after Done it is "Closed by a mitigation" with no closure line', async () => {
     const c = await blockedWalk();
-    await pressClose(c);   // the assessor presses while the mitigation is Planned
+    await closedWhileOpen(c);   // the assessor presses while the mitigation is Planned
     await addMitigationVersion(fx, c.f.id, { mitigationId: c.m!.mitigationId, status: 'cancelled', owner: 'assessor', by: 'owner', dueDate: '2099-01-01' });   // the owner cancels
     const cancelled = await renderFinding(c.f, 'viewer');
     expect(cancelled).toContain(`<bdi class="status-label">${FINDINGS_COPY.labels.closed}</bdi>`);
@@ -742,7 +752,7 @@ describe('R2 R3: a closing record is not a mitigation, and the cause is true (ru
     expect(cancelled).toMatch(new RegExp(`</time> ${lit(M.pressedWhileOpen)} <bdi>${lit(name())}</bdi></li>`));
     expect(cancelled).toMatch(new RegExp(`</time> ${lit(M.updated(2))}[^<]*<bdi>[^<]*</bdi>[^<]*<bdi>${lit(fx.members.owner.name)}</bdi></li>`));
     const dn = await blockedWalk();
-    await pressClose(dn);
+    await closedWhileOpen(dn);
     await addMitigationVersion(fx, dn.f.id, { mitigationId: dn.m!.mitigationId, status: 'done', owner: 'assessor', dueDate: '2099-01-01' });
     const done = await renderFinding(dn.f, 'viewer');
     expect(done).toContain(`<bdi class="status-label">${FINDINGS_COPY.labels.closedByMitigation}</bdi>`);

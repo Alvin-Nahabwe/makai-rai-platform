@@ -7,6 +7,7 @@ import { ALL_ORG_ROLES } from '@/lib/authz/roles';
 import { requestDigest } from '@/lib/data/idempotency';
 import { saveDecision } from '@/lib/data/decisions';
 import { openShortfallForQuestion } from '@/lib/data/findings';
+import { FINDINGS_COPY } from '@/lib/findings/copy';
 import { resetDb, testDb } from '../helpers/db';
 import { useFixtureContent } from '../helpers/content';
 import { captureLogs } from '../helpers/logCapture';
@@ -135,16 +136,17 @@ describe('finding routes 6 to 11 end to end (FR-DEC-07, NFR-INT-02, FR-PRJ-03, F
     expect(refused).toBe(12);   // viewer and reviewer x 3 mitigation:write routes, + 3 for risk:accept, + 2 for reopen, + 1 for withdraw
   });
 
-  it('B2 (the server as it stands): a close while a mitigation is Planned answers 201, writes the record, and the finding stays open', async () => {
-    // The pages no longer send this close (B2); the server's refusal is listed for after the workshop.
+  it('R11 (B2, L-2): a close while a mitigation is Planned answers 409 finding_has_open_work with the sentence, writes nothing, and the finding stays open', async () => {
+    // The pages do not send this close (B2); route decision R11 makes the server refuse it too.
     const p = await addProject(fx);
     const raising = await addDecision(fx, p.id, { stage, questionId: 'Q-PP-01', contentVersionId, status: 'not_yet' });
     const f = await addFinding(fx, p.id, { stage, source: 'shortfall', questionId: 'Q-PP-01', decisionVersionId: raising.id });
     await addMitigationVersion(fx, f.id, { status: 'planned', owner: 'assessor', dueDate: '2099-01-01' });
     const done = await addDecision(fx, p.id, { stage, questionId: 'Q-PP-01', contentVersionId, status: 'done' });
     const res = await call('close-by-decision/route.ts', 'assessor', { id: p.id, findingId: f.id }, { requestId: randomUUID(), decisionVersionId: done.id });
-    expect(res.status).toBe(201);
-    expect(await count('mitigation_versions')).toBe(2);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: FINDINGS_COPY.failures.openWork, code: 'finding_has_open_work' });
+    expect(await count('mitigation_versions')).toBe(1);
     expect(await openShortfallForQuestion(ctxFor(fx, 'assessor'), p.id, 'Q-PP-01')).toEqual({ findingId: f.id });
   });
 

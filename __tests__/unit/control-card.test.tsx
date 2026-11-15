@@ -6,6 +6,7 @@ import { RES, handBuiltContent } from '../helpers/suggestionsFixture';
 import { ControlCard } from '@/components/suggestions/ControlCard';
 import { parseResources } from '@/lib/content/resources';
 import { SUGGESTIONS_COPY } from '@/lib/suggestions/copy';
+import { TERM_MODEL_CARD } from '@/lib/vocabulary/terms';
 
 const c = handBuiltContent('__tests__/fixtures/content/0.0.1-fixture');
 const card = (id: string, extra = {}) =>
@@ -17,7 +18,7 @@ describe('ControlCard', () => {
     expect(card('C-13')).toContain('Download notebook (.ipynb, 48 KB)');
     expect(card('C-13')).toContain('Notebook: how to apply this with a free tool to your own data');
     expect(card('C-13')).toContain(SUGGESTIONS_COPY.card.runsOn);
-    expect(card('C-13')).toContain('Reviewed by Reviewer A on 31 Oct 2026.');
+    expect(card('C-13')).toContain(SUGGESTIONS_COPY.card.reviewed('Reviewer A', '31 Oct 2026'));
     expect(card('C-13')).toMatch(/Download the list of software it needs \(requirements\.txt\) \(\.txt, \d+ KB\)/);
     expect(card('C-21')).not.toMatch(/otebook/);
     expect(card('C-21')).not.toMatch(/coming soon/i);
@@ -115,5 +116,28 @@ describe('ControlCard', () => {
   it('UX-13: a resource type the card has no word for is an error, not a bare "Resource"', () => {
     const odd = { ...c.controls.get('C-01')!, resources: [{ title: 'A post', url: 'https://example.org/p', type: 'blog' }] };
     expect(() => renderToStaticMarkup(<ControlCard control={odd} resources={RES} headingLevel={3} />)).toThrow(/A post.*blog/);
+  });
+
+  // Lane 6 FX2 (ruling X-5): the card can repeat on a page, so marking "model card" is an optional prop, off by default.
+  describe('defineModelCard', () => {
+    const MODEL = { ...c.controls.get('C-01')!, description: 'Write a model card for the model and keep it with the release.' };
+    const html = (extra = {}) => renderToStaticMarkup(<ControlCard control={MODEL} resources={RES} headingLevel={3} {...extra} />);
+
+    it('off (the default, as S-12 and S-15 use it): the description is plain and nothing is defined', () => {
+      expect(html()).toBe(html({ defineModelCard: false }));
+      expect(html()).toContain('<p class="ctl-card__desc">Write a model card for the model and keep it with the release.</p>');
+      expect(html()).not.toMatch(/data-term|data-definition/);
+    });
+
+    it('on: a line before the description names the term (marked as its first use) with its definition; the description stays one whole text (DF I5; FR-PUB-01)', () => {
+      expect(html({ defineModelCard: true })).toContain(
+        `<p class="term-line"><span data-term="${TERM_MODEL_CARD.id}">Model card</span>. <span class="ui-definition" data-definition="${TERM_MODEL_CARD.id}">${TERM_MODEL_CARD.definition}</span></p>`
+        + '<p class="ctl-card__desc">Write a model card for the model and keep it with the release.</p>');
+    });
+
+    it('on, for a description that does not use the term: nothing is defined', () => {
+      expect(renderToStaticMarkup(<ControlCard control={c.controls.get('C-01')!} resources={RES} headingLevel={3} defineModelCard />))
+        .not.toMatch(/data-term|data-definition/);
+    });
   });
 });

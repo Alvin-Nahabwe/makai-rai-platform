@@ -20,7 +20,7 @@ vi.mock('node:fs', async (importOriginal) => {
 import AboutPage, { metadata } from '@/app/(public)/about/page';
 import { ABOUT_COPY } from '@/lib/about/copy';
 import { pageTitle } from '@/lib/ui/title';
-import { TERM_STAGE_1, TERM_STAGE_2, TERM_STAGE_3 } from '@/lib/vocabulary/terms';
+import { TERM_FINDING, TERM_MITIGATION, TERM_RISK_AREA, TERM_SEAL, TERM_STAGE_1, TERM_STAGE_2, TERM_STAGE_3, TERM_STAGE_REVIEW } from '@/lib/vocabulary/terms';
 
 /**
  * S-28, the public About page (FR-PUB-01, FR-PUB-02, FR-PUB-04, FR-PUB-05, UX-03).
@@ -43,6 +43,9 @@ const plain = (s: string): string =>
     .trim();
 
 const text = plain(html);
+
+/** React's escaping of a text child: the apostrophe and the ampersand are the two the copy holds. */
+const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/'/g, '&#x27;');
 
 /** The markup of one section: from the `<h2>` that carries the id to the next `<h2>`. */
 function section(markup: string, id: string): string {
@@ -294,18 +297,38 @@ describe('S-28 About page', () => {
     expect(readFileSync('app/(public)/about/page.tsx', 'utf8')).not.toContain('MAK-AI RAI Platform');
   });
 
-  it("1A Task 19 (Q15, L5-11): the three stage lines pair the content's name with the vocabulary's definition", () => {
+  it("1A Task 19 (Q15, L5-11) B5 (D1): each stage line is the content's name as a Term, with the vocabulary's Definition beside it", () => {
     const s = plain(section(html, 'what-this-is'));
     expect(s).toContain(ABOUT_COPY.whatItDoes.intro);
     for (const t of [TERM_STAGE_1, TERM_STAGE_2, TERM_STAGE_3]) {
-      expect(html, t.term).toContain(`<li><strong>${t.term}.</strong> ${t.definition}</li>`);
+      expect(html, t.term).toContain(
+        `<li><strong><span data-term="${t.id}">${t.term}</span>.</strong> <span class="ui-definition" data-definition="${t.id}">${esc(t.definition)}</span></li>`,
+      );
     }
   });
 
-  it('1A Task 19 (Q17): the paragraph on what the team records is the ruled one, word for word', () => {
-    expect(plain(section(html, 'what-this-is'))).toContain(
-      'For each question, your team records a decision, the reason, who decided, when, and any evidence. The team decides; the platform records. If a decision does not meet good practice, a finding is raised. Your team closes each finding in one of two ways: it fixes the problem (a mitigation), or it records that it accepts the risk. When your team is ready, it seals a stage review. Sealing fixes the record so it cannot change. The platform then makes documents from it for your ethics committee or funder. The platform does not test your model or calculate anything from your data.',
+  it('B5: what the team records, then the four words of what can follow a decision, each a Term with its Definition, then how they fit', () => {
+    const w = ABOUT_COPY.whatItDoes;
+    const s = section(html, 'what-this-is');
+    const items = [TERM_FINDING, TERM_MITIGATION, TERM_STAGE_REVIEW, TERM_SEAL]
+      .map((t) => `<li><strong><span data-term="${t.id}">${t.term[0].toUpperCase()}${t.term.slice(1)}</span>.</strong> <span class="ui-definition" data-definition="${t.id}">${esc(t.definition)}</span></li>`)
+      .join('');
+    expect(s).toContain(`<p>${esc(w.record)}</p><p>${esc(w.termsLead)}</p><ul class="about-stages">${items}</ul><p>${esc(w.followUp)}</p>`);
+    expect(w.terms.map((t) => t.id)).toEqual(['finding', 'mitigation', 'stage-review', 'seal']);
+    // The ruled paragraph (Q17), kept sentence by sentence except the one the seal's definition corrects: the record can
+    // change after a seal; the seal is the copy that does not (Help's "What sealing means").
+    expect(`${w.record} ${w.followUp}`).toBe(
+      'For each question, your team records a decision, the reason, who decided, when, and any evidence. The team decides; the platform records. If a decision does not meet good practice, a finding is raised. Your team closes each finding in one of two ways: it fixes the problem (a mitigation), or it records that it accepts the risk. When your team is ready, it seals a stage review. The platform then makes documents from it for your ethics committee or funder. The platform does not test your model or calculate anything from your data.',
     );
+    expect(text).not.toContain('Sealing fixes the record so it cannot change.');
+  });
+
+  it('B5, FX4 (DF I4): the principles open by naming risk areas as a Term, its Definition on its own line next, before the first card uses the words', () => {
+    const p = ABOUT_COPY.principles;
+    const lead = `<p class="about-lead">${esc(p.lead)} ${p.areasLine[0]}<span data-term="${TERM_RISK_AREA.id}">${p.areasLine[1]}</span>${p.areasLine[2]}</p><p class="ui-definition" data-definition="${TERM_RISK_AREA.id}">${esc(TERM_RISK_AREA.definition)}</p>`;
+    expect(html).toContain(lead);
+    expect(html.indexOf(lead)).toBeLessThan(html.indexOf(`<h4>${p.areas}</h4>`));
+    expect(p.areasLine.join('')).toBe('Each principle lists its risk areas.');
   });
 
   it('1A Task 19 (Q19, AB37o): the two sentences the coordinator changed, and the energy paragraph has no "five cars" figure', () => {

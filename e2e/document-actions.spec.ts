@@ -52,7 +52,7 @@ async function issuedCard(baseURL: string): Promise<{ projectId: string; reviewI
 let shared: Promise<{ projectId: string; reviewId: string; documentId: string }> | undefined;
 const sharedCard = (baseURL: string) => (shared ??= issuedCard(baseURL));
 const s18Of = (c: { projectId: string; reviewId: string }) => `/orgs/${org.slug}/projects/${c.projectId}/reviews/${c.reviewId}/documents`;
-const LOST = 'Not withdrawn yet: no reply from the server. It may have arrived. Retry is safe: it will not withdraw twice.';
+const LOST = DOCUMENTS_COPY.actions.withdrawLost;
 const withdrawRoute = (documentId: string) => `**/api/v1/orgs/${org.slug}/documents/${documentId}/withdrawal`;
 const textRoute = (documentId: string) => `**/api/v1/orgs/${org.slug}/documents/${documentId}/text`;
 const body409 = { error: 'already_withdrawn', code: 'already_withdrawn' };
@@ -140,7 +140,8 @@ test('FR-DOC-06 FR-DOC-07 UX-29 NFR-A11Y-02 NFR-A11Y-05: copy and withdraw a doc
 
   // The document stays: the PDF still downloads and hashes to the SHA-256 S-18 shows.
   const short = `${row.sha256.slice(0, 4)} ${row.sha256.slice(4, 8)} ... ${row.sha256.slice(60)}`;
-  await expect(page.getByText(`Fingerprint ${short}`)).toBeVisible();
+  // The list states each fact as a term and its value (lane 6 row S9): the fingerprint is the value after "Fingerprint".
+  await expect(page.getByRole('definition').filter({ hasText: short })).toBeVisible();
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: /^Download PDF \(\d+ KB\)$/ }).click()]);
   expect(createHash('sha256').update(readFileSync((await download.path()) as string)).digest('hex')).toBe(row.sha256);
 
@@ -273,7 +274,7 @@ test('FR-DOC-01 (MP-04): an issued mitigation plan lists, for a finding raised f
     const res = await ctx.get(`/api/v1/orgs/${org.slug}/documents/${d.id}/text`);
     expect(res.status()).toBe(200);
     const text = await res.text();
-    expect(text).toContain('Risk areas of question Q-PP-12: PP-07 Labeling Bias');
+    expect(text).toContain('Risk areas of question Q-PP-12: Labeling Bias (PP-07)'); // lane 6 C12: an area's name first, its code after (wordsThenCode)
     expect(text).toContain('Controls: C-03 Data Quality & Representativeness Audit; C-04 Bias Detection in Data; C-12 Labeling Quality Assurance');
   } finally {
     await ctx.dispose();

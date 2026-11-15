@@ -105,7 +105,7 @@
   overflow-wrap: anywhere;
 }
 
-/* S-23's flags in a cell, under the organisation's name. */
+/* S-23's flags in a cell, under the organisation's name, and S-24's state labels under its summary line. */
 .admin-flag {
   display: block;
 }

@@ -12,6 +12,6 @@ export async function assertEvidenceAttachable(tx: TenantTx, projectId: string, 
   if (wanted.length === 0) return;
   const found = await tx.evidence.count({ where: { projectId, id: { in: wanted } } });
   if (found !== wanted.length) {
-    throw new ValidationFailed([{ field: 'evidenceIds', message: 'Every attached item must be evidence of this project.' }]);
+    throw new ValidationFailed([{ field: 'evidenceIds', message: 'One of the attached files or links belongs to another project. Remove it and save again.' }]);
   }
 }

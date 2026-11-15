@@ -35,19 +35,27 @@ export function unsavedDraftsLine(n: number): string | null {
 /** "1 file", "2 files": the count with its noun (S-17's lines and the S-11 banner). */
 export const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
+/** The decision statuses in the order the seal step counts them. */
+export const PREVIEW_STATUSES = ['done', 'partly', 'not_yet', 'not_applicable'] as const;
+
+/** What the seal will hold, in the parts S-17 draws: the statement, the two count tables (S7) and the other lines. */
+export type PreviewParts = {
+  statement: string;
+  /** C 182: one row per status, every status, a zero included. */
+  statuses: ReadonlyArray<{ status: (typeof PREVIEW_STATUSES)[number]; count: number }>;
+  /** C 183: one row per reason code used, its label or (C11) the code itself when the content has no label for it. */
+  reasons: ReadonlyArray<{ code: string; label: string; count: number }>;
+  lines: readonly string[];
+};
+
 /**
- * What the seal will hold (W-7 S-17; UX-18; FR-REV-02), one line each, the statement first. `sealNumber` is the number
- * the seal will take; `reasonLabels` maps the running content's reason codes to their labels (a code without one is
- * shown as itself). The questions with no decision are rendered by the page as links, so they are not here.
+ * What the seal will hold (W-7 S-17; UX-18; FR-REV-02). `sealNumber` is the number the seal will take; `reasonLabels`
+ * maps the running content's reason codes to their labels (a code without one is shown as itself). The questions with
+ * no decision are rendered by the page as links, so they are not here.
  */
-export function previewLines(p: SealPreview, sealNumber: number, reasonLabels: Readonly<Record<string, string>>): string[] {
+export function previewParts(p: SealPreview, sealNumber: number, reasonLabels: Readonly<Record<string, string>>): PreviewParts {
   const c = REVIEW_COPY.sealPage;
-  const lines = [
-    c.statement(sealNumber),
-    c.byStatus(p.byStatus.done, p.byStatus.partly, p.byStatus.not_yet, p.byStatus.not_applicable),
-  ];
-  const reasons = Object.entries(p.byReasonCode);
-  if (reasons.length > 0) lines.push(c.byReason(reasons.map(([code, n]) => `${reasonLabels[code] ?? code} ${n}`).join('\u00a0· ')));
+  const lines: string[] = [];
   if (p.scopeAnswer !== null) lines.push(c.gateAnswer(REVIEW_COPY.gateWords[p.scopeAnswer.answer]));
   lines.push(
     c.doneNoEvidence(p.doneWithoutEvidence),
@@ -58,7 +66,21 @@ export function previewLines(p: SealPreview, sealNumber: number, reasonLabels: R
     c.reworded(p.rewordedSinceDecision),
     c.sealingAs(p.sealer.name, REVIEW_COPY.roleWords[p.sealer.role]),
   );
-  return lines;
+  return {
+    statement: c.statement(sealNumber),
+    statuses: PREVIEW_STATUSES.map((status) => ({ status, count: p.byStatus[status] })),
+    reasons: Object.entries(p.byReasonCode).map(([code, count]) => ({ code, label: reasonLabels[code] ?? code, count })),
+    lines,
+  };
+}
+
+/** The same as text, one line each, the statement first: the counts by status and by reason as one line each. */
+export function previewLines(p: SealPreview, sealNumber: number, reasonLabels: Readonly<Record<string, string>>): string[] {
+  const parts = previewParts(p, sealNumber, reasonLabels);
+  const c = REVIEW_COPY.sealPage;
+  const lines = [parts.statement, c.byStatus(p.byStatus.done, p.byStatus.partly, p.byStatus.not_yet, p.byStatus.not_applicable)];
+  if (parts.reasons.length > 0) lines.push(c.byReason(parts.reasons.map((r) => `${r.label} ${r.count}`).join('\u00a0· ')));
+  return [...lines, ...parts.lines];
 }
 
 /** The sealing states of 7.4.2 row S-16 / S-17; `lost` is followed by a Retry button (owner question B5). */
