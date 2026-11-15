@@ -2,6 +2,9 @@ import './home.css';
 import { Fragment, type ReactElement } from 'react';
 import type { HomeData } from '@/lib/home/types';
 import { HOME_COPY } from '@/lib/home/copy';
+import { PROJECT_COPY } from '@/lib/project/copy';
+import { can } from '@/lib/authz/policy';
+import { ButtonLink } from '@/components/ui/Button';
 import { LocalTime } from '@/components/ui/LocalTime';
 import { WelcomeLine } from '@/components/home/WelcomeLine';
 import { HomeUnsavedLine } from '@/components/home/HomeUnsavedLine';
@@ -88,6 +91,13 @@ export function HomeView({ data }: { data: HomeData }): ReactElement {
         {!base.welcome && lead !== null ? <p className="home-hello__lead">{lead}</p> : null}
         <HomeUnsavedLine userId={base.userId} orgId={base.orgId} />
       </header>
+      {data.variant === 'recorder' && can(base.role, 'project:create') ? (
+        // The one "New project" on Home (role-matrix O-13): the quieter button beside a next-step card, the primary where
+        // there is none. The first-time state has its own single "Create a project"; Reviewer and Viewer cannot create.
+        <div className="home-new">
+          <ButtonLink variant={data.next === null ? 'primary' : 'secondary'} href={`/orgs/${base.orgSlug}/projects/new`}>{PROJECT_COPY.allProjects.newProject}</ButtonLink>
+        </div>
+      ) : null}
       {data.variant === 'recorder' ? <RecorderHome data={data} uses={uses} />
         : data.variant === 'reviewer' ? <ReviewerHome data={data} uses={uses} />
           : data.variant === 'viewer' ? <ViewerHome data={data} uses={uses} />
