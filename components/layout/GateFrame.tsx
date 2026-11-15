@@ -1,6 +1,7 @@
 import type { ReactElement, ReactNode } from 'react';
 import { GateSignOut } from '@/components/layout/GateSignOut';
 import { MAIN_CONTENT_ID } from '@/components/layout/SkipLink';
+import { MAKAI_LOGO } from '@/components/layout/logos';
 import { GATE_COPY } from '@/lib/shell/copy';
 import { UI_COPY } from '@/lib/ui/copy';
 import { PRODUCT_NAME } from '@/lib/ui/title';
@@ -68,11 +69,14 @@ export function GateFrame(props: GateFrameProps): ReactElement {
   const route = props.route !== undefined && props.route.length > 0 ? <GateRoute route={props.route} /> : null;
   const className = `gate gate--${props.variant}${props.wide ? ' gate--wide' : ''}`;
   const card = <div className="gate__card">{props.children}</div>;
-  // The owner's ruling (I-3): the MAK-AI logo sits above the platform's name, in the rail and here. The logo component is
-  // another lane's; its slot is this empty element, which takes no room until the logo is put in it.
+  // The owner's ruling (I-3, 15 Nov): the MAK-AI logo with the platform's name under it, as the rail draws it (lane 3's
+  // components/layout/logos.ts, the white variant, drawn only on navy). No link here: the frame links only to Help (T1.3).
+  // The logo is decorative beside the visible name, so its alt is empty.
   const brand = (
     <div className="gate__brand">
-      <div className="gate__logo" data-slot="logo"></div>
+      {/* eslint-disable-next-line @next/next/no-img-element -- a file already sized for the drawn logo (logos.ts). */}
+      <img src={MAKAI_LOGO.src} srcSet={MAKAI_LOGO.srcSet} width={MAKAI_LOGO.width} height={MAKAI_LOGO.height} alt=""
+        decoding="async" className="gate__logo" />
       <p className="gate__product">{PRODUCT_NAME}</p>
     </div>
   );
@@ -98,7 +102,7 @@ export function GateFrame(props: GateFrameProps): ReactElement {
           {brand}
           {route}
           <div className="gate__footer">
-            <p className="gate__name">{props.userName}</p>
+            {props.userName !== '' ? <p className="gate__name">{props.userName}</p> : null}
             <a className="gate__help" href="/help">{GATE_COPY.help}</a>
             <GateSignOut userId={props.userId} accountReachable={props.accountReachable} />
           </div>

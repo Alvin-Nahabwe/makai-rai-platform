@@ -5,9 +5,11 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 const headersMock = vi.hoisted(() => vi.fn());
 const readSessionDeadlinesMock = vi.hoisted(() => vi.fn());
+const tryResolveIdentityMock = vi.hoisted(() => vi.fn());
 
 vi.mock('next/headers', () => ({ headers: headersMock }));
 vi.mock('@/lib/auth/idleDeadline', () => ({ readSessionDeadlines: readSessionDeadlinesMock }));
+vi.mock('@/lib/auth/identity', () => ({ tryResolveIdentity: tryResolveIdentityMock }));
 
 import NotFound, { metadata } from '@/app/not-found';
 import { NOT_FOUND_COPY } from '@/lib/errors/not-found/copy';
@@ -15,6 +17,7 @@ import { escapeRe } from '../helpers/escapeRe';
 import { pageTitle } from '@/lib/ui/title';
 import NotFoundInGroup, { metadata as groupMetadata } from '@/app/(authenticated)/not-found';
 import NotFoundCard from '@/components/layout/NotFoundCard';
+import { SHELL_COPY } from '@/lib/shell/copy';
 
 /**
  * S-31, "Not found or no access" (SRS 7.1.5, line 1701; UX-05; M-27 at SRS
@@ -26,6 +29,9 @@ import NotFoundCard from '@/components/layout/NotFoundCard';
  */
 
 const M27 = NOT_FOUND_COPY.body;
+const HOME = new RegExp(`<a[^>]*href="/"[^>]*>${escapeRe(NOT_FOUND_COPY.home)}</a>`);
+const SIGN_IN = new RegExp(`<a[^>]*href="/login"[^>]*>${escapeRe(SHELL_COPY.public.signIn)}</a>`);
+const IDENTITY = { userId: 'u1', email: 'a@example.invalid', name: 'A Person', platformRole: 'assessor', mustChangePassword: false };
 
 describe('S-31 not-found page', () => {
   let errorSpy: ReturnType<typeof vi.spyOn>;
@@ -36,6 +42,8 @@ describe('S-31 not-found page', () => {
     headersMock.mockResolvedValue(new Headers());
     readSessionDeadlinesMock.mockReset();
     readSessionDeadlinesMock.mockResolvedValue(null);
+    tryResolveIdentityMock.mockReset();
+    tryResolveIdentityMock.mockResolvedValue(null);
     errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
   });
 
@@ -44,9 +52,17 @@ describe('S-31 not-found page', () => {
   });
 
   it('FR-RM-03 UX-05 (S-31 part): the not-found page shows M-27 and a link home', async () => {
+    // Signed in the link is home; signed out it is Sign in (plan 1B Task 14, NotFoundCard({ signedIn })).
+    tryResolveIdentityMock.mockResolvedValue(IDENTITY);
+    const signedIn = renderToStaticMarkup(await NotFound());
+    expect(signedIn).toContain(M27);
+    expect(signedIn).toMatch(HOME);
+    expect(signedIn).not.toMatch(SIGN_IN);
+    tryResolveIdentityMock.mockResolvedValue(null);
     const html = renderToStaticMarkup(await NotFound());
     expect(html).toContain(M27);
-    expect(html).toMatch(new RegExp(`<a[^>]*href="/"[^>]*>${escapeRe(NOT_FOUND_COPY.home)}</a>`));
+    expect(html).toMatch(SIGN_IN);
+    expect(html).not.toMatch(HOME);
     expect(html).toContain('<main id="main-content"');
     expect(html).toMatch(/<h1[^>]*>[^<]+<\/h1>/);
   });
@@ -58,7 +74,7 @@ describe('S-31 not-found page', () => {
   it('1A-16c (A 13 to 17): the title and the heading say the same words, and the card says them from the copy module', () => {
     expect(NOT_FOUND_COPY.title).toBe('Page not found');
     expect(NOT_FOUND_COPY.heading).toBe(NOT_FOUND_COPY.title);
-    expect(renderToStaticMarkup(<NotFoundCard />)).toContain(`<h1>${NOT_FOUND_COPY.heading}</h1>`);
+    expect(renderToStaticMarkup(<NotFoundCard signedIn />)).toMatch(new RegExp(`<h1[^>]*>${escapeRe(NOT_FOUND_COPY.heading)}</h1>`));
   });
 
   it('FR-RM-03 UX-05 (S-31 part): the not-found page echoes nothing from the request', async () => {
@@ -74,8 +90,9 @@ describe('S-31 not-found page', () => {
     expect(source).toMatch(/readSessionDeadlines\(\s*await headers\(\)\s*\)/);
     // The text is the same whatever rendered it: two requests for different addresses give byte-identical markup,
     // for a signed-out visitor and for a signed-in one.
-    for (const deadlines of [null, { secondsLeft: 600, absoluteSecondsLeft: 100000 }]) {
+    for (const [deadlines, identity] of [[null, null], [{ secondsLeft: 600, absoluteSecondsLeft: 100000 }, IDENTITY]] as const) {
       readSessionDeadlinesMock.mockResolvedValue(deadlines);
+      tryResolveIdentityMock.mockResolvedValue(identity);
       headersMock.mockResolvedValue(new Headers({ 'x-pathname': '/orgs/secret-org/dashboard', referer: 'https://example.invalid/a' }));
       const first = renderToStaticMarkup(await NotFound());
       headersMock.mockResolvedValue(new Headers({ 'x-pathname': '/no-such-page', referer: 'https://example.invalid/b' }));
@@ -86,6 +103,7 @@ describe('S-31 not-found page', () => {
 
   it('UX-43 (S-31 part): a signed-in visitor gets the idle dialog on the not-found page', async () => {
     readSessionDeadlinesMock.mockResolvedValue({ secondsLeft: 600, absoluteSecondsLeft: 100000 });
+    tryResolveIdentityMock.mockResolvedValue(IDENTITY);
     const requestHeaders = new Headers({ cookie: 'authjs.session-token=x' });
     headersMock.mockResolvedValue(requestHeaders);
     const html = renderToStaticMarkup(await NotFound());
@@ -93,9 +111,18 @@ describe('S-31 not-found page', () => {
     expect([...html.matchAll(/<dialog[^>]*class="ui-dialog"[^>]*>/g)]).toHaveLength(1);
     expect(html).toContain('data-seconds-left="600"');
     expect(html).toContain(M27);
-    expect(html).toMatch(new RegExp(`<a[^>]*href="/"[^>]*>${escapeRe(NOT_FOUND_COPY.home)}</a>`));
+    expect(html).toMatch(HOME);
     expect(readSessionDeadlinesMock.mock.calls[0][0]).toBe(requestHeaders);
     expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('UX-43 (S-31 part): readable deadlines without a valid session (a revoked cookie) give no idle warning', async () => {
+    readSessionDeadlinesMock.mockResolvedValue({ secondsLeft: 600, absoluteSecondsLeft: 100000 });
+    tryResolveIdentityMock.mockResolvedValue(null);
+    const html = renderToStaticMarkup(await NotFound());
+    expect(html).not.toMatch(/shell-idle|<dialog/);
+    expect(readSessionDeadlinesMock).not.toHaveBeenCalled();
+    expect(html).toContain(M27);
   });
 
   it('UX-43 (S-31 part): a signed-out visitor gets no dialog and nothing is logged', async () => {
@@ -116,8 +143,10 @@ describe('S-31 not-found page', () => {
   });
 
   it('FR-RM-03 UX-05 (S-31 part): the two not-found pages show the same card and the same title', async () => {
-    const card = renderToStaticMarkup(<NotFoundCard />);
+    // Signed in, the two pages show byte-identical cards; signed out only the root page can be reached.
+    const card = renderToStaticMarkup(<NotFoundCard signedIn />);
     expect(renderToStaticMarkup(<NotFoundInGroup />)).toBe(card);
+    tryResolveIdentityMock.mockResolvedValue(IDENTITY);
     expect(renderToStaticMarkup(await NotFound())).toContain(card); // readSessionDeadlines mocked to null in beforeEach
     expect(groupMetadata.title).toBe(metadata.title);
   });
