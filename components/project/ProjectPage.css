@@ -278,48 +278,16 @@
   color: var(--color-ink);
 }
 
-/* Recorded so far: the kit's row of marks and its tally (the kit sets the tally at the small size); the accepted-risk line
-   under it, at the same size. */
+/* Recorded so far: the kit's tally (it sets the tally at the small size); the accepted-risk line under it, at the same size. */
 .stage-line__stop--recorded > p {
   margin-block-start: var(--space-1);
   font-size: var(--font-size-small);
 }
 
-/* The marks drawn compactly on this page only (I4; the kit's RouteRow.css keeps its 28 px boxes and connector elsewhere):
-   16 px shapes 4 px apart, so a stage of up to 28 questions takes two rows at 1440 px. The marks are not links here (lead's
-   ruling on C5), so the 24 px target does not apply. No connector: at this pitch the 2 px dash between two marks read as a
-   mark of its own (M8, "dot-dash"); evenly spaced in one wrapped row, the marks still read as the stage's questions in
-   order. The current stop keeps its ring, drawn as an outline so it takes no room. */
+/* The tally sits right under its heading; the kit's row of marks is not drawn on this page (owner's ruling of 15 Nov 2026
+   20:50), so only its tally is here. */
 .stage-line .ui-route-row {
   gap: var(--space-1);
-}
-
-.stage-line .ui-route-row__stops {
-  gap: var(--space-1);
-}
-
-.stage-line .ui-route-row__stop {
-  padding-inline-end: 0;
-}
-
-.stage-line .ui-route-row__stop:not(:last-child)::after {
-  content: none;
-}
-
-.stage-line .ui-route-row__point {
-  inline-size: 16px;
-  block-size: 16px;
-}
-
-.stage-line .ui-route-row__point > .ui-mark__shape {
-  inline-size: 16px;
-  block-size: 16px;
-}
-
-.stage-line .ui-route-row__stop--current .ui-route-row__point {
-  border: 0;
-  outline: 2px solid var(--color-action-text);
-  outline-offset: 1px;
 }
 
 /* Reviews: one white list (the sketch's .rl), each review its name, then its quiet lines. */

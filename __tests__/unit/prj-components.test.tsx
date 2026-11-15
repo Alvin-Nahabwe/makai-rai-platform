@@ -88,9 +88,10 @@ describe('S-10 (Task 5)', () => {
   it('UX-06 (R12-16, spec 7.2): each status phrase of a stage column is the kit\'s mark with its words in ink, and none carries the warning class', () => {
     const line = preLine(COUNTS);
     const html = line.slice(line.indexOf('<div class="stage-line__stop stage-line__stop--recorded"'), line.indexOf('<div class="stage-line__stop stage-line__stop--reviews"'));
-    // Each question's stop is the kit's shape, hidden from assistive technology, in a stop that names its status in words
-    // (drawn without a link on S-10: lead's ruling on C5).
-    expect(html.match(/<li class="ui-route-row__stop" data-mark-kind="[a-z_]+"><span class="ui-route-row__point"><svg class="ui-mark__shape"[^>]*aria-hidden="true"/g)).toHaveLength(24);
+    // No row of marks per question (owner's ruling of 15 Nov 2026 20:50): each tally item carries the kit's shape, hidden
+    // from assistive technology, beside its count in words.
+    expect(html).not.toContain('ui-route-row__stop');
+    expect(html.match(/<li class="ui-route-row__tally-item" data-tally-kind="[a-z_]+"><svg class="ui-mark__shape"[^>]*aria-hidden="true"/g)).toHaveLength(5);
     // The tally is the kit's list keyed by the marks (lane 4 Task B): one item per kind, read without its (i).
     const tally = [...html.matchAll(/<li class="ui-route-row__tally-item"[^>]*>(.*?)<\/li>/g)].map((m) => textOf(m[1].replace(/<span class="ui-term-tip">.*?<\/span><\/span><\/span>/, '')));
     expect(tally).toEqual(['7 done (2 with no evidence attached)', expect.stringMatching(/^\d+ partly$/), expect.stringMatching(/^\d+ not yet$/), expect.stringMatching(/^\d+ not applicable$/), '1 answered']);

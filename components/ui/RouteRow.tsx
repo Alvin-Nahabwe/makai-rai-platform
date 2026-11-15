@@ -85,7 +85,7 @@ export function RouteRow({ label, stops, tally, define }: RouteRowProps): ReactE
           );
         })}
       </ol>
-      <Tally tally={tally} define={define} />
+      <RouteTally tally={tally} define={define} />
     </div>
   );
 }
@@ -93,9 +93,10 @@ export function RouteRow({ label, stops, tally, define }: RouteRowProps): ReactE
 /**
  * The tally as a list. Each item's words are tallyWords for that kind alone ("9 done (2 with no evidence attached)"), so the
  * kit's words, their agreement in number and the evidence caveat stay in lib/ui/copy.ts; the count they start with is drawn
- * in bold. __tests__/unit/ui/route-row.test.tsx pins that the items read together are tallyWords(tally).
+ * in bold. __tests__/unit/ui/route-row.test.tsx pins that the items read together are tallyWords(tally). S-10 shows it alone,
+ * without the row of marks (owner's ruling of 15 Nov 2026 20:50).
  */
-function Tally({ tally, define }: Pick<RouteRowProps, 'tally' | 'define'>): ReactElement {
+export function RouteTally({ tally, define }: Pick<RouteRowProps, 'tally' | 'define'>): ReactElement {
   const kinds = TALLY_ORDER.filter((kind) => (tally[kind] ?? 0) > 0);
   if (kinds.length === 0) return <p className="ui-route-row__tally">{UI_COPY.tally.none}</p>;
   return (

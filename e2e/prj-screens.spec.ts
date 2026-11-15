@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { HOSTILE_STRINGS } from '../__tests__/helpers/hostile';
 import {
-  addAcceptedRisk, addFinding, addMitigationVersion, addProject, buildOrg, type FixtureAccount, type OrgFixture,
+  addAcceptedRisk, addDecision, addFinding, addMitigationVersion, addProject, buildOrg, type FixtureAccount, type OrgFixture,
 } from '../__tests__/helpers/recordFixture';
 import { testDb } from '../__tests__/helpers/db';
 import { escapeRe } from '../__tests__/helpers/escapeRe';
@@ -729,8 +729,11 @@ test('FR-RM-04 UX-06 UX-07: each stage count on S-10 and S-08 is a whole number 
   for (const [stage, n] of Object.entries(SENTINELS)) {
     for (let i = 0; i < n; i += 1) await addFinding(sentinelOrg, project.id, { stage: stage as Stage, source: 'team' });
   }
-  // One accepted risk (a closed finding, so the open counts stay as set) gives S-10 something recorded, hence status labels to check.
+  // One accepted risk (a closed finding, so the open counts stay as set) gives S-10 something recorded.
   await addAcceptedRisk(sentinelOrg, (await addFinding(sentinelOrg, project.id, { stage: 'pre-processing', source: 'team' })).id, {});
+  // One decision gives S-10's Recorded so far a tally, whose marks are the status marks to check: S-10 draws no other mark.
+  const content = await testDb.frameworkVersion.findFirstOrThrow({ where: { semver: '0.0.1-fixture' } });
+  await addDecision(sentinelOrg, project.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId: content.id, status: 'done' });
   // The owner owns one mitigation that is not yet due, so S-08 has a status label to check.
   await addMitigationVersion(sentinelOrg, (await addFinding(sentinelOrg, project.id, { stage: 'in-processing', source: 'team' })).id, { status: 'planned', owner: 'owner', dueDate: '2099-01-01' });
   const page = await signedIn(browser, sentinelOrg.members.owner);

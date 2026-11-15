@@ -144,6 +144,7 @@ test('I4 (owner 15 Nov 19:20, count not names): at 1440x900 the actions row and 
     };
   });
   expect(feet.scroll).toBe(0);
+  expect(feet.lastStops, 'one end stop per line').toHaveLength(3);
   expect(feet.actions, `actions row foot ${feet.actions}`).not.toBeNull();
   for (const b of [...feet.lastStops, feet.actions]) expect(b, `foot ${b} px of ${JSON.stringify(feet)}`).toBeLessThanOrEqual(900);
 });

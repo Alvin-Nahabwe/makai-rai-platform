@@ -192,7 +192,7 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     expect(open).toMatch(/<span class="status-label">Planned<\/span>/);
   });
 
-  it('owner 15 Nov 19:20: Still open shows overdue mitigations only; a mitigation not yet due, or whose person can no longer act, adds no "Not overdue" line and no plate', () => {
+  it('owner 15 Nov 20:50: Still open shows the overdue plates, then one line "{n} other open mitigations" to the Findings page; no plate for one not due or whose person cannot act', () => {
     const later: FollowUpItem = { ...ITEM, mitigationId: 'm3', findingId: 'f3', what: 'Re-run the check', overdue: false, dueDate: '2026-12-20', status: 'planned' };
     const stuck: FollowUpItem = { ...ITEM, mitigationId: 'm4', findingId: 'f4', what: 'Write the guide', overdue: false, dueDate: '2026-12-21', ownerCanAct: false, owner: { userId: 'u9', name: 'Former Person', formerMember: true } };
     const html = render({ followUp: { 'pre-processing': { items: [later], cannotAct: [stuck] } }, counts: { 'pre-processing': { ...COUNTS, overdueMitigations: 0, openMitigations: 2 } } });
@@ -201,21 +201,33 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     expect(open).not.toContain('Not overdue');
     expect(open).not.toContain('ui-plate');
     expect(open).not.toContain('Re-run the check');
+    expect(open).toContain(`<a href="/orgs/o/projects/p1/findings?stage=pre-processing">${P.otherOpenMitigations(2)}</a>`);
+    // With overdue ones: their plates, then the others as one line (singular for one).
+    const both = render({ followUp: { 'pre-processing': { items: [ITEM, later], cannotAct: [] } }, counts: { 'pre-processing': { ...COUNTS, overdueMitigations: 1, openMitigations: 2 } } });
+    const open2 = stop(lines(both)['pre-processing'], 'open');
+    expect(open2.match(/class="ui-plate /g)).toHaveLength(1);
+    expect(text(open2)).toContain(P.otherOpenMitigations(1));
+    expect(open2.indexOf('ui-plate ')).toBeLessThan(open2.indexOf(P.otherOpenMitigations(1)));
+    // None other open: no line.
+    const none = render({ followUp: { 'pre-processing': { items: [ITEM], cannotAct: [] } } });
+    expect(stop(lines(none)['pre-processing'], 'open')).not.toMatch(/other open mitigation/);
     // An open mitigation that is not overdue keeps "Nothing is open" away.
     const only = render({ counts: { 'pre-processing': { ...ZERO, noDecision: 0, openMitigations: 1 } }, followUp: { 'pre-processing': { items: [later], cannotAct: [] } } });
     expect(stop(lines(only)['pre-processing'], 'open')).not.toContain(S.nothingOpen);
   });
 
-  it('7.2 C5: Recorded so far is the kit\'s route row, one stop per question with no link (each question is reached by name), labelled with the stage, and the tally with the evidence caveat', () => {
+  it('owner 15 Nov 20:50: Recorded so far is the tally in words with the kit\'s mark beside each count, no row of marks per question; the no-decision count stays in Still open', () => {
     const l = lines(render({ counts: { 'in-processing': { ...COUNTS, byStatus: { done: 1, partly: 0, not_yet: 0, not_applicable: 0 }, doneWithoutEvidence: 0, noDecision: 22, notApplicableByGate: 1 } } }));
     const pre = stop(l['pre-processing'], 'recorded');
-    expect(pre).toContain(`<ol class="ui-route-row__stops" role="list" aria-label="${P.routeLabel('Pre-processing')}">`);
-    expect(pre.match(/<li class="ui-route-row__stop/g)).toHaveLength(24);
-    expect(pre.match(/<span class="ui-route-row__point"><svg class="ui-mark__shape"/g)).toHaveLength(24);
-    // No link in the row: about 75 fewer keyboard stops before "This project" (lead's ruling on C5).
+    // The row of marks per question is gone: no stops, no per-question words, no list named "Questions in <stage>".
+    expect(pre).not.toContain('ui-route-row__stops');
+    expect(pre).not.toContain('ui-route-row__stop');
+    expect(pre).not.toContain(P.routeLabel('Pre-processing'));
+    expect(pre).not.toContain('Question 1 of pre-processing');
     expect(pre).not.toContain('<a ');
-    expect(pre).toContain('<span class="visually-hidden"><span>Question 1 of pre-processing</span>: Done</span>');
-    // The tally as the kit's list keyed by the marks, read in the tally's words and order (no decision is left out here).
+    // The tally: one item per kind with a count, each its kit mark (hidden from assistive technology) then the count in words.
+    const items = [...pre.matchAll(/<li class="ui-route-row__tally-item"[^>]*>(.*?)<\/li>/g)].map((m) => m[1]);
+    for (const it of items) expect(it).toMatch(/^<svg class="ui-mark__shape"[^>]*aria-hidden="true"/);
     const tally = (rec: string) => [...rec.matchAll(/<li class="ui-route-row__tally-item"[^>]*>(.*?)<\/li>/g)].map((m) => text(m[1].replace(/<span class="ui-term-tip">.*?<\/span><\/span><\/span>/, ''))).join(', ');
     expect(tally(pre)).toBe('7 done (2 with no evidence attached), 3 partly, 2 not yet, 2 not applicable, 1 answered');
     expect(tally(stop(l['in-processing'], 'recorded'))).toBe('1 done, 1 does not apply');
@@ -223,16 +235,15 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     expect(render()).not.toMatch(/\b(total|overall|in all)\b|%|\b21 done\b/i);
   });
 
-  it('barely started: every line shows its row of No decision marks and "No decisions recorded yet"', () => {
+  it('barely started: every line reads "No decisions recorded yet", with no row of marks', () => {
     const html = render({ counts: { 'pre-processing': ZERO, 'in-processing': ZERO, 'post-processing': ZERO } });
     for (const line of Object.values(lines(html))) {
       const rec = stop(line, 'recorded');
-      expect(rec.match(/data-mark-kind="no_decision"/g)).toHaveLength(24);
+      expect(rec).not.toContain('ui-route-row__stop');
       expect(rec).toContain(`<p class="ui-route-row__tally">${UI_COPY.tally.none}</p>`);
       expect(rec).not.toMatch(/accepted risk|issued/);
       expect(text(stop(line, 'last'))).toContain(P.noDecisionYet(24));
     }
-    expect(html.split(UI_COPY.tally.none)).toHaveLength(4);
   });
 
   it('first use: each defined term\'s definition shows once on the page, beside the first use, which is marked as the term', () => {
@@ -558,6 +569,7 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     expect([P.overdueMitigations(1), P.overdueMitigations(2)]).toEqual(['1 overdue mitigation', '2 overdue mitigations']);
     expect([P.changedSinceSeal(1), P.changedSinceSeal(2)]).toEqual(['1 decision changed since it was sealed', '2 decisions changed since it was sealed']);
     expect([P.reviewsHeading, P.thisProject, P.findings, P.editProjectDetails, P.noOverdue]).toEqual(['Reviews', 'This project', 'Findings', 'Edit project details', 'No overdue mitigations']);
+    expect([P.otherOpenMitigations(1), P.otherOpenMitigations(4)]).toEqual(['1 other open mitigation', '4 other open mitigations']);
     const words: string[] = [];
     const walk = (v: unknown): void => {
       if (typeof v === 'string') words.push(v);
