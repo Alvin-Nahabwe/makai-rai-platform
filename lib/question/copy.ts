@@ -49,15 +49,45 @@ export const QUESTION_COPY = Object.freeze({
     noEvidence: 'None',
   }),
   /**
-   * The read-only question page (plan 1C Task 7, decision C12): what a Reviewer, a Viewer or anyone in an archived project
-   * reads in place of the form. CurrentDecision's reading mode and components/question/OpenWorkList.tsx.
+   * The read-only question page (plan 1C Task 7, decision C12; directions/surfaces/viewer-reading.png): what a Reviewer, a
+   * Viewer or anyone in an archived project reads in place of the form. components/question/ReadingDecision.tsx (the card),
+   * OpenWorkList.tsx (what is still open) and ReadingAside.tsx (the sealed copy, the role note, the way on).
    */
   reading: Object.freeze({
     title: 'What the team decided',
+    /** Under the quotation, with the declared date after a separator the page draws. */
+    decidedBy: (who: string): string => `Decided by ${who}`,
+    /** The version line (spec 9.3: status and version are separate text nodes; the status is in the card's corner). */
+    version: (n: number): string => `Version ${n}`,
+    saved: (day: string): string => `saved ${day}`,
     history: (n: number): string => `History: ${n} ${n === 1 ? 'version' : 'versions'}`,
+    /** Spec 9.7: a withdrawn decision is struck through (the page strikes "Version n"), with who, when and why. */
+    withdrawnVersion: (n: number): string => `Version ${n}`,
+    withdrawnBy: (who: string, day: string, kind: string | null): string =>
+      (kind === null ? ` was withdrawn by ${who} on ${day}.` : ` was withdrawn by ${who} on ${day} (${kind}).`),
+    /** The withdrawal of a version with no earlier one to name (not expected: a withdrawal always has a base). */
+    withdrawnNoBase: (who: string, day: string, kind: string | null): string =>
+      (kind === null ? `The last decision was withdrawn by ${who} on ${day}.` : `The last decision was withdrawn by ${who} on ${day} (${kind}).`),
+    evidence: 'Evidence',
+    noEvidence: 'None yet',
+    /** A file's line under its name: the size, a separator the page draws, then this. */
+    added: (day: string): string => `added ${day}`,
+    download: 'Download',
+    /** After a link's name (gap 2: never its raw address in brackets); the words of lib/suggestions/copy.ts's resource line. */
+    opensAnotherSite: ' (opens another site)',
     stillOpen: (n: number): string => `Still open on this question: ${n} ${n === 1 ? 'finding' : 'findings'}`,
     mitigation: (what: string): string => `Mitigation: ${what}`,
     noMitigationYet: 'No mitigation yet',
+    /** Beside "No mitigation yet": a finding is assigned through its mitigations (vocabulary "Assigned to"). */
+    notAssignedYet: 'Not assigned yet',
+    /** After the word Overdue and a separator the page draws. */
+    wasDue: (day: string): string => `was due ${day}`,
+    sealedHeading: 'In a sealed copy',
+    /** One per review, its highest seal holding the current version (spec 9.7 "Sealed copy exists"). */
+    sealKeeps: (sealNumber: number, reviewName: string, versionNumber: number): string =>
+      `Seal ${sealNumber} of ${reviewName} keeps version ${versionNumber} of this decision.`,
+    /** The reader's way on (a reader has no Save, so this is the page's one primary action). */
+    next: (n: number): string => `Next: question ${n}`,
   }),
   /** components/question/QuestionContent.tsx. */
   content: Object.freeze({

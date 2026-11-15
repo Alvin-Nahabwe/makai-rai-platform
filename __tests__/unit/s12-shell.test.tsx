@@ -15,6 +15,8 @@ const propsSeen: Record<string, unknown> = {};
 const slot = (name: string) => (props: unknown) => { propsSeen[name] = props; return null; };
 vi.mock('@/components/question/QuestionContent', () => ({ QuestionContent: slot('QuestionContent') }));
 vi.mock('@/components/decision/CurrentDecision', () => ({ CurrentDecision: slot('CurrentDecision') }));
+// The reader's decision card (lane 1 Task 3) is a slot too: a reader's panel renders it in place of CurrentDecision.
+vi.mock('@/components/question/ReadingDecision', () => ({ ReadingDecision: slot('ReadingDecision') }));
 vi.mock('@/components/review/SealNote', () => ({ SealNote: slot('SealNote') }));
 // DEC-b's answer form is real here: it renders the evidence block inside its own client tree (EVD RE-1), so the wiring
 // of the block is checked through it. Its router is the only part of next/navigation a static render cannot provide.

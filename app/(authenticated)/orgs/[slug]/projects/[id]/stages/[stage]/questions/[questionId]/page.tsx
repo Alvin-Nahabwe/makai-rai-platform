@@ -9,7 +9,9 @@ import { loadQuestionPanel, type QuestionPanelData } from '@/lib/question/panel'
 import { loadQuestionOpenWork, type QuestionOpenWork } from '@/lib/question/openWork';
 import { eatDate } from '@/lib/followup/overdue';
 import { decisionFormNote } from '@/lib/authz/permissionNotes';
-import { OpenWorkList } from '@/components/question/OpenWorkList';
+import { StillOpen } from '@/components/question/OpenWorkList';
+import { ReadingDecision } from '@/components/question/ReadingDecision';
+import { ReadingAside, type NextQuestion } from '@/components/question/ReadingAside';
 import { STAGES, type Stage } from '@/types/record';
 import { questionApplies, runningContent } from '@/lib/content/loader';
 import { ArchivedBanner } from '@/components/project/ArchivedBanner';
@@ -52,40 +54,23 @@ function countFor(data: QuestionPanelData): number {
 }
 
 /**
- * What a person who may not record reads after the question (plan 1C Task 7, decision C12: a Reviewer, a Viewer, anyone
- * in an archived project): "What the team decided" (CurrentDecision's reading mode), then what is still open on the
- * question (only when something is) and the one line that says why there is no form (none in an archived project, whose
- * banner says it). The seal note follows as for everyone. No form, no evidence controls, no withdraw: no role without
- * `decision:write` holds `decision:withdraw`, and nobody withdraws in an archived project.
+ * What a person who may not record reads (plan 1C Task 7, decision C12: a Reviewer, a Viewer, anyone in an archived
+ * project; directions/surfaces/viewer-reading.png): in the main column "What the team decided" as one card, then what is
+ * still open on the question directly under it (only when something is); at the top of the guidance column the reader's
+ * aside: the sealed copy, the one line that says why there is no form (none in an archived project, whose banner says
+ * it) and the way on to the next question. No form, no evidence controls, no withdraw: no role without `decision:write`
+ * holds `decision:withdraw`, and nobody withdraws in an archived project.
  */
-function readingRegions(data: QuestionPanelData, openWork: QuestionOpenWork | null, historyHref: string) {
-  const note = decisionFormNote(data.viewer.role, data.projectArchived);
-  const open = openWork?.findings.length ?? 0;
+function readingRegions(data: QuestionPanelData, openWork: QuestionOpenWork | null, historyHref: string, stageHref: string, next: NextQuestion | null) {
   return {
     decision: (
-      <section data-region="current-decision" aria-labelledby="s12-current-decision">
-        <h2 id="s12-current-decision">{Q.reading.title}</h2>
-        <CurrentDecision
-          orgSlug={data.orgSlug}
-          current={data.current}
-          historyCount={data.historyCount}
-          historyHref={historyHref}
-          seals={data.seals}
-          isScopeQuestion={data.question.type === 'gate'}
-          mode="reading"
-        />
-      </section>
+      <ReadingDecision orgSlug={data.orgSlug} current={data.current} historyCount={data.historyCount} historyHref={historyHref}
+        seals={data.seals} isScopeQuestion={data.question.type === 'gate'} />
     ),
-    openWorkAndNote: (
-      <>
-        {openWork !== null && open > 0 ? (
-          <section data-region="open-work" aria-labelledby="s12-open-work">
-            <h2 id="s12-open-work">{Q.reading.stillOpen(open)}</h2>
-            <OpenWorkList work={openWork} orgSlug={data.orgSlug} projectId={data.projectId} />
-          </section>
-        ) : null}
-        {note !== null ? <p data-permission-note>{note}</p> : null}
-      </>
+    openWork: <StillOpen work={openWork} orgSlug={data.orgSlug} projectId={data.projectId} />,
+    aside: (
+      <ReadingAside seals={data.seals} versionNumber={data.current === null || data.current.status === 'withdrawn' ? null : data.current.versionNumber}
+        note={decisionFormNote(data.viewer.role, data.projectArchived)} next={next} stageTitle={STAGE_TITLE[data.stage]} stageHref={stageHref} />
     ),
   };
 }
@@ -121,7 +106,9 @@ export function QuestionPanelRegions({ data, openWork, route }: { data: Question
   // The Findings section: for a person who may record, when there is an open finding to view or they may raise one; for
   // a reader, only when they may raise one (R4), since the reader's open findings are listed in the main column.
   const showFindings = data.canWrite ? data.openFinding !== null || data.canRaiseFinding : data.canRaiseFinding;
-  const reading = data.canWrite ? null : readingRegions(data, openWork ?? null, historyHref);
+  const next: NextQuestion | null = nextId === null ? null
+    : { questionId: nextId, text: nextQuestionText(nextId), href: questionHref(data, nextId), number: index + 2, total };
+  const reading = data.canWrite ? null : readingRegions(data, openWork ?? null, historyHref, stageHref, next);
   // Only a question in a seal has something to say here: SealNote renders nothing for one in none.
   const sealNote = data.seals.length > 0 ? (
     <section data-region="seal-note" aria-labelledby="s12-seal-note">
@@ -171,7 +158,7 @@ export function QuestionPanelRegions({ data, openWork, route }: { data: Question
               />
             </section>
           ) : reading.decision}
-          {reading === null ? sealNote : reading.openWorkAndNote}
+          {reading === null ? sealNote : reading.openWork}
           {reading === null ? (
             <section data-region="answer-form" aria-labelledby="s12-answer-form">
               <h2 id="s12-answer-form">{Q.headings.record}</h2>
@@ -185,16 +172,20 @@ export function QuestionPanelRegions({ data, openWork, route }: { data: Question
                 />
               ) : null}
             </section>
-          ) : sealNote}
-          {/* The way on after a save at the foot of a long page (workshop walk S9): a paragraph, so the page keeps one navigation landmark. */}
-          <p className="question-foot" data-region="way-on">
-            {nextId !== null
-              ? <Link href={questionHref(data, nextId)}>{Q.foot.next(nextQuestionText(nextId))}</Link>
-              : <span>{Q.foot.last}</span>}
-            <Link href={stageHref}>{Q.nav.allQuestions}</Link>
-          </p>
+          ) : null}
+          {/* The way on after a save at the foot of a long page (workshop walk S9): a paragraph, so the page keeps one navigation
+              landmark. A reader's way on is in the reader's aside. */}
+          {reading === null ? (
+            <p className="question-foot" data-region="way-on">
+              {next !== null
+                ? <Link href={next.href}>{Q.foot.next(next.text)}</Link>
+                : <span>{Q.foot.last}</span>}
+              <Link href={stageHref}>{Q.nav.allQuestions}</Link>
+            </p>
+          ) : null}
         </div>
         <div className="question-workspace__guide">
+          {reading === null ? null : reading.aside}
           {/* The guidance of the running wording (FR-CNT-08, ruling on SPEC-1), as an aside (plan 1C decision C1, cut). */}
           <QuestionContent question={data.runningQuestion} suggestionCount={count} />
           {/* Exactly when QuestionFindingLink renders something, so no heading stands over nothing. A reader's open findings are
