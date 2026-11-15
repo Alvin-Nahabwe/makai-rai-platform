@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { webLink } from '@/lib/evidence/format';
+import { isOwnHost, webLink } from '@/lib/evidence/format';
 
 /**
  * webLink (lib/evidence/format.ts): a stored evidence address parsed ONCE, so the href a reader follows and the host the
@@ -45,5 +45,27 @@ describe('webLink', () => {
     for (const bad of ['javascript:alert(1)', 'JAVASCRIPT:alert(1)', 'data:text/html,<b>x</b>', 'blob:https://example.org/1', 'ftp://example.org/', '/relative/path', '//evil.example/x', 'not a url', '']) {
       expect(webLink(bad)).toBeNull();
     }
+  });
+});
+
+describe('isOwnHost', () => {
+  const origin = 'https://makrai.example.org';
+
+  it('the platform\'s own host is own, whatever the path, case or port of the link', () => {
+    expect(isOwnHost(webLink('https://makrai.example.org/orgs/a/projects/p')!.host, origin)).toBe(true);
+    expect(isOwnHost(webLink('https://MAKRAI.example.org/x')!.host, origin)).toBe(true);
+    expect(isOwnHost(webLink('https://makrai.example.org:8443/x')!.host, 'https://makrai.example.org:443')).toBe(true);
+  });
+
+  it('another host is not own, including a look-alike, a subdomain and a user-name trick', () => {
+    expect(isOwnHost(webLink('https://evil.example/x')!.host, origin)).toBe(false);
+    expect(isOwnHost(webLink('https://makrai.example.org.evil.example/x')!.host, origin)).toBe(false);
+    expect(isOwnHost(webLink('https://docs.makrai.example.org/x')!.host, origin)).toBe(false);
+    expect(isOwnHost(webLink('https://makrai.example.org@evil.example/x')!.host, origin)).toBe(false);
+  });
+
+  it('an origin that does not parse makes nothing own, so the warning stays', () => {
+    expect(isOwnHost('makrai.example.org', 'not a url')).toBe(false);
+    expect(isOwnHost('makrai.example.org', '')).toBe(false);
   });
 });
