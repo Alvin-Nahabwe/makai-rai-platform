@@ -3102,5 +3102,21 @@
     "property": "Every variable the shell's stylesheet reads is defined by globals.css, and the current stage's state line reads the peach on-shell accent. The accent token is now defined (ADR 0022's exception, lane 7), so the case that pinned the shell ink while the token was missing is reversed, as the coordinator's ruling reversing D12 intended.",
     "proof": "The case requires app/globals.css to define --color-on-shell-accent as #F4B983 and the rule .shell-project__stage--current .shell-project__state to read color: var(--color-on-shell-accent, var(--color-shell-ink)); the fallback is the shell ink. The legacy-tokens lint's (a) case fails any read of a name globals.css does not define.",
     "task": "final hand-in item 3 (the shell reads the accent)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 (helper): each region's component gets the props its contract row names, from the panel data",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 (helper): each region's component gets the props its contract row names, from the panel data",
+    "property": "Every case of the file that renders the decision card with a current version (all 24 that failed after the integration merge) asserts what it did before; the fixture is a DecisionVersionView as the type requires.",
+    "proof": "Fixture only: the CURRENT version gains content: { contentVersionId: 'cv1', semver: '0.0.1-fixture', contentHash: 'h1' }, the field types/api.ts requires and that answerDiffers (components/decision/DecisionForm.tsx, Review A A3c-3) reads; its semver equals the panel's contentSemver, so the answer is unchanged as before. No assertion changed. Before: s12-shell and question-frame together failed 24 cases with TypeError reading 'semver' of undefined; after: both files pass (39 of 39) with the same assertions.",
+    "task": "Route rebuild lane 2 task 8 (fixtures after the integration merge)"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/measure-first-load.test.ts::owner ruling 15 Nov 2026 18:00: the question page alone is held to 192 KB; its neighbour with the same weight keeps 190",
+    "replacedBy": "__tests__/unit/measure-first-load.test.ts::owner ruling 15 Nov 2026 18:25: the question page alone is held to 195 KB; its neighbour with the same weight keeps 190",
+    "property": "The question page alone is held to its own signed-in budget; its neighbour route with the same weight keeps 190 KB and fails over it.",
+    "proof": "The owner's ruling of 15 Nov 2026 18:25 (box \"195 KB, covering the last merges\") supersedes the 18:00 ruling's 192 KB. The case now expects budgetKB=195 for the question route and budgetKB=190 for its neighbour, the fixture stays over 190 and now under 195, and the neighbour still fails with the question route absent from stderr. It still fails when it should: with the ROUTE_BUDGET_KB entry set to 190 the case fails; restored to 195 it passes.",
+    "task": "Route rebuild lane 2 task 8 (the 195 KB budget)"
   }
 ]
