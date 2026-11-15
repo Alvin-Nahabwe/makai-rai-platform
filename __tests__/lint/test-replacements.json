@@ -2182,5 +2182,29 @@
     "property": "The module imports what the cases read.",
     "proof": "One line: the import of FINDINGS_COPY, which only the case above read, is replaced by the import of STORED_CANCEL_REASONS, which that case now reads. Nothing else of the module changes.",
     "task": "lane 6 FX2 (B4 review I3)"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/integration/documents-service.test.ts::FR-REV-08 (I1, M4): an erasure that holds the lock first is seen by the issue: it redoes from a fresh snapshot and the stored text holds the erasure line",
+    "replacedBy": "__tests__/integration/documents-service.test.ts::FR-REV-08 (I1, M4): an erasure that holds the lock first is seen by the issue: it redoes from a fresh snapshot and the stored text holds the erasure line",
+    "property": "An issue that waits behind an erasure redoes from a fresh snapshot, and the stored plain text holds the document's erasure line for that day.",
+    "proof": "The same case: the expectation read textErasedLine and now reads docTextErasedLine (lib/documents/copy.ts). The coordinator's ruling of 15 Nov 2026 split the line: textErasedLine is the screen form ('at your organisation's request.', the vocabulary term erased, shown by components/decision/**) and docTextErasedLine is the document form ('at the organisation's request.', read by outsiders), which lib/documents/resolve.ts now prints. Only the constant's name changed; what the case pins (the document prints the erasure line for that day) is unchanged.",
+    "task": "lane 6 lead (erased-line split, coordinator ruling 15 Nov 2026)"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/integration/mitigation-plan.test.ts::FR-REV-08 (SRS 7.5.6): a mitigation text erased before issue prints the erasure line",
+    "replacedBy": "__tests__/integration/mitigation-plan.test.ts::FR-REV-08 (SRS 7.5.6): a mitigation text erased before issue prints the erasure line",
+    "property": "A mitigation text erased before issue prints the document's erasure line for that day in the mitigation plan.",
+    "proof": "The same case: the expectation read textErasedLine and now reads docTextErasedLine (lib/documents/copy.ts). The coordinator's ruling of 15 Nov 2026 split the line: textErasedLine is the screen form ('at your organisation's request.', the vocabulary term erased, shown by components/decision/**) and docTextErasedLine is the document form ('at the organisation's request.', read by outsiders), which lib/documents/resolve.ts now prints. Only the constant's name changed; what the case pins (the document prints the erasure line for that day) is unchanged.",
+    "task": "lane 6 lead (erased-line split, coordinator ruling 15 Nov 2026)"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/integration/mitigation-plan.test.ts::FR-REV-08 (SRS 7.5.6): a Prepared-for note erased before issue prints the erasure line in MP-01",
+    "replacedBy": "__tests__/integration/mitigation-plan.test.ts::FR-REV-08 (SRS 7.5.6): a Prepared-for note erased before issue prints the erasure line in MP-01",
+    "property": "A Prepared-for note erased before issue prints 'Prepared for: ' and the document's erasure line in MP-01.",
+    "proof": "The same case: the expectation read textErasedLine and now reads docTextErasedLine (lib/documents/copy.ts). The coordinator's ruling of 15 Nov 2026 split the line: textErasedLine is the screen form ('at your organisation's request.', the vocabulary term erased, shown by components/decision/**) and docTextErasedLine is the document form ('at the organisation's request.', read by outsiders), which lib/documents/resolve.ts now prints. Only the constant's name changed; what the case pins (the document prints the erasure line for that day) is unchanged.",
+    "task": "lane 6 lead (erased-line split, coordinator ruling 15 Nov 2026)"
   }
 ]

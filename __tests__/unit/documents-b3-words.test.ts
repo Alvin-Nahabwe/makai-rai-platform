@@ -6,7 +6,7 @@ import { loadContent, runningContent } from '@/lib/content/loader';
 import { loadFieldMap } from '@/lib/documents/fieldMaps';
 import {
   DOCUMENTS_COPY, MSG_DOCUMENT_CHECK_FAILED, MSG_ISSUE_NO_REPLY, MSG_OTHER_SEAL_CHECK_FAILED, SEALED_NOTE,
-  fileErasedLine, findingOnQuestion, questionSource, sealedNote, textErasedLine, wordsThenCode,
+  fileErasedLine, findingOnQuestion, questionSource, sealedNote, docTextErasedLine, textErasedLine, wordsThenCode,
 } from '@/lib/documents/copy';
 import { resolveFields, type DocumentSnapshot, type SealedStage } from '@/lib/documents/resolve';
 import { generateReducer } from '@/lib/documents/generate';
@@ -72,7 +72,9 @@ const currentWords = (q: string) => runningContent().questions.get(q)!.text;
 
 describe('B3 rows A1, A2: erased text and files, at the organisation\'s request (documents are read by outsiders: "the", not "your")', () => {
   it('A1: an erased text reads "Text erased on <date> at the organisation\'s request."', () => {
-    expect(textErasedLine('2026-11-04')).toBe("Text erased on 4 Nov 2026 at the organisation's request.");
+    expect(docTextErasedLine('2026-11-04')).toBe("Text erased on 4 Nov 2026 at the organisation's request.");
+    // On a screen (components/decision/**) the same line speaks to a member: the vocabulary term `erased` (coordinator's ruling, 15 Nov 2026).
+    expect(textErasedLine('2026-11-04')).toBe("Text erased on 4 Nov 2026 at your organisation's request.");
   });
   it('A2: an erased file reads "<name>: file erased on <date> at the organisation\'s request." and keeps the fingerprint sentence', () => {
     expect(fileErasedLine('protocol.pdf', '2026-11-04'))
@@ -86,6 +88,15 @@ describe('B3 rows A3, A4: a lost reply says what did not happen, why, and what t
     const issuing = { phase: 'issuing' as const, typed: {}, message: null, retry: false };
     expect(generateReducer(issuing, { kind: 'outcome', outcome: { kind: 'not_saved', reason: 'network' } }).message).toBe(MSG_ISSUE_NO_REPLY);
     expect(generateReducer(issuing, { kind: 'outcome', outcome: { kind: 'rejected', status: 503, body: { error: 'x', code: 'document_issue_busy' } } }).message).toBe(MSG_ISSUE_NO_REPLY);
+  });
+  it('a seal check that fails on Preview or Issue (500 integrity_failure) says why, never "may already be issued", and offers no Retry: nothing was written', () => {
+    for (const phase of ['generating', 'issuing'] as const) {
+      const sending = { phase, typed: {}, message: null, retry: false };
+      const after = generateReducer(sending, { kind: 'outcome', outcome: { kind: 'rejected', status: 500, body: { error: MSG_OTHER_SEAL_CHECK_FAILED, code: 'integrity_failure' } } });
+      expect(after.message).toBe(DOCUMENTS_COPY.refusal.field(phase, MSG_OTHER_SEAL_CHECK_FAILED));
+      expect(after.message).not.toBe(MSG_ISSUE_NO_REPLY);
+      expect(after.retry).toBe(false);
+    }
   });
   it('A4: a withdrawal with no reply gives the same pattern', () => {
     expect(DOCUMENTS_COPY.actions.withdrawLost).toBe('Not withdrawn yet. We did not get a reply, so the document may already be withdrawn. Select Retry. It will not withdraw twice.');

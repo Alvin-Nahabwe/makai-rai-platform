@@ -5,6 +5,7 @@
       "stage-1": "Pre-processing",
       "stage-2": "In-processing",
       "stage-3": "Post-processing",
+      "deleted-account": "Deleted user",
       "cross-border-storage-consent": "consent to storage abroad"
     },
     "extract": {

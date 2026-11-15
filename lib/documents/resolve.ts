@@ -21,7 +21,7 @@ import {
   CLOSED_NO_LONGER_APPLIES, ETHICS_APPROVED, ETHICS_NOT_REQUIRED, ETHICS_SUBMITTED, FILE_NAME_ERASED, FINDING_CLOSED, GATE_DERIVED_NA, assignedToLine, closedByLine,
   noDecisionLine, checkAgainLine, decidedByLine, decidedInLine, decisionSource,
   doneEvidenceLine, evidenceFileLine, fileErasedLine, findingOnQuestion, findingStatusLine, formatUtcDay, fromQuestion, lastCheckNoteLine, outsideOtherBodyLine, outsideRoleLine, personalDataAnswerLine,
-  questionSource, reviewLineText, textErasedLine, utcSecond, wordsThenCode,
+  questionSource, reviewLineText, docTextErasedLine, utcSecond, wordsThenCode,
 } from './copy';
 import type { ResolvedField } from './render';
 
@@ -111,7 +111,7 @@ function textOf(snap: DocumentSnapshot, table: keyof DocumentSnapshot['erasures'
   if (value !== null) return value;
   const on = erasedAt(snap, table, id, field);
   if (on === null) throw new Error(`documents: ${table} ${id} has no ${field} and no tombstone for it`);
-  return textErasedLine(on);
+  return docTextErasedLine(on);
 }
 /** FR-DOC-02 / D7: the sentence that stops a team's entry reading as the outside body's own record. */
 export const outsideRoleSentence = (member: string, role: OutsideRole): string =>
@@ -179,13 +179,13 @@ const linkOf = (e: EvidenceItemView): string | null => e['url'];
 
 /**
  * One evidence item as a document prints it, with the SRS 7.5.6 lines for erasure (silent-failure review H6, H7): erased link text
- * reads `textErasedLine` ("Text erased on <date> at the organisation's request."), an erased file name "File name erased", and a file
+ * reads `docTextErasedLine` ("Text erased on <date> at the organisation's request."), an erased file name "File name erased", and a file
  * whose bytes were erased `fileErasedLine` ("<file name>: file erased on <date> at the organisation's request. ...").
  * A text that is null with no tombstone is a broken row and throws.
  */
 function evidenceItem(e: EvidenceItemView, snap: DocumentSnapshot): string {
   if (e.kind === 'link') {
-    const label = e.label !== null ? `'${e.label}'` : erasedAt(snap, 'evidence', e.id, 'label') !== null ? textErasedLine(erasedAt(snap, 'evidence', e.id, 'label') as string) : '';
+    const label = e.label !== null ? `'${e.label}'` : erasedAt(snap, 'evidence', e.id, 'label') !== null ? docTextErasedLine(erasedAt(snap, 'evidence', e.id, 'label') as string) : '';
     const url = linkOf(e) ?? textOf(snap, 'evidence', e.id, 'url', null);
     return `link ${label} ${url}`.replace(/ {2,}/g, ' ');
   }
@@ -196,7 +196,7 @@ function evidenceItem(e: EvidenceItemView, snap: DocumentSnapshot): string {
 
 /** D2: "Not applicable (<the code's label>). Reason: '<reason>'", the reason read from the decision's own content; an erased reason prints the SRS 7.5.6 line without quotes. */
 function notApplicableLine(d: SealedDecision, content: LoadedContent): string {
-  const reasonText = d.reasonErased !== null ? textErasedLine(d.reasonErased.erasedOn) : d.row.reason ?? NOT_RECORDED;
+  const reasonText = d.reasonErased !== null ? docTextErasedLine(d.reasonErased.erasedOn) : d.row.reason ?? NOT_RECORDED;
   const code = content.reasonCodes.find((c) => c.code === d.row.reasonCode);
   if (code === undefined) throw new Error(`documents: reason code ${String(d.row.reasonCode)} of ${d.row.id} is not in content ${content.semver}`);
   return d.reasonErased !== null ? `Not applicable (${code.label}). Reason: ${reasonText}` : `Not applicable (${code.label}). Reason: '${reasonText}'`;
@@ -218,7 +218,7 @@ function extract(d: SealedDecision, snap: DocumentSnapshot, parts: ReadonlySet<P
   if (own === undefined) throw new Error(`documents: question ${d.row.questionId} is not in its own content ${content.semver}`);
   const lines: string[] = [own.text];
   const sources: RowRef[] = [];
-  const reasonText = d.reasonErased !== null ? textErasedLine(d.reasonErased.erasedOn) : d.row.reason ?? NOT_RECORDED;
+  const reasonText = d.reasonErased !== null ? docTextErasedLine(d.reasonErased.erasedOn) : d.row.reason ?? NOT_RECORDED;
   const wantsReason = parts.has('reason') || parts.has('status');
   if (d.row.status === 'not_applicable' && wantsReason) {
     lines.push(notApplicableLine(d, content));
@@ -626,7 +626,7 @@ function resolveMeta(source: Extract<FieldSource, { kind: 'meta' }>, snap: Docum
  */
 function reviewLine(s: SealedStage, snap: DocumentSnapshot): ResolvedPart {
   const erasedOn = erasedAt(snap, 'stage_reviews', s.seal.reviewId, 'preparedFor');
-  const note = s.preparedFor !== null && s.preparedFor.trim() !== '' ? s.preparedFor : erasedOn !== null ? textErasedLine(erasedOn) : null;
+  const note = s.preparedFor !== null && s.preparedFor.trim() !== '' ? s.preparedFor : erasedOn !== null ? docTextErasedLine(erasedOn) : null;
   // The note is team text that an operator may erase, so its row is a source of this document (D13).
   const sources: RowRef[] = note === null ? [] : [{ sourceTable: 'stage_reviews', sourceId: s.seal.reviewId, field: 'preparedFor' }];
   return part({ text: reviewLineText(FINDINGS_COPY.stages[s.stage], s.seal.reviewName, note), sources, sealIds: [s.seal.sealId] });

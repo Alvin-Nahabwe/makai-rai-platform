@@ -103,14 +103,6 @@
     }
   },
   "deleted-account": {
-    "Deleted user": {
-      "hits": [
-        "Deleted user"
-      ],
-      "passes": [
-        "Deleted account"
-      ]
-    },
     "An account no longer on the platform": {
       "hits": [
         "An account no longer on the platform"

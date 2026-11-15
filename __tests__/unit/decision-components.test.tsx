@@ -1,3 +1,4 @@
+import { textErasedLine } from '@/lib/documents/copy';
 import { describe, it, expect, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { QuestionPanelData } from '@/lib/question/panel';
@@ -287,7 +288,7 @@ describe('S-12 regions', () => {
     const none = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={{ ...V2, reason: null, evidence: [] }} historyCount={2} historyHref="/h" seals={[]} isScopeQuestion={false} />);
     expect(none).toMatch(/<dt>Evidence<\/dt><dd>None<\/dd>/);
     const erased = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={{ ...V2, reason: null, reasonErased: { erasedOn: '2026-11-01' } as never, evidence: [] }} historyCount={2} historyHref="/h" seals={[]} isScopeQuestion={false} />);
-    expect(erased).toContain("on the organisation&#x27;s instruction.");
+    expect(erased).toContain(textErasedLine('2026-11-01').replace(/'/g, '&#x27;'));
   });
 
   it('FR-DEC-08 (screen): a withdrawal as the current version reads as no decision, with its history link', () => {

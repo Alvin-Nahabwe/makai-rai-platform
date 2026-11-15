@@ -204,7 +204,7 @@ describe('record fields', () => {
 
   it('FR-DOC-02 FR-REV-08: an erased reason prints Erased on <date>, never the old text', () => {
     const r = resolveFields(dataCardMap, snapWith({ 'Q-PP-08': decision({ v: 1, status: 'done', reason: null, reasonErased: { erasedOn: '2026-11-04' } }) }), {});
-    expect(text(r, 'DC-01')).toContain(textErasedLine('2026-11-04'));
+    expect(text(r, 'DC-01')).toContain(docTextErasedLine('2026-11-04'));
   });
 
   it('FR-DOC-02 FR-REV-08: every printed record field and evidence file is a source row', () => {
@@ -409,7 +409,7 @@ describe('gaps, gate-derived questions and erasure lines', () => {
   });
 
   it('FR-REV-08 (SRS 7.5.6, H6): an erased link address or label reads "Text erased on <date> on the organisation\'s instruction.", an erased file name "File name erased"', () => {
-    const line = textErasedLine('2026-11-04');
+    const line = docTextErasedLine('2026-11-04');
     const erasures = { evidence: new Map([['ev-l', gone(['url', 'label'])], ['ev-f', gone(['fileName'])]]) };
     const items = [link({ url: null, label: null }), { ...file('ev-f'), fileName: null }];
     const r = resolveFields(dataCardMap, snapshotWith({ 'Q-PP-13': decision({ v: 1, evidence: items }) }, erasures), {});
@@ -452,7 +452,7 @@ describe('gaps, gate-derived questions and erasure lines', () => {
     const risk = { id: 'ar1', findingId: 'f1', acceptedBy: { kind: 'member', user: user('J') }, accepterRole: 'owner', reason: null, lookAgainNote: null, lookAgainOn: null, enteredBy: user('J'), enteredByRole: 'owner', findingSeq: 3, receivedAt: '2026-10-03T00:00:00.000Z', erasedFields: ['reason', 'lookAgainNote'] };
     (snap.stages['in-processing'] as { findings: unknown }).findings = [{ finding: { ...base, id: 'f1', source: 'team', title: null, description: null, state: 'closed_accepted_risk' }, mitigations: [], acceptedRisk: risk, events: [] }];
     const r = resolveFields(modelCardMap, snap, {});
-    const erased = textErasedLine('2026-11-04');
+    const erased = docTextErasedLine('2026-11-04');
     expect(text(r, 'MC-23')).toContain(`1. ${erased}`);
     expect(text(r, 'MC-23')).toContain(`Description: ${erased}`);
     expect(text(r, 'MC-25')).toContain(`Reason: ${erased}`);
@@ -512,8 +512,8 @@ describe('fix round 1: sources, Not yet, gaps and per-field dates', () => {
     const snap = snapshot({}, { reviewStage: 'in-processing', erasures: { findings: new Map([['f5', new Map([['title', '2026-01-10'], ['description', '2026-03-12']])]]) } });
     (snap.stages['in-processing'] as { findings: unknown }).findings = [{ finding: { ...baseFinding, id: 'f5', source: 'team', riskArea: 'IP-01', title: null, description: null, state: 'open' }, mitigations: [], acceptedRisk: null, events: [] }];
     const t = text(resolveFields(modelCardMap, snap, {}), 'MC-23') as string;
-    expect(t).toContain(`1. ${textErasedLine('2026-01-10')}`);
-    expect(t).toContain(textErasedLine('2026-03-12'));
+    expect(t).toContain(`1. ${docTextErasedLine('2026-01-10')}`);
+    expect(t).toContain(docTextErasedLine('2026-03-12'));
   });
 });
 
@@ -556,4 +556,4 @@ describe('boundaries', () => {
   });
 });
 
-import { GATE_DERIVED_NA, decidedByLine, decisionSource, evidenceFileLine, fileErasedLine, findingOnQuestion, fromQuestion, noDecisionLine, outsideRoleLine, personalDataAnswerLine, textErasedLine } from '@/lib/documents/copy';
+import { GATE_DERIVED_NA, decidedByLine, decisionSource, evidenceFileLine, fileErasedLine, findingOnQuestion, fromQuestion, noDecisionLine, outsideRoleLine, personalDataAnswerLine, docTextErasedLine } from '@/lib/documents/copy';

@@ -6,7 +6,7 @@ import { requestDigest } from '@/lib/data/idempotency';
 import { withOrg } from '@/lib/data/tenant';
 import { loadFieldMap } from '@/lib/documents/fieldMaps';
 import { RENDERERS } from '@/lib/documents/render';
-import { SEALED_NOTE, STATEMENT, checkAgainLine, textErasedLine } from '@/lib/documents/copy';
+import { SEALED_NOTE, STATEMENT, checkAgainLine, docTextErasedLine } from '@/lib/documents/copy';
 import { claimMatches } from '@/lib/claims/pattern';
 import { resetDb, testDb } from '../helpers/db';
 // Aliased: the name starts with "use", and react-hooks/rules-of-hooks reads any such call as a React hook.
@@ -161,13 +161,13 @@ describe('the mitigation plan renderer', () => {
     const sealAfter = (await sealFixture(fx, reviewId, { projectId })).id;
     sealId = sealAfter;
     const text = squash(await runsOf((await issueMp()).id));
-    expect(text).toContain(squash(textErasedLine(new Date().toISOString().slice(0, 10))));
+    expect(text).toContain(squash(docTextErasedLine(new Date().toISOString().slice(0, 10))));
   });
 
   it('FR-REV-08 (SRS 7.5.6): a Prepared-for note erased before issue prints the erasure line in MP-01', async () => {
     await eraseText('stage_reviews', reviewId, 'preparedFor');
     const text = squash(await runsOf((await issueMp()).id));
-    expect(text).toContain(squash(`Prepared for: ${textErasedLine(new Date().toISOString().slice(0, 10))}`));
+    expect(text).toContain(squash(`Prepared for: ${docTextErasedLine(new Date().toISOString().slice(0, 10))}`));
     expect(text).not.toContain('ethics submission');
   });
 

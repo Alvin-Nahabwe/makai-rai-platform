@@ -6,7 +6,7 @@ import { documentDraft, documentViews, issueDocument, listDocuments, previewDocu
 import { requestDigest } from '@/lib/data/idempotency';
 import { withOrg } from '@/lib/data/tenant';
 import { RENDERERS, type Renderer } from '@/lib/documents/render';
-import { AT_ORGANISATION_REQUEST, MSG_SEAL_CHECK_FAILED, NOT_RECORDED_AT_ISSUE, textErasedLine } from '@/lib/documents/copy';
+import { AT_ORGANISATION_REQUEST, MSG_SEAL_CHECK_FAILED, NOT_RECORDED_AT_ISSUE, docTextErasedLine } from '@/lib/documents/copy';
 import { resetDb, testDb } from '../helpers/db';
 // Aliased: the name starts with "use", and react-hooks/rules-of-hooks reads any such call as a React hook.
 import { useFixtureContent as publishFixtureContent } from '../helpers/content';
@@ -455,7 +455,7 @@ describe('the seal is checked against its rows before anything is rendered (M13)
     expect(spy).toHaveBeenCalledTimes(2);
     const row = await testDb.issuedDocument.findUniqueOrThrow({ where: { id: out.value.id }, select: { plainText: true, pdf: true } });
     expect(row.pdf).not.toBeNull();
-    expect(row.plainText).toContain(textErasedLine(new Date().toISOString().slice(0, 10)));
+    expect(row.plainText).toContain(docTextErasedLine(new Date().toISOString().slice(0, 10)));
     spy.mockRestore();
   });
 });

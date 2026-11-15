@@ -173,8 +173,8 @@ describe('1A-16c: the words of My account, word for word (audit A 78 to 87)', ()
 describe('1A-16c: the words of My data and Delete my account, word for word (audit A 88 to 98)', () => {
   it('A 89, 90, 94, 96: the rewritten texts', () => {
     expect(PERSONAL_DATA_COPY.downloadIntro).toBe('You can download a file with your data. It has your account details, your memberships, the legal texts you accepted and your reminder setting. It also lists the records you entered or were named in. It does not include the text of those records. That text belongs to your organisation.');
-    // The vocabulary retires "Deleted user"; the name the platform writes is still "Deleted user" until plan 1A Task 20 (lib/data/identity.ts).
-    expect(PERSONAL_DATA_COPY.deleteConsequence).toBe('Your name and email are removed and you are signed out everywhere. Records you entered stay with your organisations, shown as entered by "Deleted account". This cannot be undone.');
+    // Owner's written exception (15 Nov 2026): a deleted account is shown as "Deleted user", the name lib/data/identity.ts writes and the approved legal texts promise.
+    expect(PERSONAL_DATA_COPY.deleteConsequence).toBe('Your name and email are removed and you are signed out everywhere. Records you entered stay with your organisations, shown as entered by "Deleted user". This cannot be undone.');
     expect(PERSONAL_DATA_COPY.passwordLabel).toBe('Your current password');
     expect(PERSONAL_DATA_COPY.download).toBe('Download my data');
   });

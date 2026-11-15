@@ -53,9 +53,11 @@ export const HTTP_COPY = Object.freeze({
 /**
  * The names shown for a person or an invitation that is no longer there (audit E-API-47, E-S25, LD-28, LD-32 to LD-34;
  * CONSOLIDATED section 8 row 13). `deletedAccount` and `removedInvitation` are shown where the row itself is missing; the
- * name written to a deleted account is `DELETED_USER_NAME` (lib/data/identity.ts), held while row F8 is (review B2 I2).
+ * name written to a deleted account is `DELETED_USER_NAME` (lib/data/identity.ts). Owner's written exception (15 Nov 2026,
+ * 11:15 EAT): a deleted account is shown as "Deleted user", as the approved legal texts say, so a missing row shows the same
+ * name (the vocabulary's term for `deleted-account` follows it; revisit at the next legal revision).
  */
 export const GONE_NAME_COPY = Object.freeze({
-  deletedAccount: 'Deleted account',
+  deletedAccount: 'Deleted user',
   removedInvitation: 'Removed invitation',
 });

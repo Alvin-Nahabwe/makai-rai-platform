@@ -84,9 +84,8 @@
   },
   "deleted-account": {
     "Deleted user": {
-      "lint": "phrase",
-      "pattern": "\\bdeleted users?\\b",
-      "caseSensitive": false
+      "lint": "review",
+      "why": "Owner's written exception, 15 Nov 2026 11:15 EAT: the approved legal texts (data/legal/privacy/2.md, data/legal/terms/2.md) say a deleted account is shown as \"Deleted user\", so the screens keep that name and the vocabulary's term follows it (overrides terms.spec). Revisit at the next legal revision."
     },
     "Unknown": {
       "lint": "review",
