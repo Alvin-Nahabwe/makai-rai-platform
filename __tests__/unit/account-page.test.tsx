@@ -51,7 +51,8 @@ describe('S-21 My account', () => {
     expect(markup).toContain(SIGN_OUT_EVERYWHERE_COPY.explains);
     expect(markup).toMatch(new RegExp(`<a [^>]*href="/change-password"[^>]*>${escapeRe(ACCOUNT_COPY.page.changePassword)}</a>`));
     expect(vi.mocked(MyAcceptances)).toHaveBeenLastCalledWith({ userId: id.userId }, undefined);
-    expect(vi.mocked(ReminderEmailsSetting)).toHaveBeenLastCalledWith({ enabled: false }, undefined);
+    // FX2: the page also hands the setting its label with "mitigation" marked, and that term's definition (account-terms.test.tsx).
+    expect(vi.mocked(ReminderEmailsSetting)).toHaveBeenLastCalledWith({ enabled: false, label: expect.anything(), hint: { id: 'account-mitigation-definition', node: expect.anything() } }, undefined);
     expect(vi.mocked(DraftsOnThisDevice)).toHaveBeenLastCalledWith({ userId: id.userId }, undefined);
     expect(vi.mocked(PersonalExportAndDeletion)).toHaveBeenLastCalledWith({ userId: 'u1', lastActiveOwnerOf: [] }, undefined);
   });
