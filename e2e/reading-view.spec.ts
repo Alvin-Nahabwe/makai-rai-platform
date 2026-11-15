@@ -60,9 +60,9 @@ async function addOverdueMitigation(page: Page, baseURL: string): Promise<void> 
   try {
     const res = await owner.post(`/api/v1/orgs/${fixtureOrgSlug()}/projects/${projectId}/findings/${findingId}/mitigations`, { data: {
       requestId: crypto.randomUUID(), what: MITIGATION, ownerUserId: seatOf('assessor').userId, dueDate: '2026-09-30', status: 'in_progress',
-      followsControl: null, evidenceIds: [],
+      followsControl: null, closureNote: null, cancelReason: null, evidenceIds: [],
     } });
-    expect(res.status(), 'mitigation').toBe(201);
+    expect(res.status(), `mitigation: ${await res.text()}`).toBe(201);
   } finally {
     await owner.dispose();
   }
