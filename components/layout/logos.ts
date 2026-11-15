@@ -13,18 +13,6 @@ export const MAKAI_LOGO = Object.freeze({
   height: 36,
 });
 
-/**
- * The same white logo at the rail's full content width (248 px rail, less 2 x 12 px of scroll padding and 2 x 8 px of brand
- * padding = 208 px), so its tagline is as large as the rail allows. Sized copies of logo-makai-white.png made as above
- * (ImageMagick, WebP q70, 208 and 416 px wide). Drawn only in the rail's brand.
- */
-export const MAKAI_LOGO_RAIL = Object.freeze({
-  src: '/logo-makai-white-208.webp',
-  srcSet: '/logo-makai-white-208.webp 1x, /logo-makai-white-416.webp 2x',
-  width: 208,
-  height: 49,
-});
-
 export const DSWB_LOGO = Object.freeze({
   src: '/logo-dswb-white-125.webp',
   srcSet: '/logo-dswb-white-125.webp 1x, /logo-dswb-white-250.webp 2x',

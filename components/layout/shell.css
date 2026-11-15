@@ -453,9 +453,6 @@
 
 .shell-rail__logo {
   display: block;
-  /* Drawn at the rail's content width (208 px); a narrower panel scales it with its aspect ratio kept. */
-  max-inline-size: 100%;
-  block-size: auto;
 }
 
 .shell-rail__product {
