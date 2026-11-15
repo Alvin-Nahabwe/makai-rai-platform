@@ -353,6 +353,12 @@ test.describe('S-04 and S-05 in a browser', () => {
     const page = await newPage(browser);
     await signIn(page, fx.members.assessor);
     await expect(page).toHaveURL(/\/acceptances$/);
+    // Review R2-1: on a wide screen every gate page's heading is the 30 px step, the 30rem card of /change-password too.
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await expect(page.locator('.gate__card h1')).toHaveCSS('font-size', '30px');
+    await page.goto('/change-password');
+    await expect(page.locator('.gate__card h1')).toHaveCSS('font-size', '30px');
+    await page.goto('/acceptances');
     for (const width of [320, 160]) {
       await page.setViewportSize({ width, height: 640 });
       await expectNoHorizontalScroll(page);

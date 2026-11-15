@@ -47,11 +47,25 @@ const ROUTE: readonly GateStop[] = [
   { label: 'Sign in', state: 'done' },
   { label: 'Accept the terms', state: 'current' },
 ];
+/** React 19 hoists a preload for the logo's srcSet ahead of a static render; in a page it goes to <head>. Stripped here so the
+ *  frame's own markup is what the cases read; LOGO_PRELOAD pins that it is the logo's and nothing else. */
+const LOGO_PRELOAD = '<link rel="preload" as="image" imageSrcSet="/logo-makai-white-154.webp 1x, /logo-makai-white-308.webp 2x"/>';
+const frameOnly = (html: string) => (html.startsWith(LOGO_PRELOAD) ? html.slice(LOGO_PRELOAD.length) : html);
 const signedIn = (route?: readonly GateStop[], wide?: boolean) =>
-  renderToStaticMarkup(<GateFrame variant="signed-in" userName="Amina" userId="u1" accountReachable route={route} wide={wide}><h1>Title</h1></GateFrame>);
-const publicFrame = (route?: readonly GateStop[]) => renderToStaticMarkup(<GateFrame variant="public" route={route}><h1>Title</h1></GateFrame>);
+  frameOnly(renderToStaticMarkup(<GateFrame variant="signed-in" userName="Amina" userId="u1" accountReachable route={route} wide={wide}><h1>Title</h1></GateFrame>));
+const publicFrame = (route?: readonly GateStop[]) => frameOnly(renderToStaticMarkup(<GateFrame variant="public" route={route}><h1>Title</h1></GateFrame>));
 
 describe('GateFrame, signed in', () => {
+  it('I-3: the only element React hoists out of the frame is the logo\'s own preload', () => {
+    const html = renderToStaticMarkup(<GateFrame variant="public"><h1>Title</h1></GateFrame>);
+    expect(html.startsWith(LOGO_PRELOAD)).toBe(true);
+    expect(frameOnly(html)).toMatch(/^<div class="gate gate--public">/);
+  });
+
+  it('M-9: an account with no name gets no empty paragraph in the column', () => {
+    expect(renderToStaticMarkup(<GateFrame variant="signed-in" userName="" userId="u1" accountReachable>x</GateFrame>)).not.toContain('gate__name');
+  });
+
   it('T1.3: GateFrame links only to /help and signs out', () => {
     expect(hrefs(renderToStaticMarkup(<GateFrame variant="signed-in" userName="Amina" userId="u1" accountReachable>x</GateFrame>))).toEqual(['/help']);
     expect(hrefs(renderToStaticMarkup(<GateFrame variant="signed-in" userName="Amina" userId="u1" accountReachable={false}>x</GateFrame>))).toEqual(['/help']);
@@ -60,8 +74,8 @@ describe('GateFrame, signed in', () => {
   it('the product name is text, not a link; the person\'s name, Help and Sign out are in the column', () => {
     const html = signedIn();
     expect(html).toMatch(/<p class="gate__product">MAK-AI RAI Platform<\/p>/);
-    // I-3 (owner's ruling): the logo goes above the name; until the shared logo component lands, its slot is empty.
-    expect(html).toMatch(/<div class="gate__brand"><div class="gate__logo" data-slot="logo"><\/div><p class="gate__product">/);
+    // I-3 (owner's ruling, 15 Nov): the MAK-AI logo (lane 3's white WebP) above the name, decorative (alt=""), not a link.
+    expect(html).toMatch(/<div class="gate__brand"><img src="\/logo-makai-white-154\.webp" srcSet="\/logo-makai-white-154\.webp 1x, \/logo-makai-white-308\.webp 2x" width="154" height="36" alt="" decoding="async" class="gate__logo"\/><p class="gate__product">/);
     expect(textOf(html)).toContain('Amina');
     expect(html).toMatch(/<a class="gate__help" href="\/help">Help<\/a>/);
     expect(textOf(html)).toContain(GATE_COPY.signOut);
@@ -95,7 +109,7 @@ describe('GateFrame, public (inside the (public) layout\'s own header and main)'
     const html = publicFrame(ROUTE);
     expect(html).not.toMatch(/<header|<main|<form|<a /);
     expect(hrefs(html)).toEqual([]);
-    expect(html).toMatch(/^<div class="gate gate--public"><div class="gate__header"><div class="gate__column"><div class="gate__brand"><div class="gate__logo" data-slot="logo"><\/div><p class="gate__product">MAK-AI RAI Platform<\/p><\/div>/);
+    expect(html).toMatch(/^<div class="gate gate--public"><div class="gate__header"><div class="gate__column"><div class="gate__brand"><img src="\/logo-makai-white-154\.webp" srcSet="\/logo-makai-white-154\.webp 1x, \/logo-makai-white-308\.webp 2x" width="154" height="36" alt="" decoding="async" class="gate__logo"\/><p class="gate__product">MAK-AI RAI Platform<\/p><\/div>/);
     expect(html).toContain('<div class="gate__main"><div class="gate__card"><h1>Title</h1></div></div>');
   });
 });
@@ -165,15 +179,15 @@ describe('gate.css', () => {
 
   it('I-4: the card\'s heading steps down the ramp as the card narrows (22 px, then 18 px) and wraps by whole words only', () => {
     expect(css).toMatch(/\.gate__card \{[^}]*container-type: inline-size;/);
-    expect(css).toMatch(/@container \(width < 30rem\) \{\s*\.gate__card h1 \{\s*font-size: var\(--font-size-h2\);/);
+    expect(css).toMatch(/@container \(width < 24rem\) \{\s*\.gate__card h1 \{\s*font-size: var\(--font-size-h2\);/);
     expect(css).toMatch(/@container \(width < 12rem\) \{\s*\.gate__card h1 \{\s*font-size: var\(--font-size-h3\);/);
     expect(css).toMatch(/\.gate__card h1 \{[^}]*overflow-wrap: normal;/);
   });
 
-  it('I-3: the platform\'s name is the column\'s title, white at the 16 px step; the logo slot takes no room while empty', () => {
+  it('I-3: the platform\'s name is the column\'s title, white at the 16 px step; the logo sits above it as a block', () => {
     expect(css).toMatch(/\.gate__product \{[^}]*color: var\(--color-shell-ink\);[^}]*font-size: var\(--font-size-body\);[^}]*font-weight: var\(--font-weight-semibold\);/);
     expect(css).not.toMatch(/\.gate__product \{[^}]*--color-shell-muted/);
-    expect(css).toMatch(/\.gate__logo:empty \{\s*display: none;/);
+    expect(css).toMatch(/\.gate__logo \{\s*display: block;/);
   });
 
   it('I-5 M-2: the column (wide) and the band (narrow) have a 1 px edge in an existing border role, which forced colours keep', () => {
