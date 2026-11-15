@@ -97,11 +97,11 @@ describe('S-26 framework page', () => {
     for (const id of area.controls ?? []) expect(card).toContain(`href="/explore/controls#${id}">${escape(c.controls.get(id)!.name)}</a>`);
   });
 
-  it('B5 (spec 6): the lead names risk areas and controls, each a Term with its Definition in the same paragraph', () => {
+  it('B5 (spec 6), FX4 (DF I4): the lead names risk areas and controls, each a Term with its Definition on its own line next', () => {
     const F = GUIDANCE_COPY.framework;
     const pair = (t: { id: string; definition: string }, words: readonly [string, string, string]) =>
-      `${escape(words[0])}<span data-term="${t.id}">${words[1]}</span>${escape(words[2])} <span class="ui-definition" data-definition="${t.id}">${escape(t.definition)}</span>`;
-    expect(html).toContain(`<p>${escape(F.lead(3, 6))} ${pair(TERM_RISK_AREA, F.areasLine)}</p><p>${pair(TERM_CONTROL, F.controlsLine)}</p>`);
+      `${escape(words[0])}<span data-term="${t.id}">${words[1]}</span>${escape(words[2])}</p><p class="ui-definition" data-definition="${t.id}">${escape(t.definition)}</p>`;
+    expect(html).toContain(`<p>${escape(F.lead(3, 6))} ${pair(TERM_RISK_AREA, F.areasLine)}<p>${pair(TERM_CONTROL, F.controlsLine)}`);
     expect(`${F.lead(3, 6)} ${F.areasLine.join('')} ${F.controlsLine.join('')}`).toBe(
       'The questions are grouped into 3 stages and 6 topics. Each question links to a risk area. Each risk area links to controls that reduce the risk.',
     );
@@ -114,7 +114,7 @@ describe('S-26 framework page', () => {
     }
   });
 
-  it('B5 (spec 6): the first content text that uses "model card" marks it as a Term, with its Definition as the next element', () => {
+  it('B5 (spec 6), FX4 (DF I5): the first content text that uses "model card" marks it; the next element names the term, then its Definition', () => {
     const c = runningContent();
     const pattern = /(?<![\p{L}\p{N}])model\s+cards?(?![\p{L}\p{N}])/iu;
     const order = STAGES.flatMap((s) => [...c.areas.values()].filter((a) => a.stage === s));
@@ -122,7 +122,7 @@ describe('S-26 framework page', () => {
     expect(first, 'the fixture has an area that names a model card').toBeDefined();
     const field = pattern.test(first!.description) ? first!.description : first!.context!;
     const m = pattern.exec(field)!;
-    const marked = `${escape(field.slice(0, m.index))}<span data-term="${TERM_MODEL_CARD.id}">${escape(m[0])}</span>${escape(field.slice(m.index + m[0].length))}</p><p class="ui-definition" data-definition="${TERM_MODEL_CARD.id}">${escape(TERM_MODEL_CARD.definition)}</p>`;
+    const marked = `${escape(field.slice(0, m.index))}<span data-term="${TERM_MODEL_CARD.id}">${escape(m[0])}</span>${escape(field.slice(m.index + m[0].length))}</p><p class="term-line">Model card. <span class="ui-definition" data-definition="${TERM_MODEL_CARD.id}">${escape(TERM_MODEL_CARD.definition)}</span></p>`;
     expect(html).toContain(marked);
     // Only that first use is marked and defined.
     expect(html.match(/data-term="model-card"/g)).toHaveLength(1);

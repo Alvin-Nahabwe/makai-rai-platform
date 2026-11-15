@@ -171,10 +171,11 @@ export default function AboutPage() {
           aria-labelledby="principles-heading"
         >
           <h2 id="principles-heading">{principles.heading}</h2>
+          {/* The definition on its own line, the element after its sentence (FX4, DF I4). */}
           <p className="about-lead">
-            {principles.lead} {principles.areasLine[0]}<Term of={TERM_RISK_AREA}>{principles.areasLine[1]}</Term>{principles.areasLine[2]}{' '}
-            <Definition of={TERM_RISK_AREA} />
+            {principles.lead} {principles.areasLine[0]}<Term of={TERM_RISK_AREA}>{principles.areasLine[1]}</Term>{principles.areasLine[2]}
           </p>
+          <Definition of={TERM_RISK_AREA} as="p" />
 
           <div className="stage-details">
             {PRINCIPLES.map((p) => (

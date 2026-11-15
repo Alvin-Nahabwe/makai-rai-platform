@@ -31,7 +31,8 @@ describe('S-27, the controls page', () => {
     const text = html.replace(/<h3 class="ctl-card__title">[^<]*<\/h3>/g, '');
     const first = text.search(/model cards?(?![\p{L}\p{N}])/iu);
     expect(text.slice(first - 40, first)).toContain(`<span data-term="${TERM_MODEL_CARD.id}">`);
-    expect(html).toMatch(new RegExp(`<span data-term="${TERM_MODEL_CARD.id}">model cards?</span>[^<]*</p><p class="ui-definition" data-definition="${TERM_MODEL_CARD.id}">`, 'i'));
+    // FX4 (DF I5): the line after the description names its subject before the definition.
+    expect(html).toMatch(new RegExp(`<span data-term="${TERM_MODEL_CARD.id}">model cards?</span>[^<]*</p><p class="term-line">Model card\\. <span class="ui-definition" data-definition="${TERM_MODEL_CARD.id}">`, 'i'));
   });
 
 
@@ -68,17 +69,17 @@ describe('S-27, the controls page', () => {
     const html = renderToStaticMarkup(<ControlsPage />);
     const [before, term, after] = GUIDANCE_COPY.controls.introLine;
     // The h1 is the first use of "control" and its Definition is the next element (spec 6); the line's one defined term,
-    // "mitigation", has its Definition in the same paragraph.
+    // "mitigation", has its Definition on its own line, the next element (FX4, DF I4: no definition runs on in a sentence).
     expect(html).toContain(
       `${H1}<p class="ui-definition" data-definition="${TERM_CONTROL.id}">${esc(TERM_CONTROL.definition)}</p>`
-      + `<p class="controls-page__intro">${before}<span data-term="${TERM_MITIGATION.id}">${term}</span>${after} `
-      + `<span class="ui-definition" data-definition="${TERM_MITIGATION.id}">${esc(TERM_MITIGATION.definition)}</span></p>`,
+      + `<p class="controls-page__intro">${before}<span data-term="${TERM_MITIGATION.id}">${term}</span>${after}</p>`
+      + `<p class="ui-definition" data-definition="${TERM_MITIGATION.id}">${esc(TERM_MITIGATION.definition)}</p>`,
     );
     expect(GUIDANCE_COPY.controls.introLine.join('')).toBe('When your team adds a mitigation, it can follow one of these.');
     // "Risk areas:" under each card would be the first use of "risk area"; the header names it first, with its Definition.
     const [aBefore, aTerm, aAfter] = GUIDANCE_COPY.controls.areasLine;
-    const areas = `<p class="controls-page__intro">${aBefore}<span data-term="${TERM_RISK_AREA.id}">${aTerm}</span>${aAfter} `
-      + `<span class="ui-definition" data-definition="${TERM_RISK_AREA.id}">${esc(TERM_RISK_AREA.definition)}</span></p>`;
+    const areas = `<p class="controls-page__intro">${aBefore}<span data-term="${TERM_RISK_AREA.id}">${aTerm}</span>${aAfter}</p>`
+      + `<p class="ui-definition" data-definition="${TERM_RISK_AREA.id}">${esc(TERM_RISK_AREA.definition)}</p>`;
     expect(html).toContain(areas);
     expect(html.indexOf(areas)).toBeLessThan(html.indexOf(GUIDANCE_COPY.controls.riskAreas));
     expect(GUIDANCE_COPY.controls.areasLine.join('')).toBe('Each control lists the risk areas it addresses.');

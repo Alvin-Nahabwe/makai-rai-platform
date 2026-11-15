@@ -18,6 +18,8 @@ import '@/components/ui/selectStyles';
 import '@/components/ui/textAreaStyles';
 import { REVIEW_COPY } from '@/lib/review/copy';
 import { STAGE_TERMS } from '@/lib/vocabulary/maps';
+// The form's layout (.review-form): the open page loads no other file that imports it, so a direct visit had none (FX4).
+import './review.css';
 
 const MAX = 120;
 const C = REVIEW_COPY.open;

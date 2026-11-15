@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { markTerms } from '@/components/review/markTerms';
-import { TermList, termListId } from '@/components/review/TermList';
+import { TermLine, TermList, termListId } from '@/components/review/TermList';
+import { Term } from '@/components/ui/Definition';
 import * as terms from '@/lib/vocabulary/terms';
-import { TERM_FINDING, TERM_MITIGATION, TERM_MITIGATION_PLAN, TERM_SEAL, TERM_STAGE_1, TERM_STAGE_2, TERM_STAGE_REVIEW } from '@/lib/vocabulary/terms';
+import { TERM_FINDING, TERM_MITIGATION, TERM_MITIGATION_PLAN, TERM_MODEL_CARD, TERM_SEAL, TERM_STAGE_1, TERM_STAGE_2, TERM_STAGE_REVIEW } from '@/lib/vocabulary/terms';
+import { firstUseProblems } from '../helpers/firstUseMarkup';
 import { SealMarker } from '@/components/review/SealMarker';
 import { REVIEW_COPY } from '@/lib/review/copy';
 import type { SealRef } from '@/types/seal';
@@ -59,6 +61,19 @@ describe('TermList', () => {
 
   it('renders nothing with no items', () => {
     expect(html(<TermList idPrefix="p" items={[]} />)).toBe('');
+  });
+});
+
+describe('TermLine (FX4, DF I5)', () => {
+  it('gives a definition its subject: the term as a label, then the Definition as the first element, so it stays beside the use before it', () => {
+    expect(html(<TermLine of={TERM_MODEL_CARD} />)).toBe(
+      `<p class="term-line">Model card. <span class="ui-definition" data-definition="${TERM_MODEL_CARD.id}">${esc(TERM_MODEL_CARD.definition)}</span></p>`,
+    );
+  });
+
+  it('passes the crawl rule when it follows the block that holds the first use', () => {
+    const out = html(<><p>Write a <Term of={TERM_MODEL_CARD}>model card</Term>.</p><TermLine of={TERM_MODEL_CARD} /></>);
+    expect(firstUseProblems(out)).toEqual([]);
   });
 });
 

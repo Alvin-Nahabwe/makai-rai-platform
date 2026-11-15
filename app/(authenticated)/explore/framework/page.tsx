@@ -7,6 +7,7 @@ import type { ContentArea, LoadedContent } from '@/types/content';
 import { GUIDANCE_COPY } from '@/lib/guidance/copy';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Definition, Term } from '@/components/ui/Definition';
+import { TermLine } from '@/components/review/TermList';
 import { TERM_CONTROL, TERM_MODEL_CARD, TERM_RISK_AREA, TERM_STAGE_1, TERM_STAGE_2, TERM_STAGE_3 } from '@/lib/vocabulary/terms';
 import type { DefinedEntry } from '@/lib/vocabulary/types';
 import { pageTitle } from '@/lib/ui/title';
@@ -92,13 +93,13 @@ function AreaCard({ area, c, defineModelCard = null }: { area: ContentArea; c: L
       <p className="area-card__desc">
         {defineModelCard === 'description' ? <WithTerm text={area.description} entry={TERM_MODEL_CARD} /> : area.description}
       </p>
-      {defineModelCard === 'description' ? <Definition of={TERM_MODEL_CARD} as="p" /> : null}
+      {defineModelCard === 'description' ? <TermLine of={TERM_MODEL_CARD} /> : null}
       {area.context ? (
         <p className="area-card__context">
           <strong>{F.examples}</strong> {defineModelCard === 'context' ? <WithTerm text={area.context} entry={TERM_MODEL_CARD} /> : area.context}
         </p>
       ) : null}
-      {area.context && defineModelCard === 'context' ? <Definition of={TERM_MODEL_CARD} as="p" /> : null}
+      {area.context && defineModelCard === 'context' ? <TermLine of={TERM_MODEL_CARD} /> : null}
       {controls.length > 0 ? (
         <>
           <p className="area-card__controls-label">{F.controls}</p>
@@ -133,13 +134,11 @@ export default function FrameworkPage() {
         title={F.heading}
         lead={(
           <>
-            <p>
-              {F.lead(STAGES.length, moduleCount)} {F.areasLine[0]}<Term of={TERM_RISK_AREA}>{F.areasLine[1]}</Term>{F.areasLine[2]}{' '}
-              <Definition of={TERM_RISK_AREA} />
-            </p>
-            <p>
-              {F.controlsLine[0]}<Term of={TERM_CONTROL}>{F.controlsLine[1]}</Term>{F.controlsLine[2]} <Definition of={TERM_CONTROL} />
-            </p>
+            {/* Each definition on its own line, the element after its sentence (FX4, DF I4). */}
+            <p>{F.lead(STAGES.length, moduleCount)} {F.areasLine[0]}<Term of={TERM_RISK_AREA}>{F.areasLine[1]}</Term>{F.areasLine[2]}</p>
+            <Definition of={TERM_RISK_AREA} as="p" />
+            <p>{F.controlsLine[0]}<Term of={TERM_CONTROL}>{F.controlsLine[1]}</Term>{F.controlsLine[2]}</p>
+            <Definition of={TERM_CONTROL} as="p" />
             <p className="framework-page__counts">{F.counts(STAGES.length, moduleCount, c.areas.size, c.controls.size)}</p>
           </>
         )}

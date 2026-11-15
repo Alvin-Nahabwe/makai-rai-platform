@@ -75,6 +75,13 @@ describe('S-18, the documents page: every checked term\'s first use is beside it
     for (const t of [TERM_STAGE_1, TERM_STAGE_2, TERM_STAGE_3, TERM_SEAL, TERM_FINDING, TERM_DATA_CARD, TERM_MODEL_CARD, TERM_MITIGATION_PLAN]) expect([t.id, ...pair(html, t.id)]).toEqual([t.id, true, true]);
   });
 
+  it('FX4 (DF I1): the terms under the heading are the findings and review screens\' term list: each term a dt, its definition the dd', () => {
+    const out = renderToStaticMarkup(<DocumentTerms stages={['in-processing']} finding />);
+    const row = (t: { id: string; definition: string }, label: string) =>
+      `<dt><span data-term="${t.id}">${label}</span></dt><dd><span class="ui-definition" id="documents-terms-${t.id}" data-definition="${t.id}">${t.definition.replaceAll("'", '&#x27;')}</span></dd>`;
+    expect(out).toBe(`<dl class="term-list">${row(TERM_SEAL, 'Seal')}${row(TERM_STAGE_2, FINDINGS_COPY.stages['in-processing'])}${row(TERM_FINDING, 'Finding')}</dl>`);
+  });
+
   it('the rule is live: without the terms under the heading, the fixture help would be the first use of "finding" and the never-sealed note of "seal"', () => {
     const html = renderToStaticMarkup(<GenerateDocumentForm {...formProps(['in-processing'])} />);
     expect(firstUseProblems(html).map((v) => v.id)).toEqual(expect.arrayContaining([TERM_FINDING.id, TERM_SEAL.id, TERM_STAGE_2.id]));

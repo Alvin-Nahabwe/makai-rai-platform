@@ -40,3 +40,13 @@ export function TermList({ items, idPrefix }: { items: readonly TermListItem[]; 
     </dl>
   );
 }
+
+/**
+ * One definition with its subject (FX4, DF I5): the term as a label, then its `Definition`, in a paragraph of its own. For a
+ * definition placed after a block whose text holds the first use (a card's description), where a bare definition would
+ * read as a line about the block. The label is plain text, so the `Definition` stays the paragraph's first element and
+ * the pair passes the rule's "next element or its first child" (definitions-howto.md).
+ */
+export function TermLine({ of }: { of: DefinedEntry }): ReactElement {
+  return <p className="term-line">{`${labelOf(of)}. `}<Definition of={of} /></p>;
+}

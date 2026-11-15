@@ -3,7 +3,8 @@
 .controls-page__header { margin-bottom: var(--space-6); }
 .controls-page__header h1 { margin: 0; color: var(--color-heading); }
 .controls-page__intro { margin: var(--space-2) 0 0; max-width: 65ch; }
-.controls-page__counts { margin: var(--space-1) 0 0; color: var(--color-ink-muted); font-size: var(--font-size-small); }
+/* Each definition sits on its own line under its sentence (DF I4); the count stands apart from them. */
+.controls-page__counts { margin: var(--space-4) 0 0; color: var(--color-ink-muted); font-size: var(--font-size-small); }
 .controls-page__section { margin-bottom: var(--space-8); }
 .controls-page__section h2 { color: var(--color-heading); margin-bottom: var(--space-1); }
 .controls-page__type-line { margin: 0 0 var(--space-4); max-width: 65ch; color: var(--color-ink-muted); }

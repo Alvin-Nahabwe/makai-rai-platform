@@ -323,9 +323,9 @@ describe('S-28 About page', () => {
     expect(text).not.toContain('Sealing fixes the record so it cannot change.');
   });
 
-  it('B5: the principles open by naming risk areas as a Term with its Definition, before the first card uses the words', () => {
+  it('B5, FX4 (DF I4): the principles open by naming risk areas as a Term, its Definition on its own line next, before the first card uses the words', () => {
     const p = ABOUT_COPY.principles;
-    const lead = `<p class="about-lead">${esc(p.lead)} ${p.areasLine[0]}<span data-term="${TERM_RISK_AREA.id}">${p.areasLine[1]}</span>${p.areasLine[2]} <span class="ui-definition" data-definition="${TERM_RISK_AREA.id}">${esc(TERM_RISK_AREA.definition)}</span></p>`;
+    const lead = `<p class="about-lead">${esc(p.lead)} ${p.areasLine[0]}<span data-term="${TERM_RISK_AREA.id}">${p.areasLine[1]}</span>${p.areasLine[2]}</p><p class="ui-definition" data-definition="${TERM_RISK_AREA.id}">${esc(TERM_RISK_AREA.definition)}</p>`;
     expect(html).toContain(lead);
     expect(html.indexOf(lead)).toBeLessThan(html.indexOf(`<h4>${p.areas}</h4>`));
     expect(p.areasLine.join('')).toBe('Each principle lists its risk areas.');

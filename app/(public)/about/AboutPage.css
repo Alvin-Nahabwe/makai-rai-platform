@@ -94,9 +94,15 @@
 
 .about-lead {
   max-width: var(--measure-reading);
-  margin-bottom: var(--space-8);
+  margin-bottom: var(--space-1);
   line-height: var(--line-height-body);
   color: var(--color-ink-muted);
+}
+
+/* The lead's definition on its own line under it (DF I4), then the space before the principles. */
+.about-lead + .ui-definition {
+  max-width: var(--measure-reading);
+  margin-bottom: var(--space-8);
 }
 
 .about-note {

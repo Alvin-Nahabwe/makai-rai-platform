@@ -129,10 +129,10 @@ describe('ControlCard', () => {
       expect(html()).not.toMatch(/data-term|data-definition/);
     });
 
-    it('on: the description marks "model card" and the definition is the next element', () => {
+    it('on: the description marks "model card"; the next element names the term, then holds its definition (FX4, DF I5)', () => {
       expect(html({ defineModelCard: true })).toContain(
         `<p class="ctl-card__desc">Write a <span data-term="${TERM_MODEL_CARD.id}">model card</span> for the model and keep it with the release.</p>`
-        + `<p class="ui-definition" data-definition="${TERM_MODEL_CARD.id}">${TERM_MODEL_CARD.definition}</p>`);
+        + `<p class="term-line">Model card. <span class="ui-definition" data-definition="${TERM_MODEL_CARD.id}">${TERM_MODEL_CARD.definition}</span></p>`);
     });
 
     it('on, for a description that does not use the term: nothing is defined', () => {

@@ -44,7 +44,7 @@ describe('S-15: "model card" is defined once, on the first card that uses it', (
     expect(count(out, DEF)).toBe(1);
     const c15 = out.slice(out.indexOf('data-control="C-15"'), out.indexOf('data-control="C-18"'));
     expect(c15).toContain(TERM);
-    expect(c15).toMatch(new RegExp(`</p><p class="ui-definition" ${DEF}>`));
+    expect(c15).toMatch(new RegExp(`</p><p class="term-line">Model card\\. <span class="ui-definition" ${DEF}>`));
     expect(out.slice(out.indexOf('data-control="C-18"'))).not.toMatch(/data-term|data-definition/);
   });
 

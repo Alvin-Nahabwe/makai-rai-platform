@@ -44,12 +44,11 @@ export default function ControlsPage() {
       <header className="controls-page__header">
         <h1><Term of={TERM_CONTROL}>{GUIDANCE_COPY.titles.controls}</Term></h1>
         <Definition of={TERM_CONTROL} as="p" />
-        <p className="controls-page__intro">
-          {C.introLine[0]}<Term of={TERM_MITIGATION}>{C.introLine[1]}</Term>{C.introLine[2]} <Definition of={TERM_MITIGATION} />
-        </p>
-        <p className="controls-page__intro">
-          {C.areasLine[0]}<Term of={TERM_RISK_AREA}>{C.areasLine[1]}</Term>{C.areasLine[2]} <Definition of={TERM_RISK_AREA} />
-        </p>
+        {/* Each definition on its own line, the element after its sentence (FX4, DF I4). */}
+        <p className="controls-page__intro">{C.introLine[0]}<Term of={TERM_MITIGATION}>{C.introLine[1]}</Term>{C.introLine[2]}</p>
+        <Definition of={TERM_MITIGATION} as="p" />
+        <p className="controls-page__intro">{C.areasLine[0]}<Term of={TERM_RISK_AREA}>{C.areasLine[1]}</Term>{C.areasLine[2]}</p>
+        <Definition of={TERM_RISK_AREA} as="p" />
         <p className="controls-page__counts">{C.count(controls.length)}</p>
       </header>
       {TYPES.map(({ type, label, line }) => {
