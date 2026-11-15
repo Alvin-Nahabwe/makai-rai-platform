@@ -40,8 +40,8 @@ const STATUS_TERM: Readonly<Record<DefinedTallyKind, DefinedEntry>> = {
 
 /** `children` marked as the first use of `term` when `first`, else as they are. */
 const used = (first: boolean, term: DefinedEntry, children: ReactNode): ReactNode => (first ? <Term of={term}>{children}</Term> : children);
-/** The term's definition beside its first use, or nothing. */
-const defined = (first: boolean, term: DefinedEntry): ReactNode => (first ? <>{' '}<Definition of={term} /></> : null);
+/** The term's definition one step away, as the (i) toggletip right after its first use (owner's ruling of 15 Nov 2026, 21:32), or nothing. */
+const defined = (first: boolean, term: DefinedEntry): ReactNode => (first ? <TermTip of={term} label={P.whatMeans(term.term)} /> : null);
 /** A stage's question list (S-11). */
 const stagePath = (base: string, stage: Stage): string => `${base}/stages/${stage}`;
 
@@ -122,7 +122,7 @@ function StillOpen(p: StageLineProps): ReactElement {
   // (owner's ruling of 15 Nov 2026 20:50; a departure from FR-FUP-01/05's list on S-10, which the owner made).
   const others = all.length - overdue.length;
   const m = p.uses.mitigation?.stage === p.stage ? p.uses.mitigation.at : null;
-  const findingFirst = p.uses.finding !== null && 'stage' in p.uses.finding && p.uses.finding.stage === p.stage;
+  const findingFirst = p.uses.finding !== null && p.uses.finding.stage === p.stage;
   return (
     <div className="stage-line__stop stage-line__stop--open">
       <h3>{C.stillOpen}</h3>
@@ -197,7 +197,6 @@ function Plates({ items, base }: { items: readonly FollowUpItem[]; base: string 
 /** The stage's reviews (spec 9.2): each one's name, its number and state, its purpose, and for one not sealed what to look at first. */
 function Reviews(p: StageLineProps): ReactElement {
   const reviewsBase = `${p.base}/reviews`;
-  const newest = p.reviews.reduce<StageReviewView | null>((a, r) => (a === null || r.numberInStage > a.numberInStage ? r : a), null);
   const sr = p.uses.stageReview !== 'share' && p.uses.stageReview.stage === p.stage ? p.uses.stageReview.at : null;
   return (
     <div className="stage-line__stop stage-line__stop--reviews">
@@ -211,7 +210,7 @@ function Reviews(p: StageLineProps): ReactElement {
               <ListLink className="review-list__name" href={`${reviewsBase}/${r.id}`}>{r.name}</ListLink>
               <p className="review-list__meta">
                 {P.reviewNumber(r.numberInStage)}{SEP}
-                <ReviewState review={r} base={p.base} stage={p.stage} uses={p.uses} isNewest={r.id === newest?.id} />
+                <ReviewState review={r} base={p.base} uses={p.uses} />
               </p>
               {r.preparedForErased !== null ? <p className="review-list__meta">{REVIEW_COPY.review.facts.preparedFor}: {REVIEW_COPY.mounted.noteErased(formatDay(r.preparedForErased.erasedOn))}</p>
                 // The note is team-typed: only it sits in <bdi>, so right-to-left text cannot reorder the line (merge review M-2).
@@ -232,35 +231,22 @@ function Reviews(p: StageLineProps): ReactElement {
 }
 
 /**
- * A review's state after its number: not sealed yet; the damaged seal's sentence (said first, as reviewStateLine does);
- * or "sealed <date>" in the reader's zone, then how many decisions and how many findings changed since, each on its own.
- * Only the stage's newest review links its decisions, because the stage page's filter compares the stage with that
- * review's seal; the findings part links to the review, which lists them.
+ * A review's state after its number, all in the one line (owner's ruling of 15 Nov 2026, 21:32): not sealed yet; the damaged
+ * seal's first sentence (said first, as reviewStateLine does; the review page holds the rest); or "sealed <date>" in the
+ * reader's zone, then how many decisions and findings changed since, as one count linking to the review, which lists them.
  */
-function ReviewState({ review: r, isNewest, base, stage, uses }: {
-  review: StageReviewView; isNewest: boolean; base: string; stage: Stage; uses: FirstUses;
-}): ReactElement {
+function ReviewState({ review: r, base, uses }: { review: StageReviewView; base: string; uses: FirstUses }): ReactElement {
   if (r.latestSeal === null) return <>{P.notSealedYet}</>;
   if (sealDamaged(r)) {
     const first = uses.seal !== 'share' && uses.seal.reviewId === r.id;
-    return <>{used(first, TERM_SEAL, REVIEW_COPY.state.damaged)}{defined(first, TERM_SEAL)}</>;
+    return <>{used(first, TERM_SEAL, REVIEW_COPY.state.damagedShort)}{defined(first, TERM_SEAL)}</>;
   }
   const seal = r.latestSeal;
-  const questions = r.changed === null ? 0 : r.changed.changedQuestions.length;
-  const findings = r.changed === null ? 0 : r.changed.changedFindings.length;
-  const findingFirst = uses.finding !== null && 'reviewId' in uses.finding && uses.finding.reviewId === r.id;
+  const changed = r.changed === null ? 0 : r.changed.changedQuestions.length + r.changed.changedFindings.length;
   return (
     <>
       {P.sealed}{' '}<DeviceDateTime iso={seal.sealedAt} form="day" serverText={formatDay(seal.sealedAt)} />
-      {questions > 0 ? (
-        <>{SEP}{isNewest ? <ListLink href={`${stagePath(base, stage)}?show=changed_since_seal`}>{P.changedSinceSeal(questions)}</ListLink> : P.changedSinceSeal(questions)}</>
-      ) : null}
-      {findings > 0 ? (
-        <>
-          {SEP}{used(findingFirst, TERM_FINDING, <ListLink href={`${base}/reviews/${r.id}`}>{P.findingsChangedSinceSeal(findings)}</ListLink>)}
-          {defined(findingFirst, TERM_FINDING)}
-        </>
-      ) : null}
+      {changed > 0 ? <>{SEP}<ListLink href={`${base}/reviews/${r.id}`}>{P.changedSince(changed)}</ListLink></> : null}
     </>
   );
 }

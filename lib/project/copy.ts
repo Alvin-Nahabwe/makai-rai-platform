@@ -32,9 +32,8 @@ export const PROJECT_COPY = Object.freeze({
   nothingLeftOpen: 'Nothing is left open in this stage.',
   doneNoEvidence: (n: number) => (n === 1 ? '1 decision marked Done with no evidence attached' : `${n} decisions marked Done with no evidence attached`),
   overdueMitigations: (n: number) => (n === 1 ? '1 overdue mitigation' : `${n} overdue mitigations`),
-  changedSinceSeal: (n: number) => (n === 1 ? '1 decision changed since it was sealed' : `${n} decisions changed since it was sealed`),
-  /** After the decisions part of a sealed review's line; links to the review, which lists them. */
-  findingsChangedSinceSeal: (n: number) => (n === 1 ? '1 finding changed since it was sealed' : `${n} findings changed since it was sealed`),
+  /** A review's one line, after its date: how many decisions and findings changed since the seal (owner's ruling of 15 Nov 2026, 21:32). */
+  changedSince: (k: number) => `${k} changed since`,
   reviewsHeading: 'Reviews',
   /** A review's quiet line: "Review 1 · sealed 11 Nov 2026" or "Review 2 · not sealed yet". */
   reviewNumber: (n: number) => `Review ${n}`,
