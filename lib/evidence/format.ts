@@ -32,6 +32,23 @@ export function webLink(url: string): { href: string; host: string } | null {
   return { href: u.href, host: stripBidiControls(u.hostname) };
 }
 
+/**
+ * Whether a link's host (as `webLink` gives it: the browser's own resolution, lower case, punycode) is the platform's own
+ * public host, so a page does not say "opens another site" of a link that stays on the platform. `publicOrigin` is the
+ * configured public origin (lib/publicOrigin.ts `publicOrigin()`, from AUTH_URL or NEXTAUTH_URL), passed in so this stays
+ * pure and usable in the browser. The port is not compared: the same host on another port is still this platform's
+ * name. An origin that does not parse is never "own", so the caller keeps the "opens another site" warning.
+ */
+export function isOwnHost(host: string, publicOrigin: string): boolean {
+  let own: string;
+  try {
+    own = new URL(publicOrigin).hostname;
+  } catch {
+    return false; // No usable origin: never claim a link is the platform's own; the warning stays.
+  }
+  return own !== '' && host === own;
+}
+
 /** M-13's two numbers: megabytes (1,000,000 bytes) with one decimal. */
 export function formatMbPair(loaded: number, total: number): { x: string; y: string } {
   return { x: (loaded / 1e6).toFixed(1), y: (total / 1e6).toFixed(1) };
