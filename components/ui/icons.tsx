@@ -77,6 +77,9 @@
  *   paperclip
  *     https://raw.githubusercontent.com/lucide-icons/lucide/1.72.0/icons/paperclip.svg
  *     sha256 28308381efeab2e711feffe560a8eea33b092d440711aec108058041e5879f9f
+ *   pencil (fetched 15 Nov 2026 with the owner's approval)
+ *     https://raw.githubusercontent.com/lucide-icons/lucide/1.72.0/icons/pencil.svg
+ *     sha256 7e1ca7a6f5c1eb949671df762f2baadd32f5bd841d43153c3a15279af7d78d0c
  *   plus
  *     https://raw.githubusercontent.com/lucide-icons/lucide/1.72.0/icons/plus.svg
  *     sha256 7f6af73bf1ff6c4bca3f18351c8d1bdec6749c0c2530c4de5da85d520c21df17
@@ -127,6 +130,7 @@ export const ICONS: Readonly<Record<IconName, readonly IconElement[]>> = {
   'menu': [['path', {d: 'M4 5h16'}], ['path', {d: 'M4 12h16'}], ['path', {d: 'M4 19h16'}]],
   'moon': [['path', {d: 'M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401'}]],
   'paperclip': [['path', {d: 'm16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551'}]],
+  'pencil': [['path', {d: 'M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z'}], ['path', {d: 'm15 5 4 4'}]],
   'plus': [['path', {d: 'M5 12h14'}], ['path', {d: 'M12 5v14'}]],
   'sun': [['circle', {cx: '12', cy: '12', r: '4'}], ['path', {d: 'M12 2v2'}], ['path', {d: 'M12 20v2'}], ['path', {d: 'm4.93 4.93 1.41 1.41'}], ['path', {d: 'm17.66 17.66 1.41 1.41'}], ['path', {d: 'M2 12h2'}], ['path', {d: 'M20 12h2'}], ['path', {d: 'm6.34 17.66-1.41 1.41'}], ['path', {d: 'm19.07 4.93-1.41 1.41'}]],
   'triangle-alert': [['path', {d: 'm21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3'}], ['path', {d: 'M12 9v4'}], ['path', {d: 'M12 17h.01'}]],

@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import FrameworkPage from '@/app/(authenticated)/explore/framework/page';
+import { requireIdentity } from '@/lib/auth/identity';
 import { questionsInStage, runningContent } from '@/lib/content/loader';
 import { principleSlugMap, stageLabels } from '@/data/constants';
 import { STAGES } from '@/types/record';
@@ -19,6 +20,9 @@ import { GUIDANCE_COPY } from '@/lib/guidance/copy';
 const escape = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
 const PAGE = 'app/(authenticated)/explore/framework/page.tsx';
 
+// The page calls the gate first (security review 0.7.0, L-1); here it lets every render through.
+vi.mock('@/lib/auth/identity', () => ({ requireIdentity: vi.fn(async () => ({ userId: 'u-1' })) }));
+
 afterEach(() => {
   vi.doUnmock('@/lib/content/loader');
   vi.resetModules();
@@ -26,7 +30,16 @@ afterEach(() => {
 
 describe('S-26 framework page', () => {
   // framework-page.test.tsx (fixture content)
-  const html = renderToStaticMarkup(<FrameworkPage />);
+  let html = '';
+  beforeAll(async () => { html = renderToStaticMarkup(await FrameworkPage()); });
+
+  it('UX-01 FR-ACC-04 (L-1): S-26 runs the gates itself, and a redirect from them stops the page before it renders', async () => {
+    vi.mocked(requireIdentity).mockClear();
+    await FrameworkPage();
+    expect(requireIdentity).toHaveBeenCalledTimes(1);
+    vi.mocked(requireIdentity).mockRejectedValueOnce(new Error('NEXT_REDIRECT'));
+    await expect(FrameworkPage()).rejects.toThrow('NEXT_REDIRECT');
+  });
 
   it('FR-CNT-01 UX-36: S-26 lists every stage, module, risk area and control in the server HTML', () => {
     const c = runningContent();
@@ -52,7 +65,7 @@ describe('S-26 framework page', () => {
       return { ...m, runningContent: () => ({ ...c, areas, controls, questions }) };
     });
     const { default: Page } = await import('@/app/(authenticated)/explore/framework/page');
-    const text = renderToStaticMarkup(<Page />).replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&amp;/g, '&');
+    const text = renderToStaticMarkup(await Page()).replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&amp;/g, '&');
     expect(text).toContain('Content text');
     // SRS 7.5.3 (line 2472): PUB's one pattern of the words that never appear (lib/claims/pattern.ts).
     expect(claimMatches(text)).toEqual([]);
@@ -69,7 +82,7 @@ describe('S-26 framework page', () => {
       return { ...m, runningContent: () => ({ ...c, areas: new Map([[first.id, { ...first, name: HOSTILE_STRINGS[0], context: HOSTILE_STRINGS[1] }], ...rest.map((a) => [a.id, a] as const)]) }) };
     });
     const { default: Page } = await import('@/app/(authenticated)/explore/framework/page');
-    const out = renderToStaticMarkup(<Page />);
+    const out = renderToStaticMarkup(await Page());
     expect(out).not.toContain('<script>'); expect(out).not.toContain('<img'); expect(out).toContain('&lt;script&gt;');
   });
 

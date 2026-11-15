@@ -5,10 +5,13 @@ import { join } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import ControlsPage from '@/app/(authenticated)/explore/controls/page';
+import { requireIdentity } from '@/lib/auth/identity';
 import { runningContent } from '@/lib/content/loader';
 import { GUIDANCE_COPY } from '@/lib/guidance/copy';
 import { TERM_CONTROL } from '@/lib/vocabulary/terms';
 
+// The page calls the gate first (security review 0.7.0, L-1); here it lets every render through.
+vi.mock('@/lib/auth/identity', () => ({ requireIdentity: vi.fn(async () => ({ userId: 'u-1' })) }));
 vi.mock('@/lib/content/resources', async () => {
   const { RES } = await import('../helpers/suggestionsFixture');
   return { loadResources: () => RES };
@@ -17,8 +20,16 @@ vi.mock('@/lib/content/resources', async () => {
 const GUARD_PATTERNS = ['-e', '["\'`]/templates/', '-e', '["\'`]/notebooks/', '-e', 'notebooks/technical', '-e', 'NOTEBOOK_BASE_URL'];
 
 describe('S-27, the controls page', () => {
-  it('FR-SUG-04 FR-SUG-05 FR-SUG-06: S-27 lists every control with only released notebooks and passed templates', () => {
-    const html = renderToStaticMarkup(<ControlsPage />);
+  it('UX-01 FR-ACC-04 (L-1): S-27 runs the gates itself, and a redirect from them stops the page before it renders', async () => {
+    vi.mocked(requireIdentity).mockClear();
+    await ControlsPage();
+    expect(requireIdentity).toHaveBeenCalledTimes(1);
+    vi.mocked(requireIdentity).mockRejectedValueOnce(new Error('NEXT_REDIRECT'));
+    await expect(ControlsPage()).rejects.toThrow('NEXT_REDIRECT');
+  });
+
+  it('FR-SUG-04 FR-SUG-05 FR-SUG-06: S-27 lists every control with only released notebooks and passed templates', async () => {
+    const html = renderToStaticMarkup(await ControlsPage());
     const c = runningContent();
     for (const k of c.controls.values()) expect(html).toContain(`id="${k.id}"`);
     expect(html).toContain('/notebooks/C-13_subgroup-fairness.ipynb');
@@ -28,8 +39,8 @@ describe('S-27, the controls page', () => {
     expect(html).toContain('/templates/C-01_alternatives-analysis.html');
   });
 
-  it('UX-13 FR-SUG-04: one h2 per control type with its count, a card per control, and links to its risk areas', () => {
-    const html = renderToStaticMarkup(<ControlsPage />);
+  it('UX-13 FR-SUG-04: one h2 per control type with its count, a card per control, and links to its risk areas', async () => {
+    const html = renderToStaticMarkup(await ControlsPage());
     const c = runningContent();
     const n = (t: string) => [...c.controls.values()].filter((k) => k.type === t).length;
     expect(html).toContain('<h1>Controls</h1>');
@@ -45,8 +56,8 @@ describe('S-27, the controls page', () => {
   });
 
   // CONSOLIDATED section 4 (D AB45-AB47, EX19): About's "Free toolkits" section is this page's introduction now.
-  it("UX-13 UX-03: S-27 opens with the line that took over the About page's free toolkits section", () => {
-    const html = renderToStaticMarkup(<ControlsPage />);
+  it("UX-13 UX-03: S-27 opens with the line that took over the About page's free toolkits section", async () => {
+    const html = renderToStaticMarkup(await ControlsPage());
     const intro = GUIDANCE_COPY.controls.intro;
     expect(intro.startsWith(`${TERM_CONTROL.definition} `)).toBe(true);
     expect(html).not.toMatch(/practice that lowers a risk|links to free guidance/);

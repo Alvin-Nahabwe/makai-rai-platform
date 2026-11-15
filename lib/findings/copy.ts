@@ -68,6 +68,8 @@ const FIELDS = Object.freeze({
 
 /** The close box's sentences (B2): each cause once, and "You can close this finding now." once; the unblocked box joins them. */
 const CLOSE_NOW = 'You can close this finding now.';
+/** B2 (ruling R1, route decision R11): why a finding with a Planned or In progress mitigation cannot be closed yet. */
+const CLOSE_BLOCKED = 'This finding stays open while it has a mitigation that is Planned or In progress. Mark the mitigation Done, or cancel it and say why.';
 const CAUSE_WITHDRAWN = 'The decision on this question was withdrawn.';
 const CAUSE_GATE = 'Your team answered No to the personal data question, so this question does not apply.';
 const causeChanged = (status: string): string => `The decision on this question is now ${status}.`;
@@ -139,6 +141,8 @@ export const FINDINGS_COPY = Object.freeze({
     alreadyOpen: 'This finding is already open.',
     withdrawn: 'This finding was withdrawn, so it cannot be changed.',
     cannotWithdrawShortfall: 'A finding raised from a decision cannot be withdrawn. Withdraw the decision instead.',
+    /** Route 11's 409 `finding_has_open_work` (R11): the server's message and the page's failure line, the close box's sentence. */
+    openWork: CLOSE_BLOCKED,
     entry: (n: number): string => problems('entry', n, TYPED_IS_KEPT),
     outOfDate: 'Not saved. This page is out of date, or you no longer have access to it. Reload the page.',
     tooMany: (kept: string, again?: string): string => sentences('Not saved. Too many requests.', kept, again === undefined ? 'Wait a minute, then select Retry.' : `Wait a minute, then select ${again} again.`),
@@ -211,7 +215,7 @@ export const FINDINGS_COPY = Object.freeze({
     closeGate: sentences(CAUSE_GATE, CLOSE_NOW),
     closeChanged: (status: string): string => sentences(causeChanged(status), CLOSE_NOW),
     /** B2 (ruling R1): shown in the close box, with no button, while a mitigation is Planned or In progress. */
-    closeBlocked: 'This finding stays open while it has a mitigation that is Planned or In progress. Mark the mitigation Done, or cancel it and say why.',
+    closeBlocked: CLOSE_BLOCKED,
     mitigations: 'Mitigations',
     noMitigations: 'No mitigations yet. A mitigation says what the team will do about this finding. An Owner or Admin can accept the risk instead.',
     addMitigation: 'Add a mitigation',

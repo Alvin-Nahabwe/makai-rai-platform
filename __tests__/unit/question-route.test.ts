@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { foldRoute, lineTallyWords, nextApplyingId, ROUTE_FOLD, tallyOfRows, tallyParts } from '@/lib/question/route';
+import { foldRoute, lineTallyWords, nextApplyingId, ROUTE_FOLD, stopsOf, tallyOfRows, tallyParts } from '@/lib/question/route';
 import { tallyWords } from '@/lib/ui/copy';
 import type { StatusMarkKind } from '@/components/ui/types';
 import type { StageRow } from '@/lib/question/stageList';
@@ -8,6 +8,31 @@ import type { StageRow } from '@/lib/question/stageList';
 const row = (questionId: string, over: Partial<StageRow> = {}): StageRow => ({
   questionId, questionType: 'likert-5', text: `${questionId} text`, moduleId: 'M1', moduleTitle: 'Problem Formulation', statusText: 'No decision',
   versionNumber: null, declaredDate: null, openFindings: 0, changedSinceSeal: false, reworded: false, inPlace: null, kind: 'none', evidenceCount: 0, ...over,
+});
+
+// stopsOf stays for the project page's RouteRow (lane 4, lib/project/routes.ts), restored at the merge with design/route-stage1.
+describe('stopsOf', () => {
+  const rows = [row('Q-PP-02', { kind: 'done', evidenceCount: 1 }), row('Q-PP-01', { kind: 'shortfall' }), row('Q-PP-GATE', { questionType: 'gate', kind: 'scope' })];
+  const marks: Record<string, StatusMarkKind> = { 'Q-PP-02': 'done', 'Q-PP-01': 'partly', 'Q-PP-GATE': 'scope_answered' };
+  const hrefOf = (id: string) => `/q/${id}`;
+
+  it('one stop per row, in row order, with its kind, the question text as title, its address and current', () => {
+    expect(stopsOf(rows, marks, hrefOf, 'Q-PP-01')).toEqual([
+      { id: 'Q-PP-02', kind: 'done', title: 'Q-PP-02 text', href: '/q/Q-PP-02', current: false },
+      { id: 'Q-PP-01', kind: 'partly', title: 'Q-PP-01 text', href: '/q/Q-PP-01', current: true },
+      { id: 'Q-PP-GATE', kind: 'scope_answered', title: 'Q-PP-GATE text', href: '/q/Q-PP-GATE', current: false },
+    ]);
+  });
+
+  it('without a current question no stop is current', () => {
+    expect(stopsOf(rows, marks, hrefOf).every((s) => s.current === false)).toBe(true);
+  });
+
+  it('given the personal data answer, the answered stop carries it, and no other stop does', () => {
+    const stops = stopsOf(rows, marks, hrefOf, undefined, 'yes');
+    expect(stops.map((s) => s.scopeAnswer)).toEqual([undefined, undefined, 'yes']);
+    expect(stopsOf(rows, marks, hrefOf, undefined, null).every((s) => s.scopeAnswer === undefined)).toBe(true);
+  });
 });
 
 describe('tallyOfRows', () => {

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { requireIdentity } from '@/lib/auth/identity';
 import { ControlCard } from '@/components/suggestions/ControlCard';
 import { runningContent } from '@/lib/content/loader';
 import { loadResources } from '@/lib/content/resources';
@@ -21,7 +22,9 @@ const TYPES = [
   { type: 'informational', ...C.types.informational },
 ] as const;
 
-export default function ControlsPage() {
+export default async function ControlsPage() {
+  // explore/layout.tsx gates a navigation into /explore, not one between its two pages (security review 0.7.0, L-1).
+  await requireIdentity();
   const c = runningContent();
   const resources = loadResources();
   const controls = [...c.controls.values()];
