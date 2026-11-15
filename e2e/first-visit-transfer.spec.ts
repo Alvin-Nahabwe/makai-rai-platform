@@ -44,6 +44,8 @@ const S11_BUDGET = 300_000;
 const PUBLIC_BUDGET = 220_000;
 /** S-04's own first-visit limit, plain names: owner's ruling of 15 Nov 2026 15:35 (box: "Raise the limit ~4 KB"): 224,000 B. */
 const S04_BUDGET = 224_000;
+/** The /help page's own first-visit limit: owner's ruling of 15 Nov 2026 18:28: 223,000 B. */
+const HELP_BUDGET = 223_000;
 /** The sign-in rate limit keys on the client address (e2e/fixtures/auth.setup.ts), so these sign-ins get their own. */
 const SIGN_IN_IP = '10.47.0.1';
 const ACCEPTANCES_IP = '10.47.0.2';
@@ -320,13 +322,14 @@ test.describe('the public budget', () => {
       // S-04 must be the invitation itself, not its "Invitation" error page, which renders at the same address.
       const check = path.startsWith('/invitations/') ? invitedHeading : undefined;
       const m = await measure(browser, baseURL, path, undefined, check);
-      // S-04 has its own limit, raised by the owner (15 Nov 15:35, box: Raise the limit ~4 KB); every other page keeps 220,000.
-      const budget = path.startsWith('/invitations/') ? S04_BUDGET : PUBLIC_BUDGET;
+      // S-04 has its own limit, raised by the owner (15 Nov 15:35, box: Raise the limit ~4 KB), and /help has its own
+      // (owner's ruling of 15 Nov 2026 18:28, 223,000 B); every other page keeps 220,000.
+      const budget = path.startsWith('/invitations/') ? S04_BUDGET : path === '/help' ? HELP_BUDGET : PUBLIC_BUDGET;
       report(shown, m, budget);
       expectRendered(m, path, REDIRECTS_TO[path] ?? path, shown);
       if (m.total > budget) over.push(`${shown} ${m.total} (limit ${budget})`);
     }
-    expect(over, 'public pages over their limits (220000 B; S-04 224000 B)').toEqual([]);
+    expect(over, 'public pages over their limits (220000 B; S-04 224000 B; /help 223000 B)').toEqual([]);
   });
 
   test('NFR-PERF-02 (ACCEPTED-RISK): S-05, signed in without a v1 acceptance, stays within the owner\'s limit on first visit', async ({ browser }) => {
