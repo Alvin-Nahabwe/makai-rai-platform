@@ -273,19 +273,20 @@ test('L5-4 D-398: after a failed unarchive focus is on Retry, and stays on Retry
   await button.focus();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('status').filter({ hasText: PROJECT_WRITE_COPY.unarchive.lost })).toBeVisible();
-  const retry = page.locator('li', { hasText: name }).getByRole('button', { name: PROJECT_WRITE_COPY.unarchive.retry, exact: true });
+  const retry = page.locator('#projects-list tr', { hasText: name }).getByRole('button', { name: PROJECT_WRITE_COPY.unarchive.retry, exact: true });
   await expect(retry).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(retry).toBeFocused();
   await expect(retry).toHaveAttribute('aria-busy', 'true');
   release();
   await expect(page.getByRole('button', { name: PROJECT_WRITE_COPY.unarchive.named(name) })).toHaveCount(0);
-  // ruling L5-13: the success after a Retry leaves focus on the Active heading, where the project now is, not on the body
-  await expect(page.locator('section[aria-labelledby="projects-active"] li', { hasText: name })).toBeVisible();
-  await expect(page.locator('#projects-active')).toBeFocused();
+  // ruling L5-13 (plan 1B Task 12, one list): the success after a Retry leaves focus on the list, where the project is now an
+  // active row, not on the body
+  await expect(page.locator('#projects-list tr', { hasText: name }).locator('.projects-list__state')).toHaveText(PROJECT_COPY.allProjects.active);
+  await expect(page.locator('#projects-list [role="region"]')).toBeFocused();
 });
 
-test('L5-4 L5-13: after a successful unarchive the row is under Active and focus is on the Active heading, not the page body; the pressed button shows the kit\'s spinner while its request is held', async ({ browser }) => {
+test('L5-4 L5-13: after a successful unarchive the row says Active and focus is on the projects list, not the page body; the pressed button shows the kit\'s spinner while its request is held', async ({ browser }) => {
   const name = `PRJ focus unarchived ${RUN}`;
   await addProject(fx, { name, archived: true });
   const page = await signedIn(browser, fx.members.owner);
@@ -300,8 +301,8 @@ test('L5-4 L5-13: after a successful unarchive the row is under Active and focus
   await expect(button.locator('.ui-button__spinner[aria-hidden="true"]')).toHaveCount(1);
   await expect(button).toBeFocused();
   release();
-  await expect(page.locator('section[aria-labelledby="projects-active"] li', { hasText: name })).toBeVisible();
-  await expect(page.locator('#projects-active')).toBeFocused();
+  await expect(page.locator('#projects-list tr', { hasText: name }).locator('.projects-list__state')).toHaveText(PROJECT_COPY.allProjects.active);
+  await expect(page.locator('#projects-list [role="region"]')).toBeFocused();
   expect(await page.evaluate(() => document.activeElement === document.body)).toBe(false);
 });
 

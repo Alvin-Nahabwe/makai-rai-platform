@@ -8,16 +8,21 @@ import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafe
 import { signInAgainHref } from '@/lib/auth/idle';
 import { refusalOf } from '@/lib/projects/writeRefusal';
 import { PROJECT_WRITE_COPY } from '@/lib/project/write/copy';
+import { PROJECTS_LIST_ID } from '@/components/project/projectsListId';
 import '@/components/ui/buttonStyles';
 
 const FRESH: RetryState = { requestId: null, sentBody: null };
 const C = PROJECT_WRITE_COPY.unarchive;
-/** The id of the Active list's heading on S-32 (components/project/AllProjectsView.tsx), focusable with tabIndex -1. */
-const ACTIVE_HEADING_ID = 'projects-active';
-
-/** Before a refresh that removes this row: focus goes to the Active heading, while the focused control still exists. */
-function focusActiveHeading(): void {
-  document.getElementById(ACTIVE_HEADING_ID)?.focus();
+/**
+ * Before a refresh that moves this row: focus goes to the list's region on S-32 (the kit Table's scrollable wrapper,
+ * focusable and named by the caption, inside the element `PROJECTS_LIST_ID`, components/project/ProjectsTable.tsx),
+ * while the focused control still exists. The region is the same element after the refresh.
+ */
+function focusList(): void {
+  const region = document.getElementById(PROJECTS_LIST_ID)?.querySelector<HTMLElement>('[role="region"]');
+  // Not found means the list's markup changed under this control: say so (fixed words, no data), then refresh anyway.
+  if (region === null || region === undefined) console.error('UnarchiveProjectButton: no list region to move focus to');
+  else region.focus();
 }
 
 /**
@@ -32,10 +37,11 @@ function focusActiveHeading(): void {
  * that disables the button. The button is native, in the kit's classes: it needs `aria-label`, which the kit's Button
  * cannot carry; while its request is in flight it shows the kit's own spinner, the markup the kit's Button writes when busy.
  *
- * A success, or a 409 that refreshes, removes this row from Archived: the refreshed page lists the project under Active,
- * and this control (and whatever in it had focus) is gone. So just before the refresh, while the pressed button or Retry
- * still exists, focus moves to the page's Active heading (`ACTIVE_HEADING_ID`, AllProjectsView), which outlives the
- * refresh and is where the project now appears (ruling L5-13).
+ * A success, or a 409 that refreshes, makes this row an active one: the refreshed page lists the project among the
+ * active rows, above the archived ones (rule C8), and this control (and whatever in it had focus) is gone. So just before
+ * the refresh, while the pressed button or Retry still exists, focus moves to the list itself (`focusList`), which
+ * outlives the refresh and holds the project where it now appears (ruling L5-13, carried to the one list of plan 1B
+ * Task 12).
  */
 export function UnarchiveProjectButton(p: { orgSlug: string; projectId: string; projectName?: string }): ReactElement {
   const router = useRouter();
@@ -76,7 +82,7 @@ export function UnarchiveProjectButton(p: { orgSlug: string; projectId: string; 
     }
     if (outcome.kind === 'saved') {
       retry.current = FRESH;
-      focusActiveHeading();
+      focusList();
       setLine('');
       setCanRetry(false);
       router.refresh();
@@ -92,8 +98,8 @@ export function UnarchiveProjectButton(p: { orgSlug: string; projectId: string; 
       setStopped(true);
       setCanRetry(false);
     } else if (r.kind === 'refresh') {
-      retry.current = FRESH;   // 409: another person unarchived it first; the refreshed page lists it under Active
-      focusActiveHeading();
+      retry.current = FRESH;   // 409: another person unarchived it first; the refreshed page lists it among the active rows
+      focusList();
       setLine('');
       setCanRetry(false);
       router.refresh();

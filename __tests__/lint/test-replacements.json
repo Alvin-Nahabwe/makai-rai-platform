@@ -2206,5 +2206,45 @@
     "property": "Every shell page shows no image but the platform's own logos, and every icon is hidden from assistive technology.",
     "proof": "The owner asked for the MAK-AI logo back in the rail and in the footer, with the DSWB logo beside it (15 November 2026, 09:14). The allowed alt texts are now the four the shell writes: 'MAK-AI' (sign-in pages, footer), '' (the rail's logo, decorative beside the visible name), 'MAK-AI RAI Platform' (the narrow bar's logo link) and 'Data Science Without Borders' (footer); the icon check is unchanged. Each alt is pinned by __tests__/unit/ui/shell-route.test.tsx.",
     "task": "lane 3 task 1 (route: the rail logo and project block, the narrow top bar, the footer)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::(module)",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::FR-PRJ-03: S-32 lists active and archived projects, with Unarchive for owner and admin only",
+    "property": "The file's S-32 cases render the component that draws S-32. Plan 1B Task 12 deletes components/project/AllProjectsView.tsx (two lists under Active and Archived headings) and replaces it with components/project/ProjectsTable.tsx (one table); the module-level import names the new component and nothing else outside the cases changed.",
+    "proof": "__tests__/unit/prj-components.test.tsx::FR-PRJ-03: S-32 lists active and archived projects, with Unarchive for owner and admin only and __tests__/unit/prj-components.test.tsx::UX-37: the S-32 page and its view use ListLink and import no next/link import and read ProjectsTable; __tests__/unit/projects-table.test.tsx::C8: active rows come first, then archived ones, each group in the order read (most recently changed first) covers the new component's own rules.",
+    "task": "plan 1B Task 12 (lane 3 task 4: Projects as one list)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::FR-PRJ-03: S-32 lists active and archived projects, with Unarchive for owner and admin only",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::FR-PRJ-03: S-32 lists active and archived projects, with Unarchive for owner and admin only",
+    "property": "S-32 lists active projects before archived ones, offers Unarchive to a role that may archive and to no other, shows no assessment, maturity or completion word, and says plainly when there is no project. Plan 1B Task 12 makes the two lists one table (spec 8, rule C8), so the empty case has one empty state ('No projects yet') in place of the two per-list lines, and the order check reads the active row's name before the archived row's name in place of the Active heading before it.",
+    "proof": "The case renders ProjectsTable with one active and one archived row: the active name comes first; Unarchive for canUnarchive true and not for false; no Maturity, compliance, Assessment or completed word; with no rows, PROJECT_COPY.allProjects.empty.title exactly once and no table. __tests__/unit/projects-table.test.tsx::T12.1: Unarchive is on archived rows only and only with canUnarchive; without it there is no Actions column at all pins Unarchive per row.",
+    "task": "plan 1B Task 12 (lane 3 task 4: Projects as one list)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::UX-37: the S-32 page and its view use ListLink and import no next/link",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::UX-37: the S-32 page and its view use ListLink and import no next/link",
+    "property": "The S-32 page and the component that lists its projects use ListLink (no prefetch) and import no next/link, and the page pages its list with pageOf and ShowMoreLink. Only the component's file name changed: AllProjectsView.tsx is deleted by plan 1B Task 12 and ProjectsTable.tsx draws the list.",
+    "proof": "The case reads app/(authenticated)/orgs/[slug]/projects/page.tsx and components/project/ProjectsTable.tsx: neither imports next/link, ProjectsTable uses ListLink, the page uses pageOf and ShowMoreLink. Every other line is as before.",
+    "task": "plan 1B Task 12 (lane 3 task 4: Projects as one list)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/integration/prj-stage-view.test.ts::(module)",
+    "replacedBy": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-03: S-32 lists the archived project under Archived with Unarchive for an owner, and the dashboard leaves it out",
+    "property": "The file's S-32 case renders the component that draws S-32; AllProjectsView is deleted by plan 1B Task 12 and ProjectsTable replaces it. The module-level import names the new component; nothing else outside the cases changed.",
+    "proof": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-03: S-32 lists the archived project under Archived with Unarchive for an owner, and the dashboard leaves it out renders ProjectsTable from listProjectRows' rows; __tests__/integration/prj-stage-view.test.ts::plan 1B Task 12 C8: S-32 is one list, active projects first, then archived ones, each most recently changed first renders the real page.",
+    "task": "plan 1B Task 12 (lane 3 task 4: Projects as one list)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-03: S-32 lists the archived project under Archived with Unarchive for an owner, and the dashboard leaves it out",
+    "replacedBy": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-03: S-32 lists the archived project under Archived with Unarchive for an owner, and the dashboard leaves it out",
+    "property": "An archived project is read as archived by listProjectRows, S-32 offers it Unarchive for an owner, and the dashboard leaves it out. The rendering step now passes listProjectRows' active and archived rows, each marked, to ProjectsTable (plan 1B Task 12's one list) in place of AllProjectsView's two lists.",
+    "proof": "The case's reads and assertions are as before (archived names exactly ['Shelved project'], active contains 'Counted project', the dashboard shows the one and not the other, no score); only the render call changed, to ProjectsTable with rows marked archived: false or true, canUnarchive true, and it still requires 'Unarchive'.",
+    "task": "plan 1B Task 12 (lane 3 task 4: Projects as one list)"
   }
 ]

@@ -1,7 +1,7 @@
 import type { Stage } from '@/types/record';
 
 /**
- * The words of the project screens (audit B, as plan 1A Task 17 rules them): All projects (S-32), the project page (S-10)
+ * The words of the project screens (audit B, as plan 1A Task 17 rules them): Projects (S-32), the project page (S-10)
  * with its stage columns and follow-up lists, and the follow-up words Home shares with it. Server only: no file with
  * 'use client' imports it (ruling X-2); the form's words are lib/project/form/copy.ts, Archive's and Unarchive's
  * lib/project/write/copy.ts.
@@ -13,13 +13,23 @@ export const PROJECT_COPY = Object.freeze({
   start: 'Start recording',
   /** S-32 reached from the rail's Findings link with no project to go to (plan 1A Task 12, L2-65). */
   chooseForFindings: 'Choose a project to see its findings.',
+  /** S-32, Projects: one list, active and archived (plan 1B Task 12; spec 8, rule C8). The key keeps its 1A name. */
   allProjects: Object.freeze({
-    heading: 'All projects',
+    heading: 'Projects',
     newProject: 'New project',
+    /** The table's caption, which also names its region: what the list holds and its fixed order (C8: no sorting). */
+    caption: 'Active projects first, then archived ones',
+    columns: Object.freeze({ project: 'Project', state: 'State', actions: 'Actions' }),
+    /** A row's state: the word, and for an archived project the archive icon beside it. */
     active: 'Active',
     archived: 'Archived',
-    noActive: 'No active projects.',
-    noArchived: 'No archived projects.',
+    /** No project at all: the title, then TERM_PROJECT's definition and one of the two sentences (plan 1B Task 12). */
+    empty: Object.freeze({
+      title: 'No projects yet',
+      create: 'Create a project to start.',
+      /** Spec 9.1's sentence, as plan 1B gives it for Home's HOME_COPY.firstTimeAsk (Task 10, the Home stream). */
+      ask: 'Ask an Owner, Admin or Assessor to create your project.',
+    }),
     showMore: 'Show more',
   }),
   /** The words of a project's descriptive line (S-08, S-10, S-32; audit B rows 364 to 369). */
@@ -38,7 +48,7 @@ export const PROJECT_COPY = Object.freeze({
     findings: 'Findings for this project',
   }),
   /** Every page of an archived project (coordinator Q5 (a): no link, the banner's props stay as they are). */
-  archivedBanner: 'This project is archived. Nothing in it can be changed. An Owner or Admin can unarchive it on the All projects page.',
+  archivedBanner: 'This project is archived. Nothing in it can be changed. An Owner or Admin can unarchive it on the Projects page.',
   /** S-09 in edit mode for an archived project: the heading above the banner. */
   editArchivedHeading: 'Edit project',
   /** The stage names (decision D1) and the line under each (SRS W-1). */

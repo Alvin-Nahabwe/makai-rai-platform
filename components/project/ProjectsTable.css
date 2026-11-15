@@ -1,0 +1,104 @@
+/* S-32, Projects (plan 1B Task 12): the kit's Table dressed as the Route's list surface, as the findings sketch draws its
+   table (records/plans/2026-11-11-ux-redesign/directions/surfaces/findings.html): a white surface with a container border
+   on the cool ground, a quiet header row, each row the item plate (the name in words, then one small line), the state in
+   a narrow column. The caption is a quiet line above the surface. Only tokens; every colour holds in both themes.
+   Under 640 px of the table's own width the kit's card layout takes over and the surface's chrome is dropped. */
+
+.projects-list .ui-table__caption {
+  margin-block-end: var(--space-3);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-ink-muted);
+}
+
+.projects-list__name {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-link);
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+  overflow-wrap: anywhere;
+}
+
+.projects-list__name:hover {
+  text-decoration-thickness: 2px;
+}
+
+.projects-list__line {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-body);
+  color: var(--color-ink-muted);
+  overflow-wrap: anywhere;
+}
+
+.projects-list__state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-small);
+  white-space: nowrap;
+}
+
+.projects-list__state--archived {
+  color: var(--color-ink-muted);
+}
+
+@container (width >= 640px) {
+  .projects-list .ui-table {
+    border-collapse: separate;
+    border-spacing: 0;
+    border: 1px solid var(--color-border-container);
+    border-radius: var(--radius-surface);
+    background-color: var(--color-surface);
+  }
+
+  .projects-list .ui-table thead th {
+    padding: var(--space-2) var(--space-4);
+    border-block-end: 1px solid var(--color-border-container);
+    background-color: color-mix(in srgb, var(--color-ground) 60%, var(--color-surface));
+    font-size: var(--font-size-small);
+    color: var(--color-heading);
+  }
+
+  .projects-list .ui-table thead th:first-child {
+    border-start-start-radius: calc(var(--radius-surface) - 1px);
+  }
+
+  .projects-list .ui-table thead th:last-child {
+    border-start-end-radius: calc(var(--radius-surface) - 1px);
+  }
+
+  .projects-list .ui-table tbody th,
+  .projects-list .ui-table tbody td {
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .projects-list .ui-table tbody tr:last-child > * {
+    border-block-end: 0;
+  }
+
+  /* The State column keeps its word on one line; the Actions column is wide enough for Unarchive's status sentence. */
+  .projects-list .ui-table th:nth-child(2),
+  .projects-list .ui-table td:nth-child(2) {
+    inline-size: 9rem;
+  }
+
+  .projects-list .ui-table th:nth-child(3),
+  .projects-list .ui-table td:nth-child(3) {
+    inline-size: 16rem;
+  }
+
+  /* Where the active rows end and the archived ones begin (rule C8), a firmer rule: the order is fixed, so show it. */
+  .projects-list .ui-table tbody tr:not(:has(.projects-list__state--archived)):has(+ tr .projects-list__state--archived) > * {
+    border-block-end: 2px solid var(--color-border-control);
+  }
+}
+
+/* As cards, an active row's Actions cell holds nothing but its label: leave the cell out rather than show a bare label. */
+@container (width < 640px) {
+  .projects-list .ui-table tbody td:nth-child(3):not(:has(button)) {
+    display: none;
+  }
+}
