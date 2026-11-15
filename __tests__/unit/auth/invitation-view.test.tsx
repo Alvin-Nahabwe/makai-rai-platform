@@ -7,12 +7,14 @@ import { textOf } from '../../helpers/markup';
 
 vi.mock('@/lib/data/preauth', () => ({ invitationByToken: vi.fn() }));
 vi.mock('@/lib/auth/identity', () => ({ tryResolveIdentity: vi.fn(async () => null) }));
+const missing = vi.hoisted(() => vi.fn(async () => [] as string[]));
+vi.mock('@/lib/data/acceptances', () => ({ missingAcceptances: missing }));
 vi.mock('next/navigation', async (importOriginal) => ({
   ...(await importOriginal<typeof import('next/navigation')>()), useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
 }));
 
 const { default: InvitationPage } = await import('@/app/(public)/invitations/[token]/page');
-const { NewAccountView } = await import('@/app/(public)/invitations/[token]/AcceptInvitationClient');
+const { NewAccountView, InvitationRoute, InvitationRouteView, invitationStep } = await import('@/app/(public)/invitations/[token]/AcceptInvitationClient');
 const { invitationByToken } = await import('@/lib/data/preauth');
 const { tryResolveIdentity } = await import('@/lib/auth/identity');
 const { INVITATION_PAGE_COPY, roleTerm } = await import('@/lib/org/copy');
@@ -31,7 +33,7 @@ const invitation: Invitation & { org: { name: string; slug: string }; invitedBy:
   invitedById: 'u0', expiresAt: new Date('2026-11-04T09:00:00Z'), createdAt: new Date('2026-10-28T09:00:00Z'), acceptedAt: null,
   kind: 'member', linkShownAt: null, requestReference: null, org: { name: 'Makerere CAI Lab', slug: 'makerere-cai-lab' }, invitedBy: { name: 'Amina N.' },
 };
-type FrameProps = { variant: string; route?: ReadonlyArray<{ label: string; state: string }> };
+type FrameProps = { variant: string; route?: ReadonlyArray<{ label: string; state: string }>; routeSlot?: ReactElement };
 const page = async () => (await InvitationPage({ params: Promise.resolve({ token: TOKEN }) })) as ReactElement<FrameProps>;
 
 beforeEach(() => {
@@ -54,23 +56,40 @@ describe('S-04 in the gate frame (plan 1B Task 6)', () => {
     expect(INVITATION_PAGE_COPY.invitedBy('Amina N.', 'an Assessor')).toBe('Amina N. invited you to join as an Assessor.');
   });
 
-  it('L5-14: signed out, the frame\'s route is the three steps of a new account, the first current', async () => {
+  it('L5-14 L5-28: signed out, the frame\'s route is drawn from the client\'s step (routeSlot): the three steps of a new account', async () => {
     vi.mocked(invitationByToken).mockResolvedValue(invitation);
     const el = await page();
     expect(el.props.variant).toBe('public');
-    expect(el.props.route).toEqual([
-      { label: INVITATION_PAGE_COPY.stops.details, state: 'current' },
-      { label: GATE_COPY.stops.accept, state: 'upcoming' },
-      { label: INVITATION_PAGE_COPY.stops.join, state: 'upcoming' },
+    expect(el.props.route).toBeUndefined();
+    expect(el.props.routeSlot?.type).toBe(InvitationRoute);
+    const steps = (html: string) => [...html.matchAll(/gate-route__stop--(\w+)"><span class="gate-route__mark" aria-hidden="true"><\/span><span class="gate-route__label"[^>]*>(?:<span class="gate-route__here">[^<]*<\/span> )?([^<]+)/g)].map((m) => [m[2].trim(), m[1]]);
+    expect(steps(renderToStaticMarkup(<InvitationRouteView step="details" />))).toEqual([
+      [INVITATION_COPY.stops.details, 'current'], [GATE_COPY.stops.accept, 'upcoming'], [INVITATION_COPY.stops.join, 'upcoming'],
     ]);
+    expect(steps(renderToStaticMarkup(<InvitationRouteView step="acceptances" />))).toEqual([
+      [INVITATION_COPY.stops.details, 'done'], [GATE_COPY.stops.accept, 'current'], [INVITATION_COPY.stops.join, 'upcoming'],
+    ]);
+    // The server and the first render see the first step: the page's HTML never depends on the browser.
+    expect(invitationStep.initial).toBe('details');
+    expect(renderToStaticMarkup(<InvitationRoute />)).toBe(renderToStaticMarkup(<InvitationRouteView step="details" />));
   });
 
-  it('L5-14: signed in as the invited email, the one step left is Join; signed in as someone else (M-24), no route', async () => {
+  it('L5-14: signed in as the invited email, Join alone when it is the one step left; Accept the terms first when one is missing; someone else (M-24), no route', async () => {
     vi.mocked(invitationByToken).mockResolvedValue(invitation);
     vi.mocked(tryResolveIdentity).mockResolvedValue({ userId: 'u1', email: 'Head.Of.Lab@example.ac.ug', name: 'H', platformRole: 'assessor', mustChangePassword: false });
-    expect((await page()).props.route).toEqual([{ label: INVITATION_PAGE_COPY.stops.join, state: 'current' }]);
+    missing.mockResolvedValue([]);
+    expect((await page()).props.route).toEqual([{ label: INVITATION_COPY.stops.join, state: 'current' }]);
+    missing.mockResolvedValue(['privacy']);
+    expect((await page()).props.route).toEqual([
+      { label: GATE_COPY.stops.accept, state: 'current' }, { label: INVITATION_COPY.stops.join, state: 'upcoming' },
+    ]);
+    expect(missing).toHaveBeenLastCalledWith('u1');
     vi.mocked(tryResolveIdentity).mockResolvedValue({ userId: 'u2', email: 'someone@else.test', name: 'S', platformRole: 'assessor', mustChangePassword: false });
-    expect((await page()).props.route).toBeUndefined();
+    missing.mockClear();
+    const other = await page();
+    expect(other.props.route).toBeUndefined();
+    expect(other.props.routeSlot).toBeUndefined();
+    expect(missing).not.toHaveBeenCalled();   // another account's acceptances are none of this page's business
   });
 
   it('T6.1: an unusable link shows only M-23 under its heading: no route, and nothing about the organisation, role or inviter', async () => {
@@ -78,6 +97,7 @@ describe('S-04 in the gate frame (plan 1B Task 6)', () => {
     const el = await page();
     expect(el.props.variant).toBe('public');
     expect(el.props.route).toBeUndefined();
+    expect(el.props.routeSlot).toBeUndefined();
     const markup = renderToStaticMarkup(el);
     expect(markup).toContain(`<h1>${INVITATION_PAGE_COPY.unusableHeading}</h1>`);
     expect(textOf(markup)).toContain(INVITATION_PAGE_COPY.unusable);

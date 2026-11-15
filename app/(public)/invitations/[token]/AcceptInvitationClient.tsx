@@ -11,6 +11,9 @@ import { PASSWORD_MIN_LENGTH, validatePassword, validateString } from '@/lib/val
 import type { AcceptedKind, LegalTextVersion } from '@/types/legal';
 import { useHydrated } from '@/lib/client/useHydrated';
 import { INVITATION_COPY } from '@/lib/invitations/copy';
+import { GATE_COPY } from '@/lib/shell/copy';
+import { createDoorStep, useDoorStep } from '@/components/auth/doorStep';
+import { GateRoute, type GateStop } from '@/components/layout/GateRoute';
 import { Button } from '@/components/ui/Button';
 import { StatusRegion } from '@/components/ui/StatusRegion';
 import { TextInput } from '@/components/ui/TextInput';
@@ -134,6 +137,30 @@ export function joinOutcome(status: number, body: unknown): JoinOutcome {
 }
 
 export type { SendState };
+
+/** S-04's step on the signed-out branch, for the frame's route (page.tsx renders InvitationRoute in the frame's column). */
+export const invitationStep = createDoorStep<'details' | 'acceptances'>('details');
+
+const DETAILS_ROUTE: readonly GateStop[] = [
+  { label: INVITATION_COPY.stops.details, state: 'current' },
+  { label: GATE_COPY.stops.accept, state: 'upcoming' },
+  { label: INVITATION_COPY.stops.join, state: 'upcoming' },
+];
+const ACCEPT_ROUTE: readonly GateStop[] = [
+  { label: INVITATION_COPY.stops.details, state: 'done' },
+  { label: GATE_COPY.stops.accept, state: 'current' },
+  { label: INVITATION_COPY.stops.join, state: 'upcoming' },
+];
+
+/** S-04's new-account route for a given step: Your details, Accept the terms, Join (ruling L5-14). */
+export function InvitationRouteView({ step }: { step: 'details' | 'acceptances' }) {
+  return <GateRoute route={step === 'acceptances' ? ACCEPT_ROUTE : DETAILS_ROUTE} />;
+}
+
+/** S-04's route in the gate frame's column, following the new-account form's step (ruling L5-28). */
+export function InvitationRoute() {
+  return <InvitationRouteView step={useDoorStep(invitationStep)} />;
+}
 
 /**
  * Three branches by who is viewing (W-11): signed in as the invited email (one Accept invitation
@@ -310,7 +337,11 @@ export function NewAccountView(v: NewAccountViewProps) {
  */
 function NewAccount(p: Props) {
   const router = useRouter();
-  const [step, setStep] = useState<'details' | 'acceptances'>('details');
+  // The step lives in a store the frame's route reads too (InvitationRoute). It is one per page module, so a person who
+  // opens a second invitation in the same tab starts at the first step again.
+  const step = useDoorStep(invitationStep);
+  const setStep = invitationStep.set;
+  useEffect(() => () => invitationStep.set('details'), []);
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);

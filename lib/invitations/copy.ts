@@ -33,4 +33,7 @@ export const INVITATION_COPY = Object.freeze({
   creating: 'Creating your account...',
   alreadyHave: 'Already have an account with this email?',
   signInToAccept: 'Sign in to accept',
+  /** The steps of joining in the gate frame's route (plan 1B Task 6, ruling L5-14), drawn in the browser as the step
+   * changes (ruling L5-28); "Accept the terms" is GATE_COPY's. */
+  stops: Object.freeze({ details: 'Your details', join: 'Join' }),
 });

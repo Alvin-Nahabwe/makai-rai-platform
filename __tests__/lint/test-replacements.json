@@ -2262,5 +2262,13 @@
     "property": "E-06 carries no marker, escapes the organisation name in the HTML part, and links only to fixed pages whose addresses carry nothing (SRS 6.1).",
     "proof": "Plan 1B Task 6 (C9; ruling L5-19) adds the sign-in link after the reset link (lib/email/templates/accountCreated.ts). The case now expects the hrefs to be exactly [the reset page, the sign-in page], in that order; the marker, subject and escaping assertions are unchanged. The new case 'C9 T6.5: the links are the reset page then the sign-in page, each alone on its line; no query string and no address' checks both parts have no '@' and no '?'. Seen RED with the one-link template, GREEN after.",
     "task": "plan 1B Task 6 (joining)"
+  },
+  {
+    "kind": "structure",
+    "changed": "e2e/two-orgs.spec.ts::(module)",
+    "replacedBy": "e2e/two-orgs.spec.ts::9.8: a member of A accepts an invitation to B while signed in, lands on B's Home with the welcome, and the switcher lists A and B",
+    "property": "Membership stays scoped per organisation: each existing case is unchanged; the new case adds that a person joins a second organisation only by an invitation they accept while signed in, at the invited role.",
+    "proof": "Additions only, asked for by plan 1B Task 6 Step 4: imports of dotenv/config, node:crypto, testDb, buildOrg, welcomeLine and INVITATION_COPY at the top, and a new describe with the one case after the existing ones. No existing line or case changes. The new case uses fresh organisations from buildOrg, so the fixture seats the 404 cases read are never made members of a second organisation.",
+    "task": "plan 1B Task 6 (joining)"
   }
 ]
