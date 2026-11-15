@@ -63,9 +63,15 @@ export function GateSignOut({ userId, accountReachable }: { userId: string; acco
     button.current?.focus();
   }
   // A press that failed from inside the warning: signOutClearingDrafts removes the drafts before it signs out, so the
-  // warning's count may be stale. It closes (adjusted during render, React's "storing information from previous
-  // renders"), and focus goes back to Sign out, under which the failure line now speaks.
-  if (signOut.message !== null && drafts !== null) setDrafts(null);
+  // warning's count may be stale. It closes when the failure line appears, and focus goes back to Sign out, under which
+  // the failure line now speaks. Only when the line changes (React's "storing information from previous renders"; a
+  // setState in an effect is refused by the lint rule react-hooks/set-state-in-effect): closing on every render while an
+  // old failure is shown would close the next press's warning before it opens (review R1-1).
+  const [lineSeen, setLineSeen] = useState<string | null>(signOut.message);
+  if (signOut.message !== lineSeen) {
+    setLineSeen(signOut.message);
+    if (signOut.message !== null) setDrafts(null);
+  }
   useEffect(() => {
     if (signOut.message !== null) button.current?.focus();
   }, [signOut.message]);

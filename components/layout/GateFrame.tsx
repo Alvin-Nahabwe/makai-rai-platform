@@ -18,13 +18,14 @@ export type GateFrameProps =
 /**
  * The route of this door's stops, drawn as the route column draws a stage (spec 5 principle 7, 7.2): a labelled list, a
  * line joining white marks, the current stop enlarged with "You are here" above its name. Marks are borders drawn by CSS
- * and hidden; a done stop carries the visually hidden "(done)", never a tick. Below 1024 px CSS shows the two lines after
- * it instead: where the person is and, with more than one stop, which step of how many.
+ * and hidden; a done stop carries the visually hidden "(done)", never a tick. Below 1024 px CSS shows the lines after it
+ * instead: where the person is and, when the route lists one, the next stop. Never a count (ruling L5-21): gate 2 runs
+ * before gate 3, so no page knows how many steps a person still has.
  */
 function GateRoute({ route }: { route: readonly GateStop[] }): ReactElement {
   const current = route.filter((s) => s.state === 'current');
   if (current.length !== 1) throw new Error(`GateFrame: a route has exactly one current stop, not ${current.length}`);
-  const position = route.indexOf(current[0]) + 1;
+  const next = route.slice(route.indexOf(current[0]) + 1).find((s) => s.state === 'upcoming');
   return (
     <>
       <ol className="gate-route" role="list" aria-label={GATE_COPY.routeLabel}>
@@ -45,7 +46,7 @@ function GateRoute({ route }: { route: readonly GateStop[] }): ReactElement {
         ))}
       </ol>
       <p className="gate__where">{GATE_COPY.where(current[0].label)}</p>
-      {route.length > 1 ? <p className="gate__count">{GATE_COPY.count(position, route.length)}</p> : null}
+      {next !== undefined ? <p className="gate__next">{GATE_COPY.next(next.label)}</p> : null}
     </>
   );
 }
@@ -67,13 +68,21 @@ export function GateFrame(props: GateFrameProps): ReactElement {
   const route = props.route !== undefined && props.route.length > 0 ? <GateRoute route={props.route} /> : null;
   const className = `gate gate--${props.variant}${props.wide ? ' gate--wide' : ''}`;
   const card = <div className="gate__card">{props.children}</div>;
+  // The owner's ruling (I-3): the MAK-AI logo sits above the platform's name, in the rail and here. The logo component is
+  // another lane's; its slot is this empty element, which takes no room until the logo is put in it.
+  const brand = (
+    <div className="gate__brand">
+      <div className="gate__logo" data-slot="logo"></div>
+      <p className="gate__product">{PRODUCT_NAME}</p>
+    </div>
+  );
 
   if (!signedIn) {
     return (
       <div className={className}>
         <div className="gate__header">
           <div className="gate__column">
-            <p className="gate__product">{PRODUCT_NAME}</p>
+            {brand}
             {route}
           </div>
         </div>
@@ -86,7 +95,7 @@ export function GateFrame(props: GateFrameProps): ReactElement {
     <div className={className}>
       <header className="gate__header">
         <div className="gate__column">
-          <p className="gate__product">{PRODUCT_NAME}</p>
+          {brand}
           {route}
           <div className="gate__footer">
             <p className="gate__name">{props.userName}</p>

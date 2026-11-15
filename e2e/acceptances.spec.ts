@@ -324,6 +324,18 @@ test.describe('S-04 and S-05 in a browser', () => {
       await page.goto('/change-password');
       await signOut.click();
       await expect(warning.getByRole('link', { name: DRAFTS_COPY.signOut.goToThem })).toHaveAttribute('href', '/account#drafts-on-this-device');
+      // Review R1-1: a press that fails before anything is removed (the sign-out module cannot load) leaves the drafts and
+      // says so; once the module can load, the next press warns again rather than doing nothing.
+      await page.route('**/_next/static/chunks/**', (r) => r.abort('connectionfailed'));
+      await warning.getByRole('button', { name: DRAFTS_COPY.signOut.deleteAndSignOut }).click();
+      await expect(page.getByRole('banner').getByRole('alert')).toHaveText(ACCEPTANCES_COPY.stillSignedIn);
+      await expect(warning).toHaveCount(0);
+      await expect(signOut).toBeFocused();
+      expect(await keys(page)).toEqual([draftKey, otherKey].sort());
+      await page.unroute('**/_next/static/chunks/**');
+      await signOut.click();
+      await expect(warning).toBeVisible();
+      await expect(warning).toContainText(DRAFTS_COPY.signOut.warning(1));
       // Delete them and sign out: this account's drafts go, another account's stay, and the person is signed out.
       await warning.getByRole('button', { name: DRAFTS_COPY.signOut.deleteAndSignOut }).click();
       await page.waitForURL((u) => u.pathname === '/login');
@@ -334,6 +346,36 @@ test.describe('S-04 and S-05 in a browser', () => {
       await testDb.user.update({ where: { id: account.userId }, data: { mustChangePassword: false } });
       await page.context().close();
     }
+  });
+
+  test('UX-35 (review I-4): at 320 px and 200 % zoom the gate frame\'s heading wraps by whole words and stays inside its card', async ({ browser }) => {
+    const fx = await buildOrg({ label: 'gatezoom', acceptances: 'pre-v1' });
+    const page = await newPage(browser);
+    await signIn(page, fx.members.assessor);
+    await expect(page).toHaveURL(/\/acceptances$/);
+    for (const width of [320, 160]) {
+      await page.setViewportSize({ width, height: 640 });
+      await expectNoHorizontalScroll(page);
+      const h1 = await page.locator('.gate__card h1').evaluate((el) => {
+        const card = el.closest('.gate__card')!.getBoundingClientRect();
+        const box = el.getBoundingClientRect();
+        // Each word of the heading, measured as a range: a word broken across two lines has two boxes.
+        const text = el.firstChild?.nodeType === Node.TEXT_NODE ? el.firstChild as Text : null;
+        const split: string[] = [];
+        if (text !== null) {
+          for (const m of text.data.matchAll(/\S+/g)) {
+            const r = document.createRange();
+            r.setStart(text, m.index!);
+            r.setEnd(text, m.index! + m[0].length);
+            if (r.getClientRects().length > 1) split.push(m[0]);
+            if (r.getBoundingClientRect().right > card.right + 0.5) split.push(`${m[0]} (past the card)`);
+          }
+        }
+        return { measured: text !== null, split, inside: box.right <= card.right + 0.5 && el.scrollWidth <= el.clientWidth };
+      });
+      expect(h1, `${width} px`).toEqual({ measured: true, split: [], inside: true });
+    }
+    await page.context().close();
   });
 
   test('FR-ACC-01 (7.4.2 S-04): a lost connection on Create account says the account may already be created, and Try again sends the same body', async ({ browser }) => {

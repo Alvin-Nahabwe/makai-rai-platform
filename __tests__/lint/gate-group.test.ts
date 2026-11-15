@@ -114,17 +114,26 @@ describe('the (gate) route group (plan 1B Task 1)', () => {
     }
   });
 
-  it('T1.4: the (gate) pages and the frame read no tenant data: their only data modules are the identity lane\'s own reads', () => {
+  it('T1.4: the (gate) pages and the frame read no tenant data: every module they import from lib, Prisma or a relative path is on an allow-list', () => {
+    // Review R1-2: an allow-list, not a block-list, so any new reader (a data module, a loader, a guard) fails here until it
+    // is looked at. The data readers among them are the identity lane's own four.
+    const ALLOWED = [
+      './ChangePasswordForm', '@/lib/auth/copy', '@/lib/auth/identity', '@/lib/auth/idle', '@/lib/auth/idleDeadline',
+      '@/lib/client/draftKeys', '@/lib/client/signOutPress', '@/lib/client/useHydrated', '@/lib/data/acceptances',
+      '@/lib/data/identity', '@/lib/data/preauth', '@/lib/decision/drafts/copy', '@/lib/legal/copy', '@/lib/legal/registry',
+      '@/lib/org-dispatch', '@/lib/org/copy', '@/lib/shell/copy', '@/lib/ui/copy', '@/lib/ui/title', '@/lib/validate',
+    ];
     const files = [...sourcesUnder(GATE), 'components/layout/GateFrame.tsx', 'components/layout/GateSignOut.tsx'];
-    // Every way to the database: the data modules, the auth module and its identity reads, authorisation, Prisma itself.
-    const DATA = /^(@\/lib\/(data|db|authz)\b|@\/lib\/auth(\/identity)?$|@prisma\/client$|\.\.?\/)/;
     const used = new Set<string>();
     for (const f of files) {
-      for (const m of code(f).matchAll(/(?:^|\n)\s*import\s[^'"]*?from\s+['"]([^'"]+)['"]/g)) {
-        if (DATA.test(m[1]) && !m[1].startsWith('./')) used.add(m[1]);
+      for (const m of code(f).matchAll(/(?:^|\n)\s*(?:import|export)\s[^'"]*?from\s+['"]([^'"]+)['"]|import\(\s*['"]([^'"]+)['"]\s*\)/g)) {
+        const spec = m[1] ?? m[2];
+        if (/^(@\/lib\/|@prisma\/|\.\.?\/)/.test(spec)) used.add(spec);
       }
     }
-    expect([...used].sort()).toEqual(['@/lib/auth/identity', '@/lib/data/acceptances', '@/lib/data/identity', '@/lib/data/preauth']);
+    expect([...used].filter((spec) => !ALLOWED.includes(spec)).sort()).toEqual([]);
+    expect([...used].filter((spec) => /^@\/lib\/(data\/|auth\/identity$)/.test(spec)).sort())
+      .toEqual(['@/lib/auth/identity', '@/lib/data/acceptances', '@/lib/data/identity', '@/lib/data/preauth']);
     // The one identity read: this person's last organisation, by their own id.
     const chooser = code(`${GATE}/page.tsx`);
     expect(chooser.match(/identityDb\./g)).toHaveLength(1);

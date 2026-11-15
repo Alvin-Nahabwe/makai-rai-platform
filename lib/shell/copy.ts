@@ -37,8 +37,8 @@ export const GATE_COPY = Object.freeze({
   here: 'You are here',
   /** The narrow band's line for the current stop. */
   where: (stop: string): string => `You are here: ${stop}`,
-  /** The narrow band's position line, shown when the route has more than one stop. */
-  count: (n: number, of: number): string => `Step ${n} of ${of}`,
+  /** The narrow band's line for the stop after the current one, when the route lists one (never a count: ruling L5-21). */
+  next: (stop: string): string => `Next: ${stop}`,
   stops: Object.freeze({
     changePassword: 'Change your password',
     signInAgain: 'Sign in again',

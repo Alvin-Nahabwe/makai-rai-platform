@@ -5,7 +5,9 @@
    borders, so forced colours keep them (spec 7.2). Nothing animates. */
 
 /* ── The frame ── */
+/* It fills the viewport at every width, as the shell does, so the site footer never floats mid-screen (review M-3). */
 .gate {
+  min-block-size: 100vh;
   background-color: var(--color-ground);
 }
 
@@ -19,6 +21,9 @@
 .gate__header {
   background-color: var(--color-shell);
   color: var(--color-shell-ink);
+  /* A 1 px edge between the navy and the page (review I-5): in dark mode the shell and the ground are 1.04:1 apart. A border,
+     so forced colours keep the edge too (M-2). The band's is on its block end; the column's, on its inline end (below). */
+  border-block-end: 1px solid var(--color-border-container);
 }
 
 /* ── The column's contents (the rail's sizes, components/layout/shell.css) ── */
@@ -30,10 +35,20 @@
   padding: var(--space-3) var(--space-4);
 }
 
-.gate__product {
+/* The brand: the logo's slot (empty until the shared logo component is put in it; owner's ruling I-3), then the platform's
+   name as the column's title, white at the 16 px step. */
+.gate__brand {
   flex: 1 1 auto;
   min-width: 0;
+}
+
+.gate__logo:empty {
+  display: none;
+}
+
+.gate__product {
   color: var(--color-shell-ink);
+  font-size: var(--font-size-body);
   font-weight: var(--font-weight-semibold);
   overflow-wrap: anywhere;
 }
@@ -44,7 +59,7 @@
 }
 
 .gate__where,
-.gate__count {
+.gate__next {
   flex: 1 0 100%;
   order: 3;
   overflow-wrap: anywhere;
@@ -54,7 +69,7 @@
   font-weight: var(--font-weight-semibold);
 }
 
-.gate__count {
+.gate__next {
   margin-block-start: calc(-1 * var(--space-2));
   color: var(--color-shell-muted);
   font-size: var(--font-size-small);
@@ -116,6 +131,7 @@
 }
 
 .gate__card {
+  container-type: inline-size;
   max-inline-size: 30rem;
   padding: var(--space-6) var(--space-4);
   background-color: var(--color-surface);
@@ -124,11 +140,40 @@
   overflow-wrap: break-word;
 }
 
+/* The page's one heading wraps by whole words only (review I-4: at 200 % zoom it broke inside words): the size steps down
+   the ramp as the card narrows, so the longest word of a heading fits. */
 .gate__card h1 {
   margin-block-end: var(--space-4);
   font-size: var(--font-size-h1);
   line-height: var(--line-height-heading);
   color: var(--color-heading);
+  overflow-wrap: normal;
+}
+
+@container (width < 30rem) {
+  .gate__card h1 {
+    font-size: var(--font-size-h2);
+  }
+}
+
+@container (width < 12rem) {
+  .gate__card h1 {
+    font-size: var(--font-size-h3);
+  }
+}
+
+/* Below 320 CSS px (a phone at 200 % zoom) the card meets the viewport's edges: no gutter, no side borders, a narrower
+   padding, so a heading's longest word has room. */
+@media (max-width: 19.98rem) {
+  .gate__main {
+    padding-inline: 0;
+  }
+
+  .gate__card {
+    padding-inline: var(--space-3);
+    border-inline: 0;
+    border-radius: 0;
+  }
 }
 
 @media (max-width: 1023.98px) {
@@ -143,7 +188,11 @@
   .gate {
     display: grid;
     grid-template-columns: var(--rail-width) minmax(0, 1fr);
-    min-block-size: 100vh;
+  }
+
+  .gate__header {
+    border-block-end: 0;
+    border-inline-end: 1px solid var(--color-border-container);
   }
 
   /* The column scrolls with nothing: it stays in view beside a long card (the acceptances), as the rail does. */
@@ -160,11 +209,9 @@
     padding: var(--space-6) var(--space-3);
   }
 
-  .gate__product {
+  .gate__brand {
     flex: none;
     padding-inline: var(--space-3);
-    color: var(--color-shell-muted);
-    font-size: var(--font-size-small);
   }
 
   .gate-route {
@@ -172,7 +219,7 @@
   }
 
   .gate__where,
-  .gate__count {
+  .gate__next {
     display: none;
   }
 
@@ -182,7 +229,8 @@
     gap: var(--space-2);
     margin-block-start: auto;
     padding-block-start: var(--space-4);
-    border-block-start: 1px solid var(--color-shell-hover);
+    /* A control-border line (review M-1: the hover navy was 1.19:1 on the column). */
+    border-block-start: 1px solid var(--color-border-control);
   }
 
   .gate__name {

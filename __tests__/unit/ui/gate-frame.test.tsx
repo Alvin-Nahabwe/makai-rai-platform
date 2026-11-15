@@ -60,6 +60,8 @@ describe('GateFrame, signed in', () => {
   it('the product name is text, not a link; the person\'s name, Help and Sign out are in the column', () => {
     const html = signedIn();
     expect(html).toMatch(/<p class="gate__product">MAK-AI RAI Platform<\/p>/);
+    // I-3 (owner's ruling): the logo goes above the name; until the shared logo component lands, its slot is empty.
+    expect(html).toMatch(/<div class="gate__brand"><div class="gate__logo" data-slot="logo"><\/div><p class="gate__product">/);
     expect(textOf(html)).toContain('Amina');
     expect(html).toMatch(/<a class="gate__help" href="\/help">Help<\/a>/);
     expect(textOf(html)).toContain(GATE_COPY.signOut);
@@ -93,7 +95,7 @@ describe('GateFrame, public (inside the (public) layout\'s own header and main)'
     const html = publicFrame(ROUTE);
     expect(html).not.toMatch(/<header|<main|<form|<a /);
     expect(hrefs(html)).toEqual([]);
-    expect(html).toMatch(/^<div class="gate gate--public"><div class="gate__header"><div class="gate__column"><p class="gate__product">MAK-AI RAI Platform<\/p>/);
+    expect(html).toMatch(/^<div class="gate gate--public"><div class="gate__header"><div class="gate__column"><div class="gate__brand"><div class="gate__logo" data-slot="logo"><\/div><p class="gate__product">MAK-AI RAI Platform<\/p><\/div>/);
     expect(html).toContain('<div class="gate__main"><div class="gate__card"><h1>Title</h1></div></div>');
   });
 });
@@ -118,17 +120,19 @@ describe('GateRoute: the steps of this door, drawn as a short route', () => {
     expect(html).not.toMatch(/<progress|role="progressbar"|%/);
   });
 
-  it('below 1024 px the band says where the person is and, with more than one stop, which step of how many', () => {
+  it('I-1 (ruling L5-21): below 1024 px the band says where the person is and the next stop the route lists, never a count', () => {
+    // No page knows how many gates a person still has to pass (gate 2 runs before gate 3), so no total is printed.
     expect(html).toMatch(/<p class="gate__where">You are here: Accept the terms<\/p>/);
-    expect(html).toMatch(/<p class="gate__count">Step 2 of 2<\/p>/);
-    const one = signedIn([{ label: 'Change your password', state: 'current' }]);
-    expect(one).toMatch(/You are here: Change your password/);
-    expect(one).not.toMatch(/gate__count|Step 1 of 1/);
+    expect(html).not.toMatch(/gate__next|Next:/);   // this route lists no upcoming stop
+    expect(html).not.toMatch(/Step \d|of \d|gate__count/);
+    const two = signedIn([{ label: 'Change your password', state: 'current' }, { label: 'Sign in again', state: 'upcoming' }]);
+    expect(two).toMatch(/<p class="gate__where">You are here: Change your password<\/p><p class="gate__next">Next: Sign in again<\/p>/);
+    expect(two).not.toMatch(/Step \d/);
   });
 
   it('no route, no list and no position line', () => {
-    expect(signedIn()).not.toMatch(/gate-route|gate__where|gate__count/);
-    expect(signedIn([])).not.toMatch(/gate-route|gate__where|gate__count/);
+    expect(signedIn()).not.toMatch(/gate-route|gate__where|gate__next/);
+    expect(signedIn([])).not.toMatch(/gate-route|gate__where|gate__next/);
   });
 
   it('a route with no current stop, or with two, is refused (exactly one "You are here")', () => {
@@ -157,6 +161,30 @@ describe('gate.css', () => {
     expect(css).toMatch(/max-inline-size: 30rem/);
     expect(css).toMatch(/\.gate--wide \.gate__card \{[^}]*max-inline-size: 40rem/);
     expect(css).toMatch(/\.gate__card h1 \{[^}]*font-size: var\(--font-size-h1\);[^}]*color: var\(--color-heading\)/);
+  });
+
+  it('I-4: the card\'s heading steps down the ramp as the card narrows (22 px, then 18 px) and wraps by whole words only', () => {
+    expect(css).toMatch(/\.gate__card \{[^}]*container-type: inline-size;/);
+    expect(css).toMatch(/@container \(width < 30rem\) \{\s*\.gate__card h1 \{\s*font-size: var\(--font-size-h2\);/);
+    expect(css).toMatch(/@container \(width < 12rem\) \{\s*\.gate__card h1 \{\s*font-size: var\(--font-size-h3\);/);
+    expect(css).toMatch(/\.gate__card h1 \{[^}]*overflow-wrap: normal;/);
+  });
+
+  it('I-3: the platform\'s name is the column\'s title, white at the 16 px step; the logo slot takes no room while empty', () => {
+    expect(css).toMatch(/\.gate__product \{[^}]*color: var\(--color-shell-ink\);[^}]*font-size: var\(--font-size-body\);[^}]*font-weight: var\(--font-weight-semibold\);/);
+    expect(css).not.toMatch(/\.gate__product \{[^}]*--color-shell-muted/);
+    expect(css).toMatch(/\.gate__logo:empty \{\s*display: none;/);
+  });
+
+  it('I-5 M-2: the column (wide) and the band (narrow) have a 1 px edge in an existing border role, which forced colours keep', () => {
+    expect(css).toMatch(/\.gate__header \{[^}]*border-block-end: 1px solid var\(--color-border-container\);/);
+    expect(css).toMatch(/@media \(min-width: 1024px\) \{[\s\S]*\.gate__header \{\s*border-block-end: 0;\s*border-inline-end: 1px solid var\(--color-border-container\);/);
+    expect(css).not.toMatch(/--color-shell\s*:/);   // no token is redefined here
+  });
+
+  it('M-1 M-3: the person block\'s divider is a control-border line; the frame fills the viewport at every width', () => {
+    expect(css).toMatch(/border-block-start: 1px solid var\(--color-border-control\);/);
+    expect(css).toMatch(/^\.gate \{[^}]*min-block-size: 100vh;/m);
   });
 
   it('spec 7.1: no orange anywhere in the frame\'s sheet (never orange text on navy), and nothing animates', () => {
