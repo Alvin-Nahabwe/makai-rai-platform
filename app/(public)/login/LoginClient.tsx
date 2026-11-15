@@ -270,8 +270,7 @@ export function LoginView(v: LoginViewProps) {
   const signedOut = v.signedOut ?? null;
   const lead = signedOut === null ? null : (
     <Banner kind="session">
-      <p>{signedOut === 'idle' ? AUTH_COPY.signedOutIdle : AUTH_COPY.signedOutAbsolute}</p>
-      <p>{AUTH_COPY.signedOutKept}</p>
+      <p>{signedOut === 'idle' ? AUTH_COPY.signedOutIdle : AUTH_COPY.signedOutAbsolute} {AUTH_COPY.signedOutKept}</p>
     </Banner>
   );
   const footer = (
