@@ -1,13 +1,17 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { getSession, signIn } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { safeCallbackUrl } from '@/lib/safe-callback-url';
 import { DRAFT_PREFIX, openDraftStore } from '@/lib/client/drafts';
-import { AUTH_MESSAGE_COPY, SIGN_IN_COPY } from '@/lib/auth/copy';
+import { AUTH_COPY, AUTH_MESSAGE_COPY, SIGN_IN_COPY } from '@/lib/auth/copy';
+import { SIGNED_OUT_HINT_KEY } from '@/lib/auth/idle';
 import { useHydrated } from '@/lib/client/useHydrated';
+import { AuthCard } from '@/components/auth/AuthCard';
+import { PasswordField } from '@/components/auth/PasswordField';
+import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
 import { StatusRegion } from '@/components/ui/StatusRegion';
 import { TextInput } from '@/components/ui/TextInput';
@@ -109,6 +113,63 @@ export function purgeOtherAccountsAfterSignIn(storage: Storage | null | undefine
   return openDraftStore(storage)?.purgeOtherAccounts(userId) ?? 0;
 }
 
+/** Why the last session in this tab ended by the clock (C12), when S-01 knows it. */
+export type SignedOutReason = 'idle' | 'absolute';
+
+const HINT_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+
+/** The hint's text as one of the two words, or null; it has no path that throws (silent-failure review d2-sfh-1, finding 4). */
+function decodeSignedOutHint(text: string, now: number): SignedOutReason | null {
+  let v: unknown;
+  try {
+    v = JSON.parse(text);
+  } catch {
+    // Not JSON: not a hint this code wrote, so there is no reason to show.
+    return null;
+  }
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) return null;
+  const { reason, at } = v as Record<string, unknown>;
+  if (reason !== 'idle' && reason !== 'absolute') return null;
+  if (typeof at !== 'number' || !Number.isFinite(at)) return null;
+  const age = now - at;
+  return age >= 0 && age <= HINT_MAX_AGE_MS ? reason : null;
+}
+
+/**
+ * C12 (T2.1): why IdleWarning ended the last session in this tab, read once from `SIGNED_OUT_HINT_KEY` and removed. Only
+ * the two fixed words come out, and only for a hint from the last 12 hours that is not in the future; anything else is
+ * null and is removed too. Its value is never shown: S-01 shows its own sentence for the word. Each storage call is tried
+ * on its own and a throw gives null, with no log, since most visits have no hint: a hint that cannot be removed is not
+ * shown, so it cannot be shown twice.
+ */
+export function readSignedOutHint(storage: Storage | null, now: number): SignedOutReason | null {
+  if (storage === null) return null;
+  let text: string | null;
+  try {
+    text = storage.getItem(SIGNED_OUT_HINT_KEY);
+  } catch {
+    // Storage that refuses reads (a privacy mode): IdleWarning could not have written here either.
+    return null;
+  }
+  if (text === null) return null;
+  try {
+    storage.removeItem(SIGNED_OUT_HINT_KEY);
+  } catch {
+    // Not removable: shown now, it would be shown again at every visit for 12 hours.
+    return null;
+  }
+  return decodeSignedOutHint(text, now);
+}
+
+/** This tab's sessionStorage, or null where reading the property throws (blocked site data). */
+function tabStorage(): Storage | null {
+  try {
+    return typeof window === 'undefined' ? null : window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
 export interface LoginViewProps {
   email: string;
   password: string;
@@ -116,6 +177,8 @@ export interface LoginViewProps {
   error: string;
   notice: string | null;
   loading: boolean;
+  /** C12: why the last session in this tab ended, read after hydration (readSignedOutHint); null shows no line. */
+  signedOut?: SignedOutReason | null;
   /** False until React has hydrated; the submit button is disabled till then (default true for a static render). */
   hydrated?: boolean;
   onEmail: (v: string) => void;
@@ -124,31 +187,40 @@ export interface LoginViewProps {
   onSubmit: (e: FormEvent<HTMLFormElement>) => void;
 }
 
-/** S-01's markup for a given state (FR-ACC-05). It offers no way to make an account: accounts come only from an invitation. */
+/**
+ * S-01's markup for a given state (FR-ACC-05), in the gate frame's card (plan 1B Task 2): the heading; the signed-out line
+ * when the last session in this tab ended by the clock; the success notice; the form, with the error line beside the
+ * submit button (spec 9.7); then the footer. It offers no way to make an account: accounts come only from an invitation,
+ * and the footer says so.
+ */
 export function LoginView(v: LoginViewProps) {
-  return (
+  const signedOut = v.signedOut ?? null;
+  const lead = signedOut === null ? null : (
+    <Banner kind="session">
+      <p>{signedOut === 'idle' ? AUTH_COPY.signedOutIdle : AUTH_COPY.signedOutAbsolute}</p>
+      <p>{AUTH_COPY.signedOutKept}</p>
+    </Banner>
+  );
+  const footer = (
     <>
-      <h1>{SIGN_IN_COPY.heading}</h1>
+      <p><Link href="/forgot-password">{SIGN_IN_COPY.forgotLink}</Link></p>
+      <p>{AUTH_COPY.noAccount}</p>
+    </>
+  );
+  return (
+    <AuthCard title={SIGN_IN_COPY.heading} lead={lead} footer={footer}>
       <StatusRegion message={v.notice} />
-      <StatusRegion message={v.error === '' ? null : v.error} politeness="assertive" tone="error" />
       <form method="post" onSubmit={v.onSubmit}>
         <TextInput id="email" name="email" label={SIGN_IN_COPY.email} type="email" required autoComplete="username" spellCheck={false}
           value={v.email} onChange={(e) => v.onEmail(e.currentTarget.value)} />
-        <TextInput id="password" name="password" label={SIGN_IN_COPY.password} type={v.showPassword ? 'text' : 'password'} required
-          autoComplete="current-password" value={v.password} onChange={(e) => v.onPassword(e.currentTarget.value)} />
-        {/* The kit's Button cannot carry aria-pressed or aria-controls (ruling T16-5), so this is a native button in the kit's classes. */}
-        <p style={{ margin: 'calc(-1 * var(--space-4)) 0 var(--space-6)' }}>
-          <button type="button" className="ui-button ui-button--quiet ui-button--compact" aria-controls="password"
-            aria-pressed={v.showPassword} onClick={v.onToggleShow}>{SIGN_IN_COPY.showPassword}</button>
-        </p>
+        <PasswordField id="password" name="password" label={SIGN_IN_COPY.password} autoComplete="current-password"
+          value={v.password} onChange={(e) => v.onPassword(e.currentTarget.value)} show={v.showPassword} onToggleShow={v.onToggleShow} />
         <Button variant="primary" type="submit" disabled={v.loading || v.hydrated === false}>
           {v.loading ? SIGN_IN_COPY.submitting : SIGN_IN_COPY.submit}
         </Button>
+        <StatusRegion message={v.error === '' ? null : v.error} politeness="assertive" tone="error" />
       </form>
-      <p className="auth-footer">
-        <Link href="/forgot-password" style={{ display: 'inline-block', minHeight: '24px' }}>{SIGN_IN_COPY.forgotLink}</Link>
-      </p>
-    </>
+    </AuthCard>
   );
 }
 
@@ -164,7 +236,17 @@ export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [signedOut, setSignedOut] = useState<SignedOutReason | null>(null);
+  const hintRead = useRef(false);
   const hydrated = useHydrated();
+
+  // C12: the hint is read once, after hydration, so the server's render never depends on storage. The ref keeps a second
+  // run of the effect (React's development double run) from reading the removed hint as none.
+  useEffect(() => {
+    if (hintRead.current) return;
+    hintRead.current = true;
+    setSignedOut(readSignedOutHint(tabStorage(), Date.now()));
+  }, []);
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -183,6 +265,7 @@ export function LoginForm() {
 
   return (
     <LoginView email={email} password={password} showPassword={showPassword} error={error} notice={notice} loading={loading} hydrated={hydrated}
+      signedOut={signedOut}
       onEmail={setEmail} onPassword={setPassword} onToggleShow={() => setShowPassword((s) => !s)} onSubmit={onSubmit} />
   );
 }

@@ -1,32 +1,27 @@
-// app/(public)/login/page.tsx
 import { Suspense } from 'react';
+import { AuthCard } from '@/components/auth/AuthCard';
+import { GateFrame, type GateStop } from '@/components/layout/GateFrame';
 import { AUTH_COPY } from '@/lib/auth/copy';
+import { GATE_COPY } from '@/lib/shell/copy';
 import { pageTitle } from '@/lib/ui/title';
 import { LoginForm } from './LoginClient';
 
 export const metadata = { title: pageTitle(AUTH_COPY.titles.signIn) };
 
-/** S-01 Sign in (FR-ACC-05). The form is LoginClient.tsx's; `useSearchParams` there needs the Suspense boundary. */
+/** One stop: sign in. Too many sign-ins is a state of this page, on the same route (ruling L5-6). */
+const ROUTE: readonly GateStop[] = [{ label: GATE_COPY.stops.signIn, state: 'current' }];
+
+/**
+ * S-01 Sign in (FR-ACC-05), in the public gate frame (plan 1B Task 2, ruling L5-6). The form is LoginClient.tsx's;
+ * `useSearchParams` there needs the Suspense boundary, whose fallback already carries the heading. The logo is the frame
+ * column's, not the card's (ruling L5-8).
+ */
 export default function LoginPage() {
   return (
-    <div className="auth-container">
-      <div className="auth-card">
-        {/* eslint-disable-next-line @next/next/no-img-element -- the file is already sized for the 48 px-high logo
-            (app/globals.css), so next/image's client runtime stays off this public page (NFR-PERF-02;
-            __tests__/unit/auth-logo.test.ts). */}
-        <img
-          src="/logo-makai-252.png"
-          srcSet="/logo-makai-252.png 1x, /logo-makai-504.png 2x"
-          alt={AUTH_COPY.logoAlt}
-          className="auth-logo"
-          width={200}
-          height={60}
-          fetchPriority="high"
-        />
-        <Suspense fallback={<p>{AUTH_COPY.loading}</p>}>
-          <LoginForm />
-        </Suspense>
-      </div>
-    </div>
+    <GateFrame variant="public" route={ROUTE}>
+      <Suspense fallback={<AuthCard title={AUTH_COPY.titles.signIn}><p>{AUTH_COPY.loading}</p></AuthCard>}>
+        <LoginForm />
+      </Suspense>
+    </GateFrame>
   );
 }

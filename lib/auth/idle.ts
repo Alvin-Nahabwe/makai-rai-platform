@@ -22,6 +22,12 @@
  * keeps both variables out of the production images, compose files and runbooks.
  */
 
+/**
+ * The sessionStorage key of the signed-out hint (C12): IdleWarning writes `{ reason, at }` when a session ends by the
+ * clock, and S-01 reads it once, as one of two fixed words (LoginClient.tsx, readSignedOutHint). No draft key.
+ */
+export const SIGNED_OUT_HINT_KEY = 'makrai.signedOut';
+
 /** Seconds before the idle deadline at which the warning opens. */
 export const IDLE_WARNING_SECONDS = 120;
 

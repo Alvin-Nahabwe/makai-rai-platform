@@ -10,6 +10,16 @@ const SHOW_PASSWORD = 'Show password';
 const PASSWORD_CHANGED = 'Password changed. Please sign in with your new password.';
 const SOMETHING_WENT_WRONG = 'Something went wrong on our side. Try again.';
 const PASSWORD_HINT = (min: number): string => `At least ${min} characters.`;
+/**
+ * The admission's 429 (spec 9.7: the wait in words, beside the action), in whole minutes rounded up. It counts every
+ * sign-in from a browser it does not know, across the platform (lib/auth/signInAdmission.ts, never per person or
+ * address), so the words say that many people are signing in, not that this person tried too often (ruling L5-9). A
+ * locked account answers M-20 instead.
+ */
+const TOO_MANY_SIGN_INS = (minutes: number): string =>
+  minutes === 1
+    ? 'Too many people are signing in right now. Wait 1 minute, then try again.'
+    : `Too many people are signing in right now. Wait ${minutes} minutes, then try again.`;
 
 export const AUTH_COPY = Object.freeze({
   titles: Object.freeze({
@@ -24,6 +34,17 @@ export const AUTH_COPY = Object.freeze({
   resetHeading: 'Reset your password',
   backToSignIn: 'Back to sign in',
   showPassword: SHOW_PASSWORD,
+  /** S-01's footer (A page verdict, S-01): accounts come only from an invitation; "Owner" is the role's name (§2). */
+  noAccount: 'No account? You need an invitation. Ask an Owner of your organisation to invite you.',
+  /** S-01 after the idle sign-out (C12), read from the hint IdleWarning leaves (lib/auth/idle.ts). */
+  signedOutIdle: 'You were signed out because 12 hours passed since you signed in or last chose Stay signed in.',
+  /** S-01 after the 7-day limit (C12). */
+  signedOutAbsolute: 'You were signed out because 7 days passed since you signed in.',
+  /** Under either signed-out line. */
+  signedOutKept: 'Sign in again to carry on. Unsaved decisions and mitigations you typed in this browser come back when you open them again.',
+  tooManyAttempts: TOO_MANY_SIGN_INS,
+  /** S-02's lead (audit A 138). */
+  forgotLead: 'Enter the email you use to sign in. We will send you a link to set a new password.',
   /** The line under the change-password heading (audit A 61). */
   changeLead: 'When you change your password, you are signed out on every device, including this one. Then sign in with your new password.',
 });
@@ -56,8 +77,7 @@ export const SIGN_IN_COPY = Object.freeze({
   serverProblem: 'We could not sign you in because of a problem on our side. Wait a few minutes, then try again.',
   connectionLost: 'We could not sign you in. Check your internet connection and try again.',
   /** The admission's 429, with the wait in whole minutes rounded up (one sentence for 1, one for more). */
-  rateLimited: (minutes: number): string =>
-    minutes === 1 ? 'Too many sign-ins right now. Wait 1 minute and try again.' : `Too many sign-ins right now. Wait ${minutes} minutes and try again.`,
+  rateLimited: TOO_MANY_SIGN_INS,
 });
 
 /** Forgot password (S-02), read by ForgotPasswordClient. */
