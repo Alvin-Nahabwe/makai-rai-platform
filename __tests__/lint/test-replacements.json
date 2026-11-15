@@ -3086,5 +3086,13 @@
     "property": "No rule of app/globals.css paints text with the action fill colour; text uses the action-text role. Task 21 deleted --color-primary (an alias of --color-action) and --link, so the old case had nothing left to read.",
     "proof": "__tests__/unit/design-tokens.test.ts::1A (usage): no rule paints text with the action colour, which is a fill; text uses --color-action-text. The case parses every screen rule of app/globals.css (comments and @media print removed) and fails on any rule whose body has `color: var(--color-action)`, listing its selectors.",
     "task": "1A-21"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/project-page.test.tsx::UX-31 S5-1: the archived banner's words \"All projects page\" link to the organisation's projects, for every role; the sentence is today's",
+    "replacedBy": "__tests__/unit/project-page.test.tsx::UX-31 S5-1: the archived banner's words \"Projects page\" link to the organisation's projects, for every role; the sentence is the owner's ruling of 15 Nov 18:28",
+    "property": "The archived banner's link goes to the organisation's projects, for every role, and the sentence's three parts join to PROJECT_COPY.archivedBanner. The owner ruled on 15 Nov 2026 18:28 that the words are \"Projects page\" (the page's own heading), not \"All projects page\"; the link's target is unchanged.",
+    "proof": "The case now requires the joined parts to equal 'This project is archived. Nothing in it can be changed. An Owner or Admin can unarchive it on the Projects page.' literal for literal, and for each of the five roles the banner body to be before + <a href=\"/orgs/o/projects\">Projects page</a> + after. Only the pinned words and the title change.",
+    "task": "final hand-in item 5 (owner's ruling of 15 Nov 2026 18:28)"
   }
 ]

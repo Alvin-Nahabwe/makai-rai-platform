@@ -490,10 +490,10 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     expect(render({ descriptiveLine: '' })).not.toContain('project-page__facts');
   });
 
-  it('UX-31 S5-1: the archived banner\'s words "All projects page" link to the organisation\'s projects, for every role; the sentence is today\'s', () => {
-    // The split is pinned: the parts joined are the sentence the banner said before round 1, word for word.
+  it('UX-31 S5-1: the archived banner\'s words "Projects page" link to the organisation\'s projects, for every role; the sentence is the owner\'s ruling of 15 Nov 18:28', () => {
+    // The split is pinned: the parts joined are the sentence as the owner ruled it, 15 Nov 2026 18:28 ("Projects page", not "All projects page").
     expect(P.archivedBannerParts.before + P.archivedBannerParts.link + P.archivedBannerParts.after)
-      .toBe('This project is archived. Nothing in it can be changed. An Owner or Admin can unarchive it on the All projects page.');
+      .toBe('This project is archived. Nothing in it can be changed. An Owner or Admin can unarchive it on the Projects page.');
     expect(P.archivedBanner).toBe(P.archivedBannerParts.before + P.archivedBannerParts.link + P.archivedBannerParts.after);
     for (const role of ['owner', 'admin', 'assessor', 'reviewer', 'viewer'] as const) {
       const html = render({ archived: true, role });
