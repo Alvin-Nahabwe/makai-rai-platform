@@ -90,8 +90,8 @@ function readingRegions(data: QuestionPanelData, openWork: QuestionOpenWork | nu
  * The question page's frame (lane 1 Task 1; the Route sketch assigned.html and workspace-phone-saved.html), in this DOM
  * order, which is also the reading order at every width (workspace.css places the columns; nothing is reordered):
  *  1. the archived banner, when the project is archived;
- *  2. the top strip (breadcrumb, then the stage's tally and follow-up counts), shown from 1160px, and the position strip
- *     (previous, "Question n of N", next), shown under it; both need the stage's data, so neither renders without it;
+ *  2. the top strip (breadcrumb with the follow-up counts, then the stage's tally), shown from 1160px, and the position
+ *     strip (previous, "Question n of N", next), shown under it; both read the stage's data, which is required;
  *  3. the question: the running question's text as the page's one `h1` (FR-CNT-08), which takes focus on arrival (UX-42),
  *     its code line "{Q-ID} · {topic}" after it, the line for a question the personal data answer switched off, and the
  *     earlier-wording disclosure;
@@ -103,7 +103,7 @@ function readingRegions(data: QuestionPanelData, openWork: QuestionOpenWork | nu
  * withdraw, no way on. Exported so a unit test renders the markup without the loader.
  */
 export function QuestionPanelRegions({ data, openWork, route, stage }: {
-  data: QuestionPanelData; openWork?: QuestionOpenWork | null; route?: ReactNode; stage?: StagePageData;
+  data: QuestionPanelData; openWork?: QuestionOpenWork | null; route?: ReactNode; stage: StagePageData;
 }) {
   const question = data.question;
   const count = countFor(data);
@@ -114,12 +114,10 @@ export function QuestionPanelRegions({ data, openWork, route, stage }: {
   const historyHref = `${stageHref}/questions/${question.id}/history`;
   const doesNotApply = data.gateAnswer === 'no' && !questionApplies(runningContent(), data.runningQuestion.id, data.gateAnswer);
   const next = nextId === null ? null : neighbourOf(data, nextId);
-  // The previous question is read only for the position strip, which needs the stage's data.
-  const previous = previousId === null || stage === undefined ? null : neighbourOf(data, previousId);
-  // This question's row of the stage list: its open findings, for the decision card's sentence (brief: "0 if none").
-  // The page always passes the stage (it refuses a null one below); only a unit test renders without it. A stage list
-  // that lacks this question is a defect, said by name, never "nothing open".
-  const openFindingsOnQuestion = stage === undefined ? 0 : openFindingsOf(stage, question.id);
+  const previous = previousId === null ? null : neighbourOf(data, previousId);
+  // This question's row of the stage list: its open findings, for the decision card's sentence. A stage list that lacks
+  // this question is a defect, said by name, never "nothing open".
+  const openFindingsOnQuestion = openFindingsOf(stage, question.id);
   // The Findings section: for a person who may record, when there is an open finding to view or they may raise one; for
   // a reader, only when they may raise one (R4), since the reader's open findings are listed in the main column.
   const showFindings = data.canWrite ? data.openFinding !== null || data.canRaiseFinding : data.canRaiseFinding;
@@ -133,12 +131,8 @@ export function QuestionPanelRegions({ data, openWork, route, stage }: {
   return (
     <div className="question-page">
       <ArchivedBanner archived={data.projectArchived} />
-      {stage === undefined ? null : (
-        <>
-          <QuestionTopStrip stage={stage} n={index + 1} total={total} />
-          <PositionStrip previous={previous} next={next} n={index + 1} total={total} marks={stage.marks} currentId={question.id} scopeAnswer={stage.scopeAnswer} />
-        </>
-      )}
+      <QuestionTopStrip stage={stage} n={index + 1} total={total} />
+      <PositionStrip previous={previous} next={next} n={index + 1} total={total} marks={stage.marks} currentId={question.id} scopeAnswer={stage.scopeAnswer} />
       <div className="question-workspace">
         <div className="question-workspace__main">
           <section data-region="question" aria-labelledby="question-heading">

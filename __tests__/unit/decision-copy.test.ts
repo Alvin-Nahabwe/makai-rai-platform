@@ -220,8 +220,12 @@ describe('lib/question/copy.ts', () => {
     expect(QUESTION_COPY.current.withdrawn('Duplicate')).toBe('No decision. The last decision was withdrawn (Duplicate).');
     expect(QUESTION_COPY.current.enteredBy('Joseph K.', '12 Oct 2026', '10:42 EAT')).toBe('Entered by: Joseph K. on 12 Oct 2026 at 10:42 EAT');
     // copy review 17b, finding 14: the rest of the page's words, pinned once each
-    expect([QUESTION_COPY.nav.label, QUESTION_COPY.nav.previous, QUESTION_COPY.nav.next]).toEqual(['Questions in this stage', 'Previous question', 'Next question']);
-    expect(QUESTION_COPY.nav.position(4, 22, 'Pre-processing')).toBe('Question 4 of 22 in Pre-processing');
+    expect(QUESTION_COPY.nav.label).toBe('Questions in this stage');
+    // Lane 1 Task 1: the position strip names its links in words (frame.previous, frame.next); the old bare words are gone.
+    expect(QUESTION_COPY.frame.previous('Who decides?', 3, 'Done')).toBe('Previous question: Who decides? (question 3, Done)');
+    expect(QUESTION_COPY.frame.next('Who decides?', 5, 'Partly')).toBe('Next question: Who decides? (question 5, Partly)');
+    expect(QUESTION_COPY.nav).not.toHaveProperty('position');
+    expect(QUESTION_COPY.headings).not.toHaveProperty('suggestions');
     expect([QUESTION_COPY.headings.current, QUESTION_COPY.headings.record, QUESTION_COPY.headings.findings])
       .toEqual(['Current decision', 'Record a decision', 'Findings']);
     expect(QUESTION_COPY.headings).not.toHaveProperty('question');

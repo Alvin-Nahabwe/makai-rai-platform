@@ -78,11 +78,11 @@ describe('the page around the decision slot', () => {
     expect(inStage[slotProps[0].next!.number - 1].id).toBe('Q-PP-15');
   });
 
-  it('on the stage\'s last question next is null; rendered without the stage (unit tests only: the page refuses that) the open findings are 0; a next id the content lacks throws naming it', async () => {
+  it('on the stage\'s last question next is null; a question with nothing open gives 0; a next id the content lacks throws naming it', async () => {
     await render({ ...PANEL, position: { index: inStage.length - 1, total: inStage.length, previousId: 'Q-PP-22', nextId: null } });
     expect(slotProps[0].next).toBeNull();
     slotProps.length = 0;
-    renderToStaticMarkup(await QuestionPanelRegions({ data: PANEL }));
+    await render(PANEL, stageFixture());
     expect(slotProps[0].openFindingsOnQuestion).toBe(0);
     await expect(render({ ...PANEL, position: { ...PANEL.position, nextId: 'Q-NOPE-99' } })).rejects.toThrow(/Q-NOPE-99/);
   });

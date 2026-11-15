@@ -51,7 +51,7 @@ export function DecisionSlot(props: DecisionSlotProps): ReactElement | null {
           isScopeQuestion={question.type === 'gate'}
         />
       </section>
-      <section data-region="answer-form" aria-labelledby="s12-answer-form">
+      <section className="decision-slot__controls" data-region="answer-form" aria-labelledby="s12-answer-form">
         <h2 id="s12-answer-form">{Q.headings.record}</h2>
         <DecisionForm key={`${data.projectId}:${question.id}`} data={data} />
         {/* Mounted whenever there is a current version, with the permission as a prop, so after a withdrawal it stays to

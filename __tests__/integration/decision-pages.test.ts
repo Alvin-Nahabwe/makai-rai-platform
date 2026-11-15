@@ -45,7 +45,7 @@ const panelData = (role: OrgRole, questionId: string) =>
 
 describe('S-12 page', () => {
   it('UX-08 FR-CNT-02 (screen): QuestionContent gets the suggestion count and the folded list of ways carries id="suggestions"', async () => {
-    const h = renderToStaticMarkup(createElement(QuestionPanelRegions, { data: await panelData('assessor', 'Q-PP-01') }));
+    const h = renderToStaticMarkup(createElement(QuestionPanelRegions, { data: await panelData('assessor', 'Q-PP-01'), stage: (await import('../helpers/stageFixture')).stageFixture() }));
     // Lane 1 Task 1 (spec 9.3): one folded control in the guidance aside whose summary carries the count; the list opens in place.
     expect(h).toMatch(/<details class="question-content__ways" id="suggestions"><summary class="question-content__ways-summary">[\s\S]*?Ways teams address this \(3\)<\/summary>/);
     expect(h.slice(h.indexOf('<details class="question-content__ways"'), h.indexOf('</details>', h.indexOf('<details class="question-content__ways"')))).toContain(SUGGESTIONS_COPY.intro);
@@ -53,7 +53,7 @@ describe('S-12 page', () => {
   });
 
   it('FR-DEC-06 FR-DEC-10 (screen): a new project\'s S-12 shows No decision yet, an empty form with empty date fields and Save decision', async () => {
-    const h = renderToStaticMarkup(createElement(QuestionPanelRegions, { data: await panelData('assessor', 'Q-PP-01') }));
+    const h = renderToStaticMarkup(createElement(QuestionPanelRegions, { data: await panelData('assessor', 'Q-PP-01'), stage: (await import('../helpers/stageFixture')).stageFixture() }));
     expect(h).toContain('No decision yet.');
     expect(h).toMatch(/<button[^>]*type="submit"[^>]*>Save decision<\/button>/);
     expect([...h.matchAll(/<input[^>]*inputmode="numeric"[^>]*>/gi)].every((m) => !/value="[^"]+"/.test(m[0]))).toBe(true);

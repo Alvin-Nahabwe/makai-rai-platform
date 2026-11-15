@@ -73,7 +73,7 @@ beforeEach(() => {
 
 describe('S-12 shell', () => {
   it('FR-DEC-01 UX-08: S-12 shell regions in order, each but the evidence block labelled by a heading, evidence block inside the answer form', async () => {
-    const html = renderToStaticMarkup(await QuestionPanelRegions({ data: PANEL }));
+    const html = renderToStaticMarkup(await QuestionPanelRegions({ stage: stageFixture(), data: PANEL }));
     // Lane 1 Task 1: the seal note sits above the decision slot, which holds the decision's regions (its stub until lane 2's
     // card merges); the list of ways teams address this is inside the guidance aside (mocked here), not a section of its own.
     expect([...html.matchAll(/data-region="([a-z-]+)"/g)].map((m) => m[1]))
@@ -85,7 +85,7 @@ describe('S-12 shell', () => {
   });
 
   it('UX-08: every labelled region is named by a heading of the page that it points to, and the evidence block has no heading of its own', async () => {
-    const html = renderToStaticMarkup(await QuestionPanelRegions({ data: PANEL }));
+    const html = renderToStaticMarkup(await QuestionPanelRegions({ stage: stageFixture(), data: PANEL }));
     const labelled = [...html.matchAll(/aria-labelledby="([^"]+)"/g)].map((m) => m[1]);
     expect(new Set(labelled).size).toBe(5);
     expect(html).not.toContain('s12-evidence');
@@ -97,7 +97,7 @@ describe('S-12 shell', () => {
 
   it('FR-SUG-02 UX-08: for the gate question (nothing to suggest) the page renders no Ways teams address this section and no link to it', async () => {
     const gate = { ...QUESTION, id: 'Q-PP-GATE-SENSITIVE', type: 'gate' } as LoadedQuestion;
-    const html = renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, question: gate, runningQuestion: gate } }));
+    const html = renderToStaticMarkup(await QuestionPanelRegions({ stage: stageFixture(), data: { ...PANEL, question: gate, runningQuestion: gate } }));
     expect(html).not.toContain('Ways teams address this');
     expect(html).not.toContain('s12-suggestions');
     expect(html).not.toContain('data-region="suggestions"');
@@ -107,15 +107,15 @@ describe('S-12 shell', () => {
   });
 
   it('UX-31 FR-PRJ-03: an archived project shows the archived banner on S-12', async () => {
-    const html = renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, projectArchived: true } }));
+    const html = renderToStaticMarkup(await QuestionPanelRegions({ stage: stageFixture(), data: { ...PANEL, projectArchived: true } }));
     expect(html).toContain(PROJECT_COPY.archivedBanner);
     // the banner is above the regions
     expect(html.indexOf('This project is archived')).toBeLessThan(html.indexOf('data-region="question"'));
-    expect(renderToStaticMarkup(await QuestionPanelRegions({ data: PANEL }))).not.toContain('This project is archived');
+    expect(renderToStaticMarkup(await QuestionPanelRegions({ stage: stageFixture(), data: PANEL }))).not.toContain('This project is archived');
   });
 
   it('FR-DEC-01 (helper): each region\'s component gets the props its contract row names, from the panel data', async () => {
-    renderToStaticMarkup(await QuestionPanelRegions({ data: PANEL }));
+    renderToStaticMarkup(await QuestionPanelRegions({ stage: stageFixture(), data: PANEL }));
     // The aside gets the count, the question's risk areas, and the list as its children, which it shows folded.
     const content = propsSeen.QuestionContent as { question: unknown; suggestionCount: number; riskAreas: unknown[]; children: { props: unknown } };
     expect(content).toMatchObject({ question: QUESTION, suggestionCount: 3, riskAreas: [] });
@@ -134,14 +134,14 @@ describe('S-12 shell', () => {
   });
 
   it('FR-DEC-01 FR-DEC-06 UX-14 (helper): with no decision yet the next version is 1, and a read-only or archived panel has no evidence block to change', async () => {
-    renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, current: null } }));
+    renderToStaticMarkup(await QuestionPanelRegions({ stage: stageFixture(), data: { ...PANEL, current: null } }));
     expect(propsSeen.SealNote).toMatchObject({ nextVersionNumber: 1 });
     expect(propsSeen.EvidenceBlock).toMatchObject({ initial: [], disabled: false });
     expect((propsSeen.QuestionContent as { children: { props: unknown } }).children.props).toMatchObject({ tickedOptions: [] });
     expect(propsSeen.QuestionFindingLink).toMatchObject({ currentVersionId: null });
     for (const data of [{ ...PANEL, canWrite: false }, { ...PANEL, canWrite: false, projectArchived: true }]) {
       delete propsSeen.EvidenceBlock;
-      const html = renderToStaticMarkup(await QuestionPanelRegions({ data }));
+      const html = renderToStaticMarkup(await QuestionPanelRegions({ data, stage: stageFixture() }));
       expect(propsSeen.EvidenceBlock).toBeUndefined();
       expect(html).not.toContain('data-region="evidence-block"');
     }

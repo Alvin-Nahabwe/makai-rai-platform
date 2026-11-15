@@ -2246,5 +2246,37 @@
     "property": "With a decision recorded, the empty line goes and Q-PP-01's row shows its status in words (Partly) followed by its decided-on date (Oct 2026).",
     "proof": "One expectation's pattern changes and none is removed: `class=\"ui-mark__words\">Partly</span>[\\s\\S]*?class=\"ui-plate__state\">Oct 2026<` becomes `class=\"status-label\">Partly</span> · Oct 2026<`. The row is no longer the kit's ItemPlate (lane 1 Task 2, owner's answer R1: each question a row on the route's line); its meta line is the code, the status in words in a status-label, then the state parts joined by ' · ', the decided-on date first. The new pattern is stricter: the date must follow the status directly. __tests__/unit/stage-route.test.tsx::the state line: the decided-on date, \"{n} of {m} in place\", open findings only above zero, the seal and good-practice markers, with no leading separator holds the whole meta line.",
     "task": "1B-route-L1-T2"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/integration/decision-pages.test.ts::FR-DEC-06 FR-DEC-10 (screen): a new project's S-12 shows No decision yet, an empty form with empty date fields and Save decision",
+    "replacedBy": "__tests__/integration/decision-pages.test.ts::FR-DEC-06 FR-DEC-10 (screen): a new project's S-12 shows No decision yet, an empty form with empty date fields and Save decision",
+    "property": "A new project's S-12, rendered from the real panel, shows No decision yet, an empty form with empty date fields, and Save decision.",
+    "proof": "Fix round 1 (review M4): QuestionPanelRegions' `stage` (the stage page's data) is now required, so no render can invent \"0 open findings\" or drop the strips; the page already refuses a null stage list. The case passes the fixture stage (__tests__/helpers/stageFixture.ts: the fixture bundle's questions, nothing recorded) by a dynamic import inside the case, so the module's imports are unchanged. One line changed: the render call adds `stage`. The three expectations are unchanged and pass against the b5 slot.",
+    "task": "1B-route-L1-T1 fix round 1"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/decision-components.test.tsx::FR-DEC-01 UX-31 UX-14: a viewer and an archived project get no form",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::FR-DEC-01 UX-31 UX-14: a viewer and an archived project get no form",
+    "property": "A Viewer and anyone in an archived project get no decision form on S-12, and the Viewer reads the one line that says why.",
+    "proof": "Fix round 1 (review M4): QuestionPanelRegions' `stage` (the stage page's data) is now required, so no render can invent \"0 open findings\" or drop the strips; the page already refuses a null stage list. The case passes the fixture stage (__tests__/helpers/stageFixture.ts: the fixture bundle's questions, nothing recorded) by a dynamic import inside the case, so the module's imports are unchanged. The two render calls add `stage: stageFixture()` after the import line; the three expectations (the Viewer's note, no Save decision, no <form> for either) are unchanged.",
+    "task": "1B-route-L1-T1 fix round 1"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/decision-components.test.tsx::(module)",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::UX-42 W-3: one h1 for the question that takes focus, and Previous and Next go to the neighbouring questions",
+    "property": "The S-12 regions cases render a panel for Q-PP-01 whose neighbours the page can name.",
+    "proof": "Fix round 1 (review M4): QuestionPanelRegions' `stage` (the stage page's data) is now required, so no render can invent \"0 open findings\" or drop the strips; the page already refuses a null stage list. The case passes the fixture stage (__tests__/helpers/stageFixture.ts: the fixture bundle's questions, nothing recorded) by a dynamic import inside the case, so the module's imports are unchanged. One line of the module's PANEL changed: position { index: 1, previousId: 'Q-PP-00' } became { index: 0, previousId: null }. The position strip now names the previous question in words (neighbourOf reads its text and place from the content), and 'Q-PP-00' is no question, so the page rightly throws naming it; Q-PP-01 is the stage's first question (index 0), which has no previous. The UX-42 case still sets its own neighbours (Q-PP-01, Q-PP-03).",
+    "task": "1B-route-L1-T1 fix round 1"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::UX-31 FR-PRJ-03: an archived project shows the archived banner on S-12",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::UX-31 FR-PRJ-03: an archived project shows the archived banner on S-12",
+    "property": "An archived project's S-12 shows the archived banner above the regions; a live one does not.",
+    "proof": "Fix round 1 (review M4): QuestionPanelRegions' `stage` (the stage page's data) is now required, so no render can invent \"0 open findings\" or drop the strips; the page already refuses a null stage list. The case passes the fixture stage (__tests__/helpers/stageFixture.ts: the fixture bundle's questions, nothing recorded) by a dynamic import inside the case, so the module's imports are unchanged. The two render calls add `stage: stageFixture()` (the helper is already imported by this file); the expectations are unchanged.",
+    "task": "1B-route-L1-T1 fix round 1"
   }
 ]

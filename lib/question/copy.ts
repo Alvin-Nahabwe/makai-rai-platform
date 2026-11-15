@@ -8,9 +8,6 @@
 export const QUESTION_COPY = Object.freeze({
   nav: Object.freeze({
     label: 'Questions in this stage',
-    previous: 'Previous question',
-    next: 'Next question',
-    position: (n: number, of: number, stage: string): string => `Question ${n} of ${of} in ${stage}`,
     /** The strip's link to the stage page (design spec 9.3; plan 1C `DECISION_COPY.allQuestionsLink`). */
     allQuestions: 'All questions',
   }),
@@ -20,10 +17,12 @@ export const QUESTION_COPY = Object.freeze({
    * position strip under 1160px, and the guidance aside's risk areas and folded list.
    */
   frame: Object.freeze({
-    /** The tally's heading, read by a screen reader only (sketch `.tally h2.sr`). */
+    /** The tally list's label (the sketch's hidden `.tally h2.sr` words; a label, so no heading comes before the h1). */
     tallyHeading: "Your team's work in this stage",
-    /** The accessible name of the small button that shows a term's definition beside its first use (spec 6). */
+    /** The accessible name of the (i) beside a noun the vocabulary defines (spec 6; owner's ruling of 15 Nov, 11:00). */
     whatIs: (term: string): string => `What is a ${term}?`,
+    /** The accessible name of the (i) beside a status word the vocabulary defines: 'What does "Not yet" mean?'. */
+    whatMeans: (term: string): string => `What does "${term}" mean?`,
     /**
      * The position strip's links (phone sketch): the neighbour's words, then its place (the number the link shows) and its
      * status in words, never the mark alone.
@@ -40,7 +39,6 @@ export const QUESTION_COPY = Object.freeze({
     seals: 'Sealed reviews',
     record: 'Record a decision',
     findings: 'Findings',
-    suggestions: 'Ways teams address this',
   }),
   /**
    * Under the code line of a question the personal data answer switched off (workshop walk S3). The first sentence of

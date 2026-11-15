@@ -40,33 +40,41 @@
     margin-block-start: calc(-1 * var(--space-4));
   }
 
+  /*
+   * Two rows (fix round 1, I1): the breadcrumb with the follow-up counts at its right end, then the tally across. The
+   * sketch puts the counts on the tally's row; with every kind at two digits that row needs about 1,100px, more than the
+   * 953px a 1280 window leaves, and a wrapped row would push the decision past the 230px gate. DOM order is visual order.
+   */
   .question-top {
-    display: block;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-1) var(--space-6);
     padding-block: var(--space-2);
     border-block-end: 1px solid var(--color-border-container);
   }
 }
 
 .question-top .ui-breadcrumb {
-  margin-block-end: var(--space-2);
+  margin: 0;
 }
 
-.question-top__line {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2) var(--space-6);
-  font-size: 0.9375rem;
-  line-height: 1.6;
+.question-top__tally {
+  grid-column: 1 / -1;
 }
 
 .question-top__tally {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-1) var(--space-4);
+  align-items: center;
+  /* 12px between kinds (the sketch's 16 less 4): with every kind at two digits and each defined word's (i), the row needs
+     about 930px, which leaves room in the 951px a 1280 window with a 17px scroll bar gives it (fix round 1). */
+  gap: var(--space-1) var(--space-3);
   margin: 0;
   padding: 0;
   list-style: none;
+  font-size: 0.9375rem;
+  line-height: 1.6;
 }
 
 /* Each kind: its mark, then the bold count and the words (the mark's colour is the kit's, StatusMark.css). */
@@ -83,13 +91,14 @@
   font-weight: var(--font-weight-bold);
 }
 
-/* The follow-up counts, pushed right on the tally's line. */
+/* The follow-up counts, at the right end of the breadcrumb's row. */
 .question-top__follow {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-1) var(--space-4);
   margin: 0 0 0 auto;
+  font-size: 0.9375rem;
 }
 
 .question-top__count {
@@ -111,56 +120,6 @@
 
 .question-top__count > a.question-top__overdue {
   color: var(--color-overdue);
-}
-
-/* The toggletip that opens a term's definition (spec 6): a 24px target, quiet until hovered. */
-.question-top__tip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  inline-size: var(--target-min);
-  block-size: var(--target-min);
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--color-ink-muted);
-  cursor: pointer;
-}
-
-.question-top__tip:hover {
-  color: var(--color-ink);
-}
-
-.question-top__tip-body {
-  max-inline-size: 20rem;
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--color-border-container);
-  border-radius: var(--radius-control);
-  background: var(--color-surface);
-  color: var(--color-ink);
-  box-shadow: var(--shadow-surface);
-  font-size: var(--font-size-small);
-  line-height: var(--line-height-body);
-}
-
-.question-top__tip-body .ui-definition {
-  color: var(--color-ink);
-}
-
-/* Where anchor positioning is supported, the definition opens under its button; elsewhere the browser centres it. */
-@supports (anchor-name: --a) {
-  [popovertarget="question-top-tip-finding"] { anchor-name: --question-top-finding; }
-  [popovertarget="question-top-tip-mitigation"] { anchor-name: --question-top-mitigation; }
-  #question-top-tip-finding { position-anchor: --question-top-finding; }
-  #question-top-tip-mitigation { position-anchor: --question-top-mitigation; }
-
-  .question-top__tip-body {
-    inset: auto;
-    margin: var(--space-1) 0 0;
-    position-area: block-end span-inline-start;
-    position-try-fallbacks: flip-block, flip-inline;
-  }
 }
 
 /* ── The position strip, under 1160px (phone sketch `.strip`) ── */
@@ -256,6 +215,31 @@ a.position-strip__step:hover {
 
 .position-strip__ring .ui-mark__shape {
   display: block;
+}
+
+/*
+ * Under 360px "Question 22 of 24" with two-digit neighbours does not fit beside them (fix round 1, M1): the word
+ * "Question" and the two lengths of line go, the place stays ("22 of 24", the screen reader still hears "Question"), and
+ * the links' padding shrinks to keep their 44px targets.
+ */
+@media (width < 22.5rem) {
+  .position-strip__here::before,
+  .position-strip__here::after {
+    display: none;
+  }
+
+  .position-strip__word {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .position-strip__step {
+    padding: 0 var(--space-1);
+  }
 }
 
 /* ── The columns ── */
@@ -403,11 +387,10 @@ a.position-strip__step:hover {
   .question-top,
   .position-strip,
   .question-workspace__route,
-  .decision-slot form,
+  .decision-slot__controls,
   .decision-slot .question-foot,
   .question-content__ways-summary,
-  .question-top__tip,
-  .question-top__tip-body {
+  .ui-term-tip {
     display: none !important;
   }
 
@@ -423,7 +406,8 @@ a.position-strip__step:hover {
     margin-block-start: var(--space-6);
   }
 
-  /* The folded list prints open: its text is guidance too. */
+  /* The folded list prints open where the browser supports ::details-content (Chromium); elsewhere a closed list does
+     not print (known limit: its children are not rendered at all, so no rule here can show them). */
   .question-content__ways::details-content {
     content-visibility: visible;
     display: block;

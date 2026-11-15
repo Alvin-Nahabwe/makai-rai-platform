@@ -8,6 +8,7 @@ import { PROJECT_COPY } from '@/lib/project/copy';
 import { AUTHZ_COPY } from '@/lib/authz/copy';
 import { QUESTION_COPY } from '@/lib/question/copy';
 import { runningContent } from '@/lib/content/loader';
+import { stageFixture } from '../helpers/stageFixture';
 
 /**
  * The read-only question page (plan 1C Task 7; rulings R1 to R7 of the lane 6 brief of 14 November 2026): a person who
@@ -76,7 +77,7 @@ const WORK: QuestionOpenWork = {
 };
 
 const render = async (data: QuestionPanelData, openWork: QuestionOpenWork | null = WORK): Promise<string> =>
-  renderToStaticMarkup(await QuestionPanelRegions({ data, openWork }));
+  renderToStaticMarkup(await QuestionPanelRegions({ data, openWork, stage: stageFixture() }));
 const regions = (html: string): string[] => [...html.matchAll(/data-region="([a-z-]+)"/g)].map((m) => m[1]);
 const main = (html: string): string => html.match(/<div class="question-workspace__main">([\s\S]*?)<div class="question-workspace__guide">/)![1];
 const textOf = (html: string): string => html.replace(/<[^>]+>/g, '');

@@ -85,6 +85,102 @@ test('spec 9.3 item 7 (joint gate): at 1280 by 800, with the real Q-PP-01 in the
   expect(m.slotTop, `the decision slot starts at ${m.slotTop}px`).toBeLessThanOrEqual(230);
 });
 
+/** Saves a decision with a status and, for Not yet and Not applicable, a main reason (the fixture's codes), as the Assessor. */
+async function decide(baseURL: string, projectId: string, questionId: string, status: string, reasonCode: string | null = null): Promise<void> {
+  const ctx = await seatRequest(baseURL, 'assessor');
+  try {
+    const res = await ctx.post(`/api/v1/orgs/${fixtureOrgSlug()}/projects/${projectId}/decisions`, { data: {
+      requestId: crypto.randomUUID(), stage: 'pre-processing', questionId, baseVersionNumber: null,
+      status: questionId === 'Q-PP-GATE-SENSITIVE' ? null : status, scopeAnswer: questionId === 'Q-PP-GATE-SENSITIVE' ? 'no' : null,
+      optionsInPlace: [], reasonCode, reason: `Seeded ${status} for the full tally.`,
+      decidedBy: { kind: 'outside_role', role: 'supervisor' }, declaredDate: '2026-10-12', evidenceIds: [],
+    } });
+    expect(res.status(), `${questionId} ${status}`).toBe(201);
+  } finally { await ctx.dispose(); }
+}
+
+/**
+ * The full tally the sketch draws, at two digits (fix round 1, I1; owner's ruling of 11:00): the project gets one real
+ * decision of every kind (done, partly, not yet, not applicable, the personal data question at No, so two do not apply),
+ * which raises real open findings; then, because the fixture stage has 24 questions, the counts are set in the page to
+ * the two-digit numbers (9 done, 16 partly, 12 not yet, 1 not applicable, 2 do not apply, 1 answered, 13 no decision,
+ * 11 open findings) and, since the fixture has no overdue mitigation, an "1 overdue mitigation" count with its (i) is
+ * cloned from the open-findings one. Returns the strip's measures.
+ */
+async function fullTally(page: Page, baseURL: string, info: TestInfo, label: string) {
+  const m = await page.evaluate(() => {
+    const strip = document.querySelector('.question-top')!;
+    const numbers: Record<string, string> = { done: '9', partly: '16', not_yet: '12', not_applicable: '1', does_not_apply: '2', scope_answered: '1', no_decision: '13' };
+    for (const li of strip.querySelectorAll<HTMLElement>('.question-top__tally > li')) {
+      const b = li.querySelector('b');
+      const n = numbers[li.dataset.markKind ?? ''];
+      if (b !== null && n !== undefined) b.textContent = n;
+    }
+    const finding = strip.querySelector<HTMLElement>('.question-top__count')!;
+    finding.querySelector('[data-term="finding"]')!.textContent = '11 open findings';
+    if (strip.querySelectorAll('.question-top__count').length === 1) {
+      const overdue = finding.cloneNode(true) as HTMLElement;
+      overdue.querySelector('a')!.classList.add('question-top__overdue');
+      overdue.querySelector('[data-term]')!.textContent = '1 overdue mitigation';
+      overdue.querySelector('a')!.prepend(finding.querySelector('.ui-term-tip__button svg')!.cloneNode(true));
+      for (const el of overdue.querySelectorAll('[id]')) el.id = `${el.id}-clone`;
+      finding.after(overdue);
+    }
+    const tally = strip.querySelector<HTMLElement>('.question-top__tally')!;
+    const crumbs = strip.querySelector<HTMLElement>('.ui-breadcrumb')!;
+    const follow = strip.querySelector<HTMLElement>('.question-top__follow')!;
+    const items = [...tally.children] as HTMLElement[];
+    const gap = parseFloat(getComputedStyle(tally).columnGap);
+    const tallyNeeds = Math.round(items.reduce((w, li) => w + li.getBoundingClientRect().width, 0) + gap * (items.length - 1));
+    const lineTops = new Set(items.map((li) => Math.round(li.getBoundingClientRect().top)));
+    const r = (el: Element) => el.getBoundingClientRect();
+    return {
+      stripWidth: Math.round(r(strip).width), stripTop: Math.round(r(strip).top), stripBottom: Math.round(r(strip).bottom),
+      tallyNeeds, tallyHas: Math.round(tally.clientWidth), tallyRows: lineTops.size, tallyHeight: Math.round(r(tally).height),
+      crumbsWidth: Math.round(r(crumbs).width), followWidth: Math.round(r(follow).width),
+      crumbsRowTop: Math.round(r(crumbs).top), followTop: Math.round(r(follow).top), tips: strip.querySelectorAll('.ui-term-tip__button').length,
+    };
+  });
+  const slot = await page.evaluate(() => {
+    const h = document.getElementById('question-heading')!;
+    const range = document.createRange();
+    range.selectNodeContents(h);
+    return {
+      h1LastLineBottom: Math.round(Math.max(...[...range.getClientRects()].map((x) => x.bottom))),
+      slotTop: Math.round(document.querySelector('[data-region="decision-slot"]')!.getBoundingClientRect().top),
+    };
+  });
+  const all = { ...m, ...slot };
+  info.annotations.push({ type: label, description: JSON.stringify(all) });
+  console.log(`FULL ${label} ${JSON.stringify(all)}`);
+  return all;
+}
+
+test('fix round 1 (I1, owner 11:00): the full tally with every (i) at 1280x800 and 1440x900: the strip\'s rows and the slot', async ({ page, baseURL }, info) => {
+  const projectId = await newProject(baseURL!);
+  for (const id of ['Q-PP-02', 'Q-PP-03', 'Q-PP-04']) await decide(baseURL!, projectId, id, 'done');
+  for (const id of ['Q-PP-05', 'Q-PP-06']) await decide(baseURL!, projectId, id, 'partly');
+  await decide(baseURL!, projectId, 'Q-PP-07', 'not_yet', 'ny_planned_later');
+  await decide(baseURL!, projectId, 'Q-PP-08', 'not_applicable', 'na_other');
+  await decide(baseURL!, projectId, 'Q-PP-GATE-SENSITIVE', 'scope');
+  const results: Record<string, Awaited<ReturnType<typeof fullTally>>> = {};
+  for (const [w, h] of [[1280, 800], [1440, 900], [1160, 800]] as const) {
+    await page.setViewportSize({ width: w, height: h });
+    await openQuestion(page, 'assessor', Q, baseURL!, projectId);
+    await page.locator('#question-heading').evaluate((el, text) => { el.textContent = text; }, REAL_Q01);
+    // Every kind is really there before the numbers are raised.
+    await expect(page.locator('.question-top__tally > li')).toHaveCount(7);
+    results[`${w}x${h}`] = await fullTally(page, baseURL!, info, `${w}x${h}`);
+    await shot(page, info, `full-tally-${w}x${h}`);
+  }
+  const r1280 = results['1280x800'];
+  // Every (i): two follow-up counts and five defined status words.
+  expect(r1280.tips).toBe(7);
+  expect(r1280.tallyRows, `the tally needs ${r1280.tallyNeeds}px of ${r1280.tallyHas}px at 1280`).toBe(1);
+  expect(r1280.followTop, 'the follow-up counts are on the breadcrumb\'s row').toBeLessThanOrEqual(r1280.crumbsRowTop + 4);
+  expect(r1280.slotTop, `the decision slot starts at ${r1280.slotTop}px at 1280x800`).toBeLessThanOrEqual(230);
+});
+
 test('R4: the top strip at 1280 is one line of breadcrumb and one of tally, with the follow-up counts as links and their definitions one press away', async ({ page, baseURL }, info) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   const projectId = await newProject(baseURL!);
@@ -99,22 +195,40 @@ test('R4: the top strip at 1280 is one line of breadcrumb and one of tally, with
   await expect(crumbs.getByRole('link')).toHaveCount(2);
   await expect(crumbs.getByRole('link', { name: 'Pre-processing', exact: true })).toHaveAttribute('href', `/orgs/${fixtureOrgSlug()}/projects/${projectId}/stages/pre-processing`);
   await expect(crumbs.locator('[aria-current="page"]')).toHaveText('Question 1 of 24');
-  await expect(strip.locator('.question-top__tally > li')).toHaveText(['1 done', '1 partly', '22 no decision']);
+  // Each item's text starts with its count and words (a defined word's (i) holds its definition after them, hidden).
+  await expect(strip.locator('.question-top__tally > li')).toHaveText([/^1 done/, /^1 partly/, /^22 no decision$/]);
   const findings = strip.getByRole('link', { name: '1 open finding', exact: true });
   await expect(findings).toHaveAttribute('href', `/orgs/${fixtureOrgSlug()}/projects/${projectId}/findings`);
   await expect(strip.getByText(/overdue mitigation/)).toHaveCount(0);
   // One line each: the tally's line is no taller than one 24px line plus its leading.
-  const line = await box(strip.locator('.question-top__line'));
-  expect(line.height, 'the tally line is one line at 1280').toBeLessThanOrEqual(30);
-  // The definition of "finding" opens from the small button beside the count, and is the link's description.
-  const def = page.locator('#question-top-def-finding');
+  const line = await box(strip.locator('.question-top__tally'));
+  expect(line.height, 'the tally is one line at 1280').toBeLessThanOrEqual(30);
+  // TermTip (owner's ruling of 11:00): keyboard focus opens the definition, Escape closes it, a press opens it; the link is
+  // described by it. The sentence is the vocabulary's.
+  const def = page.locator('#term-tip-finding-def');
+  const tip = strip.getByRole('button', { name: QUESTION_COPY.frame.whatIs('finding') });
   await expect(def).toBeHidden();
-  await strip.getByRole('button', { name: QUESTION_COPY.frame.whatIs('finding') }).click();
-  await expect(def).toBeVisible();
-  await expect(findings).toHaveAccessibleDescription(/A gap your team has noted/);
-  await shot(page, info, 'top-strip-1280-definition-open');
+  await tip.focus();
+  await expect(def, 'focus opens it').toBeVisible();
+  await expect(def).toHaveText('A gap your team has noted for a question, so it can be dealt with and closed.');
+  // Taken with the tip's button focused (the shared helper blurs first, which would close a tip opened by focus).
+  await page.screenshot({ path: 'test-results/route-T1/top-strip-1280-definition-open.png' });
   await page.keyboard.press('Escape');
-  await expect(def).toBeHidden();
+  await expect(def, 'Escape closes it').toBeHidden();
+  await page.mouse.click(5, 5);
+  await tip.click();
+  await expect(def, 'a press opens it').toBeVisible();
+  await page.mouse.click(700, 600);
+  await expect(def, 'a press elsewhere closes it').toBeHidden();
+  await expect(findings).toHaveAccessibleDescription(/A gap your team has noted/);
+  // A status word's (i): "Partly" is defined, so it has one; tab to it from the finding's (i)... it opens on focus too.
+  const partly = strip.getByRole('button', { name: QUESTION_COPY.frame.whatMeans('Partly') });
+  await partly.focus();
+  await expect(page.locator('#term-tip-partly-def')).toHaveText('Some of it is in place, but not all of it.');
+  await expect(page.locator('#term-tip-partly-def')).toBeVisible();
+  const box24 = await box(partly);
+  expect(Math.min(box24.width, box24.height), 'a 24px target').toBeGreaterThanOrEqual(24);
+  await page.keyboard.press('Escape');
   await expectNoSeriousA11yViolations(page, 'question page top strip, 1280');
   for (const [w, h] of [[1280, 800], [1366, 768], [1440, 900]] as const) {
     await page.setViewportSize({ width: w, height: h });
@@ -153,11 +267,23 @@ test('narrow: the position strip names its neighbours in words with their place 
   await expect(page.getByRole('navigation', { name: QUESTION_COPY.nav.label, exact: true }).getByRole('link', { name: /^Previous question/ })).toHaveCount(0);
 });
 
-test('reflow: nothing scrolls sideways at 320 by 640 with the real Q-PP-01 in the heading, both strips and the route column', async ({ page, baseURL }, info) => {
+test('reflow: nothing scrolls sideways at 320 by 640 with the real Q-PP-01 in the heading, both strips and the route column; on Q-PP-22 (question 23) the strip\'s three items do not overlap', async ({ page, baseURL }, info) => {
   await page.setViewportSize({ width: 320, height: 640 });
-  await openQuestion(page, 'assessor', 'Q-PP-02', baseURL!);
+  await openQuestion(page, 'assessor', 'Q-PP-22', baseURL!);
   await page.locator('#question-heading').evaluate((h, text) => { h.textContent = text; }, REAL_Q01);
   await expectNoHorizontalScroll(page);
+  // Two-digit neighbours (21 and 23) and "22 of 24": previous link, ring, place, next link, left to right, apart.
+  const strip = page.locator('.position-strip');
+  const prev = await box(strip.getByRole('link', { name: /^Previous question/ }));
+  const ring = await box(strip.locator('.position-strip__ring'));
+  const place = await box(strip.locator('.position-strip__here b'));
+  const next = await box(strip.getByRole('link', { name: /^Next question/ }));
+  expect(prev.x + prev.width, 'the previous link ends before the ring').toBeLessThanOrEqual(ring.x);
+  expect(ring.x + ring.width).toBeLessThanOrEqual(place.x);
+  expect(place.x + place.width, 'the place ends before the next link').toBeLessThanOrEqual(next.x);
+  expect(next.x + next.width).toBeLessThanOrEqual(320);
+  // Q-PP-22 is the stage's 23rd question (the personal data question sits among them): two-digit numbers either way.
+  await expect(strip.locator('.position-strip__here')).toContainText('23 of 24');
   await shot(page, info, 'frame-320x640');
 });
 

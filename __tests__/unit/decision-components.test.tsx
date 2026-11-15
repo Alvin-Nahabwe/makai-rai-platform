@@ -42,7 +42,7 @@ const V2: DecisionVersionView = {
 };
 const PANEL: QuestionPanelData = {
   orgSlug: 'acme', projectId: 'p1', projectArchived: false, stage: 'pre-processing', question: QUESTION, runningQuestion: QUESTION,
-  position: { index: 1, total: 24, previousId: 'Q-PP-00', nextId: 'Q-PP-02' }, current: null, historyCount: 0, seals: [],
+  position: { index: 0, total: 24, previousId: null, nextId: 'Q-PP-02' }, current: null, historyCount: 0, seals: [],
   reasonCodes: [
     { code: 'ny_planned_later', status: 'not_yet', label: 'Planned for later', useWhen: '', reasonMustSay: '' },
     { code: 'na_other', status: 'not_applicable', label: 'Other reason', useWhen: '', reasonMustSay: '' },
@@ -233,15 +233,17 @@ describe('S-12 status line and conflict view', () => {
 
 describe('S-12 regions', () => {
   it('FR-DEC-01 UX-31 UX-14: a viewer and an archived project get no form', async () => {
-    const viewer = renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, canWrite: false, viewer: { ...PANEL.viewer, role: 'viewer' } } }));
+    const { stageFixture } = await import('../helpers/stageFixture');
+    const viewer = renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, canWrite: false, viewer: { ...PANEL.viewer, role: 'viewer' } } , stage: stageFixture() }));
     expect(viewer).toContain(AUTHZ_COPY.decisionFormNote.viewer);
     expect(viewer).not.toMatch(/Save decision/);
     expect(viewer).not.toMatch(/<form/);
-    expect(renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, canWrite: false, projectArchived: true } }))).not.toMatch(/<form/);
+    expect(renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, canWrite: false, projectArchived: true } , stage: stageFixture() }))).not.toMatch(/<form/);
   });
 
   it('FR-CNT-08: S-12 shows the reworded line when the running wording differs', async () => {
-    const h = renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, current: V2, runningQuestion: { ...PANEL.question, expectedPractice: 'New wording.' }, contentSemver: '0.0.2-fixture' } }));
+    const { stageFixture } = await import('../helpers/stageFixture');
+    const h = renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, current: V2, runningQuestion: { ...PANEL.question, expectedPractice: 'New wording.' }, contentSemver: '0.0.2-fixture' } , stage: stageFixture() }));
     const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const line = QUESTION_COPY.reworded.line.replaceAll("'", '&#x27;');
     expect(h).toContain(line);
@@ -253,7 +255,7 @@ describe('S-12 regions', () => {
     // Plan 1C decision C1 (cut): the running wording is the guidance aside's; the earlier one is only in the disclosure.
     expect(h).toMatch(/<aside[^>]*data-region="guidance"[^>]*>[\s\S]*New wording\.[\s\S]*<\/aside>/);
     expect(h).toMatch(/<details[^>]*>(?:(?!<\/details>)[\s\S])*Old wording\./);
-    const same = renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, current: V2 } }));
+    const same = renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, current: V2 } , stage: stageFixture() }));
     expect(same).not.toContain(QUESTION_COPY.reworded.summary);
     expect(same).not.toContain(line);   // with the same wording there is no line (the property's own words), not only no summary
   });
@@ -273,7 +275,7 @@ describe('S-12 regions', () => {
     expect(named(links[0])).toMatch(/^Previous question: .+ \(question 1, Done\)$/);
     expect(links[1]).toContain('href="/orgs/acme/projects/p1/stages/pre-processing/questions/Q-PP-03"');
     expect(named(links[1])).toMatch(/^Next question: .+ \(question 3, No decision\)$/);
-    expect(h).toContain('<b>Question 2 of 24</b>');   // the position in words, not the question's code
+    expect(h).toContain('<b><span class="position-strip__word">Question </span>2 of 24</b>');   // the position in words, not the question's code
     const first = renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, position: { index: 0, total: 24, previousId: null, nextId: 'Q-PP-02' } }, stage: stageFixture() }));
     expect(first).not.toContain('Previous question');
   });

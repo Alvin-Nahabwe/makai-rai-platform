@@ -53,6 +53,13 @@ export function PositionStrip({ previous, next, n, total, marks, currentId, scop
       <span><span className="visually-hidden">{name.slice(0, at)}</span>{n}<span className="visually-hidden">{name.slice(at + String(n).length)}</span></span>
     );
   };
+  /** "Question n of N", its first word in a span the narrowest screens hide (the place stays). */
+  const place = (at: number, of: number) => {
+    const words = positionWords(at, of);
+    const i = words.indexOf(`${at} `);
+    if (i <= 0) throw new Error(`PositionStrip: "${words}" does not hold the place ${at}`);
+    return <><span className="position-strip__word">{words.slice(0, i)}</span>{words.slice(i)}</>;
+  };
   return (
     <nav className="position-strip" aria-label={QUESTION_COPY.nav.label}>
       {previous !== null ? (
@@ -62,7 +69,7 @@ export function PositionStrip({ previous, next, n, total, marks, currentId, scop
       ) : <span className="position-strip__step" />}
       <p className="position-strip__here" aria-current="step">
         <span className="position-strip__ring">{mark(currentId, 20)}</span>
-        <b>{positionWords(n, total)}</b>
+        <b>{place(n, total)}</b>
         <span className="visually-hidden">{F.hereStatus(words(currentId))}</span>
       </p>
       {next !== null ? (

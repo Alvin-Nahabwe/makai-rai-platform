@@ -5,9 +5,9 @@ import { MAIN_CONTENT_ID } from '@/components/layout/SkipLink';
 
 /**
  * Whether the person's last input was the keyboard. Module state, so it outlives a client navigation from one question
- * to the next (the Next link pressed with Enter, then the new question's heading takes focus). It starts false: after a
- * full page load nothing is known, so the heading's script focus draws no ring (coordinator's ruling 4 accepts this; the
- * next Tab shows the ring on whatever it reaches).
+ * to the next (the Next link pressed with Enter, then the new question's heading takes focus). It starts false, so the
+ * script focus on a full page load draws no ring. The coordinator's message of 09:45 EAT: "Keep a visible focus ring for
+ * keyboard users (only the script focus on load loses it)".
  */
 let keyboardLast = false;
 

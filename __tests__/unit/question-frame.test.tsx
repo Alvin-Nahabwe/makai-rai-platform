@@ -67,7 +67,7 @@ const render = async (data: QuestionPanelData = PANEL, stage = STAGE): Promise<s
   renderToStaticMarkup(await QuestionPanelRegions({ data, stage, route: <nav aria-label="route">the route</nav> }));
 const inOrder = (ns: number[]): boolean => ns.every((n, i) => n >= 0 && (i === 0 || n > ns[i - 1]));
 const between = (html: string, start: string, end: string): string => html.slice(html.indexOf(start), html.indexOf(end, html.indexOf(start)) + end.length);
-const top = (html: string): string => between(html, '<div class="question-top"', '</div></div>');
+const top = (html: string): string => html.slice(html.indexOf('<div class="question-top"'), html.indexOf('<nav class="position-strip"'));
 const strip = (html: string): string => between(html, '<nav class="position-strip"', '</nav>');
 /** A link's accessible name as its content gives it: its text, tags dropped (the marks and icons are aria-hidden SVGs). */
 const nameOf = (link: string): string => link.replace(/<svg[\s\S]*?<\/svg>/g, '').replace(/<[^>]+>/g, '');
@@ -139,12 +139,16 @@ describe('the top strip (R4), shown from 1160px', () => {
     const html = top(await render());
     const tally = between(html, '<ul class="question-top__tally"', '</ul>');
     const items = [...tally.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/g)].map((m) => m[1]);
-    const words = items.map((i) => i.replace(/<svg[\s\S]*?<\/svg>/, '').replace(/<[^>]+>/g, ''));
+    /** An item's visible words: its tip (button and popover) and its mark left out. */
+    const visible = (i: string) => i.replace(/<span class="ui-term-tip">[\s\S]*?<\/span><\/span><\/span>/, '').replace(/<svg[\s\S]*?<\/svg>/, '').replace(/<[^>]+>/g, '');
+    const words = items.map(visible);
     // 3 done, 2 partly, 1 not yet, 1 not applicable, 1 answered (the personal data question), 16 with no decision.
     expect(words).toEqual(['3 done', '2 partly', '1 not yet', '1 not applicable', '1 answered', '16 no decision']);
     for (const i of items) expect(i).toMatch(/^<svg class="ui-mark__shape" width="16" height="16"[\s\S]*<\/svg><b>\d+<\/b> /);
     expect(tally).toContain('data-mark-kind="done"');
-    expect(html).toContain(`<h2 class="visually-hidden">${esc(QUESTION_COPY.frame.tallyHeading)}</h2>`);
+    // Named by a label, not a heading: no heading comes before the page's h1 (fix round 1, M2).
+    expect(html).toContain(`<ul class="question-top__tally" role="list" aria-label="${esc(QUESTION_COPY.frame.tallyHeading)}">`);
+    expect(html).not.toMatch(/<h[1-6]\b/);
     // The retired "scope question" never shows (vocabulary: personal-data-question-scope-question).
     expect(html).not.toMatch(/scope question/i);
     const few = top(await render(PANEL, stageFixture({ marks: Object.fromEntries(inStage.map((q) => [q.id, 'done'])) })));
@@ -163,21 +167,38 @@ describe('the top strip (R4), shown from 1160px', () => {
     expect(none).not.toContain('question-top__follow');
   });
 
-  it('spec 6: "finding" and "mitigation" at their first use carry their definitions, reachable from the term (a toggletip) and named by it', async () => {
+  it('owner 11:00 ruling: each defined word carries a TermTip with the vocabulary\'s sentence: finding, mitigation, and the status words the vocabulary defines; not "answered" or "no decision"', async () => {
     const html = top(await render());
-    for (const [id, term] of [['finding', 'finding'], ['mitigation', 'mitigation']]) {
-      expect(html).toMatch(new RegExp(`<a[^>]*aria-describedby="question-top-def-${id}"[^>]*>[\\s\\S]*?<span data-term="${id}">`));
-      expect(html).toMatch(new RegExp(`<button type="button" class="question-top__tip" popoverTarget="question-top-tip-${id}" aria-label="${esc(QUESTION_COPY.frame.whatIs(term)).replace('?', '\\?')}"`, 'i'));
-      expect(html).toMatch(new RegExp(`<span id="question-top-tip-${id}" popover="auto" class="question-top__tip-body"><span class="ui-definition" id="question-top-def-${id}" data-definition="${id}">`));
+    for (const id of ['finding', 'mitigation']) {
+      expect(html).toMatch(new RegExp(`<a[^>]*aria-describedby="term-tip-${id}-def"[^>]*>[\\s\\S]*?<span data-term="${id}">`));
+      expect(html).toContain(`aria-label="${esc(QUESTION_COPY.frame.whatIs(id))}"`);
     }
+    for (const [id, term] of [['done', 'Done'], ['partly', 'Partly'], ['not-yet', 'Not yet'], ['not-applicable', 'Not applicable']]) {
+      expect(html, id).toContain(`<span data-term="${id}">`);
+      expect(html, id).toContain(`aria-label="${esc(QUESTION_COPY.frame.whatMeans(term))}"`);
+      expect(html, id).toMatch(new RegExp(`<span class="ui-definition" id="term-tip-${id}-def" data-definition="${id}">`));
+    }
+    // One tip per defined word: six here (two counts, four statuses); "answered" and "no decision" have none.
+    expect(html.match(/class="ui-term-tip__button"/g)).toHaveLength(6);
+    const answered = between(html, 'data-mark-kind="scope_answered"', '</li>');
+    expect(answered).not.toContain('ui-term-tip');
+    expect(between(html, 'data-mark-kind="no_decision"', '</li>')).not.toContain('ui-term-tip');
   });
 
-  it('without the stage\'s data (its own load refused) there is no top strip and no position strip, and the rest still renders', async () => {
-    const html = renderToStaticMarkup(await QuestionPanelRegions({ data: PANEL }));
-    expect(html).not.toContain('question-top');
-    expect(html).not.toContain('position-strip');
-    expect(html).toContain('<h1 id="question-heading"');
+  it('a stage list without this question\'s row is a defect, said by name, never "nothing open"', async () => {
+    const stage = stageFixture();
+    await expect(render(PANEL, { ...stage, rows: stage.rows.filter((r) => r.questionId !== 'Q-PP-04') })).rejects.toThrow(/no row for Q-PP-04/);
   });
+
+  it('fix round 1 (I1): the follow-up counts sit at the right end of the breadcrumb row; the tally is its own row after them', async () => {
+    const html = top(await render());
+    const at = (s: string) => html.indexOf(s);
+    expect(inOrder([at('<nav class="ui-breadcrumb"'), at('<p class="question-top__follow">'), at('<ul class="question-top__tally"')]), html).toBe(true);
+    const css = readFileSync('components/question/workspace.css', 'utf8');
+    expect(css).toMatch(/\.question-top \{\s*display: grid;\s*grid-template-columns: minmax\(0, 1fr\) auto;/);
+    expect(css).toMatch(/\.question-top__tally \{\s*grid-column: 1 \/ -1;/);
+  });
+
 });
 
 describe('the position strip, under 1160px (phone sketch)', () => {
@@ -193,7 +214,7 @@ describe('the position strip, under 1160px (phone sketch)', () => {
     expect(links[0]).not.toContain('aria-label');
     expect(links[1]).toContain(`href="${STAGE_HREF}/questions/Q-PP-05"`);
     expect(nameOf(links[1])).toBe(esc(QUESTION_COPY.frame.next(textOf('Q-PP-05'), 5, 'Partly')));
-    expect(html).toMatch(/<p class="position-strip__here" aria-current="step">[\s\S]*data-mark-kind="partly"[\s\S]*<b>Question 4 of 24<\/b>/);
+    expect(html).toMatch(/<p class="position-strip__here" aria-current="step">[\s\S]*data-mark-kind="partly"[\s\S]*<b><span class="position-strip__word">Question <\/span>4 of 24<\/b>/);
     expect(html).toContain(esc(QUESTION_COPY.frame.hereStatus('Partly')));
     expect(html).not.toContain(QUESTION_COPY.nav.allQuestions);
     expect(html).not.toContain(`href="${STAGE_HREF}"`);
@@ -294,9 +315,9 @@ describe('the frame states', () => {
     expect(await render({ ...PANEL, openFinding: null, canRaiseFinding: true })).toContain('<section data-region="finding-link" aria-labelledby="s12-finding-link"><h2 id="s12-finding-link">Findings</h2>');
   });
 
-  it('every heading of the page, in order, starts at the h1 and skips no level', async () => {
+  it('every heading of the page, from the start of its markup, in order: the first is the h1 and none skips a level', async () => {
     const html = await render();
-    const levels = [...html.slice(html.indexOf('<h1')).matchAll(/<h([1-6])\b/g)].map((m) => Number(m[1]));
+    const levels = [...html.matchAll(/<h([1-6])\b/g)].map((m) => Number(m[1]));
     expect(levels[0]).toBe(1);
     expect(levels.every((l, i) => i === 0 || l <= levels[i - 1] + 1), levels.join(',')).toBe(true);
   });
@@ -306,7 +327,7 @@ describe('print (plan 1C Task 4, spec 7.5)', () => {
   it('@media print hides the strips, the route column and the form controls; keeps the question, the decision text and the guidance', () => {
     const css = readFileSync('components/question/workspace.css', 'utf8');
     const print = css.slice(css.indexOf('@media print'));
-    for (const s of ['.question-top', '.position-strip', '.question-workspace__route', '.decision-slot form', '.question-content__ways-summary']) expect(print).toContain(s);
+    for (const s of ['.question-top', '.position-strip', '.question-workspace__route', '.decision-slot__controls', '.decision-slot .question-foot', '.question-content__ways-summary']) expect(print).toContain(s);
     expect(print).toMatch(/display: none/);
     expect(print).toMatch(/\.question-content__ways > :not\(summary\) \{[^}]*display: block/);
   });
