@@ -27,7 +27,7 @@ const membershipsMock = vi.hoisted(() => vi.fn());
 const readSessionDeadlines = vi.hoisted(() => vi.fn());
 const pathnameMock = vi.hoisted(() => vi.fn());
 
-vi.mock('@/lib/auth/identity', () => ({ requireIdentity: requireIdentityMock }));
+vi.mock('@/lib/auth/identity', () => ({ requireIdentity: requireIdentityMock, tryResolveIdentity: () => requireIdentityMock() }));
 vi.mock('@/lib/data/admin', () => ({ listOrganisationsForAdmin: listOrganisationsMock, accountsForAdmin: accountsMock, organisationForAdmin: organisationMock }));
 vi.mock('@/lib/data/identity', () => ({ identityDb: { user: { findUnique: findUniqueMock } } }));
 vi.mock('@/lib/data/preauth', () => ({ membershipsForUser: membershipsMock }));
@@ -39,6 +39,7 @@ vi.mock('next/navigation', async (importOriginal) => ({
 vi.mock('next-auth/react', () => ({ signOut: vi.fn() }));
 
 const { default: LandingPage } = await import('@/app/(gate)/page');
+const { default: GateLayout } = await import('@/app/(gate)/layout');
 const { default: OrganisationsPage } = await import('@/app/(authenticated)/admin/organisations/page');
 const { default: AccountsPage } = await import('@/app/(authenticated)/admin/accounts/page');
 const { default: Rail } = await import('@/components/layout/Rail');
@@ -107,21 +108,30 @@ describe('S-07, the landing page', () => {
     expect(html).not.toContain('/orgs/new');
   });
 
-  it('UX-43: S-07 renders the idle warning from the session deadlines when it renders, and none when they cannot be read', async () => {
+  it('UX-43: S-07 shows the idle warning from the session deadlines, rendered by the (gate) layout around the page, and none when they cannot be read', async () => {
+    // Since plan 1B Task 1, `/` is app/(gate)/page.tsx and the group layout renders the warning around it.
+    const onS07 = async (who: Identity): Promise<string> => {
+      requireIdentityMock.mockResolvedValue(who);
+      return renderToStaticMarkup(await GateLayout({ children: await LandingPage() }));
+    };
     readSessionDeadlines.mockResolvedValue({ secondsLeft: 3000, absoluteSecondsLeft: 500000 });
-    const html = await renderLanding(noOrgIdentity);
+    const html = await onS07(noOrgIdentity);
     expect(html).toContain('data-seconds-left="3000"');
+    expect(html).toContain(ORG_COPY.chooser.emptyBody.replace("'", '&#x27;'));   // the page is inside the layout
     membershipsMock.mockResolvedValue([
       { orgId: 'o1', role: 'owner', org: { id: 'o1', slug: 'a-lab', name: 'A Lab' } },
       { orgId: 'o2', role: 'viewer', org: { id: 'o2', slug: 'b-lab', name: 'B Lab' } },
     ]);
-    expect(await renderLanding(noOrgIdentity)).toContain('data-seconds-left="3000"');   // the organisation picker too
+    expect(await onS07(noOrgIdentity)).toContain('data-seconds-left="3000"');   // the organisation picker too
     membershipsMock.mockResolvedValue([]);
     readSessionDeadlines.mockResolvedValue(null);
-    expect(await renderLanding(noOrgIdentity)).not.toContain('data-seconds-left');
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(await onS07(noOrgIdentity)).not.toContain('data-seconds-left');
+    expect(error.mock.calls).toEqual([['idle_deadline_unreadable']]);   // the layout's one fixed line
+    error.mockRestore();
     readSessionDeadlines.mockClear();
     await expect(renderLanding(adminIdentity)).rejects.toMatchObject({ digest: expect.stringMatching(/NEXT_REDIRECT/) });
-    expect(readSessionDeadlines).not.toHaveBeenCalled();   // the administrator is redirected before any render
+    expect(readSessionDeadlines).not.toHaveBeenCalled();   // the page reads no deadline: the administrator is redirected first
   });
 });
 

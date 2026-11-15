@@ -2174,5 +2174,13 @@
     "property": "A flagged account on S-29 is shown no link that names or reaches its organisation.",
     "proof": "S-29 moved into the gate frame (plan 1B Task 1, app/(gate)/change-password/page.tsx). The case asserts no navigation named Main, the banner's links are exactly ['/help'] (T1.3), and the organisation's name appears nowhere in the page; the flag is set and cleared as before.",
     "task": "plan 1B Task 1 (the gate frame and the (gate) route group)"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/admin-screens.test.tsx::UX-43: S-07 renders the idle warning from the session deadlines when it renders, and none when they cannot be read",
+    "replacedBy": "__tests__/unit/admin-screens.test.tsx::UX-43: S-07 shows the idle warning from the session deadlines, rendered by the (gate) layout around the page, and none when they cannot be read",
+    "property": "A person on S-07 (`/`) is shown the idle warning from the session deadlines when they can be read, and none when they cannot; the administrator is redirected before S-07 renders.",
+    "proof": "Plan 1B Task 1 moved `/` to app/(gate)/page.tsx and its IdleWarning to the group layout app/(gate)/layout.tsx (the plan: \"Its own IdleWarning and <main> go, because the group layout now renders them\"). The case now renders S-07 as Next serves it, the layout around the page (`GateLayout({ children: await LandingPage() })`): with readSessionDeadlines mocked to { secondsLeft: 3000, absoluteSecondsLeft: 500000 } it asserts data-seconds-left=\"3000\" for the empty state (with the page's emptyBody inside) and for the organisation picker; mocked to null it asserts no data-seconds-left and the layout's one fixed log line idle_deadline_unreadable. The administrator's NEXT_REDIRECT and readSessionDeadlines not being called by the page are kept unchanged. The module's identity mock adds tryResolveIdentity, which the layout calls, returning the same identity. The link between the layout and `/`: __tests__/lint/gate-group.test.ts::C1: (gate) holds exactly acceptances, change-password and the root page. The layout alone is also covered by __tests__/unit/ui/gate-frame.test.tsx::signed in, it renders the warning from the session deadlines, and none with one fixed log line when they cannot be read. Seen red: with the layout's IdleWarning disabled (`false && deadlines`), the new case fails.",
+    "task": "plan 1B Task 1 (the gate frame and the (gate) route group), ruling L5-3"
   }
 ]
