@@ -12,7 +12,8 @@ export const LAST_PROJECT_KEY_PREFIX = 'makrai:last-project:';
 
 /**
  * Removes this account's draft keys from localStorage directly: the store's own `purgeAccount` without the store.
- * Used only when the store's chunk cannot load. Storage that cannot be read or written leaves the keys where they are.
+ * Used when the store's chunk cannot load, or loads and cannot open (its probe write refused). Storage that cannot be
+ * read or written leaves the keys where they are.
  */
 function sweepAccountDrafts(userId: string): void {
   if (userId === '') return;
@@ -66,7 +67,12 @@ function sweepLastProjects(userId: string): void {
 export async function signOutClearingDrafts(userId: string, callbackUrl: string): Promise<void> {
   sweepLastProjects(userId);
   try {
-    (await import('@/lib/client/drafts')).openDraftStore()?.purgeAccount(userId);
+    const store = (await import('@/lib/client/drafts')).openDraftStore();
+    // Null: the store's probe write was refused (storage full, or writes blocked), which says nothing about whether the
+    // account's drafts can be removed. They are swept directly, as when the chunk cannot load (ruling L5-24): M-41 has
+    // promised the deletion.
+    if (store === null) sweepAccountDrafts(userId);
+    else store.purgeAccount(userId);
   } catch {
     // The sign-out must not depend on a chunk load. No later sign-in is sure to remove these drafts (the same account
     // keeps its own; the invitation page's sign-in purges nothing), so they are removed here without the store.
