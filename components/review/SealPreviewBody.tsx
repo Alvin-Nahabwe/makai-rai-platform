@@ -2,9 +2,10 @@ import type { ReactElement } from 'react';
 import { Definition, Term } from '@/components/ui/Definition';
 import { Table } from '@/components/ui/Table';
 import { REVIEW_COPY, STAGE_TERMS, STATUS_TERMS } from '@/lib/review/copy';
-import { TERM_FINDING, TERM_MITIGATION, TERM_SEAL } from '@/lib/vocabulary/terms';
+import { TERM_FINDING, TERM_MITIGATION, TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION, TERM_SEAL } from '@/lib/vocabulary/terms';
 import type { DefinedEntry } from '@/lib/vocabulary/types';
 import type { Stage } from '@/types/record';
+import { markTerms, usesTerm } from './markTerms';
 import type { PreviewParts } from './reviewText';
 
 /**
@@ -16,6 +17,8 @@ export function sealPageTerms(stage: Stage): { titleTerms: DefinedEntry[]; moreT
   return { titleTerms: [TERM_SEAL, STAGE_TERMS[stage]], moreTerms: [TERM_FINDING, TERM_MITIGATION] };
 }
 
+const GATE_TERM = TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION;
+
 /**
  * What the seal will include, on S-17 (W-7; UX-18; FR-REV-02): the statement, the content line when the questions
  * changed, then under its heading the decisions by status as a table, each status with its definition (S7, audit
@@ -26,6 +29,9 @@ export function SealPreviewBody({ parts, contentLine, noDecision }: {
   parts: PreviewParts; contentLine: string | null; noDecision: ReadonlyArray<{ id: string; href: string; text: string }>;
 }): ReactElement {
   const P = REVIEW_COPY.sealPage;
+  // The gate answer line (shown only when the stage's gate question has an answer) is the page's first use of "the
+  // personal data question" (B4 I1): it is marked there and its definition sits in the same item.
+  const gateLine = parts.lines.find((l) => usesTerm(l, GATE_TERM));
   return (
     <>
       <p>{parts.statement}</p>
@@ -47,7 +53,9 @@ export function SealPreviewBody({ parts, contentLine, noDecision }: {
         />
       )}
       <ul>
-        {parts.lines.map((l) => <li key={l}>{l}</li>)}
+        {parts.lines.map((l) => l === gateLine
+          ? <li key={l}>{markTerms(l, [GATE_TERM])} <Definition of={GATE_TERM} /></li>
+          : <li key={l}>{l}</li>)}
         <li>
           {P.noDecision(noDecision.length)}
           {noDecision.length > 0 ? ':' : ''}

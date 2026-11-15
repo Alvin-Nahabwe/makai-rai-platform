@@ -11,7 +11,7 @@ import type { SealPreview } from '@/lib/data/reviews';
 import { TERM_DONE, TERM_NOT_APPLICABLE, TERM_NOT_YET, TERM_PARTLY } from '@/lib/vocabulary/terms';
 import { TERM_STAGE_3 } from '@/lib/vocabulary/terms';
 import { REVIEW_COPY } from '@/lib/review/copy';
-import { TERM_FINGERPRINT, TERM_SEAL, TERM_STAGE_1, TERM_STAGE_REVIEW } from '@/lib/vocabulary/terms';
+import { TERM_FINGERPRINT, TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION, TERM_SEAL, TERM_STAGE_1, TERM_STAGE_REVIEW } from '@/lib/vocabulary/terms';
 import { firstUseProblems } from '../helpers/firstUseHtml';
 
 /**
@@ -149,6 +149,16 @@ describe('S-17 the seal step (S7: C 182, C 183)', () => {
     expect(out).toMatch(/<th role="rowheader" scope="row">na_unknown_code<\/th>/);
     expect(renderToStaticMarkup(<SealPreviewBody parts={previewParts({ ...PREVIEW, byReasonCode: {} }, 1, LABELS)} contentLine={null} noDecision={[]} />))
       .not.toContain(P.reasonTable.caption);
+  });
+
+  it('marks "the personal data question" in the gate answer line, its definition in the same item (B4 I1)', () => {
+    const gate = { ...PREVIEW, scopeAnswer: { answer: 'yes' } } as SealPreview;
+    const out = renderToStaticMarkup(<SealPreviewBody parts={previewParts(gate, 1, LABELS)} contentLine={null} noDecision={[]} />);
+    const T = TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION;
+    expect(out).toContain(`<li>Answer to <span data-term="${T.id}">the personal data question</span>: ${REVIEW_COPY.gateWords.yes} <span class="ui-definition" data-definition="${T.id}">${T.definition}</span></li>`);
+    expect(firstUseProblems(top() + out)).toEqual([]);
+    // With no gate answer the line is not there, and nothing is defined for it.
+    expect(body()).not.toContain(`data-definition="${T.id}"`);
   });
 
   it('keeps the other lines as a list, after the tables, and previewLines still says the same counts as text', () => {
