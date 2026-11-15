@@ -42,8 +42,9 @@
   min-width: 0;
 }
 
-.gate__logo:empty {
-  display: none;
+.gate__logo {
+  display: block;
+  margin-block-end: var(--space-1);
 }
 
 .gate__product {
@@ -150,7 +151,8 @@
   overflow-wrap: normal;
 }
 
-@container (width < 30rem) {
+/* 24rem, not 30rem: the query measures the card's content box, which is under 30rem on every default card (review R2-1). */
+@container (width < 24rem) {
   .gate__card h1 {
     font-size: var(--font-size-h2);
   }
