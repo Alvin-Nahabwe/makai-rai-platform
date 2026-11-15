@@ -118,7 +118,7 @@ describe('S-21 My account', () => {
 
 describe('S-29 and S-21\'s password change', () => {
   it('FR-ACC-08 NFR-SEC-18: one new-password field with the hint, the current password, and Show on both', () => {
-    const markup = html(<ChangePasswordView currentPassword="" newPassword="" show={false} state={{ kind: 'idle' }}
+    const markup = html(<ChangePasswordView forced={false} currentPassword="" newPassword="" show={false} state={{ kind: 'idle' }}
       onCurrent={noop} onNew={noop} onToggleShow={noop} onSubmit={noop} />);
     expect(tagOf(markup, 'currentPassword')).toMatch(/autocomplete="current-password"/i);
     expect(tagOf(markup, 'newPassword')).toMatch(/autocomplete="new-password"/i);
@@ -134,13 +134,13 @@ describe('S-29 and S-21\'s password change', () => {
     const tooShort = VALIDATION_COPY.passwordTooShort(12);
     const r422 = await changePasswordOutcome(new Response(JSON.stringify({ code: 'validation', fields: [{ field: 'newPassword', message: tooShort }] }), { status: 422 }));
     expect(r422).toEqual({ kind: 'invalid', field: 'newPassword', message: tooShort });
-    const markup = html(<ChangePasswordView currentPassword="x" newPassword="y" show={false} state={r422} onCurrent={noop} onNew={noop} onToggleShow={noop} onSubmit={noop} />);
+    const markup = html(<ChangePasswordView forced={false} currentPassword="x" newPassword="y" show={false} state={r422} onCurrent={noop} onNew={noop} onToggleShow={noop} onSubmit={noop} />);
     expect(tagOf(markup, 'newPassword')).toMatch(/aria-describedby="newPassword-hint newPassword-error"/);
     expect(tagOf(markup, 'newPassword')).toMatch(/aria-invalid="true"/);
     expect(markup).toMatch(new RegExp(`id="newPassword-error"[^>]*>${escapeRe(tooShort)}<`));
     const r400 = await changePasswordOutcome(new Response(JSON.stringify({ error: 'Current password is incorrect' }), { status: 400 }));
     expect(r400).toEqual({ kind: 'error', message: 'Current password is incorrect' });
-    expect(regionText(html(<ChangePasswordView currentPassword="x" newPassword="y" show={false} state={r400} onCurrent={noop} onNew={noop} onToggleShow={noop} onSubmit={noop} />), 'alert'))
+    expect(regionText(html(<ChangePasswordView forced={false} currentPassword="x" newPassword="y" show={false} state={r400} onCurrent={noop} onNew={noop} onToggleShow={noop} onSubmit={noop} />), 'alert'))
       .toBe('Current password is incorrect');
     expect(await changePasswordOutcome(new Response('{"success":true}', { status: 200 }))).toEqual({ kind: 'done' });
     // A failure on the server is said as such, with its support reference, and never as "your password is as it was".

@@ -45,6 +45,8 @@ export const AUTH_COPY = Object.freeze({
   tooManyAttempts: TOO_MANY_SIGN_INS,
   /** S-02's lead (audit A 138). */
   forgotLead: 'Enter the email you use to sign in. We will send you a link to set a new password.',
+  /** S-29's first line when gate 2 sent the person here (A page verdict, S-29). */
+  forcedLead: 'You need to choose a new password before you continue.',
   /** The line under the change-password heading (audit A 61). */
   changeLead: 'When you change your password, you are signed out on every device, including this one. Then sign in with your new password.',
 });
@@ -109,6 +111,8 @@ export const CHANGE_PASSWORD_COPY = Object.freeze({
   hint: PASSWORD_HINT,
   submit: 'Change password',
   submitting: 'Saving...',
+  /** S-21's change only: the way back to My account (never on S-29, which gate 2 holds the account on). */
+  backToAccount: 'Back to My account',
   notChanged: 'Your password was not changed. Check your internet connection and try again.',
   /** A failure on our side; with the support reference when the answer carried one, without it when not. */
   serverProblem: (reference: string | null): string =>

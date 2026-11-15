@@ -41,7 +41,7 @@ const views: Array<[string, (over: Record<string, unknown>) => React.ReactElemen
   ['S-02 forgot password', (o) => <ForgotPasswordView email="" state={{ kind: 'idle' }} onEmail={noop} onSubmit={noop} {...o} />],
   ['S-03 reset password', (o) => <ResetPasswordView token={'t'.repeat(20)} password="" showPassword={false} state={{ kind: 'idle' }}
     onPassword={noop} onToggleShow={noop} onSubmit={noop} {...o} />],
-  ['S-29 change password', (o) => <ChangePasswordView currentPassword="" newPassword="" show={false} state={{ kind: 'idle' }}
+  ['S-29 change password', (o) => <ChangePasswordView forced={false} currentPassword="" newPassword="" show={false} state={{ kind: 'idle' }}
     onCurrent={noop} onNew={noop} onToggleShow={noop} onSubmit={noop} {...o} />],
   ['S-04 create account', (o) => NewAccount(o)],
   ['S-24 create organisation', (o) => <CreateOrganisationFormView draft={{ name: '', legalName: '', ownerEmail: '', showLink: false }} errors={{}}
@@ -68,7 +68,7 @@ describe('submit buttons wait for hydration (NFR-SEC)', () => {
 describe('containers pass the hydration state to their view (NFR-SEC)', () => {
   const containers: Array<[string, () => React.ReactElement]> = [
     ['S-02 ForgotPasswordClient', () => <ForgotPasswordClient />],
-    ['S-29 ChangePasswordForm', () => <ChangePasswordForm />],
+    ['S-29 ChangePasswordForm', () => <ChangePasswordForm forced={false} />],
     ['S-04 AcceptInvitationClient (signed out)', () => <AcceptInvitationClient token={'t'.repeat(64)} invitedEmail="a@x.test" orgName="Lab" role="assessor"
       inviterName="Amina N." viewerEmail={null} viewerUserId={null} expiresOn="2026-11-09" texts={STUB_LEGAL_TEXTS.slice()} />],
     ['S-24 CreateOrganisationForm', () => <CreateOrganisationForm />],
