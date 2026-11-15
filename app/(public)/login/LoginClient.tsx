@@ -6,10 +6,13 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { safeCallbackUrl } from '@/lib/safe-callback-url';
 import { DRAFT_PREFIX, openDraftStore } from '@/lib/client/drafts';
+import { LAST_PROJECT_PREFIX } from '@/lib/client/lastProject';
+import { useSignOutPress } from '@/lib/client/signOutPress';
 import { AUTH_COPY, AUTH_MESSAGE_COPY, SIGN_IN_COPY } from '@/lib/auth/copy';
 import { SIGNED_OUT_HINT_KEY } from '@/lib/auth/idle';
 import { useHydrated } from '@/lib/client/useHydrated';
 import { AuthCard } from '@/components/auth/AuthCard';
+import { OtherAccountTextConfirm } from '@/components/auth/OtherAccountTextConfirm';
 import { PasswordField } from '@/components/auth/PasswordField';
 import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
@@ -113,6 +116,65 @@ export function purgeOtherAccountsAfterSignIn(storage: Storage | null | undefine
   return openDraftStore(storage)?.purgeOtherAccounts(userId) ?? 0;
 }
 
+/** What S-01 does after a sign-in that worked (D16): go on, or first ask about unsaved text another account left here. */
+export type SignInNext = { kind: 'go' } | { kind: 'confirm'; who: 'other' | 'unknown' };
+
+/**
+ * D16, for a sign-in whose user id could not be read: whether this browser keeps any draft key at all. Storage that is
+ * absent or refuses to list its keys keeps none this code can reach, so there is nothing to ask about (T5.5).
+ */
+export function anyDrafts(storage: Storage | null | undefined): boolean {
+  const store = storage === undefined ? browserStorage() : storage;
+  if (!store) return false;
+  try {
+    for (let i = 0; i < store.length; i++) {
+      if (store.key(i)?.startsWith(DRAFT_PREFIX)) return true;
+    }
+    return false;
+  } catch {
+    // Refuses to list (a privacy mode): no draft can have been kept here either.
+    return false;
+  }
+}
+
+/**
+ * D16 (T5.1, T5.4, T5.5): after a sign-in that worked, with the id the session read gave, whether to ask first. Only a
+ * live draft of another account asks (one's own never does); with no id, any draft asks, as whose cannot be checked.
+ * Storage that is absent or refuses access asks nothing, and the purge after it runs as today. Never a count.
+ */
+export function afterSignIn(storage: Storage | null | undefined, userId: string | null, now: Date): SignInNext {
+  if (userId) return openDraftStore(storage)?.hasOtherAccounts(userId, now) ? { kind: 'confirm', who: 'other' } : { kind: 'go' };
+  return anyDrafts(storage) ? { kind: 'confirm', who: 'unknown' } : { kind: 'go' };
+}
+
+/**
+ * D16's Remove it and continue (T5.7, R4): the last-project keys of other accounts go with their drafts; this account's
+ * stay. With no id, every last-project key goes, as every draft does. Each removal is tried on its own; one refused is
+ * said once in fixed words (the key holds an id, which a log line may not), as clearLastProjects says it.
+ */
+export function removeOtherLastProjectKeys(storage: Storage | null | undefined, userId: string | null): void {
+  const store = storage === undefined ? browserStorage() : storage;
+  if (!store) return;
+  const mine = userId ? `${LAST_PROJECT_PREFIX}${userId}:` : null;
+  const others: string[] = [];
+  try {
+    for (let i = 0; i < store.length; i++) {
+      const k = store.key(i);
+      if (k !== null && k.startsWith(LAST_PROJECT_PREFIX) && (mine === null || !k.startsWith(mine))) others.push(k);
+    }
+  } catch {
+    // Refuses to list: nothing was written there by this code either, and the next project page tries again.
+    return;
+  }
+  for (const k of others) {
+    try {
+      store.removeItem(k);
+    } catch {
+      console.warn('S-01: a last-project key of another account could not be removed after sign-in.');
+    }
+  }
+}
+
 /** Why the last session in this tab ended by the clock (C12), when S-01 knows it. */
 export type SignedOutReason = 'idle' | 'absolute';
 
@@ -179,6 +241,8 @@ export interface LoginViewProps {
   loading: boolean;
   /** C12: why the last session in this tab ended, read after hydration (readSignedOutHint); null shows no line. */
   signedOut?: SignedOutReason | null;
+  /** D16: signed in, and this browser keeps another account's unsaved text: the question shown in place of the form. */
+  confirm?: { who: 'other' | 'unknown'; busy: boolean; message: string | null; onRemove: () => void; onSignOut: () => void } | null;
   /** False until React has hydrated; the submit button is disabled till then (default true for a static render). */
   hydrated?: boolean;
   onEmail: (v: string) => void;
@@ -194,6 +258,15 @@ export interface LoginViewProps {
  * and the footer says so.
  */
 export function LoginView(v: LoginViewProps) {
+  if (v.confirm) {
+    // Signed in already: only the question is left on this page (D16), with no link away from it.
+    return (
+      <AuthCard title={SIGN_IN_COPY.heading}>
+        <OtherAccountTextConfirm kind={v.confirm.who} busy={v.confirm.busy} message={v.confirm.message}
+          onRemove={v.confirm.onRemove} onSignOut={v.confirm.onSignOut} />
+      </AuthCard>
+    );
+  }
   const signedOut = v.signedOut ?? null;
   const lead = signedOut === null ? null : (
     <Banner kind="session">
@@ -239,6 +312,12 @@ export function LoginForm() {
   const [signedOut, setSignedOut] = useState<SignedOutReason | null>(null);
   const hintRead = useRef(false);
   const hydrated = useHydrated();
+  // D16: the question after a sign-in that worked, with the id it read; and Remove it and continue being carried out.
+  const [pending, setPending] = useState<{ who: 'other' | 'unknown'; userId: string | null } | null>(null);
+  const [removing, setRemoving] = useState(false);
+  // Sign out and leave it: S-05's press (lib/client/signOutPress.ts), which removes this account's own drafts only
+  // (NFR-PRIV-06; T5.6) and, when the sign-out fails, says the person is still signed in and stays here.
+  const leave = useSignOutPress(pending?.userId ?? '', '/login');
 
   // C12: the hint is read once, after hydration, so the server's render never depends on storage. The ref keeps a second
   // run of the effect (React's development double run) from reading the removed hint as none.
@@ -259,13 +338,37 @@ export function LoginForm() {
       return;
     }
     // undefined: the browser's own storage, and a blocked one reads as none (lib/client/drafts.ts).
-    purgeDraftsAfterSignIn(undefined, outcome.userId);
+    const next = afterSignIn(undefined, outcome.userId, new Date());
+    if (next.kind === 'confirm') {
+      setPending({ who: next.who, userId: outcome.userId });
+      return;
+    }
+    goOn(outcome.userId);
+  }
+
+  /** Today's purge after a sign-in (T5.3: purgeOtherAccounts with the id, every draft without it), then the page asked for. */
+  function goOn(userId: string | null) {
+    try {
+      purgeDraftsAfterSignIn(undefined, userId);
+    } catch {
+      // Without an id the purge lists storage with no guard of its own; storage that refuses it must not hold the person
+      // on "Signing in..." once signed in (d2-sfh-1 finding 6). Nothing could be listed, so none was removed.
+      console.warn('S-01: the drafts of this browser could not be listed after sign-in; none was removed');
+    }
     router.push(callbackUrl);
+  }
+
+  function removeAndGoOn() {
+    if (pending === null || removing) return;
+    setRemoving(true);
+    removeOtherLastProjectKeys(undefined, pending.userId);
+    goOn(pending.userId);
   }
 
   return (
     <LoginView email={email} password={password} showPassword={showPassword} error={error} notice={notice} loading={loading} hydrated={hydrated}
       signedOut={signedOut}
+      confirm={pending === null ? null : { who: pending.who, busy: removing || leave.busy, message: leave.message, onRemove: removeAndGoOn, onSignOut: leave.press }}
       onEmail={setEmail} onPassword={setPassword} onToggleShow={() => setShowPassword((s) => !s)} onSubmit={onSubmit} />
   );
 }

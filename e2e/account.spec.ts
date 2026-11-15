@@ -264,6 +264,7 @@ test.describe('My account and sessions', () => {
     await page.fill('#email', b.email);
     await page.fill('#password', b.password);
     await page.locator('button[type="submit"]').click();
+    await page.getByRole('button', { name: AUTH_COPY.removeAndContinue }).click(); // D16 asks first (plan 1B Task 5)
     await page.waitForURL((url) => url.pathname !== '/login');
     const keys = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('makrai.draft.v1:')));
     expect(keys).toEqual([keyOf(b.userId)]);

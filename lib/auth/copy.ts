@@ -48,6 +48,19 @@ export const AUTH_COPY = Object.freeze({
   tooManyAttempts: TOO_MANY_SIGN_INS,
   /** S-02's lead (audit A 138). */
   forgotLead: 'Enter the email you use to sign in. We will send you a link to set a new password.',
+  /**
+   * D16 (option A; owner's answer to OD-1, 11 Nov 2026): after a sign-in, text another account left in this browser.
+   * Nothing here names the other person, says how much there is or where it was typed (T5.2).
+   */
+  otherTextTitle: 'This browser has unsaved text from another account',
+  otherTextBody: 'Someone who used this browser before you left unsaved text here. You cannot see it.',
+  /** D16 when the session read failed twice, so whose text it is cannot be checked. */
+  unknownTextTitle: 'This browser has unsaved text',
+  unknownTextBody: 'We could not check whose it is, so it will be removed when you continue. It may be yours.',
+  removeAndContinue: 'Remove it and continue',
+  signOutAndLeave: 'Sign out and leave it',
+  consequenceRemove: 'The text is removed from this browser. This cannot be undone.',
+  consequenceLeave: 'The text stays in this browser for its owner, for up to 7 days after it was typed.',
   /** S-29's first line when gate 2 sent the person here (A page verdict, S-29). */
   forcedLead: 'You need to choose a new password before you continue.',
   /** The line under the change-password heading (audit A 61). */

@@ -4,6 +4,7 @@ import type { OrgRole } from '@prisma/client';
 import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from '../fixtures/manifest';
 import { DECISION_FORM_COPY } from '../../lib/decision/form/copy';
 import { FIELD_COPY } from '../../lib/ui/field/copy';
+import { AUTH_COPY } from '../../lib/auth/copy';
 
 /**
  * Shared sign-in helpers for specs that need a real session in a browser context of their own (gap G103; V-prog imports
@@ -52,6 +53,14 @@ export async function signInWith(page: Page, email: string, password: string): P
     await expect(page.locator('#password')).toHaveValue(password, { timeout: 100 });
   }).toPass({ timeout: 20_000 });
   await page.locator('button[type="submit"]').click();
+  // D16 (plan 1B Task 5): on a browser that keeps another account's unsaved text, S-01 asks before it goes on. A spec
+  // that signs a second account in here wants today's outcome, the other accounts' drafts gone, so it removes them.
+  const remove = page.getByRole('button', { name: AUTH_COPY.removeAndContinue });
+  await Promise.race([
+    page.waitForURL((url) => url.pathname !== '/login', { timeout: 30_000 }).catch(() => {}),
+    remove.waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {}),
+  ]);
+  if (new URL(page.url()).pathname === '/login' && (await remove.isVisible())) await remove.click();
   await page.waitForURL((url) => url.pathname !== '/login', { timeout: 30_000 });
 }
 
