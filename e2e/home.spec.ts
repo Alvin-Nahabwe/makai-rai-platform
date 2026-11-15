@@ -7,6 +7,7 @@ import {
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectNoHorizontalScroll } from './helpers/reflow';
 import { HOME_COPY } from '../lib/home/copy';
+import { PROJECT_COPY } from '../lib/project/copy';
 
 /**
  * Home, every variant, in a browser (plan 1B Task 10, step 2; spec 9.1): each seat of this spec's own organisation sees
@@ -22,6 +23,7 @@ const LONG_NAME = `Home ${RUN} Antenatal-risk-triage-for-district-hospitals-and-
 
 let fx: OrgFixture;
 let fresh: OrgFixture;
+let starting: OrgFixture;
 let project: { id: string };
 const contexts: BrowserContext[] = [];
 let ipSeq = 0;
@@ -47,6 +49,8 @@ test.describe.configure({ mode: 'serial' });
 test.beforeAll(async ({ browser }) => {
   fx = await buildOrg({ label: 'home' });
   fresh = await buildOrg({ label: 'homenew' });
+  starting = await buildOrg({ label: 'homestart' });
+  await addProject(starting, { name: `Start ${RUN}` });
   project = await addProject(fx, { name: LONG_NAME });
   // An overdue mitigation (the Owner's and Admin's first list), a finding with no mitigation (their second), the
   // Reviewer's own open finding, and a stage review not sealed yet.
@@ -136,6 +140,15 @@ test('spec 9.1, M13: a new organisation shows the first visit: Create a project 
   await viewer.goto(homeOf(fresh));
   await expect(viewer.getByText(HOME_COPY.firstTimeAsk)).toBeVisible();
   await expect(viewer.getByRole('link', { name: HOME_COPY.firstTimeCreate })).toHaveCount(0);
+});
+
+test('owner ruling (15 Nov): an Assessor who has never saved sees Start recording, which opens the first question', async ({ browser }) => {
+  const page = await signedIn(browser, starting.members.assessor);
+  await page.goto(homeOf(starting));
+  const card = page.getByRole('region', { name: HOME_COPY.nextStepHeading });
+  await expect(card.getByRole('link', { name: HOME_COPY.continueRecording })).toHaveCount(0);
+  await card.getByRole('link', { name: PROJECT_COPY.start }).click();
+  await page.waitForURL('**/stages/pre-processing/questions/*');
 });
 
 for (const role of ['owner', 'reviewer', 'viewer'] as const) {

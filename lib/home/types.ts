@@ -42,8 +42,8 @@ export type RouteStop = { id: string; kind: StatusMarkKind; title: string; href?
 export type HomeData =
   | { variant: 'recorder'; base: HomeBase; next: NextStep | null; assigned: FollowUpItem[]; since: { from: UtcInstant; groups: ChangeGroup[]; more: boolean } | null;
       focus: { projectId: string; projectName: string; stages: StageOpen[] } | null; lead: TeamLead | null; otherProjects: number }
-  | { variant: 'reviewer'; base: HomeBase; unsealed: StageReviewView[]; changedSinceSeal: StageReviewView[]; raisedByMe: FindingView[] }
-  | { variant: 'viewer'; base: HomeBase; recent: { groups: ChangeGroup[]; more: boolean }; open: Array<{ projectId: string; projectName: string; stages: StageOpen[] }> }
+  | { variant: 'reviewer'; base: HomeBase; assigned: FollowUpItem[]; unsealed: StageReviewView[]; changedSinceSeal: StageReviewView[]; raisedByMe: FindingView[] }
+  | { variant: 'viewer'; base: HomeBase; assigned: FollowUpItem[]; recent: { groups: ChangeGroup[]; more: boolean }; open: Array<{ projectId: string; projectName: string; stages: StageOpen[] }> }
   | { variant: 'first-time'; base: HomeBase; canCreate: boolean };
 
 /**

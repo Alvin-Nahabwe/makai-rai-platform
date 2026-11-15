@@ -48,6 +48,9 @@ export const HOME_COPY = Object.freeze({
   overdueCount: (n: number) => (n === 1 ? ': 1 mitigation' : `: ${n} mitigations`),
   leadOverdueHeading: 'Overdue mitigations',
   leadNoMitigationHeading: 'Findings with no mitigation yet',
+  /** New (lane lead, fix round 1): each lead list shows 5 plates, then this link to the whole list. */
+  leadOverdueAll: (n: number) => (n === 1 ? 'See the 1 overdue mitigation' : `See all ${n} overdue mitigations`),
+  leadNoMitigationAll: (n: number) => (n === 1 ? 'See the 1 finding with no mitigation yet' : `See all ${n} findings with no mitigation yet`),
   reviewerUnsealed: 'Reviews not sealed yet',
   reviewerChanged: 'Sealed reviews with changes since',
   reviewerRaised: 'Findings you raised',
@@ -64,7 +67,7 @@ export const HOME_COPY = Object.freeze({
   firstTimeCreate: 'Create a project',
   /** 9.1 verbatim. */
   firstTimeAsk: 'Ask an Owner, Admin or Assessor to create your project.',
-  /** Archived projects only (B#31, one word changed by the coordinator): the All projects link follows it. */
-  noActiveProjects: 'No active projects. Your archived projects are on the All projects page.',
+  /** Archived projects only (B#31): the All projects link follows it. The page is headed "Projects" (lane lead, fix round 1). */
+  noActiveProjects: 'No active projects. Your archived projects are on the Projects page.',
   unsaved: HOME_UNSAVED_COPY.unsaved,
 });

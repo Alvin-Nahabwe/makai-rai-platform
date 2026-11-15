@@ -510,3 +510,28 @@
   }
 }
 
+
+/* A term's definition at its first use inside a card, a plate or a list row (spec 6): the kit's hint line, one step
+   smaller where the line around it is small. */
+.home-next .ui-definition,
+.home-plate .ui-definition {
+  display: block;
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-legal);
+}
+
+/* The link under a lead list cut at five plates, to the whole list. */
+.home-more-link {
+  margin: var(--space-3) 0 0;
+  font-size: 0.9375rem;
+}
+
+.home-more-link a {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-link);
+  text-underline-offset: 0.15em;
+}
+
+.home-section > .ui-definition {
+  margin: 2px 0 0;
+}

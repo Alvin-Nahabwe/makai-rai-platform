@@ -3,11 +3,13 @@ import { ButtonLink } from '@/components/ui/Button';
 import { LocalTime } from '@/components/ui/LocalTime';
 import { STAGE_NAME } from '@/components/project/StageColumn';
 import { HOME_COPY } from '@/lib/home/copy';
+import { PROJECT_COPY } from '@/lib/project/copy';
 import { positionWords } from '@/lib/ui/copy';
 import { questionHref } from '@/lib/question/draft';
 import type { NextStep } from '@/lib/home/types';
 import type { UtcInstant } from '@/types/record';
-import { SLOT, withSlot } from '@/components/home/parts';
+import type { FirstUses } from '@/components/home/firstUse';
+import { Defs, SLOT, StageName, withSlot } from '@/components/home/parts';
 
 /** The day of the person's last save, in the reader's zone once hydrated. Rules next-open and last-saved always carry it. */
 function savedDay(at: UtcInstant | null): ReactNode {
@@ -22,12 +24,24 @@ function reasonOf(next: NextStep): ReactNode {
 }
 
 /**
+ * The primary control's words (owner's ruling, 15 November, through the lane lead): "Start recording" for a person who
+ * has never saved a decision in this organisation, "Continue recording" for anyone who has (spec 9.1). The signal is
+ * `lastSavedOn === null`: `loadNextStep` gives a step with no last save only to an Assessor for whom `hasSavedAny` is
+ * false (no decision version of theirs in the organisation, archived projects included), which is also the only case of
+ * rule 'first-open'. A save in a project archived since gives no next step at all, so never "Start" by mistake.
+ */
+function primaryWords(next: NextStep): string {
+  return next.lastSavedOn === null ? PROJECT_COPY.start : HOME_COPY.continueRecording;
+}
+
+/**
  * Home's "Your next step" (spec 9.1; sketch home.png): the "you are here" ring, then where the question is (its stage, its
  * place in the stage, its project), the question in words with its code small after them, why it was chosen, and two
  * controls of one size (plan C7; the spec's two equal controls in place of the sketch's small link): the primary to the
- * question, the secondary to its stage's questions, in that order on every width. A server component.
+ * question, the secondary to its stage's questions, in that order on every width. When this card is the page's first use
+ * of the stage's name, its definition follows the "where" line. A server component.
  */
-export function NextStepCard({ orgSlug, next }: { orgSlug: string; next: NextStep }): ReactElement {
+export function NextStepCard({ orgSlug, next, uses }: { orgSlug: string; next: NextStep; uses: FirstUses }): ReactElement {
   const stage = `/orgs/${orgSlug}/projects/${next.projectId}/stages/${next.stage}`;
   return (
     <section className="home-next" aria-labelledby="next-step">
@@ -38,14 +52,15 @@ export function NextStepCard({ orgSlug, next }: { orgSlug: string; next: NextSte
       <div className="home-next__body">
         <h2 id="next-step" className="home-next__heading">{HOME_COPY.nextStepHeading}</h2>
         <p className="home-next__where">
-          {STAGE_NAME[next.stage]} · {positionWords(next.position.n, next.position.of)} · <bdi>{next.projectName}</bdi>
+          <StageName stage={next.stage} /> · {positionWords(next.position.n, next.position.of)} · <bdi>{next.projectName}</bdi>
         </p>
+        <Defs uses={uses} where="next" />
         <p className="home-next__question">
           <bdi>{next.questionText}</bdi> <span className="home-next__code">{next.questionId}</span>
         </p>
         <p className="home-next__reason">{reasonOf(next)}</p>
         <div className="home-next__actions">
-          <ButtonLink variant="primary" href={questionHref({ orgSlug, projectId: next.projectId, stage: next.stage }, next.questionId)}>{HOME_COPY.continueRecording}</ButtonLink>
+          <ButtonLink variant="primary" href={questionHref({ orgSlug, projectId: next.projectId, stage: next.stage }, next.questionId)}>{primaryWords(next)}</ButtonLink>
           <ButtonLink variant="secondary" href={stage}>{HOME_COPY.chooseAnother}</ButtonLink>
         </div>
       </div>

@@ -2,24 +2,17 @@ import type { ReactElement, ReactNode } from 'react';
 import type { ChangeGroup, HomeBase } from '@/lib/home/types';
 import { HOME_COPY } from '@/lib/home/copy';
 import { formatDay } from '@/lib/format/dates';
-import { TERM_SEAL } from '@/lib/vocabulary/terms';
-import { Definition } from '@/components/ui/Definition';
-import { STAGE_NAME } from '@/components/project/StageColumn';
-import { SLOT, personName, withSlot } from '@/components/home/parts';
-
-/** One group of changes as a sentence: who did what, how many, in which stage. The count agrees in number. */
-function sentenceOf(g: ChangeGroup): ReactNode {
-  const stage = STAGE_NAME[g.stage];
-  if (stage === undefined) throw new Error(`Home: a change names stage ${String(g.stage)}, which is not a stage`);
-  return withSlot(wordsOf(g, stage), personName(g.who));
-}
+import { STAGES } from '@/types/record';
+import { Term } from '@/components/ui/Definition';
+import type { FirstUses } from '@/components/home/firstUse';
+import { Defs, SLOT, SLOT_2, StageName, TERM_OF, personName, withSlots } from '@/components/home/parts';
 
 /** Every kind named, so a kind the query starts returning fails here instead of reading as a seal. */
-function wordsOf(g: ChangeGroup, stage: string): string {
+function wordsOf(g: ChangeGroup): string {
   switch (g.kind) {
-    case 'decisions': return HOME_COPY.sinceDecisions(SLOT, g.count, stage);
-    case 'finding': return HOME_COPY.sinceFindings(SLOT, g.count, stage);
-    case 'seal': return HOME_COPY.sinceSeals(SLOT, g.count, stage);
+    case 'decisions': return HOME_COPY.sinceDecisions(SLOT, g.count, SLOT_2);
+    case 'finding': return HOME_COPY.sinceFindings(SLOT, g.count, SLOT_2);
+    case 'seal': return HOME_COPY.sinceSeals(SLOT, g.count, SLOT_2);
     default: {
       const unknown: never = g.kind;
       throw new Error(`Home: no sentence for a change of kind ${String(unknown)}`);
@@ -28,15 +21,25 @@ function wordsOf(g: ChangeGroup, stage: string): string {
 }
 
 /**
+ * One group of changes as a sentence: who did what, how many, in which stage (the count agrees in number). The stage is
+ * marked as a use of its term; a sentence about findings is a use of "finding".
+ */
+function sentenceOf(g: ChangeGroup): ReactNode {
+  if (!STAGES.includes(g.stage)) throw new Error(`Home: a change names stage ${String(g.stage)}, which is not a stage`);
+  const sentence = withSlots(wordsOf(g), [personName(g.who), <StageName key="stage" stage={g.stage} />]);
+  return g.kind === 'finding' ? <Term of={TERM_OF.finding}>{sentence}</Term> : sentence;
+}
+
+/**
  * A dated list of changes (spec 9.1 (4) for a person who records, "what the team recorded in the last 14 days" for a
  * Viewer), as the sketch draws it: the day in a narrow column, the sentence beside it, a rule under each row. The day is
- * the change's calendar day as the loader grouped it (D5), so it is written as a date, not through LocalTime. The first
- * seal on the list carries the definition of "seal", as the sketch shows it. With more groups than shown, one line says so.
+ * the change's calendar day as the loader grouped it (D5), so it is written as a date, not through LocalTime. A row that
+ * is the first use of a stage name, of "finding" or of "seal" carries its definition under the sentence, as the sketch
+ * shows the seal's. With more groups than shown, one line says so.
  */
-export function ChangesSince({ base, heading, groups, more, none }: {
-  base: HomeBase; heading: ReactNode; groups: readonly ChangeGroup[]; more: boolean; none: string;
+export function ChangesSince({ base, heading, groups, more, none, uses }: {
+  base: HomeBase; heading: ReactNode; groups: readonly ChangeGroup[]; more: boolean; none: string; uses: FirstUses;
 }): ReactElement {
-  const firstSeal = groups.findIndex((g) => g.kind === 'seal');
   return (
     <section className="home-section home-changes">
       <h2>{heading}</h2>
@@ -49,8 +52,9 @@ export function ChangesSince({ base, heading, groups, more, none }: {
                 <time className="home-changes__day" dateTime={g.day}>{formatDay(g.day)}</time>
                 <div className="home-changes__what">
                   <p>{sentenceOf(g)}</p>
+                  {/* Right after the sentence: a definition belongs beside the use (lib/vocabulary/firstUse.ts). */}
+                  <Defs uses={uses} where={`change:${i}`} />
                   {project === null ? null : <p className="home-changes__meta"><bdi>{project}</bdi></p>}
-                  {i === firstSeal ? <Definition of={TERM_SEAL} as="p" /> : null}
                 </div>
               </li>
             );

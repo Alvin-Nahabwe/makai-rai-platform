@@ -453,6 +453,37 @@ describe('loadHome', () => {
     expect(data.raisedByMe.map((f) => f.id)).toEqual([mine.id]);
   });
 
+  it('reviewer: only the newest review of each stage is listed, so a sealed review a later one replaced never stays as changed since its seal', async () => {
+    const p = await addProject(fx, { name: 'Active' });
+    const first = await addStageReview(fx, p.id, { stage: IP });
+    await save(fx, p.id, { stage: IP, questionId: 'Q-IP-01' });
+    await sealFixture(fx, first.id, { projectId: p.id });
+    await save(fx, p.id, { stage: IP, questionId: 'Q-IP-02' });   // the first review is now changed since its seal
+    const second = await addStageReview(fx, p.id, { stage: IP });  // and a newer review of the same stage replaces it
+    const data = await home('reviewer');
+    if (data.variant !== 'reviewer') throw new Error(`expected reviewer, got ${data.variant}`);
+    expect(data.changedSinceSeal.map((r) => r.id)).toEqual([]);
+    expect(data.unsealed.map((r) => r.id)).toEqual([second.id]);
+    // The same stage of another project keeps its own newest review.
+    const q = await addProject(fx, { name: 'Other' });
+    const other = await addStageReview(fx, q.id, { stage: IP });
+    const again = await home('reviewer');
+    if (again.variant !== 'reviewer') throw new Error(`expected reviewer, got ${again.variant}`);
+    expect(again.unsealed.map((r) => r.id).sort()).toEqual([second.id, other.id].sort());
+  });
+
+  it('a Reviewer and a Viewer get the mitigations assigned to them, and only theirs; none is an empty list', async () => {
+    const p = await addProject(fx, { name: 'Active' });
+    const f = await addFinding(fx, p.id, { stage: PP, source: 'team' });
+    await addMitigationVersion(fx, f.id, { status: 'planned', owner: 'reviewer', dueDate: '2026-12-01' });
+    await addMitigationVersion(fx, f.id, { status: 'in_progress', owner: 'assessor', dueDate: '2026-12-02' });
+    const reviewer = await home('reviewer');
+    const viewer = await home('viewer');
+    if (reviewer.variant !== 'reviewer' || viewer.variant !== 'viewer') throw new Error('expected reviewer and viewer');
+    expect(reviewer.assigned.map((i) => [i.owner.userId, i.dueDate])).toEqual([[fx.members.reviewer.userId, '2026-12-01']]);
+    expect(viewer.assigned).toEqual([]);
+  });
+
   it('Review Focus 2: Home reads nothing of another organisation for a member of both', async () => {
     const b = await buildOrg({ label: 'b' });
     const u = fx.members.assessor;

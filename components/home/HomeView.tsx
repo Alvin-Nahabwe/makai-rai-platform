@@ -13,6 +13,7 @@ import { TeamLeadAdditions } from '@/components/home/TeamLeadAdditions';
 import { AllProjects, ReviewerHome } from '@/components/home/ReviewerHome';
 import { ViewerHome } from '@/components/home/ViewerHome';
 import { FirstTimeHome } from '@/components/home/FirstTimeHome';
+import { firstUsesOf, type FirstUses } from '@/components/home/firstUse';
 import { SLOT, withSlot } from '@/components/home/parts';
 
 type Recorder = Extract<HomeData, { variant: 'recorder' }>;
@@ -23,26 +24,26 @@ type Recorder = Extract<HomeData, { variant: 'recorder' }>;
  * project's three stages, then the other projects. The document order is the reading order at every width, so on a narrow
  * screen the right column follows the left.
  */
-function RecorderHome({ data }: { data: Recorder }): ReactElement {
+function RecorderHome({ data, uses }: { data: Recorder; uses: FirstUses }): ReactElement {
   const { base } = data;
   return (
     <div className="home-columns">
       <div className="home-column">
-        {data.next === null ? null : <NextStepCard orgSlug={base.orgSlug} next={data.next} />}
-        <AssignedToYou base={base} items={data.assigned} />
+        {data.next === null ? null : <NextStepCard orgSlug={base.orgSlug} next={data.next} uses={uses} />}
+        <AssignedToYou base={base} items={data.assigned} uses={uses} />
         {data.since === null ? null : (
           <ChangesSince
             base={base} heading={withSlot(HOME_COPY.sinceHeading(SLOT), <LocalTime at={data.since.from} dateOnly />)}
-            groups={data.since.groups} more={data.since.more} none={HOME_COPY.sinceNone}
+            groups={data.since.groups} more={data.since.more} none={HOME_COPY.sinceNone} uses={uses}
           />
         )}
       </div>
       <div className="home-column">
-        {data.lead === null ? null : <TeamLeadAdditions base={base} lead={data.lead} />}
+        {data.lead === null ? null : <TeamLeadAdditions base={base} lead={data.lead} uses={uses} />}
         {data.focus === null ? null : (
           <StagesOverview
             orgSlug={base.orgSlug} projectId={data.focus.projectId} projectName={data.focus.projectName} stages={data.focus.stages}
-            next={data.next} recording heading="h2"
+            next={data.next} recording heading="h2" uses={uses}
           />
         )}
         <AllProjects orgSlug={base.orgSlug} others={data.otherProjects} />
@@ -65,6 +66,8 @@ function leadOf(data: HomeData): string | null {
 export function HomeView({ data }: { data: HomeData }): ReactElement {
   const { base } = data;
   const lead = leadOf(data);
+  // Where each defined term is first used, in reading order (spec 6): the components draw the definitions there.
+  const uses = firstUsesOf(data);
   return (
     <div className="home">
       <header className="home-hello">
@@ -74,9 +77,9 @@ export function HomeView({ data }: { data: HomeData }): ReactElement {
         {!base.welcome && lead !== null ? <p className="home-hello__lead">{lead}</p> : null}
         <HomeUnsavedLine userId={base.userId} orgId={base.orgId} />
       </header>
-      {data.variant === 'recorder' ? <RecorderHome data={data} />
-        : data.variant === 'reviewer' ? <ReviewerHome data={data} />
-          : data.variant === 'viewer' ? <ViewerHome data={data} />
+      {data.variant === 'recorder' ? <RecorderHome data={data} uses={uses} />
+        : data.variant === 'reviewer' ? <ReviewerHome data={data} uses={uses} />
+          : data.variant === 'viewer' ? <ViewerHome data={data} uses={uses} />
             : <FirstTimeHome data={data} />}
     </div>
   );

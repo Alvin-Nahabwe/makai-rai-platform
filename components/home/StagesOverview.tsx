@@ -2,20 +2,17 @@ import type { ReactElement } from 'react';
 import type { Stage } from '@/types/record';
 import type { NextStep, StageOpen } from '@/lib/home/types';
 import type { StatusMarkKind } from '@/components/ui/types';
-import type { DefinedEntry } from '@/lib/vocabulary/types';
 import { HOME_COPY } from '@/lib/home/copy';
 import { PROJECT_COPY } from '@/lib/project/copy';
 import { positionWords, tallyWords } from '@/lib/ui/copy';
 import { questionHref } from '@/lib/question/draft';
-import { TERM_STAGE_1, TERM_STAGE_2, TERM_STAGE_3 } from '@/lib/vocabulary/terms';
 import { ListLink } from '@/components/ui/ListLink';
 import { MarkShape } from '@/components/ui/StatusMark';
-import { Definition, Term } from '@/components/ui/Definition';
 import { STAGE_NAME, plural } from '@/components/project/StageColumn';
-import { OverdueWord } from '@/components/home/parts';
+import type { FirstUses } from '@/components/home/firstUse';
+import { Defs, OverdueWord, StageName } from '@/components/home/parts';
 
 const C = PROJECT_COPY.stage;
-const STAGE_TERM: Readonly<Record<Stage, DefinedEntry>> = { 'pre-processing': TERM_STAGE_1, 'in-processing': TERM_STAGE_2, 'post-processing': TERM_STAGE_3 };
 /**
  * The kinds of a tally in the kit's order (spec 7.2's table), "no decision" last, as the sketch lists them. A record over
  * every kind, so a kind added to the kit fails to compile here rather than vanishing from the tally.
@@ -90,8 +87,8 @@ function NextLink({ orgSlug, projectId, stage, questionId, words }: { orgSlug: s
  * the overdue mitigations, "Overdue" red), then the tally in words with a mark per kind, then the "Next:" line for a person
  * who records. No count of zero is shown: a stage with nothing open has no open line.
  */
-function StagePlate({ orgSlug, projectId, stage, next, recording, heading }: {
-  orgSlug: string; projectId: string; stage: StageOpen; next: NextStep | null; recording: boolean; heading: 'h3' | 'h4';
+function StagePlate({ orgSlug, projectId, stage, next, recording, heading, uses }: {
+  orgSlug: string; projectId: string; stage: StageOpen; next: NextStep | null; recording: boolean; heading: 'h3' | 'h4'; uses: FirstUses;
 }): ReactElement {
   const Heading = heading;
   const here = recording && next !== null && next.projectId === projectId && next.stage === stage.stage;
@@ -102,11 +99,12 @@ function StagePlate({ orgSlug, projectId, stage, next, recording, heading }: {
       <div className="home-stage__head">
         <LineMark here={here} />
         <Heading className="home-stage__name">
-          <ListLink href={`${project}/stages/${stage.stage}`}><Term of={STAGE_TERM[stage.stage]}>{STAGE_NAME[stage.stage]}</Term></ListLink>
+          <ListLink href={`${project}/stages/${stage.stage}`}><StageName stage={stage.stage} /></ListLink>
         </Heading>
         <span className="home-stage__count">{plural(stage.stops.length, C.question, C.questions)}</span>
       </div>
-      <Definition of={STAGE_TERM[stage.stage]} as="p" />
+      {/* The stage's definition (and any other term first used on this plate), when the page has not given it earlier. */}
+      <Defs uses={uses} where={`plate:${projectId}:${stage.stage}`} />
       {open ? (
         <p className="home-stage__open">
           {stage.openFindings > 0
@@ -127,8 +125,9 @@ function StagePlate({ orgSlug, projectId, stage, next, recording, heading }: {
  * A project's three stages (spec 9.1 (5)): its name as a heading linked to the project page, the lead line, then the three
  * plates in stage order. `recording` is false for a Viewer: no "Next:" line and no "you are here" stop.
  */
-export function StagesOverview({ orgSlug, projectId, projectName, stages, next, recording, heading }: {
+export function StagesOverview({ orgSlug, projectId, projectName, stages, next, recording, heading, uses }: {
   orgSlug: string; projectId: string; projectName: string; stages: readonly StageOpen[]; next: NextStep | null; recording: boolean; heading: Heading;
+  uses: FirstUses;
 }): ReactElement {
   const Heading = heading;
   return (
@@ -140,7 +139,7 @@ export function StagesOverview({ orgSlug, projectId, projectName, stages, next, 
       {recording ? <p className="home-note">{HOME_COPY.stagesLead}</p> : null}
       <div className="home-stages">
         {stages.map((s) => (
-          <StagePlate key={s.stage} orgSlug={orgSlug} projectId={projectId} stage={s} next={next} recording={recording} heading={below(heading)} />
+          <StagePlate key={s.stage} orgSlug={orgSlug} projectId={projectId} stage={s} next={next} recording={recording} heading={below(heading)} uses={uses} />
         ))}
       </div>
     </section>

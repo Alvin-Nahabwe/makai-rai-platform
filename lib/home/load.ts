@@ -9,6 +9,7 @@ import { withOrg, type OrgContext, type TenantTx } from '@/lib/data/tenant';
 import { questionHref } from '@/lib/question/draft';
 import { markKindOf, tallyOf } from '@/lib/ui/marks';
 import { STAGES, type CalendarDate, type DecisionVersionRow, type ScopeAnswer, type Stage, type UtcInstant } from '@/types/record';
+import type { StageReviewView } from '@/types/api';
 import { changesSince, hasSavedAny, lastSavedBy, lastSavedIn } from '@/lib/home/queries';
 import { continueTarget, nextStep } from '@/lib/home/nextStep';
 import type { ContinueTarget, HomeBase, HomeData, NextStep, RouteStop, StageOpen, TeamLead } from '@/lib/home/types';
@@ -132,7 +133,7 @@ export async function loadHome(
     welcome: opts.welcome, archivedCount: archived.length, projects: active.map((p) => ({ id: p.id, name: p.name })),
   };
   if (active.length === 0) return { variant: 'first-time', base, canCreate: can(ctx.role, 'project:create') };
-  if (variant === 'viewer') return viewerHome(ctx, base, active, opts);
+  if (variant === 'viewer') return viewerHome(ctx, base, active, identity.userId, opts);
   if (variant === 'reviewer') return reviewerHome(ctx, base, active, identity.userId, opts.today);
   return recorderHome(ctx, base, active, identity.userId, opts);
 }
@@ -196,15 +197,35 @@ async function teamLeadOf(ctx: OrgContext, active: readonly ProjectRow[], today:
   return { overdue: per.flatMap((x) => x.overdue), withoutMitigation: per.flatMap((x) => x.withoutMitigation), multiProject: active.length > 1 };
 }
 
-/** A Reviewer: reviews not sealed, sealed reviews with changes since their latest seal, and the open findings they raised. */
+/**
+ * The newest review of each stage of a project (the highest number in the stage), as the stage page shows one review per
+ * stage: an older review a later one replaced is not work waiting for anyone, sealed or not.
+ */
+function newestPerStage(reviews: readonly StageReviewView[]): StageReviewView[] {
+  const newest = new Map<string, StageReviewView>();
+  for (const r of reviews) {
+    const key = `${r.projectId}:${r.stage}`;
+    const kept = newest.get(key);
+    if (kept === undefined || r.numberInStage > kept.numberInStage) newest.set(key, r);
+  }
+  return reviews.filter((r) => newest.get(`${r.projectId}:${r.stage}`) === r);
+}
+
+/**
+ * A Reviewer: the mitigations assigned to them (their own work, whatever the role; empty when none), reviews not sealed,
+ * sealed reviews with changes since their latest seal (each the newest of its stage), and the open findings they raised.
+ */
 async function reviewerHome(ctx: OrgContext, base: HomeBase, active: readonly ProjectRow[], userId: string, today: CalendarDate): Promise<HomeData> {
-  const per = await eachInTurn(active, async (p) => {
-    const [reviews, findings] = await Promise.all([listStageReviews(ctx, p.id), listFindings(ctx, p.id, undefined, today)]);
-    return { reviews, findings };
-  });
-  const reviews = per.flatMap((x) => x.reviews);
+  const [assigned, per] = await Promise.all([
+    myMitigations(ctx, userId, today),
+    eachInTurn(active, async (p) => {
+      const [reviews, findings] = await Promise.all([listStageReviews(ctx, p.id), listFindings(ctx, p.id, undefined, today)]);
+      return { reviews, findings };
+    }),
+  ]);
+  const reviews = newestPerStage(per.flatMap((x) => x.reviews));
   return {
-    variant: 'reviewer', base,
+    variant: 'reviewer', base, assigned,
     unsealed: reviews.filter((r) => r.latestSeal === null),
     changedSinceSeal: reviews.filter((r) => r.latestSeal !== null && r.changedSinceLatestSeal),
     raisedByMe: per.flatMap((x) => x.findings).filter((f) => f.raisedBy.userId === userId && f.state === 'open'),
@@ -212,20 +233,22 @@ async function reviewerHome(ctx: OrgContext, base: HomeBase, active: readonly Pr
 }
 
 /**
- * A Viewer: what the team recorded in the last 14 days, and what is still open in each active project. Its stops lead to
+ * A Viewer: the mitigations assigned to them (empty when none), what the team recorded in the last 14 days, and what is
+ * still open in each active project. Its stops lead to
  * the question page, which a Viewer reads as the reading view (record:read), and none is current: nothing here records
  * (T9.5 forbids recording links, not reading ones; the lane lead's ruling on Task 2's point 4).
  */
 async function viewerHome(
-  ctx: OrgContext, base: HomeBase, active: readonly ProjectRow[], opts: { orgSlug: string; today: CalendarDate; now: Date },
+  ctx: OrgContext, base: HomeBase, active: readonly ProjectRow[], userId: string, opts: { orgSlug: string; today: CalendarDate; now: Date },
 ): Promise<HomeData> {
-  const [recent, open] = await Promise.all([
+  const [assigned, recent, open] = await Promise.all([
+    myMitigations(ctx, userId, opts.today),
     changesSince(ctx, { since: new Date(opts.now.getTime() - RECENT_MS), excludeUserId: null, limitGroups: CHANGE_GROUPS }),
     eachInTurn(active, async (p) => ({
       projectId: p.id, projectName: p.name, stages: await stagesOpen(ctx, p.id, opts.today, { orgSlug: opts.orgSlug, recording: null }),
     })),
   ]);
-  return { variant: 'viewer', base, recent, open };
+  return { variant: 'viewer', base, assigned, recent, open };
 }
 
 /**
