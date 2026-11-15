@@ -8,8 +8,8 @@ import type { StagePageData } from '@/lib/question/stagePage';
 import { STAGE_LIST_COPY } from '@/lib/question/list/copy';
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
 import { STATUS_MARK_COPY, tallyWords } from '@/lib/ui/copy';
-import { TERM_STAGE_1 } from '@/lib/vocabulary/terms';
-import { tallyOfRows } from '@/lib/question/route';
+import { TERM_DONE, TERM_PARTLY, TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION, TERM_STAGE_1 } from '@/lib/vocabulary/terms';
+import { tallyOfRows, tallyParts } from '@/lib/question/route';
 
 /**
  * All questions, the stage page, as the route's page variant (plan 1C Task 3; owner's answer R1, 15 November 2026; lane 1
@@ -103,6 +103,26 @@ describe('All questions: a row per question on one line', () => {
   });
 });
 
+describe('All questions: fix round 4, a question that is the page\'s first use of a defined term', () => {
+  const MC = 'Have you created or updated a model card for this model?';
+  it('the model-card row marks its words with the term and puts the term\'s (i) right after its link, not inside it; a later row gets none', () => {
+    const h = render(data([row('Q-PP-01'), row('Q-PP-02', { text: MC }), row('Q-PP-03', { text: 'Is the model card published?' })]));
+    const rows = rowsOf(h);
+    expect(rows.get('Q-PP-02')).toMatch(new RegExp(`<span class="route-line__title"><span data-term="model-card">${MC.replace('?', '\\?')}</span></span>`));
+    // One link per row, and the tip after it: no control inside the link.
+    expect(rows.get('Q-PP-02')).toMatch(/<\/a><span class="route-line__tips"><span class="ui-term-tip">/);
+    expect(rows.get('Q-PP-02')!.split('</a>')[0]).not.toContain('ui-term-tip');
+    expect(rows.get('Q-PP-02')).toContain('aria-label="What does &quot;model card&quot; mean?"');
+    expect(rows.get('Q-PP-03')).not.toContain('ui-term-tip');
+    expect(rows.get('Q-PP-01')).not.toContain('ui-term-tip');
+  });
+
+  it('a term the page has already used before the rows (here in the tally) gets no second tip on a row', () => {
+    const h = render(data([row('Q-PP-01', { kind: 'done', evidenceCount: 1 }), row('Q-PP-02', { text: 'Has the assessment been done?' })]));
+    expect(rowsOf(h).get('Q-PP-02')).not.toContain('ui-term-tip');
+  });
+});
+
 describe('All questions: design fix 1', () => {
   const css = () => readFileSync('components/question/stage-route.css', 'utf8') + readFileSync('components/question/route-line.css', 'utf8');
   it('the line has a reading measure on a wide screen (about 720 px, S3-2)', () => {
@@ -132,7 +152,7 @@ describe('All questions: the page\'s head', () => {
   it('a breadcrumb of the project and the stage, then the h1 with the stage\'s plain meaning, then the topics as a quiet line', () => {
     const h = render(data(ROWS));
     expect(h).toMatch(/<nav class="ui-breadcrumb" aria-label="Breadcrumb"><ol[^>]*>[\s\S]*?href="\/orgs\/org-a\/projects\/p1"[^>]*>Project A<\/a>[\s\S]*?aria-current="page">Pre-processing<\/span>/);
-    expect(h).toMatch(new RegExp(`<h1[^>]*>Pre-processing</h1><p class="ui-definition" data-definition="${TERM_STAGE_1.id}">${TERM_STAGE_1.definition}</p><p class="stage-route__topics">Problem Formulation · Data Collection &amp; Preparation</p>`));
+    expect(h).toMatch(new RegExp(`<h1[^>]*><span data-term="${TERM_STAGE_1.id}">Pre-processing</span></h1><p class="ui-definition" data-definition="${TERM_STAGE_1.id}">${TERM_STAGE_1.definition}</p><p class="stage-route__topics">Problem Formulation · Data Collection &amp; Preparation</p>`));
     expect([...h.matchAll(/<h1/g)]).toHaveLength(1);
   });
 
@@ -141,13 +161,18 @@ describe('All questions: the page\'s head', () => {
     const h = render(d);
     expect(h).toContain(`<p class="stage-route__count" data-stage-summary="">${ROWS.length} questions</p>`);
     // Each part's words, without the tips' own text (a tip's button and its popover sentence are not the tally's words).
-    // The words a reader sees: without the tips (button and popover sentence) and the mark (hidden; its words are visible).
-    const parts = [...h.matchAll(/<li class="stage-route__tally-part">([\s\S]*?)<\/li>/g)]
-      .map((m) => m[1].replace(/<span class="ui-term-tip">[\s\S]*?<\/span><\/span>/g, '').replace(/<span class="stage-route__tally-mark" aria-hidden="true">[\s\S]*?<\/span><\/span><\/span>/g, '')
-        .replace(/<[^>]+>/g, '').replace(/\u00a0/g, ' '));
-    expect(parts.join(', ')).toBe(tallyWords(tallyOfRows(ROWS, d.marks)).replace('1 answered', '1 personal data question answered'));
-    // Each part's mark is the kit's StatusMark at 16 px, hidden from assistive technology beside the visible words.
-    expect([...h.matchAll(/<span class="stage-route__tally-mark" aria-hidden="true"><span class="ui-mark ui-mark--[a-z_]+" data-mark-kind="[a-z_]+"><svg class="ui-mark__shape" width="16"/g)]).toHaveLength(parts.length);
+    // Each item's RAW text (fix round 4, N3: nothing stripped but tags, so a hidden word inside would show): the count, its
+    // words and, where the item has an (i), the tip's definition sentence (the closed popover's text), in that order.
+    const raw = [...h.matchAll(/<li class="stage-route__tally-part">([\s\S]*?)<\/li>/g)].map((m) => m[1].replace(/<[^>]+>/g, '').replace(/\u00a0/g, ' '));
+    const defs: Record<string, string> = { done: TERM_DONE.definition, partly: TERM_PARTLY.definition, scope_answered: TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION.definition };
+    const parts = tallyParts(tallyOfRows(ROWS, d.marks));
+    expect(raw).toEqual(parts.map((p) => `${p.n} ${p.word}${defs[p.kind] ?? ''}${p.extra === null ? '' : ` ${p.extra}`}`));
+    // One source for the personal data question's words (M-A3): the list copy.
+    expect(parts.map((p) => `${p.n} ${p.word}${p.extra === null ? '' : ` ${p.extra}`}`).join(', '))
+      .toBe(tallyWords(tallyOfRows(ROWS, d.marks)).replace(/\b1 answered\b/, STAGE_LIST_COPY.line.personalDataAnswered(1)));
+    // Each part's mark is the kit's shape alone at 16 px, beside its words; no hidden words.
+    expect([...h.matchAll(/<li class="stage-route__tally-part">(<span data-term="[^"]+">)?<span class="stage-route__keep stage-route__lead"><svg class="ui-mark__shape" width="16"/g)]).toHaveLength(parts.length);
+    expect(h.split('stage-route__tally-parts')[1].split('</ul>')[0]).not.toContain('ui-mark__words');
     expect(h).not.toContain('ui-route-row');
     expect(h).not.toContain('<progress');
     expect(h).not.toMatch(/\d\s?%/);
@@ -161,17 +186,20 @@ describe('All questions: the page\'s head', () => {
     const d = data(many, { marks: { A: 'done', B: 'not_yet', C: 'not_applicable', 'Q-PP-GATE-SENSITIVE': 'scope_answered', E: 'no_decision' }, scopeAnswer: 'yes' });
     const h = render(d);
     const items = [...h.matchAll(/<li class="stage-route__tally-part">([\s\S]*?)<\/li>/g)].map((m) => m[1]);
-    const tips = items.map((b) => [b.match(/data-mark-kind="([a-z_]+)"/)![1], (b.match(/class="ui-term-tip"/g) ?? []).length === 1]);
+    const kinds = tallyParts(tallyOfRows(many, d.marks)).map((p) => p.kind);
+    const tips = items.map((b, i) => [kinds[i], (b.match(/class="ui-term-tip"/g) ?? []).length === 1]);
     expect(tips).toEqual([['done', true], ['not_yet', true], ['not_applicable', true], ['scope_answered', true], ['no_decision', false]]);
     expect(h).toContain('aria-label="What is the personal data question?"');
     expect(h).toContain('aria-label="What does &quot;Not yet&quot; mean?"');
     // Reflow at 320 (fix round 3, S3-N1): the item's words may wrap, but the mark and the count stay together and
     // with the first word (a no-break space), and the LAST word stays with its (i) (one nowrap span).
     for (const b of items) {
-      expect(b).toMatch(/^<span class="stage-route__keep"><span class="stage-route__tally-mark" aria-hidden="true">[\s\S]*?<\/span><\/span><\/span>\d+<\/span>\u00a0/);
-      if (b.includes('ui-term-tip')) expect(b).toMatch(/<span class="stage-route__keep">[^<\s]+<span class="ui-term-tip">/);
+      // The mark, the count and the first word in one kept span (a no-break space inside it).
+      expect(b).toMatch(/^(<span data-term="[^"]+">)?<span class="stage-route__keep stage-route__lead"><svg[\s\S]*?<\/svg><span class="stage-route__words">\d+\u00a0[^<\s]+/);
+      // The last word and its (i) in one kept span.
+      if (b.includes('ui-term-tip')) expect(b).toMatch(/(<span class="stage-route__keep">[^<\s]+|\u00a0[^<\s]+<\/span>)<span class="ui-term-tip">/);
     }
-    expect(items[3]).toMatch(/<span data-term="[^"]+">personal data question<\/span> <span class="stage-route__keep">answered<span class="ui-term-tip">/);
+    expect(items[3]).toMatch(/<span data-term="[^"]+"><span class="stage-route__keep stage-route__lead">[\s\S]*?1\u00a0personal<\/span><\/span> data question <span class="stage-route__keep">answered<span class="ui-term-tip">/);
     const css = readFileSync('components/question/stage-route.css', 'utf8');
     expect(css).toMatch(/\.stage-route__keep\s*\{[^}]*white-space:\s*nowrap;/);
     expect(css).not.toMatch(/\.stage-route__tally-head/);

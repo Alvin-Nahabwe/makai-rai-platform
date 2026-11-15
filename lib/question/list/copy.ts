@@ -57,6 +57,8 @@ export const STAGE_LIST_COPY = Object.freeze({
      * question page's strip reads it: QUESTION_COPY.frame.personalDataAnswered), never "scope" or a bare "answered".
      */
     personalDataAnswered: (n: number): string => `${n} personal data ${n === 1 ? 'question' : 'questions'} answered`,
+    /** The name of a row's (i) for a term its question first uses (fix round 4), as the question page's strip names it. */
+    whatMeans: (term: string): string => `What does "${term}" mean?`,
     /** Between a folded run's tally items, as the sketch writes them. */
     tallySeparator: ' · ',
     /** A folded run of questions, by their places in the stage. */

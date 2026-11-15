@@ -185,6 +185,29 @@
   margin-block-end: var(--space-1);
 }
 
+/* A term's (i) for a question that first uses it (fix round 4): after the row's link, never inside it, at the right of
+   the row and level with its meta line, so the row keeps its look. */
+.route-line__item:has(> .route-line__tips) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.route-line__item:has(> .route-line__tips) > p {
+  flex-basis: 100%;
+}
+
+.route-line__item:has(> .route-line__tips) > .route-line__link {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+
+.route-line__tips {
+  display: inline-flex;
+  flex: none;
+  padding-block-end: 4px;
+}
+
 .route-line__none {
   margin-block: var(--space-2) 0;
 }

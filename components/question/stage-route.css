@@ -53,10 +53,18 @@
   vertical-align: middle;
 }
 
-.stage-route__tally-mark {
-  display: inline-flex;
+.stage-route__lead {
+  color: var(--color-mark);
+}
+
+.stage-route__lead .ui-mark__shape {
+  display: inline-block;
   vertical-align: -3px;
   margin-inline-end: 6px;
+}
+
+.stage-route__words {
+  color: var(--color-ink);
 }
 
 .stage-route__followup {

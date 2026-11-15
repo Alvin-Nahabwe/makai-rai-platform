@@ -192,6 +192,17 @@ describe('The route column: its open and next question', () => {
   });
 });
 
+describe('The route column: fix round 4, first use of a defined term in a question', () => {
+  it('a row whose words first use a defined term gets its (i) after its link; the open question\'s own words (the page\'s h1) count as used before', async () => {
+    const MC = 'Have you created or updated a model card for this model?';
+    const rs = [row('Q-PP-01'), row('Q-PP-02', { text: MC }), row('Q-PP-03')];
+    const h = await column(data(rs), 'Q-PP-01');
+    expect(rowsOf(h).find((r) => r.id === 'Q-PP-02')!.body).toMatch(/<\/a><span class="route-line__tips"><span class="ui-term-tip">/);
+    const asH1 = await column(data([row('Q-PP-01', { text: 'Is the model card published?' }), row('Q-PP-02', { text: MC })]), 'Q-PP-01');
+    expect(asH1).not.toContain('ui-term-tip');
+  });
+});
+
 describe('The route column: folded runs', () => {
   it('in a 22-question stage, the questions away from the open one fold into one run before and one after; the open and the next show', async () => {
     const h = await column(data(STAGE22), 'Q-04');

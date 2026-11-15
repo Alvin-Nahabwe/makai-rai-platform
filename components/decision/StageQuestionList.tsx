@@ -15,6 +15,7 @@ import { STAGE_LIST_COPY as L } from '@/lib/question/list/copy';
 import { moduleGroups, retryAllSummary, rowMatches, stageDraftIds, type StageFilter, type StageRow } from '@/lib/question/stageList';
 import { foldRoute } from '@/lib/question/route';
 import type { DecisionVersionView } from '@/types/api';
+import type { DefinedEntry } from '@/lib/vocabulary/types';
 import type { CalendarDate, Stage } from '@/types/record';
 import '@/components/question/stage-route.css';
 
@@ -34,6 +35,8 @@ export type StageQuestionListProps = {
   currentQuestionId?: string;
   /** The next question that applies (lib/question/route.ts, nextApplyingId): its row says "Next question". */
   nextQuestionId?: string | null;
+  /** By question id, the defined terms whose first use on the page is that question (fix round 4; shaped on the server). */
+  termTips?: Readonly<Record<string, readonly DefinedEntry[]>>;
 };
 
 type DeviceDraft = { keptUntil: CalendarDate; pressed: boolean; value: DecisionDraft; base: number | null; retry: { requestId: string | null; sentBody: string | null } };
@@ -147,6 +150,7 @@ export function StageQuestionList(p: StageQuestionListProps): ReactElement {
       scopeAnswer: mark === 'scope_answered' && p.scopeAnswer !== null ? p.scopeAnswer : undefined,
       here, next: column && p.nextQuestionId != null && r.questionId === p.nextQuestionId,
       version: here ? r.versionNumber : null, state, result: results.get(r.questionId)?.text ?? null,
+      terms: p.termTips?.[r.questionId] ?? [],
     };
   };
 

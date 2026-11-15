@@ -2,6 +2,7 @@ import type { StatusMarkKind } from '@/components/ui/types';
 import { tallyOf, type Tally } from '@/lib/ui/marks';
 import { tallyWords, UI_COPY } from '@/lib/ui/copy';
 import { STAGE_LIST_COPY } from '@/lib/question/list/copy';
+import { ROLE_IDS, termPattern } from '@/lib/vocabulary/firstUse';
 import { filterCounts, filterLabel, STAGE_FILTERS, type StageFilter, type StageRow } from '@/lib/question/stageList';
 import type { ChangedSinceSeal } from '@/types/api';
 import type { ScopeAnswer } from '@/types/record';
@@ -131,4 +132,30 @@ export function tallyParts(t: Tally): Array<{ kind: StatusMarkKind; n: number; w
  */
 export function lineTallyWords(t: Tally): string {
   return TALLY_ORDER.filter((kind) => (t[kind] ?? 0) > 0).map((kind) => kindWords(kind, t, false)).join(STAGE_LIST_COPY.line.tallySeparator);
+}
+
+/**
+ * Fix round 4 (lane 6's first-use crawl, e2e/vocabulary-first-use.spec.ts): which question's words are a page's first use
+ * of a term the vocabulary defines at first use, so its row can carry the term's (i). `texts` are the page's words in
+ * reading order, each a question's own (with its id) or other text the page shows before or between them. The rules are
+ * the crawl's (lib/vocabulary/firstUse.ts firstUseViolations), with its matcher, termPattern: whole words, any case, an
+ * optional plural `s`; a longer checked term consumes a shorter one inside it (L2-28); a role counts only in a role
+ * choice and a decision's version only where one is stated (so neither is ever a question's first use). Returns, by
+ * question id, the concepts whose first use that question is; a term first used in other text gets no row.
+ */
+export function firstUseTips<C extends { id: string; term: string; defineOnFirstUse: boolean }>(
+  texts: ReadonlyArray<{ text: string; questionId?: string }>, concepts: readonly C[],
+): Record<string, C[]> {
+  const checked = concepts.filter((c) => c.defineOnFirstUse);
+  const out: Record<string, C[]> = {};
+  for (const concept of checked) {
+    if ((ROLE_IDS as readonly string[]).includes(concept.id) || concept.id === 'version-of-a-decision') continue;
+    const pattern = termPattern(concept.term);
+    const longer = checked.filter((c) => c !== concept && c.term.length > concept.term.length && pattern.test(c.term))
+      .map((c) => new RegExp(termPattern(c.term).source, 'giu'));
+    const outsideLonger = (text: string) => longer.reduce((t, re) => t.replace(re, ' '), text);
+    const first = texts.find((t) => pattern.test(outsideLonger(t.text)));
+    if (first?.questionId !== undefined) (out[first.questionId] ??= []).push(concept);
+  }
+  return out;
 }

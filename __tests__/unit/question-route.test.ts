@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { foldRoute, lineTallyWords, nextApplyingId, ROUTE_FOLD, stopsOf, tallyOfRows, tallyParts } from '@/lib/question/route';
+import { firstUseTips, foldRoute, lineTallyWords, nextApplyingId, ROUTE_FOLD, stopsOf, tallyOfRows, tallyParts } from '@/lib/question/route';
 import { tallyWords } from '@/lib/ui/copy';
 import type { StatusMarkKind } from '@/components/ui/types';
 import type { StageRow } from '@/lib/question/stageList';
@@ -157,5 +157,41 @@ describe('tallyParts', () => {
     const parts = tallyParts(tally);
     expect(parts.map((p) => p.kind)).toEqual(['done', 'partly', 'not_yet', 'not_applicable', 'does_not_apply', 'scope_answered', 'no_decision']);
     expect(parts.reduce((n, p) => n + Number(p.words.split(' ')[0]), 0)).toBe(23);
+  });
+});
+
+/**
+ * Fix round 4 (lane 6's first-use crawl): a question's words can be a page's first use of a defined term. firstUseTips
+ * decides, with the crawl's own matcher (lib/vocabulary/firstUse.ts termPattern), which row gets the term's (i).
+ */
+describe('firstUseTips', () => {
+  const MODEL_CARD = { id: 'model-card', term: 'model card', defineOnFirstUse: true };
+  const MITIGATION = { id: 'mitigation', term: 'mitigation', defineOnFirstUse: true };
+  const MITIGATION_PLAN = { id: 'mitigation-plan', term: 'mitigation plan', defineOnFirstUse: true };
+  const OWNER = { id: 'owner', term: 'Owner', defineOnFirstUse: true };
+  const QUIET = { id: 'stage', term: 'stage', defineOnFirstUse: false };
+  const concepts = [MODEL_CARD, MITIGATION, MITIGATION_PLAN, OWNER, QUIET];
+
+  it('the model-card question is the first use of "model card": its row gets the term; a later row with it does not', () => {
+    const tips = firstUseTips([
+      { text: '24 questions' },
+      { text: 'Have you created or updated a model card for this model?', questionId: 'Q-1' },
+      { text: 'Is the model card published?', questionId: 'Q-2' },
+    ], concepts);
+    expect(tips).toEqual({ 'Q-1': [MODEL_CARD] });
+  });
+
+  it('a term already used earlier on the page gets no tip on a row', () => {
+    expect(firstUseTips([{ text: 'Write a model card first.' }, { text: 'Is the model card published?', questionId: 'Q-2' }], concepts)).toEqual({});
+  });
+
+  it('the crawl\'s rules: a plural counts, a longer term consumes a shorter one, a role and a term not defined at first use never', () => {
+    const tips = firstUseTips([
+      { text: 'Is each mitigation plan agreed?', questionId: 'Q-1' },
+      { text: 'Who is the owner of the model cards?', questionId: 'Q-2' },
+      { text: 'Which stage are you in?', questionId: 'Q-3' },
+      { text: 'Is every mitigation tested?', questionId: 'Q-4' },
+    ], concepts);
+    expect(tips).toEqual({ 'Q-1': [MITIGATION_PLAN], 'Q-2': [MODEL_CARD], 'Q-4': [MITIGATION] });
   });
 });
