@@ -127,6 +127,67 @@
   }
 }
 
+/*
+ * Option A (the owner's ruling of 15 Nov 2026, 11:45): above 768 px the Save row (Save, the way on, the save status) pins to
+ * the screen's foot like the phone's bar while its own place in the card is below the fold, and returns to that place when
+ * the person scrolls to it. It is the same bar, sticky at the bottom of the answer form's fieldset (its last child), so it is
+ * pinned exactly while its place is below the fold and nothing in the card is hidden or repeated. DecisionForm measures its
+ * height into --decision-save-bar-h, and the element that scrolls at this width (the document from 769 to 1023 px, the shell's
+ * main region from 1024 px, components/layout/shell.css) keeps that much clear at its foot, so a field that takes focus, or
+ * a summary link's field, lands above the row (SC 2.4.11; DecisionForm's footOfView reads "pinned" from geometry). The row
+ * spans the card's width (its padding taken back); its surface and top rule are the phone bar's tokens. The rule shows only
+ * while it is pinned (a scroll-state query, read by the bar's descendants; modern-web-guidance state-aware-sticky-headers),
+ * and always where scroll-state queries are unknown. Nothing changes size when it pins, and nothing animates.
+ */
+@media (min-width: 769px) {
+  .decision-save-bar {
+    position: sticky;
+    inset-block-end: 0;
+    z-index: 2;
+    container: decision-save-bar / scroll-state;
+  }
+
+  .decision-card .decision-save-bar {
+    margin-inline: calc(-1 * var(--space-6));
+  }
+
+  .decision-save-bar__pin {
+    padding-block: var(--space-3);
+    border-block-start: 1px solid transparent;
+    background-color: var(--color-surface);
+  }
+
+  .decision-card .decision-save-bar__pin {
+    padding-inline: var(--space-6);
+  }
+
+  @container decision-save-bar scroll-state(stuck: block-end) {
+    .decision-save-bar__pin {
+      border-block-start-color: var(--color-border-control);
+    }
+  }
+
+  @supports not (container-type: scroll-state) {
+    .decision-save-bar__pin {
+      border-block-start-color: var(--color-border-control);
+    }
+  }
+
+  html:has(.decision-save-bar),
+  .shell__main:has(.decision-save-bar) {
+    scroll-padding-block-end: var(--decision-save-bar-h, 0px);
+  }
+}
+
+/* From 1024 px the shell's main region scrolls and has 32 px of padding (shell.css), and a sticky box stops at its scroll
+   container's padding edge: the row would float 32 px above the screen's foot with the card showing under it. Its inset
+   takes that padding back, so it pins to the foot itself. */
+@media (min-width: 1024px) {
+  .decision-save-bar {
+    inset-block-end: calc(-1 * var(--space-8));
+  }
+}
+
 /* R2 (the sketch's .guide): the line on what this save will do, after the fields and the evidence and before Save. The
    info icon in navy and the sentence in ink on the ground's tint; the definition of "finding" under it, muted. */
 .decision-consequence {
@@ -178,6 +239,13 @@
   line-height: 1.35;
   text-align: end;
   color: var(--color-link);
+}
+
+/* Review B-I1: while a Save waits or is out, the next question's words are text, not a link: quieter, in the muted ink. */
+.decision-next--held {
+  margin-block: 0;
+  font-weight: var(--font-weight-regular);
+  color: var(--color-ink-muted);
 }
 
 .decision-next--last {
@@ -239,5 +307,42 @@
     -webkit-line-clamp: none;
     line-clamp: none;
     white-space: nowrap;
+  }
+}
+
+/*
+ * Spec 9.7, every save state in the card (T3b item 6): the status line by Save carries an icon beside its words, so no
+ * state is told by colour alone and an alert is never red: a clock while saving or slow (M-01, M-02), the saved check in the
+ * saved green (M-03, M-04), a warning triangle in ink for every failure (the alert region). The icon is CSS on a region that
+ * has words, never markup: the live regions hold their sentence and nothing else (protected tests read their text), and
+ * generated content with no text is not read. The kit's own icons (components/ui/icons.tsx: clock, circle-check,
+ * triangle-alert), drawn as a mask in the text colour; the system text colour in forced colours.
+ */
+.save-status [role="status"]:not(:empty)::before,
+.save-status [role="alert"]:not(:empty)::before {
+  content: '';
+  display: inline-block;
+  inline-size: 1.125em;
+  block-size: 1.125em;
+  margin-inline-end: var(--space-2);
+  vertical-align: -0.2em;
+  background-color: currentColor;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 6v6l4 2'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+.save-status [role="status"]:is([data-message-id="M-03"], [data-message-id="M-04"])::before {
+  background-color: var(--color-saved);
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='m16 9-5.5 5.5L8 12'/%3E%3C/svg%3E");
+}
+
+.save-status [role="alert"]:not(:empty)::before {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3'/%3E%3Cpath d='M12 9v4'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E");
+}
+
+@media (forced-colors: active) {
+  .save-status [role="status"]:not(:empty)::before,
+  .save-status [role="alert"]:not(:empty)::before {
+    forced-color-adjust: none;
+    background-color: CanvasText;
   }
 }

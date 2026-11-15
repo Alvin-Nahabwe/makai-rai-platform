@@ -2230,5 +2230,21 @@
     "property": "A stored link address carrying bidi controls is shown without them, inside bdi, and the anchor goes where the reader is told it goes. T3 item 8 (the coordinator's security ruling of 15 Nov 2026, routed from lane 1): the href and the host shown come from ONE parse, lib/evidence/format.ts webLink, so the href is the parsed address (a control in the path percent-encoded, as the browser would send it) rather than the stored string, and a labelled link names the host it goes to, \"<label> (<host>, opens another site)\", instead of repeating the whole address.",
     "proof": "Same render (VersionEvidenceList) of the same address 'https://e.org/\\u202Eexe.pdf' with no label and with 'Ethics'; the no-controls-in-text and bdi assertions are unchanged; `expect(html).toContain(`href=\"${url}\"`)` became `toContain('href=\"https://e.org/%E2%80%AEexe.pdf\"')`, and the text the labelled link shows became 'Ethics (e.org, opens another site)'. The three new cases in the same file's describe 'T3 item 8' pin a label claiming another site, 'https:evil.example' and bidi controls in the host. Seen RED before EvidenceItemText used webLink, GREEN after.",
     "task": "Route rebuild lane 2 task 3a (the card's finish)"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/evidence-components.test.tsx::UX-30 FR-RM-01: upload lines are text and no progress element exists",
+    "replacedBy": "__tests__/unit/evidence-components.test.tsx::UX-30 FR-RM-01 C5: an uploading line is text, with one native progress element inside [data-upload-progress], labelled with the file",
+    "property": "An upload's state is told in text (\"Uploading <name>: x of y MB.\", unchanged), and no score-like progress drawing appears: plan 1C decision C5 adds exactly one native <progress value max> per uploading file, inside <span data-upload-progress>, named \"Uploading <file>\", which e2e/helpers/noScore.ts already allows there and only there (1A data-attributes table). A failed or finished file has none, and nothing has role=progressbar.",
+    "proof": "Same render of the same uploading item: the text assertion is unchanged; `not.toMatch(/<progress|role=\"progressbar\"/)` became one <progress> with value 800000, max 2400000 and aria-label \"Uploading costing.xlsx\" directly inside [data-upload-progress], no role=progressbar, and no <progress> for a failed or finished file. The browser side is e2e/evidence-block.spec.ts::UX-30 NFR-PERF-06 C5: under the Poor profile the line shows changing byte counts as text, and its one progress element sits in [data-upload-progress] (changed with this entry) and e2e/decision-pinned-save.spec.ts (B-I1 C5 case). Seen RED before EvidenceBlockView drew it, GREEN after.",
+    "task": "Route rebuild lane 2 task 3b (C5)"
+  },
+  {
+    "kind": "rule",
+    "changed": "e2e/evidence-block.spec.ts::UX-30 NFR-PERF-06: under the Poor profile the line shows changing byte counts as text and no progress element",
+    "replacedBy": "e2e/evidence-block.spec.ts::UX-30 NFR-PERF-06 C5: under the Poor profile the line shows changing byte counts as text, and its one progress element sits in [data-upload-progress]",
+    "property": "Under the Poor profile the upload line's byte counts change, as text, with the large-file note; per plan 1C C5 the only progress element on the page is the file's own <progress> inside [data-upload-progress], and nothing has role=progressbar outside one.",
+    "proof": "Same flow; `expect(page.locator('progress, [role=\"progressbar\"]')).toHaveCount(0)` became: every progress or progressbar on the page is a <progress> directly inside [data-upload-progress] (count of those outside it 0), while the file uploads.",
+    "task": "Route rebuild lane 2 task 3b (C5)"
   }
 ]

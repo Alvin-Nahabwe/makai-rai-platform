@@ -78,7 +78,9 @@ describe('DecisionForm -- EvidenceBlock wiring', () => {
     // `examples` and `decisionCard` joined it on 15 November 2026 (the decision card, spec 9.3 item 5): words only, the
     // question's own examples, the stored sentence and "None yet."; neither changes what the block sends or keeps. `keptCount`
     // (review round 1): how much evidence the form keeps that the block cannot name, so "None yet." is not said then.
-    const allowed = ['orgSlug', 'projectId', 'initial', 'disabled', 'onChange', 'onUploadState', 'onItemsChange', 'notUploaded', 'fromVersionNumber', 'saveOut', 'unaddedLinkRefusals', 'initialLink', 'onLinkInput', 'examples', 'decisionCard', 'keptCount'];
+    // `saveWithout` (plan 1C C5, lane 2 T3b): the form's own "Save without" (its existing save(true)) beside the uploading
+    // files while no Save waits; null while one waits, when the wait card holds the one such button. It sends nothing itself.
+    const allowed = ['orgSlug', 'projectId', 'initial', 'disabled', 'onChange', 'onUploadState', 'onItemsChange', 'notUploaded', 'fromVersionNumber', 'saveOut', 'unaddedLinkRefusals', 'initialLink', 'onLinkInput', 'examples', 'decisionCard', 'keptCount', 'saveWithout'];
     expect(Object.keys(props).filter((k) => !allowed.includes(k))).toEqual([]);
   });
 

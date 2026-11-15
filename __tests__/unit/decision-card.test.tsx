@@ -446,3 +446,80 @@ describe('T3a: the history list (routed items 7 and 9)', () => {
     expect(words(h)).toContain('Joseph K., 12 Oct 2026 10:42 EAT');
   });
 });
+
+const { saveControlIsRetry, WaitLines, NextWay } = await import('@/components/decision/DecisionForm');
+const { SaveStatus } = await import('@/components/decision/SaveStatus');
+const { toSaveBody } = await import('@/lib/question/draft');
+const { requestIdFor } = await import('@/lib/client/retrySafeWrite');
+
+describe('T3b: one Save/Retry control, the unsaved line, the way on during a save, the wait card, the raise link', () => {
+  const value = { ...draftFromCurrent(PANEL), status: 'done' as const, reason: 'Compared it.' };
+  const body = toSaveBody(value, PANEL, null) as unknown as Record<string, unknown>;
+  const sent = requestIdFor({ requestId: null, sentBody: null }, body, () => 'r1').state;
+  const failed = { id: 'M-05' as const, text: 'Not saved.', live: 'assertive' as const, next: 'retry' as const };
+  const base = { retry: sent, body, status: failed, restoredPressed: false, saving: false, retrying: false };
+
+  it('C4: Retry exactly while the field holds the answer whose request failed and a retry is offered (or a pressed draft was restored)', () => {
+    expect(saveControlIsRetry(base)).toBe(true);
+    expect(saveControlIsRetry({ ...base, status: null, restoredPressed: true })).toBe(true);
+  });
+  it('C4: Save decision after an edit, with no request, after a refusal that offers no retry, or with no press restored', () => {
+    const edited = toSaveBody({ ...value, reason: 'Edited after the failure' }, PANEL, null) as unknown as Record<string, unknown>;
+    expect(saveControlIsRetry({ ...base, body: edited })).toBe(false);
+    expect(saveControlIsRetry({ ...base, retry: { requestId: null, sentBody: null } })).toBe(false);
+    expect(saveControlIsRetry({ ...base, status: { ...failed, id: 'M-09', next: 'none' } })).toBe(false);
+    expect(saveControlIsRetry({ ...base, status: null })).toBe(false);
+  });
+  it('C4 D-398 item 4: a pressed Retry keeps its label while its request is out; a Save keeps "Save decision"', () => {
+    expect(saveControlIsRetry({ ...base, status: { id: 'M-01', text: 'Saving...', live: 'polite', next: 'none' }, saving: true, retrying: true })).toBe(true);
+    expect(saveControlIsRetry({ ...base, saving: true, retrying: false })).toBe(false);
+  });
+  it('C4: the card has exactly one submit control, and no separate Retry button, in its first markup', () => {
+    const h = card();
+    expect(h.match(/type="submit"/g)).toHaveLength(1);
+    expect(h).toMatch(/<button[^>]*type="submit"[^>]*>Save decision<\/button>/);
+    expect(h).not.toMatch(/>Retry<\/button>/);
+  });
+
+  it('C7: the unsaved line is the only text of an always-present polite, atomic live span; one role=status in .save-status', () => {
+    const shown = renderToStaticMarkup(<SaveStatus status={null} draftSavedAt="2026-10-12T07:43:00.000Z" storageUnavailable={false} />);
+    expect(shown).toMatch(new RegExp(`<span aria-live="polite" aria-atomic="true"[^>]*>${esc(F.unsaved)}</span>`));
+    expect(shown.match(/role="status"/g)).toHaveLength(1);
+    const none = renderToStaticMarkup(<SaveStatus status={null} draftSavedAt={null} storageUnavailable={false} />);
+    expect(none).toMatch(/<span aria-live="polite" aria-atomic="true"[^>]*><\/span>/);
+    expect(none.match(/role="status"/g)).toHaveLength(1);
+  });
+
+  it('B-I1: while a Save waits or is out, the way on is the same words as text, with no link', () => {
+    const held = renderToStaticMarkup(<NextWay next={NEXT} stageHref={STAGE} held />);
+    expect(held).not.toMatch(/<a[\s>]/);
+    expect(held).not.toContain('href=');
+    expect(words(held)).toBe(`${F.card.next(NEXT.text)}${F.card.position(3, 24)}`);
+    expect(held).toContain('decision-next--held');
+    const live = renderToStaticMarkup(<NextWay next={NEXT} stageHref={STAGE} held={false} />);
+    expect(live).toMatch(new RegExp(`<a[^>]*href="${esc(NEXT.href)}"`));
+  });
+
+  it('UX-30 (B-M5 held, protected sentence): the wait card names every file still uploading or failed in one "Waiting for … to finish uploading." line', () => {
+    const both = words(renderToStaticMarkup(<WaitLines uploading={['a.pdf']} failed={['b.pdf']} />));
+    expect(both).toBe('Waiting for a.pdf, b.pdf to finish uploading.');
+    expect(renderToStaticMarkup(<WaitLines uploading={['a.pdf']} failed={[]} />)).toMatch(/<bdi>a\.pdf<\/bdi>/);
+    expect(renderToStaticMarkup(<WaitLines uploading={[]} failed={[]} />)).toBe('');
+  });
+
+  it('item 8: after a save, the card\'s foot carries "Raise a finding about this question" to the same target, below the Save row', () => {
+    const h = card({ current: V2, historyCount: 2 });
+    const href = `/orgs/acme/projects/p1/findings?raise=1&amp;stage=pre-processing&amp;questionId=Q-PP-01&amp;versionId=dv2#raise`;
+    expect(h).toContain(`href="${href}"`);
+    expect(h.indexOf(href)).toBeGreaterThan(h.indexOf('decision-save-bar'));
+    expect(words(h)).toContain(QUESTION_COPY.findingLink.raise);
+  });
+  it('spec 9.7 archived: no card at all (a person who may not record, the project archived); the page shows the reading view and its note', () => {
+    expect(card({ canWrite: false, projectArchived: true, current: V2, historyCount: 2 })).toBe('');
+  });
+  it('item 8: no raise link with no version, after a withdrawal, or for a person who may not raise', () => {
+    expect(card()).not.toContain(QUESTION_COPY.findingLink.raise);
+    expect(card({ current: { ...V2, status: 'withdrawn', withdrawalCode: 'duplicate' }, historyCount: 2 })).not.toContain(QUESTION_COPY.findingLink.raise);
+    expect(card({ current: V2, historyCount: 2, canRaiseFinding: false })).not.toContain(QUESTION_COPY.findingLink.raise);
+  });
+});

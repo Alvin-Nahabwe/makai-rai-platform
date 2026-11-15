@@ -30,10 +30,22 @@ const text = (html: string) => html.replace(/<[^>]+>/g, '').replace(/&#x27;/g, "
 const list = (items: EvidenceItemView[]) => renderToStaticMarkup(<VersionEvidenceList orgSlug="acme" items={items} />);
 
 describe('the evidence block and the version evidence list', () => {
-  it('UX-30 FR-RM-01: upload lines are text and no progress element exists', () => {
+  it('UX-30 FR-RM-01 C5: an uploading line is text, with one native progress element inside [data-upload-progress], labelled with the file', () => {
     const html = view({ uploads: [up({ state: 'uploading', loaded: 800_000, size: 2_400_000 })] });
     expect(text(html)).toContain('Uploading costing.xlsx: 0.8 of 2.4 MB.');
-    expect(html).not.toMatch(/<progress|role="progressbar"/);
+    expect(html.match(/<progress/g)).toHaveLength(1);
+    expect(html).toMatch(/<span data-upload-progress[^>]*><progress[^>]*value="800000"[^>]*max="2400000"[^>]*aria-label="Uploading costing\.xlsx"[^>]*><\/progress><\/span>/);
+    expect(html).not.toMatch(/role="progressbar"/);
+    // A file that failed or finished has no progress element.
+    expect(view({ uploads: [up({ state: 'failed', failure: 'cut_off' }), up({ key: 'k2', state: 'uploaded', size: 412_000 })] })).not.toMatch(/<progress/);
+  });
+  it('C5: "Save without" beside an uploading file while no Save waits, one button for the block; none while a Save waits', () => {
+    const saveWithout = { label: 'Save without these files', onPress: () => {} };
+    const two = view({ uploads: [up(), up({ key: 'k2', fileName: 'b.pdf' })], saveWithout });
+    expect(two.match(/>Save without these files</g)).toHaveLength(1);
+    expect(two.indexOf('Save without these files')).toBeGreaterThan(two.indexOf('b.pdf'));
+    expect(view({ uploads: [up()], saveWithout: null })).not.toContain('Save without');
+    expect(view({ uploads: [up({ state: 'failed', failure: 'cut_off' })], saveWithout })).not.toContain('Save without');
   });
   it('M-18 UX-30: names left uploading before the page closed are listed after reload', () => {
     expect(text(view({ notUploaded: ['costing.xlsx'] }))).toContain('costing.xlsx was not uploaded before the page closed. Choose the file again.');

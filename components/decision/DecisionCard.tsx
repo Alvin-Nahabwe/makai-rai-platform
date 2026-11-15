@@ -8,6 +8,7 @@ import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
 import { formatDay, formatDeclaredDate, formatTime } from '@/lib/format/dates';
 import { ReaderZoneTime } from '@/components/decision/ReaderZoneTime';
 import { SealMarker } from '@/components/review/SealMarker';
+import { QuestionFindingLink } from '@/components/findings/QuestionFindingLink';
 import { LocalTime } from '@/components/ui/LocalTime';
 import { UI_COPY } from '@/lib/ui/copy';
 import { QUESTION_COPY } from '@/lib/question/copy';
@@ -122,6 +123,15 @@ export function DecisionCard({ data, next, stageHref }: DecisionCardProps): Reac
             <p>{decider === null ? null : `${decider} `}{DECISION_FORM_COPY.card.enteredBy(enterer)}<time dateTime={decision!.receivedAt}>{`${formatDay(decision!.receivedAt, ZONE)}, ${formatTime(decision!.receivedAt, ZONE)}`}</time>.</p>
           )}
           <p><Link href={historyHref}>{QUESTION_COPY.reading.history(data.historyCount)}</Link></p>
+          {/* Spec 9.3, after a save (coordinator, T3b item 8): the quiet way to raise a finding about this question, the page's
+              own control (same target, same permission, the version it is about), without its open-finding line, which the
+              page shows elsewhere. Below the Save row: it costs the first view nothing. */}
+          {decision === null || !data.canRaiseFinding ? null : (
+            <div className="decision-card__raise">
+              <QuestionFindingLink orgSlug={data.orgSlug} projectId={data.projectId} stage={data.stage} questionId={data.question.id}
+                currentVersionId={decision.id} openFinding={null} canRaise={data.canRaiseFinding} />
+            </div>
+          )}
         </div>
       )}
       {/* Mounted whenever there is a current version, with the permission as a prop, so after a withdrawal it stays to say

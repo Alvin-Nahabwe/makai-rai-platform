@@ -28,6 +28,14 @@
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
 }
 
+/* Spec 9.7 "both versions side by side" (T3b item 6): from 1024 px always two columns, even in the decision card's column
+   (about 500 px inside the view at 1280), where the 16 rem rule above would stack them; below, one under the other. */
+@media (min-width: 1024px) {
+  .conflict-view__columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .conflict-view__columns h4 {
   margin-block: var(--space-2);
 }

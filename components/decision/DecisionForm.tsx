@@ -95,6 +95,70 @@ export function consequenceOf(d: DecisionDraft, data: QuestionPanelData, base: n
   return { text: `${open ? C.closesNot(label) : C.raisesNone(label)} ${version}`, finding: open };
 }
 
+/**
+ * Plan 1C C4 (spec 9.7, "Save and Retry are one control whose label changes"): whether the form's one submit control reads
+ * "Retry". Exactly when today's separate Retry would have re-sent the same request: a request was sent, the answer the field
+ * holds is the one it carried (`requestIdFor` gives its id back), and either the reply offered a retry or a restored draft's
+ * Save was pressed and never confirmed. While a pressed Retry's own request is out it keeps its label (D-398 item 4: it stays
+ * the same control, busy, with focus); while a Save's request is out the control reads "Save decision", disabled.
+ */
+export function saveControlIsRetry(s: {
+  retry: RetryState; body: Record<string, unknown>; status: SaveStatusValue | null; restoredPressed: boolean; saving: boolean; retrying: boolean;
+}): boolean {
+  if (s.saving) return s.retrying;
+  return s.retry.requestId !== null
+    && requestIdFor(s.retry, s.body, () => '').requestId === s.retry.requestId
+    && (s.status?.next === 'retry' || (s.status === null && s.restoredPressed));
+}
+
+/**
+ * The wait card's line (UX-30): "Waiting for {files} to finish uploading.", for every file still uploading or failed.
+ * Review B-M5 asked for a line of its own for a failed or refused file (it will not finish by itself); the protected
+ * e2e/decision-save.spec.ts "UX-30: a failed upload is never waited out by itself…" pins this sentence for a failed file, so
+ * it is unchanged until the lead rules (lane 2 T3b report).
+ */
+export function WaitLines({ uploading, failed }: { uploading: readonly string[]; failed: readonly string[] }): ReactElement | null {
+  const names = [...uploading, ...failed];
+  return names.length > 0 ? <p>{F.waiting.before}<bdi>{fileList(names)}</bdi>{F.waiting.after}</p> : null;
+}
+
+/**
+ * The way on beside Save (R2, R9): "Next: <question>" with "Question n of N", or on the stage's last question the line that
+ * says so and All questions. Review B-I1: while a Save waits for an upload or a link, or its request is out (`held`), the
+ * next question's words are text, not a link, and quieter, so the card's own control cannot take the person away from a
+ * Save that has not gone yet (following it unmounts the form and its uploads). Leaving by the browser or the route column
+ * is unchanged.
+ */
+export function NextWay({ next, stageHref, held }: { next: NextQuestion | null; stageHref?: string; held: boolean }): ReactElement | null {
+  if (next !== null) {
+    const words = <><span className="decision-next__words">{F.card.next(next.text)}</span><span className="decision-next__position">{F.card.position(next.number, next.total)}</span></>;
+    return held
+      ? <p className="decision-next decision-next--held" data-next-held>{words}</p>
+      : <Link className="decision-next" href={next.href}>{words}</Link>;
+  }
+  if (stageHref === undefined) return null;
+  return (
+    <p className="decision-next decision-next--last">
+      {QUESTION_COPY.foot.last} <Link href={stageHref}>{QUESTION_COPY.nav.allQuestions}</Link>
+    </p>
+  );
+}
+
+/**
+ * Whether the save bar covers the screen's foot now (W-3 narrow, and the owner's Option A of 15 Nov 2026 on wide screens):
+ * fixed to the bottom at 768 px and below; above that it is `position: sticky` at the bottom of the card's form, which is
+ * pinned exactly while its own place is below the fold, so it is read from geometry: its box reaches the screen's foot and
+ * is on the screen. In the flow (static: an open withdrawal confirmation on a phone) it covers nothing.
+ */
+function pinnedBar(bar: HTMLElement): boolean {
+  const position = getComputedStyle(bar).position;
+  if (position === 'fixed') return true;
+  if (position !== 'sticky') return false;
+  const r = bar.getBoundingClientRect();
+  const foot = document.documentElement.clientHeight;
+  return r.top < foot && r.bottom >= foot - 1;
+}
+
 function WritableDecisionForm({ data, nextQuestion = null, stageHref }: DecisionFormProps): ReactElement {
   const router = useRouter();
   const key = draftKeyFor(data);
@@ -145,6 +209,9 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref }: Decision
   // D-398 item 4: a pressed Retry stays mounted, busy, while its own request is out, so focus stays on it.
   const [retrying, setRetrying] = useState(false);
   const saveBar = useRef<HTMLDivElement | null>(null);
+  // The one submit control (C4): after a Retry's answer that leaves it reading "Save decision", focus moves to the bar.
+  const submit = useRef<HTMLButtonElement | null>(null);
+  const retryLabel = useRef(false);
   // Set when a Retry's request is answered, or a send removed a focused control of the bar: if nothing else took focus,
   // the bar takes it.
   const afterRetry = useRef(false);
@@ -217,10 +284,14 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref }: Decision
   useEffect(() => {
     if (!afterRetry.current) return;
     afterRetry.current = false;
-    if (document.activeElement === null || document.activeElement === document.body) saveBar.current?.focus();
+    // C4: the Retry is the one submit control relabelled, not removed; when the answer leaves it reading "Save decision",
+    // the Retry the person had is gone as before, and the bar takes focus as it did then.
+    const active = document.activeElement;
+    if (active === null || active === document.body || (active === submit.current && !retryLabel.current)) saveBar.current?.focus();
   });
 
-  // W-3 narrow: the fixed save bar's height is the space the page reserves under its content (DecisionForm.css).
+  // W-3 narrow: the fixed save bar's height is the space the page reserves under its content (DecisionForm.css); on wide
+  // screens (Option A) the pinned row's height is the scrolling box's scroll padding at its foot.
   // Measured after every render too, not only by the observer below: a render that grows the bar (the unsaved line
   // appearing on the first edit) is followed at once by the next key, and the observer reports only at the next
   // rendering frame, so a Tab before that frame scrolled the next field into view above the bar's old height and the
@@ -239,24 +310,26 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref }: Decision
     if (h < was || !(focused instanceof HTMLElement) || bar.contains(focused) || !(bar.closest('form')?.contains(focused) ?? false)) return;
     // Covered: its lower edge under the bar's top, and it is on the screen at all (one the person scrolled away from stays).
     const r = focused.getBoundingClientRect();
-    if (getComputedStyle(bar).position === 'fixed' && r.bottom > bar.getBoundingClientRect().top && r.top < document.documentElement.clientHeight) {
+    if (pinnedBar(bar) && r.bottom > bar.getBoundingClientRect().top && r.top < document.documentElement.clientHeight) {
       focused.scrollIntoView({ block: 'nearest', behavior: 'instant' });
     }
   }, []);
   useLayoutEffect(applyBarHeight);
 
   /**
-   * Brings what took focus wholly into view, unless it already is: between the screen's top and the fixed bar's top (or
-   * the screen's foot when the bar is in the flow). A press on a control that is in view must not move the page, or the
-   * press ends on whatever slid under it and is lost.
+   * Brings what took focus wholly into view, unless it already is: between the screen's top and the top of the bar while
+   * it covers the screen's foot (fixed, or pinned on a wide screen), or the screen's foot when the bar is in its place. A
+   * control inside the bar is measured against the screen's foot: the bar holds it. A press on a control that is in view
+   * must not move the page, or the press ends on whatever slid under it and is lost.
    */
   const footOfView = useCallback((): number => {
     const bar = saveBar.current;
-    return bar !== null && getComputedStyle(bar).position === 'fixed' ? bar.getBoundingClientRect().top : document.documentElement.clientHeight;
+    return bar !== null && pinnedBar(bar) ? bar.getBoundingClientRect().top : document.documentElement.clientHeight;
   }, []);
   const reveal = useCallback((el: Element): void => {
     const r = el.getBoundingClientRect();
-    if (r.top >= 0 && r.bottom <= footOfView()) return;
+    const foot = saveBar.current?.contains(el) === true ? document.documentElement.clientHeight : footOfView();
+    if (r.top >= 0 && r.bottom <= foot) return;
     el.scrollIntoView?.({ block: 'nearest', behavior: 'instant' });
   }, [footOfView]);
 
@@ -473,9 +546,13 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref }: Decision
     };
   });
 
+  /**
+   * The one Save/Retry control's press (C4), and a submit by Enter in a field: "Retry" takes the path today's Retry took
+   * (`fromRetry`: it stays the pressed, busy control while its request is out), "Save decision" the path Save took.
+   */
   function onSubmit(e: FormEvent<HTMLFormElement>): void {
     e.preventDefault();
-    save(false);
+    if (isRetry) save(false, uploads, base, true); else save(false);
   }
 
   const deciderName = (() => {
@@ -491,6 +568,10 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref }: Decision
   const signInHref = signInAgainHref(value.href, '');
   const waitingFiles = [...uploads.uploading, ...uploads.failed];
   const consequence = consequenceOf(value, data, base);
+  const isRetry = saveControlIsRetry({
+    retry, body: toSaveBody(value, data, base) as unknown as Record<string, unknown>, status, restoredPressed, saving, retrying,
+  });
+  useLayoutEffect(() => { retryLabel.current = isRetry; });
 
   return (
     // SC 2.4.11: a control that takes focus anywhere in the answer form, the evidence block included, is brought wholly
@@ -568,6 +649,7 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref }: Decision
             initialLink={typedLink}
             onLinkInput={(l) => setTypedLink((o) => (o.url === l.url && o.label === l.label ? o : l))}
             examples={data.runningQuestion.evidenceExamples} decisionCard keptCount={extraEvidenceIds.length}
+            saveWithout={waiting || waitingFiles.length === 0 ? null : { label: F.saveWithout(waitingFiles.length), onPress: () => save(true) }}
           />
         </section>
 
@@ -589,7 +671,7 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref }: Decision
         {waiting ? (
           <div className="decision-form__box" data-upload-wait>
             <Callout kind="note">
-              {waitingFiles.length > 0 ? <p>{F.waiting.before}<bdi>{fileList(waitingFiles)}</bdi>{F.waiting.after}</p> : null}
+              <WaitLines uploading={uploads.uploading} failed={uploads.failed} />
               {/* With no file to wait for, the wait is for a link, whether or not its report has been rendered yet. */}
               {uploads.linkAdding || waitingFiles.length === 0 ? <p>{EVIDENCE_COPY.link.waiting}</p> : null}
               <div className="form-actions">
@@ -614,33 +696,28 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref }: Decision
         </div>
 
         {/* tabIndex -1: after a Retry's answer removes the Retry, focus comes here, beside the status line, not to the page. */}
+        {/* Option A (owner, 15 Nov 2026): above 768 px the bar is sticky at the foot of the form, so it pins to the screen's foot
+            while its place is below the fold and returns to it at the card's end (DecisionForm.css); the inner box carries the
+            pinned look, which a scroll-state query sets on the bar's descendants. One bar, one Save, at every width. */}
         <div className="decision-save-bar" ref={saveBar} tabIndex={-1}>
+          <div className="decision-save-bar__pin">
           <div className="decision-save-bar__row">
           <div className="form-actions">
-            <Button variant="primary" type="submit" disabled={saving}>{F.save}</Button>
-            {status?.next === 'retry' || (status === null && restoredPressed) || (saving && retrying)
-              ? <Button variant="secondary" busy={saving} onClick={() => save(false, uploads, base, true)}>{F.retry}</Button>
-              : null}
+            {/* C4: one control, "Save decision" or "Retry". A pressed Retry is busy, not disabled, while its request is out, so
+                it keeps focus (D-398 item 4); Save is disabled while its request is out. */}
+            <Button variant="primary" type="submit" ref={submit} disabled={saving && !retrying} busy={saving && retrying}>{isRetry ? F.retry : F.save}</Button>
             {/* Native links in the kit's button classes: ButtonLink is next/link, and the gate link carries data-gate-link. */}
             {status?.next === 'sign_in' ? <a className="ui-button ui-button--secondary" href={signInHref}>{F.signInAgain}</a> : null}
             {status?.next === 'go' && status.action !== undefined ? <a className="ui-button ui-button--secondary" href={status.action.href} data-gate-link>{status.action.label}</a> : null}
           </div>
-          {/* R2, R9: the way on beside Save, a quiet link, never a second orange control. On the stage's last question, the
-              line that says so and All questions. */}
-          {nextQuestion !== null ? (
-            <Link className="decision-next" href={nextQuestion.href}>
-              <span className="decision-next__words">{F.card.next(nextQuestion.text)}</span><span className="decision-next__position">{F.card.position(nextQuestion.number, nextQuestion.total)}</span>
-            </Link>
-          ) : stageHref !== undefined ? (
-            <p className="decision-next decision-next--last">
-              {QUESTION_COPY.foot.last} <Link href={stageHref}>{QUESTION_COPY.nav.allQuestions}</Link>
-            </p>
-          ) : null}
+          {/* R2, R9: the way on beside Save, a quiet link, never a second orange control; text while a Save waits or is out (B-I1). */}
+          <NextWay next={nextQuestion} stageHref={stageHref} held={waiting || saving} />
           </div>
           <SaveStatus status={status} draftSavedAt={draftSavedAt} storageUnavailable={storageUnavailable} />
           {leftOut.length > 0 && status !== null && (status.id === 'M-03' || status.id === 'M-04')
             ? <p>{F.savedWithout.before}<bdi>{fileList(leftOut)}</bdi>{leftOut.length === 1 ? F.savedWithout.after : F.savedWithout.afterMany}</p>
             : null}
+          </div>
         </div>
         </fieldset>
       </div>

@@ -41,6 +41,8 @@ export type EvidenceBlockProps = {
   decisionCard?: boolean;
   /** The decision card only: evidence the form holds that the block cannot name (EvidenceBlockView). */
   keptCount?: number;
+  /** The decision form only: "Save without" beside the uploading files while no Save waits (plan 1C C5; EvidenceBlockView). */
+  saveWithout?: { label: string; onPress: () => void } | null;
 };
 
 /** The server's limit (lib/evidence/inspect.ts MAX_BYTES, which cannot load in a browser): a larger file is not sent. */
@@ -199,6 +201,7 @@ export function EvidenceBlock(props: EvidenceBlockProps): ReactElement {
       uploads={uploads} notUploaded={props.notUploaded ?? []} disabled={props.disabled}
       linkFormOpen={linkFormOpen} linkUrl={linkUrl} linkLabel={linkLabel} linkError={linkError} linkRefused={linkRefused} linkPending={linkPending}
       held={props.saveOut === true} examples={props.examples} decisionCard={props.decisionCard} keptCount={props.keptCount}
+      saveWithout={props.saveWithout}
       onChooseFiles={chooseFiles}
       onOpenFilePicker={() => { fileInput.current?.click(); }}
       onOpenLink={() => setLinkFormOpen((o) => !o)}

@@ -202,3 +202,22 @@
   font-weight: var(--font-weight-regular);
   color: var(--color-ink-muted);
 }
+
+/* Plan 1C C5: an uploading file's native progress bar under its line (modern-web-guidance "progress": the limited styling,
+   accent-color and size only, which keeps the platform's own bar), in the heading navy, never the action orange. */
+.evidence-block__progress {
+  display: block;
+  margin-block-start: var(--space-1);
+}
+
+.evidence-block__progress > progress {
+  display: block;
+  inline-size: 100%;
+  max-inline-size: 20rem;
+  accent-color: var(--color-heading);
+}
+
+/* C5: the one "Save without" after the files still uploading, while no Save waits. */
+.evidence-block__save-without {
+  margin-block: var(--space-2) var(--space-3);
+}

@@ -47,6 +47,8 @@ export const EVIDENCE_COPY = Object.freeze({
   removeNamed: (name: string): string => `Remove ${name}`,
   cancelUpload: 'Cancel upload',
   cancelUploadNamed: (name: string): string => `Cancel upload ${name}`,
+  /** Plan 1C C5: the name of an uploading file's progress element. */
+  uploadingNamed: (name: string): string => `Uploading ${name}`,
   retryUpload: 'Retry upload',
   retryUploadNamed: (name: string): string => `Retry upload ${name}`,
   chooseFiles: 'Choose files to add as evidence',

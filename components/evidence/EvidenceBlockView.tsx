@@ -51,6 +51,12 @@ export interface EvidenceBlockViewProps {
   decisionCard?: boolean;
   /** The decision card only: evidence the form holds that the block cannot name (a restored draft's), so not "None yet.". */
   keptCount?: number;
+  /**
+   * The decision form only (plan 1C C5): "Save without this file / these files" after the uploading files, its label and
+   * its press the form's (its existing `save(true)`). Null or absent while a Save waits: the wait card then holds the one
+   * such button (the protected e2e/decision-save.spec.ts UX-30 case finds it by its name).
+   */
+  saveWithout?: { label: string; onPress: () => void } | null;
 }
 
 /** A line with the file name in `<bdi>` (E14). */
@@ -67,7 +73,9 @@ const NAMED_BUTTON = 'ui-button ui-button--secondary ui-button--compact';
 
 /**
  * The evidence block of a decision form, hookless so a unit test can render it. A fieldset nested in the form, so every
- * button is `type="button"`. Progress is text, never a progress element (UX-30). `disabled` is its only gate: it
+ * button is `type="button"`. Progress is text, and an uploading file also has a native `<progress>` inside
+ * `[data-upload-progress]`, named "Uploading {file}" (plan 1C C5; the no-score checks allow it there only, and no live
+ * region: the line's text is not announced as it changes, interstitial progress is not). `disabled` is its only gate: it
  * renders items and no control (UX-31). Whether a person may add evidence is the server's answer, not this component's.
  */
 export function EvidenceBlockView(p: EvidenceBlockViewProps): ReactElement {
@@ -150,6 +158,11 @@ export function EvidenceBlockView(p: EvidenceBlockViewProps): ReactElement {
               <li key={u.key} className="evidence-block__item">
                 <span className="evidence-block__name">
                   <span role={role}><NamedText line={line} /></span>
+                  {u.state === 'uploading' ? (
+                    <span data-upload-progress className="evidence-block__progress">
+                      <progress value={Math.min(u.loaded, u.size)} max={Math.max(u.size, 1)} aria-label={EVIDENCE_COPY.uploadingNamed(name)} />
+                    </span>
+                  ) : null}
                   {/* The space sits outside the note, so the note's own text is the ruled sentence alone (NFR-PERF-06). */}
                   {note === null ? null : <>{' '}<span className="evidence-block__note">{note}</span></>}
                 </span>
@@ -170,6 +183,12 @@ export function EvidenceBlockView(p: EvidenceBlockViewProps): ReactElement {
             );
           })}
         </ul>
+      ) : null}
+      {/* C5: one "Save without" for the block, after the files still uploading, while no Save waits. */}
+      {!p.disabled && p.saveWithout != null && p.uploads.some((u) => u.state === 'uploading') ? (
+        <div className="evidence-block__save-without">
+          <Button variant="secondary" size="compact" onClick={p.saveWithout.onPress}>{p.saveWithout.label}</Button>
+        </div>
       ) : null}
     </>
   );

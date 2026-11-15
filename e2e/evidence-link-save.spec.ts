@@ -436,7 +436,9 @@ test('B3 neighbour: the retry on reconnect does not overtake a Save that waits f
   await typeLink(page);
   const reply = page.waitForResponse(isEvidencePost);
   await addLink(page).click();
-  await saveDecision(page).click();
+  // Plan 1C C4: Save and Retry are one control. After the lost save the answer is unchanged (the link is not in it until its
+  // request ends), so the control reads Retry; its press takes the same path (save, waiting for the link).
+  await page.getByRole('button', { name: DECISION_FORM_COPY.retry, exact: true }).click();
   await expect(waitCard(page)).toContainText(EVIDENCE_COPY.link.waiting);
   await page.evaluate(() => { window.dispatchEvent(new Event('online')); });
   const { id } = (await (await reply).json()) as { id: string };
