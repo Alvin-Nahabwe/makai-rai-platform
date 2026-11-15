@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { AcceptedRiskView, FindingView, UserRef } from '@/types/api';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
-import { findingSourceLabel, findingStateLabel, OUTSIDE_ROLE_LABELS, overdueLabel, stageCountHeading, STAGE_NAMES } from '@/lib/findings/labels';
+import { cancelReasonText, findingSourceLabel, findingStateLabel, OUTSIDE_ROLE_LABELS, overdueLabel, stageCountHeading, STAGE_NAMES } from '@/lib/findings/labels';
+import { STORED_CANCEL_REASONS } from '@/lib/findings/storedCancelReasons';
 
 const ANNA: UserRef = { userId: 'u-anna', name: 'Anna K.', formerMember: false };
 const AR = { id: 'a1', findingId: 'f1', acceptedBy: { kind: 'member', user: ANNA }, accepterRole: 'owner', reason: 'Why', lookAgainNote: null, lookAgainOn: null,
@@ -35,5 +36,17 @@ describe('finding labels (7.5.6, 7.5.8)', () => {
     expect(overdueLabel('2026-10-28')).toEqual({ label: FINDINGS_COPY.labels.overdue, rest: FINDINGS_COPY.labels.wasDue('28 Oct 2026') });
     expect(STAGE_NAMES).toEqual({ 'pre-processing': 'Pre-processing', 'in-processing': 'In-processing', 'post-processing': 'Post-processing' });
     expect(STAGE_NAMES).toBe(FINDINGS_COPY.stages);
+  });
+});
+
+describe('F7: the cancel reason an acceptance stores, and how the finding page shows it (B4 I3)', () => {
+  it('the stored values are data, pinned as written: a copy edit cannot change what is stored', () => {
+    expect(STORED_CANCEL_REASONS).toEqual({ riskAcceptedBeforeLd25: 'risk accepted', riskAccepted: 'The risk was accepted, so this work was cancelled.' });
+    expect(Object.isFrozen(STORED_CANCEL_REASONS)).toBe(true);
+  });
+
+  it('shows each stored value the platform wrote in the copy sentence, and any other reason as typed', () => {
+    for (const stored of Object.values(STORED_CANCEL_REASONS)) expect(cancelReasonText(stored)).toBe(FINDINGS_COPY.mitigation.riskAcceptedCancel);
+    expect(cancelReasonText('Budget moved to Q2')).toBe('Budget moved to Q2');
   });
 });

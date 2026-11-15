@@ -63,7 +63,8 @@ export const ADMIN_COPY = Object.freeze({
   /** S-24 detail: the lines under the organisation's name. */
   organisation: Object.freeze({
     summary: (date: string, members: number): string => `Created ${date} · ${members} ${members === 1 ? 'member' : 'members'}`,
-    archived: ' · archived',
+    /** Its own label under the summary line (R1 S2), as "No active Owner" is (S1). */
+    archived: 'Archived',
     legalName: (value: string): string => `Legal name: ${value}`,
   }),
 });

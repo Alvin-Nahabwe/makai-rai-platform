@@ -26,7 +26,9 @@ import { eatDate, isOverdue } from '@/lib/followup/overdue';
 import { manifestIds } from '@/lib/seal/ids';
 import { stageReviewName } from '@/lib/seal/reviewName';
 import { SEAL_SOURCE_SQL, checkSealRows, trustedManifest, type SealSourceRows, type TombstoneRow } from '@/lib/integrity/sealCheck.mjs';
-import { DOCUMENTS_COPY, ERASABLE_FIELDS, ETHICS_STATES, METADATA_KEYS, MSG_SEAL_CHECK_FAILED, DOCUMENT_TITLES, formatUtcDay } from '@/lib/documents/copy';
+import {
+  DOCUMENTS_COPY, ERASABLE_FIELDS, ETHICS_STATES, METADATA_KEYS, MSG_DOCUMENT_CHECK_FAILED, MSG_OTHER_SEAL_CHECK_FAILED, MSG_SEAL_CHECK_FAILED, DOCUMENT_TITLES, formatUtcDay,
+} from '@/lib/documents/copy';
 import { readStageRows } from '@/lib/seal/manifest';
 import type { DocumentSnapshot, SealedDecision, SealedFinding, SealedStage } from '@/lib/documents/resolve';
 
@@ -171,7 +173,7 @@ export async function readDocumentSnapshot(
     if (row === null) continue;
     const manifest = trusted(row, false);
     // Skipping it would print "Not recorded at the time of issue" for a stage that was sealed (D3): a false statement on a document that cannot be recalled.
-    if (manifest === null) throw new AppError(500, 'integrity_failure', 'Document integrity check failed');
+    if (manifest === null) throw new AppError(500, 'integrity_failure', MSG_OTHER_SEAL_CHECK_FAILED);
     sealed.set(stage, { row, manifest });
   }
 
@@ -400,7 +402,7 @@ export function parseDocumentRequest(body: unknown, keyed: false): PreviewDocume
 export function parseDocumentRequest(body: unknown, keyed: true): PreviewDocumentRequest & { requestId: string };
 export function parseDocumentRequest(body: unknown, keyed: boolean): PreviewDocumentRequest & { requestId?: string } {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) {
-    throw new ValidationFailed([{ field: 'body', message: 'The body must be a JSON object.' }]);
+    throw new ValidationFailed([{ field: 'body', message: DOCUMENTS_COPY.fieldMessages.unreadable }]);
   }
   const known = keyed ? ['documentType', 'sealId', 'typedFields', 'requestId'] : ['documentType', 'sealId', 'typedFields'];
   const extra = Object.keys(body).filter((k) => !known.includes(k));
@@ -531,7 +533,7 @@ function checkSealsAgainstRows(
     if (result.kind === 'valid') continue;
     logSecurityEvent('SEAL_CHECK_FAILED', 'error', { details: { sealId: seal.id, kind: result.kind, stage: st, chosen: st === snap.reviewStage } });
     if (st === snap.reviewStage) throw new ValidationFailed([{ field: 'sealId', message: MSG_SEAL_CHECK_FAILED }]);
-    throw new AppError(500, 'integrity_failure', 'Document integrity check failed');
+    throw new AppError(500, 'integrity_failure', MSG_OTHER_SEAL_CHECK_FAILED);
   }
 }
 /** Prisma's interactive-transaction default is 5 s; the snapshot of a large review reads more rows than that allows on a slow disk. */
@@ -778,7 +780,7 @@ export async function readDocumentPdf(ctx: OrgContext, documentId: string): Prom
   const bytes = Buffer.from(found.row.pdf.buffer, found.row.pdf.byteOffset, found.row.pdf.byteLength);
   if (createHash('sha256').update(bytes).digest('hex') !== found.row.sha256) {
     logSecurityEvent('DOCUMENT_INTEGRITY_FAILURE', 'critical', { details: { orgId: ctx.orgId, documentId } });
-    throw new AppError(500, 'integrity_failure', 'Document integrity check failed');
+    throw new AppError(500, 'integrity_failure', MSG_DOCUMENT_CHECK_FAILED);
   }
   return { bytes, fileName: `${FILE_PREFIX[found.row.documentType as DocumentType]}-${day(found.row.issuedAt)}-${documentId.slice(0, 8)}.pdf` };
 }

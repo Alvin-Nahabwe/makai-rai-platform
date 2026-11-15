@@ -1,4 +1,5 @@
 import { AppError } from '@/lib/http/errors';
+import { HTTP_COPY } from '@/lib/http/copy';
 
 /**
  * CSRF defence for every POST, PATCH and DELETE route (NFR-SEC-08): a browser
@@ -26,5 +27,5 @@ export function assertSameOrigin(req: Request): void {
 }
 
 function crossOrigin(): AppError {
-  return new AppError(403, 'cross_origin', 'Cross-origin request rejected');
+  return new AppError(403, 'cross_origin', HTTP_COPY.outOfDate);
 }

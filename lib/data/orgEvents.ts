@@ -2,6 +2,7 @@ import type { OrgRole, Prisma } from '@prisma/client';
 import type { ActorRole, OrgEventAction } from '../../types/record';
 import type { OrgEventView } from '../../types/api';
 import { AppError, ValidationFailed } from '../http/errors';
+import { GONE_NAME_COPY } from '../http/copy';
 import { lookupUserNames } from './identity';
 import { withOrg, type OrgContext, type TenantTx } from './tenant';
 
@@ -33,8 +34,8 @@ export async function recordOrgEvent(tx: TenantTx, row: {
 /** The roles S-30 shows the rows to (FR-ORG-09, SRS line 577: "shall show owners and admins"). */
 const MAY_READ_EVENTS: ReadonlySet<OrgRole> = new Set(['owner', 'admin']);
 const MAX_PAGE = 100;
-const GONE_ACCOUNT = 'An account no longer on the platform';
-const GONE_INVITATION = 'An invitation no longer recorded';
+const GONE_ACCOUNT = GONE_NAME_COPY.deletedAccount;
+const GONE_INVITATION = GONE_NAME_COPY.removedInvitation;
 
 /**
  * FR-ORG-09 (S-30): the organisation's administrator and membership rows, newest first by `at`, then `id`,

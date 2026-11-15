@@ -55,7 +55,8 @@ describe('S-16, S-17 and the open form (workshop walk S5): a way back, no empty 
     const nav = html.match(/<nav class="ui-breadcrumb"[^>]*>(.*?)<\/nav>/)?.[1] ?? '';
     return [...nav.matchAll(/<li[^>]*>(.*?)<\/li>/g)].map(([, li]) => [li.replace(/<[^>]*>/g, ''), li.match(/href="([^"]*)"/)?.[1] ?? null]);
   };
-  const h1 = (html: string) => html.match(/<h1[^>]*>(.*?)<\/h1>/)?.[1] ?? '';
+  /** The heading's words, without the first-use marks (`Term`) inside it. */
+  const h1 = (html: string) => (html.match(/<h1[^>]*>(.*?)<\/h1>/)?.[1] ?? '').replace(/<[^>]*>/g, '');
 
   it('S5-1: the review page, the open form and the seal page lead back to the project, refusal views included', async () => {
     const openModule = await import('../../app/(authenticated)/orgs/[slug]/projects/[id]/reviews/new/page');
@@ -107,13 +108,14 @@ describe('S-16, S-17 and the open form (workshop walk S5): a way back, no empty 
 });
 
 describe('S-16 separators (workshop walk S12-a)', () => {
-  it('the opened-by line and each seal line join their parts with a no-break space, a middle dot and a space, so no wrapped line starts with the dot', async () => {
+  it('the review\'s facts are a description list (S5, C 7), and each seal line joins its parts with a no-break space, a middle dot and a space, so no wrapped line starts with the dot', async () => {
     const project = (await addProject(fxA, { name: 'Walk S12 project' })).id;
     const review = (await addStageReview(fxA, project, { stage: 'pre-processing' })).id;
     await sealFixture(fxA, review, { projectId: project });
     sessionFor(fxA.members.viewer.userId);
     const html = renderToStaticMarkup(await StageReviewPage({ params: Promise.resolve({ slug: fxA.org.slug, id: project, reviewId: review }) })).replace(/<!-- -->/g, '');
-    expect(html).toMatch(/Stage: Pre-processing\u00a0· (Prepared for: [^<]*\u00a0· )?Opened by /);
+    const F = REVIEW_COPY.review.facts;
+    expect(html).toMatch(new RegExp(`<dl class="review-facts"><dt>${F.stage}</dt><dd>Pre-processing</dd>(<dt>${F.preparedFor}</dt><dd>.*?</dd>)?<dt>${F.openedBy}</dt><dd><bdi>[^<]+</bdi> ${F.on} <time `));
     expect(html).toMatch(/Seal 1\u00a0· <time[^>]*>[^<]*<\/time>\u00a0· sealed by /);
     expect(html).not.toMatch(/ \. /);
   });

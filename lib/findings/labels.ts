@@ -3,6 +3,7 @@ import type { CalendarDate, FindingState, Stage, StoredDecisionStatus } from '@/
 import { OUTSIDE_ROLE_LABELS, STATUS_OPTIONS } from '@/lib/decision/copy';
 import { formatDay } from '@/lib/format/dates';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
+import { STORED_CANCEL_REASONS } from '@/lib/findings/storedCancelReasons';
 
 /**
  * The labels of the findings screens (SRS 7.5.6 line 2529 to 2532, 7.5.8), built from the words of `FINDINGS_COPY`
@@ -64,4 +65,12 @@ export function overdueLabel(dueDate: CalendarDate): { label: string; rest: stri
 /** S-14's stage heading with its count: "<Stage>: <n> findings", "<Stage>: 1 finding" for one (UX-07; owner default B40, R13-9). */
 export function stageCountHeading(stageName: string, n: number): string {
   return FINDINGS_COPY.labels.stageCount(stageName, n);
+}
+
+/** F7 (B4 I3): every cancel reason the platform has stored for an acceptance; each is shown in the copy sentence. */
+const PLATFORM_CANCEL_REASONS: ReadonlySet<string> = new Set(Object.values(STORED_CANCEL_REASONS));
+
+/** A mitigation's stored cancel reason as the finding page shows it: one an acceptance wrote, in LD-25's words; any other as stored. */
+export function cancelReasonText(stored: string): string {
+  return PLATFORM_CANCEL_REASONS.has(stored) ? FINDINGS_COPY.mitigation.riskAcceptedCancel : stored;
 }

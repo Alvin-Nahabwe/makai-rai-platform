@@ -9,6 +9,7 @@ import { STAGES } from '@/types/record';
 import { HOSTILE_STRINGS } from '../helpers/hostile';
 import { claimMatches, isClaim } from '@/lib/claims/pattern';
 import { GUIDANCE_COPY } from '@/lib/guidance/copy';
+import { TERM_CONTROL, TERM_MODEL_CARD, TERM_RISK_AREA, TERM_STAGE_1, TERM_STAGE_2, TERM_STAGE_3 } from '@/lib/vocabulary/terms';
 
 /**
  * S-26, the framework reference page (FR-CNT-01, UX-36; contract Screens row S-26): a server component that lists
@@ -47,7 +48,7 @@ describe('S-26 framework page', () => {
     for (const a of c.areas.values()) { expect(html).toContain(`id="area-card-${a.id}"`); expect(html).toContain(escape(a.name)); }
     for (const k of c.controls.values()) expect(html).toContain(`href="/explore/controls#${k.id}"`);
     expect(html).toContain(GUIDANCE_COPY.framework.counts(3, 6, 21, 28));
-    expect(html).toContain(GUIDANCE_COPY.framework.lead(3, 6));
+    expect(html).toContain(escape(GUIDANCE_COPY.framework.lead(3, 6)));
   });
 
   it('FR-CNT-01 FR-PUB-01 (7.5.1, 7.5.3): S-26\'s own copy says none of the never-said words, and has no emoji, curly quote or dash', async () => {
@@ -101,12 +102,44 @@ describe('S-26 framework page', () => {
   it('FR-CNT-01 NFR-A11Y-02: one h1 "Framework", an h2 per stage, and every area card names its principle as text with its controls as links', () => {
     expect(html.match(/<h1\b/g)).toHaveLength(1);
     expect(html).toMatch(new RegExp(`<h1[^>]*>${GUIDANCE_COPY.framework.heading}</h1>`));
-    for (const s of STAGES) expect(html).toMatch(new RegExp(`<h2[^>]*id="stage-${s}"[^>]*>${stageLabels[s].label}</h2>`));
+    for (const s of STAGES) expect(html).toMatch(new RegExp(`<h2[^>]*id="stage-${s}"[^>]*><span data-term="[^"]+">${stageLabels[s].label}</span></h2>`));
     const c = runningContent();
     const area = [...c.areas.values()][0];
     const card = html.slice(html.indexOf(`id="area-card-${area.id}"`));
     expect(card).toContain(`Principle: ${escape(area.principle)}`);
     for (const id of area.controls ?? []) expect(card).toContain(`href="/explore/controls#${id}">${escape(c.controls.get(id)!.name)}</a>`);
+  });
+
+  it('B5 (spec 6), FX4 (DF I4): the lead names risk areas and controls, each a Term with its Definition on its own line next', () => {
+    const F = GUIDANCE_COPY.framework;
+    const pair = (t: { id: string; definition: string }, words: readonly [string, string, string]) =>
+      `${escape(words[0])}<span data-term="${t.id}">${words[1]}</span>${escape(words[2])}</p><p class="ui-definition" data-definition="${t.id}">${escape(t.definition)}</p>`;
+    expect(html).toContain(`<p>${escape(F.lead(3, 6))} ${pair(TERM_RISK_AREA, F.areasLine)}<p>${pair(TERM_CONTROL, F.controlsLine)}`);
+    expect(`${F.lead(3, 6)} ${F.areasLine.join('')} ${F.controlsLine.join('')}`).toBe(
+      'The questions are grouped into 3 stages and 6 topics. Each question links to a risk area. Each risk area links to controls that reduce the risk.',
+    );
+  });
+
+  it('B5 (D1): each stage heading is the stage name as a Term, with its Definition as the next element', () => {
+    for (const [s, t] of [['pre-processing', TERM_STAGE_1], ['in-processing', TERM_STAGE_2], ['post-processing', TERM_STAGE_3]] as const) {
+      expect(stageLabels[s].label).toBe(t.term);
+      expect(html).toMatch(new RegExp(`<h2[^>]*id="stage-${s}"[^>]*><span data-term="${t.id}">${t.term}</span></h2><p class="ui-definition" data-definition="${t.id}">${escape(t.definition)}</p>`));
+    }
+  });
+
+  it('B5 (spec 6), FX4 (DF I5): the first content text that uses "model card" marks it; the next element names the term, then its Definition', () => {
+    const c = runningContent();
+    const pattern = /(?<![\p{L}\p{N}])model\s+cards?(?![\p{L}\p{N}])/iu;
+    const order = STAGES.flatMap((s) => [...c.areas.values()].filter((a) => a.stage === s));
+    const first = order.find((a) => pattern.test(a.description) || pattern.test(a.context ?? ''));
+    expect(first, 'the fixture has an area that names a model card').toBeDefined();
+    const field = pattern.test(first!.description) ? first!.description : first!.context!;
+    const m = pattern.exec(field)!;
+    const marked = `${escape(field.slice(0, m.index))}<span data-term="${TERM_MODEL_CARD.id}">${escape(m[0])}</span>${escape(field.slice(m.index + m[0].length))}</p><p class="term-line">Model card. <span class="ui-definition" data-definition="${TERM_MODEL_CARD.id}">${escape(TERM_MODEL_CARD.definition)}</span></p>`;
+    expect(html).toContain(marked);
+    // Only that first use is marked and defined.
+    expect(html.match(/data-term="model-card"/g)).toHaveLength(1);
+    expect(html.match(/data-definition="model-card"/g)).toHaveLength(1);
   });
 
   it('UX-03 FR-PUB-02 FR-CNT-01: every area card links its principle to its section of the About page', () => {

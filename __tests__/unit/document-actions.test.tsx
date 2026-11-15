@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { IssuedDocumentView } from '@/types/api';
 import { HOSTILE_STRINGS } from '../helpers/hostile';
+import { DOCUMENTS_COPY } from '@/lib/documents/copy';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh() {} }) }));
 const { DocumentActions, CopyFallback, WithdrawConfirm, withdrawText, WITHDRAW_LOST, WITHDRAW_OTHER, COPY_LOST } = await import('@/components/documents/DocumentActions');
@@ -76,7 +77,8 @@ describe('the copy fallback', () => {
 
 describe('the failure lines', () => {
   it('UX-27 M-06: a withdrawal that got no reply says it may have arrived and that Retry is safe, and does not say nothing was changed', () => {
-    expect(WITHDRAW_LOST).toBe('Not withdrawn yet: no reply from the server. It may have arrived. Retry is safe: it will not withdraw twice.');
+    expect(WITHDRAW_LOST).toBe(DOCUMENTS_COPY.actions.withdrawLost);
+    expect(WITHDRAW_LOST).toContain('It will not withdraw twice.');
     expect(WITHDRAW_LOST).not.toContain('Nothing was changed');
     expect(WITHDRAW_OTHER).toBe('Not withdrawn. Reload the page and try again.');
     expect(COPY_LOST).toBe('Not copied. Connection lost.');

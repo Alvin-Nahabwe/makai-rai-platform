@@ -54,6 +54,15 @@
   margin-block-end: var(--space-3);
 }
 
+/* A stage heading's meaning sits close under it and apart from the subgroup below (DF M4). */
+.finding-group > h2:has(+ .ui-definition) {
+  margin-block-end: var(--space-1);
+}
+
+.finding-group > h2 + .ui-definition {
+  margin-block-end: var(--space-6);
+}
+
 .finding-subgroup {
   margin-block: var(--space-4) var(--space-6);
 }
