@@ -603,7 +603,9 @@ for (const width of [1280, 360, 320]) {
 }
 
 test('NFR-SEC-11 FR-PRJ-01: hostile project text shows as text on S-08, S-10 and S-32', async ({ browser }) => {
-  const page = await signedIn(browser, fx.members.owner);
+  // A Viewer: Home (plan 1B Task 10) names every active project only in a Viewer's "Still open"; a person who records
+  // sees one project's stages, which need not be this one. S-10 and S-32 read the same for every role.
+  const page = await signedIn(browser, fx.members.viewer);
   failOnDialog(page);
   for (const p of [path('/dashboard'), path(`/projects/${hostileProject.id}`), path('/projects')]) {
     await page.goto(p);
