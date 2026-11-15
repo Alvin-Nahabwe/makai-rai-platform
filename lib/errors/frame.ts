@@ -41,6 +41,8 @@ export const GATE_LOOK = Object.freeze({
     borderBlockEnd: `${down('1px', '0px')} ${EDGE}`,
     borderInlineEnd: `${up('0px', '1px')} ${EDGE}`,
   },
+  /** .gate__logo: the MAK-AI logo (components/layout/logos.ts MAKAI_LOGO) as a block above the platform's name. */
+  logo: { display: 'block', marginBlockEnd: 'var(--space-1)' },
   /** .gate__product */
   product: { color: 'var(--color-shell-ink)', fontSize: 'var(--font-size-body)', fontWeight: 'var(--font-weight-semibold)', overflowWrap: 'anywhere' },
   /** .gate__main: var(--space-4); var(--space-12) from 1024 px; no side gutter below 320 px. */
@@ -63,10 +65,10 @@ export const GATE_LOOK = Object.freeze({
     borderRadius: up('0px', 'var(--radius-surface)', SMALL),
     overflowWrap: 'break-word',
   },
-  /** .gate__card h1 and its container steps: the h1 size from a 30rem card, the h2 size below it, the h3 size below 12rem. */
+  /** .gate__card h1 and its container steps: the h1 size from a 24rem card, the h2 size below it, the h3 size below 12rem. */
   heading: {
     marginBlockEnd: 'var(--space-4)',
-    fontSize: 'clamp(clamp(var(--font-size-h3),(100cqi - 11.99rem)*99999,var(--font-size-h2)),(100cqi - 29.99rem)*99999,var(--font-size-h1))',
+    fontSize: 'clamp(clamp(var(--font-size-h3),(100cqi - 11.99rem)*99999,var(--font-size-h2)),(100cqi - 23.99rem)*99999,var(--font-size-h1))',
     lineHeight: 'var(--line-height-heading)',
     color: 'var(--color-heading)',
     overflowWrap: 'normal',

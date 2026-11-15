@@ -4,6 +4,7 @@ import { NOT_FOUND_COPY } from '@/lib/errors/not-found/copy';
 import { PRODUCT_NAME, pageTitle } from '@/lib/ui/title';
 import { headers } from 'next/headers';
 import IdleWarning from '@/components/layout/IdleWarning';
+import { MAKAI_LOGO } from '@/components/layout/logos';
 import NotFoundCard from '@/components/layout/NotFoundCard';
 import { MAIN_CONTENT_ID } from '@/components/layout/SkipLink';
 import { idleLimitSeconds } from '@/lib/auth/idle';
@@ -36,7 +37,7 @@ export const metadata: Metadata = { title: pageTitle(NOT_FOUND_COPY.title) };
  * identity is shown: no name, no address.
  *
  * The page sits in the gate frame's look (plan 1B Task 14, ruling L5-18): the
- * navy column with the platform's name beside the card, drawn with
+ * navy column with the MAK-AI logo above the platform's name beside the card, drawn with
  * lib/errors/frame.ts's inline styles and no stylesheet, because every page's
  * first load lists this page's entry (the coordinator's ruling after lane 7's
  * measurement; GateFrame itself would add its sign-out's code and gate.css).
@@ -65,7 +66,10 @@ export default async function NotFound() {
       <main id={MAIN_CONTENT_ID} tabIndex={-1}>
         <div data-gate-look="" style={GATE_LOOK.frame}>
           <div style={GATE_LOOK.column}>
-            <div data-slot="logo"></div>
+            {/* The MAK-AI logo above the platform's name, as GateFrame draws it: decorative beside the name (alt=""), not a link. */}
+            {/* eslint-disable-next-line @next/next/no-img-element -- a file already sized for the drawn logo (logos.ts). */}
+            <img src={MAKAI_LOGO.src} srcSet={MAKAI_LOGO.srcSet} width={MAKAI_LOGO.width} height={MAKAI_LOGO.height} alt=""
+              decoding="async" style={GATE_LOOK.logo} />
             <p style={GATE_LOOK.product}>{PRODUCT_NAME}</p>
           </div>
           <div style={GATE_LOOK.area}>

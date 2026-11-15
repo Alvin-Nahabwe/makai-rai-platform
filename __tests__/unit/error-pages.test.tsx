@@ -17,6 +17,8 @@ import NotFoundInGroup from '@/app/(authenticated)/not-found';
 import NotFoundCard from '@/components/layout/NotFoundCard';
 import { ERRORS_COPY, supportReferenceLine } from '@/lib/errors/copy';
 import { NOT_FOUND_COPY } from '@/lib/errors/not-found/copy';
+import { MAKAI_LOGO } from '@/components/layout/logos';
+import { GATE_LOOK } from '@/lib/errors/frame';
 import { SHELL_COPY } from '@/lib/shell/copy';
 import { PRODUCT_NAME, pageTitle } from '@/lib/ui/title';
 import { escapeRe } from '../helpers/escapeRe';
@@ -164,6 +166,33 @@ describe('the gate frame look on the root pages', () => {
   it('the group not-found page has no frame, no main and no dialog of its own (the shell has them)', () => {
     const html = renderToStaticMarkup(<NotFoundInGroup />);
     expect(html).not.toMatch(/data-gate-look|<main|<dialog|id="main-content"/);
+  });
+
+  it('drift guard: the column draws the MAK-AI logo as GateFrame does, decorative, above the name, not a link', async () => {
+    const html = renderToStaticMarkup(await NotFound());
+    const img = frameOf(html).match(/<img [^>]*>/)?.[0] ?? '';
+    expect(img).toContain(`src="${MAKAI_LOGO.src}"`);
+    expect(img).toContain(`srcSet="${MAKAI_LOGO.srcSet}"`);
+    expect(img).toContain(`width="${MAKAI_LOGO.width}"`);
+    expect(img).toContain(`height="${MAKAI_LOGO.height}"`);
+    expect(img).toContain('alt=""');
+    expect(img).toContain('decoding="async"');
+    expect(frameOf(html)).toMatch(/<img [^>]*\/><p [^>]*>MAK-AI RAI Platform<\/p>/);
+    expect(frameOf(html)).not.toContain('<a ');
+    // .gate__logo in gate.css: a block with var(--space-1) under it.
+    const css = readFileSync('components/layout/gate.css', 'utf8');
+    const rule = css.match(/\.gate__logo \{([^}]*)\}/)?.[1] ?? '';
+    expect(rule).toMatch(/display:\s*block;/);
+    expect(GATE_LOOK.logo).toEqual({ display: 'block', marginBlockEnd: rule.match(/margin-block-end:\s*([^;]+);/)?.[1] });
+  });
+
+  it("drift guard: the heading steps at gate.css's container widths (h2 below 24rem, h3 below 12rem)", () => {
+    const css = readFileSync('components/layout/gate.css', 'utf8');
+    const steps = [...css.matchAll(/@container \(width < ([\d.]+)rem\)\s*\{\s*\.gate__card h1 \{\s*font-size: var\((--font-size-h\d)\);/g)].map((m) => [Number(m[1]), m[2]]);
+    expect(steps).toEqual([[24, '--font-size-h2'], [12, '--font-size-h3']]);
+    const size = String(GATE_LOOK.heading.fontSize);
+    for (const [width] of steps) expect(size).toContain(`(100cqi - ${(Number(width) - 0.01).toFixed(2)}rem)*99999`);
+    expect(size).toBe('clamp(clamp(var(--font-size-h3),(100cqi - 11.99rem)*99999,var(--font-size-h2)),(100cqi - 23.99rem)*99999,var(--font-size-h1))');
   });
 
   it('no stylesheet and no GateFrame: the root not-found page, the card and the frame styles import no CSS and nothing of the gate frame', () => {
