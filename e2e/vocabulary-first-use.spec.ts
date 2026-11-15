@@ -29,10 +29,12 @@ import * as terms from '../lib/vocabulary/terms';
  *
  * Two tests in a serial block, so that an expected failure cannot hide a broken crawl: the first crawls and collects and
  * must pass (its floors: the claims crawl's must-reach lists, the page-file gate, a text node on every page, all 26
- * first-use concepts checked), and prints the worklist; only the second, which asserts that no page has a violation, is
- * marked `test.fail()`. No screen uses Term and Definition yet, so it fails until the copy tasks do; Task 20 removes the
- * mark (the same deferral as the vocabulary lint's worklist case in __tests__/lint/vocabulary.test.ts). With
- * VOCABULARY_HITS_DIR set, the worklist is also written to vocabulary-first-use-hits.txt in that directory.
+ * first-use concepts in the list the rule reads), and prints the worklist; only the second, which asserts that no page has
+ * a violation and that some collected text was inside `[data-decision-version]` (review B1 I-1: otherwise
+ * `version-of-a-decision` was never checked), is marked `test.fail()`. No screen uses Term and Definition yet, so it
+ * fails until the copy tasks do; Task 20 removes the mark (the same deferral as the vocabulary lint's worklist case in
+ * __tests__/lint/vocabulary.test.ts). With VOCABULARY_HITS_DIR set, the worklist is also written to
+ * vocabulary-first-use-hits.txt in that directory.
  *
  * Ruling X-1 (3): a text node whose whole text is what the team typed (a project's name or description, read as the claims
  * crawl reads it, e2e/helpers/projectTexts.ts, for pages under `/orgs/` only), a framework area or control name
@@ -47,6 +49,9 @@ const BLOCK_SELECTOR = 'p, li, dt, dd, label, legend, th, td, h1, h2, h3, h4, h5
 
 /** Every concept of the vocabulary; the rule checks those whose `defineOnFirstUse` is true. */
 const CONCEPTS = Object.values(terms);
+
+/** Each concept's id and its data/vocabulary.json definition, word for word: what a closed toggletip must hold to count. */
+const DEFINITIONS: Record<string, string> = Object.fromEntries(CONCEPTS.flatMap((c) => (c.definition === null ? [] : [[c.id, c.definition]])));
 
 /** The two content roots: the repository's own and the fixture bundle the test server serves (playwright.config.ts). */
 const CONTENT_ROOTS = [path.join(process.cwd(), 'data', 'content'), path.join(process.cwd(), '__tests__', 'fixtures', 'content')];
@@ -105,15 +110,26 @@ function worklist(hits: readonly Hit[]): string[] {
  * closest `.ui-field` or `.ui-callout`, or its nearest block ancestor is that element; D's id is named by
  * `aria-describedby` on B, on a control inside B, or on a label's control (`for`/`id`). A node in no block has no
  * definitions and a key of its own.
+ *
+ * The owner's ruling of 15 November 2026, 11:00 (components/ui/TermTip.tsx): a toggletip counts as beside its term, its
+ * popover closed or open. A definition D inside a `.ui-term-tip` T counts, even when D cannot be seen, only when T is
+ * visible and inside `main`, and D's text is exactly `definitions[id]` (data/vocabulary.json's sentence for D's id); and
+ * then where a visible definition would (the rules above), or when T is the next element sibling of the node's closest
+ * `[data-term]` element (a count strip with no block element). Any other definition the reader cannot see does not count.
  */
-function collectTextNodes({ blockSelector, legalRoute }: { blockSelector: string; legalRoute: boolean }): TextNodeInfo[] | null {
+function collectTextNodes({ blockSelector, legalRoute, definitions }: { blockSelector: string; legalRoute: boolean; definitions: Record<string, string> }): TextNodeInfo[] | null {
   const main = document.querySelector('main');
   if (main === null) return null;
   const skip = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE']);
   const visible = (el: Element) => el.checkVisibility({ visibilityProperty: true });
-  /** The definition ids of `candidates` that are definitions the reader can see in `main`. */
+  /** True when `d` is in a toggletip the reader can see in `main` and holds its id's vocabulary sentence word for word. */
+  const inTip = (d: Element): boolean => {
+    const tip = d.closest('.ui-term-tip');
+    return tip !== null && main.contains(tip) && visible(tip) && d.textContent === definitions[d.getAttribute('data-definition') ?? ''];
+  };
+  /** The definition ids of `candidates` that are definitions in `main` the reader can see, or can open in a toggletip. */
   const shown = (candidates: Array<Element | null | undefined>): string[] => candidates
-    .filter((d): d is Element => d instanceof Element && d.hasAttribute('data-definition') && main.contains(d) && visible(d))
+    .filter((d): d is Element => d instanceof Element && d.hasAttribute('data-definition') && main.contains(d) && (visible(d) || inTip(d)))
     .map((d) => d.getAttribute('data-definition') as string)
     .filter(Boolean);
   /** `owner` itself and the definitions whose nearest block ancestor is `owner`, or (for a field or callout) whose parent is. */
@@ -150,6 +166,11 @@ function collectTextNodes({ blockSelector, legalRoute }: { blockSelector: string
       const candidates = [...near(block, false), next, next?.firstElementChild, ...(field ? near(field, true) : []), ...describedBy(block)];
       for (const id of shown(candidates)) ids.add(id);
     }
+    // The toggletip right after the term's own element: beside it even where the term sits in no block.
+    const after = parent.closest('[data-term]')?.nextElementSibling;
+    if (after?.matches('.ui-term-tip') && main.contains(after)) {
+      for (const id of shown(Array.from(after.querySelectorAll('[data-definition]')).filter(inTip))) ids.add(id);
+    }
     nodes.push({
       text, termIds, blockKey, definitionIdsInBlock: [...ids],
       inRoleChoice: parent.closest('[data-role-choice]') !== null,
@@ -162,7 +183,7 @@ function collectTextNodes({ blockSelector, legalRoute }: { blockSelector: string
 /** Sets `html` as the page and runs the collector on it, as on `legalRoute` or not. */
 async function collect(page: Page, html: string, legalRoute = false): Promise<TextNodeInfo[] | null> {
   await page.setContent(`<!doctype html><title>t</title>${html}`);
-  return page.evaluate(collectTextNodes, { blockSelector: BLOCK_SELECTOR, legalRoute });
+  return page.evaluate(collectTextNodes, { blockSelector: BLOCK_SELECTOR, legalRoute, definitions: DEFINITIONS });
 }
 
 test('vocabulary first use (helper): the collector reads main outside nav, in order, with terms, blocks, definitions and role choices', async ({ page }) => {
@@ -173,7 +194,7 @@ test('vocabulary first use (helper): the collector reads main outside nav, in or
     <fieldset data-role-choice><legend>Role</legend><label>Owner</label></fieldset>
     <div>Loose text</div>
   </main>`);
-  const nodes = await page.evaluate(collectTextNodes, { blockSelector: BLOCK_SELECTOR, legalRoute: false });
+  const nodes = await page.evaluate(collectTextNodes, { blockSelector: BLOCK_SELECTOR, legalRoute: false, definitions: DEFINITIONS });
   expect(nodes?.map((n) => n.text)).toEqual(['finding', 'Open the finding', 'Role', 'Owner', 'Loose text']);
   const [term, later, legend, owner, loose] = nodes!;
   expect(term).toEqual({ text: 'finding', termIds: ['finding'], blockKey: 'block-0', definitionIdsInBlock: ['finding'], inRoleChoice: false, inDecisionVersion: false });
@@ -183,7 +204,7 @@ test('vocabulary first use (helper): the collector reads main outside nav, in or
   expect(loose).toMatchObject({ blockKey: 'none-4', definitionIdsInBlock: [] });
   expect(firstUseViolations(nodes!, CONCEPTS)).toEqual([{ id: 'owner', text: 'Owner' }]);
   await page.setContent('<!doctype html><title>t</title><div>No main here</div>');
-  expect(await page.evaluate(collectTextNodes, { blockSelector: BLOCK_SELECTOR, legalRoute: false })).toBeNull();
+  expect(await page.evaluate(collectTextNodes, { blockSelector: BLOCK_SELECTOR, legalRoute: false, definitions: DEFINITIONS })).toBeNull();
 });
 
 test('vocabulary first use (helper): legal text on a legal route, a definition\'s own text and hidden text are not uses (L2-25, L2-27, L2-30)', async ({ page }) => {
@@ -262,19 +283,60 @@ test('vocabulary first use (helper): a definition the reader cannot see is not s
   expect.soft((await collect(page, '<main><p style="visibility: hidden">A seal, invisible.</p><p>Shown</p></main>'))?.map((n) => n.text)).toEqual(['Shown']);
 });
 
+/** components/ui/TermTip.tsx's markup: the (i) button, then its popover holding the definition (closed unless `open`). */
+function termTip(id: string, text: string, open = false): string {
+  return `<span class="ui-term-tip"><button type="button" popovertarget="tip-${id}" aria-label="What is it?" aria-describedby="tip-${id}-def"><svg aria-hidden="true"></svg></button>`
+    + `<span popover="auto" id="tip-${id}"${open ? ' data-open' : ''}><span class="ui-definition" data-definition="${id}" id="tip-${id}-def">${text}</span></span></span>`;
+}
+
+test('vocabulary first use (helper): a toggletip with the exact definition, next to the term or in its block, is beside it, closed or open (owner\'s ruling, 15 Nov 11:00)', async ({ page }) => {
+  const finding = terms.TERM_FINDING.definition;
+  const mitigation = terms.TERM_MITIGATION.definition;
+  const idsOf = async (html: string) => (await collect(page, `<main>${html}</main>`))![0].definitionIdsInBlock;
+  // A closed popover is display: none in Chromium, so the reader cannot see it until the button is pressed: checked, not assumed.
+  await page.setContent(`<!doctype html><title>t</title><main>${termTip('finding', finding)}</main>`);
+  expect(await page.evaluate(() => document.querySelector('[data-definition]')!.checkVisibility({ visibilityProperty: true }))).toBe(false);
+  // The question page's count strip: no block element, each term followed by its tip.
+  const strip = `<div class="strip"><span data-term="finding">3 findings</span>${termTip('finding', finding)}, <span data-term="mitigation">1 mitigation</span>${termTip('mitigation', mitigation)}</div>`;
+  const nodes = await collect(page, `<main>${strip}</main>`);
+  expect(nodes?.map((n) => [n.text, n.definitionIdsInBlock])).toEqual([['3 findings', ['finding']], [',', []], ['1 mitigation', ['mitigation']]]);
+  expect(firstUseViolations(nodes!, [terms.TERM_FINDING, terms.TERM_MITIGATION])).toEqual([]);
+  // In the term's block, as a visible definition would be.
+  expect.soft(await idsOf(`<p><span data-term="finding">finding</span> ${termTip('finding', finding)}</p>`)).toEqual(['finding']);
+  // Open, it is a visible definition, and next to the term it still counts.
+  await page.setContent(`<!doctype html><title>t</title><main><div><span data-term="finding">finding</span>${termTip('finding', finding, true)}</div></main>`);
+  await page.evaluate(() => (document.querySelector('[data-open]') as HTMLElement).showPopover());
+  expect.soft((await page.evaluate(collectTextNodes, { blockSelector: BLOCK_SELECTOR, legalRoute: false, definitions: DEFINITIONS }))![0].definitionIdsInBlock).toEqual(['finding']);
+  // Not beside: a closed tip whose text is not the vocabulary's sentence, in a block or next to the term.
+  expect.soft(await idsOf(`<div><span data-term="finding">finding</span>${termTip('finding', 'A gap.')}</div>`)).toEqual([]);
+  expect.soft(await idsOf(`<p><span data-term="finding">finding</span> ${termTip('finding', `${finding} `)}</p>`)).toEqual([]);
+  // Not beside: a closed definition with the exact sentence that is not in a tip.
+  expect.soft(await idsOf(`<div><span data-term="finding">finding</span><span><span popover><span data-definition="finding">${finding}</span></span></span></div>`)).toEqual([]);
+  expect.soft(await idsOf(`<p><span data-term="finding">finding</span> <span popover><span data-definition="finding">${finding}</span></span></p>`)).toEqual([]);
+  // A visible definition that is not in a tip keeps the old rule: right after the term's own element, with no block, it is not beside.
+  expect.soft(await idsOf(`<div><span data-term="finding">finding</span><span><span data-definition="finding">${finding}</span></span></div>`)).toEqual([]);
+  // Not beside: a tip two siblings away from the term, or a tip the reader cannot see at all.
+  expect.soft(await idsOf(`<div><span data-term="finding">finding</span><span>, open</span>${termTip('finding', finding)}</div>`)).toEqual([]);
+  expect.soft(await idsOf(`<div><span data-term="finding">finding</span><span hidden>${termTip('finding', finding)}</span></div>`)).toEqual([]);
+  expect.soft(await idsOf(`<div><span data-term="finding">finding</span>${termTip('finding', finding).replace('class="ui-term-tip"', 'class="ui-term-tip" hidden')}</div>`)).toEqual([]);
+});
+
 /** Filled by the crawl and asserted by the expected failure; reset when the crawl starts. */
 let hits: Hit[] = [];
 let crawled = false;
+/** How many collected text nodes were inside `[data-decision-version]`: none means `version-of-a-decision` was never checked. */
+let decisionVersionNodes = 0;
 
 test.describe.serial('vocabulary first use', () => {
   test('vocabulary first use: every seat\'s crawl reaches its pages and reads their main text', async ({ browser, baseURL, playwright }) => {
     test.setTimeout(15 * 60_000);
     hits = [];
     crawled = false;
+    decisionVersionNodes = 0;
     const defined = (JSON.parse(fs.readFileSync(path.join(process.cwd(), 'data', 'vocabulary.json'), 'utf8')) as { concepts: Array<{ defineOnFirstUse: boolean }> })
       .concepts.filter((c) => c.defineOnFirstUse).length;
     expect(defined, 'data/vocabulary.json has concepts to check').toBeGreaterThan(0);
-    expect(CONCEPTS.filter((c) => c.defineOnFirstUse).length, 'the crawl checks every first-use concept of data/vocabulary.json').toBe(defined);
+    expect(CONCEPTS.filter((c) => c.defineOnFirstUse).length, 'the rule reads every first-use concept of data/vocabulary.json').toBe(defined);
 
     const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf-8')) as FixtureManifest;
     const slug = manifest.orgs[0].slug;
@@ -323,7 +385,7 @@ test.describe.serial('vocabulary first use', () => {
       const collected: Array<{ key: string; pathname: string; nodes: TextNodeInfo[] }> = [];
       const pages = await reachablePages(page, seat.starts, { max: MAX_PAGES, label: seat.label, follows }, async (key) => {
         const pathname = new URL(page.url()).pathname;
-        const nodes = await page.evaluate(collectTextNodes, { blockSelector: BLOCK_SELECTOR, legalRoute: isLegalTextRoute(pathname) });
+        const nodes = await page.evaluate(collectTextNodes, { blockSelector: BLOCK_SELECTOR, legalRoute: isLegalTextRoute(pathname), definitions: DEFINITIONS });
         expect(nodes, `${seat.label} ${key}: the page has no main`).not.toBeNull();
         expect(nodes!.length, `${seat.label} ${key}: no visible text node in main outside nav`).toBeGreaterThan(0);
         collected.push({ key, pathname, nodes: nodes! });
@@ -333,6 +395,7 @@ test.describe.serial('vocabulary first use', () => {
       const own = collected.some((c) => c.pathname.startsWith('/orgs/')) ? await projectTexts(list) : [];
       const withTeam: ReadonlySet<string> = new Set([...CONTENT_NAMES, ...own]);
       for (const c of collected) {
+        decisionVersionNodes += c.nodes.filter((n) => n.inDecisionVersion).length;
         for (const v of firstUseViolations(c.nodes, CONCEPTS, c.pathname.startsWith('/orgs/') ? withTeam : CONTENT_NAMES)) {
           hits.push({ seat: seat.label, page: c.key, id: v.id, text: v.text });
           found += 1;
@@ -356,6 +419,7 @@ test.describe.serial('vocabulary first use', () => {
       byId.set(id, (byId.get(id) ?? 0) + 1);
     }
     const ranked = [...byId].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    console.log(`[vocabulary-first-use] ${decisionVersionNodes} text nodes inside [data-decision-version]`);
     console.log(`[vocabulary-first-use] ${hits.length} violations, ${lines.length} worklist lines; lines by id: ${ranked.map(([id, n]) => `${id} ${n}`).join(', ')}`);
     for (const line of lines) console.log(`[vocabulary-first-use] ${line}`);
     const dir = process.env.VOCABULARY_HITS_DIR;
@@ -368,6 +432,9 @@ test.describe.serial('vocabulary first use', () => {
   test('vocabulary first use (worklist until Task 20)', () => {
     test.skip(!crawled, 'the crawl test did not finish, so there is nothing to judge');
     test.fail();
+    // Review B1 I-1: a floor once the mark goes. Until a screen marks a decision's version, `version-of-a-decision` can
+    // match nowhere, and a crawl with no hits would still not have checked it.
+    expect.soft(decisionVersionNodes, 'no collected text was inside [data-decision-version], so version-of-a-decision was never checked: lanes 1 and 2 put the attribute where a screen states a decision\'s version').toBeGreaterThan(0);
     expect(hits.length, `first uses not beside their definition:\n${worklist(hits).join('\n')}`).toBe(0);
   });
 });

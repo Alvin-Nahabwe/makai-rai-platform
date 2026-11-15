@@ -23,7 +23,10 @@ export type TextNodeInfo = {
    * Diagnostics only: the rule never reads it (`definitionIdsInBlock` carries the relation).
    */
   blockKey: string;
-  /** The `data-definition` ids beside the node: in its block, or tied to it as the collector's comment says (L2-29). */
+  /**
+   * The `data-definition` ids beside the node: in its block, or tied to it as the collector's comment says (L2-29),
+   * including a toggletip holding the vocabulary's exact sentence, closed or open (the owner's ruling of 15 November 2026).
+   */
   definitionIdsInBlock: readonly string[];
   /** True when the node is inside `[data-role-choice]`. */
   inRoleChoice: boolean;
