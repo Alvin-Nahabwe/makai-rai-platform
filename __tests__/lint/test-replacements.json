@@ -3118,5 +3118,13 @@
     "property": "The question page alone is held to its own signed-in budget; its neighbour route with the same weight keeps 190 KB and fails over it.",
     "proof": "The owner's ruling of 15 Nov 2026 18:25 (box \"195 KB, covering the last merges\") supersedes the 18:00 ruling's 192 KB. The case now expects budgetKB=195 for the question route and budgetKB=190 for its neighbour, the fixture stays over 190 and now under 195, and the neighbour still fails with the question route absent from stderr. It still fails when it should: with the ROUTE_BUDGET_KB entry set to 190 the case fails; restored to 195 it passes.",
     "task": "Route rebuild lane 2 task 8 (the 195 KB budget)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::UX-06 (R12-16, spec 7.2): each status phrase of a stage column is the kit's mark with its words in ink, and none carries the warning class",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::UX-06 (R12-16, spec 7.2): each status phrase of a stage column is the kit's mark with its words in ink, and none carries the warning class",
+    "property": "Recorded so far shows each status as the kit's mark, hidden from assistive technology, beside its count in words, never a warning style. There is no row of marks per question on the project page any more (owner's ruling of 15 Nov 2026 20:50, as sketched): the tally alone carries the marks.",
+    "proof": "The case slices the pre-processing line's Recorded so far stop and requires NO ui-route-row__stop (the row is gone) and exactly 5 <li class=\"ui-route-row__tally-item\" data-tally-kind=...> each opening with an <svg class=\"ui-mark__shape\" aria-hidden=\"true\">; the tally read without its (i) must equal exactly \"7 done (2 with no evidence attached)\", \"n partly\", \"n not yet\", \"n not applicable\", \"1 answered\", in that order; no status-label or warning in the stop. Ink is checked in the browser by expectStatusMarksInk (e2e/prj-screens.spec.ts UX-06 UX-07, whose sentinel project now has one decision so S-10 has a mark).",
+    "task": "lane 8 I4 round 3 (owner 20:50: drop the per-question marks row on S-10)"
   }
 ]
