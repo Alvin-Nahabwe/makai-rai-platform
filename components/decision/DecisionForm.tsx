@@ -8,6 +8,7 @@ import { ConflictView } from '@/components/decision/ConflictView';
 import { DecisionFields, FIELD_LABEL, FIELD_TARGET } from '@/components/decision/DecisionFields';
 import { SaveStatus, unsavedShown } from '@/components/decision/SaveStatus';
 import { HELD_ON_SAVE, SaveHeldContext } from '@/components/decision/SaveHeld';
+import { cardScroller, SCROLLER_ATTRIBUTE, scrollerView } from '@/components/decision/scroller';
 import { Button } from '@/components/ui/Button';
 import { Callout } from '@/components/ui/Callout';
 import { Definition, Term } from '@/components/ui/Definition';
@@ -222,14 +223,16 @@ export function NextWay({ next, stageHref, held }: { next: NextQuestion | null; 
  * Whether the save bar covers the screen's foot now (W-3 narrow, and the owner's Option A of 15 Nov 2026 on wide screens):
  * fixed to the bottom at 768 px and below; above that it is `position: sticky` at the bottom of the card's form, which is
  * pinned exactly while its own place is below the fold, so it is read from geometry: its box reaches the screen's foot and
- * is on the screen. In the flow (static: an open withdrawal confirmation on a phone) it covers nothing.
+ * is on the screen. In the flow (static: an open withdrawal confirmation on a phone) it covers nothing. "The screen" for the
+ * sticky row is the box that scrolls the card (T10: lane 3's frame from 1024 px, the document below; components/decision/
+ * scroller.ts): the row pins to that box's foot, which is the window's only while that box ends on it.
  */
 function pinnedBar(bar: HTMLElement): boolean {
   const position = getComputedStyle(bar).position;
   if (position === 'fixed') return true;
   if (position !== 'sticky') return false;
   const r = bar.getBoundingClientRect();
-  const foot = document.documentElement.clientHeight;
+  const foot = scrollerView(cardScroller(bar)).bottom;
   return r.top < foot && r.bottom >= foot - 1;
 }
 
@@ -375,9 +378,18 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
   // bar covered it (SC 2.4.11). A layout effect runs inside the same event, before the next key is handled.
   // When the bar has grown over the control that has focus (the radio whose Space made the first edit), that control
   // is scrolled clear once, above the new height; nothing moves when nothing is covered or focus is outside the form.
+  // T10: the box that scrolls the card at this width carries the attribute that gives it the row's height as scroll padding
+  // (DecisionForm.css); it is found again on every measure, so a resize across 1024 px moves it to the new scroller.
+  const scroller = useRef<HTMLElement | null>(null);
   const applyBarHeight = useCallback((): void => {
     const bar = saveBar.current;
     if (bar === null) return;
+    const now = cardScroller(bar);
+    if (scroller.current !== now) {
+      scroller.current?.removeAttribute(SCROLLER_ATTRIBUTE);
+      now.setAttribute(SCROLLER_ATTRIBUTE, '');
+      scroller.current = now;
+    }
     const root = document.documentElement;
     const was = parseFloat(root.style.getPropertyValue('--decision-save-bar-h')) || 0;
     const h = bar.offsetHeight;
@@ -387,7 +399,7 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
     if (h < was || !(focused instanceof HTMLElement) || bar.contains(focused) || !(bar.closest('form')?.contains(focused) ?? false)) return;
     // Covered: its lower edge under the bar's top, and it is on the screen at all (one the person scrolled away from stays).
     const r = focused.getBoundingClientRect();
-    if (pinnedBar(bar) && r.bottom > bar.getBoundingClientRect().top && r.top < document.documentElement.clientHeight) {
+    if (pinnedBar(bar) && r.bottom > bar.getBoundingClientRect().top && r.top < scrollerView(now).bottom) {
       focused.scrollIntoView({ block: 'nearest', behavior: 'instant' });
     }
   }, []);
@@ -401,16 +413,18 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
    */
   const footOfView = useCallback((): number => {
     const bar = saveBar.current;
-    return bar !== null && pinnedBar(bar) ? bar.getBoundingClientRect().top : document.documentElement.clientHeight;
+    if (bar === null) return document.documentElement.clientHeight;
+    return pinnedBar(bar) ? bar.getBoundingClientRect().top : scrollerView(cardScroller(bar)).bottom;
   }, []);
   const reveal = useCallback((el: Element): void => {
     const r = el.getBoundingClientRect();
     // Review B M-r4-2: only the wide screens' pinned (sticky) row holds its controls at the screen's foot; the phone's fixed
     // bar is measured as it was at 757f56ca (footOfView), so a control its own overflow clips is still scrolled into view.
     const bar = saveBar.current;
+    const view = bar === null ? { top: 0, bottom: document.documentElement.clientHeight } : scrollerView(cardScroller(bar));
     const inPinnedRow = bar !== null && bar.contains(el) && getComputedStyle(bar).position === 'sticky';
-    const foot = inPinnedRow ? document.documentElement.clientHeight : footOfView();
-    if (r.top >= 0 && r.bottom <= foot) return;
+    const foot = inPinnedRow ? view.bottom : footOfView();
+    if (r.top >= view.top && r.bottom <= foot) return;
     el.scrollIntoView?.({ block: 'nearest', behavior: 'instant' });
   }, [footOfView]);
 
@@ -435,7 +449,12 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
     const root = document.documentElement;
     const observer = new ResizeObserver(applyBarHeight);
     observer.observe(bar);
-    return () => { observer.disconnect(); root.style.removeProperty('--decision-save-bar-h'); };
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty('--decision-save-bar-h');
+      scroller.current?.removeAttribute(SCROLLER_ATTRIBUTE);
+      scroller.current = null;
+    };
   }, [applyBarHeight]);
 
   /** Keeps the draft on this device; false when there is no store or the browser refused it. */

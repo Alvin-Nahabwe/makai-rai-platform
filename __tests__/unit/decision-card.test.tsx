@@ -750,3 +750,36 @@ describe('T5: the last fix round before the hand-in', () => {
     expect(await changed({ current: { ...V2, status: 'not_yet', reasonCode: 'ny_planned_later' }, historyCount: 2 }, 1)).toMatch(/This save becomes version 3\.$/);
   });
 });
+
+describe('T10 I5 (owner 19:30, "Empty, show last date"): a re-decision names the last declared date beside empty boxes', () => {
+  const boxes = (h: string) => [...h.matchAll(/<input[^>]*inputmode="numeric"[^>]*>/gi)].map((m) => m[0]);
+  const draft = (current: DecisionVersionView | null) => draftFromCurrent({ ...PANEL, current });
+
+  it('a current version shows "Last decided on <date>" at its precision, the boxes stay empty, every box names the line, and Today stays', () => {
+    for (const [declaredDate, declaredPrecision, shown] of [['2026-11-15', 'day', '15 Nov 2026'], ['2026-11', 'month', 'Nov 2026'], ['2026', 'year', '2026']] as const) {
+      const current = { ...V1, declaredDate, declaredPrecision };
+      expect(draft(current).date).toEqual({ day: '', month: '', year: '' });
+      const h = card({ current, historyCount: 1 });
+      expect(words(h)).toContain(F.lastDecidedOn(shown));
+      expect(F.lastDecidedOn(shown)).toBe(`Last decided on ${shown}`);
+      // Inside the date's group, under its legend and before the boxes.
+      const group = /<fieldset class="ui-date"[\s\S]*?<\/fieldset>/.exec(h)?.[0] ?? '';
+      expect(group).toMatch(new RegExp(`<legend[\\s\\S]*?</legend><div class="ui-field__hint" id="decision-hint">${F.lastDecidedOn(shown)}</div>`));
+      const ins = boxes(h);
+      expect(ins).toHaveLength(3);
+      for (const i of ins) {
+        expect(i).not.toMatch(/value="[^"]+"/);
+        expect(i).toContain('aria-describedby="decision-hint decision-date-hint"');
+      }
+      expect(h).toMatch(/<button[^>]*>Today<\/button>/);
+    }
+  });
+
+  it('a first decision and a withdrawal as the current version show no such line', () => {
+    expect(words(card())).not.toContain('Last decided on');
+    const withdrawn = { ...V2, status: 'withdrawn' as const, reason: 'x', withdrawalCode: 'duplicate' as const, decidedBy: null };
+    const h = card({ current: withdrawn, historyCount: 2 });
+    expect(words(h)).not.toContain('Last decided on');
+    expect(h).not.toContain('id="decision-hint"');
+  });
+});

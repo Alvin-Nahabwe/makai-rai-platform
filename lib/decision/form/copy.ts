@@ -34,6 +34,8 @@ export const DECISION_FORM_COPY = Object.freeze({
   dateHelp: 'Leave the day empty if you only know the month. Leave both empty if you only know the year.',
   sameAsMyLast: (date: string): string => `Same date as my last decision (${date})`,
   sameAsCurrent: (date: string): string => `Same date as the current decision (${date})`,
+  /** I5, the owner's words (15 Nov 2026, 19:30): beside a re-decision's empty date boxes, the current version's date at its precision. */
+  lastDecidedOn: (date: string): string => `Last decided on ${date}`,
   evidenceFallback: 'Evidence',
   removeKept: (n: number): string => (n === 1 ? 'Remove it from this decision' : 'Remove them from this decision'),
   /** "Waiting for {files} to finish uploading.": the names sit between the two parts, in their own element. */

@@ -132,8 +132,8 @@
  * the screen's foot like the phone's bar while its own place in the card is below the fold, and returns to that place when
  * the person scrolls to it. It is the same bar, sticky at the bottom of the answer form's fieldset (its last child), so it is
  * pinned exactly while its place is below the fold and nothing in the card is hidden or repeated. DecisionForm measures its
- * height into --decision-save-bar-h, and the element that scrolls at this width (the document from 769 to 1023 px, the shell's
- * main region from 1024 px, components/layout/shell.css) keeps that much clear at its foot, so a field that takes focus, or
+ * height into --decision-save-bar-h, and the element that scrolls at this width (the document from 769 to 1023 px, the page
+ * frame from 1024 px, components/layout/shell.css) keeps that much clear at its foot, so a field that takes focus, or
  * a summary link's field, lands above the row (SC 2.4.11; DecisionForm's footOfView reads "pinned" from geometry). The row
  * spans the card's width (its padding taken back); its surface and top rule are the phone bar's tokens. The rule shows only
  * while it is pinned (a scroll-state query, read by the bar's descendants; modern-web-guidance state-aware-sticky-headers),
@@ -173,8 +173,10 @@
     }
   }
 
-  html:has(.decision-save-bar),
-  .shell__main:has(.decision-save-bar) {
+  /* T10: on the box that scrolls the card, found by DecisionForm (components/decision/scroller.ts) and marked with this
+     attribute, not on a box named here: with the padding on the document while the frame scrolled, a Tab scrolled the
+     document instead and lifted the frame, row and all, off the screen's foot (the frame still scrolls the card). */
+  [data-decision-scroller] {
     scroll-padding-block-end: var(--decision-save-bar-h, 0px);
   }
 }
@@ -208,7 +210,7 @@
   }
 }
 
-/* From 1024 px the shell's main region scrolls and has 32 px of padding (shell.css), and a sticky box stops at its scroll
+/* From 1024 px the page frame scrolls and has 32 px of end padding (shell.css), and a sticky box stops at its scroll
    container's padding edge: the row would float 32 px above the screen's foot with the card showing under it. Its inset
    takes that padding back, so it pins to the foot itself. */
 @media (min-width: 1024px) {

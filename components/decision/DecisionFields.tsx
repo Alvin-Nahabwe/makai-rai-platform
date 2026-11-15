@@ -174,8 +174,11 @@ export function DecisionFields({ data, value, errors, disabled, onChange }: Deci
         onChange={(e) => set({ decidedBy: deciderFrom(e.target.value) })}
       />
 
+      {/* I5 (the owner, 15 Nov 2026 19:30): on a re-decision the boxes stay empty, so every version's date is entered on
+          purpose, and the group's hint names the current version's date at its precision (a withdrawal has none). */}
       <DateField
         idPrefix="decision" legend={F.fields.declaredDate} required aria-describedby="decision-date-hint" value={value.date} disabled={disabled}
+        hint={current?.declaredDate ? F.lastDecidedOn(formatDeclaredDate(current.declaredDate)) : undefined}
         error={err('declaredDate')} errorId="decision-declaredDate-error" showToday shortcuts={shortcuts}
         onChange={(date) => set({ date })}
       />
