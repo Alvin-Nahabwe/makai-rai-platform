@@ -10,6 +10,9 @@ palette and four status tints, and about 25 files read those names. Restyling th
 break every screen at once; leaving the old names would keep green, red and yellow status colour alive.
 Constraints: no new runtime or styling dependency; WCAG 2.2 AA in light and dark; orange is never text on
 navy (2.66:1) and never a status; red means overdue only.
+One exception (15 November 2026, owner's route target, coordinator's ruling): the peach #F4B983 accent
+(`--color-on-shell-accent`) marks "You are here" on the navy rail, as sketched; 7.86:1 at its weakest pair; no
+other orange text on navy.
 
 ## Decision
 
