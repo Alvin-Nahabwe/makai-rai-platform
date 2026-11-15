@@ -10,7 +10,11 @@ export type RadioCardsProps = {
   legend: string;
   /** Rendered after the legend, outside it, so the legend's text stays the group's name alone. */
   legendHint?: ReactNode;
-  options: ReadonlyArray<{ value: string; label: string; help?: string; mark?: StatusMarkKind; id?: string }>;
+  /**
+   * `term` (lane 2 T3c item 10a, additive): the vocabulary id whose word the label is and whose definition the help is (spec 6
+   * first use): the label's words carry `data-term` and the help sentence `data-definition`. Absent: markup unchanged.
+   */
+  options: ReadonlyArray<{ value: string; label: string; help?: string; mark?: StatusMarkKind; id?: string; term?: string }>;
   /** Pass `value` (controlled, with `onChange`) or `defaultValue`, never both. */
   value?: string;
   defaultValue?: string;
@@ -75,16 +79,16 @@ export function RadioCards({
                   aria-describedby={helpId}
                 />
                 {o.mark === undefined ? null : <MarkShape kind={o.mark} size={20} />}
-                {o.label}
+                {o.term === undefined ? o.label : <span data-term={o.term}>{o.label}</span>}
               </label>
-              {helpId === undefined || helpBelow ? null : <p className="ui-radio-card__help" id={helpId}>{o.help}</p>}
+              {helpId === undefined || helpBelow ? null : <p className="ui-radio-card__help" id={helpId} data-definition={o.term}>{o.help}</p>}
             </div>
           );
         })}
       </div>
       {helpBelow ? (
         <div className="ui-radio-cards__helps">
-          {options.map((o) => (o.help === undefined ? null : <p key={o.value} className="ui-radio-card__help" id={helpIdOf(o)}>{o.help}</p>))}
+          {options.map((o) => (o.help === undefined ? null : <p key={o.value} className="ui-radio-card__help" id={helpIdOf(o)} data-definition={o.term}>{o.help}</p>))}
         </div>
       ) : null}
     </fieldset>

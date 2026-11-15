@@ -100,6 +100,8 @@ export const EVIDENCE_COPY = Object.freeze({
      * so a name cannot claim another site. The same words as lane 1's reading card (QUESTION_COPY.reading.linkTo there).
      */
     linkTo: (host: string): string => `(${host}, opens another site)`,
+    /** A link to the platform's own host (isOwnHost): the host alone, since it does not go to another site (coordinator, T3c). */
+    linkToOwn: (host: string): string => `(${host})`,
   }),
   /** The kind of a stored file, by its type (lib/evidence/format.ts `evidenceKind`). */
   kinds: Object.freeze({

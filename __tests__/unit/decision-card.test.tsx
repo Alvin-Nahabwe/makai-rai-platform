@@ -6,6 +6,7 @@ import type { LoadedQuestion } from '@/types/content';
 import type { DecisionVersionView } from '@/types/api';
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
 import { FINDING_NOTE, STATUS_OPTIONS } from '@/lib/decision/copy';
+import { textErasedLine } from '@/lib/documents/copy';
 import { EVIDENCE_COPY } from '@/lib/evidence/copy';
 import { QUESTION_COPY } from '@/lib/question/copy';
 import { TERM_FINDING } from '@/lib/vocabulary/terms';
@@ -58,6 +59,15 @@ const STAGE = '/orgs/acme/projects/p1/stages/pre-processing';
 const HISTORY = '/orgs/acme/projects/p1/stages/pre-processing/questions/Q-PP-01/history';
 
 /** `open` is the question's open shortfall finding (data.openFinding), the one a save acts on; `all` the seam's count of every open finding. */
+/**
+ * The line for an answer the person changed (here the reason), on the panel `p` with `open` shortfall findings: the version
+ * line is shown only while the answer differs from the saved version (coordinator, T3c item 7).
+ */
+const changed = async (p: Partial<QuestionPanelData>, open = 0): Promise<string> => {
+  const { consequenceOf } = await import('@/components/decision/DecisionForm');
+  const data = { ...PANEL, ...(open > 0 ? { openFinding: { findingId: 'f1' } } : {}), ...p };
+  return consequenceOf({ ...draftFromCurrent(data), reason: 'Changed since the saved version.' }, data, data.current?.versionNumber ?? null).text;
+};
 const card = (p: Partial<QuestionPanelData> = {}, o: { next?: typeof NEXT | null; open?: number; all?: number } = {}) =>
   renderToStaticMarkup(<DecisionCard data={{ ...PANEL, ...((o.open ?? 0) > 0 ? { openFinding: { findingId: 'f1' } } : {}), ...p }} next={o.next === undefined ? NEXT : o.next} stageHref={STAGE} openFindingsOnQuestion={o.all ?? o.open ?? 0} />) ?? '';
 const words = (h: string) => textOf(h).replace(/\s+/g, ' ');
@@ -65,7 +75,8 @@ const words = (h: string) => textOf(h).replace(/\s+/g, ' ');
 const consequence = (h: string) => {
   const m = /<p[^>]*data-consequence[^>]*>([\s\S]*?)<\/p>/.exec(h);
   expect(m, 'the consequence line').not.toBeNull();
-  return words(m![1]);
+  // the words alone: a term's (i) holds its button and its definition (T3c item 10b)
+  return words(m![1].replace(/<span class="ui-term-tip">[\s\S]*?<\/span><\/span><\/span>/g, ''));
 };
 const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -124,14 +135,14 @@ describe('the saved mark in the card\'s corner (spec 7.3)', () => {
   it('D1: the header is the heading and one line in the corner, "Saved as version N · <date>"; who decided, who entered, the dates, the platform line and "History: n versions" are at the foot, after Save and before More', () => {
     const h = card({ current: V2, historyCount: 2, viewer: { ...PANEL.viewer, role: 'owner' } });
     const head = h.match(/<div class="decision-card__head">[\s\S]*?<\/div><\/div>/)![0];
-    expect(words(head)).toBe(`${F.card.heading}${F.card.savedAs(2)}12 Oct 2026`);
+    expect(words(head)).toBe(`${F.card.heading}${F.card.savedAs(2)}12 Oct 2026 UTC`);
     const foot = h.match(/<div class="decision-card__meta">[\s\S]*?<\/div><div class="decision-card__more">/)![0];
     expect(words(foot)).toContain(`${UI_COPY.saved.decidedOn} 12 Oct 2026 \u00b7 ${UI_COPY.saved.savedAt} 12 Oct 2026, 07:42 UTC`);
     expect(words(foot)).toContain(`${UI_COPY.saved.onPlatform} ${UI_COPY.saved.keptBefore(1)}${UI_COPY.saved.keptLink}.`);
     // T3 item 9 (coordinator's ruling): the entered time is East Africa time, with its zone, as lane 1's reading card.
     expect(words(foot)).toContain('Decided by: Principal investigator (no platform account). Entered by: Joseph K. on 12 Oct 2026, 10:42 EAT.');
     expect(foot).toMatch(/<time dateTime="2026-10-12T07:42:00.000Z">/);
-    expect(foot).toMatch(new RegExp(`<a href="${esc(HISTORY)}"[^>]*>${esc(QUESTION_COPY.reading.history(2))}</a>`));
+    expect(foot).toMatch(new RegExp(`<a [^>]*href="${esc(HISTORY)}"[^>]*>${esc(QUESTION_COPY.reading.history(2))}</a>`));
     expect(h.indexOf('>Save decision</button>')).toBeLessThan(h.indexOf('class="decision-card__meta"'));
   });
 
@@ -157,8 +168,10 @@ describe('the status choice (R3) and the done mark (R8)', () => {
     for (const o of STATUS_OPTIONS) {
       const radio = h.match(new RegExp(`<input[^>]*id="decision-status-${o.value}"[^>]*>`))?.[0] ?? '';
       expect(radio).toContain(`aria-describedby="decision-status-${o.value}-help"`);
-      expect(h).toMatch(new RegExp(`<label class="ui-radio-card__label" for="decision-status-${o.value}">${esc(radio)}<svg class="ui-mark__shape[^"]*"[^>]*aria-hidden="true"[\\s\\S]*?</svg>${esc(o.label)}</label>`));
-      expect(h).toContain(`<p class="ui-radio-card__help" id="decision-status-${o.value}-help">${o.help}</p>`);
+      // T3c item 10a (lane 6's first-use rule): the word is the status's term, and its sentence the status's definition
+      const term = { done: 'done', partly: 'partly', not_yet: 'not-yet', not_applicable: 'not-applicable' }[o.value];
+      expect(h).toMatch(new RegExp(`<label class="ui-radio-card__label" for="decision-status-${o.value}">${esc(radio)}<svg class="ui-mark__shape[^"]*"[^>]*aria-hidden="true"[\\s\\S]*?</svg><span data-term="${term}">${esc(o.label)}</span></label>`));
+      expect(h).toContain(`<p class="ui-radio-card__help" id="decision-status-${o.value}-help" data-definition="${term}">${o.help}</p>`);
     }
     // the guiding line moved from the legend to the consequence line
     expect(h).not.toMatch(/<div class="ui-radio-cards__hint"[^>]*>If you choose/);
@@ -229,15 +242,15 @@ describe('the evidence (spec 9.3 item 5)', () => {
 describe('the consequence line: what this save will do, and its version (R2)', () => {
   const line = (p: Partial<QuestionPanelData>, open = 0) => consequence(card(p, { open }));
 
-  it('the owner\'s example, verbatim: Partly with an open finding on version 1', () => {
-    expect(line({ current: V1, historyCount: 1 }, 1)).toContain('Saving ‘Partly’ keeps a finding open for this question until your team closes it. This save becomes version 2.');
+  it('the owner\'s example, verbatim: Partly with an open finding on version 1, once the answer differs from it', async () => {
+    expect(await changed({ current: V1, historyCount: 1 }, 1)).toBe('Saving ‘Partly’ keeps a finding open for this question until your team closes it. This save becomes version 2.');
   });
 
   it('no status chosen keeps the meaning of the old note; a first decision becomes version 1', () => {
     expect(line({})).toContain(`${FINDING_NOTE} ${C.version(1)}`);
   });
 
-  it('every status, with and without an open finding, ends with this save\'s version', () => {
+  it('every status, with and without an open finding, ends with this save\'s version once the answer differs', async () => {
     const cases: Array<[string, number, string]> = [
       ['done', 0, C.raisesNone('Done')], ['done', 1, C.closesNot('Done')],
       ['partly', 0, C.raises('Partly')], ['partly', 1, C.keepsOpen('Partly')],
@@ -245,7 +258,8 @@ describe('the consequence line: what this save will do, and its version (R2)', (
       ['not_applicable', 0, C.raisesNone('Not applicable')], ['not_applicable', 1, C.closesNot('Not applicable')],
     ];
     for (const [status, open, sentence] of cases) {
-      expect(line({ current: { ...V2, status: status as never } }, open), `${status} ${open}`).toContain(`${sentence} ${C.version(3)}`);
+      expect(await changed({ current: { ...V2, status: status as never } }, open), `${status} ${open}`).toBe(`${sentence} ${C.version(3)}`);
+      expect(line({ current: { ...V2, status: status as never } }, open), `${status} ${open} unchanged`).toBe(sentence);
     }
   });
 
@@ -257,10 +271,11 @@ describe('the consequence line: what this save will do, and its version (R2)', (
     expect(none).not.toContain('data-definition="finding"');
   });
 
-  it('the personal data question: what Yes, No and Not sure switch on or off', () => {
+  it('the personal data question: what Yes, No and Not sure switch on or off', async () => {
     const gate = { ...QUESTION, id: 'Q-PP-GATE-SENSITIVE', type: 'gate' } as LoadedQuestion;
     for (const a of ['yes', 'no', 'not_sure'] as const) {
-      expect(line({ question: gate, runningQuestion: gate, current: { ...V2, status: null, scopeAnswer: a } })).toBe(`${C.scope[a]} ${C.version(3)}`);
+      expect(await changed({ question: gate, runningQuestion: gate, current: { ...V2, status: null, scopeAnswer: a } })).toBe(`${C.scope[a]} ${C.version(3)}`);
+      expect(line({ question: gate, runningQuestion: gate, current: { ...V2, status: null, scopeAnswer: a } })).toBe(C.scope[a]);
     }
     expect(line({ question: gate, runningQuestion: gate })).toBe(C.version(1));
   });
@@ -285,7 +300,7 @@ describe('Save beside the next question (R2, R9)', () => {
 describe('review round 1', () => {
   it('A-I1: a current reason erased on the organisation\'s instruction is said beside the empty Reason box, and the box names it', () => {
     const h = card({ current: { ...V2, reason: null, reasonErased: { erasedOn: '2026-11-01' } as never } });
-    expect(decode(h)).toContain(`<p id="decision-reason-erased" class="decision-fields__help">Text erased on 1 Nov 2026 on the organisation's instruction.</p>`);
+    expect(decode(h)).toContain(`<p id="decision-reason-erased" class="decision-fields__help">${textErasedLine('2026-11-01')}</p>`);
     expect(h).toMatch(/<textarea[^>]*aria-describedby="decision-reason-count decision-reason-help decision-reason-erased"/);
     expect(card({ current: V2 })).not.toContain('decision-reason-erased');
   });
@@ -308,9 +323,10 @@ describe('review round 1', () => {
   it('A-minor B-M1: the version is one above the newer of the form\'s base and the version on the page', async () => {
     const { consequenceOf } = await import('@/components/decision/DecisionForm');
     const data = { ...PANEL, current: V2 };
+    const typed = { ...draftFromCurrent(data), reason: 'Typed on version 1.' };
     // After a refresh brought version 2 while the person had typed on version 1, the line and the corner agree.
-    expect(consequenceOf(draftFromCurrent(data), data, 1).text).toContain(C.version(3));
-    expect(consequenceOf(draftFromCurrent(data), data, 2).text).toContain(C.version(3));
+    expect(consequenceOf(typed, data, 1).text).toContain(C.version(3));
+    expect(consequenceOf(typed, data, 2).text).toContain(C.version(3));
     expect(consequenceOf(draftFromCurrent(PANEL), PANEL, null).text).toContain(C.version(1));
   });
 
@@ -339,10 +355,11 @@ describe('review round 1', () => {
 describe('T3a: the card\'s finish (owner\'s sentence, design must-fix and minors, review round 2, routed items)', () => {
   const css = (p: string) => readFileSync(p, 'utf8');
 
-  it('item 1: Partly and Not yet with no open finding say the owner\'s sentence, exactly, then the version', () => {
-    const owner = (s: string) => `Saving ‘${s}’ raises a finding for this question, unless your team already accepted this risk at this level or a worse one and no version since was Done or Not applicable.`;
-    expect(consequence(card({ current: V2 }))).toBe(`${owner('Partly')} ${C.version(3)}`);
-    expect(consequence(card({ current: { ...V2, status: 'not_yet' } }))).toBe(`${owner('Not yet')} ${C.version(3)}`);
+  it('item 1: Partly and Not yet with no open finding say the owner\'s sentence, exactly (its 14:30 words), then the version', async () => {
+    const owner = (s: string) => `Saving ‘${s}’ raises a finding for this question, unless its last finding was closed as an accepted risk at this level or a worse one and no version since was Done or Not applicable.`;
+    expect(await changed({ current: V2 })).toBe(`${owner('Partly')} ${C.version(3)}`);
+    expect(await changed({ current: { ...V2, status: 'not_yet' } })).toBe(`${owner('Not yet')} ${C.version(3)}`);
+    expect(consequence(card({ current: V2 }))).toBe(owner('Partly'));
   });
 
   it('M2: Decided by keeps at least 16rem beside Decided on, and the two stack when the card is narrower than both', () => {
@@ -401,7 +418,7 @@ describe('T3a: the card\'s finish (owner\'s sentence, design must-fix and minors
     expect(css).toMatch(/\.decision-card__saved-disc\s*\{\s*fill:\s*var\(--color-saved\);/);
     expect(css).toMatch(/\.decision-card__saved-check\s*\{\s*stroke:\s*var\(--color-surface\);/);
     expect(head).not.toContain('class="ui-icon"');
-    expect(words(head)).toBe(`${F.card.heading}${F.card.savedAs(2)}12 Oct 2026`);
+    expect(words(head)).toBe(`${F.card.heading}${F.card.savedAs(2)}12 Oct 2026 UTC`);
   });
 
   it('A N-1: the accepted types line has its own id, and the add buttons and the file input name it directly', () => {
@@ -439,6 +456,15 @@ describe('T3a: the card\'s finish (owner\'s sentence, design must-fix and minors
 });
 
 describe('T3a: the history list (routed items 7 and 9)', () => {
+  it('T3c item 10d: the first seal marker on the history page defines its terms; later ones are plain', async () => {
+    const { DecisionHistoryList } = await import('@/components/decision/DecisionHistoryList');
+    const seal = (n: number) => [{ sealId: `s${n}`, sealNumber: n, reviewName: 'Pre-processing review 1' }] as never;
+    const h = renderToStaticMarkup(<DecisionHistoryList orgSlug="acme" entries={[{ version: V2, wording: null, seals: [] }, { version: V1, wording: null, seals: seal(1) }, { version: { ...V1, id: 'dv0' }, wording: null, seals: seal(2) }]} />);
+    expect(h.match(/data-definition="seal"/g)).toHaveLength(1);
+    expect(h.indexOf('data-definition="seal"')).toBeLessThan(h.indexOf('data-version-number="1"') + 2000);
+    expect(h.indexOf('data-definition="seal"')).toBeGreaterThan(h.indexOf('data-version-number="1"'));
+  });
+
   it('the version line carries data-decision-version; "Entered by" is in East Africa time with its zone', async () => {
     const { DecisionHistoryList } = await import('@/components/decision/DecisionHistoryList');
     const h = renderToStaticMarkup(<DecisionHistoryList orgSlug="acme" entries={[{ version: V2, wording: null, seals: [] }]} />);
@@ -500,9 +526,15 @@ describe('T3b: one Save/Retry control, the unsaved line, the way on during a sav
     expect(live).toMatch(new RegExp(`<a[^>]*href="${esc(NEXT.href)}"`));
   });
 
-  it('UX-30 (B-M5 held, protected sentence): the wait card names every file still uploading or failed in one "Waiting for … to finish uploading." line', () => {
-    const both = words(renderToStaticMarkup(<WaitLines uploading={['a.pdf']} failed={['b.pdf']} />));
-    expect(both).toBe('Waiting for a.pdf, b.pdf to finish uploading.');
+  it('UX-30 (owner, 14:30): files still uploading share "Waiting for … to finish uploading."; each failed or refused file says it did not upload and what to do', () => {
+    const both = renderToStaticMarkup(<WaitLines uploading={['a.pdf', 'c.pdf']} failed={['b.pdf', 'd.pdf']} />);
+    expect(both.match(/<p>[\s\S]*?<\/p>/g)!.map(words)).toEqual([
+      'Waiting for a.pdf, c.pdf to finish uploading.',
+      'b.pdf did not upload. Retry it, remove it, or save without it.',
+      'd.pdf did not upload. Retry it, remove it, or save without it.',
+    ]);
+    expect(words(renderToStaticMarkup(<WaitLines uploading={[]} failed={['b.pdf']} />))).toBe('b.pdf did not upload. Retry it, remove it, or save without it.');
+    expect(renderToStaticMarkup(<WaitLines uploading={[]} failed={['b.pdf']} />)).toMatch(/<bdi>b\.pdf<\/bdi>/);
     expect(renderToStaticMarkup(<WaitLines uploading={['a.pdf']} failed={[]} />)).toMatch(/<bdi>a\.pdf<\/bdi>/);
     expect(renderToStaticMarkup(<WaitLines uploading={[]} failed={[]} />)).toBe('');
   });
@@ -521,5 +553,135 @@ describe('T3b: one Save/Retry control, the unsaved line, the way on during a sav
     expect(card()).not.toContain(QUESTION_COPY.findingLink.raise);
     expect(card({ current: { ...V2, status: 'withdrawn', withdrawalCode: 'duplicate' }, historyCount: 2 })).not.toContain(QUESTION_COPY.findingLink.raise);
     expect(card({ current: V2, historyCount: 2, canRaiseFinding: false })).not.toContain(QUESTION_COPY.findingLink.raise);
+  });
+});
+
+describe('T3c: the fix round on T3b, the owner\'s 14:30 rulings and the routed items', () => {
+  it('review A I-1: on the stage\'s last question, All questions is text, not a link, while a Save waits or is out', () => {
+    const held = renderToStaticMarkup(<NextWay next={null} stageHref={STAGE} held />);
+    expect(held).not.toMatch(/<a[\s>]/);
+    expect(held).not.toContain('href=');
+    expect(words(held)).toBe(`${QUESTION_COPY.foot.last} ${QUESTION_COPY.nav.allQuestions}`);
+    expect(held).toContain('data-next-held');
+    const live = renderToStaticMarkup(<NextWay next={null} stageHref={STAGE} held={false} />);
+    expect(live).toMatch(new RegExp(`<a [^>]*href="${esc(STAGE)}"[^>]*>${QUESTION_COPY.nav.allQuestions}</a>`));
+    // a focused way off the page is marked, so the form can move focus to the save bar when it becomes text
+    expect(live).toContain('data-held-on-save');
+    expect(renderToStaticMarkup(<NextWay next={NEXT} stageHref={STAGE} held={false} />)).toContain('data-held-on-save');
+  });
+
+  it('reviews B M-r4-3 and A M-1: the foot\'s History and finding links are text while a Save waits or is out', async () => {
+    const { HeldLink, HeldFindingLink, SaveHeldContext } = await import('@/components/decision/SaveHeld');
+    const foot = (held: boolean) => renderToStaticMarkup(
+      <SaveHeldContext.Provider value={held}>
+        <HeldLink href={HISTORY}>{QUESTION_COPY.reading.history(2)}</HeldLink>
+        <HeldFindingLink orgSlug="acme" projectId="p1" stage="pre-processing" questionId="Q-PP-01" currentVersionId="dv2" openFinding={{ findingId: 'f1' }} canRaise />
+      </SaveHeldContext.Provider>);
+    const live = foot(false);
+    expect(live.match(/<a [^>]*href=/g)).toHaveLength(3);
+    expect(live.match(/data-held-on-save/g)).toHaveLength(2);
+    const held = foot(true);
+    expect(held).not.toMatch(/<a[\s>]/);
+    expect(words(held)).toBe(`${QUESTION_COPY.reading.history(2)}${QUESTION_COPY.findingLink.open} ${QUESTION_COPY.findingLink.view}${QUESTION_COPY.findingLink.raise}`);
+    expect(held.match(/data-link-held/g)).toHaveLength(3);
+    // the card's own foot is rendered by the form, inside its context: live links on first render
+    const h = card({ current: V2, historyCount: 2 });
+    expect(h.indexOf('</form>')).toBeLessThan(h.indexOf('class="decision-card__meta"'));
+    expect(h).toMatch(new RegExp(`<a [^>]*href="${esc(HISTORY)}"[^>]*>${esc(QUESTION_COPY.reading.history(2))}</a>`));
+  });
+
+  it('item 9: "View the finding" whenever the question has an open finding; "Raise a finding" after a save, for a role that may raise', () => {
+    const view = `href="/orgs/acme/projects/p1/findings/f1"`;
+    const withOpen = card({ current: V2, historyCount: 2 }, { open: 1 });
+    expect(withOpen).toContain(view);
+    expect(words(withOpen)).toContain(`${QUESTION_COPY.findingLink.open} ${QUESTION_COPY.findingLink.view}`);
+    expect(card({ current: V2, historyCount: 2 })).not.toContain(view);
+    // after a withdrawal the open finding is still shown; raising needs a current decision
+    const withdrawn = card({ current: { ...V2, status: 'withdrawn', withdrawalCode: 'duplicate', decidedBy: null, declaredDate: null }, historyCount: 2 }, { open: 1 });
+    expect(withdrawn).toContain(view);
+    expect(words(withdrawn)).not.toContain(QUESTION_COPY.findingLink.raise);
+    expect(words(card({ current: V2, historyCount: 2 }))).toContain(QUESTION_COPY.findingLink.raise);
+    expect(words(card({ current: V2, historyCount: 2, canRaiseFinding: false }))).not.toContain(QUESTION_COPY.findingLink.raise);
+  });
+
+  it('item 7: the version line only while the answer differs from the saved version; a first decision always has it', async () => {
+    const { answerDiffers } = await import('@/components/decision/DecisionForm');
+    const data = { ...PANEL, current: V2 };
+    const same = draftFromCurrent(data);
+    expect(answerDiffers(same, data)).toBe(false);
+    expect(consequence(card({ current: V2 }))).not.toContain(C.version(3));
+    expect(answerDiffers({ ...same, status: 'done' }, data)).toBe(true);
+    expect(answerDiffers({ ...same, reason: `${same.reason}.` }, data)).toBe(true);
+    expect(answerDiffers({ ...same, evidenceIds: ['e9'] }, data)).toBe(true);
+    expect(answerDiffers({ ...same, decidedBy: { kind: 'member', userId: 'u-j' } }, data)).toBe(true);
+    // the date opens empty: the saved date typed again is no change; another date is
+    expect(answerDiffers({ ...same, date: { day: '12', month: '10', year: '2026' } }, data)).toBe(false);
+    expect(answerDiffers({ ...same, date: { day: '13', month: '10', year: '2026' } }, data)).toBe(true);
+    expect(answerDiffers(draftFromCurrent(PANEL), PANEL)).toBe(true);
+    expect(consequence(card({}))).toContain(C.version(1));
+    // a withdrawal is not a saved answer: any answer makes the next version
+    const withdrawn = { ...PANEL, current: { ...V2, status: 'withdrawn' as const, withdrawalCode: 'duplicate' as const, decidedBy: null, declaredDate: null } };
+    expect(answerDiffers(draftFromCurrent(withdrawn), withdrawn)).toBe(true);
+  });
+
+  it('item 8: a link to the platform\'s own host reads "<name> (<host>)"; any other host, or no origin configured, keeps "opens another site"', async () => {
+    const { EvidenceItemText, VersionEvidenceList, platformOrigin } = await import('@/components/evidence/VersionEvidenceList');
+    const item = { id: 'e1', kind: 'link', url: 'https://rai.example.org/orgs/acme/findings/f1', label: 'Our finding', fileName: null, mimeType: null, byteSize: null, erased: null } as unknown as Parameters<typeof EvidenceItemText>[0]['item'];
+    const text = (ownOrigin: string | null) => words(renderToStaticMarkup(<EvidenceItemText orgSlug="acme" item={item} ownOrigin={ownOrigin} />));
+    expect(text('https://rai.example.org')).toBe(`Our finding ${EVIDENCE_COPY.list.linkToOwn('rai.example.org')}`);
+    expect(text('https://rai.example.org')).not.toContain('opens another site');
+    expect(text('https://other.example')).toBe(`Our finding ${EVIDENCE_COPY.list.linkTo('rai.example.org')}`);
+    expect(text(null)).toBe(`Our finding ${EVIDENCE_COPY.list.linkTo('rai.example.org')}`);
+    // the server reads the configured origin; with none configured nothing is own
+    const env = { auth: process.env.AUTH_URL, next: process.env.NEXTAUTH_URL };
+    try {
+      delete process.env.AUTH_URL; delete process.env.NEXTAUTH_URL;
+      expect(platformOrigin()).toBeNull();
+      expect(words(renderToStaticMarkup(<VersionEvidenceList orgSlug="acme" items={[item]} />))).toContain('opens another site');
+      process.env.AUTH_URL = 'https://rai.example.org/app';
+      expect(platformOrigin()).toBe('https://rai.example.org');
+      expect(words(renderToStaticMarkup(<VersionEvidenceList orgSlug="acme" items={[item]} />))).toBe(`Our finding ${EVIDENCE_COPY.list.linkToOwn('rai.example.org')}`);
+    } finally {
+      if (env.auth === undefined) delete process.env.AUTH_URL; else process.env.AUTH_URL = env.auth;
+      if (env.next === undefined) delete process.env.NEXTAUTH_URL; else process.env.NEXTAUTH_URL = env.next;
+    }
+  });
+
+  it('review A A3-1: the host\'s style lives with its renderer, so every page that lists evidence draws it', () => {
+    expect(readFileSync('components/evidence/VersionEvidenceList.tsx', 'utf8')).toContain("import './VersionEvidenceList.css';");
+    expect(readFileSync('components/evidence/VersionEvidenceList.css', 'utf8')).toMatch(/\.evidence-item__host\s*\{[^}]*color:\s*var\(--color-ink-muted\)/);
+    expect(readFileSync('components/evidence/EvidenceBlock.css', 'utf8')).not.toContain('.evidence-item__host');
+  });
+
+  it('review A A3-3: the corner\'s date names its zone; one zone constant for the card and the history', () => {
+    const h = card({ current: V2, historyCount: 2 });
+    const corner = h.match(/<div class="decision-card__corner">[\s\S]*?<\/div>/)![0];
+    expect(words(corner)).toBe(`${F.card.savedAs(2)}12 Oct 2026 UTC`);
+    for (const f of ['components/decision/DecisionCard.tsx', 'components/decision/DecisionHistoryList.tsx']) {
+      expect(readFileSync(f, 'utf8')).not.toContain("'Africa/Kampala'");
+      expect(readFileSync(f, 'utf8')).toContain('PLATFORM_ZONE');
+    }
+    expect(readFileSync('components/decision/DecisionCard.tsx', 'utf8')).not.toContain('decision!');
+  });
+
+  it('item 10 (lane 6\'s first-use rule): the status cards, the line with no status, the owner\'s sentence and the seal marker define their terms', async () => {
+    const { firstUseProblems } = await import('../helpers/firstUseHtml');
+    // Left, and reported: the evidence block's stored-file sentence ("fingerprint", T1's verbatim words) and the kit
+    // SavedMark's "Saved as version N" (components/ui), neither in this task's items.
+    const left = new Set(['fingerprint', 'version-of-a-decision']);
+    const seals = [{ sealId: 's1', sealNumber: 1, reviewName: 'Pre-processing review 1' }] as never;
+    for (const h of [card({}), card({ current: V2, historyCount: 2, seals }), card({ current: { ...V2, status: 'done' }, historyCount: 2 }, { open: 1 })]) {
+      expect(firstUseProblems(h).filter((x) => !left.has(x.id))).toEqual([]);
+    }
+    // the no-status line: Partly, Not yet and "version" each with its (i), named for the term; "finding" with its definition
+    const none = card({});
+    for (const [id, word, after] of [['partly', 'Partly', ''], ['not-yet', 'Not yet', ''], ['version-of-a-decision', 'version', ' 1']]) {
+      // "version 1" reads as one: its (i) follows the number
+      expect(decode(none)).toContain(`<span data-term="${id}">${word}</span>${after}<span class="ui-term-tip"><button type="button" class="ui-term-tip__button" popoverTarget="decision-consequence-tip-${id}"`);
+      expect(decode(none)).toContain(`aria-label="${F.whatMeans(word)}"`);
+    }
+    expect(none).toContain('<span data-term="finding">finding</span>');
+    // the card's first seal marker defines its terms (lane 6's defineTerms)
+    expect(card({ current: V2, historyCount: 2, seals })).toMatch(/class="seal-markers"[\s\S]*data-definition="seal"/);
   });
 });

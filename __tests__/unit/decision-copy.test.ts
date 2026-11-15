@@ -166,7 +166,7 @@ describe('lib/decision/form/copy.ts', () => {
     expect(DECISION_FORM_COPY.card.position(5, 22)).toBe('Question 5 of 22');
     expect(`${C.keepsOpen('Partly')} ${C.version(2)}`).toBe('Saving \u2018Partly\u2019 keeps a finding open for this question until your team closes it. This save becomes version 2.');
     // The owner's sentence, exact (ruled 15 Nov 2026, 11:45).
-    expect(C.raises('Not yet')).toBe('Saving \u2018Not yet\u2019 raises a finding for this question, unless your team already accepted this risk at this level or a worse one and no version since was Done or Not applicable.');
+    expect(C.raises('Not yet')).toBe('Saving \u2018Not yet\u2019 raises a finding for this question, unless its last finding was closed as an accepted risk at this level or a worse one and no version since was Done or Not applicable.');
     expect(DECISION_FORM_COPY.card.savedAs(2)).toBe('Saved as version 2 \u00b7 ');
     expect(DECISION_FORM_COPY.card.enteredBy('Joseph K.')).toBe('Entered by: Joseph K. on ');
     expect(DECISION_FORM_COPY.conflict.notChosen).toBe('not chosen yet');

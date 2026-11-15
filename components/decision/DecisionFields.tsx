@@ -13,10 +13,18 @@ import { REASON_MAX } from '@/lib/decision/rules';
 import { formatDeclaredDate } from '@/lib/format/dates';
 import { dateParts, isDecision, type DecisionDraft } from '@/lib/question/draft';
 import type { QuestionPanelData } from '@/lib/question/panel';
-import { OUTSIDE_ROLES, type Decider, type FieldError } from '@/types/record';
+import { TERM_DONE, TERM_NOT_APPLICABLE, TERM_NOT_YET, TERM_PARTLY } from '@/lib/vocabulary/terms';
+import { OUTSIDE_ROLES, type DecisionStatus, type Decider, type FieldError } from '@/types/record';
 import './DecisionFields.css';
 
 const F = DECISION_FORM_COPY;
+
+/**
+ * Lane 6's first-use rule (lane 2 T3c item 10a): each status card's word is the status's term and its help sentence is
+ * the status's definition (STATUS_OPTIONS' help is the vocabulary's own sentence), so the card is the term's first use with
+ * its definition beside it, and the Not applicable sentence is not read as a use of "Does not apply".
+ */
+const STATUS_TERMS: Readonly<Record<DecisionStatus, { id: string }>> = { done: TERM_DONE, partly: TERM_PARTLY, not_yet: TERM_NOT_YET, not_applicable: TERM_NOT_APPLICABLE };
 
 export interface DecisionFieldsProps {
   data: QuestionPanelData; value: DecisionDraft; errors: FieldError[]; disabled: boolean;
@@ -60,7 +68,7 @@ export function DecisionFields({ data, value, errors, disabled, onChange }: Deci
     <RadioCards
       name="status" legend={F.fields.status} disabled={disabled} error={err('status')} columns={2} helpBelow
       value={value.status ?? ''}
-      options={STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label, help: o.help, mark: o.value, id: `decision-status-${o.value}` }))}
+      options={STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label, help: o.help, mark: o.value, id: `decision-status-${o.value}`, term: STATUS_TERMS[o.value].id }))}
       onChange={(next) => {
         const status = STATUS_OPTIONS.find((o) => o.value === next)?.value ?? null;
         // A reason code belongs to one status (OD-C2 (a)); it does not follow the person to another.

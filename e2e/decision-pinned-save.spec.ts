@@ -209,3 +209,55 @@ test('C4: after a lost save the one control reads Retry; an edit turns it back t
   await expect(page.getByRole('button', { name: F.retry, exact: true })).toHaveCount(0);
   await context.setOffline(false);
 });
+
+/**
+ * Reviews A M-1 and B M-r4-3 (T3c items 2 and 3): when a way off the page that has focus becomes text because a Save goes
+ * out (here the automatic retry when the browser is back online, NFR-REL-05, which no press of Save starts), focus goes to
+ * the save bar, never to the page body; and the card's foot links are text while that Save is out.
+ */
+async function lostSaveThenHeldRetry(page: Page, context: import('@playwright/test').BrowserContext): Promise<() => void> {
+  await context.setOffline(true);
+  await page.getByRole('button', { name: F.save, exact: true }).click();
+  await expect(page.locator('[data-region="answer-form"] [type="submit"]')).toHaveText(F.retry);
+  let release: () => void = () => {};
+  const held = new Promise<void>((r) => { release = r; });
+  await page.route('**/decisions', async (route) => { await held; await route.continue(); });
+  return release;
+}
+
+test('M-1: Next has focus when the automatic retry goes out; it becomes text and the save bar takes focus', async ({ page, baseURL, context }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openQuestion(page, 'assessor', Q, baseURL!); await fillValid(page);
+  const release = await lostSaveThenHeldRetry(page, context);
+  const next = page.locator('.decision-save-bar a.decision-next');
+  await next.focus();
+  await expect(next).toBeFocused();
+  const sent = page.waitForRequest((r) => r.method() === 'POST' && r.url().endsWith('/decisions'));
+  await context.setOffline(false);
+  await sent;
+  await expect(page.locator('.decision-save-bar [data-next-held]')).toBeVisible();
+  await expect(page.locator('.decision-save-bar')).toBeFocused();
+  release();
+  await expect(saveStatus(page)).toHaveText(/as version 1\./, { timeout: 20_000 });
+});
+
+test('M-r4-3: the foot\'s History link has focus when the automatic retry goes out; the foot\'s links are text and the save bar takes focus', async ({ page, baseURL, context }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const projectId = await openQuestion(page, 'assessor', Q, baseURL!);
+  expect((await saveViaApi(baseURL!, 'assessor', projectId, Q, { reason: 'Version 1' })).status).toBe(201);
+  await openQuestion(page, 'assessor', Q, baseURL!, projectId);
+  await fillValid(page, { reason: 'Version 2, typed here' });
+  const release = await lostSaveThenHeldRetry(page, context);
+  const history = page.locator('.decision-card__meta a[href$="/history"]');
+  await history.focus();
+  await expect(history).toBeFocused();
+  const sent = page.waitForRequest((r) => r.method() === 'POST' && r.url().endsWith('/decisions'));
+  await context.setOffline(false);
+  await sent;
+  await expect(page.locator('.decision-card__meta a')).toHaveCount(0);
+  await expect(page.locator('.decision-card__meta [data-link-held]').first()).toBeVisible();
+  await expect(page.locator('.decision-save-bar')).toBeFocused();
+  release();
+  await expect(saveStatus(page)).toHaveText(/as version 2\./, { timeout: 20_000 });
+  await expect(page.locator('.decision-card__meta a[href$="/history"]').first()).toBeVisible();
+});

@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { SealMarker } from '@/components/review/SealMarker';
+import { PLATFORM_ZONE } from '@/components/decision/zone';
 import { VersionEvidenceList } from '@/components/evidence/VersionEvidenceList';
 import { StatusMark } from '@/components/ui/StatusMark';
 import { WITHDRAWAL_CODE_LABELS, deciderLabel } from '@/lib/decision/copy';
@@ -10,12 +11,8 @@ import { markKindOf } from '@/lib/ui/marks';
 import type { DecisionVersionView } from '@/types/api';
 import type { SealRef } from '@/types/seal';
 
-/**
- * The zone "Entered by" is written in: East Africa time, the zone of the platform's teams (coordinator's ruling, T3 item
- * 9), as lane 1's reading card and the organisation's events (components/org/OrganisationEventsList.tsx). This list is
- * rendered on the server, whose own zone is the host's; formatTime names the zone ("10:42 EAT").
- */
-const ZONE = 'Africa/Kampala';
+/** East Africa time, the zone "Entered by" is written in (components/decision/zone.ts). */
+const ZONE = PLATFORM_ZONE;
 
 export type HistoryEntry = {
   version: DecisionVersionView;
@@ -38,12 +35,14 @@ export function DecisionHistoryList({ orgSlug, entries, isScopeQuestion = false 
   isScopeQuestion?: boolean;
 }): ReactElement {
   const H = QUESTION_COPY.history;
+  // Lane 6's SealMarker `defineTerms` (ruling X-5): the page's first seal marker defines "seal" beside its first use.
+  const firstSealed = entries.findIndex((e) => e.seals.length > 0);
   return (
     <ol className="decision-history" style={{ listStyle: 'none', padding: 0 }}>
-      {entries.map(({ version: v, wording, seals }) => (
+      {entries.map(({ version: v, wording, seals }, i) => (
         <li key={v.id} data-version-number={v.versionNumber} className="card" style={{ marginBottom: '0.75rem' }}>
           <h2 style={{ fontSize: '1.1rem' }} data-decision-version={v.versionNumber}>{H.version(v.versionNumber)}</h2>
-          <SealMarker seals={seals} />
+          <SealMarker seals={seals} defineTerms={i === firstSealed} />
           <dl>
             <dt>{H.status}</dt>
             {/* A withdrawn version keeps its words and no mark; any other shows the kit's mark with its words (spec 7.2). */}

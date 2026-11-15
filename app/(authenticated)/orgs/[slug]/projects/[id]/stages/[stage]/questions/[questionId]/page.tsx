@@ -119,7 +119,9 @@ export function QuestionPanelRegions({ data, openWork, route }: { data: Question
   const doesNotApply = data.gateAnswer === 'no' && !questionApplies(runningContent(), data.runningQuestion.id, data.gateAnswer);
   // The Findings section: for a person who may record, when there is an open finding to view or they may raise one; for
   // a reader, only when they may raise one (R4), since the reader's open findings are listed in the main column.
-  const showFindings = data.canWrite ? data.openFinding !== null || data.canRaiseFinding : data.canRaiseFinding;
+  // Lane 2 stub: lane 1's DecisionSlot replaces this at merge. A writer's finding links are in the decision card's foot (lane 2
+  // T3c item 9, review A M-2: not the same two links twice), so this section is a reader's only.
+  const showFindings = data.canWrite ? false : data.canRaiseFinding;
   const reading = data.canWrite ? null : readingRegions(data, openWork ?? null, historyHref);
   // Only a question in a seal has something to say here: SealNote renders nothing for one in none.
   const sealNote = data.seals.length > 0 ? (

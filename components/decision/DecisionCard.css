@@ -103,6 +103,11 @@
   color: var(--color-link);
 }
 
+/* Reviews B M-r4-3 and A M-1: while a Save waits or is out, a foot link's words are text in the muted ink, as Next's are. */
+.decision-held-link {
+  color: var(--color-ink-muted);
+}
+
 /* More actions, quiet, after the foot. */
 .decision-card__more {
   margin-block-start: var(--space-3);

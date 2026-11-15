@@ -21,6 +21,8 @@ export const DECISION_FORM_COPY = Object.freeze({
   scopeNote: TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION.definition,
   optionsCount: (inPlace: number, of: number): string => `${inPlace} of ${of} in place`,
   chooseOne: 'Choose one',
+  /** The name of a term's (i) button in the form (lane 6's TermTip), as the project page's (lib/project/copy.ts whatMeans). */
+  whatMeans: (term: string): string => `What does "${term}" mean?`,
   startingNote: 'The form shows the current decision. Change what is different, then save.',
   you: (name: string): string => `You (${name})`,
   formerMember: (name: string): string => `${name} (former member)`,
@@ -31,7 +33,11 @@ export const DECISION_FORM_COPY = Object.freeze({
   evidenceFallback: 'Evidence',
   removeKept: (n: number): string => (n === 1 ? 'Remove it from this decision' : 'Remove them from this decision'),
   /** "Waiting for {files} to finish uploading.": the names sit between the two parts, in their own element. */
-  waiting: Object.freeze({ before: 'Waiting for ', after: ' to finish uploading.' }),
+  waiting: Object.freeze({
+    before: 'Waiting for ', after: ' to finish uploading.',
+    /** The owner's words (15 Nov 2026, 14:30), exact, after a failed or refused file's name in the wait card. */
+    failed: ' did not upload. Retry it, remove it, or save without it.',
+  }),
   /**
    * Walk finding B3: the link's request ended without the link while Save waited. Nothing was sent; the summary shows this.
    * "or clear the box": an address left in the box holds the next Save back too (lib/evidence/copy.ts, `typedNotAdded`).
@@ -90,12 +96,13 @@ export const DECISION_FORM_COPY = Object.freeze({
   consequence: Object.freeze({
     version: (n: number): string => `This save becomes version ${n}.`,
     /**
-     * The owner's sentence, exact (ruled 15 Nov 2026, 11:45; not to be reworded). True of raisesAfterAcceptance: a finding
+     * The owner's sentence, exact (ruled 15 Nov 2026, 11:45, reworded by the owner at 14:30: "its last finding was closed as
+     * an accepted risk"; not to be reworded). True of onShortfallSaved and raisesAfterAcceptance: a finding
      * is withheld only when the version the risk was accepted on was Partly or Not yet ("at this level or a worse one"),
      * no Done or Not applicable version lies between it and this one, and this status is not worse; a withdrawal has no
      * level, so a risk accepted on one never withholds a finding (__tests__/integration/findings-consequence-sentence.test.ts).
      */
-    raises: (status: string): string => `Saving \u2018${status}\u2019 raises a finding for this question, unless your team already accepted this risk at this level or a worse one and no version since was Done or Not applicable.`,
+    raises: (status: string): string => `Saving \u2018${status}\u2019 raises a finding for this question, unless its last finding was closed as an accepted risk at this level or a worse one and no version since was Done or Not applicable.`,
     keepsOpen: (status: string): string => `Saving \u2018${status}\u2019 keeps a finding open for this question until your team closes it.`,
     raisesNone: (status: string): string => `Saving \u2018${status}\u2019 raises no finding.`,
     closesNot: (status: string): string => `Saving \u2018${status}\u2019 does not close the open finding by itself. Your team closes it on the finding's page.`,

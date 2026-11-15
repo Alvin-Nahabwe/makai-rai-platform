@@ -2,10 +2,26 @@ import type { ReactElement } from 'react';
 import { DownloadLink } from '@/components/ui/DownloadLink';
 import { EVIDENCE_COPY } from '@/lib/evidence/copy';
 import { formatDay } from '@/lib/format/dates';
-import { evidenceKind, stripBidiControls, webLink } from '@/lib/evidence/format';
+import { evidenceKind, isOwnHost, stripBidiControls, webLink } from '@/lib/evidence/format';
+import { publicOrigin } from '@/lib/publicOrigin';
 import type { EvidenceItemView } from '@/types/api';
+import './VersionEvidenceList.css';
 
 export type VersionEvidenceListProps = { orgSlug: string; items: EvidenceItemView[] };
+
+/**
+ * The platform's configured public origin, read on the SERVER (it reads AUTH_URL or NEXTAUTH_URL, which the browser does
+ * not have), or null when none is configured: then no link is called the platform's own and every web link keeps "opens
+ * another site" (coordinator, T3c item 8). A client tree is handed the value as a prop, never reads it itself, so the
+ * server's render and the browser's agree.
+ */
+export function platformOrigin(): string | null {
+  try {
+    return publicOrigin();
+  } catch {
+    return null; // No origin configured: nothing is "own", the warning stays on every link.
+  }
+}
 
 /** The name a person sees for an item, bidi controls removed (E14). A link without a label is named by its address. */
 export function evidenceDisplayName(item: EvidenceItemView): string {
@@ -15,10 +31,11 @@ export function evidenceDisplayName(item: EvidenceItemView): string {
 /**
  * One item as text: a file is a download link stating its kind and size (UX-39), a link is a plain anchor only when
  * its address parses as http or https (never next/link, which prefetches: FR-EVD-03), named "<name> (<host>, opens
- * another site)" from webLink's one parse, and an erased file reads its name, then
+ * another site)" from webLink's one parse, or "<name> (<host>)" when the host is the platform's own (`ownOrigin`, from
+ * platformOrigin(); null: none is own), and an erased file reads its name, then
  * "File erased on {date} at your organisation's request." (copy audit B#277, answer Q16) with no link. Every file name sits inside `<bdi>` so a right-to-left override cannot reorder its neighbours.
  */
-export function EvidenceItemText({ orgSlug, item }: { orgSlug: string; item: EvidenceItemView }): ReactElement {
+export function EvidenceItemText({ orgSlug, item, ownOrigin }: { orgSlug: string; item: EvidenceItemView; ownOrigin: string | null }): ReactElement {
   if (item.kind === 'link') {
     if (item.url === null) return <>{EVIDENCE_COPY.list.linkAddressErased}</>;
     // T3 item 8 (security, routed from lane 1): ONE parse gives the href and the host shown (webLink), so a name, or an
@@ -34,7 +51,10 @@ export function EvidenceItemText({ orgSlug, item }: { orgSlug: string; item: Evi
     // The name (the author's, or else the address), then the host it really goes to, inside the link so its name says it.
     return (
       <a href={web.href} rel="noopener noreferrer">
-        <bdi>{label ?? address}</bdi>{' '}<span className="evidence-item__host">{EVIDENCE_COPY.list.linkTo(web.host)}</span>
+        <bdi>{label ?? address}</bdi>{' '}
+        <span className="evidence-item__host">
+          {ownOrigin !== null && isOwnHost(web.host, ownOrigin) ? EVIDENCE_COPY.list.linkToOwn(web.host) : EVIDENCE_COPY.list.linkTo(web.host)}
+        </span>
       </a>
     );
   }
@@ -63,10 +83,11 @@ export function EvidenceItemText({ orgSlug, item }: { orgSlug: string; item: Evi
  */
 export function VersionEvidenceList({ orgSlug, items }: VersionEvidenceListProps): ReactElement | null {
   if (items.length === 0) return null;
+  const ownOrigin = platformOrigin();
   return (
     <ul>
       {items.map((item) => (
-        <li key={item.id}><EvidenceItemText orgSlug={orgSlug} item={item} /></li>
+        <li key={item.id}><EvidenceItemText orgSlug={orgSlug} item={item} ownOrigin={ownOrigin} /></li>
       ))}
     </ul>
   );

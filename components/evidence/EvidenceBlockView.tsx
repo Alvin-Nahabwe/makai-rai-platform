@@ -13,6 +13,8 @@ import '@/components/ui/buttonStyles';
 
 export interface EvidenceBlockViewProps {
   orgSlug: string;
+  /** The platform's public origin (EvidenceBlock `ownOrigin`); absent or null: no link is the platform's own. */
+  ownOrigin?: string | null;
   /** Prefix of the ids the labels and descriptions point at. */
   idBase: string;
   /** Items carried from the version being edited, not removed. */
@@ -98,7 +100,7 @@ export function EvidenceBlockView(p: EvidenceBlockViewProps): ReactElement {
   const removable = (item: EvidenceItemView, carried: boolean): ReactElement => (
     <li key={item.id} className="evidence-block__item">
       <span className="evidence-block__name">
-        <EvidenceItemText orgSlug={p.orgSlug} item={item} />
+        <EvidenceItemText orgSlug={p.orgSlug} item={item} ownOrigin={p.ownOrigin ?? null} />
         {carried && p.fromVersionNumber != null ? <>{' '}<span className="evidence-block__from">{EVIDENCE_COPY.fromCurrent}</span></> : null}
       </span>
       {p.disabled ? null : (

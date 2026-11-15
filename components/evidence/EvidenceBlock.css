@@ -196,13 +196,6 @@
   margin: var(--space-1) 0 0;
 }
 
-/* After a web link's name, the host it really goes to (T3 item 8, webLink): regular weight and muted ink, in its own
-   element, so a name that copies the words cannot pass for them. */
-.evidence-item__host {
-  font-weight: var(--font-weight-regular);
-  color: var(--color-ink-muted);
-}
-
 /* Plan 1C C5: an uploading file's native progress bar under its line (modern-web-guidance "progress": the limited styling,
    accent-color and size only, which keeps the platform's own bar), in the heading navy, never the action orange. */
 .evidence-block__progress {
