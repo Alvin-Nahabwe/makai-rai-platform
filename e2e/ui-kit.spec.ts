@@ -120,6 +120,9 @@ async function shapesVisible(page: Page, selector: string): Promise<{ count: num
     const invisible: string[] = [];
     const shapes = Array.from(document.querySelectorAll(`${sel} svg *`));
     for (const shape of shapes) {
+      // Done's check is the surface colour (the canvas in forced colours) on its green disc, by the owner's ruling R8: it is
+      // drawn against the disc, not the page, so only the disc is held to the page. Every other shape is ink.
+      if (shape.classList.contains('ui-mark__done-check')) continue;
       const style = getComputedStyle(shape);
       const paint = style.stroke !== 'none' ? style.stroke : style.fill;
       if (paint === 'none' || paint === ground || paint === 'rgba(0, 0, 0, 0)') invisible.push(`${shape.tagName} ${paint}`);
