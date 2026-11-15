@@ -1,6 +1,6 @@
 import { expect, test, type Page, type Request } from '@playwright/test';
 import { failOnDialog } from './helpers/dialogs';
-import { fillValid, openQuestion, saveStatus } from './helpers/session';
+import { actAsSeat, fillValid, openQuestionIn, saveStatus } from './helpers/session';
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
 import { M11 } from '../lib/decision/copy';
 
@@ -9,7 +9,8 @@ import { M11 } from '../lib/decision/copy';
  * upload has finished, save again to add it." That promise holds only if the upload keeps going after the save: the new
  * version the save makes must not replace the evidence block (whose unmount aborts its uploads and drops an aborted one from
  * the list without a word). These cases hold the upload with page.route across the save and the new version's arrival.
- * The admin 0 seat: two uploads (one reaching the server), well inside the evidence route's 10 a minute.
+ * The admin 0 seat: two uploads (one reaching the server), well inside the evidence route's 10 a minute. Each case makes its
+ * project as that seat (openQuestionIn), not as the owner, whose project creations the other decision specs already spend.
  */
 const Q = 'Q-PP-01';
 const F = DECISION_FORM_COPY;
@@ -48,8 +49,8 @@ async function saveWithoutWhileUploading(page: Page, name: string): Promise<void
   await expect(page.locator('.decision-card__saved')).toContainText(F.card.savedAs(1).trim());
 }
 
-test('I-r4-1: after "Save without this file" the upload left out keeps going when the new version arrives; once it finishes, the next Save adds it', async ({ page, baseURL }) => {
-  await openQuestion(page, 'admin', Q, baseURL!); await fillValid(page);
+test('I-r4-1: after "Save without this file" the upload left out keeps going when the new version arrives; once it finishes, the next Save adds it', async ({ page }) => {
+  await actAsSeat(page, 'admin'); await openQuestionIn(page, Q); await fillValid(page);
   const uploads = await holdUploads(page);
   await saveWithoutWhileUploading(page, 'left-out.pdf');
   // The defect: the new version remounted the evidence block, which aborted the upload and dropped it without a word.
@@ -69,8 +70,8 @@ test('I-r4-1: after "Save without this file" the upload left out keeps going whe
   expect(uploads.aborted).toEqual([]);
 });
 
-test('I-r4-1: when the upload left out then fails, nothing waits forever: Save waits with the file named as not uploaded and "Save without" offered, and saving without it is answered', async ({ page, baseURL }) => {
-  await openQuestion(page, 'admin', Q, baseURL!); await fillValid(page);
+test('I-r4-1: when the upload left out then fails, nothing waits forever: Save waits with the file named as not uploaded and "Save without" offered, and saving without it is answered', async ({ page }) => {
+  await actAsSeat(page, 'admin'); await openQuestionIn(page, Q); await fillValid(page);
   const uploads = await holdUploads(page);
   await saveWithoutWhileUploading(page, 'left-out-fails.pdf');
   await expect(page.locator('[data-upload-progress] > progress')).toHaveAttribute('aria-label', 'Uploading left-out-fails.pdf');

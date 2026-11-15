@@ -1,7 +1,7 @@
 import { appendFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { failOnDialog } from './helpers/dialogs';
-import { fillValid, newProject, openQuestion, saveStatus, saveViaApi, waitForQuestionPage } from './helpers/session';
+import { actAsSeat, fillValid, newProject, openQuestion, openQuestionIn, saveStatus, saveViaApi, waitForQuestionPage } from './helpers/session';
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
 import { WITHDRAW_COPY } from '../lib/decision/copy';
 import { EVIDENCE_COPY } from '../lib/evidence/copy';
@@ -213,7 +213,8 @@ test('C4: after a lost save the one control reads Retry; an edit turns it back t
 /**
  * Reviews A M-1 and B M-r4-3 (T3c items 2 and 3): when a way off the page that has focus becomes text because a Save goes
  * out (here the automatic retry when the browser is back online, NFR-REL-05, which no press of Save starts), focus goes to
- * the save bar, never to the page body; and the card's foot links are text while that Save is out.
+ * the save bar, never to the page body; and the card's foot links are text while that Save is out. The admin seat makes
+ * its own projects (openQuestionIn), so these cases do not spend the owner's project creations the other specs share.
  */
 async function lostSaveThenHeldRetry(page: Page, context: import('@playwright/test').BrowserContext): Promise<() => void> {
   await context.setOffline(true);
@@ -225,9 +226,9 @@ async function lostSaveThenHeldRetry(page: Page, context: import('@playwright/te
   return release;
 }
 
-test('M-1: Next has focus when the automatic retry goes out; it becomes text and the save bar takes focus', async ({ page, baseURL, context }) => {
+test('M-1: Next has focus when the automatic retry goes out; it becomes text and the save bar takes focus', async ({ page, context }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  await openQuestion(page, 'assessor', Q, baseURL!); await fillValid(page);
+  await actAsSeat(page, 'admin'); await openQuestionIn(page, Q); await fillValid(page);
   const release = await lostSaveThenHeldRetry(page, context);
   const next = page.locator('.decision-save-bar a.decision-next');
   await next.focus();
@@ -243,9 +244,10 @@ test('M-1: Next has focus when the automatic retry goes out; it becomes text and
 
 test('M-r4-3: the foot\'s History link has focus when the automatic retry goes out; the foot\'s links are text and the save bar takes focus', async ({ page, baseURL, context }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  const projectId = await openQuestion(page, 'assessor', Q, baseURL!);
-  expect((await saveViaApi(baseURL!, 'assessor', projectId, Q, { reason: 'Version 1' })).status).toBe(201);
-  await openQuestion(page, 'assessor', Q, baseURL!, projectId);
+  await actAsSeat(page, 'admin');
+  const projectId = await openQuestionIn(page, Q);
+  expect((await saveViaApi(baseURL!, 'admin', projectId, Q, { reason: 'Version 1' })).status).toBe(201);
+  await openQuestion(page, 'admin', Q, baseURL!, projectId);
   await fillValid(page, { reason: 'Version 2, typed here' });
   const release = await lostSaveThenHeldRetry(page, context);
   const history = page.locator('.decision-card__meta a[href$="/history"]');
