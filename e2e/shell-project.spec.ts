@@ -212,11 +212,12 @@ test('one gutter round the page (fix round 2): each signed-in page\'s content st
     await page.setViewportSize({ width, height: 812 });
     for (const path of paths) {
       await page.goto(path);
-      // The shell's main gives the gutter; the page's own root (.page-content, or Help's .help) adds no inline or top
+      // The shell's main gives the gutter; the page's own root (.page-content, Help's .help, or the question page's own
+      // frame .question-page, which pads once through the shell: components/question/workspace.css) adds no inline or top
       // padding of its own, and starts at main's content edge.
       const at = await page.evaluate(() => {
         const main = document.querySelector('main#main-content') as HTMLElement;
-        const root = main.querySelector(':scope > .page-content, :scope > .help') as HTMLElement | null;
+        const root = main.querySelector(':scope > .page-content, :scope > .help, :scope > .question-page') as HTMLElement | null;
         const ms = getComputedStyle(main);
         if (root === null) return null;
         const rs = getComputedStyle(root);
@@ -226,7 +227,7 @@ test('one gutter round the page (fix round 2): each signed-in page\'s content st
           top: Math.round(root.getBoundingClientRect().top - main.getBoundingClientRect().top),
         };
       });
-      expect(at, `${path}: a .page-content or .help root`).not.toBeNull();
+      expect(at, `${path}: a .page-content, .help or .question-page root`).not.toBeNull();
       expect(at!.main, `${path} at ${width}: main's padding is the gutter`).toEqual([gutter, gutter]);
       expect(at!.root, `${path} at ${width}: the page root adds none`).toEqual([0, 0]);
       expect(at!.top, `${path} at ${width}: content starts one gutter down`).toBe(gutter);
