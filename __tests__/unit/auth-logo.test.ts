@@ -7,8 +7,8 @@ import { AUTH_COPY } from '@/lib/auth/copy';
  * a plain <img> of a file already sized for it, so next/image's client runtime and its optimizer round trip left those pages
  * (cuts C and D of the V-prog finding). Since plan 1B Task 2 the pages are in the gate frame and the logo is the frame
  * column's, put there by the shared logo component (owner's ruling I-3, lead's ruling L5-8): the card draws none. What this
- * file still guards is the property the plain <img> bought: no next/image runtime on these public pages. The logo files and
- * the `.auth-logo` rule stay for the pages that still draw it (ruling L5-13).
+ * file still guards is the property the plain <img> bought: no next/image runtime on these public pages. The logo files
+ * stay, for the shared logo component.
  */
 const PAGES = ['app/(public)/login/page.tsx', 'app/(public)/forgot-password/page.tsx', 'app/(public)/reset-password/page.tsx'];
 const CLIENTS = ['app/(public)/login/LoginClient.tsx', 'app/(public)/forgot-password/ForgotPasswordClient.tsx', 'app/(public)/reset-password/ResetPasswordClient.tsx',
@@ -32,6 +32,8 @@ describe('the logo on S-01, S-02 and S-03', () => {
     expect(pngSize('public/logo-makai-252.png')).toEqual({ width: 252, height: 48 });
     expect(pngSize('public/logo-makai-504.png')).toEqual({ width: 504, height: 96 });
     expect(readFileSync('public/logo-makai-252.png').length).toBeLessThan(8_000);
-    expect(readFileSync('app/globals.css', 'utf8')).toMatch(/\.auth-logo \{[^}]*height: 48px;/);
+    // No page draws the logo with `.auth-logo` since plan 1B Task 2, so the rule left app/globals.css with it (an unused
+    // class fails __tests__/lint/s04-first-visit-weight.test.ts); the shared logo component will size its own.
+    expect(readFileSync('app/globals.css', 'utf8')).not.toMatch(/\.auth-logo\b/);
   });
 });

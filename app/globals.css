@@ -710,13 +710,6 @@ h5 { font-size: var(--font-size-body); }
   text-align: center;
 }
 
-.auth-logo {
-  display: block;
-  height: 48px;
-  width: auto;
-  margin: 0 auto var(--space-6);
-}
-
 .auth-card form {
   display: flex;
   flex-direction: column;
