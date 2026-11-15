@@ -14,7 +14,8 @@ import type { SealRequest } from '@/types/api';
  * number, is refused on its field, since every value a seal holds comes from the server's rows, the session and
  * the database clock.
  */
-function parseSealRequest(body: unknown): SealRequest {
+/** Exported for the unit test of its messages (lane 6, FX3); not part of the route's contract. */
+export function parseSealRequest(body: unknown): SealRequest {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) {
     throw new ValidationFailed([{ field: 'body', message: HTTP_COPY.unreadable }]);
   }

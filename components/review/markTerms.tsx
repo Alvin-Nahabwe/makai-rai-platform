@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Term } from '@/components/ui/Definition';
+import { termPattern } from '@/lib/vocabulary/firstUse';
 import { TERM_MITIGATION_PLAN } from '@/lib/vocabulary/terms';
 import type { VocabularyEntry } from '@/lib/vocabulary/types';
 
@@ -15,12 +16,6 @@ import type { VocabularyEntry } from '@/lib/vocabulary/types';
  * (__tests__/unit/review-term-list.test.tsx) fails if the vocabulary gains another such pair.
  */
 const LONGER_TERMS: readonly VocabularyEntry[] = [TERM_MITIGATION_PLAN];
-
-/** The term as whole words, as the first-use rule reads it: case-insensitive, the last word may take a plural `s`. */
-function termPattern(term: string, flags: string): RegExp {
-  const words = term.trim().split(/\s+/).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  return new RegExp(`(?<![\\p{L}\\p{N}])${words.join('\\s+')}s?(?![\\p{L}\\p{N}])`, flags);
-}
 
 /** Where `entry` is first used in `text`, outside any longer checked term that holds it, or null. */
 function firstMatch(text: string, entry: VocabularyEntry): { start: number; end: number } | null {

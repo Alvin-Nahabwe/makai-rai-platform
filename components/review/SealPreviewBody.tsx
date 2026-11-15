@@ -1,7 +1,8 @@
 import type { ReactElement } from 'react';
 import { Definition, Term } from '@/components/ui/Definition';
 import { Table } from '@/components/ui/Table';
-import { REVIEW_COPY, STAGE_TERMS, STATUS_TERMS } from '@/lib/review/copy';
+import { REVIEW_COPY } from '@/lib/review/copy';
+import { STAGE_TERMS, STATUS_TERMS } from '@/lib/vocabulary/maps';
 import { TERM_FINDING, TERM_MITIGATION, TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION, TERM_SEAL } from '@/lib/vocabulary/terms';
 import type { DefinedEntry } from '@/lib/vocabulary/types';
 import type { Stage } from '@/types/record';
@@ -54,7 +55,7 @@ export function SealPreviewBody({ parts, contentLine, noDecision }: {
       )}
       <ul>
         {parts.lines.map((l) => l === gateLine
-          ? <li key={l}>{markTerms(l, [GATE_TERM])} <Definition of={GATE_TERM} /></li>
+          ? <li key={l}>{markTerms(l, [GATE_TERM])}<Definition of={GATE_TERM} as="p" /></li>
           : <li key={l}>{l}</li>)}
         <li>
           {P.noDecision(noDecision.length)}

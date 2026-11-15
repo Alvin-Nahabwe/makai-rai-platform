@@ -517,7 +517,7 @@ async function riskViewById(tx: TenantTx, id: string): Promise<AcceptedRiskView>
  * finding. Under the finding lock, in one transaction: the accepted risk, entered by the session's account and role,
  * with `accepterRole` the role at the time of a member who accepted (a current member, else 422; an outside role is
  * stored as itself); then, for every mitigation whose current version is planned or in progress, a cancelled version
- * with the stored acceptance reason (`RISK_ACCEPTED_REASON`) based on it (5.3 item 11 rule 2), whose request id is
+ * with the stored acceptance reason (`RISK_ACCEPTED_REASON`, from `STORED_CANCEL_REASONS`: data, not copy) based on it (5.3 item 11 rule 2), whose request id is
  * `derivedRequestId(requestId, 'mitigation_versions:' + mitigationId)`. RISK_ACCEPTED, and for `accept` FINDING_CLOSED,
  * are logged after the commit.
  */

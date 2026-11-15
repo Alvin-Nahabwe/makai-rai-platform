@@ -155,7 +155,7 @@ describe('S-17 the seal step (S7: C 182, C 183)', () => {
     const gate = { ...PREVIEW, scopeAnswer: { answer: 'yes' } } as SealPreview;
     const out = renderToStaticMarkup(<SealPreviewBody parts={previewParts(gate, 1, LABELS)} contentLine={null} noDecision={[]} />);
     const T = TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION;
-    expect(out).toContain(`<li>Answer to <span data-term="${T.id}">the personal data question</span>: ${REVIEW_COPY.gateWords.yes} <span class="ui-definition" data-definition="${T.id}">${T.definition}</span></li>`);
+    expect(out).toContain(`<li>Answer to <span data-term="${T.id}">the personal data question</span>: ${REVIEW_COPY.gateWords.yes}<p class="ui-definition" data-definition="${T.id}">${T.definition}</p></li>`);   // FX3 (RR-B M1): its own line, not run on after the answer
     expect(firstUseProblems(top() + out)).toEqual([]);
     // With no gate answer the line is not there, and nothing is defined for it.
     expect(body()).not.toContain(`data-definition="${T.id}"`);

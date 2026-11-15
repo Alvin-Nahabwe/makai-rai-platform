@@ -15,7 +15,7 @@ import { formatDay } from '@/lib/format/dates';
 import { acceptedByName, cancelReasonText, overdueLabel, STAGE_NAMES } from '@/lib/findings/labels';
 import { markTerms } from '@/components/review/markTerms';
 import { TermList, termListId, type TermListItem } from '@/components/review/TermList';
-import { STAGE_TERMS, STATUS_TERMS } from '@/lib/review/copy';
+import { STAGE_TERMS, STATUS_TERMS } from '@/lib/vocabulary/maps';
 import {
   TERM_ACCEPTED_RISK, TERM_DOES_NOT_APPLY, TERM_FINDING, TERM_MITIGATION, TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION, TERM_RISK_AREA, TERM_SEAL,
 } from '@/lib/vocabulary/terms';

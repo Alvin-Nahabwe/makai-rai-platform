@@ -18,7 +18,8 @@ const KEYS = ['requestId', 'stage', 'preparedFor'] as const;
  * refused on its field, since the platform names the review, numbers it and takes the opener from the session
  * (FR-REV-01, R-70). Types only here; the note's length is the service's rule.
  */
-function parseOpenReviewRequest(body: unknown): OpenReviewRequest {
+/** Exported for the unit test of its messages (lane 6, FX3); not part of the route's contract. */
+export function parseOpenReviewRequest(body: unknown): OpenReviewRequest {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) {
     throw new ValidationFailed([{ field: 'body', message: HTTP_COPY.unreadable }]);
   }

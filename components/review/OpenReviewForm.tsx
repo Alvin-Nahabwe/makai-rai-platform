@@ -16,7 +16,8 @@ import { FieldError, FieldLabel } from '@/components/ui/TextInput';
 import { StatusRegion } from '@/components/ui/StatusRegion';
 import '@/components/ui/selectStyles';
 import '@/components/ui/textAreaStyles';
-import { REVIEW_COPY, STAGE_TERMS } from '@/lib/review/copy';
+import { REVIEW_COPY } from '@/lib/review/copy';
+import { STAGE_TERMS } from '@/lib/vocabulary/maps';
 
 const MAX = 120;
 const C = REVIEW_COPY.open;

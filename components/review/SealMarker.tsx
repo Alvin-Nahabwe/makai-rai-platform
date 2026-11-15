@@ -3,7 +3,8 @@ import type { ReactElement } from 'react';
 import { Definition } from '@/components/ui/Definition';
 import { markTerms } from '@/components/review/markTerms';
 import { TERM_SEAL } from '@/lib/vocabulary/terms';
-import { REVIEW_COPY, STAGE_TERMS } from '@/lib/review/copy';
+import { REVIEW_COPY } from '@/lib/review/copy';
+import { STAGE_TERMS } from '@/lib/vocabulary/maps';
 import { STAGES } from '@/types/record';
 import type { DefinedEntry } from '@/lib/vocabulary/types';
 

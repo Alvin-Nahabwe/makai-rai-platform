@@ -9,7 +9,7 @@ import { STAGE_NAMES } from '@/lib/findings/labels';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
 import { Definition, Term } from '@/components/ui/Definition';
 import { TermList, termListId, type TermListItem } from '@/components/review/TermList';
-import { STAGE_TERMS, STATUS_TERMS } from '@/lib/review/copy';
+import { STAGE_TERMS, STATUS_TERMS } from '@/lib/vocabulary/maps';
 import { TERM_ACCEPTED_RISK, TERM_FINDING, TERM_MITIGATION } from '@/lib/vocabulary/terms';
 import type { FindingListItem, FindingsPageData } from '@/lib/findings/pageData';
 import { STAGES, type DecisionStatus, type Stage } from '@/types/record';
