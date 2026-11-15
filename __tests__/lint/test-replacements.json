@@ -2206,5 +2206,21 @@
     "property": "Every shell page shows no image but the platform's own logos, and every icon is hidden from assistive technology.",
     "proof": "The owner asked for the MAK-AI logo back in the rail and in the footer, with the DSWB logo beside it (15 November 2026, 09:14). The allowed alt texts are now the four the shell writes: 'MAK-AI' (sign-in pages, footer), '' (the rail's logo, decorative beside the visible name), 'MAK-AI RAI Platform' (the narrow bar's logo link) and 'Data Science Without Borders' (footer); the icon check is unchanged. Each alt is pinned by __tests__/unit/ui/shell-route.test.tsx.",
     "task": "lane 3 task 1 (route: the rail logo and project block, the narrow top bar, the footer)"
+  },
+  {
+    "kind": "rule",
+    "deleted": "e2e/shell.spec.ts::UX-03: Help and contact resolves to S-28's Help and contact part",
+    "replacedBy": "e2e/shell.spec.ts::UX-03 (spec 8 line 271): the footer's Help and contact resolves to Help's contact section",
+    "property": "The footer's Help and contact link, pressed from a public page, lands on the section of the site that holds the contact address, and that section is shown.",
+    "proof": "Spec 8 line 271 puts contact in Help, and design-target section 1 gap 4 names the old /about#help-and-contact address as a departure; the coordinator ruled on 15 November 2026 that the footer links to /help#contact (lane 6 owns that section). The case presses the same link from /login and now expects the URL to end in /help#contact and #contact to be visible; __tests__/unit/ui/shell-route.test.tsx pins the footer's four addresses in order.",
+    "task": "lane 3 task 1, fix round 2"
+  },
+  {
+    "kind": "wording",
+    "deleted": "e2e/shell-checks.spec.ts::UX-41: no image but the logo, and every icon hidden from assistive technology",
+    "replacedBy": "e2e/shell-checks.spec.ts::UX-41: no image but the logos, and every icon hidden from assistive technology",
+    "property": "Every shell page shows no image but the platform's own logos, each its own file with its own alt text in its own place, and every icon is hidden from assistive technology.",
+    "proof": "Supersedes the earlier entry for this title (code review I1, 15 November 2026: that version allowed any image with alt \"\" or \"MAK-AI\"). The case now reads each image's src attribute, alt and place and allows only five pairs: /logo-makai-white-154.webp with \"\" inside .shell-rail__brand, with \"MAK-AI RAI Platform\" inside .shell-topbar__brand, with \"MAK-AI\" in footer.shell-footer; /logo-dswb-white-125.webp with \"Data Science Without Borders\" in the footer; /logo-makai-252.png with \"MAK-AI\" as .auth-logo on the sign-in pages. The self-test 'UX-41 (self-test): a stray image is reported, whatever its alt, and a logo out of its place too' shows a decorative image elsewhere (/uploads/chart.png, alt \"\"), an image borrowing a logo's alt, and each logo file out of its place are all reported.",
+    "task": "lane 3 task 1, fix round 2"
   }
 ]

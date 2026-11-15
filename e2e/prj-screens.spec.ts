@@ -604,10 +604,31 @@ for (const width of [1280, 360, 320]) {
 test('NFR-SEC-11 FR-PRJ-01: hostile project text shows as text on S-08, S-10 and S-32', async ({ browser }) => {
   const page = await signedIn(browser, fx.members.owner);
   failOnDialog(page);
+  const name = HOSTILE_STRINGS[0];
   for (const p of [path('/dashboard'), path(`/projects/${hostileProject.id}`), path('/projects')]) {
     await page.goto(p);
-    await expect(page.getByText(HOSTILE_STRINGS[0]).first()).toBeVisible();
+    // Every place the name appears, shown or not (on S-10 the rail's project block, the page itself, and the narrow top
+    // bar's copy, hidden from 1024 px), holds it as text: the element's own text is the literal markup, and no element
+    // was parsed out of it. At least one occurrence is visible.
+    const occurrences = page.getByText(name, { exact: true });
+    const count = await occurrences.count();
+    expect(count, `${p}: the name appears`).toBeGreaterThan(0);
+    for (let i = 0; i < count; i += 1) {
+      const node = occurrences.nth(i);
+      expect(await node.evaluate((el) => el.textContent), `${p} #${i}`).toBe(name);
+      expect(await node.evaluate((el) => el.querySelector('script, img') === null), `${p} #${i}: no element inside`).toBe(true);
+    }
+    await expect(occurrences.filter({ visible: true }).first()).toBeVisible();
+    expect(await page.evaluate(() => [...document.querySelectorAll('script')].some((s) => (s.textContent ?? '').trim() === 'alert(1)')),
+      `${p}: no script element made from the name`).toBe(false);
   }
+  // S-10 at 1280 px: the top bar's copy of the name is in the markup but not shown, and not in the accessibility tree.
+  await page.goto(path(`/projects/${hostileProject.id}`));
+  const barCopy = page.locator('.shell-bar-project__name');
+  await expect(barCopy).toHaveText(name);
+  await expect(barCopy).toBeHidden();
+  // display: none on the bar takes it and everything in it out of the accessibility tree.
+  expect(await barCopy.evaluate((el) => getComputedStyle(el.closest('.shell-topbar')!).display)).toBe('none');
 });
 
 const SENTINELS: Record<Stage, number> = { 'pre-processing': 41, 'in-processing': 28, 'post-processing': 13 };   // in-processing gets one more below, with the mitigation   // open findings per stage after the extra in-processing finding below (28 + 1 = 29); the sum, 83, must appear nowhere

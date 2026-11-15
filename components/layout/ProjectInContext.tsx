@@ -15,7 +15,10 @@ export type ProjectSlotParams = { slug: string; id: string; stage?: string };
  * quietly turned into a rail without its block.
  */
 export async function ProjectInContext({ identity, params }: { identity: Identity; params: ProjectSlotParams }) {
+  // A stage segment that names no stage is the page's 404: no project block there, and nothing read for it (review M5).
+  const stage = stageParam(params.stage);
+  if (params.stage !== undefined && stage === null) return null;
   const project = await loadShellProject(identity, { slug: params.slug, id: params.id });
   if (project === null) return null;
-  return <ShellProjectSlot project={project} orgSlug={params.slug} currentStage={stageParam(params.stage)} />;
+  return <ShellProjectSlot project={project} orgSlug={params.slug} currentStage={stage} />;
 }

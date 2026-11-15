@@ -227,12 +227,12 @@ describe('the footer: a navy band with the MAK-AI and DSWB logos (owner, 15 Nove
     expect(readFileSync('components/layout/Footer.tsx', 'utf8')).not.toMatch(/dangerouslySetInnerHTML/);
   });
 
-  it('UX-03: the four links in today\'s order and at today\'s addresses', () => {
+  it('UX-03: the four links in today\'s order; Help and contact goes to Help\'s contact section (spec 8 line 271)', () => {
     const nav = /<nav aria-label="Footer"[^>]*>([\s\S]*?)<\/nav>/.exec(html)![1];
     const credit = readCreditLine();
     expect(linksOf(nav).map((l) => [l.text, /href="([^"]+)"/.exec(l.attrs)![1]])).toEqual([
       [credit.licence, credit.href], ['Terms and privacy', '/help#terms-and-privacy'], ['About', '/about'],
-      ['Help and contact', '/about#help-and-contact'],
+      ['Help and contact', '/help#contact'],
     ]);
   });
 });
@@ -260,5 +260,35 @@ describe('the logo files are sized WebP copies, no larger than drawn at 1x and 2
     const size = webpSize(path);
     expect(size).toMatchObject({ width, height });
     expect(size.bytes).toBeLessThan(ceiling);
+  });
+});
+
+describe('the shell\'s frame (route task 1, fix round 2)', () => {
+  const shellCss = readFileSync('components/layout/shell.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const rule = (selector: string) => {
+    const at = shellCss.indexOf(`${selector} {`);
+    expect(at, selector).toBeGreaterThanOrEqual(0);
+    return shellCss.slice(at, shellCss.indexOf('}', at));
+  };
+
+  it('one gutter: a page root that brings its own padding drops its inline and top padding inside the shell\'s main', () => {
+    const body = rule('.shell__main > :is(.page-content, .help)');
+    expect(body).toMatch(/padding-inline: 0;/);
+    expect(body).toMatch(/padding-block-start: 0;/);
+    // The bottom padding stays: the decision form's fixed Save bar sets it (components/decision/DecisionForm.css).
+    expect(body).not.toMatch(/padding(-block-end)?:/);
+  });
+
+  it('one gutter: the page\'s first block drops its top margin, so the first view starts one gutter down', () => {
+    expect(rule('.shell__main > :is(.page-content, .help) > :first-child')).toMatch(/margin-block-start: 0;/);
+  });
+
+  it('the rail\'s column has an inline-end edge and the bar a bottom edge (an inset shadow), in the container border role', () => {
+    const wide = shellCss.slice(shellCss.indexOf('@media (min-width: 1024px)'));
+    const panel = wide.slice(wide.indexOf('.shell-topbar__panel {'), wide.indexOf('}', wide.indexOf('.shell-topbar__panel {')));
+    expect(panel).toMatch(/border-inline-end: 1px solid var\(--color-border-container\);/);
+    // The bar's edge is an inset shadow, so the bar keeps its 60 px height (the panel opens at 3.75rem without scripts).
+    expect(rule('.shell-topbar')).toMatch(/box-shadow: inset 0 -1px 0 var\(--color-border-container\);/);
+    expect(rule('.shell-topbar')).not.toMatch(/border(-[a-z-]+)?:/);
   });
 });

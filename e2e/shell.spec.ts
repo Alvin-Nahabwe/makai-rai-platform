@@ -119,11 +119,11 @@ test.describe('skip link, footer and landmarks (SRS 7.1.1)', () => {
     }
   });
 
-  test("UX-03: Help and contact resolves to S-28's Help and contact part", async ({ page }) => {
+  test("UX-03 (spec 8 line 271): the footer's Help and contact resolves to Help's contact section", async ({ page }) => {
     await page.goto('/login');
     await page.getByRole('link', { name: 'Help and contact' }).click();
-    await expect(page).toHaveURL(/\/about#help-and-contact$/);
-    await expect(page.locator('#help-and-contact')).toBeVisible();
+    await expect(page).toHaveURL(/\/help#contact$/);
+    await expect(page.locator('#contact')).toBeVisible();
   });
 
   test('UX-03: the signed-out pages have a header with the product name, About and Sign in', async ({ page }) => {

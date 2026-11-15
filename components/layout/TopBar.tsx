@@ -47,6 +47,10 @@ function isPopoverOpen(panel: HTMLElement): boolean {
  */
 export default function TopBar({ shell, project }: { shell: ShellData; project?: ReactNode }) {
   const pathname = usePathname();
+  // The bar's logo links to the address's organisation, else the server's homeSlug. The rail's brand also remembers the
+  // last of the person's organisations seen while it stayed mounted (Rail's lastSeen), so on a page with no slug in its
+  // address (/account, /help) a person in several organisations can find the two pointing at different organisations
+  // (code review M4, accepted: each is one of the person's own, and the rail's Home item is beside the rail's brand).
   const home = orgHref(railOrgSlug(pathname, null, shell), '/dashboard');
   const barRef = useRef<HTMLElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);

@@ -15,12 +15,30 @@
   padding: var(--space-4);
 }
 
+/* One gutter round the page: the shell's main gives it (16 px, 32 px from 1024 px), so a page root that brings its own
+   (.page-content in app/globals.css, Help's .help) drops its inline and top padding here. Its bottom padding stays, as
+   the decision form's fixed Save bar sizes it (components/decision/DecisionForm.css). A page with neither root (S-05)
+   keeps the shell's gutter. */
+.shell__main > :is(.page-content, .help) {
+  padding-inline: 0;
+  padding-block-start: 0;
+}
+
+/* The page's first block starts one gutter down: its own top margin (the kit's page header has 32 px, for space under a
+   breadcrumb) would otherwise collapse through the root and add to the gutter. */
+.shell__main > :is(.page-content, .help) > :first-child {
+  margin-block-start: 0;
+}
+
 /* ── The top bar (below 1024 px): ordinary flow content, neither sticky nor fixed ── */
 .shell-topbar {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-4);
+  /* The bar's bottom edge, for the same reason as the rail's (the dark theme's navy against its ground). An inset shadow,
+     not a border, so the bar stays 60 px high: the Menu panel opens at 3.75rem without JavaScript. */
+  box-shadow: inset 0 -1px 0 var(--color-border-container);
   background-color: var(--color-shell);
   color: var(--color-shell-ink);
 }
@@ -216,6 +234,9 @@
     width: auto;
     height: 100vh;
     overflow-y: auto;
+    /* In the dark theme the shell navy and the page ground are 1.04:1 apart: the edge keeps the rail from merging into
+       the page. A container border, so it is quiet in the light theme, where the navy already stands apart. */
+    border-inline-end: 1px solid var(--color-border-container);
   }
 
   .shell__main {

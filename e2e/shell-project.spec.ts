@@ -199,6 +199,38 @@ test('reflow: no sideways scroll at 320 px on a question page, a project page an
   await expectNoHorizontalScroll(page);
 });
 
+test('one gutter round the page (fix round 2): each signed-in page\'s content starts 16 px in at 375 and 32 px at 1280', async ({ browser }) => {
+  const page = await signedIn(browser, fx.members.owner, { viewport: { width: 375, height: 812 } });
+  const paths = [
+    `/orgs/${fx.org.slug}/dashboard`, `/orgs/${fx.org.slug}/projects`, projectPath(), questionPath(),
+    `/orgs/${fx.org.slug}/settings/members`, '/help', '/account',
+  ];
+  for (const [width, gutter] of [[375, 16], [1280, 32]] as const) {
+    await page.setViewportSize({ width, height: 812 });
+    for (const path of paths) {
+      await page.goto(path);
+      // The shell's main gives the gutter; the page's own root (.page-content, or Help's .help) adds no inline or top
+      // padding of its own, and starts at main's content edge.
+      const at = await page.evaluate(() => {
+        const main = document.querySelector('main#main-content') as HTMLElement;
+        const root = main.querySelector(':scope > .page-content, :scope > .help') as HTMLElement | null;
+        const ms = getComputedStyle(main);
+        if (root === null) return null;
+        const rs = getComputedStyle(root);
+        return {
+          main: [parseFloat(ms.paddingLeft), parseFloat(ms.paddingTop)],
+          root: [parseFloat(rs.paddingLeft), parseFloat(rs.paddingTop)],
+          top: Math.round(root.getBoundingClientRect().top - main.getBoundingClientRect().top),
+        };
+      });
+      expect(at, `${path}: a .page-content or .help root`).not.toBeNull();
+      expect(at!.main, `${path} at ${width}: main's padding is the gutter`).toEqual([gutter, gutter]);
+      expect(at!.root, `${path} at ${width}: the page root adds none`).toEqual([0, 0]);
+      expect(at!.top, `${path} at ${width}: content starts one gutter down`).toBe(gutter);
+    }
+  }
+});
+
 test('the footer: both logos, named, on a signed-in page and on the public pages', async ({ browser }) => {
   const check = async (page: Page, where: string) => {
     const footer = page.locator('footer.shell-footer');
