@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type Ref } from 'react';
 import Link from 'next/link';
 import { AUTH_COPY, AUTH_MESSAGE_COPY, FORGOT_COPY } from '@/lib/auth/copy';
 import { useHydrated } from '@/lib/client/useHydrated';
@@ -34,6 +34,8 @@ export interface ForgotPasswordViewProps {
   state: ForgotState;
   /** False until React has hydrated; the submit button is disabled till then (default true for a static render). */
   hydrated?: boolean;
+  /** Called with the sent answer's region, which the client focuses when it replaces the form. */
+  statusRef?: Ref<HTMLDivElement>;
   onEmail: (v: string) => void;
   onSubmit: (e: FormEvent<HTMLFormElement>) => void;
 }
@@ -47,7 +49,7 @@ export function ForgotPasswordView(v: ForgotPasswordViewProps) {
   return (
     <AuthCard title={AUTH_COPY.resetHeading} lead={<p>{AUTH_COPY.forgotLead}</p>}
       footer={<p><Link href="/login">{AUTH_COPY.backToSignIn}</Link></p>}>
-      <StatusRegion message={v.state.kind === 'sent' ? AUTH_MESSAGE_COPY.resetLinkSent : null} />
+      <StatusRegion message={v.state.kind === 'sent' ? AUTH_MESSAGE_COPY.resetLinkSent : null} focusRef={v.state.kind === 'sent' ? (v.statusRef ?? null) : undefined} />
       {/* Once sent, M-21 replaces the form (design review I-5): no field to fill again, no button to press again. */}
       {v.state.kind === 'sent' ? null : (
       <form method="post" onSubmit={v.onSubmit}>
@@ -66,10 +68,13 @@ export function ForgotPasswordClient() {
   const [email, setEmail] = useState('');
   const [state, setState] = useState<ForgotState>({ kind: 'idle' });
   const hydrated = useHydrated();
+  const statusEl = useRef<HTMLDivElement>(null);
+  // The Send reset link button leaves with the form: move focus to the sent answer instead of letting it fall to the body (WCAG 2.4.3).
+  useEffect(() => { if (state.kind === 'sent') statusEl.current?.focus(); }, [state.kind]);
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setState({ kind: 'sending' });
     setState(await requestResetLink(fetch, email));
   }
-  return <ForgotPasswordView email={email} state={state} hydrated={hydrated} onEmail={setEmail} onSubmit={onSubmit} />;
+  return <ForgotPasswordView email={email} state={state} hydrated={hydrated} statusRef={statusEl} onEmail={setEmail} onSubmit={onSubmit} />;
 }

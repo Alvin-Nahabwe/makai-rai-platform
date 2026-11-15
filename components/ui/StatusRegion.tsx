@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import type { ReactElement, Ref } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import './formStyles';
 
@@ -10,6 +10,8 @@ export type StatusRegionProps = {
   id?: string;
   /** An error is ink, bold, with the triangle-alert icon (decision B5): never red. */
   tone?: 'neutral' | 'error';
+  /** For a region that replaces the control the person just used: given, the region takes focus by script only (tabindex -1), so the caller can move focus to it. */
+  focusRef?: Ref<HTMLDivElement>;
 };
 
 /**
@@ -17,9 +19,9 @@ export type StatusRegionProps = {
  * there is a message: a live region inserted already holding its text is often not announced. The message is rendered
  * as given, as text. The same message twice in a row is not announced again unless the caller clears it (null) between.
  */
-export function StatusRegion({ message, politeness = 'polite', id, tone = 'neutral' }: StatusRegionProps): ReactElement {
+export function StatusRegion({ message, politeness = 'polite', id, tone = 'neutral', focusRef }: StatusRegionProps): ReactElement {
   return (
-    <div role={politeness === 'assertive' ? 'alert' : 'status'} id={id} className={tone === 'error' ? 'ui-status ui-status--error' : 'ui-status'}>
+    <div role={politeness === 'assertive' ? 'alert' : 'status'} tabIndex={focusRef !== undefined ? -1 : undefined} ref={focusRef ?? undefined} id={id} className={tone === 'error' ? 'ui-status ui-status--error' : 'ui-status'}>
       {message !== null && message !== '' && tone === 'error' ? <span className="ui-status__icon"><Icon name="triangle-alert" size={20} /></span> : null}
       {message}
     </div>
