@@ -42,6 +42,8 @@ import type { PerfManifest } from '../scripts/load/seed-perf-fixture';
 
 const S11_BUDGET = 300_000;
 const PUBLIC_BUDGET = 220_000;
+/** S-04's own first-visit limit, plain names: owner's ruling of 15 Nov 2026 15:35 (box: "Raise the limit ~4 KB"): 224,000 B. */
+const S04_BUDGET = 224_000;
 /** The sign-in rate limit keys on the client address (e2e/fixtures/auth.setup.ts), so these sign-ins get their own. */
 const SIGN_IN_IP = '10.47.0.1';
 const ACCEPTANCES_IP = '10.47.0.2';
@@ -60,7 +62,7 @@ const SIGNED_IN = /^\/(orgs\/[^/]+\/dashboard)?$/;
  */
 const LIMITS = {
   nginx: { s04Accented: 243_700, s05: 227_800 },     // the owner's production limits, through nginx on HTTP/2 (6 Nov)
-  direct: { s04Accented: 237_700, s05: 221_500 },    // regression guard for the direct run, the direct figures plus 1 KB (6 Nov)
+  direct: { s04Accented: 241_500, s05: 221_500 },    // regression guard for the direct run; S-04 accented raised by the owner, 15 Nov 15:35 (box: Raise the limit ~4 KB); S-05 as of 6 Nov
 } as const;
 /** S-04 rendered the invitation: its heading, not the "Invitation" page of an unusable link (app/(public)/invitations/[token]/page.tsx). */
 async function invitedHeading(page: Page): Promise<void> {
@@ -309,7 +311,7 @@ test.describe('the public budget', () => {
     await signInAndSave(browser, baseURL, unaccepted, acceptancesState, ACCEPTANCES_IP, /^\/acceptances$/);
   });
 
-  test('NFR-PERF-02: every public page transfers at most 220 KB on first visit', async ({ browser }) => {
+  test('NFR-PERF-02: every public page transfers at most 220 KB on first visit, and S-04 at most 224 KB', async ({ browser }) => {
     const baseURL = test.info().project.use.baseURL!;
     const over: string[] = [];
     for (const file of publicPages()) {
@@ -318,11 +320,13 @@ test.describe('the public budget', () => {
       // S-04 must be the invitation itself, not its "Invitation" error page, which renders at the same address.
       const check = path.startsWith('/invitations/') ? invitedHeading : undefined;
       const m = await measure(browser, baseURL, path, undefined, check);
-      report(shown, m, PUBLIC_BUDGET);
+      // S-04 has its own limit, raised by the owner (15 Nov 15:35, box: Raise the limit ~4 KB); every other page keeps 220,000.
+      const budget = path.startsWith('/invitations/') ? S04_BUDGET : PUBLIC_BUDGET;
+      report(shown, m, budget);
       expectRendered(m, path, REDIRECTS_TO[path] ?? path, shown);
-      if (m.total > PUBLIC_BUDGET) over.push(`${shown} ${m.total}`);
+      if (m.total > budget) over.push(`${shown} ${m.total} (limit ${budget})`);
     }
-    expect(over, 'public pages over 220000 bytes').toEqual([]);
+    expect(over, 'public pages over their limits (220000 B; S-04 224000 B)').toEqual([]);
   });
 
   test('NFR-PERF-02 (ACCEPTED-RISK): S-05, signed in without a v1 acceptance, stays within the owner\'s limit on first visit', async ({ browser }) => {

@@ -108,7 +108,9 @@ test.describe('S-04 and S-05 in a browser', () => {
 
     await page.goto(`/invitations/${raw}`);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(INVITATION_PAGE_COPY.heading(fx.org.name));
-    await expect(page.getByText(new RegExp(`^${escapeRe(fx.members.owner.name)} ${escapeRe(INVITATION_PAGE_COPY.invitedAs(roleWithArticle('assessor')))}\\. This invitation ends on \\d{1,2} [A-Z][a-z]{2} \\d{4}\\.$`))).toBeVisible();
+    // Since plan 1B Task 6 the invited line and the end date are separate sentences, with the role's meaning between them.
+    await expect(page.getByText(new RegExp(`^${escapeRe(fx.members.owner.name)} ${escapeRe(INVITATION_PAGE_COPY.invitedAs(roleWithArticle('assessor')))}\\.$`))).toBeVisible();
+    await expect(page.getByText(/^This invitation ends on \d{1,2} [A-Z][a-z]{2} \d{4}\.$/)).toBeVisible();
     await expect(page.getByLabel(/^Email/)).toHaveValue(email);
 
     // 7.4.2 S-04 validation: Continue with nothing typed stays on step 1 and names both fields.
@@ -587,6 +589,40 @@ test.describe('S-04 and S-05 in a browser', () => {
     await page.keyboard.press('Enter');
     await page.waitForURL(`**/orgs/${fx.org.slug}/dashboard?welcome=1`);
     expect(await userCount(email)).toBe(1);
+    await page.context().close();
+  });
+
+  test('L5-29: step 2 goes back to step 1 with the name and password kept, focus on the first field and the route on Your details', async ({ browser }) => {
+    const fx = await buildOrg({ label: 'chgdet' });
+    const raw = await invitationFor(fx, `chgdet-${Date.now()}@fixture.test`, 'viewer');
+    const page = await newPage(browser);
+    await page.goto(`/invitations/${raw}`);
+    await page.getByLabel(INVITATION_COPY.name).fill('Back Again');
+    await page.locator('#new-password').fill('Back-again-ok-1');
+    await page.getByRole('button', { name: INVITATION_COPY.continue }).click();
+    await expect(page.locator('#acceptances-step')).toBeFocused();
+    await expect(page.getByText(INVITATION_COPY.creatingFor('Back Again'))).toBeVisible();
+    await page.getByRole('button', { name: INVITATION_COPY.changeDetails }).click();
+    await expect(page.getByLabel(INVITATION_COPY.name)).toBeFocused();
+    await expect(page.getByLabel(INVITATION_COPY.name)).toHaveValue('Back Again');
+    await expect(page.locator('#new-password')).toHaveValue('Back-again-ok-1');
+    await expect(page.locator('#invitation-route')).toHaveAttribute('data-step', 'details');
+    await page.getByRole('button', { name: INVITATION_COPY.continue }).click();
+    await expect(page.locator('#acceptances-step')).toBeFocused();
+    await expect(page.locator('#invitation-route')).toHaveAttribute('data-step', 'acceptances');
+    await page.context().close();
+  });
+
+  test('P2-I1 NFR-A11Y-05: M-24 (signed in as someone else) needs no sideways scroll at 160 CSS pixels, a 320 pixel phone at 200 % zoom', async ({ browser }) => {
+    const issuer = await buildOrg({ label: 'm24i' });
+    const other = await buildOrg({ label: 'm24o' });
+    const raw = await invitationFor(issuer, `m24-a-very-long-invited-address-${Date.now()}@fixture-example-organisation.test`, 'viewer');
+    const page = await newPage(browser);
+    await signIn(page, other.members.viewer);
+    await page.setViewportSize({ width: 160, height: 640 });
+    await page.goto(`/invitations/${raw}`);
+    await expect(page.getByRole('alert').filter({ hasText: other.members.viewer.email })).toBeVisible();
+    await expectNoHorizontalScroll(page);
     await page.context().close();
   });
 

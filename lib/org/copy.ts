@@ -24,6 +24,10 @@ export const ORG_COPY = Object.freeze({
     listLabel: 'Your organisations',
     emptyHeading: 'Welcome',
     emptyBody: "You are not a member of any organisation yet. Ask the Owner of your team's organisation to invite you. You will get the invitation by email.",
+    /** The empty state's own title, over `emptyBody` (plan 1B Task 8: the kit's EmptyState, which takes a title). */
+    emptyTitle: 'No organisation yet',
+    /** Each organisation's line of state: `roleWithArticle` is "an Owner", "a Viewer" and so on (plan 1B Task 8). */
+    youAre: (roleWithArticle: string): string => `You are ${roleWithArticle}`,
   }),
   /** S-22 Members, the page's own words (audit D OR3, OR4); the manager's are `MEMBERS_COPY` (lib/org/members/copy.ts). */
   members: Object.freeze({
@@ -84,8 +88,9 @@ export const INVITATION_PAGE_COPY = Object.freeze({
   heading: (org: string): string => `You are invited to ${org}`,
   /** `roleWithArticle` is "an Owner", "a Viewer" and so on, from `roleWithArticle` below (audit A 159). */
   invitedAs: INVITED_AS,
-  invitedLine: (inviter: string, roleWithArticle: string, date: string): string =>
-    `${inviter} ${INVITED_AS(roleWithArticle)}. This invitation ends on ${date}.`,
+  /** "Amina N. invited you to join as an Assessor." (audit A 159); the role's meaning and the end date follow it. */
+  invitedBy: (inviter: string, roleWithArticle: string): string => `${inviter} ${INVITED_AS(roleWithArticle)}.`,
+  endsOn: (date: string): string => `This invitation ends on ${date}.`,
 });
 
 const ROLE_TERMS: Readonly<Record<OrgRole, DefinedEntry>> = Object.freeze({
@@ -108,6 +113,11 @@ export function roleTerm(role: OrgRole): VocabularyEntry {
 export function roleWithArticle(role: OrgRole): string {
   const term = roleTerm(role).term;
   return `${/^[AEIOU]/.test(term) ? 'an' : 'a'} ${term}`;
+}
+
+/** Whether a role read as text (orgRoleLabel returns the membership's role as text) is one of the five organisation roles. */
+export function isOrgRole(label: string): label is OrgRole {
+  return Object.hasOwn(ROLE_TERMS, label);
 }
 
 /**

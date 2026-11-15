@@ -1,0 +1,29 @@
+/* What changed in a text, before its box on S-05 (plan 1B Task 7; spec 9.8): the text and its versions as a heading, then
+   "What changed" and the summary at reading measure, then the link to the full words. Role tokens only. */
+.acceptance-change {
+  margin-block: var(--space-4) var(--space-3);
+}
+
+.acceptance-change__title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-h3);
+  line-height: var(--line-height-heading);
+  color: var(--color-heading);
+}
+
+.acceptance-change__label {
+  margin: 0;
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-ink-muted);
+}
+
+.acceptance-change__summary {
+  margin: var(--space-1) 0 var(--space-2);
+  max-inline-size: 65ch;
+}
+
+.acceptance-change__link {
+  display: inline-block;
+  min-block-size: var(--target-min);
+}

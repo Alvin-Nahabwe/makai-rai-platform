@@ -20,6 +20,13 @@
   font-weight: var(--font-weight-bold);
 }
 
+/* Beside the icon in a flex row, the text may shrink below its longest word and break inside it (an address in M-24), so
+   the page needs no sideways scroll at 320 px or at 200 % zoom (WCAG 1.4.10). */
+.ui-status__text {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
 .ui-status__icon {
   display: inline-flex;
   flex: none;

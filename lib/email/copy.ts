@@ -25,6 +25,8 @@ export const EMAIL_COPY = Object.freeze({
     intro: (organisation: string, date: string): string =>
       `An account for this email address was created on the MAK-AI RAI Platform on ${date}. It is a member of ${organisation}. If you did not create it, reset the password now:`,
     closing: (organisation: string): string => `Then tell the Owner of ${organisation}.`,
+    /** Over the sign-in link, the email's last line (plan 1B Task 6, C9). */
+    later: 'To open the platform later:',
   }),
   /** E-03, the reset link (A 225 keeps the subject, A 226). */
   passwordReset: Object.freeze({

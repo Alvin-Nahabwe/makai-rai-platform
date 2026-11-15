@@ -1,4 +1,5 @@
-import { GateFrame, type GateStop } from '@/components/layout/GateFrame';
+import { GatePublicFrame } from '@/components/layout/GatePublicFrame';
+import type { GateStop } from '@/components/layout/GateRoute';
 import { AUTH_COPY } from '@/lib/auth/copy';
 import { GATE_COPY } from '@/lib/shell/copy';
 import { pageTitle } from '@/lib/ui/title';
@@ -19,8 +20,8 @@ const ROUTE: readonly GateStop[] = [
  */
 export default function ForgotPasswordPage() {
   return (
-    <GateFrame variant="public" route={ROUTE}>
+    <GatePublicFrame route={ROUTE}>
       <ForgotPasswordClient />
-    </GateFrame>
+    </GatePublicFrame>
   );
 }

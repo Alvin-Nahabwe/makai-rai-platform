@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import { AuthCard } from '@/components/auth/AuthCard';
-import { GateFrame } from '@/components/layout/GateFrame';
+import { GatePublicFrame } from '@/components/layout/GatePublicFrame';
 import { AUTH_COPY } from '@/lib/auth/copy';
 import { pageTitle } from '@/lib/ui/title';
 import { LoginForm, LoginRoute } from './LoginClient';
@@ -16,10 +16,10 @@ export default function LoginPage() {
   return (
     // The route is Sign in (ruling L5-6; too many sign-ins is a state of this page), then D16's question once the sign-in
     // has worked (ruling L5-27): LoginRoute follows the form's step.
-    <GateFrame variant="public" routeSlot={<LoginRoute />}>
+    <GatePublicFrame routeSlot={<LoginRoute />}>
       <Suspense fallback={<AuthCard title={AUTH_COPY.titles.signIn}><p>{AUTH_COPY.loading}</p></AuthCard>}>
         <LoginForm />
       </Suspense>
-    </GateFrame>
+    </GatePublicFrame>
   );
 }

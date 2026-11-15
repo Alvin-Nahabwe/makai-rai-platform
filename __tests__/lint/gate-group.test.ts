@@ -123,6 +123,9 @@ describe('the (gate) route group (plan 1B Task 1)', () => {
     // is looked at. The data readers among them are the identity lane's own four.
     const ALLOWED = [
       './ChangePasswordForm', '@/lib/auth/copy', '@/lib/auth/identity', '@/lib/auth/idle', '@/lib/auth/idleDeadline',
+      // plan 1B Task 8: the chooser words each organisation's role with orgRoleLabel, which reads the person's own
+      // memberships by their own id (membershipsForUser, the identity lane).
+      '@/lib/authz/roleLabel',
       '@/lib/client/draftKeys', '@/lib/client/signOutPress', '@/lib/client/useHydrated', '@/lib/data/acceptances',
       '@/lib/data/identity', '@/lib/data/preauth', '@/lib/decision/drafts/copy', '@/lib/legal/copy', '@/lib/legal/registry',
       '@/lib/org-dispatch', '@/lib/org/copy', '@/lib/shell/copy', '@/lib/ui/copy', '@/lib/ui/title', '@/lib/validate',

@@ -1,4 +1,10 @@
+import 'dotenv/config';
+import { createHash, randomBytes } from 'node:crypto';
 import { test, expect } from '@playwright/test';
+import { testDb } from '../__tests__/helpers/db';
+import { buildOrg } from '../__tests__/helpers/recordFixture';
+import { welcomeLine } from '../lib/org/copy';
+import { INVITATION_COPY } from '../lib/invitations/copy';
 import { INVITATION_PAGE_COPY } from '../lib/org/copy';
 import { roleWithArticle } from '../lib/org/copy';
 import { MEMBERS_COPY } from '../lib/org/members/copy';
@@ -147,5 +153,42 @@ test.describe('an invitation moves a third person into an org, at the invited ro
     expect(res?.status()).toBe(404);
 
     await thirdContext.close();
+  });
+});
+
+test.describe('a member of one organisation joins a second (plan 1B Task 6, spec 9.8)', () => {
+  test('9.8: a member of A accepts an invitation to B while signed in, lands on B\'s Home with the welcome, and the switcher lists A and B', async ({ browser }) => {
+    // Fresh organisations, so the fixture seats the cases above rely on are not moved into a second organisation.
+    const a = await buildOrg({ label: 'joina' });
+    const b = await buildOrg({ label: 'joinb' });
+    const person = a.members.viewer;
+    const raw = randomBytes(32).toString('hex');
+    await testDb.invitation.create({ data: {
+      orgId: b.org.id, email: person.email, role: 'assessor', tokenHash: createHash('sha256').update(raw).digest('hex'),
+      invitedById: b.members.owner.userId, expiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000),
+    } });
+    const context = await browser.newContext({ extraHTTPHeaders: { 'x-forwarded-for': '10.52.0.1' } });
+    const page = await context.newPage();
+    await page.goto('/login');
+    await page.waitForLoadState('networkidle');
+    await page.fill('#email', person.email);
+    await page.fill('#password', person.password);
+    await page.locator('button[type="submit"]').click();
+    await page.waitForURL((url) => url.pathname !== '/login');
+
+    await page.goto(`/invitations/${raw}`);
+    await expect(page.locator('h1')).toHaveText(`You are invited to ${b.org.name}`);
+    await page.getByRole('button', { name: INVITATION_COPY.accept }).click();
+    await page.waitForURL(`**/orgs/${b.org.slug}/dashboard?welcome=1`);
+    await expect(page.getByText(welcomeLine(b.org.name, roleWithArticle('assessor')))).toBeVisible();
+
+    const nav = page.getByRole('navigation', { name: 'Main', exact: true });
+    // The switcher's list (the rail's Home also links to B's Home, the open organisation).
+    await nav.locator('.shell-org__button').click();
+    const list = nav.locator('.shell-org__list');
+    await expect(list.locator(`a[href="/orgs/${a.org.slug}/dashboard"]`)).toHaveCount(1);
+    await expect(list.locator(`a[href="/orgs/${b.org.slug}/dashboard"]`)).toHaveCount(1);
+    await context.close();
+    await testDb.$disconnect();
   });
 });

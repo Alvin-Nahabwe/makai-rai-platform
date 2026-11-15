@@ -2532,7 +2532,7 @@
     "changed": "__tests__/unit/idle.test.ts::UX-43: the component keeps no page state to purge: nothing is removed from storage and nothing is navigated",
     "replacedBy": "__tests__/unit/idle.test.ts::UX-43: the component keeps no page state to purge: no draft is removed, nothing is navigated, and its one storage is the signed-out hint",
     "property": "IdleWarning removes no draft and no other page state (SignOutWithDraftsGuard stays the only purge path, R-53) and never navigates or signs out when the session ends.",
-    "proof": "Plan 1B Task 4 (C12) makes IdleWarning leave S-01 the reason a session ended: the signed-out hint in this tab's sessionStorage under SIGNED_OUT_HINT_KEY ('makrai.signedOut', not a draft key), written at an ending the clock explains and removed at mount and on an extension. The case keeps every other ban (localStorage, indexedDB, location changes, the router, signOut) and now pins the one storage: sessionStorage is named once in IdleWarning.tsx (its accessor), which calls no storage method itself, and lib/auth/idle.ts holds exactly two storage calls, setItem and removeItem of SIGNED_OUT_HINT_KEY. __tests__/unit/idle-copy.test.tsx proves the hint is written once with the reason, never under a draft key, and that the removal leaves a draft key in place.",
+    "proof": "Plan 1B Task 4 (C12) makes IdleWarning leave S-01 the reason a session ended: the signed-out hint in this tab's sessionStorage under SIGNED_OUT_HINT_KEY ('makrai.signedOut', not a draft key), written at an ending the clock explains and removed at mount and on an extension. The case keeps every other ban (localStorage, indexedDB, location changes, the router, signOut) and now pins the one storage: IdleWarning.tsx does not name sessionStorage at all (the case asserts the source has no match for it; the storage is reached only through lib/auth/idle.ts's tabStorage), and lib/auth/idle.ts holds exactly two storage calls, setItem and removeItem of SIGNED_OUT_HINT_KEY. __tests__/unit/idle-copy.test.tsx proves the hint is written once with the reason, never under a draft key, and that the removal leaves a draft key in place.",
     "task": "plan 1B Task 4 (session states: the true reason, and the signed-out notice)"
   },
   {
@@ -2590,6 +2590,38 @@
     "property": "The logo files public/logo-makai-252.png and -504.png keep their 1x and 2x sizes and the 1x file stays under 8,000 bytes.",
     "proof": "The case's assertions on the two files are unchanged (252 x 48, 504 x 96, under 8,000 bytes). Its title said the files are sized for the drawn 48 px height, which no page draws since plan 1B Task 2 moved the logo to the gate frame's column (lane 3's WebP files, components/layout/logos.ts); its last assertion became that app/globals.css has no .auth-logo rule (commit 10c64d7e). The title now says what the case asserts (code review A-1).",
     "task": "plan 1B D2 fix round 2 (code review A-1)"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/account-created-email.test.ts::FR-ACC-10 (6.1): E-06 holds no marker, escapes the organisation name, and links only to the reset page",
+    "replacedBy": "__tests__/unit/account-created-email.test.ts::FR-ACC-10 (6.1) C9: E-06 holds no marker, escapes the organisation name, and links to the reset page then the sign-in page",
+    "property": "E-06 carries no marker, escapes the organisation name in the HTML part, and links only to fixed pages whose addresses carry nothing (SRS 6.1).",
+    "proof": "Plan 1B Task 6 (C9; ruling L5-19) adds the sign-in link after the reset link (lib/email/templates/accountCreated.ts). The case now expects the hrefs to be exactly [the reset page, the sign-in page], in that order; the marker, subject and escaping assertions are unchanged. The new case 'C9 T6.5: the links are the reset page then the sign-in page, each alone on its line; no query string and no address' checks both parts have no '@' and no '?'. Seen RED with the one-link template, GREEN after.",
+    "task": "plan 1B Task 6 (joining)"
+  },
+  {
+    "kind": "structure",
+    "changed": "e2e/two-orgs.spec.ts::(module)",
+    "replacedBy": "e2e/two-orgs.spec.ts::9.8: a member of A accepts an invitation to B while signed in, lands on B's Home with the welcome, and the switcher lists A and B",
+    "property": "Membership stays scoped per organisation: each existing case is unchanged; the new case adds that a person joins a second organisation only by an invitation they accept while signed in, at the invited role.",
+    "proof": "Additions only, asked for by plan 1B Task 6 Step 4: imports of dotenv/config, node:crypto, testDb, buildOrg, welcomeLine and INVITATION_COPY at the top, and a new describe with the one case after the existing ones. No existing line or case changes. The new case uses fresh organisations from buildOrg, so the fixture seats the 404 cases read are never made members of a second organisation.",
+    "task": "plan 1B Task 6 (joining)"
+  },
+  {
+    "kind": "rule",
+    "changed": "e2e/first-visit-transfer.spec.ts::NFR-PERF-02: every public page transfers at most 220 KB on first visit",
+    "replacedBy": "e2e/first-visit-transfer.spec.ts::NFR-PERF-02: every public page transfers at most 220 KB on first visit, and S-04 at most 224 KB",
+    "property": "Every public page other than S-04 transfers at most 220,000 B on a first visit; S-04 (plain) at most 224,000 B.",
+    "proof": "Only the title changes, to name the figure S-04 now has under the owner's ruling of 15 Nov 2026 15:35 (box: \"Raise the limit ~4 KB\"), verbatim \"S-04's first-visit limits rise to 224,000 B (plain and the three inviter-name cases) and 241,500 B (accented)\". The loop still holds every other public page to PUBLIC_BUDGET 220,000 and S-04's plain page to 224,000 (S04_BUDGET); the accepted-risk and nginx limits are untouched except the direct accented guard, which the same ruling raises to 241,500.",
+    "task": "D3 fix round 1 (lane 5, the door): S-04 limits"
+  },
+  {
+    "kind": "rule",
+    "changed": "e2e/invitation-name-transfer.spec.ts::NFR-PERF-02: S-04 with a ${language} inviter name (${letters}) transfers at most 220 KB on first visit, fetching the small latin-ext face only",
+    "replacedBy": "e2e/invitation-name-transfer.spec.ts::NFR-PERF-02: S-04 with a ${language} inviter name (${letters}) transfers at most 224 KB on first visit, fetching the small latin-ext face only",
+    "property": "S-04 with each inviter name (Luganda, Kikuyu, Hausa) transfers within its byte limit, fetching only the small latin-ext face.",
+    "proof": "Only the title changes, to the figure the case now enforces under the owner's ruling of 15 Nov 2026 15:35 (box: \"Raise the limit ~4 KB\"), verbatim \"S-04's first-visit limits rise to 224,000 B (plain and the three inviter-name cases) and 241,500 B (accented)\": PUBLIC_BUDGET in this spec is 224,000 for S-04, which is the only page this spec measures. Every assertion is unchanged.",
+    "task": "D3 fix round 1 (lane 5, the door): S-04 limits"
   },
   {
     "kind": "structure",

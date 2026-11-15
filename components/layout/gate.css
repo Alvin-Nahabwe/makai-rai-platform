@@ -2,7 +2,10 @@
    rail's width (from 1024 px, the shell's breakpoint) with the product name, the route of this door and the person's
    block; the page's content in a white card on the ground beside it. Below 1024 px the column is a navy band above the
    card. Role tokens only; the column's text is white or the shell's muted ink, never orange (spec 7.1). Marks are
-   borders, so forced colours keep them (spec 7.2). Nothing animates. */
+   borders, so forced colours keep them (spec 7.2). Nothing animates.
+   The signed-in frame's own rules (the platform's name, the person's block, Help, Sign out, M-41) are in
+   ./gate-signed-in.css, which only GateFrame imports (the lean frame, owner, 15 Nov 15:35): this sheet is what a public
+   door page loads. */
 
 /* ── The frame ── */
 /* It fills the viewport at every width, as the shell does, so the site footer never floats mid-screen (review M-3). */
@@ -65,13 +68,6 @@ body:has(.gate--public) {
   margin-block-end: var(--space-1);
 }
 
-.gate__product {
-  color: var(--color-shell-ink);
-  font-size: var(--font-size-body);
-  font-weight: var(--font-weight-semibold);
-  overflow-wrap: anywhere;
-}
-
 /* Below 1024 px the band says where the person is; the list is the wide column's. */
 .gate-route {
   display: none;
@@ -94,52 +90,19 @@ body:has(.gate--public) {
   font-size: var(--font-size-small);
 }
 
-/* The person's block: Help and Sign out in the band; the name only in the wide column. */
-.gate__footer {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2) var(--space-4);
-  min-width: 0;
+/* A route that follows a step changed in the browser without route code (S-04 signed out,
+   app/(public)/invitations/[token]/InvitationRoute.tsx; the lean frame, owner, 15 Nov 15:35): the server draws the route
+   of each step and the form names its step in data-step, and only that step's route is drawn, so the other's list and
+   aria-current are out of the accessibility tree. The wrappers lay their contents out as the column's own children: the
+   band's two lines stay its flex items. */
+.gate-steps,
+.gate-steps__step {
+  display: contents;
 }
 
-.gate__name {
+.gate-steps[data-step="details"] > [data-for="acceptances"],
+.gate-steps[data-step="acceptances"] > [data-for="details"] {
   display: none;
-  font-weight: var(--font-weight-semibold);
-  overflow-wrap: anywhere;
-}
-
-.gate__help,
-.gate__help:hover {
-  /* a:hover in app/globals.css would paint it the link colour, navy on navy. */
-  color: var(--color-shell-ink);
-}
-
-.gate__help {
-  display: inline-flex;
-  align-items: center;
-  min-block-size: var(--target-min);
-  text-decoration: underline;
-  text-underline-offset: 0.15em;
-}
-
-.gate__signout {
-  min-width: 0;
-  max-inline-size: 100%;
-}
-
-.gate__signout .shell-rail__signout {
-  inline-size: auto;
-}
-
-/* M-41 (the drafts warning) is a surface box laid over the page from inside the column: it takes the page's ink. */
-.gate__header [data-sign-out-drafts] {
-  color: var(--color-ink);
-}
-
-/* The sign-out failure line sits on the navy: white words, bold with the icon (the kit's error tone, never red). */
-.gate__signout .ui-status {
-  color: var(--color-shell-ink);
 }
 
 /* ── The card ── */
@@ -169,16 +132,30 @@ body:has(.gate--public) {
   overflow-wrap: normal;
 }
 
+/* A card's second-level heading sits below its h1 at every width: one step down the ramp, and a step more wherever the h1
+   has stepped down. */
+.gate__subheading {
+  font-size: var(--font-size-h2);
+}
+
 /* 24rem, not 30rem: the query measures the card's content box, which is under 30rem on every default card (review R2-1). */
 @container (width < 24rem) {
   .gate__card h1 {
     font-size: var(--font-size-h2);
+  }
+
+  .gate__subheading {
+    font-size: var(--font-size-h3);
   }
 }
 
 @container (width < 12rem) {
   .gate__card h1 {
     font-size: var(--font-size-h3);
+  }
+
+  .gate__subheading {
+    font-size: var(--font-size-body);
   }
 }
 
@@ -198,6 +175,11 @@ body:has(.gate--public) {
 
 @media (max-width: 1023.98px) {
   .gate--public .gate__brand {
+    display: none;
+  }
+
+  /* A public page with no route (M-23, M-24) has nothing left in its band: draw none, not an empty navy strip. */
+  .gate--public .gate__header:not(:has(.gate__where)) {
     display: none;
   }
 
@@ -250,30 +232,6 @@ body:has(.gate--public) {
   .gate__where,
   .gate__next {
     display: none;
-  }
-
-  .gate__footer {
-    flex-direction: column;
-    align-items: stretch;
-    gap: var(--space-2);
-    margin-block-start: auto;
-    padding-block-start: var(--space-4);
-    /* A control-border line (review M-1: the hover navy was 1.19:1 on the column). */
-    border-block-start: 1px solid var(--color-border-control);
-  }
-
-  .gate__name {
-    display: block;
-    padding-inline: var(--space-3);
-  }
-
-  .gate__help {
-    min-block-size: var(--target-primary);
-    padding-inline: var(--space-3);
-  }
-
-  .gate__signout .shell-rail__signout {
-    inline-size: 100%;
   }
 
   .gate__main {
@@ -368,6 +326,25 @@ body:has(.gate--public) {
   .gate-route__stop--current {
     border: 1px solid CanvasText;
   }
+}
+
+/* ── The card's content: AuthCard's lead and a form's status line (components/auth/AuthCardBase.tsx) ──
+   Moved word for word from components/auth/auth.css by the lean frame (owner, 15 Nov 15:35): S-04 draws them, and every
+   page that draws AuthCard is in this frame, so they are here and auth.css stays off S-04's first visit. */
+.auth-view__lead {
+  display: grid;
+  gap: var(--space-3);
+  margin-block-end: var(--space-6);
+  color: var(--color-ink);
+}
+
+.auth-view__lead > p {
+  max-inline-size: 65ch;
+}
+
+/* The form's submit and its error line beside it (spec 9.7). */
+.auth-view form .ui-status:not(:empty) {
+  margin-block-start: var(--space-4);
 }
 
 /* ── Print: the card only ── */

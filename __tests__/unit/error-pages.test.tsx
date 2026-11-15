@@ -196,7 +196,10 @@ describe('the gate frame look on the root pages', () => {
   });
 
   it("drift guard: the card, the main area, the product name and the band copy gate.css's values, and the 1024 px and 320 px switches", () => {
-    const css = readFileSync('components/layout/gate.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    // The frame's rules live in two sheets since lane 5's lean S-04 build (319b9b0a): the public one and
+    // gate-signed-in.css, which holds .gate__product. Read both, in the order GateFrame imports them.
+    const css = (readFileSync('components/layout/gate.css', 'utf8') + '\n' + readFileSync('components/layout/gate-signed-in.css', 'utf8'))
+      .replace(/\/\*[\s\S]*?\*\//g, '');
     // Split the sheet into its top level and its at-rule blocks (brace matching; no at-rule here nests another).
     const blocks: Record<string, string> = {};
     let top = '';
@@ -209,7 +212,8 @@ describe('the gate frame look on the root pages', () => {
       let depth = 1;
       let j = open + 1;
       for (; depth > 0; j++) depth += css[j] === '{' ? 1 : css[j] === '}' ? -1 : 0;
-      blocks[css.slice(at, open).trim()] = css.slice(open + 1, j - 1);
+      const key = css.slice(at, open).trim();
+      blocks[key] = (blocks[key] ?? '') + css.slice(open + 1, j - 1);   // the same at-rule in both sheets: join them
       i = j;
     }
     const wideKey = Object.keys(blocks).find((k) => /^@media \(min-width: [\d.]+px\)$/.test(k)) ?? '';

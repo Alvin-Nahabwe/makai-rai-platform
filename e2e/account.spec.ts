@@ -536,6 +536,8 @@ test.describe('J-15 with a mail catcher', { tag: '@nginx' }, () => {
     await tabTo(page, page.getByRole('button', { name: FORGOT_COPY.submit }));
     await page.keyboard.press('Enter');
     await expect(page.getByRole('status').filter({ hasText: AUTH_MESSAGE_COPY.resetLinkSent })).toBeVisible();
+    // The form and its button are gone: focus is on the card's h1 above the answer, not in the live region (A-L1).
+    await expect(page.getByRole('heading', { level: 1, name: AUTH_COPY.resetHeading })).toBeFocused();
     await expect.poll(() => mailedResetToken(a.email), { timeout: 15_000 }).not.toBeNull();
 
     await page.goto(`/reset-password#token=${mailedResetToken(a.email)!}`);

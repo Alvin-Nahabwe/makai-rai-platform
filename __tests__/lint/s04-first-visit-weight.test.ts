@@ -104,6 +104,15 @@ describe('NFR-PERF-02 FIX-15: S-04 downloads nothing it does not use', () => {
     expect(found).toEqual([]);
   });
 
+  it('NFR-PERF-02 (owner, 15 Nov 15:35, lean frame): S-04\'s client draws no route: no GateRoute, no step store, no shell copy', () => {
+    // The route is drawn on the server (InvitationRoute.tsx, both steps); the client only names its step on the route's
+    // wrapper (invitationStep.ts). GateRoute, components/auth/doorStep.ts and lib/shell/copy.ts stay with sign-in and reset.
+    const graph = importGraph(join(ROOT, 'app/(public)/invitations/[token]/AcceptInvitationClient.tsx'));
+    expect(graph).toContain('components/legal/AcceptancesForm.tsx');   // the graph is the real one
+    expect(graph).toContain('app/(public)/invitations/[token]/invitationStep.ts');
+    expect(graph.filter((f) => ['components/layout/GateRoute.tsx', 'components/auth/doorStep.ts', 'lib/shell/copy.ts'].includes(f))).toEqual([]);
+  });
+
   it('NFR-PERF-02 FIX-15: S-05 still records acceptances through RecordAcceptances', () => {
     const graph = importGraph(join(ROOT, 'app/(gate)/acceptances/page.tsx'));
     expect(graph.filter((f) => /\bexport function RecordAcceptances\b/.test(readFileSync(join(ROOT, f), 'utf8')))).toEqual(['components/legal/RecordAcceptances.tsx']);

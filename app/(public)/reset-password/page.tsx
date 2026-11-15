@@ -1,5 +1,5 @@
 import { AuthCard } from '@/components/auth/AuthCard';
-import { GateFrame } from '@/components/layout/GateFrame';
+import { GatePublicFrame } from '@/components/layout/GatePublicFrame';
 import { AUTH_COPY } from '@/lib/auth/copy';
 import { pageTitle } from '@/lib/ui/title';
 import { ResetPasswordClient, ResetRoute, ResetTitle } from './ResetPasswordClient';
@@ -16,10 +16,10 @@ export default function ResetPasswordPage() {
   return (
     // Ask for a link (done), Set a new password (current), Sign in; with a link that cannot be used, Ask for a link is
     // current again and the heading says so (design review I-6). ResetRoute and ResetTitle follow the client's state.
-    <GateFrame variant="public" routeSlot={<ResetRoute />}>
+    <GatePublicFrame routeSlot={<ResetRoute />}>
       <AuthCard title={<ResetTitle />}>
         <ResetPasswordClient />
       </AuthCard>
-    </GateFrame>
+    </GatePublicFrame>
   );
 }

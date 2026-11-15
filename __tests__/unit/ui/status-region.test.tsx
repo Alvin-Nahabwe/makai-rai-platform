@@ -28,10 +28,19 @@ describe('StatusRegion', () => {
   it('an error is ink, bold, with the triangle-alert icon (B5), and stays empty with no message', () => {
     const html = renderToStaticMarkup(<StatusRegion message="The invitation was not sent." tone="error" />);
     expect(html).toMatch(/^<div role="status" class="ui-status ui-status--error"><span class="ui-status__icon"><svg [^>]*aria-hidden="true"/);
+    expect(html).toMatch(/<span class="ui-status__text">The invitation was not sent\.<\/span><\/div>$/);
     expect(textOf(html)).toBe('The invitation was not sent.');
     expect(renderToStaticMarkup(<StatusRegion message={null} tone="error" />)).toBe('<div role="status" class="ui-status ui-status--error"></div>');
     expect(renderToStaticMarkup(<StatusRegion message="" tone="error" />)).toBe('<div role="status" class="ui-status ui-status--error"></div>');
     expect(CSS).toMatch(/\.ui-status--error\s*\{[^}]*font-weight:\s*var\(--font-weight-bold\)/);
     expect(CSS).not.toMatch(/--color-overdue|--color-action/);
+  });
+
+  it('P2-I1 (SC 1.4.10): the error text beside its icon may shrink and break inside a long address, so the page needs no sideways scroll', () => {
+    expect(CSS).toMatch(/\.ui-status__text\s*\{[^}]*min-inline-size:\s*0;[^}]*overflow-wrap:\s*anywhere/);
+  });
+
+  it('A-L3: it has no focus prop; a page that moves focus after an answer targets its heading, not the live region', () => {
+    expect(readFileSync('components/ui/StatusRegion.tsx', 'utf8')).not.toContain('focusRef');
   });
 });
