@@ -3,28 +3,6 @@ import { tallyOf, type Tally } from '@/lib/ui/marks';
 import { tallyWords } from '@/lib/ui/copy';
 import { filterCounts, filterLabel, STAGE_FILTERS, type StageFilter, type StageRow } from '@/lib/question/stageList';
 import type { ChangedSinceSeal } from '@/types/api';
-import type { ScopeAnswer } from '@/types/record';
-
-/**
- * A stage as a row of marks (plan 1C Task 2, spec 7.2), pure: the page reads the rows and their marks, this shapes the
- * kit's RouteRow stops and tally. The stops are every row given, in their order: callers pass the whole stage.
- */
-export type RouteStopData = { id: string; kind: StatusMarkKind; title: string; href: string; current: boolean; scopeAnswer?: ScopeAnswer };
-
-/**
- * One stop per row: its mark, the question in words, its address, and whether it is the question open now. With the
- * personal data question's answer, that question's stop carries it, so its words are "Answer: Yes" and not "Answered".
- */
-export function stopsOf(
-  rows: readonly StageRow[], marks: Readonly<Record<string, StatusMarkKind>>, hrefOf: (questionId: string) => string, currentId?: string,
-  scopeAnswer?: ScopeAnswer | null,
-): RouteStopData[] {
-  return rows.map((r) => {
-    const kind = marks[r.questionId];
-    const stop: RouteStopData = { id: r.questionId, kind, title: r.text, href: hrefOf(r.questionId), current: r.questionId === currentId };
-    return kind === 'scope_answered' && scopeAnswer != null ? { ...stop, scopeAnswer } : stop;
-  });
-}
 
 /** The tally of the rows' marks; done with no evidence is a done row with no evidence attached (the done_without_evidence filter's rule). */
 export function tallyOfRows(rows: readonly StageRow[], marks: Readonly<Record<string, StatusMarkKind>>): Tally {
@@ -62,19 +40,20 @@ export type RoutePart<T> =
 
 /**
  * The stage's questions as the line shows them, in stage order. `rows` are the rows shown, in stage order; a part's
- * `number` is its place among them, which is its place in the stage whenever anything folds (no filter: every row). Nothing folds when a filter is active, when no question
- * is open (the stage page), when the open question is not among the rows, or in a stage of `shortStage` questions or
+ * `number` is its place among them, which is its place in the stage whenever anything folds (no filter: every row).
+ * Nothing folds when `fold` is false (the column with a filter active, and the stage page, which shows every question),
+ * when no question is open, when the open question is not among the rows, or in a stage of `shortStage` questions or
  * fewer. Otherwise the window round the open question shows, stretched to reach the next question so that it is never
  * folded, and the questions before and after it fold into one run each; a run of one question shows as its own row.
  * Every row is in exactly one part, so every question stays reachable (a run opens in place).
  */
 export function foldRoute<T extends { questionId: string }>(
-  rows: readonly T[], p: { currentId?: string; nextId?: string | null; filtered: boolean },
+  rows: readonly T[], p: { currentId?: string; nextId?: string | null; fold: boolean },
 ): RoutePart<T>[] {
   const numbered = rows.map((row, i) => ({ row, number: i + 1 }));
   const asRows = (xs: typeof numbered): RoutePart<T>[] => xs.map((x) => ({ kind: 'row' as const, ...x }));
   const at = p.currentId === undefined ? -1 : rows.findIndex((r) => r.questionId === p.currentId);
-  if (p.filtered || at === -1 || rows.length <= ROUTE_FOLD.shortStage) return asRows(numbered);
+  if (!p.fold || at === -1 || rows.length <= ROUTE_FOLD.shortStage) return asRows(numbered);
   const start = Math.min(Math.max(at - ROUTE_FOLD.before, 0), Math.max(rows.length - ROUTE_FOLD.window, 0));
   const next = p.nextId == null ? -1 : rows.findIndex((r) => r.questionId === p.nextId);
   const end = Math.max(Math.min(rows.length - 1, start + ROUTE_FOLD.window - 1), next);

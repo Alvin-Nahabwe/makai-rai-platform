@@ -123,6 +123,12 @@ describe('The route column: one line of the stage\'s questions', () => {
     expect(css).toMatch(/\.route-line__title\s*\{[^}]*overflow:\s*hidden;[^}]*\}/);
   });
 
+  it('the small filter keeps 16 px text on a touch screen, so a phone does not zoom on it; 14 px elsewhere', () => {
+    const css = readFileSync('components/question/route-column.css', 'utf8');
+    expect(css).toMatch(/\.route-filter__select\s*\{[^}]*font-size:\s*var\(--font-size-small\);/);
+    expect(css).toMatch(/@media \(pointer: coarse\)\s*\{\s*\.route-filter__select\s*\{\s*font-size:\s*var\(--font-size-body\);\s*\}\s*\}/);
+  });
+
   it('the column is a nav named by its heading, the stage\'s name, and ends with the link to all the stage\'s questions', async () => {
     const h = await column(data(ROWS), 'Q-PP-01');
     expect(h).toMatch(/^<nav class="route-column" aria-labelledby="route-column-heading"><h2 id="route-column-heading"[^>]*>Pre-processing<\/h2>/);
@@ -173,6 +179,8 @@ describe('The route column: folded runs', () => {
     const d = data(STAGE22);
     const run = detailsOf(await column(d, 'Q-04'))[1];
     expect(run.summary).toContain('class="route-line__title">Questions 7 to 22<');
+    // Read aloud (or as text) the label and the tally are two phrases, not one run of numbers: "Questions 7 to 22, 4 done".
+    expect(run.summary).toMatch(/class="route-line__title">Questions 7 to 22<\/span><span class="visually-hidden">, <\/span><span class="route-line__tally">/);
     const marks = [...run.summary.matchAll(/<svg class="ui-mark__shape" width="(\d+)"/g)].map((m) => Number(m[1]));
     expect(marks).toEqual(Array(16).fill(16));
     const runRows = STAGE22.slice(6);

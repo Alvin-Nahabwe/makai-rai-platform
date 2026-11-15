@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { foldRoute, nextApplyingId, ROUTE_FOLD, stopsOf, tallyOfRows, tallyParts } from '@/lib/question/route';
+import { foldRoute, nextApplyingId, ROUTE_FOLD, tallyOfRows, tallyParts } from '@/lib/question/route';
 import { tallyWords } from '@/lib/ui/copy';
 import type { StatusMarkKind } from '@/components/ui/types';
 import type { StageRow } from '@/lib/question/stageList';
@@ -8,30 +8,6 @@ import type { StageRow } from '@/lib/question/stageList';
 const row = (questionId: string, over: Partial<StageRow> = {}): StageRow => ({
   questionId, questionType: 'likert-5', text: `${questionId} text`, moduleId: 'M1', moduleTitle: 'Problem Formulation', statusText: 'No decision',
   versionNumber: null, declaredDate: null, openFindings: 0, changedSinceSeal: false, reworded: false, inPlace: null, kind: 'none', evidenceCount: 0, ...over,
-});
-
-describe('stopsOf', () => {
-  const rows = [row('Q-PP-02', { kind: 'done', evidenceCount: 1 }), row('Q-PP-01', { kind: 'shortfall' }), row('Q-PP-GATE', { questionType: 'gate', kind: 'scope' })];
-  const marks: Record<string, StatusMarkKind> = { 'Q-PP-02': 'done', 'Q-PP-01': 'partly', 'Q-PP-GATE': 'scope_answered' };
-  const hrefOf = (id: string) => `/q/${id}`;
-
-  it('one stop per row, in row order, with its kind, the question text as title, its address and current', () => {
-    expect(stopsOf(rows, marks, hrefOf, 'Q-PP-01')).toEqual([
-      { id: 'Q-PP-02', kind: 'done', title: 'Q-PP-02 text', href: '/q/Q-PP-02', current: false },
-      { id: 'Q-PP-01', kind: 'partly', title: 'Q-PP-01 text', href: '/q/Q-PP-01', current: true },
-      { id: 'Q-PP-GATE', kind: 'scope_answered', title: 'Q-PP-GATE text', href: '/q/Q-PP-GATE', current: false },
-    ]);
-  });
-
-  it('without a current question no stop is current', () => {
-    expect(stopsOf(rows, marks, hrefOf).every((s) => s.current === false)).toBe(true);
-  });
-
-  it('given the personal data answer, the answered stop carries it, and no other stop does', () => {
-    const stops = stopsOf(rows, marks, hrefOf, undefined, 'yes');
-    expect(stops.map((s) => s.scopeAnswer)).toEqual([undefined, undefined, 'yes']);
-    expect(stopsOf(rows, marks, hrefOf, undefined, null).every((s) => s.scopeAnswer === undefined)).toBe(true);
-  });
 });
 
 describe('tallyOfRows', () => {
@@ -67,51 +43,50 @@ describe('foldRoute', () => {
     parts.flatMap((p) => (p.kind === 'row' ? [p.number] : p.rows.map((r) => r.number)));
 
   it('a stage of 8 questions or fewer folds nothing', () => {
-    expect(shape(foldRoute(stage(8), { currentId: id(4), nextId: id(5), filtered: false }))).toEqual(['1', '2', '3', '4', '5', '6', '7', '8']);
+    expect(shape(foldRoute(stage(8), { currentId: id(4), nextId: id(5), fold: true }))).toEqual(['1', '2', '3', '4', '5', '6', '7', '8']);
     expect(ROUTE_FOLD.shortStage).toBe(8);
   });
 
   it('in the middle: the run before folds, one question before the open one shows, then the open one and the next ones, then the run after folds', () => {
-    expect(shape(foldRoute(stage(22), { currentId: id(4), nextId: id(5), filtered: false }))).toEqual(['1-2', '3', '4', '5', '6', '7-22']);
+    expect(shape(foldRoute(stage(22), { currentId: id(4), nextId: id(5), fold: true }))).toEqual(['1-2', '3', '4', '5', '6', '7-22']);
   });
 
   it('on the first question nothing is folded before it, and the window runs forward from it', () => {
-    expect(shape(foldRoute(stage(22), { currentId: id(1), nextId: id(2), filtered: false }))).toEqual(['1', '2', '3', '4', '5-22']);
+    expect(shape(foldRoute(stage(22), { currentId: id(1), nextId: id(2), fold: true }))).toEqual(['1', '2', '3', '4', '5-22']);
   });
 
   it('on the last question the window runs back from it, so the column shows as many questions as anywhere else', () => {
-    expect(shape(foldRoute(stage(22), { currentId: id(22), nextId: null, filtered: false }))).toEqual(['1-18', '19', '20', '21', '22']);
+    expect(shape(foldRoute(stage(22), { currentId: id(22), nextId: null, fold: true }))).toEqual(['1-18', '19', '20', '21', '22']);
   });
 
   it('a run of one question is not folded: it shows as its own row', () => {
-    expect(shape(foldRoute(stage(22), { currentId: id(3), nextId: id(4), filtered: false }))).toEqual(['1', '2', '3', '4', '5', '6-22']);
-    expect(shape(foldRoute(stage(9), { currentId: id(6), nextId: id(7), filtered: false }))).toEqual(['1-4', '5', '6', '7', '8', '9']);
-    expect(shape(foldRoute(stage(9), { currentId: id(4), nextId: id(5), filtered: false }))).toEqual(['1-2', '3', '4', '5', '6', '7-9']);
+    expect(shape(foldRoute(stage(22), { currentId: id(3), nextId: id(4), fold: true }))).toEqual(['1', '2', '3', '4', '5', '6-22']);
+    expect(shape(foldRoute(stage(9), { currentId: id(6), nextId: id(7), fold: true }))).toEqual(['1-4', '5', '6', '7', '8', '9']);
+    expect(shape(foldRoute(stage(9), { currentId: id(4), nextId: id(5), fold: true }))).toEqual(['1-2', '3', '4', '5', '6', '7-9']);
   });
 
   it('the next question is never folded, also when the questions between are switched off by the personal data answer', () => {
     // Q-05 to Q-09 do not apply, so the next question is Q-10: the window reaches it, and the switched-off ones show on the way.
-    const parts = foldRoute(stage(22), { currentId: id(4), nextId: id(10), filtered: false });
+    const parts = foldRoute(stage(22), { currentId: id(4), nextId: id(10), fold: true });
     expect(shape(parts)).toEqual(['1-2', '3', '4', '5', '6', '7', '8', '9', '10', '11-22']);
   });
 
   it('every question of the stage is in exactly one part, in stage order, wherever the open question is', () => {
     for (const at of [1, 2, 5, 11, 21, 22]) {
-      expect(numbersIn(foldRoute(stage(22), { currentId: id(at), nextId: at < 22 ? id(at + 1) : null, filtered: false }))).toEqual(
+      expect(numbersIn(foldRoute(stage(22), { currentId: id(at), nextId: at < 22 ? id(at + 1) : null, fold: true }))).toEqual(
         Array.from({ length: 22 }, (_, i) => i + 1),
       );
     }
   });
 
-  it('with a filter active, or with no open question (the stage page), nothing is folded', () => {
-    const rows = stage(22).filter((_, i) => i % 3 === 0);
-    expect(foldRoute(rows, { currentId: id(4), nextId: id(5), filtered: true }).every((p) => p.kind === 'row')).toBe(true);
-    expect(foldRoute(stage(22), { filtered: false }).every((p) => p.kind === 'row')).toBe(true);
-    expect(foldRoute(stage(22), { currentId: 'Q-NOT-HERE', filtered: false }).every((p) => p.kind === 'row')).toBe(true);
+  it('with folding off (a filter active, or the stage page), or with no open question, nothing is folded', () => {
+    expect(foldRoute(stage(22), { currentId: id(4), nextId: id(5), fold: false }).every((p) => p.kind === 'row')).toBe(true);
+    expect(foldRoute(stage(22), { fold: true }).every((p) => p.kind === 'row')).toBe(true);
+    expect(foldRoute(stage(22), { currentId: 'Q-NOT-HERE', fold: true }).every((p) => p.kind === 'row')).toBe(true);
   });
 
   it('a run lists its rows with their numbers in the stage', () => {
-    const parts = foldRoute(stage(22), { currentId: id(4), nextId: id(5), filtered: false });
+    const parts = foldRoute(stage(22), { currentId: id(4), nextId: id(5), fold: true });
     const first = parts[0];
     expect(first.kind === 'run' && first.rows.map((r) => [r.number, r.row.questionId])).toEqual([[1, 'Q-01'], [2, 'Q-02']]);
   });

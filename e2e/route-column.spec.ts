@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { failOnDialog } from './helpers/dialogs';
 import { expectNoHorizontalScroll } from './helpers/reflow';
-import { fillValid, newProject, openQuestion, questionPath, saveStatus, saveViaApi, seatOf, stagePath } from './helpers/session';
+import { actAsSeat, fillValid, newProject, openQuestion, questionPath, saveStatus, saveViaApi, seatOf, stagePath } from './helpers/session';
 import { QUESTION_COPY } from '../lib/question/copy';
 import { STAGE_LIST_COPY } from '../lib/question/list/copy';
 import { STATUS_MARK_COPY } from '../lib/ui/copy';
@@ -151,12 +151,23 @@ test('no serious accessibility violation with the column at 1280 and at 375', as
   }
 });
 
+test('the stage page, as the route\'s page variant, has no horizontal scroll at 320 by 640', async ({ page, baseURL }) => {
+  const projectId = await newProject(baseURL!);
+  await actAsSeat(page, 'assessor');
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.goto(stagePath(projectId, 'pre-processing'));
+  await expect(page.locator('[data-question-id]')).toHaveCount(24);
+  await expectNoHorizontalScroll(page);
+});
+
 /**
  * Screenshots for the lane's own look and the finish review (lane 1 Task 2): the question page's column and the stage
- * page at 1280 by 800, 1440 by 900 and 375 by 812, on a project with a few decisions and an unsaved draft. They are
- * written to test-results/route-shots/ and assert nothing beyond the page having loaded.
+ * page at 1280 by 800, 1440 by 900 and 375 by 812, on a project with a few decisions and an unsaved draft. Only on
+ * request (CAPTURE=1 in the environment of the Playwright run); written to test-results/route-shots/, asserting nothing
+ * beyond the pages having loaded.
  */
-test('screenshots of the column and the stage page at 1280, 1440 and 375', async ({ page, baseURL }) => {
+test('screenshots of the column and the stage page at 1280, 1440 and 375 (CAPTURE=1 only)', async ({ page, baseURL }) => {
+  test.skip(process.env.CAPTURE !== '1', 'screenshots are taken only with CAPTURE=1');
   test.setTimeout(120_000);
   const projectId = await newProject(baseURL!);
   for (const [q, status] of [['Q-PP-01', 'done'], ['Q-PP-02', 'done'], ['Q-PP-03', 'partly'], ['Q-PP-04', 'partly']] as const) {
@@ -179,6 +190,5 @@ test('screenshots of the column and the stage page at 1280, 1440 and 375', async
   }
   await page.setViewportSize({ width: 320, height: 640 });
   await page.goto(stagePath(projectId, 'pre-processing'));
-  await expectNoHorizontalScroll(page);
   await page.screenshot({ path: `${dir}/stage-320-full.png`, fullPage: true });
 });
