@@ -139,7 +139,7 @@
 
 .stage-route__chip:has(:checked) {
   padding: calc(var(--space-1) - 2px) calc(var(--space-3) - 2px);
-  border: 2px solid var(--color-selected);
+  border: 2px solid var(--color-ink);
   box-shadow: none;
 }
 
@@ -151,7 +151,8 @@
 
 .stage-route__chip input {
   margin: 0;
-  accent-color: var(--color-selected);
+  /* Ink, not orange: orange is for actions and "You are here" only (design fix round 1, S3-4). */
+  accent-color: var(--color-ink);
 }
 
 .stage-route__note {
@@ -159,24 +160,35 @@
   color: var(--color-ink);
 }
 
-/* A topic: a quiet heading on the line, in the text's column (the 42 px marks column and its gap), its count under it. */
-.stage-route__section + .stage-route__section {
-  margin-block-start: var(--space-5);
-}
-
+/* A topic: a quiet label ON the line (design fix round 1, S3-3), in the text's column (the 42 px marks column and its
+   gap), tied to the rule by a short tick, its count under it. The sections sit flush, so nothing breaks the line. */
 .stage-route__topic,
 .stage-route__topic-count {
   padding-inline-start: calc(42px + var(--space-3));
 }
 
 .stage-route__topic {
+  position: relative;
   margin-block: 0;
-  padding-block-start: var(--space-2);
-  font-size: var(--font-size-h3);
+  padding-block-start: var(--space-3);
+  color: var(--color-ink-muted);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-heading);
+}
+
+.stage-route__topic::before {
+  content: "";
+  position: absolute;
+  inset-block-end: calc(0.625rem - 1px);
+  inset-inline-start: 19px;
+  inline-size: 16px;
+  block-size: 2px;
+  background-color: var(--color-mark);
 }
 
 .stage-route__topic-count {
-  margin-block: 0 var(--space-2);
+  margin-block: 0 var(--space-1);
   font-size: var(--font-size-small);
 }
 

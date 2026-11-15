@@ -52,6 +52,13 @@ export const STAGE_LIST_COPY = Object.freeze({
     youAreHere: 'You are here',
     next: 'Next question',
     version: (n: number): string => `version ${n}`,
+    /**
+     * A tally's item for the personal data question once answered: the vocabulary's term (lane 6's wording ruling, as the
+     * question page's strip reads it: QUESTION_COPY.frame.personalDataAnswered), never "scope" or a bare "answered".
+     */
+    personalDataAnswered: (n: number): string => `${n} personal data ${n === 1 ? 'question' : 'questions'} answered`,
+    /** Between a folded run's tally items, as the sketch writes them. */
+    tallySeparator: ' · ',
     /** A folded run of questions, by their places in the stage. */
     run: (first: number, last: number): string => (last === first + 1 ? `Questions ${first} and ${last}` : `Questions ${first} to ${last}`),
   }),

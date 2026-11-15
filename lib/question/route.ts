@@ -1,6 +1,7 @@
 import type { StatusMarkKind } from '@/components/ui/types';
 import { tallyOf, type Tally } from '@/lib/ui/marks';
 import { tallyWords } from '@/lib/ui/copy';
+import { STAGE_LIST_COPY } from '@/lib/question/list/copy';
 import { filterCounts, filterLabel, STAGE_FILTERS, type StageFilter, type StageRow } from '@/lib/question/stageList';
 import type { ChangedSinceSeal } from '@/types/api';
 
@@ -80,9 +81,22 @@ const TALLY_RANK: Readonly<Record<StatusMarkKind, number>> = {
 };
 const TALLY_ORDER = (Object.keys(TALLY_RANK) as StatusMarkKind[]).sort((a, b) => TALLY_RANK[a] - TALLY_RANK[b]);
 
-/** A tally as one part per kind that occurs, each in tallyWords' own words, so a page can set a mark beside each. */
+/** One kind's words: tallyWords' own, except the personal data question, which a tally names by its term. */
+function kindWords(kind: StatusMarkKind, t: Tally, withNoEvidence: boolean): string {
+  const n = t[kind] ?? 0;
+  if (kind === 'scope_answered') return STAGE_LIST_COPY.line.personalDataAnswered(n);
+  return tallyWords(withNoEvidence && kind === 'done' && (t.doneNoEvidence ?? 0) > 0 ? { done: n, doneNoEvidence: t.doneNoEvidence } : { [kind]: n });
+}
+
+/** A tally as one part per kind that occurs, each in its words, so a page can set a mark beside each. */
 export function tallyParts(t: Tally): Array<{ kind: StatusMarkKind; words: string }> {
-  return TALLY_ORDER.filter((kind) => (t[kind] ?? 0) > 0).map((kind) => ({
-    kind, words: tallyWords(kind === 'done' && (t.doneNoEvidence ?? 0) > 0 ? { done: t.done, doneNoEvidence: t.doneNoEvidence } : { [kind]: t[kind] }),
-  }));
+  return TALLY_ORDER.filter((kind) => (t[kind] ?? 0) > 0).map((kind) => ({ kind, words: kindWords(kind, t, true) }));
+}
+
+/**
+ * A folded run's tally on one line, as the sketch writes it: the kinds joined by middots, with no "(n with no evidence
+ * attached)" inside a run (each row's own meta line says it). Design fix round 1, S2-4.
+ */
+export function lineTallyWords(t: Tally): string {
+  return TALLY_ORDER.filter((kind) => (t[kind] ?? 0) > 0).map((kind) => kindWords(kind, t, false)).join(STAGE_LIST_COPY.line.tallySeparator);
 }

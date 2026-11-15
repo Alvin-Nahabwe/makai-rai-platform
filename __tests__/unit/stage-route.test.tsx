@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { StatusMarkKind } from '@/components/ui/types';
@@ -102,6 +103,24 @@ describe('All questions: a row per question on one line', () => {
   });
 });
 
+describe('All questions: design fix 1', () => {
+  const css = () => readFileSync('components/question/stage-route.css', 'utf8') + readFileSync('components/question/route-line.css', 'utf8');
+  it('the line has a reading measure on a wide screen (about 720 px, S3-2)', () => {
+    expect(css()).toMatch(/\.route-line--page\s*\{[^}]*max-inline-size:\s*45rem;/);
+  });
+
+  it('a topic is a quiet label on the line, tied to it by a short tick, with no gap that breaks the line (S3-3)', () => {
+    expect(css()).toMatch(/\.stage-route__topic::before\s*\{[^}]*background-color:\s*var\(--color-mark\);/);
+    expect(css()).not.toMatch(/\.stage-route__section \+ \.stage-route__section/);
+  });
+
+  it('the chosen filter chip is an ink border and the radio\'s dot, never orange (S3-4)', () => {
+    const chosen = css().match(/\.stage-route__chip:has\(:checked\)\s*\{([^}]*)\}/)![1];
+    expect(chosen).toMatch(/border:\s*2px solid var\(--color-ink\);/);
+    expect(css()).not.toContain('--color-selected');
+  });
+});
+
 describe('All questions: the page\'s head', () => {
   it('a breadcrumb of the project and the stage, then the h1 with the stage\'s plain meaning, then the topics as a quiet line', () => {
     const h = render(data(ROWS));
@@ -115,7 +134,7 @@ describe('All questions: the page\'s head', () => {
     const h = render(d);
     expect(h).toContain(`<p class="stage-route__count" data-stage-summary="">${ROWS.length} questions</p>`);
     const parts = [...h.matchAll(/<li class="stage-route__tally-part" data-mark-kind="([a-z_]+)"><svg class="ui-mark__shape" width="16"[\s\S]*?<\/svg>([^<]*)<\/li>/g)].map((m) => m[2]);
-    expect(parts.join(', ')).toBe(tallyWords(tallyOfRows(ROWS, d.marks)));
+    expect(parts.join(', ')).toBe(tallyWords(tallyOfRows(ROWS, d.marks)).replace('1 answered', '1 personal data question answered'));
     expect(h).not.toContain('ui-route-row');
     expect(h).not.toContain('<progress');
     expect(h).not.toMatch(/\d\s?%/);

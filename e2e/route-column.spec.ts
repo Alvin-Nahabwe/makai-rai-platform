@@ -169,9 +169,9 @@ test('the stage page, as the route\'s page variant, has no horizontal scroll at 
  * request (CAPTURE=1 in the environment of the Playwright run); written to test-results/route-shots/, asserting nothing
  * beyond the pages having loaded.
  */
-test('screenshots of the column and the stage page at 1280, 1440 and 375 (CAPTURE=1 only)', async ({ page, baseURL }) => {
+test('screenshots of the column and the stage page at 1280, 1440 and 375, dark, and Save all (CAPTURE=1 only)', async ({ page, baseURL }) => {
   test.skip(process.env.CAPTURE !== '1', 'screenshots are taken only with CAPTURE=1');
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   const projectId = await newProject(baseURL!);
   for (const [q, status] of [['Q-PP-01', 'done'], ['Q-PP-02', 'done'], ['Q-PP-03', 'partly'], ['Q-PP-04', 'partly']] as const) {
     expect((await saveViaApi(baseURL!, 'assessor', projectId, q, { status })).status).toBe(201);
@@ -194,4 +194,28 @@ test('screenshots of the column and the stage page at 1280, 1440 and 375 (CAPTUR
   await page.setViewportSize({ width: 320, height: 640 });
   await page.goto(stagePath(projectId, 'pre-processing'));
   await page.screenshot({ path: `${dir}/stage-320-full.png`, fullPage: true });
+  // The marks on the line in dark mode too (design fix round 1, S2-1: the halo in light and dark).
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(questionPath(projectId, 'Q-PP-04'));
+  await expect(column(page)).toBeVisible();
+  await column(page).screenshot({ path: `${dir}/column-1440-dark.png` });
+  await page.emulateMedia({ colorScheme: 'light' });
+  // "Save all n now" (design fix round 1, CAPTURE): two saves pressed while the server is unreachable, as
+  // e2e/stage-workspace.spec.ts makes them, then the stage page at 1280 and 375.
+  await page.route('**/decisions', (r) => r.abort('failed'));
+  for (const [q, reason] of [['Q-PP-06', 'First'], ['Q-PP-07', 'Second']] as const) {
+    await openQuestion(page, 'assessor', q, baseURL!, projectId);
+    await fillValid(page, { reason });
+    await page.getByRole('button', { name: 'Save decision' }).click();
+    await expect(page.locator('[data-region="answer-form"] .save-status').getByRole('alert')).toContainText('Not saved');
+  }
+  await page.unroute('**/decisions');
+  for (const [width, height] of [[1280, 800], [375, 812]] as const) {
+    await page.setViewportSize({ width, height });
+    await page.goto(stagePath(projectId, 'pre-processing'));
+    await expect(page.getByRole('button', { name: STAGE_LIST_COPY.saveAll(2) })).toBeVisible();
+    await page.getByRole('button', { name: STAGE_LIST_COPY.saveAll(2) }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `${dir}/stage-${width}-save-all.png` });
+  }
 });
