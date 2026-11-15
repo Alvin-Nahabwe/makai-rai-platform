@@ -34,12 +34,29 @@ async function openFramework(page: Page, account: { email: string; password: str
   await page.waitForLoadState('networkidle');
 }
 
-/** Follows the first Controls link on the open Framework page as a client-side navigation (no document request). */
-async function clickControlsLink(page: Page): Promise<boolean> {
+/**
+ * Follows the first Controls link on the open Framework page and answers two readings, taken when asked (after the
+ * redirect has landed, since Next may still fall back to a full load after the click resolves): whether a document was
+ * requested for /explore/controls (a full load), and whether the router fetched it as a flight request (header `rsc: 1`,
+ * not a prefetch), which shows the client-side path ran.
+ */
+async function clickControlsLink(page: Page): Promise<{ fullLoad: () => boolean; clientFetch: () => boolean }> {
   let documentRequested = false;
-  page.on('request', (r) => { if (r.resourceType() === 'document' && new URL(r.url()).pathname === '/explore/controls') documentRequested = true; });
+  let flightFetched = false;
+  page.on('request', (r) => {
+    if (new URL(r.url()).pathname !== '/explore/controls') return;
+    if (r.resourceType() === 'document') documentRequested = true;
+    const h = r.headers();
+    if (h['rsc'] === '1' && h['next-router-prefetch'] === undefined) flightFetched = true;
+  });
   await page.locator('a[href^="/explore/controls#"]').first().click();
-  return documentRequested;
+  return { fullLoad: () => documentRequested, clientFetch: () => flightFetched };
+}
+
+/** After the redirect: the navigation was the router's own flight request, and no page load of Controls happened. */
+function expectClientSideNavigation(nav: { fullLoad: () => boolean; clientFetch: () => boolean }): void {
+  expect(nav.clientFetch(), 'the router fetched /explore/controls as a flight request').toBe(true);
+  expect(nav.fullLoad(), 'no document request for /explore/controls (not a page load)').toBe(false);
 }
 
 test.afterAll(async () => {
@@ -53,9 +70,9 @@ test('UX-01 FR-ACC-04 (L-1): after sign out everywhere, a client-side navigation
   await openFramework(page, a);
   const out = await page.request.delete('/api/users/me/sessions', { headers: { origin: new URL(page.url()).origin } });
   expect(out.status(), await out.text()).toBe(200);
-  const fullLoad = await clickControlsLink(page);
+  const nav = await clickControlsLink(page);
   await expect(page).toHaveURL(/\/login(\?|$)/);
-  expect(fullLoad, 'the navigation was a client-side one, not a page load').toBe(false);
+  expectClientSideNavigation(nav);
   await expect(page.locator('#controls-library-page')).toHaveCount(0);
   await page.context().close();
 });
@@ -66,9 +83,9 @@ test('UX-01 FR-ACC-04 (L-1): a password change made due while Framework is open 
   const page = await contextFor(browser, '10.47.7.2');
   await openFramework(page, a);
   await testDb.user.update({ where: { id: a.userId }, data: { mustChangePassword: true } });
-  const fullLoad = await clickControlsLink(page);
+  const nav = await clickControlsLink(page);
   await expect(page).toHaveURL(/\/change-password$/);
-  expect(fullLoad, 'the navigation was a client-side one, not a page load').toBe(false);
+  expectClientSideNavigation(nav);
   await expect(page.locator('#controls-library-page')).toHaveCount(0);
   await page.context().close();
 });
