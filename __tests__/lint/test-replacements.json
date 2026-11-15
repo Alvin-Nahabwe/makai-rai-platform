@@ -3094,5 +3094,13 @@
     "property": "The archived banner's link goes to the organisation's projects, for every role, and the sentence's three parts join to PROJECT_COPY.archivedBanner. The owner ruled on 15 Nov 2026 18:28 that the words are \"Projects page\" (the page's own heading), not \"All projects page\"; the link's target is unchanged.",
     "proof": "The case now requires the joined parts to equal 'This project is archived. Nothing in it can be changed. An Owner or Admin can unarchive it on the Projects page.' literal for literal, and for each of the five roles the banner body to be before + <a href=\"/orgs/o/projects\">Projects page</a> + after. Only the pinned words and the title change.",
     "task": "final hand-in item 5 (owner's ruling of 15 Nov 2026 18:28)"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/ui/shell-route.test.tsx::I1: the shell reads no variable that globals.css does not define (lane 7's on-shell accent comes with its own merge)",
+    "replacedBy": "__tests__/unit/ui/shell-route.test.tsx::I1: the shell reads --color-on-shell-accent, which globals.css defines, with the shell ink as its fallback",
+    "property": "Every variable the shell's stylesheet reads is defined by globals.css, and the current stage's state line reads the peach on-shell accent. The accent token is now defined (ADR 0022's exception, lane 7), so the case that pinned the shell ink while the token was missing is reversed, as the coordinator's ruling reversing D12 intended.",
+    "proof": "The case requires app/globals.css to define --color-on-shell-accent as #F4B983 and the rule .shell-project__stage--current .shell-project__state to read color: var(--color-on-shell-accent, var(--color-shell-ink)); the fallback is the shell ink. The legacy-tokens lint's (a) case fails any read of a name globals.css does not define.",
+    "task": "final hand-in item 3 (the shell reads the accent)"
   }
 ]
