@@ -2854,5 +2854,13 @@
     "property": "Outside its cases the file now also imports PROJECT_COPY (lib/project/copy.ts), for the paging case added by plan 1B Task 12, which reads the count line's words through the copy constant. The earlier (module) entry of this task covers the AllProjectsView to ProjectsTable import; nothing else outside the cases changed.",
     "proof": "__tests__/integration/prj-stage-view.test.ts::plan 1B Task 12 C8: the one list pages 50 at a time across active and archived, with one \"Show more\" requires PROJECT_COPY.allProjects.showing(50, 60) followed by PROJECT_COPY.allProjects.archivedNotShown(10) on the first page and no 'Showing' once all 60 are shown.",
     "task": "plan 1B Task 12 (lane 3 task 4, fix round 1: design review 15)"
+  },
+  {
+    "kind": "structure",
+    "changed": "e2e/two-orgs.spec.ts::a brand-new person accepts a live invitation into org A as assessor",
+    "replacedBy": "e2e/two-orgs.spec.ts::a brand-new person accepts a live invitation into org A as assessor",
+    "property": "The invited person lands on Home with ?welcome=1 and the landing renders the role's own controls, which proves the GRANTED role and not only membership: an assessor (decision:write) sees a role-gated control, and a role without decision:write would see none. Org A is reachable and org B answers 404, as before.",
+    "proof": "The role-gated control is now Home's recording link, \"Start recording\" (a person who has never saved) or \"Continue recording\", asserted visible when can('assessor', 'decision:write') and absent (count 0) otherwise, in place of the \"New project\" link gated by project:create. \"New project\" left Home above the next step: DESIGN-SPEC 9.1 puts the next step first and design-target Home gap 2 removes the create control from Home; the owner's 11:15 ruling of 15 November 2026 names Start recording / Continue recording as the primary control. The two checks of the case (org A reachable, org B 404) are unchanged.",
+    "task": "plan 1B (lane 3 task 6: final fixes, fix 7)"
   }
 ]
