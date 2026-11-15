@@ -1,11 +1,13 @@
 import type { Metadata } from 'next';
+import { GATE_LOOK } from '@/lib/errors/frame';
 import { NOT_FOUND_COPY } from '@/lib/errors/not-found/copy';
-import { pageTitle } from '@/lib/ui/title';
+import { PRODUCT_NAME, pageTitle } from '@/lib/ui/title';
 import { headers } from 'next/headers';
 import IdleWarning from '@/components/layout/IdleWarning';
 import NotFoundCard from '@/components/layout/NotFoundCard';
 import { MAIN_CONTENT_ID } from '@/components/layout/SkipLink';
 import { idleLimitSeconds } from '@/lib/auth/idle';
+import { tryResolveIdentity } from '@/lib/auth/identity';
 import { readSessionDeadlines } from '@/lib/auth/idleDeadline';
 
 export const metadata: Metadata = { title: pageTitle(NOT_FOUND_COPY.title) };
@@ -26,6 +28,19 @@ export const metadata: Metadata = { title: pageTitle(NOT_FOUND_COPY.title) };
  * not-found.md), and this page renders inside the root layout, so the skip
  * link and the footer are on it.
  *
+ * Whether the visitor is signed in decides the card's one link (home, or Sign
+ * in). It comes from tryResolveIdentity(), the soft read app/(gate)/layout.tsx
+ * uses: null when there is no valid session, never a redirect; a failure other
+ * than the session's (the database down) is thrown, as everywhere else, and
+ * becomes the error page (the lead's ruling, 15 November). Nothing of the
+ * identity is shown: no name, no address.
+ *
+ * The page sits in the gate frame's look (plan 1B Task 14, ruling L5-18): the
+ * navy column with the platform's name beside the card, drawn with
+ * lib/errors/frame.ts's inline styles and no stylesheet, because every page's
+ * first load lists this page's entry (the coordinator's ruling after lane 7's
+ * measurement; GateFrame itself would add its sign-out's code and gate.css).
+ *
  * This page serves an address that matches no route and a notFound() thrown
  * outside the signed-in group. It does NOT replace the signed-in layout: a
  * notFound() thrown below app/(authenticated)/layout.tsx renders
@@ -42,12 +57,21 @@ export const metadata: Metadata = { title: pageTitle(NOT_FOUND_COPY.title) };
  * address shows M-26 in the page with status 200.
  */
 export default async function NotFound() {
+  const signedIn = (await tryResolveIdentity()) !== null;
   const deadlines = await readSessionDeadlines(await headers());
   return (
     <>
       {deadlines ? <IdleWarning idleSeconds={idleLimitSeconds()} {...deadlines} /> : null}
-      <main id={MAIN_CONTENT_ID} tabIndex={-1} className="public-layout">
-        <NotFoundCard />
+      <main id={MAIN_CONTENT_ID} tabIndex={-1}>
+        <div data-gate-look="" style={GATE_LOOK.frame}>
+          <div style={GATE_LOOK.column}>
+            <div data-slot="logo"></div>
+            <p style={GATE_LOOK.product}>{PRODUCT_NAME}</p>
+          </div>
+          <div style={GATE_LOOK.area}>
+            <NotFoundCard signedIn={signedIn} />
+          </div>
+        </div>
       </main>
     </>
   );
