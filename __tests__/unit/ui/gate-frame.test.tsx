@@ -28,8 +28,9 @@ vi.mock('@/lib/auth/idleDeadline', () => ({ readSessionDeadlines: idle.read }));
 vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
 
 import { GateFrame, type GateStop } from '@/components/layout/GateFrame';
-import { signOutFailure, signOutFromGate } from '@/components/layout/GateSignOut';
-import { ACCEPTANCES_COPY } from '@/lib/legal/acceptances/copy';
+import { DraftsWarning } from '@/components/layout/GateSignOut';
+import { countAccountDrafts } from '@/lib/client/draftKeys';
+import { DRAFTS_COPY } from '@/lib/decision/drafts/copy';
 import { GATE_COPY } from '@/lib/shell/copy';
 import { MAIN_CONTENT_ID } from '@/components/layout/SkipLink';
 import { textOf } from '@/__tests__/helpers/markup';
@@ -47,12 +48,13 @@ const ROUTE: readonly GateStop[] = [
   { label: 'Accept the terms', state: 'current' },
 ];
 const signedIn = (route?: readonly GateStop[], wide?: boolean) =>
-  renderToStaticMarkup(<GateFrame variant="signed-in" userName="Amina" userId="u1" route={route} wide={wide}><h1>Title</h1></GateFrame>);
+  renderToStaticMarkup(<GateFrame variant="signed-in" userName="Amina" userId="u1" accountReachable route={route} wide={wide}><h1>Title</h1></GateFrame>);
 const publicFrame = (route?: readonly GateStop[]) => renderToStaticMarkup(<GateFrame variant="public" route={route}><h1>Title</h1></GateFrame>);
 
 describe('GateFrame, signed in', () => {
   it('T1.3: GateFrame links only to /help and signs out', () => {
-    expect(hrefs(renderToStaticMarkup(<GateFrame variant="signed-in" userName="Amina" userId="u1">x</GateFrame>))).toEqual(['/help']);
+    expect(hrefs(renderToStaticMarkup(<GateFrame variant="signed-in" userName="Amina" userId="u1" accountReachable>x</GateFrame>))).toEqual(['/help']);
+    expect(hrefs(renderToStaticMarkup(<GateFrame variant="signed-in" userName="Amina" userId="u1" accountReachable={false}>x</GateFrame>))).toEqual(['/help']);
   });
 
   it('the product name is text, not a link; the person\'s name, Help and Sign out are in the column', () => {
@@ -171,37 +173,50 @@ describe('gate.css', () => {
   });
 });
 
-describe('Sign out from the frame (signOutClearingDrafts, as S-05\'s sign out)', () => {
-  it('says it is working, then signs out to /login clearing this account\'s drafts, once however often it is pressed', async () => {
-    const out = vi.fn(async () => {});
-    const shown: string[] = [];
-    const press = signOutFromGate(async () => ({ signOutClearingDrafts: out }), (p) => shown.push(p));
-    await Promise.all([press('u1'), press('u1')]);
-    expect(out.mock.calls).toEqual([['u1', '/login']]);
-    expect(shown).toEqual(['working']);
+describe('Sign out from the frame: S-05\'s press, after M-41 when this device holds this account\'s drafts', () => {
+  it('B-1: the press is the one shared module (lib/client/signOutPress.ts), to /login; the frame keeps no press of its own', () => {
+    // Code only: the module's comments explain the sign-out it uses.
+    const src = readFileSync('components/layout/GateSignOut.tsx', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    expect(src).toMatch(/from '@\/lib\/client\/signOutPress'/);
+    expect(src).toMatch(/useSignOutPress\(userId, '\/login'\)/);
+    expect(src).not.toMatch(/\bcatch\b|signOutClearingDrafts|next-auth/);
+    expect(readFileSync('components/legal/AcceptancesForm.tsx', 'utf8')).toMatch(/from '@\/lib\/client\/signOutPress'/);
+    expect(readFileSync('components/legal/AcceptancesForm.tsx', 'utf8')).not.toMatch(/export function signOutPress/);
   });
 
-  it('T16-31: if the module cannot load or the sign-out request fails, the person is told they are still signed in, and nothing navigates', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    for (const load of [
-      async () => { throw new Error('chunk'); },
-      async () => ({ signOutClearingDrafts: async () => { throw new TypeError('Failed to fetch'); } }),
-    ]) {
-      const shown: string[] = [];
-      const press = signOutFromGate(load as never, (p) => shown.push(p));
-      await press('u1');
-      expect(shown).toEqual(['working', 'stillSignedIn']);
-      await press('u1');   // pressable again after a failure
-      expect(shown).toEqual(['working', 'stillSignedIn', 'working', 'stillSignedIn']);
-    }
-    // Only the kind of error is logged, never its message.
-    for (const call of warn.mock.calls) expect(call.join(' ')).not.toMatch(/chunk|Failed to fetch/);
-    warn.mockRestore();
+  it('A-1: the drafts of this account are counted by their keys alone, without the draft store, and another account\'s are not', () => {
+    const keys = ['makrai.draft.v1:u1:o:p:q:Q-1', 'makrai.draft.v1:u1:o:p:m:f:new', 'makrai.draft.v1:u10:o:p:q:Q-1', 'makrai.draft.v1:u2:o:p:q:Q-1', 'theme'];
+    vi.stubGlobal('localStorage', { length: keys.length, key: (i: number) => keys[i] ?? null });
+    expect(countAccountDrafts('u1')).toBe(2);
+    expect(countAccountDrafts('u2')).toBe(1);
+    expect(countAccountDrafts('')).toBe(0);
+    expect(readFileSync('lib/client/draftKeys.ts', 'utf8')).not.toMatch(/from '@\/lib\/client\/drafts'|next-auth/);
+    vi.unstubAllGlobals();
   });
 
-  it('the failure line is S-05\'s sentence, in an alert region that is in the page from the start', () => {
-    expect(signOutFailure('stillSignedIn')).toBe(ACCEPTANCES_COPY.stillSignedIn);
-    expect(signOutFailure('working')).toBeNull();
+  it('A-1: storage that refuses to be read counts as no draft (there is nothing this code could have kept there either)', () => {
+    vi.stubGlobal('localStorage', { get length(): number { throw new DOMException('denied', 'SecurityError'); }, key: () => null });
+    expect(countAccountDrafts('u1')).toBe(0);
+    vi.unstubAllGlobals();
+  });
+
+  it('A-1: M-41 in its own words, with Delete them and sign out and Cancel, and Go to them only when My account is reachable', () => {
+    const view = (accountReachable: boolean) => renderToStaticMarkup(
+      <DraftsWarning count={2} accountReachable={accountReachable} busy={false} onDelete={() => {}} onCancel={() => {}} />);
+    const open = view(true);
+    expect(open).toMatch(/role="alertdialog"/);
+    expect(open).toContain(DRAFTS_COPY.signOut.warning(2));
+    expect(open).toMatch(/<a class="ui-button ui-button--secondary" href="\/account#drafts-on-this-device">Go to them<\/a>/);
+    expect(textOf(open)).toContain(DRAFTS_COPY.signOut.deleteAndSignOut);
+    expect(textOf(open)).toContain(DRAFTS_COPY.signOut.cancel);
+    // A flagged account: gate 2 would send My account straight back to S-29, so the choice is not offered.
+    const flagged = view(false);
+    expect(hrefs(flagged)).toEqual([]);
+    expect(textOf(flagged)).not.toContain(DRAFTS_COPY.signOut.goToThem);
+    expect(textOf(flagged)).toContain(DRAFTS_COPY.signOut.deleteAndSignOut);
+  });
+
+  it('the failure line of a press is in the page from the start, empty', () => {
     expect(signedIn()).toMatch(/<div role="alert" class="ui-status ui-status--error"><\/div>/);
   });
 });
@@ -234,7 +249,7 @@ describe('the (gate) layout\'s idle warning (UX-43)', () => {
 });
 
 describe('the gate pages pass a route of true stops', () => {
-  type FrameProps = { variant: string; userName: string; userId: string; route?: readonly GateStop[]; wide?: boolean };
+  type FrameProps = { variant: string; userName: string; userId: string; accountReachable: boolean; route?: readonly GateStop[]; wide?: boolean };
   /** The GateFrame element a page returns (each page renders the frame itself; the layout cannot know the page). */
   const frameOf = (el: unknown) => (el as ReactElement<FrameProps>).props;
 
@@ -252,6 +267,8 @@ describe('the gate pages pass a route of true stops', () => {
       expect(p.userId).toBe('u1');
       expect(p.userName).toBe('Amina Namusoke');
       expect(p.route).toEqual([{ label: 'Change your password', state: 'current' }, { label: 'Sign in again', state: 'upcoming' }]);
+      // Gate 2 holds a flagged account on S-29, so M-41's Go to them (My account) is not offered to it.
+      expect(p.accountReachable).toBe(!must);
     }
   });
 
@@ -261,6 +278,7 @@ describe('the gate pages pass a route of true stops', () => {
     const p = frameOf(await Page());
     expect(p.route).toEqual([{ label: 'Sign in', state: 'done' }, { label: 'Accept the terms', state: 'current' }]);
     expect(p.wide).toBe(true);
+    expect(p.accountReachable).toBe(true);   // gate 3 lets My account through (ACCEPTANCE_EXEMPT_PATHS)
   });
 
   it('T1.5: / sends the MAK-AI administrator to /admin/organisations before reading any membership', async () => {
@@ -281,6 +299,10 @@ describe('the gate pages pass a route of true stops', () => {
     const p = frameOf(await Page());
     expect(p.route).toEqual([{ label: 'Choose an organisation', state: 'current' }, { label: 'Home', state: 'upcoming' }]);
     expect(p.wide).toBe(true);
+    expect(p.accountReachable).toBe(true);
+    // T1.4: the chooser reads only this person's own memberships and last organisation, by their own id.
+    expect(data.memberships.mock.calls).toEqual([['u1']]);
+    expect(data.findUser.mock.calls).toEqual([[{ where: { id: 'u1' }, select: { lastActiveOrgId: true } }]]);
   });
 
   it('/ with no organisation: the empty state, and no route (no step is certain)', async () => {

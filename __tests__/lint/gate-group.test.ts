@@ -114,6 +114,24 @@ describe('the (gate) route group (plan 1B Task 1)', () => {
     }
   });
 
+  it('T1.4: the (gate) pages and the frame read no tenant data: their only data modules are the identity lane\'s own reads', () => {
+    const files = [...sourcesUnder(GATE), 'components/layout/GateFrame.tsx', 'components/layout/GateSignOut.tsx'];
+    // Every way to the database: the data modules, the auth module and its identity reads, authorisation, Prisma itself.
+    const DATA = /^(@\/lib\/(data|db|authz)\b|@\/lib\/auth(\/identity)?$|@prisma\/client$|\.\.?\/)/;
+    const used = new Set<string>();
+    for (const f of files) {
+      for (const m of code(f).matchAll(/(?:^|\n)\s*import\s[^'"]*?from\s+['"]([^'"]+)['"]/g)) {
+        if (DATA.test(m[1]) && !m[1].startsWith('./')) used.add(m[1]);
+      }
+    }
+    expect([...used].sort()).toEqual(['@/lib/auth/identity', '@/lib/data/acceptances', '@/lib/data/identity', '@/lib/data/preauth']);
+    // The one identity read: this person's last organisation, by their own id.
+    const chooser = code(`${GATE}/page.tsx`);
+    expect(chooser.match(/identityDb\./g)).toHaveLength(1);
+    expect(chooser).toMatch(/identityDb\.user\.findUnique\(\{\s*where: \{ id: identity\.userId \},\s*select: \{ lastActiveOrgId: true \},\s*\}\)/);
+    expect(chooser).toContain('membershipsForUser(identity.userId)');
+  });
+
   it('T1.3 T1.6: no org-scoped address is written in the frame, the group layout or the acceptances and change-password pages', () => {
     // The chooser at `/` links each of the person's organisations: that list is the page, reached only once requireIdentity
     // has passed gates 2 and 3 (a flagged or unaccepted account is redirected before it renders).
@@ -121,7 +139,11 @@ describe('the (gate) route group (plan 1B Task 1)', () => {
       'components/layout/GateFrame.tsx', 'components/layout/GateSignOut.tsx', `${GATE}/layout.tsx`,
       ...sourcesUnder(`${GATE}/acceptances`), ...sourcesUnder(`${GATE}/change-password`),
     ];
-    for (const f of files) expect(code(f), f).not.toMatch(/\/orgs\/|\/projects|\/settings|\/account\b|\/admin\//);
+    // The one exception: M-41's Go to them in GateSignOut.tsx, the drafts list of My account, which the frame shows only
+    // when gate 3 or no gate holds the account (not to a flagged one, gate 2), and only after a Sign out press finds drafts.
+    const m41 = '"/account#drafts-on-this-device"';
+    expect(code('components/layout/GateSignOut.tsx').split(m41)).toHaveLength(2);
+    for (const f of files) expect(code(f).replace(m41, ''), f).not.toMatch(/\/orgs\/|\/projects|\/settings|\/account\b|\/admin\//);
   });
 
   it('the group layout renders the idle warning when the deadlines are read, and the frame no newer-text notice', () => {

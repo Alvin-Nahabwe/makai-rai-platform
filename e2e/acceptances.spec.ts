@@ -12,6 +12,7 @@ import { VALIDATION_COPY } from '../lib/http/copy';
 import { ACCEPT_LABEL } from '../components/legal/AcceptancesForm';
 import { INVITATION_COPY } from '../lib/invitations/copy';
 import { ACCEPTANCES_COPY } from '../lib/legal/acceptances/copy';
+import { DRAFTS_COPY } from '../lib/decision/drafts/copy';
 import { INVITATION_PAGE_COPY, roleWithArticle } from '../lib/org/copy';
 import { ACCEPTED_KINDS, CONSENT_TYPE_FOR } from '../types/legal';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
@@ -286,6 +287,51 @@ test.describe('S-04 and S-05 in a browser', () => {
       await expect(page.locator('body')).not.toContainText(fx.org.name);
     } finally {
       await testDb.user.update({ where: { id: fx.members.assessor.userId }, data: { mustChangePassword: false } });
+      await page.context().close();
+    }
+  });
+
+  test('NFR-PRIV-06 M-41 (ruling L5-20): the gate frame\'s Sign out warns before it removes this account\'s drafts, and offers Go to them only when My account is reachable', async ({ browser }) => {
+    const fx = await buildOrg({ label: 'gatem41' });
+    const account = fx.members.assessor;
+    const draftKey = `makrai.draft.v1:${account.userId}:${fx.org.id}:p1:q:Q-PP-01`;
+    const otherKey = `makrai.draft.v1:${fx.members.viewer.userId}:${fx.org.id}:p1:q:Q-PP-01`;
+    const plant = (page: Page) => page.evaluate(([mine, other]) => {
+      const draft = JSON.stringify({ value: 'unsaved text', savedAt: new Date().toISOString() });
+      localStorage.setItem(mine, draft);
+      localStorage.setItem(other, draft);
+    }, [draftKey, otherKey]);
+    const keys = (page: Page) => page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('makrai.draft.v1:')).sort());
+    const page = await newPage(browser);
+    await signIn(page, account);
+    await testDb.user.update({ where: { id: account.userId }, data: { mustChangePassword: true } });
+    try {
+      // Flagged: gate 2 holds the account on S-29, so the warning offers no way to My account.
+      await page.goto('/change-password');
+      await plant(page);
+      const signOut = page.getByRole('banner').getByRole('button', { name: 'Sign out' });
+      const warning = page.getByRole('alertdialog');
+      await signOut.click();
+      await expect(warning).toBeVisible();
+      await expect(warning).toContainText(DRAFTS_COPY.signOut.warning(1));
+      await expect(warning.getByRole('link', { name: DRAFTS_COPY.signOut.goToThem })).toHaveCount(0);
+      await warning.getByRole('button', { name: DRAFTS_COPY.signOut.cancel }).click();
+      await expect(warning).toHaveCount(0);
+      await expect(page).toHaveURL(/\/change-password$/);
+      expect(await keys(page)).toEqual([draftKey, otherKey].sort());   // Cancel removes nothing
+      // Not flagged: the same page (a voluntary change) offers Go to them, to S-21's drafts list.
+      await testDb.user.update({ where: { id: account.userId }, data: { mustChangePassword: false } });
+      await page.goto('/change-password');
+      await signOut.click();
+      await expect(warning.getByRole('link', { name: DRAFTS_COPY.signOut.goToThem })).toHaveAttribute('href', '/account#drafts-on-this-device');
+      // Delete them and sign out: this account's drafts go, another account's stay, and the person is signed out.
+      await warning.getByRole('button', { name: DRAFTS_COPY.signOut.deleteAndSignOut }).click();
+      await page.waitForURL((u) => u.pathname === '/login');
+      expect(await keys(page)).toEqual([otherKey]);
+      await page.goto('/change-password');
+      await expect(page).toHaveURL(/\/login/);
+    } finally {
+      await testDb.user.update({ where: { id: account.userId }, data: { mustChangePassword: false } });
       await page.context().close();
     }
   });

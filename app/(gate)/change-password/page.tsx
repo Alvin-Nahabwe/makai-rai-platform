@@ -16,12 +16,13 @@ const ROUTE: readonly GateStop[] = [
 
 /**
  * S-29 Forced password change, and S-21's **Change password** (FR-ACC-08), in the gate frame (plan 1B Task 1). Gate 2 sends a
- * flagged account here and nowhere else. The gates run here in the page (T1.7), in ./layout.tsx and in the group layout.
+ * flagged account here and nowhere else. The gates run here in the page (T1.7) and in ./layout.tsx; the group layout runs
+ * none (app/(gate)/layout.tsx). A flagged account cannot open My account, so the frame's M-41 offers no Go to them.
  */
 export default async function ChangePasswordPage() {
   const identity = await requireIdentity();
   return (
-    <GateFrame variant="signed-in" userName={identity.name ?? ''} userId={identity.userId} route={ROUTE}>
+    <GateFrame variant="signed-in" userName={identity.name ?? ''} userId={identity.userId} accountReachable={!identity.mustChangePassword} route={ROUTE}>
       <h1>{AUTH_COPY.titles.changePassword}</h1>
       <p className="text-muted" style={{ marginBottom: 'var(--space-4)' }}>
         {AUTH_COPY.changeLead}

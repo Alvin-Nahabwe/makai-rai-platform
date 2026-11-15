@@ -54,7 +54,7 @@ export default async function LandingPage() {
   const hasOrgs = dispatch.orgs.length > 0;
 
   return (
-    <GateFrame variant="signed-in" userName={identity.name ?? ''} userId={identity.userId} route={hasOrgs ? CHOOSER_ROUTE : undefined} wide>
+    <GateFrame variant="signed-in" userName={identity.name ?? ''} userId={identity.userId} accountReachable route={hasOrgs ? CHOOSER_ROUTE : undefined} wide>
       {hasOrgs ? (
         <>
           <h1>{ORG_COPY.chooser.heading}</h1>

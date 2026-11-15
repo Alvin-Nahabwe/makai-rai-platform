@@ -11,7 +11,8 @@ export type GateStop = { label: string; state: 'done' | 'current' | 'upcoming' }
 
 type Shared = { route?: readonly GateStop[]; wide?: boolean; children: ReactNode };
 export type GateFrameProps =
-  | ({ variant: 'signed-in'; userName: string; userId: string } & Shared)
+  /** `accountReachable`: whether this account may open My account now (false while gate 2 holds it on S-29); M-41's Go to them depends on it. */
+  | ({ variant: 'signed-in'; userName: string; userId: string; accountReachable: boolean } & Shared)
   | ({ variant: 'public' } & Shared);
 
 /**
@@ -90,7 +91,7 @@ export function GateFrame(props: GateFrameProps): ReactElement {
           <div className="gate__footer">
             <p className="gate__name">{props.userName}</p>
             <a className="gate__help" href="/help">{GATE_COPY.help}</a>
-            <GateSignOut userId={props.userId} />
+            <GateSignOut userId={props.userId} accountReachable={props.accountReachable} />
           </div>
         </div>
       </header>

@@ -33,7 +33,7 @@ export default async function AcceptancesPage() {
   if (texts.length === 0) redirect('/');
   const mode = missing.length > 0 ? 'required' : 'offer';
   return (
-    <GateFrame variant="signed-in" userName={identity.name ?? ''} userId={identity.userId} route={ROUTE} wide>
+    <GateFrame variant="signed-in" userName={identity.name ?? ''} userId={identity.userId} accountReachable route={ROUTE} wide>
       <RecordAcceptances texts={texts} mode={mode} userId={identity.userId} />
     </GateFrame>
   );

@@ -98,6 +98,11 @@
   inline-size: auto;
 }
 
+/* M-41 (the drafts warning) is a surface box laid over the page from inside the column: it takes the page's ink. */
+.gate__header [data-sign-out-drafts] {
+  color: var(--color-ink);
+}
+
 /* The sign-out failure line sits on the navy: white words, bold with the icon (the kit's error tone, never red). */
 .gate__signout .ui-status {
   color: var(--color-shell-ink);
