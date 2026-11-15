@@ -44,6 +44,11 @@ export const PROJECT_COPY = Object.freeze({
   wasDue: (day: string) => `was due ${day}`,
   /** The name of a stage's row of marks, one per question. */
   routeLabel: (stageName: string) => `Questions in ${stageName}`,
+  /**
+   * The accessible name of the (i) beside a status word in a tally, at its first use on the page: 'What does "Done" mean?'
+   * (the owner's ruling of 15 November 2026, 11:05; the same words as the question page's, lib/question/copy.ts on lane 1).
+   */
+  whatMeans: (term: string) => `What does "${term}" mean?`,
   /** S-32 reached from the rail's Findings link with no project to go to (plan 1A Task 12, L2-65). */
   chooseForFindings: 'Choose a project to see its findings.',
   allProjects: Object.freeze({

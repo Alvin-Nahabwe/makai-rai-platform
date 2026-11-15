@@ -33,7 +33,8 @@ export function ProjectPage({ data, routes, continueTo, children }: {
 }): ReactElement {
   const { orgSlug, project, can } = data;
   const base = `/orgs/${orgSlug}/projects/${project.id}`;
-  const uses = firstUses({ counts: data.counts, reviews: data.reviews, canOpenReview: can.openReview });
+  const tallies = { 'pre-processing': routes['pre-processing'].tally, 'in-processing': routes['in-processing'].tally, 'post-processing': routes['post-processing'].tally };
+  const uses = firstUses({ counts: data.counts, reviews: data.reviews, canOpenReview: can.openReview, tallies });
   const shareSeal = uses.seal === 'share';
   const shareReview = uses.stageReview === 'share';
   let share: ReactNode = P.overview.shareLine;

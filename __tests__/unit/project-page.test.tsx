@@ -10,7 +10,8 @@ import { REVIEW_COPY } from '@/lib/review/copy';
 import { UI_COPY } from '@/lib/ui/copy';
 import { tallyOf } from '@/lib/ui/marks';
 import {
-  TERM_ACCEPTED_RISK, TERM_FINDING, TERM_MITIGATION, TERM_SEAL, TERM_STAGE_1, TERM_STAGE_2, TERM_STAGE_3, TERM_STAGE_REVIEW,
+  TERM_ACCEPTED_RISK, TERM_DOES_NOT_APPLY, TERM_DONE, TERM_FINDING, TERM_MITIGATION, TERM_NOT_APPLICABLE, TERM_NOT_YET, TERM_PARTLY,
+  TERM_SEAL, TERM_STAGE_1, TERM_STAGE_2, TERM_STAGE_3, TERM_STAGE_REVIEW,
 } from '@/lib/vocabulary/terms';
 import type { ProjectOverviewData } from '@/lib/data/projects';
 import type { ProjectRoutes, StageRoute } from '@/lib/project/routes';
@@ -228,8 +229,10 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     // No link in the row: about 75 fewer keyboard stops before "This project" (lead's ruling on C5).
     expect(pre).not.toContain('<a ');
     expect(pre).toContain('<span class="visually-hidden"><span>Question 1 of pre-processing</span>: Done</span>');
-    expect(pre).toContain('<p class="ui-route-row__tally">7 done (2 with no evidence attached), 3 partly, 2 not yet, 2 not applicable, 1 answered</p>');
-    expect(stop(l['in-processing'], 'recorded')).toContain('<p class="ui-route-row__tally">1 done, 1 does not apply</p>');
+    // The tally as the kit's list keyed by the marks, read in the tally's words and order (no decision is left out here).
+    const tally = (rec: string) => [...rec.matchAll(/<li class="ui-route-row__tally-item"[^>]*>(.*?)<\/li>/g)].map((m) => text(m[1].replace(/<span class="ui-term-tip">.*?<\/span><\/span><\/span>/, ''))).join(', ');
+    expect(tally(pre)).toBe('7 done (2 with no evidence attached), 3 partly, 2 not yet, 2 not applicable, 1 answered');
+    expect(tally(stop(l['in-processing'], 'recorded'))).toBe('1 done, 1 does not apply');
     expect(text(pre)).toContain('1 accepted risk, 1 document issued');
     expect(render()).not.toMatch(/\b(total|overall|in all)\b|%|\b21 done\b/i);
   });
@@ -264,6 +267,32 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     expect(stop(l['pre-processing'], 'reviews')).toMatch(new RegExp(`<p><span data-term="stage-review">${REVIEW_COPY.mounted.noReviews}</span>`));
     // "seal" is first used in the share line ("seal a stage review"): defined there, after the lines.
     expect(html.indexOf('data-definition="seal"')).toBeGreaterThan(html.indexOf('<section class="stage-line" id="post-processing"'));
+  });
+
+  it('first use: each status word of a tally carries its (i) once on the page, on the first line whose tally shows it', () => {
+    const STATUS_TERMS = [TERM_DONE, TERM_PARTLY, TERM_NOT_YET, TERM_NOT_APPLICABLE, TERM_DOES_NOT_APPLY];
+    const tipsIn = (markup: string) => [...markup.matchAll(/<span class="ui-term-tip">.*?data-definition="([a-z-]+)"/g)].map((m) => m[1]);
+    // Pre-processing counts done, partly, not yet and not applicable; only in-processing has a question that does not apply.
+    const html = render({ counts: { 'in-processing': { ...COUNTS, notApplicableByGate: 1, noDecision: 8 } } });
+    for (const term of STATUS_TERMS) {
+      expect(html.split(`data-definition="${term.id}"`), term.id).toHaveLength(2);
+      expect(html.split(`data-term="${term.id}"`), term.id).toHaveLength(2);
+      expect(html, term.id).toContain(`aria-label="${P.whatMeans(term.term).replace(/"/g, '&quot;')}"`);
+      // The sentence is the vocabulary's, word for word, inside the tip.
+      expect(html, term.id).toContain(`data-definition="${term.id}">${term.definition}</span>`);
+    }
+    const l = lines(html);
+    expect(tipsIn(stop(l['pre-processing'], 'recorded'))).toEqual(['done', 'partly', 'not-yet', 'not-applicable']);
+    expect(tipsIn(stop(l['in-processing'], 'recorded'))).toEqual(['does-not-apply']);
+    expect(tipsIn(l['post-processing'])).toEqual([]);
+    // No (i) on "no decision" or on the answered personal data question, wherever they show.
+    expect(html).not.toMatch(/data-definition="no-decision"|data-definition="personal-data-question-scope-question"/);
+
+    // A stage with nothing recorded shows no tally items, so the words are first used, and defined, on a later line.
+    const later = lines(render({ counts: { 'pre-processing': ZERO, 'in-processing': { ...ZERO, noDecision: 23, byStatus: { done: 1, partly: 0, not_yet: 0, not_applicable: 0 } } } }));
+    expect(tipsIn(later['pre-processing'])).toEqual([]);
+    expect(tipsIn(stop(later['in-processing'], 'recorded'))).toEqual(['done']);
+    expect(tipsIn(stop(later['post-processing'], 'recorded'))).toEqual(['partly', 'not-yet', 'not-applicable']);
   });
 
   /** The next-step block shown above the stacked lines (owner's ruling on C3), from its opening tag to the jump links. */
@@ -481,6 +510,7 @@ describe('S-10 as three lines of stops (Route R5)', () => {
 
   it('copy: the new constants\' exact words, and no copy constant says "stop" or "line" (spec principle 4)', () => {
     expect(P.nextLabel).toBe('Next question');
+    expect([P.whatMeans('Done'), P.whatMeans('Not yet')]).toEqual(['What does "Done" mean?', 'What does "Not yet" mean?']);
     expect([P.noDecisionYet(1), P.noDecisionYet(3)]).toEqual(['1 question has no decision yet.', '3 questions have no decision yet.']);
     expect(P.allDecided).toBe('Every question in this stage has a decision.');
     expect(P.andMore(4)).toBe('and 4 more');

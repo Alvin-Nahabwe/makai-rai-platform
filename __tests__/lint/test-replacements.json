@@ -2230,5 +2230,29 @@
     "property": "O-13 on the project page after Route R5: every control in main is classified, and the role-gated ones show only for the roles that may use them. The page's one findings link is now the \"This project\" row's \"Findings\" (the foot link \"Findings for this project\" is gone, spec 9.2); each stage's Still open starts with a link \"N questions with no decision\" to the stage's filtered list, then the first three of those questions by name and \"and k more\". The rows of marks have no links on S-10 (lead's ruling on C5).",
     "proof": "PROJECT_DETAIL_CONTROLS: the 'Findings for this project' entry becomes { name: PROJECT_COPY.findings, exact: true, action: null, located in nav.project-actions by role link and exact name }, so every role must see it, and the census classifies only a control whose whole text is \"Findings\" by it (a Control's new optional `exact`, passed to findUnclassifiedControls with each name; every other entry keeps the `includes` match). A new entry { name: 'questions with no decision', action: null, located in [data-stage=\"pre-processing\"] by a link whose name ends 'question(s) with no decision' } (the fixture's project is fresh, so every stage has one). findUnclassifiedControls ignores exactly the links of .stage-line__named (el.matches('.stage-line__named a[href]')): read-only navigation whose words are the questions', varying with data and the same for every role, as .project-card already is; any other control in that list stays in the census. Every role-gated entry (Start recording, Edit project, Download records, Archive project, Open a stage review) is unchanged; \"Edit project details\" still matches 'Edit project' by includes and by the link locator's substring name.",
     "task": "lane 4 Task A (Route R5: S-10 as three lines of stops)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::UX-06 FR-PRJ-02: to-do counts come before recorded counts in each stage column",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::UX-06 FR-PRJ-02: to-do counts come before recorded counts in each stage column",
+    "property": "In each stage the to-do counts come before the recorded counts and none is a percentage, score or \"complete\". The recorded counts are now the kit's tally list: the count is bold and the status word may be marked as its term's first use, so \"7 done (2 with no evidence attached)\" is no longer one run of markup, only one run of text.",
+    "proof": "The case renders the page with COUNTS, slices the pre-processing line and reads its text (each (i), <span class=\"ui-term-tip\">, removed with its definition, then tags stripped): \"Still open in this stage\" before \"9 questions with no decision\", that before \"Recorded so far\", and that before \"7 done (2 with no evidence attached)\". \"3 open findings\", the overdue count's text and the no-%/score/complete line are unchanged. Moving the tally above Still open, or dropping the evidence caveat, fails it.",
+    "task": "lane 4 Task B (the kit RouteRow tally keyed by its marks, kept whole, with the status words' (i))"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::UX-06 (R12-16, spec 7.2): each status phrase of a stage column is the kit's mark with its words in ink, and none carries the warning class",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::UX-06 (R12-16, spec 7.2): each status phrase of a stage column is the kit's mark with its words in ink, and none carries the warning class",
+    "property": "Recorded so far shows each status as the kit's mark, hidden from assistive technology, with words, never a warning style. The tally after the row is now the kit's list keyed by the marks (owner's design finish review K1): one item per kind with a count, each its 16 px shape, the count and the words; a defined status word's item ends with its (i).",
+    "proof": "The case slices the pre-processing line's Recorded so far stop and requires the 24 stops as before; the tally is read as the text of each <li class=\"ui-route-row__tally-item\"> without its <span class=\"ui-term-tip\"> and must equal exactly \"7 done (2 with no evidence attached)\", \"n partly\", \"n not yet\", \"n not applicable\", \"1 answered\", in that order; no status-label or warning in the stop. The ink of the tally's shapes is checked in the browser by expectStatusMarksInk (e2e/project-page.spec.ts, e2e/prj-screens.spec.ts).",
+    "task": "lane 4 Task B (the kit RouteRow tally keyed by its marks, kept whole, with the status words' (i))"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::FR-PRJ-02: the stage column says how many open findings have no mitigation yet, and counts gated questions as not applying, beside those marked not applicable",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::FR-PRJ-02: the stage column says how many open findings have no mitigation yet, and counts gated questions as not applying, beside those marked not applicable",
+    "property": "The stage says how many open findings have no mitigation yet, and counts questions the personal data answer gates as not applying, beside those marked not applicable. The tally is now the kit's list, one item per kind.",
+    "proof": "The case renders the pre-processing line with notApplicableByGate: 2 and requires the findings link and the bracket's text as before, and among the tally items' texts (each <li class=\"ui-route-row__tally-item\"> without its (i)) the whole items \"2 not applicable\" and \"2 do not apply\": a gated count is printed apart from not applicable. That S-10 reads gated questions as not applying stays proved by __tests__/integration/project-routes.test.ts, as the lane 4 Task A row says.",
+    "task": "lane 4 Task B (the kit RouteRow tally keyed by its marks, kept whole, with the status words' (i))"
   }
 ]

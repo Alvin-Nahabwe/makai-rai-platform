@@ -3,6 +3,9 @@ import { expectNoSeriousA11yViolations, settleHover } from './helpers/a11y';
 import { expectNoHorizontalScroll } from './helpers/reflow';
 import { expectTargetsAtLeast24px } from './helpers/targetSize';
 import { TERM_DONE, TERM_PARTLY } from '../lib/vocabulary/terms';
+import { tallyWords } from '../lib/ui/copy';
+import { tallyOf } from '../lib/ui/marks';
+import type { StatusMarkKind } from '../components/ui/types';
 
 /**
  * The development gallery /dev/ui-kit (plan 1A Task 3): every components/ui component in every state, driven in a
@@ -231,7 +234,27 @@ test.describe('RouteRow', () => {
     await expectNoHorizontalScroll(page);
     await expect(row.locator('[aria-current="step"]')).toHaveCount(1);
     await expect(row.getByRole('link', { name: 'Sample question 4: Not yet' })).toHaveAttribute('aria-current', 'step');
-    await expect(section(page, 'route-row').locator('.ui-route-row__tally').first()).toHaveText(/^\d+ done \(2 with no evidence attached\), /);
+    // The tally, keyed by the marks (lane 4 Task B): a list whose items, as assistive technology reads them, say the tally in
+    // words in its order. The gallery's row counts its stops' kinds with 2 done questions lacking evidence.
+    const kinds = await stops.evaluateAll((els) => els.map((el) => el.getAttribute('data-mark-kind')));
+    const tally = section(page, 'route-row').locator('.ui-route-row').first().locator('ul.ui-route-row__tally');
+    const items = tally.getByRole('listitem');
+    const spoken = (await tally.ariaSnapshot()).split('\n').map((l) => /^\s*- listitem: (.*)$/.exec(l)?.[1]).filter((t): t is string => t !== undefined);
+    expect(spoken.join(', ')).toBe(tallyWords(tallyOf(kinds as StatusMarkKind[], 2)));
+    await expect(items.first()).toHaveText(/^\d+ done \(2 with no evidence attached\)$/);
+    // K2: at 320 px each count stays on one line with its word, and the evidence caveat on one line of its own at most;
+    // every item stays inside the list.
+    const listBox = (await tally.boundingBox())!;
+    const parts = await items.evaluateAll((els) => els.map((el) => ({
+      text: el.textContent, right: el.getBoundingClientRect().right,
+      // An inline part on one line is one line box tall (under two font sizes); on two it would be two 24 px lines.
+      oneLine: Array.from(el.querySelectorAll('.ui-route-row__tally-count, .ui-route-row__tally-caveat')).map((p) => p.getBoundingClientRect().height < 2 * parseFloat(getComputedStyle(p).fontSize)),
+    })));
+    for (const part of parts) {
+      expect(part.oneLine, `${part.text}: each part on one line`).toEqual(part.oneLine.map(() => true));
+      expect(part.right, `${part.text}: inside the list`).toBeLessThanOrEqual(listBox.x + listBox.width + 0.5);
+    }
+    expect(new Set(await items.evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().top)))).size, 'the items wrap between each other').toBeGreaterThan(1);
   });
 
   test('the current stop is the only ringed one, in normal and in forced colours', async ({ page }) => {

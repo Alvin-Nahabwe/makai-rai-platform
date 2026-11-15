@@ -300,12 +300,8 @@
   color: var(--color-ink);
 }
 
-/* Recorded so far: the kit's row of marks and its tally in words, at the size of the stop's other lines; the accepted-risk
-   line under it. */
-.stage-line .ui-route-row__tally {
-  font-size: var(--font-size-small);
-}
-
+/* Recorded so far: the kit's row of marks and its tally (the kit sets the tally at the small size); the accepted-risk line
+   under it, at the same size. */
 .stage-line__stop--recorded > p {
   margin-block-start: var(--space-2);
   font-size: var(--font-size-small);

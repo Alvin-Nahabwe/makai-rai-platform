@@ -1,5 +1,7 @@
 import type { StageCounts, StageReviewView } from '@/types/api';
 import { STAGES, type Stage } from '@/types/record';
+import type { DefinedTallyKind } from '@/components/ui/RouteRow';
+import type { Tally } from '@/lib/ui/marks';
 
 /**
  * Where S-10 first uses each defined term (spec 6, "a term is explained where it is first met"; plan 1A Task 9's rule,
@@ -22,7 +24,15 @@ export type FirstUses = {
   stageReview: { stage: Stage; at: 'empty' | 'open' } | 'share';
   /** A damaged seal's sentence ("Something in this seal has changed..."), else the share line ("seal a stage review"). */
   seal: { reviewId: string } | 'share';
+  /**
+   * For each status word the vocabulary defines, the stage whose "Recorded so far" tally first shows it (a count above
+   * zero); absent when no tally shows it. The tally is the route's, as StageLine passes it to RouteRow.
+   */
+  statusWords: Partial<Record<DefinedTallyKind, Stage>>;
 };
+
+/** The defined status words, in the tally's order. */
+const STATUS_WORDS: readonly DefinedTallyKind[] = ['done', 'partly', 'not_yet', 'not_applicable', 'does_not_apply'];
 
 /** Whether a stage's "Still open" holds a list (else it reads "Nothing is open in this stage."). */
 export const hasOpenWork = (c: StageCounts): boolean => c.noDecision + c.openFindings + c.overdueMitigations + c.openMitigations > 0;
@@ -30,8 +40,11 @@ export const hasOpenWork = (c: StageCounts): boolean => c.noDecision + c.openFin
 /** A review whose latest seal no longer holds together: its state line is the damaged sentence. */
 export const sealDamaged = (r: StageReviewView): boolean => r.latestSeal !== null && (r.latestSealUnreadable || !r.latestSeal.bytesMatch);
 
-export function firstUses(i: { counts: Readonly<Record<Stage, StageCounts>>; reviews: Readonly<Record<Stage, readonly StageReviewView[]>>; canOpenReview: boolean }): FirstUses {
-  const out: FirstUses = { finding: null, mitigation: null, acceptedRisk: null, stageReview: 'share', seal: 'share' };
+export function firstUses(i: {
+  counts: Readonly<Record<Stage, StageCounts>>; reviews: Readonly<Record<Stage, readonly StageReviewView[]>>; canOpenReview: boolean;
+  tallies: Readonly<Record<Stage, Tally>>;
+}): FirstUses {
+  const out: FirstUses = { finding: null, mitigation: null, acceptedRisk: null, stageReview: 'share', seal: 'share', statusWords: {} };
   let stageReviewFound = false;
   for (const stage of STAGES) {
     const c = i.counts[stage];
@@ -42,6 +55,8 @@ export function firstUses(i: { counts: Readonly<Record<Stage, StageCounts>>; rev
           : { stage, at: c.overdueMitigations > 0 ? 'overdue' : 'noOverdue' };
       }
     }
+    // Recorded so far follows Still open in a stage; its tally's words are the first status words a reader sees there.
+    for (const kind of STATUS_WORDS) if (out.statusWords[kind] === undefined && (i.tallies[stage][kind] ?? 0) > 0) out.statusWords[kind] = stage;
     if (out.acceptedRisk === null && c.acceptedRisks + c.documentsIssued > 0) out.acceptedRisk = stage;
     const reviews = i.reviews[stage];
     // Reviews come after Still open in a stage. "sealed" and "sealing" are not uses of "seal" (lib/vocabulary/firstUse.ts

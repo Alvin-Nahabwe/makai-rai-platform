@@ -5,7 +5,7 @@ import { ListLink } from '@/components/ui/ListLink';
 import { ButtonLink } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
 import { ItemPlate } from '@/components/ui/ItemPlate';
-import { RouteRow } from '@/components/ui/RouteRow';
+import { RouteRow, type DefinedTallyKind } from '@/components/ui/RouteRow';
 import { Definition, Term } from '@/components/ui/Definition';
 import { STATUS_WORD } from '@/components/followup/StageFollowUp';
 import { DeviceDateTime } from '@/components/review/DeviceTime';
@@ -20,7 +20,8 @@ import type { StageRoute } from '@/lib/project/routes';
 import type { ContinueTarget } from '@/lib/home/types';
 import type { DefinedEntry } from '@/lib/vocabulary/types';
 import {
-  TERM_ACCEPTED_RISK, TERM_FINDING, TERM_MITIGATION, TERM_SEAL, TERM_STAGE_1, TERM_STAGE_2, TERM_STAGE_3, TERM_STAGE_REVIEW,
+  TERM_ACCEPTED_RISK, TERM_DOES_NOT_APPLY, TERM_DONE, TERM_FINDING, TERM_MITIGATION, TERM_NOT_APPLICABLE, TERM_NOT_YET, TERM_PARTLY,
+  TERM_SEAL, TERM_STAGE_1, TERM_STAGE_2, TERM_STAGE_3, TERM_STAGE_REVIEW,
 } from '@/lib/vocabulary/terms';
 
 const P = PROJECT_COPY;
@@ -31,6 +32,11 @@ const NAMED = 3;
 
 /** Each stage's plain meaning, the vocabulary's sentence (decision D1, X-5), shown under its name. */
 const STAGE_TERM: Readonly<Record<Stage, DefinedEntry>> = { 'pre-processing': TERM_STAGE_1, 'in-processing': TERM_STAGE_2, 'post-processing': TERM_STAGE_3 };
+
+/** The status words a tally may define, with the term whose name the (i) button says. */
+const STATUS_TERM: Readonly<Record<DefinedTallyKind, DefinedEntry>> = {
+  done: TERM_DONE, partly: TERM_PARTLY, not_yet: TERM_NOT_YET, not_applicable: TERM_NOT_APPLICABLE, does_not_apply: TERM_DOES_NOT_APPLY,
+};
 
 /** `children` marked as the first use of `term` when `first`, else as they are. */
 const used = (first: boolean, term: DefinedEntry, children: ReactNode): ReactNode => (first ? <Term of={term}>{children}</Term> : children);
@@ -81,6 +87,7 @@ export function StageLine(p: StageLineProps): ReactElement {
           label={P.routeLabel(name)}
           stops={p.route.stops.map(({ id, kind, title, current, scopeAnswer }) => ({ id, kind, title, current, scopeAnswer }))}
           tally={{ ...p.route.tally, no_decision: undefined }}
+          define={tallyDefinitions(p.uses, p.stage)}
         />
         {p.counts.acceptedRisks + p.counts.documentsIssued > 0 ? (
           <p>
@@ -93,6 +100,15 @@ export function StageLine(p: StageLineProps): ReactElement {
       <LastStop {...p} headingId={headingId} />
     </section>
   );
+}
+
+/** The (i) labels for the status words whose first use on the page is this stage's tally (components/project/firstUse.ts). */
+function tallyDefinitions(uses: FirstUses, stage: Stage): Partial<Record<DefinedTallyKind, string>> {
+  const out: Partial<Record<DefinedTallyKind, string>> = {};
+  for (const [kind, at] of Object.entries(uses.statusWords) as Array<[DefinedTallyKind, Stage]>) {
+    if (at === stage) out[kind] = P.whatMeans(STATUS_TERM[kind].term);
+  }
+  return out;
 }
 
 /** "Still open in this stage": the questions with no decision (the first three named), open findings, then the mitigations. */

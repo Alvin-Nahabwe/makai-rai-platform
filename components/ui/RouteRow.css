@@ -66,7 +66,45 @@ a.ui-route-row__point:active {
   border: 2px solid var(--color-action-text);
 }
 
+/* The tally, keyed by the marks (the sketch's `.counts`): items wrap between each other, and a count never parts from its
+   word (design finish review K2); the (i) stays beside the word. Only the evidence caveat on done may take a second line,
+   under the words, when a 320 px line cannot hold the whole item (it is the one item long enough). The small size is the
+   ramp's nearest to the sketch's 13 px; the line is the (i)'s 24 px, so lines with and without it keep one rhythm. The
+   shape takes the mark colour from its own rule: the item carries no mark class, so its (i) and the popover are not part
+   of a mark (e2e/helpers/noScore.ts, expectStatusMarksInk). */
 .ui-route-row__tally {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-3);
   margin: 0;
+  padding: 0;
+  list-style: none;
   color: var(--color-ink);
+  font-size: var(--font-size-small);
+}
+
+.ui-route-row__tally-item {
+  display: grid;
+  grid-template-columns: 16px auto;
+  column-gap: var(--space-1);
+  align-items: start;
+  line-height: var(--target-min);
+}
+
+.ui-route-row__tally-item > .ui-mark__shape {
+  margin-block-start: calc((var(--target-min) - 16px) / 2);
+  color: var(--color-mark);
+}
+
+.ui-route-row__tally-count,
+.ui-route-row__tally-caveat {
+  white-space: nowrap;
+}
+
+.ui-route-row__tally b {
+  font-weight: var(--font-weight-bold);
+}
+
+.ui-route-row__tally .ui-term-tip {
+  vertical-align: top;
 }

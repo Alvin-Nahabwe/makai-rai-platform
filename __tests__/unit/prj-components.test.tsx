@@ -77,9 +77,12 @@ const textOf = (markup: string) => markup.replace(/<[^>]+>/g, '');
 describe('S-10 (Task 5)', () => {
   it('UX-06 FR-PRJ-02: to-do counts come before recorded counts in each stage column', () => {
     const html = preLine(COUNTS);
-    expect(html.indexOf('Still open in this stage')).toBeLessThan(html.indexOf('9 questions with no decision'));
-    expect(html.indexOf('9 questions with no decision')).toBeLessThan(html.indexOf('Recorded so far'));
-    expect(html.indexOf('Recorded so far')).toBeLessThan(html.indexOf('7 done (2 with no evidence attached)'));
+    // Read as text: the tally's count is bold and its word marked as the term's first use, with its (i) beside it, whose
+    // definition is left out here (lane 4 Task B).
+    const t = textOf(html.replace(/<span class="ui-term-tip">.*?<\/span><\/span><\/span>/g, ''));
+    expect(t.indexOf('Still open in this stage')).toBeLessThan(t.indexOf('9 questions with no decision'));
+    expect(t.indexOf('9 questions with no decision')).toBeLessThan(t.indexOf('Recorded so far'));
+    expect(t.indexOf('Recorded so far')).toBeLessThan(t.indexOf('7 done (2 with no evidence attached)'));
     expect(html).toContain('3 open findings'); expect(textOf(html)).toContain(`${PROJECT_COPY.followUp.overdue}: ${PROJECT_COPY.mitigationCount(1)}`);
     expect(html).not.toMatch(/%|score|complete/i);
   });
@@ -90,7 +93,8 @@ describe('S-10 (Task 5)', () => {
     // Each question's stop is the kit's shape, hidden from assistive technology, in a stop that names its status in words
     // (drawn without a link on S-10: lead's ruling on C5).
     expect(html.match(/<li class="ui-route-row__stop" data-mark-kind="[a-z_]+"><span class="ui-route-row__point"><svg class="ui-mark__shape"[^>]*aria-hidden="true"/g)).toHaveLength(24);
-    const tally = /<p class="ui-route-row__tally">([^<]*)<\/p>/.exec(html)?.[1].split(', ');
+    // The tally is the kit's list keyed by the marks (lane 4 Task B): one item per kind, read without its (i).
+    const tally = [...html.matchAll(/<li class="ui-route-row__tally-item"[^>]*>(.*?)<\/li>/g)].map((m) => textOf(m[1].replace(/<span class="ui-term-tip">.*?<\/span><\/span><\/span>/, '')));
     expect(tally).toEqual(['7 done (2 with no evidence attached)', expect.stringMatching(/^\d+ partly$/), expect.stringMatching(/^\d+ not yet$/), expect.stringMatching(/^\d+ not applicable$/), '1 answered']);
     expect(html).not.toMatch(/status-label|warning/);
   });
@@ -99,8 +103,9 @@ describe('S-10 (Task 5)', () => {
     const html = preLine({ ...COUNTS, notApplicableByGate: 2 });
     expect(html).toContain('<a href="/orgs/o/projects/p1/findings?stage=pre-processing">3 open findings</a>');
     expect(textOf(html)).toContain('3 open findings (1 of them with no mitigation yet)');
-    expect(html).toMatch(/<p class="ui-route-row__tally">[^<]*\b2 not applicable\b[^<]*<\/p>/);
-    expect(html).toMatch(/<p class="ui-route-row__tally">[^<]*\b2 do not apply\b[^<]*<\/p>/);
+    const tally = [...html.matchAll(/<li class="ui-route-row__tally-item"[^>]*>(.*?)<\/li>/g)].map((m) => textOf(m[1].replace(/<span class="ui-term-tip">.*?<\/span><\/span><\/span>/, '')));
+    expect(tally).toContain('2 not applicable');
+    expect(tally).toContain('2 do not apply');
   });
 
   it('FR-RM-04: no stage column and no page adds the three stages together', () => {

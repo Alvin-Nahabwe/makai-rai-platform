@@ -12,6 +12,7 @@ import { expectNoScoreShapes, expectStatusMarksInk } from './helpers/noScore';
 import { PROJECT_COPY } from '../lib/project/copy';
 import { PROJECT_WRITE_COPY } from '../lib/project/write/copy';
 import { UI_COPY } from '../lib/ui/copy';
+import { TERM_DOES_NOT_APPLY, TERM_DONE, TERM_NOT_APPLICABLE, TERM_NOT_YET, TERM_PARTLY } from '../lib/vocabulary/terms';
 
 /**
  * S-10 as three lines of stops in a browser (lane 4 Task A; Route R5; spec 9.2; plan 1C Task 8): side by side at 1280 px
@@ -60,14 +61,22 @@ test.beforeAll(async ({ browser }) => {
   const sealed = await addStageReview(fx, project.id, { stage: 'pre-processing', preparedFor: 'Ethics committee' });
   await addSealRow(fx, sealed.id);
   await addStageReview(fx, project.id, { stage: 'pre-processing' });
-  // One decision in each stage, through the route with the owner's own session.
+  // One Done decision in each stage, through the route with the owner's own session. Then every other status word a tally
+  // defines (lane 4 Task B): No to the personal data question, so two pre-processing questions do not apply; and in
+  // in-processing one Partly, one Not yet and one Not applicable. Pre-processing's tally first uses "done" and "does not
+  // apply", in-processing's the other three.
   const owner = await signedIn(browser, fx.members.owner);
-  for (const [stage, questionId] of [['pre-processing', 'Q-PP-01'], ['in-processing', 'Q-IP-01'], ['post-processing', 'Q-PO-01']]) {
+  const SEEDS: ReadonlyArray<readonly [string, string, 'done' | 'partly' | 'not_yet' | 'not_applicable' | null, string | null]> = [
+    ['pre-processing', 'Q-PP-01', 'done', null], ['in-processing', 'Q-IP-01', 'done', null], ['post-processing', 'Q-PO-01', 'done', null],
+    ['pre-processing', 'Q-PP-GATE-SENSITIVE', null, null], ['in-processing', 'Q-IP-02', 'partly', null],
+    ['in-processing', 'Q-IP-03', 'not_yet', 'ny_planned_later'], ['in-processing', 'Q-IP-04', 'not_applicable', 'na_answered_elsewhere'],
+  ];
+  for (const [stage, questionId, status, reasonCode] of SEEDS) {
     const res = await owner.context().request.post(`/api/v1/orgs/${fx.org.slug}/projects/${project.id}/decisions`, {
       headers: { origin: new URL(owner.url()).origin },
       data: {
-        requestId: randomUUID(), stage, questionId, baseVersionNumber: null, status: 'done', scopeAnswer: null, optionsInPlace: [],
-        reasonCode: null, reason: `Seeded reason ${randomUUID()} for this decision.`, decidedBy: { kind: 'outside_role', role: 'principal_investigator' },
+        requestId: randomUUID(), stage, questionId, baseVersionNumber: null, status, scopeAnswer: status === null ? 'no' : null, optionsInPlace: [],
+        reasonCode, reason: `Seeded reason ${randomUUID()} for this decision.`, decidedBy: { kind: 'outside_role', role: 'principal_investigator' },
         declaredDate: '2026-10-30', evidenceIds: [],
       },
     });
@@ -140,6 +149,77 @@ test('Review Focus 4: at 320 px a 70-character name and an unbroken mitigation s
   await page.goto(projectPath(project.id));
   await expect(page.getByRole('heading', { level: 1, name: LONG_NAME })).toBeVisible();
   await expect(page.getByRole('link', { name: UNBROKEN })).toBeVisible();
+  await expectNoHorizontalScroll(page);
+});
+
+/** The status words a tally defines, each with the stage whose tally first shows it in this spec's project. */
+const STATUS_TIPS = [
+  [TERM_DONE, 'pre-processing'], [TERM_DOES_NOT_APPLY, 'pre-processing'],
+  [TERM_PARTLY, 'in-processing'], [TERM_NOT_YET, 'in-processing'], [TERM_NOT_APPLICABLE, 'in-processing'],
+] as const;
+
+test('owner\'s ruling 11:05: each status word\'s (i), once on the page in the first tally that shows it, opens its sentence by keyboard and by pointer', async ({ browser }) => {
+  const page = await signedIn(browser, fx.members.owner);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(projectPath(project.id));
+  const main = page.locator('main');
+  for (const [term, stage] of STATUS_TIPS) {
+    const button = main.getByRole('button', { name: PROJECT_COPY.whatMeans(term.term), exact: true });
+    await expect(button, term.id).toHaveCount(1);
+    await expect(page.locator(`#${stage} .ui-route-row__tally`).getByRole('button', { name: PROJECT_COPY.whatMeans(term.term), exact: true }), term.id).toHaveCount(1);
+    const tip = page.locator(`#term-tip-${term.id}`);
+    // The sentence is the vocabulary's, word for word, and the button is described by it.
+    await expect(tip.locator(`[data-definition="${term.id}"]`)).toHaveText(term.definition);
+    await expect(button).toHaveAccessibleDescription(term.definition);
+    await expect(tip).toBeHidden();
+    // Keyboard: Tab onto the button from the element before it shows the sentence; Escape closes it.
+    await button.evaluate((el) => {
+      const all = Array.from(document.querySelectorAll<HTMLElement>('a[href], button, [tabindex]:not([tabindex="-1"])'));
+      all[all.indexOf(el as HTMLElement) - 1].focus();
+    });
+    await page.keyboard.press('Tab');
+    await expect(button).toBeFocused();
+    await expect(tip, `${term.id} by keyboard`).toBeVisible();
+    await expectFocusVisibleAndUncovered(page);
+    await page.keyboard.press('Escape');
+    await expect(tip).toBeHidden();
+    // Pointer: a press shows it; a press elsewhere closes it.
+    await button.click();
+    await expect(tip, `${term.id} by pointer`).toBeVisible();
+    await page.locator('h1').click();
+    await expect(tip).toBeHidden();
+  }
+  // "No decision" and the answered personal data question carry none.
+  await expect(main.locator('.ui-term-tip [data-definition="no-decision"], .ui-term-tip [data-definition="personal-data-question-scope-question"]')).toHaveCount(0);
+});
+
+test('K2: at 320 px no count parts from its word, the (i) stays beside the word, every item stays inside its list; no horizontal scroll', async ({ browser }) => {
+  const page = await signedIn(browser, fx.members.owner);
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.goto(projectPath(project.id));
+  const items = page.locator('main .ui-route-row__tally-item');
+  expect(await items.count()).toBeGreaterThanOrEqual(STATUS_TIPS.length);
+  const facts = await items.evaluateAll((els) => els.map((el) => {
+    const count = el.querySelector('.ui-route-row__tally-count')!;
+    const tip = el.querySelector('.ui-term-tip');
+    const caveat = el.querySelector('.ui-route-row__tally-caveat');
+    const c = count.getBoundingClientRect();
+    const t = tip?.getBoundingClientRect();
+    return {
+      text: el.textContent, right: el.getBoundingClientRect().right, listRight: el.closest('ul')!.getBoundingClientRect().right,
+      // An inline part on one line is one line box tall (under two font sizes); on two it would be two 24 px lines.
+      countOneLine: c.height < 2 * parseFloat(getComputedStyle(count).fontSize),
+      caveatOneLine: caveat === null || caveat.getBoundingClientRect().height < 2 * parseFloat(getComputedStyle(caveat).fontSize),
+      // The (i) on the same line as the word, right after it.
+      tipBeside: t === undefined || (Math.abs(t.top + t.height / 2 - (c.top + c.height / 2)) < 4 && t.left >= c.right - 1 && t.left - c.right < 12),
+    };
+  }));
+  for (const f of facts) {
+    expect(f.countOneLine, `${f.text}: the count and its word on one line`).toBe(true);
+    expect(f.caveatOneLine, `${f.text}: the caveat on one line`).toBe(true);
+    expect(f.tipBeside, `${f.text}: the (i) beside the word`).toBe(true);
+    expect(f.right, `${f.text}: inside its list`).toBeLessThanOrEqual(f.listRight + 0.5);
+  }
   await expectNoHorizontalScroll(page);
 });
 
