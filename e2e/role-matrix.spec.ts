@@ -135,7 +135,8 @@ const PROJECT_DETAIL_CONTROLS: Control[] = [
   { name: 'Edit project', action: 'project:update', mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Edit project' }) },
   { name: PROJECT_COPY.overview.downloadRecords, action: 'team:export', mode: 'presence', locator: (p) => p.getByRole('link', { name: PROJECT_COPY.overview.downloadRecords }) },
   { name: 'Archive project', action: 'project:archive', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Archive project', exact: true }) },
-  { name: 'Findings for this project', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Findings for this project' }) },
+  { name: PROJECT_COPY.findings, action: null, mode: 'presence', locator: (p) => p.locator('nav.project-actions').getByRole('link', { name: PROJECT_COPY.findings, exact: true }) },
+  { name: 'questions with no decision', action: null, mode: 'presence', locator: (p) => p.locator('[data-stage="pre-processing"]').getByRole('link', { name: /questions? with no decision$/ }).first() },
   { name: 'All questions in this stage', action: null, mode: 'presence', locator: (p) => p.locator('[data-stage="pre-processing"]').getByRole('link', { name: 'All questions in this stage', exact: true }) },
   { name: 'All questions in this stage', action: null, mode: 'presence', locator: (p) => p.locator('[data-stage="in-processing"]').getByRole('link', { name: 'All questions in this stage', exact: true }) },
   { name: 'All questions in this stage', action: null, mode: 'presence', locator: (p) => p.locator('[data-stage="post-processing"]').getByRole('link', { name: 'All questions in this stage', exact: true }) },
@@ -200,6 +201,9 @@ async function findUnclassifiedControls(page: Page, knownNames: readonly string[
       // The buttons in S-32's rows (Unarchive) are not: they stay in the census.
       if (el.matches('a[href]') && el.closest('.projects-list')) return true;
       if (el.closest('nav[aria-label="Breadcrumb"]') || el.closest('.stage-list__jump')) return true;
+      // S-10's rows of marks (one link per question) and its named questions with no decision ("and k more" after them) are
+      // read-only navigation that varies with data, the same for every role, as the project cards are.
+      if (el.closest('.ui-route-row') || el.closest('.stage-line__named')) return true;
       // "Show more" appears on S-32 only once the organisation has more than 50 projects, which the shared fixture reaches as specs add them.
       if (el.matches('a[href]') && (el.textContent ?? '').trim() === 'Show more') return true;
       return false;

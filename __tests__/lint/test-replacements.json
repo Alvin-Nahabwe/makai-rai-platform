@@ -2222,5 +2222,13 @@
     "property": "Each of the three stages is one section a person can find, named by its <h2>, that states its to-do counts. The section is now a line of stops (class stage-line); its heading's name is marked as the first use of the stage's term (spec 6), and the overdue count reads \"Overdue: 1 mitigation\".",
     "proof": "The case requires three <section class=\"stage-line\" id=… data-stage=… aria-labelledby=…>, no <details>, the pre-processing <h2 id=…><span data-term=\"stage-1\">Pre-processing</span></h2>, and in its text \"9 questions with no decision\", \"3 open findings\" and PROJECT_COPY.followUp.overdue + ': ' + PROJECT_COPY.mitigationCount(1).",
     "task": "lane 4 Task A (Route R5: S-10 as three lines of stops)"
+  },
+  {
+    "kind": "structure",
+    "changed": "e2e/role-matrix.spec.ts::(module)",
+    "replacedBy": "e2e/role-matrix.spec.ts::dashboard, projects, projects/new, project detail and members render only the controls this role may use",
+    "property": "O-13 on the project page after Route R5: every control in main is classified, and the role-gated ones show only for the roles that may use them. The page's one findings link is now the \"This project\" row's \"Findings\" (the foot link \"Findings for this project\" is gone, spec 9.2); each stage's Still open starts with a link \"N questions with no decision\" to the stage's filtered list, then the first three of those questions by name and \"and k more\"; and Recorded so far is the kit's row of marks, one link per question.",
+    "proof": "PROJECT_DETAIL_CONTROLS: the 'Findings for this project' entry becomes { name: PROJECT_COPY.findings, action: null, located in nav.project-actions by role link and exact name }, so every role must see it; a new entry { name: 'questions with no decision', action: null, located in [data-stage=\"pre-processing\"] by a link whose name ends 'question(s) with no decision' } (the fixture's project is fresh, so every stage has one). findUnclassifiedControls ignores links inside .ui-route-row and .stage-line__named: one per question, read-only navigation that varies with data and is the same for every role, as .project-card already is. Every role-gated entry (Start recording, Edit project, Download records, Archive project, Open a stage review) is unchanged; \"Edit project details\" still matches 'Edit project' by includes and by the link locator's substring name.",
+    "task": "lane 4 Task A (Route R5: S-10 as three lines of stops)"
   }
 ]
