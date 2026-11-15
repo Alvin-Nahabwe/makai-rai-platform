@@ -58,14 +58,14 @@ on a dark operating system, `light dark` would draw native controls dark while t
 ## Consequences
 
 - Every screen takes the new palette on the commit that adds the tokens; screens are restyled one area at a
-  time, each removing files from `legacy-tokens.allow.json` until Task 21 deletes the block.
+  time, each removing files from `legacy-tokens.allow.json` until Task 21 deletes the block. Task 21 deleted the block and that list on 15 November 2026.
 - Where an old name could not take the plan's mapping without breaking a screen, the alias says why in a comment:
   `--color-white` stays `#FFFFFF` in every theme (the plan's surface role is dark in dark mode, and white is read as
   text on navy and on the action fill, as it is at the base), `--color-primary-light` is `#F0A35E` in every theme (its
   only reader, AboutPage.css, draws it as text on the navy hero; the plan's action-text role is 2.66:1 there in
   light; its readers go in Task 19), and `--font-family` reads the `--font-overpass` variable the layout defines
   (Overpass, self-hosted, replaced Source Sans 3 and DM Serif Display in Task 2), while `--font-display` is an alias of
-  `--font-family`: there is one family, and the About page no longer reads the alias.
+  `--font-family`: there is one family, and the About page no longer reads the alias. Task 21 deleted these aliases on 15 November 2026; the paragraph above records why each was written that way.
 - `--color-risk-critical` is ink, not the overdue role as the plan maps it: its readers are field errors, a required
   mark and a hover state, none an overdue date, and red means overdue only (B5).
 - A mistyped variable fails `legacy-tokens.test.ts` (a), which lists the five variables defined outside the stylesheet.
