@@ -12,17 +12,11 @@ import type { DecisionVersionView } from '@/types/api';
 import type { SealRef } from '@/types/seal';
 
 const C = QUESTION_COPY.current;
-const R = QUESTION_COPY.reading;
 
 export type CurrentDecisionProps = {
   orgSlug: string; current: DecisionVersionView | null; historyCount: number; historyHref: string; seals: SealRef[];
   /** Whether this is the personal data question itself, whose decision is an answer, not a status. */
   isScopeQuestion: boolean;
-  /**
-   * 'summary' (the default) for a person who may record, above the form; 'reading' for the read-only page (plan 1C Task 7,
-   * decision C12): the reason as a quotation, then who decided and who entered it, the evidence, "History: n versions".
-   */
-  mode?: 'summary' | 'reading';
 };
 
 /**
@@ -35,10 +29,9 @@ export type CurrentDecisionProps = {
  * decision, says what kind of mistake it was, and has no mark (a mark has no kind for it). A server component: every
  * value is a React child, so it is text, never markup (NFR-SEC-11).
  */
-export function CurrentDecision({ orgSlug, current, historyCount, historyHref, seals, isScopeQuestion, mode = 'summary' }: CurrentDecisionProps): ReactElement | null {
+export function CurrentDecision({ orgSlug, current, historyCount, historyHref, seals, isScopeQuestion }: CurrentDecisionProps): ReactElement | null {
   if (current === null) return <p>{C.none}</p>;
-  const reading = mode === 'reading';
-  const history = <p><Link href={historyHref}>{reading ? R.history(historyCount) : C.history(historyCount)}</Link></p>;
+  const history = <p><Link href={historyHref}>{C.history(historyCount)}</Link></p>;
   if (current.status === 'withdrawn') {
     return (
       <div className="current-decision">
@@ -60,24 +53,6 @@ export function CurrentDecision({ orgSlug, current, historyCount, historyHref, s
   );
   const who = <p>{decided === null ? entered : <>{decided} {entered}</>}</p>;
   const evidence = current.evidence.length === 0 ? C.noEvidence : <VersionEvidenceList orgSlug={orgSlug} items={current.evidence} />;
-  if (reading) {
-    // The reason is a quotation of what the team wrote; an erased one is the platform's line, not a quotation.
-    return (
-      <div className="current-decision">
-        {firstLine}
-        <SealMarker seals={seals} />
-        {current.reasonErased !== null ? <p>{textErasedLine(current.reasonErased.erasedOn)}</p>
-          : current.reason !== null && current.reason !== '' ? <blockquote className="current-decision__reason">{current.reason}</blockquote>
-          : null}
-        {who}
-        <dl>
-          <dt>{C.evidence}</dt>
-          <dd>{evidence}</dd>
-        </dl>
-        {history}
-      </div>
-    );
-  }
   return (
     <div className="current-decision">
       {firstLine}

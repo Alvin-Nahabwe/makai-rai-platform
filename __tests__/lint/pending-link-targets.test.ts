@@ -78,7 +78,7 @@ describe('pending shell link targets', () => {
   it('FR-RM-01 UX-37 (helper): the address of a page file is derived without its route groups and with any one segment for a dynamic one', () => {
     expect(pathForPageFile('app/(authenticated)/orgs/[slug]/settings/thing/page.tsx')).toBe('/orgs/x1/settings/thing');
     expect(pathForPageFile('app/(public)/about/page.tsx')).toBe('/about');
-    expect(pathForPageFile('app/page.tsx')).toBe('/');
+    expect(pathForPageFile('app/(gate)/page.tsx')).toBe('/');
   });
 
   // The case below ends with the last entry of the list, and then has nothing to hold.

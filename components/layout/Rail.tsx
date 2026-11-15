@@ -3,7 +3,7 @@
 import { useState, useSyncExternalStore, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { signOut } from 'next-auth/react';
+import { signOutClearingDrafts } from '@/lib/client/signOutClearingDrafts';
 import { Icon } from '@/components/ui/Icon';
 import OrgSwitcher from '@/components/layout/OrgSwitcher';
 import ThemeToggle from '@/components/layout/ThemeToggle';
@@ -122,7 +122,7 @@ export default function Rail({ shell, project }: { shell: ShellData; project?: R
           <SignOutWithDraftsGuard userId={shell.userId}>
             <button type="button" className="shell-rail__signout" onClick={() => {
               clearLastProjects(shell.userId);
-              void signOut({ callbackUrl: '/login' });
+              void signOutClearingDrafts(shell.userId, '/login').catch((err: unknown) => { console.warn('rail: a sign-out press was rejected', err instanceof Error ? err.name : typeof err); });
             }}>
               <Icon name="log-out" />
               {SHELL_COPY.signOut}

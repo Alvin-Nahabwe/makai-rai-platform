@@ -222,6 +222,9 @@ function addressReads(file: string, src: string): string[] {
  * - The session-read guard (`lib/auth/sessionEndpoint.ts`, ACC-b) reads only the pathname of the request's URL to decide
  *   whether it is `/api/auth/session`; it builds no URL and redirects nowhere. It takes a plain `Request`, which has no
  *   `nextUrl`.
+ * - The client sign-out (`lib/client/signOutClearingDrafts.ts`, ruling L5-11) reads the `url` of next-auth's JSON answer
+ *   to its sign-out POST, not a request's address: the browser navigates to it only when it has no `error` parameter and
+ *   is not under /api/auth/. It runs in the browser and builds no server redirect.
  */
 const ALLOWED: Record<string, Record<string, number>> = {
   'lib/http/sameOrigin.ts': { [L.host]: 1 },
@@ -231,6 +234,7 @@ const ALLOWED: Record<string, Record<string, number>> = {
   'lib/client/evidenceUpload.ts': { [L.url]: 2 },
   'app/api/v1/orgs/[slug]/projects/[id]/evidence/route.ts': { [L.url]: 1 },
   'lib/auth/sessionEndpoint.ts': { [L.url]: 1 },
+  'lib/client/signOutClearingDrafts.ts': { [L.url]: 1 },
 };
 
 /** The labels in `file` that its allowance does not cover. */

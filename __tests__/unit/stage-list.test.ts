@@ -69,7 +69,7 @@ describe('S-11 rows', () => {
 
   it('W-2: every filter has its label', () => {
     expect(STAGE_FILTERS.map((f) => filterLabel(f, 1))).toEqual([
-      'All', 'No decision', 'Partly or not yet', 'Done, no evidence attached', 'Changed since seal 1', 'Good practice changed', 'Not saved yet',
+      'All', 'No decision', 'Partly or not yet', 'Done, no evidence attached', 'Changed since seal 1', 'Good practice changed since the decision', 'Not saved in this browser',
     ]);
     expect(filterLabel('changed_since_seal', null)).toBe('Changed since the last seal');
   });

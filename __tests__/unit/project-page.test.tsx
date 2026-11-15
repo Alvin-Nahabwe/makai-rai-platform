@@ -440,6 +440,13 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     expect(pre).not.toContain(P.beforeSealing);
   });
 
+  it('M-2: the team-typed "Prepared for" note sits inside <bdi> (and only the note), so right-to-left text cannot reorder the line', () => {
+    const rtl = '\u05d5\u05e2\u05d3\u05ea \u05d0\u05ea\u05d9\u05e7\u05d4 (ethics)';
+    const pre = stop(lines(render({ reviews: { 'pre-processing': [{ ...REVIEW, preparedFor: rtl }] } }))['pre-processing'], 'reviews');
+    expect(pre).toContain(`<p class="review-list__meta">${REVIEW_COPY.review.facts.preparedFor}: <bdi>${rtl}</bdi></p>`);
+    expect(pre.match(/<bdi>/g)).toHaveLength(1);
+  });
+
   it('9.2: a sealed review says how many decisions and how many findings changed since it was sealed, each on its own; the findings part links to the review', () => {
     const both: StageReviewView = { ...REVIEW, latestSeal: SEAL, changedSinceLatestSeal: true,
       changed: { sealNumber: 1, changedQuestions: ['Q-PP-01', 'Q-PP-02'], changedFindings: ['f1', 'f2', 'f3'] } };

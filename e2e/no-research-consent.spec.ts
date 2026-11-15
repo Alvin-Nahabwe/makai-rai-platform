@@ -55,7 +55,7 @@ function owner(): FixtureManifestUser {
 
 /**
  * Where the owner pass is expected to end up. A route not named here ends on itself. The home
- * route is the org dispatcher (app/page.tsx), which sends a signed-in user to an org dashboard.
+ * route is the org dispatcher (app/(gate)/page.tsx), which sends a signed-in user to an org dashboard.
  */
 const OWNER_LANDING: Record<string, string> = {
   '/': '/orgs/[slug]/dashboard',

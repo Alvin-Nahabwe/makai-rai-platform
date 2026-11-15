@@ -104,7 +104,7 @@ describe('route 30, POST /api/acceptances', () => {
 });
 
 describe('S-05, the acceptances page (FR-ACC-04)', () => {
-  const page = async () => (await import('@/app/(authenticated)/acceptances/page')).default();
+  const page = async () => (await import('@/app/(gate)/acceptances/page')).default();
 
   it('FR-ACC-04 UX-22: an account missing acceptances gets the required form with exactly the missing texts', async () => {
     const fx = await buildOrg({ acceptances: 'none' });

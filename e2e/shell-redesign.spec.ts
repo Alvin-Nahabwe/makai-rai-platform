@@ -7,6 +7,7 @@ import { MANIFEST_PATH, adminSeat, type FixtureManifest, type FixtureManifestUse
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { expectNoHorizontalScroll } from './helpers/reflow';
+import { IDLE_TEXTS } from '../lib/auth/session/copy';
 
 /**
  * Plan 1A Task 11: the shell in a browser (the lead's additions, section 8). Each case says where a thing is, not only that
@@ -18,8 +19,8 @@ import { expectNoHorizontalScroll } from './helpers/reflow';
  * buildOrg and testDb on rows no other spec uses (FR-ACC-04's way in e2e/acceptances.spec.ts).
  */
 
-const WARNING = 'You will be signed out in 2 minutes because nothing has happened for a while.';
-const ENDED = 'You have been signed out. What you typed is still on this page.';
+const WARNING = IDLE_TEXTS.warningTitle;
+const ENDED = IDLE_TEXTS.endedKept;
 const ORG_ITEMS = ['Home', 'Projects', 'Findings', 'Guidance', 'Help', 'Members', 'Organisation', 'My account'];
 /** 70 characters, no hyphen and no space: the hardest organisation name to fit in the rail. */
 const LONG_ORG_NAME = 'Kampalanakasongolaresponsibleartificialintelligencelaboratoryformakere';

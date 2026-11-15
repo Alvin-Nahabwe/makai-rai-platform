@@ -65,6 +65,7 @@ describe('TermTip', () => {
     tip.dispatchEvent(new Event('pointerdown'));
     button.dispatchEvent(new Event('blur'));
     expect(open, 'a press inside the tip keeps it open, so its sentence can be selected').toBe(true);
+    tip.dispatchEvent(new Event('pointerup'));
     button.dispatchEvent(new Event('blur'));
     expect(open, 'focus leaving closes it').toBe(false);
     cleanup();
@@ -72,6 +73,29 @@ describe('TermTip', () => {
     button.dispatchEvent(new Event('blur'));
     expect(open, 'after cleanup nothing listens').toBe(true);
     expect(readFileSync('components/ui/TermTip.tsx', 'utf8')).not.toMatch(/addEventListener\('focus'/);
+  });
+
+  it('review M-A2: the press-inside flag lives only for the press: a press with no blur (Safari), then a later focus-leave, closes the tip; so does a second press', () => {
+    const button = new EventTarget();
+    let open = true;
+    const tip: TipPopover & EventTarget = Object.assign(new EventTarget(), { hidePopover: () => { open = false; }, matches: () => open });
+    closeOnBlur(button, tip);
+    // A press inside with no blur (the browser did not focus the button), released.
+    tip.dispatchEvent(new Event('pointerdown'));
+    tip.dispatchEvent(new Event('pointerup'));
+    button.dispatchEvent(new Event('focus'));
+    button.dispatchEvent(new Event('blur'));
+    expect(open, 'a later focus-leave closes it').toBe(false);
+    // Two presses inside: the first blur keeps it open, the release clears the flag, the next focus-leave closes it.
+    open = true;
+    tip.dispatchEvent(new Event('pointerdown'));
+    button.dispatchEvent(new Event('blur'));
+    expect(open).toBe(true);
+    tip.dispatchEvent(new Event('pointerup'));
+    tip.dispatchEvent(new Event('pointerdown'));
+    tip.dispatchEvent(new Event('pointercancel'));
+    button.dispatchEvent(new Event('blur'));
+    expect(open, 'after a cancelled second press, focus leaving closes it').toBe(false);
   });
 
   it('a 24px target, colour roles only, the focus ring left to the global rule', () => {

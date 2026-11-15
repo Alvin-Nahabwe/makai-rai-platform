@@ -1,31 +1,104 @@
 /*
- * The question page's column (components/question/RouteColumn.tsx). Under 72.5rem it is the short form after the
- * guidance: the stage's name, the row of marks with its tally, the link to all questions; the list (the filter and the
- * topics) is its own page there. Its place in the grid is workspace.css's. Design tokens only; no kit class restyled.
+ * The question page's column (components/question/RouteColumn.tsx): the stage's name with its plain meaning, one sentence,
+ * the filter as a small select, the line (route-line.css), the link to all the stage's questions. The same line shows at
+ * every width; below 72.5rem the column follows the main content (its place in the grid is workspace.css's). Sizes from
+ * the locked sketch's `.route` rules. Design tokens only; no kit class restyled.
  */
-.route-column__heading {
-  margin: 0 0 var(--space-2);
-  font-size: var(--font-size-h3);
+.route-column {
+  /* The heading starts on the main column's top edge (design fix round 1, S1a-1): the grid's own gap is the only space. */
+  padding-block-start: 0;
 }
 
-.route-column__list {
-  display: none;
+.route-column__heading {
+  margin: 0;
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-heading);
+}
+
+.route-column__intro {
+  margin-block: var(--space-1) var(--space-3);
+  color: var(--color-ink-muted);
+  font-size: var(--font-size-small);
+}
+
+/* The filter: a small labelled select above the line (the kit's Select is a 44 px form field; this one is the list's own
+   compact control: as wide as its words, 32 px tall at 14 px, with the kit's chevron; design fix round 1, S2-2). On a
+   touch screen it is 16 px and 44 px tall. The native picker opens, so a phone keeps its own. */
+.route-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-block-end: var(--space-2);
+}
+
+.route-filter__label {
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-bold);
+}
+
+.route-filter__wrap {
+  position: relative;
+  display: grid;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.route-filter__select {
+  appearance: none;
+  box-sizing: border-box;
+  inline-size: auto;
+  max-inline-size: 100%;
+  /* As wide as the chosen option where the browser can (Chromium); elsewhere as wide as the longest option. */
+  field-sizing: content;
+  min-block-size: 32px;
+  padding: 2px calc(var(--space-2) + 16px + var(--space-1)) 2px var(--space-2);
+  border: 1px solid var(--color-border-control);
+  border-radius: var(--radius-control);
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+  font: inherit;
+  font-size: var(--font-size-small);
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+/* On a touch screen the text is 16 px, so a phone's browser does not zoom the page when the select is tapped. */
+@media (pointer: coarse) {
+  .route-filter__select {
+    font-size: var(--font-size-body);
+    min-block-size: var(--target-primary);
+  }
+}
+
+.route-filter__select:hover {
+  border-color: var(--color-ink);
+}
+
+.route-filter__icon {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: var(--space-2);
+  display: grid;
+  place-items: center;
+  color: var(--color-ink);
+  pointer-events: none;
+}
+
+.route-filter__note {
+  margin-block: 0 var(--space-2);
+  font-size: var(--font-size-small);
 }
 
 .route-column__all {
-  margin-block: var(--space-4) 0;
+  margin-block: var(--space-3) 0;
 }
 
-/* A link on a line of its own, near the row of marks' stops: a target of at least 24 by 24 (spec 7.5, SC 2.5.8). */
+/* A link on a line of its own: a target of at least 24 by 24 (spec 7.5, SC 2.5.8). */
 .route-column__all a {
   display: inline-flex;
   align-items: center;
   min-block-size: var(--target-min);
-}
-
-@media (width >= 72.5rem) {
-  .route-column__list {
-    display: block;
-    margin-block-start: var(--space-4);
-  }
 }

@@ -1,0 +1,239 @@
+/*
+ * The stage's questions as one line (components/question/RouteLine.tsx; owner's answer R1, 15 November 2026). The values
+ * are the locked sketch's `.route` rules (.impeccable/mocks/decision/assigned.html): a 4 px navy rule, a 42 px column for
+ * the marks with the rule through its centre, the question in words at 15 px / 600 clamped to two lines, a 13 px meta
+ * line; the open question a white plate with the sketch's border and shadow and its mark in a 40 px orange ring. Design
+ * tokens only, and no kit class restyled: the kit's StatusMark keeps its own colour.
+ */
+
+/* The rule: drawn once on the wrapper, so it runs on through a run opened in place and past the page's topic headings. */
+.route-line {
+  position: relative;
+}
+
+.route-line::before {
+  content: "";
+  position: absolute;
+  inset-block: var(--space-2);
+  inset-inline-start: 19px;
+  inline-size: 4px;
+  border-radius: 2px;
+  background-color: var(--color-mark);
+}
+
+.route-line__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A row: the whole of it is the one link (or, for a run, the summary). */
+.route-line__link {
+  position: relative;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  column-gap: var(--space-3);
+  padding: 6px var(--space-2) 6px 0;
+  border-radius: var(--radius-control);
+  color: var(--color-ink);
+  text-decoration: none;
+}
+
+.route-line__link:hover .route-line__title {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* The mark on the rule, on a disc of the ground's colour with a halo of at least 3 px round the mark's own shape, so the
+   rule stops short of the mark and every mark reads on the line (design fix round 1, S2-1): the kit's shapes fill a
+   circle of about 19 px in their 24 px box, so a 26 px disc; the no-decision dot fills 7 px, so a 16 px disc round it.
+   The node's box is 28 px so the disc fits; its centre stays on the rule's (the 42 px column's middle). */
+.route-line__node {
+  display: grid;
+  place-items: center;
+  justify-self: center;
+  align-self: start;
+  inline-size: 28px;
+  block-size: 28px;
+  border-radius: 50%;
+  background: radial-gradient(circle closest-side, var(--color-ground) 13px, transparent 13.5px);
+}
+
+.route-line__node--dot {
+  background: radial-gradient(circle closest-side, var(--color-ground) 8px, transparent 8.5px);
+}
+
+.route-line__text {
+  display: block;
+  min-inline-size: 0;
+}
+
+/* The question in words: two lines at most (R7). The whole text stays in the markup, so assistive technology reads it all. */
+.route-line__title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.route-line__meta {
+  display: block;
+  margin-block-start: 2px;
+  color: var(--color-ink-muted);
+  font-size: var(--font-size-small);
+  line-height: 1.45;
+}
+
+.route-line__code {
+  font: inherit;
+  color: inherit;
+}
+
+.route-line__next {
+  color: var(--color-action-text);
+  font-weight: var(--font-weight-bold);
+}
+
+/* "You are here": the white plate, the enlarged mark in its ring, the label above the question. */
+.route-line__item--here > .route-line__link {
+  margin-block: var(--space-1);
+  padding: var(--space-3) var(--space-3) var(--space-3) 0;
+  border: 1px solid var(--color-border-container);
+  border-radius: var(--radius-surface);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-surface);
+}
+
+.route-line__node--here {
+  inline-size: 40px;
+  block-size: 40px;
+  margin-block-start: 0;
+  border: 4px solid var(--color-action-text);
+  background: var(--color-surface);
+}
+
+.route-line__pin {
+  display: block;
+  margin-block-end: 2px;
+  color: var(--color-action-text);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.3;
+}
+
+.route-line__item--here .route-line__title {
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-bold);
+}
+
+/* A folded run: a native disclosure, its own marker removed and a chevron on the rule in its place. */
+.route-line__summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.route-line__summary::-webkit-details-marker {
+  display: none;
+}
+
+.route-line__summary .route-line__title {
+  font-weight: var(--font-weight-bold);
+}
+
+.route-line__node--run {
+  box-sizing: border-box;
+  border: 2px solid var(--color-mark);
+  color: var(--color-mark);
+}
+
+.route-line__node--run svg {
+  display: block;
+}
+
+.route-line__run[open] > .route-line__summary .route-line__node--run svg {
+  rotate: 90deg;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .route-line__node--run svg {
+    transition: rotate var(--duration-state) var(--easing-state);
+  }
+}
+
+/* A run's marks: one per question, in order, at 16 px (spec 7.2), then its tally in words on a line of its own. */
+.route-line__tally {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 3px;
+  margin-block: var(--space-1) 2px;
+  color: var(--color-mark);
+}
+
+.route-line__tally-words {
+  flex-basis: 100%;
+  color: var(--color-ink-muted);
+  font-size: var(--font-size-small);
+  line-height: 1.45;
+}
+
+.route-line__list--run {
+  margin-block-end: var(--space-1);
+}
+
+/* A term's (i) for a question that first uses it (stage page only; fix rounds 4 and 5): after the row's link, never inside
+   it, as a third column of the row (the mark, the words, the (i)), level with the title's first line. It never wraps
+   under the mark or onto the line, and it adds no height to the row. */
+.route-line__item:has(> .route-line__tips) {
+  display: grid;
+  /* The words take their own width (shrinking to wrap when the row is narrower), so the (i) follows them closely. */
+  grid-template-columns: minmax(0, max-content) auto;
+  justify-content: start;
+  column-gap: var(--space-1);
+}
+
+.route-line__item:has(> .route-line__tips) > .route-line__link {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.route-line__tips {
+  display: inline-flex;
+  grid-column: 2;
+  grid-row: 1;
+  align-self: start;
+  /* The link's 6 px top padding less half of the 24 px button's overhang on a 16 px x 1.3 line: centred on line one. */
+  margin-block-start: 4px;
+}
+
+.route-line__item:has(> .route-line__tips) > p {
+  grid-column: 1 / -1;
+}
+
+.route-line__none {
+  margin-block: var(--space-2) 0;
+}
+
+/* The page's rows: wider, so the question in words gets the room of the page, up to a reading measure (about 720 px,
+   design fix round 1, S3-2). */
+.route-line--page {
+  max-inline-size: 45rem;
+}
+
+.route-line--page .route-line__title {
+  font-size: var(--font-size-body);
+}
+
+@media (forced-colors: active) {
+  .route-line::before {
+    background-color: CanvasText;
+  }
+
+  .route-line__item--here > .route-line__link {
+    border-width: 2px;
+  }
+}

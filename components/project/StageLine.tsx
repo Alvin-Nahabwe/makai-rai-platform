@@ -226,7 +226,8 @@ function Reviews(p: StageLineProps): ReactElement {
                 <ReviewState review={r} base={p.base} stage={p.stage} uses={p.uses} isNewest={r.id === newest?.id} />
               </p>
               {r.preparedForErased !== null ? <p className="review-list__meta">{REVIEW_COPY.review.facts.preparedFor}: {REVIEW_COPY.mounted.noteErased(formatDay(r.preparedForErased.erasedOn))}</p>
-                : r.preparedFor !== null ? <p className="review-list__meta">{REVIEW_COPY.review.facts.preparedFor}: {r.preparedFor}</p> : null}
+                // The note is team-typed: only it sits in <bdi>, so right-to-left text cannot reorder the line (merge review M-2).
+                : r.preparedFor !== null ? <p className="review-list__meta">{REVIEW_COPY.review.facts.preparedFor}: <bdi>{r.preparedFor}</bdi></p> : null}
               {r.latestSeal === null ? <BeforeSealing counts={p.counts} base={p.base} stage={p.stage} /> : null}
             </li>
           ))}

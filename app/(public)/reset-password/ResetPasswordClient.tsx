@@ -1,14 +1,17 @@
 'use client';
 
-import { useState, useSyncExternalStore, type FormEvent } from 'react';
+import { useEffect, useState, useSyncExternalStore, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { PASSWORD_MIN_LENGTH } from '@/lib/validate';
-import { AUTH_MESSAGE_COPY, RESET_COPY } from '@/lib/auth/copy';
+import { AUTH_COPY, AUTH_MESSAGE_COPY, RESET_COPY } from '@/lib/auth/copy';
 import { useHydrated } from '@/lib/client/useHydrated';
-import { Button } from '@/components/ui/Button';
+import { PasswordField } from '@/components/auth/PasswordField';
+import { createDoorStep, useDoorStep } from '@/components/auth/doorStep';
+import { GateRoute, type GateStop } from '@/components/layout/GateRoute';
+import { Button, ButtonLink } from '@/components/ui/Button';
+import { GATE_COPY } from '@/lib/shell/copy';
 import { StatusRegion } from '@/components/ui/StatusRegion';
-import { TextInput } from '@/components/ui/TextInput';
 
 export type ResetState =
   | { kind: 'idle' } | { kind: 'sending' } | { kind: 'done' } | { kind: 'unusable' }
@@ -64,7 +67,11 @@ export interface ResetPasswordViewProps {
   onSubmit: (e: FormEvent<HTMLFormElement>) => void;
 }
 
-/** S-03's markup for a given state: one "New password" field (no confirm field), Show, and **Set password**. */
+/**
+ * S-03's markup for a given state: one "New password" field (no confirm field), Show, and **Set password**. The page's
+ * AuthCard holds the heading. The assertive region stays first here, not beside the button as on S-01 and S-02: a 410
+ * turns the form into M-22 in that same element (ruling T16-6, pinned by __tests__/unit/auth-pages.test.tsx).
+ */
 export function ResetPasswordView(v: ResetPasswordViewProps) {
   // Checked before the token: the token is forgotten once the password is set, and that must not read as a dead link.
   if (v.state.kind === 'done') return <StatusRegion message={RESET_COPY.passwordChanged} />;
@@ -77,24 +84,51 @@ export function ResetPasswordView(v: ResetPasswordViewProps) {
     <>
       <StatusRegion message={alert} politeness="assertive" tone="error" />
       {unusable ? (
-        <p className="auth-footer">
-          <Link href="/forgot-password" style={{ display: 'inline-block', minHeight: '24px' }}>{RESET_COPY.askNewLink}</Link>
-        </p>
+        // The one way forward is the card's primary action (design review I-6), and the way back is the footer's.
+        <>
+          <p className="auth-view__action"><ButtonLink variant="primary" href="/forgot-password">{RESET_COPY.askNewLink}</ButtonLink></p>
+          <div className="auth-view__footer"><p><Link href="/login">{AUTH_COPY.backToSignIn}</Link></p></div>
+        </>
       ) : (
         <form method="post" onSubmit={v.onSubmit} noValidate>
-          <TextInput id="new-password" name="new-password" label={RESET_COPY.newPassword} type={v.showPassword ? 'text' : 'password'} required
-            autoComplete="new-password" value={v.password} onChange={(e) => v.onPassword(e.currentTarget.value)}
-            hint={RESET_COPY.hint(PASSWORD_MIN_LENGTH)} error={invalid ?? undefined} />
-          {/* The kit's Button cannot carry aria-pressed or aria-controls (ruling T16-5), so this is a native button in the kit's classes. */}
-          <p style={{ margin: 'calc(-1 * var(--space-4)) 0 var(--space-6)' }}>
-            <button type="button" className="ui-button ui-button--quiet ui-button--compact" aria-controls="new-password"
-              aria-pressed={v.showPassword} onClick={v.onToggleShow}>{RESET_COPY.showPassword}</button>
-          </p>
+          <PasswordField id="new-password" name="new-password" label={RESET_COPY.newPassword} autoComplete="new-password"
+            value={v.password} onChange={(e) => v.onPassword(e.currentTarget.value)}
+            hint={RESET_COPY.hint(PASSWORD_MIN_LENGTH)} error={invalid ?? undefined} show={v.showPassword} onToggleShow={v.onToggleShow} />
           <Button variant="primary" type="submit" disabled={v.state.kind === 'sending' || v.hydrated === false}>{RESET_COPY.submit}</Button>
+          <div className="auth-view__footer"><p><Link href="/login">{AUTH_COPY.backToSignIn}</Link></p></div>
         </form>
       )}
     </>
   );
+}
+
+/** S-03's step, for the card's heading and the frame's route (page.tsx renders them outside this form). */
+export const resetStep = createDoorStep<'form' | 'unusable'>('form');
+
+const FORM_ROUTE: readonly GateStop[] = [
+  { label: AUTH_COPY.recoveryStops.askForLink, state: 'done' },
+  { label: AUTH_COPY.recoveryStops.setNewPassword, state: 'current' },
+  { label: GATE_COPY.stops.signIn, state: 'upcoming' },
+];
+/** A used, expired or unknown link: asking for a new one is where the person is again (design review I-6). */
+const UNUSABLE_ROUTE: readonly GateStop[] = [
+  { label: AUTH_COPY.recoveryStops.askForLink, state: 'current' },
+  { label: AUTH_COPY.recoveryStops.setNewPassword, state: 'upcoming' },
+  { label: GATE_COPY.stops.signIn, state: 'upcoming' },
+];
+
+export function ResetRouteView({ step }: { step: 'form' | 'unusable' }) {
+  return <GateRoute route={step === 'unusable' ? UNUSABLE_ROUTE : FORM_ROUTE} />;
+}
+
+/** S-03's route in the gate frame's column, following the link's state. */
+export function ResetRoute() {
+  return <ResetRouteView step={useDoorStep(resetStep)} />;
+}
+
+/** S-03's heading: the step's name, or what is the case when the link cannot be used. */
+export function ResetTitle() {
+  return useDoorStep(resetStep) === 'unusable' ? AUTH_COPY.linkUnusableHeading : AUTH_COPY.titles.resetPassword;
 }
 
 /**
@@ -128,6 +162,10 @@ export function ResetPasswordClient() {
   const [showPassword, setShowPassword] = useState(false);
   const [state, setState] = useState<ResetState>({ kind: 'idle' });
   const hydrated = useHydrated();
+  // The heading and the route follow the link's state (design review I-6); back to the form's when this page is left.
+  const unusable = token === null || state.kind === 'unusable';
+  useEffect(() => { resetStep.set(unusable ? 'unusable' : 'form'); }, [unusable]);
+  useEffect(() => () => resetStep.set('form'), []);
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();

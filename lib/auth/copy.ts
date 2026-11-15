@@ -5,25 +5,79 @@
  * reaches the browser. Words only the server prints do not belong here (the password route's answers are
  * `PASSWORD_ROUTE_COPY` in `lib/http/api/copy.ts`).
  */
+import { IDLE_TEXTS } from '@/lib/auth/session/copy';
 
 const SHOW_PASSWORD = 'Show password';
 const PASSWORD_CHANGED = 'Password changed. Please sign in with your new password.';
 const SOMETHING_WENT_WRONG = 'Something went wrong on our side. Try again.';
 const PASSWORD_HINT = (min: number): string => `At least ${min} characters.`;
+/**
+ * The admission's 429 (spec 9.7: the wait in words, beside the action), in whole minutes rounded up. It counts every
+ * sign-in from a browser it does not know, across the platform (lib/auth/signInAdmission.ts, never per person or
+ * address), so the words say that many people are signing in, not that this person tried too often (ruling L5-9). A
+ * locked account answers M-20 instead.
+ */
+const TOO_MANY_SIGN_INS = (minutes: number): string =>
+  minutes === 1
+    ? 'Too many people are signing in right now. Wait 1 minute, then try again.'
+    : `Too many people are signing in right now. Wait ${minutes} minutes, then try again.`;
 
 export const AUTH_COPY = Object.freeze({
+  /** The session's warning and notice words (UX-43, plan 1B Task 4), the same as IdleWarning's. */
+  ...IDLE_TEXTS,
   titles: Object.freeze({
     signIn: 'Sign in',
     forgotPassword: 'Forgot password',
     resetPassword: 'Set a new password',
     changePassword: 'Change your password',
   }),
+  /**
+   * S-02 and S-03's route stops in the gate frame (ruling L5-6): ask for the link, set the new password, then GATE_COPY's
+   * Sign in. Kept here, not in GATE_COPY: lib/shell/copy.ts is in every public page's first visit through PublicHeader,
+   * S-04's included, whose weight may not grow (lead's weight rule); these two pages load this module already.
+   */
+  recoveryStops: Object.freeze({
+    askForLink: 'Ask for a link',
+    setNewPassword: 'Set a new password',
+  }),
+  /** S-01's route while D16 asks (ruling L5-27): Sign in is done, and the question is the current stop. */
+  loginStops: Object.freeze({
+    unsavedText: 'Unsaved text in this browser',
+  }),
   logoAlt: 'MAK-AI',
   loading: 'Loading...',
   /** The heading of the forgot-password page: the action, not the problem (audit A 138). */
   resetHeading: 'Reset your password',
   backToSignIn: 'Back to sign in',
+  /** S-03's heading when its link is used, expired or unknown (design review I-6), with M-22 under it. */
+  linkUnusableHeading: 'This link cannot be used',
   showPassword: SHOW_PASSWORD,
+  /** S-01's footer (A page verdict, S-01): accounts come only from an invitation; "Owner" is the role's name (§2). */
+  noAccount: 'No account? You need an invitation. Ask an Owner of your organisation to invite you.',
+  /** S-01 after the idle sign-out (C12), read from the hint IdleWarning leaves (lib/auth/idle.ts): the notice's sentence. */
+  signedOutIdle: IDLE_TEXTS.endedIdle,
+  /** S-01 after the 7-day limit (C12): the in-page notice's sentence, one sentence per fact (design review M-5). */
+  signedOutAbsolute: IDLE_TEXTS.endedAbsolute,
+  /** Under either signed-out line. */
+  signedOutKept: 'Sign in again to carry on. Unsaved decisions and mitigations you typed in this browser come back when you open them again.',
+  tooManyAttempts: TOO_MANY_SIGN_INS,
+  /** S-02's lead (audit A 138). */
+  forgotLead: 'Enter the email you use to sign in. We will send you a link to set a new password.',
+  /**
+   * D16 (option A; owner's answer to OD-1, 11 Nov 2026): after a sign-in, text another account left in this browser.
+   * Nothing here names the other person, says how much there is or where it was typed (T5.2).
+   */
+  otherTextTitle: 'This browser has unsaved text from another account',
+  otherTextBody: 'Someone who used this browser before you left unsaved text here. You cannot see it.',
+  /** D16 when the session read failed twice, so whose text it is cannot be checked. */
+  unknownTextTitle: 'This browser has unsaved text',
+  unknownTextBody: 'We could not check whose it is, so it will be removed when you continue. It may be yours.',
+  removeAndContinue: 'Remove it and continue',
+  signOutAndLeave: 'Sign out and leave it',
+  consequenceRemove: 'The text is removed from this browser. This cannot be undone.',
+  consequenceLeave: 'The text stays in this browser for its owner, for up to 7 days after it was typed.',
+  /** S-29's first line when gate 2 sent the person here (A page verdict, S-29). */
+  forcedLead: 'You need to choose a new password before you continue.',
   /** The line under the change-password heading (audit A 61). */
   changeLead: 'When you change your password, you are signed out on every device, including this one. Then sign in with your new password.',
 });
@@ -56,8 +110,7 @@ export const SIGN_IN_COPY = Object.freeze({
   serverProblem: 'We could not sign you in because of a problem on our side. Wait a few minutes, then try again.',
   connectionLost: 'We could not sign you in. Check your internet connection and try again.',
   /** The admission's 429, with the wait in whole minutes rounded up (one sentence for 1, one for more). */
-  rateLimited: (minutes: number): string =>
-    minutes === 1 ? 'Too many sign-ins right now. Wait 1 minute and try again.' : `Too many sign-ins right now. Wait ${minutes} minutes and try again.`,
+  rateLimited: TOO_MANY_SIGN_INS,
 });
 
 /** Forgot password (S-02), read by ForgotPasswordClient. */
@@ -89,6 +142,8 @@ export const CHANGE_PASSWORD_COPY = Object.freeze({
   hint: PASSWORD_HINT,
   submit: 'Change password',
   submitting: 'Saving...',
+  /** S-21's change only: the way back to My account (never on S-29, which gate 2 holds the account on). */
+  backToAccount: 'Back to My account',
   notChanged: 'Your password was not changed. Check your internet connection and try again.',
   /** A failure on our side; with the support reference when the answer carried one, without it when not. */
   serverProblem: (reference: string | null): string =>

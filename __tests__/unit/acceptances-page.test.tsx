@@ -3,7 +3,7 @@ import type { ReactElement } from 'react';
 import type { LegalTextVersion } from '@/types/legal';
 
 /**
- * S-05's server component (app/(authenticated)/acceptances/page.tsx). The registry is the stub of
+ * S-05's server component (app/(gate)/acceptances/page.tsx). The registry is the stub of
  * __tests__/setup/legal.ts, whose texts are not empty, so a page that passed them on would show it.
  * The form links to the words on S-06 and posts only each text's kind and version, so the words must
  * stay out of the props that become the client payload (S-04 does the same: invitations/[token]/page.tsx).
@@ -14,7 +14,7 @@ vi.mock('@/lib/auth/identity', () => ({ requireIdentity: async () => identity })
 vi.mock('@/lib/data/acceptances', () => ({ missingAcceptances: acceptances.missing, offeredAcceptances: acceptances.offered }));
 vi.mock('next/navigation', () => ({ redirect: (to: string) => { throw new Error(`REDIRECT ${to}`); } }));
 
-const Page = (await import('@/app/(authenticated)/acceptances/page')).default;
+const Page = (await import('@/app/(gate)/acceptances/page')).default;
 const { currentLegalText } = await import('@/lib/legal/registry');
 
 type FormProps = { texts: LegalTextVersion[]; mode: 'required' | 'offer'; userId: string };

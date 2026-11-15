@@ -50,14 +50,15 @@ test('Review Focus 4: the 28-question stage has no horizontal scroll at 320 by 6
   await page.setViewportSize({ width: 320, height: 640 });
   await page.goto(stagePath(projectId, 'post-processing'));
   await expect(page.locator('[data-question-id]')).toHaveCount(28);
-  await expect(page.locator('.ui-route-row__stop')).toHaveCount(28);
+  // One line: every question a row on it, the topics quiet headings along it (lane 1 Task 2).
+  await expect(page.locator('.route-line--page')).toHaveCount(1);
   await expectNoHorizontalScroll(page);
   await expectNoSeriousA11yViolations(page, 'S-11 post-processing at 320 by 640');
   await page.setViewportSize({ width: 640, height: 900 });
   await expectNoHorizontalScroll(page);
 });
 
-test('Review Focus 5: with storage blocked, "Not saved yet" shows no count, never 0, and the line says this browser cannot keep the text', async ({ page, baseURL }) => {
+test('Review Focus 5: with storage blocked, "Not saved in this browser" shows no count, never 0, and the line says this browser cannot keep the text', async ({ page, baseURL }) => {
   const projectId = await newProject(baseURL!);
   await page.addInitScript(() => {
     Object.defineProperty(window, 'localStorage', { configurable: true, get() { throw new DOMException('The operation is insecure.', 'SecurityError'); } });

@@ -12,6 +12,7 @@ import { VALIDATION_COPY } from '../lib/http/copy';
 import { ACCEPT_LABEL } from '../components/legal/AcceptancesForm';
 import { INVITATION_COPY } from '../lib/invitations/copy';
 import { ACCEPTANCES_COPY } from '../lib/legal/acceptances/copy';
+import { DRAFTS_COPY } from '../lib/decision/drafts/copy';
 import { INVITATION_PAGE_COPY, roleWithArticle } from '../lib/org/copy';
 import { ACCEPTED_KINDS, CONSENT_TYPE_FOR } from '../types/legal';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
@@ -179,22 +180,28 @@ test.describe('S-04 and S-05 in a browser', () => {
     await expect(page).toHaveURL(/\/acceptances$/);
     expect((await page.goto('/legal/terms'))?.status()).toBe(200);
 
+    // S-05 is in the gate frame (plan 1B Task 1): no rail, and the frame's one link is Help, a public page.
+    await page.goto('/acceptances');
+    await expect(page.getByRole('navigation', { name: 'Main', exact: true })).toHaveCount(0);
+    expect(await page.getByRole('banner').getByRole('link').evaluateAll((els) => els.map((e) => e.getAttribute('href')))).toEqual(['/help']);
     // C4 CR-1 / SE-1: a click in the rail is a client-side navigation, which does not re-render the
-    // shared (authenticated) layout; each destination must still send the account back to S-05.
+    // shared (authenticated) layout; each destination must still send the account back to S-05. The rail is walked from
+    // S-21, the page of the shell gate 3 lets this account reach.
     const nav = page.getByRole('navigation', { name: 'Main', exact: true });
     // Every link of the shell's rail, by href (several org items fall back to / outside an organisation). A public page
     // (PUB's /about, Help, a legal text) is open to anyone, and gate 3 lets S-21 through (My account: export and
     // deletion, FR-ACC-04), so a click on one of those lands there. Asserting "back on S-05" for them passed only while
     // the assertion ran before the router had shown the page, and failed when the page won (seen on a production build).
-    await page.goto('/acceptances');
+    await page.goto('/account');
     await expect(nav).toBeVisible();
     const hrefs = [...new Set(await nav.getByRole('link').evaluateAll((els) => els.map((e) => e.getAttribute('href') ?? '')))];
     expect(hrefs, 'the rail has links to try').toEqual(expect.arrayContaining(['/explore/framework', '/account']));
     // Guidance is the rail's one entry to the framework pages; Controls is reached from it, not from the rail.
     expect(hrefs).not.toContain('/explore/controls');
     const REACHABLE = /^\/(about$|help$|legal\/|account$)/;
-    for (const href of hrefs) {
-      await page.goto('/acceptances');
+    // S-21's own link is the page the walk starts from, so it is not clicked.
+    for (const href of hrefs.filter((h) => h !== '/account')) {
+      await page.goto('/account');
       // The router's own request for the destination (not a prefetch), so the check waits for the server's answer.
       const answered = page.waitForResponse((r) => new URL(r.url()).pathname === href && r.request().headers()['rsc'] === '1'
         && r.request().headers()['next-router-prefetch'] === undefined);
@@ -241,19 +248,21 @@ test.describe('S-04 and S-05 in a browser', () => {
     await page.context().close();
   });
 
-  test('FR-ACC-04 UX-01 (ruling after S4): a person held at gate 3 has no organisation link in the rail on S-05 and S-21, and has them once the texts are accepted', async ({ browser }) => {
+  test('FR-ACC-04 UX-01 (ruling after S4; plan 1B Task 1): a person held at gate 3 has no organisation link on S-05 (the gate frame) or S-21 (the rail), and has them once the texts are accepted', async ({ browser }) => {
     const fx = await buildOrg({ label: 'heldrail', acceptances: 'pre-v1' });
     const page = await newPage(browser);
     await signIn(page, fx.members.assessor);
     const nav = page.getByRole('navigation', { name: 'Main', exact: true });
-    // As for a person in no organisation: Guidance, Help and My account, and nothing that names the organisation.
-    for (const path of ['/acceptances', '/account']) {
-      await page.goto(path);
-      await expect(nav, path).toBeVisible();
-      expect(await nav.getByRole('link').evaluateAll((els) => els.map((e) => e.getAttribute('href'))), path)
-        .toEqual(['/explore/framework', '/help', '/account']);
-      await expect(nav, path).not.toContainText(fx.org.name);
-    }
+    // S-05 is in the gate frame: no rail, and its banner links only to Help (T1.3); nothing names the organisation.
+    await page.goto('/acceptances');
+    await expect(nav).toHaveCount(0);
+    expect(await page.getByRole('banner').getByRole('link').evaluateAll((els) => els.map((e) => e.getAttribute('href')))).toEqual(['/help']);
+    await expect(page.locator('body')).not.toContainText(fx.org.name);
+    // S-21 keeps the shell, as for a person in no organisation: Guidance, Help and My account.
+    await page.goto('/account');
+    await expect(nav).toBeVisible();
+    expect(await nav.getByRole('link').evaluateAll((els) => els.map((e) => e.getAttribute('href')))).toEqual(['/explore/framework', '/help', '/account']);
+    await expect(nav).not.toContainText(fx.org.name);
     // Accepting moves on by a client-side navigation to /, which sends a person whose last organisation is known straight to
     // its dashboard; the shared signed-in layout must then give the rail that organisation without a reload.
     await testDb.user.update({ where: { id: fx.members.assessor.userId }, data: { lastActiveOrgId: fx.org.id } });
@@ -266,22 +275,125 @@ test.describe('S-04 and S-05 in a browser', () => {
     await page.context().close();
   });
 
-  test('SRS 7.1.2 gate 2 (ruling after S4): with a password change due, the rail on S-29 has no organisation link', async ({ browser }) => {
+  test('SRS 7.1.2 gate 2 (ruling after S4; plan 1B Task 1): with a password change due, S-29 is in the gate frame, with no rail and no organisation link', async ({ browser }) => {
     const fx = await buildOrg({ label: 'heldpw' });
     const page = await newPage(browser);
     await signIn(page, fx.members.assessor);
     await testDb.user.update({ where: { id: fx.members.assessor.userId }, data: { mustChangePassword: true } });
     try {
       await page.goto('/change-password');
-      const nav = page.getByRole('navigation', { name: 'Main', exact: true });
-      await expect(nav).toBeVisible();
-      expect(await nav.getByRole('link').evaluateAll((els) => els.map((e) => e.getAttribute('href'))))
-        .toEqual(['/explore/framework', '/help', '/account']);
-      await expect(nav).not.toContainText(fx.org.name);
+      await expect(page.getByRole('navigation', { name: 'Main', exact: true })).toHaveCount(0);
+      expect(await page.getByRole('banner').getByRole('link').evaluateAll((els) => els.map((e) => e.getAttribute('href')))).toEqual(['/help']);
+      await expect(page.locator('body')).not.toContainText(fx.org.name);
     } finally {
       await testDb.user.update({ where: { id: fx.members.assessor.userId }, data: { mustChangePassword: false } });
       await page.context().close();
     }
+  });
+
+  test('NFR-PRIV-06 M-41 (ruling L5-20): the gate frame\'s Sign out warns before it removes this account\'s drafts, and offers Go to them only when My account is reachable', async ({ browser }) => {
+    const fx = await buildOrg({ label: 'gatem41' });
+    const account = fx.members.assessor;
+    const draftKey = `makrai.draft.v1:${account.userId}:${fx.org.id}:p1:q:Q-PP-01`;
+    const otherKey = `makrai.draft.v1:${fx.members.viewer.userId}:${fx.org.id}:p1:q:Q-PP-01`;
+    const plant = (page: Page) => page.evaluate(([mine, other]) => {
+      const draft = JSON.stringify({ value: 'unsaved text', savedAt: new Date().toISOString() });
+      localStorage.setItem(mine, draft);
+      localStorage.setItem(other, draft);
+    }, [draftKey, otherKey]);
+    const keys = (page: Page) => page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('makrai.draft.v1:')).sort());
+    const page = await newPage(browser);
+    await signIn(page, account);
+    await testDb.user.update({ where: { id: account.userId }, data: { mustChangePassword: true } });
+    try {
+      // Flagged: gate 2 holds the account on S-29, so the warning offers no way to My account.
+      await page.goto('/change-password');
+      await plant(page);
+      const signOut = page.getByRole('banner').getByRole('button', { name: 'Sign out' });
+      const warning = page.getByRole('alertdialog');
+      await signOut.click();
+      await expect(warning).toBeVisible();
+      await expect(warning).toContainText(DRAFTS_COPY.signOut.warning(1));
+      await expect(warning.getByRole('link', { name: DRAFTS_COPY.signOut.goToThem })).toHaveCount(0);
+      await warning.getByRole('button', { name: DRAFTS_COPY.signOut.cancel }).click();
+      await expect(warning).toHaveCount(0);
+      await expect(page).toHaveURL(/\/change-password$/);
+      expect(await keys(page)).toEqual([draftKey, otherKey].sort());   // Cancel removes nothing
+      // Not flagged: the same page (a voluntary change) offers Go to them, to S-21's drafts list.
+      await testDb.user.update({ where: { id: account.userId }, data: { mustChangePassword: false } });
+      await page.goto('/change-password');
+      await signOut.click();
+      await expect(warning.getByRole('link', { name: DRAFTS_COPY.signOut.goToThem })).toHaveAttribute('href', '/account#drafts-on-this-device');
+      // Review R1-1: a press that fails before anything is removed (the sign-out module cannot load) leaves the drafts and
+      // says so; once the module can load, the next press warns again rather than doing nothing.
+      await page.route('**/_next/static/chunks/**', (r) => r.abort('connectionfailed'));
+      await warning.getByRole('button', { name: DRAFTS_COPY.signOut.deleteAndSignOut }).click();
+      await expect(page.getByRole('banner').getByRole('alert')).toHaveText(ACCEPTANCES_COPY.stillSignedIn);
+      await expect(warning).toHaveCount(0);
+      await expect(signOut).toBeFocused();
+      expect(await keys(page)).toEqual([draftKey, otherKey].sort());
+      await page.unroute('**/_next/static/chunks/**');
+      await signOut.click();
+      await expect(warning).toBeVisible();
+      await expect(warning).toContainText(DRAFTS_COPY.signOut.warning(1));
+      // Delete them and sign out: this account's drafts go, another account's stay, and the person is signed out.
+      await warning.getByRole('button', { name: DRAFTS_COPY.signOut.deleteAndSignOut }).click();
+      await page.waitForURL((u) => u.pathname === '/login');
+      expect(await keys(page)).toEqual([otherKey]);
+      await page.goto('/change-password');
+      await expect(page).toHaveURL(/\/login/);
+    } finally {
+      await testDb.user.update({ where: { id: account.userId }, data: { mustChangePassword: false } });
+      await page.context().close();
+    }
+  });
+
+  test('Design review I-1 (D2): the public door pages\' heading is the 30 px step at 1280 by 800', async ({ browser }) => {
+    const page = await newPage(browser);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    for (const path of ['/login', '/forgot-password', '/reset-password']) {
+      await page.goto(path);
+      await expect(page).toHaveURL(new RegExp(`${path}$`));
+      await expect(page.locator('.gate__card h1'), path).toHaveCSS('font-size', '30px');
+    }
+    await page.context().close();
+  });
+
+  test('UX-35 (review I-4): at 320 px and 200 % zoom the gate frame\'s heading wraps by whole words and stays inside its card', async ({ browser }) => {
+    const fx = await buildOrg({ label: 'gatezoom', acceptances: 'pre-v1' });
+    const page = await newPage(browser);
+    await signIn(page, fx.members.assessor);
+    await expect(page).toHaveURL(/\/acceptances$/);
+    // Review R2-1: on a wide screen every gate page's heading is the 30 px step, the 30rem card of /change-password too.
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await expect(page.locator('.gate__card h1')).toHaveCSS('font-size', '30px');
+    await page.goto('/change-password');
+    await expect(page).toHaveURL(/\/change-password$/);   // D1 closing review CR-2: the size is read on the page meant
+    await expect(page.locator('.gate__card h1')).toHaveCSS('font-size', '30px');
+    await page.goto('/acceptances');
+    for (const width of [320, 160]) {
+      await page.setViewportSize({ width, height: 640 });
+      await expectNoHorizontalScroll(page);
+      const h1 = await page.locator('.gate__card h1').evaluate((el) => {
+        const card = el.closest('.gate__card')!.getBoundingClientRect();
+        const box = el.getBoundingClientRect();
+        // Each word of the heading, measured as a range: a word broken across two lines has two boxes.
+        const text = el.firstChild?.nodeType === Node.TEXT_NODE ? el.firstChild as Text : null;
+        const split: string[] = [];
+        if (text !== null) {
+          for (const m of text.data.matchAll(/\S+/g)) {
+            const r = document.createRange();
+            r.setStart(text, m.index!);
+            r.setEnd(text, m.index! + m[0].length);
+            if (r.getClientRects().length > 1) split.push(m[0]);
+            if (r.getBoundingClientRect().right > card.right + 0.5) split.push(`${m[0]} (past the card)`);
+          }
+        }
+        return { measured: text !== null, split, inside: box.right <= card.right + 0.5 && el.scrollWidth <= el.clientWidth };
+      });
+      expect(h1, `${width} px`).toEqual({ measured: true, split: [], inside: true });
+    }
+    await page.context().close();
   });
 
   test('FR-ACC-01 (7.4.2 S-04): a lost connection on Create account says the account may already be created, and Try again sends the same body', async ({ browser }) => {
