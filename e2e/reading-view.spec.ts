@@ -102,6 +102,9 @@ for (const role of ['viewer', 'reviewer'] as const) {
 
     const aside = page.locator('[data-region="reading-aside"]');
     await expect(aside.getByRole('heading', { level: 2, name: R.sealedHeading })).toBeVisible();
+    // Every term-and-definition line is small print, under Still open and in the sealed copy alike (design review 3 S4-N8).
+    const defSizes = await page.locator('.reading-def').evaluateAll((els) => els.map((e) => getComputedStyle(e).fontSize));
+    expect(defSizes).toEqual(['14px', '14px', '14px', '14px']);
     await expect(aside.getByRole('link', { name: R.next(2) })).toBeVisible();
     await expect(page.locator('form:not(.route-column__filter)')).toHaveCount(0);
     await expect(page.locator('.question-workspace__main').locator('input, select, textarea, button')).toHaveCount(0);
