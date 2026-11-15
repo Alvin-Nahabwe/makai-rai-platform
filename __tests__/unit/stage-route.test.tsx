@@ -53,7 +53,7 @@ describe('All questions: a row per question on one line', () => {
       const body = rows.get(r.questionId)!;
       expect([...body.matchAll(/class="ui-mark ui-mark--/g)], r.questionId).toHaveLength(1);
       // The mark is on the line, hidden from assistive technology; its words are read once, in the status label.
-      expect(body).toMatch(/<span class="route-line__node" aria-hidden="true"><span class="ui-mark ui-mark--/);
+      expect(body).toMatch(/<span class="route-line__node( route-line__node--dot)?" aria-hidden="true"><span class="ui-mark ui-mark--/);
       expect(body).toMatch(/class="status-label">[^<]*\p{L}/u);
       expect(body.indexOf(`>${r.text}<`)).toBeGreaterThan(-1);
       expect(body.indexOf(`>${r.questionId}<`)).toBeGreaterThan(body.indexOf(r.text));

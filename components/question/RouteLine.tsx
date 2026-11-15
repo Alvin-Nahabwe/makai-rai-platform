@@ -41,7 +41,7 @@ function Row({ item }: { item: RouteLineItem }): ReactElement {
     <li className={item.here ? 'route-line__item route-line__item--here' : 'route-line__item'} data-question-id={item.questionId}>
       <ListLink className="route-line__link" href={item.href} aria-current={item.here ? 'step' : undefined}>
         {/* The mark sits on the line. Its words are the meta line's status, read once there, so the mark is hidden. */}
-        <span className={item.here ? 'route-line__node route-line__node--here' : 'route-line__node'} aria-hidden="true">
+        <span className={item.here ? 'route-line__node route-line__node--here' : `route-line__node${item.mark === 'no_decision' ? ' route-line__node--dot' : ''}`} aria-hidden="true">
           <StatusMark kind={item.mark} size={24} words="hidden" noEvidence={item.noEvidence} scopeAnswer={item.scopeAnswer} />
         </span>
         <span className="route-line__text">

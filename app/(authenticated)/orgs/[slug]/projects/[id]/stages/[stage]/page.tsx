@@ -104,6 +104,8 @@ export function StageWorkspace({ data, show, shown }: { data: StagePageData; sho
       {openFindings > 0 || overdueMitigations > 0 ? (
         <p className="stage-route__followup">
           {openFindings > 0 ? <ListLink href={`${base}/findings`}>{`${openFindings} ${openFindings === 1 ? F.openFinding : F.openFindings}`}</ListLink> : null}
+          {/* The gap shows the two apart; in text (copied, or read without styles) they are a list, as they were before. */}
+          {openFindings > 0 && overdueMitigations > 0 ? <span className="visually-hidden">, </span> : null}
           {overdueMitigations > 0 ? (
             <ListLink href={`${base}#${data.stage}`}>{`${overdueMitigations} ${overdueMitigations === 1 ? F.overdueMitigation : F.overdueMitigations}`}</ListLink>
           ) : null}

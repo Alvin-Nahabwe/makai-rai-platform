@@ -8,6 +8,16 @@ import { QUESTION_COPY } from '@/lib/question/copy';
 import './route-column.css';
 
 /**
+ * A mistake in the calling page (components/ui/Table.tsx's rule): outside production it throws, so a test or the
+ * development server shows it; in production the column renders and the mistake goes to the server's log, with fixed
+ * words and the question id cut to 40 characters.
+ */
+function mistake(message: string): void {
+  if (process.env.NODE_ENV !== 'production') throw new Error(`RouteColumn: ${message}`);
+  console.error(`RouteColumn: ${message}`);
+}
+
+/**
  * The question page's column (owner's decision "Route column", 14 November 2026; owner's answer R1, 15 November 2026):
  * the stage's questions as one line beside the question. A `<nav>` named by its heading, the stage's name, with the
  * stage's plain meaning and one sentence under it; the filter as a small select above the line; the line itself, the
@@ -16,7 +26,14 @@ import './route-column.css';
  * column shows the same line; below 72.5rem it follows the main content (its place is workspace.css's). The data is the
  * stage page's own loader's.
  */
-export function RouteColumn({ data, currentQuestionId, show }: { data: StagePageData; currentQuestionId: string; show: StageFilter }) {
+export function RouteColumn({ data, currentQuestionId, show, nextQuestionId }: {
+  data: StagePageData; currentQuestionId: string; show: StageFilter;
+  /** The page's own next question (the panel's position.nextId, the Next button's); when not given, the same rule over the rows. */
+  nextQuestionId?: string | null;
+}) {
+  // The open question is always one of its stage's rows (the panel refuses a question outside the stage, and both read
+  // the running content's stage): if it is not, the column would show no "You are here" and look right (review F1).
+  if (!data.rows.some((r) => r.questionId === currentQuestionId)) mistake(`the open question is not in the stage's rows (${currentQuestionId.slice(0, 40)})`);
   const { counts, filters, sealNumber } = stageFilterSet(data.rows, data.changed);
   return (
     <nav className="route-column" aria-labelledby="route-column-heading">
@@ -28,7 +45,7 @@ export function RouteColumn({ data, currentQuestionId, show }: { data: StagePage
             draft and refreshes the page; a new key mounts the list again, so "Not saved in this browser" is read again. */}
         <StageQuestionList
           key={data.rows.map((r) => `${r.questionId}:${r.versionNumber ?? 0}`).join(',')}
-          variant="column" currentQuestionId={currentQuestionId} nextQuestionId={nextApplyingId(data.rows, currentQuestionId)}
+          variant="column" currentQuestionId={currentQuestionId} nextQuestionId={nextQuestionId === undefined ? nextApplyingId(data.rows, currentQuestionId) : nextQuestionId}
           orgSlug={data.orgSlug} orgId={data.orgId} projectId={data.projectId} stage={data.stage} viewerId={data.viewerId}
           rows={data.rows} show={show} counts={counts} filters={filters}
           total={data.rows.length} sealNumber={sealNumber} marks={data.marks} scopeAnswer={data.scopeAnswer}

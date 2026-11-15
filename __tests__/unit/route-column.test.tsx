@@ -142,10 +142,22 @@ describe('The route column: one line of the stage\'s questions', () => {
   });
 });
 
+describe('The route column: its open and next question', () => {
+  it('an open question that is not among the stage\'s rows is a mistake in the page: it fails loudly outside production, never a column with no "You are here" (silent-failure review F1)', async () => {
+    await expect(column(data(ROWS), 'Q-NOT-HERE')).rejects.toThrow(/RouteColumn: the open question is not in the stage's rows/);
+  });
+
+  it('the page may give the next question itself (the panel\'s position.nextId, the Next button\'s own); the column then marks that one (review F2)', async () => {
+    const { RouteColumn } = await import('@/components/question/RouteColumn');
+    const h = renderToStaticMarkup(createElement(RouteColumn, { data: data(ROWS), currentQuestionId: 'Q-PP-01', show: 'all', nextQuestionId: 'Q-PP-16' }));
+    expect(rowsOf(h).filter((r) => r.body.includes(STAGE_LIST_COPY.line.next)).map((r) => r.id)).toEqual(['Q-PP-16']);
+  });
+});
+
 describe('The route column: folded runs', () => {
   it('in a 22-question stage, the questions away from the open one fold into one run before and one after; the open and the next show', async () => {
     const h = await column(data(STAGE22), 'Q-04');
-    expect(partsOf(h)).toEqual(['Questions 1 and 2', 'Q-03', 'Q-04', 'Q-05', 'Q-06', 'Q-07', 'Questions 8 to 22']);
+    expect(partsOf(h)).toEqual(['Questions 1 and 2', 'Q-03', 'Q-04', 'Q-05', 'Q-06', 'Questions 7 to 22']);
   });
 
   it('a run is a disclosure that opens in place (works without script): every question of the stage stays one link away, in stage order', async () => {
@@ -153,17 +165,17 @@ describe('The route column: folded runs', () => {
     const runs = detailsOf(h);
     expect(runs).toHaveLength(2);
     expect(runs.every((r) => !r.open)).toBe(true);
-    expect(rowsIn(runs[1].body).map((r) => r.id)).toEqual(STAGE22.slice(7).map((r) => r.questionId));
+    expect(rowsIn(runs[1].body).map((r) => r.id)).toEqual(STAGE22.slice(6).map((r) => r.questionId));
     expect(rowsOf(h).map((r) => r.id)).toEqual(STAGE22.map((r) => r.questionId));
   });
 
   it('a run\'s summary: its questions\' numbers in bold words, one small mark per question in order (16 px), and its tally in words', async () => {
     const d = data(STAGE22);
     const run = detailsOf(await column(d, 'Q-04'))[1];
-    expect(run.summary).toContain('class="route-line__title">Questions 8 to 22<');
+    expect(run.summary).toContain('class="route-line__title">Questions 7 to 22<');
     const marks = [...run.summary.matchAll(/<svg class="ui-mark__shape" width="(\d+)"/g)].map((m) => Number(m[1]));
-    expect(marks).toEqual(Array(15).fill(16));
-    const runRows = STAGE22.slice(7);
+    expect(marks).toEqual(Array(16).fill(16));
+    const runRows = STAGE22.slice(6);
     const { tallyOfRows } = await import('@/lib/question/route');
     expect(run.summary).toContain(`class="route-line__tally-words">${tallyWords(tallyOfRows(runRows, d.marks))}<`);
   });

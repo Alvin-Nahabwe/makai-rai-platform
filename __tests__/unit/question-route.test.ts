@@ -72,21 +72,21 @@ describe('foldRoute', () => {
   });
 
   it('in the middle: the run before folds, one question before the open one shows, then the open one and the next ones, then the run after folds', () => {
-    expect(shape(foldRoute(stage(22), { currentId: id(4), nextId: id(5), filtered: false }))).toEqual(['1-2', '3', '4', '5', '6', '7', '8-22']);
+    expect(shape(foldRoute(stage(22), { currentId: id(4), nextId: id(5), filtered: false }))).toEqual(['1-2', '3', '4', '5', '6', '7-22']);
   });
 
   it('on the first question nothing is folded before it, and the window runs forward from it', () => {
-    expect(shape(foldRoute(stage(22), { currentId: id(1), nextId: id(2), filtered: false }))).toEqual(['1', '2', '3', '4', '5', '6-22']);
+    expect(shape(foldRoute(stage(22), { currentId: id(1), nextId: id(2), filtered: false }))).toEqual(['1', '2', '3', '4', '5-22']);
   });
 
   it('on the last question the window runs back from it, so the column shows as many questions as anywhere else', () => {
-    expect(shape(foldRoute(stage(22), { currentId: id(22), nextId: null, filtered: false }))).toEqual(['1-17', '18', '19', '20', '21', '22']);
+    expect(shape(foldRoute(stage(22), { currentId: id(22), nextId: null, filtered: false }))).toEqual(['1-18', '19', '20', '21', '22']);
   });
 
   it('a run of one question is not folded: it shows as its own row', () => {
-    expect(shape(foldRoute(stage(22), { currentId: id(3), nextId: id(4), filtered: false }))).toEqual(['1', '2', '3', '4', '5', '6', '7-22']);
-    expect(shape(foldRoute(stage(9), { currentId: id(5), nextId: id(6), filtered: false }))).toEqual(['1-3', '4', '5', '6', '7', '8', '9']);
-    expect(shape(foldRoute(stage(9), { currentId: id(4), nextId: id(5), filtered: false }))).toEqual(['1-2', '3', '4', '5', '6', '7', '8-9']);
+    expect(shape(foldRoute(stage(22), { currentId: id(3), nextId: id(4), filtered: false }))).toEqual(['1', '2', '3', '4', '5', '6-22']);
+    expect(shape(foldRoute(stage(9), { currentId: id(6), nextId: id(7), filtered: false }))).toEqual(['1-4', '5', '6', '7', '8', '9']);
+    expect(shape(foldRoute(stage(9), { currentId: id(4), nextId: id(5), filtered: false }))).toEqual(['1-2', '3', '4', '5', '6', '7-9']);
   });
 
   it('the next question is never folded, also when the questions between are switched off by the personal data answer', () => {
@@ -136,5 +136,12 @@ describe('tallyParts', () => {
       { kind: 'no_decision', words: '3 no decision' },
     ]);
     expect(tallyParts(tally).map((p) => p.words).join(', ')).toBe(tallyWords(tally));
+  });
+
+  it('every kind of mark has a part: with all seven present, the parts\' counts add up to the rows (silent-failure review F4)', () => {
+    const tally = { done: 1, partly: 2, not_yet: 3, not_applicable: 4, does_not_apply: 5, scope_answered: 1, no_decision: 7 };
+    const parts = tallyParts(tally);
+    expect(parts.map((p) => p.kind)).toEqual(['done', 'partly', 'not_yet', 'not_applicable', 'does_not_apply', 'scope_answered', 'no_decision']);
+    expect(parts.reduce((n, p) => n + Number(p.words.split(' ')[0]), 0)).toBe(23);
   });
 });

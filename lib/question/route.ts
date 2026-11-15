@@ -50,9 +50,10 @@ export function stageFilterSet(rows: readonly StageRow[], changed: ChangedSinceS
  * The column's folding (owner's answer R1, 15 November 2026; lane 1 Task 2). `shortStage`: a stage of this many questions
  * or fewer folds nothing. `window`: how many questions show unfolded around the open one, `before` of them before it
  * where the stage allows; at the stage's ends the window slides so the column always shows the same number. Sized so the
- * column, with two-line titles, fits the first view at 1440 by 900 under the page's top strip.
+ * column, with two-line titles, the filter and the stage's meaning, fits the first view at 1440 by 900 under the page's
+ * top strip (seen on the 0.7.0 frame: five rows ran to about y = 950, four end near 870).
  */
-export const ROUTE_FOLD = Object.freeze({ shortStage: 8, before: 1, window: 5 });
+export const ROUTE_FOLD = Object.freeze({ shortStage: 8, before: 1, window: 4 });
 
 /** A question on the line with its place in the stage (1-based), or a run of questions folded into one row. */
 export type RoutePart<T> =
@@ -94,8 +95,11 @@ export function nextApplyingId(rows: readonly StageRow[], currentId: string): st
   return rows.slice(at + 1).find((r) => r.kind !== 'not_applicable_by_gate')?.questionId ?? null;
 }
 
-/** The order of a tally (spec 7.2's table, as tallyWords writes it). */
-const TALLY_ORDER: readonly StatusMarkKind[] = ['done', 'partly', 'not_yet', 'not_applicable', 'does_not_apply', 'scope_answered', 'no_decision'];
+/** Each kind's place in a tally (spec 7.2's table, as tallyWords writes it). A Record, so a new kind fails to compile here. */
+const TALLY_RANK: Readonly<Record<StatusMarkKind, number>> = {
+  done: 0, partly: 1, not_yet: 2, not_applicable: 3, does_not_apply: 4, scope_answered: 5, no_decision: 6,
+};
+const TALLY_ORDER = (Object.keys(TALLY_RANK) as StatusMarkKind[]).sort((a, b) => TALLY_RANK[a] - TALLY_RANK[b]);
 
 /** A tally as one part per kind that occurs, each in tallyWords' own words, so a page can set a mark beside each. */
 export function tallyParts(t: Tally): Array<{ kind: StatusMarkKind; words: string }> {

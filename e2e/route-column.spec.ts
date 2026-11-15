@@ -70,7 +70,7 @@ test('a folded run opens in place by keyboard and every question of the stage st
   const shown = await visibleRows(page).count();
   expect(shown, 'some questions are folded').toBeLessThan(24);
   const last = runs.last().locator('summary');
-  await expect(last).toContainText(/^Questions 8 to 24/);
+  await expect(last).toContainText(/^Questions 7 to 24/);
   await last.focus();
   await page.keyboard.press('Enter');
   await expect(runs.last()).toHaveAttribute('open', '');
