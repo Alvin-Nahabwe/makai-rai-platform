@@ -185,27 +185,33 @@
   margin-block-end: var(--space-1);
 }
 
-/* A term's (i) for a question that first uses it (fix round 4): after the row's link, never inside it, at the right of
-   the row and level with its meta line, so the row keeps its look. */
+/* A term's (i) for a question that first uses it (stage page only; fix rounds 4 and 5): after the row's link, never inside
+   it, as a third column of the row (the mark, the words, the (i)), level with the title's first line. It never wraps
+   under the mark or onto the line, and it adds no height to the row. */
 .route-line__item:has(> .route-line__tips) {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-}
-
-.route-line__item:has(> .route-line__tips) > p {
-  flex-basis: 100%;
+  display: grid;
+  /* The words take their own width (shrinking to wrap when the row is narrower), so the (i) follows them closely. */
+  grid-template-columns: minmax(0, max-content) auto;
+  justify-content: start;
+  column-gap: var(--space-1);
 }
 
 .route-line__item:has(> .route-line__tips) > .route-line__link {
-  flex: 1 1 auto;
-  min-inline-size: 0;
+  grid-column: 1;
+  grid-row: 1;
 }
 
 .route-line__tips {
   display: inline-flex;
-  flex: none;
-  padding-block-end: 4px;
+  grid-column: 2;
+  grid-row: 1;
+  align-self: start;
+  /* The link's 6 px top padding less half of the 24 px button's overhang on a 16 px x 1.3 line: centred on line one. */
+  margin-block-start: 4px;
+}
+
+.route-line__item:has(> .route-line__tips) > p {
+  grid-column: 1 / -1;
 }
 
 .route-line__none {

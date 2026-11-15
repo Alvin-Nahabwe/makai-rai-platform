@@ -117,6 +117,13 @@ describe('All questions: fix round 4, a question that is the page\'s first use o
     expect(rows.get('Q-PP-01')).not.toContain('ui-term-tip');
   });
 
+  it('fix round 5: the (i) is a third column of the row, level with the title\'s first line, never under the mark or on the line', () => {
+    const css = readFileSync('components/question/route-line.css', 'utf8');
+    expect(css).toMatch(/\.route-line__item:has\(> \.route-line__tips\)\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*minmax\(0, max-content\) auto;/);
+    expect(css).toMatch(/\.route-line__tips\s*\{[^}]*grid-column:\s*2;[^}]*grid-row:\s*1;[^}]*align-self:\s*start;/);
+    expect(css).not.toMatch(/flex-wrap:\s*wrap;\s*align-items:\s*flex-end;/);
+  });
+
   it('a term the page has already used before the rows (here in the tally) gets no second tip on a row', () => {
     const h = render(data([row('Q-PP-01', { kind: 'done', evidenceCount: 1 }), row('Q-PP-02', { text: 'Has the assessment been done?' })]));
     expect(rowsOf(h).get('Q-PP-02')).not.toContain('ui-term-tip');
