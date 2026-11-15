@@ -179,22 +179,28 @@ test.describe('S-04 and S-05 in a browser', () => {
     await expect(page).toHaveURL(/\/acceptances$/);
     expect((await page.goto('/legal/terms'))?.status()).toBe(200);
 
+    // S-05 is in the gate frame (plan 1B Task 1): no rail, and the frame's one link is Help, a public page.
+    await page.goto('/acceptances');
+    await expect(page.getByRole('navigation', { name: 'Main', exact: true })).toHaveCount(0);
+    expect(await page.getByRole('banner').getByRole('link').evaluateAll((els) => els.map((e) => e.getAttribute('href')))).toEqual(['/help']);
     // C4 CR-1 / SE-1: a click in the rail is a client-side navigation, which does not re-render the
-    // shared (authenticated) layout; each destination must still send the account back to S-05.
+    // shared (authenticated) layout; each destination must still send the account back to S-05. The rail is walked from
+    // S-21, the page of the shell gate 3 lets this account reach.
     const nav = page.getByRole('navigation', { name: 'Main', exact: true });
     // Every link of the shell's rail, by href (several org items fall back to / outside an organisation). A public page
     // (PUB's /about, Help, a legal text) is open to anyone, and gate 3 lets S-21 through (My account: export and
     // deletion, FR-ACC-04), so a click on one of those lands there. Asserting "back on S-05" for them passed only while
     // the assertion ran before the router had shown the page, and failed when the page won (seen on a production build).
-    await page.goto('/acceptances');
+    await page.goto('/account');
     await expect(nav).toBeVisible();
     const hrefs = [...new Set(await nav.getByRole('link').evaluateAll((els) => els.map((e) => e.getAttribute('href') ?? '')))];
     expect(hrefs, 'the rail has links to try').toEqual(expect.arrayContaining(['/explore/framework', '/account']));
     // Guidance is the rail's one entry to the framework pages; Controls is reached from it, not from the rail.
     expect(hrefs).not.toContain('/explore/controls');
     const REACHABLE = /^\/(about$|help$|legal\/|account$)/;
-    for (const href of hrefs) {
-      await page.goto('/acceptances');
+    // S-21's own link is the page the walk starts from, so it is not clicked.
+    for (const href of hrefs.filter((h) => h !== '/account')) {
+      await page.goto('/account');
       // The router's own request for the destination (not a prefetch), so the check waits for the server's answer.
       const answered = page.waitForResponse((r) => new URL(r.url()).pathname === href && r.request().headers()['rsc'] === '1'
         && r.request().headers()['next-router-prefetch'] === undefined);
@@ -241,19 +247,21 @@ test.describe('S-04 and S-05 in a browser', () => {
     await page.context().close();
   });
 
-  test('FR-ACC-04 UX-01 (ruling after S4): a person held at gate 3 has no organisation link in the rail on S-05 and S-21, and has them once the texts are accepted', async ({ browser }) => {
+  test('FR-ACC-04 UX-01 (ruling after S4; plan 1B Task 1): a person held at gate 3 has no organisation link on S-05 (the gate frame) or S-21 (the rail), and has them once the texts are accepted', async ({ browser }) => {
     const fx = await buildOrg({ label: 'heldrail', acceptances: 'pre-v1' });
     const page = await newPage(browser);
     await signIn(page, fx.members.assessor);
     const nav = page.getByRole('navigation', { name: 'Main', exact: true });
-    // As for a person in no organisation: Guidance, Help and My account, and nothing that names the organisation.
-    for (const path of ['/acceptances', '/account']) {
-      await page.goto(path);
-      await expect(nav, path).toBeVisible();
-      expect(await nav.getByRole('link').evaluateAll((els) => els.map((e) => e.getAttribute('href'))), path)
-        .toEqual(['/explore/framework', '/help', '/account']);
-      await expect(nav, path).not.toContainText(fx.org.name);
-    }
+    // S-05 is in the gate frame: no rail, and its banner links only to Help (T1.3); nothing names the organisation.
+    await page.goto('/acceptances');
+    await expect(nav).toHaveCount(0);
+    expect(await page.getByRole('banner').getByRole('link').evaluateAll((els) => els.map((e) => e.getAttribute('href')))).toEqual(['/help']);
+    await expect(page.locator('body')).not.toContainText(fx.org.name);
+    // S-21 keeps the shell, as for a person in no organisation: Guidance, Help and My account.
+    await page.goto('/account');
+    await expect(nav).toBeVisible();
+    expect(await nav.getByRole('link').evaluateAll((els) => els.map((e) => e.getAttribute('href')))).toEqual(['/explore/framework', '/help', '/account']);
+    await expect(nav).not.toContainText(fx.org.name);
     // Accepting moves on by a client-side navigation to /, which sends a person whose last organisation is known straight to
     // its dashboard; the shared signed-in layout must then give the rail that organisation without a reload.
     await testDb.user.update({ where: { id: fx.members.assessor.userId }, data: { lastActiveOrgId: fx.org.id } });
@@ -266,18 +274,16 @@ test.describe('S-04 and S-05 in a browser', () => {
     await page.context().close();
   });
 
-  test('SRS 7.1.2 gate 2 (ruling after S4): with a password change due, the rail on S-29 has no organisation link', async ({ browser }) => {
+  test('SRS 7.1.2 gate 2 (ruling after S4; plan 1B Task 1): with a password change due, S-29 is in the gate frame, with no rail and no organisation link', async ({ browser }) => {
     const fx = await buildOrg({ label: 'heldpw' });
     const page = await newPage(browser);
     await signIn(page, fx.members.assessor);
     await testDb.user.update({ where: { id: fx.members.assessor.userId }, data: { mustChangePassword: true } });
     try {
       await page.goto('/change-password');
-      const nav = page.getByRole('navigation', { name: 'Main', exact: true });
-      await expect(nav).toBeVisible();
-      expect(await nav.getByRole('link').evaluateAll((els) => els.map((e) => e.getAttribute('href'))))
-        .toEqual(['/explore/framework', '/help', '/account']);
-      await expect(nav).not.toContainText(fx.org.name);
+      await expect(page.getByRole('navigation', { name: 'Main', exact: true })).toHaveCount(0);
+      expect(await page.getByRole('banner').getByRole('link').evaluateAll((els) => els.map((e) => e.getAttribute('href')))).toEqual(['/help']);
+      await expect(page.locator('body')).not.toContainText(fx.org.name);
     } finally {
       await testDb.user.update({ where: { id: fx.members.assessor.userId }, data: { mustChangePassword: false } });
       await page.context().close();

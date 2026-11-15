@@ -1,0 +1,300 @@
+/* The gate frame (plan 1B Task 1, lead's ruling L5-1): the Route's rail with no navigation in it. A navy column at the
+   rail's width (from 1024 px, the shell's breakpoint) with the product name, the route of this door and the person's
+   block; the page's content in a white card on the ground beside it. Below 1024 px the column is a navy band above the
+   card. Role tokens only; the column's text is white or the shell's muted ink, never orange (spec 7.1). Marks are
+   borders, so forced colours keep them (spec 7.2). Nothing animates. */
+
+/* ── The frame ── */
+.gate {
+  background-color: var(--color-ground);
+}
+
+/* The (public) layout's <main> centres its child in a flex row (app/globals.css .public-layout): the frame fills it. */
+.gate--public {
+  align-self: stretch;
+  flex: 1 1 auto;
+  inline-size: 100%;
+}
+
+.gate__header {
+  background-color: var(--color-shell);
+  color: var(--color-shell-ink);
+}
+
+/* ── The column's contents (the rail's sizes, components/layout/shell.css) ── */
+.gate__column {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-3) var(--space-4);
+}
+
+.gate__product {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--color-shell-ink);
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+/* Below 1024 px the band says where the person is; the list is the wide column's. */
+.gate-route {
+  display: none;
+}
+
+.gate__where,
+.gate__count {
+  flex: 1 0 100%;
+  order: 3;
+  overflow-wrap: anywhere;
+}
+
+.gate__where {
+  font-weight: var(--font-weight-semibold);
+}
+
+.gate__count {
+  margin-block-start: calc(-1 * var(--space-2));
+  color: var(--color-shell-muted);
+  font-size: var(--font-size-small);
+}
+
+/* The person's block: Help and Sign out in the band; the name only in the wide column. */
+.gate__footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  min-width: 0;
+}
+
+.gate__name {
+  display: none;
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.gate__help,
+.gate__help:hover {
+  /* a:hover in app/globals.css would paint it the link colour, navy on navy. */
+  color: var(--color-shell-ink);
+}
+
+.gate__help {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--target-min);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.gate__signout {
+  min-width: 0;
+  max-inline-size: 100%;
+}
+
+.gate__signout .shell-rail__signout {
+  inline-size: auto;
+}
+
+/* The sign-out failure line sits on the navy: white words, bold with the icon (the kit's error tone, never red). */
+.gate__signout .ui-status {
+  color: var(--color-shell-ink);
+}
+
+/* ── The card ── */
+.gate__main {
+  min-width: 0;
+  padding: var(--space-4);
+  background-color: var(--color-ground);
+}
+
+.gate__card {
+  max-inline-size: 30rem;
+  padding: var(--space-6) var(--space-4);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-container);
+  border-radius: var(--radius-surface);
+  overflow-wrap: break-word;
+}
+
+.gate__card h1 {
+  margin-block-end: var(--space-4);
+  font-size: var(--font-size-h1);
+  line-height: var(--line-height-heading);
+  color: var(--color-heading);
+}
+
+@media (max-width: 1023.98px) {
+  .gate__card,
+  .gate--wide .gate__card {
+    max-inline-size: none;
+  }
+}
+
+/* ── Wide: the navy column beside the card ── */
+@media (min-width: 1024px) {
+  .gate {
+    display: grid;
+    grid-template-columns: var(--rail-width) minmax(0, 1fr);
+    min-block-size: 100vh;
+  }
+
+  /* The column scrolls with nothing: it stays in view beside a long card (the acceptances), as the rail does. */
+  .gate__column {
+    position: sticky;
+    top: 0;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: var(--space-6);
+    max-block-size: 100vh;
+    min-block-size: 100vh;
+    overflow-y: auto;
+    padding: var(--space-6) var(--space-3);
+  }
+
+  .gate__product {
+    flex: none;
+    padding-inline: var(--space-3);
+    color: var(--color-shell-muted);
+    font-size: var(--font-size-small);
+  }
+
+  .gate-route {
+    display: block;
+  }
+
+  .gate__where,
+  .gate__count {
+    display: none;
+  }
+
+  .gate__footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-2);
+    margin-block-start: auto;
+    padding-block-start: var(--space-4);
+    border-block-start: 1px solid var(--color-shell-hover);
+  }
+
+  .gate__name {
+    display: block;
+    padding-inline: var(--space-3);
+  }
+
+  .gate__help {
+    min-block-size: var(--target-primary);
+    padding-inline: var(--space-3);
+  }
+
+  .gate__signout .shell-rail__signout {
+    inline-size: 100%;
+  }
+
+  .gate__main {
+    padding: var(--space-12);
+  }
+
+  .gate__card {
+    padding: var(--space-8);
+  }
+
+  .gate--wide .gate__card {
+    max-inline-size: 40rem;
+  }
+}
+
+/* ── The route: the stops joined by a line, the current one enlarged ── */
+.gate-route__stop {
+  position: relative;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-shell-ink);
+  overflow-wrap: anywhere;
+}
+
+/* The line: a 2 px border in the shell's muted ink, from mark to mark (a border, so forced colours keep it). */
+.gate-route__stop:not(:first-child)::before,
+.gate-route__stop:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  inset-inline-start: calc(var(--space-3) + 11px);
+  border-inline-start: 2px solid var(--color-shell-muted);
+}
+
+.gate-route__stop:not(:first-child)::before {
+  top: 0;
+  height: calc(50% - 8px);
+}
+
+.gate-route__stop:not(:last-child)::after {
+  bottom: 0;
+  height: calc(50% - 8px);
+}
+
+/* The current mark is 24 px: the line stops at its edge. */
+.gate-route__stop--current:not(:first-child)::before,
+.gate-route__stop--current:not(:last-child)::after {
+  height: calc(50% - 12px);
+}
+
+.gate-route__mark {
+  justify-self: center;
+  box-sizing: border-box;
+  inline-size: 16px;
+  block-size: 16px;
+  border: 2px solid var(--color-shell-ink);
+  border-radius: var(--radius-pill);
+}
+
+.gate-route__stop--done .gate-route__mark {
+  border-width: 8px;
+}
+
+.gate-route__stop--current {
+  padding-block: var(--space-3);
+  border-radius: var(--radius-control);
+  background-color: var(--color-shell-hover);
+  font-weight: var(--font-weight-semibold);
+}
+
+.gate-route__stop--current .gate-route__mark {
+  inline-size: 24px;
+  block-size: 24px;
+  border-width: 4px;
+}
+
+.gate-route__label {
+  display: block;
+  min-width: 0;
+}
+
+.gate-route__here {
+  display: block;
+  color: var(--color-shell-muted);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-regular);
+}
+
+@media (forced-colors: active) {
+  .gate-route__stop--current {
+    border: 1px solid CanvasText;
+  }
+}
+
+/* ── Print: the card only ── */
+@media print {
+  .gate__header {
+    display: none;
+  }
+
+  .gate {
+    display: block;
+  }
+}

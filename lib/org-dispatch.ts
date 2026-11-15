@@ -1,5 +1,5 @@
 /**
- * Pure decision core for `app/page.tsx` (Task 6, constraint 6). See
+ * Pure decision core for `app/(gate)/page.tsx` (Task 6, constraint 6). See
  * __tests__/unit/org-dispatch.test.ts for the D-069 case this exists to
  * cover: `users.lastActiveOrgId` is unconstrained, FK-less TEXT that can
  * name an org the caller was removed from, so it is never trusted alone —

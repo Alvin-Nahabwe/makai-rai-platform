@@ -204,7 +204,7 @@ describe('L2-66 S4: every person-started sign-out clears this person\'s last-pro
       .filter((f) => /\.(ts|tsx)$/.test(f) && !f.startsWith('app/api/'));
     const callers = files.filter((f) => /\bsignOut\(/.test(read(f))).sort();
     expect(callers).toEqual([
-      'app/(authenticated)/change-password/ChangePasswordForm.tsx',
+      'app/(gate)/change-password/ChangePasswordForm.tsx',
       'components/account/PersonalExportAndDeletionForm.tsx',
       'components/account/SignOutEverywhere.tsx',
       'components/decision/SignOutWithDraftsGuard.tsx',
@@ -215,7 +215,7 @@ describe('L2-66 S4: every person-started sign-out clears this person\'s last-pro
     // signOutClearingDrafts is on two public pages, so it sweeps the keys itself (fix round 1, F1c), with no import of the store.
     expect(read('lib/client/signOutClearingDrafts.ts')).toMatch(/sweepLastProjects\(userId\);/);
     expect(read('lib/client/signOutClearingDrafts.ts')).not.toMatch(/from '@\/lib\/client\/lastProject'/);
-    expect(read('app/(authenticated)/change-password/ChangePasswordForm.tsx')).not.toMatch(/clearLastProjects/);
+    expect(read('app/(gate)/change-password/ChangePasswordForm.tsx')).not.toMatch(/clearLastProjects/);
   });
 });
 

@@ -38,7 +38,7 @@ vi.mock('next/navigation', async (importOriginal) => ({
 }));
 vi.mock('next-auth/react', () => ({ signOut: vi.fn() }));
 
-const { default: LandingPage } = await import('@/app/page');
+const { default: LandingPage } = await import('@/app/(gate)/page');
 const { default: OrganisationsPage } = await import('@/app/(authenticated)/admin/organisations/page');
 const { default: AccountsPage } = await import('@/app/(authenticated)/admin/accounts/page');
 const { default: Rail } = await import('@/components/layout/Rail');

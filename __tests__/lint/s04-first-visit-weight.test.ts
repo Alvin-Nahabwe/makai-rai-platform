@@ -105,7 +105,7 @@ describe('NFR-PERF-02 FIX-15: S-04 downloads nothing it does not use', () => {
   });
 
   it('NFR-PERF-02 FIX-15: S-05 still records acceptances through RecordAcceptances', () => {
-    const graph = importGraph(join(ROOT, 'app/(authenticated)/acceptances/page.tsx'));
+    const graph = importGraph(join(ROOT, 'app/(gate)/acceptances/page.tsx'));
     expect(graph.filter((f) => /\bexport function RecordAcceptances\b/.test(readFileSync(join(ROOT, f), 'utf8')))).toEqual(['components/legal/RecordAcceptances.tsx']);
   });
 

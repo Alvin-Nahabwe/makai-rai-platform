@@ -2150,5 +2150,29 @@
     "property": "The in-page link down to the suggestions shows exactly while the guidance (and the suggestions in it) is not beside the form, is a target of at least 24 by 24 pixels, and keeps a visible focus ring; it is hidden by the same media query that puts the guidance beside the form in components/question/workspace.css.",
     "proof": "With the route column (owner's decision of 14 November 2026) the guidance sits beside the form only from 90rem; from 72.5rem to under 90rem it is below the form. The case now requires `@media (width >= 90rem) { .question-content__jump { display: none;` in QuestionContent.css and the same query in workspace.css opening the three-column grid (`grid-template-columns: minmax(16rem, 1fr) minmax(0, 2fr) minmax(16rem, 1fr); grid-template-areas: \"route main guide\";`), in place of the 72.5rem pair; the 24 px, focus-ring, colour-role and no-75rem expectations are unchanged. Seen RED on the old pattern after the CSS moved to 90rem, GREEN with the new one; e2e/question-frame.spec.ts sees the link visible at 1160 and hidden at 1440.",
     "task": "lane 7 part 2 (the route column on the question page)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/lint/authenticated-page-gate.test.ts::UX-01 FR-ACC-04 (A7): each page under app/(authenticated) calls requireIdentity, or a layout below the group root does, or is exempt with a reason",
+    "replacedBy": "__tests__/lint/authenticated-page-gate.test.ts::UX-01 FR-ACC-04 (A7): each page under app/(authenticated) and app/(gate) calls requireIdentity, or a layout below its group root does, or is exempt with a reason",
+    "property": "Every signed-in page runs the gates on a client-side navigation (threat A7): each page calls requireIdentity itself, or a layout between it and its group root does, or it is on the named exempt list with a reason; the group app/(authenticated) still holds more than 8 pages.",
+    "proof": "The case now walks both signed-in groups, app/(authenticated) and app/(gate) (plan 1B Task 1 moved S-05, S-29 and S-07 into app/(gate)), with the same ungatedPages check per group, its group root passed as the second argument; the `> 8` page count is kept for app/(authenticated) and app/(gate) is required to hold exactly 3 pages. The exempt entry's key moved with its file to app/(gate)/acceptances/page.tsx, reason unchanged. Seen RED with app/(gate) missing (ENOENT), GREEN after the move; the lint self-test case is unchanged.",
+    "task": "plan 1B Task 1 (the gate frame and the (gate) route group)"
+  },
+  {
+    "kind": "structure",
+    "changed": "e2e/acceptances.spec.ts::FR-ACC-04 UX-01 (ruling after S4): a person held at gate 3 has no organisation link in the rail on S-05 and S-21, and has them once the texts are accepted",
+    "replacedBy": "e2e/acceptances.spec.ts::FR-ACC-04 UX-01 (ruling after S4; plan 1B Task 1): a person held at gate 3 has no organisation link on S-05 (the gate frame) or S-21 (the rail), and has them once the texts are accepted",
+    "property": "A person held at gate 3 is shown no link that names or reaches their organisation on S-05 and S-21, and has the organisation's links in the rail once the texts are accepted.",
+    "proof": "S-05 moved out of the shell into the gate frame (plan 1B Task 1, app/(gate)/acceptances/page.tsx), so it has no rail to check: the case now asserts no navigation named Main on /acceptances, that the page's banner links only to /help (T1.3), and that the organisation's name appears nowhere in the page. S-21 keeps the rail and keeps the old assertion (links exactly /explore/framework, /help, /account; no organisation name). The part after accepting is unchanged.",
+    "task": "plan 1B Task 1 (the gate frame and the (gate) route group)"
+  },
+  {
+    "kind": "structure",
+    "changed": "e2e/acceptances.spec.ts::SRS 7.1.2 gate 2 (ruling after S4): with a password change due, the rail on S-29 has no organisation link",
+    "replacedBy": "e2e/acceptances.spec.ts::SRS 7.1.2 gate 2 (ruling after S4; plan 1B Task 1): with a password change due, S-29 is in the gate frame, with no rail and no organisation link",
+    "property": "A flagged account on S-29 is shown no link that names or reaches its organisation.",
+    "proof": "S-29 moved into the gate frame (plan 1B Task 1, app/(gate)/change-password/page.tsx). The case asserts no navigation named Main, the banner's links are exactly ['/help'] (T1.3), and the organisation's name appears nowhere in the page; the flag is set and cleared as before.",
+    "task": "plan 1B Task 1 (the gate frame and the (gate) route group)"
   }
 ]
