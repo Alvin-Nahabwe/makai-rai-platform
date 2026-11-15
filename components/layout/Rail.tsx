@@ -61,8 +61,9 @@ function Item({ item }: { item: RailItem }) {
  * The rail (plan 1A Task 11, rulings L2-52 and L2-60): the one navigation landmark, holding the brand (the MAK-AI logo and the
  * platform's name under it, one link to Home, as the locked sketch draws it), the organisation switcher (not for the platform
  * administrator, L2-61), the items, the project block when a project is in context (the `@project` slot, owner ruling R4,
- * between the main items and the lower group), and, in a foot that stays put while the part above scrolls (review D4), the
- * person and their role, My account, Sign out and the theme switch, so a person moving by
+ * between the main items and the lower group), then the lower group (Members and Organisation) and a foot, both staying put
+ * while the part above scrolls (review D4, final review I1): the foot holds the person and their role, My account, Sign out
+ * and the theme switch, so a person moving by
  * landmarks reaches all of them. Navy in both themes, with the current item a filled orange shape and white text; no text on it
  * is in the action orange (the project block's "You are here" takes the on-shell accent token, see shell.css).
  *
@@ -110,7 +111,7 @@ export default function Rail({ shell, project }: { shell: ShellData; project?: R
   return (
     <nav className="shell-rail" aria-label={SHELL_COPY.nav}>
       {/* From 1024 px this part scrolls when it must (shell.css: a thin scrollbar and a cue at each edge with more beyond);
-          the foot below it stays put. Below 1024 px the Menu panel scrolls as a whole. */}
+          the lower group and the foot below it stay put. Below 1024 px the Menu panel scrolls as a whole. */}
       <div className="shell-rail__scroll">
         {/* The logo is decorative beside the visible name inside the one link, so the link is read once: "MAK-AI RAI Platform".
             `/` only redirects (to the chooser, a gate or /login), so it is not prefetched, as in PublicHeader. */}
@@ -130,13 +131,15 @@ export default function Rail({ shell, project }: { shell: ShellData; project?: R
             {items.filter((i) => i.group === 'main').map((item) => <Item key={item.key} item={item} />)}
           </ul>
           {project ? <ShellPlace name="rail">{project}</ShellPlace> : null}
-          {lower.length > 0 ? (
-            <ul className="shell-rail__lower">
-              {lower.map((item) => <Item key={item.key} item={item} />)}
-            </ul>
-          ) : null}
         </div>
       </div>
+      {/* Members and Organisation (final review I1): outside the scrolling part and above the foot, so a project block
+          that fills the upper part cannot push them out of view. From 1024 px they stay put with the foot. */}
+      {lower.length > 0 ? (
+        <ul className="shell-rail__lower">
+          {lower.map((item) => <Item key={item.key} item={item} />)}
+        </ul>
+      ) : null}
       {/* The pinned foot (design review D4): the person and their role, My account, Sign out and the theme switch. */}
       <div className="shell-rail__foot">
         <ul className="shell-rail__account">

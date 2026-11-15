@@ -230,8 +230,9 @@
     z-index: 1;
     width: auto;
     height: 100vh;
-    /* The rail's own parts scroll: the upper part when it must, beside a pinned foot (review D4). The panel scrolls as a
-       whole only when the foot alone is taller than the window (under about 230 px), so Sign out stays reachable (M3). */
+    /* The rail's own parts scroll: the upper part when it must, above the pinned lower group and foot (review D4, final
+       review I1). The panel scrolls as a whole only when those two alone are taller than the window (under about 270 px),
+       so Sign out stays reachable (M3). */
     overflow-y: auto;
     /* In the dark theme the shell navy and the page ground are 1.04:1 apart: the edge keeps the rail from merging into
        the page. A container border, so it is quiet in the light theme, where the navy already stands apart. */
@@ -343,8 +344,8 @@
     block-size: 100%;
   }
 
-  /* The upper part scrolls when the screen is too short for it; the foot stays. A thin scrollbar in the rail's colours
-     (thumb 8.6:1 on the navy), and a cue at each edge that has more beyond it (modern-web-guidance
+  /* The upper part scrolls when the screen is too short for it; the lower group and the foot stay. A thin scrollbar in the
+     rail's colours (thumb 8.6:1 on the navy), and a cue at each edge that has more beyond it (modern-web-guidance
      scrollability-affordance-hints): the navy fades over the content there, with a hairline. */
   .shell-rail__scroll {
     flex: 1 1 auto;
@@ -379,10 +380,13 @@
     background: linear-gradient(var(--color-shell), transparent);
   }
 
-  /* The bottom fade ends on the foot's rule, with no hairline of its own, so there is one rule there, not two (M2). */
+  /* The bottom fade ends on the lower group's rule (the foot's when there is no lower group). That rule is 1.2:1 on the
+     navy, and a cut can fall between two stage lines with no text under the fade, so the cue carries the top cue's hairline
+     (final review I1): while more is below, the edge reads as one bright rule over the quiet one. */
   .shell-rail__scroll::after {
     inset-block-end: calc(-1 * var(--space-2));
     margin-block-start: calc(-1 * var(--space-6));
+    border-block-end: 1px solid var(--color-shell-muted);
     background: linear-gradient(transparent, var(--color-shell));
   }
 
@@ -476,10 +480,17 @@
   list-style: none;
 }
 
+/* Members and Organisation, between the scrolling part and the foot (final review I1): never scrolled away. The rule and the
+   inset are the ones they had at the end of the scrolling part, so the rail looks the same when nothing overflows. */
 .shell-rail__lower {
-  margin-block-start: auto;
-  padding-block-start: var(--space-2);
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 0;
+  margin-inline: var(--space-3);
+  padding-block: var(--space-2);
   border-block-start: 1px solid var(--color-shell-hover);
+  list-style: none;
 }
 
 .shell-rail__item {

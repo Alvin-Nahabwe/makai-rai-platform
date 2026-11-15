@@ -307,17 +307,19 @@ describe('fix round 3: the rail fits a laptop (D4, D5) and the minor design item
     return bodies.join('\n');
   };
 
-  it('D4: the rail is a scrolling part and a pinned foot; the foot holds the person, My account, Sign out and the theme switch', () => {
+  it('D4 I1: the rail is a scrolling part, then the pinned lower group and the pinned foot; the foot holds the person, My account, Sign out and the theme switch', () => {
     at('/orgs/a/projects');
     const html = renderToStaticMarkup(<Rail shell={shell} />).replace(/^(<link rel="preload"[^>]*>)+/, '');
-    const scroll = /<div class="shell-rail__scroll">([\s\S]*)<\/div><div class="shell-rail__foot">/.exec(html);
-    expect(scroll, 'the scrolling part, then the foot').not.toBeNull();
-    for (const part of ['shell-rail__brand', 'shell-rail__org', 'shell-rail__main', 'shell-rail__lower']) expect(scroll![1]).toContain(part);
+    const parts = /<div class="shell-rail__scroll">([\s\S]*)<\/div><ul class="shell-rail__lower">([\s\S]*?)<\/ul><div class="shell-rail__foot">/.exec(html);
+    expect(parts, 'the scrolling part, then the lower group, then the foot').not.toBeNull();
+    const [, scroll, lower] = parts!;
+    for (const part of ['shell-rail__brand', 'shell-rail__org', 'shell-rail__main']) expect(scroll).toContain(part);
     const foot = html.slice(html.indexOf('<div class="shell-rail__foot">'));
     for (const part of ['shell-rail__person', 'href="/account"', 'shell-rail__signout', 'shell-theme']) expect(foot, part).toContain(part);
-    expect(scroll![1]).not.toContain('shell-rail__person');
-    // Members and Organisation stay in the scrolling part's lower group.
-    const lower = /<ul class="shell-rail__lower">([\s\S]*?)<\/ul>/.exec(html)![1];
+    expect(scroll).not.toContain('shell-rail__person');
+    // I1 (final review): Members and Organisation sit outside the scrolling part, so a tall project block cannot push them
+    // out of view; they stay in reading order between the project block and the foot.
+    expect(scroll).not.toContain('settings/members');
     expect(lower).toContain('/orgs/a/settings/members');
     expect(lower).toContain('/orgs/a/settings/organisation');
   });
@@ -417,10 +419,13 @@ describe('fix round 4: the footer in the content column (D23, coordinator\'s opt
     expect(css).not.toMatch(/@supports not \(container-type: scroll-state\)/);
   });
 
-  it('I3 M2: each cue sits on the scroller\'s real edge, past its 8 px padding; the bottom fade ends on the foot rule with no hairline', () => {
+  it('I3 M2 I1: each cue sits on the scroller\'s real edge, past its 8 px padding, with the same hairline at either edge', () => {
     expect(ruleIn(wide, '.shell-rail__scroll::before')).toMatch(/inset-block-start: calc\(-1 \* var\(--space-2\)\);/);
     expect(ruleIn(wide, '.shell-rail__scroll::after')).toMatch(/inset-block-end: calc\(-1 \* var\(--space-2\)\);/);
-    expect(ruleIn(wide, '.shell-rail__scroll::after')).not.toMatch(/border-block-end/);
+    // Final review I1: the bottom edge now meets the lower group's rule (1.2:1 on the navy), which alone does not show that
+    // stage lines lie below it; the bottom cue carries the top cue's hairline, shown only while more is below.
+    expect(ruleIn(wide, '.shell-rail__scroll::before')).toMatch(/border-block-start: 1px solid var\(--color-shell-muted\);/);
+    expect(ruleIn(wide, '.shell-rail__scroll::after')).toMatch(/border-block-end: 1px solid var\(--color-shell-muted\);/);
     expect(ruleIn(css, '.shell-rail__foot')).toMatch(/border-block-start: 1px solid var\(--color-border-container\);/);
   });
 
