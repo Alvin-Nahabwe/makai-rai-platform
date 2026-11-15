@@ -1,6 +1,7 @@
 /* Buttons (plan 1A Task 4, spec 7.1 and 7.5). Every button is 44 px high at least (a primary control) and the compact
    one 32 px, inside a 24 px target. Primary is the action orange with white text (6.10:1); secondary is the surface
-   with the link colour and its 1 px border; quiet has no border and no fill; destructive is the surface, ink and the
+   with the heading colour for its label and its 1 px border (the link colour's navy in light; in dark the brightest
+   ink, where the link colour's pale lavender read as disabled beside a disabled button: lane 1 review S4-6); quiet has no border and no fill; destructive is the surface, ink and the
    control border (decision B6: never orange, never red). The ring is the base :focus-visible rule (app/globals.css).
    Only colours and borders change, over --duration-state; nothing moves. */
 .ui-button {
@@ -54,14 +55,14 @@
 }
 
 .ui-button--secondary {
-  border-color: var(--color-link);
+  border-color: var(--color-heading);
   background-color: var(--color-surface);
-  color: var(--color-link);
+  color: var(--color-heading);
 }
 
 .ui-button--secondary:hover {
   background-color: var(--color-tint);
-  color: var(--color-link);
+  color: var(--color-heading);
 }
 
 .ui-button--secondary:active {
