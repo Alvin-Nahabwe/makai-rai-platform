@@ -33,6 +33,18 @@ describe('S-02 in the gate frame', () => {
     expect(html(forgot({ kind: 'idle' }))).toMatch(new RegExp(`<a [^>]*href="/login"[^>]*>${AUTH_COPY.backToSignIn}</a>`));
   });
 
+  it('D2 review A-r2-2: once the form is replaced by the sent answer, the status block can take focus (tabindex -1) and the client moves it there', () => {
+    // The Send reset link button is removed with the form, so focus would fall to the body (WCAG 2.4.3). No jsdom here (see
+    // acceptances-form.test.tsx): the markup carries the target, and the client's source is read for the move.
+    const sent = html(forgot({ kind: 'sent' }));
+    expect(sent).toMatch(new RegExp(`<div role="status" tabindex="-1"[^>]*>${AUTH_MESSAGE_COPY.resetLinkSent}</div>`));
+    // Before it is sent the region takes no focus: no tabindex on either region, so no tab stop or focus ring appears.
+    expect(html(forgot({ kind: 'idle' }))).not.toMatch(/tabindex/);
+    expect(html(forgot({ kind: 'error', message: 'x' }))).not.toMatch(/tabindex/);
+    const src = readFileSync('app/(public)/forgot-password/ForgotPasswordClient.tsx', 'utf8');
+    expect(src).toMatch(/useEffect\(\(\) => \{ if \(state\.kind === 'sent'\) statusEl\.current\?\.focus\(\); \}, \[state\.kind\]\)/);
+  });
+
   it('T2.5 and I-5: the sent answer is M-21 whatever the address, in a status region that replaces the form; an error sits after the button', () => {
     const sent = html(forgot({ kind: 'sent' }));
     expect(sent).toMatch(new RegExp(`<div role="status"[^>]*>${AUTH_MESSAGE_COPY.resetLinkSent}</div>`));
@@ -83,12 +95,14 @@ describe('S-03 in the gate frame', () => {
 describe('L5-6 and L5-8: the three door pages render the public gate frame, its route, and no logo in the card', () => {
   // A page whose step changes in the browser draws its route from its client module (routeSlot); the stops are there.
   const PAGES: Array<[string, RegExp, string, string[]]> = [
-    ['app/(public)/login/page.tsx', /<GateFrame variant="public" routeSlot=\{<LoginRoute \/>\}>/, 'app/(public)/login/LoginClient.tsx', ['GATE_COPY.stops.signIn']],
-    ['app/(public)/forgot-password/page.tsx', /<GateFrame variant="public" route=\{ROUTE\}>/, 'app/(public)/forgot-password/page.tsx', ['AUTH_COPY.recoveryStops.askForLink', 'AUTH_COPY.recoveryStops.setNewPassword', 'GATE_COPY.stops.signIn']],
-    ['app/(public)/reset-password/page.tsx', /<GateFrame variant="public" routeSlot=\{<ResetRoute \/>\}>/, 'app/(public)/reset-password/ResetPasswordClient.tsx', ['AUTH_COPY.recoveryStops.askForLink', 'AUTH_COPY.recoveryStops.setNewPassword', 'GATE_COPY.stops.signIn']],
+    ['app/(public)/login/page.tsx', /<GatePublicFrame routeSlot=\{<LoginRoute \/>\}>/, 'app/(public)/login/LoginClient.tsx', ['GATE_COPY.stops.signIn']],
+    ['app/(public)/forgot-password/page.tsx', /<GatePublicFrame route=\{ROUTE\}>/, 'app/(public)/forgot-password/page.tsx', ['AUTH_COPY.recoveryStops.askForLink', 'AUTH_COPY.recoveryStops.setNewPassword', 'GATE_COPY.stops.signIn']],
+    ['app/(public)/reset-password/page.tsx', /<GatePublicFrame routeSlot=\{<ResetRoute \/>\}>/, 'app/(public)/reset-password/ResetPasswordClient.tsx', ['AUTH_COPY.recoveryStops.askForLink', 'AUTH_COPY.recoveryStops.setNewPassword', 'GATE_COPY.stops.signIn']],
   ];
   it.each(PAGES)('%s', (page, frame, routeFile, stops) => {
     expect(readFileSync(page, 'utf8')).toMatch(frame);
+    // Public pages draw only the public frame: GateFrame would bring the signed-in sheet (gate-signed-in.css) with it (D3 fix round 1).
+    expect(readFileSync(page, 'utf8')).not.toMatch(/\bGateFrame\b/);
     const src = readFileSync(routeFile, 'utf8');
     let at = -1;
     for (const s of stops) {
