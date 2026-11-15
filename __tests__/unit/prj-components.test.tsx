@@ -26,7 +26,7 @@ vi.mock('@/components/review/StageReviewsSummary', () => ({ StageReviewsSummary:
 const { StageColumn } = await import('@/components/project/StageColumn');
 const { ProjectOverview } = await import('@/components/project/ProjectOverview');
 const { HomeView } = await import('@/components/home/HomeView');
-const { AllProjectsView } = await import('@/components/project/AllProjectsView');
+const { ProjectsTable } = await import('@/components/project/ProjectsTable');
 const { default: ProjectForm } = await import('@/components/project/ProjectForm');
 const { ArchiveProjectControl } = await import('@/components/project/ArchiveProjectControl');
 const { UnarchiveProjectButton } = await import('@/components/project/UnarchiveProjectButton');
@@ -172,22 +172,22 @@ describe('S-10 (Task 5)', () => {
 
 describe('S-09 and S-32 (Task 7)', () => {
   it('FR-PRJ-03: S-32 lists active and archived projects, with Unarchive for owner and admin only', () => {
-    const data = { orgSlug: 'o', active: [{ id: 'a', name: 'Alive', descriptiveLine: '' }], archived: [{ id: 'b', name: 'Shelved', descriptiveLine: '' }] };
-    const owner = renderToStaticMarkup(<AllProjectsView data={{ ...data, canUnarchive: true }} />);
-    const assessor = renderToStaticMarkup(<AllProjectsView data={{ ...data, canUnarchive: false }} />);
-    expect(owner.indexOf('Active')).toBeLessThan(owner.indexOf('Shelved'));
+    const rows = [{ id: 'a', name: 'Alive', descriptiveLine: '', archived: false }, { id: 'b', name: 'Shelved', descriptiveLine: '', archived: true }];
+    const data = { orgSlug: 'o', rows, canCreate: true, target: 'project' as const };
+    const owner = renderToStaticMarkup(<ProjectsTable {...data} canUnarchive />);
+    const assessor = renderToStaticMarkup(<ProjectsTable {...data} canUnarchive={false} />);
+    expect(owner.indexOf('Alive')).toBeLessThan(owner.indexOf('Shelved'));
     expect(owner).toContain('Unarchive'); expect(assessor).not.toContain('Unarchive');
     expect(owner).not.toMatch(/Maturity|compliance|\bAssessments?\b|\bcompleted\b/i);
-    const empty = renderToStaticMarkup(<AllProjectsView data={{ ...data, active: [], archived: [], canUnarchive: true }} />);
-    expect(empty.split(PROJECT_COPY.allProjects.noActive)).toHaveLength(2);
-    expect(empty.split(PROJECT_COPY.allProjects.noArchived)).toHaveLength(2);
-    expect(empty.indexOf(PROJECT_COPY.allProjects.noActive)).toBeLessThan(empty.indexOf(PROJECT_COPY.allProjects.noArchived));
+    const empty = renderToStaticMarkup(<ProjectsTable {...data} rows={[]} canUnarchive />);
+    expect(empty.split(PROJECT_COPY.allProjects.empty.title)).toHaveLength(2);
+    expect(empty).not.toContain('<table');
   });
 
   it('UX-37: the S-32 page and its view use ListLink and import no next/link', () => {
-    for (const f of ['app/(authenticated)/orgs/[slug]/projects/page.tsx', 'components/project/AllProjectsView.tsx'])
+    for (const f of ['app/(authenticated)/orgs/[slug]/projects/page.tsx', 'components/project/ProjectsTable.tsx'])
       expect(readFileSync(f, 'utf8')).not.toMatch(/from 'next\/link'/);
-    expect(readFileSync('components/project/AllProjectsView.tsx', 'utf8')).toMatch(/\bListLink\b/);
+    expect(readFileSync('components/project/ProjectsTable.tsx', 'utf8')).toMatch(/\bListLink\b/);
     const page = readFileSync('app/(authenticated)/orgs/[slug]/projects/page.tsx', 'utf8');
     expect(page).toMatch(/\bpageOf\b/);
     expect(page).toMatch(/\bShowMoreLink\b/);

@@ -185,10 +185,10 @@ test.describe('Findings from the rail (P2, L2-64 to L2-66)', () => {
     await page.waitForURL((u) => u.pathname === `/orgs/${fx.org.slug}/projects` && u.searchParams.get('for') === 'findings');
     const main = page.getByRole('main');
     await expect(main.getByText(CHOOSE, { exact: true })).toBeVisible();
-    // F6 (b): clear space between the line and the Active heading.
+    // F6 (b): clear space between the line and the list under it (plan 1B Task 12: one list, no Active heading).
     const below = await page.evaluate((text) => {
       const line = [...document.querySelectorAll('main p')].find((p) => p.textContent === text)!;
-      return document.getElementById('projects-active')!.getBoundingClientRect().top - line.getBoundingClientRect().bottom;
+      return document.getElementById('projects-list')!.getBoundingClientRect().top - line.getBoundingClientRect().bottom;
     }, CHOOSE);
     expect(below).toBeGreaterThanOrEqual(16);
     for (const p of [a, b]) await expect(main.locator(`a[href="/orgs/${fx.org.slug}/projects/${p.id}/findings"]`)).toHaveCount(1);

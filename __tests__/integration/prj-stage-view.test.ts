@@ -8,8 +8,9 @@ import { NotFoundError } from '@/lib/data/tenant';
 import { myMitigations, openMitigationsByStage, stageFollowUpCounts } from '@/lib/data/followup';
 import { loadHome } from '@/lib/home/load';
 import { HomeView } from '@/components/home/HomeView';
-import { AllProjectsView } from '@/components/project/AllProjectsView';
+import { ProjectsTable } from '@/components/project/ProjectsTable';
 import { HOME_COPY } from '@/lib/home/copy';
+import { PROJECT_COPY } from '@/lib/project/copy';
 import { resetDb, testDb } from '../helpers/db';
 import { sessionFor } from '../helpers/authSession';
 import { useFixtureContent } from '../helpers/content';
@@ -175,12 +176,47 @@ describe('S-10 and S-32 pages (Task 5, Task 7)', () => {
     expect(all).not.toContain('Show more');
   });
 
+  it('plan 1B Task 12 C8: S-32 is one list, active projects first, then archived ones, each most recently changed first', async () => {
+    const one = await buildOrg({ label: 'order' });
+    // created in this order, so each is more recently changed than the one before it
+    for (const [name, archived] of [['Old active', false], ['Old shelved', true], ['New active', false], ['New shelved', true]] as const) {
+      await addProject(one, { name, archived });
+    }
+    sessionFor(one.members.viewer.userId);
+    const { default: AllProjectsPage } = await import('@/app/(authenticated)/orgs/[slug]/projects/page');
+    const html = renderToStaticMarkup(await AllProjectsPage({ params: Promise.resolve({ slug: one.org.slug }), searchParams: Promise.resolve({}) }));
+    expect(html.match(/<table\b/g)).toHaveLength(1);
+    expect([...html.matchAll(/(Old|New) (active|shelved)/g)].map((m) => m[0])).toEqual(['New active', 'Old active', 'New shelved', 'Old shelved']);
+  });
+
+  it('plan 1B Task 12 C8: the one list pages 50 at a time across active and archived, with one "Show more"', async () => {
+    const mixed = await buildOrg({ label: 'mixed' });
+    for (let i = 0; i < 30; i++) await addProject(mixed, { name: `Active ${String(i).padStart(3, '0')}` });
+    for (let i = 0; i < 30; i++) await addProject(mixed, { name: `Shelved ${String(i).padStart(3, '0')}`, archived: true });
+    sessionFor(mixed.members.owner.userId);
+    const { default: AllProjectsPage } = await import('@/app/(authenticated)/orgs/[slug]/projects/page');
+    const at = async (searchParams: { shown?: string }) =>
+      renderToStaticMarkup(await AllProjectsPage({ params: Promise.resolve({ slug: mixed.org.slug }), searchParams: Promise.resolve(searchParams) }));
+    const first = await at({});
+    expect(new Set(first.match(/Active \d{3}/g)).size).toBe(30);
+    expect(new Set(first.match(/Shelved \d{3}/g)).size).toBe(20);
+    expect(first.match(/>Show more<\/a>/g)).toHaveLength(1);
+    expect(first).toMatch(/<a [^>]*href="\?shown=100"[^>]*>Show more<\/a>/);
+    // design review 15: the line by the link counts what is shown and says the archived ones not shown yet
+    expect(first).toContain(`${PROJECT_COPY.allProjects.showing(50, 60)} ${PROJECT_COPY.allProjects.archivedNotShown(10)}`);
+    const all = await at({ shown: '100' });
+    expect(new Set(all.match(/Shelved \d{3}/g)).size).toBe(30);
+    expect(all).not.toContain('Showing');
+    expect(all).not.toContain('Show more');
+  });
+
   it('FR-PRJ-03: S-32 lists the archived project under Archived with Unarchive for an owner, and the dashboard leaves it out', async () => {
     await addProject(fx, { name: 'Shelved project', archived: true });
     const { active, archived } = await listProjectRows(ctxFor(fx, 'owner'));
     expect(archived.map((r) => r.name)).toEqual(['Shelved project']);
     expect(active.map((r) => r.name)).toContain('Counted project');
-    expect(renderToStaticMarkup(createElement(AllProjectsView, { data: { orgSlug: fx.org.slug, canUnarchive: true, active, archived } }))).toContain('Unarchive');
+    const rows = [...active.map((r) => ({ ...r, archived: false })), ...archived.map((r) => ({ ...r, archived: true }))];
+    expect(renderToStaticMarkup(createElement(ProjectsTable, { orgSlug: fx.org.slug, rows, canUnarchive: true, canCreate: true, target: 'project' }))).toContain('Unarchive');
     const dash = await renderDashboard(fx, 'viewer', '2026-11-02');
     expect(dash).toContain('Counted project'); expect(dash).not.toContain('Shelved project');
     // Home's stage plate (plan 1B Task 10): the open findings as a link to that stage's findings, no zero count.
