@@ -7,7 +7,12 @@ import { describe, expect, it, vi } from 'vitest';
 import ControlsPage from '@/app/(authenticated)/explore/controls/page';
 import { runningContent } from '@/lib/content/loader';
 import { GUIDANCE_COPY } from '@/lib/guidance/copy';
-import { TERM_CONTROL } from '@/lib/vocabulary/terms';
+import { TERM_CONTROL, TERM_MITIGATION, TERM_RISK_AREA } from '@/lib/vocabulary/terms';
+
+/** React's escaping of a text child, for the copy's apostrophes and ampersands. */
+const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/'/g, '&#x27;');
+/** The page's h1: "Controls", the first use of the term on the page (B5). */
+const H1 = `<h1><span data-term="${TERM_CONTROL.id}">${GUIDANCE_COPY.titles.controls}</span></h1>`;
 
 vi.mock('@/lib/content/resources', async () => {
   const { RES } = await import('../helpers/suggestionsFixture');
@@ -32,7 +37,7 @@ describe('S-27, the controls page', () => {
     const html = renderToStaticMarkup(<ControlsPage />);
     const c = runningContent();
     const n = (t: string) => [...c.controls.values()].filter((k) => k.type === t).length;
-    expect(html).toContain('<h1>Controls</h1>');
+    expect(html).toContain(H1);
     expect(html).toContain(GUIDANCE_COPY.controls.count(c.controls.size));
     for (const t of ['technical', 'procedural', 'informational'] as const) {
       const { label, line } = GUIDANCE_COPY.controls.types[t];
@@ -45,13 +50,27 @@ describe('S-27, the controls page', () => {
   });
 
   // CONSOLIDATED section 4 (D AB45-AB47, EX19): About's "Free toolkits" section is this page's introduction now.
+  // B5: the page opens with the control's Definition under the h1, then the line, each defined term beside its definition.
   it("UX-13 UX-03: S-27 opens with the line that took over the About page's free toolkits section", () => {
     const html = renderToStaticMarkup(<ControlsPage />);
-    const intro = GUIDANCE_COPY.controls.intro;
-    expect(intro.startsWith(`${TERM_CONTROL.definition} `)).toBe(true);
+    const [before, term, after] = GUIDANCE_COPY.controls.introLine;
+    // The h1 is the first use of "control" and its Definition is the next element (spec 6); the line's one defined term,
+    // "mitigation", has its Definition in the same paragraph.
+    expect(html).toContain(
+      `${H1}<p class="ui-definition" data-definition="${TERM_CONTROL.id}">${esc(TERM_CONTROL.definition)}</p>`
+      + `<p class="controls-page__intro">${before}<span data-term="${TERM_MITIGATION.id}">${term}</span>${after} `
+      + `<span class="ui-definition" data-definition="${TERM_MITIGATION.id}">${esc(TERM_MITIGATION.definition)}</span></p>`,
+    );
+    expect(GUIDANCE_COPY.controls.introLine.join('')).toBe('When your team adds a mitigation, it can follow one of these.');
+    // "Risk areas:" under each card would be the first use of "risk area"; the header names it first, with its Definition.
+    const [aBefore, aTerm, aAfter] = GUIDANCE_COPY.controls.areasLine;
+    const areas = `<p class="controls-page__intro">${aBefore}<span data-term="${TERM_RISK_AREA.id}">${aTerm}</span>${aAfter} `
+      + `<span class="ui-definition" data-definition="${TERM_RISK_AREA.id}">${esc(TERM_RISK_AREA.definition)}</span></p>`;
+    expect(html).toContain(areas);
+    expect(html.indexOf(areas)).toBeLessThan(html.indexOf(GUIDANCE_COPY.controls.riskAreas));
+    expect(GUIDANCE_COPY.controls.areasLine.join('')).toBe('Each control lists the risk areas it addresses.');
     expect(html).not.toMatch(/practice that lowers a risk|links to free guidance/);
-    expect(html).toMatch(new RegExp(`<h1>Controls</h1><p[^>]*>${intro.replace(/\./g, '\\.')}</p>`));
-    expect(html.indexOf(intro)).toBeLessThan(html.indexOf('<h2'));
+    expect(html.indexOf(TERM_CONTROL.definition)).toBeLessThan(html.indexOf('<h2'));
   });
 
   it('FR-SUG-04: no file under app, components or lib links a template or notebook path except through the resources file', () => {
