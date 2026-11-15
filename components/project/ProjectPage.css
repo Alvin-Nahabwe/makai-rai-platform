@@ -210,6 +210,10 @@
 .stage-line__open .ui-definition,
 .stage-line__stop--recorded .ui-definition,
 .stage-line__stop--reviews .ui-definition,
+.project-page__share .ui-definition {
+  display: block;
+  margin-block-start: var(--space-1);
+}
 
 /* The first three questions with no decision, named: each at most two lines (R7), the link leads to its whole text. A list
    of links with no text around them, so a lighter underline still marks them. */
