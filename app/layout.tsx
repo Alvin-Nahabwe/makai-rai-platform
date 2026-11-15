@@ -92,11 +92,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <SkipLink />
-        <OfflineBanner />
         {/* The page and its one footer in one frame. On a public page the frame draws nothing; on a signed-in page from
             1024 px it is the content's one scroller, so the footer ends the content column beside the rail
-            (components/layout/shell.css, review D23). */}
+            (components/layout/shell.css, review D23). The offline notice is the frame's first box: there it takes one of
+            the frame's rows before the shell, so the frame stays the window's height when it shows (lane 8 I2). */}
         <div className="page-frame">
+          <OfflineBanner />
           {children}
           <Footer />
         </div>

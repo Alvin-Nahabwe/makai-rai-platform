@@ -261,8 +261,9 @@
   .page-frame:has(> .shell) {
     display: grid;
     grid-template-columns: var(--rail-width) minmax(0, 1fr);
-    /* Two rows for boxes a layout puts before the shell inside the frame (today one: the idle warning's, which also holds
-       its signed-out notice; e2e/shell-project.spec.ts holds the count), then main's row, which takes the rest of a short
+    /* Two rows for boxes a layout puts before the shell inside the frame (today two: the offline notice's region, which
+       app/layout.tsx puts first so the frame stays the window's height when the notice shows, and the idle warning's,
+       which also holds its signed-out notice; e2e/shell-project.spec.ts holds the count), then main's row, which takes the rest of a short
        page so the band still ends on the screen's foot, then the band's. :has() and subgrid are Baseline widely
        available, so there is no fallback for a browser without them. */
     grid-template-rows: repeat(2, auto) [shell-start] 1fr [footer-start] auto [shell-end];

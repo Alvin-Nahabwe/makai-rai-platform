@@ -375,9 +375,9 @@ describe('fix round 4: the footer in the content column (D23, coordinator\'s opt
     return bodies.join('\n');
   };
 
-  it('D23: the root layout puts the page and its one footer in one frame, after the skip link and the offline banner', () => {
+  it('D23: the root layout puts the page and its one footer in one frame, after the skip link; the offline banner is the frame\'s first box (lane 8 I2)', () => {
     const layout = readFileSync('app/layout.tsx', 'utf8');
-    expect(layout).toMatch(/<SkipLink \/>\s*<OfflineBanner \/>\s*(\{\/\*[\s\S]*?\*\/\}\s*)?<div className="page-frame">\s*\{children\}\s*<Footer \/>\s*<\/div>/);
+    expect(layout).toMatch(/<SkipLink \/>\s*(\{\/\*[\s\S]*?\*\/\}\s*)?<div className="page-frame">\s*<OfflineBanner \/>\s*\{children\}\s*<Footer \/>\s*<\/div>/);
     expect([...layout.matchAll(/<Footer \/>/g)]).toHaveLength(1);
   });
 
