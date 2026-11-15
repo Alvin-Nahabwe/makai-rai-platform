@@ -2478,5 +2478,13 @@
     "property": "A Prepared-for note erased before issue prints 'Prepared for: ' and the document's erasure line in MP-01.",
     "proof": "The same case: the expectation read textErasedLine and now reads docTextErasedLine (lib/documents/copy.ts). The coordinator's ruling of 15 Nov 2026 split the line: textErasedLine is the screen form ('at your organisation's request.', the vocabulary term erased, shown by components/decision/**) and docTextErasedLine is the document form ('at the organisation's request.', read by outsiders), which lib/documents/resolve.ts now prints. Only the constant's name changed; what the case pins (the document prints the erasure line for that day) is unchanged.",
     "task": "lane 6 lead (erased-line split, coordinator ruling 15 Nov 2026)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/decision-components.test.tsx::(module)",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::FR-DEC-01 UX-31 UX-14: a viewer and an archived project get no form",
+    "property": "The file's module code serves the cases below: next/navigation is mocked so the S-12 regions render outside a request, with the readers the rendered components call.",
+    "proof": "One module line changes: the next/navigation mock also returns useParams () => ({ slug: 'acme' }). Lane 4's ArchivedBanner (merged from design/route-stage1 f7997a58) now renders OrgProjectsLink, a client component that calls useParams, so the archived case threw \"No useParams export is defined on the next/navigation mock\" before any expectation ran. No case and no expectation changed. After the line: decision-components.test.tsx, protected-tests.test.ts and test-replacements.test.ts gave 'Test Files  3 passed (3)' and 'Tests  57 passed (57)' at TZ=UTC.",
+    "task": "1B-route-L1 lead (merge of design/route-stage1 f7997a58)"
   }
 ]

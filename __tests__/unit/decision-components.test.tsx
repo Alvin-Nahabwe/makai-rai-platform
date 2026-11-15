@@ -17,7 +17,7 @@ import { STATUS_MARK_COPY } from '@/lib/ui/copy';
  * The S-12 regions DEC-b fills (W-3, W-4; UX-09 to UX-12, UX-25, UX-28; NFR-A11Y-03, NFR-A11Y-04), rendered as
  * static markup: hooks run, effects do not, so this is the first markup a browser receives.
  */
-vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh() {} }), usePathname: () => '/x' }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh() {} }), usePathname: () => '/x', useParams: () => ({ slug: 'acme' }) }));
 
 const { DecisionFields } = await import('@/components/decision/DecisionFields');
 const { SaveStatus } = await import('@/components/decision/SaveStatus');
