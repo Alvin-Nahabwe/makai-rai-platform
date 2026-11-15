@@ -40,6 +40,7 @@ import IdleWarning from '@/components/layout/IdleWarning';
 import { SEAL_PROOF_HREF } from '@/components/review/reviewText';
 import * as TERMS from '@/lib/vocabulary/terms';
 import { TERM_FINDING, TERM_SEAL, TERM_STAGE_REVIEW } from '@/lib/vocabulary/terms';
+import { firstUseProblems } from '../helpers/firstUseHtml';
 
 const W1 = [
   'When your team seals a stage review, the platform saves the decisions and evidence in it at that moment. After that, nobody can change what was sealed. If a file must be deleted later (for example for privacy), the platform shows that it was deleted.',
@@ -146,26 +147,32 @@ describe('the Help page', () => {
     expect(readFileSync('lib/help/vocabulary.ts').includes(Buffer.from([0xe2, 0x80, 0xa6]))).toBe(true);
   });
 
-  it('L2-69 L2-29a B5: every term is followed directly by its definition; a defined term uses Term and Definition, the others plain text', () => {
+  it('L2-69 L2-29a: every <dt data-term> is followed directly by its <dd data-definition>, as text, never the Definition component', () => {
     const html = page();
+    const pairs = [...html.matchAll(/<dt data-term="([^"]+)">([\s\S]*?)<\/dt><dd data-definition="([^"]+)">([\s\S]*?)<\/dd>/g)];
     const entries = helpVocabulary().flatMap((g) => g.entries);
-    const plainPair = /<dt data-term="([^"]+)">([^<]*)<\/dt><dd data-definition="([^"]+)">([^<]*)<\/dd>/g;
-    const termPair = /<dt><span data-term="([^"]+)">([^<]*)<\/span><\/dt><dd><span class="ui-definition" data-definition="([^"]+)">([^<]*)<\/span><\/dd>/g;
-    const pairs = [...html.matchAll(new RegExp(`${plainPair.source}|${termPair.source}`, 'g'))]
-      .map((m) => (m[1] === undefined ? { id: m[5], term: m[6], defId: m[7], definition: m[8], component: true } : { id: m[1], term: m[2], defId: m[3], definition: m[4], component: false }));
-    expect(pairs.map((p) => p.id)).toEqual(entries.map((e) => e.id));
-    for (const p of pairs) expect(p.defId).toBe(p.id);
+    expect(pairs.map((m) => m[1])).toEqual(entries.map((e) => e.id));
+    for (const m of pairs) expect(m[3]).toBe(m[1]);
     expect(html.match(/<dt\b/g)).toHaveLength(97);
     expect(html.match(/<dd\b/g)).toHaveLength(97);
-    // Exactly the concepts the first-use rule checks use the components (the brief's rule), with the vocabulary's words.
-    const checked = new Set(Object.values(TERMS).filter((t) => t.defineOnFirstUse).map((t) => t.id as string));
-    for (const p of pairs) expect(p.component, p.id).toBe(checked.has(p.id));
-    expect(pairs.filter((p) => p.component).length).toBeGreaterThan(0);
+    for (const m of pairs) expect(m[2] + m[4]).not.toMatch(/<[a-z]/i);
+    const src = readFileSync('app/help/page.tsx', 'utf8');
+    expect(src).not.toMatch(/Definition|<Term\b|dangerouslySetInnerHTML/);
+  });
+
+  it('FX2 (lead\'s ruling): every entry looks the same, and the checked concepts pass the first-use rule through the attributes', () => {
+    const html = page();
+    // One form for all 97 entries: the attributes on the dt and dd themselves, no kit span inside either.
+    expect(html).not.toContain('ui-definition');
+    expect(html).not.toMatch(/<dt><span data-term/);
+    const checked = Object.values(TERMS).filter((t) => t.defineOnFirstUse);
     for (const t of [TERM_FINDING, TERM_STAGE_REVIEW, TERM_SEAL]) {
-      expect(html).toContain(`<dt><span data-term="${t.id}">`);
-      expect(html).toContain(`<span class="ui-definition" data-definition="${t.id}">${t.definition.replace(/'/g, '&#x27;')}</span>`);
+      expect(html).toContain(`<dt data-term="${t.id}">`);
+      expect(html).toContain(`<dd data-definition="${t.id}">${t.definition.replace(/'/g, '&#x27;')}</dd>`);
     }
-    expect(readFileSync('app/help/page.tsx', 'utf8')).not.toMatch(/dangerouslySetInnerHTML/);
+    // The rule the browser crawl applies, over the glossary (the roles count only inside [data-role-choice]).
+    expect(checked.length).toBe(26);
+    expect(firstUseProblems(section(html, 'words-used-on-the-platform'))).toEqual([]);
   });
 
   it('W1 (FR-PUB-04 UX-03): "What sealing means" is the two paragraphs, word for word, and says what a seal does not show', () => {
