@@ -36,16 +36,18 @@ function isAbandonedPrefetch(url: string, headers: Record<string, string>, error
   return headers['next-router-prefetch'] !== undefined || new URL(url).searchParams.has('_rsc');
 }
 
-const PUBLIC_BUDGET = 220_000;
+/** S-04's limit with an inviter name: owner's ruling of 15 Nov 2026 15:35 (box: "Raise the limit ~4 KB"): 224,000 B. */
+const PUBLIC_BUDGET = 224_000;
 /**
  * The stylesheets S-04's first visit receives, exactly. The kit's sheets reach S-04 through styles entries
  * (components/ui/<part>Styles.ts; the lints __tests__/lint/kit-styles-entries.test.ts and
  * __tests__/lint/invitation-kit-sheets.test.ts read the source). That an entry's sheets are served as one file is
  * measured, not derived (components/ui/formStyles.ts), so the built page is checked here: the next/font sheet with
- * Icon.css, globals.css, Button.css with Dialog.css, and the four form sheets in one file. An exact figure, so a join
+ * Icon.css, globals.css, Button.css with Dialog.css, the four form sheets in one file, and the gate frame's public sheet
+ * (components/layout/gate.css, drawn by GatePublicFrame: owner's R6 and the 15 Nov 15:35 ruling). An exact figure, so a join
  * that forms by chance is noticed as well as a split; and by content, so a split and a join at once are noticed too.
  */
-const S04_STYLESHEETS = 4;
+const S04_STYLESHEETS = 5;
 /**
  * The sheets that must share one built file, each found by a class its own rules open with: a built file is minified,
  * so a rule starts at a line's start (each source sheet begins a line) or after a `}`. Each class below opens a rule in its own sheet only (checked
@@ -73,7 +75,7 @@ test.afterAll(async () => {
   await testDb.$disconnect();
 });
 
-for (const { language, inviter, letters, clientIp } of CASES) test(`NFR-PERF-02: S-04 with a ${language} inviter name (${letters}) transfers at most 220 KB on first visit, fetching the small latin-ext face only`, async ({ browser }) => {
+for (const { language, inviter, letters, clientIp } of CASES) test(`NFR-PERF-02: S-04 with a ${language} inviter name (${letters}) transfers at most 224 KB on first visit, fetching the small latin-ext face only`, async ({ browser }) => {
   test.setTimeout(120_000);
   const baseURL = test.info().project.use.baseURL!;
   const fx = await buildOrg({ label: `name-transfer-${language.toLowerCase()}` });
