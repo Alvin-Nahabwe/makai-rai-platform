@@ -96,6 +96,13 @@ describe('firstUseViolations', () => {
     expect(firstUseViolations([node('seal the loan model')], [SEAL], skip)).toEqual([{ id: 'seal', text: 'seal the loan model' }]);
   });
 
+  it('a skipped text with one trailing parenthesis (a resource link and its kind) is read as the parenthesis only', () => {
+    const skip = new Set(['Deployment Controls']);
+    const CONTROL = { id: 'control', term: 'control', defineOnFirstUse: true };
+    expect(firstUseViolations([node('Deployment Controls (Framework, opens another site)')], [CONTROL], skip)).toEqual([]);
+    expect(firstUseViolations([node('Deployment Controls (a seal of it)')], [SEAL], skip)).toEqual([{ id: 'seal', text: '(a seal of it)' }]);
+    expect(firstUseViolations([node('Other Controls (Framework)')], [CONTROL], skip)).toEqual([{ id: 'control', text: 'Other Controls (Framework)' }]);
+  });
   it('skips nothing when no skipped texts are given', () => {
     expect(firstUseViolations([node('Seal the loan model')], [SEAL])).toEqual([{ id: 'seal', text: 'Seal the loan model' }]);
     expect(firstUseViolations([node('Seal the loan model')], [SEAL], new Set())).toEqual([{ id: 'seal', text: 'Seal the loan model' }]);

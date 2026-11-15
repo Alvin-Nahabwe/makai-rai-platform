@@ -10,7 +10,9 @@
  * (DECISION_VERSION_IDS) counts only where a screen states one, inside `[data-decision-version]` (ruling X-1 (2)), so
  * "version 2 of the terms" is not a use. A longer checked term consumes a shorter one inside it: "mitigation plan" is a
  * use of `mitigation-plan`, not of `mitigation` (L2-28). A node whose whole text is one of `skipTexts` (what the team
- * typed, a framework or source name: ruling X-1 (3)) is not read at all; there is no exemption attribute (X-1 (4)).
+ * typed, a framework or source name: ruling X-1 (3)) is not read at all; a node that is a skipped text followed by one
+ * trailing parenthesis, as a resource link prints its kind ("<title> (Framework, opens another site)"), is read as that
+ * parenthesis only, so the platform's own words in it are still checked. There is no exemption attribute (X-1 (4)).
  */
 
 /** One text node of `main` outside `nav`, in document order, as the browser spec's collector reads it. */
@@ -65,7 +67,10 @@ export function firstUseViolations(
 ): Array<{ id: string; text: string }> {
   const violations: Array<{ id: string; text: string }> = [];
   const checked = concepts.filter((c) => c.defineOnFirstUse);
-  const read = nodes.filter((n) => !skipTexts.has(n.text));
+  const read = nodes.filter((n) => !skipTexts.has(n.text)).map((n) => {
+    const m = /^(.+) (\([^()]*\))$/su.exec(n.text);
+    return m !== null && skipTexts.has(m[1]) ? { ...n, text: m[2] } : n;
+  });
   for (const concept of checked) {
     const pattern = termPattern(concept.term);
     // L2-28: a longer checked term that holds this one ("mitigation plan" holds "mitigation") consumes it, so the
