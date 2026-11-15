@@ -668,12 +668,6 @@ h5 { font-size: var(--font-size-body); }
 }
 
 /* ── Auth Forms ── */
-.auth-container {
-  width: 100%;
-  max-width: 440px;
-  padding: var(--space-6);
-}
-
 .auth-card {
   background: var(--surface-card);
   border-radius: var(--border-radius-lg);
