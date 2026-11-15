@@ -321,3 +321,21 @@ test('M-r4-3: the foot\'s History link has focus when the automatic retry goes o
   await expect(saveStatus(page)).toHaveText(/as version 2\./, { timeout: 20_000 });
   await expect(page.locator('.decision-card__meta a[href$="/history"]').first()).toBeVisible();
 });
+
+test('R6-1: with the kept-evidence box shown on the frame a draft is restored, wide, the Done radio and the Reason box are drawn', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await actAsSeat(page, 'admin'); await openQuestionIn(page, Q); await fillValid(page);
+  // Upload without saving: the draft then holds the file's id; after a reload the evidence block cannot name it, so the form shows the kept card.
+  const reply = page.waitForResponse((r) => r.request().method() === 'POST' && /\/evidence$/.test(new URL(r.url()).pathname));
+  await page.locator('input[type="file"]').setInputFiles({ name: 'kept-r6.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\nkept r6\n') });
+  expect((await reply).status()).toBe(201);
+  await expect(page.getByText(/^Uploaded kept-r6\.pdf /)).toBeVisible();
+  await page.waitForTimeout(500); // the draft write is debounced
+  await page.reload(); await waitForQuestionPage(page);
+  await expect(page.locator('[data-kept-evidence]')).toBeVisible();
+  expect((await page.locator('.decision-fields').boundingBox())?.height ?? 0, 'the size container is laid out').toBeGreaterThan(0);
+  const done = await page.getByRole('radio', { name: 'Done', exact: true }).boundingBox();
+  const reason = await page.getByLabel(`${F.fields.reason} ${FIELD_COPY.required}`, { exact: true }).boundingBox();
+  expect(done?.height ?? 0, 'Done radio is drawn').toBeGreaterThan(0);
+  expect(reason?.height ?? 0, 'Reason box is drawn').toBeGreaterThan(0);
+});

@@ -45,6 +45,7 @@ const RUNNING = { ...QUESTION, text: 'How could the system affect protected or v
 const CURRENT = {
   id: 'dv2', projectId: 'p1', stage: 'pre-processing', questionId: 'Q-PP-04', versionNumber: 2,
   optionsInPlace: ['Alternatives analysis'], evidence: [{ id: 'e1' }],
+  content: { contentVersionId: 'cv1', semver: '0.0.1-fixture', contentHash: 'h1' },
   status: 'done', scopeAnswer: null, reasonCode: null, reason: 'r', decidedBy: null, declaredDate: null,
   enteredBy: { userId: 'u2', name: 'Joseph K.', formerMember: false }, receivedAt: '2026-11-10T08:30:00.000Z',
 } as unknown as DecisionVersionView;

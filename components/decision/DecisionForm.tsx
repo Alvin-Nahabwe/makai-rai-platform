@@ -749,19 +749,6 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
           />
         </section>
 
-        {extraEvidenceIds.length > 0 ? (
-          <div className="decision-form__box" data-kept-evidence>
-            <Callout kind="note">
-              <p>{keptEvidenceLine(extraEvidenceIds.length)}</p>
-              <Button variant="secondary" size="compact" onClick={() => {
-                const now = latest.current.value;
-                setExtraEvidenceIds([]);
-                edit({ ...now, evidenceIds: now.evidenceIds.filter((x) => !extraEvidenceIds.includes(x)) });
-              }}>{F.removeKept(extraEvidenceIds.length)}</Button>
-            </Callout>
-          </div>
-        ) : null}
-
         {/* A status region that is on the page before the wait, so the card put into it is announced, once (one added with its words often is not). */}
         <div role="status" data-wait-status>
         {waiting ? (
@@ -815,7 +802,22 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
             : null}
           </div>
         </div>
+        {/* GUARD: insert no block inside this fieldset on the frame a draft is restored (Chromium leaves .decision-fields 0 px
+            tall, T6 and R6-1); the save bar stays its last child. Such blocks go after it, below. */}
         </fieldset>
+        {/* R6-1: after the fieldset, as the unsaved line below is: it appears on the frame a draft is restored. */}
+        {extraEvidenceIds.length > 0 ? (
+          <div className="decision-form__box" data-kept-evidence>
+            <Callout kind="note">
+              <p>{keptEvidenceLine(extraEvidenceIds.length)}</p>
+              <Button variant="secondary" size="compact" onClick={() => {
+                const now = latest.current.value;
+                setExtraEvidenceIds([]);
+                edit({ ...now, evidenceIds: now.evidenceIds.filter((x) => !extraEvidenceIds.includes(x)) });
+              }}>{F.removeKept(extraEvidenceIds.length)}</Button>
+            </Callout>
+          </div>
+        ) : null}
         {/* Design N1: the unsaved line's words after its first sentence, under the bar's own place in the card, so the pinned
             bar stays one line taller and these show when it is back in its place. Hidden from assistive technology: the bar's
             live span reads the whole sentence. Not drawn on a phone, whose fixed bar shows the whole line (DecisionForm.css).
