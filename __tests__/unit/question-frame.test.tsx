@@ -46,7 +46,7 @@ const CURRENT = {
   id: 'dv2', projectId: 'p1', stage: 'pre-processing', questionId: 'Q-PP-04', versionNumber: 2,
   optionsInPlace: ['Alternatives analysis'], evidence: [{ id: 'e1' }],
   status: 'done', scopeAnswer: null, reasonCode: null, reason: 'r', decidedBy: null, declaredDate: null,
-  enteredBy: { userId: 'u2', name: 'Joseph K.', formerMember: false },
+  enteredBy: { userId: 'u2', name: 'Joseph K.', formerMember: false }, receivedAt: '2026-11-10T08:30:00.000Z',
 } as unknown as DecisionVersionView;
 const SEAL = { sealId: 's1', sealNumber: 1, reviewId: 'r1', reviewName: 'Pre-processing review 1' };
 const PANEL: QuestionPanelData = {
@@ -298,7 +298,9 @@ describe('the frame states', () => {
   });
 
   it('archived: the banner is at the top of the work area, above both strips', async () => {
-    const html = await render({ ...PANEL, projectArchived: true, canWrite: false, canRaiseFinding: false });
+    // A reader's page (lane 1 Task 3's ReadingDecision) reads the version's whole shape, so the version here is complete.
+    const current = { ...CURRENT, reasonErased: null, withdrawalCode: null, evidence: [] } as unknown as DecisionVersionView;
+    const html = await render({ ...PANEL, current, projectArchived: true, canWrite: false, canRaiseFinding: false });
     expect(html.indexOf('This project is archived')).toBeGreaterThan(-1);
     expect(html.indexOf('This project is archived')).toBeLessThan(html.indexOf('<div class="question-top"'));
   });

@@ -170,10 +170,11 @@ test('a Viewer sees the same frame with no form controls', async ({ page, baseUR
   await expect(page.getByRole('complementary', { name: QUESTION_COPY.content.goodPractice })).toBeVisible();
   // From 1160 the breadcrumb leads back to the stage's questions (on narrow screens the top bar does).
   await expect(page.getByRole('navigation', { name: UI_COPY.breadcrumbLabel }).getByRole('link', { name: 'Pre-processing', exact: true })).toBeVisible();
-  // The read-only view (plan 1C Task 7): no answer-form region; the one line sits in the main column, which holds no control.
+  // The read-only view (plan 1C Task 7; lane 1 Task 3): no answer-form region; the one line sits in the reader's aside at the
+  // top of the guidance column, and the main column holds no control.
   const main = page.locator('.question-workspace__main');
   await expect(form(page)).toHaveCount(0);
-  await expect(main.locator('[data-permission-note]')).toBeVisible();
+  await expect(page.locator('[data-region="reading-aside"] [data-permission-note]')).toBeVisible();
   await expect(main.locator('input, select, textarea, button')).toHaveCount(0);
   const f = await box(page.locator('section[data-region="current-decision"]'));
   const a = await box(aside(page));
@@ -192,7 +193,7 @@ for (const role of ['viewer', 'reviewer'] as const) {
     await page.setViewportSize({ width: 1280, height: 900 });
     await openQuestion(page, role, Q, baseURL!, projectId);
     await expect(page.getByRole('heading', { level: 2, name: QUESTION_COPY.reading.title })).toBeVisible();
-    await expect(page.locator('blockquote.current-decision__reason')).toHaveText(reason);
+    await expect(page.locator('blockquote.reading-decision__reason')).toHaveText(reason);
     const open = page.locator('section[data-region="open-work"]');
     await expect(open.getByRole('heading', { level: 2 })).toHaveText(QUESTION_COPY.reading.stillOpen(1));
     // No decision form; the route column's GET filter ("Show") is a form of its own and stays for every role.
@@ -201,9 +202,11 @@ for (const role of ['viewer', 'reviewer'] as const) {
     await expect(page.locator('.decision-save-bar')).toHaveCount(0);
     const raise = page.getByRole('link', { name: QUESTION_COPY.findingLink.raise });
     await expect(raise).toHaveCount(role === 'reviewer' ? 1 : 0);
-    // The open finding is listed once, in the main column, not again in the aside (review M2); the way on closes the column.
+    // The open finding is listed once, in the main column, not again in the aside (review M2); what is still open closes the
+    // column, and the way on is the reader's aside's one primary link (lane 1 Task 3, viewer-reading.png).
     await expect(page.getByRole('link', { name: QUESTION_COPY.findingLink.view })).toHaveCount(0);
-    await expect(page.locator('.question-workspace__main > :last-child')).toHaveAttribute('data-region', 'way-on');
+    await expect(page.locator('.question-workspace__main > :last-child')).toHaveAttribute('data-region', 'open-work');
+    await expect(page.locator('[data-region="reading-aside"] .ui-button--primary')).toHaveCount(1);
     for (const [width, height] of [[1280, 900], [375, 812], [320, 640]] as const) {
       await page.setViewportSize({ width, height });
       await expectNoHorizontalScroll(page);

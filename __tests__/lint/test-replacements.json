@@ -2278,5 +2278,13 @@
     "property": "An archived project's S-12 shows the archived banner above the regions; a live one does not.",
     "proof": "Fix round 1 (review M4): QuestionPanelRegions' `stage` (the stage page's data) is now required, so no render can invent \"0 open findings\" or drop the strips; the page already refuses a null stage list. The case passes the fixture stage (__tests__/helpers/stageFixture.ts: the fixture bundle's questions, nothing recorded) by a dynamic import inside the case, so the module's imports are unchanged. The two render calls add `stage: stageFixture()` (the helper is already imported by this file); the expectations are unchanged.",
     "task": "1B-route-L1-T1 fix round 1"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::(module)",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 FR-DEC-06 UX-14 (helper): with no decision yet the next version is 1, and a read-only or archived panel has no evidence block to change",
+    "property": "The S-12 page is rendered in a unit test with its auth and its loaders mocked, so no case reaches a database; every slot records its props.",
+    "proof": "Two lines are added and none removed: a comment and `vi.mock('@/components/question/ReadingDecision', () => ({ ReadingDecision: slot('ReadingDecision') }));`. A reader's panel now renders the reader's card (components/question/ReadingDecision.tsx) where it rendered CurrentDecision's reading mode, and CurrentDecision is already a slot here; the file's fixture version carries no receivedAt, so the real card's date throws (RangeError: not an instant). As a slot it records its props like the others; the helper case still checks that a read-only or archived panel has no evidence block, and every other case renders a writer's panel, which does not reach the card. No expectation was removed or loosened; the file's ten cases pass.",
+    "task": "1B-route-L1-T3"
   }
 ]

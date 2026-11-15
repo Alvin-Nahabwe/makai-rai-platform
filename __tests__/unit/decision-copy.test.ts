@@ -224,7 +224,8 @@ describe('lib/question/copy.ts', () => {
     // Lane 1 Task 1: the position strip names its links in words (frame.previous, frame.next); the old bare words are gone.
     expect(QUESTION_COPY.frame.previous('Who decides?', 3, 'Done')).toBe('Previous question: Who decides? (question 3, Done)');
     expect(QUESTION_COPY.frame.next('Who decides?', 5, 'Partly')).toBe('Next question: Who decides? (question 5, Partly)');
-    expect(QUESTION_COPY.nav).not.toHaveProperty('position');
+    // Lane 1 Task 3: the reader's way on names the next question's place under "Next: question n".
+    expect(QUESTION_COPY.nav.position(10, 24, 'Pre-processing')).toBe('Question 10 of 24 in Pre-processing');
     expect(QUESTION_COPY.headings).not.toHaveProperty('suggestions');
     expect([QUESTION_COPY.headings.current, QUESTION_COPY.headings.record, QUESTION_COPY.headings.findings])
       .toEqual(['Current decision', 'Record a decision', 'Findings']);

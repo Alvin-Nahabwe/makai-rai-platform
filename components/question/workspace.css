@@ -314,14 +314,6 @@ a.position-strip__step:hover {
   margin-block-start: var(--space-6);
 }
 
-/* The reason in the read-only view is a quotation of what the team wrote. */
-.current-decision__reason {
-  margin: var(--space-2) 0;
-  padding-inline-start: var(--space-4);
-  border-inline-start: 3px solid var(--color-border-container);
-  white-space: pre-line;
-  overflow-wrap: anywhere;
-}
 
 /* ── The question in words (R7: one ramp step below the sketch's 30px, so "Save decision" stays in the first view) ── */
 .question-frame__title {
