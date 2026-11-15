@@ -6,7 +6,8 @@ import { SealMarker } from '@/components/review/SealMarker';
 import { WITHDRAWAL_CODE_LABELS, deciderLabel } from '@/lib/decision/copy';
 import { textErasedLine } from '@/lib/documents/copy';
 import { EVIDENCE_COPY } from '@/lib/evidence/copy';
-import { stripBidiControls, webLink } from '@/lib/evidence/format';
+import { isOwnHost, stripBidiControls, webLink } from '@/lib/evidence/format';
+import { publicOrigin } from '@/lib/publicOrigin';
 import { QUESTION_COPY } from '@/lib/question/copy';
 import { markKindOf } from '@/lib/ui/marks';
 import { formatDay, formatDeclaredDate, formatTime } from '@/lib/format/dates';
@@ -45,7 +46,21 @@ export type ReadingDecisionProps = {
  * same parse the host comes from (lib/evidence/format.ts webLink); never the whole address in brackets. Any other
  * address is its name and the whole cleaned address as text, with no claim to open a site. Every name sits in `<bdi>` with bidi controls removed (E14).
  */
-function EvidenceItem({ orgSlug, item }: { orgSlug: string; item: EvidenceItemView }): ReactElement {
+/**
+ * The platform's own public origin, or null when none is configured. A link to that host stays on the platform, so the
+ * page does not call it another site (coordinator's ruling, lane 2's review). publicOrigin() throws without AUTH_URL or
+ * NEXTAUTH_URL (lib/publicOrigin.ts refuses to guess); then no link is treated as own and every one keeps the
+ * "opens another site" warning: the safe side for a reader deciding whether to follow it.
+ */
+function ownOrigin(): string | null {
+  try {
+    return publicOrigin();
+  } catch {
+    return null;
+  }
+}
+
+function EvidenceItem({ orgSlug, item, origin }: { orgSlug: string; item: EvidenceItemView; origin: string | null }): ReactElement {
   if (item.kind === 'link') {
     if (item.url === null) return <li className="reading-evidence__item">{EVIDENCE_COPY.list.linkAddressErased}</li>;
     const web = webLink(item.url);
@@ -67,7 +82,9 @@ function EvidenceItem({ orgSlug, item }: { orgSlug: string; item: EvidenceItemVi
           {/* The real host in its own quieter element (regular weight, muted ink), so a name that copies this suffix cannot
               pass for it (review M1). An http or https host is plain ASCII (punycode), so it needs no <bdi>, which a browser
               would set apart with spaces in the link's accessible name. */}
-          {' '}<span className="reading-evidence__host">{R.linkTo(web.host)}</span><Icon name="external-link" size={18} />
+          {origin !== null && isOwnHost(web.host, origin)
+            ? <>{' '}<span className="reading-evidence__host">{R.linkOwn(web.host)}</span></>
+            : <>{' '}<span className="reading-evidence__host">{R.linkTo(web.host)}</span><Icon name="external-link" size={18} /></>}
         </a>
       </li>
     );
@@ -117,6 +134,7 @@ function Reason({ current }: { current: DecisionVersionView }): ReactElement | n
  * every value is a React child, so it is text, never markup (NFR-SEC-11).
  */
 export function ReadingDecision({ orgSlug, current, historyCount, historyHref, seals, isScopeQuestion }: ReadingDecisionProps): ReactElement {
+  const origin = ownOrigin();
   const head = (state: ReactElement | null) => (
     <div className="reading-decision__head">
       <h2 id="s12-current-decision">{R.title}</h2>
@@ -178,7 +196,7 @@ export function ReadingDecision({ orgSlug, current, historyCount, historyHref, s
         <div className="reading-evidence">
           <h3>{R.evidence}</h3>
           {current.evidence.length === 0 ? <p>{R.noEvidence}</p> : (
-            <ul>{current.evidence.map((item) => <EvidenceItem key={item.id} orgSlug={orgSlug} item={item} />)}</ul>
+            <ul>{current.evidence.map((item) => <EvidenceItem key={item.id} orgSlug={orgSlug} item={item} origin={origin} />)}</ul>
           )}
         </div>
       </>

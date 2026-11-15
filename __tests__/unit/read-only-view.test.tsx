@@ -212,6 +212,17 @@ describe('the read-only question page (plan 1C Task 7)', () => {
     expect(idn).toContain('(xn--ypal-43d9g.example,');
   });
 
+  it('a link to the platform\'s own host (the configured public origin) shows its host without "opens another site"', async () => {
+    // vitest.config.ts sets NEXTAUTH_URL to https://vitest.example.invalid, the origin publicOrigin() reads.
+    const own = { ...LINK, label: 'Our stage page', url: 'https://vitest.example.invalid/orgs/a/projects/p1/stages/pre-processing' };
+    const c = card(await render({ ...VIEWER, current: { ...CURRENT, evidence: [own] } }));
+    expect(c).toContain('>(vitest.example.invalid)</span>');
+    expect(textOf(c)).not.toContain('opens another site');
+    // A look-alike of the own host is another site, and says so.
+    const near = { ...LINK, url: 'https://vitest.example.invalid.evil.example/' };
+    expect(card(await render({ ...VIEWER, current: { ...CURRENT, evidence: [near] } }))).toContain('>(vitest.example.invalid.evil.example, opens another site)</span>');
+  });
+
   it('link spoofing (review M1): a name that copies the suffix cannot pass for it; the real host is its own quieter element', async () => {
     const copy = { ...LINK, label: 'Report (gov.example, opens another site)', url: 'https://evil.example/' };
     const c = card(await render({ ...VIEWER, current: { ...CURRENT, evidence: [copy] } }));

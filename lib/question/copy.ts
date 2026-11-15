@@ -109,6 +109,8 @@ export const QUESTION_COPY = Object.freeze({
      * of lib/suggestions/copy.ts's resource line "(PDF, opens another site)". The page sets it in its own quieter element.
      */
     linkTo: (host: string): string => `(${host}, opens another site)`,
+    /** After the name of a link to the platform's own host (lib/evidence/format.ts isOwnHost): the host alone, since it opens no other site. */
+    linkOwn: (host: string): string => `(${host})`,
     /** After the name of a link that is not a web address (shown as text, not as a link): the address, cleaned. */
     notWebLink: Object.freeze({ before: ' (', after: ')' }),
     stillOpen: (n: number): string => `Still open on this question: ${n} ${n === 1 ? 'finding' : 'findings'}`,
