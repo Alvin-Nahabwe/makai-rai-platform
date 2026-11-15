@@ -104,7 +104,7 @@ describe('S-14 the findings list (UX-15, UX-06, UX-07, FR-FND-07, FR-FND-08)', (
     const k = await everyKind();
     const html = await renderList('reviewer', k.p.id);
     const L = FINDINGS_COPY.list;
-    const order: Array<string | RegExp> = [L.decisionDone, L.decisionWithdrawn, /Pre-processing: \d+ findings?/, L.noMitigation,
+    const order: Array<string | RegExp> = [L.decisionDone, L.decisionWithdrawn, /Pre-processing<\/span>: \d+ findings?/, L.noMitigation,
       L.overdue, L.lookAgain, L.closed, L.withdrawn];   // the stage heading carries its count (R13-9)
     const at = (h: string | RegExp) => html.search(typeof h === 'string' ? new RegExp(`>${h}<`) : new RegExp(`>${h.source}<`));
     expect(order.map(at).every((i) => i >= 0)).toBe(true);
@@ -127,17 +127,19 @@ describe('S-14 the findings list (UX-15, UX-06, UX-07, FR-FND-07, FR-FND-08)', (
     for (let i = 0; i < 2; i++) await addFinding(fx, q.id, { stage: 'pre-processing', source: 'team' });
     await addFinding(fx, q.id, { stage: 'in-processing', source: 'team' });
     const html = await renderList('reviewer', q.id);
-    expect(html).toContain('>Pre-processing: 2 findings<'); expect(html).toContain('>In-processing: 1 finding<');
+    // The heading marks the stage's name as a defined term (spec 6), so the name ends in its Term's closing tag.
+    const heading = (stage: string, n: number) => `>${stage}</span>${FINDINGS_COPY.labels.stageCountRest(n)}<`;
+    expect(html).toContain(heading('Pre-processing', 2)); expect(html).toContain(heading('In-processing', 1));
     expect(html).not.toMatch(/\b3 findings?\b/);                                   // 2 + 1 appears on no element
     const filtered = await renderList('reviewer', q.id, 'pre-processing');
-    expect(filtered).toContain('>Pre-processing: 2 findings<'); expect(filtered).not.toContain('In-processing:');   // the stage filter keeps the count of what is listed
+    expect(filtered).toContain(heading('Pre-processing', 2)); expect(filtered).not.toContain('id="g-in-processing"');   // the stage filter keeps the count of what is listed
   });
 
   it('UX-40 UX-07: a list shows 50 findings and "Show more", and the stage heading still counts its whole group', async () => {
     const q = await addProject(fx, { name: 'Many' });
     for (let i = 0; i < 52; i++) await addFinding(fx, q.id, { stage: 'pre-processing', source: 'team' });
     const html = await renderList('reviewer', q.id);
-    expect(html).toContain('>Pre-processing: 52 findings<');
+    expect(html).toContain(`>Pre-processing</span>${FINDINGS_COPY.labels.stageCountRest(52)}<`);
     expect(html.match(/\/findings\/[0-9a-f-]{36}"/g)).toHaveLength(50);
     expect(html).toMatch(/href="\/orgs\/[^"]+\/findings\?shown=100"[^>]*>Show more</);
   });

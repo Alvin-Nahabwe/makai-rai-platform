@@ -107,6 +107,8 @@ export const FINDINGS_COPY = Object.freeze({
     fromDecisionWith: (status: string): string => `From a decision: ${status}`,
     overdue: 'Overdue',
     wasDue: (date: string): string => `: was due ${date}`,
+    /** S-14's stage heading after the stage's name, which the heading marks as a defined term: ": 1 finding". */
+    stageCountRest: (n: number): string => `: ${n} ${n === 1 ? 'finding' : 'findings'}`,
     stageCount: (stageName: string, n: number): string => `${stageName}: ${n} ${n === 1 ? 'finding' : 'findings'}`,
   }),
 
@@ -177,6 +179,9 @@ export const FINDINGS_COPY = Object.freeze({
     stage: 'Stage',
     chooseStage: 'Choose a stage',
     riskArea: 'Risk area (optional)',
+    /** The label's two parts: the term, which the label marks with its definition beside the field, then "(optional)". */
+    riskAreaWord: 'Risk area',
+    optional: '(optional)',
     noRiskArea: 'No risk area',
     areaOption: (id: string, name: string): string => `${name} (${id})`,
     submit: 'Raise finding',
@@ -234,6 +239,11 @@ export const FINDINGS_COPY = Object.freeze({
     cannotAct: 'The person this is assigned to can no longer update it. Assign it to someone else.',
     controlUsed: 'Suggested control used:',
     cancelReason: 'Why it is cancelled:',
+    /**
+     * F7 (LD-25): the reason written on each open mitigation when a risk is accepted (lib/data/findings.ts). Rows written
+     * before it hold "risk accepted"; the finding page shows those in these words too (`cancelReasonText`).
+     */
+    riskAcceptedCancel: 'The risk was accepted, so this work was cancelled.',
     historySummary: (n: number): string => `History: ${n} ${n === 1 ? 'version' : 'versions'}`,
     historyVersion: (n: number): string => `Version ${n}, saved`,
     by: 'by',

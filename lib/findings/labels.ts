@@ -65,3 +65,11 @@ export function overdueLabel(dueDate: CalendarDate): { label: string; rest: stri
 export function stageCountHeading(stageName: string, n: number): string {
   return FINDINGS_COPY.labels.stageCount(stageName, n);
 }
+
+/** F7: the cancel reason an acceptance wrote before LD-25's words, still stored in those rows (no stored data changes). */
+const RISK_ACCEPTED_BEFORE_LD25 = 'risk accepted';
+
+/** A mitigation's stored cancel reason as the finding page shows it: an earlier acceptance's "risk accepted" in LD-25's words. */
+export function cancelReasonText(stored: string): string {
+  return stored === RISK_ACCEPTED_BEFORE_LD25 ? FINDINGS_COPY.mitigation.riskAcceptedCancel : stored;
+}

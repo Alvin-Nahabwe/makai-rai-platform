@@ -6,6 +6,7 @@ import { requestDigest } from '@/lib/data/idempotency';
 import type { OrgContext } from '@/lib/data/tenant';
 import { acceptRisk, acceptedRisksToLookAgain, addMitigation, findingDetail, mitigationHistory } from '@/lib/data/findings';
 import { toResponse } from '@/lib/http/toResponse';
+import { FINDINGS_COPY } from '@/lib/findings/copy';
 import { resetDb, testDb } from '../helpers/db';
 import { captureLogs, scanLines } from '../helpers/logCapture';
 import { markerFor } from '../helpers/markers';
@@ -86,7 +87,7 @@ describe('acceptRisk and route 8 (FR-FND-05, SRS 5.3 item 11 rule 2)', () => {
     const R = randomUUID();
     await accept({ requestId: R });
     const h = await mitigationHistory(ctx, p.id, m.mitigationId);
-    expect(h[0]).toMatchObject({ versionNumber: 2, baseVersionNumber: 1, status: 'cancelled', cancelReason: 'risk accepted', enteredBy: { userId: fx.members.admin.userId } });
+    expect(h[0]).toMatchObject({ versionNumber: 2, baseVersionNumber: 1, status: 'cancelled', cancelReason: FINDINGS_COPY.mitigation.riskAcceptedCancel, enteredBy: { userId: fx.members.admin.userId } });
     expect(await testDb.mitigationVersion.findUniqueOrThrow({ where: { id: h[0].id } })).toMatchObject({ requestId: (await import('@/lib/data/idempotency')).derivedRequestId(R, 'mitigation_versions:' + m.mitigationId) });
     expect(await mitigationHistory(ctx, p.id, done.mitigationId)).toHaveLength(1);   // a done one is left as it is
   });

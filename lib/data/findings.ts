@@ -19,6 +19,7 @@ import { erasedFields, evidenceViews, userRefs } from '@/lib/data/views';
 import { sealsIncludingRows } from '@/lib/data/seals';
 import { runningContent } from '@/lib/content/loader';
 import { deriveFindingState } from '@/lib/findings/state';
+import { FINDINGS_COPY } from '@/lib/findings/copy';
 import { FINDING_MESSAGES, parseAcceptRisk, parseAddMitigation, parseCloseByDecision, parseFindingEvent, parseUpdateMitigation } from '@/lib/findings/validate';
 import { eatDate, isOverdue } from '@/lib/followup/overdue';
 import { logSecurityEvent } from '@/lib/security-logger';
@@ -216,8 +217,11 @@ async function eventViews(tx: TenantTx, rows: readonly EventRow[]): Promise<Find
   }));
 }
 
-/** The cancel reason of the versions an acceptance saves (FR-FND-05, 5.3 item 11 rule 2). */
-const RISK_ACCEPTED_REASON = 'risk accepted';
+/**
+ * The cancel reason of the versions an acceptance saves (FR-FND-05, 5.3 item 11 rule 2), in LD-25's words (F7). Rows
+ * saved before hold "risk accepted"; the finding page shows those in these words (`cancelReasonText`, lib/findings/labels.ts).
+ */
+const RISK_ACCEPTED_REASON = FINDINGS_COPY.mitigation.riskAcceptedCancel;
 
 const isOpenWork = (m: { status: string }) => m.status === 'planned' || m.status === 'in_progress';
 

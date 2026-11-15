@@ -7,8 +7,12 @@ import { ShowMoreLink } from '@/components/ui/ShowMoreLink';
 import { LIST_PAGE_SIZE, pageOf } from '@/lib/ui/showMore';
 import { STAGE_NAMES } from '@/lib/findings/labels';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
+import { Definition, Term } from '@/components/ui/Definition';
+import { TermList, termListId, type TermListItem } from '@/components/review/TermList';
+import { STAGE_TERMS, STATUS_TERMS } from '@/lib/review/copy';
+import { TERM_ACCEPTED_RISK, TERM_FINDING, TERM_MITIGATION } from '@/lib/vocabulary/terms';
 import type { FindingListItem, FindingsPageData } from '@/lib/findings/pageData';
-import { STAGES, type Stage } from '@/types/record';
+import { STAGES, type DecisionStatus, type Stage } from '@/types/record';
 import '@/components/ui/pageHeaderStyles';
 import './Findings.css';
 
@@ -70,6 +74,31 @@ function Group({ id, heading, d, items }: { id: string; heading: string; d: Find
   );
 }
 
+/** The prefix of the ids of the definitions under the heading. */
+const TERMS_ID = 'findings-term';
+
+/**
+ * The terms defined under the heading (spec 6; the findings sketch): "finding", which the heading holds; "mitigation",
+ * which the stage groups' headings use ("Open, no mitigation yet"); the decision statuses the rows name ("From a
+ * decision: Partly") or, for a project with no finding, the empty line names; and "accepted risk" when a row or a group
+ * says it. Each is listed only when the page shows it.
+ */
+function listTerms(d: FindingsPageData): TermListItem[] {
+  const rows = [
+    ...d.decisionDone, ...d.decisionWithdrawn, ...d.gateNo, ...d.stages.flatMap((g) => [...g.noMitigation, ...g.overdue, ...g.other]),
+    ...d.lookAgain, ...d.closed, ...d.withdrawn,
+  ];
+  const used = new Set<string>(rows.map((r) => r.sourceStatus).filter((x): x is DecisionStatus => x !== null && x !== 'withdrawn'));
+  // "No findings yet. The platform raises a finding when a decision is saved as Partly or Not yet."
+  if (d.empty) { used.add('partly'); used.add('not_yet'); }
+  const statuses = (Object.keys(STATUS_TERMS) as DecisionStatus[]).filter((s) => used.has(s)).map((s) => ({ of: STATUS_TERMS[s], marked: true }));
+  const accepted = d.lookAgain.length > 0 || rows.some((r) => r.state === 'closed_accepted_risk');
+  return [
+    { of: TERM_FINDING, marked: false }, { of: TERM_MITIGATION, marked: true }, ...statuses,
+    ...(accepted ? [{ of: TERM_ACCEPTED_RISK, marked: true }] : []),
+  ];
+}
+
 export function FindingsPageView({ data }: { data: FindingsPageData }): ReactElement {
   const d = data;
   const hasAny = d.decisionDone.length + d.decisionWithdrawn.length + d.gateNo.length + d.stages.length + d.lookAgain.length + d.closed.length + d.withdrawn.length > 0;
@@ -80,8 +109,9 @@ export function FindingsPageView({ data }: { data: FindingsPageData }): ReactEle
       <div className="ui-page-header">
         <div>
           <ListLink href={`/orgs/${d.orgSlug}/projects/${d.projectId}`} className="finding-back">{L.backTo} <bdi>{d.projectName}</bdi></ListLink>
-          <h1 className="ui-page-header__title">{FINDINGS_COPY.titles.findings}</h1>
+          <h1 className="ui-page-header__title" aria-describedby={termListId(TERMS_ID, TERM_FINDING)}><Term of={TERM_FINDING}>{FINDINGS_COPY.titles.findings}</Term></h1>
         </div>
+        <TermList idPrefix={TERMS_ID} items={listTerms(d)} />
       </div>
       <nav aria-label={L.filter} className="finding-filter">
         <ul>
@@ -103,7 +133,9 @@ export function FindingsPageView({ data }: { data: FindingsPageData }): ReactEle
       <Group id="g-gate-no" heading={L.gateNo} d={d} items={d.gateNo} />
       {d.stages.map((g) => (
         <section key={g.stage} aria-labelledby={`g-${g.stage}`} className="finding-group">
-          <h2 id={`g-${g.stage}`}>{g.heading}</h2>
+          {/* The group's heading holds the page's first use of the stage's name: its meaning follows it (D1). */}
+          <h2 id={`g-${g.stage}`}><Term of={STAGE_TERMS[g.stage]}>{g.name}</Term>{FINDINGS_COPY.labels.stageCountRest(g.count)}</h2>
+          <Definition of={STAGE_TERMS[g.stage]} as="p" />
           {([[L.noMitigation, g.noMitigation], [L.overdue, g.overdue], [L.open, g.other]] as const).map(([name, items]) =>
             items.length === 0 ? null : (
               <section key={name} aria-label={L.groupLabel(g.name, name)} className="finding-subgroup">
