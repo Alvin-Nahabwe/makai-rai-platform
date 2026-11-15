@@ -82,7 +82,9 @@ test.describe('D16: unsaved text of another account on a shared browser', () => 
     await pressSignIn(page, b);
     await expect(question(page)).toBeVisible();
     await page.getByRole('button', { name: AUTH_COPY.signOutAndLeave }).click();
-    await page.waitForURL(/\/login(\?|$)/);
+    // The question is on /login already, so the address cannot say the sign-out finished: S-01's form coming back can.
+    await expect(page.locator('#email')).toBeVisible({ timeout: 30_000 });
+    await expect(question(page)).toHaveCount(0);
     expect(await draftKeys(page, a.userId)).toEqual(aKeys);
     // B is signed out: a signed-in page sends B to S-01.
     await page.goto('/account');
@@ -142,7 +144,8 @@ test.describe('D16: unsaved text of another account on a shared browser', () => 
     await page.evaluate(([k, v]) => localStorage.setItem(k, v), [keyOf(fx, a.userId), DRAFT()] as const);
     await pressSignIn(page, b);
     await expect(question(page)).toBeVisible();
-    await expect(page.getByText(AUTH_COPY.otherTextTitle)).toBeFocused();
+    // The title is InlineConfirm's first paragraph (its words are in a <strong> inside it).
+    await expect(question(page).locator('p').filter({ hasText: AUTH_COPY.otherTextTitle })).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(page.getByRole('button', { name: AUTH_COPY.signOutAndLeave })).toBeFocused();
     await page.keyboard.press('Tab');
