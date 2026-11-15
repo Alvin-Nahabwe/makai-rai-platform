@@ -68,7 +68,7 @@ export function firstUseViolations(
   const violations: Array<{ id: string; text: string }> = [];
   const checked = concepts.filter((c) => c.defineOnFirstUse);
   const read = nodes.filter((n) => !skipTexts.has(n.text)).map((n) => {
-    const m = /^(.+) (\([^()]*\))$/su.exec(n.text);
+    const m = /^(.+) (\([^()]*\))$/u.exec(n.text);
     return m !== null && skipTexts.has(m[1]) ? { ...n, text: m[2] } : n;
   });
   for (const concept of checked) {
