@@ -8,6 +8,7 @@ import { Select } from '@/components/ui/Select';
 import { TextArea } from '@/components/ui/TextArea';
 import { OUTSIDE_ROLE_LABELS, SCOPE_OPTIONS, STATUS_OPTIONS, reasonCount } from '@/lib/decision/copy';
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
+import { textErasedLine } from '@/lib/documents/copy';
 import { REASON_MAX } from '@/lib/decision/rules';
 import { formatDeclaredDate } from '@/lib/format/dates';
 import { dateParts, isDecision, type DecisionDraft } from '@/lib/question/draft';
@@ -108,6 +109,7 @@ export function DecisionFields({ data, value, errors, disabled, onChange }: Deci
       <Select
         id="decision-reason-code" name="reasonCode" label={F.fields.reasonCode} required placeholder={F.chooseOne}
         value={value.reasonCode ?? ''} disabled={disabled} error={err('reasonCode')}
+        aria-describedby={chosenCode !== null && chosenCode.useWhen !== '' ? 'decision-reason-code-use' : undefined}
         options={codes.map((c) => ({ value: c.code, label: c.label }))}
         onChange={(e) => set({ reasonCode: e.target.value === '' ? null : e.target.value })}
       />
@@ -115,6 +117,7 @@ export function DecisionFields({ data, value, errors, disabled, onChange }: Deci
     </div>
   ) : null;
   // Ruling (a), 15 Nov 2026: the reason's hint is the question's own signed-off prompt (content 5.1.0), not one line for all.
+  const erased = current?.reasonErased?.erasedOn ?? null;
   const reasonHelp = [data.runningQuestion.reasonPrompt, chosenCode?.reasonMustSay ?? ''].filter((t) => t !== '').join(' ');
 
   // A former member who decided the current version stays selectable, named as the record names them.
@@ -135,11 +138,15 @@ export function DecisionFields({ data, value, errors, disabled, onChange }: Deci
 
       <div className="decision-fields__reason">
         <TextArea
-          id="decision-reason" name="reason" label={F.fields.reason} required value={value.reason} disabled={disabled}
-          maxLength={REASON_MAX} count={(n) => reasonCount(n)} describedBy={['decision-reason-help']} error={err('reason')}
+          id="decision-reason" name="reason" label={F.fields.reason} required value={value.reason} disabled={disabled} rows={4}
+          maxLength={REASON_MAX} count={(n) => reasonCount(n)} error={err('reason')}
+          describedBy={erased === null ? ['decision-reason-help'] : ['decision-reason-help', 'decision-reason-erased']}
           onChange={(e) => set({ reason: e.target.value })}
         />
         <p id="decision-reason-help" className="decision-fields__help">{reasonHelp}</p>
+        {/* The current version's reason was erased on the organisation's instruction: the box opens empty, and says why
+            (review round 1, A-I1; the reading view says the same, CurrentDecision). */}
+        {erased === null ? null : <p id="decision-reason-erased" className="decision-fields__help">{textErasedLine(erased)}</p>}
       </div>
 
       {/* One row (the sketch's .row): Decided by beside Decided on; the date's shortcuts wrap under its boxes, and below about
@@ -160,11 +167,13 @@ export function DecisionFields({ data, value, errors, disabled, onChange }: Deci
       />
 
       <DateField
-        idPrefix="decision" legend={F.fields.declaredDate} required hint={F.dateHelp} value={value.date} disabled={disabled}
+        idPrefix="decision" legend={F.fields.declaredDate} required aria-describedby="decision-date-hint" value={value.date} disabled={disabled}
         error={err('declaredDate')} errorId="decision-declaredDate-error" showToday shortcuts={shortcuts}
         onChange={(date) => set({ date })}
       />
       </div>
+      {/* Lead's ruling D3: the date's hint under the row, one line of small type; every box names it. */}
+      <p id="decision-date-hint" className="decision-fields__date-hint">{F.dateHelp}</p>
     </div>
   );
 }

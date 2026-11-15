@@ -33,6 +33,13 @@ describe('Select', () => {
     expect(html).toContain('<option value="a" selected="">A</option>');
   });
 
+  it('aria-describedby (additive): the caller\'s ids follow the hint and come before the error; without it the markup is unchanged', () => {
+    const base = { id: 's', name: 's', label: 'Main reason', hint: 'h', options: [{ value: 'a', label: 'A' }] } as const;
+    expect(selectOf(renderToStaticMarkup(<Select {...base} aria-describedby="s-use" error="Choose one." />))).toContain('aria-describedby="s-hint s-use s-error"');
+    expect(selectOf(renderToStaticMarkup(<Select {...base} aria-describedby="s-use" hint={undefined} />))).toContain('aria-describedby="s-use"');
+    expect(renderToStaticMarkup(<Select {...base} aria-describedby={undefined} />)).toBe(renderToStaticMarkup(<Select {...base} />));
+  });
+
   it('without an error, aria-invalid is false', () => {
     expect(selectOf(renderToStaticMarkup(<Select id="s" name="s" label="S" options={[]} />))).toContain('aria-invalid="false"');
   });

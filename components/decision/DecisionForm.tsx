@@ -32,10 +32,10 @@ import '@/components/ui/buttonStyles';
 export type NextQuestion = { questionId: string; text: string; href: string; number: number; total: number };
 
 /**
- * `next`, `stageHref` and `openFindings` come from the decision card (DecisionCard.tsx); without them (a unit test of the
- * form alone) the save bar has no way on and the consequence line counts no open finding.
+ * `nextQuestion` and `stageHref` come from the decision card (DecisionCard.tsx); without them (a unit test of the form
+ * alone) the save bar has no way on. The line on what this save will do reads the panel's own shortfall finding.
  */
-export type DecisionFormProps = { data: QuestionPanelData; next?: NextQuestion | null; stageHref?: string; openFindings?: number };
+export type DecisionFormProps = { data: QuestionPanelData; nextQuestion?: NextQuestion | null; stageHref?: string };
 
 const NO_RETRY: RetryState = { requestId: null, sentBody: null };
 const F = DECISION_FORM_COPY;
@@ -66,33 +66,36 @@ const fileList = (names: readonly string[]) => names.join(', ');
  * form. The evidence block lives in this client tree, so its callbacks are this form's (EVD RE-1), and it is
  * remounted with the current version's id so a save that made a new version gives it the new `initial` (EVD RE-4).
  */
-export function DecisionForm({ data, next = null, stageHref, openFindings = 0 }: DecisionFormProps): ReactElement | null {
+export function DecisionForm({ data, nextQuestion = null, stageHref }: DecisionFormProps): ReactElement | null {
   if (!data.canWrite) {
     const note = decisionFormNote(data.viewer.role, data.projectArchived);
     return note === null ? null : <p data-permission-note>{note}</p>;
   }
-  return <WritableDecisionForm data={data} next={next} stageHref={stageHref} openFindings={openFindings} />;
+  return <WritableDecisionForm data={data} nextQuestion={nextQuestion} stageHref={stageHref} />;
 }
 
 /**
- * What this save will do (R2; spec 9.3 item 6), as one sentence, then the version it becomes: the base it is sent on plus
- * one. The words are DECISION_FORM_COPY.consequence's, each true of lib/data/findings.ts (that file's comment says how).
+ * What this save will do (R2; spec 9.3 item 6), as one sentence, then the version it becomes. The words are
+ * DECISION_FORM_COPY.consequence's, each true of lib/data/findings.ts (that file's comment says how); "open" is the
+ * question's open shortfall finding, the one a save acts on (`data.openFinding`, openShortfallForQuestion), never a team
+ * finding. The version is one above the newer of the base the form holds and the version on the page: the same number as
+ * the corner's mark after a refresh, and a stale base meets the conflict view before any save (review round 1).
  * `finding` is true when the sentence uses the word, so its definition goes beside it.
  */
-function consequenceOf(d: DecisionDraft, data: QuestionPanelData, base: number | null, openFindings: number): { text: string; finding: boolean } {
+export function consequenceOf(d: DecisionDraft, data: QuestionPanelData, base: number | null): { text: string; finding: boolean } {
   const C = F.consequence;
-  const version = C.version((base ?? 0) + 1);
+  const version = C.version(Math.max(base ?? 0, data.current?.versionNumber ?? 0) + 1);
   if (data.question.type === 'gate') {
     return { text: d.scopeAnswer === null ? version : `${C.scope[d.scopeAnswer]} ${version}`, finding: false };
   }
   const label = STATUS_OPTIONS.find((o) => o.value === d.status)?.label;
   if (d.status === null || label === undefined) return { text: `${FINDING_NOTE} ${version}`, finding: true };
-  const open = openFindings > 0;
+  const open = data.openFinding !== null;
   if (d.status === 'partly' || d.status === 'not_yet') return { text: `${open ? C.keepsOpen(label) : C.raises(label)} ${version}`, finding: true };
   return { text: `${open ? C.closesNot(label) : C.raisesNone(label)} ${version}`, finding: open };
 }
 
-function WritableDecisionForm({ data, next = null, stageHref, openFindings = 0 }: DecisionFormProps): ReactElement {
+function WritableDecisionForm({ data, nextQuestion = null, stageHref }: DecisionFormProps): ReactElement {
   const router = useRouter();
   const key = draftKeyFor(data);
   const currentNumber = data.current?.versionNumber ?? null;
@@ -487,7 +490,7 @@ function WritableDecisionForm({ data, next = null, stageHref, openFindings = 0 }
 
   const signInHref = signInAgainHref(value.href, '');
   const waitingFiles = [...uploads.uploading, ...uploads.failed];
-  const consequence = consequenceOf(value, data, base, openFindings);
+  const consequence = consequenceOf(value, data, base);
 
   return (
     // SC 2.4.11: a control that takes focus anywhere in the answer form, the evidence block included, is brought wholly
@@ -564,7 +567,7 @@ function WritableDecisionForm({ data, next = null, stageHref, openFindings = 0 }
             unaddedLinkRefusals={linkRefusals}
             initialLink={typedLink}
             onLinkInput={(l) => setTypedLink((o) => (o.url === l.url && o.label === l.label ? o : l))}
-            examples={data.runningQuestion.evidenceExamples} decisionCard
+            examples={data.runningQuestion.evidenceExamples} decisionCard keptCount={extraEvidenceIds.length}
           />
         </section>
 
@@ -624,9 +627,9 @@ function WritableDecisionForm({ data, next = null, stageHref, openFindings = 0 }
           </div>
           {/* R2, R9: the way on beside Save, a quiet link, never a second orange control. On the stage's last question, the
               line that says so and All questions. */}
-          {next !== null ? (
-            <Link className="decision-next" href={next.href}>
-              <span className="decision-next__words">{F.card.next(next.text)}</span><span className="decision-next__position">{F.card.position(next.number, next.total)}</span>
+          {nextQuestion !== null ? (
+            <Link className="decision-next" href={nextQuestion.href}>
+              <span className="decision-next__words">{F.card.next(nextQuestion.text)}</span><span className="decision-next__position">{F.card.position(nextQuestion.number, nextQuestion.total)}</span>
             </Link>
           ) : stageHref !== undefined ? (
             <p className="decision-next decision-next--last">

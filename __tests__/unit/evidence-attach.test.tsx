@@ -76,8 +76,9 @@ describe('DecisionForm -- EvidenceBlock wiring', () => {
     // `initialLink` and `onLinkInput` joined it on 15 November 2026: when a new version replaces the block, an address typed
     // and not added is handed to the next block, not lost.
     // `examples` and `decisionCard` joined it on 15 November 2026 (the decision card, spec 9.3 item 5): words only, the
-    // question's own examples, the stored sentence and "None yet."; neither changes what the block sends or keeps.
-    const allowed = ['orgSlug', 'projectId', 'initial', 'disabled', 'onChange', 'onUploadState', 'onItemsChange', 'notUploaded', 'fromVersionNumber', 'saveOut', 'unaddedLinkRefusals', 'initialLink', 'onLinkInput', 'examples', 'decisionCard'];
+    // question's own examples, the stored sentence and "None yet."; neither changes what the block sends or keeps. `keptCount`
+    // (review round 1): how much evidence the form keeps that the block cannot name, so "None yet." is not said then.
+    const allowed = ['orgSlug', 'projectId', 'initial', 'disabled', 'onChange', 'onUploadState', 'onItemsChange', 'notUploaded', 'fromVersionNumber', 'saveOut', 'unaddedLinkRefusals', 'initialLink', 'onLinkInput', 'examples', 'decisionCard', 'keptCount'];
     expect(Object.keys(props).filter((k) => !allowed.includes(k))).toEqual([]);
   });
 

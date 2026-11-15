@@ -106,4 +106,6 @@ export const EVIDENCE_COPY = Object.freeze({
   examples: 'For example:',
   stored: 'Your file is stored as it is. The platform checks its type and records a fingerprint. It does not open or run the file.',
   noneYet: 'None yet.',
+  /** The decision card's closed disclosure over the accepted types and the stored sentence (lead's ruling D4, 15 Nov 2026). */
+  whatToAttach: 'What to attach',
 });

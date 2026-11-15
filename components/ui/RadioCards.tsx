@@ -63,7 +63,7 @@ export function RadioCards({
       <div className="ui-radio-cards__list">
         {options.map((o) => {
           const inputId = o.id ?? `${name}-${o.value}`;
-          const helpId = o.help === undefined ? undefined : `${inputId}-help`;
+          const helpId = helpIdOf(o);
           return (
             <div key={o.value} className="ui-radio-card">
               <label className="ui-radio-card__label" htmlFor={inputId}>

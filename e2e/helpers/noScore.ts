@@ -414,6 +414,8 @@ type ElementFacts = {
   points: string | null;
   /** A pseudo-element's computed `content`; null for an element. */
   content: string | null;
+  /** The two graphics of Done's filled green check (R8), or null. */
+  done: 'disc' | 'check' | null;
 };
 type MarkFacts = {
   html: string;
@@ -427,7 +429,7 @@ type MarkFacts = {
   parentText: string;
 };
 type InkSnapshot = {
-  tokens: Record<'mark' | 'ink' | 'muted' | 'saved' | 'tint' | 'action', string | null>;
+  tokens: Record<'mark' | 'ink' | 'muted' | 'saved' | 'tint' | 'action' | 'surface', string | null>;
   marks: MarkFacts[];
   /** Every mark element and every element inside one, with their pseudo-elements, once. */
   markTree: ElementFacts[];
@@ -447,6 +449,10 @@ type InkSnapshot = {
  *   - on the same elements, text colour is one of `--color-mark`, `--color-ink`, `--color-ink-muted`; background is
  *     transparent or `--color-tint`; a drawn border is one of those inks or `--color-action-text`;
  *   - a legacy label has words and its own colour is `--color-ink` or `--color-ink-muted`.
+ * One exception, the owner's ruling R8 (15 Nov 2026, over spec D4): Done's mark is the filled green check the kit draws,
+ * a disc (`.ui-mark__done-disc`) filled with `--color-saved` and a check (`.ui-mark__done-check`) stroked with
+ * `--color-surface`. Those two graphics, and only they, are held to exactly those paints instead of the rules above,
+ * and the check's tick shape is allowed; the mark's own colour, its words and every other mark stay ink.
  * A page with neither kind of element fails (a check that found nothing must not pass). Known limits: a tick drawn
  * as a closed outline, over two subpaths or two `line` elements, with a collinear extra point or with curves is not
  * recognised, and a chevron pointing down reads as a tick.
@@ -490,13 +496,16 @@ export async function expectStatusMarksInk(page: Page): Promise<void> {
         d: tag === 'path' ? (el.getAttribute('d') ?? '') : null,
         points: tag === 'polyline' ? (el.getAttribute('points') ?? '') : null,
         content: null,
+        // R8: only inside a mark's shape, as the kit draws it (StatusMark's MarkShape).
+        done: el.closest('svg.ui-mark__shape') === null ? null
+          : el.matches('.ui-mark__done-disc') ? ('disc' as const) : el.matches('.ui-mark__done-check') ? ('check' as const) : null,
       };
-      const out: Array<typeof own | { html: string; tag: string; pseudo: '::before' | '::after'; color: string; background: string; borders: string[]; paint: null; d: null; points: null; content: string }> = [own];
+      const out: Array<typeof own | { html: string; tag: string; pseudo: '::before' | '::after'; color: string; background: string; borders: string[]; paint: null; d: null; points: null; content: string; done: null }> = [own];
       for (const pseudo of ['::before', '::after'] as const) {
         const ps = getComputedStyle(el, pseudo);
         // A pseudo-element whose content is none or normal does not exist.
         if (ps.content === 'none' || ps.content === 'normal') continue;
-        out.push({ html, tag, pseudo, color: ps.color, background: ps.backgroundColor, borders: borderColours(ps), paint: null, d: null, points: null, content: ps.content });
+        out.push({ html, tag, pseudo, color: ps.color, background: ps.backgroundColor, borders: borderColours(ps), paint: null, d: null, points: null, content: ps.content, done: null });
       }
       return out;
     };
@@ -530,6 +539,7 @@ export async function expectStatusMarksInk(page: Page): Promise<void> {
         saved: tokenColour('--color-saved'),
         tint: tokenColour('--color-tint'),
         action: tokenColour('--color-action-text'),
+        surface: tokenColour('--color-surface'),
       },
       marks,
       markTree: treeOf(Array.from(markEls)),
@@ -543,12 +553,12 @@ export async function expectStatusMarksInk(page: Page): Promise<void> {
     };
   });
   if (!snap) throw new Error(`${who}: no <main> element, so there is nothing to check`);
-  const { mark, ink, muted, saved, tint, action } = snap.tokens;
-  const missing = ([['--color-mark', mark], ['--color-ink', ink], ['--color-ink-muted', muted], ['--color-saved', saved], ['--color-tint', tint], ['--color-action-text', action]] as Array<[string, string | null]>)
+  const { mark, ink, muted, saved, tint, action, surface } = snap.tokens;
+  const missing = ([['--color-mark', mark], ['--color-ink', ink], ['--color-ink-muted', muted], ['--color-saved', saved], ['--color-tint', tint], ['--color-action-text', action], ['--color-surface', surface]] as Array<[string, string | null]>)
     .filter(([, v]) => v === null)
     .map(([name]) => `${name} is not defined on :root, so no colour can be compared with it`);
   if (missing.length > 0) return fail(who, missing);
-  if (mark === null || ink === null || muted === null || saved === null || tint === null || action === null) {
+  if (mark === null || ink === null || muted === null || saved === null || tint === null || action === null || surface === null) {
     throw new Error(`${who}: a token resolved to nothing after the defined-on-:root check`);
   }
   if (snap.marks.length === 0 && snap.labels.length === 0) return fail(who, ['no status mark: neither a .ui-mark, .ui-mark__shape or [data-mark-kind] nor a .status-label in <main>']);
@@ -568,7 +578,8 @@ export async function expectStatusMarksInk(page: Page): Promise<void> {
       green(e.color, where, 'color');
       green(e.background, where, 'background-color');
       for (const b of e.borders) green(b, where, 'border colour');
-      if (e.paint) {
+      // Done's disc and check (R8) are held to their own paints below; their green and their tick are the ruling.
+      if (e.paint && e.done === null) {
         green(e.paint.fill, where, 'fill');
         green(e.paint.stroke, where, 'stroke');
       }
@@ -578,7 +589,7 @@ export async function expectStatusMarksInk(page: Page): Promise<void> {
         if (!inks.includes(b) && b !== action) findings.push(`border colour ${b} is not an ink or --color-action-text in ${where}`);
       }
       if (e.content !== null && TICK_CHARACTERS.test(e.content)) findings.push(`tick character in the content of ${where}`);
-      if (e.d !== null) {
+      if (e.d !== null && e.done !== 'check') {
         const verdict = tickShapeOf(e.d);
         if (verdict === 'tick') findings.push(`tick-shaped path in ${where}`);
         if (verdict === 'unreadable') findings.push(`cannot read path ${JSON.stringify(e.d)} in ${where}`);
@@ -596,7 +607,13 @@ export async function expectStatusMarksInk(page: Page): Promise<void> {
     }
   }
   for (const e of snap.markTree) {
-    if (e.paint) {
+    if (e.paint && e.done === 'disc') {
+      if (e.paint.fill !== saved) findings.push(`fill ${e.paint.fill} of Done's disc is not --color-saved (${saved}) in ${e.html}`);
+      if (e.paint.stroke !== 'none') findings.push(`stroke ${e.paint.stroke} on Done's disc in ${e.html}`);
+    } else if (e.paint && e.done === 'check') {
+      if (e.paint.stroke !== surface) findings.push(`stroke ${e.paint.stroke} of Done's check is not --color-surface (${surface}) in ${e.html}`);
+      if (e.paint.fill !== 'none') findings.push(`fill ${e.paint.fill} on Done's check in ${e.html}`);
+    } else if (e.paint) {
       if (e.paint.stroke !== 'none' && e.paint.stroke !== mark) findings.push(`stroke ${e.paint.stroke} is not --color-mark (${mark}) in ${e.html}`);
       if (e.tag !== 'line' && e.paint.fill !== 'none' && e.paint.fill !== mark) findings.push(`fill ${e.paint.fill} is not --color-mark (${mark}) in ${e.html}`);
     }

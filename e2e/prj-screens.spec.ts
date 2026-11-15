@@ -123,7 +123,7 @@ test('UX-36 FR-PRJ-02: S-10 delivers its headings and counts with JavaScript off
   await expect(page.getByRole('listitem').filter({ hasText: /\d+ questions? with no decision/ }).first()).toBeVisible();
 });
 
-test('UX-06: to-do counts come before recorded counts; status is words in ink, with no tick and no green (S-10 and S-08)', async ({ browser }) => {
+test('UX-06 R8: to-do counts come before recorded counts; status is words in ink, with no tick and no green but Done\'s filled green check (S-10 and S-08)', async ({ browser }) => {
   const page = await signedIn(browser, fx.members.owner);
   await page.goto(path(`/projects/${main.id}`));
   const text = await page.locator('[data-stage="pre-processing"]').innerText();

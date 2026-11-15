@@ -37,8 +37,10 @@ export type EvidenceBlockProps = {
   onLinkInput?: (link: { url: string; label: string }) => void;
   /** The decision card only: the question's own examples of what to attach (EvidenceBlockView). */
   examples?: readonly string[];
-  /** The decision card only: the stored sentence and "None yet." (EvidenceBlockView). */
+  /** The decision card only: its one-line layout, "None yet." and the closed "What to attach" (EvidenceBlockView). */
   decisionCard?: boolean;
+  /** The decision card only: evidence the form holds that the block cannot name (EvidenceBlockView). */
+  keptCount?: number;
 };
 
 /** The server's limit (lib/evidence/inspect.ts MAX_BYTES, which cannot load in a browser): a larger file is not sent. */
@@ -196,7 +198,7 @@ export function EvidenceBlock(props: EvidenceBlockProps): ReactElement {
       orgSlug={props.orgSlug} idBase={idBase} items={carried} added={added} fromVersionNumber={props.fromVersionNumber}
       uploads={uploads} notUploaded={props.notUploaded ?? []} disabled={props.disabled}
       linkFormOpen={linkFormOpen} linkUrl={linkUrl} linkLabel={linkLabel} linkError={linkError} linkRefused={linkRefused} linkPending={linkPending}
-      held={props.saveOut === true} examples={props.examples} decisionCard={props.decisionCard}
+      held={props.saveOut === true} examples={props.examples} decisionCard={props.decisionCard} keptCount={props.keptCount}
       onChooseFiles={chooseFiles}
       onOpenFilePicker={() => { fileInput.current?.click(); }}
       onOpenLink={() => setLinkFormOpen((o) => !o)}

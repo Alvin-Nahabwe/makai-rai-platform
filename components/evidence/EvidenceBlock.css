@@ -113,3 +113,85 @@
   margin: 0 0 var(--space-4);
   color: var(--color-ink);
 }
+
+/*
+ * The decision card's evidence (lead's ruling D4, 15 Nov 2026; the phone sketch's "Evidence: none yet [Add evidence]"):
+ * one line, the legend beside "None yet." and the two add buttons; the link form under the line; then the question's
+ * own examples, the private-data line, and the closed "What to attach". 16 px under it, as the sketch's groups.
+ */
+.evidence-block--card {
+  margin-block-end: var(--space-4);
+}
+
+.evidence-block--card > legend {
+  float: inline-start;
+  margin: 0 var(--space-3) 0 0;
+  line-height: var(--target-primary);
+}
+
+.evidence-block--card .evidence-block__add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin-block-end: var(--space-3);
+}
+
+.evidence-block--card .evidence-block__none {
+  margin: 0;
+  color: var(--color-ink-muted);
+}
+
+.evidence-block--card .evidence-block__link {
+  flex-basis: 100%;
+  margin-block-start: var(--space-2);
+}
+
+.evidence-block--card .evidence-block__list {
+  clear: both;
+  margin-block-end: var(--space-3);
+}
+
+.evidence-block--card .evidence-block__examples {
+  clear: both;
+  margin-block-end: var(--space-2);
+}
+
+.evidence-block--card .evidence-block__examples > p,
+.evidence-block--card .evidence-block__examples > ul {
+  display: inline;
+  margin: 0;
+  padding: 0;
+}
+
+.evidence-block--card .evidence-block__examples > ul {
+  list-style: none;
+}
+
+/* The examples read as one sentence: "For example: a, b, c". */
+.evidence-block--card .evidence-block__examples li {
+  display: inline;
+}
+
+.evidence-block--card .evidence-block__examples li + li::before {
+  content: '; ';
+}
+
+.evidence-block--card .evidence-block__examples > p::after {
+  content: ' ';
+}
+
+.evidence-block--card .evidence-block__help {
+  margin-block-end: 0;
+}
+
+.evidence-block__more > summary {
+  inline-size: fit-content;
+  min-block-size: var(--target-min);
+  color: var(--color-link);
+  cursor: pointer;
+}
+
+.evidence-block__more > p {
+  margin: var(--space-1) 0 0;
+}

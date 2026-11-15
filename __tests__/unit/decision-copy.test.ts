@@ -165,7 +165,10 @@ describe('lib/decision/form/copy.ts', () => {
     expect(DECISION_FORM_COPY.card.next('Who is affected?')).toBe('Next: Who is affected?');
     expect(DECISION_FORM_COPY.card.position(5, 22)).toBe('Question 5 of 22');
     expect(`${C.keepsOpen('Partly')} ${C.version(2)}`).toBe('Saving \u2018Partly\u2019 keeps a finding open for this question until your team closes it. This save becomes version 2.');
-    expect(C.raises('Not yet')).toBe('Saving \u2018Not yet\u2019 raises a finding for this question, unless your team has already accepted this risk.');
+    expect(C.raises('Not yet')).toBe('Saving \u2018Not yet\u2019 raises a finding for this question. If your team accepted this risk earlier, it raises one only if a version since was Done or Not applicable, or this answer is worse than the one accepted.');
+    expect(DECISION_FORM_COPY.card.savedAs(2)).toBe('Saved as version 2 \u00b7 ');
+    expect(DECISION_FORM_COPY.card.enteredBy('Joseph K.')).toBe('Entered by: Joseph K. on ');
+    expect(DECISION_FORM_COPY.conflict.notChosen).toBe('not chosen yet');
     expect(C.raisesNone('Done')).toBe('Saving \u2018Done\u2019 raises no finding.');
     expect(C.closesNot('Not applicable')).toBe("Saving \u2018Not applicable\u2019 does not close the open finding by itself. Your team closes it on the finding's page.");
     expect(C.scope).toEqual({

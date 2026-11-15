@@ -49,6 +49,12 @@ describe('DateField', () => {
     }
   });
 
+  it('aria-describedby (additive): a line the caller places outside the fieldset describes every box, before the error; without it the markup is unchanged', () => {
+    const outside = render({ 'aria-describedby': 'decision-date-hint', errorId: 'decision-declaredDate-error', error: 'Enter a real date.' });
+    for (const i of outside.match(/<input[^>]*>/g) ?? []) expect(i).toContain('aria-describedby="decision-date-hint decision-declaredDate-error"');
+    expect(render({ 'aria-describedby': undefined })).toBe(render());
+  });
+
   it('the error id defaults to idPrefix-error, and without an error the inputs do not reference it', () => {
     expect(render({ error: 'Enter a real date.' })).toContain('id="decision-error"');
     for (const i of inputs(render())) {

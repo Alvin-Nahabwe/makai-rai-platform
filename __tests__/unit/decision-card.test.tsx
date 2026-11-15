@@ -56,8 +56,9 @@ const NEXT = { questionId: 'Q-PP-02', text: 'Who is affected by the AI system?',
 const STAGE = '/orgs/acme/projects/p1/stages/pre-processing';
 const HISTORY = '/orgs/acme/projects/p1/stages/pre-processing/questions/Q-PP-01/history';
 
-const card = (p: Partial<QuestionPanelData> = {}, o: { next?: typeof NEXT | null; open?: number } = {}) =>
-  renderToStaticMarkup(<DecisionCard data={{ ...PANEL, ...p }} next={o.next === undefined ? NEXT : o.next} stageHref={STAGE} openFindingsOnQuestion={o.open ?? 0} />) ?? '';
+/** `open` is the question's open shortfall finding (data.openFinding), the one a save acts on; `all` the seam's count of every open finding. */
+const card = (p: Partial<QuestionPanelData> = {}, o: { next?: typeof NEXT | null; open?: number; all?: number } = {}) =>
+  renderToStaticMarkup(<DecisionCard data={{ ...PANEL, ...((o.open ?? 0) > 0 ? { openFinding: { findingId: 'f1' } } : {}), ...p }} next={o.next === undefined ? NEXT : o.next} stageHref={STAGE} openFindingsOnQuestion={o.all ?? o.open ?? 0} />) ?? '';
 const words = (h: string) => textOf(h).replace(/\s+/g, ' ');
 /** The words of the one consequence line. */
 const consequence = (h: string) => {
@@ -119,11 +120,18 @@ describe('the saved mark in the card\'s corner (spec 7.3)', () => {
     expect(h).toMatch(new RegExp(`${esc(UI_COPY.saved.keptBefore(1))}<a href="${esc(HISTORY)}">${UI_COPY.saved.keptLink}</a>`));
   });
 
-  it('who decided and who entered, and "History: n versions", quietly under the heading', () => {
-    const h = card({ current: V2, historyCount: 2 });
-    expect(words(h)).toContain('Decided by: Principal investigator (no platform account).');
-    expect(words(h)).toMatch(/Entered by: Joseph K\. on 12 Oct 2026 at \d{2}:\d{2} \S+/);
-    expect(h).toMatch(new RegExp(`<a href="${esc(HISTORY)}"[^>]*>${esc(QUESTION_COPY.reading.history(2))}</a>`));
+  it('D1: the header is the heading and one line in the corner, "Saved as version N · <date>"; who decided, who entered, the dates, the platform line and "History: n versions" are at the foot, after Save and before More', () => {
+    const h = card({ current: V2, historyCount: 2, viewer: { ...PANEL.viewer, role: 'owner' } });
+    const head = h.match(/<div class="decision-card__head">[\s\S]*?<\/div><\/div>/)![0];
+    expect(words(head)).toBe(`${F.card.heading}${F.card.savedAs(2)}12 Oct 2026`);
+    const foot = h.match(/<div class="decision-card__meta">[\s\S]*?<\/div><div class="decision-card__more">/)![0];
+    expect(words(foot)).toContain(`${UI_COPY.saved.decidedOn} 12 Oct 2026 \u00b7 ${UI_COPY.saved.savedAt} 12 Oct 2026, 07:42 UTC`);
+    expect(words(foot)).toContain(`${UI_COPY.saved.onPlatform} ${UI_COPY.saved.keptBefore(1)}${UI_COPY.saved.keptLink}.`);
+    // A-minor (review round 1): the entered time is the reader's, as the saved time (LocalTime: UTC until hydration).
+    expect(words(foot)).toContain('Decided by: Principal investigator (no platform account). Entered by: Joseph K. on 12 Oct 2026, 07:42 UTC.');
+    expect(foot).toMatch(/<time dateTime="2026-10-12T07:42:00.000Z">/);
+    expect(foot).toMatch(new RegExp(`<a href="${esc(HISTORY)}"[^>]*>${esc(QUESTION_COPY.reading.history(2))}</a>`));
+    expect(h.indexOf('>Save decision</button>')).toBeLessThan(h.indexOf('class="decision-card__meta"'));
   });
 
   it('a withdrawal as the current version: the withdrawn line, no saved mark', () => {
@@ -199,13 +207,18 @@ describe('the reason, the main reason and Decided by', () => {
 });
 
 describe('the evidence (spec 9.3 item 5)', () => {
-  it('the question\'s own examples, the stored sentence verbatim, the private-data line, and "None yet." with nothing attached', () => {
+  it('D4: one line, "Evidence", "None yet." and the two add buttons; the examples visible; the private-data line; the types and the stored sentence in a closed "What to attach"', () => {
     const h = card();
-    const ev = h.match(/<fieldset class="evidence-block">[\s\S]*?<\/fieldset>/)![0];
-    for (const e of QUESTION.evidenceExamples) expect(ev).toContain(`<li>${e}</li>`);
-    expect(decode(ev)).toContain('Your file is stored as it is. The platform checks its type and records a fingerprint. It does not open or run the file.');
-    expect(decode(ev)).toContain(EVIDENCE_COPY.help.keep);
-    expect(ev).toContain(EVIDENCE_COPY.noneYet);
+    const ev = h.match(/<fieldset class="evidence-block evidence-block--card">[\s\S]*?<\/fieldset>/)![0];
+    expect(ev).toMatch(/^<fieldset[^>]*><legend>Evidence<\/legend><div class="evidence-block__add"><p class="evidence-block__none">None yet\.<\/p>/);
+    const examples = ev.match(/<div class="evidence-block__examples">[\s\S]*?<\/div>/)![0];
+    for (const e of QUESTION.evidenceExamples) expect(examples).toContain(`<li>${e}</li>`);
+    expect(examples).not.toMatch(/<details/);
+    expect(decode(ev)).toContain(`<p>${EVIDENCE_COPY.help.keep}</p><details class="evidence-block__more"><summary>${EVIDENCE_COPY.whatToAttach}</summary>`);
+    const more = decode(ev.match(/<details[\s\S]*?<\/details>/)![0]);
+    expect(more).not.toMatch(/<details[^>]*\bopen/);
+    expect(more).toContain(EVIDENCE_COPY.help.types);
+    expect(more).toContain('Your file is stored as it is. The platform checks its type and records a fingerprint. It does not open or run the file.');
     // the two controls stay one press away (the protected flows press "Add a link" and set the file input directly)
     expect(ev).toMatch(/>Add a file<\/button>/);
     expect(ev).toMatch(/aria-expanded="false"[^>]*>Add a link<\/button>/);
@@ -265,5 +278,59 @@ describe('Save beside the next question (R2, R9)', () => {
     expect(h).toContain(QUESTION_COPY.foot.last);
     expect(h).toMatch(new RegExp(`<a[^>]*href="${esc(STAGE)}"[^>]*>${QUESTION_COPY.nav.allQuestions}</a>`));
     expect(h).not.toContain('Next: ');
+  });
+});
+
+describe('review round 1', () => {
+  it('A-I1: a current reason erased on the organisation\'s instruction is said beside the empty Reason box, and the box names it', () => {
+    const h = card({ current: { ...V2, reason: null, reasonErased: { erasedOn: '2026-11-01' } as never } });
+    expect(decode(h)).toContain(`<p id="decision-reason-erased" class="decision-fields__help">Text erased on 1 Nov 2026 on the organisation's instruction.</p>`);
+    expect(h).toMatch(/<textarea[^>]*aria-describedby="decision-reason-count decision-reason-help decision-reason-erased"/);
+    expect(card({ current: V2 })).not.toContain('decision-reason-erased');
+  });
+
+  it('A-I2: "None yet." is not said while the form keeps evidence the block cannot name', async () => {
+    const { EvidenceBlockView } = await import('@/components/evidence/EvidenceBlockView');
+    const view = (keptCount: number) => renderToStaticMarkup(
+      <EvidenceBlockView orgSlug="acme" idBase="e" items={[]} added={[]} uploads={[]} notUploaded={[]} disabled={false}
+        linkFormOpen={false} linkUrl="" linkLabel="" linkError={null} decisionCard keptCount={keptCount} />);
+    expect(view(0)).toContain(EVIDENCE_COPY.noneYet);
+    expect(view(1)).not.toContain(EVIDENCE_COPY.noneYet);
+  });
+
+  it('B-I2: the sentence reads the open shortfall finding a save acts on, not the count of every open finding', () => {
+    // A team finding open on the question (all: 1) and no shortfall finding: Partly raises one.
+    expect(consequence(card({ current: V2 }, { all: 1 }))).toContain(C.raises('Partly'));
+    expect(consequence(card({ current: V2 }, { open: 1 }))).toContain(C.keepsOpen('Partly'));
+  });
+
+  it('A-minor B-M1: the version is one above the newer of the form\'s base and the version on the page', async () => {
+    const { consequenceOf } = await import('@/components/decision/DecisionForm');
+    const data = { ...PANEL, current: V2 };
+    // After a refresh brought version 2 while the person had typed on version 1, the line and the corner agree.
+    expect(consequenceOf(draftFromCurrent(data), data, 1).text).toContain(C.version(3));
+    expect(consequenceOf(draftFromCurrent(data), data, 2).text).toContain(C.version(3));
+    expect(consequenceOf(draftFromCurrent(PANEL), PANEL, null).text).toContain(C.version(1));
+  });
+
+  it('B-M3: "Your answer" with no decider chosen says so, never "Decided by: , <date>"', async () => {
+    const { ConflictView } = await import('@/components/decision/ConflictView');
+    const h = renderToStaticMarkup(<ConflictView current={V1} mine={{ ...draftFromCurrent(PANEL), date: { day: '14', month: '11', year: '2026' } }}
+      viewerId="u-me" mineDecidedBy="" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
+    expect(decode(h)).toContain(`${F.conflict.notChosen}, 14 Nov 2026`);
+    expect(decode(h)).not.toMatch(/>, 14 Nov 2026</);
+  });
+
+  it('A-minor: the main reason\'s line on when to use it describes the select', () => {
+    const h = card({ current: { ...V2, status: 'not_yet', reasonCode: 'ny_planned_later' } });
+    expect(h).toMatch(/<select[^>]*id="decision-reason-code"[^>]*aria-describedby="decision-reason-code-use"/);
+    expect(card({ current: { ...V2, status: 'not_yet', reasonCode: null } })).not.toContain('decision-reason-code-use');
+  });
+
+  it('D2 D3: the reason box is four rows; the date\'s hint sits under the row, one line, and every box names it', () => {
+    const h = card();
+    expect(h).toMatch(/<textarea[^>]*id="decision-reason"[^>]*rows="4"/);
+    expect(h).toMatch(/<\/fieldset><\/div><p id="decision-date-hint" class="decision-fields__date-hint">/);
+    for (const part of ['day', 'month', 'year']) expect(h).toMatch(new RegExp(`<input[^>]*id="decision-${part}"[^>]*aria-describedby="decision-date-hint"`));
   });
 });

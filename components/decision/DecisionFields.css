@@ -28,6 +28,8 @@
  * still beside the word, so the choice never rests on colour alone. RadioCards renders the sentences after the grid
  * (helpBelow), in option order, and one shows: the sentence of the card that has focus, or else of the chosen card, or
  * none. A hidden sentence still describes its radio (aria-describedby names it). Where :has() does not work, all show.
+ * The rules pair the nth card with the nth sentence: four options at most, every one with its sentence (STATUS_OPTIONS,
+ * SCOPE_OPTIONS); an option without one would shift the pairs.
  */
 .decision-fields__choice .ui-radio-cards__list {
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -60,14 +62,14 @@
     display: none;
   }
 
-  .ui-radio-cards:has(.ui-radio-card:nth-child(1) :focus) .ui-radio-cards__helps > :nth-child(1),
-  .ui-radio-cards:has(.ui-radio-card:nth-child(2) :focus) .ui-radio-cards__helps > :nth-child(2),
-  .ui-radio-cards:has(.ui-radio-card:nth-child(3) :focus) .ui-radio-cards__helps > :nth-child(3),
-  .ui-radio-cards:has(.ui-radio-card:nth-child(4) :focus) .ui-radio-cards__helps > :nth-child(4),
-  .ui-radio-cards:not(:has(:focus)):has(.ui-radio-card:nth-child(1) :checked) .ui-radio-cards__helps > :nth-child(1),
-  .ui-radio-cards:not(:has(:focus)):has(.ui-radio-card:nth-child(2) :checked) .ui-radio-cards__helps > :nth-child(2),
-  .ui-radio-cards:not(:has(:focus)):has(.ui-radio-card:nth-child(3) :checked) .ui-radio-cards__helps > :nth-child(3),
-  .ui-radio-cards:not(:has(:focus)):has(.ui-radio-card:nth-child(4) :checked) .ui-radio-cards__helps > :nth-child(4) {
+  .decision-fields__choice .ui-radio-cards:has(.ui-radio-card:nth-child(1) :focus) .ui-radio-cards__helps > :nth-child(1),
+  .decision-fields__choice .ui-radio-cards:has(.ui-radio-card:nth-child(2) :focus) .ui-radio-cards__helps > :nth-child(2),
+  .decision-fields__choice .ui-radio-cards:has(.ui-radio-card:nth-child(3) :focus) .ui-radio-cards__helps > :nth-child(3),
+  .decision-fields__choice .ui-radio-cards:has(.ui-radio-card:nth-child(4) :focus) .ui-radio-cards__helps > :nth-child(4),
+  .decision-fields__choice .ui-radio-cards:not(:has(:focus)):has(.ui-radio-card:nth-child(1) :checked) .ui-radio-cards__helps > :nth-child(1),
+  .decision-fields__choice .ui-radio-cards:not(:has(:focus)):has(.ui-radio-card:nth-child(2) :checked) .ui-radio-cards__helps > :nth-child(2),
+  .decision-fields__choice .ui-radio-cards:not(:has(:focus)):has(.ui-radio-card:nth-child(3) :checked) .ui-radio-cards__helps > :nth-child(3),
+  .decision-fields__choice .ui-radio-cards:not(:has(:focus)):has(.ui-radio-card:nth-child(4) :checked) .ui-radio-cards__helps > :nth-child(4) {
     display: block;
   }
 }
@@ -105,4 +107,33 @@
 .decision-fields__note {
   margin: 0 0 var(--space-4);
   max-inline-size: var(--measure-reading);
+}
+
+/*
+ * Lead's ruling D5: inside the card the groups keep the sketch's 16 px between them (its fieldset, textarea and .row
+ * margins), not the kit's 24 px; the hint lines under a field keep their 8 px above the next group's 16.
+ */
+.decision-fields .ui-radio-cards,
+.decision-fields .ui-checkbox-group,
+.decision-fields .ui-date,
+.decision-fields > .ui-field {
+  margin-block-end: var(--space-4);
+}
+
+.decision-fields__help,
+.decision-fields__count {
+  margin-block-end: var(--space-4);
+}
+
+/* The date's hint (lead's ruling D3): under the row, one line of small type; every date box names it. */
+.decision-fields__date-hint {
+  margin: calc(-1 * var(--space-2)) 0 var(--space-4);
+  font-size: var(--font-size-small);
+  color: var(--color-ink-muted);
+}
+
+/* Inside the row the date's group ends with its buttons; the hint under the row carries the space. */
+.decision-fields__row > .ui-date,
+.decision-fields__row > .ui-field {
+  margin-block-end: var(--space-4);
 }

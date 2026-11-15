@@ -5,7 +5,10 @@ import { WithdrawDecision } from '@/components/decision/WithdrawDecision';
 import { SavedMark } from '@/components/ui/SavedMark';
 import { WITHDRAWAL_CODE_LABELS, deciderLabel } from '@/lib/decision/copy';
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
-import { formatDay, formatTime } from '@/lib/format/dates';
+import { formatDeclaredDate } from '@/lib/format/dates';
+import { Icon } from '@/components/ui/Icon';
+import { LocalTime } from '@/components/ui/LocalTime';
+import { UI_COPY } from '@/lib/ui/copy';
 import { QUESTION_COPY } from '@/lib/question/copy';
 import { canWithdrawVersion } from '@/lib/question/draft';
 import type { QuestionPanelData } from '@/lib/question/panel';
@@ -18,7 +21,11 @@ export type DecisionCardProps = {
   /** The next question that applies in this stage; null on the stage's last question. */
   next: NextQuestion | null;
   stageHref: string;
-  /** Open findings on this question: the input of the line on what this save will do. */
+  /**
+   * All open findings on this question, of any source (the seam's prop, kept). No sentence of the card counts them today:
+   * the line on what this save will do reads the question's open shortfall finding, `data.openFinding`, the one a save
+   * acts on (coordinator's seam ruling, review round 1).
+   */
   openFindingsOnQuestion: number;
 };
 
@@ -33,23 +40,29 @@ export type DecisionCardProps = {
  *
  * Not a client component: the page renders it, and a save's router.refresh() renders it again with the new version.
  */
-export function DecisionCard({ data, next, stageHref, openFindingsOnQuestion }: DecisionCardProps): ReactElement | null {
+export function DecisionCard({ data, next, stageHref }: DecisionCardProps): ReactElement | null {
   if (!data.canWrite) return null;
   const current = data.current;
   const historyHref = `/orgs/${data.orgSlug}/projects/${data.projectId}/stages/${data.stage}/questions/${data.question.id}/history`;
-  const withdrawn = current !== null && current.status === 'withdrawn';
+  const decision = current !== null && current.status !== 'withdrawn' ? current : null;
+  const S = UI_COPY.saved;
 
-  // The corner: the saved mark of a decision; the withdrawn line of a withdrawal; "No decision yet." with no version. The
-  // mark is not a live region: it is server-rendered filled, and the save's own status line announces the save.
+  // The corner (lead's ruling D1, the sketch's .fh): one line, the saved shape and "Saved as version N · <saved date>" in
+  // the reader's zone; "No decision yet." with no version; the withdrawn line for a withdrawal. Not a live region: it is
+  // server-rendered filled, and the save's own status line announces the save.
   const corner = current === null ? <p className="decision-card__none">{C.none}</p>
-    : withdrawn ? <p className="decision-card__none">{current.withdrawalCode === null ? C.withdrawnNoCode : C.withdrawn(WITHDRAWAL_CODE_LABELS[current.withdrawalCode])}</p>
-    : <SavedMark saved={{ version: current.versionNumber, savedAt: current.receivedAt, decidedOn: current.declaredDate }} historyHref={historyHref} live={false} />;
+    : decision === null ? <p className="decision-card__none">{current.withdrawalCode === null ? C.withdrawnNoCode : C.withdrawn(WITHDRAWAL_CODE_LABELS[current.withdrawalCode])}</p>
+    : (
+      <p className="decision-card__saved">
+        <span className="decision-card__saved-shape"><Icon name="circle-check" size={16} /></span>
+        {DECISION_FORM_COPY.card.savedAs(decision.versionNumber)}<LocalTime at={decision.receivedAt} dateOnly />
+      </p>
+    );
 
-  // Spec 9.3, after a save: "Entered by" and "Decided by" both shown, and "History: n versions". The decided date is in the
-  // saved mark ("Decided on ..."), so the decider's line names the person alone.
-  const decided = current === null || withdrawn || current.decidedBy === null ? null : C.decidedBy(deciderLabel(current.decidedBy, '', 'record'), null);
-  const entered = current === null || withdrawn ? null
-    : C.enteredBy(current.enteredBy.formerMember ? C.formerMember(current.enteredBy.name) : current.enteredBy.name, formatDay(current.receivedAt), formatTime(current.receivedAt));
+  // Spec 9.3, after a save: "Entered by" and "Decided by" both shown, and "History: n versions"; spec 7.3's dates and its
+  // line on the platform. All quiet, at the card's foot (D1). Every time is in the reader's zone (LocalTime).
+  const decider = decision?.decidedBy == null ? null : C.decidedBy(deciderLabel(decision.decidedBy, '', 'record'), null);
+  const enterer = decision === null ? null : (decision.enteredBy.formerMember ? C.formerMember(decision.enteredBy.name) : decision.enteredBy.name);
 
   return (
     <section data-region="answer-form" aria-labelledby="s12-answer-form" className="decision-card">
@@ -57,13 +70,33 @@ export function DecisionCard({ data, next, stageHref, openFindingsOnQuestion }: 
         <h2 id="s12-answer-form">{DECISION_FORM_COPY.card.heading}</h2>
         <div className="decision-card__corner">{corner}</div>
       </div>
+      {/* A phone (spec 7.3: the most visible thing after the question): the whole saved mark, first in the card. */}
+      {decision === null ? null : (
+        <div className="decision-card__saved-block">
+          <SavedMark saved={{ version: decision.versionNumber, savedAt: decision.receivedAt, decidedOn: decision.declaredDate }} historyHref={historyHref} live={false} />
+        </div>
+      )}
+      <DecisionForm key={`${data.projectId}:${data.question.id}`} data={data} nextQuestion={next} stageHref={stageHref} />
       {current === null ? null : (
         <div className="decision-card__meta">
-          {decided === null && entered === null ? null : <p>{decided === null ? entered : <>{decided} {entered}</>}</p>}
+          {decision === null ? null : (
+            <div className="decision-card__saved-lines">
+              <p>
+                {decision.declaredDate === null ? null : `${S.decidedOn} ${formatDeclaredDate(decision.declaredDate)} \u00b7 `}
+                {`${S.savedAt} `}<LocalTime at={decision.receivedAt} />
+              </p>
+              <p>
+                {S.onPlatform}
+                {decision.versionNumber > 1 ? <>{` ${S.keptBefore(decision.versionNumber - 1)}`}<Link href={historyHref}>{S.keptLink}</Link>.</> : null}
+              </p>
+            </div>
+          )}
+          {enterer === null ? null : (
+            <p>{decider === null ? null : `${decider} `}{DECISION_FORM_COPY.card.enteredBy(enterer)}<LocalTime at={decision!.receivedAt} />.</p>
+          )}
           <p><Link href={historyHref}>{QUESTION_COPY.reading.history(data.historyCount)}</Link></p>
         </div>
       )}
-      <DecisionForm key={`${data.projectId}:${data.question.id}`} data={data} next={next} stageHref={stageHref} openFindings={openFindingsOnQuestion} />
       {/* Mounted whenever there is a current version, with the permission as a prop, so after a withdrawal it stays to say
           "Withdrawn..." and to take focus (F12); it shows the More menu only while it can act. */}
       {current !== null ? (
