@@ -1,5 +1,8 @@
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { Icon } from '@/components/ui/Icon';
+import { Term } from '@/components/ui/Definition';
+import { TermTip } from '@/components/ui/TermTip';
+import type { DefinedEntry } from '@/lib/vocabulary/types';
 import { ListLink } from '@/components/ui/ListLink';
 import { MarkShape, StatusMark, statusMarkWords } from '@/components/ui/StatusMark';
 import type { ScopeAnswer, StatusMarkKind } from '@/components/ui/types';
@@ -28,6 +31,8 @@ export type RouteLineItem = {
   state: string[];
   /** The line after "Save all n now", for this question; null when there is none. */
   result: string | null;
+  /** The defined terms whose first use on the page is this question (fix round 4): marked in its words, an (i) after its link. */
+  terms: readonly DefinedEntry[];
 };
 
 const SEP = L.row.separator;
@@ -45,7 +50,7 @@ function Row({ item }: { item: RouteLineItem }): ReactElement {
         </span>
         <span className="route-line__text">
           {item.here ? <span className="route-line__pin">{L.line.youAreHere}</span> : null}
-          <span className="route-line__title">{item.title}</span>
+          <span className="route-line__title">{item.terms.reduceRight<ReactNode>((words, t) => <Term of={t}>{words}</Term>, item.title)}</span>
           <span className="route-line__meta">
             {item.next ? <><span className="route-line__next">{L.line.next}</span>{SEP}</> : null}
             <code className="route-line__code">{item.questionId}</code>{SEP}<span className="status-label">{words}</span>
@@ -53,6 +58,12 @@ function Row({ item }: { item: RouteLineItem }): ReactElement {
           </span>
         </span>
       </ListLink>
+      {/* The term's (i) after the link, never inside it: one control per row (fix round 4). */}
+      {item.terms.length > 0 ? (
+        <span className="route-line__tips">
+          {item.terms.map((t) => <TermTip key={t.id} of={t} id={`route-term-tip-${t.id}`} label={L.line.whatMeans(t.term)} />)}
+        </span>
+      ) : null}
       {item.result !== null ? <p className="stage-route__result">{item.result}</p> : null}
     </li>
   );

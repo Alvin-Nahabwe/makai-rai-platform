@@ -5,6 +5,7 @@ import { nextApplyingId, stageFilterSet } from '@/lib/question/route';
 import { STAGE_TITLE, type StageFilter } from '@/lib/question/stageList';
 import type { StagePageData } from '@/lib/question/stagePage';
 import { QUESTION_COPY } from '@/lib/question/copy';
+import { routeTermTips } from '@/components/question/termTips';
 import './route-column.css';
 
 /**
@@ -49,6 +50,10 @@ export function RouteColumn({ data, currentQuestionId, show, nextQuestionId }: {
           orgSlug={data.orgSlug} orgId={data.orgId} projectId={data.projectId} stage={data.stage} viewerId={data.viewerId}
           rows={data.rows} show={show} counts={counts} filters={filters}
           total={data.rows.length} sealNumber={sealNumber} marks={data.marks} scopeAnswer={data.scopeAnswer}
+          termTips={routeTermTips(
+            // The open question's words are the page's h1, ahead of the column: a term they use is not first used here.
+            [data.rows.find((r) => r.questionId === currentQuestionId)?.text ?? '', ...data.rows], data.marks, data.scopeAnswer,
+          )}
         />
       </div>
       <p className="route-column__all">

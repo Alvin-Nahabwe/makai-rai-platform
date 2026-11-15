@@ -103,6 +103,26 @@ describe('All questions: a row per question on one line', () => {
   });
 });
 
+describe('All questions: fix round 4, a question that is the page\'s first use of a defined term', () => {
+  const MC = 'Have you created or updated a model card for this model?';
+  it('the model-card row marks its words with the term and puts the term\'s (i) right after its link, not inside it; a later row gets none', () => {
+    const h = render(data([row('Q-PP-01'), row('Q-PP-02', { text: MC }), row('Q-PP-03', { text: 'Is the model card published?' })]));
+    const rows = rowsOf(h);
+    expect(rows.get('Q-PP-02')).toMatch(new RegExp(`<span class="route-line__title"><span data-term="model-card">${MC.replace('?', '\\?')}</span></span>`));
+    // One link per row, and the tip after it: no control inside the link.
+    expect(rows.get('Q-PP-02')).toMatch(/<\/a><span class="route-line__tips"><span class="ui-term-tip">/);
+    expect(rows.get('Q-PP-02')!.split('</a>')[0]).not.toContain('ui-term-tip');
+    expect(rows.get('Q-PP-02')).toContain('aria-label="What does &quot;model card&quot; mean?"');
+    expect(rows.get('Q-PP-03')).not.toContain('ui-term-tip');
+    expect(rows.get('Q-PP-01')).not.toContain('ui-term-tip');
+  });
+
+  it('a term the page has already used before the rows (here in the tally) gets no second tip on a row', () => {
+    const h = render(data([row('Q-PP-01', { kind: 'done', evidenceCount: 1 }), row('Q-PP-02', { text: 'Has the assessment been done?' })]));
+    expect(rowsOf(h).get('Q-PP-02')).not.toContain('ui-term-tip');
+  });
+});
+
 describe('All questions: design fix 1', () => {
   const css = () => readFileSync('components/question/stage-route.css', 'utf8') + readFileSync('components/question/route-line.css', 'utf8');
   it('the line has a reading measure on a wide screen (about 720 px, S3-2)', () => {

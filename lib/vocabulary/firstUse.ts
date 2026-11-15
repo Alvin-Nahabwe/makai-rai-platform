@@ -32,9 +32,10 @@ export const ROLE_IDS = ['owner', 'admin', 'assessor', 'reviewer', 'viewer'] as 
 const ROLES: ReadonlySet<string> = new Set(ROLE_IDS);
 
 /** The term as whole words: letters or digits may not touch either end, and the last word may take a plural `s`. */
-function termPattern(term: string): RegExp {
+/** (Also used by components/review/markTerms.tsx, so marking and checking read a use alike.) */
+export function termPattern(term: string, flags = 'iu'): RegExp {
   const words = term.trim().split(/\s+/).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  return new RegExp(`(?<![\\p{L}\\p{N}])${words.join('\\s+')}s?(?![\\p{L}\\p{N}])`, 'iu');
+  return new RegExp(`(?<![\\p{L}\\p{N}])${words.join('\\s+')}s?(?![\\p{L}\\p{N}])`, flags);
 }
 
 export function firstUseViolations(

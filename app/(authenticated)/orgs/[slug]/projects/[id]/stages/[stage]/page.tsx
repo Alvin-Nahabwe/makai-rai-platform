@@ -11,6 +11,7 @@ import { ArchivedBanner } from '@/components/project/ArchivedBanner';
 import { StageSealBanner } from '@/components/review/StageSealBanner';
 import { StageQuestionList } from '@/components/decision/StageQuestionList';
 import { StageMeaning } from '@/components/question/StageMeaning';
+import { routeTermTips } from '@/components/question/termTips';
 import { Breadcrumb } from '@/components/ui/Breadcrumb';
 import { StatusMark } from '@/components/ui/StatusMark';
 import { Icon } from '@/components/ui/Icon';
@@ -176,6 +177,17 @@ export function StageWorkspace({ data, show, shown }: { data: StagePageData; sho
         orgSlug={data.orgSlug} orgId={data.orgId} projectId={data.projectId} stage={data.stage} viewerId={data.viewerId}
         rows={page.items} show={show} counts={counts} filters={filters}
         total={data.rows.length} sealNumber={sealNumber} marks={data.marks} scopeAnswer={data.scopeAnswer}
+        termTips={routeTermTips([
+          // The page's words ahead of the rows, in reading order (fix round 4): a term they use is not first used in a row.
+          STAGE_TITLE[data.stage], QUESTION_COPY.stage.topics(moduleGroups(data.rows).map((g) => g.moduleTitle)),
+          STAGE_LIST_COPY.count(data.rows.length), ...tallyParts(tallyOfRows(data.rows, data.marks)).map((t) => t.words),
+          ...(openFindings > 0 ? [F.openFindings] : []), ...(overdueMitigations > 0 ? [F.overdueMitigations] : []),
+          ...(data.nothingRecorded ? [QUESTION_COPY.stage.nothingRecorded] : []),
+          ...(data.review !== null ? [QUESTION_COPY.stage.reviewName(data.review.name)] : []),
+          ...filters.map((f) => f.label),
+          // Then each topic's name and count line, and its rows.
+          ...moduleGroups(page.items).flatMap((g) => [g.moduleTitle, STAGE_LIST_COPY.summary(g.rows.length, g.noDecision), ...g.rows]),
+        ], data.marks, data.scopeAnswer)}
       />
       {page.hasMore ? <ShowMoreLink href={`?show=${show}&shown=${page.nextShown}`} label={QUESTION_COPY.stage.showMore} /> : null}
     </div>
