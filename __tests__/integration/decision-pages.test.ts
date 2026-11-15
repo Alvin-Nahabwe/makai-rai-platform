@@ -10,6 +10,8 @@ import { addDecision, addProject, addSealRow, addStageReview, buildOrg, ctxFor, 
 import { FIXTURE_QUESTION_IDS } from '../helpers/content';
 import type { StageFilter } from '@/lib/question/stageList';
 import { HOSTILE_STRINGS } from '../helpers/hostile';
+import { SUGGESTIONS_COPY } from '@/lib/suggestions/copy';
+import { QUESTION_COPY } from '@/lib/question/copy';
 
 /**
  * S-11, S-12 and S-13 rendered from real panel data on the fixture bundle (contract "Content bundle"). The router is the
@@ -46,7 +48,7 @@ describe('S-12 page', () => {
     const h = renderToStaticMarkup(createElement(QuestionPanelRegions, { data: await panelData('assessor', 'Q-PP-01') }));
     expect(h).toContain('href="#suggestions">Ways teams address this (3)</a>');
     expect(h).toContain('<h2 id="s12-suggestions">Ways teams address this</h2>');
-    expect(h).toContain('3 controls for this question&#x27;s risk area');
+    expect(h).toContain(SUGGESTIONS_COPY.intro);
     expect(h).toMatch(/<section[^>]*id="suggestions"/);
   });
 
@@ -84,24 +86,24 @@ describe('S-11 page', () => {
 
   it('FR-DEC-06 (screen): a new project\'s stage shows every question as No decision and the W-2 empty line', async () => {
     const h = await renderS11('?show=all');
-    expect(h).toContain('Nothing is recorded for this stage yet. Open any question to start. Stages can be recorded in any order.');
+    expect(h).toContain(QUESTION_COPY.stage.nothingRecorded);
     expect([...h.matchAll(/>No decision</g)].length).toBe(STAGE_QUESTION_COUNT);
     expect(h).toContain(`${STAGE_QUESTION_COUNT} questions`);
     // SPEC-4 W-2: module headings with their own counts, under a stage subtitle
     expect(h).toMatch(/<h2[^>]*>Problem Formulation<\/h2>\s*<p[^>]*>7 questions · 7 with no decision<\/p>/);
-    expect(h).toContain('Pre-processing: Problem Formulation; Data Collection &amp; Preparation');
+    expect(h).toContain('Problem Formulation · Data Collection &amp; Preparation');
   });
 
   it('FR-DEC-06 (screen): with a decision recorded the empty line goes and the row shows its status and version', async () => {
     await addDecision(fx, project.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId: c1.contentVersionId, status: 'partly', declaredDate: '2026-10' });
     const h = await renderS11('?show=all');
     expect(h).not.toContain('Nothing is recorded for this stage yet.');
-    expect(h).toMatch(/data-question-id="Q-PP-01"[\s\S]*?>Partly<\/span> · v1 · Oct 2026/);
+    expect(h).toMatch(/data-question-id="Q-PP-01"[\s\S]*?class="ui-mark__words">Partly<\/span>[\s\S]*?class="ui-plate__state">Oct 2026</);
   });
 
   it('FR-DEC-06 (screen): a filter with no results says so and links to all', async () => {
     const h = await renderS11('?show=done_without_evidence');
-    expect(h).toContain('No questions match &#x27;Done without evidence&#x27;.');
+    expect(h).toContain('No questions match &#x27;Done, no evidence attached&#x27;.');
     expect(h).toMatch(new RegExp(`<a[^>]*href="[^"]*\\?show=all"[^>]*>Show all ${STAGE_QUESTION_COUNT}</a>`));
   });
 
@@ -119,12 +121,6 @@ describe('S-11 page', () => {
     expect(h).toMatch(/Pre-processing review 1:[\s\S]*changed since seal 1 in 2 questions\./);
     expect(h).toContain(`href="/orgs/${fx.org.slug}/projects/${project.id}/reviews/${lastReviewId}"`);
     expect(h).toMatch(/value="changed_since_seal"[^>]*\/?>\s*Changed since seal 1 2</);
-  });
-
-  it('UX-06 (screen, R12-16): every S-11 row\'s status words sit in a status-label element, and none carries the warning class', async () => {
-    const h = await renderS11('?show=all');
-    expect([...h.matchAll(/class="[^"]*\bstatus-label\b[^"]*"/g)].length).toBe(STAGE_QUESTION_COUNT);
-    expect(h).not.toContain('status-label--warning');
   });
 
   it('UX-26 W-2: ?show=drafts renders every row on the server with the Drafts on this device filter chosen', async () => {
@@ -151,13 +147,26 @@ describe('S-13 page', () => {
     return renderToStaticMarkup(createElement(HistoryView, { data: data!, shown }));
   };
 
-  it('FR-DEC-04 (screen) FR-CNT-07: versions newest first, each with its content version and that version\'s wording', async () => {
+  it("FR-DEC-04 (screen) FR-CNT-07: versions newest first, each with that version's wording, and no content version or UTC toggle", async () => {
+    // Version 1 answers content 0.0.1-fixture and version 2 answers 0.0.2-fixture, whose wording of Q-PP-01 differs, so
+    // each block must show its own version's wording. The content version itself and a "Show UTC" disclosure are not shown.
     await addDecision(fx, project.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId: c1.contentVersionId, status: 'done', declaredDate: '2026-10' });
-    await addDecision(fx, project.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId: c1.contentVersionId, status: 'partly', declaredDate: '2026' });
+    const c2 = await useFixtureContent('0.0.2-fixture');
+    await addDecision(fx, project.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId: c2.contentVersionId, status: 'partly', declaredDate: '2026' });
     const h = await history('viewer');
     expect([...h.matchAll(/data-version-number="(\d+)"/g)].map((m) => m[1])).toEqual(['2', '1']);
-    expect(h).toContain('0.0.1-fixture');
-    expect(h).toContain('Show UTC');
+    const asMarkup = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
+    const [v2, v1] = h.split('data-version-number=').slice(1);
+    const w1 = wordingIn(c1.semver, 'Q-PP-01')!;
+    const w2 = wordingIn(c2.semver, 'Q-PP-01')!;
+    expect(w2.text).not.toBe(w1.text);   // not vacuous: the two versions word the question differently
+    expect(v1).toContain(`<dd>${asMarkup(w1.text)}</dd>`);
+    expect(v1).not.toContain(`<dd>${asMarkup(w2.text)}</dd>`);
+    expect(v2).toContain(`<dd>${asMarkup(w2.text)}</dd>`);
+    expect(v2).not.toContain(`<dd>${asMarkup(w1.text)}</dd>`);
+    expect(v1).toContain(`<dd>${asMarkup(w1.expectedPractice)}</dd>`);
+    expect(v2).toContain(`<dd>${asMarkup(w2.expectedPractice)}</dd>`);
+    for (const gone of ['Show UTC', 'Content version', `<dd>${c1.semver}</dd>`, `<dd>${c2.semver}</dd>`]) expect(h, gone).not.toContain(gone);
     expect(h).not.toContain('Withdraw this decision');   // a viewer has no withdraw control (FR-DEC-08)
   });
 

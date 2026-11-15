@@ -1,20 +1,14 @@
 'use client';
 
-import { useState, useSyncExternalStore, type CSSProperties, type FormEvent } from 'react';
+import { useState, useSyncExternalStore, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { PASSWORD_MIN_LENGTH } from '@/lib/validate';
-import { M22 } from '@/lib/http/messages';
+import { AUTH_MESSAGE_COPY, RESET_COPY } from '@/lib/auth/copy';
 import { useHydrated } from '@/lib/client/useHydrated';
-
-const NOT_SET = 'Not set: the request did not reach the server. Your link still works; try again.';
-/** S-01's notice for the same moment (LoginClient.tsx), shown while the page moves there. */
-const PASSWORD_CHANGED = 'Password changed. Please sign in with your new password.';
-const SERVER_PROBLEM = 'Not set: the server had a problem. Try again; if the link no longer works, ask for a new one.';
-
-const TARGET: CSSProperties = { minWidth: '24px', minHeight: '24px' };
-const FIELD_ERROR: CSSProperties = { margin: 'var(--space-1) 0 0', color: 'var(--color-risk-critical)', fontSize: 'var(--font-size-sm)' };
-const HINT: CSSProperties = { margin: 'var(--space-1) 0 0', fontSize: 'var(--font-size-sm)' };
+import { Button } from '@/components/ui/Button';
+import { StatusRegion } from '@/components/ui/StatusRegion';
+import { TextInput } from '@/components/ui/TextInput';
 
 export type ResetState =
   | { kind: 'idle' } | { kind: 'sending' } | { kind: 'done' } | { kind: 'unusable' }
@@ -44,7 +38,7 @@ export async function setNewPassword(fetchImpl: typeof fetch, token: string, new
     });
   } catch {
     // fetch rejects only when no answer came back; nothing was changed, and the link is unused.
-    return { kind: 'error', message: NOT_SET };
+    return { kind: 'error', message: RESET_COPY.notReached };
   }
   if (res.status === 204) return { kind: 'done' };
   if (res.status === 410) return { kind: 'unusable' };
@@ -55,7 +49,7 @@ export async function setNewPassword(fetchImpl: typeof fetch, token: string, new
     if (field) return { kind: 'invalid', message: field.message };
   }
   // The server answered, so whether the link was used is not known here.
-  return { kind: 'error', message: SERVER_PROBLEM };
+  return { kind: 'error', message: RESET_COPY.serverProblem };
 }
 
 export interface ResetPasswordViewProps {
@@ -73,34 +67,32 @@ export interface ResetPasswordViewProps {
 /** S-03's markup for a given state: one "New password" field (no confirm field), Show, and **Set password**. */
 export function ResetPasswordView(v: ResetPasswordViewProps) {
   // Checked before the token: the token is forgotten once the password is set, and that must not read as a dead link.
-  if (v.state.kind === 'done') return <div className="auth-success" role="status">{PASSWORD_CHANGED}</div>;
-  if (v.token === null || v.state.kind === 'unusable') {
-    return (
-      <>
-        <div className="auth-error" role="alert">{M22}</div>
-        <p className="auth-footer">
-          <Link href="/forgot-password" style={{ display: 'inline-block', minHeight: '24px' }}>Ask for a new link</Link>
-        </p>
-      </>
-    );
-  }
+  if (v.state.kind === 'done') return <StatusRegion message={RESET_COPY.passwordChanged} />;
+  // The assertive region is the first child in both branches below, so React keeps the one element when a 410 turns the
+  // form into M-22: the region exists before its text (ruling T16-6), and only its words change.
+  const unusable = v.token === null || v.state.kind === 'unusable';
+  const alert = unusable ? AUTH_MESSAGE_COPY.resetLinkUnusable : v.state.kind === 'error' ? v.state.message : null;
   const invalid = v.state.kind === 'invalid' ? v.state.message : null;
   return (
     <>
-      {v.state.kind === 'error' && <div className="auth-error" role="alert">{v.state.message}</div>}
-      <form method="post" onSubmit={v.onSubmit} noValidate>
-        <label htmlFor="new-password">New password</label>
-        <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
-          <input id="new-password" name="new-password" type={v.showPassword ? 'text' : 'password'} required autoComplete="new-password"
-            value={v.password} onChange={(e) => v.onPassword(e.currentTarget.value)} aria-invalid={invalid ? true : undefined}
-            aria-describedby={invalid ? 'new-password-hint new-password-error' : 'new-password-hint'} />
-          <button type="button" aria-controls="new-password" aria-pressed={v.showPassword} onClick={v.onToggleShow}
-            style={{ ...TARGET, padding: '0 var(--space-2)' }}>Show</button>
-        </div>
-        <p id="new-password-hint" style={HINT}>{`At least ${PASSWORD_MIN_LENGTH} characters.`}</p>
-        {invalid && <p id="new-password-error" style={FIELD_ERROR}>{invalid}</p>}
-        <button type="submit" className="btn-primary" disabled={v.state.kind === 'sending' || v.hydrated === false} style={TARGET}>Set password</button>
-      </form>
+      <StatusRegion message={alert} politeness="assertive" tone="error" />
+      {unusable ? (
+        <p className="auth-footer">
+          <Link href="/forgot-password" style={{ display: 'inline-block', minHeight: '24px' }}>{RESET_COPY.askNewLink}</Link>
+        </p>
+      ) : (
+        <form method="post" onSubmit={v.onSubmit} noValidate>
+          <TextInput id="new-password" name="new-password" label={RESET_COPY.newPassword} type={v.showPassword ? 'text' : 'password'} required
+            autoComplete="new-password" value={v.password} onChange={(e) => v.onPassword(e.currentTarget.value)}
+            hint={RESET_COPY.hint(PASSWORD_MIN_LENGTH)} error={invalid ?? undefined} />
+          {/* The kit's Button cannot carry aria-pressed or aria-controls (ruling T16-5), so this is a native button in the kit's classes. */}
+          <p style={{ margin: 'calc(-1 * var(--space-4)) 0 var(--space-6)' }}>
+            <button type="button" className="ui-button ui-button--quiet ui-button--compact" aria-controls="new-password"
+              aria-pressed={v.showPassword} onClick={v.onToggleShow}>{RESET_COPY.showPassword}</button>
+          </p>
+          <Button variant="primary" type="submit" disabled={v.state.kind === 'sending' || v.hydrated === false}>{RESET_COPY.submit}</Button>
+        </form>
+      )}
     </>
   );
 }
@@ -148,7 +140,7 @@ export function ResetPasswordClient() {
     if (next.kind === 'done') router.push('/login?passwordChanged=1');
   }
 
-  if (token === undefined) return <p>Loading...</p>;
+  if (token === undefined) return <p>{RESET_COPY.loading}</p>;
   return (
     <ResetPasswordView token={token} password={password} showPassword={showPassword} state={state} hydrated={hydrated}
       onPassword={setPassword} onToggleShow={() => setShowPassword((s) => !s)} onSubmit={onSubmit} />

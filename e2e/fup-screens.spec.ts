@@ -7,6 +7,7 @@ import { addFinding, addMitigationVersion, addProject, buildOrg, type FixtureAcc
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { eatDate } from '../lib/followup/overdue';
+import { PROJECT_COPY } from '../lib/project/copy';
 
 /**
  * The follow-up lines of S-10 and the reminder setting of S-21 in a browser (FR-FUP-01, FR-FUP-06,
@@ -112,7 +113,7 @@ test('NFR-A11Y-02 FR-FUP-01: keyboard only, a member reaches an overdue mitigati
   const { fx, url } = await projectWithFollowUp();
   const page = await signedIn(browser, fx.members.owner);
   await openProject(page, url);
-  await tabUntil(page, /^Open$/, { inside: FOLLOW_UP }); await expectFocusVisibleAndUncovered(page);
+  await tabUntil(page, new RegExp(`^${PROJECT_COPY.followUp.view.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`), { inside: FOLLOW_UP }); await expectFocusVisibleAndUncovered(page);
   await page.keyboard.press('Enter'); await expect(page).toHaveURL(/\/findings\//);
 });
 
@@ -124,6 +125,17 @@ for (const width of [1280, 360, 320]) for (const theme of ['light', 'dark'] as c
     await openProject(page, url);
     await expectNoSeriousA11yViolations(page, `S-10 follow-up ${width} ${theme}`);
     await expect(page.getByText(/^Overdue: was due \d{1,2} [A-Z][a-z]{2} \d{4}$/).first()).toBeVisible();
+    // spec 7.1: the word Overdue is drawn in the overdue role (red), the rest of the line in ink
+    const [word, role, rest] = await page.locator('.followup-overdue').first().evaluate((el) => {
+      const probe = document.createElement('span');
+      probe.style.color = 'var(--color-overdue)';
+      el.parentElement!.appendChild(probe);
+      const colours = [getComputedStyle(el).color, getComputedStyle(probe).color, getComputedStyle(el.parentElement!).color];
+      probe.remove();
+      return colours;
+    });
+    expect(word).toBe(role);
+    expect(rest).not.toBe(role);
   });
 
 test('NFR-A11Y-02 FR-FUP-06: the reminder setting on S-21 toggles by keyboard and announces "Reminder emails turned off."', async ({ browser }) => {
@@ -131,7 +143,7 @@ test('NFR-A11Y-02 FR-FUP-06: the reminder setting on S-21 toggles by keyboard an
   const page = await signedIn(browser, fx.members.assessor);
   requireWired('ReminderEmailsSetting', 'ACC-b, S-21');
   await page.goto('/account');
-  await tabUntil(page, /Email me when a mitigation I own is due/);
+  await tabUntil(page, /Email me when a mitigation assigned to me is due or overdue/);
   await page.keyboard.press('Space'); await expect(page.getByRole('status').filter({ hasText: 'Reminder emails' })).toHaveText('Reminder emails turned off.');   // 7.4.2 row S-21
-  await page.keyboard.press('Space'); await expect(page.getByRole('status').filter({ hasText: 'Saved.' })).toHaveText('Saved.');
+  await page.keyboard.press('Space'); await expect(page.getByRole('status').filter({ hasText: 'Reminder emails turned on.' })).toHaveText('Reminder emails turned on.');
 });

@@ -5,10 +5,11 @@ import type { AcceptedRiskView, ContentRef, FindingView, MitigationVersionView, 
 import type { FieldMap } from '@/types/documents';
 import type { SealManifestV1 } from '@/types/seal';
 import { loadContent } from '@/lib/content/loader';
-import { controlsForArea } from '@/lib/content/suggestions';
+import { controlsForArea, controlsForQuestion } from '@/lib/content/suggestions';
 import { loadFieldMap } from '@/lib/documents/fieldMaps';
 import {
-  GATE_DERIVED_NA, textErasedLine, NOT_RECORDED_AT_ISSUE,
+  GATE_DERIVED_NA, textErasedLine, NOT_RECORDED_AT_ISSUE, SEALED_NOTE, STATEMENT,
+  PROJECT_MARK, decisionSource, fromQuestion, outsideRoleLine, personalDataAnswerLine,
 } from '@/lib/documents/copy';
 import { SOURCE_RESOLVERS, resolveFields, type DocumentSnapshot, type SealedDecision, type SealedFinding, type SealedStage } from '@/lib/documents/resolve';
 
@@ -114,8 +115,8 @@ const provenance = (r: Resolved, id: string): string => (r.fields.find((f) => f.
 
 describe('the mitigation plan resolvers', () => {
   it('FR-DOC-01 (MP-01): stage, review name and the Prepared-for note; no note line when the note is empty', () => {
-    expect(text(resolve({ preparedFor: 'ethics submission' }), 'MP-01')).toBe('Stage: pre-processing. Pre-processing review 1. Prepared for: ethics submission');
-    expect(text(resolve({ preparedFor: null }), 'MP-01')).toBe('Stage: pre-processing. Pre-processing review 1.');
+    expect(text(resolve({ preparedFor: 'ethics submission' }), 'MP-01')).toBe('Stage: Pre-processing. Review: Pre-processing review 1. Prepared for: ethics submission');
+    expect(text(resolve({ preparedFor: null }), 'MP-01')).toBe('Stage: Pre-processing. Review: Pre-processing review 1.');
   });
 
   it('FR-DOC-01 FR-RM-04 (MP-02): whole-number counts of findings and mitigations, overdue by East Africa Time', () => {
@@ -148,7 +149,7 @@ describe('the mitigation plan resolvers', () => {
       mitigations: [{ what: 'Second coder', owner: 'Amina N.', due: '2026-11-10', status: 'planned', control: 'C-03' }],
     }] });
     const mp3 = text(r, 'MP-03') as string;
-    for (const s of ['From Q-PP-12', 'PP-02', 'Labels drift', 'Coders disagree.', '29 Oct 2026', 'Second coder', 'Amina N.', '10 Nov 2026', 'Planned', 'C-03']) expect(mp3).toContain(s);
+    for (const s of ['Source: From question Q-PP-12', 'Assigned to: Amina N.', 'PP-02', 'Labels drift', 'Coders disagree.', '29 Oct 2026', 'Second coder', 'Amina N.', '10 Nov 2026', 'Planned', 'C-03']) expect(mp3).toContain(s);
     const mp4 = text(r, 'MP-04') as string;
     for (const g of controlsForArea(content, 'PP-02')) for (const c of g.controls) expect(mp4).toContain(`${c.control.id} ${c.control.name}`);
   });
@@ -167,6 +168,34 @@ describe('the mitigation plan resolvers', () => {
 
   it('FR-DOC-01 (MP-04): an open finding with no risk area has no controls to suggest, and the field says so', () => {
     expect(text(resolve({ findings: [{ riskArea: null }] }), 'MP-04')).toBe('None');
+  });
+
+  it('FR-DOC-01 FR-SUG-01 (MP-04): a finding raised from a decision has no risk area of its own; it lists the controls of its question\'s risk areas, the set its question page suggests', () => {
+    // Walk 2 N3: the shortfall finding's risk areas are its question's (SRS 10.3.4 MP-04 "controls of the finding's risk areas"; SRS "Mapping").
+    const r = resolve({ findings: [{ source: 'shortfall', questionId: 'Q-PP-09', riskArea: null, title: null }] });
+    const { first, rest } = controlsForQuestion(content, 'Q-PP-09', []);
+    const ids = [...first, ...rest].flatMap((g) => g.controls.map((x) => x.control.id));
+    expect(ids).toEqual(['C-03', 'C-04', 'C-05', 'C-07']);
+    const name = (id: string) => content.controls.get(id)?.name as string;
+    const area = (id: string) => `${id} ${content.areas.get(id)?.name as string}`;
+    expect(text(r, 'MP-04')).toBe([
+      '1. Finding on Q-PP-09',
+      `Risk areas of question Q-PP-09: ${area('PP-02')}; ${area('PP-04')}`,
+      `Controls: ${ids.map((id) => `${id} ${name(id)}`).join('; ')}`,
+    ].join('\n'));
+  });
+
+  it('FR-DOC-01 (MP-04): a finding with a risk area keeps its area\'s controls even when it names a question; closed findings and findings with neither are not listed', () => {
+    const r = resolve({ findings: [
+      { riskArea: 'PP-02', questionId: 'Q-PP-12', title: 'With area' },
+      { state: 'closed_mitigation', riskArea: null, source: 'shortfall', questionId: 'Q-PP-10', title: null, mitigations: [{ status: 'done' }] },
+      { riskArea: null, questionId: null, title: 'Neither' },
+    ] });
+    const mp4 = text(r, 'MP-04') as string;
+    expect(mp4).toContain('1. With area\nRisk area: PP-02');
+    expect(mp4).not.toContain('C-12');            // Q-PP-12's area PP-07 is not read when the finding has its own area
+    expect(mp4).not.toContain('Q-PP-10');
+    expect(mp4).not.toContain('Neither');
   });
 
   it('FR-DOC-01 (MP-05): findings closed by a mitigation with the closure note or evidence', () => {
@@ -251,13 +280,97 @@ describe('the mitigation plan records what it prints, so an erasure reaches it (
 
   it('FR-REV-08 (SRS 7.5.6): a Prepared-for note erased before issue prints the erasure line, still as a source row, and an empty note still prints no line', () => {
     const erased = resolve({ preparedFor: null, erasures: { stage_reviews: new Map([['review-pp', new Map([['preparedFor', '2026-11-04']])]]) } });
-    expect(text(erased, 'MP-01')).toBe(`Stage: pre-processing. Pre-processing review 1. Prepared for: ${textErasedLine('2026-11-04')}`);
+    expect(text(erased, 'MP-01')).toBe(`Stage: Pre-processing. Review: Pre-processing review 1. Prepared for: ${textErasedLine('2026-11-04')}`);
     expect(erased.sources).toContainEqual({ sourceTable: 'stage_reviews', sourceId: 'review-pp', field: 'preparedFor' });
-    expect(text(resolve({ preparedFor: null }), 'MP-01')).toBe('Stage: pre-processing. Pre-processing review 1.');
+    expect(text(resolve({ preparedFor: null }), 'MP-01')).toBe('Stage: Pre-processing. Review: Pre-processing review 1.');
   });
 
   it('FR-REV-08: a finding text that is null with no tombstone is a broken row and throws', () => {
     expect(() => resolve({ findings: [{ id: 'f-bad', title: null }] })).toThrow(/no title and no tombstone/);
+  });
+});
+
+describe('the ruled words a new document prints (plan 1A Task 18c)', () => {
+  it('FR-DOC-02 (AL-1, AL-2): the statement and the sealed note on every document, word for word', () => {
+    expect(STATEMENT).toBe("Made from this team's own records in the MAK-AI RAI Platform. It is not an ethics approval, audit, certification or compliance statement.");
+    expect(SEALED_NOTE).toBe('The platform keeps this seal. No outside body has time-stamped it.');
+  });
+
+  it('FR-DOC-02 (C2, C8 #4, G-c3, G-c5): the five ruled lines: Assigned to, Evidence that it is done, the personal data answer, Does not apply, and the source of a decision', () => {
+    const r = resolve({
+      findings: [
+        { mitigations: [{ owner: 'Joan K.', status: 'planned', control: 'C-03' }] },
+        { state: 'closed_mitigation', mitigations: [{ status: 'done', evidence: [{
+          id: 'ev-1', kind: 'file', fileName: 'audit.pdf', mimeType: 'application/pdf', byteSize: 100, sha256: 'ab'.repeat(32), url: null, label: null,
+          uploadedBy: null, uploadedAt: '2026-10-30T09:00:00.000Z', erased: null,
+        }] }] },
+      ],
+      notApplicable: { 'Q-PP-18': ['na_no_personal_data', 'Whole register used.'] },
+      gate: { derived: ['Q-PP-13'], answer: 'no' },
+    });
+    const mp3 = text(r, 'MP-03') as string;
+    expect(mp3).toContain('Assigned to: Joan K.');
+    expect(mp3).not.toContain('Owner:');
+    expect(mp3).toContain('Control followed: C-03');   // kept as it was
+    expect(text(r, 'MP-05')).toContain('Evidence that it is done: file audit.pdf');
+    expect(text(r, 'MP-05')).not.toContain('Closure evidence');
+    expect(GATE_DERIVED_NA).toBe('Does not apply: the team answered No to the personal data question');
+    expect(text(r, 'MP-08')).toContain('Q-PP-13: Does not apply: the team answered No to the personal data question');
+    expect(provenance(r, 'MP-08').split('\n')).toEqual([
+      'Source: question Q-PP-18, version 1 of the decision. Decided by Amina N. on 12 Oct 2026.',
+      'From question Q-PP-GATE-SENSITIVE (decision version 1).',
+    ]);
+    expect(personalDataAnswerLine('Not sure')).toBe('Answer to the personal data question: Not sure');
+    expect(fromQuestion('Q-PP-12', 3)).toBe('From question Q-PP-12 (decision version 3)');
+    expect(fromQuestion('Q-PP-12')).toBe('From question Q-PP-12');
+    expect(decisionSource('Q-PP-12', 3)).toBe('Source: question Q-PP-12, version 3 of the decision.');
+  });
+
+  it('FR-DOC-02 FR-DOC-05 (C#273, C#274, C#328, C#331, C#347, C#359, C#360, C#362): the other settled lines of a new document', () => {
+    expect(NOT_RECORDED_AT_ISSUE).toBe('Not recorded: this stage had no seal when the document was issued');
+    expect(PROJECT_MARK).toBe('From the project details on the day of issue. Not part of the sealed record.');
+    expect(outsideRoleLine('Amina N.', 'Ethics committee')).toBe('Recorded by Amina N. as a decision of the ethics committee. The ethics committee did not enter it in the platform.');
+    const r = resolve({
+      findings: [
+        { title: 'Open one' },
+        { state: 'closed_accepted_risk', title: 'Accepted one', risk: {
+          lookAgainOn: '2027-01-15', lookAgainNote: 'Check the new register.',
+          acceptedBy: { kind: 'outside_role', role: 'data_access_committee' },
+        } },
+        { state: 'closed_mitigation', mitigations: [{ status: 'done', evidence: [{
+          id: 'ev-2', kind: 'file', fileName: 'audit.pdf', mimeType: 'application/pdf', byteSize: 100, sha256: 'ab'.repeat(32), url: null, label: null,
+          uploadedBy: null, uploadedAt: '2026-10-30T09:00:00.000Z', erased: null,
+        }] }] },
+      ],
+    });
+    expect(text(r, 'MP-03')).toContain('1. Open one\nSource: Raised by the team\nRisk area: PP-02');
+    expect(text(r, 'MP-03')).toContain('\nStatus: Open');
+    expect(text(r, 'MP-03')).not.toContain('State:');
+    const mp6 = text(r, 'MP-06') as string;
+    expect(mp6).toContain('To be checked again on: 15 Jan 2027');
+    expect(mp6).toContain('Notes from the last check: Check the new register.');
+    expect(mp6).toContain('Recorded by Owen O. as a decision of the data-access committee. The data-access committee did not enter it in the platform.');
+    expect(mp6).not.toMatch(/Look again on|\nNote:/);
+    expect(text(r, 'MP-05')).toContain('Evidence that it is done: file audit.pdf (fingerprint abab abab ... abab)');
+  });
+});
+
+describe('the two lines the coordinator ruled after the review of part (b) (14 Nov 2026, 19:14)', () => {
+  it('FR-DOC-02: a decision dated by day is decided "on" it; one dated by month or year is decided "in" it', () => {
+    const at = (precision: 'day' | 'month' | 'year') => {
+      const snap = snapshot({ notApplicable: { 'Q-PP-18': ['na_no_personal_data', 'Whole register used.'] } });
+      (snap.chosen.decisions.get('Q-PP-18') as SealedDecision).row.declaredPrecision = precision;
+      return provenance(resolveFields(mpMap, snap, {}), 'MP-08');
+    };
+    expect(at('day')).toBe('Source: question Q-PP-18, version 1 of the decision. Decided by Amina N. on 12 Oct 2026.');
+    expect(at('month')).toBe('Source: question Q-PP-18, version 1 of the decision. Decided by Amina N. in Oct 2026.');
+    expect(at('year')).toBe('Source: question Q-PP-18, version 1 of the decision. Decided by Amina N. in 2026.');
+  });
+
+  it('FR-DOC-02 D7: an outside role of "other" is "another body"; every other role keeps its name', () => {
+    const risk = (role: 'other' | 'supervisor') => text(resolve({ findings: [{ state: 'closed_accepted_risk', risk: { acceptedBy: { kind: 'outside_role', role } } }] }), 'MP-06') as string;
+    expect(risk('other')).toContain('Recorded by Owen O. as a decision of another body. That body did not enter it in the platform.');
+    expect(risk('supervisor')).toContain('Recorded by Owen O. as a decision of the supervisor. The supervisor did not enter it in the platform.');
   });
 });
 

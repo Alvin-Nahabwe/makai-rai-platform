@@ -1,9 +1,13 @@
 'use client';
 
 import { useId, useState } from 'react';
-import type { ReactElement } from 'react';
+import type { ReactElement, Ref } from 'react';
 import type { UtcInstant } from '@/types/record';
 import { formatDay } from '@/lib/format/dates';
+import { COPY_LINK_COPY } from '@/lib/invitations/link/copy';
+import { Button } from '@/components/ui/Button';
+import { StatusRegion } from '@/components/ui/StatusRegion';
+import { TextInput } from '@/components/ui/TextInput';
 
 export interface CopyLinkFallbackProps {
   acceptUrl: string | null;
@@ -13,6 +17,8 @@ export interface CopyLinkFallbackProps {
   onResendWithLink?: () => void;
   /** The screen announces the email-failure sentence in its own persistent status region, so the box does not print it. */
   noticeShownElsewhere?: boolean;
+  /** The box itself, for a screen that brings it into view after the answer that showed it (Members, finding S6). */
+  ref?: Ref<HTMLDivElement>;
 }
 
 /**
@@ -21,7 +27,9 @@ export interface CopyLinkFallbackProps {
  * copy result: a live region inserted together with its text is often not announced (4.1.3). A copy result belongs to
  * one link: it is remembered with the link it was made for, so a later invitation never shows an earlier "copied".
  */
-export function CopyLinkFallback(p: CopyLinkFallbackProps): ReactElement {
+export function CopyLinkFallback({ ref, ...p }: CopyLinkFallbackProps): ReactElement {
+  // The ref is taken out of the props so the rest are plain values: reading a props object that holds a ref during
+  // render is what react-hooks/refs refuses.
   const fieldId = useId();
   const [copy, setCopy] = useState<{ url: string; result: 'done' | 'blocked' } | null>(null);
   async function copyLink(): Promise<void> {
@@ -34,23 +42,22 @@ export function CopyLinkFallback(p: CopyLinkFallbackProps): ReactElement {
       setCopy({ url, result: 'blocked' }); // reported in the status region below; the field stays selectable
     }
   }
-  const message = copy === null || copy.url !== p.acceptUrl ? ''
-    : copy.result === 'done' ? 'Link copied.'
-    : 'The link could not be copied. Select it and copy it by hand.';
+  const message = copy === null || copy.url !== p.acceptUrl ? null
+    : copy.result === 'done' ? COPY_LINK_COPY.copied
+    : COPY_LINK_COPY.copyFailed;
   return (
-    <div className="card">
-      <div role="status">{message}</div>
-      {!p.emailSent && !p.noticeShownElsewhere && <p>The invitation email could not be sent. Send this link another way.</p>}
+    <div className="card" ref={ref}>
+      <StatusRegion message={message} />
+      {!p.emailSent && !p.noticeShownElsewhere && <p>{COPY_LINK_COPY.emailFailed}</p>}
       {p.acceptUrl !== null && (
         <>
-          <label htmlFor={fieldId}>Invitation link</label>
-          <input id={fieldId} type="text" readOnly value={p.acceptUrl} />
-          <button type="button" className="btn btn--secondary" onClick={() => { void copyLink(); }}>Copy link</button>
-          <p>The link works once and expires on {formatDay(p.expiresAt)}.</p>
+          <TextInput id={fieldId} name="invitationLink" label={COPY_LINK_COPY.linkLabel} readOnly value={p.acceptUrl} />
+          <Button variant="secondary" onClick={() => { void copyLink(); }}>{COPY_LINK_COPY.copy}</Button>
+          <p style={{ margin: 'var(--space-3) 0 0' }}>{COPY_LINK_COPY.worksOnce(formatDay(p.expiresAt))}</p>
         </>
       )}
       {p.acceptUrl === null && !p.emailSent && p.onResendWithLink !== undefined && (
-        <button type="button" className="btn btn--secondary" onClick={p.onResendWithLink}>Resend and show link</button>
+        <Button variant="secondary" onClick={p.onResendWithLink}>{COPY_LINK_COPY.resend}</Button>
       )}
     </div>
   );

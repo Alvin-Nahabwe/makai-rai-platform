@@ -28,7 +28,7 @@ import type { PerfManifest } from '../scripts/load/seed-perf-fixture';
  *
  * Budgets as the owner ruled them (owner-questions.md, decision of 6 Nov, verbatim "Production + 1 KB (Recommended)",
  * which supersedes the earlier figures): 220000 for every public page with the fixture's plain names; S-04 with an
- * accented organisation name (set in DM Serif, which then fetches its latin_rest file) and S-05 are accepted risks with
+ * accented organisation name (set in Overpass, which then fetches its latin_rest file) and S-05 are accepted risks with
  * their own limits, below (LIMITS). S-05 is not a public page (it renders only for a signed-in account missing an
  * acceptance), so no SRS budget binds it; the owner's limit does.
  *
@@ -276,7 +276,8 @@ test.describe('the public budget', () => {
     const files = execFileSync('git', ['ls-files', '-co', '--exclude-standard', 'app/(public)/**/page.tsx'], { encoding: 'utf8' })
       .split('\n').filter(Boolean);
     if (files.length === 0) throw new Error('git ls-files found no page under app/(public)');
-    return files;
+    // Help (plan 1A Task 12): a public page outside the route group, measured signed out like the others (ruling T12-xi).
+    return [...files, 'app/help/page.tsx'];
   }
 
   function pathFor(file: string): string {
@@ -362,8 +363,8 @@ test.describe('S-04 with accented names, against the accepted risk', () => {
     const limit = limits().s04Accented;
     report('/invitations/[token] (accented names)', m, limit);
     expectRendered(m, path, path, '/invitations/[token] (accented names)');
-    // The reason this case exists: the accented organisation name, set in DM Serif, fetches that face's latin_rest file.
-    expect(m.fonts.some((f) => /^dm_serif_display_latin_rest/.test(f)), `fonts: ${m.fonts.join(',')}`).toBe(true);
+    // The reason this case exists: the accented organisation name, set in Overpass, fetches that face's latin_rest file.
+    expect(m.fonts.some((f) => /^overpass_latin_rest/.test(f)), `fonts: ${m.fonts.join(',')}`).toBe(true);
     const page = `measured ${m.total} B: ${m.total <= PUBLIC_BUDGET ? 'within the 220000 B budget' : `${m.total - PUBLIC_BUDGET} B over the 220000 B budget`}`;
     test.info().annotations.push({ type: 'NFR-PERF-02 accepted risk', description: page });
     expect(m.total, `${page}; the limit for this run is ${limit} B`).toBeLessThanOrEqual(limit);

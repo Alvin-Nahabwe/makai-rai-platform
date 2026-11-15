@@ -8,6 +8,8 @@
 
 import { escapeHtml } from './escape';
 import { formatDay } from '../format/dates';
+import { EMAIL_COPY } from './copy';
+import { roleWithArticle } from '../org/copy';
 import type { OrgRole } from '@prisma/client';
 
 export interface InvitationEmailInput {
@@ -33,10 +35,18 @@ export interface EmailContent {
 export function invitationEmail(input: InvitationEmailInput): EmailContent {
   const { orgName, role, acceptUrl, expiresAt } = input;
   const expiry = formatDay(expiresAt);
-  const subject = `You are invited to ${orgName} on the MAK-AI RAI Platform`;
-  const before = `You are invited to join ${orgName} as ${role}. Open this link to accept: `;
-  const after = `. It works once and expires on ${expiry}. If you were not expecting this, you can ignore this email.`;
-  const text = `${before}${acceptUrl}${after}`;
-  const html = `<p>You are invited to join <strong>${escapeHtml(orgName)}</strong> as <strong>${escapeHtml(role)}</strong>. Open this link to accept: <a href="${escapeHtml(acceptUrl)}">${escapeHtml(acceptUrl)}</a>${escapeHtml(after)}</p>`;
-  return { subject, html, text };
+  const roleSentence = roleWithArticle(role);
+  const { invitation } = EMAIL_COPY;
+  // The role's article is part of the vocabulary's sentence, so the whole phrase is the bold run.
+  const intro = invitation.intro(`<strong>${escapeHtml(orgName)}</strong>`, `<strong>${roleSentence}</strong>`);
+  return {
+    subject: invitation.subject(orgName),
+    text: [invitation.intro(orgName, roleSentence), `${invitation.linkLead}\n${acceptUrl}`, invitation.closing(expiry)].join('\n\n'),
+    html: [
+      `<p>${intro}</p>`,
+      `<p>${invitation.linkLead}</p>`,
+      `<p><a href="${escapeHtml(acceptUrl)}">${escapeHtml(acceptUrl)}</a></p>`,
+      `<p>${invitation.closing(expiry)}</p>`,
+    ].join('\n'),
+  };
 }

@@ -8,6 +8,7 @@ import { accountCreatedEmail } from '@/lib/email/templates/accountCreated';
 import { sendEmail } from '@/lib/email/send';
 import { AppError, ValidationFailed } from '@/lib/http/errors';
 import { invitationUnusable as unusable } from '@/lib/http/messages';
+import { INVITATION_COPY } from '@/lib/invitations/copy';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { toResponse } from '@/lib/http/toResponse';
 import { acceptanceError as m25, isAcceptancePairs, type AcceptancePair } from '@/lib/legal/kinds';
@@ -19,7 +20,7 @@ import { ACCEPTED_KINDS } from '@/types/legal';
 /** `://` or `www.` in any case (FR-MEM-01, SRS line 591). */
 const WEB_ADDRESS = /:\/\/|www\./i;
 
-const accountExists = () => new AppError(409, 'account_exists', 'An account with this email already exists. Sign in to accept.');
+const accountExists = () => new AppError(409, 'account_exists', INVITATION_COPY.accountExists);
 
 /**
  * Contract route row 31 (FR-ACC-01, FR-ACC-03, FR-ACC-10): creates an account for the holder of a
@@ -46,12 +47,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
     if (invitation === null) throw unusable();
 
     const body = await bodyOf(req);
-    const name = validateString(body.name, 'name', 100);
+    const name = validateString(body.name, 'name', 100, true, 'name');
     // validateString trims: a name of spaces only reads as empty, and S-04 requires a name (7.4.2), in the client's words.
-    const blankName = name.error === null && name.value.length === 0 ? { field: 'name', message: 'Name is required' } : null;
+    // An empty, missing or blank name says "Enter your name." (A 165, 272); the field key and the status are the same as ever.
+    const emptyName = body.name === undefined || body.name === null || body.name === '' || (name.error === null && name.value.length === 0);
+    const blankName = emptyName ? { field: 'name', message: INVITATION_COPY.nameRequired } : null;
     // FR-MEM-01 (obligation M9): a name that reads as a link is shown to colleagues and on S-04, so sign-up refuses it.
-    const linkName = name.error === null && WEB_ADDRESS.test(name.value) ? { field: 'name', message: 'A name cannot contain a web address.' } : null;
-    const fieldErrors = collectErrors([name.error ?? blankName ?? linkName, validatePassword(body.password)]);
+    const linkName = name.error === null && WEB_ADDRESS.test(name.value) ? { field: 'name', message: INVITATION_COPY.nameHasWebAddress } : null;
+    const fieldErrors = collectErrors([blankName ?? name.error ?? linkName, validatePassword(body.password)]);
     if (fieldErrors.length > 0) throw new ValidationFailed(fieldErrors);
     const password = body.password as string;
 

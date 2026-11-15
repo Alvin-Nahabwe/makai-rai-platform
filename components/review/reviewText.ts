@@ -1,35 +1,37 @@
 import type { ApiErrorBody, SealView, StageReviewView } from '@/types/api';
-import type { ScopeAnswer, Stage } from '@/types/record';
+import type { Stage } from '@/types/record';
 import type { SealPreview } from '@/lib/data/reviews';
 import { formatDay, formatTime } from '@/lib/format/dates';
 import { formatFingerprint } from '@/lib/seal/format';
+import { REVIEW_COPY } from '@/lib/review/copy';
 
 /**
- * The words of S-16, S-17 and the review slots (W-7; 7.4.2 row S-16 / S-17, SRS line 2385; UX-18; M-28), as pure
- * functions, so the server pages, the client components and the tests read one copy. No markup: every state is a
- * sentence (NFR-A11Y-05, SC 1.4.1). Imported by client components, so it imports types and pure modules only.
+ * The sentences of S-16, S-17 and the review slots (W-7; 7.4.2 row S-16 / S-17, SRS line 2385; UX-18; M-28), built as
+ * pure functions from the words in lib/review/copy.ts, so the server pages, the client components and the tests read
+ * one copy. No markup: every state is a sentence (NFR-A11Y-05, SC 1.4.1). Imported by client components, so it imports
+ * types and pure modules only.
  */
 
 /** The review's state in one line (W-7 note 1; S-10's "Changed since seal 1 (2)"); a damaged seal is said first. */
 export function reviewStateLine(v: StageReviewView): string {
   const seal = v.latestSeal;
-  if (seal === null) return 'Never sealed.';
-  if (v.latestSealUnreadable || !seal.bytesMatch) return 'Does not match the record.';   // M-29's sentence (SRS 7.5.3 bans every form of "fail")
-  if (v.changed !== null) return `Changed since seal ${v.changed.sealNumber} (${v.changed.changedQuestions.length + v.changed.changedFindings.length}).`;
-  return `Sealed as seal ${seal.sealNumber} on ${formatDay(seal.sealedAt)}.`;
+  if (seal === null) return REVIEW_COPY.state.notSealed;
+  if (v.latestSealUnreadable || !seal.bytesMatch) return REVIEW_COPY.state.damaged;   // Task 18 Q3 (b) (SRS 7.5.3 bans every form of "fail")
+  if (v.changed !== null) return REVIEW_COPY.state.changed(v.changed.sealNumber, v.changed.changedQuestions.length + v.changed.changedFindings.length);
+  return REVIEW_COPY.state.sealed(seal.sealNumber, formatDay(seal.sealedAt));
 }
 
 /** M-28, shown after sealing, in the device's zone when `zone` is not given. */
 export function sealedMessage(s: SealView, zone?: string): string {
-  return `Sealed as seal ${s.sealNumber} on ${formatDay(s.sealedAt, zone)} at ${formatTime(s.sealedAt, zone)}. Fingerprint ${formatFingerprint(s.fingerprint, 'short')}.`;
+  return REVIEW_COPY.confirm.sealed(s.sealNumber, formatDay(s.sealedAt, zone), formatTime(s.sealedAt, zone), formatFingerprint(s.fingerprint, 'short'));
 }
 
-/** UX-18's first line on S-17, null when there is no unsaved answer of the stage on this device. "[Go to them]" sits beside it. */
+/** UX-18's first line on S-17, null when there is no unsaved decision of the stage in this browser. Its link sits beside it. */
 export function unsavedDraftsLine(n: number): string | null {
-  return n > 0 ? `You have ${n} unsaved answers in this stage on this device. They will not be in the seal.` : null;
+  if (n <= 0) return null;
+  return n === 1 ? REVIEW_COPY.confirm.unsavedOne : REVIEW_COPY.confirm.unsavedMany(n);
 }
 
-const SCOPE_WORDS: Record<ScopeAnswer, string> = { yes: 'Yes', no: 'No', not_sure: 'Not sure' };
 /** "1 file", "2 files": the count with its noun (S-17's lines and the S-11 banner). */
 export const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
@@ -39,45 +41,50 @@ export const plural = (n: number, one: string, many: string) => `${n} ${n === 1 
  * shown as itself). The questions with no decision are rendered by the page as links, so they are not here.
  */
 export function previewLines(p: SealPreview, sealNumber: number, reasonLabels: Readonly<Record<string, string>>): string[] {
+  const c = REVIEW_COPY.sealPage;
   const lines = [
-    `A seal fixes what the record says right now, gaps included. It does not hide open items; it records them. After sealing, any change shows as "changed since seal ${sealNumber}".`,
-    `Decisions by status: Done ${p.byStatus.done} . Partly ${p.byStatus.partly} . Not yet ${p.byStatus.not_yet} . Not applicable ${p.byStatus.not_applicable}`,
+    c.statement(sealNumber),
+    c.byStatus(p.byStatus.done, p.byStatus.partly, p.byStatus.not_yet, p.byStatus.not_applicable),
   ];
   const reasons = Object.entries(p.byReasonCode);
-  if (reasons.length > 0) lines.push(`Not applicable and Not yet by reason: ${reasons.map(([code, n]) => `${reasonLabels[code] ?? code} ${n}`).join(' . ')}`);
-  if (p.scopeAnswer !== null) lines.push(`Scope answer: ${SCOPE_WORDS[p.scopeAnswer.answer]} (${p.scopeAnswer.questionId}, version ${p.scopeAnswer.versionNumber})`);
+  if (reasons.length > 0) lines.push(c.byReason(reasons.map(([code, n]) => `${reasonLabels[code] ?? code} ${n}`).join('\u00a0· ')));
+  if (p.scopeAnswer !== null) lines.push(c.gateAnswer(REVIEW_COPY.gateWords[p.scopeAnswer.answer]));
   lines.push(
-    `Done without evidence: ${p.doneWithoutEvidence}`,
-    `Open findings: ${p.openFindings}`,
-    `Open mitigations: ${p.openMitigations}`,
-    `Evidence: ${plural(p.evidence.files, 'file', 'files')} (fingerprints taken of each file), ${plural(p.evidence.links, 'link', 'links')} (the address only; the platform never opens links)`,
-    `Decisions entered by ${plural(p.enteredByPeople, 'person', 'people')}`,
-    `Expected practice reworded since the decision: ${p.rewordedSinceDecision}`,
-    `You are sealing as ${p.sealer.name} (${p.sealer.role})`,
+    c.doneNoEvidence(p.doneWithoutEvidence),
+    c.openFindings(p.openFindings),
+    c.openMitigations(p.openMitigations),
+    c.evidence(plural(p.evidence.files, 'file', 'files'), plural(p.evidence.links, 'link', 'links')),
+    c.enteredBy(plural(p.enteredByPeople, 'person', 'people')),
+    c.reworded(p.rewordedSinceDecision),
+    c.sealingAs(p.sealer.name, REVIEW_COPY.roleWords[p.sealer.role]),
   );
   return lines;
 }
 
 /** The sealing states of 7.4.2 row S-16 / S-17; `lost` is followed by a Retry button (owner question B5). */
 export const SEAL_STATUS = Object.freeze({
-  sending: 'Sealing...',
-  slow: 'Still sealing. The connection is slow.',
-  // M-06's pattern (C4 ruling on hunter H1, owner copy): the seal may have arrived, and Retry replays the same request id.
-  lost: 'Not sealed yet: no reply from the server. It may have arrived. Retry is safe: it will not seal twice.',
+  sending: REVIEW_COPY.confirm.sending,
+  slow: REVIEW_COPY.confirm.slow,
+  // Task 18 Q1: the seal may have arrived, and Retry replays the same request id, so "It will not seal twice." is true.
+  lost: REVIEW_COPY.confirm.lost,
 });
 
 /** The path to the next seal (7.4.2 "Sealed" cell). */
 export function sealAgainLabel(nextNumber: number): string {
-  return `Seal again as seal ${nextNumber}`;
+  return REVIEW_COPY.review.sealAgain(nextNumber);
 }
 
-/** "[Go to them]": S-11 with its drafts filter (DEC-b's address, contract G023). */
+/** The unsaved decisions' link: S-11 with its drafts filter (DEC-b's address, contract G023). */
 export function draftsHref(orgSlug: string, projectId: string, stage: Stage): string {
   return `/orgs/${encodeURIComponent(orgSlug)}/projects/${encodeURIComponent(projectId)}/stages/${stage}?show=drafts`;
 }
 
-/** "What a seal proves" (AL-2's link; PUB's About anchor, contract G050). */
-export const SEAL_PROOF_HREF = '/about#what-a-seal-proves';
+/**
+ * "What sealing means" (AL-2's link, contract G050): Help's section of that name (plan 1A Task 12, W2). The link's words are
+ * HELP_COPY.sealing.heading, imported by the server pages that print it; this module is imported by client components, so
+ * it does not import the Help copy itself (ruling X-2).
+ */
+export const SEAL_PROOF_HREF = '/help#what-sealing-means';
 
 /**
  * The question-set line (controller ruling on RE-5, owner copy): shown when the content running now is not the one the
@@ -85,7 +92,7 @@ export const SEAL_PROOF_HREF = '/about#what-a-seal-proves';
  */
 export function contentChangedLine(latestSeal: SealView | null, runningSemver: string): string | null {
   if (latestSeal === null || latestSeal.contentSemver === runningSemver) return null;
-  return `The question set changed after seal ${latestSeal.sealNumber} (version ${latestSeal.contentSemver} to ${runningSemver}). Changes are counted against the current question set.`;
+  return REVIEW_COPY.state.contentChanged(latestSeal.sealNumber);
 }
 
 /** What a refused write shows (UX-25: said once, assertively), whether Retry can help, and whether the page reloads. */
@@ -94,7 +101,7 @@ type Refused = { status: number; body: Pick<ApiErrorBody, 'code'> & { retryAfter
 
 const waitMinutes = (seconds: number | undefined) => {
   const n = typeof seconds === 'number' && seconds > 0 ? Math.ceil(seconds / 60) : 1;
-  return `Wait ${n} minute${n === 1 ? '' : 's'}, then retry.`;
+  return n === 1 ? REVIEW_COPY.waitOne : REVIEW_COPY.waitMany(n);
 };
 
 /**
@@ -105,27 +112,27 @@ const waitMinutes = (seconds: number | undefined) => {
 export function sealRefusal(out: Refused, sealNumber: number): RefusalLine {
   const { status, body } = out;
   if (body.code === 'number_taken') {
-    return { message: `Not sealed: seal ${sealNumber} was taken by someone else just now. Nothing was sealed by this press. The next seal is seal ${sealNumber + 1}.`, retry: false, refresh: true };
+    return { message: REVIEW_COPY.confirm.numberTaken(sealNumber), retry: false, refresh: true };
   }
-  if (status === 401) return { message: 'Not sealed: you have been signed out. Sign in again to seal.', retry: false, refresh: false };
-  if (status === 429 || body.code === 'rate_limited') return { message: `Not sealed: too many requests. ${waitMinutes(body.retryAfterSeconds)}`, retry: false, refresh: false };
+  if (status === 401) return { message: REVIEW_COPY.confirm.signedOut, retry: false, refresh: false };
+  if (status === 429 || body.code === 'rate_limited') return { message: REVIEW_COPY.confirm.rateLimited(waitMinutes(body.retryAfterSeconds)), retry: false, refresh: false };
   // M-12 and M-09's patterns for a seal (C4 CR-6 ruling, owner copy): nothing is kept on the device.
-  if (body.code === 'project_archived') return { message: 'Not sealed: this project is archived.', retry: false, refresh: false };
-  if (status === 403 && body.code === 'forbidden') return { message: 'Not sealed: your role changed. Ask an owner or admin.', retry: false, refresh: false };
-  return { message: 'Not sealed: the server had a problem. Nothing was sealed.', retry: status >= 500, refresh: false };
+  if (body.code === 'project_archived') return { message: REVIEW_COPY.confirm.archived, retry: false, refresh: false };
+  if (status === 403 && body.code === 'forbidden') return { message: REVIEW_COPY.confirm.roleChanged, retry: false, refresh: false };
+  return { message: REVIEW_COPY.confirm.server, retry: status >= 500, refresh: false };
 }
 
 /** The open form's refusals other than a field error, on the same rules; the form's own button is its retry. */
 export function openRefusal(out: Refused): RefusalLine {
   const { status, body } = out;
   if (body.code === 'number_taken') {
-    return { message: 'Not opened: another review of this stage was opened at the same moment. The name above is updated; open again.', retry: false, refresh: true };
+    return { message: REVIEW_COPY.open.numberTaken, retry: false, refresh: true };
   }
-  if (status === 401) return { message: 'Not opened: you have been signed out. Sign in again.', retry: false, refresh: false };
-  if (status === 429 || body.code === 'rate_limited') return { message: `Not opened: too many requests. ${waitMinutes(body.retryAfterSeconds)}`, retry: false, refresh: false };
-  if (body.code === 'project_archived') return { message: 'Not opened: this project is archived.', retry: false, refresh: false };
-  if (status === 403 && body.code === 'forbidden') return { message: 'Not opened: your role changed. Ask an owner or admin.', retry: false, refresh: false };
-  return { message: 'Not opened: the server had a problem. Retry.', retry: status >= 500, refresh: false };
+  if (status === 401) return { message: REVIEW_COPY.open.signedOut, retry: false, refresh: false };
+  if (status === 429 || body.code === 'rate_limited') return { message: REVIEW_COPY.open.rateLimited(waitMinutes(body.retryAfterSeconds)), retry: false, refresh: false };
+  if (body.code === 'project_archived') return { message: REVIEW_COPY.open.archived, retry: false, refresh: false };
+  if (status === 403 && body.code === 'forbidden') return { message: REVIEW_COPY.open.roleChanged, retry: false, refresh: false };
+  return { message: REVIEW_COPY.open.server, retry: status >= 500, refresh: false };
 }
 
 /**
@@ -144,5 +151,8 @@ export function isReviewBody(v: unknown): v is StageReviewView {
   return typeof v === 'object' && v !== null && typeof (v as { id?: unknown }).id === 'string' && (v as { id: string }).id !== '';
 }
 
-/** The open form's lost reply, M-06's pattern as S-17's (C4 ruling on hunter H1: the same applies to the open form). */
-export const OPEN_LOST = 'Not opened yet: no reply from the server. It may have arrived. Retry is safe: it will not open the review twice.';
+/**
+ * The open form's lost reply (Task 18 Q1). Pressing the form's button again replays the same request id for the same
+ * stage and note (requestIdFor), so "It will not open twice." is true.
+ */
+export const OPEN_LOST = REVIEW_COPY.open.lost;

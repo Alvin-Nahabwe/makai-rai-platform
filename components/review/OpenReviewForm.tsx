@@ -8,11 +8,16 @@ import { clearRetry, loadRetry, openRetryKey, retryAfter, saveRetry, sessionRetr
 import { stageReviewName } from '@/lib/seal/reviewName';
 import { STAGES, type Stage } from '@/types/record';
 import type { ApiErrorBody, StageReviewView } from '@/types/api';
+import { Button } from '@/components/ui/Button';
+import { Icon } from '@/components/ui/Icon';
+import { FieldError, FieldLabel } from '@/components/ui/TextInput';
+import { StatusRegion } from '@/components/ui/StatusRegion';
+import '@/components/ui/selectStyles';
+import '@/components/ui/textAreaStyles';
+import { REVIEW_COPY } from '@/lib/review/copy';
 
-/** FR-REV-01's help text under the note (SRS line 2100), verbatim. */
-const HELP = 'What is this review for? For example: UNCST protocol submission; data transfer agreement with the partner hospital; annual renewal; NeurIPS datasets track; Hugging Face upload. Use roles, not names.';
 const MAX = 120;
-const STAGE_WORDS: Record<Stage, string> = { 'pre-processing': 'Pre-processing', 'in-processing': 'In-processing', 'post-processing': 'Post-processing' };
+const C = REVIEW_COPY.open;
 
 /** Code points of the NFC form: the server's count (lib/data/reviews.ts), not the browser's UTF-16 `maxlength`. */
 const noteLength = (s: string) => [...s.normalize('NFC').trim()].length;
@@ -57,12 +62,12 @@ export function OpenReviewForm(props: OpenReviewFormProps): ReactElement {
     setBusy(true);
     setFieldError(null);
     setAlert('');
-    setStatus('Opening...');
+    setStatus(C.sending);
     const body = { stage, preparedFor: note.trim() === '' ? null : note };
     const { requestId, state } = requestIdFor(retry.current ?? loadRetry(sessionRetryStorage(), retryKey), body);
     retry.current = state;
     saveRetry(sessionRetryStorage(), retryKey, state);
-    const out = await sendWrite<StageReviewView>(url, 'POST', { ...body, requestId }, { onSlow: () => setStatus('Still opening. The connection is slow.') });
+    const out = await sendWrite<StageReviewView>(url, 'POST', { ...body, requestId }, { onSlow: () => setStatus(C.slow) });
     setStatus('');
     const ok = out.kind === 'saved' && isReviewBody(out.body);
     if (retryAfter(out.kind === 'rejected' ? { kind: 'rejected', status: out.status, code: out.body.code } : out.kind === 'saved' ? { kind: 'saved', bodyOk: ok } : { kind: 'not_saved' }) === 'clear') {
@@ -98,37 +103,44 @@ export function OpenReviewForm(props: OpenReviewFormProps): ReactElement {
   }
 
   const noteDescribedBy = ['open-review-help', 'open-review-count', fieldError?.field === 'preparedFor' ? 'open-review-note-error' : null].filter(Boolean).join(' ');
+  const stageInvalid = fieldError?.field === 'stage';
+  const noteInvalid = fieldError?.field === 'preparedFor' || count > MAX;
   return (
-    <form method="post" onSubmit={(e) => { void submit(e); }} noValidate>
-      <p>Name: <strong>{stageReviewName(stage, props.nextNumbers[stage])}</strong></p>
+    <form method="post" onSubmit={(e) => { void submit(e); }} noValidate className="review-form">
+      <p>{C.nameLabel} <strong>{stageReviewName(stage, props.nextNumbers[stage])}</strong></p>
       {props.fixedStage === null ? (
-        <div className="form-field">
-          <label htmlFor="open-review-stage">Stage</label>
-          <select
-            id="open-review-stage" ref={stageRef} value={stage} onChange={(e) => { if (!busy) setStage(e.target.value as Stage); }} aria-disabled={busy || undefined}
-            aria-invalid={fieldError?.field === 'stage' || undefined} aria-describedby={fieldError?.field === 'stage' ? 'open-review-stage-error' : undefined}
-          >
-            {STAGES.map((s) => <option key={s} value={s}>{STAGE_WORDS[s]}</option>)}
-          </select>
-          {fieldError?.field === 'stage' ? <p id="open-review-stage-error" className="field-error">{fieldError.message}</p> : null}
+        <div className="ui-field">
+          <FieldLabel htmlFor="open-review-stage" label={C.stageLabel} />
+          <div className="ui-select__wrap">
+            <select
+              id="open-review-stage" ref={stageRef} value={stage} onChange={(e) => { if (!busy) setStage(e.target.value as Stage); }} aria-disabled={busy || undefined}
+              aria-invalid={stageInvalid || undefined} aria-describedby={stageInvalid ? 'open-review-stage-error' : undefined}
+              className={stageInvalid ? 'ui-select ui-select--invalid' : 'ui-select'}
+            >
+              {STAGES.map((s) => <option key={s} value={s}>{REVIEW_COPY.stageNames[s]}</option>)}
+            </select>
+            <span className="ui-select__icon"><Icon name="chevron-down" size={20} /></span>
+          </div>
+          {fieldError?.field === 'stage' ? <FieldError id="open-review-stage-error" message={fieldError.message} /> : null}
         </div>
       ) : (
-        <p>Stage: {props.fixedStage}</p>
+        <p>{C.fixedStage(REVIEW_COPY.stageNames[props.fixedStage])}</p>
       )}
-      <div className="form-field">
-        <label htmlFor="open-review-note">Prepared for (optional)</label>
+      <div className="ui-field">
+        <FieldLabel htmlFor="open-review-note" label={C.noteLabel} />
         <input
           id="open-review-note" ref={noteRef} type="text" value={note} readOnly={busy} onChange={(e) => setNote(e.target.value)}
-          aria-describedby={noteDescribedBy} aria-invalid={fieldError?.field === 'preparedFor' || count > MAX || undefined}
+          aria-describedby={noteDescribedBy} aria-invalid={noteInvalid || undefined}
           autoComplete="off"
+          className={['ui-input', noteInvalid && 'ui-input--invalid', busy && 'ui-input--readonly'].filter(Boolean).join(' ')}
         />
-        <p id="open-review-help">{HELP}</p>
-        <p id="open-review-count">{`${count} of ${MAX}`}</p>
-        {fieldError?.field === 'preparedFor' ? <p id="open-review-note-error" className="field-error">{fieldError.message}</p> : null}
+        <p id="open-review-help" className="ui-field__hint">{C.help}</p>
+        <p id="open-review-count" className={count > MAX ? 'ui-count ui-count--over' : 'ui-count'}>{C.count(count, MAX)}</p>
+        {fieldError?.field === 'preparedFor' ? <FieldError id="open-review-note-error" message={fieldError.message} /> : null}
       </div>
-      <button type="submit" className="btn btn--primary" aria-disabled={busy || undefined}>Open a stage review</button>
-      <p role="status">{status}</p>
-      <div role="alert">{alert}</div>
+      <Button type="submit" variant="primary" busy={busy}>{C.submit}</Button>
+      <StatusRegion message={status} />
+      <StatusRegion message={alert} politeness="assertive" tone="error" />
     </form>
   );
 }

@@ -1,0 +1,18 @@
+/*
+ * The decision form's fields (plan 1A Task 17) sit on the kit's fields. Two lines the kit has no slot for keep their own
+ * element and id, because a test or the error summary reads them: the reason's help after its count
+ * (decision-reason-help, which the textarea's aria-describedby lists) and the checklist's "{k} of {n} in place" after
+ * its boxes (decision-options-count). They sit close under their field, in the muted ink of the kit's hints, and the
+ * field's usual space follows them instead.
+ */
+.decision-fields__reason > .ui-field,
+.decision-fields__checklist > .ui-checkbox-group {
+  margin-block-end: var(--space-2);
+}
+
+.decision-fields__help,
+.decision-fields__count {
+  margin: 0 0 var(--space-6);
+  max-inline-size: var(--measure-reading);
+  color: var(--color-ink-muted);
+}

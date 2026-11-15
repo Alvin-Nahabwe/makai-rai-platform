@@ -6,6 +6,7 @@ import type { OrgRole } from '@prisma/client';
 import { testDb } from '../__tests__/helpers/db';
 import { expectNoSeriousA11yViolations, settleHover } from './helpers/a11y';
 import { expectMainDoesNotScroll, org, seat, signIn, tabTo } from './helpers/s18';
+import { DOCUMENTS_COPY } from '../lib/documents/copy';
 import { failOnDialog } from './helpers/dialogs';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { expectNoHorizontalScroll } from './helpers/reflow';
@@ -50,7 +51,7 @@ test('FR-DOC-08 FR-DOC-04 FR-DOC-01 NFR-A11Y-02 NFR-A11Y-05 NFR-SEC-11: generate
   await signIn(page, 'admin');
   const s18 = `/orgs/${org.slug}/projects/${projectId}/reviews/${reviewId}/documents`;
   await page.goto(s18);
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Generate a document');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(DOCUMENTS_COPY.page.heading);
   await expect(page.getByText('No documents issued from this review yet.')).toBeVisible();
   await expectNoSeriousA11yViolations(page, 'S-18 form');
 
@@ -76,26 +77,24 @@ test('FR-DOC-08 FR-DOC-04 FR-DOC-01 NFR-A11Y-02 NFR-A11Y-05 NFR-SEC-11: generate
 
   await tabTo(page, page.getByRole('button', { name: 'Back to edit' }));
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('button', { name: 'Generate document' })).toBeFocused();
+  await expect(page.getByRole('button', { name: DOCUMENTS_COPY.form.previewButton })).toBeFocused();
   expect(await testDb.issuedDocument.count({ where: { stageReviewId: reviewId } })).toBe(0);
   await page.keyboard.press('Enter');
   await expect(heading).toBeFocused();
   await tabTo(page, page.getByRole('button', { name: 'Issue this document' }));
   await page.keyboard.press('Enter');
-  await expect(issuedStatus(page)).toHaveText(/^Issued\. SHA-256 [0-9a-f]{4} [0-9a-f]{4} \.\.\. [0-9a-f]{4}\.$/);
+  await expect(issuedStatus(page)).toHaveText(/^Issued\. Fingerprint [0-9a-f]{4} [0-9a-f]{4} \.\.\. [0-9a-f]{4}\.$/);
   await expect(issuedStatus(page)).toBeFocused();
   // N3: router.refresh() after the Issue brings the new document into the list below with no reload.
   await expect(page.getByText('No documents issued from this review yet.')).toHaveCount(0);
-  await expect(page.getByText(/^Data card \. seal 1 \./)).toBeVisible();
+  await expect(page.getByText(/^Data card[\u00a0 ]· seal 1[\u00a0 ]· /)).toBeVisible();
   await expectFocusVisibleAndUncovered(page);
   // The status line (M-35) and the refreshed list (W-9) each carry a link to the same file.
   const downloads = page.getByRole('link', { name: /^Download PDF \(\d+ KB\)$/ });
   await expect(downloads).toHaveCount(2);
   expect(await downloads.evaluateAll((els) => new Set(els.map((e) => e.getAttribute('href'))).size)).toBe(1);
-  // Task 10 (OD-20): the UNCST table sits below the documents, with its heading, a caption and six body rows.
-  await expect(page.getByRole('heading', { name: "Uganda's AI protocol issues", level: 2 })).toBeVisible();
-  await expect(page.locator('.uncst-table caption')).toBeVisible();
-  await expect(page.locator('.uncst-table tbody tr')).toHaveCount(6);
+  // CONSOLIDATED section 4: no country table below the documents (the UNCST table was removed).
+  await expect(page.getByText(/UNCST|AI protocol issues/)).toHaveCount(0);
   await settleHover(page);
   await expectNoSeriousA11yViolations(page, 'S-18 issued');
 
@@ -103,7 +102,7 @@ test('FR-DOC-08 FR-DOC-04 FR-DOC-01 NFR-A11Y-02 NFR-A11Y-05 NFR-SEC-11: generate
   await page.goto(s18);
   const row = await testDb.issuedDocument.findFirstOrThrow({ where: { stageReviewId: reviewId } });
   const short = `${row.sha256.slice(0, 4)} ${row.sha256.slice(4, 8)} ... ${row.sha256.slice(60)}`;
-  await expect(page.getByText(`SHA-256 ${short}`)).toBeVisible();
+  await expect(page.getByText(`Fingerprint ${short}`)).toBeVisible();
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: /^Download PDF \(\d+ KB\)$/ }).click()]);
   const bytes = readFileSync((await download.path()) as string);
   expect(createHash('sha256').update(bytes).digest('hex')).toBe(row.sha256);
@@ -121,7 +120,7 @@ test('FR-DOC-08 FR-DOC-04 FR-DOC-01 NFR-A11Y-02 NFR-A11Y-05 NFR-SEC-11: generate
       await expectNoSeriousA11yViolations(page, `S-18 form and issued list, ${scheme}, ${width}`);
       await expect(page.locator('#typed-DC-25')).toHaveValue(`CC BY 4.0 ${HOSTILE}`);   // the draft kept for next time
       // The form with the issued list is the page above; the preview is the state a Generate leaves. (C4 SC-1)
-      await page.getByRole('button', { name: 'Generate document' }).click();
+      await page.getByRole('button', { name: DOCUMENTS_COPY.form.previewButton }).click();
       await expect(page.getByRole('heading', { name: /^Preview: Data card/ })).toBeFocused();
       await settleHover(page);
       await expectNoSeriousA11yViolations(page, `S-18 preview, ${scheme}, ${width}`);
@@ -140,7 +139,7 @@ test('FR-DOC-08 FR-DOC-04 FR-DOC-01 NFR-A11Y-02 NFR-A11Y-05 NFR-SEC-11: generate
   await expectNoHorizontalScroll(page);
   await expectMainDoesNotScroll(page);
   await page.locator('#typed-DC-25').fill('CC BY 4.0');
-  await page.getByRole('button', { name: 'Generate document' }).click();
+  await page.getByRole('button', { name: DOCUMENTS_COPY.form.previewButton }).click();
   await expect(page.getByRole('heading', { name: /^Preview: Data card/ })).toBeFocused();
   await expectNoHorizontalScroll(page);
   await expectMainDoesNotScroll(page);
@@ -155,7 +154,7 @@ test('UX-20 UX-27: a lost Issue says it may have arrived, with [Retry], and Retr
   const { projectId, reviewId } = await sealedReview(baseURL!);
   await signIn(page, 'owner');
   await page.goto(`/orgs/${org.slug}/projects/${projectId}/reviews/${reviewId}/documents`);
-  await page.getByRole('button', { name: 'Generate document' }).click();
+  await page.getByRole('button', { name: DOCUMENTS_COPY.form.previewButton }).click();
   await expect(page.getByRole('heading', { name: /^Preview: Data card/ })).toBeFocused();
 
   const sent: Array<{ requestId: string }> = [];
@@ -188,8 +187,8 @@ test('UX-20 (accessibility audit): a refused typed value is marked aria-invalid,
   await signIn(page, 'owner');
   await page.goto(`/orgs/${org.slug}/projects/${projectId}/reviews/${reviewId}/documents`);
   await page.locator('#typed-DC-25').fill('x'.repeat(2001));
-  await page.getByRole('button', { name: 'Generate document' }).click();
-  await expect(page.getByRole('alert').filter({ hasText: 'Not generated: Use at most 2000 characters.' })).toBeVisible();
+  await page.getByRole('button', { name: DOCUMENTS_COPY.form.previewButton }).click();
+  await expect(page.getByRole('alert').filter({ hasText: DOCUMENTS_COPY.refusal.field('generating', 'Use at most 2000 characters.') })).toBeVisible();
   const field = page.locator('#typed-DC-25');
   await expect(field).toBeFocused();
   await expect(field).toHaveAttribute('aria-invalid', 'true');
@@ -199,24 +198,21 @@ test('UX-20 (accessibility audit): a refused typed value is marked aria-invalid,
   expect(await testDb.issuedDocument.count({ where: { stageReviewId: reviewId } })).toBe(0);
 });
 
-test('NFR-A11Y-05 (Task 10): at 769, 800 and 820 px wide .app-main has no horizontal overflow on S-18 and the UNCST table stacks', async ({ page, baseURL }) => {
+test('NFR-A11Y-05 (Task 10): at 769, 800, 820 and 1024 px wide the main landmark has no horizontal overflow on S-18', async ({ page, baseURL }) => {
   test.setTimeout(120_000);
   failOnDialog(page);
   const { projectId, reviewId } = await sealedReview(baseURL!);
   await signIn(page, 'reviewer');   // the generate form is on the page too; GETs do not spend the documents budget
-  for (const width of [769, 800, 820]) {
+  // 1024 px: the narrowest main beside the rail's column.
+  for (const width of [769, 800, 820, 1024]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto(`/orgs/${org.slug}/projects/${projectId}/reviews/${reviewId}/documents`);
-    await expect(page.getByRole('heading', { name: "Uganda's AI protocol issues", level: 2 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Issued documents', level: 2 })).toBeVisible();
     const m = await page.evaluate(() => {
-      const main = document.querySelector('.app-main') as HTMLElement;
-      const wrap = document.querySelector('.uncst-table-wrap') as HTMLElement;
-      const row = document.querySelector('.uncst-table tbody tr') as HTMLElement;
-      return { mainScroll: main.scrollWidth, mainClient: main.clientWidth, wrap: wrap.clientWidth, rowDisplay: getComputedStyle(row).display };
+      const main = document.querySelector('.shell__main') as HTMLElement;
+      return { mainScroll: main.scrollWidth, mainClient: main.clientWidth };
     });
-    expect(m.mainScroll, `.app-main at ${width}`).toBeLessThanOrEqual(m.mainClient);
-    expect(m.wrap, `table container at ${width}`).toBeLessThanOrEqual(600);   // the container query's range: about 412 to 432 px is left
-    expect(m.rowDisplay, `rows stack at ${width}`).toBe('block');
+    expect(m.mainScroll, `.shell__main at ${width}`).toBeLessThanOrEqual(m.mainClient);
     await expectNoHorizontalScroll(page);
   }
 });

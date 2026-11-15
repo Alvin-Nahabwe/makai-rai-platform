@@ -5,6 +5,7 @@ import { resetDb, testDb } from '../helpers/db';
 import { buildOrg, type FixtureMember } from '../helpers/recordFixture';
 import { captureLogs } from '../helpers/logCapture';
 import { sessionFor, clearSession } from '../helpers/authSession';
+import { API_COPY, PASSWORD_ROUTE_COPY } from '@/lib/http/api/copy';
 
 /**
  * The password change on S-21 and S-29 (route 35; FR-ACC-08) and E-02 after every change and reset (FR-ACC-09;
@@ -77,7 +78,11 @@ describe('password change and E-02', () => {
 
   it('FR-ACC-08: a refused change sends no E-02', async () => {
     sessionFor(a.userId);
-    expect((await change({ currentPassword: 'not-the-password', newPassword: 'c'.repeat(12) })).status).toBe(400);
+    const wrong = await change({ currentPassword: 'not-the-password', newPassword: 'c'.repeat(12) });
+    expect([wrong.status, (await wrong.json()).error]).toEqual([400, PASSWORD_ROUTE_COPY.currentIncorrect]);
+    // Route 35's own words for a new password equal to the current one (audit A 74).
+    const same = await change({ currentPassword: a.password, newPassword: a.password });
+    expect([same.status, (await same.json()).error]).toEqual([400, PASSWORD_ROUTE_COPY.mustDiffer]);
     await flush();
     expect(sendEmail).not.toHaveBeenCalled();
   }, 60_000);
@@ -103,7 +108,7 @@ describe('password change and E-02', () => {
 
   it('FR-ACC-08: an unauthenticated change answers 401 as before', async () => {
     const r = await change({ currentPassword: a.password, newPassword: 'c'.repeat(12) });
-    expect([r.status, (await r.json()).error]).toEqual([401, 'Unauthorized']);
+    expect([r.status, (await r.json()).error]).toEqual([401, API_COPY.unauthenticated]);
   }, 60_000);
 
   it('NFR-AVL-04 NFR-OBS-05: with the database unreachable, the password route answers 503 database_unavailable with a reference and writes one REQUEST_FAILED line', async () => {
@@ -113,7 +118,7 @@ describe('password change and E-02', () => {
     vi.mocked(requireIdentityForApi).mockRejectedValueOnce(Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }));
     const { result, lines } = await captureLogs(() => change({ currentPassword: a.password, newPassword: 'c'.repeat(12) }));
     const body = await result.json();
-    expect([result.status, body]).toEqual([503, { error: 'Service unavailable', code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) }]);
+    expect([result.status, body]).toEqual([503, { error: API_COPY.databaseUnavailable, code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) }]);
     expect(lines.filter((l) => l.includes('REQUEST_FAILED') && l.includes(body.reference))).toHaveLength(1);
   }, 60_000);
 

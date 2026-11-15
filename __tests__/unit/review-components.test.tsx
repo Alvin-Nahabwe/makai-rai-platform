@@ -10,6 +10,7 @@ import { HOSTILE_STRINGS } from '../helpers/hostile';
 import { countStageDrafts, isDraftStorageEvent } from '@/components/review/SealConfirm';
 import { DeviceDateTime, ReviewStateLine } from '@/components/review/DeviceTime';
 import { DRAFT_PREFIX, draftKey, openDraftStore } from '@/lib/client/drafts';
+import { REVIEW_COPY } from '@/lib/review/copy';
 
 /** The review slots of S-10, S-11, S-12 and S-15 (UX-31, FR-REV-05, FR-REV-01; contract "Screens and slots"). */
 
@@ -28,7 +29,7 @@ const VIEW_CHANGED: StageReviewView = {
 describe('review slots', () => {
   it('UX-31: SealNote says before saving what saving will do, once per review, for the highest seal', () => {
     const html = renderToStaticMarkup(<SealNote seals={[ref(1, 'r1', 'Pre-processing review 1'), ref(2, 'r1', 'Pre-processing review 1')]} nextVersionNumber={3} />);
-    expect(html).toContain('This decision is in seal 2. Saving makes version 3; seal 2 keeps version 2, and the review will show &quot;changed since seal 2&quot;.');
+    expect(html).toContain(REVIEW_COPY.mounted.sealNote(2).replaceAll('"', '&quot;'));
     expect(html.match(/This decision is in seal/g)).toHaveLength(1);
     expect(renderToStaticMarkup(<SealNote seals={[]} nextVersionNumber={1} />)).toBe('');
   });
@@ -41,7 +42,7 @@ describe('review slots', () => {
 
   it('FR-REV-05 NFR-A11Y-05: StageSealBanner names the review, the seal and the changed count in text', () => {
     const html = renderToStaticMarkup(<StageSealBanner changed={{ sealNumber: 1, changedQuestions: ['Q-PP-12', 'Q-PP-14'], changedFindings: [] }} reviewHref="/orgs/o/projects/p/reviews/r" />);
-    expect(html).toMatch(/changed since seal 1 in 2 questions\./); expect(html).toMatch(/<a [^>]*href="\/orgs\/o\/projects\/p\/reviews\/r"[^>]*>Open review<\/a>/);
+    expect(html).toMatch(/changed since seal 1 in 2 questions\./); expect(html).toMatch(/<a [^>]*href="\/orgs\/o\/projects\/p\/reviews\/r"[^>]*>View review<\/a>/);
     expect(renderToStaticMarkup(<StageSealBanner changed={{ sealNumber: 2, changedQuestions: ['Q-PP-12'], changedFindings: ['f1'] }} reviewHref={null} />))
       .toMatch(/changed since seal 2 in 1 question and 1 finding\./);
     expect(renderToStaticMarkup(<StageSealBanner changed={null} reviewHref={null} />)).toBe('');
@@ -50,10 +51,10 @@ describe('review slots', () => {
   it('FR-REV-01 FR-REV-05: StageReviewsSummary lists each review with its note and state, and offers Open a stage review only when allowed', () => {
     const html = renderToStaticMarkup(<StageReviewsSummary orgSlug="o" projectId="p" stage="pre-processing" reviews={[VIEW_CHANGED]} canOpen={true} />);
     expect(html).toContain('Pre-processing review 1'); expect(html).toContain('(ethics submission)'); expect(html).toContain('Changed since seal 1 (2).');
-    expect(html).toMatch(/<a [^>]*href="\/orgs\/o\/projects\/p\/reviews\/r"[^>]*>Open review<\/a>/);
+    expect(html).toMatch(/<a [^>]*href="\/orgs\/o\/projects\/p\/reviews\/r"[^>]*>View review<\/a>/);
     expect(html).toMatch(/<a [^>]*href="\/orgs\/o\/projects\/p\/reviews\/new\?stage=pre-processing"[^>]*>Open a stage review<\/a>/);
     const erased = renderToStaticMarkup(<StageReviewsSummary orgSlug="o" projectId="p" stage="pre-processing" reviews={[{ ...VIEW_CHANGED, preparedFor: null, preparedForErased: { erasedOn: '2026-11-03' } }]} canOpen={false} />);
-    expect(erased).toContain('(Prepared for: erased on 3 Nov 2026)');
+    expect(erased).toContain(REVIEW_COPY.mounted.noteErased('3 Nov 2026'));
   });
 
   it('FR-REV-01 (7.4.2 S-10): StageReviewsSummary says No stage review yet. for a stage with none', () => {

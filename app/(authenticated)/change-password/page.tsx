@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
+import { AUTH_COPY } from '@/lib/auth/copy';
+import { pageTitle } from '@/lib/ui/title';
 import { ChangePasswordForm } from './ChangePasswordForm';
 
-export const metadata: Metadata = { title: 'Change your password - MAK-AI RAI Platform' };
+export const metadata: Metadata = { title: pageTitle(AUTH_COPY.titles.changePassword) };
 
 /**
  * S-29 Forced password change, and S-21's **Change password** (FR-ACC-08). Gate 2 sends a flagged account here and
@@ -11,9 +13,9 @@ export default function ChangePasswordPage() {
   return (
     <div className="page-content">
       <div className="auth-card" style={{ maxWidth: 460, margin: '3rem auto' }}>
-        <h1>Change your password</h1>
+        <h1>{AUTH_COPY.titles.changePassword}</h1>
         <p className="text-muted" style={{ marginBottom: 'var(--space-4)' }}>
-          Changing it ends every session of your account, including this one, and you sign in again with the new password.
+          {AUTH_COPY.changeLead}
         </p>
         <ChangePasswordForm />
       </div>

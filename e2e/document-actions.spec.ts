@@ -6,7 +6,7 @@ import type { OrgRole } from '@prisma/client';
 import { testDb } from '../__tests__/helpers/db';
 import { expectNoSeriousA11yViolations, settleHover } from './helpers/a11y';
 import { expectMainDoesNotScroll, org, seat, signIn, tabTo } from './helpers/s18';
-import { formatUtcDay } from '../lib/documents/copy';
+import { DOCUMENTS_COPY, formatUtcDay } from '../lib/documents/copy';
 import { failOnDialog } from './helpers/dialogs';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { expectNoHorizontalScroll } from './helpers/reflow';
@@ -85,8 +85,15 @@ test('FR-DOC-06 FR-DOC-07 UX-29 NFR-A11Y-02 NFR-A11Y-05: copy and withdraw a doc
   const confirm = page.locator('[data-inline-confirm]');
   await expect(confirm.getByLabel('Reason (required)')).toBeFocused();
   await expectFocusVisibleAndUncovered(page);
+  // SC 2.4.11: the confirmation opens wholly in view, so both of its buttons are on screen without a scroll (measured once, not retried).
+  const view = page.viewportSize()!;
+  for (const name of ['Withdraw document', 'Cancel']) {
+    const b = (await confirm.getByRole('button', { name, exact: true }).boundingBox())!;
+    const box = `${Math.round(b.x)},${Math.round(b.y)} to ${Math.round(b.x + b.width)},${Math.round(b.y + b.height)} in ${view.width}x${view.height}`;
+    expect(b.x >= 0 && b.y >= 0 && b.x + b.width <= view.width && b.y + b.height <= view.height, `the confirmation's ${name} button is inside the viewport (box ${box})`).toBe(true);
+  }
   const today = formatUtcDay(new Date().toISOString());
-  await expect(confirm).toContainText(`Withdraw data card? It will show 'Withdrawn by the team on ${today}'. The document stays stored.`);
+  await expect(confirm).toContainText(DOCUMENTS_COPY.actions.withdrawConsequence('data card'));
   await expect(confirm).toContainText(`Data card issued ${formatUtcDay(row.issuedAt.toISOString())}`);
   await expect(confirm.getByRole('button', { name: 'Withdraw document' })).toBeDisabled();
   expect(await testDb.documentEvent.count({ where: { documentId } })).toBe(0);
@@ -133,7 +140,7 @@ test('FR-DOC-06 FR-DOC-07 UX-29 NFR-A11Y-02 NFR-A11Y-05: copy and withdraw a doc
 
   // The document stays: the PDF still downloads and hashes to the SHA-256 S-18 shows.
   const short = `${row.sha256.slice(0, 4)} ${row.sha256.slice(4, 8)} ... ${row.sha256.slice(60)}`;
-  await expect(page.getByText(`SHA-256 ${short}`)).toBeVisible();
+  await expect(page.getByText(`Fingerprint ${short}`)).toBeVisible();
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: /^Download PDF \(\d+ KB\)$/ }).click()]);
   expect(createHash('sha256').update(readFileSync((await download.path()) as string)).digest('hex')).toBe(row.sha256);
 
@@ -175,6 +182,7 @@ test('UX-27 M-06 FR-DOC-06: a withdrawal whose reply is lost says it may have ar
       abortNext = false;
       await route.abort('connectionfailed');
     } else {
+      await new Promise((r) => setTimeout(r, 1_500));   // held, so the Retry is pressed while its send is out
       await route.continue();
     }
   });
@@ -184,8 +192,13 @@ test('UX-27 M-06 FR-DOC-06: a withdrawal whose reply is lost says it may have ar
   const alert = page.getByRole('alert').filter({ hasText: 'Not withdrawn yet' });
   await expect(alert).toContainText(LOST);
   expect(await testDb.documentEvent.count({ where: { documentId: card.documentId } })).toBe(0);
-  await page.getByRole('button', { name: 'Retry' }).click();
+  const retryButton = page.getByRole('button', { name: 'Retry' });
+  await retryButton.click();
+  // D-398 item 4: the pressed Retry stays, busy and focused, while its send is out; focus never falls to the page body.
+  await expect(retryButton).toBeFocused();
+  await expect(retryButton).toHaveAttribute('aria-busy', 'true');
   await expect(page.getByRole('status').filter({ hasText: 'Withdrawn.' })).toBeVisible();
+  expect(await page.evaluate(() => document.activeElement === document.body || document.activeElement === null)).toBe(false);
   expect(sent).toHaveLength(2);
   expect(sent[1].requestId).toBe(sent[0].requestId);
   expect(await testDb.documentEvent.count({ where: { documentId: card.documentId } })).toBe(1);
@@ -202,7 +215,7 @@ test('FR-DOC-06: a 409 already_withdrawn says someone else withdrew it first, an
   await page.getByRole('button', { name: 'Withdraw document' }).click();
   await page.getByLabel('Reason (required)').fill('First try.');
   await page.getByRole('button', { name: 'Withdraw document' }).click();
-  await expect(page.getByRole('status').filter({ hasText: 'Not withdrawn by you: someone else withdrew it first. Their reason is shown.' })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: DOCUMENTS_COPY.actions.withdrawTaken })).toBeVisible();
   expect(await testDb.documentEvent.count({ where: { documentId: card.documentId } })).toBe(0);
 
   // The same box after a send with no reply: the 409 may be this person's own request.
@@ -217,7 +230,7 @@ test('FR-DOC-06: a 409 already_withdrawn says someone else withdrew it first, an
   const alert = page.getByRole('alert').filter({ hasText: 'Not withdrawn yet' });
   await expect(alert).toContainText(LOST);
   await page.getByRole('button', { name: 'Retry' }).click();
-  await expect(page.getByRole('status').filter({ hasText: 'Withdrawn. Your earlier request may have done it; the reason shown is the one recorded.' })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: DOCUMENTS_COPY.actions.withdrawEarlier })).toBeVisible();
 });
 
 test('FR-DOC-07 NFR-SEC-11: when the clipboard refuses, Copy as text shows the text in a read-only box to copy by hand', async ({ page, baseURL }) => {
@@ -239,6 +252,34 @@ test('FR-DOC-07 NFR-SEC-11: when the clipboard refuses, Copy as text shows the t
   await expect(page.getByRole('status').filter({ hasText: 'Copied.' })).toHaveCount(0);
 });
 
+test('FR-DOC-01 (MP-04): an issued mitigation plan lists, for a finding raised from a decision, the controls of its question\'s risk areas', async ({ baseURL }) => {
+  // Workshop walk 2, N3: such a finding has no risk area of its own, and MP-04 printed "None". Issued as the owner seat, so the admin
+  // seat's issue budget above is untouched.
+  test.setTimeout(120_000);
+  const base = `/api/v1/orgs/${org.slug}/projects`;
+  const p = await api<{ id: string }>(baseURL!, 'owner', base, { requestId: randomUUID(), name: `N3 ${randomUUID().slice(0, 8)}`, aiSystemType: 'classification' });
+  await api(baseURL!, 'assessor', `${base}/${p.id}/decisions`, {
+    requestId: randomUUID(), stage: 'pre-processing', questionId: 'Q-PP-12', baseVersionNumber: null, status: 'partly', scopeAnswer: null, optionsInPlace: [],
+    reasonCode: null, reason: `End-to-end reason ${randomUUID()} for this decision.`, decidedBy: { kind: 'outside_role', role: 'principal_investigator' },
+    declaredDate: '2026-10-30', evidenceIds: [],
+  });
+  const r = await api<{ id: string }>(baseURL!, 'admin', `${base}/${p.id}/reviews`, { requestId: randomUUID(), stage: 'pre-processing', preparedFor: null });
+  const s = await api<{ id: string }>(baseURL!, 'reviewer', `${base}/${p.id}/reviews/${r.id}/seals`, { requestId: randomUUID() });
+  const d = await api<{ id: string }>(baseURL!, 'owner', `${base}/${p.id}/reviews/${r.id}/documents`, {
+    requestId: randomUUID(), documentType: 'mitigation_plan', sealId: s.id, typedFields: {},
+  });
+  const ctx = await pwRequest.newContext({ baseURL, storageState: seat('reviewer').storageStatePath });
+  try {
+    const res = await ctx.get(`/api/v1/orgs/${org.slug}/documents/${d.id}/text`);
+    expect(res.status()).toBe(200);
+    const text = await res.text();
+    expect(text).toContain('Risk areas of question Q-PP-12: PP-07 Labeling Bias');
+    expect(text).toContain('Controls: C-03 Data Quality & Representativeness Audit; C-04 Bias Detection in Data; C-12 Labeling Quality Assurance');
+  } finally {
+    await ctx.dispose();
+  }
+});
+
 test('FR-DOC-07 FR-REV-08: a 410 on Copy as text says the text was erased and refreshes the list', async ({ page, baseURL }) => {
   test.setTimeout(120_000);
   failOnDialog(page);
@@ -248,6 +289,6 @@ test('FR-DOC-07 FR-REV-08: a 410 on Copy as text says the text was erased and re
   await page.route(textRoute(card.documentId), (route) => route.fulfill({ status: 410, contentType: 'application/json', body: JSON.stringify({ error: 'erased', code: 'erased', erasedOn: '2026-11-04' }) }));
   const refreshed = page.waitForRequest((r) => r.url().includes('/documents') && r.url().includes('_rsc='));
   await page.getByRole('button', { name: 'Copy as text' }).click();
-  await expect(page.getByRole('alert').filter({ hasText: "Not copied: this document's text was erased." })).toBeVisible();
+  await expect(page.getByRole('alert').filter({ hasText: DOCUMENTS_COPY.actions.copyErased })).toBeVisible();
   await refreshed;
 });

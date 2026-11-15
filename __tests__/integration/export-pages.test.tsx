@@ -61,27 +61,27 @@ describe('S-20', () => {
       const html = await orgPage(other);
       expect(html).not.toContain(REFUSED_TEXT.export_busy);
       expect(html).not.toContain(REFUSED_TEXT.rate_limited);
-      expect(html).toMatch(/>Download export<\/a>/);
+      expect(html).toMatch(/>Download records<\/a>/);
     }
   });
 
   it('M-37 FR-EXP-01: the organisation page names the organisation, its size, and links to route 20 for the whole organisation', async () => {
     const html = await orgPage();
-    expect(html).toContain(`Export ${fxA.org.name}: about 2.4 MB as one ZIP file.`);
+    expect(html).toContain(`Records of ${fxA.org.name}: about 2.4 MB, as one ZIP file.`);
     expect(html).toContain(`href="/api/v1/orgs/${fxA.org.slug}/export"`);
-    expect(html).toMatch(/<h1[^>]*>Team export<\/h1>/);
+    expect(html).toMatch(/<h1[^>]*>Download records<\/h1>/);
   });
 
   it('M-37 FR-EXP-01: the project page names the project and links to route 20 for that project', async () => {
     const html = await projectPage(projectOfA);
-    expect(html).toContain('Export Maternal-risk triage: about 2.4 MB as one ZIP file.');
+    expect(html).toContain('Records of Maternal-risk triage: about 2.4 MB, as one ZIP file.');
     expect(html).toContain(`href="/api/v1/orgs/${fxA.org.slug}/export?projectId=${projectOfA}"`);
   });
 
   it('UX-31: the project export page shows the archived banner for an archived project, and still offers the export', async () => {
     const html = await projectPage(archivedOfA);
     expect(html).toContain('This project is archived. Nothing in it can be changed.');
-    expect(html).toMatch(/>Download export<\/a>/);
+    expect(html).toMatch(/>Download records<\/a>/);
     expect(await projectPage(projectOfA)).not.toContain('This project is archived.');
   });
 
@@ -92,15 +92,15 @@ describe('S-20', () => {
       sessionFor(fxA.members[role].userId);
       for (const html of [await orgPage(), await projectPage(projectOfA)]) {
         expect(html).toContain(`<p>${EXPORT_NOT_ALLOWED.replace("'", '&#x27;')}</p>`);
-        expect(html).toMatch(/<h1[^>]*>Team export<\/h1>/);
-        expect(html).not.toMatch(/Download export/);
+        expect(html).toMatch(/<h1[^>]*>Download records<\/h1>/);
+        expect(html).not.toMatch(/>Download records<\/a>|\/api\/v1\/orgs\/[^"]*\/export/);
         expect(html).not.toContain('Maternal-risk triage');
         expect(html).not.toContain(fxA.org.name);
       }
     }
-    expect(EXPORT_NOT_ALLOWED).toBe("Only owners and admins can export the team's records.");
+    expect(EXPORT_NOT_ALLOWED).toBe("Only Owners and Admins can download the team's records.");
     sessionFor(fxA.members.admin.userId);
-    expect(await orgPage()).toMatch(/>Download export<\/a>/);
+    expect(await orgPage()).toMatch(/>Download records<\/a>/);
   });
 
   it('NFR-SEC-02: for a role without team:export, a project of organisation B is still not shown, and the answer is the same as for a project of A', async () => {
@@ -108,9 +108,20 @@ describe('S-20', () => {
     expect(await projectPage(projectOfB)).toBe(await projectPage(projectOfA));
   });
 
-  it('NFR-A11Y-02 (WCAG 2.4.2): both S-20 pages carry their own title', () => {
-    expect(orgModule.metadata).toEqual({ title: 'Team export - MAK-AI RAI Platform' });
-    expect(projectModule.metadata).toEqual({ title: 'Team export - MAK-AI RAI Platform' });
+  it('NFR-A11Y-02 (WCAG 2.4.2): both S-20 pages carry their own title', async () => {
+    const { pageTitle } = await import('../../lib/ui/title');
+    const { EXPORT_COPY } = await import('../../lib/export/copy');
+    const orgTitle = async () => (await orgModule.generateMetadata({ params: Promise.resolve({ slug: fxA.org.slug }) })).title;
+    const projectTitle = async (id: string) => (await projectModule.generateMetadata({ params: Promise.resolve({ slug: fxA.org.slug, id }) })).title;
+    expect(await orgTitle()).toBe(pageTitle(EXPORT_COPY.titles.downloadRecords, fxA.org.name));
+    expect(await projectTitle(projectOfA)).toBe(pageTitle(EXPORT_COPY.titles.downloadRecords, 'Maternal-risk triage'));
+    // A session with no right to the page: the role without team:export gets the refusal and a title that names nothing,
+    // and a project of organisation B is not found from the title as from the page.
+    sessionFor(fxA.members.viewer.userId);
+    expect(await orgTitle()).toBe(pageTitle(EXPORT_COPY.titles.downloadRecords));
+    expect(await projectTitle(projectOfA)).toBe(pageTitle(EXPORT_COPY.titles.downloadRecords));
+    sessionFor(fxA.members.owner.userId);
+    await expect(projectTitle(projectOfB)).rejects.toMatchObject({ digest: 'NEXT_HTTP_ERROR_FALLBACK;404' });
   });
 
   it('FR-EXP-01: estimateTeamExport sums held evidence files and issued PDFs of the scope', async () => {

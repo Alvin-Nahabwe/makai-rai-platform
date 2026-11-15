@@ -4,6 +4,9 @@ import type { OrgRole } from '@prisma/client';
 import { can, type Action } from '../lib/authz/policy';
 import { FIXTURE_ROLES } from '../__tests__/helpers/fixture';
 import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from './fixtures/manifest';
+import { HOME_COPY } from '../lib/home/copy';
+import { PROJECT_COPY } from '../lib/project/copy';
+import { PROJECT_FORM_COPY } from '../lib/project/form/copy';
 
 /**
  * Task 12 Step 1 — O-13: no mutating control is rendered to a role that may
@@ -108,7 +111,7 @@ interface Control {
 
 const DASHBOARD_CONTROLS: Control[] = [
   { name: 'New project', action: 'project:create', mode: 'presence', locator: (p) => p.getByRole('link', { name: 'New project' }) },
-  { name: 'Archived projects', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Archived projects' }) },
+  { name: HOME_COPY.allProjects, action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: HOME_COPY.allProjects }) },
 ];
 
 const PROJECTS_LIST_CONTROLS: Control[] = [
@@ -123,18 +126,19 @@ const PROJECTS_LIST_CONTROLS: Control[] = [
 const PROJECTS_NEW_CONTROLS: Control[] = [
   { name: 'Create project', action: 'project:create', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Create project' }) },
   { name: 'Cancel', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Cancel' }) },
-  { name: 'Show additional details', action: null, mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Show additional details' }) },
-  { name: 'Back to Projects', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: /Back to Projects/ }) },
+  { name: PROJECT_FORM_COPY.showDetails, action: null, mode: 'presence', locator: (p) => p.getByRole('button', { name: PROJECT_FORM_COPY.showDetails }) },
+  { name: PROJECT_FORM_COPY.back, action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: new RegExp(PROJECT_FORM_COPY.back) }) },
 ];
 
 const PROJECT_DETAIL_CONTROLS: Control[] = [
+  { name: PROJECT_COPY.start, action: 'decision:write', mode: 'presence', locator: (p) => p.getByRole('link', { name: PROJECT_COPY.start, exact: true }) },
   { name: 'Edit project', action: 'project:update', mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Edit project' }) },
-  { name: 'Export project', action: 'team:export', mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Export project' }) },
+  { name: PROJECT_COPY.overview.downloadRecords, action: 'team:export', mode: 'presence', locator: (p) => p.getByRole('link', { name: PROJECT_COPY.overview.downloadRecords }) },
   { name: 'Archive project', action: 'project:archive', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Archive project', exact: true }) },
   { name: 'Findings for this project', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Findings for this project' }) },
-  { name: 'Open pre-processing', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Open pre-processing' }) },
-  { name: 'Open in-processing', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Open in-processing' }) },
-  { name: 'Open post-processing', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Open post-processing' }) },
+  { name: 'All questions in this stage', action: null, mode: 'presence', locator: (p) => p.locator('[data-stage="pre-processing"]').getByRole('link', { name: 'All questions in this stage', exact: true }) },
+  { name: 'All questions in this stage', action: null, mode: 'presence', locator: (p) => p.locator('[data-stage="in-processing"]').getByRole('link', { name: 'All questions in this stage', exact: true }) },
+  { name: 'All questions in this stage', action: null, mode: 'presence', locator: (p) => p.locator('[data-stage="post-processing"]').getByRole('link', { name: 'All questions in this stage', exact: true }) },
   { name: 'Open a stage review', action: 'review:open', mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Open a stage review' }).first() },
 ];
 
@@ -187,7 +191,11 @@ async function findUnclassifiedControls(page: Page, knownNames: readonly string[
   return page.evaluate((names: readonly string[]) => {
     function isIgnored(el: Element): boolean {
       if (el.closest('.project-card')) return true;
-      if (el.closest('.admin-table')) return true;
+      // Home's next step is two navigation links (to one question and to its stage's questions), present only when the
+      // person has a next step, so it varies with data as the project cards do. That a role which records no decisions
+      // never gets it is asserted in this file's case below, and in e2e/home-next-step.spec.ts (T9.5).
+      if (el.closest('.next-step')) return true;
+      if (el.closest('.members .ui-table')) return true;
       // S-32's project links, S-10's breadcrumb and its stage jump row are read-only navigation, the same for every role.
       // The buttons in S-32's rows (Unarchive) are not: they stay in the census.
       if (el.matches('a[href]') && el.closest('.projects-list')) return true;
@@ -262,6 +270,12 @@ for (const [orgIndex, org] of manifest.orgs.entries()) {
         await page.goto(`/orgs/${org.slug}/dashboard`);
         await assertScreenControls(page, role, DASHBOARD_CONTROLS);
         if (role === 'owner') await assertNoUnclassifiedControls(page, 'dashboard', DASHBOARD_CONTROLS);
+        // T9.5: a role that records no decisions never gets Home's next step, whatever the data. Its presence for the roles
+        // that record depends on their saves, so it is not asserted here.
+        if (!can(role, 'decision:write')) {
+          await expect.soft(page.locator('.next-step'), `${role}: Home shows no next step to a role that records no decisions`).toHaveCount(0);
+          await expect.soft(page.getByRole('link', { name: HOME_COPY.continueRecording }), `${role}: no Continue recording link`).toHaveCount(0);
+        }
 
         await page.goto(`/orgs/${org.slug}/projects`);
         await assertScreenControls(page, role, PROJECTS_LIST_CONTROLS);

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { escapeRe } from '../helpers/escapeRe';
 
 /**
  * S-01, S-02 and S-03 (FR-ACC-05, FR-ACC-06; M-20, M-21, M-22; obligations B9 and B17).
@@ -21,13 +22,18 @@ const { LoginView, signInErrorText, purgeOtherAccountsAfterSignIn, submitSignIn,
 const { ForgotPasswordView, requestResetLink } = await import('@/app/(public)/forgot-password/ForgotPasswordClient');
 const { ResetPasswordView, takeResetToken, setNewPassword, resetTokenStore } = await import('@/app/(public)/reset-password/ResetPasswordClient');
 const messages = await import('@/lib/http/messages');
+const { VALIDATION_COPY } = await import('@/lib/http/copy');
 const { openDraftStore } = await import('@/lib/client/drafts');
+const { AUTH_MESSAGE_COPY, SIGN_IN_COPY, FORGOT_COPY, RESET_COPY } = await import('@/lib/auth/copy');
 
-const M20 = 'The email or password is not right, or the account is locked after too many attempts. Try again in 15 minutes, or reset your password.';
-const M21 = 'If an account exists for this email, we have sent a link. It works once and expires in 30 minutes.';
-const M22 = 'This link has expired or has already been used. Ask for a new one.';
+const M20 = AUTH_MESSAGE_COPY.wrongCredentials;
+const M21 = AUTH_MESSAGE_COPY.resetLinkSent;
+const M22 = AUTH_MESSAGE_COPY.resetLinkUnusable;
 
 const html = (el: React.ReactElement) => renderToStaticMarkup(el);
+/** The words inside the page's live region of this role (the kit's StatusRegion), tags removed. */
+const regionText = (markup: string, role: 'alert' | 'status') =>
+  (markup.match(new RegExp(`<div role="${role}"[^>]*>(.*?)</div>`))?.[1] ?? '').replace(/<[^>]*>/g, '');
 const tagOf = (markup: string, id: string) => markup.match(new RegExp(`<[a-z]+[^>]*\\bid="${id}"[^>]*>`))?.[0] ?? '';
 const noop = () => {};
 
@@ -52,10 +58,10 @@ describe('S-01 Sign in', () => {
   it('M-20 FR-ACC-05: every refused sign-in shows one text, and there is no Create account link', () => {
     expect(signInErrorText({ error: 'CredentialsSignin' })).toBe(M20);
     const markup = loginView({ error: M20 });
-    expect(markup).toMatch(new RegExp(`role="alert"[^>]*>${M20}<`));
+    expect(regionText(markup, 'alert')).toBe(M20);
     expect(markup).not.toMatch(/create account/i);
     expect(markup).not.toMatch(/href="\/register/);
-    expect(markup).toMatch(/<a [^>]*href="\/forgot-password"[^>]*>Forgot your password\?<\/a>/);
+    expect(markup).toMatch(new RegExp(`<a [^>]*href="/forgot-password"[^>]*>${escapeRe(SIGN_IN_COPY.forgotLink)}</a>`));
     expect(tagOf(markup, 'email')).toMatch(/autoComplete="username"|autocomplete="username"/i);
     expect(tagOf(markup, 'email')).toMatch(/spellcheck="false"/i);
     expect(tagOf(markup, 'email')).toMatch(/type="email"/);
@@ -63,7 +69,13 @@ describe('S-01 Sign in', () => {
     expect(tagOf(markup, 'password')).toMatch(/autocomplete="current-password"/i);
     expect(tagOf(markup, 'password')).toMatch(/required/);
     expect(tagOf(markup, 'password')).toMatch(/type="password"/);
-    expect(markup).toMatch(/<button[^>]*type="button"[^>]*aria-controls="password"[^>]*>Show<\/button>/);
+    expect(markup).toMatch(new RegExp(`<button[^>]*type="button"[^>]*aria-controls="password"[^>]*>${escapeRe(SIGN_IN_COPY.showPassword)}</button>`));
+  });
+
+  it('M-20 (workshop walk S7): the one refusal text says the details are wrong first, and the lock as a rule, not as a verdict', () => {
+    // One wrong password must not read as a lock; the lock's numbers are lib/auth/credentials.ts's LOCK_THRESHOLD (5) and LOCK_MS (15 min).
+    expect(M20).toBe('The email or password is wrong. Check them and try again. After five wrong tries an account is locked for 15 minutes. You can also reset your password.');
+    expect(M20).not.toMatch(/Try again in 15 minutes/);
   });
 
   it('S-01 (a419413): the Create account link and the registered banner are gone from the page source', () => {
@@ -75,24 +87,24 @@ describe('S-01 Sign in', () => {
 
   it('FR-ACC-05: a busy or rate-limited sign-in says so, and Show reveals the password', () => {
     // Owner copy (C4 ruling SC-1), in the 7.5.7 pattern: what did not happen, what is safe, what to do.
-    expect(signInErrorText({ error: 'sign_in_busy' })).toBe('Not signed in: the server is busy with other sign-ins. Nothing was changed. Try again in a minute.');
+    expect(signInErrorText({ error: 'sign_in_busy' })).toBe(SIGN_IN_COPY.busy);
     // A failure on the server (next-auth answers Configuration when authorize throws, as in a database outage) is not
     // told as a wrong password.
-    const SERVER = 'Not signed in: the server had a problem. Nothing was changed. Try again in a few minutes.';
+    const SERVER = SIGN_IN_COPY.serverProblem;
     expect(signInErrorText({ error: 'Configuration' })).toBe(SERVER);
     expect(signInErrorText({})).toBe(SERVER);
     // The wait rides in the refusal url's `code` (and `wait`), the one other field next-auth/react's signIn returns
     // (C4 ruling SC-3); minutes rounded up.
-    expect(signInErrorText({ error: 'rate_limited', code: '42' })).toBe('Too many sign-ins right now. Wait 1 minute and try again.');
-    expect(signInErrorText({ error: 'rate_limited', code: '90' })).toBe('Too many sign-ins right now. Wait 2 minutes and try again.');
-    expect(signInErrorText({ error: 'rate_limited' })).toBe('Too many sign-ins right now. Wait 1 minute and try again.');
-    expect(signInErrorText({ error: 'rate_limited', code: 'x9' })).toBe('Too many sign-ins right now. Wait 1 minute and try again.');
+    expect(signInErrorText({ error: 'rate_limited', code: '42' })).toBe(SIGN_IN_COPY.rateLimited(1));
+    expect(signInErrorText({ error: 'rate_limited', code: '90' })).toBe(SIGN_IN_COPY.rateLimited(2));
+    expect(signInErrorText({ error: 'rate_limited' })).toBe(SIGN_IN_COPY.rateLimited(1));
+    expect(signInErrorText({ error: 'rate_limited', code: 'x9' })).toBe(SIGN_IN_COPY.rateLimited(1));
     expect(tagOf(loginView({ showPassword: true }), 'password')).toMatch(/type="text"/);
     expect(loginView({ showPassword: true })).toMatch(/aria-pressed="true"/);
   });
 
   it('FR-ACC-05 (C4 ruling F2): a sign-in that gets no readable answer says the connection was lost and gives the form back', async () => {
-    const LOST = 'Not signed in: connection lost. Nothing was changed. Try again.';
+    const LOST = SIGN_IN_COPY.connectionLost;
     // next-auth/react's signIn parses the answer with res.json(): an nginx 502 page in HTML makes it reject.
     const html502 = vi.fn(async () => { throw new SyntaxError('Unexpected token \'<\', "<html><hea"... is not valid JSON'); });
     expect(await submitSignIn({ signIn: html502, getSession: vi.fn() }, 'a@x.test', 'pw')).toEqual({ kind: 'error', message: LOST });
@@ -108,8 +120,7 @@ describe('S-01 Sign in', () => {
   });
 
   it('FR-ACC-06: after a reset or a change the page says the password changed', () => {
-    expect(loginView({ notice: 'Password changed. Please sign in with your new password.' }))
-      .toMatch(/role="status"[^>]*>Password changed\. Please sign in with your new password\.</);
+    expect(regionText(loginView({ notice: SIGN_IN_COPY.passwordChanged }), 'status')).toBe(SIGN_IN_COPY.passwordChanged);
   });
 
   it('UX-26 (helper) FR-ACC-05: sign-in purges other accounts\' drafts', () => {
@@ -175,9 +186,9 @@ describe('S-02 Forgot password', () => {
     expect(await requestResetLink(fetchMock as unknown as typeof fetch, 'a@x.test')).toEqual({ kind: 'sent' });
     expect(fetchMock).toHaveBeenCalledWith('/api/password-reset', expect.objectContaining({ method: 'POST', body: JSON.stringify({ email: 'a@x.test' }) }));
     const sent = html(<ForgotPasswordView email="a@x.test" state={{ kind: 'sent' }} onEmail={noop} onSubmit={noop} />);
-    expect(sent).toMatch(new RegExp(`role="status"[^>]*>${M21}<`));
+    expect(regionText(sent, 'status')).toBe(M21);
     const idle = html(<ForgotPasswordView email="" state={{ kind: 'idle' }} onEmail={noop} onSubmit={noop} />);
-    expect(idle).toMatch(/<button[^>]*type="submit"[^>]*>Send reset link<\/button>/);
+    expect(idle).toMatch(new RegExp(`<button[^>]*type="submit"[^>]*>${escapeRe(FORGOT_COPY.submit)}</button>`));
     expect(tagOf(idle, 'email')).toMatch(/autocomplete="username"/i);
     expect(tagOf(idle, 'email')).toMatch(/spellcheck="false"/i);
   });
@@ -187,10 +198,10 @@ describe('S-02 Forgot password', () => {
     expect(await requestResetLink(offline as unknown as typeof fetch, 'a@x.test')).toMatchObject({ kind: 'error' });
     const fault = vi.fn(async () => new Response('{}', { status: 500 }));
     const r = await requestResetLink(fault as unknown as typeof fetch, 'a@x.test');
-    expect(r).toEqual({ kind: 'error', message: 'Not sent: the server had a problem. Try again in a few minutes.' });
-    expect(await requestResetLink(offline as unknown as typeof fetch, 'a@x.test')).toEqual({ kind: 'error', message: 'Not sent: the request did not reach the server. Check the connection and try again.' });
+    expect(r).toEqual({ kind: 'error', message: FORGOT_COPY.serverProblem });
+    expect(await requestResetLink(offline as unknown as typeof fetch, 'a@x.test')).toEqual({ kind: 'error', message: FORGOT_COPY.notReached });
     const markup = html(<ForgotPasswordView email="a@x.test" state={r} onEmail={noop} onSubmit={noop} />);
-    expect(markup).toMatch(/role="alert"/);
+    expect(regionText(markup, 'alert')).toBe(FORGOT_COPY.serverProblem);
     expect(tagOf(markup, 'email')).toMatch(/value="a@x.test"/);
   });
 });
@@ -222,7 +233,7 @@ describe('S-03 Set a new password', () => {
     const r = await setNewPassword(fetchMock as unknown as typeof fetch, 'a'.repeat(64), 'n'.repeat(12));
     expect(r).toEqual({ kind: 'unusable' });
     const markup = html(<ResetPasswordView token="x" password="" showPassword={false} state={r} onPassword={noop} onToggleShow={noop} onSubmit={noop} />);
-    expect(markup).toMatch(new RegExp(`role="alert"[^>]*>${M22}`));
+    expect(regionText(markup, 'alert')).toBe(M22);
     expect(markup).toMatch(/<a [^>]*href="\/forgot-password"/);
     const { win } = fakeWindow('');
     expect(takeResetToken(win)).toBeNull();
@@ -232,26 +243,43 @@ describe('S-03 Set a new password', () => {
   });
 
   it('NFR-SEC-18 FR-ACC-06: S-03 states the minimum, shows a 422 under the field, and has one new-password field', async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ error: 'Validation failed', code: 'validation', fields: [{ field: 'newPassword', message: 'Password must be at least 12 characters' }] }), { status: 422 }));
+    const tooShort = VALIDATION_COPY.passwordTooShort(12);
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ error: 'Validation failed', code: 'validation', fields: [{ field: 'newPassword', message: tooShort }] }), { status: 422 }));
     const r = await setNewPassword(fetchMock as unknown as typeof fetch, 'a'.repeat(64), 'short');
-    expect(r).toEqual({ kind: 'invalid', message: 'Password must be at least 12 characters' });
+    expect(r).toEqual({ kind: 'invalid', message: tooShort });
     const markup = html(<ResetPasswordView token="x" password="short" showPassword={false} state={r} onPassword={noop} onToggleShow={noop} onSubmit={noop} />);
-    expect(markup).toContain('At least 12 characters.');
+    expect(markup).toContain(RESET_COPY.hint(12));
     expect(tagOf(markup, 'new-password')).toMatch(/autocomplete="new-password"/i);
     expect(tagOf(markup, 'new-password')).toMatch(/aria-describedby="new-password-hint new-password-error"/);
-    expect(markup).toMatch(/id="new-password-error"[^>]*>Password must be at least 12 characters</);
+    expect(markup).toMatch(new RegExp(`id="new-password-error"[^>]*>${escapeRe(tooShort)}<`));
     expect(markup.match(/type="password"/g)).toHaveLength(1);
-    expect(markup).toMatch(/<button[^>]*type="submit"[^>]*>Set password<\/button>/);
-    expect(markup).toMatch(/aria-controls="new-password"[^>]*>Show</);
+    expect(markup).toMatch(new RegExp(`<button[^>]*type="submit"[^>]*>${escapeRe(RESET_COPY.submit)}</button>`));
+    expect(markup).toMatch(new RegExp(`aria-controls="new-password"[^>]*>${escapeRe(RESET_COPY.showPassword)}<`));
   });
 
   it('FR-ACC-06: S-03 tells a lost request from a server failure', async () => {
     const offline = vi.fn(async () => { throw new TypeError('Failed to fetch'); });
     expect(await setNewPassword(offline as unknown as typeof fetch, 'a'.repeat(64), 'n'.repeat(12)))
-      .toEqual({ kind: 'error', message: 'Not set: the request did not reach the server. Your link still works; try again.' });
+      .toEqual({ kind: 'error', message: RESET_COPY.notReached });
     const fault = vi.fn(async () => new Response('{"error":"Service unavailable","code":"database_unavailable","reference":"0a1b2c3d"}', { status: 503 }));
     expect(await setNewPassword(fault as unknown as typeof fetch, 'a'.repeat(64), 'n'.repeat(12)))
-      .toEqual({ kind: 'error', message: 'Not set: the server had a problem. Try again; if the link no longer works, ask for a new one.' });
+      .toEqual({ kind: 'error', message: RESET_COPY.serverProblem });
+  });
+
+  it('FR-ACC-06 M-22 (ruling T16-6): S-03 renders its assertive region empty with the form, first, and a 410 puts M-22 in that same first region', () => {
+    const props = { token: 'x', password: '', showPassword: false, onPassword: noop, onToggleShow: noop, onSubmit: noop };
+    const idle = html(<ResetPasswordView {...props} state={{ kind: 'idle' }} />);
+    const refused = html(<ResetPasswordView {...props} state={{ kind: 'unusable' }} />);
+    const missing = html(<ResetPasswordView {...props} token={null} state={{ kind: 'idle' }} />);
+    const firstElement = (markup: string) => /^<div role="alert"[^>]*>/.exec(markup)?.[0];
+    expect(firstElement(idle)).toBe('<div role="alert" class="ui-status ui-status--error">');
+    expect(regionText(idle, 'alert')).toBe('');
+    expect(idle).toMatch(/id="new-password"/);
+    for (const markup of [refused, missing]) {
+      expect(firstElement(markup)).toBe(firstElement(idle));
+      expect(regionText(markup, 'alert')).toBe(M22);
+      expect(markup).not.toMatch(/id="new-password"/);
+    }
   });
 
   it('NFR-A11Y-04: S-01 and S-03 take pasted passwords', () => {
@@ -265,15 +293,25 @@ describe('one copy of each message (C4 SI-1)', () => {
   it('M-20 M-21 M-22: the texts live once, in lib/http/messages.ts, and every screen and route imports them', () => {
     expect([messages.M20, messages.M21, messages.M22]).toEqual([M20, M21, M22]);
     const users: Record<string, string[]> = {
-      'app/(public)/login/LoginClient.tsx': ['M20'],
-      'app/(public)/forgot-password/ForgotPasswordClient.tsx': ['M21'],
       'app/api/password-reset/route.ts': ['M21'],
-      'app/(public)/reset-password/ResetPasswordClient.tsx': ['M22'],
       'lib/data/passwordReset.ts': ['M22'],
     };
     for (const [file, names] of Object.entries(users)) {
       const src = readFileSync(file, 'utf8');
       for (const n of names) expect(src, `${file} imports ${n}`).toMatch(new RegExp(`import \\{[^}]*\\b${n}\\b[^}]*\\} from '@/lib/http/messages'`));
+      for (const text of [M20, M21, M22]) expect(src.includes(text), `${file} repeats a message text`).toBe(false);
+    }
+    // The three client screens read the words from the copy module, never through lib/http/messages.ts.
+    const clients: Record<string, string> = {
+      'app/(public)/login/LoginClient.tsx': 'wrongCredentials',
+      'app/(public)/forgot-password/ForgotPasswordClient.tsx': 'resetLinkSent',
+      'app/(public)/reset-password/ResetPasswordClient.tsx': 'resetLinkUnusable',
+    };
+    for (const [file, key] of Object.entries(clients)) {
+      const src = readFileSync(file, 'utf8');
+      expect(src, `${file} imports AUTH_MESSAGE_COPY`).toMatch(/import \{[^}]*\bAUTH_MESSAGE_COPY\b[^}]*\} from '@\/lib\/auth\/copy'/);
+      expect(src, `${file} reads AUTH_MESSAGE_COPY.${key}`).toContain(`AUTH_MESSAGE_COPY.${key}`);
+      expect(src, `${file} does not import lib/http/messages`).not.toContain('@/lib/http/messages');
       for (const text of [M20, M21, M22]) expect(src.includes(text), `${file} repeats a message text`).toBe(false);
     }
   });
@@ -283,7 +321,7 @@ describe('S-03 after a successful reset (C4 m4)', () => {
   it('FR-ACC-06: once the password is set, the page never shows M-22, even after the token is forgotten', () => {
     const markup = html(<ResetPasswordView token={null} password="" showPassword={false} state={{ kind: 'done' }} onPassword={noop} onToggleShow={noop} onSubmit={noop} />);
     expect(markup).not.toContain(M22);
-    expect(markup).toMatch(/role="status"[^>]*>Password changed\. Please sign in with your new password\.</);
+    expect(regionText(markup, 'status')).toBe(RESET_COPY.passwordChanged);
     expect(markup).not.toMatch(/id="new-password"/);
   });
 });

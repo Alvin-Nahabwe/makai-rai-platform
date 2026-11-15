@@ -36,6 +36,6 @@ async function bodyOf(req: NextRequest): Promise<{ token: string; newPassword: s
     throw e;
   });
   const b = typeof body === 'object' && body !== null && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
-  // A missing or non-string password is refused by validatePassword as 'Password is required' (422).
+  // A missing or non-string password is refused by validatePassword with VALIDATION_COPY.passwordRequired (422).
   return { token: typeof b.token === 'string' ? b.token : '', newPassword: typeof b.newPassword === 'string' ? b.newPassword : '' };
 }

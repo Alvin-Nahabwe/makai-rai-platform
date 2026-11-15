@@ -1,10 +1,21 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { cloneElement, isValidElement, useCallback, useEffect, useId, useRef, useState, type ReactElement, type ReactNode } from 'react';
+import { cloneElement, isValidElement, useCallback, useEffect, useId, useRef, useState, type ReactElement, type ReactNode, type Ref } from 'react';
+import { Button } from '@/components/ui/Button';
+import { ErrorSummary as KitErrorSummary } from '@/components/ui/ErrorSummary';
 import { InlineConfirm } from '@/components/ui/InlineConfirm';
+import { Icon } from '@/components/ui/Icon';
+import { FieldError as KitFieldError, FieldHint, FieldLabel } from '@/components/ui/TextInput';
+import '@/components/ui/formStyles';
+import '@/components/ui/textAreaStyles';
+import '@/components/ui/selectStyles';
+import '@/components/ui/dateFieldStyles';
+import { UI_COPY } from '@/lib/ui/copy';
+import './Findings.css';
 import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafeWrite';
 import { characterCount, KEPT_IN_FORM, reasonErrors, writeFailure, type WriteFailure } from '@/lib/findings/formRules';
+import { FINDINGS_COPY } from '@/lib/findings/copy';
 import type { FieldError } from '@/types/record';
 
 /**
@@ -14,7 +25,8 @@ import type { FieldError } from '@/types/record';
  * while one is in flight does nothing. After a save the retry state is cleared, so the same action later (reopening again)
  * is a new request and not a replay of the first.
  */
-export function useFindingWrite(url: string, kept: string): {
+/** `again` is the label of the button that sends this write: its failure lines say "Select <again> again." (ruling L5-5). */
+export function useFindingWrite(url: string, kept: string, again: string): {
   phase: 'idle' | 'saving' | 'slow'; failure: WriteFailure | null;
   send: <T>(body: Record<string, unknown>) => Promise<{ status: number; body: T } | null>;
   clearFailure: () => void;
@@ -32,7 +44,7 @@ export function useFindingWrite(url: string, kept: string): {
       const next = requestIdFor(retry.current, body);
       retry.current = next.state;
       const outcome = await sendWrite<T>(url, 'POST', { requestId: next.requestId, ...body }, { onSlow: () => setPhase('slow') });
-      const failed = writeFailure(outcome, kept);
+      const failed = writeFailure(outcome, kept, undefined, again);
       if (failed !== null || outcome.kind !== 'saved') {
         setFailure(failed);
         return null;
@@ -43,7 +55,7 @@ export function useFindingWrite(url: string, kept: string): {
       busy.current = false;
       setPhase('idle');
     }
-  }, [url, kept]);
+  }, [url, kept, again]);
   return { phase, failure, send, clearFailure: () => setFailure(null) };
 }
 
@@ -56,11 +68,12 @@ export function FailureText({ text, name }: { text: string; name?: string }): Re
 
 /**
  * A polite live region that keeps its place in the page: the element is always there so the screen reader has registered
- * it, and it takes `role="status"` only while it holds text (so a page shows one status at a time).
+ * it, and it takes `role="status"` only while it holds text (so a page shows one status at a time). Given a `ref`, it can
+ * take focus from script (`tabIndex={-1}`), for an outcome that replaces the control that was pressed.
  */
-export function StatusLine({ children }: { children?: ReactNode }): ReactElement {
+export function StatusLine({ children, ref }: { children?: ReactNode; ref?: Ref<HTMLDivElement> }): ReactElement {
   const has = children !== undefined && children !== null && children !== false && children !== '';
-  return <div aria-live="polite" role={has ? 'status' : undefined}>{has ? children : null}</div>;
+  return <div aria-live="polite" role={has ? 'status' : undefined} ref={ref} tabIndex={ref === undefined ? undefined : -1}>{has ? children : null}</div>;
 }
 
 /** The summary a failed Save shows and takes focus (WCAG 3.3.1; the forms guide: "Block and route focus"): one link per field. */
@@ -76,21 +89,67 @@ export function ErrorSummary({ summary, errors, focusKey, prefix = '' }: { summa
   );
 }
 
-/** A labelled control with its help and error linked by `aria-describedby` (the forms guide). */
+/**
+ * A labelled control with its help and error linked by `aria-describedby` (the forms guide), drawn with the kit's field
+ * parts (`div.ui-field`, `FieldLabel`, `FieldHint`, `FieldError`). It stays for the controls the kit's own fields cannot
+ * carry with the same ids: the help's id is `<id>-help` (the kit's is `<id>-hint`), and the control is the caller's,
+ * which wears the kit's class (`ui-input`, `ui-textarea`, `ui-select`).
+ */
 export function Field(p: {
   id: string; label: string; error?: string | null; help?: string;
   render: (a: { id: string; 'aria-describedby'?: string; 'aria-invalid'?: true }) => ReactElement;
+  /** Shown after the control, before the error: a textarea's count. */
+  after?: ReactNode;
 }): ReactElement {
   const helpId = `${p.id}-help`;
   const errorId = `${p.id}-error`;
   const describedBy = [p.help ? helpId : null, p.error ? errorId : null].filter((x): x is string => x !== null).join(' ');
   return (
-    <div className="form-group">
-      <label htmlFor={p.id}>{p.label}</label>
-      {p.help ? <p id={helpId} className="text-muted">{p.help}</p> : null}
+    <div className="ui-field">
+      <FieldLabel htmlFor={p.id} label={p.label} />
+      {p.help ? <FieldHint id={helpId}>{p.help}</FieldHint> : null}
       {p.render({ id: p.id, ...(describedBy === '' ? {} : { 'aria-describedby': describedBy }), ...(p.error ? { 'aria-invalid': true as const } : {}) })}
-      {p.error ? <p id={errorId} className="form-error">{p.error}</p> : null}
+      {p.after}
+      {p.error ? <KitFieldError id={errorId} message={p.error} /> : null}
     </div>
+  );
+}
+
+/** A native select in the kit's look: the wrap and the chevron of `components/ui/Select.tsx`, for a select `Field` labels. */
+export function SelectBox({ children }: { children: ReactElement }): ReactElement {
+  return (
+    <div className="ui-select__wrap">
+      {children}
+      <span className="ui-select__icon"><Icon name="chevron-down" size={20} /></span>
+    </div>
+  );
+}
+
+/**
+ * A date as three boxes, Day, Month and Year, in the kit's date classes (`components/ui/DateField.tsx`'s markup). Native,
+ * because the forms keep what the kit's DateField cannot carry: the fieldset's own id (an error summary links to it) and
+ * each box's `name`.
+ */
+export function DateBoxes(p: {
+  id: string; boxId: (part: 'day' | 'month' | 'year') => string; legend: string;
+  value: { day: string; month: string; year: string }; onChange: (part: 'day' | 'month' | 'year', value: string) => void;
+  error: string | null; errorId: string;
+}): ReactElement {
+  return (
+    <fieldset id={p.id} className="ui-date" aria-describedby={p.error ? p.errorId : undefined}>
+      <legend className="ui-date__legend">{p.legend}</legend>
+      {p.error ? <KitFieldError id={p.errorId} message={p.error} /> : null}
+      <div className="ui-date__parts">
+        {(['day', 'month', 'year'] as const).map((part) => (
+          <div key={part} className={`ui-date__part ui-date__part--${part}`}>
+            <label className="ui-date__label" htmlFor={p.boxId(part)}>{UI_COPY.date[part]}</label>
+            <input id={p.boxId(part)} name={part} type="text" inputMode="numeric" maxLength={part === 'year' ? 4 : 2} value={p.value[part]}
+              className={p.error ? 'ui-input ui-input--invalid' : 'ui-input'} aria-invalid={p.error ? true : undefined}
+              onChange={(e) => p.onChange(part, e.target.value)} />
+          </div>
+        ))}
+      </div>
+    </fieldset>
   );
 }
 
@@ -101,14 +160,21 @@ export type FindingActionsProps = {
   canReopen: boolean; canWithdraw: boolean;
   /** M-26: shown where an action is absent for the role (UX-17); null where the role holds it. */
   cannotAccept: string | null; cannotReopen: string | null;
-  /** The accepted-risk form (a client component), rendered here so it sits in "Other ways to close this finding". */
+  /** The accepted-risk form (a client component), rendered here so it sits in "Accept the risk, withdraw or reopen". */
   acceptForm: ReactNode;
 };
 
+const C = FINDINGS_COPY.actions;
+
 /**
- * "Other ways to close this finding" (W-5 note 6): the accept form, Withdraw for a team finding's raiser, owners and admins, and,
- * once the finding is closed, Reopen this finding. One client component keeps all three and the page's status, so
- * "Reopened." survives the refresh that turns the finding open again. Every control only asks: each write is re-checked by its route.
+ * "Accept the risk, withdraw or reopen" (W-5 note 6): the accept form, Withdraw for a team finding's raiser, owners and
+ * admins, and, once the finding is closed, Reopen this finding. One client component keeps all three and the page's
+ * status, so "Reopened." survives the refresh that turns the finding open again. Every control only asks: each write is
+ * re-checked by its route.
+ *
+ * Focus (ruling X-4; register D-398 item 9): opening the withdrawal's confirmation, or the reopen form that replaces its
+ * trigger, puts focus on the reason, the first field; Cancel puts it back on the trigger. A refused submit focuses the
+ * summary's title. The reason's summary is the kit's: every error it lists is the reason's.
  */
 export function FindingActions(p: FindingActionsProps): ReactElement {
   const router = useRouter();
@@ -119,21 +185,33 @@ export function FindingActions(p: FindingActionsProps): ReactElement {
   const [errors, setErrors] = useState<FieldError[]>([]);
   const [attempt, setAttempt] = useState(0);
   const withdrawTrigger = useRef<HTMLButtonElement>(null);
+  // After a reopen, a withdrawal or an acceptance the pressed control is gone: the status line that holds the outcome takes
+  // focus (B1, ruling L5-4), once it holds it. It stays in place through the refresh.
+  const statusLine = useRef<HTMLDivElement>(null);
+  const [focusStatus, setFocusStatus] = useState(0);
+  useEffect(() => {
+    if (focusStatus > 0) statusLine.current?.focus();
+  }, [focusStatus]);
   const reopenTrigger = useRef<HTMLButtonElement>(null);
-  const confirmWrap = useRef<HTMLDivElement>(null);
+  const reasonBox = useRef<HTMLTextAreaElement>(null);
+  const summaryTitle = useRef<HTMLHeadingElement>(null);
   const rid = `act-${useId().replace(/:/g, '')}`;
-  const withdraw = useFindingWrite(`${base}/withdrawal`, KEPT_IN_FORM);
-  const reopen = useFindingWrite(`${base}/reopen`, KEPT_IN_FORM);
+  const withdraw = useFindingWrite(`${base}/withdrawal`, KEPT_IN_FORM, C.withdrawAction);
+  const reopen = useFindingWrite(`${base}/reopen`, KEPT_IN_FORM, C.reopenSubmit);
   const w = open === 'reopen' ? reopen : withdraw;
   // The accept form reports its saved line here, so it survives the refresh that remounts the form behind its trigger (CR-1).
   const accept = isValidElement(p.acceptForm)
-    ? cloneElement(p.acceptForm as ReactElement<{ onAccepted?: (t: ReactNode) => void }>, { onAccepted: (t: ReactNode) => setMessage(t) })
+    ? cloneElement(p.acceptForm as ReactElement<{ onAccepted?: (t: ReactNode) => void }>, { onAccepted: (t: ReactNode) => { setMessage(t); setFocusStatus((n) => n + 1); } })
     : p.acceptForm;
 
-  // Opening the confirmation puts focus on its action button (UX-42); Cancel puts it back on what opened it.
+  // Opening the confirmation or the reopen form puts focus on its first field, the reason (X-4); Cancel puts it back on what opened it.
   useEffect(() => {
-    if (open === 'withdraw') confirmWrap.current?.querySelector<HTMLButtonElement>('button.btn--primary')?.focus();
+    if (open !== null) reasonBox.current?.focus();
   }, [open]);
+  // A refused submit moves focus to the summary's title, as the forms guide asks ("Block and route focus").
+  useEffect(() => {
+    if (attempt > 0 && errors.length > 0) summaryTitle.current?.focus();
+  }, [attempt]);   // eslint-disable-line react-hooks/exhaustive-deps -- only a new submit moves focus
   const close = (back: React.RefObject<HTMLButtonElement | null>) => {
     setOpen(null); setReason(''); setErrors([]); w.clearFailure();
     requestAnimationFrame(() => back.current?.focus());
@@ -146,19 +224,23 @@ export function FindingActions(p: FindingActionsProps): ReactElement {
     const hook = kind === 'withdraw' ? withdraw : reopen;
     const sent = await hook.send({ reason: reason.trim(), eventCode: null });
     if (sent === null) return;
-    setMessage(kind === 'withdraw' ? 'Withdrawn.' : 'Reopened.');
-    setOpen(null); setReason('');
+    setMessage(kind === 'withdraw' ? C.withdrawnDone : C.reopenedDone);
+    setOpen(null); setReason(''); setFocusStatus((n) => n + 1);
     router.refresh();
   };
 
+  const reasonError = errors[0]?.message ?? w.failure?.fields.find((f) => f.field === 'reason')?.message ?? null;
   const reasonField = (
     <>
-      <ErrorSummary summary="There is a problem with this reason. What you typed is kept." errors={errors} focusKey={attempt} prefix={`${rid}-`} />
+      <KitErrorSummary ref={summaryTitle} title={C.reasonSummary} errors={errors.map((e) => ({ fieldId: `${rid}-${e.field}`, message: e.message }))} />
       <Field
-        id={`${rid}-reason`} label="Reason (required)" error={errors[0]?.message ?? w.failure?.fields.find((f) => f.field === 'reason')?.message ?? null}
-        render={(a) => <textarea {...a} name="reason" rows={3} value={reason} onChange={(e) => { setReason(e.target.value); if (errors.length) setErrors([]); }} />}
+        id={`${rid}-reason`} label={C.reason} error={reasonError}
+        render={(a) => (
+          <textarea {...a} ref={reasonBox} className={reasonError ? 'ui-textarea ui-textarea--invalid' : 'ui-textarea'} name="reason" rows={3} value={reason}
+            onChange={(e) => { setReason(e.target.value); if (errors.length) setErrors([]); }} />
+        )}
+        after={<p className="ui-count" aria-live="off">{characterCount(Array.from(reason).length)}</p>}
       />
-      <p className="text-muted" aria-live="off">{characterCount(Array.from(reason).length)}</p>
     </>
   );
 
@@ -169,40 +251,40 @@ export function FindingActions(p: FindingActionsProps): ReactElement {
         {accept}
         {p.canReopen ? (
           open === 'reopen' ? (
-            <form method="post" onSubmit={(e) => { e.preventDefault(); void submit('reopen'); }} noValidate>
-              <h3>Reopen this finding</h3>
+            <form method="post" className="finding-form" onSubmit={(e) => { e.preventDefault(); void submit('reopen'); }} noValidate>
+              <h3>{C.reopenHeading}</h3>
               {reasonField}
-              <div className="form-actions">
-                <button type="submit" className="btn btn--primary" aria-disabled={reopen.phase !== 'idle' ? true : undefined}>Reopen finding</button>
-                <button type="button" className="btn btn--secondary" onClick={() => close(reopenTrigger)}>Cancel</button>
+              <div className="finding-actions">
+                <Button variant="primary" type="submit" busy={reopen.phase !== 'idle'}>{C.reopenSubmit}</Button>
+                <Button variant="secondary" onClick={() => close(reopenTrigger)}>{C.cancel}</Button>
               </div>
             </form>
           ) : (
-            <button type="button" ref={reopenTrigger} className="btn btn--secondary" onClick={() => setOpen('reopen')}>Reopen this finding</button>
+            <Button variant="secondary" ref={reopenTrigger} onClick={() => setOpen('reopen')}>{C.reopenTrigger}</Button>
           )
-        ) : <p>{p.cannotReopen}</p>}
+        ) : <p className="finding-note">{p.cannotReopen}</p>}
         </>
       ) : (
         <>
           {accept}
-          {p.cannotAccept === null ? null : <p>{p.cannotAccept}</p>}
+          {p.cannotAccept === null ? null : <p className="finding-note">{p.cannotAccept}</p>}
           {p.canWithdraw ? (
             open === 'withdraw' ? (
-              <div ref={confirmWrap}>
+              <div className="finding-confirm">
                 <InlineConfirm
-                  objectName={`Finding: ${p.findingTitle}`} consequence="It stays listed as withdrawn and counts as neither open nor closed."
-                  actionLabel="Withdraw finding" busy={withdraw.phase !== 'idle'}
+                  objectName={C.objectName(p.findingTitle)} consequence={C.consequence}
+                  actionLabel={C.withdrawAction} busy={withdraw.phase !== 'idle'} destructive
                   onConfirm={() => submit('withdraw')} onCancel={() => close(withdrawTrigger)}
                 >{reasonField}</InlineConfirm>
               </div>
             ) : (
-              <button type="button" ref={withdrawTrigger} className="btn btn--secondary" onClick={() => setOpen('withdraw')}>Withdraw</button>
+              <Button variant="secondary" ref={withdrawTrigger} onClick={() => setOpen('withdraw')}>{C.withdrawTrigger}</Button>
             )
           ) : null}
         </>
       )}
-      {w.failure === null ? null : <p role="alert"><FailureText text={w.failure.text} name={w.failure.nameInText} /></p>}
-      <StatusLine>{w.phase === 'saving' ? 'Saving...' : w.phase === 'slow' ? 'Still saving. The connection is slow.' : message}</StatusLine>
+      {w.failure === null ? null : <p role="alert" className="finding-alert"><FailureText text={w.failure.text} name={w.failure.nameInText} /></p>}
+      <StatusLine ref={statusLine}>{w.phase === 'saving' ? C.saving : w.phase === 'slow' ? C.slow : message}</StatusLine>
     </div>
   );
 }

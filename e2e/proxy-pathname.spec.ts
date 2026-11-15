@@ -24,6 +24,9 @@ const org = manifest.orgs[1];
 const seat = manifest.users.find((u) => u.orgSlug === org.slug && u.role === 'viewer' && u.index === 1);
 if (!seat) throw new Error(`proxy-pathname: no second viewer seat for ${org.slug} in the fixture manifest`);
 
+/** Strings only the signed-in shell writes: the rail, its one navigation landmark and the shell's main. */
+const SHELL_MARKERS = ['shell-rail', 'aria-label="Main"', 'shell__main'];
+
 test.afterAll(async () => {
   await testDb.$disconnect();
 });
@@ -33,16 +36,19 @@ test('UX-01: a must-change-password account cannot skip the gate with a forged x
   try {
     await testDb.user.update({ where: { id: seat.userId }, data: { mustChangePassword: true } });
     const forged = { 'x-pathname': '/change-password' };
+    // The markers are real: the page the gate allows serves the shell, and its HTML holds every one of them.
+    const allowed = await context.request.get('/change-password', { maxRedirects: 0 });
+    expect(allowed.status()).toBe(200);
+    const allowedBody = await allowed.text();
+    for (const marker of SHELL_MARKERS) expect(allowedBody, marker).toContain(marker);
     // A project id may end in any extension, so these paths reach `(authenticated)/layout.tsx` (which calls
     // requireIdentity() before the page looks the project up and answers not-found), and used to skip the proxy.
     for (const ext of ['png', 'jpg', 'jpeg', 'svg', 'ico', 'webp']) {
       const path = `/orgs/${org.slug}/projects/missing.${ext}`;
       const res = await context.request.get(path, { headers: forged, maxRedirects: 0 });
       const body = await res.text();
-      // Not the signed-in shell: its sidebar and main landmark are absent.
-      expect(body, path).not.toContain('app-layout');
-      expect(body, path).not.toContain('Main navigation');
-      expect(body, path).not.toContain('app-main');
+      // Not the signed-in shell: its rail, navigation and main landmark are absent.
+      for (const marker of SHELL_MARKERS) expect(body, `${path} ${marker}`).not.toContain(marker);
       // The gate ran: the account is sent to /change-password.
       expect(res.status(), path).toBe(307);
       expect(res.headers().location ?? '', path).toMatch(/\/change-password$/);
@@ -50,7 +56,8 @@ test('UX-01: a must-change-password account cannot skip the gate with a forged x
     // A path no route matches answers the plain not-found page, never the shell, whatever the header says.
     const missing = await context.request.get('/does-not-exist.png', { headers: forged, maxRedirects: 0 });
     expect(missing.status()).toBe(404);
-    expect(await missing.text()).not.toContain('app-layout');
+    const missingBody = await missing.text();
+    for (const marker of SHELL_MARKERS) expect(missingBody, marker).not.toContain(marker);
     // The same request with the true path is unchanged.
     const own = await context.request.get('/change-password', { maxRedirects: 0 });
     expect(own.status()).toBe(200);
@@ -74,12 +81,16 @@ test('UX-01 FR-ACC-04: an account missing an acceptance cannot skip gate 3 with 
     await login.locator('button[type="submit"]').click();
     await login.waitForURL((url) => url.pathname !== '/login');
     await login.close();
+    // The markers are real: S-05, the page gate 3 allows, serves the shell and its HTML holds every one of them.
+    const allowed = await context.request.get('/acceptances', { maxRedirects: 0 });
+    expect(allowed.status()).toBe(200);
+    const allowedBody = await allowed.text();
+    for (const marker of SHELL_MARKERS) expect(allowedBody, marker).toContain(marker);
     for (const ext of ['png', 'svg']) {
       const path = `/orgs/${fx.org.slug}/projects/missing.${ext}`;
       const res = await context.request.get(path, { headers: { 'x-pathname': '/account' }, maxRedirects: 0 });
       const body = await res.text();
-      expect(body, path).not.toContain('app-layout');
-      expect(body, path).not.toContain('Main navigation');
+      for (const marker of SHELL_MARKERS) expect(body, `${path} ${marker}`).not.toContain(marker);
       expect(res.status(), path).toBe(307);
       expect(res.headers().location ?? '', path).toMatch(/\/acceptances$/);
     }

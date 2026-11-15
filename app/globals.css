@@ -1,72 +1,51 @@
 /* =================================================================
    MAK-AI Responsible AI Toolkit — Design System
-   Branding derived from air.ug (Makerere Centre for AI)
+   Colour roles, type, space and motion are tokens (ADR 0022). A screen
+   reads the roles; the LEGACY ALIASES block keeps screens not yet
+   restyled resolving until Task 21 deletes it.
    ================================================================= */
 
 /* ── Design Tokens ── */
 :root {
-  /* Primary palette (from MAK-AI / air.ug) */
-  --color-primary: #9A4D10;
-  --color-primary-dark: #5C2D0E;
-  --color-primary-light: #E8935A;
-  --color-accent-warm: #D4792E;
-  --color-navy: #1A1F36;
-  --color-navy-light: #252B45;
+  /* Colour roles, light. Every pair is held to its WCAG minimum by
+     __tests__/unit/design-tokens.test.ts in light and in both dark blocks. */
+  --color-shell: #1A1F36;
+  --color-shell-ink: #FFFFFF;
+  --color-shell-muted: #B7BCD3;
+  --color-shell-hover: #262C4A;
+  --color-action: #9A4D10;          /* a fill: never text */
+  --color-action-hover: #7F3F0C;
+  --color-on-action: #FFFFFF;
+  --color-action-text: #9A4D10;
+  --color-selected: #9A4D10;
+  --color-ground: #F2F4F8;
+  --color-surface: #FFFFFF;
+  --color-tint: #E6E9F0;
+  --color-ink: #1B1B1F;
+  --color-ink-muted: #4A5060;
+  --color-heading: #1A1F36;
+  --color-link: #1A1F36;
+  --color-border-container: #D5DAE3;
+  --color-border-control: #6B7385;
+  --color-saved: #1F7A4D;           /* the "Saved" confirmation only */
+  --color-saved-tint: #E8F3EC;
+  --color-overdue: #B42318;         /* an overdue date and the word "Overdue" only */
+  --color-mark: #1A1F36;
+  --color-focus: #B85F14;
 
-  /* Brand gradient (used for card borders, accents) */
-  --gradient-brand: linear-gradient(135deg, #C06014, #E8935A, #D4792E, #5C2D0E);
-
-  /* Neutrals */
-  --color-black: #000000;
-  --color-charcoal: #414042;
-  --color-gray-700: #4A4A4A;
-  --color-gray-600: #585E6A;
-  --color-gray-500: #9CA3AF;
-  --color-gray-400: #D1D5DB;
-  --color-gray-300: #E5E7EB;
-  --color-gray-200: #F0F0F0;
-  --color-off-white: #F5F5F5;
-  --color-white: #FFFFFF;
-
-  /* Semantic colors */
-  --color-risk-critical: #DC2626;
-  --color-risk-high: #F97316;
-  --color-risk-moderate: #FACC15;
-  --color-risk-low: #22C55E;
-  --color-info: #3B82F6;
-
-  /* Lifecycle stage colors (MAK-AI brand-derived) */
-  --color-pre-processing: #C06014;
-  --color-in-processing: #8B4513;
-  --color-post-processing: #A0522D;
-  --color-cross-cutting: #D4792E;
-
-  /* Typography */
-  --font-family: var(--font-source-sans, system-ui), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-display: var(--font-dm-serif, Georgia), Georgia, 'Times New Roman', serif;
-  --font-size-xs: 0.75rem;
-  --font-size-sm: 0.875rem;
-  --font-size-base: 1rem;
-  --font-size-lg: 1.125rem;
-  --font-size-xl: 1.25rem;
-  --font-size-2xl: 1.5rem;
-  --font-size-3xl: 1.875rem;
-  --font-size-4xl: 2.25rem;
-  --font-size-5xl: 3rem;
-  --font-size-6xl: 3.75rem;
-
-  /* Only 400, 600 and 700 of Source Sans 3 are loaded (app/layout.tsx, UX-38).
-     The medium and extrabold names stay because stylesheets beside this one
-     still read them; they now mean the nearest loaded weight. */
+  /* Typography. One family, Overpass, self-hosted (app/layout.tsx, ADR 0022). */
+  --font-family: var(--font-overpass, system-ui), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-size-h1: 1.875rem;
+  --font-size-h2: 1.375rem;
+  --font-size-h3: 1.125rem;
+  --font-size-body: 1rem;
+  --font-size-small: 0.875rem;
+  --font-size-legal: 0.8125rem;
+  --line-height-body: 1.5;
+  --line-height-heading: 1.25;
   --font-weight-regular: 400;
-  --font-weight-medium: 600;
   --font-weight-semibold: 600;
   --font-weight-bold: 700;
-  --font-weight-extrabold: 700;
-
-  --line-height-tight: 1.2;
-  --line-height-normal: 1.5;
-  --line-height-relaxed: 1.75;
 
   /* Spacing */
   --space-1: 0.25rem;
@@ -82,131 +61,177 @@
   --space-20: 5rem;
   --space-24: 6rem;
 
-  /* Layout */
+  /* Shape, depth, focus, motion, layout, targets */
+  --radius-control: 6px;
+  --radius-surface: 8px;
+  --radius-pill: 999px;
+  --shadow-surface: 0 2px 8px rgb(26 31 54 / 0.08);
+  --focus-width: 3px;
+  --focus-offset: 2px;
+  --duration-state: 160ms;
+  --easing-state: cubic-bezier(0.2, 0, 0, 1);
+  --rail-width: 248px;
+  --measure-reading: 68ch;
+  --grid-gap: var(--space-6);
+  --target-primary: 44px;
+  --target-min: 24px;
   --max-width: 1200px;
   --max-width-narrow: 900px;
-  --border-radius-sm: 4px;
-  --border-radius-md: 8px;
-  --border-radius-lg: 12px;
-  --border-radius-xl: 16px;
-  --border-radius-full: 9999px;
 
-  /* Shadows */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
-  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-  --shadow-glow: 0 0 20px rgba(192, 96, 20, 0.12);
-
-  /* Transitions */
-  --transition-fast: 150ms ease;
-  --transition-base: 250ms ease;
-  --transition-slow: 400ms ease;
-  --transition-spring: 350ms cubic-bezier(0.34, 1.56, 0.64, 1);
-
-  /* ── Semantic surface / text / border tokens ──
-     These are the theme-aware layer. Light values match the original design;
-     the dark theme (below) overrides only these, so every surface flips as a
-     set. Components should reference these, not the raw palette above. */
-  --surface-base: var(--color-off-white);   /* page background */
-  --surface-card: var(--color-white);        /* cards, panels, modals */
-  --surface-raised: var(--color-gray-200);   /* inputs, hover, subtle fills */
-  --text-primary: var(--color-navy);         /* headings, emphasis */
-  --text-body: var(--color-charcoal);        /* body copy */
-  --text-muted: var(--color-gray-600);       /* secondary text */
-  --border: var(--color-gray-300);           /* dividers, card borders */
-  --border-strong: var(--color-gray-400);
-
-  /* Status tints (badges, callouts). Flip in dark mode for legible contrast. */
-  --tint-critical-bg: #FEE2E2;  --tint-critical-fg: #B91C1C;
-  --tint-high-bg: #FFEDD5;      --tint-high-fg: #C2410C;
-  --tint-moderate-bg: #FEF9C3;  --tint-moderate-fg: #A16207;
-  --tint-low-bg: #DCFCE7;       --tint-low-fg: #15803D;
-  --tint-info-bg: #DBEAFE;      --tint-info-fg: #1D4ED8;
-  --tint-accent-bg: #EDE9FE;    --tint-accent-fg: #6D28D9;
-  --tint-brand-bg: #FFF5EB;     --tint-brand-fg: var(--color-primary);
-
-  /* Interaction colours (UX-33, SRS 7.6.3). The dark theme redefines the first
-     three; the stage pair follows --tint-brand-*, which both themes define.
-     Each pair is held to its WCAG minimum by __tests__/unit/design-tokens.test.ts. */
-  --form-field-border: #767C88;           /* 4.19:1 on --surface-card (D-1, needs 3:1) */
-  --link: var(--color-primary);           /* text links, 5.59:1 or better (D-3, needs 4.5:1) */
-  --focus-ring: var(--color-primary);     /* the 3-pixel ring (D-3, needs 3:1) */
-  --sidebar-toggle-bar: var(--color-white); /* the phone menu button's bars, on --color-navy in both themes (needs 3:1) */
-  --stage-fg: var(--tint-brand-fg);       /* stage labels (D-5, needs 4.5:1) */
-  --stage-bg: var(--tint-brand-bg);
+  /* LEGACY ALIASES: deleted by Task 21 */
+  --surface-base: var(--color-ground);
+  --surface-card: var(--color-surface);
+  --surface-raised: var(--color-tint);
+  --text-primary: var(--color-heading);
+  --text-body: var(--color-ink);
+  --text-muted: var(--color-ink-muted);
+  --border: var(--color-border-container);
+  --border-strong: var(--color-border-control);
+  --form-field-border: var(--color-border-control);
+  --link: var(--color-link);
+  --focus-ring: var(--color-focus);
+  --stage-fg: var(--color-ink);
+  --stage-bg: var(--color-tint);
+  --tint-critical-bg: var(--color-tint);
+  --tint-critical-fg: var(--color-ink);
+  --tint-high-bg: var(--color-tint);
+  --tint-high-fg: var(--color-ink);
+  --tint-moderate-bg: var(--color-tint);
+  --tint-moderate-fg: var(--color-ink);
+  --tint-low-bg: var(--color-tint);
+  --tint-low-fg: var(--color-ink);
+  --tint-info-bg: var(--color-tint);
+  --tint-info-fg: var(--color-ink);
+  --tint-accent-bg: var(--color-tint);
+  --tint-accent-fg: var(--color-ink);
+  --tint-brand-bg: var(--color-tint);
+  --tint-brand-fg: var(--color-action-text);
+  --color-risk-critical: var(--color-ink);   /* not overdue: the readers are field errors and a required mark */
+  --color-risk-high: var(--color-ink);
+  --color-risk-moderate: var(--color-ink);
+  --color-risk-low: var(--color-ink);
+  --color-info: var(--color-ink);
+  --color-primary: var(--color-action);
+  --color-primary-dark: var(--color-action-hover);
+  /* Read only by AboutPage.css, as text on dark grounds, where it was the light brand orange in both themes
+     (the action-text role is dark orange in light). Its readers go in Task 19. */
+  --color-primary-light: #F0A35E;
+  --color-navy: var(--color-shell);
+  --color-navy-light: var(--color-shell-hover);
+  /* Not the surface role the plan names: white is #FFFFFF in every theme at the base and is read as text on
+     navy and on the action fill, while the surface role is dark in the dark theme. An alias keeps that. */
+  --color-white: var(--color-on-action);
+  --color-off-white: var(--color-ground);
+  --color-gray-200: var(--color-border-container);
+  --color-gray-300: var(--color-border-container);
+  --color-gray-400: var(--color-border-container);
+  --color-gray-500: var(--color-border-container);
+  --color-gray-600: var(--color-ink-muted);
+  --color-gray-700: var(--color-ink-muted);
+  --color-charcoal: var(--color-ink-muted);
+  --color-black: var(--color-ink);
+  --color-pre-processing: var(--color-ink);
+  --color-in-processing: var(--color-ink);
+  --color-post-processing: var(--color-ink);
+  --color-cross-cutting: var(--color-ink);
+  --gradient-brand: none;
+  /* One family now: the display face is the body face. Alias only; nothing reads it after the About page change. */
+  --font-display: var(--font-family);
+  --font-size-xs: var(--font-size-small);
+  --font-size-sm: var(--font-size-small);
+  --font-size-base: var(--font-size-body);
+  --font-size-lg: var(--font-size-h3);
+  --font-size-xl: var(--font-size-h3);
+  --font-size-2xl: var(--font-size-h2);
+  --font-size-3xl: var(--font-size-h1);
+  --font-size-4xl: var(--font-size-h1);
+  --font-size-5xl: var(--font-size-h1);
+  --font-size-6xl: var(--font-size-h1);
+  --font-weight-medium: var(--font-weight-semibold);
+  --font-weight-extrabold: var(--font-weight-bold);
+  --line-height-tight: var(--line-height-heading);
+  --line-height-normal: var(--line-height-body);
+  --line-height-relaxed: var(--line-height-body);
+  --border-radius-sm: var(--radius-control);
+  --border-radius-md: var(--radius-control);
+  --border-radius-lg: var(--radius-surface);
+  --border-radius-xl: var(--radius-surface);
+  --border-radius-full: var(--radius-pill);
+  --shadow-sm: var(--shadow-surface);
+  --shadow-md: var(--shadow-surface);
+  --shadow-lg: var(--shadow-surface);
+  --shadow-xl: var(--shadow-surface);
+  --shadow-glow: var(--shadow-surface);
+  --transition-fast: var(--duration-state) var(--easing-state);
+  --transition-base: var(--duration-state) var(--easing-state);
+  --transition-slow: var(--duration-state) var(--easing-state);
+  --transition-spring: var(--duration-state) var(--easing-state);
 
   color-scheme: light;
 }
 
 /* ── Dark theme ──────────────────────────────────────────────────────────
-   Applied when the OS prefers dark AND the user hasn't forced light, or when
-   the user explicitly selects dark via the theme toggle ([data-theme]). Only
-   the semantic tokens change; the raw palette and brand colors stay put. */
+   Applied when the OS prefers dark AND the person has not forced light, or when
+   dark is chosen with the theme toggle ([data-theme]). The two blocks hold the
+   same values. color-scheme stays `light` on :root and `dark` here: a root of
+   `light dark` would draw native controls dark while the tokens are light
+   when light is forced on a dark operating system (ADR 0022). */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --surface-base: #0F131C;
-    --surface-card: #1A1F2E;
-    --surface-raised: #252B3D;
-    --text-primary: #F3F4F6;
-    --text-body: #D6D9E0;
-    --text-muted: #9AA3B2;
-    --border: #2E3547;
-    --border-strong: #3B4358;
-
-    /* Raw neutrals used directly as surfaces/borders also flip so nothing is
-       left light. Tokens used only as on-dark text (--color-white) are left. */
-    --color-off-white: #0F131C;
-    --color-gray-200: #252B3D;
-    --color-gray-300: #2E3547;
-    --color-gray-400: #3B4358;
-    --color-gray-700: #C6CAD3;
-
-    --tint-critical-bg: #3B1717;  --tint-critical-fg: #FCA5A5;
-    --tint-high-bg: #3A2413;      --tint-high-fg: #FDBA74;
-    --tint-moderate-bg: #322913;  --tint-moderate-fg: #FDE047;
-    --tint-low-bg: #14321F;       --tint-low-fg: #86EFAC;
-    --tint-info-bg: #172554;      --tint-info-fg: #93C5FD;
-    --tint-accent-bg: #241B45;    --tint-accent-fg: #C4B5FD;
-    --tint-brand-bg: #2A1C0E;     --tint-brand-fg: #E8935A;
-
-    /* --color-primary (#9A4D10) is 2.69:1 on dark cards (D-3); the light brand
-       orange is 6.84:1. Field borders are 4.31:1 instead of 1.66:1 (D-1). */
-    --form-field-border: #7A8396;
-    --link: var(--color-primary-light);
-    --focus-ring: var(--color-primary-light);
+    --color-shell: #0A0D18;
+    --color-shell-ink: #ECEEF4;
+    --color-shell-muted: #AEB4C4;
+    --color-shell-hover: #1E2338;
+    --color-action: #9A4D10;
+    --color-action-hover: #7F3F0C;
+    --color-on-action: #FFFFFF;
+    --color-action-text: #F0A35E;
+    --color-selected: #F0A35E;
+    --color-ground: #0F1220;
+    --color-surface: #181C2E;
+    --color-tint: #232842;
+    --color-ink: #ECEEF4;
+    --color-ink-muted: #AEB4C4;
+    --color-heading: #ECEEF4;
+    --color-link: #C7CCE0;
+    --color-border-container: #363C55;
+    --color-border-control: #8A93A8;
+    --color-saved: #6FCF97;
+    --color-saved-tint: #15301F;
+    --color-overdue: #FF8A7A;
+    --color-mark: #C7CCE0;
+    --color-focus: #F4B983;
+    --shadow-surface: none;
 
     color-scheme: dark;
   }
 }
 
 :root[data-theme='dark'] {
-  --surface-base: #0F131C;
-  --surface-card: #1A1F2E;
-  --surface-raised: #252B3D;
-  --text-primary: #F3F4F6;
-  --text-body: #D6D9E0;
-  --text-muted: #9AA3B2;
-  --border: #2E3547;
-  --border-strong: #3B4358;
-
-  --color-off-white: #0F131C;
-  --color-gray-200: #252B3D;
-  --color-gray-300: #2E3547;
-  --color-gray-400: #3B4358;
-  --color-gray-700: #C6CAD3;
-
-  --tint-critical-bg: #3B1717;  --tint-critical-fg: #FCA5A5;
-  --tint-high-bg: #3A2413;      --tint-high-fg: #FDBA74;
-  --tint-moderate-bg: #322913;  --tint-moderate-fg: #FDE047;
-  --tint-low-bg: #14321F;       --tint-low-fg: #86EFAC;
-  --tint-info-bg: #172554;      --tint-info-fg: #93C5FD;
-  --tint-accent-bg: #241B45;    --tint-accent-fg: #C4B5FD;
-  --tint-brand-bg: #2A1C0E;     --tint-brand-fg: #E8935A;
-
-  --form-field-border: #7A8396;
-  --link: var(--color-primary-light);
-  --focus-ring: var(--color-primary-light);
+  --color-shell: #0A0D18;
+  --color-shell-ink: #ECEEF4;
+  --color-shell-muted: #AEB4C4;
+  --color-shell-hover: #1E2338;
+  --color-action: #9A4D10;
+  --color-action-hover: #7F3F0C;
+  --color-on-action: #FFFFFF;
+  --color-action-text: #F0A35E;
+  --color-selected: #F0A35E;
+  --color-ground: #0F1220;
+  --color-surface: #181C2E;
+  --color-tint: #232842;
+  --color-ink: #ECEEF4;
+  --color-ink-muted: #AEB4C4;
+  --color-heading: #ECEEF4;
+  --color-link: #C7CCE0;
+  --color-border-container: #363C55;
+  --color-border-control: #8A93A8;
+  --color-saved: #6FCF97;
+  --color-saved-tint: #15301F;
+  --color-overdue: #FF8A7A;
+  --color-mark: #C7CCE0;
+  --color-focus: #F4B983;
+  --shadow-surface: none;
 
   color-scheme: dark;
 }
@@ -229,12 +254,36 @@ html {
 }
 
 body {
-  font-family: var(--font-family);
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-regular);
-  line-height: var(--line-height-normal);
-  color: var(--text-body);
-  background-color: var(--color-off-white);
+  background: var(--color-ground);
+  color: var(--color-ink);
+  font: var(--font-weight-regular) var(--font-size-body)/var(--line-height-body) var(--font-family);
+}
+
+/* Native controls compute the browser's own family unless told otherwise. Family only: the font shorthand would
+   also reset the size of every native control. */
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+:focus-visible {
+  outline: var(--focus-width) solid var(--color-focus);
+  outline-offset: var(--focus-offset);
+}
+
+/* Clipped, not display:none: assistive technology still reads it. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
 img, svg {
@@ -262,21 +311,16 @@ td a {
 }
 
 h1, h2, h3, h4, h5, h6 {
-  color: var(--text-primary);
-  line-height: var(--line-height-tight);
+  color: var(--color-heading);
+  line-height: var(--line-height-heading);
   font-weight: var(--font-weight-bold);
 }
 
-h1, h2 {
-  font-family: var(--font-display);
-  font-weight: 400;
-}
-
-h1 { font-size: var(--font-size-5xl); }
-h2 { font-size: var(--font-size-3xl); }
-h3 { font-size: var(--font-size-2xl); }
-h4 { font-size: var(--font-size-xl); }
-h5 { font-size: var(--font-size-lg); }
+h1 { font-size: var(--font-size-h1); }
+h2 { font-size: var(--font-size-h2); }
+h3 { font-size: var(--font-size-h3); }
+h4 { font-size: var(--font-size-h3); }
+h5 { font-size: var(--font-size-body); }
 
 /* ── Utility Classes ── */
 .container {
@@ -341,20 +385,6 @@ h5 { font-size: var(--font-size-lg); }
   color: var(--surface-base);   /* the page colour on the text colour: --color-white is not light-on-dark in the dark theme */
 }
 
-.btn--large {
-  padding: var(--space-4) var(--space-8);
-  font-size: var(--font-size-base);
-}
-
-.btn--arrow::after {
-  content: '→';
-  transition: transform var(--transition-fast);
-}
-
-.btn--arrow:hover::after {
-  transform: translateX(4px);
-}
-
 /* ── Cards ── */
 .card {
   background: var(--surface-card);
@@ -383,17 +413,6 @@ h5 { font-size: var(--font-size-lg); }
   font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-}
-
-.badge--moderate {
-  background-color: var(--tint-moderate-bg);
-  color: var(--tint-moderate-fg);
-}
-
-/* The warning tint of UX-06: "Overdue", "Owner cannot act" and "Legal name not recorded" only (the label word, never the phrase). */
-.status-label--warning {
-  background-color: var(--tint-moderate-bg);
-  color: var(--tint-moderate-fg);
 }
 
 /* ── Stage indicators ── */
@@ -433,11 +452,6 @@ h5 { font-size: var(--font-size-lg); }
   .container {
     padding: 0 var(--space-4);
   }
-
-  .btn--large {
-    padding: var(--space-3) var(--space-6);
-    font-size: var(--font-size-sm);
-  }
 }
 
 /* ── Accessibility: Reduced Motion ── */
@@ -450,19 +464,7 @@ h5 { font-size: var(--font-size-lg); }
   }
 }
 
-/* ── Accessibility: Focus Visible ── */
-*:focus-visible {
-  outline: 3px solid var(--focus-ring);
-  outline-offset: 2px;
-  border-radius: 2px;
-}
-
-button:focus-visible,
-a:focus-visible,
-input:focus-visible {
-  outline: 3px solid var(--focus-ring);
-  outline-offset: 2px;
-}
+/* ── Accessibility: Focus Visible ── the ring is the base :focus-visible rule near the top of this file ── */
 
 /* ── Skip Link ── */
 .skip-link {
@@ -513,48 +515,7 @@ input:focus-visible {
   color: var(--link);
 }
 
-/* ── Projects Grid ── */
-.projects-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: var(--space-6);
-}
-
-.project-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  text-decoration: none;
-  color: inherit;
-  cursor: pointer;
-}
-
-.project-card__name {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-  line-height: var(--line-height-tight);
-}
-
-.project-card__desc {
-  font-size: var(--font-size-sm);
-  color: var(--text-muted);
-  line-height: var(--line-height-normal);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
 /* ── Form Styles (authenticated pages) ── */
-.form-container {
-  background: var(--surface-card);
-  border-radius: var(--border-radius-lg);
-  padding: var(--space-8);
-  box-shadow: var(--shadow-sm);
-  max-width: 720px;
-}
-
 .form-error {
   background-color: var(--tint-critical-bg);
   /* The foreground paired with --tint-critical-bg in both themes: 5.30:1 light, 8.38:1 dark (risk-critical gave 3.95 and 3.29). */
@@ -566,100 +527,10 @@ input:focus-visible {
   margin-bottom: var(--space-6);
 }
 
-.form-group {
-  margin-bottom: var(--space-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.form-group label {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-}
-
-.required {
-  color: var(--color-risk-critical);
-}
-
-.form-group input,
-.form-group select,
-.form-group textarea {
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--form-field-border);
-  border-radius: var(--border-radius-md);
-  font-family: var(--font-family);
-  font-size: var(--font-size-base);
-  color: var(--text-body);
-  background: var(--surface-card);
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
-}
-
-.form-group input:focus,
-.form-group select:focus,
-.form-group textarea:focus {
-  /* The 3-pixel ring of *:focus-visible stays (D-2); only the border follows it. */
-  border-color: var(--focus-ring);
-}
-
-.form-group textarea {
-  resize: vertical;
-  min-height: 80px;
-}
-
-.form-group select {
-  cursor: pointer;
-}
-
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--space-4);
-}
-
-.form-section-toggle {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  margin: var(--space-6) 0;
-  padding: var(--space-4) 0;
-  border-top: 1px solid var(--color-gray-300);
-  border-bottom: 1px solid var(--color-gray-300);
-}
-
-.toggle-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  background: none;
-  border: none;
-  font-family: var(--font-family);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  color: var(--link);
-  cursor: pointer;
-  padding: 0;
-  transition: color var(--transition-fast);
-}
-
-.toggle-btn:hover {
-  color: var(--color-primary-dark);
-}
-
-.toggle-icon {
-  display: inline-block;
-  font-size: var(--font-size-xs);
-  transition: transform var(--transition-fast);
-}
-
-.toggle-icon.open {
-  transform: rotate(90deg);
-}
-
-.form-details {
-  padding: var(--space-4) 0;
-  animation: fadeInUp 0.3s ease-out;
 }
 
 .form-actions {
@@ -680,10 +551,6 @@ input:focus-visible {
   .page-header {
     flex-direction: column;
     gap: var(--space-4);
-  }
-
-  .projects-grid {
-    grid-template-columns: 1fr;
   }
 
   .form-row {
@@ -714,12 +581,12 @@ input:focus-visible {
   }
 
   /* Hide non-essential UI */
-  .footer, .skip-link, .page-hero__bg, .page-hero__grid-overlay, .page-hero__accent-line {
+  .footer, .skip-link {
     display: none !important;
   }
 
   /* Hero simplification */
-  .page-hero, .page-hero--animated {
+  .page-hero {
     background: var(--color-navy) !important;
     padding: 1cm 0 !important;
     min-height: auto !important;
@@ -779,239 +646,14 @@ input:focus-visible {
   animation: fadeInUp 0.6s ease-out forwards;
 }
 
-/* ── Dashboard ── */
-.dashboard-section {
-  margin-bottom: var(--space-10);
-}
-
-.dashboard-section h2 {
-  margin-bottom: var(--space-6);
-}
-
 /* =================================================================
    Admin Pages
    ================================================================= */
-
-/* ── Admin data tables ── */
-.admin-table-wrapper {
-  overflow-x: auto;
-  padding: 0;
-  container-type: inline-size;
-}
-
-.admin-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--font-size-sm);
-}
-
-.admin-table th {
-  text-align: left;
-  padding: var(--space-3) var(--space-4);
-  font-weight: var(--font-weight-semibold);
-  font-size: var(--font-size-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-muted);
-  background: var(--color-off-white);
-  border-bottom: 2px solid var(--color-gray-300);
-  white-space: nowrap;
-}
-
-.admin-table td {
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--color-gray-300);
-  vertical-align: middle;
-}
-
-.admin-table tbody tr:hover {
-  background: var(--color-off-white);
-}
-
-.admin-table__name {
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-}
-
-.admin-table__email {
-  color: var(--text-muted);
-}
-
-.admin-table__actions {
-  display: flex;
-  gap: var(--space-2);
-  align-items: center;
-}
-
-/* Tables that carry row actions (members, invitations, accounts) stack each row in a narrow card, so the actions
-   stay on the screen instead of past the wrapper's scrolling edge. The column headings stay in the accessibility
-   tree (clipped, not display:none) and each cell shows its own heading as a label.
-   `--stack` stacks under 600px of card width (members, invitations); `--stack-wide` under 800px, for the accounts
-   table, whose six columns need about 781px. The two blocks carry the same declarations. */
-@container (width < 600px) {
-  .admin-table--stack,
-  .admin-table--stack tbody,
-  .admin-table--stack tr,
-  .admin-table--stack td {
-    display: block;
-  }
-  .admin-table--stack caption {
-    display: block;
-  }
-  .admin-table--stack thead {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-  .admin-table--stack tr {
-    border-bottom: 1px solid var(--color-gray-300);
-    padding-block: var(--space-2);
-  }
-  .admin-table--stack td {
-    border-bottom: 0;
-    padding-block: var(--space-1);
-    overflow-wrap: anywhere;
-  }
-  .admin-table--stack td[data-label]::before {
-    content: attr(data-label) ": ";
-    content: attr(data-label) ": " / "";
-    font-weight: var(--font-weight-semibold);
-    color: var(--text-muted);
-  }
-  .admin-table--stack .admin-table__actions {
-    display: flex;
-    flex-wrap: wrap;
-  }
-}
-
-@container (width < 800px) {
-  .admin-table--stack-wide,
-  .admin-table--stack-wide tbody,
-  .admin-table--stack-wide tr,
-  .admin-table--stack-wide td {
-    display: block;
-  }
-  .admin-table--stack-wide caption {
-    display: block;
-  }
-  .admin-table--stack-wide thead {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-  .admin-table--stack-wide tr {
-    border-bottom: 1px solid var(--color-gray-300);
-    padding-block: var(--space-2);
-  }
-  .admin-table--stack-wide td {
-    border-bottom: 0;
-    padding-block: var(--space-1);
-    overflow-wrap: anywhere;
-  }
-  .admin-table--stack-wide td[data-label]::before {
-    content: attr(data-label) ": ";
-    content: attr(data-label) ": " / "";
-    font-weight: var(--font-weight-semibold);
-    color: var(--text-muted);
-  }
-  .admin-table--stack-wide .admin-table__actions {
-    display: flex;
-    flex-wrap: wrap;
-  }
-}
 
 /* ── Small buttons for admin actions ── */
 .btn--small {
   padding: var(--space-1) var(--space-3);
   font-size: var(--font-size-xs);
-}
-
-.btn--outline {
-  background: transparent;
-  border: 1px solid var(--color-gray-400);
-  color: var(--color-gray-700);
-  cursor: pointer;
-  border-radius: var(--border-radius-sm);
-  font-weight: var(--font-weight-semibold);
-  transition: all var(--transition-fast);
-}
-
-.btn--outline:hover {
-  border-color: var(--color-primary);
-  color: var(--link);
-}
-
-.btn--danger-outline {
-  background: transparent;
-  border: 1px solid var(--color-gray-400);
-  color: var(--color-gray-700);
-  cursor: pointer;
-  border-radius: var(--border-radius-sm);
-  font-weight: var(--font-weight-semibold);
-  transition: all var(--transition-fast);
-}
-
-.btn--danger-outline:hover {
-  border-color: var(--color-risk-critical);
-  color: var(--color-risk-critical);
-}
-
-/* ═══════════════════════════════════════════
-   App Layout — Sidebar + Main Content Grid
-   ═══════════════════════════════════════════ */
-.app-layout {
-  display: grid;
-  grid-template-columns: 260px 1fr;
-  min-height: 100vh;
-}
-
-.app-main {
-  overflow-y: auto;
-  max-height: 100vh;
-  padding: var(--space-8);
-  background-color: var(--color-off-white);
-}
-
-/* ═══════════════════════════════════════════
-   Sidebar Navigation
-   ═══════════════════════════════════════════ */
-.sidebar {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  position: sticky;
-  top: 0;
-  /* Stable dark chrome in both themes — not the text token, which flips. */
-  background-color: var(--color-navy);
-  color: var(--color-white);
-  overflow-y: auto;
-  z-index: 100;
-}
-
-.sidebar-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-6) var(--space-5);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.sidebar-logo {
-  height: 40px;
-  width: auto;
-}
-
-.sidebar-title {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-bold);
-  letter-spacing: -0.02em;
-  color: var(--color-white);
 }
 
 .sidebar-nav {
@@ -1033,137 +675,6 @@ input:focus-visible {
 
 .chooser-link:hover {
   background-color: var(--surface-raised);
-}
-
-.sidebar-link {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  color: rgba(255, 255, 255, 0.7);
-  text-decoration: none;
-  border-radius: var(--border-radius-md);
-  transition: all var(--transition-fast);
-}
-
-.sidebar-link:hover {
-  color: var(--color-white);
-  background-color: rgba(255, 255, 255, 0.08);
-}
-
-.sidebar-link.active {
-  color: var(--color-white);
-  background-color: var(--color-primary);
-  font-weight: var(--font-weight-semibold);
-}
-
-.sidebar-divider {
-  height: 1px;
-  background: rgba(255, 255, 255, 0.08);
-  margin: var(--space-3) var(--space-4);
-}
-
-.sidebar-section-label {
-  padding: var(--space-2) var(--space-4);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.6);
-}
-
-.sidebar-footer {
-  padding: var(--space-4) var(--space-5);
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  margin-top: auto;
-}
-
-.sidebar-user {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  margin-bottom: var(--space-3);
-}
-
-.sidebar-user-name {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-white);
-}
-
-.sidebar-user-role {
-  font-size: var(--font-size-xs);
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.sidebar-signout {
-  width: 100%;
-  padding: var(--space-2) var(--space-4);
-  font-family: var(--font-family);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: rgba(255, 255, 255, 0.6);
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: var(--border-radius-sm);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.sidebar-signout:hover {
-  color: var(--color-white);
-  border-color: rgba(255, 255, 255, 0.4);
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.sidebar-footer__actions {
-  display: flex;
-  align-items: stretch;
-  gap: var(--space-2);
-}
-
-.sidebar-footer__actions .sidebar-signout {
-  flex: 1;
-}
-
-/* ── Theme toggle ── */
-.theme-toggle {
-  flex: 0 0 auto;
-  width: 38px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--font-size-base);
-  line-height: 1;
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: var(--border-radius-sm);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.theme-toggle:hover {
-  border-color: rgba(255, 255, 255, 0.4);
-  background: rgba(255, 255, 255, 0.06);
-}
-
-/* Toggle used on a light surface, outside the dark sidebar (the signed-out header) */
-.theme-toggle--on-light {
-  width: 40px;
-  height: 40px;
-  color: var(--text-body);
-  background: var(--surface-card);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-sm);
-}
-
-.theme-toggle--on-light:hover {
-  border-color: var(--border-strong);
-  background: var(--surface-raised);
 }
 
 /* ═══════════════════════════════════════════
@@ -1211,64 +722,6 @@ input:focus-visible {
   flex-direction: column;
 }
 
-.auth-card label {
-  display: block;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-body);
-  margin-bottom: var(--space-1);
-  margin-top: var(--space-4);
-}
-
-.auth-card label:first-of-type {
-  margin-top: 0;
-}
-
-.auth-card input[type="text"],
-.auth-card input[type="email"],
-.auth-card input[type="password"] {
-  width: 100%;
-  padding: var(--space-3) var(--space-4);
-  font-family: var(--font-family);
-  font-size: var(--font-size-base);
-  color: var(--text-body);
-  background: var(--surface-card);
-  border: 1px solid var(--form-field-border);
-  border-radius: var(--border-radius-sm);
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
-}
-
-.auth-card input[type="text"]:focus,
-.auth-card input[type="email"]:focus,
-.auth-card input[type="password"]:focus {
-  /* The 3-pixel ring of *:focus-visible stays (D-2); only the border follows it. */
-  border-color: var(--focus-ring);
-}
-
-.auth-card button[type="submit"] {
-  margin-top: var(--space-6);
-}
-
-.auth-error {
-  padding: var(--space-3) var(--space-4);
-  background: var(--tint-critical-bg);
-  color: var(--color-risk-critical);
-  border-radius: var(--border-radius-sm);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  margin-bottom: var(--space-4);
-}
-
-.auth-success {
-  padding: var(--space-3) var(--space-4);
-  background: var(--tint-low-bg);
-  color: var(--tint-low-fg);
-  border-radius: var(--border-radius-sm);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  margin-bottom: var(--space-4);
-}
-
 .auth-footer {
   text-align: center;
   margin-top: var(--space-6);
@@ -1293,269 +746,6 @@ input:focus-visible {
   gap: var(--space-3);
 }
 
-.checkbox-label {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
-  font-size: var(--font-size-sm) !important;
-  font-weight: var(--font-weight-regular) !important;
-  color: var(--color-gray-700) !important;
-  margin-top: 0 !important;
-  margin-bottom: 0 !important;
-  line-height: var(--line-height-normal);
-  cursor: pointer;
-}
-
-.checkbox-label input[type="checkbox"] {
-  margin-top: 3px;
-  flex-shrink: 0;
-  accent-color: var(--color-primary);
-}
-
-/* ── btn-primary alias (auth pages use non-BEM class name) ── */
-.btn-primary {
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  width: 100%;
-  padding: var(--space-3) var(--space-6);
-  font-family: var(--font-family);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  border: 2px solid transparent;
-  border-radius: 0;
-  cursor: pointer;
-  transition: background-color var(--transition-base), border-color var(--transition-base), color var(--transition-base), box-shadow var(--transition-base), transform var(--transition-base);
-  background-color: var(--color-primary);
-  color: var(--color-white);
-  border-color: var(--color-primary);
-}
-
-.btn-primary:hover:not(:disabled) {
-  background-color: var(--color-primary-dark);
-  border-color: var(--color-primary-dark);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(192, 96, 20, 0.3);
-}
-
-.btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* ═══════════════════════════════════════════
-   Responsive — Sidebar Collapse
-   ═══════════════════════════════════════════ */
-
-/* Hamburger toggle — hidden on desktop */
-.sidebar-toggle {
-  display: none;
-}
-
-.sidebar-overlay {
-  display: none;
-}
-
-@media (max-width: 768px) {
-  .app-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .sidebar {
-    position: fixed;
-    left: -260px;
-    width: 260px;
-    transition: left var(--transition-base);
-    z-index: 200;
-  }
-
-  .sidebar.open {
-    left: 0;
-  }
-
-  .sidebar-toggle {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 5px;
-    position: fixed;
-    top: var(--space-4);
-    left: var(--space-4);
-    z-index: 201;
-    width: 40px;
-    height: 40px;
-    padding: 8px;
-    background: var(--color-navy);
-    border: none;
-    border-radius: var(--border-radius-sm);
-    cursor: pointer;
-  }
-
-  .sidebar-toggle__bar {
-    display: block;
-    width: 100%;
-    height: 2px;
-    background: var(--sidebar-toggle-bar);
-    border-radius: 1px;
-    transition: all var(--transition-fast);
-  }
-
-  .sidebar-overlay {
-    display: block;
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.4);
-    z-index: 199;
-  }
-
-  .app-main {
-    max-height: none;
-    padding: var(--space-4);
-    padding-top: calc(var(--space-4) + 48px);
-  }
-}
-
-/* ── Shell components (unit UI) ──────────────────────────────────────────
-   Offline banner (M-40). Plain flow content on purpose: nothing fixed or
-   sticky, so it can never cover a focused control (WCAG 2.4.11). */
-.offline-banner {
-  padding: var(--space-3) var(--space-4);
-  background: var(--tint-moderate-bg);
-  color: var(--tint-moderate-fg);
-  border-bottom: 1px solid var(--border-strong);
-  font-size: var(--font-size-sm);
-}
-
-.offline-banner__text {
-  max-width: var(--max-width);
-  margin: 0 auto;
-}
-
-/* On narrow screens the fixed menu button sits over the top-left corner, so the text starts clear of it (as .idle-ended). */
-@media (max-width: 768px) {
-  .offline-banner {
-    padding-left: calc(var(--space-4) + 48px);
-  }
-}
-
-/* Footer (UX-03) and the signed-out header (SRS 7.1.1). Plain flow content, nothing fixed, so neither can cover a
-   focused control. Links are underlined (SC 1.4.1) and at least 24px tall (SC 2.5.8). */
-.site-footer {
-  padding: var(--space-6) var(--space-4);
-  border-top: 1px solid var(--border);
-  background: var(--surface-card);
-  color: var(--text-body);
-  font-size: var(--font-size-sm);
-}
-
-.site-footer__credit {
-  max-width: var(--max-width);
-  margin: 0 auto var(--space-3);
-}
-
-.site-footer__nav,
-.public-header__nav {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--space-2) var(--space-6);
-}
-
-.site-footer__nav {
-  max-width: var(--max-width);
-  margin: 0 auto;
-}
-
-.site-footer__nav a,
-.public-header a {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  text-underline-offset: 0.15em;
-}
-
-.site-footer__nav a {
-  text-decoration: underline;
-}
-
-.public-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2) var(--space-6);
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--border);
-  background: var(--surface-card);
-}
-
-.public-header__name {
-  color: var(--text-primary);
-  font-weight: var(--font-weight-bold);
-  text-decoration: none;
-}
-
-/* Idle-sign-out warning (UX-43): a native modal <dialog>, so the browser supplies the
-   inert page, focus containment and Esc. The two overscroll rules stop scrolling over the
-   backdrop from moving the page behind it. */
-.idle-warning {
-  /* The page's reset sets every margin to 0, which removes the `margin: auto` the browser gives a
-     modal dialog to centre it; without this line the dialog sits in the top-left corner. */
-  margin: auto;
-  max-width: min(32rem, calc(100vw - var(--space-8)));
-  padding: var(--space-6);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--border-radius-lg);
-  background: var(--surface-card);
-  color: var(--text-body);
-  box-shadow: var(--shadow-xl);
-}
-
-.idle-warning p {
-  margin: 0 0 var(--space-4);
-}
-
-/* The signed-out notice that replaces the dialog once a "Stay signed in" finds the session over.
-   Plain flow content at the top of the page, like the offline banner: nothing fixed or sticky, so
-   it can never cover a focused control, and nothing inert, so the page behind it can be read and
-   copied. On narrow screens the fixed menu button sits over the top-left corner, so the text
-   starts clear of it. */
-.idle-ended {
-  padding: var(--space-3) var(--space-4);
-  background: var(--tint-moderate-bg);
-  color: var(--tint-moderate-fg);
-  border-bottom: 1px solid var(--border-strong);
-  font-size: var(--font-size-sm);
-}
-
-.idle-ended__text {
-  max-width: var(--max-width);
-  margin: 0 auto;
-}
-
-.idle-ended a {
-  color: inherit;
-  font-weight: var(--font-weight-semibold);
-  text-decoration: underline;
-}
-
-@media (max-width: 768px) {
-  .idle-ended {
-    padding-left: calc(var(--space-4) + 48px);
-  }
-}
-
-.idle-warning p[role='alert'] {
-  color: var(--tint-critical-fg);
-  background: var(--tint-critical-bg);
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--border-radius-sm);
-}
-
 dialog:modal {
   overscroll-behavior: contain;
 }
@@ -1564,4 +754,214 @@ dialog::backdrop {
   overflow: hidden;
   overscroll-behavior: contain;
   background: rgba(15, 19, 28, 0.6);
+}
+
+/* Moved from components/ui/Banner.css (plan 1A Task 6), unchanged, by follow-up B of plan 1A (deferral register D-383):
+   the kit Banner's rules. The root layout renders the offline banner, so Banner.css was a stylesheet of its own on every
+   page's first visit: one more response, about 870 bytes of transfer, for rules that compress to 299 (NFR-PERF-02).
+   Here they ride in the stylesheet every page loads anyway, after its last rule of its own and before the block moved
+   from shell.css, which stays the end of the file. Only their order against this file's rules changed (they were linked
+   before it), and no declaration changes its winner: that takes a rule of equal specificity, and the only rule here with
+   one class's specificity that can match a banner's own element is :focus-visible, which sets nothing these rules set.
+   Every kind is drawn alike: the tint, ink, and a 1 px rule below; the icon and the words tell the kinds apart, so forced
+   colours, which drop the tint and keep the rule, lose nothing. Plain flow content: nothing fixed or sticky can cover a
+   focused control (WCAG 2.4.11). The action wraps below the words on a narrow screen. */
+.ui-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border-control);
+  background-color: var(--color-tint);
+  color: var(--color-ink);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+}
+
+.ui-banner__icon {
+  display: inline-flex;
+  flex: none;
+  padding-block-start: 0.125rem;
+}
+
+.ui-banner__body {
+  flex: 1 1 12rem;
+  min-inline-size: 0;
+  max-inline-size: 75ch;
+}
+
+.ui-banner__title {
+  margin: 0;
+  font-weight: var(--font-weight-bold);
+}
+
+.ui-banner__action {
+  flex: none;
+}
+
+/* Moved from components/layout/shell.css (plan 1A Task 11), unchanged, by plan 1A Task 12 (fix round 1, F1a; ruling
+   T12-x): the rules a public page uses (the theme switch, with the rail's Sign out that shares its rule; the public header;
+   the footer; their print rule) and the idle warning's. A root-layout stylesheet reaches every public page anyway;
+   shell.css is now loaded only inside the signed-in shell (AppShell, TopBar, Rail, OrgSwitcher), so S-04's first visit
+   no longer carries the rail's rules (NFR-PERF-02). shell.css used to be linked before globals.css (the root layout
+   imports its components before ./globals.css) and on a signed-in page it now follows it, so the print rule is kept, byte
+   for byte, at the end of shell.css too: without it the top bar's own display: flex (below 1024 px) and the panel's
+   display: block (from 1024 px) would beat the print rule at every width. */
+
+/* Sign out and the theme switch in the rail: navy controls in shell ink, a full target high. */
+.shell-rail__signout,
+.shell-theme {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  inline-size: 100%;
+  min-block-size: var(--target-primary);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-shell-muted);
+  border-radius: var(--radius-control);
+  background-color: var(--color-shell);
+  color: var(--color-shell-ink);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.shell-rail__signout:hover,
+.shell-theme:hover {
+  background-color: var(--color-shell-hover);
+}
+
+/* ── The theme switch: one of its two labels, the one naming the other theme ── */
+.shell-theme__to-dark,
+.shell-theme__to-light {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.shell-theme__to-light {
+  display: none;
+}
+
+:root[data-theme='dark'] .shell-theme__to-light {
+  display: inline-flex;
+}
+
+:root[data-theme='dark'] .shell-theme__to-dark {
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .shell-theme__to-light {
+    display: inline-flex;
+  }
+
+  :root:not([data-theme='light']) .shell-theme__to-dark {
+    display: none;
+  }
+}
+
+/* On the public header's surface: a quiet control in ink. */
+.shell-theme--on-light {
+  inline-size: auto;
+  min-block-size: var(--target-min);
+  padding: var(--space-1) var(--space-2);
+  border-color: var(--color-border-control);
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+}
+
+.shell-theme--on-light:hover {
+  background-color: var(--color-tint);
+}
+
+/* ── The public header and the footer: plain flow content on the surface, links underlined and 24 px high ── */
+.shell-public-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-6);
+  padding: var(--space-3) var(--space-4);
+  border-block-end: 1px solid var(--color-border-container);
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+}
+
+.shell-public-header__name {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--target-min);
+  color: var(--color-heading);
+  font-weight: var(--font-weight-bold);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.shell-public-header__nav,
+.shell-footer__nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-6);
+}
+
+.shell-public-header__nav a,
+.shell-footer__nav a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--target-min);
+  color: var(--color-link);
+  text-underline-offset: 0.15em;
+}
+
+.shell-public-header__nav a,
+.shell-footer__nav a {
+  text-decoration: underline;
+}
+
+.shell-footer {
+  padding: var(--space-6) var(--space-4);
+  border-block-start: 1px solid var(--color-border-container);
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+  font-size: var(--font-size-small);
+}
+
+.shell-footer__credit {
+  max-width: var(--max-width);
+  margin: 0 auto var(--space-3);
+}
+
+.shell-footer__nav {
+  max-width: var(--max-width);
+  margin: 0 auto;
+}
+
+/* ── The session dialogs: the warning is the kit's Dialog; the signed-out notice is a Banner at the top of the page ── */
+.shell-idle__failed {
+  margin-block-start: var(--space-3);
+  color: var(--color-ink);
+  font-weight: var(--font-weight-bold);
+}
+
+/* ── Print: the page's content only ── */
+@media print {
+  .shell-topbar,
+  .shell-topbar__panel,
+  .shell-public-header,
+  .shell-footer {
+    display: none;
+  }
+
+  .shell {
+    display: block;
+  }
+
+  .shell__main {
+    overflow: visible;
+    max-height: none;
+    padding: 0;
+  }
 }

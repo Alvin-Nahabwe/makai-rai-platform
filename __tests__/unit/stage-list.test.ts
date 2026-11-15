@@ -44,8 +44,8 @@ describe('S-11 rows', () => {
 
   it('FR-CNT-04 (screen): the gate shows its scope answer; with the gate at no, Q-PP-13 reads Not applicable (scope answer: no)', () => {
     const rows = buildStageRows({ ...BASE, gate: 'no', current: new Map([['Q-PP-GATE-SENSITIVE', v('Q-PP-GATE-SENSITIVE', { status: null, scopeAnswer: 'no' })]]) });
-    expect(rows.find((r) => r.questionId === 'Q-PP-GATE-SENSITIVE')!.statusText).toBe('Scope answer: no');
-    expect(rows.find((r) => r.questionId === 'Q-PP-13')!.statusText).toBe('Not applicable (scope answer: no)');
+    expect(rows.find((r) => r.questionId === 'Q-PP-GATE-SENSITIVE')!.statusText).toBe('Answer: No');
+    expect(rows.find((r) => r.questionId === 'Q-PP-13')!.statusText).toBe('Does not apply');
     expect(filterCounts(rows, new Set()).no_decision).toBe(2);   // Q-PP-01 and Q-PP-16; the gate is answered and Q-PP-13 does not apply
   });
 
@@ -69,8 +69,9 @@ describe('S-11 rows', () => {
 
   it('W-2: every filter has its label', () => {
     expect(STAGE_FILTERS.map((f) => filterLabel(f, 1))).toEqual([
-      'All', 'No decision', 'Shortfalls', 'Done without evidence', 'Changed since seal 1', 'Expected practice reworded since the decision', 'Drafts on this device',
+      'All', 'No decision', 'Partly or not yet', 'Done, no evidence attached', 'Changed since seal 1', 'Good practice changed', 'Not saved yet',
     ]);
+    expect(filterLabel('changed_since_seal', null)).toBe('Changed since the last seal');
   });
 
   it('F1 FR-RM-04 UX-26: the drafts filter counts drafts of this stage only, when the device holds drafts in two stages', () => {

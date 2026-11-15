@@ -8,6 +8,7 @@ import { NotFoundError } from '@/lib/data/tenant';
 import { myMitigations, openMitigationsByStage, stageFollowUpCounts } from '@/lib/data/followup';
 import { DashboardView } from '@/components/project/DashboardView';
 import { AllProjectsView } from '@/components/project/AllProjectsView';
+import { HOME_COPY } from '@/lib/home/copy';
 import { resetDb, testDb } from '../helpers/db';
 import { sessionFor } from '../helpers/authSession';
 import { useFixtureContent } from '../helpers/content';
@@ -178,7 +179,7 @@ describe('S-10 and S-32 pages (Task 5, Task 7)', () => {
     expect(renderToStaticMarkup(createElement(AllProjectsView, { data: { orgSlug: fx.org.slug, canUnarchive: true, active, archived } }))).toContain('Unarchive');
     const dash = await renderDashboard(fx, 'viewer', '2026-11-02');
     expect(dash).toContain('Counted project'); expect(dash).not.toContain('Shelved project');
-    expect(dash).toMatch(/Pre-processing: \d+ open findings?, \d+ overdue mitigations?/);
+    expect(dash.replace(/<[^>]+>/g, '')).toMatch(/Pre-processing: \d+ open findings?, \d+ overdue mitigations?/);   // R5: the count may be a link
     expect(dash).not.toMatch(/score|%|maturity/i);
   });
 
@@ -208,9 +209,9 @@ describe('follow-up reads on S-08 and S-10 (Task 9: FUP\'s real bodies)', () => 
     const f = await addFinding(fx, q.id, { stage: 'pre-processing', source: 'team' });
     await addMitigationVersion(fx, f.id, { status: 'planned', owner: 'assessor', dueDate: '2026-10-28' });
     const html = await renderDashboard(fx, 'assessor', '2026-11-02');
-    expect(html).toContain('My open and overdue mitigations');
+    expect(html).toContain(HOME_COPY.myMitigations);
     expect(html).toMatch(/>Overdue<\/span>: was due 28 Oct 2026/);
-    expect(html).not.toContain('You own no open mitigations.');
+    expect(html).not.toContain(HOME_COPY.noMitigations);
   });
 
   it('FR-PRJ-04 NFR-SEC-02: my mitigations lists only the signed-in person\'s, and is not empty', async () => {
@@ -255,7 +256,7 @@ describe('page wiring (C4 round 1)', () => {
     });
     const html = renderToStaticMarkup(element);
     expect(html).not.toContain('Due 1 Jan 2099');   // the assessor's mitigation
-    expect(html).toContain('You own no open mitigations.');
+    expect(html).toContain(HOME_COPY.noMitigations);
   });
 
   it('FR-PRJ-03 (P1): S-32 gives Unarchive to owner and admin and to no other role', async () => {
@@ -275,8 +276,11 @@ describe('page wiring (C4 round 1)', () => {
     expect(data.projects).toHaveLength(0);
     expect(data.archivedCount).toBe(1);
     const html = renderToStaticMarkup(createElement(DashboardView, { data }));
-    expect(html).toContain('No active projects.');
-    expect(html).not.toContain('No projects yet.');
-    expect(html).toMatch(/No active projects\.\s*<a[^>]*>New project<\/a>/);
+    expect(html).toContain(`<p>${HOME_COPY.noActiveProjects}</p>`);   // plain text: the page's All projects link follows it
+    expect(html).not.toContain(HOME_COPY.noProjects);
+    const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const links = [...html.matchAll(new RegExp(`<a[^>]*href="/orgs/${esc(only.org.slug)}/projects/new"[^>]*>${esc(HOME_COPY.newProject)}</a>`, 'g'))];
+    expect(links).toHaveLength(1);   // the header's New project, for a creator
+    expect(links[0].index).toBeLessThan(html.indexOf(`<p>${HOME_COPY.noActiveProjects}</p>`));   // that link, before the sentence
   });
 });

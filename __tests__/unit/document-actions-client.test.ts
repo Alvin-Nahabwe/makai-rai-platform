@@ -60,13 +60,13 @@ describe('WithdrawConfirm.send outcomes', () => {
 
   it('UX-27: 401 says the person is signed out, in the literal words, with no Retry', async () => {
     const r = await send(fakeFetch(json(401, errorBody('unauthenticated'))));
-    expect(r.result).toEqual({ kind: 'refused', line: 'Not withdrawn: you are signed out. Sign in again, then come back.', retry: false });
-    expect(A.WITHDRAW_SIGNED_OUT).toBe('Not withdrawn: you are signed out. Sign in again, then come back.');
+    expect(r.result).toEqual({ kind: 'refused', line: 'Not withdrawn. You are signed out. Sign in again, then come back.', retry: false });
+    expect(A.WITHDRAW_SIGNED_OUT).toBe('Not withdrawn. You are signed out. Sign in again, then come back.');
   });
 
   it('FR-AUTHZ-01: 403 says the role no longer allows this, with no Retry', async () => {
     const r = await send(fakeFetch(json(403, errorBody('forbidden'))));
-    expect(r.result).toEqual({ kind: 'refused', line: 'Not withdrawn: your role in this organisation no longer allows this. Ask an owner or admin.', retry: false });
+    expect(r.result).toEqual({ kind: 'refused', line: 'Not withdrawn. Your role in this organisation no longer allows this. Ask an Owner or Admin.', retry: false });
   });
 
   it('FR-DOC-06: 422 shows the server\'s message for the reason, with no Retry', async () => {
@@ -93,14 +93,14 @@ describe('WithdrawConfirm.send outcomes', () => {
       expect(a.unknown).toBe(true);
       const b = await send(f, a.retry, 'Wrong committee.', a.unknown);
       expect(b.result).toEqual({ kind: 'earlier' });
-      expect(A.WITHDRAW_EARLIER).toBe('Withdrawn. Your earlier request may have done it; the reason shown is the one recorded.');
+      expect(A.WITHDRAW_EARLIER).toBe('Withdrawn. Your earlier request may have done it. The reason shown is the one recorded.');
     }
   });
 
   it('UX-27 (N1): after an unknown outcome, a 401 or 403 says it is not confirmed and that the page should be reloaded', async () => {
     for (const reply of [json(401, errorBody('unauthenticated')), json(403, errorBody('forbidden'))]) {
       const r = await send(fakeFetch(reply), NO_RETRY, 'Wrong committee.', true);
-      expect(r.result).toEqual({ kind: 'refused', line: 'Not confirmed: it may already have been withdrawn. Reload the page to see.', retry: false });
+      expect(r.result).toEqual({ kind: 'refused', line: 'Not confirmed. It may already have been withdrawn. Reload the page to see.', retry: false });
     }
   });
 
@@ -132,16 +132,16 @@ describe('Copy as text outcomes', () => {
   });
 
   it('FR-DOC-07 (SF-2): each refusal names its cause: 401 signed out, 410 erased (and the list refreshes), 429 too many, any other reload', async () => {
-    expect(await copy(fakeFetch(json(401, errorBody('unauthenticated'))))).toEqual({ kind: 'refused', line: 'Not copied: you are signed out. Sign in again, then come back.', erased: false });
-    expect(await copy(fakeFetch(json(410, errorBody('erased', { erasedOn: '2026-11-04' }))))).toEqual({ kind: 'refused', line: "Not copied: this document's text was erased.", erased: true });
-    expect(await copy(fakeFetch(json(429, errorBody('rate_limited', { retryAfterSeconds: 30 }))))).toEqual({ kind: 'refused', line: 'Not copied: too many requests. Wait a minute, then try again.', erased: false });
+    expect(await copy(fakeFetch(json(401, errorBody('unauthenticated'))))).toEqual({ kind: 'refused', line: 'Not copied. You are signed out. Sign in again, then come back.', erased: false });
+    expect(await copy(fakeFetch(json(410, errorBody('erased', { erasedOn: '2026-11-04' }))))).toEqual({ kind: 'refused', line: "Not copied. This document's text was erased.", erased: true });
+    expect(await copy(fakeFetch(json(429, errorBody('rate_limited', { retryAfterSeconds: 30 }))))).toEqual({ kind: 'refused', line: 'Not copied. Too many requests. Wait a minute, then try again.', erased: false });
     for (const status of [403, 404, 500]) {
       expect(await copy(fakeFetch(json(status, errorBody('x'))))).toEqual({ kind: 'refused', line: 'Not copied. Reload the page and try again.', erased: false });
     }
   });
 
   it('FR-DOC-07: a fetch that throws says the connection was lost', async () => {
-    expect(await copy(fakeFetch(new TypeError('offline')))).toEqual({ kind: 'refused', line: 'Not copied: connection lost.', erased: false });
+    expect(await copy(fakeFetch(new TypeError('offline')))).toEqual({ kind: 'refused', line: 'Not copied. Connection lost.', erased: false });
   });
 
   it('FR-DOC-07 NFR-SEC-11: a clipboard that rejects, or none at all, gives the text for copying by hand', async () => {

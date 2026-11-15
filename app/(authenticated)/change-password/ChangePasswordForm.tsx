@@ -1,15 +1,14 @@
 'use client';
 
-import { useState, type CSSProperties, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { PASSWORD_MIN_LENGTH } from '@/lib/validate';
+import { CHANGE_PASSWORD_COPY } from '@/lib/auth/copy';
 import { useHydrated } from '@/lib/client/useHydrated';
-
-const TARGET: CSSProperties = { minWidth: '24px', minHeight: '24px' };
-const FIELD_ERROR: CSSProperties = { margin: 'var(--space-1) 0 0', color: 'var(--color-risk-critical)', fontSize: 'var(--font-size-sm)' };
-const HINT: CSSProperties = { margin: 'var(--space-1) 0 0', fontSize: 'var(--font-size-sm)' };
-const NOT_CHANGED = 'Not changed: the request did not reach the server. Your password is as it was; try again.';
+import { Button } from '@/components/ui/Button';
+import { StatusRegion } from '@/components/ui/StatusRegion';
+import { TextInput } from '@/components/ui/TextInput';
 
 export type ChangeState =
   | { kind: 'idle' } | { kind: 'sending' } | { kind: 'done' }
@@ -26,10 +25,11 @@ export async function changePasswordOutcome(res: Response): Promise<ChangeState>
   const field = res.status === 422 ? body?.fields?.find((f) => f.field === 'newPassword') : undefined;
   if (field) return { kind: 'invalid', field: 'newPassword', message: field.message };
   if (res.status >= 500 || !body) {
-    const ref = typeof body?.reference === 'string' ? ` (reference ${body.reference})` : '';
-    return { kind: 'error', message: `The server had a problem${ref}. Try again.` };
+    // An empty reference is no reference: it would print "...give this reference: ." (R1-6).
+    const reference = typeof body?.reference === 'string' ? body.reference : '';
+    return { kind: 'error', message: CHANGE_PASSWORD_COPY.serverProblem(reference || null) };
   }
-  return { kind: 'error', message: typeof body.error === 'string' && body.error.length > 0 ? body.error : `The server had a problem. Try again.` };
+  return { kind: 'error', message: typeof body.error === 'string' && body.error.length > 0 ? body.error : CHANGE_PASSWORD_COPY.serverProblem(null) };
 }
 
 export interface ChangePasswordViewProps {
@@ -51,24 +51,21 @@ export function ChangePasswordView(v: ChangePasswordViewProps) {
   const type = v.show ? 'text' : 'password';
   return (
     <>
-      {v.state.kind === 'error' && <div className="auth-error" role="alert">{v.state.message}</div>}
+      <StatusRegion message={v.state.kind === 'error' ? v.state.message : null} politeness="assertive" tone="error" />
       <form method="post" onSubmit={v.onSubmit} noValidate>
-        <label htmlFor="currentPassword">Current password</label>
-        <input id="currentPassword" name="currentPassword" type={type} required autoComplete="current-password"
-          value={v.currentPassword} onChange={(e) => v.onCurrent(e.currentTarget.value)} />
-        <label htmlFor="newPassword">New password</label>
-        <input id="newPassword" name="newPassword" type={type} required autoComplete="new-password"
-          value={v.newPassword} onChange={(e) => v.onNew(e.currentTarget.value)} aria-invalid={invalid ? true : undefined}
-          aria-describedby={invalid ? 'newPassword-hint newPassword-error' : 'newPassword-hint'} />
-        <p id="newPassword-hint" style={HINT}>{`At least ${PASSWORD_MIN_LENGTH} characters.`}</p>
-        {invalid && <p id="newPassword-error" style={FIELD_ERROR}>{invalid}</p>}
-        <p>
-          <button type="button" aria-controls="currentPassword newPassword" aria-pressed={v.show} onClick={v.onToggleShow}
-            style={{ ...TARGET, padding: '0 var(--space-2)' }}>Show passwords</button>
+        <TextInput id="currentPassword" name="currentPassword" label={CHANGE_PASSWORD_COPY.currentPassword} type={type} required
+          autoComplete="current-password" value={v.currentPassword} onChange={(e) => v.onCurrent(e.currentTarget.value)} />
+        <TextInput id="newPassword" name="newPassword" label={CHANGE_PASSWORD_COPY.newPassword} type={type} required
+          autoComplete="new-password" value={v.newPassword} onChange={(e) => v.onNew(e.currentTarget.value)}
+          hint={CHANGE_PASSWORD_COPY.hint(PASSWORD_MIN_LENGTH)} error={invalid ?? undefined} />
+        {/* The kit's Button cannot carry aria-pressed or aria-controls (ruling T16-5), so this is a native button in the kit's classes. */}
+        <p style={{ margin: 'calc(-1 * var(--space-4)) 0 var(--space-6)' }}>
+          <button type="button" className="ui-button ui-button--quiet ui-button--compact" aria-controls="currentPassword newPassword"
+            aria-pressed={v.show} onClick={v.onToggleShow}>{CHANGE_PASSWORD_COPY.showPasswords}</button>
         </p>
-        <button type="submit" className="btn-primary" disabled={v.state.kind === 'sending' || v.hydrated === false} style={TARGET}>
-          {v.state.kind === 'sending' ? 'Saving...' : 'Change password'}
-        </button>
+        <Button variant="primary" type="submit" disabled={v.state.kind === 'sending' || v.hydrated === false}>
+          {v.state.kind === 'sending' ? CHANGE_PASSWORD_COPY.submitting : CHANGE_PASSWORD_COPY.submit}
+        </Button>
       </form>
     </>
   );
@@ -95,7 +92,7 @@ export function ChangePasswordForm() {
       }));
     } catch {
       // fetch rejects only when no answer came back.
-      next = { kind: 'error', message: NOT_CHANGED };
+      next = { kind: 'error', message: CHANGE_PASSWORD_COPY.notChanged };
     }
     if (next.kind === 'done') {
       // This browser is signed out after a change, and the person signs straight back in as the same account (R-53).

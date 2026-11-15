@@ -3,63 +3,92 @@ import type { ReactElement, ReactNode } from 'react';
 import type { StageCounts } from '@/types/api';
 import type { Stage } from '@/types/record';
 import { ListLink } from '@/components/ui/ListLink';
+import { MarkShape } from '@/components/ui/StatusMark';
+import type { StatusMarkKind } from '@/components/ui/types';
+import { tallyWords, UI_COPY } from '@/lib/ui/copy';
+import type { Tally } from '@/lib/ui/marks';
+import { PROJECT_COPY } from '@/lib/project/copy';
 
-/** The stage names and the line under each (SRS W-1). */
-export const STAGE_NAME: Record<Stage, string> = {
-  'pre-processing': 'Pre-processing', 'in-processing': 'In-processing', 'post-processing': 'Post-processing',
-};
-const STAGE_LINE: Record<Stage, string> = {
-  'pre-processing': 'Problem formulation; data collection and preparation',
-  'in-processing': 'Model development and training; evaluation, fairness, documentation',
-  'post-processing': 'Deployment and monitoring; governance and community engagement',
-};
+/** The stage names and the line under each (SRS W-1), read from the project screens' copy module. */
+export const STAGE_NAME: Readonly<Record<Stage, string>> = PROJECT_COPY.stageNames;
+const STAGE_LINE: Readonly<Record<Stage, string>> = PROJECT_COPY.stageLines;
+
+const C = PROJECT_COPY.stage;
 
 /** "1 question", "2 questions". */
 export const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
+/** The kinds of "Recorded so far", in the kit's order (spec 7.2's table). No decision is not one: it is still open. */
+const TALLY_KINDS = ['done', 'partly', 'not_yet', 'not_applicable', 'does_not_apply', 'scope_answered'] as const satisfies readonly StatusMarkKind[];
+
 /**
- * One stage of S-10 (FR-PRJ-02, UX-06): to-do counts first, then recorded counts, in words and numerals; no
- * percentage, bar or cross-stage total (FR-RM-04). A `<details open>`: the collapsed heading still shows its three
- * to-do counts, and its text stays findable (modern-web-guidance `search-hidden-content`). The four status phrases
- * carry `status-label` and no warning class (UX-06); the slots for follow-up and stage reviews come in as children.
+ * A stage's tally from the loader's counts (lib/data/projects.ts), nothing new read. Every question of a stage is
+ * gated (`notApplicableByGate`), or has no decision (`noDecision`), or has a status (`byStatus`), or is the gate itself
+ * with an answer and no status (lib/ui/marks.ts): the loader counts the first three, so the answered gate is what is
+ * left. The loader's counts cannot over-add (one current row per question, and a row has a status or an answer, never
+ * both); counts built by hand that do give 0 answered, never a negative count.
  */
-export function StageColumn(p: { orgSlug: string; projectId: string; stage: Stage; counts: StageCounts; children: ReactNode }): ReactElement {
+export function stageTally(c: StageCounts): Tally & Record<(typeof TALLY_KINDS)[number], number> & { doneNoEvidence: number } {
+  const { done, partly, not_yet, not_applicable } = c.byStatus;
+  const answered = c.questions - c.noDecision - c.notApplicableByGate - (done + partly + not_yet + not_applicable);
+  return {
+    done, partly, not_yet, not_applicable, does_not_apply: c.notApplicableByGate, scope_answered: Math.max(0, answered),
+    doneNoEvidence: c.doneWithoutEvidence,
+  };
+}
+
+/**
+ * One stage of S-10 (FR-PRJ-02, UX-06; spec 9.2) as a plain block: its name, what is still open, what is recorded so
+ * far, its stage reviews, then one link to the stage page. Counts are words and numerals, each stage on its own; no
+ * percentage, bar or cross-stage total (FR-RM-04). The tally's words are the kit's (`tallyWords`); each item carries the
+ * kit's shape, hidden from assistive technology, so a screen reader hears each item once. `children` (the follow-up)
+ * lands under "Still open"; `reviews` (the stage reviews summary) after "Recorded so far".
+ */
+export function StageColumn(p: { orgSlug: string; projectId: string; stage: Stage; counts: StageCounts; children: ReactNode; reviews?: ReactNode }): ReactElement {
   const c = p.counts;
-  const name = STAGE_NAME[p.stage];
-  const notApplicable = c.byStatus.not_applicable + c.notApplicableByGate;
-  const nothingRecorded = c.byStatus.done + c.byStatus.partly + c.byStatus.not_yet + notApplicable + c.acceptedRisks + c.documentsIssued === 0;
-  const noMitigationNote = c.openFindingsWithoutMitigation > 0 ? ` (${c.openFindingsWithoutMitigation} of them with no mitigation yet)` : '';
+  const headingId = `${p.stage}-name`;
+  const tally = stageTally(c);
+  const kinds = TALLY_KINDS.filter((k) => tally[k] > 0);
+  const nothingOpen = c.noDecision + c.openFindings + c.overdueMitigations + c.openMitigations === 0;
+  const stillOpen: ReactNode[] = [];
+  if (c.noDecision > 0) stillOpen.push(<li key="no-decision">{C.noDecisionQuestions(c.noDecision)}</li>);
+  if (c.openFindings > 0) {
+    // The findings page filtered to this stage (`?stage=`) lists every open finding the count holds, the ones to close
+    // included; its per-stage heading (`#g-<stage>`) leaves those out and is absent when it would count none.
+    stillOpen.push(
+      <li key="findings">
+        <ListLink href={`/orgs/${p.orgSlug}/projects/${p.projectId}/findings?stage=${p.stage}`}>{plural(c.openFindings, C.openFinding, C.openFindings)}</ListLink>
+        {c.openFindingsWithoutMitigation > 0 ? C.withoutMitigation(c.openFindingsWithoutMitigation) : null}
+      </li>,
+    );
+  }
+  if (c.overdueMitigations > 0) stillOpen.push(<li key="overdue">{plural(c.overdueMitigations, C.overdueMitigation, C.overdueMitigations)}</li>);
   return (
-    <details open className="stage-column" id={p.stage} data-stage={p.stage}>
-      <summary>
-        <h2>{name}</h2>
-        <span className="stage-column__todo-line">
-          {`${name}: ${c.noDecision} with no decision, ${plural(c.openFindings, 'open finding', 'open findings')}, ${plural(c.overdueMitigations, 'overdue mitigation', 'overdue mitigations')}`}
-        </span>
-      </summary>
+    <section className="stage-column" id={p.stage} data-stage={p.stage} aria-labelledby={headingId}>
+      <h2 id={headingId}>{STAGE_NAME[p.stage]}</h2>
       <p>{STAGE_LINE[p.stage]}</p>
-      <p>{plural(c.questions, 'question', 'questions')}</p>
-      <h3>To do</h3>
-      <ul>
-        <li>{`${c.noDecision} with no decision`}</li>
-        <li>{`${plural(c.openFindings, 'open finding', 'open findings')}${noMitigationNote}`}</li>
-        <li>{plural(c.overdueMitigations, 'overdue mitigation', 'overdue mitigations')}</li>
-        <li>{`${c.doneWithoutEvidence} done without evidence`}</li>
-      </ul>
-      <h3>Recorded</h3>
-      {nothingRecorded ? <p>Nothing recorded yet.</p> : (
-        <>
-          <ul>
-            <li><span className="status-label">{`Done ${c.byStatus.done}`}</span></li>
-            <li><span className="status-label">{`Partly ${c.byStatus.partly}`}</span></li>
-            <li><span className="status-label">{`Not yet ${c.byStatus.not_yet}`}</span></li>
-            <li><span className="status-label">{`Not applicable ${notApplicable}`}</span></li>
-          </ul>
-          <p>{`${plural(c.acceptedRisks, 'accepted risk', 'accepted risks')}, ${plural(c.documentsIssued, 'document', 'documents')} issued`}</p>
-        </>
-      )}
-      <p><ListLink href={`/orgs/${p.orgSlug}/projects/${p.projectId}/stages/${p.stage}`}>{`Open ${p.stage}`}</ListLink></p>
+      <p>{plural(c.questions, C.question, C.questions)}</p>
+      <h3>{C.stillOpen}</h3>
+      {nothingOpen ? <p>{C.nothingOpen}</p> : stillOpen.length > 0 ? <ul>{stillOpen}</ul> : null}
       {p.children}
-    </details>
+      <h3>{C.recorded}</h3>
+      {kinds.length === 0 ? <p>{UI_COPY.tally.none}</p> : (
+        <ul className="stage-column__tally" role="list">
+          {kinds.map((k) => (
+            <li key={k} className="stage-column__tally-item">
+              <MarkShape kind={k} />
+              <span>{tallyWords(k === 'done' ? { done: tally.done, doneNoEvidence: tally.doneNoEvidence } : { [k]: tally[k] })}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {c.acceptedRisks + c.documentsIssued > 0 ? (
+        <p>{C.issued(plural(c.acceptedRisks, C.acceptedRisk, C.acceptedRisks), plural(c.documentsIssued, C.document, C.documents))}</p>
+      ) : null}
+      {p.reviews}
+      <p>
+        <ListLink href={`/orgs/${p.orgSlug}/projects/${p.projectId}/stages/${p.stage}`} aria-describedby={headingId}>{C.allQuestions}</ListLink>
+      </p>
+    </section>
   );
 }

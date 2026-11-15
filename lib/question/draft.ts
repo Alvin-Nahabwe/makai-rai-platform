@@ -1,4 +1,5 @@
 import { declaredDateFromParts, utcPlus14Date, validateDecisionFields, type DateParts } from '@/lib/decision/rules';
+import { DECISION_OUTCOME_COPY } from '@/lib/decision/outcome/copy';
 import type { DraftKey, DraftStore, StoredDraft } from '@/lib/client/drafts';
 import type { QuestionPanelData } from '@/lib/question/panel';
 import type { LoadedQuestion } from '@/types/content';
@@ -56,15 +57,10 @@ export function draftFromCurrent(data: QuestionPanelData): DecisionDraft {
   };
 }
 
-/** The three date fields of a declared date at its precision (Today, Same as my last save, Same as version N). */
+/** The three date fields of a declared date at its precision (the form's two date shortcuts). */
 export function dateParts(d: DeclaredDate): DateParts {
   const [year, month, day] = d.split('-');
   return { year: year ?? '', month: month === undefined ? '' : String(Number(month)), day: day === undefined ? '' : String(Number(day)) };
-}
-
-/** Today's date on this device, as the three fields (UX-10's Today). */
-export function todayParts(now: Date): DateParts {
-  return { day: String(now.getDate()), month: String(now.getMonth() + 1), year: String(now.getFullYear()) };
 }
 
 /**
@@ -127,9 +123,9 @@ export function isDraftValue(v: unknown): v is DecisionDraft {
     && (d.reasonCode === null || typeof d.reasonCode === 'string') && (d.decidedBy === null || typeof d.decidedBy === 'object');
 }
 
-/** The line for evidence a restored draft holds that the evidence block cannot name (S-12 and W-4's "Your answer"). */
+/** The line for evidence a restored draft holds that the evidence block cannot name (S-12 and W-4's "Your version"). */
 export function keptEvidenceLine(n: number): string {
-  return `This answer also holds ${n} evidence ${n === 1 ? 'item' : 'items'} added before the page was closed. It is attached when you save.`;
+  return DECISION_OUTCOME_COPY.keptEvidence(n);
 }
 
 /**

@@ -4,6 +4,9 @@ import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { LegalTextVersion } from '@/types/legal';
 import { HOSTILE_STRINGS } from '../helpers/hostile';
+import { LEGAL_COPY, LEGAL_PAGE_COPY } from '@/lib/legal/copy';
+import { pageTitle } from '@/lib/ui/title';
+import { TERM_FINGERPRINT } from '@/lib/vocabulary/terms';
 
 /**
  * S-06, the public legal text pages (FR-ACC-02, SRS line 479; 7.1.5 line 1629). The registry is the actual
@@ -70,13 +73,16 @@ const bodyOf = (path: string) => {
 const unescaped = (s: string) =>
   s.replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&gt;/g, '>').replace(/&lt;/g, '<').replace(/&amp;/g, '&');
 
-/** The paragraphs of the text itself: every `<p>` after the hash block, which closes the text's header. */
+/** The marked text block: from data-legal-text to the fingerprint below it. */
+const textBlock = (html: string) => html.slice(html.indexOf('data-legal-text'), html.indexOf('<dl', html.indexOf('data-legal-text')));
+
+/** The paragraphs of the text itself: every `<p>` of the marked block. */
 const textParagraphs = (html: string) =>
-  [...html.slice(html.indexOf('</dl>')).matchAll(/<p[^>]*>([^<]*)<\/p>/g)].map((m) => m[1]);
+  [...textBlock(html).matchAll(/<p[^>]*>([^<]*)<\/p>/g)].map((m) => m[1]);
 
 /** The blocks of the text itself in order, headings (h2) and paragraphs alike: what a reader is shown of its words. */
 const textBlocks = (html: string) =>
-  [...html.slice(html.indexOf('</dl>')).matchAll(/<(p|h2)[^>]*>([^<]*)<\/\1>/g)].map((m) => m[2]);
+  [...textBlock(html).matchAll(/<(p|h2)[^>]*>([^<]*)<\/\1>/g)].map((m) => m[2]);
 
 const PRIVACY_V1 = { sha256: sha(`${FIX}/privacy/1.md`), text: bodyOf(`${FIX}/privacy/1.md`) };
 const PRIVACY_V2 = { sha256: sha(`${FIX}/privacy/2.md`), text: bodyOf(`${FIX}/privacy/2.md`) };
@@ -85,11 +91,16 @@ const kindPage = async (kind: string) => renderToStaticMarkup(await KindPage({ p
 const versionPage = async (kind: string, version: string) =>
   renderToStaticMarkup(await VersionPage({ params: Promise.resolve({ kind, version }) }));
 const NOT_FOUND = /NEXT_HTTP_ERROR_FALLBACK;404/;
+/** The label as the page marks it (its words, "File fingerprint, for checking that this text has not changed", with a term inside): the word "fingerprint" is the vocabulary's term (first use, with its definition). */
+const FINGERPRINT_LABEL_MARKED = `${LEGAL_PAGE_COPY.fingerprintBefore}<span data-term="fingerprint">fingerprint</span>${LEGAL_PAGE_COPY.fingerprintAfter}`;
 
 describe('S-06 /legal/[kind] and /legal/[kind]/[version]', () => {
   it('FR-ACC-02: /legal/privacy shows the current version, its hash and the past versions', async () => {
     const html = await kindPage('privacy');
     expect(html).toContain('Version 2, published 1 Dec 2026');
+    // A 113: the link's words are "Link to version 2", and the sentence follows the link in the same paragraph.
+    expect(html).toMatch(/<p[^>]*><a[^>]*href="\/legal\/privacy\/2"[^>]*>Link to version 2<\/a> This text will not change\.<\/p>/);
+    expect(html).not.toContain('Permanent link');
     expect(html).toContain(groupsOfFour(PRIVACY_V2.sha256));
     expect(html).not.toContain(groupsOfFour(PRIVACY_V1.sha256));
     expect(textParagraphs(html)).toEqual([
@@ -118,7 +129,8 @@ describe('S-06 /legal/[kind] and /legal/[kind]/[version]', () => {
 
   it('FR-ACC-02: a past version says it is not the current one and links to the current version', async () => {
     const html = await versionPage('privacy', '1');
-    expect(html).toContain('This is an earlier version. The current one is version 2, published 1 Dec 2026.');
+    expect(html).toContain(LEGAL_PAGE_COPY.earlierVersion('2', '1 Dec 2026'));
+    expect(LEGAL_PAGE_COPY.earlierVersion('2', '1 Dec 2026')).toBe('This is an earlier version. The current one is version 2, published 1 Dec 2026.');
     expect(html).toContain('href="/legal/privacy"');
     const current = await versionPage('privacy', '2');
     expect(current).not.toContain('This is an earlier version.');
@@ -131,8 +143,9 @@ describe('S-06 /legal/[kind] and /legal/[kind]/[version]', () => {
     const sentence = 'This agreement is no longer used. MAK-AI does not ask organisations to sign it.';
     expect(RETIRED_NOTE['organisation-agreement']).toBe(sentence);
     for (const html of [await kindPage('organisation-agreement'), await versionPage('organisation-agreement', '1')]) {
-      const notes = [...html.matchAll(/<p[^>]*role="note"[^>]*>(.*?)<\/p>/g)].map((m) => m[1]);
+      const notes = [...html.matchAll(/<div[^>]*role="note"[^>]*>(?:<div[^>]*>)*(?:<div class="ui-callout__body">)(.*?)<\/div><\/div><\/div>/g)].map((m) => m[1]);
       expect(notes).toEqual([sentence]);
+      expect(html).toContain('ui-callout ui-callout--note');   // the kit's note, not a tinted paragraph
       expect(notes[0]).not.toMatch(/<a[\s>]|href|section|\d/i);
       expect(html).not.toContain('This is an earlier version.');
       // Outside the block that holds the text's own words, so the claim-word and no-score checks still read it.
@@ -217,11 +230,11 @@ describe('S-06 /legal/[kind] and /legal/[kind]/[version]', () => {
 
   it('FR-ACC-02: a kind with one version lists no past versions', async () => {
     // The retired organisation agreement is the one kind that still has a single version (version 1, as published).
+    // CONSOLIDATED section 4: an empty "Past versions" block ("None") is hidden, heading included.
     const html = await kindPage('organisation-agreement');
-    const past = html.slice(html.indexOf('<h2>Past versions</h2>'));
-    expect(past).toContain('<p>None</p>');
-    expect(past).not.toContain('href="/legal/organisation-agreement/');
-    expect(html).toContain('href="/legal/organisation-agreement/1"');
+    expect(html).not.toContain('Past versions');
+    expect(html).not.toContain('<p>None</p>');
+    expect(html.match(/href="\/legal\/organisation-agreement\/[^"]*"/g)).toEqual(['href="/legal/organisation-agreement/1"']);   // the link to this version only
   });
 
   it('FR-ACC-02: a kind with two versions lists version 1 as a past version, with its link, and not the current version', async () => {
@@ -280,11 +293,32 @@ describe('S-06 /legal/[kind] and /legal/[kind]/[version]', () => {
     const inner = marked.slice(marked.indexOf('>') + 1, marked.length - '</div>'.length);
     expect(inner).toBe('<h2>Our promise</h2><p>We certify the words of this stub.</p><p>A second paragraph.</p>');
     // The page's heading, the version line and the fingerprint are interface copy: they stay outside.
-    for (const part of ['<h1', 'Version 3, published 5 Jan 2027', groupsOfFour('ab'.repeat(32)), 'SHA-256']) {
+    for (const part of ['<h1', 'Version 3, published 5 Jan 2027', groupsOfFour('ab'.repeat(32)), FINGERPRINT_LABEL_MARKED]) {
       expect(marked, part).not.toContain(part);
       expect(outside, part).toContain(part);
     }
     expect(outside).not.toContain('certify');
+  });
+
+  it('FR-PUB-01: the rendered /legal/[kind] and /legal/[kind]/[version] pages carry data-legal-text on the text block', async () => {
+    for (const html of [await kindPage('privacy'), await versionPage('privacy', '1')]) {
+      expect(html.match(/data-legal-text/g), 'one marked element').toHaveLength(1);
+      expect(html.slice(html.indexOf('data-legal-text'), html.indexOf('</div>', html.indexOf('data-legal-text')))).toContain('<p>Fixture privacy notice');
+    }
+  });
+
+  it('FR-ACC-02: the fingerprint sits below the text, labelled "File fingerprint, for checking that this text has not changed"', () => {
+    const text: LegalTextVersion = { kind: 'terms', version: '3', publishedOn: '2027-01-05', acceptance: 'offered', sha256: 'cd'.repeat(32), text: 'Only paragraph.\n' };
+    const html = renderToStaticMarkup(<LegalTextView text={text} />);
+    expect(html).not.toContain('SHA-256');
+    const label = html.indexOf(FINGERPRINT_LABEL_MARKED);
+    expect(label).toBeGreaterThan(html.indexOf('Only paragraph.'));
+    expect(html.indexOf(groupsOfFour('cd'.repeat(32)))).toBeGreaterThan(label);
+    // In the article's footer, after the text block, so it is not heard as part of the text's last section.
+    expect(html).toMatch(/<\/div><footer><dl[^>]*><dt[^>]*>File <span data-term="fingerprint">fingerprint<\/span>, for checking that this text has not changed<\/dt><dd[^>]*><p class="ui-definition" data-definition="fingerprint">[^<]*<\/p>[\s\S]*<\/dd><\/dl><\/footer><\/article>$/);
+    // First use of "fingerprint" (T16-11): the term and its definition, from the vocabulary.
+    expect(html).toContain(TERM_FINGERPRINT.definition);
+    expect(html.indexOf('Version 3, published 5 Jan 2027')).toBeLessThan(html.indexOf('data-legal-text'));
   });
 
   it('FR-ACC-02: the text is one paragraph per blank-line-separated block, and keeps its single line breaks', () => {
@@ -324,10 +358,10 @@ describe('S-06 /legal/[kind] and /legal/[kind]/[version]', () => {
 
   it('FR-ACC-02 (7.6.2, 2.4.2): each page title names the text, then the product', async () => {
     expect(await KindModule.generateMetadata({ params: Promise.resolve({ kind: 'privacy' }) })).toEqual({
-      title: 'Privacy notice - MAK-AI RAI Platform',
+      title: pageTitle('Privacy notice'),
     });
     expect(await VersionModule.generateMetadata({ params: Promise.resolve({ kind: 'privacy', version: '1' }) })).toEqual({
-      title: 'Privacy notice, version 1 - MAK-AI RAI Platform',
+      title: pageTitle(LEGAL_COPY.titles.version('Privacy notice', '1')),
     });
     await expect(KindModule.generateMetadata({ params: Promise.resolve({ kind: 'x' }) })).rejects.toThrow(NOT_FOUND);
     await expect(

@@ -6,8 +6,14 @@
 
 .stage-list__jump {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-3);
   margin-bottom: var(--space-3);
+}
+
+/* The jump links read the full stage names: a name wraps to the next line whole, never at its hyphen. */
+.stage-list__jump a {
+  white-space: nowrap;
 }
 
 .stage-list__columns {
@@ -16,29 +22,29 @@
   gap: var(--space-4);
 }
 
+/* A block is narrow when the three sit side by side: a long unbroken string (a pasted address in a mitigation, a name)
+   breaks inside it and never spills over the next block. */
 .stage-column {
-  border: 1px solid var(--border);
-  border-radius: var(--border-radius-md);
+  border: 1px solid var(--color-border-container);
+  border-radius: var(--radius-control);
   padding: var(--space-4);
+  overflow-wrap: anywhere;
 }
 
-.stage-column > summary {
-  cursor: pointer;
+.stage-column > h2 {
+  margin-block-start: 0;
 }
 
-.stage-column > summary h2 {
-  display: inline;
-  margin: 0;
+/* The parts of a block ("Still open in this stage", "Recorded so far", the stage reviews) each start with a heading: space
+   above it, so the parts read as parts whether the part before ends in a list or in a sentence. */
+.stage-column h3 {
+  margin-block: var(--space-4) var(--space-1);
 }
 
-.stage-column__todo-line {
-  display: block;
-  font-size: var(--font-size-sm);
-  color: var(--text-muted);
-}
-
-.stage-column[open] > summary .stage-column__todo-line {
-  display: none;
+/* The follow-up's heading sits inside "Still open in this stage": one step below that part's heading. */
+.stage-column h4 {
+  margin-block: var(--space-2) var(--space-1);
+  font-size: var(--font-size-body);
 }
 
 .stage-column ul {
@@ -46,7 +52,33 @@
   padding-left: var(--space-5);
 }
 
-@container (min-width: 60rem) {
+/* The block's last line, the link to the stage's questions. */
+.stage-column > p:last-child {
+  margin-block-start: var(--space-3);
+}
+
+/* "Recorded so far": each item is the kit's shape (hidden from assistive technology) and the tally's words. The shape is
+   not inside a .ui-mark here, so it takes the mark ink itself; its words stay in the body ink. */
+/* No bullet beside the shape; the list keeps role="list" in the markup, since Safari drops the role of a list styled so. */
+.stage-column ul.stage-column__tally {
+  list-style: none;
+  padding-left: 0;
+}
+
+.stage-column__tally-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.stage-column__tally-item > .ui-mark__shape {
+  flex: none;
+  color: var(--color-mark);
+}
+
+/* Side by side from a 1280 px window (spec 9.2): beside the rail the list is then about 56rem wide. Narrower, a column
+   would be too narrow to read, so the stages stack. */
+@container (min-width: 52rem) {
   .stage-list__columns {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     align-items: start;

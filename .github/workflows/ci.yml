@@ -147,6 +147,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The spec-12 gate (__tests__/lint/protected-tests.test.ts, test-replacements.test.ts) reads files at the
+          # tag stage-1-base; a depth-1 checkout has neither the tag nor its commit.
+          fetch-depth: 0
 
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0

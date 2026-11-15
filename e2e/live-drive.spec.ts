@@ -22,8 +22,8 @@ test('live drive: viewer seat, role under the name, dark link colour, M-40 offli
   try {
     const page = await context.newPage();
     await page.goto(`/orgs/${slug}/dashboard`);
-    seen.role = (await page.locator('.sidebar-user-role').textContent()) ?? '';
-    expect(seen.role).toBe('viewer');
+    seen.role = (await page.locator('.shell-rail__role').textContent()) ?? '';
+    expect(seen.role).toBe('Viewer');
     await page.screenshot({ path: path.join(DIR!, '1-viewer-dark-dashboard.png') });
 
     await page.goto('/about');
@@ -35,7 +35,7 @@ test('live drive: viewer seat, role under the name, dark link colour, M-40 offli
     await page.goto(`/orgs/${slug}/dashboard`);
     await context.setOffline(true);
     await expect(page.getByRole('status').filter({ hasText: 'You are offline.' })).toBeVisible();
-    seen.offline = (await page.locator('.offline-banner__text').textContent()) ?? '';
+    seen.offline = (await page.locator('.ui-banner__body').textContent()) ?? '';
     await page.screenshot({ path: path.join(DIR!, '3-offline-banner.png') });
     await context.setOffline(false);
   } finally {

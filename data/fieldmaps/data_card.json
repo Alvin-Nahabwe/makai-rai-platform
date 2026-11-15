@@ -62,7 +62,7 @@
     },
     {
       "fieldId": "DC-07",
-      "label": "Is this a sample or complete collection? How was sampling done?",
+      "label": "Is this a sample or complete collection? How was the sample chosen?",
       "section": "Composition",
       "sources": [
         {"kind": "record", "questionId": "Q-PP-18", "parts": ["status", "reason"]}
@@ -223,7 +223,7 @@
     },
     {
       "fieldId": "DC-23",
-      "label": "Could the dataset composition negatively affect future uses? Which bias checks were run, and their results",
+      "label": "Could the dataset's make-up harm future uses? Which bias checks were run, and what did they show?",
       "section": "Uses and restrictions",
       "sources": [
         {"kind": "record", "questionId": "Q-PP-09", "parts": ["status", "reason"]},
@@ -300,7 +300,7 @@
     },
     {
       "fieldId": "DC-31",
-      "label": "Datasheet held by the team",
+      "label": "Does the team keep its own datasheet? Where?",
       "section": "Record and sign-off",
       "sources": [
         {"kind": "typed"}

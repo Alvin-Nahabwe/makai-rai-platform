@@ -1,4 +1,7 @@
 import { PROJECT_METADATA_FIELDS } from '@/lib/validate';
+import { LIFECYCLE_STAGE_WORDS } from '@/lib/project/labels';
+import { PROJECT_FIELD_MESSAGES as M } from '@/lib/projects/copy';
+import { PROJECT_COPY } from '@/lib/project/copy';
 
 /** The values of the Prisma enums `DevelopmentStage` and `DatasetSize` (prisma/schema.prisma). */
 const DEVELOPMENT_STAGES: readonly string[] = ['concept', 'development', 'testing', 'deployed', 'retired'];
@@ -18,19 +21,19 @@ function problem(field: string, value: unknown): string | null {
   if (value === null) return null;
   switch (field) {
     case 'developmentStage':
-      return typeof value === 'string' && DEVELOPMENT_STAGES.includes(value) ? null : `${field} must be one of ${DEVELOPMENT_STAGES.join(', ')}`;
+      return typeof value === 'string' && DEVELOPMENT_STAGES.includes(value) ? null : M.developmentStage;
     case 'datasetSize':
-      return typeof value === 'string' && DATASET_SIZES.includes(value) ? null : `${field} must be one of ${DATASET_SIZES.join(', ')}`;
+      return typeof value === 'string' && DATASET_SIZES.includes(value) ? null : M.datasetSize;
     case 'processesPersonalData':
-      return typeof value === 'boolean' ? null : `${field} must be true or false`;
+      return typeof value === 'boolean' ? null : M.processesPersonalData;
     case 'teamSize':
-      return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 2_147_483_647 ? null : `${field} must be a whole number of at least 0`;
+      return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 2_147_483_647 ? null : M.teamSize;
     case 'projectStart':
     case 'projectEnd':
-      return isCalendarDate(value) ? null : `${field} must be a date written YYYY-MM-DD`;
+      return isCalendarDate(value) ? null : M.date;
     default: {
       const max = field === 'datasetDescription' ? DESCRIPTION_MAX : TEXT_MAX;
-      return typeof value === 'string' && value.length <= max ? null : `${field} must be text of at most ${max} characters`;
+      return typeof value === 'string' && value.length <= max ? null : M.textMax(max);
     }
   }
 }
@@ -62,16 +65,11 @@ export function metadataColumnValues(fields: Record<string, unknown>): Record<st
   return out;
 }
 
-/** The words of the lifecycle stage choices, in the enum's order, for the form and for the descriptive line. */
-export const LIFECYCLE_STAGE_WORDS: Readonly<Record<string, string>> = {
-  concept: 'Concept', development: 'Development', testing: 'Testing', deployed: 'Deployed', retired: 'Retired',
-};
-
 const SPACED = (v: string) => v.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
 
 /**
  * The one line that describes a project (S-10, S-08, S-32; SRS W-1 note 1) from its descriptive fields: the AI system
- * type, the sector, whether it processes personal data and the lifecycle stage, each only when set. It never shows a
+ * type, the sector, whether it processes personal data and the development status, each only when set. It never shows a
  * score, a percentage or a "complete" label (FR-RM-01, FR-RM-04). Empty when no field is set.
  */
 export function descriptiveLine(m: {
@@ -80,9 +78,10 @@ export function descriptiveLine(m: {
 } | null | undefined): string {
   if (!m) return '';
   const parts: string[] = [];
-  if (m.aiSystemType) parts.push(m.aiSystemType === 'other' ? (m.aiSystemTypeOther || 'Other') : SPACED(m.aiSystemType));
+  const D = PROJECT_COPY.descriptive;
+  if (m.aiSystemType) parts.push(m.aiSystemType === 'other' ? (m.aiSystemTypeOther || D.other) : SPACED(m.aiSystemType));
   if (m.deploymentSector) parts.push(m.deploymentSector);
-  if (m.processesPersonalData !== null && m.processesPersonalData !== undefined) parts.push(`personal data: ${m.processesPersonalData ? 'yes' : 'no'}`);
-  if (m.developmentStage) parts.push(`lifecycle stage: ${LIFECYCLE_STAGE_WORDS[m.developmentStage] ?? m.developmentStage}`);
+  if (m.processesPersonalData !== null && m.processesPersonalData !== undefined) parts.push(m.processesPersonalData ? D.usesPersonalData : D.noPersonalData);
+  if (m.developmentStage) parts.push(LIFECYCLE_STAGE_WORDS[m.developmentStage] ?? m.developmentStage);
   return parts.join(', ');
 }

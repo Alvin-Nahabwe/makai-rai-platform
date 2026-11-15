@@ -1,0 +1,327 @@
+/* The shell (plan 1A Task 11; spec 7.1 and 8): the navy rail, the top bar and its menu panel below 1024 px, the
+   organisation switcher, the theme switch, the public header, the footer and the session dialogs' wrapper. Role tokens
+   only. The rail is navy in both themes; its current item is an orange fill with white text, and no text on the rail or
+   the bar is ever orange. Focus is the global :focus-visible ring (--color-focus), kept clear of every overflow edge.
+   Nothing animates. */
+
+/* ── The frame ── */
+.shell {
+  min-height: 100vh;
+  background-color: var(--color-ground);
+}
+
+.shell__main {
+  min-width: 0;
+  padding: var(--space-4);
+}
+
+/* ── The top bar (below 1024 px): ordinary flow content, neither sticky nor fixed ── */
+.shell-topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-2) var(--space-4);
+  background-color: var(--color-shell);
+  color: var(--color-shell-ink);
+}
+
+.shell-topbar__title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: var(--font-weight-semibold);
+}
+
+.shell-topbar__menu-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: var(--target-primary);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-shell-muted);
+  border-radius: var(--radius-control);
+  background-color: var(--color-shell);
+  color: var(--color-shell-ink);
+  font: inherit;
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.shell-topbar__menu-button:hover {
+  background-color: var(--color-shell-hover);
+}
+
+/* The panel holds the rail. The browser's popover rules give it a border, padding, an inset and the canvas colours;
+   both layouts below replace them. */
+.shell-topbar__panel {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background-color: var(--color-shell);
+  color: var(--color-shell-ink);
+}
+
+@media (max-width: 1023.98px) {
+  /* Closed, it is not displayed, whether or not the browser knows popovers (:is() forgives the unknown pseudo-class). */
+  .shell-topbar__panel:not(:is(:popover-open, .shell-topbar__panel--open)) {
+    display: none;
+  }
+
+  /* Open: from edge to edge of the viewport, its top at the bar's bottom (set by TopBar as it opens), ending inside the
+     viewport and scrolling within itself. */
+  .shell-topbar__panel:is(:popover-open, .shell-topbar__panel--open) {
+    display: block;
+    position: fixed;
+    inset-block-start: var(--shell-panel-top, 3.75rem);
+    inset-block-end: auto;
+    inset-inline: 0;
+    width: auto;
+    height: auto;
+    max-block-size: calc(100dvh - var(--shell-panel-top, 3.75rem));
+    overflow-y: auto;
+    /* Only for a browser without popovers (the fallback class): an open popover is in the top layer already. */
+    z-index: 100;
+    box-shadow: var(--shadow-surface);
+  }
+
+  .shell-rail__product {
+    display: none;
+  }
+}
+
+@media (min-width: 1024px) {
+  .shell {
+    display: grid;
+    grid-template-columns: var(--rail-width) minmax(0, 1fr);
+  }
+
+  .shell-topbar {
+    display: none;
+  }
+
+  /* The rail's column, open as a popover or not: author CSS replaces the browser's rule that hides a closed popover.
+     z-index 1 keeps the rail, and the sign-out warning inside it, over positioned content of main (the sidebar had one). */
+  .shell-topbar__panel {
+    display: block;
+    position: sticky;
+    inset: auto;
+    top: 0;
+    z-index: 1;
+    width: auto;
+    height: 100vh;
+    overflow-y: auto;
+  }
+
+  .shell__main {
+    overflow-y: auto;
+    max-height: 100vh;
+    padding: var(--space-8);
+    /* One stacking context for main at level auto: no z-index inside it, however high, can pass the rail's z-index 1
+       (and the sign-out warning in it). It makes no containing block, so fixed and sticky descendants are unchanged. */
+    isolation: isolate;
+  }
+}
+
+/* ── The rail ── */
+.shell-rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-block-size: 100%;
+  /* Room on every side for the 3 px focus ring and its offset, inside the panel's scroll edge. */
+  padding: var(--space-4) var(--space-3);
+}
+
+/* The sign-out warning (SignOutWithDraftsGuard) is a surface box inside the rail: it takes the page's ink, not the rail's. */
+.shell-rail [data-sign-out-drafts] {
+  color: var(--color-ink);
+}
+.shell-rail__product {
+  padding-inline: var(--space-3);
+  color: var(--color-shell-muted);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.shell-rail__nav {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.shell-rail__nav ul {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  list-style: none;
+}
+
+.shell-rail__lower {
+  margin-block-start: auto;
+  padding-block-start: var(--space-4);
+  border-block-start: 1px solid var(--color-shell-hover);
+}
+
+.shell-rail__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-block-size: var(--target-primary);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  color: var(--color-shell-ink);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.shell-rail__item:hover {
+  background-color: var(--color-shell-hover);
+  color: var(--color-shell-ink);
+}
+
+.shell-rail__item--current,
+.shell-rail__item--current:hover {
+  background-color: var(--color-action);
+  color: var(--color-on-action);
+  font-weight: var(--font-weight-semibold);
+}
+
+@media (forced-colors: active) {
+  .shell-rail__item--current {
+    border-color: CanvasText;
+    border-inline-start-width: 4px;
+  }
+}
+
+.shell-rail__person {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-2) var(--space-3);
+  min-width: 0;
+}
+
+.shell-rail__name {
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.shell-rail__role {
+  color: var(--color-shell-muted);
+  font-size: var(--font-size-small);
+  overflow-wrap: anywhere;
+}
+
+.shell-rail__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* ── The organisation switcher ── */
+.shell-org {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.shell-org > .shell-org__name {
+  padding: var(--space-2) var(--space-3);
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.shell-org__button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--space-2);
+  inline-size: 100%;
+  min-block-size: var(--target-primary);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-shell-muted);
+  border-radius: var(--radius-control);
+  background-color: var(--color-shell);
+  color: var(--color-shell-ink);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.shell-org__button:hover {
+  background-color: var(--color-shell-hover);
+}
+
+.shell-org__button .shell-org__name {
+  grid-column: 1;
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.shell-org__action {
+  grid-column: 1;
+  color: var(--color-shell-muted);
+  font-size: var(--font-size-small);
+}
+
+.shell-org__button .ui-icon {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+.shell-org__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  list-style: none;
+}
+
+.shell-org__list[hidden] {
+  display: none;
+}
+
+.shell-org__link {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--target-primary);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-control);
+  color: var(--color-shell-ink);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  overflow-wrap: anywhere;
+}
+
+.shell-org__link:hover {
+  background-color: var(--color-shell-hover);
+  /* a:hover in app/globals.css (0,1,1) would paint it the link colour, navy on navy. */
+  color: var(--color-shell-ink);
+}
+
+.shell-org__link[aria-current='true'] {
+  font-weight: var(--font-weight-semibold);
+  text-decoration: none;
+}
+
+/* ── Print: the page's content only ── */
+@media print {
+  .shell-topbar,
+  .shell-topbar__panel,
+  .shell-public-header,
+  .shell-footer {
+    display: none;
+  }
+
+  .shell {
+    display: block;
+  }
+
+  .shell__main {
+    overflow: visible;
+    max-height: none;
+    padding: 0;
+  }
+}

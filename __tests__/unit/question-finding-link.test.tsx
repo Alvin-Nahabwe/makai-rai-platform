@@ -20,11 +20,19 @@ describe('QuestionFindingLink on S-12 (UX-14, FR-FND-01, FR-FND-02)', () => {
 
   it('FR-FND-01 (screen): an open finding of the question is linked from S-12', () => {
     expect(renderToStaticMarkup(<QuestionFindingLink {...P} openFinding={{ findingId: 'f7' }} canRaise={false} />))
-      .toMatch(/1 open finding from this question[\s\S]*href="\/orgs\/lab\/projects\/p1\/findings\/f7"[^>]*>Open finding</);
+      .toMatch(/<p>This question has an open finding\. <a[^>]*href="\/orgs\/lab\/projects\/p1\/findings\/f7"[^>]*>View the finding<\/a><\/p>/);
   });
 
   it('FR-FND-01 FR-FND-02: a reviewer sees both the open finding and the raise link', () => {
     const r = renderToStaticMarkup(<QuestionFindingLink {...P} openFinding={{ findingId: 'f7' }} canRaise />);
-    expect(r).toContain('Open finding'); expect(r).toContain('Raise a finding about this question');
+    expect(r).toContain('View the finding'); expect(r).toContain('Raise a finding about this question');
+    expect(r).not.toContain('Open finding');
+  });
+
+  it('R4: an open finding that a decision now closes reads "This question has a finding that can now be closed." with the same link', () => {
+    expect(renderToStaticMarkup(<QuestionFindingLink {...P} openFinding={{ findingId: 'f7', closable: true }} canRaise={false} />))
+      .toMatch(/<p>This question has a finding that can now be closed\. <a[^>]*href="\/orgs\/lab\/projects\/p1\/findings\/f7"[^>]*>View the finding<\/a><\/p>/);
+    expect(renderToStaticMarkup(<QuestionFindingLink {...P} openFinding={{ findingId: 'f7' }} canRaise={false} />))
+      .toContain('This question has an open finding.');
   });
 });

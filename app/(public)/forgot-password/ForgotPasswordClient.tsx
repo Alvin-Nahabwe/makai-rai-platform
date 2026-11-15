@@ -1,13 +1,11 @@
 'use client';
 
-import { useState, type CSSProperties, type FormEvent } from 'react';
-import { M21 } from '@/lib/http/messages';
+import { useState, type FormEvent } from 'react';
+import { AUTH_MESSAGE_COPY, FORGOT_COPY } from '@/lib/auth/copy';
 import { useHydrated } from '@/lib/client/useHydrated';
-
-const NOT_SENT = 'Not sent: the request did not reach the server. Check the connection and try again.';
-const SERVER_PROBLEM = 'Not sent: the server had a problem. Try again in a few minutes.';
-
-const TARGET: CSSProperties = { minWidth: '24px', minHeight: '24px' };
+import { Button } from '@/components/ui/Button';
+import { StatusRegion } from '@/components/ui/StatusRegion';
+import { TextInput } from '@/components/ui/TextInput';
 
 export type ForgotState = { kind: 'idle' } | { kind: 'sending' } | { kind: 'sent' } | { kind: 'error'; message: string };
 
@@ -22,10 +20,10 @@ export async function requestResetLink(fetchImpl: typeof fetch, email: string): 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email }),
     });
-    return res.status === 202 ? { kind: 'sent' } : { kind: 'error', message: SERVER_PROBLEM };
+    return res.status === 202 ? { kind: 'sent' } : { kind: 'error', message: FORGOT_COPY.serverProblem };
   } catch {
     // fetch rejects only when no answer came back (offline, a dropped connection).
-    return { kind: 'error', message: NOT_SENT };
+    return { kind: 'error', message: FORGOT_COPY.notReached };
   }
 }
 
@@ -42,13 +40,12 @@ export interface ForgotPasswordViewProps {
 export function ForgotPasswordView(v: ForgotPasswordViewProps) {
   return (
     <>
-      {v.state.kind === 'sent' && <div className="auth-success" role="status">{M21}</div>}
-      {v.state.kind === 'error' && <div className="auth-error" role="alert">{v.state.message}</div>}
+      <StatusRegion message={v.state.kind === 'sent' ? AUTH_MESSAGE_COPY.resetLinkSent : null} />
+      <StatusRegion message={v.state.kind === 'error' ? v.state.message : null} politeness="assertive" tone="error" />
       <form method="post" onSubmit={v.onSubmit}>
-        <label htmlFor="email">Email</label>
-        <input id="email" name="email" type="email" required autoComplete="username" spellCheck={false}
+        <TextInput id="email" name="email" label={FORGOT_COPY.email} type="email" required autoComplete="username" spellCheck={false}
           value={v.email} onChange={(e) => v.onEmail(e.currentTarget.value)} />
-        <button type="submit" className="btn-primary" disabled={v.state.kind === 'sending' || v.hydrated === false} style={TARGET}>Send reset link</button>
+        <Button variant="primary" type="submit" disabled={v.state.kind === 'sending' || v.hydrated === false}>{FORGOT_COPY.submit}</Button>
       </form>
     </>
   );

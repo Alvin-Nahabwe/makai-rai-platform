@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import { test, expect } from '@playwright/test';
 import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
+import { HOME_COPY } from '../lib/home/copy';
 
 /**
  * Sign-in through the real /login form. Accounts are created only from an invitation (FR-ACC-01;
@@ -27,7 +28,7 @@ test.describe('Authentication Flow', () => {
     // (lib/org-dispatch.ts); either way the account's own dashboard answers, signed in.
     const res = await page.goto(`/orgs/${seat.orgSlug}/dashboard`);
     expect(res?.status()).toBe(200);
-    await expect(page.locator('h1')).toContainText('Dashboard');
+    await expect(page.locator('h1')).toContainText(HOME_COPY.heading);
     await context.close();
   });
 });

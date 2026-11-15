@@ -1,46 +1,84 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/Button';
 import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafeWrite';
 import { signInAgainHref } from '@/lib/auth/idle';
 import { refusalOf } from '@/lib/projects/writeRefusal';
+import { PROJECT_WRITE_COPY } from '@/lib/project/write/copy';
+import '@/components/ui/buttonStyles';
 
 const FRESH: RetryState = { requestId: null, sentBody: null };
-const SLOW_LINE = 'Still saving. The connection is slow.';
+const C = PROJECT_WRITE_COPY.unarchive;
+/** The id of the Active list's heading on S-32 (components/project/AllProjectsView.tsx), focusable with tabIndex -1. */
+const ACTIVE_HEADING_ID = 'projects-active';
+
+/** Before a refresh that removes this row: focus goes to the Active heading, while the focused control still exists. */
+function focusActiveHeading(): void {
+  document.getElementById(ACTIVE_HEADING_ID)?.focus();
+}
 
 /**
  * Unarchive on S-32 (FR-PRJ-03, UX-27): POST route 22 with a request id that a Retry repeats. One `role="status"` region
  * is in the page from the first render and is filled, so a screen reader announces the slow, lost and refused lines. A 204,
  * or 409 (another person unarchived it first), refreshes the page; a 401 goes to sign in; a 403 or 404 keeps its line and
  * disables the button without a refresh (the refresh would remove the row's control and the line); a server error offers Retry.
+ *
+ * Focus (SC 2.4.3; ruling L5-4): the pressed button stays, focusable and `aria-busy`, while its own request is in flight
+ * (never `disabled` during its send), and Retry stays, busy, while its own request is in flight. When the answer
+ * arrives focus goes to Retry after a lost connection or a server error, and to this control's container after a refusal
+ * that disables the button. The button is native, in the kit's classes: it needs `aria-label`, which the kit's Button
+ * cannot carry; while its request is in flight it shows the kit's own spinner, the markup the kit's Button writes when busy.
+ *
+ * A success, or a 409 that refreshes, removes this row from Archived: the refreshed page lists the project under Active,
+ * and this control (and whatever in it had focus) is gone. So just before the refresh, while the pressed button or Retry
+ * still exists, focus moves to the page's Active heading (`ACTIVE_HEADING_ID`, AllProjectsView), which outlives the
+ * refresh and is where the project now appears (ruling L5-13).
  */
 export function UnarchiveProjectButton(p: { orgSlug: string; projectId: string; projectName?: string }): ReactElement {
   const router = useRouter();
   const retry = useRef<RetryState>(FRESH);
+  const box = useRef<HTMLSpanElement>(null);
+  const retryButton = useRef<HTMLButtonElement>(null);
+  const inFlight = useRef(false);
+  /** Where focus goes after the next render: set when an answer arrives, used once by the effect below. */
+  const focusNext = useRef<'retry' | 'box' | null>(null);
   const [busy, setBusy] = useState(false);
   const [line, setLine] = useState('');
   const [canRetry, setCanRetry] = useState(false);
   const [stopped, setStopped] = useState(false);
 
+  // A layout effect: focus moves in the same commit that removed the focused control, so no painted frame has it on body.
+  useLayoutEffect(() => {
+    const target = focusNext.current;
+    if (target === null) return;
+    focusNext.current = null;
+    (target === 'retry' ? retryButton.current : box.current)?.focus();
+  });
+
   async function send(): Promise<void> {
-    if (busy) return;
+    if (inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
-    setCanRetry(false);
     setLine('');
     const { requestId, state } = requestIdFor(retry.current, {});
     retry.current = state;
-    const outcome = await sendWrite(`/api/v1/orgs/${p.orgSlug}/projects/${p.projectId}/unarchive`, 'POST', { requestId }, { onSlow: () => setLine(SLOW_LINE) });
+    const outcome = await sendWrite(`/api/v1/orgs/${p.orgSlug}/projects/${p.projectId}/unarchive`, 'POST', { requestId }, { onSlow: () => setLine(C.slow) });
+    inFlight.current = false;
     setBusy(false);
     if (outcome.kind === 'not_saved') {
-      setLine('Not unarchived: connection lost.');   // keep the id: a Retry is answered again if the first request had arrived
+      focusNext.current = 'retry';
+      setLine(C.lost);   // keep the id: a Retry is answered again if the first request had arrived
       setCanRetry(true);
       return;
     }
     if (outcome.kind === 'saved') {
       retry.current = FRESH;
+      focusActiveHeading();
       setLine('');
+      setCanRetry(false);
       router.refresh();
       return;
     }
@@ -49,24 +87,35 @@ export function UnarchiveProjectButton(p: { orgSlug: string; projectId: string; 
       window.location.assign(signInAgainHref(window.location.pathname, window.location.search));   // the session ended: sign in, then come back
     } else if (r.kind === 'stop') {
       retry.current = FRESH;   // the same request would be refused again
+      focusNext.current = 'box';
       setLine(r.line);
       setStopped(true);
+      setCanRetry(false);
     } else if (r.kind === 'refresh') {
-      retry.current = FRESH;
+      retry.current = FRESH;   // 409: another person unarchived it first; the refreshed page lists it under Active
+      focusActiveHeading();
       setLine('');
+      setCanRetry(false);
       router.refresh();
     } else {
-      setLine('Not unarchived: something went wrong. Please try again.');   // keep the id
+      focusNext.current = 'retry';
+      setLine(C.failed);   // keep the id
       setCanRetry(true);
     }
   }
 
   return (
-    <span>
+    <span ref={box} tabIndex={-1}>
       {canRetry ? (
-        <button type="button" className="btn btn--secondary btn--small" onClick={() => { void send(); }}>Retry</button>
+        <Button ref={retryButton} variant="secondary" size="compact" busy={busy} onClick={() => { void send(); }}>{C.retry}</Button>
       ) : (
-        <button type="button" className="btn btn--secondary btn--small" disabled={busy || stopped} aria-label={p.projectName === undefined ? undefined : `Unarchive ${p.projectName}`} onClick={() => { void send(); }}>Unarchive</button>
+        <button
+          type="button" className="ui-button ui-button--secondary ui-button--compact" disabled={stopped} aria-busy={busy ? true : undefined}
+          aria-label={p.projectName === undefined ? undefined : C.named(p.projectName)} onClick={() => { void send(); }}
+        >
+          {busy ? <span className="ui-button__spinner" aria-hidden="true" /> : null}
+          {C.button}
+        </button>
       )}{' '}
       <span role="status">{line}</span>
     </span>

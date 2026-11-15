@@ -9,6 +9,10 @@ import { membershipsForUser } from '@/lib/data/preauth';
 import { resolveOrgDispatch } from '@/lib/org-dispatch';
 import IdleWarning from '@/components/layout/IdleWarning';
 import { MAIN_CONTENT_ID } from '@/components/layout/SkipLink';
+import { ORG_COPY } from '@/lib/org/copy';
+import { pageTitle } from '@/lib/ui/title';
+
+export const metadata = { title: pageTitle(ORG_COPY.titles.chooser) };
 
 /**
  * The active org is a URL segment now, not ambient session state (Task 6).
@@ -57,8 +61,8 @@ export default async function LandingPage() {
         <div className="auth-card" style={{ maxWidth: 460, margin: '3rem auto' }}>
           {hasOrgs ? (
             <>
-              <h1>Choose an organisation</h1>
-              <nav aria-label="Your organisations" className="sidebar-nav">
+              <h1>{ORG_COPY.chooser.heading}</h1>
+              <nav aria-label={ORG_COPY.chooser.listLabel} className="sidebar-nav">
                 {dispatch.orgs.map((org) => (
                   <Link key={org.slug} href={`/orgs/${org.slug}/dashboard`} className="chooser-link">
                     {org.name}
@@ -68,8 +72,8 @@ export default async function LandingPage() {
             </>
           ) : (
             <>
-              <h1>Welcome</h1>
-              <p className="text-muted">You are not in an organisation yet: ask its owner for an invitation.</p>
+              <h1>{ORG_COPY.chooser.emptyHeading}</h1>
+              <p className="text-muted">{ORG_COPY.chooser.emptyBody}</p>
             </>
           )}
         </div>

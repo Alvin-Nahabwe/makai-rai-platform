@@ -3,18 +3,12 @@ import { invitationByToken } from '@/lib/data/preauth';
 import { tryResolveIdentity } from '@/lib/auth/identity';
 import { currentLegalText } from '@/lib/legal/registry';
 import { ACCEPTED_KINDS } from '@/types/legal';
-import type { OrgRole } from '@prisma/client';
 import { formatDay } from '@/lib/format/dates';
-import { M23 } from '@/lib/http/messages';
+import { INVITATION_PAGE_COPY, ORG_COPY, roleWithArticle } from '@/lib/org/copy';
+import { pageTitle } from '@/lib/ui/title';
 import AcceptInvitationClient from './AcceptInvitationClient';
 
-export const metadata: Metadata = { title: 'Invitation - MAK-AI RAI Platform' };
-
-/** "Amina N. invited you as an assessor. The invitation expires on 4 Nov 2026." (W-11, SRS line 2218). */
-function invitedLine(inviterName: string, role: OrgRole, expiresOn: string): string {
-  const article = /^[aeiou]/.test(role) ? 'an' : 'a';
-  return `${inviterName} invited you as ${article} ${role}. The invitation expires on ${formatDay(expiresOn)}.`;
-}
+export const metadata: Metadata = { title: pageTitle(ORG_COPY.titles.invitation) };
 
 /**
  * Public preview + acceptance entry point for an invitation link
@@ -26,7 +20,7 @@ function invitedLine(inviterName: string, role: OrgRole, expiresOn: string): str
  *
  * `invitationByToken` fails closed (returns `null` for an expired, used,
  * revoked, replaced or unknown token, and for an archived organisation,
- * indistinguishably — lib/data/preauth.ts), so an unusable link renders M-23
+ * indistinguishably — lib/data/preauth.ts), so an unusable link renders its heading and M-23
  * alone: no organisation, role or inviter name (FR-ACC-01, W-11 note 1).
  * Otherwise S-04 (W-11): who invited the person, as what, until when, and
  * the client's three branches by who is signed in.
@@ -52,8 +46,8 @@ export default async function InvitationPage({
     return (
       <div className="auth-container">
         <div className="auth-card">
-          <h1>Invitation</h1>
-          <p>{M23}</p>
+          <h1>{INVITATION_PAGE_COPY.unusableHeading}</h1>
+          <p>{INVITATION_PAGE_COPY.unusable}</p>
         </div>
       </div>
     );
@@ -71,8 +65,8 @@ export default async function InvitationPage({
   return (
     <div className="auth-container">
       <div className="auth-card">
-        <h1>You are invited to {invitation.org.name}</h1>
-        <p>{invitedLine(invitation.invitedBy.name, invitation.role, expiresOn)}</p>
+        <h1>{INVITATION_PAGE_COPY.heading(invitation.org.name)}</h1>
+        <p>{INVITATION_PAGE_COPY.invitedLine(invitation.invitedBy.name, roleWithArticle(invitation.role), formatDay(expiresOn))}</p>
         <AcceptInvitationClient
           token={token}
           invitedEmail={invitation.email}

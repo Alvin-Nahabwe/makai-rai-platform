@@ -16,26 +16,26 @@ describe('upload states', () => {
   it('M-13 M-14 M-15 M-16 M-17 M-19: each upload state shows its message', () => {
     expect(statusLine(item({ state: 'uploading', loaded: 800_000, size: 2_400_000 })).text).toBe('Uploading costing.xlsx: 0.8 of 2.4 MB.');
     expect(statusLine(item({ state: 'uploaded', size: 412_000 })).text).toBe('Uploaded costing.xlsx (412 KB).');
-    expect(statusLine(item({ state: 'failed', failure: 'too_large' })).text).toBe('Not uploaded: costing.xlsx is larger than 10 MB. Add a link to where it is kept instead.');
-    expect(statusLine(item({ state: 'failed', failure: 'wrong_type' })).text).toBe('Not uploaded: costing.xlsx is not a PDF, PNG, JPEG, Office document or ZIP file.');
-    expect(statusLine(item({ state: 'failed', failure: 'cut_off' }))).toMatchObject({ text: 'Not uploaded: connection lost.', retry: true });
-    expect(statusLine(item({ state: 'failed', failure: 'rate_limited' }))).toMatchObject({ text: 'Not uploaded: you can upload 10 files a minute. Wait a minute, then retry.', retry: true });
-    expect(statusLine(item({ state: 'failed', failure: 'storage_full' })).text).toBe("This organisation's storage is full. Attach a link instead.");
-    expect(statusLine(item({ state: 'failed', failure: 'archived' })).text).toBe('Not saved: this project is archived. Owners and admins can unarchive it.');
+    expect(statusLine(item({ state: 'failed', failure: 'too_large' })).text).toBe('Not uploaded. costing.xlsx is larger than 10 MB. Add a link to where it is kept instead.');
+    expect(statusLine(item({ state: 'failed', failure: 'wrong_type' })).text).toBe('Not uploaded. costing.xlsx is not a PDF, PNG, JPEG, Word (.docx), Excel (.xlsx), PowerPoint (.pptx) or ZIP file.');
+    expect(statusLine(item({ state: 'failed', failure: 'cut_off' }))).toMatchObject({ text: 'Not uploaded. The connection was lost. Select Retry upload.', retry: true });
+    expect(statusLine(item({ state: 'failed', failure: 'rate_limited' }))).toMatchObject({ text: 'Not uploaded. You can upload 10 files a minute. Wait a minute, then retry.', retry: true });
+    expect(statusLine(item({ state: 'failed', failure: 'storage_full' })).text).toBe("Your organisation's storage is full. Add a link instead.");
+    expect(statusLine(item({ state: 'failed', failure: 'archived' })).text).toBe('Not uploaded. This project is archived. An Owner or Admin can unarchive it.');
   });
   it('NFR-SEC-11 E14: a status line returns the name apart from the words around it, so the view can put it in bdi', () => {
     expect(statusLine(item({ state: 'uploading', loaded: 800_000 }))).toEqual({
       before: 'Uploading ', name: 'costing.xlsx', after: ': 0.8 of 2.4 MB.', text: 'Uploading costing.xlsx: 0.8 of 2.4 MB.', retry: false,
     });
-    expect(statusLine(item({ state: 'failed', failure: 'cut_off' }))).toMatchObject({ before: 'Not uploaded: connection lost.', name: '', after: '' });
+    expect(statusLine(item({ state: 'failed', failure: 'cut_off' }))).toMatchObject({ before: 'Not uploaded. The connection was lost. Select Retry upload.', name: '', after: '' });
     expect(notUploadedLine('invoice\u202Efdp.pdf')).toEqual({
       before: '', name: 'invoicefdp.pdf', after: ' was not uploaded before the page closed. Choose the file again.',
       text: 'invoicefdp.pdf was not uploaded before the page closed. Choose the file again.',
     });
   });
   it('M-08 M-09 (contract: use the messages verbatim): a refusal for a signed-out session or a changed role shows its message', () => {
-    expect(statusLine(item({ state: 'failed', failure: 'signed_out' })).text).toBe('Not saved: you have been signed out. Your answer is kept on this device. Sign in again to save it.');
-    expect(statusLine(item({ state: 'failed', failure: 'role_changed' })).text).toBe('Not saved: your role in this organisation no longer allows this. Your answer is kept on this device. Ask an owner or admin.');
+    expect(statusLine(item({ state: 'failed', failure: 'signed_out' })).text).toBe('Not uploaded. You have been signed out. Sign in again, then add the file again.');
+    expect(statusLine(item({ state: 'failed', failure: 'role_changed' })).text).toBe('Not uploaded. Your role no longer allows this. Ask an Owner or Admin.');
   });
   it('RE-3 NFR-SEC-11: uploadState reports names without bidi controls', () => {
     expect(uploadState([item({ fileName: 'a\u202Eb.pdf', state: 'uploading' }), item({ fileName: 'c\u2066d.pdf', state: 'failed', failure: 'cut_off' })]))
@@ -51,7 +51,7 @@ describe('upload states', () => {
     expect(notUploadedLine('costing.xlsx').text).toBe('costing.xlsx was not uploaded before the page closed. Choose the file again.');
   });
   it('NFR-PERF-06: a file over 2 MB gets its size and the link suggestion; a smaller one none', () => {
-    expect(largeFileNote(2_400_000)).toBe('2.4 MB. Large files are slow on poor connections; you can link to where the file is kept instead.');
+    expect(largeFileNote(2_400_000)).toBe('This file is large (2.4 MB) and may upload slowly. You can add a link to it instead.');
     expect(largeFileNote(2_000_000)).toBeNull();
   });
   it('UX-30 (helper): uploading and failed names are reported for the Save-wait rule', () => {

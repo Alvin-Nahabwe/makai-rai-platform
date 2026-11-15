@@ -166,6 +166,14 @@ function routeTemplate(file: string): string {
 
 function whoFor(file: string): Who {
   if (file.startsWith('app/(public)/')) return 'anonymous';
+  // The development gallery (app/dev/ui-kit) sits outside every route group and needs no sign-in. This server serves
+  // it because Playwright sets MAKRAI_TEST_SEAMS=1 (lib/ui/devGallery.ts); the production host answers 404. It is
+  // swept, not skipped: it mounts the components/ui components the gallery shows, so the policy is checked against
+  // them in one visit (a component the gallery does not show, such as InlineConfirm today, is not covered by it).
+  if (file.startsWith('app/dev/')) return 'anonymous';
+  // Help (plan 1A Task 12) sits outside every route group and is public: it is swept as a signed-out visitor sees it.
+  // The signed-in shell it shows a member is the shell every signed-in page shows, which the owner's sweep covers.
+  if (file.startsWith('app/help/')) return 'anonymous';
   if (file.startsWith('app/(authenticated)/admin/')) return 'admin';
   if (file === 'app/(authenticated)/acceptances/page.tsx') return 'unaccepted';
   if (file === 'app/page.tsx' || file.startsWith('app/(authenticated)/')) return 'owner';

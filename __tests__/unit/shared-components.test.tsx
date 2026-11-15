@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { InlineConfirm } from '@/components/ui/InlineConfirm';
 import { ArchivedBanner } from '@/components/project/ArchivedBanner';
+import { PROJECT_COPY } from '@/lib/project/copy';
 
 const noop = () => {};
 
@@ -12,14 +13,15 @@ describe('InlineConfirm', () => {
     expect(html).toMatch(/<button[^>]*>Withdraw document<\/button>/); expect(html).not.toMatch(/>OK</);
   });
 
-  it('UX-29 (helper): the confirm button is disabled while busy or when canConfirm is false, and the cancel button never is', () => {
+  it('UX-29 (helper): busy, the confirm button is aria-busy and not disabled; canConfirm false disables it, busy or not; the cancel button is never either', () => {
     const base = { objectName: 'Maternal-risk triage', consequence: 'Nothing in it can be changed.', actionLabel: 'Archive project', onConfirm: noop, onCancel: noop };
-    const confirmOf = (html: string) => /<button[^>]*>Archive project<\/button>/.exec(html)![0];
+    const confirmOf = (html: string) => /<button[^>]*>(?:<span[^>]*><\/span>)?Archive project<\/button>/.exec(html)![0];
     const cancelOf = (html: string) => /<button[^>]*>Cancel<\/button>/.exec(html)![0];
-    for (const [props, disabled] of [[{}, false], [{ busy: true }, true], [{ canConfirm: false }, true], [{ canConfirm: true }, false]] as const) {
+    for (const [props, busy, disabled] of [[{}, false, false], [{ busy: true }, true, false], [{ canConfirm: false }, false, true], [{ canConfirm: true }, false, false], [{ busy: true, canConfirm: false }, true, true]] as const) {
       const html = renderToStaticMarkup(<InlineConfirm {...base} {...props} />);
+      expect(/aria-busy="true"/.test(confirmOf(html)), JSON.stringify(props)).toBe(busy);
       expect(/disabled/.test(confirmOf(html)), JSON.stringify(props)).toBe(disabled);
-      expect(/disabled/.test(cancelOf(html)), JSON.stringify(props)).toBe(false);
+      expect(/disabled|aria-busy/.test(cancelOf(html)), JSON.stringify(props)).toBe(false);
     }
   });
 
@@ -32,7 +34,7 @@ describe('InlineConfirm', () => {
     expect(html).not.toMatch(/<dialog|aria-modal|role="dialog"|role="alertdialog"/);
     expect(html).toContain('<input type="password" name="password"/>');
     // a confirm button that submits nothing by itself
-    expect(html).toMatch(/<button type="button"[^>]*>Delete account<\/button>/);
+    expect(html).toMatch(/<button [^>]*type="button"[^>]*>Delete account<\/button>/);
   });
 
   it('UX-29 (helper): the group is named by the object, so a screen reader hears what is being confirmed', () => {
@@ -50,6 +52,8 @@ describe('ArchivedBanner', () => {
 
   it('UX-31 FR-PRJ-03 (helper): an archived project shows the exact sentence in a status region', () => {
     const html = renderToStaticMarkup(<ArchivedBanner archived />);
-    expect(html).toMatch(/^<div[^>]*role="status"[^>]*>This project is archived\. Nothing in it can be changed\. Owners and admins can unarchive it from All projects\.<\/div>$/);
+    // the kit's Banner is not a live region, so a wrapper keeps role="status"; the sentence is the banner body's only text
+    expect(html).toMatch(/^<div role="status"><div class="ui-banner ui-banner--archived"><span class="ui-banner__icon">[\s\S]*?<\/span><div class="ui-banner__body">([^<]*)<\/div><\/div><\/div>$/);
+    expect(/<div class="ui-banner__body">([^<]*)</.exec(html)?.[1]).toBe(PROJECT_COPY.archivedBanner);
   });
 });

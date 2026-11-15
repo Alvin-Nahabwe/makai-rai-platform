@@ -11,7 +11,7 @@ import { expect, test } from './helpers/loopbackOnly';
 import { addAcceptedRisk, addFinding, addMitigationVersion, addProject, buildOrg, type OrgFixture } from '../__tests__/helpers/recordFixture';
 import { testDb } from '../__tests__/helpers/db';
 import type { Stage } from '../types/record';
-import { expectCountsAsWholeNumbersPerStage, expectNeutralStatusLabels, expectNoCrossStageTotal } from './helpers/noScore';
+import { expectCountsAsWholeNumbersPerStage, expectStatusMarksInk, expectNoCrossStageTotal } from './helpers/noScore';
 
 const COUNTS: Record<Stage, number> = { 'pre-processing': 37, 'in-processing': 23, 'post-processing': 11 };
 const STAGES = Object.keys(COUNTS) as Stage[];
@@ -52,8 +52,9 @@ test.beforeAll(async () => {
     for (let i = 0; i < plain; i += 1) await addFinding(fx, projectId, { stage, source: 'team' });
   }
   await addMitigationVersion(fx, (await addFinding(fx, projectId, { stage: 'in-processing', source: 'team' })).id, { status: 'planned', owner: 'owner', dueDate: '2099-01-01' });
-  // One accepted risk, on a finding that is then closed, gives S-10 something recorded, so it has status labels to check
-  // (FIX-6). A closed finding is in no open count.
+  // One accepted risk, on a finding that is then closed, gives S-10's "Recorded so far" its accepted-risk line (FIX-6). A
+  // closed finding is in no open count. The status label S-10's ink check reads here is the planned mitigation's above
+  // (this project has no decisions, so no tally shapes); the tally's shapes are checked on S-10 in prj-screens.spec.ts.
   await addAcceptedRisk(fx, (await addFinding(fx, projectId, { stage: 'pre-processing', source: 'team' })).id, {});
 });
 
@@ -71,20 +72,20 @@ test('FR-RM-04 UX-06 UX-07: S-08, S-10, S-11 and S-14 print the stage counts as 
     await page.goto(path);
     await expectCountsAsWholeNumbersPerStage(page, sentinels);
     await expectNoCrossStageTotal(page, sentinels);
-    await expectNeutralStatusLabels(page);
+    await expectStatusMarksInk(page);
     await expectNoOtherSums(page, path);
-    if (path.endsWith(projectId)) {                                                // S-10's to-do line reads the open count itself
-      await expect(page.locator('[data-stage="pre-processing"] .stage-column__todo-line')).toContainText('37 open findings');
+    if (path.endsWith(projectId)) {                                                // S-10's "Still open" reads the open count itself, as a link
+      await expect(page.locator('[data-stage="pre-processing"]').getByRole('link', { name: '37 open findings', exact: true })).toBeVisible();
     }
   }
 
   for (const stage of STAGES) {                                                   // S-11 of each stage
     await page.goto(`${base}/projects/${projectId}/stages/${stage}`);
-    // The helpers refuse a sentinel set with an empty stage (e2e/helpers/noScore.ts:146), so a one-stage page is checked
+    // The helpers refuse a sentinel set with an empty stage (e2e/helpers/noScore.ts:149-153), so a one-stage page is checked
     // as e2e/stage-workspace.spec.ts checks S-11, with the count read from its own words ("<n> open findings",
     // components/followup/StageFollowUpCounts.tsx:16): question ids such as Q-IP-23 also carry the digits.
-    expect(await page.locator('main .status-label').count(), `S-11 ${stage}: one label per question row`).toBe(questionsIn(stage));
-    await expectNeutralStatusLabels(page);
+    expect(await page.locator('main [data-question-id] .ui-mark').count(), `S-11 ${stage}: one status mark per question row`).toBe(questionsIn(stage));
+    await expectStatusMarksInk(page);
     await expect(page.locator('main').getByRole('link', { name: `${COUNTS[stage]} open findings`, exact: true })).toBeVisible();
     const text = (await page.locator('main').innerText()).replace(/\s+/g, ' ');
     expect(text, `S-11 ${stage}: its count as a whole number`).toMatch(new RegExp(`(?<![0-9.,])${COUNTS[stage]} open findings`));
@@ -97,6 +98,6 @@ test('FR-RM-04 UX-06 UX-07: S-08, S-10, S-11 and S-14 print the stage counts as 
   // S-08 last, so a failure here does not hide the others.
   await page.goto(`${base}/dashboard`);                                          // S-08
   await expectNoCrossStageTotal(page, sentinels);
-  await expectNeutralStatusLabels(page);
+  await expectStatusMarksInk(page);
   await expectNoOtherSums(page, 'S-08');
 });

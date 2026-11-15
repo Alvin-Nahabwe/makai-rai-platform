@@ -1,6 +1,7 @@
 import { test, expect, type Browser, type BrowserContext, type Page, type Route } from '@playwright/test';
 import fs from 'node:fs';
 import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from './fixtures/manifest';
+import { NOT_FOUND_COPY } from '../lib/errors/not-found/copy';
 
 /**
  * UX-43 (SRS 7.6.1, line 2645; WCAG 2.2.1): two minutes before the session cookie's expiry the
@@ -70,7 +71,7 @@ async function reachWarning(page: Page, context: BrowserContext): Promise<number
 async function open(page: Page, url: string) {
   const response = await page.goto(url);
   await page.waitForFunction(() => {
-    const dialog = document.querySelector('dialog.idle-warning');
+    const dialog = document.querySelector('.shell-idle dialog.ui-dialog');
     return dialog !== null && Object.keys(dialog).some((key) => key.startsWith('__reactProps$'));
   });
   await page.waitForTimeout(300);
@@ -116,12 +117,12 @@ test.describe('idle-sign-out warning on the 12-hour server', () => {
       await expect(dialog).toContainText(WARNING, SHORT);
       await expect(stayButton(page)).toBeFocused();
       // A modal dialog sits in the middle of the window. The page's reset of margins once left it in the top-left corner,
-      // where it covered the sidebar's first items and read as a stray box.
+      // where it covered the rail's first items and read as a stray box.
       const box = (await dialog.boundingBox())!;
       const viewport = page.viewportSize()!;
       expect(Math.abs(box.x + box.width / 2 - viewport.width / 2), 'horizontal centre').toBeLessThanOrEqual(2);
       expect(Math.abs(box.y + box.height / 2 - viewport.height / 2), 'vertical centre').toBeLessThanOrEqual(2);
-      const seconds = Number(await page.locator('dialog.idle-warning').getAttribute('data-seconds-left'));
+      const seconds = Number(await page.locator('.shell-idle').getAttribute('data-seconds-left'));
       expect(Number.isInteger(seconds) && seconds > 0 && seconds <= 43200, String(seconds)).toBe(true);
     } finally {
       await context.close();
@@ -280,7 +281,8 @@ test.describe('idle-sign-out warning on the 12-hour server', () => {
         held = route;
       });
       await stayButton(page).click();
-      await expect(stayButton(page)).toBeDisabled(); // while the read is in flight
+      // While the read is in flight the button is busy (the kit's Button): it keeps focus and a press does nothing.
+      await expect(stayButton(page)).toHaveAttribute('aria-busy', 'true');
       await jumpPastTimers(page, 130_000);
       await expect(page.getByRole('dialog')).toHaveCount(0, SHORT); // the schedule closes it at the deadline
       await expect.poll(() => held !== undefined, SHORT).toBe(true);
@@ -376,7 +378,8 @@ test.describe('idle-sign-out warning on the 12-hour server', () => {
         held = route;
       });
       await stayButton(page).click();
-      await expect(stayButton(page)).toBeDisabled(); // while the read is in flight
+      // While the read is in flight the button is busy (the kit's Button): it keeps focus and a press does nothing.
+      await expect(stayButton(page)).toHaveAttribute('aria-busy', 'true');
       await expect.poll(() => held !== undefined, SHORT).toBe(true);
 
       await page.waitForTimeout(1500); // so the new expiry differs from the old
@@ -441,9 +444,12 @@ test.describe('idle-sign-out warning on the 12-hour server', () => {
       ] as const) {
         const response = await context.request.get(url);
         expect(response.status(), url).toBe(status);
-        const dialogs = [...(await response.text()).matchAll(/<dialog\b[^>]*\bclass="idle-warning"[^>]*>/g)];
-        expect(dialogs, url).toHaveLength(1);
-        const seconds = Number(/data-seconds-left="(\d+)"/.exec(dialogs[0][0])?.[1]);
+        const html = await response.text();
+        // One wrapper carrying the seconds, holding the one warning dialog (the kit's).
+        const wrappers = [...html.matchAll(/<div class="shell-idle" data-seconds-left="(\d+)">/g)];
+        expect(wrappers, url).toHaveLength(1);
+        expect([...html.matchAll(/<dialog\b[^>]*\bclass="ui-dialog"[^>]*>/g)], url).toHaveLength(1);
+        const seconds = Number(wrappers[0][1]);
         expect(Number.isInteger(seconds) && seconds >= 1 && seconds <= 43200, `${url} ${seconds}`).toBe(true);
       }
     } finally {
@@ -453,10 +459,17 @@ test.describe('idle-sign-out warning on the 12-hour server', () => {
     // A request with no cookie: S-31 and the sign-in page carry no dialog.
     const signedOutNotFound = await request.get('/no-such-page');
     expect(signedOutNotFound.status()).toBe(404);
-    expect(await signedOutNotFound.text()).not.toContain('idle-warning');
+    const signedOutHtml = await signedOutNotFound.text();
+    // Not vacuous: the page is the one the signed-in visit above read the wrapper from.
+    expect(signedOutHtml).toContain(NOT_FOUND_COPY.body);
+    expect(signedOutHtml).not.toContain('shell-idle');
+    expect(signedOutHtml).not.toContain('data-seconds-left');
     const login = await request.get('/login');
     expect(login.status()).toBe(200);
-    expect(await login.text()).not.toContain('idle-warning');
+    const loginHtml = await login.text();
+    expect(loginHtml).toContain('shell-public-header');
+    expect(loginHtml).not.toContain('shell-idle');
+    expect(loginHtml).not.toContain('data-seconds-left');
   });
 
   test('UX-43 (S-31): a signed-in visit to an unknown address shows the warning on schedule', async ({ browser }) => {
@@ -478,18 +491,17 @@ test.describe('idle-sign-out warning on the 12-hour server', () => {
   test("UX-43 (S-31): another organisation's address, refused inside the signed-in layout, carries exactly one idle dialog and one main", async ({ browser }) => {
     // notFound() thrown by app/(authenticated)/orgs/[slug]/layout.tsx is caught below app/(authenticated)/layout.tsx,
     // so S-31 renders inside that layout and not in place of it. Without app/(authenticated)/not-found.tsx the root page
-    // rendered there too (measured on Next 16.4.2 in dev: two dialogs, two main landmarks and the sidebar). The browser
+    // rendered there too (measured on Next 16.4.2 in dev: two dialogs, two main landmarks and the sidebar, now the rail). The browser
     // must end up with the layout's one warning and the layout's one main, not two of each.
     const { otherSlug, context, page } = await ownerPage(browser);
     try {
       const response = await open(page, `/orgs/${otherSlug}/dashboard`);
       expect(response!.status()).toBe(404);
-      await expect(page.locator('dialog.idle-warning')).toHaveCount(1);
+      await expect(page.locator('.shell-idle dialog.ui-dialog')).toHaveCount(1);
+      await expect(page.locator('dialog')).toHaveCount(1);
       await expect(page.locator('main')).toHaveCount(1);
-      await expect(page.locator('main')).toContainText(
-        'We cannot find this page, or you do not have access to it. If someone sent you this link, ask them to check it or to invite you.',
-      );
-      await expect(page.locator('aside.sidebar')).toHaveCount(1);
+      await expect(page.locator('main')).toContainText(NOT_FOUND_COPY.body);
+      await expect(page.locator('.shell-rail')).toHaveCount(1);
     } finally {
       await context.close();
     }

@@ -18,6 +18,14 @@ describe('evidence link and name helpers', () => {
     expect(() => parseLinkEvidenceBody({ requestId: R, kind: 'link', url: 'https://e.org/' + 'a'.repeat(2035), label: null })).toThrow(expect.objectContaining({ status: 422 }));
     expect(() => parseLinkEvidenceBody({ requestId: R, kind: 'link', url: 'https://e.org/', label: 'x'.repeat(201) })).toThrow(expect.objectContaining({ status: 422 }));
   });
+  it('B#377 B#379: a missing request id and a long name for the link carry the audited field messages', () => {
+    expect(() => parseLinkEvidenceBody({ kind: 'link', url: 'https://e.org/', label: null }))
+      .toThrow(expect.objectContaining({ status: 422, extra: { fields: [{ field: 'requestId', message: 'Something went wrong. Reload the page and try again.' }] } }));
+    expect(() => parseLinkEvidenceBody({ requestId: R, kind: 'link', url: 'https://e.org/', label: 'x'.repeat(201) }))
+      .toThrow(expect.objectContaining({ status: 422, extra: { fields: [{ field: 'label', message: 'Use 200 characters or fewer for the name.' }] } }));
+    expect(() => parseLinkEvidenceBody({ requestId: R, kind: 'link', url: 'https://e.org/', label: 7 }))
+      .toThrow(expect.objectContaining({ status: 422, extra: { fields: [{ field: 'label', message: 'Use 200 characters or fewer for the name.' }] } }));
+  });
   it('M-13: the upload pair is in MB with one decimal', () => {
     expect(formatMbPair(800_000, 2_400_000)).toEqual({ x: '0.8', y: '2.4' });
   });

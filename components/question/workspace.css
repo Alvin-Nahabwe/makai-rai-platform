@@ -1,0 +1,146 @@
+/*
+ * The question page's frame (app/(authenticated)/.../questions/[questionId]/page.tsx; plan 1C decision C1, cut to
+ * slice 1): the strip, the question as the page's h1 with its code line, and two columns, the main one (the question,
+ * the current decision, the seal note, the form) and the guide one (the guidance aside, the finding link, the
+ * suggestions). Role tokens and spaces only, so both themes hold.
+ */
+
+/* The strip: Previous question, the position, Next question, All questions. */
+.question-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: center;
+  margin-block-end: var(--space-4);
+}
+
+/* One column, in DOM order: the main column, the guide column, then the stage's questions in their short form. */
+.question-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "main"
+    "guide"
+    "route";
+  gap: var(--space-6);
+  align-items: start;
+  overflow-wrap: break-word;
+}
+
+.question-workspace__main {
+  grid-area: main;
+  min-width: 0;
+}
+
+.question-workspace__guide {
+  grid-area: guide;
+  min-width: 0;
+}
+
+/* The stage's questions (components/question/RouteColumn.tsx): last in the DOM at every width, placed here. */
+.question-workspace__route {
+  grid-area: route;
+  min-width: 0;
+}
+
+/* Each region starts clear of the one above it: the current decision under the question, the form under the current
+   decision, and in the guide column the finding link and the suggestions under the guidance. */
+.question-workspace__main > section + section,
+.question-workspace__guide > * + * {
+  margin-block-start: var(--space-6);
+}
+
+/* The read-only view (plan 1C Task 7): the one line that says why there is no form sits between the open work and the
+   seal note, clear of both. */
+.question-workspace__main > section + [data-permission-note],
+.question-workspace__main > [data-permission-note] + section {
+  margin-block-start: var(--space-6);
+}
+
+/* The reason in the read-only view is a quotation of what the team wrote. */
+.current-decision__reason {
+  margin: var(--space-2) 0;
+  padding-inline-start: var(--space-4);
+  border-inline-start: 3px solid var(--color-border-container);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+/*
+ * Two columns once the main one keeps at least 30rem beside a column of 16rem and the 1.5rem gap: 47.5rem (760px) of
+ * content. From 1024px the window also holds the rail (248px), the main area's padding (2 x 2rem), the page's padding
+ * (2 x 2rem) and, where scroll bars take space, the main area's scroll bar (15px in Chromium on Linux, 17px on
+ * Windows): 760 + 248 + 64 + 64 + 17 = 1153px, so 72.5rem (1160px) with a few pixels to spare. Below it, one column in
+ * DOM order. e2e/question-frame.spec.ts measures the columns either side of it.
+ *
+ * THE OWNER'S CHOICE, ONE RULE (decision "Route column", 21:51 EAT 14 November 2026): from 72.5rem to under 90rem the
+ * stage's questions are the column on the left, beside the question and its form, and the guidance drops below the
+ * form. The other arrangement, the guidance beside the form and the stage's questions below both, is this one edit:
+ *     grid-template-columns: minmax(0, 2fr) minmax(16rem, 1fr);
+ *     grid-template-areas: "main guide" "route route";
+ * (and QuestionContent.css's jump link query then becomes (width >= 72.5rem)).
+ */
+@media (72.5rem <= width < 90rem) {
+  .question-workspace {
+    grid-template-columns: minmax(16rem, 1fr) minmax(0, 2fr);
+    /* A column taller than the form gives its extra height to the guidance's row, never a gap above the guidance. */
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      "route main"
+      "route guide";
+  }
+}
+
+/*
+ * Three columns from 90rem (1440px): the stage's questions, the question with its form, the guidance. 1440 less the rail,
+ * the paddings and a scroll bar leaves 1049px; less two gaps, 1001px, which keeps two side columns of 16rem and the main
+ * one above 30rem.
+ */
+@media (width >= 90rem) {
+  .question-workspace {
+    grid-template-columns: minmax(16rem, 1fr) minmax(0, 2fr) minmax(16rem, 1fr);
+    grid-template-areas: "route main guide";
+  }
+}
+
+/* The question in words: the h2 step of the type ramp, so the longest question still leaves the form's first field in
+   the first view at 1280 by 900. */
+.question-frame__title {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-h2);
+  overflow-wrap: break-word;
+}
+
+/* The code line "{Q-ID} · {module}", directly under the h1. */
+.question-frame__code {
+  margin: 0 0 var(--space-4);
+  font-size: var(--font-size-small);
+  color: var(--color-ink-muted);
+}
+
+/*
+ * The way on at the foot of the main column, after the form (workshop walk S9): "Next question: {its words}" (or the
+ * sentence that this is the stage's last question), then All questions. Clear of the form above it; the two items apart
+ * and wrapping at 320px; each link a target of at least 24 by 24 CSS px (SC 2.5.8). At 768px and below the page reserves
+ * the fixed save bar's height under its content (DecisionForm.css), so the foot scrolls clear of the bar.
+ */
+.question-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-6);
+  margin: var(--space-8) 0 0;
+  overflow-wrap: anywhere;
+}
+
+.question-foot > * {
+  min-width: 0;
+}
+
+.question-foot a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--target-min);
+  min-inline-size: var(--target-min);
+  padding-block: 2px;
+}

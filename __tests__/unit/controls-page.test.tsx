@@ -6,6 +6,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import ControlsPage from '@/app/(authenticated)/explore/controls/page';
 import { runningContent } from '@/lib/content/loader';
+import { GUIDANCE_COPY } from '@/lib/guidance/copy';
+import { TERM_CONTROL } from '@/lib/vocabulary/terms';
 
 vi.mock('@/lib/content/resources', async () => {
   const { RES } = await import('../helpers/suggestionsFixture');
@@ -31,14 +33,25 @@ describe('S-27, the controls page', () => {
     const c = runningContent();
     const n = (t: string) => [...c.controls.values()].filter((k) => k.type === t).length;
     expect(html).toContain('<h1>Controls</h1>');
-    expect(html).toContain(`${c.controls.size} controls`);
-    for (const [t, w] of [['technical', 'Technical'], ['procedural', 'Procedural'], ['informational', 'Informational']] as const) {
-      expect(html).toContain(`>${w} (${n(t)})</h2>`);
+    expect(html).toContain(GUIDANCE_COPY.controls.count(c.controls.size));
+    for (const t of ['technical', 'procedural', 'informational'] as const) {
+      const { label, line } = GUIDANCE_COPY.controls.types[t];
+      expect(html).toMatch(new RegExp(`>${GUIDANCE_COPY.controls.section(label, n(t)).replace(/[()]/g, '\\$&')}</h2><p[^>]*>${line}</p>`));
     }
     expect(html.match(/<article class="ctl-card"/g)).toHaveLength(c.controls.size);
     expect(html).toContain('href="/explore/framework#area-card-PP-01"');
-    expect(html).toContain('Risk areas:');
+    expect(html).toContain(GUIDANCE_COPY.controls.riskAreas);
     expect(html).not.toContain('<button');
+  });
+
+  // CONSOLIDATED section 4 (D AB45-AB47, EX19): About's "Free toolkits" section is this page's introduction now.
+  it("UX-13 UX-03: S-27 opens with the line that took over the About page's free toolkits section", () => {
+    const html = renderToStaticMarkup(<ControlsPage />);
+    const intro = GUIDANCE_COPY.controls.intro;
+    expect(intro.startsWith(`${TERM_CONTROL.definition} `)).toBe(true);
+    expect(html).not.toMatch(/practice that lowers a risk|links to free guidance/);
+    expect(html).toMatch(new RegExp(`<h1>Controls</h1><p[^>]*>${intro.replace(/\./g, '\\.')}</p>`));
+    expect(html.indexOf(intro)).toBeLessThan(html.indexOf('<h2'));
   });
 
   it('FR-SUG-04: no file under app, components or lib links a template or notebook path except through the resources file', () => {

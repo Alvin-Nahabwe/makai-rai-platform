@@ -1,0 +1,205 @@
+/* Data table (plan 1A Task 5, decision B8; modern-web-guidance `responsive-table`, `sortable-table`). The wrapper is the
+   size container: under 640 px of its own width (not the window's) the rows become cards and each cell shows its column's
+   label. The wrapper scrolls sideways when a wide table does not fit, and is focusable so a keyboard can scroll it.
+   Numerals are tabular. Only colours change, over --duration-state; nothing moves. */
+.ui-table-wrap {
+  container-type: inline-size;
+  max-inline-size: 100%;
+  overflow-x: auto;
+  margin-block-end: var(--space-6);
+}
+
+.ui-table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.ui-table__caption {
+  margin-block-end: var(--space-2);
+  text-align: start;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-heading);
+}
+
+.ui-table th,
+.ui-table td {
+  padding: var(--space-2) var(--space-3);
+  border-block-end: 1px solid var(--color-border-container);
+  text-align: start;
+  vertical-align: top;
+  color: var(--color-ink);
+}
+
+.ui-table thead th {
+  border-block-end: 2px solid var(--color-border-control);
+  vertical-align: bottom;
+  font-weight: var(--font-weight-bold);
+}
+
+.ui-table tbody th {
+  font-weight: var(--font-weight-semibold);
+}
+
+.ui-table .ui-table__end {
+  text-align: end;
+}
+
+/* The header's button fills the cell and supplies its padding (sortable-table: drop the padding only on th:has(button)). */
+.ui-table th:has(> .ui-table__sort) {
+  padding: 0;
+}
+
+.ui-table__sort {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  box-sizing: border-box;
+  inline-size: 100%;
+  min-block-size: var(--target-min);
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+  transition: background-color var(--duration-state) var(--easing-state);
+}
+
+.ui-table__end .ui-table__sort {
+  justify-content: flex-end;
+}
+
+.ui-table__sort:hover {
+  background-color: var(--color-tint);
+}
+
+.ui-table__sort:active {
+  background-color: var(--color-border-container);
+}
+
+/* Inside the scrolling wrapper an outside ring would be cut at the edges, so the ring is drawn inside the button. */
+.ui-table__sort:focus-visible {
+  outline-offset: calc(-1 * var(--focus-width));
+}
+
+/* The direction is drawn from th[aria-sort], never from a class: up-and-down arrows while unsorted, one arrow when
+   sorted (up for ascending, turned for descending). Both are currentColor strokes, so forced colours keep them. */
+.ui-table__sort-icon {
+  display: inline-flex;
+  color: var(--color-ink-muted);
+}
+
+.ui-table__sort-icon .ui-icon:last-child {
+  display: none;
+}
+
+.ui-table th[aria-sort] .ui-table__sort-icon {
+  color: var(--color-ink);
+}
+
+.ui-table th[aria-sort] .ui-table__sort-icon .ui-icon:first-child {
+  display: none;
+}
+
+.ui-table th[aria-sort] .ui-table__sort-icon .ui-icon:last-child {
+  display: inline-block;
+}
+
+.ui-table th[aria-sort='descending'] .ui-table__sort-icon .ui-icon:last-child {
+  rotate: 180deg;
+}
+
+/* Each cell's column label is for the card layout only (and hidden from assistive technology, which has the header). */
+.ui-table__cell-label {
+  display: none;
+}
+
+.ui-table__empty {
+  padding-block: var(--space-3);
+  color: var(--color-ink);
+}
+
+/* Cards: each row a card on the surface, its row header the card's title and each cell under its label. The explicit
+   roles in the markup keep the table's semantics when these boxes are blocks. The header row stays as a row of the
+   sort buttons (so sorting still works on a narrow screen); a header with no button is clipped, not removed, and a
+   header row with no button at all is clipped whole. */
+@container (width < 640px) {
+  .ui-table,
+  .ui-table thead,
+  .ui-table tbody,
+  .ui-table tr,
+  .ui-table th,
+  .ui-table td {
+    display: block;
+  }
+
+  /* A caption keeps display: table-caption, which in a block table shrinks it to its longest word. */
+  .ui-table__caption {
+    display: block;
+  }
+
+  .ui-table thead tr {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-block-end: var(--space-3);
+  }
+
+  .ui-table thead th {
+    padding: 0;
+    border: 0;
+  }
+
+  .ui-table thead th:not(:has(> .ui-table__sort)),
+  .ui-table thead:not(:has(.ui-table__sort)) {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .ui-table__sort {
+    inline-size: auto;
+    border: 1px solid var(--color-border-control);
+    border-radius: var(--radius-control);
+  }
+
+  .ui-table tbody tr {
+    margin-block-end: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--color-border-container);
+    border-radius: var(--radius-surface);
+    background-color: var(--color-surface);
+  }
+
+  /* `.ui-table .ui-table__end` would otherwise put an end-aligned column's label and value on the card's right edge. */
+  .ui-table tbody th,
+  .ui-table tbody td,
+  .ui-table tbody .ui-table__end {
+    padding: 0;
+    border: 0;
+    text-align: start;
+    overflow-wrap: anywhere;
+  }
+
+  .ui-table tbody th {
+    font-weight: var(--font-weight-bold);
+  }
+
+  .ui-table tbody th + td,
+  .ui-table tbody td + td {
+    margin-block-start: var(--space-2);
+  }
+
+  .ui-table__cell-label {
+    display: block;
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-ink-muted);
+  }
+}

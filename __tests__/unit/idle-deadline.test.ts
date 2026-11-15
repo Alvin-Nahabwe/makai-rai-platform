@@ -109,7 +109,7 @@ describe('who imports the deadline reader', () => {
     // the contract). The importers are the signed-in layout and the not-found page; S-07 (app/page.tsx)
     // renders the warning too once its owner merges, so it is allowed and not required.
     const importers = files.filter((f) => f !== 'lib/auth/idleDeadline.ts' && importsDeadline(readFileSync(f, 'utf8'))).sort();
-    const allowed = ['app/(authenticated)/layout.tsx', 'app/not-found.tsx', 'app/page.tsx'];
+    const allowed = ['app/(authenticated)/layout.tsx', 'app/help/layout.tsx', 'app/not-found.tsx', 'app/page.tsx'];
     for (const f of importers) expect(allowed, f).toContain(f);
     expect(importers).toEqual(expect.arrayContaining(['app/(authenticated)/layout.tsx', 'app/not-found.tsx']));
     for (const f of importers) expect(readFileSync(f, 'utf8'), f).not.toMatch(/^['"]use client['"]/m);

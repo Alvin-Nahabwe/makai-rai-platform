@@ -1,10 +1,14 @@
 import type { FieldError } from '@/types/record';
+import { PROJECT_WRITE_COPY } from '@/lib/project/write/copy';
 
-/** Plain TypeScript with no React, so the three project writers (form, Archive, Unarchive) and their tests share one reading of a refusal. */
-export const FORBIDDEN_LINE = 'You can no longer change this project.';
-export const GONE_LINE = 'This project no longer exists.';
-export const ARCHIVED_FORM_LINE = 'This project is archived. Nothing in it can be changed.';
-export const TRY_AGAIN_LINE = 'Something went wrong. Please try again.';
+/**
+ * Plain TypeScript with no React, so the three project writers (form, Archive, Unarchive) and their tests share one
+ * reading of a refusal. The lines are the copy module's, under the names the writers and their tests already use.
+ */
+export const FORBIDDEN_LINE = PROJECT_WRITE_COPY.forbidden;
+export const GONE_LINE = PROJECT_WRITE_COPY.gone;
+export const ARCHIVED_FORM_LINE = PROJECT_WRITE_COPY.archivedForm;
+export const TRY_AGAIN_LINE = PROJECT_WRITE_COPY.tryAgain;
 
 /**
  * What Archive and Unarchive do with an API refusal (F8):
@@ -46,7 +50,7 @@ export function formRefusalOf(status: number, body: { code: string; fields?: Fie
     const n = body.fields.length;
     return {
       kind: 'fields', fields: body.fields, openDetails: body.fields.some((f) => DETAIL_FIELDS.includes(f.field)),
-      summary: n === 1 ? 'There is a problem with this project. What you typed is kept.' : `There are ${n} problems with this project. What you typed is kept.`,
+      summary: PROJECT_WRITE_COPY.summary(n),
     };
   }
   const r = refusalOf(status);

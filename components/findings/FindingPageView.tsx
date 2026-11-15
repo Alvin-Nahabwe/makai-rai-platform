@@ -3,7 +3,7 @@ import { ArchivedBanner } from '@/components/project/ArchivedBanner';
 import { CloseByDecisionButton } from '@/components/findings/CloseByDecisionButton';
 import { FindingActions } from '@/components/findings/FindingActions';
 import { AcceptRiskForm } from '@/components/findings/AcceptRiskForm';
-import { LocalTime } from '@/components/findings/LocalTime';
+import { LocalTime } from '@/components/ui/LocalTime';
 import { MitigationFormToggle, MitigationStatusWord } from '@/components/findings/MitigationForm';
 import { VersionEvidenceList } from '@/components/evidence/VersionEvidenceList';
 import { FindingSuggestions, findingSuggestionCount } from '@/components/suggestions/FindingSuggestions';
@@ -12,51 +12,79 @@ import { ListLink } from '@/components/ui/ListLink';
 import { onlyRolesCanText } from '@/lib/findings/messages';
 import { deciderLabel } from '@/lib/decision/copy';
 import { formatDay } from '@/lib/format/dates';
-import { overdueLabel, STAGE_NAMES } from '@/lib/findings/labels';
+import { acceptedByName, overdueLabel, STAGE_NAMES } from '@/lib/findings/labels';
+import { FINDINGS_COPY } from '@/lib/findings/copy';
 import type { FindingPageData, MitigationOnPage } from '@/lib/findings/pageData';
+import type { ClosureCause } from '@/lib/findings/closure';
+import '@/components/ui/pageHeaderStyles';
+import './Findings.css';
 
 /**
  * S-15, one finding (W-5, W-6; SRS 7.4.2 S-15 row; FR-FND-01, 03 to 07, FR-FUP-05). No hooks: the page loads `FindingPageData`
  * and this renders it, so a unit test renders the markup without the loader. Regions in W-5's order: the archived banner,
  * the header, the "decision now done" box, the mitigations, the ways to address it, the ways to close it, the history.
- * Every name and text a team typed is rendered as text (NFR-SEC-11).
+ * Every name and text a team typed is rendered as text (NFR-SEC-11). The words are `FINDINGS_COPY`'s (lib/findings/copy.ts).
+ * "Overdue" is the one red word (spec 7.1): its own span, never inside a status label; a finding's state and a mitigation's
+ * status stay text in `.status-label` (register D-385: no kit mark exists for them).
  */
 
 /** Between the parts of a line: a middle dot with a space each side, as the account pages write it. */
-const SEP = ' \u00b7 ';
+const SEP = FINDINGS_COPY.separator;
+const F = FINDINGS_COPY.finding;
+const M = FINDINGS_COPY.mitigation;
+
+/** "<name> (<id>)", or the id alone when the content has no name for it. */
+const named = (id: string, name: string | null): string => (name === null || name === '' ? id : F.namedId(name, id));
+
+/** The mitigations section's heading: it stays on the page in every state, so a save that removes its toggle sends focus here (B1). */
+const MITIGATIONS_HEADING = 'f-mitigations';
 
 /** What every mitigation form needs from the page (the draft key's account and organisation, the owners who can act, the controls). */
 function formProps(d: FindingPageData) {
   return {
     orgSlug: d.orgSlug, projectId: d.projectId, findingId: d.detail.id, owners: d.owners, controls: d.controls, userId: d.viewer.userId, orgId: d.orgId,
+    // Where focus goes when a save removes the toggle that held it (Done closes the finding; Cancelled ends the card).
+    leaveFocusTo: MITIGATIONS_HEADING,
   };
+}
+
+/**
+ * F1 (the owner's decision, 14 Nov 2026): a mitigation written by "close by decision" stores no text. In the text's place
+ * the card says why it closed, for those two kinds only and only when the text was never erased. An erased text, and an
+ * action's null text, keep the empty line they had. Nothing stored changes.
+ */
+function decisionClosureText(v: MitigationOnPage['current']): string | null {
+  if (v.erasedFields.includes('what')) return null;
+  if (v.kind === 'decision_changed') return M.closedBecauseDecisionChanged;
+  if (v.kind === 'decision_withdrawn') return M.closedBecauseDecisionWithdrawn;
+  return null;
 }
 
 function Mitigation({ d, m, controlName }: { d: FindingPageData; m: MitigationOnPage; controlName: (id: string) => string }): ReactElement {
   const v = m.current;
   const overdue = overdueLabel(v.dueDate);
   return (
-    <li data-mitigation-id={v.mitigationId} className="card">
-      <p>{v.what === null ? null : <bdi>{v.what}</bdi>}</p>
-      <p>
-        Owner: <bdi>{v.owner.name}</bdi>{v.owner.formerMember ? ' (former member)' : ''}{SEP}Due {formatDay(v.dueDate)}{SEP}
-        {m.overdue ? <><span className="status-label status-label--warning badge--moderate">{overdue.label}</span>{overdue.rest}{SEP}</> : null}
-        <MitigationStatusWord status={v.status} noArtefactNote={v.evidence.length === 0 ? v.closureNote : null} />{SEP}version {v.versionNumber}
+    <li data-mitigation-id={v.mitigationId} className="finding-card">
+      <p>{v.what === null ? decisionClosureText(v) : <bdi>{v.what}</bdi>}</p>
+      <p className="finding-card__line">
+        {M.assignedTo} <bdi>{v.owner.name}</bdi>{v.owner.formerMember ? M.formerMember : ''}{SEP}{M.due(formatDay(v.dueDate))}{SEP}
+        {m.overdue ? <><span className="finding-overdue">{overdue.label}</span>{overdue.rest}{SEP}</> : null}
+        <MitigationStatusWord status={v.status} noArtefactNote={v.evidence.length === 0 ? v.closureNote : null} />{SEP}{M.version(v.versionNumber)}
       </p>
-      {d.ownerCannotAct.includes(v.mitigationId) ? <p><span className="status-label status-label--warning badge--moderate">Owner cannot act</span>: reassign</p> : null}
-      {v.followsControl === null ? null : <p>Follows: <bdi>{v.followsControl}{' '}{controlName(v.followsControl)}</bdi></p>}
-      {v.cancelReason === null ? null : <p>Why it is cancelled: <bdi>{v.cancelReason}</bdi></p>}
+      {d.ownerCannotAct.includes(v.mitigationId) ? <p>{M.cannotAct}</p> : null}
+      {v.followsControl === null ? null : <p>{M.controlUsed} <bdi>{named(v.followsControl, controlName(v.followsControl))}</bdi></p>}
+      {v.cancelReason === null ? null : <p>{M.cancelReason} <bdi>{v.cancelReason}</bdi></p>}
       <VersionEvidenceList orgSlug={d.orgSlug} items={v.evidence} />
       {d.canMitigate && d.detail.state === 'open' && v.status !== 'cancelled' ? (
-        <MitigationFormToggle label="Update this mitigation" {...formProps(d)} base={v} />
+        <MitigationFormToggle label={F.updateMitigation} {...formProps(d)} base={v} />
       ) : null}
-      <details>
-        <summary>History: {m.versions} {m.versions === 1 ? 'version' : 'versions'}</summary>
+      <details className="finding-history">
+        <summary>{M.historySummary(m.versions)}</summary>
         <ol>
           {m.history.map((h) => (
             <li key={h.id}>
-              Version {h.versionNumber}, saved <LocalTime at={h.receivedAt} /> by <bdi>{h.enteredBy.name}</bdi>: owner <bdi>{h.owner.name}</bdi>, due {formatDay(h.dueDate)}.
-              {h.changeNote === null ? null : <> Why the date changed: <bdi>{h.changeNote}</bdi></>}
+              {M.historyVersion(h.versionNumber)} <LocalTime at={h.receivedAt} /> {M.by} <bdi>{h.enteredBy.name}</bdi>{M.assignedToClause} <bdi>{h.owner.name}</bdi>{M.dueClause(formatDay(h.dueDate))}
+              {h.changeNote === null ? null : <> {M.changeNote} <bdi>{h.changeNote}</bdi></>}
             </li>
           ))}
         </ol>
@@ -65,26 +93,38 @@ function Mitigation({ d, m, controlName }: { d: FindingPageData; m: MitigationOn
   );
 }
 
-/** One line of the history, oldest first (W-5's last region). */
-interface HistoryEntry { seq: number; at: string; by: string; text: ReactElement | string }
+/** R3: the cause sentence of a closure line (rule A decided it in the loader). */
+const CAUSE_TEXT: Record<ClosureCause, string> = {
+  changed: M.closedBecauseDecisionChanged, withdrawn: M.closedBecauseDecisionWithdrawn, no_longer_applies: M.closedBecauseNoLongerApplies,
+};
+
+/** One line of the history, oldest first (W-5's last region). `by` is null for a line that names its person in its text. */
+interface HistoryEntry { seq: number; at: string; by: string | null; text: ReactElement | string }
 
 function historyOf(d: FindingPageData): HistoryEntry[] {
   const f = d.detail;
   const out: HistoryEntry[] = [{
     seq: 0, at: f.raisedAt, by: f.raisedBy.name,
     text: f.source === 'shortfall' && d.version !== null && f.questionId !== null
-      ? `Raised from ${f.questionId} version ${d.version.versionNumber} (${d.version.statusWord}).` : 'Raised by the team.',
+      ? M.raisedFromDecision(d.version.statusWord) : M.raisedByTeam,
   }];
-  for (const e of f.events) out.push({ seq: e.findingSeq, at: e.at, by: e.by.name, text: <>{e.kind === 'reopened' ? 'Reopened' : 'Withdrawn'}{e.reason === null ? '.' : <>: <bdi>{e.reason}</bdi></>}</> });
+  for (const e of f.events) out.push({ seq: e.findingSeq, at: e.at, by: e.by.name, text: <>{e.kind === 'reopened' ? M.reopened : M.withdrawn}{e.reason === null ? '.' : <>: <bdi>{e.reason}</bdi></>}</> });
   for (const m of d.mitigations) {
     for (const h of m.history) {
       out.push({ seq: h.findingSeq, at: h.receivedAt, by: h.enteredBy.name,
-        text: <>{h.versionNumber === 1 ? 'Mitigation added' : `Mitigation updated to version ${h.versionNumber}`}: owner <bdi>{h.owner.name}</bdi>, due {formatDay(h.dueDate)}.</> });
+        text: <>{h.versionNumber === 1 ? M.added : M.updated(h.versionNumber)}{M.assignedToClause} <bdi>{h.owner.name}</bdi>{M.dueClause(formatDay(h.dueDate))}</> });
     }
+  }
+  // R2: a closing record's line says whether it closed the finding; never "Mitigation added".
+  for (const r of d.closingRecords) {
+    const v = r.current;
+    out.push(r.closedFinding
+      ? { seq: v.findingSeq, at: v.receivedAt, by: null, text: <>{M.findingClosedBy} <bdi>{v.enteredBy.name}</bdi>.</> }
+      : { seq: v.findingSeq, at: v.receivedAt, by: v.enteredBy.name, text: M.pressedWhileOpen });
   }
   for (const r of f.acceptedRisks) {
     out.push({ seq: r.findingSeq, at: r.receivedAt, by: r.enteredBy.name,
-      text: <>Risk accepted by <bdi>{deciderLabel(r.acceptedBy, '', 'record')}</bdi>{r.reason === null ? '.' : <>: <bdi>{r.reason}</bdi></>}</> });
+      text: <>{M.riskAcceptedBy} <bdi>{deciderLabel(r.acceptedBy, '', 'record')}</bdi>{r.reason === null ? '.' : <>: <bdi>{r.reason}</bdi></>}</> });
   }
   return out.sort((x, y) => x.seq - y.seq);
 }
@@ -99,56 +139,71 @@ export function FindingPageView({ data }: { data: FindingPageData }): ReactEleme
   const closed = f.state === 'closed_mitigation' || f.state === 'closed_accepted_risk';
   const closing = d.closeByDecision;
   const acceptedLine = f.state === 'closed_accepted_risk' && f.acceptedRisk !== null
-    ? <>Closed: risk accepted by <bdi>{deciderLabel(f.acceptedRisk.acceptedBy, '', 'record')}</bdi> on {formatDay(f.acceptedRisk.receivedAt)}.{f.acceptedRisk.lookAgainOn === null ? '' : ` Look at it again on ${formatDay(f.acceptedRisk.lookAgainOn)}.`}</>
+    ? <>{F.acceptedHeaderStart}<bdi>{acceptedByName(f.acceptedRisk.acceptedBy)}</bdi>{F.acceptedHeaderOn(formatDay(f.acceptedRisk.receivedAt))}{f.acceptedRisk.lookAgainOn === null ? '' : F.checkAgainOn(formatDay(f.acceptedRisk.lookAgainOn))}</>
     : null;
   return (
-    <div className="page-content">
+    <div className="page-content finding-page">
       <ArchivedBanner archived={d.archived} />
-      <ListLink href={`${base}/findings`} className="back-link">Back to findings</ListLink>
-      <header>
-        <h1><bdi>{d.title}</bdi></h1>
+      <ListLink href={`${base}/findings`} className="finding-back">{F.backToFindings}</ListLink>
+      <header className="ui-page-header finding-header">
+        <h1 className="ui-page-header__title"><bdi>{d.title}</bdi></h1>
         <p><bdi className="status-label">{d.stateLabel}</bdi></p>
         {acceptedLine === null ? null : <p>{acceptedLine}</p>}
+        {d.closure === null ? null : d.closure.closedBy !== null ? (
+          <p>{F.closedBy} <bdi>{d.closure.closedBy.by}</bdi> {F.on} <LocalTime at={d.closure.closedBy.at} dateOnly />.{d.closure.cause === null ? null : ` ${CAUSE_TEXT[d.closure.cause]}`}</p>
+        ) : d.closure.cause === null ? null : <p>{CAUSE_TEXT[d.closure.cause]}</p>}
         <p>
           {d.sourceLabel}{SEP}{STAGE_NAMES[f.stage]}
-          {f.riskArea === null ? null : <>{SEP}Risk area <bdi>{f.riskArea}{d.riskAreaName === null ? '' : ` ${d.riskAreaName}`}</bdi></>}
+          {f.riskArea === null ? null : <>{SEP}{F.riskArea} <bdi>{named(f.riskArea, d.riskAreaName)}</bdi></>}
         </p>
-        {f.source === 'team' && f.questionId !== null ? <p>About question <bdi>{f.questionId}</bdi>{d.version === null ? '' : ` (version ${d.version.versionNumber})`}</p> : null}
+        {d.questionHref === null ? null : <p><ListLink href={d.questionHref}>{F.openQuestion}</ListLink></p>}
+        {d.questionText === null ? null : <p>{F.aboutQuestion} <bdi>{d.questionText}</bdi></p>}
         {f.source === 'shortfall' && d.version !== null
-          ? <p>Raised automatically on <LocalTime at={f.raisedAt} dateOnly /> when &quot;{d.version.statusWord}&quot; was saved by <bdi>{f.raisedBy.name}</bdi>.</p> : null}
-        {f.source === 'team' ? <p>Raised by <bdi>{f.raisedBy.name}</bdi> on <LocalTime at={f.raisedAt} dateOnly />.</p> : null}
-        {f.description === null ? null : <p><bdi>{f.description}</bdi></p>}
+          ? <p>{F.raisedByPlatformOn} <LocalTime at={f.raisedAt} dateOnly />{F.raisedByPlatformWhen} <bdi>{f.raisedBy.name}</bdi> {F.savedDecisionAs(d.version.statusWord)}</p> : null}
+        {f.source === 'team' ? <p>{F.raisedBy} <bdi>{f.raisedBy.name}</bdi> {F.on} <LocalTime at={f.raisedAt} dateOnly />.</p> : null}
+        {f.description === null ? null : <p className="finding-description"><bdi>{f.description}</bdi></p>}
         <SealMarker seals={f.seals} />
       </header>
-      {closing === null ? null : (
-        <section aria-label="Decision now changed">
+      {d.closeBlocked ? (
+        // B2 (ruling R1): the finding stays open while a mitigation is Planned or In progress, so no button; the cause, when
+        // a closure is available, then the way on. Not named "Can be closed now": it cannot be.
+        <section className="finding-close-box">
+          {closing === null ? null : (
+            <p>
+              {closing.reason === 'decision_withdrawn' ? F.closeWithdrawnCause
+                : closing.reason === 'gate_no' ? F.closeGateCause
+                  : F.closeChangedCause(closing.statusWord)}
+            </p>
+          )}
+          <p>{F.closeBlocked}</p>
+        </section>
+      ) : closing === null ? null : (
+        <section aria-label={F.closeSection} className="finding-close-box">
           <p>
-            {closing.reason === 'decision_withdrawn'
-              ? `The decision on ${closing.questionId} was withdrawn (version ${closing.versionNumber}). Close this finding with that decision?`
-              : closing.reason === 'gate_no'
-                ? `The scope answer on ${closing.questionId} is now No (version ${closing.versionNumber}). Close this finding with that answer?`
-                : `The decision on ${closing.questionId} is now ${closing.statusWord} (version ${closing.versionNumber}). Close this finding with that decision?`}
+            {closing.reason === 'decision_withdrawn' ? F.closeWithdrawn
+              : closing.reason === 'gate_no' ? F.closeGate
+                : F.closeChanged(closing.statusWord)}
           </p>
           <CloseByDecisionButton orgSlug={d.orgSlug} projectId={d.projectId} findingId={f.id} decisionVersionId={closing.decisionVersionId} reason={closing.reason} findingTitle={d.title} />
         </section>
       )}
-      <section aria-labelledby="f-mitigations">
-        <h2 id="f-mitigations">Mitigations</h2>
+      <section aria-labelledby={MITIGATIONS_HEADING} className="finding-section">
+        <h2 id={MITIGATIONS_HEADING} tabIndex={-1}>{F.mitigations}</h2>
         {d.mitigations.length === 0 ? (
-          <p>No mitigations yet. Add one, or an owner or admin can accept the risk.</p>
+          <p>{F.noMitigations}</p>
         ) : (
-          <ul>{d.mitigations.map((m) => <Mitigation key={m.current.mitigationId} d={d} m={m} controlName={controlName} />)}</ul>
+          <ul className="finding-cards">{d.mitigations.map((m) => <Mitigation key={m.current.mitigationId} d={d} m={m} controlName={controlName} />)}</ul>
         )}
-        {d.canMitigate && f.state === 'open' ? <MitigationFormToggle label="Add a mitigation" {...formProps(d)} base={null} /> : null}
+        {d.canMitigate && f.state === 'open' ? <MitigationFormToggle label={F.addMitigation} {...formProps(d)} base={null} /> : null}
       </section>
       {waysArea === null ? null : (
-        <section aria-labelledby="f-ways">
-          <h2 id="f-ways">{`Ways teams address this (for risk area ${waysArea})`}</h2>
+        <section aria-labelledby="f-ways" className="finding-section">
+          <h2 id="f-ways">{F.ways}</h2>
           <FindingSuggestions contentSemver={d.contentSemver} riskArea={waysArea} />
         </section>
       )}
-      <section aria-labelledby="f-close">
-        <h2 id="f-close">Other ways to close this finding</h2>
+      <section aria-labelledby="f-close" className="finding-section">
+        <h2 id="f-close">{F.otherWays}</h2>
         <FindingActions
           orgSlug={d.orgSlug} projectId={d.projectId} findingId={f.id} findingTitle={d.title}
           closed={closed} withdrawn={f.state === 'withdrawn'} canReopen={d.canReopen} canWithdraw={d.canWithdraw}
@@ -160,10 +215,10 @@ export function FindingPageView({ data }: { data: FindingPageData }): ReactEleme
           ) : null}
         />
       </section>
-      <section aria-labelledby="f-history">
-        <h2 id="f-history">History</h2>
-        <ol>
-          {historyOf(d).map((h, i) => <li key={i}><LocalTime at={h.at} /> {h.text} <bdi>{h.by}</bdi></li>)}
+      <section aria-labelledby="f-history" className="finding-section">
+        <h2 id="f-history">{F.history}</h2>
+        <ol className="finding-timeline">
+          {historyOf(d).map((h, i) => <li key={i}><LocalTime at={h.at} /> {h.text}{h.by === null ? null : <> <bdi>{h.by}</bdi></>}</li>)}
         </ol>
       </section>
     </div>

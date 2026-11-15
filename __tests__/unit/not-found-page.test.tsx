@@ -10,6 +10,9 @@ vi.mock('next/headers', () => ({ headers: headersMock }));
 vi.mock('@/lib/auth/idleDeadline', () => ({ readSessionDeadlines: readSessionDeadlinesMock }));
 
 import NotFound, { metadata } from '@/app/not-found';
+import { NOT_FOUND_COPY } from '@/lib/errors/not-found/copy';
+import { escapeRe } from '../helpers/escapeRe';
+import { pageTitle } from '@/lib/ui/title';
 import NotFoundInGroup, { metadata as groupMetadata } from '@/app/(authenticated)/not-found';
 import NotFoundCard from '@/components/layout/NotFoundCard';
 
@@ -22,8 +25,7 @@ import NotFoundCard from '@/components/layout/NotFoundCard';
  * 03-file-conventions/not-found.md), which the e2e case checks on a real server.
  */
 
-const M27 =
-  'We cannot find this page, or you do not have access to it. If someone sent you this link, ask them to check it or to invite you.';
+const M27 = NOT_FOUND_COPY.body;
 
 describe('S-31 not-found page', () => {
   let errorSpy: ReturnType<typeof vi.spyOn>;
@@ -44,13 +46,19 @@ describe('S-31 not-found page', () => {
   it('FR-RM-03 UX-05 (S-31 part): the not-found page shows M-27 and a link home', async () => {
     const html = renderToStaticMarkup(await NotFound());
     expect(html).toContain(M27);
-    expect(html).toMatch(/<a[^>]*href="\/"[^>]*>Go to your home page<\/a>/);
+    expect(html).toMatch(new RegExp(`<a[^>]*href="/"[^>]*>${escapeRe(NOT_FOUND_COPY.home)}</a>`));
     expect(html).toContain('<main id="main-content"');
     expect(html).toMatch(/<h1[^>]*>[^<]+<\/h1>/);
   });
 
   it('FR-RM-03 UX-05 (S-31 part): the page title names the screen, then the product', () => {
-    expect(metadata.title).toBe('Not found - MAK-AI RAI Platform');
+    expect(metadata.title).toBe(pageTitle(NOT_FOUND_COPY.title));
+  });
+
+  it('1A-16c (A 13 to 17): the title and the heading say the same words, and the card says them from the copy module', () => {
+    expect(NOT_FOUND_COPY.title).toBe('Page not found');
+    expect(NOT_FOUND_COPY.heading).toBe(NOT_FOUND_COPY.title);
+    expect(renderToStaticMarkup(<NotFoundCard />)).toContain(`<h1>${NOT_FOUND_COPY.heading}</h1>`);
   });
 
   it('FR-RM-03 UX-05 (S-31 part): the not-found page echoes nothing from the request', async () => {
@@ -81,10 +89,11 @@ describe('S-31 not-found page', () => {
     const requestHeaders = new Headers({ cookie: 'authjs.session-token=x' });
     headersMock.mockResolvedValue(requestHeaders);
     const html = renderToStaticMarkup(await NotFound());
-    expect([...html.matchAll(/<dialog[^>]*class="idle-warning"[^>]*>/g)]).toHaveLength(1);
+    expect([...html.matchAll(/<div class="shell-idle" data-seconds-left="\d+">/g)]).toHaveLength(1);
+    expect([...html.matchAll(/<dialog[^>]*class="ui-dialog"[^>]*>/g)]).toHaveLength(1);
     expect(html).toContain('data-seconds-left="600"');
     expect(html).toContain(M27);
-    expect(html).toMatch(/<a[^>]*href="\/"[^>]*>Go to your home page<\/a>/);
+    expect(html).toMatch(new RegExp(`<a[^>]*href="/"[^>]*>${escapeRe(NOT_FOUND_COPY.home)}</a>`));
     expect(readSessionDeadlinesMock.mock.calls[0][0]).toBe(requestHeaders);
     expect(errorSpy).not.toHaveBeenCalled();
   });
@@ -100,10 +109,10 @@ describe('S-31 not-found page', () => {
   it("FR-RM-03 UX-05 (S-31 part): the signed-in group's not-found page shows M-27 and a link home, with no main and no dialog of its own", () => {
     const html = renderToStaticMarkup(<NotFoundInGroup />);
     expect(html).toContain(M27);
-    expect(html).toMatch(/<a[^>]*href="\/"[^>]*>Go to your home page<\/a>/);
+    expect(html).toMatch(new RegExp(`<a[^>]*href="/"[^>]*>${escapeRe(NOT_FOUND_COPY.home)}</a>`));
     expect(html).toMatch(/<h1[^>]*>[^<]+<\/h1>/);
     // the group's layout supplies the one main (and, after the shell work, the one id) and the one dialog
-    expect(html).not.toMatch(/<main|<dialog|idle-warning|id="main-content"/);
+    expect(html).not.toMatch(/<main|<dialog|shell-idle|id="main-content"/);
   });
 
   it('FR-RM-03 UX-05 (S-31 part): the two not-found pages show the same card and the same title', async () => {

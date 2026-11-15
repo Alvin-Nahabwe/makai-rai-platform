@@ -286,7 +286,10 @@ describe('route 20, GET team export', () => {
     const res = await GET(new NextRequest(`http://1038b2a33d91:3000/api/v1/orgs/${other.org.slug}/export?projectId=${p}`), { params: Promise.resolve({ slug: other.org.slug }) });
     expect(res.status).toBe(500);
     expect(res.headers.get('content-type')).toMatch(/json/);
-    expect(await res.json()).toMatchObject({ code: 'integrity_failure', reference: expect.any(String) });
+    expect(await res.json()).toMatchObject({
+      error: 'The export stopped because a stored file failed its safety check. Nothing was downloaded. Write to MAK-AI and give the reference shown with this message.',
+      code: 'integrity_failure', reference: expect.any(String),
+    });
   });
 
   it('FR-EXP-01 ADR-C7: a client that leaves while the file is being opened releases the export (C4 SF-4)', async () => {

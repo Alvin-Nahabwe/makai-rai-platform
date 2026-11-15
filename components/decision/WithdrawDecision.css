@@ -1,0 +1,12 @@
+/* The withdrawal control takes focus after a failure that cannot be retried (D-398 item 4): a programmatic focus shows no
+   :focus-visible ring, so the control draws one. */
+.withdraw-decision:focus {
+  outline: var(--focus-width) solid var(--color-focus);
+  outline-offset: var(--focus-offset);
+}
+
+/* The result line takes focus after a withdrawal (the control is gone): it draws the same ring. */
+[data-withdraw-status]:focus {
+  outline: var(--focus-width) solid var(--color-focus);
+  outline-offset: var(--focus-offset);
+}

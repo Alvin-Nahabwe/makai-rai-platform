@@ -1,3 +1,5 @@
+import { cache } from 'react';
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { requireIdentity } from '@/lib/auth/identity';
 import { requireOrgContextFor } from '@/lib/auth/context';
@@ -7,7 +9,9 @@ import { listStageReviews } from '@/lib/data/reviews';
 import { listSeals } from '@/lib/data/seals';
 import { documentDraft, documentSummaries, listDocuments, typedFieldsOf } from '@/lib/data/documents';
 import { runningContent } from '@/lib/content/loader';
-import { DOCUMENT_TITLES } from '@/lib/documents/copy';
+import { DOCUMENT_TITLES, DOCUMENTS_COPY } from '@/lib/documents/copy';
+import { orNotFound } from '@/lib/auth/titleGate';
+import { pageTitle } from '@/lib/ui/title';
 import { DOCUMENT_TYPES, type DocumentType } from '@/types/record';
 import { MSG_SEAL_CHECK_FAILED } from '@/lib/documents/copy';
 import { RENDERERS } from '@/lib/documents/render';
@@ -16,10 +20,33 @@ import { logSecurityEvent } from '@/lib/security-logger';
 import { ArchivedBanner } from '@/components/project/ArchivedBanner';
 import { GenerateDocumentForm, NeverSealed, type GenerateDocumentFormProps } from '@/components/documents/GenerateDocumentForm';
 import { IssuedDocumentsList } from '@/components/documents/IssuedDocumentsList';
-import { UncstTable } from '@/components/help/UncstTable';
+import RememberProject from '@/components/layout/RememberProject';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 interface PageProps {
   params: Promise<{ slug: string; id: string; reviewId: string }>;
+}
+
+/**
+ * The gates, the project read and the review lookup, once per request: the page and its title both read through this
+ * (React `cache()`), so a project not visible, or a review not of this project, is the same `notFound()` for both and
+ * the title names nothing. The page's later reads stay in the page.
+ */
+const load = cache(async (slug: string, id: string, reviewId: string) => {
+  const identity = await requireIdentity();
+  const ctx = await requireOrgContextFor(identity.userId, slug, 'record:read');
+  const project = await withOrg(ctx, (tx) => tx.project.findUnique({ where: { id }, select: { id: true, name: true, archivedAt: true } }));
+  if (project === null) notFound();
+  const review = (await listStageReviews(ctx, id)).find((r) => r.id === reviewId);
+  if (review === undefined) notFound();
+  return { identity, ctx, project, review };
+});
+
+/** The review's documents, then the project. */
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { slug, id, reviewId } = await params;
+  const { project, review } = await orNotFound(load(slug, id, reviewId));
+  return { title: pageTitle(DOCUMENTS_COPY.titles.documentsOf(review.name), project.name) };
 }
 
 /**
@@ -30,12 +57,7 @@ interface PageProps {
  */
 export default async function DocumentsPage({ params }: PageProps) {
   const { slug, id, reviewId } = await params;
-  const identity = await requireIdentity();
-  const ctx = await requireOrgContextFor(identity.userId, slug, 'record:read');
-  const project = await withOrg(ctx, (tx) => tx.project.findUnique({ where: { id }, select: { id: true, archivedAt: true } }));
-  if (project === null) notFound();
-  const review = (await listStageReviews(ctx, id)).find((r) => r.id === reviewId);
-  if (review === undefined) notFound();
+  const { identity, ctx, project, review } = await load(slug, id, reviewId);
 
   const archived = project.archivedAt !== null;
   const [seals, documents] = await Promise.all([listSeals(ctx, reviewId), listDocuments(ctx, { projectId: id, reviewId })]);
@@ -75,22 +97,18 @@ export default async function DocumentsPage({ params }: PageProps) {
   return (
     <div className="page-content">
       <ArchivedBanner archived={archived} />
-      <h1>Generate a document</h1>
-      <p>{review.name}</p>
+      <PageHeader title={DOCUMENTS_COPY.page.heading} lead={<p>{review.name}</p>} />
       {seals.length === 0 ? <NeverSealed orgSlug={slug} projectId={id} reviewId={reviewId} /> : (
         <>
-          {form !== null ? <section aria-labelledby="documents-generate"><h2 id="documents-generate">Documents</h2>{form}</section> : null}
-          {sealsFailed ? <section aria-labelledby="documents-generate"><h2 id="documents-generate">Documents</h2><p>{MSG_SEAL_CHECK_FAILED}</p></section> : null}
-          <section aria-labelledby="documents-issued">
-            <h2 id="documents-issued">Issued documents</h2>
+          {form !== null ? <section className="documents-section" aria-labelledby="documents-generate"><h2 id="documents-generate">{DOCUMENTS_COPY.page.chooseHeading}</h2>{form}</section> : null}
+          {sealsFailed ? <section className="documents-section" aria-labelledby="documents-generate"><h2 id="documents-generate">{DOCUMENTS_COPY.page.chooseHeading}</h2><p>{MSG_SEAL_CHECK_FAILED}</p></section> : null}
+          <section className="documents-section" aria-labelledby="documents-issued">
+            <h2 id="documents-issued">{DOCUMENTS_COPY.page.issuedHeading}</h2>
             <IssuedDocumentsList orgSlug={slug} documents={documents} latestSealNumber={latestNumber} canWithdraw={canWithdraw} />
-          </section>
-          <section aria-labelledby="uncst-heading">
-            <h2 id="uncst-heading">Uganda&apos;s AI protocol issues</h2>
-            <UncstTable />
           </section>
         </>
       )}
+      <RememberProject userId={identity.userId} orgSlug={slug} projectId={project.id} />
     </div>
   );
 }

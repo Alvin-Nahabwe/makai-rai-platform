@@ -1,0 +1,82 @@
+/*
+ * Help, /help (plan 1A Task 12, ruling L2-69): a reading page. One column no wider than the reading measure, headings on
+ * the type ramp, each term and its definition read as one item, more space between groups than between items. Only the
+ * tokens of app/globals.css; no card, no icon, no colour beyond ink and the link colour, no motion. It sits under the
+ * public header (inside .public-layout, which centres its child in a flex row) and inside the shell's main. Sizes, weights,
+ * colours and the line height that app/globals.css already gives body text and headings are not repeated here.
+ */
+.help {
+  inline-size: 100%;
+  max-inline-size: var(--measure-reading);
+  align-self: flex-start;
+  margin-inline: auto;
+  padding: var(--space-8) var(--space-4) var(--space-12);
+  color: var(--color-ink);
+  overflow-wrap: break-word;
+}
+
+.help h2 {
+  margin-block: var(--space-12) var(--space-4);
+  text-wrap: balance;
+}
+
+.help h3 {
+  margin-block: var(--space-8) var(--space-3);
+  text-wrap: balance;
+}
+
+/* A followed anchor (#terms-and-privacy, #what-sealing-means) lands with a little air above its heading. */
+.help [id] {
+  scroll-margin-block-start: var(--space-4);
+}
+
+.help p {
+  margin-block: 0 var(--space-4);
+  text-wrap: pretty;
+}
+
+.help__list {
+  margin: 0;
+}
+
+.help__list dt {
+  margin-block-start: var(--space-5);
+  font-weight: var(--font-weight-semibold);
+}
+
+.help__list dt:first-child {
+  margin-block-start: 0;
+}
+
+.help__list dd {
+  margin: var(--space-1) 0 0;
+  text-wrap: pretty;
+}
+
+.help__links {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* The About link closes the page as its own part: the space above it is a section's (an h2's top margin). Written with
+   .help in front so it outranks `.help p`'s margin. */
+.help .help__about {
+  margin-block-start: var(--space-12);
+}
+
+/* Links that stand alone are at least 24 px high. A link inside a sentence (the contact address) keeps flowing as text. */
+.help__links a,
+.help__about a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 1.5rem;
+}
+
+/* A long address breaks anywhere rather than pushing the page wider than a 320 px screen. */
+.help__address {
+  overflow-wrap: anywhere;
+}

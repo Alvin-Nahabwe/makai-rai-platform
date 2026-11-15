@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { applyNetworkProfile, type NetworkProfile } from './helpers/network';
 import { failOnDialog } from './helpers/dialogs';
 import { fillValid, newProject, openQuestion, questionPath, saveStatus, seatOf } from './helpers/session';
+import { QUESTION_COPY } from '../lib/question/copy';
 
 /**
  * S-12 on slow links (NFR-PERF-03) and the size of a decision save (NFR-PERF-05). NFR-PERF-03 is verified on the
@@ -22,10 +23,10 @@ async function timeSaves(page: Page, n: number): Promise<number[]> {
     await fillValid(page, { reason: `Save number ${i + 1} under a slow link` });
     const t = Date.now();
     await page.getByRole('button', { name: 'Save decision' }).click();
-    await expect(saveStatus(page)).toHaveText(new RegExp(`^Saved as version ${i + 1} at `), { timeout: 20_000 });
+    await expect(saveStatus(page)).toHaveText(new RegExp(`^Saved at .+ as version ${i + 1}\\.`), { timeout: 20_000 });
     times.push(Date.now() - t);
     // the page refreshes its data after a save; the next save starts from the new version
-    await expect(page.getByText(`Starting from version ${i + 1}`)).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator('[data-region="current-decision"]').getByText(QUESTION_COPY.current.version(i + 1), { exact: true })).toBeVisible({ timeout: 20_000 });
   }
   return times;
 }

@@ -1,0 +1,2159 @@
+{
+  "_generated": "Generated; do not edit by hand. Command: node scripts/vocabulary/generate.mjs <CONSOLIDATED.md> [--allow-missing-rules]",
+  "source": "records/plans/2026-11-11-ux-redesign/copy-audit/CONSOLIDATED.md",
+  "sourceSha256": "53142dcd8c78b24f4b66775fda62ec02596c2da6be19c7bcaafae5992cd78a46",
+  "overrides": "scripts/vocabulary/overrides.json",
+  "lintRules": "scripts/vocabulary/lint-rules.json",
+  "concepts": [
+    {
+      "id": "product",
+      "group": "People, organisations and accounts",
+      "concept": "Product",
+      "term": "MAK-AI RAI Platform",
+      "definition": "A place where your team records its decisions about one AI system, and why.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "Toolkit",
+          "lint": "phrase",
+          "pattern": "\\bMAK-AI Responsible AI Toolkit\\b|\\b[Tt]he Toolkit\\b",
+          "caseSensitive": true
+        },
+        {
+          "text": "RAI Toolkit",
+          "lint": "phrase",
+          "pattern": "\\bRAI Toolkit\\b",
+          "caseSensitive": true
+        },
+        {
+          "text": "lower-case \"platform\" in the name",
+          "lint": "phrase",
+          "pattern": "\\bMAK-AI (?:RAI |Responsible AI (?:\\(RAI\\) )?)?platform\\b",
+          "caseSensitive": true
+        }
+      ]
+    },
+    {
+      "id": "organisation",
+      "group": "People, organisations and accounts",
+      "concept": "Organisation",
+      "term": "organisation",
+      "definition": "The group on the platform whose members can all read the same records. Usually one research team.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "organization",
+          "lint": "phrase",
+          "pattern": "\\borganization(?:s|al)?\\b|(?<=^[\\s#>*_\\-\\d.)|]*|[.!?:]\\s{1,4})Organization(?:s|al)?\\b",
+          "caseSensitive": true
+        }
+      ]
+    },
+    {
+      "id": "team",
+      "group": "People, organisations and accounts",
+      "concept": "Team",
+      "term": "team",
+      "definition": null,
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "\"team\" as a page or account name",
+          "lint": "review",
+          "why": "\"Your team's records\" is a correct sentence: \"team\" is ruled for sentences and only its use as a page or account name is retired, which a pattern cannot tell apart."
+        }
+      ]
+    },
+    {
+      "id": "member",
+      "group": "People, organisations and accounts",
+      "concept": "Member",
+      "term": "member",
+      "definition": "A person with an account in your organisation. Every member can read all its records.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": []
+    },
+    {
+      "id": "role",
+      "group": "People, organisations and accounts",
+      "concept": "Role",
+      "term": "role",
+      "definition": "What a member can do in the organisation.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "lower-case role words on screen",
+          "lint": "review",
+          "why": "\"Ask a reviewer at your ethics committee\" correctly uses \"reviewer\" as a plain English word, not the role name."
+        }
+      ]
+    },
+    {
+      "id": "owner",
+      "group": "People, organisations and accounts",
+      "concept": "Owner",
+      "term": "Owner",
+      "definition": "Can do everything, including making other members owners and downloading all records.",
+      "ownerDecision": false,
+      "defineOnFirstUse": true,
+      "retired": []
+    },
+    {
+      "id": "admin",
+      "group": "People, organisations and accounts",
+      "concept": "Admin",
+      "term": "Admin",
+      "definition": "Can do everything an Owner can, except make or remove Owners.",
+      "ownerDecision": false,
+      "defineOnFirstUse": true,
+      "retired": [
+        {
+          "text": "\"administrator\" for this role",
+          "lint": "review",
+          "why": "\"MAK-AI administrator\" is itself a ruled term, and \"ask your university's research administrator\" correctly names a person outside the platform."
+        }
+      ]
+    },
+    {
+      "id": "assessor",
+      "group": "People, organisations and accounts",
+      "concept": "Assessor",
+      "term": "Assessor",
+      "definition": "Creates projects, records decisions, raises findings, adds mitigations and opens stage reviews.",
+      "ownerDecision": false,
+      "defineOnFirstUse": true,
+      "retired": []
+    },
+    {
+      "id": "reviewer",
+      "group": "People, organisations and accounts",
+      "concept": "Reviewer",
+      "term": "Reviewer",
+      "definition": "Raises findings, seals stage reviews and creates documents. Does not record decisions.",
+      "ownerDecision": false,
+      "defineOnFirstUse": true,
+      "retired": []
+    },
+    {
+      "id": "viewer",
+      "group": "People, organisations and accounts",
+      "concept": "Viewer",
+      "term": "Viewer",
+      "definition": "Can read every record but cannot change anything.",
+      "ownerDecision": false,
+      "defineOnFirstUse": true,
+      "retired": []
+    },
+    {
+      "id": "mak-ai-administrator",
+      "group": "People, organisations and accounts",
+      "concept": "MAK-AI administrator",
+      "term": "MAK-AI administrator",
+      "definition": "The MAK-AI staff member who creates organisations and manages accounts. Cannot see any team's records.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "Platform Admin",
+          "lint": "phrase",
+          "pattern": "\\bplatform[- ]admin(?:s|istrators?)?\\b",
+          "caseSensitive": false
+        },
+        {
+          "text": "plural \"administrators\"",
+          "lint": "review",
+          "why": "\"Research administrators at your university can help\" is a correct sentence about people outside the platform; only the bare plural standing for MAK-AI staff or the Admin role is retired."
+        }
+      ]
+    },
+    {
+      "id": "account-type-admin-screen",
+      "group": "People, organisations and accounts",
+      "concept": "Account type (admin screen)",
+      "term": "Account type",
+      "definition": null,
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "Platform role",
+          "lint": "phrase",
+          "pattern": "\\bplatform roles?\\b",
+          "caseSensitive": false
+        },
+        {
+          "text": "\"Assessor\" as an account type",
+          "lint": "review",
+          "why": "\"Assessor\" is the correct name of a role in an organisation (\"Choose Assessor to let them record decisions\"); only its use as an account type is retired."
+        }
+      ]
+    },
+    {
+      "id": "invitation",
+      "group": "People, organisations and accounts",
+      "concept": "Invitation",
+      "term": "invitation",
+      "definition": "An email with a link to join an organisation. The link works once and stops working on a set date.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": []
+    },
+    {
+      "id": "owner-invitation",
+      "group": "People, organisations and accounts",
+      "concept": "Owner invitation",
+      "term": "owner invitation",
+      "definition": "The invitation the MAK-AI administrator sends to the person who will own a new organisation.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "first-owner invitation",
+          "lint": "phrase",
+          "pattern": "\\bfirst[- ]owner invitations?\\b",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "send-cancel-an-invitation",
+      "group": "People, organisations and accounts",
+      "concept": "Send / cancel an invitation",
+      "term": "send, send again, cancel",
+      "definition": "Cancel: the invitation link stops working at once.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "issue (for invitations)",
+          "lint": "phrase",
+          "pattern": "\\bissu(?:e|es|ed|ing)\\s+(?:(?:an|a|the|this|that|new|another|owner|first-owner)\\s+)*invitations?\\b|\\binvitations?\\s+(?:(?:was|were|is|has been|have been)\\s+)?issued\\b",
+          "caseSensitive": false
+        },
+        {
+          "text": "revoke",
+          "lint": "phrase",
+          "pattern": "^\\s*Revoked?\\s*$|\\brevok(?:e|es|ed|ing)\\b[^.!?\\n]{0,40}\\binvitations?\\b|\\binvitations?\\b[^.!?\\n]{0,60}\\brevoked\\b",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "former-member",
+      "group": "People, organisations and accounts",
+      "concept": "Former member",
+      "term": "former member",
+      "definition": "Someone who has left or was removed. Their past entries stay, under their name.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": []
+    },
+    {
+      "id": "deleted-account",
+      "group": "People, organisations and accounts",
+      "concept": "Deleted account",
+      "term": "Deleted account",
+      "definition": "Shown instead of a name when that person deleted their account.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "Deleted user",
+          "lint": "phrase",
+          "pattern": "\\bdeleted users?\\b",
+          "caseSensitive": false
+        },
+        {
+          "text": "Unknown",
+          "lint": "review",
+          "why": "\"Unknown\" is correct in other places, for example \"Unknown file type\" or a status the reader has not set."
+        },
+        {
+          "text": "An account no longer on the platform",
+          "lint": "phrase",
+          "pattern": "\\ban account no longer on the platform\\b",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "data-controller",
+      "group": "People, organisations and accounts",
+      "concept": "Data controller",
+      "term": "data controller",
+      "definition": "The institution legally responsible for the personal data in an organisation's records.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "\"controller\" alone",
+          "lint": "phrase",
+          "pattern": "(?<!\\bdata[-\\s]+)\\bcontrollers?\\b",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "data-protection-contact",
+      "group": "People, organisations and accounts",
+      "concept": "Data-protection contact",
+      "term": "data-protection contact",
+      "definition": "The person at that institution to contact about personal data.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": []
+    },
+    {
+      "id": "organisation-agreement-record-of-signing",
+      "group": "People, organisations and accounts",
+      "concept": "Organisation agreement (record of signing)",
+      "term": "organisation agreement",
+      "definition": null,
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "historical": true,
+      "retired": [
+        {
+          "text": "\"accepted\" for the agreement",
+          "lint": "phrase",
+          "pattern": "\\borganisation\\s+agreement\\s+(?:(?:was|were|is|has been|had been)\\s+)?accepted\\b|\\baccept(?:s|ed|ing)?\\s+(?:(?:the|this|an|its|your)\\s+)?organisation\\s+agreement\\b",
+          "caseSensitive": false
+        },
+        {
+          "text": "Agreement records",
+          "lint": "phrase",
+          "pattern": "\\bagreement records\\b",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "organisation-details-page",
+      "group": "People, organisations and accounts",
+      "concept": "Organisation details page",
+      "term": "Organisation details",
+      "definition": null,
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "bare \"Organisation\" in the sidebar",
+          "lint": "review",
+          "why": "\"Organisation\" correctly begins sentence-case text such as \"Organisation name changed\"; only the bare sidebar label is retired (plan 1A line 278)."
+        }
+      ]
+    },
+    {
+      "id": "change-the-organisation-name",
+      "group": "People, organisations and accounts",
+      "concept": "Change the organisation name",
+      "term": "change the name",
+      "definition": null,
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "correct",
+          "lint": "review",
+          "why": "\"Check that the date is correct\" is a correct sentence; only \"correct\" as the verb for changing the organisation name is retired."
+        },
+        {
+          "text": "corrected",
+          "lint": "review",
+          "why": "\"The fingerprint is checked against the record, so nothing needs to be corrected\" uses the word in its plain sense; only the name-change event is retired."
+        }
+      ]
+    },
+    {
+      "id": "project",
+      "group": "Projects, stages and questions",
+      "concept": "Project",
+      "term": "project",
+      "definition": "One AI system your team is building, and everything recorded about it.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "\"register\" a system",
+          "lint": "phrase",
+          "pattern": "\\bregister(?:s|ed|ing)?\\s+(?:(?:a|an|the|your|this|new|another)\\s+)*(?:AI\\s+)?systems?\\b",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "development-status-project-field",
+      "group": "Projects, stages and questions",
+      "concept": "Development status (project field)",
+      "term": "development status",
+      "definition": null,
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "\"lifecycle stage\" for this field",
+          "lint": "phrase",
+          "pattern": "^\\s*life[- ]?cycle stage\\s*(?:\\([^)]*\\))?\\s*:?\\s*$",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "archive-a-project",
+      "group": "Projects, stages and questions",
+      "concept": "Archive a project",
+      "term": "archive, unarchive",
+      "definition": "Nothing in an archived project can change and no reminders are sent. Owners and Admins can unarchive it.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "\"archive\" for the ZIP (say \"ZIP file\")",
+          "lint": "review",
+          "why": "\"Archive this project\" is the ruled verb for projects; only \"archive\" meaning the downloaded ZIP is retired, which a pattern cannot tell apart."
+        }
+      ]
+    },
+    {
+      "id": "stage",
+      "group": "Projects, stages and questions",
+      "concept": "Stage",
+      "term": "stage",
+      "definition": "One of three parts of building an AI system. You can work on the stages in any order.",
+      "ownerDecision": true,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "ML lifecycle",
+          "lint": "phrase",
+          "pattern": "\\bML life[- ]?cycle\\b",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "stage-1",
+      "group": "Projects, stages and questions",
+      "concept": "Stage 1",
+      "term": "Pre-processing",
+      "definition": "The work before training: the problem, the data, consent and labels.",
+      "ownerDecision": true,
+      "defineOnFirstUse": true,
+      "retired": [
+        {
+          "text": "Pre",
+          "lint": "phrase",
+          "pattern": "^\\s*Pre\\s*$",
+          "caseSensitive": true
+        },
+        {
+          "text": "raw lower-case segment",
+          "lint": "phrase",
+          "pattern": "^\\s*pre-processing\\s*$",
+          "caseSensitive": true
+        }
+      ]
+    },
+    {
+      "id": "stage-2",
+      "group": "Projects, stages and questions",
+      "concept": "Stage 2",
+      "term": "In-processing",
+      "definition": "Training and testing the model: how it is chosen, measured and explained.",
+      "ownerDecision": true,
+      "defineOnFirstUse": true,
+      "retired": [
+        {
+          "text": "In",
+          "lint": "phrase",
+          "pattern": "^\\s*In\\s*$",
+          "caseSensitive": true
+        }
+      ]
+    },
+    {
+      "id": "stage-3",
+      "group": "Projects, stages and questions",
+      "concept": "Stage 3",
+      "term": "Post-processing",
+      "definition": "After the system is in use: monitoring, who is responsible, and how people report problems.",
+      "ownerDecision": true,
+      "defineOnFirstUse": true,
+      "retired": [
+        {
+          "text": "Post",
+          "lint": "phrase",
+          "pattern": "^\\s*Post\\s*$",
+          "caseSensitive": true
+        }
+      ]
+    },
+    {
+      "id": "topic-module",
+      "group": "Projects, stages and questions",
+      "concept": "Topic (module)",
+      "term": "topic",
+      "definition": "A group of related questions within a stage.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "module",
+          "lint": "review",
+          "why": "\"Import the fairness module in Python\" correctly uses \"module\" in its software sense in guidance and notebooks."
+        }
+      ]
+    },
+    {
+      "id": "question",
+      "group": "Projects, stages and questions",
+      "concept": "Question",
+      "term": "question",
+      "definition": "Something your team decides about. Each question says why it is asked and what good looks like.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "a code standing alone for a question",
+          "lint": "review",
+          "why": "\"Q-PP-03\" shown small after the question's text is correct (question code row), and a string holding only the code cannot show whether the text sits beside it."
+        }
+      ]
+    },
+    {
+      "id": "question-code",
+      "group": "Projects, stages and questions",
+      "concept": "Question code",
+      "term": "question code",
+      "definition": "A short label, such as Q-PP-03, that identifies a question.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": []
+    },
+    {
+      "id": "what-good-looks-like",
+      "group": "Projects, stages and questions",
+      "concept": "What good looks like",
+      "term": "What good looks like",
+      "definition": "What a team has in place when it has fully dealt with this question.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "expected practice",
+          "lint": "phrase",
+          "pattern": "\\bexpected practices?\\b",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "why-this-is-asked",
+      "group": "Projects, stages and questions",
+      "concept": "Why this is asked",
+      "term": "Why this is asked",
+      "definition": null,
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": []
+    },
+    {
+      "id": "question-changed",
+      "group": "Projects, stages and questions",
+      "concept": "Question changed",
+      "term": "Good practice changed",
+      "definition": "The description of good practice changed after your team decided. Check that your decision still fits.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "content version",
+          "lint": "phrase",
+          "pattern": "\\bcontent versions?\\b",
+          "caseSensitive": false
+        },
+        {
+          "text": "reworded",
+          "lint": "review",
+          "why": "\"Your reason was saved as you reworded it\" uses the word plainly; only \"reworded\" as the label for a changed question is retired."
+        }
+      ]
+    },
+    {
+      "id": "personal-data-question-scope-question",
+      "group": "Projects, stages and questions",
+      "concept": "Personal data question (scope question)",
+      "term": "the personal data question",
+      "definition": "If you answer No, the questions about consent and anonymisation do not apply.",
+      "ownerDecision": false,
+      "defineOnFirstUse": true,
+      "retired": [
+        {
+          "text": "scope answer",
+          "lint": "phrase",
+          "pattern": "\\bscope answers?\\b",
+          "caseSensitive": false
+        },
+        {
+          "text": "scope question",
+          "lint": "phrase",
+          "pattern": "\\bscope questions?\\b",
+          "caseSensitive": false
+        },
+        {
+          "text": "gate",
+          "lint": "review",
+          "why": "\"Plan the review before the funding gate\" uses \"gate\" as plain English; only \"gate\" for the personal data question is retired."
+        }
+      ]
+    },
+    {
+      "id": "does-not-apply",
+      "group": "Projects, stages and questions",
+      "concept": "Does not apply",
+      "term": "Does not apply",
+      "definition": "This question is skipped because your team answered No to the personal data question.",
+      "ownerDecision": false,
+      "defineOnFirstUse": true,
+      "retired": [
+        {
+          "text": "Not applicable (scope answer: no)",
+          "lint": "phrase",
+          "pattern": "\\bNot applicable \\(scope answer: no\\)",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "framework",
+      "group": "Projects, stages and questions",
+      "concept": "Framework",
+      "term": "framework",
+      "definition": "The full set of stages, topics, questions, risk areas and controls the platform uses.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": []
+    },
+    {
+      "id": "risk-area",
+      "group": "Projects, stages and questions",
+      "concept": "Risk area",
+      "term": "risk area",
+      "definition": "A kind of harm an AI system can cause, such as unfair results for some groups.",
+      "ownerDecision": false,
+      "defineOnFirstUse": true,
+      "retired": [
+        {
+          "text": "assessment area",
+          "lint": "phrase",
+          "pattern": "\\bassessment areas?\\b",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "principle",
+      "group": "Projects, stages and questions",
+      "concept": "Principle",
+      "term": "principle",
+      "definition": "One of eight values the questions come from, such as fairness or transparency.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": []
+    },
+    {
+      "id": "guidance-section-of-the-menu",
+      "group": "Projects, stages and questions",
+      "concept": "Guidance section of the menu",
+      "term": "Guidance",
+      "definition": null,
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "Explore",
+          "lint": "phrase",
+          "pattern": "^\\s*Explore\\s*$",
+          "caseSensitive": true
+        },
+        {
+          "text": "do not use \"Reference\" (it already means support reference and request reference)",
+          "lint": "review",
+          "why": "\"Reference\" is a correct field label (components/documents/GenerateDocumentForm.tsx:125); only a menu section named \"Reference\" was proposed and retired."
+        }
+      ]
+    },
+    {
+      "id": "decision",
+      "group": "Recording a decision",
+      "concept": "Decision",
+      "term": "decision",
+      "definition": "What your team decided for one question: a status, the reason, who decided, when, and any evidence.",
+      "ownerDecision": true,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "\"answer\" for a decision",
+          "lint": "review",
+          "why": "\"Answer\" is the ruled field of the personal data question (D2), and \"If you answer No\" is its ruled line."
+        }
+      ]
+    },
+    {
+      "id": "status",
+      "group": "Recording a decision",
+      "concept": "Status",
+      "term": "status",
+      "definition": "Your team's short answer to a question: Done, Partly, Not yet or Not applicable.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "Shortfalls (`stageList.ts:47`)",
+          "lint": "phrase",
+          "pattern": "^\\s*Shortfalls\\b",
+          "caseSensitive": true
+        }
+      ]
+    },
+    {
+      "id": "done",
+      "group": "Recording a decision",
+      "concept": "Done",
+      "term": "Done",
+      "definition": "This is in place.",
+      "ownerDecision": false,
+      "defineOnFirstUse": true,
+      "retired": []
+    },
+    {
+      "id": "partly",
+      "group": "Recording a decision",
+      "concept": "Partly",
+      "term": "Partly",
+      "definition": "Some of it is in place, but not all of it.",
+      "ownerDecision": false,
+      "defineOnFirstUse": true,
+      "retired": []
+    },
+    {
+      "id": "not-yet",
+      "group": "Recording a decision",
+      "concept": "Not yet",
+      "term": "Not yet",
+      "definition": "It is not in place yet.",
+      "ownerDecision": false,
+      "defineOnFirstUse": true,
+      "retired": []
+    },
+    {
+      "id": "not-applicable",
+      "group": "Recording a decision",
+      "concept": "Not applicable",
+      "term": "Not applicable",
+      "definition": "It does not apply to this project. Say why in the reason.",
+      "ownerDecision": false,
+      "defineOnFirstUse": true,
+      "retired": []
+    },
+    {
+      "id": "no-decision",
+      "group": "Recording a decision",
+      "concept": "No decision",
+      "term": "No decision",
+      "definition": "Nobody has recorded a decision for this question yet.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": []
+    },
+    {
+      "id": "checklist-items",
+      "group": "Recording a decision",
+      "concept": "Checklist items",
+      "term": "in place",
+      "definition": "Tick each item your team has actually done.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": []
+    },
+    {
+      "id": "reason",
+      "group": "Recording a decision",
+      "concept": "Reason",
+      "term": "reason",
+      "definition": "Your team's explanation: what is in place, where it is recorded, and what is missing.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": []
+    },
+    {
+      "id": "main-reason-reason-code",
+      "group": "Recording a decision",
+      "concept": "Main reason (reason code)",
+      "term": "main reason",
+      "definition": "The closest reason from a short list. Explain it in your own words below.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "reason code",
+          "lint": "phrase",
+          "pattern": "\\breason codes?\\b",
+          "caseSensitive": false
+        },
+        {
+          "text": "raw codes",
+          "lint": "phrase",
+          "pattern": "\\b(?:na|ny)_[a-z]+(?:_[a-z]+)*\\b",
+          "caseSensitive": true
+        }
+      ]
+    },
+    {
+      "id": "decided-by-entered-by",
+      "group": "Recording a decision",
+      "concept": "Decided by / Entered by",
+      "term": "Decided by; Entered by",
+      "definition": "Decided by: who made the decision. Entered by: who typed it into the platform.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": []
+    },
+    {
+      "id": "someone-without-an-account",
+      "group": "Recording a decision",
+      "concept": "Someone without an account",
+      "term": "Someone without a platform account",
+      "definition": "A person or body, such as an ethics committee, who decided but has no account here.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "outside role",
+          "lint": "phrase",
+          "pattern": "\\boutside roles?\\b",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "evidence",
+      "group": "Recording a decision",
+      "concept": "Evidence",
+      "term": "evidence",
+      "definition": "A file or a link that shows what your team did.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "attachment",
+          "lint": "review",
+          "why": "\"This email has no attachment\" is a correct sentence; only \"attachment\" for a piece of evidence is retired."
+        },
+        {
+          "text": "evidence item",
+          "lint": "phrase",
+          "pattern": "\\bevidence items?\\b",
+          "caseSensitive": false
+        },
+        {
+          "text": "artefact",
+          "lint": "review",
+          "why": "\"Store the trained model artefact with its version number\" correctly uses \"artefact\" in its machine-learning sense in guidance."
+        }
+      ]
+    },
+    {
+      "id": "version-of-a-decision",
+      "group": "Recording a decision",
+      "concept": "Version (of a decision)",
+      "term": "version",
+      "definition": "Each save makes a new version. Earlier versions stay in the history and are never overwritten.",
+      "ownerDecision": false,
+      "defineOnFirstUse": true,
+      "retired": [
+        {
+          "text": "v3",
+          "lint": "phrase",
+          "pattern": "(?<![\\w./-])v(?:\\d+(?![\\w/]|\\.\\w)|(?=\\p{Cf}))",
+          "caseSensitive": true
+        },
+        {
+          "text": "version arithmetic in messages",
+          "lint": "review",
+          "why": "The saved mark correctly names the version, \"Saved as version 4\" (spec 6 override; plan 1A line 277)."
+        }
+      ]
+    },
+    {
+      "id": "content-version",
+      "group": "Recording a decision",
+      "concept": "Content version",
+      "term": "the questions",
+      "definition": null,
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "content version",
+          "lint": "phrase",
+          "pattern": "\\bcontent versions?\\b",
+          "caseSensitive": false
+        },
+        {
+          "text": "semver",
+          "lint": "review",
+          "why": "\"Install scikit-learn 1.3.0\" correctly gives a third-party version number in a notebook; only a version number of the questions is retired."
+        },
+        {
+          "text": "question set",
+          "lint": "phrase",
+          "pattern": "\\bquestion sets?\\b",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "history",
+      "group": "Recording a decision",
+      "concept": "History",
+      "term": "history",
+      "definition": "Every version of a decision, newest first, with who saved it and when.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": []
+    },
+    {
+      "id": "unsaved-changes-draft",
+      "group": "Recording a decision",
+      "concept": "Unsaved changes (draft)",
+      "term": "unsaved changes",
+      "definition": "What you typed but have not saved. It is kept in this browser only, until you save.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "draft",
+          "lint": "review",
+          "why": "\"Send the draft data card to your ethics committee\" uses \"draft\" in its plain sense; only \"draft\" for unsaved changes is retired."
+        },
+        {
+          "text": "on this device",
+          "lint": "phrase",
+          "pattern": "\\bon this device\\b",
+          "caseSensitive": false
+        },
+        {
+          "text": "saved on this device",
+          "lint": "phrase",
+          "pattern": "\\bsaved on this device\\b",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "withdraw-a-decision",
+      "group": "Recording a decision",
+      "concept": "Withdraw a decision",
+      "term": "withdraw",
+      "definition": "Remove a decision entered by mistake. The question goes back to No decision. Every version stays in history.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "withdrawal code",
+          "lint": "phrase",
+          "pattern": "\\bwithdrawal codes?\\b",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "erased",
+      "group": "Recording a decision",
+      "concept": "Erased",
+      "term": "erased at your organisation's request",
+      "definition": "Removed at your organisation's request. A note shows when, and seals that included it can still be checked.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "instruction",
+          "lint": "review",
+          "why": "\"Follow the instructions in the notebook\" is a correct sentence; only \"instruction\" for an erasure request is retired."
+        },
+        {
+          "text": "tombstone",
+          "lint": "phrase",
+          "pattern": "\\btombstones?\\b",
+          "caseSensitive": false
+        },
+        {
+          "text": "operator",
+          "lint": "review",
+          "why": "\"The operator of a deployed AI system must be able to stop it\" correctly uses \"operator\" in guidance."
+        }
+      ]
+    },
+    {
+      "id": "done-no-evidence-attached",
+      "group": "Recording a decision",
+      "concept": "Done, no evidence attached",
+      "term": "Done, no evidence attached",
+      "definition": "Questions marked Done that have no file or link attached yet.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "Done without evidence",
+          "lint": "phrase",
+          "pattern": "\\bDone without evidence\\b",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "finding",
+      "group": "Findings and follow-up",
+      "concept": "Finding",
+      "term": "finding",
+      "definition": "A gap your team has noted for a question, so it can be dealt with and closed.",
+      "ownerDecision": true,
+      "defineOnFirstUse": true,
+      "retired": [
+        {
+          "text": "shortfall",
+          "lint": "phrase",
+          "pattern": "\\bshortfalls?\\b",
+          "caseSensitive": false
+        },
+        {
+          "text": "issue",
+          "lint": "review",
+          "why": "\"Issue this document\" is the ruled verb for documents, and \"a known issue with the data\" is plain English."
+        }
+      ]
+    },
+    {
+      "id": "raise-a-finding",
+      "group": "Findings and follow-up",
+      "concept": "Raise a finding",
+      "term": "raise",
+      "definition": "The platform raises a finding when a decision is saved as Partly or Not yet. Members can raise one too.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "opens",
+          "lint": "review",
+          "why": "\"The link opens in a new tab\" is a correct sentence; only \"opens\" for a finding being raised is retired."
+        },
+        {
+          "text": "added",
+          "lint": "review",
+          "why": "\"Evidence added on 2 Nov 2026\" is correct; only \"added\" for a finding being raised is retired."
+        }
+      ]
+    },
+    {
+      "id": "close-a-finding",
+      "group": "Findings and follow-up",
+      "concept": "Close a finding",
+      "term": "close",
+      "definition": "A finding is closed by a mitigation, by accepting the risk, or by a changed decision.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "Close it",
+          "lint": "phrase",
+          "pattern": "^\\s*Close it\\b|\\bClose it\\s*:",
+          "caseSensitive": true
+        },
+        {
+          "text": "Closed by mitigation",
+          "lint": "phrase",
+          "pattern": "\\bClosed by mitigation\\b",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "withdraw-reopen-a-finding",
+      "group": "Findings and follow-up",
+      "concept": "Withdraw / reopen a finding",
+      "term": "Withdraw this finding; Reopen this finding",
+      "definition": "Withdraw: the finding was a mistake; it stays listed but is not open. Reopen: open it again.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "bare \"Withdraw\"",
+          "lint": "phrase",
+          "pattern": "^\\s*Withdraw\\s*$",
+          "caseSensitive": true
+        }
+      ]
+    },
+    {
+      "id": "mitigation",
+      "group": "Findings and follow-up",
+      "concept": "Mitigation",
+      "term": "mitigation",
+      "definition": "A step your team will take to deal with a finding, with a person responsible and a due date.",
+      "ownerDecision": true,
+      "defineOnFirstUse": true,
+      "retired": [
+        {
+          "text": "measures",
+          "lint": "review",
+          "why": "\"The model's accuracy measures how often it is right\" uses \"measures\" as a verb or metric; only \"measures\" for mitigations is retired."
+        },
+        {
+          "text": "action",
+          "lint": "review",
+          "why": "\"This action cannot be undone\" is a correct sentence; only \"action\" for a mitigation is retired."
+        }
+      ]
+    },
+    {
+      "id": "mitigation-status",
+      "group": "Findings and follow-up",
+      "concept": "Mitigation status",
+      "term": "mitigation status",
+      "definition": null,
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": []
+    },
+    {
+      "id": "assigned-to",
+      "group": "Findings and follow-up",
+      "concept": "Assigned to",
+      "term": "Assigned to",
+      "definition": "The member responsible for doing a mitigation.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "\"owner\" and \"own\" for mitigations",
+          "lint": "phrase",
+          "pattern": "\\bmitigations?\\s+(?:I|you|we|they)\\s+own\\b|\\bmitigation(?:'s)?\\s+owners?\\b|\\bown(?:s|ed)?\\s+(?:a|the|this)\\s+mitigation\\b",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "evidence-that-it-is-done",
+      "group": "Findings and follow-up",
+      "concept": "Evidence that it is done",
+      "term": "Evidence that it is done",
+      "definition": null,
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "closure evidence",
+          "lint": "phrase",
+          "pattern": "\\bclosure evidence\\b",
+          "caseSensitive": false
+        },
+        {
+          "text": "artefact",
+          "lint": "review",
+          "why": "\"Store the trained model artefact with its version number\" correctly uses \"artefact\" in its machine-learning sense in guidance."
+        }
+      ]
+    },
+    {
+      "id": "due-date",
+      "group": "Findings and follow-up",
+      "concept": "Due date",
+      "term": "due date",
+      "definition": "The day a mitigation should be done.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "deadline",
+          "lint": "review",
+          "why": "\"Plan around your ethics committee's submission deadline\" is a correct sentence; only \"deadline\" for a mitigation's due date is retired."
+        }
+      ]
+    },
+    {
+      "id": "overdue",
+      "group": "Findings and follow-up",
+      "concept": "Overdue",
+      "term": "overdue",
+      "definition": "Past its due date and not yet Done or Cancelled.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "the East Africa Time line",
+          "lint": "phrase",
+          "pattern": "\\bEast Africa Time\\b",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "accepted-risk",
+      "group": "Findings and follow-up",
+      "concept": "Accepted risk",
+      "term": "accepted risk",
+      "definition": "A decision to live with a finding's risk. It records who accepted it and why, and can be reopened.",
+      "ownerDecision": false,
+      "defineOnFirstUse": true,
+      "retired": []
+    },
+    {
+      "id": "check-again-date",
+      "group": "Findings and follow-up",
+      "concept": "Check again date",
+      "term": "Check again on {date}",
+      "definition": "A date to check whether the accepted risk is still acceptable.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "look at again",
+          "lint": "phrase",
+          "pattern": "\\blook(?:s|ing)?\\s+at\\s+again\\b|\\blook(?:s|ing)?\\s+(?:at\\s+(?:(?:it|this|them)\\s+)?)?again\\s+on\\b|\\bdate\\s+to\\s+look\\s+(?:at\\s+it\\s+)?again\\b",
+          "caseSensitive": false
+        },
+        {
+          "text": "looked at again",
+          "lint": "phrase",
+          "pattern": "\\blooked\\s+at\\s+again\\b|\\blooked\\s+(?:at\\s+(?:(?:it|this|them)\\s+)?)?again\\s+on\\b",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "reminder-emails",
+      "group": "Findings and follow-up",
+      "concept": "Reminder emails",
+      "term": "reminder emails",
+      "definition": "Emails to the member assigned a mitigation, on its due date and when it is 7 days overdue.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": []
+    },
+    {
+      "id": "follow-up-list",
+      "group": "Findings and follow-up",
+      "concept": "Follow-up list",
+      "term": "Mitigations assigned to me; Mitigations to follow up",
+      "definition": null,
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "My open and overdue mitigations",
+          "lint": "phrase",
+          "pattern": "\\bMy open and overdue mitigations\\b",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "stage-review",
+      "group": "Stage reviews, seals and documents",
+      "concept": "Stage review",
+      "term": "stage review",
+      "definition": "A fixed point for one stage, for example before an ethics submission. You seal it, then create documents.",
+      "ownerDecision": false,
+      "defineOnFirstUse": true,
+      "retired": [
+        {
+          "text": "\"Open review\" as a link",
+          "lint": "phrase",
+          "pattern": "^\\s*Open review\\s*$",
+          "caseSensitive": true
+        }
+      ]
+    },
+    {
+      "id": "prepared-for",
+      "group": "Stage reviews, seals and documents",
+      "concept": "Prepared for",
+      "term": "Prepared for",
+      "definition": "A short note on what the review is for, such as a funder report.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": []
+    },
+    {
+      "id": "seal",
+      "group": "Stage reviews, seals and documents",
+      "concept": "Seal",
+      "term": "seal",
+      "definition": "A fixed copy of one stage's record at one moment. Later changes do not alter it.",
+      "ownerDecision": true,
+      "defineOnFirstUse": true,
+      "retired": []
+    },
+    {
+      "id": "changed-since-seal-n",
+      "group": "Stage reviews, seals and documents",
+      "concept": "Changed since seal N",
+      "term": "Changed since seal {n}",
+      "definition": "Something in this stage changed after that seal. The seal still shows the earlier record.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": []
+    },
+    {
+      "id": "fingerprint",
+      "group": "Stage reviews, seals and documents",
+      "concept": "Fingerprint",
+      "term": "fingerprint",
+      "definition": "A code worked out from a sealed record or a file. If anything changes, the code changes.",
+      "ownerDecision": false,
+      "defineOnFirstUse": true,
+      "retired": [
+        {
+          "text": "SHA-256 on screen (keep it in the export README only)",
+          "lint": "phrase",
+          "pattern": "(?<=^|[.!?]\\s{1,4})SHA-?256\\b|\\bSHA-?256\\s*:",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "check-a-seal",
+      "group": "Stage reviews, seals and documents",
+      "concept": "Check a seal",
+      "term": "Check this seal",
+      "definition": "Asks the platform to confirm that nothing in this seal has changed since sealing.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "\"Matches the record\" without saying what was checked",
+          "lint": "phrase",
+          "pattern": "^\\s*Matches the record(?:\\.|\\s*$)",
+          "caseSensitive": true
+        }
+      ]
+    },
+    {
+      "id": "document",
+      "group": "Stage reviews, seals and documents",
+      "concept": "Document",
+      "term": "document",
+      "definition": "A PDF made from a sealed stage review, for an ethics committee, funder or repository.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "report",
+          "lint": "review",
+          "why": "\"Use this data card in your funder report\" is a correct sentence; only \"report\" as the name of a platform document is retired."
+        }
+      ]
+    },
+    {
+      "id": "data-card",
+      "group": "Stage reviews, seals and documents",
+      "concept": "Data card",
+      "term": "data card",
+      "definition": "Describes a dataset: where it came from, what it holds, how it was collected and may be used.",
+      "ownerDecision": false,
+      "defineOnFirstUse": true,
+      "retired": []
+    },
+    {
+      "id": "model-card",
+      "group": "Stage reviews, seals and documents",
+      "concept": "Model card",
+      "term": "model card",
+      "definition": "Describes a model: what it is for, how it was tested, its limits and its risks.",
+      "ownerDecision": false,
+      "defineOnFirstUse": true,
+      "retired": []
+    },
+    {
+      "id": "mitigation-plan",
+      "group": "Stage reviews, seals and documents",
+      "concept": "Mitigation plan",
+      "term": "mitigation plan",
+      "definition": "Lists a stage's open findings, accepted risks and mitigations, and the gaps a reader should know about.",
+      "ownerDecision": false,
+      "defineOnFirstUse": true,
+      "retired": []
+    },
+    {
+      "id": "preview",
+      "group": "Stage reviews, seals and documents",
+      "concept": "Preview",
+      "term": "Preview document",
+      "definition": "See a document before it is created. Nothing is stored until you issue it.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "Generate",
+          "lint": "review",
+          "why": "\"The notebook can generate a summary table\" is a correct sentence; only \"Generate\" as the label of the preview action is retired."
+        }
+      ]
+    },
+    {
+      "id": "issue-a-document",
+      "group": "Stage reviews, seals and documents",
+      "concept": "Issue a document",
+      "term": "issue",
+      "definition": "Create the final document. It is stored with a fingerprint and listed under Issued documents.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": []
+    },
+    {
+      "id": "withdraw-a-document",
+      "group": "Stage reviews, seals and documents",
+      "concept": "Withdraw a document",
+      "term": "withdraw",
+      "definition": "Marks an issued document as withdrawn, with a reason. The PDF is kept and can still be downloaded.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": []
+    },
+    {
+      "id": "fields-to-type-in",
+      "group": "Stage reviews, seals and documents",
+      "concept": "Fields to type in",
+      "term": "Fields to type in",
+      "definition": "Details the sealed record does not hold. You type them for this document only.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "fields the record cannot hold",
+          "lint": "phrase",
+          "pattern": "\\bfields the record cannot hold\\b",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "not-recorded",
+      "group": "Stage reviews, seals and documents",
+      "concept": "Not recorded",
+      "term": "Not recorded",
+      "definition": "Printed where the record holds nothing for that field.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "the bare \"at the time of issue\" form",
+          "lint": "phrase",
+          "pattern": "\\bnot recorded at the time of issue\\b",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "download-all-records-team-export",
+      "group": "Stage reviews, seals and documents",
+      "concept": "Download all records (team export)",
+      "term": "Download records",
+      "definition": "One ZIP file with your records, their history, evidence files and issued documents.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "export as a label (file names may keep it)",
+          "lint": "phrase",
+          "pattern": "\\b[Tt]eam export\\b|^\\s*Export\\b[^.!?\\n]{0,40}$",
+          "caseSensitive": true
+        }
+      ]
+    },
+    {
+      "id": "download-my-data",
+      "group": "Stage reviews, seals and documents",
+      "concept": "Download my data",
+      "term": "Download my data",
+      "definition": "A file with your own account details, memberships and the legal texts you accepted.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "Export my data",
+          "lint": "phrase",
+          "pattern": "\\bexport my data\\b",
+          "caseSensitive": false
+        },
+        {
+          "text": "JSON",
+          "lint": "review",
+          "why": "\"Save the results as a JSON file\" is a correct instruction in a notebook; only \"JSON\" as the name of the download is retired."
+        }
+      ]
+    },
+    {
+      "id": "control",
+      "group": "Guidance content",
+      "concept": "Control",
+      "term": "control",
+      "definition": "A tested way to reduce a risk, with free guidance and sometimes a template or notebook.",
+      "ownerDecision": true,
+      "defineOnFirstUse": true,
+      "retired": [
+        {
+          "text": "\"Other controls\" (say \"More ways to address this\")",
+          "lint": "phrase",
+          "pattern": "^\\s*Other controls\\b",
+          "caseSensitive": true
+        }
+      ]
+    },
+    {
+      "id": "control-types",
+      "group": "Guidance content",
+      "concept": "Control types",
+      "term": "control types",
+      "definition": "Technical: changes to data, model or code. Procedural: steps your team follows. Informational: what you tell affected people.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": []
+    },
+    {
+      "id": "template",
+      "group": "Guidance content",
+      "concept": "Template",
+      "term": "template",
+      "definition": "A form you fill in your browser, then print or save as a PDF. It does not save your typing.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "\"web page\" as its kind",
+          "lint": "phrase",
+          "pattern": "^\\s*web page\\s*$",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "notebook",
+      "group": "Guidance content",
+      "concept": "Notebook",
+      "term": "notebook",
+      "definition": "A Python file you run on your own computer to test your data or model.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": []
+    },
+    {
+      "id": "research-sources",
+      "group": "Guidance content",
+      "concept": "Research sources",
+      "term": "Research sources",
+      "definition": "Published papers and reports behind each risk area.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": []
+    },
+    {
+      "id": "legal-texts-collective",
+      "group": "Legal texts",
+      "concept": "Legal texts (collective)",
+      "term": "Terms and privacy",
+      "definition": "The texts you agree to when you join: terms of service, privacy notice and storage consent.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "\"Legal texts\" as a link",
+          "lint": "phrase",
+          "pattern": "^\\s*Legal texts\\s*$",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "terms-of-service",
+      "group": "Legal texts",
+      "concept": "Terms of service",
+      "term": "terms of service",
+      "definition": "The rules for using the platform.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "Title Case form",
+          "lint": "phrase",
+          "pattern": "\\bTerms of Service\\b",
+          "caseSensitive": true
+        }
+      ]
+    },
+    {
+      "id": "privacy-notice",
+      "group": "Legal texts",
+      "concept": "Privacy notice",
+      "term": "privacy notice",
+      "definition": "What personal data the platform holds, why, where it is stored, and who can see it.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "Privacy Policy",
+          "lint": "phrase",
+          "pattern": "\\bPrivacy Policy\\b",
+          "caseSensitive": true
+        }
+      ]
+    },
+    {
+      "id": "cross-border-storage-consent",
+      "group": "Legal texts",
+      "concept": "Cross-border storage consent",
+      "term": "consent to store data in other countries",
+      "definition": "Your agreement that your account and records are stored in the countries the text names.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "cross-border storage consent",
+          "lint": "phrase",
+          "pattern": "\\bcross[- ]border storage consent\\b",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "organisation-agreement",
+      "group": "Legal texts",
+      "concept": "Organisation agreement",
+      "term": "organisation agreement",
+      "definition": "The signed agreement between MAK-AI and your institution that lets your organisation use the platform.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "historical": true,
+      "retired": []
+    },
+    {
+      "id": "accept-a-legal-text",
+      "group": "Legal texts",
+      "concept": "Accept a legal text",
+      "term": "Read and accept",
+      "definition": "The platform records which version you accepted and when.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "Review (for this action)",
+          "lint": "review",
+          "why": "\"Review\" is a correct word for a stage review (\"View review\"), so the bare label cannot be told apart from its use for accepting a legal text."
+        }
+      ]
+    },
+    {
+      "id": "legal-text-version",
+      "group": "Legal texts",
+      "concept": "Legal text version",
+      "term": "version {n}",
+      "definition": null,
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "v1",
+          "lint": "phrase",
+          "pattern": "(?<![\\w./-])v(?:\\d+(?![\\w/]|\\.\\w)|(?=\\p{Cf}))",
+          "caseSensitive": true
+        }
+      ]
+    },
+    {
+      "id": "sign-in-sign-out",
+      "group": "Using the platform",
+      "concept": "Sign in / sign out",
+      "term": "sign in, sign out",
+      "definition": null,
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "Sign In",
+          "lint": "phrase",
+          "pattern": "\\bSign In\\b",
+          "caseSensitive": true
+        },
+        {
+          "text": "login",
+          "lint": "phrase",
+          "pattern": "(?<![/\\w.-])log-?ins?\\b",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "automatic-sign-out",
+      "group": "Using the platform",
+      "concept": "Automatic sign-out",
+      "term": "Stay signed in",
+      "definition": "You are signed out 12 hours after signing in or choosing Stay signed in, and always after 7 days.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "the \"nothing has happened\" reason",
+          "lint": "phrase",
+          "pattern": "\\bbecause nothing has happened\\b",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "signed-in-devices",
+      "group": "Using the platform",
+      "concept": "Signed-in devices",
+      "term": "signed-in devices",
+      "definition": "The browsers where you are signed in. Sign out everywhere signs you out on all of them.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "session",
+          "lint": "review",
+          "why": "\"Plan a working session with your team\" is a correct sentence; only \"session\" for a signed-in browser is retired."
+        }
+      ]
+    },
+    {
+      "id": "password-reset-link",
+      "group": "Using the platform",
+      "concept": "Password reset link",
+      "term": "password reset link",
+      "definition": "A link sent by email to set a new password. It works once, for 30 minutes.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": []
+    },
+    {
+      "id": "dashboard",
+      "group": "Using the platform",
+      "concept": "Dashboard",
+      "term": "Home",
+      "definition": "Your starting page in this organisation: your next step and what is open.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "Dashboard",
+          "lint": "phrase",
+          "pattern": "\\bDashboards?\\b",
+          "caseSensitive": true
+        }
+      ]
+    },
+    {
+      "id": "my-account",
+      "group": "Using the platform",
+      "concept": "My account",
+      "term": "My account",
+      "definition": "Your name, email, password, signed-in devices, data download and account deletion.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "the repeated \"My account\" h2",
+          "lint": "review",
+          "why": "\"My account\" is the ruled page name; only a second \"My account\" heading on the same page is retired, which a single string cannot show."
+        }
+      ]
+    },
+    {
+      "id": "help-and-contact",
+      "group": "Using the platform",
+      "concept": "Help and contact",
+      "term": "Help and contact",
+      "definition": null,
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": []
+    },
+    {
+      "id": "support-reference",
+      "group": "Using the platform",
+      "concept": "Support reference",
+      "term": "support reference",
+      "definition": "A short code on an error page. Give it to MAK-AI so they can find what happened.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "\"reference\" in brackets mid-sentence",
+          "lint": "phrase",
+          "pattern": "\\(\\s*reference\\b",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "emergency-access",
+      "group": "Using the platform",
+      "concept": "Emergency access",
+      "term": "emergency access",
+      "definition": "How MAK-AI's server staff reach the server when the normal way does not work. Owners and Admins are emailed.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "break-glass",
+          "lint": "phrase",
+          "pattern": "\\bbreak[- ]?glass\\b",
+          "caseSensitive": false
+        },
+        {
+          "text": "root",
+          "lint": "review",
+          "why": "\"Find the root cause of the bias\" is a correct sentence in guidance; only \"root\" for the server login is retired."
+        },
+        {
+          "text": "console",
+          "lint": "review",
+          "why": "\"Open the browser console\" or \"print it to the console\" in a notebook is correct; only \"console\" for the server login is retired."
+        },
+        {
+          "text": "integrity log",
+          "lint": "phrase",
+          "pattern": "\\bintegrity logs?\\b",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "time-and-time-zone",
+      "group": "Using the platform",
+      "concept": "Time and time zone",
+      "term": "time and time zone",
+      "definition": null,
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [
+        {
+          "text": "EAT",
+          "lint": "phrase",
+          "pattern": "\\bEAT\\b",
+          "caseSensitive": true
+        },
+        {
+          "text": "unlabelled zones",
+          "lint": "review",
+          "why": "\"14:05\" with no zone is correct on screen, where times are in the reader's own zone (voice rule 10); a string cannot show where it is rendered."
+        },
+        {
+          "text": "Show UTC",
+          "lint": "phrase",
+          "pattern": "\\bShow UTC\\b",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "legal-name",
+      "group": "People, organisations and accounts",
+      "concept": "Legal name",
+      "term": "legal name",
+      "definition": "The full legal name of the institution responsible for an organisation, recorded by MAK-AI when it creates the organisation.",
+      "ownerDecision": false,
+      "defineOnFirstUse": false,
+      "retired": [],
+      "source": "stage-0-legal-two-texts-plan.md Part 1, decision 2"
+    }
+  ],
+  "properNames": [
+    {
+      "text": "NIST AI RMF Playbook: MAP function",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[0].resources[0].title"
+    },
+    {
+      "text": "Canada Algorithmic Impact Assessment (AIA) Tool",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[0].resources[1].title"
+    },
+    {
+      "text": "EU AI Act Art. 27: Fundamental Rights Impact Assessment",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[1].resources[0].title"
+    },
+    {
+      "text": "WHO Ethics & Governance of AI for Health",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[1].resources[1].title"
+    },
+    {
+      "text": "CodeCarbon: track the energy use and carbon emissions of computing",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[1].resources[3].title"
+    },
+    {
+      "text": "pandas: working with missing data",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[2].resources[0].title"
+    },
+    {
+      "text": "SciPy: chi-square test against expected counts (stats.chisquare)",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[2].resources[1].title"
+    },
+    {
+      "text": "scikit-learn: mutual_info_classif",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[3].resources[0].title"
+    },
+    {
+      "text": "scikit-learn: cohen_kappa_score",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[3].resources[1].title"
+    },
+    {
+      "text": "statsmodels: fleiss_kappa",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[3].resources[2].title"
+    },
+    {
+      "text": "pandas: crosstab",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[4].resources[0].title"
+    },
+    {
+      "text": "SciPy: statistics reference (scipy.stats)",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[4].resources[1].title"
+    },
+    {
+      "text": "NIST SP 1270: Towards a Standard for Identifying and Managing Bias in AI",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[5].resources[0].title"
+    },
+    {
+      "text": "IBM AI Fairness 360 (AIF360): Bias Detection Toolkit",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[5].resources[1].title"
+    },
+    {
+      "text": "Microsoft Fairlearn: Fairness Assessment & Mitigation",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[5].resources[2].title"
+    },
+    {
+      "text": "NIST AI RMF Playbook, MAP 5.1: impacts, beneficial and harmful",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[6].resources[0].title"
+    },
+    {
+      "text": "OECD AI Principles: Inclusive Growth & Stakeholder Engagement",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[6].resources[1].title"
+    },
+    {
+      "text": "scikit-learn: Cross-validation & Stratified Sampling",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[7].resources[0].title"
+    },
+    {
+      "text": "NIST AI RMF Playbook, MAP 2.3: data collection and selection",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[7].resources[1].title"
+    },
+    {
+      "text": "NIST AI RMF Playbook: GOVERN function",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[8].resources[0].title"
+    },
+    {
+      "text": "OECD AI Principles: Data Governance & Stewardship",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[8].resources[1].title"
+    },
+    {
+      "text": "DAMA International: Data Management Body of Knowledge (DMBOK)",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[8].resources[2].title"
+    },
+    {
+      "text": "pycanon: k-anonymity and l-diversity checks in Python",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[9].resources[0].title"
+    },
+    {
+      "text": "Python: hmac, keyed-hash message authentication",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[9].resources[1].title"
+    },
+    {
+      "text": "WHO Ethics & Governance of AI for Health: Consent Guidance",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[10].resources[0].title"
+    },
+    {
+      "text": "UNESCO Recommendation on Ethics of AI: Informed Participation",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[10].resources[1].title"
+    },
+    {
+      "text": "GDPR Articles 13-14: Information Requirements for Consent",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[10].resources[2].title"
+    },
+    {
+      "text": "Regulation (EU) 2016/679 (GDPR), official text",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[10].resources[3].title"
+    },
+    {
+      "text": "Label Studio: Open-Source Data Annotation Platform",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[11].resources[2].title"
+    },
+    {
+      "text": "Fairlearn: assessing fairness with MetricFrame",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[12].resources[0].title"
+    },
+    {
+      "text": "Fairlearn: MetricFrame",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[13].resources[0].title"
+    },
+    {
+      "text": "scikit-learn: resample",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[13].resources[1].title"
+    },
+    {
+      "text": "Fairlearn: mitigation techniques (CorrelationRemover, ExponentiatedGradient, ThresholdOptimizer)",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[14].resources[0].title"
+    },
+    {
+      "text": "scikit-learn: StratifiedKFold",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[15].resources[0].title"
+    },
+    {
+      "text": "scikit-learn: GroupKFold",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[15].resources[1].title"
+    },
+    {
+      "text": "Mitchell et al. (2019): Model Cards for Model Reporting",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[16].resources[0].title"
+    },
+    {
+      "text": "Google Model Card Toolkit",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[16].resources[1].title"
+    },
+    {
+      "text": "Hugging Face: Model Card Guide",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[16].resources[2].title"
+    },
+    {
+      "text": "DVC: data and model versioning",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[16].resources[3].title"
+    },
+    {
+      "text": "MLflow: experiment and model tracking",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[16].resources[4].title"
+    },
+    {
+      "text": "Git: reference documentation",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[16].resources[5].title"
+    },
+    {
+      "text": "EQUATOR Network: reporting guidelines library",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[16].resources[6].title"
+    },
+    {
+      "text": "TRIPOD+AI reporting guideline",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[16].resources[7].title"
+    },
+    {
+      "text": "SHAP documentation",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[17].resources[0].title"
+    },
+    {
+      "text": "scikit-learn: permutation feature importance",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[17].resources[1].title"
+    },
+    {
+      "text": "Adversarial Robustness Toolbox (GitHub)",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[17].resources[2].title"
+    },
+    {
+      "text": "Gebru et al. (2021): Datasheets for Datasets",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[18].resources[0].title"
+    },
+    {
+      "text": "Hugging Face: Dataset Card Guide",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[18].resources[1].title"
+    },
+    {
+      "text": "UNESCO Recommendation on Ethics of AI: Multi-stakeholder Governance",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[19].resources[0].title"
+    },
+    {
+      "text": "OECD AI Principles: Inclusive Growth & Sustainable Development",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[19].resources[1].title"
+    },
+    {
+      "text": "AU Continental AI Strategy: Multi-stakeholder Governance",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[19].resources[2].title"
+    },
+    {
+      "text": "SciPy: two-sample Kolmogorov-Smirnov test (stats.ks_2samp)",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[20].resources[0].title"
+    },
+    {
+      "text": "Evidently documentation",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[20].resources[1].title"
+    },
+    {
+      "text": "NIST AI RMF Playbook: MANAGE function",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[21].resources[0].title"
+    },
+    {
+      "text": "Google Cloud: MLOps, continuous delivery and automation pipelines in machine learning",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[21].resources[1].title"
+    },
+    {
+      "text": "NIST AI RMF Playbook, MANAGE 1.1: whether deployment should proceed",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[22].resources[0].title"
+    },
+    {
+      "text": "CONSORT-AI reporting guideline",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[22].resources[1].title"
+    },
+    {
+      "text": "SPIRIT-AI reporting guideline",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[22].resources[2].title"
+    },
+    {
+      "text": "Google SRE Workbook: canarying releases",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[22].resources[3].title"
+    },
+    {
+      "text": "NIST AI RMF Playbook, MANAGE 2.4: supersede, disengage or deactivate a system",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[23].resources[0].title"
+    },
+    {
+      "text": "EU AI Act: Human Oversight Requirements for High-Risk AI",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[23].resources[1].title"
+    },
+    {
+      "text": "EU AI Act Art. 86: Right to Explanation of AI Decisions",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[24].resources[0].title"
+    },
+    {
+      "text": "UNESCO Recommendation: Contestability & Redress Mechanisms",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[24].resources[1].title"
+    },
+    {
+      "text": "OECD AI Principles: Accountability & Transparency",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[24].resources[2].title"
+    },
+    {
+      "text": "NIST AI RMF Playbook, GOVERN 2.1: roles and responsibilities",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[25].resources[0].title"
+    },
+    {
+      "text": "ISO/IEC 42001: AI Management System Standard",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[25].resources[1].title"
+    },
+    {
+      "text": "OECD AI Policy Observatory: AI Literacy & Education",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[26].resources[0].title"
+    },
+    {
+      "text": "UNESCO Recommendation: AI Education & Public Awareness",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[26].resources[1].title"
+    },
+    {
+      "text": "Elements of AI: a free online introduction to artificial intelligence",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[26].resources[2].title"
+    },
+    {
+      "text": "NIST AI RMF Playbook, MANAGE 4.1: incident response, recovery and change management",
+      "source": "data/content/5.1.0/assessmentAreas.json:controls[27].resources[0].title"
+    }
+  ]
+}

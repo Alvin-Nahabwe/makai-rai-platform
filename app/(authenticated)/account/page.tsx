@@ -3,8 +3,10 @@ import { requireIdentity } from '@/lib/auth/identity';
 import { identityDb } from '@/lib/data/identity';
 import { lastActiveOwnerOf } from '@/lib/data/identityReads';
 import { AccountRegions } from '@/components/account/AccountRegions';
+import { ACCOUNT_COPY } from '@/lib/account/copy';
+import { pageTitle } from '@/lib/ui/title';
 
-export const metadata: Metadata = { title: 'My account - MAK-AI RAI Platform' };
+export const metadata: Metadata = { title: pageTitle(ACCOUNT_COPY.titles.myAccount) };
 
 /**
  * S-21 My account (FR-ACC-04, FR-ACC-07, FR-ACC-08, FR-EXP-02, FR-EXP-03). Gate 3 lets `/account` through by exact path

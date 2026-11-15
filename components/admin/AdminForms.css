@@ -1,0 +1,111 @@
+/* Layout of the MAK-AI administrator's forms and boxes (plan 1A Task 19, part 19a): only what the kit has no part for.
+   The fields, buttons, status lines and confirmation are the kit's (components/ui); this file spaces them and reads the
+   role tokens only. */
+
+/* The "show the link" box under the fields, before the note and the submit button. */
+.admin-form__check {
+  margin-block-end: var(--space-5);
+}
+
+.admin-form__note {
+  max-inline-size: var(--measure-reading);
+  margin-block: 0 var(--space-5);
+}
+
+/* A row of buttons: they wrap under each other on a narrow screen rather than overflowing it. */
+.admin-form__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* The form's own error line under its buttons ("Check the fields marked above."). */
+.admin-form__actions + .ui-field__error {
+  margin-block-start: var(--space-3);
+}
+
+/* The organisation page's facts (date, members, flags, legal name), set apart from the forms under them. */
+.admin-facts {
+  margin-block-end: var(--space-6);
+}
+
+/* One block of the organisation page (name, legal name, owner invitation, history), set apart from the next. */
+.admin-block {
+  margin-block-end: var(--space-6);
+}
+
+.admin-block > h2 {
+  margin-block: 0 var(--space-3);
+}
+
+/* The owner invitation box's list of invitations, one per line. */
+.admin-invitations {
+  margin-block: 0 var(--space-4);
+  padding-inline-start: var(--space-5);
+}
+
+.admin-invitations > li {
+  overflow-wrap: anywhere;
+}
+
+/* The earlier agreement records: history, read-only, muted like the record it is. */
+.admin-history {
+  margin-block: 0;
+  padding-inline-start: var(--space-5);
+  color: var(--color-ink-muted);
+}
+
+.admin-history > li {
+  overflow-wrap: anywhere;
+}
+
+/* The resend control: its checkbox, then the two buttons with the resend's description between them. */
+.admin-invitation__resend {
+  display: grid;
+  gap: var(--space-3);
+  margin-block-end: var(--space-4);
+}
+
+/* S-25's cells: the "(you)" mark, a long name or email that may break anywhere, and the action form's warning, field and
+   button. Every cell that holds what people typed (a name, an email, the organisations' names in the warning) may break
+   anywhere, so no such word sets the table's narrowest width: the six columns then fit the wrapper at every width the kit
+   draws them as a table (640 px of wrapper and up), and the row actions never scroll out of sight. The name keeps room
+   for an ordinary word (7em, inside that sum), so only a word longer than its column breaks. */
+.admin-account__you {
+  color: var(--color-ink-muted);
+}
+
+/* The organisation's name in the Organisations table takes the same rule: one long unbreakable word in a name must
+   not make the table wider than its wrapper and push the last column out of sight. */
+.admin-account__name,
+.admin-org__name {
+  display: inline-block;
+  min-inline-size: 7em;
+  overflow-wrap: anywhere;
+}
+
+.admin-account__email {
+  overflow-wrap: anywhere;
+}
+
+.admin-account__form {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+}
+
+.admin-account__form > .ui-field {
+  margin-block-end: 0;
+}
+
+.admin-account__warning {
+  max-inline-size: var(--measure-reading);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* S-23's flags in a cell, under the organisation's name. */
+.admin-flag {
+  display: block;
+}

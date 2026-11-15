@@ -2,13 +2,16 @@
 
 import { useEffect, useRef, useState, type MouseEvent, type ReactElement, type ReactNode } from 'react';
 import { signOut } from 'next-auth/react';
+import { Button } from '@/components/ui/Button';
+import '@/components/ui/buttonStyles';
 import { openDraftStore } from '@/lib/client/drafts';
+import { DRAFTS_COPY } from '@/lib/decision/drafts/copy';
+import { clearLastProjects } from '@/lib/client/lastProject';
 
 export type SignOutWithDraftsGuardProps = { userId: string; children: ReactNode };
 
-/** M-41 (SRS 7.5.7), without its two bracketed actions, which are the buttons below it. */
-export const m41 = (n: number): string =>
-  `You have ${n} answers on this device that are not saved. If you sign out, they are deleted from this device.`;
+/** M-41 (SRS 7.5.7), without its two bracketed actions, which are the buttons below it (answer Q11). */
+export const m41 = (n: number): string => DRAFTS_COPY.signOut.warning(n);
 
 /**
  * The guard around the sidebar's Sign out button (M-41, UX-26, NFR-PRIV-06, FR-DEC-06). A press is caught before the
@@ -39,6 +42,7 @@ export function SignOutWithDraftsGuard({ userId, children }: SignOutWithDraftsGu
   async function deleteAndSignOut(): Promise<void> {
     setBusy(true);
     openDraftStore()?.purgeAccount(userId);
+    clearLastProjects(userId);
     await signOut({ callbackUrl: '/login' });
   }
 
@@ -55,9 +59,10 @@ export function SignOutWithDraftsGuard({ userId, children }: SignOutWithDraftsGu
           <p id="sign-out-drafts-text">{m41(count)}</p>
           <div className="form-actions">
             {/* A plain link: S-21 is another unit's page, and this is not a navigation to prefetch. */}
-            <a className="btn btn--secondary" href="/account#drafts-on-this-device" onClick={() => setCount(null)}>Go to them</a>
-            <button type="button" className="btn btn--primary" disabled={busy} onClick={() => { void deleteAndSignOut(); }}>Delete them and sign out</button>
-            <button type="button" className="btn btn--secondary" onClick={() => setCount(null)}>Cancel</button>
+            <a className="ui-button ui-button--secondary" href="/account#drafts-on-this-device" onClick={() => setCount(null)}>{DRAFTS_COPY.signOut.goToThem}</a>
+            {/* Busy, not disabled: the press keeps its focus while the drafts are purged and the sign-out runs (kit Button). */}
+            <Button variant="primary" busy={busy} onClick={() => { void deleteAndSignOut(); }}>{DRAFTS_COPY.signOut.deleteAndSignOut}</Button>
+            <Button variant="secondary" onClick={() => setCount(null)}>{DRAFTS_COPY.signOut.cancel}</Button>
           </div>
         </div>
       ) : null}

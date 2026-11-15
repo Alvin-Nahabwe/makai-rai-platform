@@ -53,7 +53,9 @@ describe('the v0.6.1 release notes', () => {
     expect(waivers).toMatch(/D-293[^.]*not renewed/);
     expect(waivers).toMatch(/D-294[^.]*not renewed/);
     // Nothing in the notes asks the owner for a waiver the file does not hold: the 0.6.0 owner words are not quoted as in force.
-    for (const w of file.waivers.filter((x) => x.release !== '0.6.1')) expect(waivers).not.toContain(`"${w.owner_words}"`);
+    // A later release may be deferred in the same words (0.7.0 was: "Defer the walk"); those words are this release's own.
+    const own = new Set(mine.map((w) => w.owner_words));
+    for (const w of file.waivers.filter((x) => x.release !== '0.6.1' && !own.has(x.owner_words))) expect(waivers).not.toContain(`"${w.owner_words}"`);
   });
 
   it('NFR-SEC-14 NFR-SEC-17 NFR-PRIV-05: the notes carry no value, and say no key is added, removed or renamed', () => {

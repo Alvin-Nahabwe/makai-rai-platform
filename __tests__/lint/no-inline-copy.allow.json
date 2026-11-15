@@ -1,0 +1,37 @@
+[
+  {
+    "file": "components/admin/AgreementRecords.tsx",
+    "text": "Earlier agreement records (no longer used)",
+    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
+  },
+  {
+    "file": "components/admin/AgreementRecords.tsx",
+    "text": "v${…} · accepted ${…} · controller ${…} · ${…} · recorded on ${…}",
+    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
+  },
+  {
+    "file": "components/findings/MitigationForm.tsx",
+    "text": "In progress",
+    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
+  },
+  {
+    "file": "components/layout/Footer.tsx",
+    "text": "Footer",
+    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
+  },
+  {
+    "file": "components/layout/Footer.tsx",
+    "text": "Help and contact",
+    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
+  },
+  {
+    "file": "components/layout/IdleWarning.tsx",
+    "text": "Sign in again",
+    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
+  },
+  {
+    "file": "components/layout/IdleWarning.tsx",
+    "text": "Stay signed in",
+    "reason": "Inline in JSX when the no-inline-copy rule was introduced (plan 1A Task 13); plan 1A Tasks 16 to 20 and plans 1B and 1C move it into a copy module."
+  }
+]

@@ -1,5 +1,6 @@
 import type { EmailContent } from '../templates';
 import { escapeHtml } from '../escape';
+import { EMAIL_COPY } from '../copy';
 
 /**
  * E-03 (FR-ACC-06, SRS 7.5.9 line 2602): the reset link. `resetUrl` is S-03 with the token after `#token=`, so the token is
@@ -7,11 +8,14 @@ import { escapeHtml } from '../escape';
  * and no email address. Pure: no I/O; lib/data/passwordReset.ts sends it.
  */
 export function passwordResetEmail(input: { resetUrl: string }): EmailContent {
-  const before = 'Use this link to set a new password: ';
-  const after = '. It works once and expires in 30 minutes. If you did not ask for this, you can ignore this email; nothing will change.';
+  const { passwordReset } = EMAIL_COPY;
   return {
-    subject: 'Reset your MAK-AI RAI Platform password',
-    text: `${before}${input.resetUrl}${after}`,
-    html: `<p>${escapeHtml(before)}<a href="${escapeHtml(input.resetUrl)}">${escapeHtml(input.resetUrl)}</a>${escapeHtml(after)}</p>`,
+    subject: passwordReset.subject,
+    text: [`${passwordReset.linkLead}\n${input.resetUrl}`, passwordReset.closing].join('\n\n'),
+    html: [
+      `<p>${passwordReset.linkLead}</p>`,
+      `<p><a href="${escapeHtml(input.resetUrl)}">${escapeHtml(input.resetUrl)}</a></p>`,
+      `<p>${passwordReset.closing}</p>`,
+    ].join('\n'),
   };
 }

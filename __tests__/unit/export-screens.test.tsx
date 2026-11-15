@@ -7,6 +7,7 @@ import {
 import { PersonalExportAndDeletion } from '../../components/account/PersonalExportAndDeletion';
 import { TeamExportLink } from '../../components/org/TeamExportLink';
 import { DELETION_UNCONFIRMED } from '../../lib/export/messages';
+import { PERSONAL_DATA_COPY, phraseLabel } from '../../lib/account/copy';
 
 /**
  * S-20 (TeamExportPanel), the S-21 slot (PersonalExportAndDeletion) and the S-30 slot (TeamExportLink):
@@ -18,12 +19,20 @@ const M38 = 'You are the only owner of Makerere CAI Lab with an active account. 
 describe('S-20 TeamExportPanel', () => {
   it('M-37 FR-EXP-01: S-20 says what will be exported, about how big, as one ZIP file, and says it is preparing after the click', () => {
     const html = renderToStaticMarkup(<TeamExportPanel href="/api/v1/orgs/o/export" scopeName="Maternal-risk triage" aboutBytes={2_400_000} refused={null} />);
-    expect(html).toContain('Export Maternal-risk triage: about 2.4 MB as one ZIP file.');
-    expect(html).toMatch(/<a[^>]*href="\/api\/v1\/orgs\/o\/export"[^>]*>Download export<\/a>/);
+    expect(html).toContain('Records of Maternal-risk triage: about 2.4 MB, as one ZIP file.');
+    expect(html).toMatch(/<a[^>]*href="\/api\/v1\/orgs\/o\/export"[^>]*>Download records<\/a>/);
     expect(html).toMatch(/role="status"/); // the region PREPARING is written into on click
     expect(html).not.toContain(PREPARING); // not before the click
     expect(PREPARING).toBe('Preparing the export. Large projects can take a few minutes.');
     expect(html).not.toMatch(/role="alert"/);
+  });
+
+  it('S-20: the panel has no heading of its own and no label pointing at a missing heading', () => {
+    // CONSOLIDATED section 4: the panel's "Download" heading repeated its button; the page's h1 names the page.
+    const html = renderToStaticMarkup(<TeamExportPanel href="/api/v1/orgs/o/export" scopeName="Maternal-risk triage" aboutBytes={2_400_000} refused={null} />);
+    expect(html).not.toMatch(/<h[1-6][\s>]/);
+    expect(html).not.toContain('aria-labelledby');
+    expect(html).toMatch(/>Download records<\/a>/);
   });
 
   it('FR-EXP-01 (owner question B4): S-20 says why an export was refused, for two running and for the hourly limit', () => {
@@ -31,7 +40,7 @@ describe('S-20 TeamExportPanel', () => {
     for (const r of ['export_busy', 'rate_limited'] as const) {
       const html = renderToStaticMarkup(<TeamExportPanel href="/api/v1/orgs/o/export" scopeName="Maternal-risk triage" aboutBytes={2_400_000} refused={r} />);
       expect(html).toMatch(new RegExp(`role="alert"[^>]*>${REFUSED_TEXT[r]}<`));
-      expect(html).toMatch(/>Download export<\/a>/);
+      expect(html).toMatch(/>Download records<\/a>/);
     }
     expect([refusedFrom({ refused: 'export_busy' }), refusedFrom({ refused: 'rate_limited' }), refusedFrom({ refused: '<script>' }),
       refusedFrom({ refused: ['export_busy', 'x'] }), refusedFrom({})]).toEqual(['export_busy', 'rate_limited', null, null, null]);
@@ -51,30 +60,30 @@ describe('S-21 PersonalExportAndDeletion', () => {
 
   it('FR-EXP-02: S-21 offers Export my data with what it does and does not include', () => {
     const html = renderToStaticMarkup(<PersonalExportAndDeletionForm userId="u1" lastActiveOwnerOf={[]} />);
-    expect(html).toMatch(/<a[^>]*href="\/api\/users\/me\/export"[^>]*>Export my data<\/a>/);
-    expect(html).toContain('A JSON file with your account, memberships, acceptances, reminder setting and a list of the records you entered or were named in. It does not include your teams&#x27; record text, which belongs to each organisation.');
-    expect(html).toMatch(/<h2[^>]*>My data<\/h2>/);
-    expect(html).toMatch(/<h2[^>]*>Delete my account<\/h2>/);
-    expect(html).toContain('Your name and email are removed and you are signed out everywhere. Records you entered stay with your organisations, shown as entered by &quot;Deleted user&quot;. This cannot be undone.');
-    expect(html).toMatch(/<button[^>]*>Delete my account\.\.\.<\/button>/);
+    expect(html).toMatch(new RegExp(`<a[^>]*href="/api/users/me/export"[^>]*>${PERSONAL_DATA_COPY.download}</a>`));
+    expect(html).toContain(PERSONAL_DATA_COPY.downloadIntro);
+    expect(html).toMatch(new RegExp(`<h2[^>]*>${PERSONAL_DATA_COPY.dataHeading}</h2>`));
+    expect(html).toMatch(new RegExp(`<h2[^>]*>${PERSONAL_DATA_COPY.deleteHeading}</h2>`));
+    expect(html).toContain(PERSONAL_DATA_COPY.deleteConsequence.replace(/"/g, '&quot;'));
+    expect(html).toMatch(new RegExp(`<button[^>]*>${PERSONAL_DATA_COPY.deleteTrigger}</button>`));
   });
 
   it('UX-29 FR-EXP-03: Delete my account confirms inline with a password and the typed phrase, both pasteable, and a button that repeats the action', () => {
     const html = renderToStaticMarkup(<DeleteConfirm userId="u1" onCancel={() => {}} />);
     expect(html).toMatch(/<input[^>]*type="password"[^>]*autoComplete="current-password"|<input[^>]*autoComplete="current-password"[^>]*type="password"/i);
     expect(html).not.toMatch(/onpaste|readonly/i);
-    expect(html).toContain('Type DELETE MY ACCOUNT to confirm');
-    expect(html).toMatch(/<label[^>]*for="[^"]+"[^>]*>Password<\/label>/);
-    expect(html).toMatch(/<button[^>]*>Delete my account<\/button>/);
+    expect(html).toContain(phraseLabel('DELETE MY ACCOUNT'));
+    expect(html).toMatch(new RegExp(`<label[^>]*for="[^"]+"[^>]*>${PERSONAL_DATA_COPY.passwordLabel}`));
+    expect(html).toMatch(new RegExp(`<button[^>]*>${PERSONAL_DATA_COPY.deleteAction}</button>`));
     expect(html).toMatch(/<button[^>]*>Cancel<\/button>/);
-    expect(html).toContain('Your account');
+    expect(html).toContain(PERSONAL_DATA_COPY.objectName);
   });
 
   it('M-38 FR-EXP-03: for a last owner the delete button is replaced by the message naming the organisation', () => {
     const html = renderToStaticMarkup(<PersonalExportAndDeletionForm userId="u1" lastActiveOwnerOf={['Makerere CAI Lab']} />);
     expect(html).toContain(M38);
     expect(html).not.toMatch(/>Delete my account\.\.\.</);
-    expect(html).toMatch(/>Export my data<\/a>/); // the export stays offered
+    expect(html).toMatch(new RegExp(`>${PERSONAL_DATA_COPY.download}</a>`)); // the export stays offered
   });
 
   it('M-38 FR-EXP-03: the server slot renders the form with its contract props', () => {

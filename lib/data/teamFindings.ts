@@ -9,6 +9,7 @@ import { userRefs } from '@/lib/data/views';
 import { runningContent } from '@/lib/content/loader';
 import { deriveFindingState } from '@/lib/findings/state';
 import { FINDING_MESSAGES, TEXT_MAX, textLength } from '@/lib/findings/validate';
+import { FINDINGS_COPY } from '@/lib/findings/copy';
 import { eatDate, isOverdue } from '@/lib/followup/overdue';
 import { logSecurityEvent } from '@/lib/security-logger';
 
@@ -29,12 +30,12 @@ export const TEAM_TITLE_MAX = 200;
  * object answers the same 422 as a nonexistent one (no oracle, ruling RE-1; round 17 queue, AUTHZ M3).
  */
 export const TEAM_FINDING_MESSAGES = Object.freeze({
-  title: 'Write a title.',
-  description: 'Write a description.',
-  stage: 'Choose a stage.',
-  riskArea: 'Choose a risk area of this stage, or none.',
-  questionId: 'Choose a question of this stage, or none.',
-  decisionVersionId: 'Choose a decision version of this question, or none.',
+  title: FINDINGS_COPY.fields.title,
+  description: FINDINGS_COPY.fields.description,
+  stage: FINDINGS_COPY.fields.stage,
+  riskArea: FINDINGS_COPY.fields.riskArea,
+  questionId: FINDINGS_COPY.fields.questionId,
+  decisionVersionId: FINDINGS_COPY.fields.decisionVersionId,
 });
 
 /** A lone UTF-16 surrogate cannot be carried by UTF-8; NUL cannot be stored in a PostgreSQL text column (as lib/findings/validate.ts). */

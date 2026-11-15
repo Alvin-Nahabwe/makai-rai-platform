@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { OrgRole } from '@prisma/client';
 import type { ContentRef, SaveDecisionRequest } from '@/types/api';
 import { requestDigest } from '@/lib/data/idempotency';
+import { M11 } from '@/lib/decision/copy';
 import { withOrg } from '@/lib/data/tenant';
 import { currentDecisionRows, currentDecisions, saveDecision } from '@/lib/data/decisions';
 import { resetDb, testDb } from '../helpers/db';
@@ -151,7 +152,7 @@ describe('saveDecision: versions, base check and server-set fields', () => {
     const b2 = body({ baseVersionNumber: 1, status: 'partly' });
     await save('assessor', b2);
     const e = await save('assessor', { ...b2, requestId: randomUUID(), baseVersionNumber: 2 }).catch((x) => x);
-    expect(e).toMatchObject({ status: 422, extra: { fields: [{ field: 'form', message: 'This is the same as version 2. Change something before saving, or keep version 2.' }] } });
+    expect(e).toMatchObject({ status: 422, extra: { fields: [{ field: 'form', message: M11.unchanged(2) }] } });
     await expect(save('assessor', { ...b2, requestId: randomUUID(), baseVersionNumber: 2, declaredDate: '2026-10-13' })).resolves.toMatchObject({ value: { versionNumber: 3 } });
   });
 

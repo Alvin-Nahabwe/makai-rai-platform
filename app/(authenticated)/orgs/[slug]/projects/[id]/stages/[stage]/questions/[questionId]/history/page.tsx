@@ -1,3 +1,5 @@
+import { cache } from 'react';
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { requireIdentity } from '@/lib/auth/identity';
 import { requireOrgContextFor } from '@/lib/auth/context';
@@ -17,9 +19,14 @@ import { ListLink } from '@/components/ui/ListLink';
 import { STAGES, type Stage } from '@/types/record';
 import type { DecisionVersionView } from '@/types/api';
 import type { OrgRole } from '@prisma/client';
+import { DECISION_COPY } from '@/lib/decision/copy';
+import { QUESTION_COPY } from '@/lib/question/copy';
+import { orNotFound } from '@/lib/auth/titleGate';
+import { pageTitle } from '@/lib/ui/title';
+import RememberProject from '@/components/layout/RememberProject';
 
 export interface HistoryPageData {
-  orgSlug: string; projectId: string; projectArchived: boolean; stage: Stage; questionId: string;
+  orgSlug: string; projectId: string; projectName: string; projectArchived: boolean; stage: Stage; questionId: string;
   viewer: { userId: string; role: OrgRole }; versions: DecisionVersionView[]; entries: HistoryEntry[];
 }
 
@@ -48,15 +55,37 @@ export function wordingIn(semver: string, questionId: string, load: (semver: str
 export async function loadHistoryPage(ctx: OrgContext, viewerId: string, p: { projectId: string; stage: Stage; questionId: string }): Promise<HistoryPageData | null> {
   const q = runningContent().questions.get(p.questionId);
   if (q === undefined || q.stage !== p.stage) return null;
-  const project = await withOrg(ctx, (tx) => tx.project.findFirst({ where: { id: p.projectId }, select: { archivedAt: true, org: { select: { slug: true } } } }));
+  const project = await withOrg(ctx, (tx) => tx.project.findFirst({ where: { id: p.projectId }, select: { name: true, archivedAt: true, org: { select: { slug: true } } } }));
   if (project === null) return null;
   const versions = await decisionHistory(ctx, p.projectId, p.questionId);
   const seals = await sealsIncludingRows(ctx, versions.map((v) => v.id));
   return {
-    orgSlug: project.org.slug, projectId: p.projectId, projectArchived: project.archivedAt !== null, stage: p.stage, questionId: p.questionId,
+    orgSlug: project.org.slug, projectId: p.projectId, projectName: project.name, projectArchived: project.archivedAt !== null, stage: p.stage, questionId: p.questionId,
     viewer: { userId: viewerId, role: ctx.role }, versions,
     entries: versions.map((v) => ({ version: v, wording: wordingIn(v.content.semver, p.questionId), seals: seals.get(v.id) ?? [] })),
   };
+}
+
+type Params = Promise<{ slug: string; id: string; stage: string; questionId: string }>;
+
+/**
+ * The gates and the loader, once per request: the page and its title both read through this (React `cache()`), so an
+ * unknown stage, question or project is the same `notFound()` for both and the title names nothing.
+ */
+const load = cache(async (slug: string, id: string, stage: string, questionId: string) => {
+  const identity = await requireIdentity();
+  const ctx = await requireOrgContextFor(identity.userId, slug, 'record:read');
+  if (!(STAGES as readonly string[]).includes(stage)) notFound();
+  const data = await loadHistoryPage(ctx, identity.userId, { projectId: id, stage: stage as Stage, questionId });
+  if (data === null) notFound();
+  return data;
+});
+
+/** The page's own heading, then the project. */
+export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
+  const { slug, id, stage, questionId } = await params;
+  const data = await orNotFound(load(slug, id, stage, questionId));
+  return { title: pageTitle(DECISION_COPY.titles.history(data.questionId), data.projectName) };
 }
 
 /**
@@ -66,17 +95,18 @@ export async function loadHistoryPage(ctx: OrgContext, viewerId: string, p: { pr
 export default async function HistoryPage({
   params, searchParams,
 }: {
-  params: Promise<{ slug: string; id: string; stage: string; questionId: string }>;
+  params: Params;
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const { slug, id, stage, questionId } = await params;
-  const identity = await requireIdentity();
-  const ctx = await requireOrgContextFor(identity.userId, slug, 'record:read');
-  if (!(STAGES as readonly string[]).includes(stage)) notFound();
-  const data = await loadHistoryPage(ctx, identity.userId, { projectId: id, stage: stage as Stage, questionId });
-  if (data === null) notFound();
+  const data = await load(slug, id, stage, questionId);
   const sp = await searchParams;
-  return <HistoryView data={data} shown={typeof sp.shown === 'string' ? sp.shown : null} />;
+  return (
+    <>
+      <HistoryView data={data} shown={typeof sp.shown === 'string' ? sp.shown : null} />
+      <RememberProject userId={data.viewer.userId} orgSlug={slug} projectId={data.projectId} />
+    </>
+  );
 }
 
 /** The markup of S-13, exported so a test renders it from real data. */
@@ -85,20 +115,21 @@ export function HistoryView({ data, shown }: { data: HistoryPageData; shown: str
   const current = data.versions[0] ?? null;
   const questionHref = questionHrefOf(data, data.questionId);
   const n = data.versions.length;
+  const H = QUESTION_COPY.history;
   return (
     <div className="page-content">
       <ArchivedBanner archived={data.projectArchived} />
-      <p><ListLink href={questionHref}>{`Back to ${data.questionId}`}</ListLink></p>
-      <h1>{`History of ${data.questionId}`}</h1>
-      <p>{n === 0 ? 'No decision has been recorded for this question yet.' : `${n} ${n === 1 ? 'version' : 'versions'}, newest first.`}</p>
+      <p><ListLink href={questionHref}>{H.back(data.questionId)}</ListLink></p>
+      <h1>{DECISION_COPY.titles.history(data.questionId)}</h1>
+      <p>{n === 0 ? H.none : H.count(n)}</p>
       {current !== null ? (
         <WithdrawDecision
           orgSlug={data.orgSlug} projectId={data.projectId} stage={data.stage} questionId={data.questionId} current={current}
           canWithdraw={canWithdrawVersion(data.viewer.role, data.viewer.userId, current, data.projectArchived)}
         />
       ) : null}
-      <DecisionHistoryList orgSlug={data.orgSlug} entries={page.items} />
-      {page.hasMore ? <ShowMoreLink href={`?shown=${page.nextShown}`} label="Show older" /> : null}
+      <DecisionHistoryList orgSlug={data.orgSlug} entries={page.items} isScopeQuestion={runningContent().questions.get(data.questionId)?.type === 'gate'} />
+      {page.hasMore ? <ShowMoreLink href={`?shown=${page.nextShown}`} label={H.showOlder} /> : null}
     </div>
   );
 }

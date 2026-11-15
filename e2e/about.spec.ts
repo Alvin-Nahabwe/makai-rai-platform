@@ -100,14 +100,14 @@ test('UX-03 FR-PUB-02 NFR-A11Y-04: /about is public, and /explore/about redirect
   await expect(page.locator('#help-and-contact')).toBeVisible();
 });
 
-test('UX-03 FR-PUB-02 NFR-A11Y-04: signed in as a seat, the sidebar About link reaches /about', async ({ browser, baseURL }) => {
+test('UX-03 FR-PUB-02 NFR-A11Y-04: signed in as a seat, the footer About link reaches /about', async ({ browser, baseURL }) => {
   const seat = ownerSeat();
   const context = await browser.newContext({ baseURL, storageState: seat.storageStatePath });
   const page = await context.newPage();
   failOnDialog(page);
   await page.goto(`/orgs/${seat.orgSlug}/dashboard`);
-  // The sidebar's link points at /explore/about until UI changes it, and at /about after; both end here.
-  await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: /About$/ }).click();
+  // The shell's rail has no About item (plan 1A Task 11): a signed-in person reaches About by the footer, on every page.
+  await page.getByRole('navigation', { name: 'Footer' }).getByRole('link', { name: 'About', exact: true }).click();
   await page.waitForURL((url) => url.pathname === '/about');
   await expect(page.locator('#help-and-contact')).toBeVisible();
 
@@ -153,46 +153,19 @@ test('UX-03: /about#help-and-contact lands on the Help and contact section', asy
   expect(top, 'the section starts in the first half of the viewport').toBeLessThan(350);
 });
 
-test('OD-20 UX-03 NFR-A11Y-05: Help and contact shows the UNCST table, and 360 px does not scroll sideways', async ({ page }) => {
+// CONSOLIDATED section 4 (owner ruling, country content): the UNCST table left Help and contact; the section stays.
+test('UX-03 NFR-A11Y-05: Help and contact holds no country table, and 360 px does not scroll sideways', async ({ page }) => {
   failOnDialog(page);
   await page.setViewportSize({ width: 360, height: 900 });
   await page.goto('/about');
   // The id is on the heading, so the section is found by the heading it is labelled by.
-  const table = page.locator('section[aria-labelledby="help-and-contact"] table');
-  await expect(table.locator('caption')).toHaveText("Which fields answer Uganda's six AI protocol issues (UNCST guidelines 2025, section 16.6)");
-  await expect(table.locator('tbody tr')).toHaveCount(6);
-  // Labels, not ids, in the field columns.
-  // The layout follows the component's own width.
-  expect(await page.locator('.uncst-table-wrap').evaluate((el) => getComputedStyle(el).containerType)).toBe('inline-size');
-  expect(await table.textContent()).not.toMatch(/\b(DC|MP)-\d{2}\b/);
+  const help = page.locator('section[aria-labelledby="help-and-contact"]');
+  await expect(help.getByRole('heading', { name: 'Help and contact', level: 2 })).toBeVisible();
+  await expect(help.locator('table')).toHaveCount(0);
+  await expect(page.getByText(/UNCST|AI protocol issues/)).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= 360)).toBe(true);
-  await expectNoSeriousA11yViolations(page, 'S-28 UNCST table');
+  await expectNoSeriousA11yViolations(page, 'S-28 Help and contact');
 });
-
-for (const width of [360, 1280]) {
-  test(`OD-20 UX-03 NFR-A11Y-05: no word of the UNCST table breaks in the middle at ${width} px`, async ({ page }) => {
-    failOnDialog(page);
-    await page.setViewportSize({ width, height: 900 });
-    await page.goto('/about');
-    const table = page.locator('section[aria-labelledby="help-and-contact"] table');
-    await expect(table).toBeVisible();
-    // A word is a run of characters between spaces or hyphens; one that spans two client rects was broken inside.
-    const broken = await table.evaluate((t) => {
-      const out: string[] = [];
-      const walker = document.createTreeWalker(t, NodeFilter.SHOW_TEXT);
-      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-        for (const m of (n.textContent ?? '').matchAll(/[^\s-]+/g)) {
-          const r = document.createRange();
-          r.setStart(n, m.index!);
-          r.setEnd(n, m.index! + m[0].length);
-          if (r.getClientRects().length > 1) out.push(m[0]);
-        }
-      }
-      return out;
-    });
-    expect(broken, 'words broken across lines').toEqual([]);
-  });
-}
 
 for (const scheme of ['light', 'dark'] as const) {
   for (const width of [1280, 360]) {

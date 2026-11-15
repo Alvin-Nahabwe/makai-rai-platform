@@ -1,0 +1,77 @@
+/* Layout of S-22, Members (plan 1A Task 19, part 19b): only what the kit has no part for. The tables, fields, buttons,
+   status line and confirmations are the kit's (components/ui), or native elements in the kit's classes; this file
+   spaces them and reads the role tokens only. */
+
+/* The screen's blocks (status line, tables, the leave control, the invite form), set apart from each other. */
+.members {
+  display: grid;
+  gap: var(--space-6);
+}
+
+/* A row's actions: they wrap under each other in a narrow cell rather than overflowing it. */
+.members-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+/* An open confirmation under the row's actions. */
+.members-actions + div > .ui-confirm,
+.members-leave > div > .ui-confirm {
+  margin-block-start: var(--space-3);
+}
+
+/* The role select in a member's row: not the field width of a form, and never narrower than its longest word and the
+   chevron, which a wide confirmation in the actions cell would otherwise squeeze it to. */
+.members-role {
+  min-inline-size: 10em;
+  max-inline-size: 14em;
+}
+
+/* The copied-link mark (FR-ACC-10): on its own line under the member's name, small and muted, so it never runs into
+   the name. */
+.members-mark {
+  display: block;
+  font-size: var(--font-size-small);
+  font-weight: normal;
+  color: var(--color-ink-muted);
+}
+
+/* A long email may break anywhere. */
+.members-email {
+  overflow-wrap: anywhere;
+}
+
+/* The invite form: its heading, fields and button in one column. */
+.members-invite {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-4);
+}
+
+.members-invite > h2 {
+  margin: 0;
+}
+
+.members-invite > .ui-field,
+.members-invite > [data-role-choice],
+.members-invite > [data-role-choice] > .ui-field {
+  justify-self: stretch;
+  margin-block-end: 0;
+}
+
+/* The roles the person can choose, each with its definition, one per line under the role select. */
+.members-roles {
+  display: grid;
+  gap: var(--space-1);
+  max-inline-size: var(--measure-reading);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.members-roles [data-term] {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-ink);
+}

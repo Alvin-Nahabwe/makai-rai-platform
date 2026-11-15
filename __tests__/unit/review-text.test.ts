@@ -7,6 +7,7 @@ import { requestIdFor } from '@/lib/client/retrySafeWrite';
 import { clearRetry, loadRetry, openRetryKey, retryAfter, saveRetry, sealRetryKey } from '@/components/review/retryStore';
 import type { SealView, StageReviewView } from '@/types/api';
 import type { SealPreview } from '@/lib/data/reviews';
+import { REVIEW_COPY } from '@/lib/review/copy';
 
 /** S-16 and S-17's words (W-7, 7.4.2 row S-16 / S-17, UX-18, M-28), as pure functions. */
 
@@ -35,75 +36,75 @@ describe('review text', () => {
   });
 
   it('FR-REV-05 NFR-A11Y-05: the review state is said in words', () => {
-    expect(reviewStateLine({ ...VIEW, latestSeal: null, changed: null })).toBe('Never sealed.');
+    expect(reviewStateLine({ ...VIEW, latestSeal: null, changed: null })).toBe(REVIEW_COPY.state.notSealed);
     expect(reviewStateLine({ ...VIEW, latestSeal: { ...SEAL_VIEW, sealNumber: 1, sealedAt: '2026-11-02T07:42:00.000Z', bytesMatch: true }, changed: null })).toBe('Sealed as seal 1 on 2 Nov 2026.');
     expect(reviewStateLine({ ...VIEW, latestSeal: { ...SEAL_VIEW, sealNumber: 1, bytesMatch: true }, changed: { sealNumber: 1, changedQuestions: ['Q-PP-12', 'Q-PP-14'], changedFindings: [] } })).toBe('Changed since seal 1 (2).');
-    expect(reviewStateLine({ ...VIEW, latestSeal: { ...SEAL_VIEW, bytesMatch: false }, changed: null })).toBe('Does not match the record.');   // SRS 7.5.3 bans "failed"; M-29's sentence
+    expect(reviewStateLine({ ...VIEW, latestSeal: { ...SEAL_VIEW, bytesMatch: false }, changed: null })).toBe(REVIEW_COPY.state.damaged);   // SRS 7.5.3 bans "failed"; M-29's sentence
   });
 
   it('UX-18: the unsaved-answers line, and the statement that sealing records open items', () => {
     expect(unsavedDraftsLine(0)).toBeNull();
-    expect(unsavedDraftsLine(1)).toBe('You have 1 unsaved answers in this stage on this device. They will not be in the seal.');
+    expect(unsavedDraftsLine(1)).toBe(REVIEW_COPY.confirm.unsavedOne);
     const lines = previewLines(PREVIEW, 2, LABELS);
-    expect(lines[0]).toBe('A seal fixes what the record says right now, gaps included. It does not hide open items; it records them. After sealing, any change shows as "changed since seal 2".');
-    expect(lines).toContain('Decisions by status: Done 8 . Partly 3 . Not yet 1 . Not applicable 2');
-    expect(lines).toContain('Not applicable and Not yet by reason: No personal data is involved 2 . Planned for later 1');
-    expect(lines).toContain('Scope answer: Yes (Q-PP-GATE-SENSITIVE, version 1)');
-    expect(lines).toContain('Done without evidence: 2');
+    expect(lines[0]).toBe(REVIEW_COPY.sealPage.statement(2));
+    expect(lines).toContain('Decisions by status: Done 8\u00a0· Partly 3\u00a0· Not yet 1\u00a0· Not applicable 2');
+    expect(lines).toContain('Not applicable and Not yet by reason: No personal data is involved 2\u00a0· Planned for later 1');
+    expect(lines).toContain(REVIEW_COPY.sealPage.gateAnswer('Yes'));
+    expect(lines).toContain(REVIEW_COPY.sealPage.doneNoEvidence(2));
     expect(lines).toContain('Open findings: 3');
     expect(lines).toContain('Open mitigations: 2');
-    expect(lines).toContain('Evidence: 6 files (fingerprints taken of each file), 3 links (the address only; the platform never opens links)');
+    expect(lines).toContain(REVIEW_COPY.sealPage.evidence('6 files', '3 links'));
     expect(lines).toContain('Decisions entered by 3 people');
-    expect(lines).toContain('Expected practice reworded since the decision: 1');
-    expect(lines).toContain('You are sealing as Grace A. (reviewer)');
+    expect(lines).toContain(REVIEW_COPY.sealPage.reworded(1));
+    expect(lines).toContain(REVIEW_COPY.sealPage.sealingAs('Grace A.', 'Reviewer'));
     expect(previewLines({ ...PREVIEW, enteredByPeople: 1, scopeAnswer: null }, 1, LABELS)).toContain('Decisions entered by 1 person');
-    expect(previewLines({ ...PREVIEW, scopeAnswer: null }, 1, LABELS).some((l) => l.startsWith('Scope answer'))).toBe(false);
+    expect(previewLines({ ...PREVIEW, scopeAnswer: null }, 1, LABELS).some((l) => l.startsWith(REVIEW_COPY.sealPage.gateAnswer('')))).toBe(false);
   });
 
   it('UX-18 (7.4.2 S-16 / S-17): the sealing states, the lost-connection line and the path to the next seal read as the SRS', () => {
-    expect(SEAL_STATUS).toEqual({ sending: 'Sealing...', slow: 'Still sealing. The connection is slow.', lost: 'Not sealed yet: no reply from the server. It may have arrived. Retry is safe: it will not seal twice.' });   // C4 ruling on hunter H1 (M-06 pattern)
+    expect(SEAL_STATUS).toEqual({ sending: 'Sealing...', slow: 'Still sealing. The connection is slow.', lost: REVIEW_COPY.confirm.lost });   // C4 ruling on hunter H1 (M-06 pattern)
     expect(sealAgainLabel(3)).toBe('Seal again as seal 3');
   });
 
-  it('UX-18 (G023, G050): Go to them opens S-11 with its drafts filter, and What a seal proves opens its About anchor', () => {
+  it('UX-18 (G023, G050): Go to them opens S-11 with its drafts filter, and the seal link opens What sealing means on Help', () => {
     expect(draftsHref('o', 'p', 'pre-processing')).toBe('/orgs/o/projects/p/stages/pre-processing?show=drafts');
-    expect(SEAL_PROOF_HREF).toBe('/about#what-a-seal-proves');
+    expect(SEAL_PROOF_HREF).toBe('/help#what-sealing-means');
   });
 
   it('FR-REV-05 (ruling on RE-5): the question-set line shows only when the running content differs from the seal\'s', () => {
     expect(contentChangedLine({ ...SEAL_VIEW, sealNumber: 1, contentSemver: '0.0.1-fixture' }, '0.0.2-fixture'))
-      .toBe('The question set changed after seal 1 (version 0.0.1-fixture to 0.0.2-fixture). Changes are counted against the current question set.');
+      .toBe(REVIEW_COPY.state.contentChanged(1));
     expect(contentChangedLine({ ...SEAL_VIEW, contentSemver: '0.0.2-fixture' }, '0.0.2-fixture')).toBeNull();
     expect(contentChangedLine(null, '0.0.2-fixture')).toBeNull();
   });
 
   it('FR-REV-06 (C4 SF-1 ruling): a latest seal whose bytes are no readable manifest of it reads M-29, even when its fingerprint matches', () => {
-    expect(reviewStateLine({ ...VIEW, latestSeal: { ...SEAL_VIEW, bytesMatch: true }, latestSealUnreadable: true, changed: null })).toBe('Does not match the record.');
+    expect(reviewStateLine({ ...VIEW, latestSeal: { ...SEAL_VIEW, bytesMatch: true }, latestSealUnreadable: true, changed: null })).toBe(REVIEW_COPY.state.damaged);
   });
 
   it('UX-25 (C4 CR-1, CR-4, SF-5): S-17 says every refusal once, with Retry only where retrying can help', () => {
     const r = (status: number, code: string, extra: Record<string, unknown> = {}) => ({ status, body: { error: 'x', code, ...extra } });
     expect(sealRefusal(r(409, 'number_taken'), 2)).toEqual({
-      message: 'Not sealed: seal 2 was taken by someone else just now. Nothing was sealed by this press. The next seal is seal 3.', retry: false, refresh: true,
+      message: REVIEW_COPY.confirm.numberTaken(2), retry: false, refresh: true,
     });
-    expect(sealRefusal(r(401, 'unauthenticated'), 1)).toEqual({ message: 'Not sealed: you have been signed out. Sign in again to seal.', retry: false, refresh: false });
-    expect(sealRefusal(r(429, 'rate_limited', { retryAfterSeconds: 90 }), 1)).toEqual({ message: 'Not sealed: too many requests. Wait 2 minutes, then retry.', retry: false, refresh: false });
-    expect(sealRefusal(r(429, 'rate_limited'), 1).message).toBe('Not sealed: too many requests. Wait 1 minute, then retry.');
-    expect(sealRefusal(r(409, 'project_archived'), 1)).toMatchObject({ message: 'Not sealed: this project is archived.', retry: false });   // C4 CR-6 ruling
-    expect(sealRefusal(r(403, 'forbidden'), 1).message).toBe('Not sealed: your role changed. Ask an owner or admin.');
-    expect(openRefusal(r(403, 'forbidden')).message).toBe('Not opened: your role changed. Ask an owner or admin.');
-    expect(openRefusal(r(409, 'project_archived')).message).toBe('Not opened: this project is archived.');
+    expect(sealRefusal(r(401, 'unauthenticated'), 1)).toEqual({ message: REVIEW_COPY.confirm.signedOut, retry: false, refresh: false });
+    expect(sealRefusal(r(429, 'rate_limited', { retryAfterSeconds: 90 }), 1)).toEqual({ message: REVIEW_COPY.confirm.rateLimited(REVIEW_COPY.waitMany(2)), retry: false, refresh: false });
+    expect(sealRefusal(r(429, 'rate_limited'), 1).message).toBe(REVIEW_COPY.confirm.rateLimited(REVIEW_COPY.waitOne));
+    expect(sealRefusal(r(409, 'project_archived'), 1)).toMatchObject({ message: REVIEW_COPY.confirm.archived, retry: false });   // C4 CR-6 ruling
+    expect(sealRefusal(r(403, 'forbidden'), 1).message).toBe(REVIEW_COPY.confirm.roleChanged);
+    expect(openRefusal(r(403, 'forbidden')).message).toBe(REVIEW_COPY.open.roleChanged);
+    expect(openRefusal(r(409, 'project_archived')).message).toBe(REVIEW_COPY.open.archived);
     expect(sealRefusal(r(403, 'forbidden'), 1).retry).toBe(false);
-    expect(sealRefusal(r(500, 'internal_error'), 1)).toEqual({ message: 'Not sealed: the server had a problem. Nothing was sealed.', retry: true, refresh: false });
+    expect(sealRefusal(r(500, 'internal_error'), 1)).toEqual({ message: REVIEW_COPY.confirm.server, retry: true, refresh: false });
     expect(sealRefusal(r(404, 'not_found'), 1).retry).toBe(false);
   });
 
   it('UX-25 (C4 CR-4): the open form says a sign-out and a rate limit, and never offers a retry that cannot work', () => {
     const r = (status: number, code: string, extra: Record<string, unknown> = {}) => ({ status, body: { error: 'x', code, ...extra } });
-    expect(openRefusal(r(401, 'unauthenticated'))).toEqual({ message: 'Not opened: you have been signed out. Sign in again.', retry: false, refresh: false });
-    expect(openRefusal(r(429, 'rate_limited', { retryAfterSeconds: 30 })).message).toBe('Not opened: too many requests. Wait 1 minute, then retry.');
+    expect(openRefusal(r(401, 'unauthenticated'))).toEqual({ message: REVIEW_COPY.open.signedOut, retry: false, refresh: false });
+    expect(openRefusal(r(429, 'rate_limited', { retryAfterSeconds: 30 })).message).toBe(REVIEW_COPY.open.rateLimited(REVIEW_COPY.waitOne));
     expect(openRefusal(r(409, 'number_taken'))).toMatchObject({ refresh: true, retry: false });
-    expect(openRefusal(r(500, 'internal_error'))).toEqual({ message: 'Not opened: the server had a problem. Retry.', retry: true, refresh: false });
+    expect(openRefusal(r(500, 'internal_error'))).toEqual({ message: REVIEW_COPY.open.server, retry: true, refresh: false });
   });
 
   it('UX-25 (S-17 hunt H2, H3): a 2xx body that is not a seal or a review is not trusted, and only forbidden reads as a lowered role', () => {
@@ -112,10 +113,10 @@ describe('review text', () => {
     expect(isReviewBody(VIEW)).toBe(true);
     for (const bad of [null, {}, { id: 7 }, { id: '' }]) expect(isReviewBody(bad)).toBe(false);
     const r = (status: number, code: string) => ({ status, body: { error: 'x', code } });
-    expect(sealRefusal(r(403, 'must_change_password'), 1).message).not.toContain('your role');
-    expect(sealRefusal(r(403, 'cross_origin'), 1).message).not.toContain('your role');
-    expect(openRefusal(r(403, 'must_change_password')).message).not.toContain('your role');
-    expect(sealRefusal(r(403, 'forbidden'), 1).message).toContain('your role changed');
+    expect(sealRefusal(r(403, 'must_change_password'), 1).message).not.toContain(REVIEW_COPY.confirm.roleChanged);
+    expect(sealRefusal(r(403, 'cross_origin'), 1).message).not.toContain(REVIEW_COPY.confirm.roleChanged);
+    expect(openRefusal(r(403, 'must_change_password')).message).not.toContain(REVIEW_COPY.open.roleChanged);
+    expect(sealRefusal(r(403, 'forbidden'), 1).message).toContain(REVIEW_COPY.confirm.roleChanged);
   });
 
   it('FR-DEC-07 (C4 ruling on hunter H1): the request id of a lost seal or open survives a reload, until a 201 or a 200 clears it', () => {

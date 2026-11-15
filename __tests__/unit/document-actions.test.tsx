@@ -52,8 +52,8 @@ describe('the withdrawal confirmation', () => {
   });
 
   it('M-36 (owner question B2): the confirmation reads the agreed text, with no code and no checking sentence', () => {
-    expect(withdrawText('data_card', '2026-11-04')).toBe("Withdraw data card? It will show 'Withdrawn by the team on 4 Nov 2026'. The document stays stored.");
-    expect(withdrawText('mitigation_plan', '2026-11-04')).toBe("Withdraw mitigation plan? It will show 'Withdrawn by the team on 4 Nov 2026'. The document stays stored.");
+    expect(withdrawText('data_card', '2026-11-04')).toBe('Withdraw this data card? It will be marked Withdrawn in the list, with your reason. The PDF is kept and can still be downloaded.');
+    expect(withdrawText('mitigation_plan', '2026-11-04')).toBe('Withdraw this mitigation plan? It will be marked Withdrawn in the list, with your reason. The PDF is kept and can still be downloaded.');
     const html = plain(confirm(doc({ documentType: 'model_card' })));
     expect(html).toContain(withdrawText('model_card', '2026-11-04'));
     expect(html).toContain('Reason (required)');
@@ -79,6 +79,6 @@ describe('the failure lines', () => {
     expect(WITHDRAW_LOST).toBe('Not withdrawn yet: no reply from the server. It may have arrived. Retry is safe: it will not withdraw twice.');
     expect(WITHDRAW_LOST).not.toContain('Nothing was changed');
     expect(WITHDRAW_OTHER).toBe('Not withdrawn. Reload the page and try again.');
-    expect(COPY_LOST).toBe('Not copied: connection lost.');
+    expect(COPY_LOST).toBe('Not copied. Connection lost.');
   });
 });

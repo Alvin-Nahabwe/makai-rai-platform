@@ -1,31 +1,22 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-
-type Theme = 'light' | 'dark';
+import { Icon } from '@/components/ui/Icon';
+import { SHELL_COPY } from '@/lib/shell/copy';
 
 /**
- * Light/dark theme toggle. Persists the choice to localStorage and reflects it
- * on <html data-theme>. Until mounted it renders a neutral placeholder so the
- * server and client markup match (the actual theme is applied pre-paint by the
- * inline script in the root layout).
+ * The theme switch (plan 1A Task 11, ruling L2-47; modern-web-guidance `dark-mode-toggle`). Both labels are in the markup and
+ * CSS shows the one that names the other theme (app/globals.css, moved there from components/layout/shell.css), so the server and the client render the same
+ * thing and the words are right on first paint, before any script. The control's name changes with the state, so it carries
+ * no aria-pressed. A press sets <html data-theme> and stores the choice under `theme`, which the root layout's inline script
+ * reads before paint.
  */
 export default function ThemeToggle({ onLight = false }: { onLight?: boolean }) {
-  const [theme, setTheme] = useState<Theme | null>(null);
-
-  useEffect(() => {
-    // Reads browser-only APIs (data-theme set pre-paint, and the OS preference),
-    // so it can only run after mount — a legitimate one-shot effect setState.
-    const stored = document.documentElement.getAttribute('data-theme') as Theme | null;
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setTheme(stored ?? (prefersDark ? 'dark' : 'light'));
-  }, []);
-
   function toggle() {
-    const next: Theme = theme === 'dark' ? 'light' : 'dark';
-    setTheme(next);
-    document.documentElement.setAttribute('data-theme', next);
+    const root = document.documentElement;
+    const set = root.getAttribute('data-theme');
+    const rendered = set === 'dark' || set === 'light' ? set : window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    const next = rendered === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
     try {
       localStorage.setItem('theme', next);
     } catch {
@@ -33,35 +24,10 @@ export default function ThemeToggle({ onLight = false }: { onLight?: boolean }) 
     }
   }
 
-  const isDark = theme === 'dark';
-
   return (
-    <button
-      type="button"
-      onClick={toggle}
-      className={onLight ? 'theme-toggle theme-toggle--on-light' : 'theme-toggle'}
-      aria-label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
-      title={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
-    >
-      {theme === null ? <span aria-hidden="true">◐</span> : isDark ? <SunIcon /> : <MoonIcon />}
+    <button type="button" className={onLight ? 'shell-theme shell-theme--on-light' : 'shell-theme'} onClick={toggle}>
+      <span className="shell-theme__to-dark"><Icon name="moon" />{SHELL_COPY.theme.toDark}</span>
+      <span className="shell-theme__to-light"><Icon name="sun" />{SHELL_COPY.theme.toLight}</span>
     </button>
-  );
-}
-
-/** Inline icons, hidden from assistive technology (the button has its own name); no emoji (SRS 7.6.3 D-9). */
-function SunIcon() {
-  return (
-    <svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <circle cx="12" cy="12" r="4" />
-      <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
-    </svg>
-  );
-}
-
-function MoonIcon() {
-  return (
-    <svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
-    </svg>
   );
 }

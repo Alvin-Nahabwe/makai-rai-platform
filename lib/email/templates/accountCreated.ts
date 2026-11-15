@@ -1,5 +1,6 @@
 import type { EmailContent } from '../templates';
 import { escapeHtml } from '../escape';
+import { EMAIL_COPY } from '../copy';
 import { formatDay } from '../../format/dates';
 import { publicOrigin } from '../../publicOrigin';
 
@@ -12,11 +13,16 @@ import { publicOrigin } from '../../publicOrigin';
  */
 export function accountCreatedEmail(input: { orgName: string; createdAt: Date }): EmailContent {
   const resetUrl = new URL('/forgot-password', publicOrigin()).toString();
-  const before = `An account was created for this address in ${input.orgName} on ${formatDay(input.createdAt)}. If this was not you, reset your password: `;
-  const after = ', and tell the organisation\'s owner.';
+  const { accountCreated } = EMAIL_COPY;
+  const date = formatDay(input.createdAt);
+  const link = `<a href="${escapeHtml(resetUrl)}">${escapeHtml(resetUrl)}</a>`;
   return {
-    subject: 'An account was created for this address',
-    text: `${before}${resetUrl}${after}`,
-    html: `<p>${escapeHtml(before)}<a href="${escapeHtml(resetUrl)}">${escapeHtml(resetUrl)}</a>${escapeHtml(after)}</p>`,
+    subject: accountCreated.subject,
+    text: [`${accountCreated.intro(input.orgName, date)}\n${resetUrl}`, accountCreated.closing(input.orgName)].join('\n\n'),
+    html: [
+      `<p>${accountCreated.intro(escapeHtml(input.orgName), date)}</p>`,
+      `<p>${link}</p>`,
+      `<p>${accountCreated.closing(escapeHtml(input.orgName))}</p>`,
+    ].join('\n'),
   };
 }

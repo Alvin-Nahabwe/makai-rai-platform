@@ -1,0 +1,11 @@
+/* Layout of S-30, Organisation details (plan 1A Task 19, part 19b): only what the kit has no part for. The header and the
+   changes table are the kit's (components/ui); this file spaces the page's blocks and reads the role tokens only. */
+
+/* One block of the page (the download link, the changes table), set apart from the next. */
+.org-block {
+  margin-block-end: var(--space-6);
+}
+
+.org-block > h2 {
+  margin-block: 0 var(--space-3);
+}

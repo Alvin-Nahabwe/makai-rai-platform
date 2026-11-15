@@ -1,5 +1,6 @@
 import { requestIdFor, type RetryState } from '@/lib/client/retrySafeWrite';
 import { linkFailureText, type UploadOutcome } from '@/lib/client/evidenceUpload';
+import { EVIDENCE_COPY } from '@/lib/evidence/copy';
 import { LINK_LABEL_MAX, LINK_URL_MAX, LINK_URL_MESSAGE, isHttpUrl } from '@/lib/evidence/link';
 import type { CreateLinkEvidenceRequest, EvidenceItemView } from '@/types/api';
 
@@ -24,7 +25,7 @@ export function createLinkAdder(a: {
     const address = input.address.trim();
     const text = input.label.trim();
     if (address.length > LINK_URL_MAX || !isHttpUrl(address)) { a.onError(LINK_URL_MESSAGE); return; }
-    if (text.length > LINK_LABEL_MAX) { a.onError(`Enter a label of ${LINK_LABEL_MAX} characters or fewer.`); return; }
+    if (text.length > LINK_LABEL_MAX) { a.onError(EVIDENCE_COPY.link.nameTooLong(LINK_LABEL_MAX)); return; }
     a.onError(null);
     inFlight = true;
     a.onPending(true);

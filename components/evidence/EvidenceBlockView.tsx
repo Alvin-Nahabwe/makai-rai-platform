@@ -1,12 +1,15 @@
 import type { ReactElement } from 'react';
 import { EvidenceItemText, evidenceDisplayName } from '@/components/evidence/VersionEvidenceList';
+import { Button } from '@/components/ui/Button';
+import { FieldError, FieldLabel } from '@/components/ui/TextInput';
+import { EVIDENCE_COPY } from '@/lib/evidence/copy';
 import { stripBidiControls } from '@/lib/evidence/format';
+import { LINK_LABEL_MAX } from '@/lib/evidence/link';
 import { largeFileNote, notUploadedLine, statusLine, type NamedLine, type UploadItem } from '@/lib/evidence/uploadQueue';
 import type { EvidenceItemView } from '@/types/api';
-
-/** W-3's help line (SRS lines 1895-1896). */
-export const EVIDENCE_HELP =
-  'PDF, PNG, JPEG, Office documents or ZIP, up to 10 MB each. Do not upload datasets or files about the people your system affects. Add a link to where they are kept instead.';
+import './EvidenceBlock.css';
+import '@/components/ui/formStyles';
+import '@/components/ui/buttonStyles';
 
 export interface EvidenceBlockViewProps {
   orgSlug: string;
@@ -24,8 +27,12 @@ export interface EvidenceBlockViewProps {
   linkUrl: string;
   linkLabel: string;
   linkError: string | null;
+  /** The parent form refused a save for the address in the box: said after the box's own line, never in its place. */
+  linkRefused?: boolean;
   /** A link is being sent: its button is disabled, so a second press sends nothing. */
   linkPending?: boolean;
+  /** The parent form's own save is out: "Add link" says to wait and does nothing, and the two boxes take no text. */
+  held?: boolean;
   onChooseFiles?: (files: FileList | null) => void;
   onOpenFilePicker?: () => void;
   onOpenLink?: () => void;
@@ -45,7 +52,12 @@ function NamedText({ line }: { line: NamedLine }): ReactElement {
   return <>{line.before}{line.name === '' ? null : <bdi>{line.name}</bdi>}{line.after}</>;
 }
 
-const VISUALLY_HIDDEN = { position: 'absolute', width: 1, height: 1, margin: -1, padding: 0, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap', border: 0 } as const;
+/**
+ * The kit's compact secondary button, worn by the native buttons that need an `aria-label` the kit's Button cannot
+ * carry (Remove, Cancel upload, Retry upload), `aria-expanded` (Add a link) or `aria-disabled` (Add link). Button.css
+ * is loaded by this file's own kit Button (Add a file), never imported here directly (ruling X-6).
+ */
+const NAMED_BUTTON = 'ui-button ui-button--secondary ui-button--compact';
 
 /**
  * The evidence block of a decision form, hookless so a unit test can render it. A fieldset nested in the form, so every
@@ -58,51 +70,73 @@ export function EvidenceBlockView(p: EvidenceBlockViewProps): ReactElement {
   const urlId = `${p.idBase}-link-url`;
   const labelId = `${p.idBase}-link-label`;
   const errorId = `${p.idBase}-link-error`;
+  const heldId = `${p.idBase}-link-held`;
+  const refusedId = `${p.idBase}-link-refused`;
+  const held = p.held === true;
+  const refused = p.linkRefused === true;
+  /** The ids a link box is described by: the help, then what applies now. */
+  const describedBy = (...ids: Array<string | false>): string => [helpId, ...ids.filter((id) => id !== false)].join(' ');
+  // A field is marked invalid only by its own message; a refusal (signed out, archived, the limiter, a lost connection)
+  // is about the request, not a field, and marks neither.
+  const urlInvalid = p.linkError === EVIDENCE_COPY.link.address || refused;
+  const nameInvalid = p.linkError === EVIDENCE_COPY.link.nameTooLong(LINK_LABEL_MAX);
   const removable = (item: EvidenceItemView, carried: boolean): ReactElement => (
-    <li key={item.id}>
-      <EvidenceItemText orgSlug={p.orgSlug} item={item} />
-      {carried && p.fromVersionNumber != null ? <span className="text-muted">{` from version ${p.fromVersionNumber}`}</span> : null}
+    <li key={item.id} className="evidence-block__item">
+      <span className="evidence-block__name">
+        <EvidenceItemText orgSlug={p.orgSlug} item={item} />
+        {carried && p.fromVersionNumber != null ? <>{' '}<span className="evidence-block__from">{EVIDENCE_COPY.fromCurrent}</span></> : null}
+      </span>
       {p.disabled ? null : (
-        <button type="button" className="btn btn--secondary btn--small" aria-label={`Remove ${evidenceDisplayName(item)}`} onClick={() => p.onRemoveItem?.(item.id)}>Remove</button>
+        <button type="button" className={NAMED_BUTTON} aria-label={EVIDENCE_COPY.removeNamed(evidenceDisplayName(item))} onClick={() => p.onRemoveItem?.(item.id)}>{EVIDENCE_COPY.remove}</button>
       )}
     </li>
   );
+  const onEnter = (e: { key: string; preventDefault: () => void }): void => {
+    if (e.key === 'Enter') { e.preventDefault(); p.onAddLink?.(); }
+  };
 
   return (
-    <fieldset>
-      <legend>Evidence</legend>
-      {p.disabled ? null : <p id={helpId} className="text-muted">{EVIDENCE_HELP}</p>}
+    <fieldset className="evidence-block">
+      <legend>{EVIDENCE_COPY.legend}</legend>
+      {p.disabled ? null : (
+        <div id={helpId} className="evidence-block__help">
+          <p>{EVIDENCE_COPY.help.keep}</p>
+          <p className="evidence-block__types">{EVIDENCE_COPY.help.types}</p>
+        </div>
+      )}
 
       {p.notUploaded.length > 0 ? (
-        <ul>{p.notUploaded.map((name) => <li key={name}><NamedText line={notUploadedLine(name)} /></li>)}</ul>
+        <ul className="evidence-block__list">{p.notUploaded.map((name) => <li key={name} className="evidence-block__item"><span className="evidence-block__name"><NamedText line={notUploadedLine(name)} /></span></li>)}</ul>
       ) : null}
 
       {p.items.length + p.added.length > 0 ? (
-        <ul>{[...p.items.map((i) => removable(i, true)), ...p.added.map((i) => removable(i, false))]}</ul>
+        <ul className="evidence-block__list">{[...p.items.map((i) => removable(i, true)), ...p.added.map((i) => removable(i, false))]}</ul>
       ) : null}
 
       {p.uploads.length > 0 ? (
-        <ul>
+        <ul className="evidence-block__list">
           {p.uploads.map((u) => {
             const line = statusLine(u);
             const name = stripBidiControls(u.fileName);
             const note = u.state === 'uploading' ? largeFileNote(u.size) : null;
             const role = u.state === 'failed' ? 'alert' : u.state === 'uploaded' ? 'status' : undefined;
             return (
-              <li key={u.key}>
-                <span role={role}><NamedText line={line} /></span>
-                {/* The space sits outside the note, so the note's own text starts with its size (NFR-PERF-06). */}
-                {note === null ? null : <>{' '}<span className="text-muted">{note}</span></>}
+              <li key={u.key} className="evidence-block__item">
+                <span className="evidence-block__name">
+                  <span role={role}><NamedText line={line} /></span>
+                  {/* The space sits outside the note, so the note's own text is the ruled sentence alone (NFR-PERF-06). */}
+                  {note === null ? null : <>{' '}<span className="evidence-block__note">{note}</span></>}
+                </span>
                 {p.disabled ? null : (
                   <>
                     {u.state === 'uploading' ? (
-                      <button type="button" className="btn btn--secondary btn--small" aria-label={`Cancel upload ${name}`} onClick={() => p.onCancelUpload?.(u.key)}>Cancel upload</button>
+                      <button type="button" className={NAMED_BUTTON} aria-label={EVIDENCE_COPY.cancelUploadNamed(name)} onClick={() => p.onCancelUpload?.(u.key)}>{EVIDENCE_COPY.cancelUpload}</button>
                     ) : null}
                     {u.state === 'failed' && line.retry ? (
-                      <button type="button" className="btn btn--secondary btn--small" aria-label={`Retry upload ${name}`} onClick={() => p.onRetryUpload?.(u.key)}>Retry upload</button>
+                      <button type="button" className={NAMED_BUTTON} aria-label={EVIDENCE_COPY.retryUploadNamed(name)} onClick={() => p.onRetryUpload?.(u.key)}>{EVIDENCE_COPY.retryUpload}</button>
                     ) : null}
                     {u.state !== 'uploading' ? (
-                      <button type="button" className="btn btn--secondary btn--small" aria-label={`Remove ${name}`} onClick={() => p.onRemoveUpload?.(u.key)}>Remove</button>
+                      <button type="button" className={NAMED_BUTTON} aria-label={EVIDENCE_COPY.removeNamed(name)} onClick={() => p.onRemoveUpload?.(u.key)}>{EVIDENCE_COPY.remove}</button>
                     ) : null}
                   </>
                 )}
@@ -113,25 +147,42 @@ export function EvidenceBlockView(p: EvidenceBlockViewProps): ReactElement {
       ) : null}
 
       {p.disabled ? null : (
-        <div>
-          <label htmlFor={fileInputId} style={VISUALLY_HIDDEN}>Choose files to add as evidence</label>
-          <input id={fileInputId} type="file" multiple tabIndex={-1} ref={(el) => p.registerFileInput?.(el)} aria-describedby={helpId} style={VISUALLY_HIDDEN}
+        <div className="evidence-block__add">
+          <label htmlFor={fileInputId} className="visually-hidden">{EVIDENCE_COPY.chooseFiles}</label>
+          <input id={fileInputId} type="file" multiple tabIndex={-1} ref={(el) => p.registerFileInput?.(el)} aria-describedby={helpId} className="visually-hidden"
             onChange={(e) => { p.onChooseFiles?.(e.target.files); e.target.value = ''; }} />
-          <button type="button" className="btn btn--secondary" ref={(el) => p.registerAddFileButton?.(el)} aria-describedby={helpId} onClick={() => p.onOpenFilePicker?.()}>Add a file</button>
-          <button type="button" className="btn btn--secondary" aria-describedby={helpId} aria-expanded={p.linkFormOpen} onClick={() => p.onOpenLink?.()}>Add a link</button>
+          <div className="evidence-block__actions">
+            <Button variant="secondary" ref={(el) => p.registerAddFileButton?.(el)} aria-describedby={helpId} onClick={() => p.onOpenFilePicker?.()}>{EVIDENCE_COPY.addFile}</Button>
+            <button type="button" className="ui-button ui-button--secondary" aria-describedby={helpId} aria-expanded={p.linkFormOpen} onClick={() => p.onOpenLink?.()}>{EVIDENCE_COPY.addLinkToggle}</button>
+          </div>
           {p.linkFormOpen ? (
-            <div>
-              <label htmlFor={urlId}>Web address</label>
-              <input id={urlId} type="text" inputMode="url" autoComplete="off" value={p.linkUrl}
-                aria-describedby={p.linkError === null ? helpId : `${helpId} ${errorId}`} aria-invalid={p.linkError === null ? undefined : true}
-                onChange={(e) => p.onLinkUrlChange?.(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); p.onAddLink?.(); } }} />
-              <label htmlFor={labelId}>Label (optional)</label>
-              <input id={labelId} type="text" autoComplete="off" value={p.linkLabel} aria-describedby={helpId}
-                onChange={(e) => p.onLinkLabelChange?.(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); p.onAddLink?.(); } }} />
-              <button type="button" className="btn btn--secondary" disabled={p.linkPending === true} onClick={() => p.onAddLink?.()}>Add link</button>
-              {p.linkError === null ? null : <p id={errorId} className="form-error" role="alert">{p.linkError}</p>}
+            <div className="evidence-block__link">
+              <div className="ui-field">
+                <FieldLabel htmlFor={urlId} label={EVIDENCE_COPY.webAddress} />
+                <input id={urlId} type="text" inputMode="url" autoComplete="off" value={p.linkUrl}
+                  className={urlInvalid ? 'ui-input ui-input--invalid' : 'ui-input'}
+                  aria-describedby={describedBy(p.linkError !== null && errorId, refused && refusedId, held && heldId)} aria-invalid={urlInvalid ? true : undefined}
+                  readOnly={held ? true : undefined} onChange={(e) => p.onLinkUrlChange?.(e.target.value)} onKeyDown={onEnter} />
+              </div>
+              <div className="ui-field">
+                <FieldLabel htmlFor={labelId} label={EVIDENCE_COPY.linkName} />
+                <input id={labelId} type="text" autoComplete="off" value={p.linkLabel} className={nameInvalid ? 'ui-input ui-input--invalid' : 'ui-input'}
+                  aria-describedby={describedBy(nameInvalid && errorId, held && heldId)} aria-invalid={nameInvalid ? true : undefined}
+                  readOnly={held ? true : undefined} onChange={(e) => p.onLinkLabelChange?.(e.target.value)} onKeyDown={onEnter} />
+              </div>
+              {/* Held is aria-disabled, never disabled: the button keeps its focus and says why it does nothing. The block does not add while held. */}
+              <button type="button" className="ui-button ui-button--secondary" disabled={p.linkPending === true}
+                aria-disabled={held ? true : undefined} aria-describedby={held ? heldId : undefined} onClick={() => p.onAddLink?.()}>{EVIDENCE_COPY.addLink}</button>
+              {/* In the markup from the moment the link form opens and empty until a link is sent, so its words are announced. */}
+              <p role="status" data-link-adding className="evidence-block__adding">{p.linkPending === true ? EVIDENCE_COPY.link.adding : ''}</p>
+              {held ? <p id={heldId} className="evidence-block__adding">{EVIDENCE_COPY.link.waitForSave}</p> : null}
+              {/* Where the line was before the kit: after the button, so a refusal that is not about the address still reads in order. */}
+              {p.linkError === null && !refused ? null : (
+                <div className="evidence-block__error" role="alert">
+                  {p.linkError === null ? null : <FieldError id={errorId} message={p.linkError} />}
+                  {refused ? <FieldError id={refusedId} message={EVIDENCE_COPY.link.typedNotAdded} /> : null}
+                </div>
+              )}
             </div>
           ) : null}
         </div>

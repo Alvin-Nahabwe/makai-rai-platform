@@ -6,7 +6,7 @@ import { documentDraft, documentViews, issueDocument, listDocuments, previewDocu
 import { requestDigest } from '@/lib/data/idempotency';
 import { withOrg } from '@/lib/data/tenant';
 import { RENDERERS, type Renderer } from '@/lib/documents/render';
-import { textErasedLine } from '@/lib/documents/copy';
+import { MSG_SEAL_CHECK_FAILED, NOT_RECORDED_AT_ISSUE, textErasedLine } from '@/lib/documents/copy';
 import { resetDb, testDb } from '../helpers/db';
 // Aliased: the name starts with "use", and react-hooks/rules-of-hooks reads any such call as a React hook.
 import { useFixtureContent as publishFixtureContent } from '../helpers/content';
@@ -126,7 +126,7 @@ describe('preview and issue', () => {
     const seal = await sealFixture(lone, review, { projectId: loneProject });
     const lctx = ctxFor(lone, 'admin');
     const p = await previewDocument(lctx, { userId: lone.members.admin.userId, role: 'admin' }, { projectId: loneProject, reviewId: review, sealId: seal.id, documentType: 'model_card', typedFields: {} });
-    expect(p.text).toContain('Not recorded at the time of issue');
+    expect(p.text).toContain(NOT_RECORDED_AT_ISSUE);
     const out = await issueDocument(lctx, { userId: lone.members.admin.userId, role: 'admin' }, { projectId: loneProject, reviewId: review, sealId: seal.id, documentType: 'model_card', typedFields: {}, requestId: randomUUID() },
       requestDigest({ path: { id: loneProject, reviewId: review }, body: {} }));
     expect(out.value.seals.map((s) => s.sealId)).toEqual([seal.id]);
@@ -360,7 +360,7 @@ describe('the seal is checked against its rows before anything is rendered (M13)
       previewDocument(ctx(), admin(), { ...body(), projectId: s.projectId, reviewId: s.reviewId, sealId: s.sealId }).then(() => 'ok', (e: unknown) => e),
       issue({ projectId: s.projectId, reviewId: s.reviewId, sealId: s.sealId }).then(() => 'ok', (e: unknown) => e),
     ]));
-    for (const r of result) expect(r).toMatchObject({ status: 422, code: 'validation', extra: { fields: [{ field: 'sealId', message: 'This seal cannot be used: its check failed.' }] } });
+    for (const r of result) expect(r).toMatchObject({ status: 422, code: 'validation', extra: { fields: [{ field: 'sealId', message: MSG_SEAL_CHECK_FAILED }] } });
     const failed = lines.filter((l) => l.includes('SEAL_CHECK_FAILED'));
     expect(failed.length).toBeGreaterThanOrEqual(2);
     for (const l of failed) expect(JSON.parse(l)).toMatchObject({ level: 'error', details: { sealId: s.sealId, chosen: true } });

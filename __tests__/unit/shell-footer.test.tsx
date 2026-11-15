@@ -35,7 +35,7 @@ describe('footer', () => {
     expect(html).toContain(escapeHtml(credit.current.text));
     expect(anchors(html)).toEqual([
       [credit.current.licence, credit.current.href],
-      ['Legal texts', '/legal/terms'],
+      ['Terms and privacy', '/help#terms-and-privacy'],
       ['About', '/about'],
       ['Help and contact', '/about#help-and-contact'],
     ]);
@@ -47,7 +47,7 @@ describe('footer', () => {
     expect(html).toContain('&lt;b&gt;x&lt;/b&gt; GIZ');
     expect(html).not.toContain('<b>');
     expect(html).not.toContain('javascript:');
-    expect(anchors(html).map(([name]) => name)).toEqual(['Legal texts', 'About', 'Help and contact']);
+    expect(anchors(html).map(([name]) => name)).toEqual(['Terms and privacy', 'About', 'Help and contact']);
     expect(html).toContain('LICENCE');
   });
 
@@ -65,8 +65,10 @@ describe('skip link', () => {
   });
 
   it('UX-04: every <main> under app/ carries the skip-link target and a tab stop', () => {
-    const tags = mainTagsUnder('app');
-    expect(tags.length, '<main> tags found under app/').toBeGreaterThanOrEqual(5);
+    // The signed-in pages' <main> is AppShell's (plan 1A Task 11), so that file is read too.
+    const tags = [...mainTagsUnder('app'), ...mainTagsIn('components/layout/AppShell.tsx')];
+    expect(tags.length, '<main> tags found under app/ and in AppShell').toBeGreaterThanOrEqual(6);
+    expect(tags.map(([file]) => file), 'the signed-in main').toContain('components/layout/AppShell.tsx');
     for (const [file, tag] of tags)
       expect(tag, file).toMatch(/id=(\{MAIN_CONTENT_ID\}|"main-content")[^>]*tabIndex=\{-1\}|tabIndex=\{-1\}[^>]*id=(\{MAIN_CONTENT_ID\}|"main-content")/);
   });
@@ -92,9 +94,14 @@ function mainTagsUnder(dir: string): Array<[string, string]> {
     if (statSync(path).isDirectory()) {
       if (name !== 'node_modules') out.push(...mainTagsUnder(path));
     } else if (name.endsWith('.tsx')) {
-      const source = readFileSync(path, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-      for (const m of source.matchAll(/<main\b[^>]*>/g)) out.push([path, m[0]]);
+      out.push(...mainTagsIn(path));
     }
   }
   return out;
+}
+
+/** Every `<main ...>` JSX opening tag in one .tsx file. */
+function mainTagsIn(path: string): Array<[string, string]> {
+  const source = readFileSync(path, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  return [...source.matchAll(/<main\b[^>]*>/g)].map((m): [string, string] => [path, m[0]]);
 }

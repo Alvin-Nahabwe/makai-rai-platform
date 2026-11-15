@@ -1,6 +1,9 @@
 import type { Stage } from '@/types/record';
 import type { ReactElement } from 'react';
 import { ListLink } from '@/components/ui/ListLink';
+import { PROJECT_COPY } from '@/lib/project/copy';
+
+const C = PROJECT_COPY.followUpCounts;
 
 export type StageFollowUpCountsProps = { orgSlug: string; projectId: string; stage: Stage; counts: { openFindings: number; overdueMitigations: number } };
 
@@ -13,11 +16,11 @@ export function StageFollowUpCounts({ orgSlug, projectId, stage, counts }: Stage
   return (
     <p>
       <ListLink href={`/orgs/${orgSlug}/projects/${projectId}/findings`}>
-        {openFindings} open {openFindings === 1 ? 'finding' : 'findings'}
+        {`${openFindings} ${openFindings === 1 ? C.openFinding : C.openFindings}`}
       </ListLink>
       {', '}
       <ListLink href={`/orgs/${orgSlug}/projects/${projectId}#${stage}`}>
-        {overdueMitigations} overdue {overdueMitigations === 1 ? 'mitigation' : 'mitigations'}
+        {`${overdueMitigations} ${overdueMitigations === 1 ? C.overdueMitigation : C.overdueMitigations}`}
       </ListLink>
     </p>
   );

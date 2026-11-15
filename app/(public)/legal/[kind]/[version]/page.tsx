@@ -12,7 +12,10 @@ import {
   legalTextVersion,
 } from '@/lib/legal/registry';
 import { RETIRED_NOTE, isRetiredKind } from '@/lib/legal/kinds';
-import { LEGAL_LINK_STYLE, LEGAL_NOTE_STYLE, LEGAL_PAGE_STYLE, LegalTextView, legalTextHeading } from '@/components/legal/LegalTextView';
+import { LEGAL_COPY, LEGAL_PAGE_COPY } from '@/lib/legal/copy';
+import { pageTitle } from '@/lib/ui/title';
+import { Callout } from '@/components/ui/Callout';
+import { LEGAL_LINK_STYLE, LEGAL_PAGE_STYLE, LegalTextView, legalTextHeading } from '@/components/legal/LegalTextView';
 
 /**
  * S-06, one version (FR-ACC-02, SRS line 479: "/legal/privacy/<old-version>"): that version's text, version,
@@ -40,7 +43,7 @@ async function versionOf(params: Params): Promise<LegalTextVersion> {
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const text = await versionOf(params);
-  return { title: `${legalTextHeading(text.kind)}, version ${text.version} - MAK-AI RAI Platform` };
+  return { title: pageTitle(LEGAL_COPY.titles.version(legalTextHeading(text.kind), text.version)) };
 }
 
 export default async function LegalVersionPage({ params }: { params: Params }) {
@@ -51,19 +54,19 @@ export default async function LegalVersionPage({ params }: { params: Params }) {
   const note = isRetiredKind(text.kind)
     ? RETIRED_NOTE[text.kind]
     : current.version !== text.version
-      ? `This is an earlier version. The current one is version ${current.version}, published ${formatDay(current.publishedOn)}.`
+      ? LEGAL_PAGE_COPY.earlierVersion(current.version, formatDay(current.publishedOn))
       : null;
   return (
     <div style={LEGAL_PAGE_STYLE}>
       {note !== null && (
-        <p role="note" style={LEGAL_NOTE_STYLE}>
-          {note}
-        </p>
+        <div role="note">
+          <Callout kind="note">{note}</Callout>
+        </div>
       )}
       <LegalTextView text={text} />
       <p style={{ marginTop: 'var(--space-6)' }}>
         <Link href={`/legal/${text.kind}`} style={LEGAL_LINK_STYLE}>
-          {`All versions of the ${LEGAL_KIND_NAMES[text.kind]}`}
+          {LEGAL_PAGE_COPY.allVersions(LEGAL_KIND_NAMES[text.kind])}
         </Link>
       </p>
     </div>

@@ -1,0 +1,78 @@
+/* Item plate (plan 1A Task 5): the name, its small code, then the mark and one line of state, then the "You are here"
+   pin when current. The plate has a 1 px container border; the current one has a 2 px border in the action text colour
+   and gives the extra pixel back in its padding, so nothing moves. The state is carried by the border's WIDTH and by
+   the pin's words, so it holds in forced colours, which repaint every border's colour. With an address the name's link
+   stretches over the whole plate. Only colours change, over --duration-state. */
+.ui-plate {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--space-2);
+  row-gap: var(--space-1);
+  box-sizing: border-box;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border-container);
+  border-radius: var(--radius-surface);
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+  transition: background-color var(--duration-state) var(--easing-state);
+}
+
+.ui-plate--current {
+  padding: calc(var(--space-3) - 1px) calc(var(--space-4) - 1px);
+  border: 2px solid var(--color-action-text);
+}
+
+.ui-plate__title,
+.ui-plate__code,
+.ui-plate__pin {
+  flex-basis: 100%;
+  min-inline-size: 0;
+}
+
+.ui-plate__title {
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-body);
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+
+.ui-plate__link {
+  color: var(--color-link);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.ui-plate__link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+.ui-plate--link:hover {
+  background-color: var(--color-tint);
+}
+
+.ui-plate__code {
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.ui-plate__mark {
+  display: flex;
+}
+
+.ui-plate__state {
+  min-inline-size: 0;
+  color: var(--color-ink);
+}
+
+.ui-plate__pin {
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-action-text);
+}

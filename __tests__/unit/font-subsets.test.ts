@@ -7,9 +7,9 @@ import { describe, expect, it } from 'vitest';
 
 /**
  * NFR-PERF-02 (SRS line 3195): every public page transfers at most 220 KB on a first visit. Every page preloads one
- * Source Sans 3 file and one DM Serif Display file, so their size is paid on every page. The preloaded files hold
+ * Overpass file, so its size is paid on every page. The preloaded files hold
  * printable ASCII and the few other characters the pages' own copy uses; the rest of the latin range Google's
- * stylesheet declared sits in a third file per family that is not preloaded and that a browser fetches only when a
+ * stylesheet declared sits in a further file that is not preloaded and that a browser fetches only when a
  * page shows one of its characters (a name with an accent, say). Nothing that rendered in the font before falls back
  * to another font now: these tests read the files' own character maps, not only the declared ranges.
  *
@@ -44,7 +44,7 @@ function codePoints(ranges: Ranges): Set<number> {
 
 const hex = (cp: number) => `U+${cp.toString(16).toUpperCase().padStart(4, '0')}`;
 
-/** The latin range of Google's stylesheet, which the latin file declared before this change (unit FONTS, D-279). */
+/** The latin range of Google's stylesheet, the same for Source Sans 3 before and for Overpass now (unit FONTS, D-279). */
 const OLD_LATIN = parseRange(
   'U+??,U+131,U+152-153,U+2BB-2BC,U+2C6,U+2DA,U+2DC,U+304,U+308,U+329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD',
 );
@@ -81,18 +81,21 @@ function layoutCalls(src: string): Call[] {
 }
 
 const CALLS = layoutCalls(LAYOUT);
-const FAMILIES = ['sourceSans', 'dmSerif'] as const;
-/** The original latin file of each family, as next/font/google downloaded it. */
+const FAMILIES = ['overpass'] as const;
+/** The original latin file of each family, as Google serves it (scripts/fonts/fetch-overpass.sh). */
 const ORIGINAL: Record<(typeof FAMILIES)[number], string> = {
-  sourceSans: 'fonts/source/source-sans-3-latin.woff2',
-  dmSerif: 'fonts/source/dm-serif-display-latin.woff2',
+  overpass: 'fonts/source/overpass-latin.woff2',
 };
+/** Google's latin-ext range, as the Overpass stylesheet declares it (the Source Sans and DM Serif ones were the same). */
+const GOOGLE_EXT = parseRange(
+  'U+100-2BA,U+2BD-2C5,U+2C7-2CC,U+2CE-2D7,U+2DD-2FF,U+304,U+308,U+329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C4,U+2113,U+2C60-2C7F,U+A720-A7FF',
+);
 
 /** Code points of the old latin range that no latin file maps but each latin-ext file does: the dagger. */
 const HANDED_TO_EXT = [0x2020];
 
-/** How many latin-ext faces each family has: Source Sans's is split into a common and a remainder face. */
-const EXT_FACES: Record<(typeof FAMILIES)[number], number> = { sourceSans: 2, dmSerif: 1 };
+/** How many latin-ext faces each family has: Overpass's is split into a common and a remainder face. */
+const EXT_FACES: Record<(typeof FAMILIES)[number], number> = { overpass: 2 };
 
 function callsOf(family: (typeof FAMILIES)[number]): { core: Call; rest: Call; ext: Call[] } {
   const of = CALLS.filter((c) => c.family === family);
@@ -104,15 +107,17 @@ function callsOf(family: (typeof FAMILIES)[number]): { core: Call; rest: Call; e
   return { core: core[0], rest: rest[0], ext };
 }
 
-// ---------------------------------------------------------------------------------------------- WOFF2 cmap reader
+// ---------------------------------------------------------------------------------------------- WOFF2 reader
 
-/** The code points a WOFF2 file maps to a glyph (its cmap's format 4 or 12 subtable). */
-function woff2CodePoints(path: string): Set<number> {
+/** A WOFF2 file's tables, decompressed, by tag (glyf and loca stay in their WOFF2 transform; nothing here reads them). */
+function woff2Tables(path: string): Map<string, Buffer> {
   const buf = readFileSync(path);
   if (buf.toString('latin1', 0, 4) !== 'wOF2') throw new Error(`${path} is not a WOFF2 file`);
+  if (buf.toString('latin1', 4, 8) === 'ttcf') throw new Error(`${path} is a font collection, which this reader does not read`);
   const numTables = buf.readUInt16BE(12);
   const totalCompressedSize = buf.readUInt32BE(20);
-  const KNOWN: Record<number, string> = { 0: 'cmap', 10: 'glyf', 11: 'loca' };
+  // The WOFF2 known-tag indices this file reads (W3C WOFF2, section 5.1).
+  const KNOWN: Record<number, string> = { 0: 'cmap', 10: 'glyf', 11: 'loca', 26: 'GDEF', 27: 'GPOS' };
   let pos = 48;
   const base128 = () => {
     let v = 0;
@@ -124,7 +129,7 @@ function woff2CodePoints(path: string): Set<number> {
     throw new Error(`${path}: bad UIntBase128`);
   };
   let offset = 0;
-  let cmap: { at: number; length: number } | undefined;
+  const at = new Map<string, { at: number; length: number }>();
   for (let t = 0; t < numTables; t++) {
     const flags = buf[pos++];
     const index = flags & 0x3f;
@@ -137,15 +142,19 @@ function woff2CodePoints(path: string): Set<number> {
     const origLength = base128();
     const transformed = tag === 'glyf' || tag === 'loca' ? version === 0 : version !== 0;
     const length = transformed ? base128() : origLength;
-    if (tag === 'cmap') cmap = { at: offset, length };
+    at.set(tag, { at: offset, length });
     offset += length;
   }
-  if (!cmap) throw new Error(`${path} has no cmap table`);
-  if (buf.toString('latin1', 4, 8) === 'ttcf') throw new Error(`${path} is a font collection, which this reader does not read`);
   const stream = brotliDecompressSync(buf.subarray(pos, pos + totalCompressedSize));
   if (stream.length !== offset) throw new Error(`${path}: the table data is ${stream.length} bytes, the directory says ${offset}`);
-  const data = stream.subarray(cmap.at, cmap.at + cmap.length);
-  const out = new Set<number>();
+  return new Map([...at].map(([tag, t]) => [tag, stream.subarray(t.at, t.at + t.length)]));
+}
+
+/** The glyph id each code point of a WOFF2 file maps to (its cmap's format 4 and 12 subtables), glyph 0 left out. */
+function woff2Cmap(path: string): Map<number, number> {
+  const data = woff2Tables(path).get('cmap');
+  if (!data) throw new Error(`${path} has no cmap table`);
+  const out = new Map<number, number>();
   const numSub = data.readUInt16BE(2);
   let read = 0;
   for (let i = 0; i < numSub; i++) {
@@ -170,7 +179,7 @@ function woff2CodePoints(path: string): Set<number> {
             const g = data.readUInt16BE(rangeOffsets + s * 2 + ro + (c - start) * 2);
             glyph = g === 0 ? 0 : (g + delta) & 0xffff;
           }
-          if (glyph !== 0) out.add(c);
+          if (glyph !== 0) out.set(c, glyph);
         }
       }
     } else if (format === 12) {
@@ -180,12 +189,74 @@ function woff2CodePoints(path: string): Set<number> {
         const start = data.readUInt32BE(at);
         const end = data.readUInt32BE(at + 4);
         const glyph = data.readUInt32BE(at + 8);
-        for (let c = start; c <= end; c++) if (glyph + (c - start) !== 0) out.add(c);
+        for (let c = start; c <= end; c++) if (glyph + (c - start) !== 0) out.set(c, glyph + (c - start));
       }
     }
   }
   if (read === 0 || out.size === 0) throw new Error(`${path}: no format 4 or 12 cmap subtable with any mapping`);
   return out;
+}
+
+/** The code points a WOFF2 file maps to a glyph. */
+function woff2CodePoints(path: string): Set<number> {
+  return new Set(woff2Cmap(path).keys());
+}
+
+/** The glyph ids of an OpenType Coverage table at `at` (format 1, a list; format 2, ranges). */
+function coverage(data: Buffer, at: number): number[] {
+  const format = data.readUInt16BE(at);
+  const count = data.readUInt16BE(at + 2);
+  const out: number[] = [];
+  for (let i = 0; i < count; i++) {
+    if (format === 1) out.push(data.readUInt16BE(at + 4 + i * 2));
+    else if (format === 2) for (let g = data.readUInt16BE(at + 4 + i * 6); g <= data.readUInt16BE(at + 6 + i * 6); g++) out.push(g);
+    else throw new Error(`Coverage format ${format}`);
+  }
+  return out;
+}
+
+/**
+ * What makes a glyph a mark to the text shaper: its GDEF glyph class 3, and the mark coverages of the GPOS lookups that
+ * position marks (MarkBasePos 4, MarkLigPos 5: MarkCoverage; MarkMarkPos 6: Mark1Coverage; each the subtable's second
+ * field), extension lookups (9) followed. `marks` maps each glyph in a mark coverage to the lookups that hold it.
+ */
+function woff2MarkGlyphs(path: string): { class3: Set<number>; marks: Map<number, number[]> } {
+  const tables = woff2Tables(path);
+  const gdef = tables.get('GDEF');
+  const gpos = tables.get('GPOS');
+  if (!gdef || !gpos) throw new Error(`${path} has no GDEF or no GPOS table`);
+  const class3 = new Set<number>();
+  const classDef = gdef.readUInt16BE(4);
+  if (classDef !== 0) {
+    const format = gdef.readUInt16BE(classDef);
+    if (format === 1) {
+      const start = gdef.readUInt16BE(classDef + 2);
+      const count = gdef.readUInt16BE(classDef + 4);
+      for (let i = 0; i < count; i++) if (gdef.readUInt16BE(classDef + 6 + i * 2) === 3) class3.add(start + i);
+    } else if (format === 2) {
+      for (let i = 0; i < gdef.readUInt16BE(classDef + 2); i++) {
+        const r = classDef + 4 + i * 6;
+        if (gdef.readUInt16BE(r + 4) === 3) for (let g = gdef.readUInt16BE(r); g <= gdef.readUInt16BE(r + 2); g++) class3.add(g);
+      }
+    } else throw new Error(`${path}: GDEF ClassDef format ${format}`);
+  }
+  const marks = new Map<number, number[]>();
+  const lookupList = gpos.readUInt16BE(8);
+  for (let l = 0; l < gpos.readUInt16BE(lookupList); l++) {
+    const lookup = lookupList + gpos.readUInt16BE(lookupList + 2 + l * 2);
+    const lookupType = gpos.readUInt16BE(lookup);
+    for (let s = 0; s < gpos.readUInt16BE(lookup + 4); s++) {
+      let sub = lookup + gpos.readUInt16BE(lookup + 6 + s * 2);
+      let type = lookupType;
+      if (type === 9) {
+        type = gpos.readUInt16BE(sub + 2);
+        sub += gpos.readUInt32BE(sub + 4);
+      }
+      if (type < 4 || type > 6) continue;
+      for (const g of coverage(gpos, sub + gpos.readUInt16BE(sub + 2))) marks.set(g, [...(marks.get(g) ?? []), l]);
+    }
+  }
+  return { class3, marks };
 }
 
 // ---------------------------------------------------------------------------------------------- the pages' copy
@@ -270,7 +341,7 @@ function publicCopyFiles(): string[] {
   // S-01 to S-04, S-06 and S-28 (with /terms and /privacy, which redirect); a glob that finds fewer proves less.
   expect(pages.length, 'public pages found').toBeGreaterThanOrEqual(8);
   // The not-found and error pages render for anyone, signed in or not, in the same layout.
-  const roots = [...pages, ...gitFiles('app/(public)/**/layout.tsx'), 'app/layout.tsx', 'app/not-found.tsx', 'app/error.tsx', 'app/global-error.tsx', 'app/(authenticated)/acceptances/page.tsx'];
+  const roots = [...pages, ...gitFiles('app/(public)/**/layout.tsx'), 'app/layout.tsx', 'app/not-found.tsx', 'app/error.tsx', 'app/global-error.tsx', 'app/(authenticated)/acceptances/page.tsx', 'app/help/page.tsx', 'app/help/layout.tsx'];
   return [...importClosure(roots), ...gitFiles('data/legal/**/*.md')];
 }
 
@@ -303,7 +374,7 @@ const LIB_NOT_COPY: Record<string, string> = {
  * outside the core range, and not excused for that file by LIB_NOT_COPY. One `U+XXXX file` line per file and code point.
  */
 function restOnlyCopy(entries: Array<[string, string]>): string[] {
-  const core = callsOf('sourceSans').core.range;
+  const core = callsOf('overpass').core.range;
   const out: string[] = [];
   for (const [f, raw] of entries) {
     const excused = f in LIB_NOT_COPY ? parseRange(LIB_NOT_COPY[f]) : [];
@@ -323,10 +394,7 @@ function restOnlyCopy(entries: Array<[string, string]>): string[] {
  * maps them, so they render in the fallback font today, as before. Each is pinned to stay outside the old ranges, so
  * this list can never excuse a character this change stopped covering.
  */
-const NEVER_COVERED: Record<string, string> = {
-  [hex(0x2192)]: "app/globals.css: content: '→' after a link (the latin subset maps U+2191 and U+2193, not U+2192)",
-  [hex(0x2713)]: "app/(public)/about/AboutPage.css: content: '✓ ' before a list item",
-};
+const NEVER_COVERED: Record<string, string> = {};
 
 // ---------------------------------------------------------------------------------------------- the tests
 
@@ -337,7 +405,7 @@ describe('NFR-PERF-02: the preloaded font files hold printable ASCII and the pag
       for (const c of [core, rest, ...ext]) expect(existsSync(join('app', c.file)), c.file).toBe(true);
       expect(core.file).toMatch(/-latin-core\.woff2$/);
     }
-    expect(CALLS.filter((c) => c.preload).map((c) => c.constName).sort()).toEqual(['dmSerif', 'sourceSans']);
+    expect(CALLS.filter((c) => c.preload).map((c) => c.constName).sort()).toEqual(['overpass']);
   });
 
   for (const family of FAMILIES) {
@@ -367,7 +435,8 @@ describe('NFR-PERF-02: the preloaded font files hold printable ASCII and the pag
         } else if (inCore === inRest) problems.push(`${hex(cp)} is declared by ${inCore ? 'both files' : 'neither file'}`);
       }
       for (const cp of [...codePoints(core.range), ...codePoints(rest.range)]) {
-        if (!inRanges(cp, OLD_LATIN)) problems.push(`${hex(cp)} is outside the old latin range`);
+        // The combining marks the latin file maps sit in core though Google's latin range omitted them (see the combining-marks case).
+        if (!inRanges(cp, OLD_LATIN) && !(cp >= 0x300 && cp <= 0x36f)) problems.push(`${hex(cp)} is outside the old latin range`);
       }
       expect(problems).toEqual([]);
     });
@@ -440,8 +509,8 @@ describe('NFR-PERF-02: the preloaded font files hold printable ASCII and the pag
   });
 
   /**
-   * S-04 shows the inviter's name in Source Sans. One latin-ext letter in it (Luganda's U+014B, say) used to fetch the
-   * whole 60,048 B Source Sans latin-ext file and put the page at 264 KB, over the 220 KB cap. So the letters that
+   * S-04 shows the inviter's name in Overpass. One latin-ext letter in it (Luganda's U+014B, say) fetched the
+   * whole 60,048 B Source Sans latin-ext file (46,080 B for Overpass's) and put the page over the 220 KB cap. So the letters that
    * names commonly carry sit in a small face of their own, and the rest of latin-ext in another; neither is preloaded.
    * e2e/invitation-name-transfer.spec.ts measures the page with such a name.
    */
@@ -462,22 +531,23 @@ describe('NFR-PERF-02: the preloaded font files hold printable ASCII and the pag
     // Romanian Ș ș Ț ț Ă ă Ţ ţ by its fallback: with them S-04 measured 217,020 to 217,032 B, over 217,000 B.
     0x116, 0x117, 0x172, 0x173, 0x12e, 0x12f, 0x122, 0x123, 0x136, 0x137, 0x13b, 0x13c, 0x145, 0x146,
   ];
-  const ORIGINAL_SANS_EXT = 'fonts/source/source-sans-3-latin-ext.woff2';
+  const ORIGINAL_EXT = 'fonts/source/overpass-latin-ext.woff2';
 
-  it('NFR-PERF-02: the latin-ext letters names commonly carry sit in a small Source Sans face of their own, not preloaded', () => {
-    const common = callsOf('sourceSans').ext.find((c) => c.file.endsWith('-latin-ext-common.woff2'));
-    expect(common, 'a source-sans-3-latin-ext-common.woff2 call').toBeDefined();
+  it('NFR-PERF-02: the latin-ext letters names commonly carry sit in a small Overpass face of their own, not preloaded', () => {
+    const common = callsOf('overpass').ext.find((c) => c.file.endsWith('-latin-ext-common.woff2'));
+    expect(common, 'an overpass-latin-ext-common.woff2 call').toBeDefined();
     expect(common!.preload).toBe(false);
     expect([...codePoints(common!.range)].sort((a, b) => a - b)).toEqual([...NAME_LETTERS].sort((a, b) => a - b));
     const map = woff2CodePoints(join('app', common!.file));
     expect(NAME_LETTERS.filter((cp) => !map.has(cp)).map(hex)).toEqual([]);
-    // The face's budget (controller ruling): at most 12,100 B. The binding budget is S-04 with such a name at or under
-    // 217,000 B, which e2e/invitation-name-transfer.spec.ts measures.
-    expect(statSync(join('app', common!.file)).size).toBeLessThanOrEqual(12_100);
+    // The face's cap is the controller's, set on 13 November 2026 for Overpass (14,100 B; Overpass's cut of these letters
+    // is 13,952 B, and the 12,100 B set for Source Sans's 11,600 B did not carry over). The binding budget stays the
+    // measured page: S-04 with such a name, which e2e/invitation-name-transfer.spec.ts measures against its own limits.
+    expect(statSync(join('app', common!.file)).size).toBeLessThanOrEqual(14_100);
   });
 
-  it('NFR-PERF-02: every Source Sans code point lands in exactly one face, whose file maps it', () => {
-    const { core, rest, ext } = callsOf('sourceSans');
+  it('NFR-PERF-02: every Overpass code point a page can use lands in exactly one face, whose file maps it', () => {
+    const { core, rest, ext } = callsOf('overpass');
     const faces = [core, rest, ...ext];
     const problems: string[] = [];
     // Declared ranges are disjoint, so no answer depends on the declaration order.
@@ -495,34 +565,22 @@ describe('NFR-PERF-02: the preloaded font files hold printable ASCII and the pag
       const undeclared = [...map].filter((cp) => !declared.has(cp));
       if (extra.length || undeclared.length) problems.push(`${e.file}: declared without a glyph ${extra.slice(0, 5).map(hex)}; mapped, not declared ${undeclared.slice(0, 5).map(hex)}`);
     }
-    // Every glyph the original latin and latin-ext files mapped where a browser used it is in exactly one face's file.
-    // Google declared latin after latin-ext. Where both ranges held a code point, a browser tries the last-declared face
-    // first and falls through to the next face of the family whose range covers it when that face has no glyph
-    // (CSS Fonts 4, unicode-range). So U+0304, U+0308 and U+0329 came from the latin file, and U+2020, which the latin
-    // file does not map, came from the latin-ext file. A latin-ext glyph is wanted unless the latin file mapped it.
-    const OLD_EXT = callsOf('dmSerif').ext[0].range;
-    const latinMap = woff2CodePoints(ORIGINAL.sourceSans);
+    // Every code point either source file maps (controls aside) is declared by exactly one face whose file holds its glyph.
     const owners = (cp: number) => faces.filter((f) => inRanges(cp, f.range) && woff2CodePoints(join('app', f.file)).has(cp)).map((f) => f.file);
-    const wanted = new Set([
-      ...[...woff2CodePoints(ORIGINAL.sourceSans)].filter((cp) => inRanges(cp, OLD_LATIN) && !isControl(cp)),
-      ...[...woff2CodePoints(ORIGINAL_SANS_EXT)].filter((cp) => inRanges(cp, OLD_EXT) && !(inRanges(cp, OLD_LATIN) && latinMap.has(cp))),
-    ]);
+    const wanted = new Set([...woff2CodePoints(ORIGINAL.overpass), ...woff2CodePoints(ORIGINAL_EXT)].filter((cp) => !isControl(cp)));
     for (const cp of wanted) {
       const o = owners(cp);
       if (o.length !== 1) problems.push(`${hex(cp)} is in ${o.length} faces: ${o.join(', ')}`);
     }
-    expect(wanted.size).toBeGreaterThan(700);
+    expect(wanted.size, 'code points the two source files map').toBeGreaterThan(550);
     expect(problems).toEqual([]);
   });
 
   it('NFR-PERF-02: the characters listed as never covered were outside the old ranges too, and are still in the copy', () => {
-    // DM Serif's latin-ext file and range did not change, so its range is Google's latin-ext range (local-fonts.test.ts
-    // pins it literally as LATIN_EXT).
-    const OLD_EXT = callsOf('dmSerif').ext[0].range;
     const present = charactersIn(publicCopyFiles());
     for (const key of Object.keys(NEVER_COVERED)) {
       const cp = parseInt(key.slice(2), 16);
-      expect({ key, oldLatin: inRanges(cp, OLD_LATIN), oldExt: inRanges(cp, OLD_EXT), present: present.has(cp) }).toEqual({ key, oldLatin: false, oldExt: false, present: true });
+      expect({ key, oldLatin: inRanges(cp, OLD_LATIN), oldExt: inRanges(cp, GOOGLE_EXT), present: present.has(cp) }).toEqual({ key, oldLatin: false, oldExt: false, present: true });
     }
   });
 
@@ -534,13 +592,11 @@ describe('NFR-PERF-02: the preloaded font files hold printable ASCII and the pag
     expect(sheets.length).toBeGreaterThan(50);
     expect(sheets).toEqual(expect.arrayContaining(['data/credit.json', 'lib/http/messages.ts']));
     for (const f of Object.keys(LIB_NOT_COPY)) expect(existsSync(f), `${f} (LIB_NOT_COPY) exists`).toBe(true);
-    const { core } = callsOf('sourceSans');
     expect(sheets).toEqual(expect.arrayContaining(Object.keys(LIB_NOT_COPY)));
     const needRest = restOnlyCopy(sheets.map((f) => [f, readFileSync(f, 'utf8')]));
     // To fix a failure here: rewrite the copy, or move the character into CORE in scripts/fonts/subset.sh and the four
     // core and rest ranges in app/layout.tsx, run the script, and re-pin the files in __tests__/unit/local-fonts.test.ts.
     expect(needRest, 'copy characters only the rest file holds (see the comment above this line)').toEqual([]);
-    expect(callsOf('dmSerif').core.rangeText, 'both families preload the same range').toBe(core.rangeText);
   });
 
   it('(harness) a rest-range character added to the copy of a LIB_NOT_COPY file is reported; its excused code points are not', () => {
@@ -552,6 +608,58 @@ describe('NFR-PERF-02: the preloaded font files hold printable ASCII and the pag
     expect(restOnlyCopy([['lib/data/tenant.ts', "throw new Error('can\u2019t \u00a9');"]])).toEqual(['U+00A9 lib/data/tenant.ts']);
   });
 
+  it('NFR-PERF-02: no code point either source file maps is left without a face', () => {
+    const { core, rest, ext } = callsOf('overpass');
+    const faces = [core, rest, ...ext];
+    const mapped = new Set([...woff2CodePoints(ORIGINAL.overpass), ...woff2CodePoints(ORIGINAL_EXT)]);
+    const unserved = [...mapped].filter((cp) => !isControl(cp) && !faces.some((f) => inRanges(cp, f.range))).sort((a, b) => a - b);
+    expect(unserved.map(hex)).toEqual([]);
+  });
+
+  it('NFR-PERF-02: every combining mark (U+0300 to U+036F) that either source file maps is declared by the core or the rest face, never an extended-Latin face, and U+0300, U+0301, U+0303, U+0309 and U+0323 are not in core', () => {
+    // Names are shown as typed, so a decomposed name (an e and then U+0301) must find the mark in a latin file, not in
+    // the 37 KB ext-rest file. The five marks Google's latin range omitted sit in rest, not core: if core held both an
+    // ASCII letter and one of them, the browser could compose an accented letter from the preloaded file and never
+    // fetch the face that declares the designed precomposed glyph.
+    const { core, rest, ext } = callsOf('overpass');
+    const maps = (f: Call) => woff2CodePoints(join('app', f.file));
+    const marks = [...new Set([...woff2CodePoints(ORIGINAL.overpass), ...woff2CodePoints(ORIGINAL_EXT)])].filter((cp) => cp >= 0x300 && cp <= 0x36f).sort((a, b) => a - b);
+    expect(marks.length, 'combining marks the source files map').toBeGreaterThanOrEqual(7);
+    const problems: string[] = [];
+    for (const cp of marks) {
+      const homes = [core, rest].filter((f) => inRanges(cp, f.range) && maps(f).has(cp));
+      if (homes.length !== 1) problems.push(`${hex(cp)} is held by ${homes.length} of core and rest`);
+      for (const e of ext) if (inRanges(cp, e.range)) problems.push(`${hex(cp)} is declared by ${e.file}`);
+    }
+    for (const cp of [0x300, 0x301, 0x303, 0x309, 0x323]) {
+      if (inRanges(cp, core.range)) problems.push(`${hex(cp)} is declared by core`);
+      if (!inRanges(cp, rest.range)) problems.push(`${hex(cp)} is not declared by rest`);
+    }
+    expect(problems).toEqual([]);
+  });
+
+  it('NFR-PERF-02: every CASES letter of e2e/invitation-name-transfer.spec.ts is declared by exactly one face or listed as uncovered', () => {
+    const spec = readFileSync('e2e/invitation-name-transfer.spec.ts', 'utf8');
+    const names = [...spec.matchAll(/inviter:\s*'([^']+)'/g)].map((m) => m[1]);
+    // The spec has three cases (Luganda, Kikuyu, Hausa); a regex that read fewer would prove less.
+    expect(names.length, 'inviter names in CASES').toBe(3);
+    const { core, rest, ext } = callsOf('overpass');
+    const faces = [core, rest, ...ext];
+    /** Name letters no face is to declare; each is a name that would print in the fallback font. Empty today. */
+    const UNCOVERED_NAME_LETTERS: number[] = [];
+    const letters = new Set([...names.join('')].map((ch) => ch.codePointAt(0)!).filter((cp) => cp > 0x7e));
+    expect(letters.size, 'non-ASCII letters in the names').toBeGreaterThan(4);
+    const problems: string[] = [];
+    for (const cp of letters) {
+      const declaring = faces.filter((f) => inRanges(cp, f.range));
+      if (UNCOVERED_NAME_LETTERS.includes(cp)) {
+        if (declaring.length > 0) problems.push(`${hex(cp)} is listed as uncovered and a face declares it`);
+      } else if (declaring.length !== 1) problems.push(`${hex(cp)} is declared by ${declaring.length} faces`);
+      else if (!woff2CodePoints(join('app', declaring[0].file)).has(cp)) problems.push(`${hex(cp)} is declared by ${declaring[0].file}, which does not map it`);
+    }
+    expect(problems).toEqual([]);
+  });
+
   it('NFR-PERF-02: scripts/fonts/subset.sh cuts the files with the ranges the layout declares', () => {
     const script = readFileSync('scripts/fonts/subset.sh', 'utf8');
     const core = /^CORE='([^']+)'$/m.exec(script)?.[1];
@@ -560,7 +668,7 @@ describe('NFR-PERF-02: the preloaded font files hold printable ASCII and the pag
       const calls = callsOf(family);
       expect({ family, core, rest }).toEqual({ family, core: calls.core.rangeText, rest: calls.rest.rangeText });
     }
-    const ext = callsOf('sourceSans').ext;
+    const ext = callsOf('overpass').ext;
     const byFile = (suffix: string) => ext.find((c) => c.file.endsWith(suffix))?.rangeText;
     expect({
       common: /^EXT_COMMON='([^']+)'$/m.exec(script)?.[1],
@@ -571,15 +679,14 @@ describe('NFR-PERF-02: the preloaded font files hold printable ASCII and the pag
   it('(harness) the cmap reader and the range parser read what fontTools reads', () => {
     // len(TTFont(f).getBestCmap()) for each file, fontTools 4.46.0.
     const SIZES: Record<string, number> = {
-      'fonts/source/source-sans-3-latin.woff2': 231,
-      'fonts/source/dm-serif-display-latin.woff2': 221,
-      'fonts/source/source-sans-3-latin-ext.woff2': 563,
-      'app/fonts/dm-serif-display-latin-ext.woff2': 102,
+      'fonts/source/overpass-latin.woff2': 232,
+      'fonts/source/overpass-latin-ext.woff2': 439,
+      'app/fonts/overpass-latin-ext-common.woff2': 82,
     };
     for (const [f, n] of Object.entries(SIZES)) expect({ f, n: woff2CodePoints(f).size }).toEqual({ f, n });
-    // The original Source Sans 3 latin subset maps 231 code points (fontTools 4.46: len(TTFont(f).getBestCmap())).
-    const orig = woff2CodePoints(ORIGINAL.sourceSans);
-    expect(orig.size).toBe(231);
+    // The original Overpass latin subset maps 232 code points (fontTools 4.46: len(TTFont(f).getBestCmap())).
+    const orig = woff2CodePoints(ORIGINAL.overpass);
+    expect(orig.size).toBe(232);
     expect([0x41, 0xe9, 0x2014, 0x20ac].every((cp) => orig.has(cp))).toBe(true);
     expect(orig.has(0x2190)).toBe(false);
     expect(parseRange('U+??,U+20-7E,U+B7')).toEqual([[0, 0xff], [0x20, 0x7e], [0xb7, 0xb7]]);
@@ -591,5 +698,91 @@ describe('NFR-PERF-02: the preloaded font files hold printable ASCII and the pag
     expect(decoded(uncommented("const a = <p>&copy; '\\u00e9' {'//x'} {\"/*\"} &#8212;</p>; // \u00ff", 'x.tsx'), 'x.tsx')).toMatch(/\u00a9 '\u00e9' \{'\/\/x'\} \{"\/\*"\} \u2014/);
     expect(() => decoded('&bogus;', 'x.tsx')).toThrow(/bogus/);
     expect(decoded(".a::before { content: '\\2019 x\\00a0'; }", 'a.css')).toBe(".a::before { content: '\u2019x\u00a0'; }");
+  });
+});
+
+/**
+ * Upstream Overpass (fonts/source/, as Google serves it) classes twelve mapped spacing glyphs as marks: the middle dot
+ * U+00B7, the backtick U+0060 and the spacing accents (´ ¸ ¨ ¯ ˆ ˚ ˜ in the latin file, ˇ ˉ ˝ in latin-ext). They have
+ * GDEF glyph class 3 and sit in the GPOS mark coverages, and the text shaper gives a mark no advance: the " · "
+ * separator drew its dot on top of the space after it. scripts/fonts/subset.sh applies the rule "a mapped glyph that
+ * Unicode does not class as a combining mark is not a mark" to the four files it writes. A glyph no code point maps
+ * (the .dnom figures, the .case marks) is outside the rule and keeps its class.
+ */
+describe('the served font files: a character Unicode does not class as a combining mark is not a mark in the font', () => {
+  const SERVED = ['core', 'rest', 'ext-common', 'ext-rest'].map((p) => `app/fonts/overpass-latin-${p}.woff2`);
+  /** Unicode general category Mn, Mc or Me (Python's unicodedata.category, which subset.sh uses, agrees for these). */
+  const isCombining = (cp: number) => /^\p{M}$/u.test(String.fromCodePoint(cp));
+
+  /** Each mapped code point outside Mn, Mc and Me whose glyph has GDEF class 3 or is in a GPOS mark coverage. */
+  function spacingMarks(path: string): string[] {
+    const { class3, marks } = woff2MarkGlyphs(path);
+    const out: string[] = [];
+    for (const [cp, glyph] of woff2Cmap(path)) {
+      if (isCombining(cp)) continue;
+      if (class3.has(glyph)) out.push(`${hex(cp)} glyph ${glyph} has GDEF class 3`);
+      if (marks.has(glyph)) out.push(`${hex(cp)} glyph ${glyph} is in the mark coverage of GPOS lookup ${marks.get(glyph)!.join(', ')}`);
+    }
+    return out;
+  }
+
+  for (const file of SERVED) {
+    it(`${file}: no character outside Mn, Mc and Me has a mark glyph (GDEF class 3, or a GPOS mark coverage)`, () => {
+      expect(spacingMarks(file)).toEqual([]);
+    });
+  }
+
+  for (const [cp, name] of [[0xb7, 'the middle dot'], [0x60, 'the backtick']] as const) {
+    it(`${hex(cp)}, ${name}, is a spacing glyph in the core file: not GDEF class 3, in no GPOS mark coverage`, () => {
+      const file = 'app/fonts/overpass-latin-core.woff2';
+      const glyph = woff2Cmap(file).get(cp);
+      expect(glyph, `${file} maps ${hex(cp)}`).toBeDefined();
+      const { class3, marks } = woff2MarkGlyphs(file);
+      expect({ class3: class3.has(glyph!), markLookups: marks.get(glyph!) ?? [] }).toEqual({ class3: false, markLookups: [] });
+    });
+  }
+
+  it('the combining marks the core and rest files map stay marks: GDEF class 3, and in a GPOS mark coverage', () => {
+    const kept: string[] = [];
+    for (const file of SERVED.slice(0, 2)) {
+      const { class3, marks } = woff2MarkGlyphs(file);
+      for (const [cp, glyph] of woff2Cmap(file)) {
+        if (isCombining(cp)) kept.push(`${hex(cp)} ${class3.has(glyph) && marks.has(glyph)}`);
+      }
+    }
+    expect(kept.sort()).toEqual(['U+0300 true', 'U+0301 true', 'U+0303 true', 'U+0304 true', 'U+0308 true', 'U+0309 true', 'U+0323 true']);
+  });
+
+  it('(harness) the GDEF and GPOS reader reads what fontTools reads, and finds the fault in the upstream file', () => {
+    // fontTools 4.46.0 on fonts/source/overpass-latin.woff2: 32 glyphs of GDEF class 3, the same 32 in the GPOS mark
+    // coverages; U+00B7 maps glyph 208, in lookup 1's MarkCoverage; U+0060 in lookup 1's and lookup 3's (Mark1Coverage).
+    const upstream = 'fonts/source/overpass-latin.woff2';
+    const { class3, marks } = woff2MarkGlyphs(upstream);
+    expect({ class3: class3.size, marks: marks.size }).toEqual({ class3: 32, marks: 32 });
+    const cmap = woff2Cmap(upstream);
+    expect(cmap.get(0xb7)).toBe(208);
+    expect(marks.get(cmap.get(0xb7)!)).toEqual([1]);
+    expect(marks.get(cmap.get(0x60)!)).toEqual([1, 3]);
+    expect(spacingMarks(upstream).filter((l) => l.includes('class 3')).map((l) => l.slice(0, 6)).sort()).toEqual(
+      ['U+0060', 'U+00A8', 'U+00AF', 'U+00B4', 'U+00B7', 'U+00B8', 'U+02C6', 'U+02DA', 'U+02DC'],
+    );
+    expect(spacingMarks('fonts/source/overpass-latin-ext.woff2').filter((l) => l.includes('class 3')).map((l) => l.slice(0, 6)).sort()).toEqual(
+      ['U+02C7', 'U+02C9', 'U+02DD'],
+    );
+  });
+
+  it('scripts/fonts/subset.sh applies the rule to each file between fontTools.subset and the write, and checks what it wrote', () => {
+    const script = readFileSync('scripts/fonts/subset.sh', 'utf8');
+    // The rule: GDEF class 3 to 1, and out of the mark coverages with the MarkArray records, for every mapped glyph
+    // whose code points are not all Mn, Mc or Me.
+    const rule = /^def spacing_not_marks\(font\):\n([\s\S]*?)\n(?=\S)/m.exec(script)?.[1] ?? '';
+    for (const part of ["unicodedata.category", "('Mn', 'Mc', 'Me')", 'GlyphClassDef', '= 1', 'MarkCoverage', 'Mark1Coverage', 'MarkArray.MarkRecord', 'Mark1Array.MarkRecord']) {
+      expect(rule, `the rule holds ${part}`).toContain(part);
+    }
+    const order = ['subsetter.subset(font)', '= spacing_not_marks(font)', 'subset.save_font(font', '\n    check_written(path)\n'].map((s) => script.indexOf(s));
+    expect(order.every((i, k) => i > 0 && (k === 0 || i > order[k - 1])), `subset, rule, write, check in that order: ${order}`).toBe(true);
+    // Each written file is re-read and refused if a spacing glyph is still a mark, before any replaces a committed one.
+    expect(script.indexOf('def check_written(path):')).toBeGreaterThan(0);
+    expect(order[3]).toBeLessThan(script.indexOf('mv "$f" app/fonts/'));
   });
 });

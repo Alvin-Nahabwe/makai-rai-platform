@@ -49,14 +49,9 @@ export async function expectFocusVisibleAndUncovered(page: Page): Promise<void> 
     const focused = look(el);
     const describe = (l: ReturnType<typeof look>) => `outline ${l.outlineStyle} ${l.outlineWidth} ${l.outlineColor}, box-shadow ${l.boxShadow}`;
     if (!outlineShows(focused) && !shadowShows(focused)) return `${what} has no focus indicator (${describe(focused)})`;
-    el.blur();
-    const unfocused = look(el);
-    el.focus({ preventScroll: true });
-    if (document.activeElement !== el) return `${what} did not take focus back after the check`;
-    if (JSON.stringify(focused) === JSON.stringify(unfocused)) {
-      return `${what} has no focus indicator: its outline and shadow are the same without focus (${describe(focused)})`;
-    }
 
+    // Place and cover are read before the blur and refocus below: a focus handler on the page (the answer form scrolls
+    // whatever takes focus into view) would move the element clear first, and a cover would never be seen.
     const r = el.getBoundingClientRect();
     const slack = 0.5;
     const width = document.documentElement.clientWidth;
@@ -69,6 +64,14 @@ export async function expectFocusVisibleAndUncovered(page: Page): Promise<void> 
     if (!hit || !(hit === el || el.contains(hit))) {
       const over = hit ? `${hit.tagName.toLowerCase()}${hit.id ? `#${hit.id}` : ''}` : 'nothing';
       return `${what} is covered by ${over} at the centre of its box`;
+    }
+
+    el.blur();
+    const unfocused = look(el);
+    el.focus({ preventScroll: true });
+    if (document.activeElement !== el) return `${what} did not take focus back after the check`;
+    if (JSON.stringify(focused) === JSON.stringify(unfocused)) {
+      return `${what} has no focus indicator: its outline and shadow are the same without focus (${describe(focused)})`;
     }
     return null;
   });

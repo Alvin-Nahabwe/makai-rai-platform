@@ -13,7 +13,8 @@ import * as documents from '../../lib/data/documents';
 import { NO_DOCUMENTS_LINE } from '../../components/documents/GenerateDocumentForm';
 import { captureLogs } from '../helpers/logCapture';
 import { can } from '../../lib/authz/policy';
-import { TYPED_MARK } from '../../lib/documents/copy';
+import { DOCUMENTS_COPY, MSG_SEAL_CHECK_FAILED } from '../../lib/documents/copy';
+import { REVIEW_COPY } from '../../lib/review/copy';
 
 vi.setConfig({ testTimeout: 60_000 });
 vi.mock('next/navigation', async (orig) => ({ ...(await orig<typeof import('next/navigation')>()), useRouter: () => ({ refresh() {} }) }));
@@ -63,10 +64,10 @@ describe('S-18', () => {
 
   it('FR-DOC-01 FR-DOC-03 UX-20: a sealed review shows the form with the documents that have a generator, the draft and the summary, and the empty issued list', async () => {
     const html = await render(reviewOfA);
-    expect(html).toMatch(/<h1[^>]*>Generate a document<\/h1>/);
+    expect(html).toMatch(/<h1[^>]*>Create a document<\/h1>/);
     expect(['>Data card<', '>Model card<'].map((t) => html.indexOf(t)).every((x) => x > 0)).toBe(true);
     expect(html).toContain('value="Draft licence text"');
-    expect(html).toContain(TYPED_MARK);
+    expect(html).toContain('They are not part of the sealed record.');
     expect(html).toMatch(/\d+ fields from \d+ questions/);
     expect(html).toContain(NO_DOCUMENTS_LINE);
     expect(html).toContain('Seal 1,');
@@ -74,7 +75,7 @@ describe('S-18', () => {
 
   it('FR-DOC-05 UX-20 (7.4.2 S-18): a review never sealed shows the line and the link to seal it, and no form', async () => {
     const html = await render(unsealedReviewOfA);
-    expect(html).toContain('This review has not been sealed yet. Documents come from a seal.');
+    expect(html).toContain(DOCUMENTS_COPY.form.neverSealed);
     expect(html).toContain('Seal this review');
     expect(html).not.toContain('type="radio"');
   });
@@ -101,11 +102,11 @@ describe('S-18', () => {
     const stageReview = async () => renderToStaticMarkup(await StageReviewPage({ params: Promise.resolve({ slug: fxA.org.slug, id: projectOfA, reviewId: reviewOfA }) }));
     for (const role of ['owner', 'admin', 'reviewer'] as const) {
       sessionFor(fxA.members[role].userId);
-      expect([role, (await stageReview()).split('Generate a document').length - 1]).toEqual([role, 1]);
+      expect([role, (await stageReview()).split(REVIEW_COPY.review.createDocument).length - 1]).toEqual([role, 1]);
     }
     for (const role of ['assessor', 'viewer'] as const) {
       sessionFor(fxA.members[role].userId);
-      expect([role, (await stageReview()).split('Generate a document').length - 1]).toEqual([role, 0]);
+      expect([role, (await stageReview()).split(REVIEW_COPY.review.createDocument).length - 1]).toEqual([role, 0]);
     }
   });
 
@@ -128,7 +129,7 @@ describe('S-18', () => {
     vi.spyOn(documents, 'documentSummaries').mockRejectedValue(new AppError(500, 'integrity_failure', 'Document integrity check failed'));
     const { result: html, lines } = await captureLogs(() => render(reviewOfA));
     expect(lines.filter((l) => l.includes('SEAL_CHECK_FAILED')).map((l) => JSON.parse(l))).toEqual([expect.objectContaining({ level: 'error', details: expect.objectContaining({ sealId: sealOfA }) })]);
-    expect(html).toContain('This seal cannot be used: its check failed.');
+    expect(html).toContain(MSG_SEAL_CHECK_FAILED);
     expect(html).not.toContain('type="radio"');
     expect(html).toContain(`/documents/${issued.id}/pdf`);
     vi.restoreAllMocks();
@@ -141,7 +142,7 @@ describe('S-18', () => {
     await withTriggersDisabled('seals', () => testDb.$executeRaw`UPDATE seals SET manifest = manifest || '\x20'::bytea WHERE id = ${seal.id}`);
     const { result: html, lines } = await captureLogs(() => render(review, otherProjectOfA));
     expect(lines.filter((l) => l.includes('SEAL_CHECK_FAILED')).map((l) => JSON.parse(l))).toEqual([expect.objectContaining({ level: 'error', details: expect.objectContaining({ sealId: seal.id }) })]);
-    expect(html).toContain('This seal cannot be used: its check failed.');
+    expect(html).toContain(MSG_SEAL_CHECK_FAILED);
     expect(html).not.toContain('type="radio"');
     expect(html).toContain(`/documents/${issued.id}/pdf`);
   });
@@ -163,28 +164,36 @@ describe('S-18', () => {
     for (const role of ['owner', 'admin', 'reviewer', 'assessor', 'viewer'] as const) {
       sessionFor(fxA.members[role].userId);
       const s18 = await render(review, project);
-      expect([role, s18.includes('Erased on ')]).toEqual([role, true]);
+      expect([role, s18.includes('File erased on ')]).toEqual([role, true]);
       expect([role, s18.includes('/pdf')]).toEqual([role, false]);
       const s16 = renderToStaticMarkup(await StageReviewPage({ params: Promise.resolve({ slug: fxA.org.slug, id: project, reviewId: review }) }));
-      expect([role, s16.includes('Data card . from seal 1')]).toEqual([role, true]);
+      expect([role, s16.includes('Data card\u00a0· from seal 1')]).toEqual([role, true]);
     }
   });
 
-  it('OD-20 FR-DOC-01 UX-20: S-18 shows "Uganda\'s AI protocol issues" and the UNCST table below the documents for every sealed review and every role', async () => {
+  it('S-16: the seal explanation link sits in the Status section after the state line, and the time-stamp sentence is not on screen', async () => {
+    const { SEAL_PROOF_HREF } = await import('../../components/review/reviewText');
+    for (const review of [reviewOfA, unsealedReviewOfA]) {
+      const html = renderToStaticMarkup(await StageReviewPage({ params: Promise.resolve({ slug: fxA.org.slug, id: projectOfA, reviewId: review }) }));
+      expect(html).not.toContain('independently time-stamped');
+      const status = html.slice(html.indexOf('<h2 id="review-state">'), html.indexOf('</section>', html.indexOf('<h2 id="review-state">')));
+      expect(status).toMatch(new RegExp(`^<h2 id="review-state">Status</h2><p>(?:[^<]|<!-- -->)*</p><p><a href="${SEAL_PROOF_HREF}">What sealing means</a></p>`));
+      expect(html.match(/What sealing means/g)).toHaveLength(1);
+    }
+  });
+
+  it('FR-DOC-01: S-18 shows no UNCST or Uganda-only table, for a sealed or never-sealed review and every role', async () => {
+    // CONSOLIDATED section 4 (owner ruling, country content): the UNCST table and its heading left S-18.
     for (const role of ['owner', 'admin', 'reviewer', 'assessor', 'viewer'] as const) {
       sessionFor(fxA.members[role].userId);
-      const html = await render(reviewOfA);
-      const at = html.search(/<h2[^>]*>Uganda&#x27;s AI protocol issues<\/h2>/);
-      expect(at, role).toBeGreaterThan(-1);
-      expect(html.slice(at), role).toContain('<caption');
-      const issuedAt = html.indexOf('id="documents-issued"');
-      expect(issuedAt, role).toBeGreaterThan(-1);   // the issued list is always on the page, whatever the earlier cases added to this review
-      expect(at, role).toBeGreaterThan(issuedAt);
-      if (can(role, 'document:generate')) expect(at, role).toBeGreaterThan(html.indexOf('>Data card<'));
+      for (const review of [reviewOfA, unsealedReviewOfA]) {
+        const html = await render(review);
+        expect(html, role).toMatch(/<h1[^>]*>Create a document<\/h1>/);   // not vacuous: the page rendered
+        expect(html, role).not.toMatch(/UNCST|AI protocol|<table[\s>]/i);
+      }
+      const sealed = await render(reviewOfA);
+      expect(sealed.indexOf('id="documents-issued"'), role).toBeGreaterThan(-1);   // the issued list stays on the page
+      if (can(role, 'document:generate')) expect(sealed, role).toContain('>Data card<');   // and the form, for the roles that generate
     }
-  });
-
-  it('OD-20: a review never sealed shows no UNCST table', async () => {
-    expect(await render(unsealedReviewOfA)).not.toContain('AI protocol issues');
   });
 });

@@ -24,10 +24,28 @@ interface Blocking {
 
 export async function expectNoSeriousA11yViolations(page: Page, state: string): Promise<void> {
   await page.addScriptTag({ path: AXE_SOURCE });
-  const found = await page.evaluate(async (tags): Promise<AxeResults['violations']> => {
+  const limitMs = 2000;
+  const { violations: found, unsettled } = await page.evaluate(async ({ tags, limit }): Promise<{ violations: AxeResults['violations']; unsettled: string[] }> => {
+    // A control that has just changed state is half way between two colours for a moment, and axe would read the blend: a
+    // submit button that hydration has just enabled passes through about 1.2:1 on its way from the disabled colours to the
+    // primary ones (measured on S-01, plan 1A Task 16). So the check waits for the CSS transitions that are running, at
+    // most two seconds, and then reads the page as a person sees it at rest. When the limit wins, the transitions still
+    // running are named (as settleHover does), and the check goes on.
+    const running = document.getAnimations().filter((a): a is CSSTransition => a instanceof CSSTransition);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = new Promise<boolean>((resolve) => { timer = setTimeout(() => resolve(true), limit); });
+    const settled = Promise.all(running.map((a) => a.finished.catch(() => undefined))).then(() => false);
+    const lost = await Promise.race([settled, timedOut]);
+    clearTimeout(timer);
+    const stillRunning = !lost ? [] : running.filter((a) => a.playState === 'running').map((a) => {
+      const target = (a.effect as KeyframeEffect | null)?.target as Element | null | undefined;
+      const name = target === undefined || target === null ? 'unknown element' : `${target.tagName.toLowerCase()}${target.id ? `#${target.id}` : ''}${typeof target.className === 'string' && target.className ? `.${target.className.split(' ').join('.')}` : ''}`;
+      return `${a.transitionProperty} on ${name}`;
+    });
     const axe = (window as unknown as { axe: { run(ctx: Document, opts: object): Promise<AxeResults> } }).axe;
-    return (await axe.run(document, { runOnly: { type: 'tag', values: tags } })).violations;
-  }, TAGS);
+    return { violations: (await axe.run(document, { runOnly: { type: 'tag', values: tags } })).violations, unsettled: stillRunning };
+  }, { tags: TAGS, limit: limitMs });
+  if (unsettled.length > 0) console.warn(`expectNoSeriousA11yViolations (${state}): ${unsettled.length} transition(s) still running after ${limitMs} ms: ${unsettled.join('; ')}`);
   const blocking: Blocking[] = found
     .filter((v) => v.impact && BLOCKING.has(v.impact))
     .map((v) => ({

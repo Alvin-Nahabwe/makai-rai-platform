@@ -2,9 +2,9 @@ import type { Page } from '@playwright/test';
 import type { Stage } from '../../types/record';
 
 /**
- * The shared "no score" checks (FR-RM-01, FR-RM-04, UX-06, UX-07), for the screens other units build
- * (S-08, S-10, S-11, S-14, S-28) and for the crawl in e2e/no-score-crawl.spec.ts. The names and
- * signatures are contract symbols (00-contract.md, "Further cross-unit symbols", row `e2e/helpers/noScore.ts`).
+ * The shared "no score" checks (FR-RM-01, FR-RM-04, UX-07 and NFR-A11Y-05 with spec 7.2), for the screens other units build
+ * (S-08, S-10, S-11, S-14, S-28) and for the crawl in e2e/no-score-crawl.spec.ts. `expectStatusMarksInk` is the one
+ * new symbol and replaces `expectNeutralStatusLabels`; the other names and signatures are unchanged.
  *
  * Markup the checks read:
  *   - text inside an element carrying `data-claims-allowed="<reason>"` is skipped by every text and
@@ -12,13 +12,19 @@ import type { Stage } from '../../types/record';
  *   - a percentage inside an element carrying `data-source-note` (a cited study's note, ReferencesList) is not a
  *     finding: SRS 7.5.3 bans a percentage "next to the team's items", and a cited figure is not one (coordinator
  *     ruling 2, unit/cnt). Only the percentage check skips it; score words there are still checked;
- *   - a status label is an element with class `status-label`;
- *   - the warning tint is the class `status-label--warning`.
- * They read computed values only. RM adds no style rule for either class; UI owns the tokens.
+ *   - a status mark is any `.ui-mark`, `.ui-mark__shape` or `[data-mark-kind]` element; a legacy status label is a
+ *     `.status-label` element, read until its screen is rebuilt (expectStatusMarksInk);
+ *   - an upload's own `<progress>` carries `data-upload-progress` itself or sits directly in an element that does, and
+ *     is the one progress element allowed (never inside a route row); a route row's proportional fill is any element
+ *     in `.ui-route-row` with an inline style value in per cent (a custom property too) or a `width` attribute in per
+ *     cent, and is a progress element too (spec 7.2).
+ * Computed values are read, not source. The status-mark check (expectStatusMarksInk) compares colours with the tokens
+ * `--color-mark`, `--color-ink`, `--color-ink-muted`, `--color-saved`, `--color-tint` and `--color-action-text` as
+ * `:root` resolves them; its rules are listed at that function.
  *
  * Every check reads the `<main>` landmark and refuses a page that has none, because a page with no
  * `<main>` would otherwise pass for having nothing in it. A check that finds nothing to examine
- * (no status label, no sentinel on the page) fails for the same reason.
+ * (no status mark or label, no sentinel on the page) fails for the same reason.
  */
 
 /**
@@ -33,11 +39,8 @@ export const SCORE_WORDS: RegExp = /\b(maturity|overall score|readiness score|as
 const PERCENT = /\d+(?:[.,]\d+)?\s?%/g;
 /** FR-RM-04 (SRS line 469): no element is labelled as a total. */
 const TOTAL_WORDS = /\b(total|overall|in all)\b/gi;
-/** UX-06 (SRS line 2296): the warning tint is allowed on these three labels only. */
-const WARNING_LABELS: ReadonlySet<string> = new Set(['overdue', 'owner cannot act', 'legal name not recorded']);
-
 /** Elements that draw a progress bar, a gauge or a meter. A `<canvas>` or an undecorated `<svg>` is a drawn chart. */
-const PROGRESS_KINDS: readonly string[] = ['<progress>', '<meter>', 'role=progressbar', 'role=meter'];
+const PROGRESS_KINDS: readonly string[] = ['<progress>', '<meter>', 'role=progressbar', 'role=meter', 'proportional fill'];
 
 type Shape = { kind: string; html: string };
 type MainSnapshot = {
@@ -78,8 +81,9 @@ async function snapshotMain(page: Page, who: string): Promise<MainSnapshot> {
         const label = el.getAttribute('aria-label');
         if (label) ariaLabels.push(label);
         const tag = el.localName;
+        const inRouteRow = el.closest('.ui-route-row') !== null;
         const kind =
-          tag === 'progress' ? '<progress>'
+          tag === 'progress' ? ((el.matches('[data-upload-progress]') || el.parentElement?.matches('[data-upload-progress]')) && !inRouteRow ? null : '<progress>')
           : tag === 'meter' ? '<meter>'
           : el.getAttribute('role') === 'progressbar' ? 'role=progressbar'
           : el.getAttribute('role') === 'meter' ? 'role=meter'
@@ -87,6 +91,15 @@ async function snapshotMain(page: Page, who: string): Promise<MainSnapshot> {
           : tag === 'svg' && el.closest('svg[aria-hidden="true"]') === null ? '<svg> without aria-hidden="true"'
           : null;
         if (kind) shapes.push({ kind, html: el.outerHTML.slice(0, 90) });
+        if (inRouteRow) {
+          // Any inline value in per cent (a custom property too), or a width attribute in per cent, is a drawn fill.
+          const style = 'style' in el ? (el as HTMLElement).style : null;
+          let percent = (el.getAttribute('width') ?? '').includes('%');
+          for (let i = 0; style && i < style.length; i += 1) {
+            if (style.getPropertyValue(style[i]).includes('%')) percent = true;
+          }
+          if (percent) shapes.push({ kind: 'proportional fill', html: el.outerHTML.slice(0, 90) });
+        }
       }
     }
     return { text: texts.join(' '), percentText: percentTexts.join(' '), ariaLabels, shapes };
@@ -252,24 +265,195 @@ export async function expectNoCrossStageTotal(page: Page, sentinels: Record<Stag
   fail(who, [...sentinelFindings(s, sentinels, sums, own), ...totalLabelFindings(s)]);
 }
 
-type LabelSnapshot = {
-  body: string | null;
-  muted: string | null;
-  labels: Array<{ text: string; colour: string; warning: boolean }>;
-  warnings: string[];
+/** The characters that draw a tick: U+2713, U+2714, U+2705, U+2611 and U+1F5F8. */
+const TICK_CHARACTERS = /[\u2713\u2714\u2705\u2611\u{1F5F8}]/u;
+
+type Point = { x: number; y: number };
+
+/** Three points a, b, c of an open run: b is lower on the screen than both ends and strictly between them across. */
+function isTick(a: Point, b: Point, c: Point): boolean {
+  return b.y > a.y && b.y > c.y && Math.min(a.x, c.x) < b.x && b.x < Math.max(a.x, c.x);
+}
+
+/** Drops a point equal to the one before it, so that a repeated point does not hide a tick. */
+function withoutRepeats(points: Point[]): Point[] {
+  return points.filter((p, i) => i === 0 || p.x !== points[i - 1].x || p.y !== points[i - 1].y);
+}
+
+const NUMBER = String.raw`[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?`;
+const PATH_TOKEN = new RegExp(`[a-zA-Z]|${NUMBER}`, 'g');
+const isLetter = (t: string): boolean => /^[a-zA-Z]$/.test(t);
+
+/**
+ * Whether a path's `d` draws a tick: a subpath of exactly two straight segments, open, whose middle point is lower than
+ * both ends and between them (a point repeated in a row counts once). `'unreadable'` when a command needs a current
+ * point that a curve or arc left unknown. A chevron pointing down is a tick by this test.
+ */
+export function tickShapeOf(d: string): 'tick' | 'clear' | 'unreadable' {
+  const tokens = d.match(PATH_TOKEN) ?? [];
+  let cur: Point | null = null;
+  let start: Point | null = null;
+  let sub: { points: Point[] | null; closed: boolean } | null = null;
+  let found = false;
+  let first = true;
+  const endSub = (): void => {
+    if (sub && sub.points && !sub.closed) {
+      const pts = withoutRepeats(sub.points);
+      if (pts.length === 3 && isTick(pts[0], pts[1], pts[2])) found = true;
+    }
+    sub = null;
+  };
+  let i = 0;
+  while (i < tokens.length) {
+    const cmd = tokens[i++];
+    if (!isLetter(cmd)) continue; // numbers before any command: nothing to draw
+    const lower = cmd === cmd.toLowerCase();
+    const up = cmd.toUpperCase();
+    if (up === 'Z') {
+      if (sub) { sub.closed = true; endSub(); }
+      cur = start;
+      continue;
+    }
+    if ('MLHV'.includes(up)) {
+      let current = up;
+      while (i < tokens.length && !isLetter(tokens[i])) {
+        const n1 = Number(tokens[i]);
+        const arity = up === 'H' || up === 'V' ? 1 : 2;
+        if (arity === 2 && (i + 1 >= tokens.length || isLetter(tokens[i + 1]))) { i = tokens.length; break; }
+        const n2 = arity === 2 ? Number(tokens[i + 1]) : 0;
+        i += arity;
+        const relative = lower && !(first && current === 'M');
+        let p: Point;
+        if (up === 'H' || up === 'V') {
+          if (!cur) return 'unreadable';
+          p = up === 'H' ? { x: relative ? cur.x + n1 : n1, y: cur.y } : { x: cur.x, y: relative ? cur.y + n1 : n1 };
+        } else if (relative) {
+          if (!cur) return 'unreadable';
+          p = { x: cur.x + n1, y: cur.y + n2 };
+        } else {
+          p = { x: n1, y: n2 };
+        }
+        if (current === 'M') {
+          endSub();
+          start = p;
+          sub = { points: [p], closed: false };
+        } else {
+          if (!sub) sub = { points: cur ? [cur] : [], closed: false };
+          sub.points?.push(p);
+        }
+        cur = p;
+        first = false;
+        if (current === 'M') current = 'L'; // further pairs after a move are lines
+      }
+      continue;
+    }
+    // Curves and arcs: the subpath is not straight and the current point is unknown until the next absolute point.
+    if (!sub) sub = { points: null, closed: false };
+    sub.points = null;
+    cur = null;
+    first = false;
+    while (i < tokens.length && !isLetter(tokens[i])) i += 1;
+  }
+  endSub();
+  return found ? 'tick' : 'clear';
+}
+
+/** A `polyline`'s `points`: three points (a point repeated in a row counts once) that pass the tick test. A `polygon` is closed and never one. */
+function polylineIsTick(points: string): boolean {
+  const n = (points.match(new RegExp(NUMBER, 'g')) ?? []).map(Number);
+  if (n.length % 2 !== 0) return false;
+  const pts: Point[] = [];
+  for (let i = 0; i < n.length; i += 2) pts.push({ x: n[i], y: n[i + 1] });
+  const run = withoutRepeats(pts);
+  return run.length === 3 && isTick(run[0], run[1], run[2]);
+}
+
+/**
+ * Green, as the no-tick, no-green rule means it: not transparent, and either the saved mark's colour or hue 70 to 170
+ * degrees with saturation at least 0.2 (HSL from the sRGB values). Reads `rgb(...)` and `rgba(...)`; `none` and
+ * `transparent` are never green; any other non-empty form throws, so that a colour the check cannot read is a finding.
+ */
+export function isGreenColour(value: string, saved: string): boolean {
+  const v = value.trim().toLowerCase();
+  if (v === '' || v === 'none' || v === 'transparent') return false;
+  const m = /^rgba?\(\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*(?:,\s*(\d*\.?\d+)\s*)?\)$/.exec(v);
+  if (!m) throw new Error(`cannot read colour ${JSON.stringify(value)}`);
+  const alpha = m[4] === undefined ? 1 : Number(m[4]);
+  if (alpha === 0) return false;
+  if (v === saved.trim().toLowerCase()) return true;
+  const [r, g, b] = [Number(m[1]) / 255, Number(m[2]) / 255, Number(m[3]) / 255];
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+  if (d === 0) return false;
+  const l = (max + min) / 2;
+  const saturation = d / (1 - Math.abs(2 * l - 1));
+  const hue = 60 * (max === r ? ((g - b) / d + 6) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4);
+  return hue >= 70 && hue <= 170 && saturation >= 0.2;
+}
+
+/** A computed background that paints nothing: `transparent`, or an `rgba(...)` with alpha 0. */
+function isTransparent(value: string): boolean {
+  const v = value.trim().toLowerCase();
+  return v === 'transparent' || /^rgba\([^)]*,\s*0(?:\.0+)?\s*\)$/.test(v);
+}
+
+/** What one element, or one of its `::before` and `::after`, computes to. */
+type ElementFacts = {
+  html: string;
+  tag: string;
+  /** '' for the element itself. */
+  pseudo: '' | '::before' | '::after';
+  color: string;
+  background: string;
+  /** Colours of the sides whose border width is not 0px. */
+  borders: string[];
+  /** Set on the seven graphics elements; null elsewhere. */
+  paint: { fill: string; stroke: string } | null;
+  d: string | null;
+  points: string | null;
+  /** A pseudo-element's computed `content`; null for an element. */
+  content: string | null;
+};
+type MarkFacts = {
+  html: string;
+  color: string;
+  text: string;
+  /** `.ui-mark` or `[data-mark-kind]`: its own text must hold a letter. */
+  wrapper: boolean;
+  isShape: boolean;
+  /** Whether an ancestor is a wrapper. */
+  insideWrapper: boolean;
+  parentText: string;
+};
+type InkSnapshot = {
+  tokens: Record<'mark' | 'ink' | 'muted' | 'saved' | 'tint' | 'action', string | null>;
+  marks: MarkFacts[];
+  /** Every mark element and every element inside one, with their pseudo-elements, once. */
+  markTree: ElementFacts[];
+  words: Array<{ html: string; color: string }>;
+  labels: Array<{ html: string; text: string; color: string; tree: ElementFacts[] }>;
 };
 
 /**
- * UX-06 (SRS line 2296) and NFR-A11Y-05 (SC 1.4.1): every `.status-label` is words, not a colour or an
- * icon; its computed colour is `--text-body` or `--text-muted` as `:root` resolves them; and
- * `.status-label--warning` is on "Overdue", "Owner cannot act" and "Legal name not recorded" only (a count
- * or punctuation beside the words is ignored). A warning-tinted label is exempt from the colour check.
- * The order of the to-do counts and the recorded counts in a stage column needs S-10's markup, which is
- * PRJ's: its own test asserts that.
+ * NFR-A11Y-05 (SC 1.4.1) with spec 7.2: a status is words, its mark is a shape, and neither is carried by colour.
+ * The mark elements are every `.ui-mark`, `.ui-mark__shape` and `[data-mark-kind]` in `<main>`; every `.status-label`
+ * there is read too, until its screen is rebuilt. What it holds, by rule group:
+ *   - a mark element's own colour is `--color-mark`, and so is the fill and stroke of each graphic in it (a `line`'s
+ *     fill paints nothing and is not read); a mark's words (`.ui-mark__words`) are `--color-ink`, and a mark has words;
+ *   - on every mark element, legacy label and element inside either, and on their `::before` and `::after` that
+ *     exist: no tick (a tick-shaped `path` or `polyline`, or a tick character in the text or the pseudo-element's
+ *     content) and no green in text colour, background, a drawn border, fill or stroke;
+ *   - on the same elements, text colour is one of `--color-mark`, `--color-ink`, `--color-ink-muted`; background is
+ *     transparent or `--color-tint`; a drawn border is one of those inks or `--color-action-text`;
+ *   - a legacy label has words and its own colour is `--color-ink` or `--color-ink-muted`.
+ * A page with neither kind of element fails (a check that found nothing must not pass). Known limits: a tick drawn
+ * as a closed outline, over two subpaths or two `line` elements, with a collinear extra point or with curves is not
+ * recognised, and a chevron pointing down reads as a tick.
  */
-export async function expectNeutralStatusLabels(page: Page): Promise<void> {
-  const who = `expectNeutralStatusLabels(${page.url()})`;
-  const snap: LabelSnapshot | null = await page.evaluate(() => {
+export async function expectStatusMarksInk(page: Page): Promise<void> {
+  const who = `expectStatusMarksInk(${page.url()})`;
+  const snap: InkSnapshot | null = await page.evaluate(() => {
     const mains = Array.from(document.querySelectorAll('main'));
     if (mains.length === 0) return null;
     const rootStyle = getComputedStyle(document.documentElement);
@@ -282,40 +466,152 @@ export async function expectNeutralStatusLabels(page: Page): Promise<void> {
       probe.remove();
       return colour;
     };
-    const labels: LabelSnapshot['labels'] = [];
-    const warnings: string[] = [];
+    const GRAPHICS = new Set(['circle', 'ellipse', 'path', 'polygon', 'polyline', 'rect', 'line']);
+    const WRAPPER = '.ui-mark, [data-mark-kind]';
+    const borderColours = (cs: CSSStyleDeclaration): string[] => {
+      const out: string[] = [];
+      for (const side of ['top', 'right', 'bottom', 'left']) {
+        if (cs.getPropertyValue(`border-${side}-width`) !== '0px') out.push(cs.getPropertyValue(`border-${side}-color`));
+      }
+      return out;
+    };
+    const facts = (el: Element) => {
+      const cs = getComputedStyle(el);
+      const tag = el.localName;
+      const html = el.outerHTML.slice(0, 90);
+      const own = {
+        html,
+        tag,
+        pseudo: '' as const,
+        color: cs.color,
+        background: cs.backgroundColor,
+        borders: borderColours(cs),
+        paint: GRAPHICS.has(tag) ? { fill: cs.fill, stroke: cs.stroke } : null,
+        d: tag === 'path' ? (el.getAttribute('d') ?? '') : null,
+        points: tag === 'polyline' ? (el.getAttribute('points') ?? '') : null,
+        content: null,
+      };
+      const out: Array<typeof own | { html: string; tag: string; pseudo: '::before' | '::after'; color: string; background: string; borders: string[]; paint: null; d: null; points: null; content: string }> = [own];
+      for (const pseudo of ['::before', '::after'] as const) {
+        const ps = getComputedStyle(el, pseudo);
+        // A pseudo-element whose content is none or normal does not exist.
+        if (ps.content === 'none' || ps.content === 'normal') continue;
+        out.push({ html, tag, pseudo, color: ps.color, background: ps.backgroundColor, borders: borderColours(ps), paint: null, d: null, points: null, content: ps.content });
+      }
+      return out;
+    };
+    const treeOf = (roots: Element[]) => {
+      const seen = new Set<Element>();
+      for (const r of roots) for (const el of [r, ...Array.from(r.querySelectorAll('*'))]) seen.add(el);
+      return Array.from(seen).flatMap(facts);
+    };
+    const markEls = new Set<Element>();
+    const labelEls: Element[] = [];
+    const wordEls: Element[] = [];
     for (const main of mains) {
-      for (const el of Array.from(main.querySelectorAll('.status-label'))) {
-        labels.push({
-          text: (el.textContent ?? '').replace(/\s+/g, ' ').trim(),
-          colour: getComputedStyle(el).color,
-          warning: el.classList.contains('status-label--warning'),
-        });
-      }
-      for (const el of Array.from(main.querySelectorAll('.status-label--warning'))) {
-        warnings.push((el.textContent ?? '').replace(/\s+/g, ' ').trim());
-      }
+      for (const el of Array.from(main.querySelectorAll('.ui-mark, .ui-mark__shape, [data-mark-kind]'))) markEls.add(el);
+      labelEls.push(...Array.from(main.querySelectorAll('.status-label')));
+      wordEls.push(...Array.from(main.querySelectorAll('.ui-mark__words')));
     }
-    return { body: tokenColour('--text-body'), muted: tokenColour('--text-muted'), labels, warnings };
+    const marks = Array.from(markEls).map((el) => ({
+      html: el.outerHTML.slice(0, 90),
+      color: getComputedStyle(el).color,
+      text: el.textContent ?? '',
+      wrapper: el.matches(WRAPPER),
+      isShape: el.matches('.ui-mark__shape'),
+      insideWrapper: el.parentElement?.closest(WRAPPER) != null,
+      parentText: el.parentElement?.textContent ?? '',
+    }));
+    return {
+      tokens: {
+        mark: tokenColour('--color-mark'),
+        ink: tokenColour('--color-ink'),
+        muted: tokenColour('--color-ink-muted'),
+        saved: tokenColour('--color-saved'),
+        tint: tokenColour('--color-tint'),
+        action: tokenColour('--color-action-text'),
+      },
+      marks,
+      markTree: treeOf(Array.from(markEls)),
+      words: wordEls.map((el) => ({ html: el.outerHTML.slice(0, 90), color: getComputedStyle(el).color })),
+      labels: labelEls.map((el) => ({
+        html: el.outerHTML.slice(0, 90),
+        text: (el.textContent ?? '').replace(/\s+/g, ' ').trim(),
+        color: getComputedStyle(el).color,
+        tree: treeOf([el]),
+      })),
+    };
   });
   if (!snap) throw new Error(`${who}: no <main> element, so there is nothing to check`);
-  const findings: string[] = [];
-  if (snap.body === null) findings.push('--text-body is not defined on :root, so no colour can be compared with it');
-  if (snap.muted === null) findings.push('--text-muted is not defined on :root, so no colour can be compared with it');
-  if (findings.length > 0) fail(who, findings);
-  if (snap.labels.length === 0 && snap.warnings.length === 0) fail(who, ['no .status-label element in <main>']);
+  const { mark, ink, muted, saved, tint, action } = snap.tokens;
+  const missing = ([['--color-mark', mark], ['--color-ink', ink], ['--color-ink-muted', muted], ['--color-saved', saved], ['--color-tint', tint], ['--color-action-text', action]] as Array<[string, string | null]>)
+    .filter(([, v]) => v === null)
+    .map(([name]) => `${name} is not defined on :root, so no colour can be compared with it`);
+  if (missing.length > 0) return fail(who, missing);
+  if (mark === null || ink === null || muted === null || saved === null || tint === null || action === null) {
+    throw new Error(`${who}: a token resolved to nothing after the defined-on-:root check`);
+  }
+  if (snap.marks.length === 0 && snap.labels.length === 0) return fail(who, ['no status mark: neither a .ui-mark, .ui-mark__shape or [data-mark-kind] nor a .status-label in <main>']);
 
-  for (const l of snap.labels) {
-    if (!/\p{L}/u.test(l.text)) findings.push(`.status-label "${l.text}" has no words; a status must be text, not colour or a number alone (SC 1.4.1)`);
-    if (!l.warning && l.colour !== snap.body && l.colour !== snap.muted) {
-      findings.push(`.status-label "${l.text}": colour ${l.colour} is neither --text-body (${snap.body}) nor --text-muted (${snap.muted})`);
+  const inks = [mark, ink, muted];
+  const findings: string[] = [];
+  const green = (value: string, where: string, property: string): void => {
+    try {
+      if (isGreenColour(value, saved)) findings.push(`${property} ${value} is green in ${where}`);
+    } catch {
+      findings.push(`cannot read colour ${JSON.stringify(value)} (${property}) in ${where}`);
+    }
+  };
+  const treeFindings = (tree: ElementFacts[]): void => {
+    for (const e of tree) {
+      const where = e.pseudo === '' ? e.html : `${e.html} ${e.pseudo}`;
+      green(e.color, where, 'color');
+      green(e.background, where, 'background-color');
+      for (const b of e.borders) green(b, where, 'border colour');
+      if (e.paint) {
+        green(e.paint.fill, where, 'fill');
+        green(e.paint.stroke, where, 'stroke');
+      }
+      if (!inks.includes(e.color)) findings.push(`colour ${e.color} is not an ink (--color-mark, --color-ink, --color-ink-muted) in ${where}`);
+      if (e.background !== tint && !isTransparent(e.background)) findings.push(`background-color ${e.background} is neither transparent nor --color-tint in ${where}`);
+      for (const b of e.borders) {
+        if (!inks.includes(b) && b !== action) findings.push(`border colour ${b} is not an ink or --color-action-text in ${where}`);
+      }
+      if (e.content !== null && TICK_CHARACTERS.test(e.content)) findings.push(`tick character in the content of ${where}`);
+      if (e.d !== null) {
+        const verdict = tickShapeOf(e.d);
+        if (verdict === 'tick') findings.push(`tick-shaped path in ${where}`);
+        if (verdict === 'unreadable') findings.push(`cannot read path ${JSON.stringify(e.d)} in ${where}`);
+      }
+      if (e.points !== null && polylineIsTick(e.points)) findings.push(`tick-shaped polyline in ${where}`);
+    }
+  };
+
+  for (const m of snap.marks) {
+    if (m.color !== mark) findings.push(`${m.html}: colour ${m.color} is not --color-mark (${mark})`);
+    if (TICK_CHARACTERS.test(m.text)) findings.push(`tick character in the text of ${m.html}`);
+    if (m.wrapper && !/\p{L}/u.test(m.text)) findings.push(`${m.html} has no words; a status must be text, not colour or a shape alone (SC 1.4.1)`);
+    if (m.isShape && !m.wrapper && !m.insideWrapper && !/\p{L}/u.test(m.parentText)) {
+      findings.push(`${m.html} has no words beside it; a status must be text, not colour or a shape alone (SC 1.4.1)`);
     }
   }
-  for (const text of snap.warnings) {
-    const words = text.toLowerCase().replace(/[\d\p{P}\p{S}]+/gu, ' ').replace(/\s+/g, ' ').trim();
-    if (!WARNING_LABELS.has(words)) {
-      findings.push(`warning tint on "${text}"; allowed only on Overdue, Owner cannot act and Legal name not recorded`);
+  for (const e of snap.markTree) {
+    if (e.paint) {
+      if (e.paint.stroke !== 'none' && e.paint.stroke !== mark) findings.push(`stroke ${e.paint.stroke} is not --color-mark (${mark}) in ${e.html}`);
+      if (e.tag !== 'line' && e.paint.fill !== 'none' && e.paint.fill !== mark) findings.push(`fill ${e.paint.fill} is not --color-mark (${mark}) in ${e.html}`);
     }
+  }
+  treeFindings(snap.markTree);
+  for (const w of snap.words) {
+    if (w.color !== ink) findings.push(`${w.html}: colour ${w.color} is not --color-ink (${ink})`);
+  }
+  for (const l of snap.labels) {
+    if (!/\p{L}/u.test(l.text)) findings.push(`.status-label "${l.text}" has no words; a status must be text, not colour or a number alone (SC 1.4.1)`);
+    if (l.color !== ink && l.color !== muted) {
+      findings.push(`.status-label "${l.text}": colour ${l.color} is neither --color-ink (${ink}) nor --color-ink-muted (${muted})`);
+    }
+    if (TICK_CHARACTERS.test(l.text)) findings.push(`tick character in the text of .status-label "${l.text}"`);
+    treeFindings(l.tree);
   }
   fail(who, findings);
 }
