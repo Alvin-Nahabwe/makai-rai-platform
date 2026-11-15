@@ -30,6 +30,12 @@ describe('DecisionSlot (stub)', () => {
     }
   });
 
+  it('review M-A4: a writer who may not raise a finding and has no open finding gets no Findings section, so no empty heading', () => {
+    const html = renderToStaticMarkup(<DecisionSlot data={{ ...DATA, canRaiseFinding: false, openFinding: null }} next={NEXT} stageHref={STAGE_HREF} openFindingsOnQuestion={0} />);
+    expect(html).not.toContain('data-region="finding-link"');
+    expect(html).not.toContain(`>${QUESTION_COPY.headings.findings}</h2>`);
+  });
+
   it('for a writer: the current decision, the answer form, then the way on to the next question in words and All questions', () => {
     const html = renderToStaticMarkup(<DecisionSlot data={DATA} next={NEXT} stageHref={STAGE_HREF} openFindingsOnQuestion={0} />);
     const at = (s: string) => html.indexOf(s);

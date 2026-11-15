@@ -404,12 +404,18 @@ describe('the read-only question page (plan 1C Task 7)', () => {
     expect(viewer).toContain('data-region="guidance"');
   });
 
-  it('review M-B1: the reader\'s "Next: question n" counts the stage as the panel does when the personal data answer switches questions off: after Q-PP-12 at No, Q-PP-15, the 16th of 24', async () => {
-    const q12 = runningContent().questions.get('Q-PP-12')!;
+  it('review M-B1: the reader\'s "Next: question n" counts the stage as the panel does when the personal data answer switches questions off: on the personal data question at No, the next is Q-PP-15, the 16th of 24', async () => {
+    // These numbers hold for the fixture bundle (__tests__/fixtures/content/0.0.1-fixture): its pre-processing stage has 24
+    // questions, the personal data question is the 13th (index 12, after Q-PP-12), and Q-PP-13 and Q-PP-14 are the two it
+    // switches off at No, which keep their places in the count. So at No the panel's next after the personal data question
+    // is Q-PP-15, and Q-PP-15 is the 16th.
+    const gate = runningContent().questions.get('Q-PP-GATE-SENSITIVE')!;
     const stageIds = [...runningContent().questions.values()].filter((q) => q.stage === 'pre-processing').map((q) => q.id);
+    expect(stageIds.indexOf(gate.id)).toBe(12);
+    expect(stageIds[11]).toBe('Q-PP-12');
     const n = stageIds.indexOf('Q-PP-15') + 1;
-    expect(n).toBe(16);   // Q-PP-13 and Q-PP-14 are switched off but keep their places; the personal data question is the 13th
-    const html = await render({ ...VIEWER, question: q12, runningQuestion: q12, gateAnswer: 'no', position: { index: 11, total: 24, previousId: 'Q-PP-11', nextId: 'Q-PP-15' } });
+    expect(n).toBe(16);
+    const html = await render({ ...VIEWER, question: gate, runningQuestion: gate, gateAnswer: 'no', position: { index: 12, total: 24, previousId: 'Q-PP-12', nextId: 'Q-PP-15' } });
     const a = aside(html);
     expect(a).toContain(`>Next: question ${n}<`);
     expect(a).toContain(`Question ${n} of 24 in Pre-processing`);
