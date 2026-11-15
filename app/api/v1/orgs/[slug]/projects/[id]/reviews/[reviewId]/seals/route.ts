@@ -3,6 +3,7 @@ import { requireOrgContextWithIdentity } from '@/lib/auth/context';
 import { sealStageReview } from '@/lib/data/seals';
 import { isRequestId, requestDigest } from '@/lib/data/idempotency';
 import { ValidationFailed } from '@/lib/http/errors';
+import { HTTP_COPY } from '@/lib/http/copy';
 import { readJsonBody } from '@/lib/http/jsonBody';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { toResponse } from '@/lib/http/toResponse';
@@ -15,12 +16,12 @@ import type { SealRequest } from '@/types/api';
  */
 function parseSealRequest(body: unknown): SealRequest {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) {
-    throw new ValidationFailed([{ field: 'body', message: 'The body must be a JSON object.' }]);
+    throw new ValidationFailed([{ field: 'body', message: HTTP_COPY.unreadable }]);
   }
   const extra = Object.keys(body).filter((k) => k !== 'requestId');
   if (extra.length > 0) throw new ValidationFailed(extra.map((field) => ({ field, message: 'This field cannot be sent.' })));
   const { requestId } = body as { requestId?: unknown };
-  if (!isRequestId(requestId)) throw new ValidationFailed([{ field: 'requestId', message: 'requestId must be a UUID (8-4-4-4-12 hexadecimal).' }]);
+  if (!isRequestId(requestId)) throw new ValidationFailed([{ field: 'requestId', message: HTTP_COPY.outOfDate }]);
   return { requestId };
 }
 

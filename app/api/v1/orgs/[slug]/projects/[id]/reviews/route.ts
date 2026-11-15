@@ -3,6 +3,7 @@ import { requireOrgContextWithIdentity } from '@/lib/auth/context';
 import { openStageReview } from '@/lib/data/reviews';
 import { isRequestId, requestDigest } from '@/lib/data/idempotency';
 import { ValidationFailed } from '@/lib/http/errors';
+import { HTTP_COPY } from '@/lib/http/copy';
 import { readJsonBody } from '@/lib/http/jsonBody';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { toResponse } from '@/lib/http/toResponse';
@@ -19,13 +20,13 @@ const KEYS = ['requestId', 'stage', 'preparedFor'] as const;
  */
 function parseOpenReviewRequest(body: unknown): OpenReviewRequest {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) {
-    throw new ValidationFailed([{ field: 'body', message: 'The body must be a JSON object.' }]);
+    throw new ValidationFailed([{ field: 'body', message: HTTP_COPY.unreadable }]);
   }
   const extra = Object.keys(body).filter((k) => !(KEYS as readonly string[]).includes(k));
   if (extra.length > 0) throw new ValidationFailed(extra.map((field) => ({ field, message: 'This field cannot be sent.' })));
   const { requestId, stage, preparedFor } = body as Record<string, unknown>;
   const errors: FieldError[] = [];
-  if (!isRequestId(requestId)) errors.push({ field: 'requestId', message: 'requestId must be a UUID (8-4-4-4-12 hexadecimal).' });
+  if (!isRequestId(requestId)) errors.push({ field: 'requestId', message: HTTP_COPY.outOfDate });
   if (!(STAGES as readonly unknown[]).includes(stage)) errors.push({ field: 'stage', message: REVIEW_COPY.open.stageInvalid });
   if (preparedFor !== null && typeof preparedFor !== 'string') errors.push({ field: 'preparedFor', message: REVIEW_COPY.open.noteInvalid });
   if (errors.length > 0) throw new ValidationFailed(errors);
