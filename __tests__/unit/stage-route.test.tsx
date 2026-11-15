@@ -109,6 +109,13 @@ describe('All questions: design fix 1', () => {
     expect(css()).toMatch(/\.route-line--page\s*\{[^}]*max-inline-size:\s*45rem;/);
   });
 
+  it('fix round 3, S3-N3: a topic label is quieter than a question: 14 px semibold, muted, sentence as given', () => {
+    const topic = css().match(/\.stage-route__topic\s*\{([^}]*)\}/)![1];
+    expect(topic).toMatch(/font-size:\s*var\(--font-size-small\);/);
+    expect(topic).toMatch(/color:\s*var\(--color-ink-muted\);/);
+    expect(topic).not.toMatch(/text-transform|font-variant/);
+  });
+
   it('a topic is a quiet label on the line, tied to it by a short tick, with no gap that breaks the line (S3-3)', () => {
     expect(css()).toMatch(/\.stage-route__topic::before\s*\{[^}]*background-color:\s*var\(--color-mark\);/);
     expect(css()).not.toMatch(/\.stage-route__section \+ \.stage-route__section/);
@@ -134,11 +141,13 @@ describe('All questions: the page\'s head', () => {
     const h = render(d);
     expect(h).toContain(`<p class="stage-route__count" data-stage-summary="">${ROWS.length} questions</p>`);
     // Each part's words, without the tips' own text (a tip's button and its popover sentence are not the tally's words).
+    // The words a reader sees: without the tips (button and popover sentence) and the mark (hidden; its words are visible).
     const parts = [...h.matchAll(/<li class="stage-route__tally-part">([\s\S]*?)<\/li>/g)]
-      .map((m) => m[1].replace(/<span class="ui-term-tip">[\s\S]*?<\/span><\/span>/g, '').replace(/<[^>]+>/g, ''));
+      .map((m) => m[1].replace(/<span class="ui-term-tip">[\s\S]*?<\/span><\/span>/g, '').replace(/<span class="stage-route__tally-mark" aria-hidden="true">[\s\S]*?<\/span><\/span><\/span>/g, '')
+        .replace(/<[^>]+>/g, '').replace(/\u00a0/g, ' '));
     expect(parts.join(', ')).toBe(tallyWords(tallyOfRows(ROWS, d.marks)).replace('1 answered', '1 personal data question answered'));
-    // Each mark sits in a wrapper with its count and word, so the shape always has its words beside it.
-    expect([...h.matchAll(/<span class="stage-route__tally-mark" data-mark-kind="[a-z_]+"><svg class="ui-mark__shape" width="16"/g)]).toHaveLength(parts.length);
+    // Each part's mark is the kit's StatusMark at 16 px, hidden from assistive technology beside the visible words.
+    expect([...h.matchAll(/<span class="stage-route__tally-mark" aria-hidden="true"><span class="ui-mark ui-mark--[a-z_]+" data-mark-kind="[a-z_]+"><svg class="ui-mark__shape" width="16"/g)]).toHaveLength(parts.length);
     expect(h).not.toContain('ui-route-row');
     expect(h).not.toContain('<progress');
     expect(h).not.toMatch(/\d\s?%/);
@@ -151,15 +160,21 @@ describe('All questions: the page\'s head', () => {
     ];
     const d = data(many, { marks: { A: 'done', B: 'not_yet', C: 'not_applicable', 'Q-PP-GATE-SENSITIVE': 'scope_answered', E: 'no_decision' }, scopeAnswer: 'yes' });
     const h = render(d);
-    const tips = [...h.matchAll(/<li class="stage-route__tally-part"><span class="stage-route__tally-head"><span class="stage-route__tally-mark" data-mark-kind="([a-z_]+)">([\s\S]*?)<\/li>/g)]
-      .map((m) => [m[1], (m[2].match(/class="ui-term-tip"/g) ?? []).length === 1]);
-    // No tip sits inside the mark's wrapper: the tip is not a status mark.
-    for (const m of h.matchAll(/<span class="stage-route__tally-mark"[^>]*>([\s\S]*?)<\/span><(span class="ui-term-tip"|\/span)/g)) expect(m[1]).not.toContain('ui-term-tip');
+    const items = [...h.matchAll(/<li class="stage-route__tally-part">([\s\S]*?)<\/li>/g)].map((m) => m[1]);
+    const tips = items.map((b) => [b.match(/data-mark-kind="([a-z_]+)"/)![1], (b.match(/class="ui-term-tip"/g) ?? []).length === 1]);
     expect(tips).toEqual([['done', true], ['not_yet', true], ['not_applicable', true], ['scope_answered', true], ['no_decision', false]]);
     expect(h).toContain('aria-label="What is the personal data question?"');
     expect(h).toContain('aria-label="What does &quot;Not yet&quot; mean?"');
+    // Reflow at 320 (fix round 3, S3-N1): the item's words may wrap, but the mark and the count stay together and
+    // with the first word (a no-break space), and the LAST word stays with its (i) (one nowrap span).
+    for (const b of items) {
+      expect(b).toMatch(/^<span class="stage-route__keep"><span class="stage-route__tally-mark" aria-hidden="true">[\s\S]*?<\/span><\/span><\/span>\d+<\/span>\u00a0/);
+      if (b.includes('ui-term-tip')) expect(b).toMatch(/<span class="stage-route__keep">[^<\s]+<span class="ui-term-tip">/);
+    }
+    expect(items[3]).toMatch(/<span data-term="[^"]+">personal data question<\/span> <span class="stage-route__keep">answered<span class="ui-term-tip">/);
     const css = readFileSync('components/question/stage-route.css', 'utf8');
-    expect(css).toMatch(/\.stage-route__tally-head\s*\{[^}]*white-space:\s*nowrap;/);
+    expect(css).toMatch(/\.stage-route__keep\s*\{[^}]*white-space:\s*nowrap;/);
+    expect(css).not.toMatch(/\.stage-route__tally-head/);
   });
 
   it('the open findings and overdue mitigations are links only above zero', () => {
@@ -172,7 +187,10 @@ describe('All questions: the page\'s head', () => {
     expect(some).not.toMatch(/\b0 (open finding|overdue mitigation)/);
     const both = render(data(ROWS, { followUp: { openFindings: 1, overdueMitigations: 2 } }));
     expect(both).toMatch(/>1 open finding<\/a>/);
-    expect(both).toMatch(/<a[^>]*href="\/orgs\/org-a\/projects\/p1#pre-processing"[^>]*>2 overdue mitigations<\/a>/);
+    // Fix round 3, S3-N4: as the question page's strip draws it, an ink link with the clock and the word "overdue" in red.
+    expect(both).toMatch(/<a[^>]*class="stage-route__overdue"[^>]*href="\/orgs\/org-a\/projects\/p1#pre-processing"[^>]*><svg class="ui-icon"[\s\S]*?<\/svg>2 <span class="stage-route__overdue-word">overdue<\/span> mitigations<\/a>|<a[^>]*href="\/orgs\/org-a\/projects\/p1#pre-processing"[^>]*class="stage-route__overdue"[^>]*><svg class="ui-icon"[\s\S]*?<\/svg>2 <span class="stage-route__overdue-word">overdue<\/span> mitigations<\/a>/);
+    const css = readFileSync('components/question/stage-route.css', 'utf8');
+    expect(css).toMatch(/\.stage-route__overdue \.ui-icon,\s*\.stage-route__overdue-word\s*\{\s*color:\s*var\(--color-overdue\);/);
   });
 
   it('the seal banner shows only when a seal changed, the review named before it', () => {

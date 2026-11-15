@@ -75,7 +75,7 @@
   -webkit-line-clamp: 2;
   line-clamp: 2;
   overflow: hidden;
-  font-size: 0.9375rem;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-semibold);
   line-height: 1.3;
   overflow-wrap: anywhere;

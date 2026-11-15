@@ -148,6 +148,8 @@ describe('The route column: one line of the stage\'s questions', () => {
   it('design fix 1: the meta line and a run\'s tally are 14 px (spec 7.4: 13 only for legal small print, S2-5)', () => {
     const css = readFileSync('components/question/route-line.css', 'utf8');
     expect(css).not.toContain('--font-size-legal');
+    // Fix round 3 (S1a-6's remainder): no 15 px left on the line; 14 and 16 are the ramp's steps here.
+    expect(css).not.toMatch(/0\.9375rem|15px/);
     for (const sel of ['route-line__meta', 'route-line__tally-words']) {
       expect(css).toMatch(new RegExp(`\\.${sel}\\s*\\{[^}]*font-size:\\s*var\\(--font-size-small\\);`));
     }
