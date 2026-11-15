@@ -40,6 +40,18 @@
 }
 
 .stage-route__tally-part {
+  display: inline;
+}
+
+/* The count, its word and its (i) never part (owner's ruling of 15 Nov, 11:00; design fix round 1): breaks fall between
+   items, and inside the done item only before its "(n with no evidence attached)". */
+.stage-route__tally-head {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.stage-route__tally-mark {
   display: inline-flex;
   align-items: center;
   gap: 6px;

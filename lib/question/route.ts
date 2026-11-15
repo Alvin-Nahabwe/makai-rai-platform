@@ -1,6 +1,6 @@
 import type { StatusMarkKind } from '@/components/ui/types';
 import { tallyOf, type Tally } from '@/lib/ui/marks';
-import { tallyWords } from '@/lib/ui/copy';
+import { tallyWords, UI_COPY } from '@/lib/ui/copy';
 import { STAGE_LIST_COPY } from '@/lib/question/list/copy';
 import { filterCounts, filterLabel, STAGE_FILTERS, type StageFilter, type StageRow } from '@/lib/question/stageList';
 import type { ChangedSinceSeal } from '@/types/api';
@@ -88,9 +88,18 @@ function kindWords(kind: StatusMarkKind, t: Tally, withNoEvidence: boolean): str
   return tallyWords(withNoEvidence && kind === 'done' && (t.doneNoEvidence ?? 0) > 0 ? { done: n, doneNoEvidence: t.doneNoEvidence } : { [kind]: n });
 }
 
-/** A tally as one part per kind that occurs, each in its words, so a page can set a mark beside each. */
-export function tallyParts(t: Tally): Array<{ kind: StatusMarkKind; words: string }> {
-  return TALLY_ORDER.filter((kind) => (t[kind] ?? 0) > 0).map((kind) => ({ kind, words: kindWords(kind, t, true) }));
+/**
+ * A tally as one part per kind that occurs, so a page can set a mark (and the word's (i)) beside each: its count `n`, its
+ * `word` after the count ("done", "personal data question answered"), the done kind's `extra` "(n with no evidence
+ * attached)" or null, and `words`, the three as one phrase.
+ */
+export function tallyParts(t: Tally): Array<{ kind: StatusMarkKind; n: number; word: string; extra: string | null; words: string }> {
+  return TALLY_ORDER.filter((kind) => (t[kind] ?? 0) > 0).map((kind) => {
+    const n = t[kind] ?? 0;
+    const word = kindWords(kind, t, false).slice(String(n).length + 1);
+    const extra = kind === 'done' && (t.doneNoEvidence ?? 0) > 0 ? UI_COPY.tally.noEvidence(t.doneNoEvidence ?? 0) : null;
+    return { kind, n, word, extra, words: kindWords(kind, t, true) };
+  });
 }
 
 /**

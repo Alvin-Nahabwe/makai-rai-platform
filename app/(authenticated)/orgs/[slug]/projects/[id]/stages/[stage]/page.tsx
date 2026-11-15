@@ -13,6 +13,13 @@ import { StageQuestionList } from '@/components/decision/StageQuestionList';
 import { StageMeaning } from '@/components/question/StageMeaning';
 import { Breadcrumb } from '@/components/ui/Breadcrumb';
 import { MarkShape } from '@/components/ui/StatusMark';
+import { Term } from '@/components/ui/Definition';
+import { TermTip } from '@/components/ui/TermTip';
+import type { StatusMarkKind } from '@/components/ui/types';
+import type { DefinedEntry } from '@/lib/vocabulary/types';
+import {
+  TERM_DONE, TERM_DOES_NOT_APPLY, TERM_NOT_APPLICABLE, TERM_NOT_YET, TERM_PARTLY, TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION,
+} from '@/lib/vocabulary/terms';
 import { ShowMoreLink } from '@/components/ui/ShowMoreLink';
 import { QUESTION_COPY } from '@/lib/question/copy';
 import { STAGE_LIST_COPY } from '@/lib/question/list/copy';
@@ -29,6 +36,17 @@ export { loadStagePage } from '@/lib/question/stagePage';
 export type { StagePageData };
 
 type Params = Promise<{ slug: string; id: string; stage: string }>;
+
+/** The words of the question page's strip (its tips' names and the personal data question's tally words). */
+const FR = QUESTION_COPY.frame;
+
+/**
+ * The vocabulary entry each tally word is defined by, as components/question/QuestionTopStrip.tsx reads it. "No decision"
+ * is not defined at first use (defineOnFirstUse false), so it has no (i); the personal data question's tip is its own.
+ */
+const TALLY_TERM: Readonly<Partial<Record<StatusMarkKind, DefinedEntry>>> = {
+  done: TERM_DONE, partly: TERM_PARTLY, not_yet: TERM_NOT_YET, not_applicable: TERM_NOT_APPLICABLE, does_not_apply: TERM_DOES_NOT_APPLY,
+};
 
 /**
  * The gates and the loader, once per request: the page and its title both read through this (React `cache()`), so an
@@ -95,9 +113,27 @@ export function StageWorkspace({ data, show, shown }: { data: StagePageData; sho
       <div className="stage-route__tally">
         <p className="stage-route__count" data-stage-summary="">{STAGE_LIST_COPY.count(data.rows.length)}</p>
         <ul className="stage-route__tally-parts" role="list">
-          {tallyParts(tallyOfRows(data.rows, data.marks)).map((t) => (
-            <li key={t.kind} className="stage-route__tally-part" data-mark-kind={t.kind}><MarkShape kind={t.kind} size={16} />{t.words}</li>
-          ))}
+          {tallyParts(tallyOfRows(data.rows, data.marks)).map((t) => {
+            // The owner's ruling of 15 Nov, 11:00: an (i) beside each word the vocabulary defines at first use, as the question
+            // page's strip does. It sits outside the mark's wrapper and stays on one line with the count and word.
+            const pd = t.kind === 'scope_answered' ? TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION : null;
+            const entry = TALLY_TERM[t.kind];
+            return (
+              <li key={t.kind} className="stage-route__tally-part">
+                <span className="stage-route__tally-head">
+                  <span className="stage-route__tally-mark" data-mark-kind={t.kind}>
+                    <MarkShape kind={t.kind} size={16} />{`${t.n} `}
+                    {pd !== null
+                      ? <><Term of={pd}>{FR.personalDataAnswered.term}</Term>{FR.personalDataAnswered.after}</>
+                      : entry === undefined ? t.word : <Term of={entry}>{t.word}</Term>}
+                  </span>
+                  {pd !== null ? <TermTip of={pd} label={FR.whatIsTerm(pd.term)} /> : null}
+                  {entry !== undefined ? <TermTip of={entry} label={FR.whatMeans(entry.term)} /> : null}
+                </span>
+                {t.extra !== null ? ` ${t.extra}` : null}
+              </li>
+            );
+          })}
         </ul>
       </div>
       {/* The follow-up counts as links, each only above zero (plan 1C Task 3): the findings list and the stage's follow-up. */}
