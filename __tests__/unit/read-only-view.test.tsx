@@ -280,6 +280,11 @@ describe('the read-only question page (plan 1C Task 7)', () => {
     expect(rule('.reading-evidence__link')).not.toMatch(/display:\s*inline-flex/);
     expect(css).not.toContain('--font-size-legal');
     expect(readFileSync('components/question/OpenWorkList.css', 'utf8')).not.toContain('--font-size-legal');
+    // Design review 2: no 15 px step either; every size is on the ramp (body 16, small 14), through its token.
+    for (const sheet of [css, readFileSync('components/question/OpenWorkList.css', 'utf8')]) {
+      expect(sheet).not.toMatch(/0\.9375rem|15px/);
+      for (const m of sheet.matchAll(/font-size:\s*([^;]+);/g)) expect(m[1]).toMatch(/^var\(--font-size-(body|small|h2|h3)\)$/);
+    }
   });
 
   it('with no evidence the card says "None yet"', async () => {
