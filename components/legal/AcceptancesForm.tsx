@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type CSSProperties, type FormEvent } from 'react';
+import { useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { LEGAL_KIND_NAMES, acceptanceError, type AcceptancePair } from '@/lib/legal/kinds';
 import { ACCEPT_LABEL, ACCEPTANCES_COPY } from '@/lib/legal/acceptances/copy';
@@ -27,6 +27,11 @@ interface AcceptancesFormBase {
   /** Sends the accepted kinds and shows its own outcome; it should not reject. */
   onAccepted: (kinds: AcceptedKind[]) => Promise<void>;
   busy?: boolean;
+  /** The heading in place of the mode's own (S-05 when a text changed: plan 1B Task 7). */
+  heading?: string;
+  /** What S-05 shows before a text's box when it changed (which text, which versions, what changed, its full words); such
+   * a box then carries only its version line, as the link to the words is in what comes before it. */
+  before?: Partial<Record<AcceptedKind, ReactNode>>;
 }
 
 /**
@@ -205,7 +210,7 @@ export type AcceptancesFormViewProps = Omit<AcceptancesFormBase, 'onAccepted'> &
 /** The markup of the form for a given state; `AcceptancesForm` holds the state. */
 export function AcceptancesFormView(p: AcceptancesFormViewProps) {
   const names = p.texts.map((t) => LEGAL_KIND_NAMES[acceptedKindOf(t)]);
-  const legend = p.mode === 'offer' ? ACCEPTANCES_COPY.offerLegend(names) : ACCEPTANCES_COPY.legend;
+  const legend = p.heading ?? (p.mode === 'offer' ? ACCEPTANCES_COPY.offerLegend(names) : ACCEPTANCES_COPY.legend);
   return (
     <form method="post" noValidate onSubmit={p.onSubmit}>
       <ErrorSummary title={ACCEPTANCES_COPY.summaryTitle} errors={p.errors.map((kind) => ({ fieldId: `accept-${kind}`, message: acceptanceError(kind) }))} />
@@ -219,18 +224,28 @@ export function AcceptancesFormView(p: AcceptancesFormViewProps) {
           {p.texts.map((text) => {
             const kind = acceptedKindOf(text);
             const name = LEGAL_KIND_NAMES[kind];
+            // null counts as nothing before the box, as undefined does, so the box keeps its own link to the words.
+            const before = p.before?.[kind] ?? undefined;
             return (
-              <Checkbox key={kind} id={`accept-${kind}`} name="acceptances" value={kind} label={ACCEPT_LABEL[kind]}
-                checked={p.ticked.has(kind)} onChange={(e) => p.onToggle(kind, e.currentTarget.checked)}
-                error={p.errors.includes(kind) ? ACCEPTANCES_COPY.tickThis : undefined}
-                hint={(
-                  <>
-                    <span>{ACCEPTANCES_COPY.version(text.version, formatDay(text.publishedOn))}</span>{' '}
-                    <a href={`/legal/${kind}/${text.version}`} target="_blank" rel="noopener" style={LINK_TARGET}>
-                      {ACCEPTANCES_COPY.readLink(name)}<span>{' '}{ACCEPTANCES_COPY.opensInNewTab}</span>
-                    </a>
-                  </>
-                )} />
+              <div key={kind}>
+                {before}
+                <Checkbox id={`accept-${kind}`} name="acceptances" value={kind} label={ACCEPT_LABEL[kind]}
+                  checked={p.ticked.has(kind)} onChange={(e) => p.onToggle(kind, e.currentTarget.checked)}
+                  error={p.errors.includes(kind) ? ACCEPTANCES_COPY.tickThis : undefined}
+                  hint={(
+                    <>
+                      <span>{ACCEPTANCES_COPY.version(text.version, formatDay(text.publishedOn))}</span>
+                      {before === undefined ? (
+                        <>
+                          {' '}
+                          <a href={`/legal/${kind}/${text.version}`} target="_blank" rel="noopener" style={LINK_TARGET}>
+                            {ACCEPTANCES_COPY.readLink(name)}<span>{' '}{ACCEPTANCES_COPY.opensInNewTab}</span>
+                          </a>
+                        </>
+                      ) : null}
+                    </>
+                  )} />
+              </div>
             );
           })}
         </div>

@@ -76,6 +76,25 @@ export async function missingAcceptances(userId: string): Promise<AcceptedKind[]
   return ACCEPTED_KINDS.filter((k) => standing(k, rows).state === 'missing');
 }
 
+/** One text S-05 asks the person to accept: its current version, the newest version they accepted before, and whether it blocks. */
+export type AcceptanceChange = { kind: AcceptedKind; current: LegalTextVersion; lastAccepted: string | null; state: 'missing' | 'offered' };
+
+/**
+ * What S-05 shows (plan 1B Task 7): each text that is not current for the account, in `ACCEPTED_KINDS` order, with its current
+ * version, the newest version a counting row of the account's is of (null when none counts: a first acceptance, or pre-v1
+ * rows), and its state by the rules above. Only the caller's own rows are read (`rowsOf`, `accountId`; T7.1).
+ */
+export async function acceptanceChanges(userId: string): Promise<AcceptanceChange[]> {
+  const rows = await rowsOf(userId);
+  return ACCEPTED_KINDS.flatMap((kind): AcceptanceChange[] => {
+    const { state, current } = standing(kind, rows);
+    if (state === 'current') return [];
+    const ofKind = rows.filter((r) => r.consentType === consentTypeOf(kind));
+    const counted = legalTextHistory(kind).filter((t) => ofKind.some((r) => isOf(r, t)));
+    return [{ kind, current, lastAccepted: counted.at(-1)?.version ?? null, state }];
+  });
+}
+
 /** The current versions offered without blocking (M-39): accepted before, newer one `offered`. */
 export async function offeredAcceptances(userId: string): Promise<LegalTextVersion[]> {
   const rows = await rowsOf(userId);

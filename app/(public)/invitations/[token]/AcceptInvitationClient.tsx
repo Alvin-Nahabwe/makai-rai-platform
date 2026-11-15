@@ -11,6 +11,7 @@ import { PASSWORD_MIN_LENGTH, validatePassword, validateString } from '@/lib/val
 import type { AcceptedKind, LegalTextVersion } from '@/types/legal';
 import { useHydrated } from '@/lib/client/useHydrated';
 import { INVITATION_COPY } from '@/lib/invitations/copy';
+import { showInvitationStep, type InvitationStep } from './invitationStep';
 import { Button } from '@/components/ui/Button';
 import { StatusRegion } from '@/components/ui/StatusRegion';
 import { TextInput } from '@/components/ui/TextInput';
@@ -245,7 +246,7 @@ function AcceptAsSignedIn({ token, texts, userId }: { token: string; texts: Lega
 }
 
 export interface NewAccountViewProps extends Omit<Props, 'viewerUserId'> {
-  step: 'details' | 'acceptances';
+  step: InvitationStep;
   name: string;
   password: string;
   showPassword: boolean;
@@ -258,6 +259,8 @@ export interface NewAccountViewProps extends Omit<Props, 'viewerUserId'> {
   onToggleShow: () => void;
   onContinue: (e: FormEvent<HTMLFormElement>) => void;
   onAccepted: (kinds: AcceptedKind[]) => Promise<void>;
+  /** Step 2's way back to step 1, with the name and password kept (ruling L5-29). */
+  onChangeDetails?: () => void;
   onRetry: () => void;
   /** Called with each input element, so the client can move focus to a field with an error. */
   nameInput?: (el: HTMLInputElement | null) => void;
@@ -272,7 +275,7 @@ export function NewAccountView(v: NewAccountViewProps) {
     <div>
       {v.step === 'details' ? (
         <form method="post" noValidate onSubmit={v.onContinue}>
-          <h2 style={{ margin: 'var(--space-6) 0 var(--space-4)' }}>{INVITATION_COPY.createHeading}</h2>
+          <h2 className="gate__subheading" style={{ margin: 'var(--space-6) 0 var(--space-4)' }}>{INVITATION_COPY.createHeading}</h2>
           <TextInput id="email" name="email" label={INVITATION_COPY.email} hint={INVITATION_COPY.emailHint} type="email" autoComplete="username"
             spellCheck={false} readOnly value={v.invitedEmail} />
           <TextInput id="name" name="name" label={INVITATION_COPY.name} hint={INVITATION_COPY.nameHint} required autoComplete="name"
@@ -289,6 +292,11 @@ export function NewAccountView(v: NewAccountViewProps) {
         </form>
       ) : (
         <div id="acceptances-step" tabIndex={-1} ref={(el) => v.acceptancesStep?.(el)}>
+          <p style={{ margin: '0 0 var(--space-2)' }}>{INVITATION_COPY.creatingFor(v.name.trim())}</p>
+          <p style={{ margin: '0 0 var(--space-4)' }}>
+            <button type="button" className="ui-button ui-button--quiet ui-button--compact" disabled={v.send.state === 'sending'}
+              onClick={v.onChangeDetails}>{INVITATION_COPY.changeDetails}</button>
+          </p>
           <AcceptancesForm key={textsKey(v.texts)} texts={v.texts} mode="invitation" submitLabel={INVITATION_COPY.createAccount} onAccepted={v.onAccepted}
             busy={v.send.state === 'sending'} />
         </div>
@@ -310,7 +318,9 @@ export function NewAccountView(v: NewAccountViewProps) {
  */
 function NewAccount(p: Props) {
   const router = useRouter();
-  const [step, setStep] = useState<'details' | 'acceptances'>('details');
+  const [step, setStep] = useState<InvitationStep>('details');
+  // The frame's route (InvitationRoute, drawn on the server for each step) shows this step's: the lean frame, owner, 15 Nov 15:35.
+  useEffect(() => { showInvitationStep(document, step); }, [step]);
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -321,10 +331,13 @@ function NewAccount(p: Props) {
   const nameEl = useRef<HTMLInputElement | null>(null);
   const passwordEl = useRef<HTMLInputElement | null>(null);
   const stepEl = useRef<HTMLDivElement | null>(null);
+  // Change your details returns to step 1: focus goes to its first field, which a 422 does not ask for.
+  const backToDetails = useRef(false);
   // Continue removes the step-1 form and its button: move focus to step 2 (WCAG 2.4.3). A 422 on a
   // field brings step 1 back: move focus to the field it names.
   useEffect(() => {
     if (step === 'acceptances') stepEl.current?.focus();
+    else if (backToDetails.current) { backToDetails.current = false; nameEl.current?.focus(); }
     else if (errors.name) nameEl.current?.focus();
     else if (errors.password) passwordEl.current?.focus();
   }, [step, errors]);
@@ -336,6 +349,12 @@ function NewAccount(p: Props) {
     if (found.name) { nameEl.current?.focus(); return; }
     if (found.password) { passwordEl.current?.focus(); return; }
     setStep('acceptances');
+  }
+
+  function onChangeDetails() {
+    backToDetails.current = true;
+    setSend({ state: 'idle' });
+    setStep('details');
   }
 
   async function post(body: string): Promise<void> {
@@ -370,7 +389,7 @@ function NewAccount(p: Props) {
 
   return (
     <NewAccountView {...p} step={step} name={name} password={password} showPassword={showPassword} errors={errors} send={send} hydrated={hydrated}
-      onName={setName} onPassword={setPassword} onToggleShow={() => setShowPassword((s) => !s)} onContinue={onContinue}
+      onName={setName} onPassword={setPassword} onToggleShow={() => setShowPassword((s) => !s)} onContinue={onContinue} onChangeDetails={onChangeDetails}
       onAccepted={(kinds) => post(JSON.stringify({ name, password, acceptances: acceptancePairs(p.texts, kinds) }))}
       onRetry={() => { if (lastBody.current !== null) void post(lastBody.current); }}
       nameInput={(el) => { nameEl.current = el; }} passwordInput={(el) => { passwordEl.current = el; }}

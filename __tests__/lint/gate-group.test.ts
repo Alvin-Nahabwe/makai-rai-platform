@@ -119,6 +119,9 @@ describe('the (gate) route group (plan 1B Task 1)', () => {
     // is looked at. The data readers among them are the identity lane's own four.
     const ALLOWED = [
       './ChangePasswordForm', '@/lib/auth/copy', '@/lib/auth/identity', '@/lib/auth/idle', '@/lib/auth/idleDeadline',
+      // plan 1B Task 8: the chooser words each organisation's role with orgRoleLabel, which reads the person's own
+      // memberships by their own id (membershipsForUser, the identity lane).
+      '@/lib/authz/roleLabel',
       '@/lib/client/draftKeys', '@/lib/client/signOutPress', '@/lib/client/useHydrated', '@/lib/data/acceptances',
       '@/lib/data/identity', '@/lib/data/preauth', '@/lib/decision/drafts/copy', '@/lib/legal/copy', '@/lib/legal/registry',
       '@/lib/org-dispatch', '@/lib/org/copy', '@/lib/shell/copy', '@/lib/ui/copy', '@/lib/ui/title', '@/lib/validate',
@@ -152,7 +155,13 @@ describe('the (gate) route group (plan 1B Task 1)', () => {
     // when gate 3 or no gate holds the account (not to a flagged one, gate 2), and only after a Sign out press finds drafts.
     const m41 = '"/account#drafts-on-this-device"';
     expect(code('components/layout/GateSignOut.tsx').split(m41)).toHaveLength(2);
-    for (const f of files) expect(code(f).replace(m41, ''), f).not.toMatch(/\/orgs\/|\/projects|\/settings|\/account\b|\/admin\//);
+    // And S-21's voluntary change (plan 1B Task 3, T3.2): Back to My account, in the view's footer only when the identity is
+    // not flagged (`forced` is identity.mustChangePassword, read by the page on the server, T3.1).
+    const back = '<Link href="/account">';
+    const form = `${GATE}/change-password/ChangePasswordForm.tsx`;
+    expect(code(form).split(back)).toHaveLength(2);
+    expect(code(form)).toMatch(/const footer = v\.forced \? null : <p><Link href="\/account">/);
+    for (const f of files) expect(code(f).replace(m41, '').replace(back, ''), f).not.toMatch(/\/orgs\/|\/projects|\/settings|\/account\b|\/admin\//);
   });
 
   it('the group layout renders the idle warning when the deadlines are read, and the frame no newer-text notice', () => {

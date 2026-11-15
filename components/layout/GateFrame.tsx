@@ -1,55 +1,19 @@
-import type { ReactElement, ReactNode } from 'react';
+import type { ReactElement } from 'react';
 import { GateSignOut } from '@/components/layout/GateSignOut';
 import { MAIN_CONTENT_ID } from '@/components/layout/SkipLink';
+import { GateBrand, GatePublicFrame, gateRouteOf, type GateFrameShared } from '@/components/layout/GatePublicFrame';
+import type { GateStop } from '@/components/layout/GateRoute';
 import { GATE_COPY } from '@/lib/shell/copy';
-import { UI_COPY } from '@/lib/ui/copy';
 import { PRODUCT_NAME } from '@/lib/ui/title';
-import './gate.css';
+import './gate-signed-in.css';
 
-/** One stop of the door the person is going through. A route has exactly one `current` stop. */
-export type GateStop = { label: string; state: 'done' | 'current' | 'upcoming' };
+export type { GateStop };
 
-type Shared = { route?: readonly GateStop[]; wide?: boolean; children: ReactNode };
+type Shared = GateFrameShared;
 export type GateFrameProps =
   /** `accountReachable`: whether this account may open My account now (false while gate 2 holds it on S-29); M-41's Go to them depends on it. */
   | ({ variant: 'signed-in'; userName: string; userId: string; accountReachable: boolean } & Shared)
   | ({ variant: 'public' } & Shared);
-
-/**
- * The route of this door's stops, drawn as the route column draws a stage (spec 5 principle 7, 7.2): a labelled list, a
- * line joining white marks, the current stop enlarged with "You are here" above its name. Marks are borders drawn by CSS
- * and hidden; a done stop carries the visually hidden "(done)", never a tick. Below 1024 px CSS shows the lines after it
- * instead: where the person is and, when the route lists one, the next stop. Never a count (ruling L5-21): gate 2 runs
- * before gate 3, so no page knows how many steps a person still has.
- */
-function GateRoute({ route }: { route: readonly GateStop[] }): ReactElement {
-  const current = route.filter((s) => s.state === 'current');
-  if (current.length !== 1) throw new Error(`GateFrame: a route has exactly one current stop, not ${current.length}`);
-  const next = route.slice(route.indexOf(current[0]) + 1).find((s) => s.state === 'upcoming');
-  return (
-    <>
-      <ol className="gate-route" role="list" aria-label={GATE_COPY.routeLabel}>
-        {route.map((stop, i) => (
-          <li key={`${i}-${stop.label}`} className={`gate-route__stop gate-route__stop--${stop.state}`}>
-            <span className="gate-route__mark" aria-hidden="true"></span>
-            {stop.state === 'current' ? (
-              <span className="gate-route__label" aria-current="step">
-                <span className="gate-route__here">{GATE_COPY.here}</span>{' '}{stop.label}
-              </span>
-            ) : (
-              <span className="gate-route__label">
-                {stop.label}
-                {stop.state === 'done' ? <>{' '}<span className="visually-hidden">{UI_COPY.stepper.done}</span></> : null}
-              </span>
-            )}
-          </li>
-        ))}
-      </ol>
-      <p className="gate__where">{GATE_COPY.where(current[0].label)}</p>
-      {next !== undefined ? <p className="gate__next">{GATE_COPY.next(next.label)}</p> : null}
-    </>
-  );
-}
 
 /**
  * The gate frame (plan 1B Task 1, lead's ruling L5-1): the Route's rail with no navigation in it. From 1024 px a navy
@@ -64,47 +28,26 @@ function GateRoute({ route }: { route: readonly GateStop[] }): ReactElement {
  * which already has the light header and the <main>: it renders neither, only the column and the card area.
  */
 export function GateFrame(props: GateFrameProps): ReactElement {
-  const signedIn = props.variant === 'signed-in';
-  const route = props.route !== undefined && props.route.length > 0 ? <GateRoute route={props.route} /> : null;
-  const className = `gate gate--${props.variant}${props.wide ? ' gate--wide' : ''}`;
-  const card = <div className="gate__card">{props.children}</div>;
-  // The owner's ruling (I-3): the MAK-AI logo sits above the platform's name, in the rail and here. The logo component is
-  // another lane's; its slot is this empty element, which takes no room until the logo is put in it.
-  const brand = (
-    <div className="gate__brand">
-      <div className="gate__logo" data-slot="logo"></div>
-      <p className="gate__product">{PRODUCT_NAME}</p>
-    </div>
-  );
-
-  if (!signedIn) {
-    return (
-      <div className={className}>
-        <div className="gate__header">
-          <div className="gate__column">
-            {brand}
-            {route}
-          </div>
-        </div>
-        <div className="gate__main">{card}</div>
-      </div>
-    );
+  // The public variant is GatePublicFrame's, which a public page may also draw directly without this module's signed-in
+  // sheet and sign-out (S-04, the lean frame, owner, 15 Nov 15:35).
+  if (props.variant !== 'signed-in') {
+    return <GatePublicFrame route={props.route} routeSlot={props.routeSlot} wide={props.wide}>{props.children}</GatePublicFrame>;
   }
 
   return (
-    <div className={className}>
+    <div className={`gate gate--signed-in${props.wide ? ' gate--wide' : ''}`}>
       <header className="gate__header">
         <div className="gate__column">
-          {brand}
-          {route}
+          <GateBrand name={<p className="gate__product">{PRODUCT_NAME}</p>} />
+          {gateRouteOf(props)}
           <div className="gate__footer">
-            <p className="gate__name">{props.userName}</p>
+            {props.userName !== '' ? <p className="gate__name">{props.userName}</p> : null}
             <a className="gate__help" href="/help">{GATE_COPY.help}</a>
             <GateSignOut userId={props.userId} accountReachable={props.accountReachable} />
           </div>
         </div>
       </header>
-      <main id={MAIN_CONTENT_ID} tabIndex={-1} className="gate__main">{card}</main>
+      <main id={MAIN_CONTENT_ID} tabIndex={-1} className="gate__main"><div className="gate__card">{props.children}</div></main>
     </div>
   );
 }

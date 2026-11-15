@@ -2694,5 +2694,109 @@
     "property": "After a save on the first question, at 1280 by 900 and 375 by 812, the way on to the next question is one link, a target of at least 24 px, wholly on the screen once scrolled to, and it opens Q-PP-02. With the merged card (owner's ruling R2, R9) the way on is the card's \"Next: <question>\" link in its Save row (.decision-save-bar), inside the card, not a foot below the form; in the fixed or pinned bar it is the bar's own control, so it cannot be under it.",
     "proof": "The case waits for the card's saved mark to leave \"No decision yet.\", requires [data-region=\"way-on\"] to be absent, one link named /^Next: / in .decision-save-bar, contained in section[data-region=\"answer-form\"], its box on the screen with height >= 24 and bottom <= the viewport height after scrollIntoView, then clicks it and requires the Q-PP-02 code line. It failed 10 of 10 at b4a9dc00 on the stub's current-decision section (x10 diagnosis class (a)).",
     "task": "Route rebuild lane 2 task 5 (lane 1's cases re-expressed on the merged card)"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/auth-logo.test.ts::NFR-PERF-02: %s draws the pre-sized logo with a plain <img>, not next/image",
+    "replacedBy": "__tests__/unit/auth-logo.test.ts::NFR-PERF-02 (ruling L5-8): %s loads no next/image runtime and draws no logo in its card",
+    "property": "S-01, S-02 and S-03 carry no next/image client runtime in their first visit (NFR-PERF-02, cuts C and D of the V-prog finding).",
+    "proof": "Plan 1B Task 2 puts the three pages in the public gate frame, and lead's ruling L5-8 (the owner's ruling I-3) moves the logo out of the card into the frame column's slot, filled by the shared logo component at merge, so the pages draw no <img> to pin. The case now asserts, for each page, that neither the page nor any client module it renders (LoginClient, ForgotPasswordClient, ResetPasswordClient, AuthCard, PasswordField, GateFrame) imports next/image statically or by import(), and that the page draws no <img> or <Image>. The byte limit itself is measured on the built page by e2e/first-visit-transfer.spec.ts. The file's second case now pins the two old logo files' sizes (252 x 48 and 504 x 96, the 1x file under 8,000 bytes) and that app/globals.css has no .auth-logo rule: no element carries that class since the door pages stopped drawing the logo, and __tests__/lint/s04-first-visit-weight.test.ts refuses a class the app never writes (commit 10c64d7e; code review A-1).",
+    "task": "plan 1B Task 2 (sign in, forgotten and reset password), ruling L5-8"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/idle.test.ts::UX-43: the component keeps no page state to purge: nothing is removed from storage and nothing is navigated",
+    "replacedBy": "__tests__/unit/idle.test.ts::UX-43: the component keeps no page state to purge: no draft is removed, nothing is navigated, and its one storage is the signed-out hint",
+    "property": "IdleWarning removes no draft and no other page state (SignOutWithDraftsGuard stays the only purge path, R-53) and never navigates or signs out when the session ends.",
+    "proof": "Plan 1B Task 4 (C12) makes IdleWarning leave S-01 the reason a session ended: the signed-out hint in this tab's sessionStorage under SIGNED_OUT_HINT_KEY ('makrai.signedOut', not a draft key), written at an ending the clock explains and removed at mount and on an extension. The case keeps every other ban (localStorage, indexedDB, location changes, the router, signOut) and now pins the one storage: IdleWarning.tsx does not name sessionStorage at all (the case asserts the source has no match for it; the storage is reached only through lib/auth/idle.ts's tabStorage), and lib/auth/idle.ts holds exactly two storage calls, setItem and removeItem of SIGNED_OUT_HINT_KEY. __tests__/unit/idle-copy.test.tsx proves the hint is written once with the reason, never under a draft key, and that the removal leaves a draft key in place.",
+    "task": "plan 1B Task 4 (session states: the true reason, and the signed-out notice)"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/sign-out-clearing-drafts.test.ts::NFR-PRIV-06 SPEC-1: the purge runs before signOut, with the callback URL, when the store loads",
+    "replacedBy": "__tests__/unit/sign-out-clearing-drafts.test.ts::NFR-PRIV-06 SPEC-1: the purge runs before signOut, with the callback URL, when the store loads",
+    "property": "When the draft store loads, this account's drafts are purged before the sign-out is asked of next-auth, with the caller's callback URL.",
+    "proof": "The case still records the purge, then the signOut call, in that order, with the same callback (/invitations/tok); the recorded argument now also carries redirect false. Ruling L5-11 makes signOutClearingDrafts ask next-auth's signOut with `{ callbackUrl, redirect: false }` and navigate only when the answer's url says the session ended (no `error` parameter, not under /api/auth/), so the call's argument gains `redirect: false` and a mocked signOut must answer next-auth's success shape `{ url }`, as the module's ENDED does. The new property, a failed sign-out never navigates, is proven in __tests__/unit/sign-out-not-ended.test.ts: MissingCSRF, a body with no url, a url that is not a string or does not parse, next-auth's own sign-out and error pages and a 30 s timeout each reject with a named error and leave window.location.href unchanged; a rejected request rejects as before; and signOutPress then shows stillSignedIn and retries on the next press.",
+    "task": "lead's ruling L5-11, option (a) (D2 fix round 1): the sign-out ends the session or says it did not"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/sign-out-clearing-drafts.test.ts::NFR-PRIV-06 CR-1 SFH-4: a draft store whose import rejects still signs out, with the callback URL",
+    "replacedBy": "__tests__/unit/sign-out-clearing-drafts.test.ts::NFR-PRIV-06 CR-1 SFH-4: a draft store whose import rejects still signs out, with the callback URL",
+    "property": "A draft store whose chunk cannot load never stops the sign-out: next-auth is still asked, with the same callback, and the call resolves.",
+    "proof": "The case still makes the import throw and still asserts the call resolves and that signOut was asked with callbackUrl /login; the argument now also carries redirect false. Ruling L5-11 makes signOutClearingDrafts ask next-auth's signOut with `{ callbackUrl, redirect: false }` and navigate only when the answer's url says the session ended (no `error` parameter, not under /api/auth/), so the call's argument gains `redirect: false` and a mocked signOut must answer next-auth's success shape `{ url }`, as the module's ENDED does. The new property, a failed sign-out never navigates, is proven in __tests__/unit/sign-out-not-ended.test.ts: MissingCSRF, a body with no url, a url that is not a string or does not parse, next-auth's own sign-out and error pages and a 30 s timeout each reject with a named error and leave window.location.href unchanged; a rejected request rejects as before; and signOutPress then shows stillSignedIn and retries on the next press.",
+    "task": "lead's ruling L5-11, option (a) (D2 fix round 1): the sign-out ends the session or says it did not"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/sign-out-clearing-drafts.test.ts::NFR-PRIV-06 SFH-4: no store in this browser (null) still signs out",
+    "replacedBy": "__tests__/unit/sign-out-clearing-drafts.test.ts::NFR-PRIV-06 SFH-4: no store in this browser (null) still signs out",
+    "property": "A browser with no draft store (openDraftStore null) still signs out with the same callback.",
+    "proof": "The case still returns null from openDraftStore and asserts signOut was asked with callbackUrl /login, now with redirect false; the null store is also swept directly since ruling L5-24 (__tests__/unit/sign-out-storage-full.test.ts). Ruling L5-11 makes signOutClearingDrafts ask next-auth's signOut with `{ callbackUrl, redirect: false }` and navigate only when the answer's url says the session ended (no `error` parameter, not under /api/auth/), so the call's argument gains `redirect: false` and a mocked signOut must answer next-auth's success shape `{ url }`, as the module's ENDED does. The new property, a failed sign-out never navigates, is proven in __tests__/unit/sign-out-not-ended.test.ts: MissingCSRF, a body with no url, a url that is not a string or does not parse, next-auth's own sign-out and error pages and a 30 s timeout each reject with a named error and leave window.location.href unchanged; a rejected request rejects as before; and signOutPress then shows stillSignedIn and retries on the next press.",
+    "task": "lead's ruling L5-11, option (a) (D2 fix round 1): the sign-out ends the session or says it did not"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/sign-out-clearing-drafts.test.ts::NFR-PRIV-06 FIX-7: when the store cannot load, this account's drafts are still removed, and only this account's",
+    "replacedBy": "__tests__/unit/sign-out-clearing-drafts.test.ts::NFR-PRIV-06 FIX-7: when the store cannot load, this account's drafts are still removed, and only this account's",
+    "property": "When the store cannot load, this account's drafts are removed directly, and only this account's, with one fixed warning that names no account, and the sign-out is still asked with the same callback.",
+    "proof": "The keys, the sweep, the one warning without the id are asserted as before; only the expected signOut argument gains redirect false. Ruling L5-11 makes signOutClearingDrafts ask next-auth's signOut with `{ callbackUrl, redirect: false }` and navigate only when the answer's url says the session ended (no `error` parameter, not under /api/auth/), so the call's argument gains `redirect: false` and a mocked signOut must answer next-auth's success shape `{ url }`, as the module's ENDED does. The new property, a failed sign-out never navigates, is proven in __tests__/unit/sign-out-not-ended.test.ts: MissingCSRF, a body with no url, a url that is not a string or does not parse, next-auth's own sign-out and error pages and a 30 s timeout each reject with a named error and leave window.location.href unchanged; a rejected request rejects as before; and signOutPress then shows stillSignedIn and retries on the next press.",
+    "task": "lead's ruling L5-11, option (a) (D2 fix round 1): the sign-out ends the session or says it did not"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/sign-out-clearing-drafts.test.ts::1A Task 12 L2-66 S4: the last-project keys of this account only are removed before signOut, whether or not the store loads",
+    "replacedBy": "__tests__/unit/sign-out-clearing-drafts.test.ts::1A Task 12 L2-66 S4: the last-project keys of this account only are removed before signOut, whether or not the store loads",
+    "property": "This account's last-project keys, and only this account's, are gone when the sign-out is asked, whether or not the store loads.",
+    "proof": "The case still reads the keys at the moment signOut is called and asserts the same remaining keys for both store outcomes; its one-off signOut now answers ENDED, next-auth's success shape, so the call resolves as it did. Ruling L5-11 makes signOutClearingDrafts ask next-auth's signOut with `{ callbackUrl, redirect: false }` and navigate only when the answer's url says the session ended (no `error` parameter, not under /api/auth/), so the call's argument gains `redirect: false` and a mocked signOut must answer next-auth's success shape `{ url }`, as the module's ENDED does. The new property, a failed sign-out never navigates, is proven in __tests__/unit/sign-out-not-ended.test.ts: MissingCSRF, a body with no url, a url that is not a string or does not parse, next-auth's own sign-out and error pages and a 30 s timeout each reject with a named error and leave window.location.href unchanged; a rejected request rejects as before; and signOutPress then shows stillSignedIn and retries on the next press.",
+    "task": "lead's ruling L5-11, option (a) (D2 fix round 1): the sign-out ends the session or says it did not"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/sign-out-clearing-drafts.test.ts::(module)",
+    "replacedBy": "__tests__/unit/sign-out-clearing-drafts.test.ts::NFR-PRIV-06 SPEC-1: the purge runs before signOut, with the callback URL, when the store loads",
+    "property": "The file's mocked next-auth signOut records each call; every case runs on a fresh module with that mock.",
+    "proof": "The module's signOut mock still records each call's argument; it now returns ENDED ({ url: 'http://localhost/login' }), next-auth's answer when the session ended, and beforeEach sets a plain window with a location, since a sign-out that ended now navigates (window.location.href = its url) and the node test environment has no window; afterEach removes it. It is set directly, not with vi.stubGlobal, because the cases call vi.unstubAllGlobals in their finally blocks. Ruling L5-11 makes signOutClearingDrafts ask next-auth's signOut with `{ callbackUrl, redirect: false }` and navigate only when the answer's url says the session ended (no `error` parameter, not under /api/auth/), so the call's argument gains `redirect: false` and a mocked signOut must answer next-auth's success shape `{ url }`, as the module's ENDED does. The new property, a failed sign-out never navigates, is proven in __tests__/unit/sign-out-not-ended.test.ts: MissingCSRF, a body with no url, a url that is not a string or does not parse, next-auth's own sign-out and error pages and a 30 s timeout each reject with a named error and leave window.location.href unchanged; a rejected request rejects as before; and signOutPress then shows stillSignedIn and retries on the next press.",
+    "task": "lead's ruling L5-11, option (a) (D2 fix round 1): the sign-out ends the session or says it did not"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/auth-logo.test.ts::NFR-PERF-02: the logo files are sized for the drawn 48 px height, at 1x and 2x, and small",
+    "replacedBy": "__tests__/unit/auth-logo.test.ts::NFR-PERF-02: the old logo files keep their sizes and stay small, and no rule draws them as .auth-logo any more",
+    "property": "The logo files public/logo-makai-252.png and -504.png keep their 1x and 2x sizes and the 1x file stays under 8,000 bytes.",
+    "proof": "The case's assertions on the two files are unchanged (252 x 48, 504 x 96, under 8,000 bytes). Its title said the files are sized for the drawn 48 px height, which no page draws since plan 1B Task 2 moved the logo to the gate frame's column (lane 3's WebP files, components/layout/logos.ts); its last assertion became that app/globals.css has no .auth-logo rule (commit 10c64d7e). The title now says what the case asserts (code review A-1).",
+    "task": "plan 1B D2 fix round 2 (code review A-1)"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/account-created-email.test.ts::FR-ACC-10 (6.1): E-06 holds no marker, escapes the organisation name, and links only to the reset page",
+    "replacedBy": "__tests__/unit/account-created-email.test.ts::FR-ACC-10 (6.1) C9: E-06 holds no marker, escapes the organisation name, and links to the reset page then the sign-in page",
+    "property": "E-06 carries no marker, escapes the organisation name in the HTML part, and links only to fixed pages whose addresses carry nothing (SRS 6.1).",
+    "proof": "Plan 1B Task 6 (C9; ruling L5-19) adds the sign-in link after the reset link (lib/email/templates/accountCreated.ts). The case now expects the hrefs to be exactly [the reset page, the sign-in page], in that order; the marker, subject and escaping assertions are unchanged. The new case 'C9 T6.5: the links are the reset page then the sign-in page, each alone on its line; no query string and no address' checks both parts have no '@' and no '?'. Seen RED with the one-link template, GREEN after.",
+    "task": "plan 1B Task 6 (joining)"
+  },
+  {
+    "kind": "structure",
+    "changed": "e2e/two-orgs.spec.ts::(module)",
+    "replacedBy": "e2e/two-orgs.spec.ts::9.8: a member of A accepts an invitation to B while signed in, lands on B's Home with the welcome, and the switcher lists A and B",
+    "property": "Membership stays scoped per organisation: each existing case is unchanged; the new case adds that a person joins a second organisation only by an invitation they accept while signed in, at the invited role.",
+    "proof": "Additions only, asked for by plan 1B Task 6 Step 4: imports of dotenv/config, node:crypto, testDb, buildOrg, welcomeLine and INVITATION_COPY at the top, and a new describe with the one case after the existing ones. No existing line or case changes. The new case uses fresh organisations from buildOrg, so the fixture seats the 404 cases read are never made members of a second organisation.",
+    "task": "plan 1B Task 6 (joining)"
+  },
+  {
+    "kind": "rule",
+    "changed": "e2e/first-visit-transfer.spec.ts::NFR-PERF-02: every public page transfers at most 220 KB on first visit",
+    "replacedBy": "e2e/first-visit-transfer.spec.ts::NFR-PERF-02: every public page transfers at most 220 KB on first visit, and S-04 at most 224 KB",
+    "property": "Every public page other than S-04 transfers at most 220,000 B on a first visit; S-04 (plain) at most 224,000 B.",
+    "proof": "Only the title changes, to name the figure S-04 now has under the owner's ruling of 15 Nov 2026 15:35 (box: \"Raise the limit ~4 KB\"), verbatim \"S-04's first-visit limits rise to 224,000 B (plain and the three inviter-name cases) and 241,500 B (accented)\". The loop still holds every other public page to PUBLIC_BUDGET 220,000 and S-04's plain page to 224,000 (S04_BUDGET); the accepted-risk and nginx limits are untouched except the direct accented guard, which the same ruling raises to 241,500.",
+    "task": "D3 fix round 1 (lane 5, the door): S-04 limits"
+  },
+  {
+    "kind": "rule",
+    "changed": "e2e/invitation-name-transfer.spec.ts::NFR-PERF-02: S-04 with a ${language} inviter name (${letters}) transfers at most 220 KB on first visit, fetching the small latin-ext face only",
+    "replacedBy": "e2e/invitation-name-transfer.spec.ts::NFR-PERF-02: S-04 with a ${language} inviter name (${letters}) transfers at most 224 KB on first visit, fetching the small latin-ext face only",
+    "property": "S-04 with each inviter name (Luganda, Kikuyu, Hausa) transfers within its byte limit, fetching only the small latin-ext face.",
+    "proof": "Only the title changes, to the figure the case now enforces under the owner's ruling of 15 Nov 2026 15:35 (box: \"Raise the limit ~4 KB\"), verbatim \"S-04's first-visit limits rise to 224,000 B (plain and the three inviter-name cases) and 241,500 B (accented)\": PUBLIC_BUDGET in this spec is 224,000 for S-04, which is the only page this spec measures. Every assertion is unchanged.",
+    "task": "D3 fix round 1 (lane 5, the door): S-04 limits"
   }
 ]

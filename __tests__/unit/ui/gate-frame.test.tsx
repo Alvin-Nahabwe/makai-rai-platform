@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import type { ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
@@ -22,12 +23,19 @@ const soft = vi.hoisted(() => ({ identity: vi.fn() }));
 vi.mock('@/lib/auth/identity', () => ({ requireIdentity: async () => identity.current, tryResolveIdentity: soft.identity }));
 vi.mock('@/lib/data/preauth', () => ({ membershipsForUser: data.memberships }));
 vi.mock('@/lib/data/identity', () => ({ identityDb: { user: { findUnique: data.findUser } } }));
-vi.mock('@/lib/data/acceptances', () => ({ missingAcceptances: data.missing, offeredAcceptances: data.offered }));
+// Since plan 1B Task 7 S-05 reads acceptanceChanges: built here from `missing` (each kind missing, first acceptance).
+vi.mock('@/lib/data/acceptances', () => ({
+  missingAcceptances: data.missing, offeredAcceptances: data.offered,
+  acceptanceChanges: async () => ((await data.missing()) as string[]).map((kind) => ({
+    kind, current: { kind, version: '1', publishedOn: '2026-10-30', acceptance: 'required', sha256: 'x', text: 'words' }, lastAccepted: null, state: 'missing',
+  })),
+}));
 const idle = vi.hoisted(() => ({ read: vi.fn() }));
 vi.mock('@/lib/auth/idleDeadline', () => ({ readSessionDeadlines: idle.read }));
 vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
 
 import { GateFrame, type GateStop } from '@/components/layout/GateFrame';
+import { GatePublicFrame } from '@/components/layout/GatePublicFrame';
 import { DraftsWarning } from '@/components/layout/GateSignOut';
 import { countAccountDrafts } from '@/lib/client/draftKeys';
 import { DRAFTS_COPY } from '@/lib/decision/drafts/copy';
@@ -47,11 +55,25 @@ const ROUTE: readonly GateStop[] = [
   { label: 'Sign in', state: 'done' },
   { label: 'Accept the terms', state: 'current' },
 ];
+/** React 19 hoists a preload for the logo's srcSet ahead of a static render; in a page it goes to <head>. Stripped here so the
+ *  frame's own markup is what the cases read; LOGO_PRELOAD pins that it is the logo's and nothing else. */
+const LOGO_PRELOAD = '<link rel="preload" as="image" imageSrcSet="/logo-makai-white-154.webp 1x, /logo-makai-white-308.webp 2x"/>';
+const frameOnly = (html: string) => (html.startsWith(LOGO_PRELOAD) ? html.slice(LOGO_PRELOAD.length) : html);
 const signedIn = (route?: readonly GateStop[], wide?: boolean) =>
-  renderToStaticMarkup(<GateFrame variant="signed-in" userName="Amina" userId="u1" accountReachable route={route} wide={wide}><h1>Title</h1></GateFrame>);
-const publicFrame = (route?: readonly GateStop[]) => renderToStaticMarkup(<GateFrame variant="public" route={route}><h1>Title</h1></GateFrame>);
+  frameOnly(renderToStaticMarkup(<GateFrame variant="signed-in" userName="Amina" userId="u1" accountReachable route={route} wide={wide}><h1>Title</h1></GateFrame>));
+const publicFrame = (route?: readonly GateStop[]) => frameOnly(renderToStaticMarkup(<GateFrame variant="public" route={route}><h1>Title</h1></GateFrame>));
 
 describe('GateFrame, signed in', () => {
+  it('I-3: the only element React hoists out of the frame is the logo\'s own preload', () => {
+    const html = renderToStaticMarkup(<GateFrame variant="public"><h1>Title</h1></GateFrame>);
+    expect(html.startsWith(LOGO_PRELOAD)).toBe(true);
+    expect(frameOnly(html)).toMatch(/^<div class="gate gate--public">/);
+  });
+
+  it('M-9: an account with no name gets no empty paragraph in the column', () => {
+    expect(renderToStaticMarkup(<GateFrame variant="signed-in" userName="" userId="u1" accountReachable>x</GateFrame>)).not.toContain('gate__name');
+  });
+
   it('T1.3: GateFrame links only to /help and signs out', () => {
     expect(hrefs(renderToStaticMarkup(<GateFrame variant="signed-in" userName="Amina" userId="u1" accountReachable>x</GateFrame>))).toEqual(['/help']);
     expect(hrefs(renderToStaticMarkup(<GateFrame variant="signed-in" userName="Amina" userId="u1" accountReachable={false}>x</GateFrame>))).toEqual(['/help']);
@@ -60,8 +82,8 @@ describe('GateFrame, signed in', () => {
   it('the product name is text, not a link; the person\'s name, Help and Sign out are in the column', () => {
     const html = signedIn();
     expect(html).toMatch(/<p class="gate__product">MAK-AI RAI Platform<\/p>/);
-    // I-3 (owner's ruling): the logo goes above the name; until the shared logo component lands, its slot is empty.
-    expect(html).toMatch(/<div class="gate__brand"><div class="gate__logo" data-slot="logo"><\/div><p class="gate__product">/);
+    // I-3 (owner's ruling, 15 Nov): the MAK-AI logo (lane 3's white WebP) above the name, decorative (alt=""), not a link.
+    expect(html).toMatch(/<div class="gate__brand"><img src="\/logo-makai-white-154\.webp" srcSet="\/logo-makai-white-154\.webp 1x, \/logo-makai-white-308\.webp 2x" width="154" height="36" alt="" decoding="async" class="gate__logo"\/><p class="gate__product">/);
     expect(textOf(html)).toContain('Amina');
     expect(html).toMatch(/<a class="gate__help" href="\/help">Help<\/a>/);
     expect(textOf(html)).toContain(GATE_COPY.signOut);
@@ -91,12 +113,44 @@ describe('GateFrame, signed in', () => {
 });
 
 describe('GateFrame, public (inside the (public) layout\'s own header and main)', () => {
+  const css = readFileSync('components/layout/gate.css', 'utf8');
   it('renders no header, no main, no Help, no Sign out and no link at all: the public layout has those', () => {
     const html = publicFrame(ROUTE);
     expect(html).not.toMatch(/<header|<main|<form|<a /);
     expect(hrefs(html)).toEqual([]);
-    expect(html).toMatch(/^<div class="gate gate--public"><div class="gate__header"><div class="gate__column"><div class="gate__brand"><div class="gate__logo" data-slot="logo"><\/div><p class="gate__product">MAK-AI RAI Platform<\/p><\/div>/);
+    // Ruling L5-26 (design review I-2): the light header names the platform, so the public column shows the logo alone.
+    expect(html).toMatch(/^<div class="gate gate--public"><div class="gate__header"><div class="gate__column"><div class="gate__brand"><img src="\/logo-makai-white-154\.webp" srcSet="\/logo-makai-white-154\.webp 1x, \/logo-makai-white-308\.webp 2x" width="154" height="36" alt="" decoding="async" class="gate__logo"\/><\/div>/);
+    expect(html).not.toContain('gate__product');
     expect(html).toContain('<div class="gate__main"><div class="gate__card"><h1>Title</h1></div></div>');
+  });
+
+  it('L5-26: the platform is named once per viewport: below 1024 px the public band shows no logo, only where the person is', () => {
+    expect(css).toMatch(/@media \(max-width: 1023\.98px\) \{\s*\.gate--public \.gate__brand \{\s*display: none;/);
+  });
+
+  it('a page whose route changes in the browser passes its own route element in place of the list (D16, a used reset link)', () => {
+    const html = frameOnly(renderToStaticMarkup(<GateFrame variant="public" routeSlot={<p id="slot">S</p>}><h1>T</h1></GateFrame>));
+    expect(html).toContain('<p id="slot">S</p>');
+    expect(html).not.toContain('gate-route');
+  });
+
+  it('M-2: on a public page the frame fills what the light header leaves, not a whole viewport under it', () => {
+    expect(css).toMatch(/body:has\(\.gate--public\) \{[^}]*display: flex;[^}]*flex-direction: column;[^}]*min-block-size: 100dvh;/);
+    expect(css).toMatch(/\.public-layout:has\(> \.gate--public\) \{[^}]*flex: 1 0 auto;[^}]*min-block-size: 0;/);
+    expect(css).toMatch(/\.gate--public \{[^}]*min-block-size: 0;/);
+  });
+
+  it('CR-1: the logo keeps its proportions when the column is narrower than it', () => {
+    expect(css).toMatch(/\.gate__logo \{[^}]*max-inline-size: 100%;[^}]*block-size: auto;/);
+  });
+
+  it('lean frame (owner, 15 Nov 15:35): GatePublicFrame, which S-04 renders, draws exactly the public variant of GateFrame', () => {
+    const lean = (route?: readonly GateStop[]) => frameOnly(renderToStaticMarkup(<GatePublicFrame route={route}><h1>Title</h1></GatePublicFrame>));
+    expect(lean(ROUTE)).toBe(publicFrame(ROUTE));
+    expect(lean()).toBe(publicFrame());
+    const slot = <p id="slot">S</p>;
+    expect(frameOnly(renderToStaticMarkup(<GatePublicFrame routeSlot={slot} wide><h1>T</h1></GatePublicFrame>)))
+      .toBe(frameOnly(renderToStaticMarkup(<GateFrame variant="public" routeSlot={slot} wide><h1>T</h1></GateFrame>)));
   });
 });
 
@@ -142,11 +196,29 @@ describe('GateRoute: the steps of this door, drawn as a short route', () => {
 });
 
 describe('gate.css', () => {
-  const css = readFileSync('components/layout/gate.css', 'utf8');
+  // The frame's rules, in two sheets since the lean frame (owner, 15 Nov 15:35): the public sheet every door page loads,
+  // and the signed-in frame's own (the person block, Help, Sign out, M-41), which S-04 does not load.
+  const publicCss = readFileSync('components/layout/gate.css', 'utf8');
+  const signedInCss = readFileSync('components/layout/gate-signed-in.css', 'utf8');
+  const css = `${publicCss}\n${signedInCss}`;
   const src = readFileSync('components/layout/GateFrame.tsx', 'utf8');
 
   it('GateFrame imports its own stylesheet; it is not a kit sheet', () => {
-    expect(src).toMatch(/^import '\.\/gate\.css';$/m);
+    expect(readFileSync('components/layout/GatePublicFrame.tsx', 'utf8')).toMatch(/^import '\.\/gate\.css';$/m);
+    expect(src).toMatch(/^import '\.\/gate-signed-in\.css';$/m);
+    expect(src).toMatch(/from '@\/components\/layout\/GatePublicFrame'/);
+  });
+
+  it('lean frame (owner, 15 Nov 15:35): the public sheet holds no rule of the signed-in frame, and only GateFrame loads that sheet', () => {
+    const SIGNED_IN = /\.gate__(?:footer|name|help|signout|product)\b|data-sign-out-drafts/;
+    expect(publicCss.replace(/\/\*[\s\S]*?\*\//g, '')).not.toMatch(SIGNED_IN);
+    // Every selector of the signed-in sheet names a part only the signed-in frame draws.
+    const selectors = [...signedInCss.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{/g)].map((m) => m[1].trim()).filter((sel) => !sel.startsWith('@'));
+    expect(selectors.length).toBeGreaterThan(0);
+    expect(selectors.flatMap((sel) => sel.split(',')).map((sel) => sel.trim()).filter((sel) => !SIGNED_IN.test(sel))).toEqual([]);
+    const importers = execFileSync('git', ['grep', '-l', '--untracked', '-E', '-e', String.raw`import\s+['"][^'"]*gate-signed-in\.css`, '--', 'app', 'components', 'lib'], { encoding: 'utf8' })
+      .split('\n').filter(Boolean);
+    expect(importers).toEqual(['components/layout/GateFrame.tsx']);
   });
 
   it('wide from 1024 px, the shell\'s breakpoint: the navy column at the rail\'s width beside the ground', () => {
@@ -165,15 +237,15 @@ describe('gate.css', () => {
 
   it('I-4: the card\'s heading steps down the ramp as the card narrows (22 px, then 18 px) and wraps by whole words only', () => {
     expect(css).toMatch(/\.gate__card \{[^}]*container-type: inline-size;/);
-    expect(css).toMatch(/@container \(width < 30rem\) \{\s*\.gate__card h1 \{\s*font-size: var\(--font-size-h2\);/);
+    expect(css).toMatch(/@container \(width < 24rem\) \{\s*\.gate__card h1 \{\s*font-size: var\(--font-size-h2\);/);
     expect(css).toMatch(/@container \(width < 12rem\) \{\s*\.gate__card h1 \{\s*font-size: var\(--font-size-h3\);/);
     expect(css).toMatch(/\.gate__card h1 \{[^}]*overflow-wrap: normal;/);
   });
 
-  it('I-3: the platform\'s name is the column\'s title, white at the 16 px step; the logo slot takes no room while empty', () => {
+  it('I-3: the platform\'s name is the column\'s title, white at the 16 px step; the logo sits above it as a block', () => {
     expect(css).toMatch(/\.gate__product \{[^}]*color: var\(--color-shell-ink\);[^}]*font-size: var\(--font-size-body\);[^}]*font-weight: var\(--font-weight-semibold\);/);
     expect(css).not.toMatch(/\.gate__product \{[^}]*--color-shell-muted/);
-    expect(css).toMatch(/\.gate__logo:empty \{\s*display: none;/);
+    expect(css).toMatch(/\.gate__logo \{\s*display: block;/);
   });
 
   it('I-5 M-2: the column (wide) and the band (narrow) have a 1 px edge in an existing border role, which forced colours keep', () => {
@@ -320,16 +392,18 @@ describe('the gate pages pass a route of true stops', () => {
   it('/ with organisations to choose from: Choose an organisation current, Home upcoming, in the wide card', async () => {
     data.findUser.mockResolvedValue({ lastActiveOrgId: null });
     data.memberships.mockResolvedValue([
-      { orgId: 'o1', org: { slug: 'alpha', name: 'Alpha Lab' } },
-      { orgId: 'o2', org: { slug: 'beta', name: 'Beta Lab' } },
+      { orgId: 'o1', role: 'owner', org: { slug: 'alpha', name: 'Alpha Lab' } },
+      { orgId: 'o2', role: 'viewer', org: { slug: 'beta', name: 'Beta Lab' } },
     ]);
     const Page = (await import('@/app/(gate)/page')).default;
     const p = frameOf(await Page());
     expect(p.route).toEqual([{ label: 'Choose an organisation', state: 'current' }, { label: 'Home', state: 'upcoming' }]);
     expect(p.wide).toBe(true);
     expect(p.accountReachable).toBe(true);
-    // T1.4: the chooser reads only this person's own memberships and last organisation, by their own id.
-    expect(data.memberships.mock.calls).toEqual([['u1']]);
+    // T1.4: the chooser reads only this person's own memberships and last organisation, by their own id (orgRoleLabel, which
+    // words each plate's role since plan 1B Task 8, reads the same memberships by the same id).
+    expect(data.memberships.mock.calls.length).toBeGreaterThan(0);
+    for (const call of data.memberships.mock.calls) expect(call).toEqual(['u1']);
     expect(data.findUser.mock.calls).toEqual([[{ where: { id: 'u1' }, select: { lastActiveOrgId: true } }]]);
   });
 

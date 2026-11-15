@@ -21,7 +21,7 @@ export function StatusRegion({ message, politeness = 'polite', id, tone = 'neutr
   return (
     <div role={politeness === 'assertive' ? 'alert' : 'status'} id={id} className={tone === 'error' ? 'ui-status ui-status--error' : 'ui-status'}>
       {message !== null && message !== '' && tone === 'error' ? <span className="ui-status__icon"><Icon name="triangle-alert" size={20} /></span> : null}
-      {message}
+      {tone === 'error' && message !== null && message !== '' ? <span className="ui-status__text">{message}</span> : message}
     </div>
   );
 }

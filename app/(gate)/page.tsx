@@ -1,11 +1,13 @@
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { requireIdentity } from '@/lib/auth/identity';
+import { orgRoleLabel } from '@/lib/authz/roleLabel';
 import { identityDb } from '@/lib/data/identity';
 import { membershipsForUser } from '@/lib/data/preauth';
 import { resolveOrgDispatch } from '@/lib/org-dispatch';
 import { GateFrame, type GateStop } from '@/components/layout/GateFrame';
-import { ORG_COPY } from '@/lib/org/copy';
+import { OrgChooser, type OrgChoice } from '@/components/org/OrgChooser';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { ORG_COPY, isOrgRole, roleWithArticle } from '@/lib/org/copy';
 import { GATE_COPY } from '@/lib/shell/copy';
 import { pageTitle } from '@/lib/ui/title';
 
@@ -32,6 +34,13 @@ const CHOOSER_ROUTE: readonly GateStop[] = [
  * line 311): organisations are created by the administrator only (FR-ORG-04), so it offers no way to make
  * one. Since plan 1B Task 1 `/` is in app/(gate): the group layout shows the idle warning (UX-43), and the page renders
  * the gate frame with the chooser in its wide card.
+ *
+ * The chooser (plan 1B Task 8) lists each organisation as an item plate with the person's role there, read by
+ * `orgRoleLabel(identity, slug)` (T8.3) and worded through the fixed role map (`roleWithArticle`). An organisation whose
+ * role reads as none (the membership ended, or the organisation was archived, between the two reads) is left out of the
+ * list: T8.2, the person's own active memberships only; with none left, the kit's empty state. Any other text is not a
+ * role (a broken contract between orgRoleLabel and this page), so it is an error, never a dropped organisation: dropping
+ * them all would tell a member they are in no organisation. A database error propagates to the error page.
  */
 export default async function LandingPage() {
   const identity = await requireIdentity();
@@ -51,25 +60,27 @@ export default async function LandingPage() {
     redirect(`/orgs/${dispatch.slug}/dashboard`);
   }
 
-  const hasOrgs = dispatch.orgs.length > 0;
+  const labels = await Promise.all(dispatch.orgs.map((org) => orgRoleLabel(identity, org.slug)));
+  const choices: OrgChoice[] = [];
+  dispatch.orgs.forEach((org, i) => {
+    const label = labels[i];
+    if (label === null) return;
+    if (!isOrgRole(label)) throw new Error('organisation chooser: orgRoleLabel returned a value that is not an organisation role');
+    choices.push({ ...org, roleLabel: roleWithArticle(label) });
+  });
+  const hasOrgs = choices.length > 0;
 
   return (
     <GateFrame variant="signed-in" userName={identity.name ?? ''} userId={identity.userId} accountReachable route={hasOrgs ? CHOOSER_ROUTE : undefined} wide>
       {hasOrgs ? (
         <>
           <h1>{ORG_COPY.chooser.heading}</h1>
-          <nav aria-label={ORG_COPY.chooser.listLabel} className="sidebar-nav">
-            {dispatch.orgs.map((org) => (
-              <Link key={org.slug} href={`/orgs/${org.slug}/dashboard`} className="chooser-link">
-                {org.name}
-              </Link>
-            ))}
-          </nav>
+          <OrgChooser orgs={choices} />
         </>
       ) : (
         <>
           <h1>{ORG_COPY.chooser.emptyHeading}</h1>
-          <p className="text-muted">{ORG_COPY.chooser.emptyBody}</p>
+          <EmptyState title={ORG_COPY.chooser.emptyTitle}>{ORG_COPY.chooser.emptyBody}</EmptyState>
         </>
       )}
     </GateFrame>
