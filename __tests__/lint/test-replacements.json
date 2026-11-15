@@ -3134,5 +3134,13 @@
     "property": "S-11 (the stage page of the 28-question stage) transfers at most 300,000 B on first visit and S-12 (its question page) at most 315,000 B, each failing above its own limit; nothing was trimmed. The owner's ruling of 15 Nov 2026 20:50 EAT (box) set S-12's limit; S-11 keeps the SRS's 300 KB.",
     "proof": "The case measures both pages with the same measure() as before and asserts m.total <= its own limit per page ([s11, 300_000], [s12, 315_000]); S-12 measured 312,535 B at e422129c (lane 8 investigation on the remote runner, a temporary spec copying this file's measure()).",
     "task": "lane 8 (owner 20:50: S-12 first-visit limit 315,000 B)"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/project-page.test.tsx::9.2: a sealed review says how many decisions and how many findings changed since it was sealed, each on its own; the findings part links to the review",
+    "replacedBy": "__tests__/unit/project-page.test.tsx::owner 15 Nov 21:32 (C): decisions and findings changed since the seal are one count, \"k changed since\"; none changed adds nothing",
+    "property": "A sealed review's change since its seal is still shown on S-10 and still links to the review that lists it; decisions and findings are now one count in the review's one line (owner's ruling of 15 Nov 2026 21:32), no longer two sentences.",
+    "proof": "The replacing case gives a review 2 changed decisions and 3 changed findings and requires the text \"Review 1 · sealed 11 Nov 2026 · 5 changed since\" with the count a link to /reviews/r1 and one review-list__meta p; with findings only it requires \"1 changed since\" and that the page's first use of \"finding\" stays in the first stage with an open finding; with nothing changed no \"changed since\" shows. It failed before the change and passes after.",
+    "task": "lane 8 I4 round 5 (owner 21:32: each review is one line)"
   }
 ]

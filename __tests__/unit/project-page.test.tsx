@@ -266,9 +266,28 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     expect(html.indexOf('data-definition="seal"')).toBeGreaterThan(html.indexOf('<section class="stage-line" id="post-processing"'));
   });
 
+  it('owner 15 Nov 21:32 (A): every first-use definition below the stage heads is a (i) toggletip with the exact sentence; only the stage meanings stay as text', () => {
+    const reviews = { 'in-processing': [{ ...REVIEW, stage: 'in-processing' as const }] };
+    const html = render({ reviews, counts: { 'pre-processing': { ...COUNTS, openFindings: 0, openFindingsWithoutMitigation: 0 } } });
+    for (const term of [TERM_FINDING, TERM_MITIGATION, TERM_ACCEPTED_RISK, TERM_STAGE_REVIEW, TERM_SEAL]) {
+      // No bare Definition (it has no id); one tip, named by whatMeans, whose popover holds the vocabulary's sentence.
+      expect(html, term.id).not.toMatch(new RegExp(`class="ui-definition" data-definition="${term.id}"`));
+      expect(html, term.id).toContain(`data-definition="${term.id}">${term.definition?.replace(/'/g, '&#x27;')}</span>`);
+      expect(html, term.id).toContain(`aria-label="${P.whatMeans(term.term).replace(/"/g, '&quot;')}"`);
+      // The tip follows its term in the same block (a toggletip beside the exact definition counts, owner 11:00).
+      expect(html.indexOf('<span class="ui-term-tip">', html.indexOf(`data-term="${term.id}"`)), term.id).toBeGreaterThan(-1);
+    }
+    for (const term of [TERM_STAGE_1, TERM_STAGE_2, TERM_STAGE_3]) expect(html).toMatch(new RegExp(`<p class="ui-definition" data-definition="${term.id}">`));
+    // The share line's two tips sit in its own p.
+    const share = html.slice(html.indexOf('<p class="project-page__share">'), html.indexOf('</p>', html.indexOf('<p class="project-page__share">')));
+    expect(share).toContain('ui-term-tip');
+  });
+
   it('first use: each status word of a tally carries its (i) once on the page, on the first line whose tally shows it', () => {
     const STATUS_TERMS = [TERM_DONE, TERM_PARTLY, TERM_NOT_YET, TERM_NOT_APPLICABLE, TERM_DOES_NOT_APPLY];
-    const tipsIn = (markup: string) => [...markup.matchAll(/<span class="ui-term-tip">.*?data-definition="([a-z-]+)"/g)].map((m) => m[1]);
+    // Only the status words' tips: the page's other first-use tips (finding, mitigation, ...) sit beside them in the same lines.
+    const tipsIn = (markup: string) => [...markup.matchAll(/<span class="ui-term-tip">.*?data-definition="([a-z-]+)"/g)].map((m) => m[1])
+      .filter((id) => STATUS_TERMS.some((t) => t.id === id));
     // Pre-processing counts done, partly, not yet and not applicable; only in-processing has a question that does not apply.
     const html = render({ counts: { 'in-processing': { ...COUNTS, notApplicableByGate: 1, noDecision: 8 } } });
     for (const term of STATUS_TERMS) {
@@ -419,11 +438,13 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     const newer: StageReviewView = { ...REVIEW, id: 'r2', numberInStage: 2, name: 'Team check-in, November', latestSeal: { ...SEAL, id: 's2', reviewId: 'r2' }, changedSinceLatestSeal: true,
       changed: { sealNumber: 1, changedQuestions: ['Q-PP-03'], changedFindings: [] } };
     const pre = stop(lines(render({ reviews: { 'pre-processing': [sealed, newer] } }))['pre-processing'], 'reviews');
-    expect(text(pre)).toContain(`${P.reviewNumber(1)} · ${P.sealed} 11 Nov 2026 · ${P.changedSinceSeal(2)}`);
+    // Owner 15 Nov 21:32 (C): one line per review, "Review n · sealed <date> · k changed since", the count linking to the review.
+    expect(text(pre)).toContain(`${P.reviewNumber(1)} · ${P.sealed} 11 Nov 2026 · ${P.changedSince(2)}`);
+    expect(text(pre)).toContain(`${P.reviewNumber(2)} · ${P.sealed} 11 Nov 2026 · ${P.changedSince(1)}`);
     expect(text(pre)).toContain(`${REVIEW_COPY.review.facts.preparedFor}: Ethics committee`);
-    // Only the newest review's change count is a link: the stage page's filter compares against the newest review.
-    expect(pre).not.toContain(`>${P.changedSinceSeal(2)}</a>`);
-    expect(pre).toContain(`<a href="/orgs/o/projects/p1/stages/pre-processing?show=changed_since_seal">${P.changedSinceSeal(1)}</a>`);
+    expect(pre).toContain(`<a href="/orgs/o/projects/p1/reviews/r1">${P.changedSince(2)}</a>`);
+    expect(pre).toContain(`<a href="/orgs/o/projects/p1/reviews/r2">${P.changedSince(1)}</a>`);
+    expect(pre).not.toContain('it was sealed');
     expect(pre).not.toContain(P.beforeSealing);
   });
 
@@ -434,30 +455,30 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     expect(pre.match(/<bdi>/g)).toHaveLength(1);
   });
 
-  it('9.2: a sealed review says how many decisions and how many findings changed since it was sealed, each on its own; the findings part links to the review', () => {
+  it('owner 15 Nov 21:32 (C): decisions and findings changed since the seal are one count, "k changed since"; none changed adds nothing', () => {
     const both: StageReviewView = { ...REVIEW, latestSeal: SEAL, changedSinceLatestSeal: true,
       changed: { sealNumber: 1, changedQuestions: ['Q-PP-01', 'Q-PP-02'], changedFindings: ['f1', 'f2', 'f3'] } };
     const pre = stop(lines(render({ reviews: { 'pre-processing': [both] } }))['pre-processing'], 'reviews');
-    expect(text(pre)).toContain(`${P.reviewNumber(1)} · ${P.sealed} 11 Nov 2026 · ${P.changedSinceSeal(2)} · ${P.findingsChangedSinceSeal(3)}`);
-    expect(pre).toContain(`<a href="/orgs/o/projects/p1/stages/pre-processing?show=changed_since_seal">${P.changedSinceSeal(2)}</a>`);
-    expect(pre).toContain(`<a href="/orgs/o/projects/p1/reviews/r1">${P.findingsChangedSinceSeal(3)}</a>`);
-    // Findings only: the findings part alone, in the same words; never "Changed since seal 1 (n)."
-    const onlyFindings: StageReviewView = { ...both, changed: { sealNumber: 1, changedQuestions: [], changedFindings: ['f1'] } };
-    const html = render({ reviews: { 'pre-processing': [onlyFindings] }, counts: { 'pre-processing': { ...COUNTS, openFindings: 0, openFindingsWithoutMitigation: 0 } } });
-    const only = stop(lines(html)['pre-processing'], 'reviews');
-    expect(text(only)).toContain(`${P.reviewNumber(1)} · ${P.sealed} 11 Nov 2026 · ${P.findingsChangedSinceSeal(1)}`);
-    expect(only).not.toContain(P.changedSinceSeal(1));
-    expect(only).not.toContain('Changed since seal');
-    // With no open finding before it, this sentence is the page's first use of "finding": its definition is here, once.
-    expect(only).toContain('data-definition="finding"');
+    expect(text(pre)).toContain(`${P.reviewNumber(1)} · ${P.sealed} 11 Nov 2026 · ${P.changedSince(5)}`);
+    expect(pre).toContain(`<a href="/orgs/o/projects/p1/reviews/r1">${P.changedSince(5)}</a>`);
+    // The review's meta is one p: no second sentence about findings, so the review adds no first use of "finding".
+    expect(pre.match(/class="review-list__meta"/g)).toHaveLength(1);
+    const html = render({ reviews: { 'pre-processing': [{ ...both, changed: { sealNumber: 1, changedQuestions: [], changedFindings: ['f1'] } }] }, counts: { 'pre-processing': { ...COUNTS, openFindings: 0, openFindingsWithoutMitigation: 0 } } });
+    expect(text(stop(lines(html)['pre-processing'], 'reviews'))).toContain(`${P.reviewNumber(1)} · ${P.sealed} 11 Nov 2026 · ${P.changedSince(1)}`);
+    // With no open finding in pre-processing, the first use of "finding" is in-processing's Still open, as for any page.
+    expect(lines(html)['pre-processing']).not.toContain('data-definition="finding"');
     expect(html.split('data-definition="finding"')).toHaveLength(2);
-    expect([P.findingsChangedSinceSeal(1), P.findingsChangedSinceSeal(3)]).toEqual(['1 finding changed since it was sealed', '3 findings changed since it was sealed']);
+    const none = stop(lines(render({ reviews: { 'pre-processing': [{ ...both, changed: { sealNumber: 1, changedQuestions: [], changedFindings: [] } }] } }))['pre-processing'], 'reviews');
+    expect(text(none)).toContain(`${P.reviewNumber(1)} · ${P.sealed} 11 Nov 2026`);
+    expect(none).not.toContain('changed since');
   });
 
   it('9.2: a damaged seal says so first, an erased purpose says when; "Open a stage review" only where the role may and the project is live', () => {
     const damaged: StageReviewView = { ...REVIEW, latestSeal: SEAL, latestSealUnreadable: true, preparedForErased: { erasedOn: '2026-11-12' } };
     const pre = text(stop(lines(render({ reviews: { 'pre-processing': [damaged] } }))['pre-processing'], 'reviews'));
-    expect(pre).toContain(`${P.reviewNumber(1)} · ${REVIEW_COPY.state.damaged}`);
+    // One line, in the first sentence of the damaged-seal words (the review page keeps the whole of it).
+    expect(pre).toContain(`${P.reviewNumber(1)} · ${REVIEW_COPY.state.damagedShort}`);
+    expect(pre).not.toContain('Contact MAK-AI');
     expect(pre).toContain(`${REVIEW_COPY.review.facts.preparedFor}: ${REVIEW_COPY.mounted.noteErased('12 Nov 2026')}`);
     for (const [o, shown] of [[{ role: 'owner' }, true], [{ role: 'assessor' }, true], [{ role: 'viewer' }, false], [{ role: 'owner', archived: true }, false]] as const) {
       const html = render(o);
@@ -567,7 +588,7 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     expect([P.beforeSealing, P.nothingLeftOpen]).toEqual(['Before sealing, look at:', 'Nothing is left open in this stage.']);
     expect([P.doneNoEvidence(1), P.doneNoEvidence(2)]).toEqual(['1 decision marked Done with no evidence attached', '2 decisions marked Done with no evidence attached']);
     expect([P.overdueMitigations(1), P.overdueMitigations(2)]).toEqual(['1 overdue mitigation', '2 overdue mitigations']);
-    expect([P.changedSinceSeal(1), P.changedSinceSeal(2)]).toEqual(['1 decision changed since it was sealed', '2 decisions changed since it was sealed']);
+    expect([P.changedSince(1), P.changedSince(5)]).toEqual(['1 changed since', '5 changed since']);
     expect([P.reviewsHeading, P.thisProject, P.findings, P.editProjectDetails, P.noOverdue]).toEqual(['Reviews', 'This project', 'Findings', 'Edit project details', 'No overdue mitigations']);
     expect([P.otherOpenMitigations(1), P.otherOpenMitigations(4)]).toEqual(['1 other open mitigation', '4 other open mitigations']);
     const words: string[] = [];

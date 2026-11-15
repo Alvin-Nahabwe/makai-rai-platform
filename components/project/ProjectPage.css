@@ -209,18 +209,6 @@
   font-weight: var(--font-weight-semibold);
 }
 
-/* A first-use definition under its term: one small line where the words fit, the sketch's .def (13 px, 1.45), set tight
-   under the term it explains. The head stop's meaning keeps the small size (the sketch's header p). */
-.stage-line__open .ui-definition,
-.stage-line__stop--recorded .ui-definition,
-.stage-line__stop--reviews .ui-definition,
-.project-page__share .ui-definition {
-  display: block;
-  margin-block-start: 0;
-  font-size: 0.8125rem;
-  line-height: 1.45;
-}
-
 .stage-line__quiet {
   color: var(--color-ink-muted);
 }

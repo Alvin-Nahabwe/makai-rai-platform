@@ -50,6 +50,8 @@ export const REVIEW_COPY = Object.freeze({
     notSealed: 'Not sealed yet.',
     /** A seal whose stored copy no longer holds together (Q3 (b)): the state line and the line under that seal. */
     damaged: 'Something in this seal has changed since it was sealed. Contact MAK-AI through Help and contact.',
+    /** The first sentence of `damaged`, for the project page's one-line review (owner's ruling of 15 Nov 2026, 21:32). */
+    damagedShort: 'Something in this seal has changed since it was sealed.',
     changed: (sealNumber: number, count: number): string => `Changed since seal ${sealNumber} (${count}).`,
     sealed: (sealNumber: number, day: string): string => `Sealed as seal ${sealNumber} on ${day}.`,
     contentChanged: (sealNumber: number): string => `MAK-AI updated the questions after seal ${sealNumber}. Changes are compared with the current questions.`,

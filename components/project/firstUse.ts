@@ -11,11 +11,8 @@ import type { Tally } from '@/lib/ui/marks';
  * When a stop's words change in components/project/StageLine.tsx, this is the function to update.
  */
 export type FirstUses = {
-  /**
-   * The first sentence that says "finding": a stage's open-findings line in Still open, or (earlier in the page when its
-   * stage has no open finding) a sealed review's "{n} finding(s) changed since it was sealed".
-   */
-  finding: { stage: Stage } | { reviewId: string } | null;
+  /** The stage whose open-findings line in Still open is the first sentence that says "finding" (a review's line no longer does). */
+  finding: { stage: Stage } | null;
   /** The first line of "Still open" that says "mitigation": the findings line's bracket, the Overdue line, or "No overdue mitigations". */
   mitigation: { stage: Stage; at: 'bracket' | 'overdue' | 'noOverdue' } | null;
   /** The stage whose "accepted risks, documents issued" line comes first. */
@@ -60,11 +57,7 @@ export function firstUses(i: {
     if (out.acceptedRisk === null && c.acceptedRisks + c.documentsIssued > 0) out.acceptedRisk = stage;
     const reviews = i.reviews[stage];
     // Reviews come after Still open in a stage. "sealed" and "sealing" are not uses of "seal" (lib/vocabulary/firstUse.ts
-    // matches the whole word with an optional plural "s"), so a sealed review's line is a use of "finding" only.
-    if (out.finding === null) {
-      const changed = reviews.find((r) => r.latestSeal !== null && !sealDamaged(r) && (r.changed?.changedFindings.length ?? 0) > 0);
-      if (changed !== undefined) out.finding = { reviewId: changed.id };
-    }
+    // matches the whole word with an optional plural "s"), and a review's "k changed since" says no "finding".
     if (out.seal === 'share') {
       const damaged = reviews.find(sealDamaged);
       if (damaged !== undefined) out.seal = { reviewId: damaged.id };

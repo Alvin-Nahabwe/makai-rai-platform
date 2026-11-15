@@ -2,7 +2,8 @@ import './ProjectPage.css';
 import type { ReactElement, ReactNode } from 'react';
 import { STAGES } from '@/types/record';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { Definition, Term } from '@/components/ui/Definition';
+import { Term } from '@/components/ui/Definition';
+import { TermTip } from '@/components/ui/TermTip';
 import { ArchivedBanner } from '@/components/project/ArchivedBanner';
 import { NextStep, StageLine } from '@/components/project/StageLine';
 import { ProjectActions } from '@/components/project/ProjectActions';
@@ -73,8 +74,8 @@ export function ProjectPage({ data, routes, continueTo, children }: {
       </div>
       <p className="project-page__share">
         {share}
-        {shareSeal ? <Definition of={TERM_SEAL} /> : null}
-        {shareReview ? <Definition of={TERM_STAGE_REVIEW} /> : null}
+        {shareSeal ? <TermTip of={TERM_SEAL} label={P.whatMeans(TERM_SEAL.term)} /> : null}
+        {shareReview ? <TermTip of={TERM_STAGE_REVIEW} label={P.whatMeans(TERM_STAGE_REVIEW.term)} /> : null}
       </p>
       <ProjectActions base={base} can={can} orgSlug={orgSlug} projectId={project.id} projectName={project.name} archived={project.archived} />
       {children}
