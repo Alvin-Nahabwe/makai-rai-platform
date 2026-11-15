@@ -1,10 +1,10 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { AcceptancesForm, SendStatus, acceptancePairs, handleFailure, recordOutcome, textsKey, type SendState } from '@/components/legal/AcceptancesForm';
 import { ACCEPTANCES_COPY } from '@/lib/legal/acceptances/copy';
-import type { LegalTextVersion } from '@/types/legal';
+import type { AcceptedKind, LegalTextVersion } from '@/types/legal';
 
 /*
  * S-05's body, in a module of its own so that S-04, which shows the form but never records acceptances on their own,
@@ -18,7 +18,9 @@ import type { LegalTextVersion } from '@/types/legal';
  * not saved, with **Try again**, which re-sends the same body; any other refusal is acted on by
  * `failureOutcome` (sign in and back here, S-29, M-39 with a reload, the wait, or its words).
  */
-export function RecordAcceptances({ texts, mode, userId }: { texts: LegalTextVersion[]; mode: 'required' | 'offer'; userId: string }) {
+export function RecordAcceptances({ texts, mode, userId, heading, before }: {
+  texts: LegalTextVersion[]; mode: 'required' | 'offer'; userId: string; heading?: string; before?: Partial<Record<AcceptedKind, ReactNode>>;
+}) {
   const router = useRouter();
   const [send, setSend] = useState<SendState>({ state: 'idle' });
   const sent = useRef<string | null>(null);
@@ -46,7 +48,8 @@ export function RecordAcceptances({ texts, mode, userId }: { texts: LegalTextVer
 
   return (
     <>
-      <AcceptancesForm key={textsKey(texts)} texts={texts} mode={mode} userId={userId} submitLabel={ACCEPTANCES_COPY.submit} busy={send.state === 'sending'}
+      <AcceptancesForm key={textsKey(texts)} texts={texts} mode={mode} userId={userId} heading={heading} before={before}
+        submitLabel={ACCEPTANCES_COPY.submit} busy={send.state === 'sending'}
         onAccepted={(kinds) => record(JSON.stringify({ acceptances: acceptancePairs(texts, kinds) }))} />
       <SendStatus send={send} what="choice" sendingText={ACCEPTANCES_COPY.saving} onRetry={() => { if (sent.current !== null) void record(sent.current); }} />
     </>

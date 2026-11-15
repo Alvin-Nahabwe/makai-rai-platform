@@ -6,7 +6,8 @@ import { buildOrg, type FixtureAccount, type OrgFixture } from '../__tests__/hel
 import { currentLegalText } from '../lib/legal/registry';
 import { ACCEPT_LABEL } from '../components/legal/AcceptancesForm';
 import { INVITATION_COPY } from '../lib/invitations/copy';
-import { ACCEPTANCES_COPY } from '../lib/legal/acceptances/copy';
+import { LEGAL_COPY } from '../lib/legal/copy';
+import { LEGAL_KIND_NAMES } from '../lib/legal/kinds';
 import { ACCEPTED_KINDS, CONSENT_TYPE_FOR } from '../types/legal';
 import { draftKeys, draftValues, fillValid, stageOf, waitForQuestionPage } from './helpers/session';
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
@@ -70,15 +71,16 @@ test.describe('version 2 of the terms, the privacy notice and the consent to sto
     await page.goto('/');
     await expect(page).toHaveURL(/\/acceptances$/);
 
-    // Each box is for the version now current, and its link opens that version's page.
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText(ACCEPTANCES_COPY.legend);
+    // Each box is for the version now current, and its link opens that version's page. Since plan 1B Task 7 a version-1
+    // account is told the terms changed, and each text's link sits in what changed, before its box.
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(LEGAL_COPY.changes.heading);
     await expect(page.getByRole('checkbox')).toHaveCount(3);
     for (const kind of ACCEPTED_KINDS) {
       const { version, publishedOn } = currentLegalText(kind);
       expect(version, `${kind}: a text later than version 1 is current`).not.toBe('1');
       await expect(page.locator(`#accept-${kind}-hint`)).toContainText(`Version ${version}, published`);
       expect(publishedOn).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-      await expect(page.locator(`#accept-${kind}-hint a`)).toHaveAttribute('href', `/legal/${kind}/${version}`);
+      await expect(page.getByRole('link', { name: new RegExp(`^${LEGAL_COPY.changes.readFull(LEGAL_KIND_NAMES[kind])}`) })).toHaveAttribute('href', `/legal/${kind}/${version}`);
       await expect(page.getByLabel(ACCEPT_LABEL[kind], { exact: true })).not.toBeChecked();
     }
     // The version-1 rows alone do not open the app: nothing was recorded for the new texts.
@@ -132,7 +134,8 @@ test.describe('version 2 of the terms, the privacy notice and the consent to sto
     await expect(page).toHaveURL(/\/acceptances$/);
     // The way back is the one the form itself takes after a refused save (lib/question/saveOutcome.ts navigationForOutcome).
     await page.goto(`/acceptances?callbackUrl=${encodeURIComponent(question)}`);
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText(ACCEPTANCES_COPY.legend);
+    // A version-1 account: S-05 says the terms changed (plan 1B Task 7).
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(LEGAL_COPY.changes.heading);
 
     // The save itself is refused by the server, whatever the page does: 403 acceptances_required, nothing written.
     const refused = await page.request.post(`/api/v1/orgs/${fx.org.slug}/projects/${id}/decisions`, { data: {
