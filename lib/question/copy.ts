@@ -81,6 +81,11 @@ export const QUESTION_COPY = Object.freeze({
      * holds the two equal.
      */
     allQuestionsInStage: 'All questions in this stage',
+    /**
+     * Under the column's heading and the stage's meaning (lane 1 Task 2). The sketch's "Each stop is a question. Go to any
+     * one." uses a word the interface never says (spec principle 4); this is the nearest true sentence, listed for the owner.
+     */
+    routeIntro: 'Each mark is a question. Open any one.',
   }),
   /** The history page of a question and components/decision/DecisionHistoryList.tsx (copy audit B rows 21 to 25, 185 to 197). */
   history: Object.freeze({

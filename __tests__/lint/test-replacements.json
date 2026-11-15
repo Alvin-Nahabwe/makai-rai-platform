@@ -2150,5 +2150,21 @@
     "property": "The in-page link down to the suggestions shows exactly while the guidance (and the suggestions in it) is not beside the form, is a target of at least 24 by 24 pixels, and keeps a visible focus ring; it is hidden by the same media query that puts the guidance beside the form in components/question/workspace.css.",
     "proof": "With the route column (owner's decision of 14 November 2026) the guidance sits beside the form only from 90rem; from 72.5rem to under 90rem it is below the form. The case now requires `@media (width >= 90rem) { .question-content__jump { display: none;` in QuestionContent.css and the same query in workspace.css opening the three-column grid (`grid-template-columns: minmax(16rem, 1fr) minmax(0, 2fr) minmax(16rem, 1fr); grid-template-areas: \"route main guide\";`), in place of the 72.5rem pair; the 24 px, focus-ring, colour-role and no-75rem expectations are unchanged. Seen RED on the old pattern after the CSS moved to 90rem, GREEN with the new one; e2e/question-frame.spec.ts sees the link visible at 1160 and hidden at 1440.",
     "task": "lane 7 part 2 (the route column on the question page)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/integration/decision-pages.test.ts::FR-DEC-06 (screen): a new project's stage shows every question as No decision and the W-2 empty line",
+    "replacedBy": "__tests__/integration/decision-pages.test.ts::FR-DEC-06 (screen): a new project's stage shows every question as No decision and the W-2 empty line",
+    "property": "On a new project's stage page every question reads No decision, once per question, beside the stage's count, its topics and each topic's count line.",
+    "proof": "One expectation's pattern changes and none is removed: the count of `>No decision<` becomes the count of `class=\"status-label\">No decision<`. Lane 1 Task 2 (owner's answer R1) draws each question as a row of the route's line: the kit's StatusMark sits on the line inside an aria-hidden node with its words visually hidden, and the status is read once, in words, in the row's meta line as `<span class=\"status-label\">`. The old pattern now also counts the mark's hidden words, so it would read 48 for 24 questions; the new one counts the words a person reads, one per question, and still equals STAGE_QUESTION_COUNT. The other expectations of the case (the empty line, the count, the topic heading with its count line, the topics line) are unchanged. __tests__/unit/stage-route.test.tsx::each row shows its StatusMark with words and its code after the question in words; no \"v3\" or other version number holds the mark and the status label per row.",
+    "task": "1B-route-L1-T2"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/integration/decision-pages.test.ts::FR-DEC-06 (screen): with a decision recorded the empty line goes and the row shows its status and version",
+    "replacedBy": "__tests__/integration/decision-pages.test.ts::FR-DEC-06 (screen): with a decision recorded the empty line goes and the row shows its status and version",
+    "property": "With a decision recorded, the empty line goes and Q-PP-01's row shows its status in words (Partly) followed by its decided-on date (Oct 2026).",
+    "proof": "One expectation's pattern changes and none is removed: `class=\"ui-mark__words\">Partly</span>[\\s\\S]*?class=\"ui-plate__state\">Oct 2026<` becomes `class=\"status-label\">Partly</span> · Oct 2026<`. The row is no longer the kit's ItemPlate (lane 1 Task 2, owner's answer R1: each question a row on the route's line); its meta line is the code, the status in words in a status-label, then the state parts joined by ' · ', the decided-on date first. The new pattern is stricter: the date must follow the status directly. __tests__/unit/stage-route.test.tsx::the state line: the decided-on date, \"{n} of {m} in place\", open findings only above zero, the seal and good-practice markers, with no leading separator holds the whole meta line.",
+    "task": "1B-route-L1-T2"
   }
 ]

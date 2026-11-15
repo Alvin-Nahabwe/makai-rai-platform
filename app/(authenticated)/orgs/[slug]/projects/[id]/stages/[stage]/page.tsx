@@ -5,18 +5,19 @@ import { requireIdentity } from '@/lib/auth/identity';
 import { requireOrgContextFor } from '@/lib/auth/context';
 import { isStageFilter, moduleGroups, STAGE_TITLE, type StageFilter } from '@/lib/question/stageList';
 import { loadStagePage, type StagePageData } from '@/lib/question/stagePage';
-import { stageFilterSet, stopsOf, tallyOfRows } from '@/lib/question/route';
-import { questionHref } from '@/lib/question/draft';
+import { stageFilterSet, tallyOfRows, tallyParts } from '@/lib/question/route';
 import { LIST_PAGE_SIZE, pageOf } from '@/lib/ui/showMore';
 import { ArchivedBanner } from '@/components/project/ArchivedBanner';
 import { StageSealBanner } from '@/components/review/StageSealBanner';
-import { StageFollowUpCounts } from '@/components/followup/StageFollowUpCounts';
 import { StageQuestionList } from '@/components/decision/StageQuestionList';
-import { RouteRow } from '@/components/ui/RouteRow';
+import { StageMeaning } from '@/components/question/StageMeaning';
+import { Breadcrumb } from '@/components/ui/Breadcrumb';
+import { MarkShape } from '@/components/ui/StatusMark';
 import { ShowMoreLink } from '@/components/ui/ShowMoreLink';
 import { QUESTION_COPY } from '@/lib/question/copy';
 import { STAGE_LIST_COPY } from '@/lib/question/list/copy';
 import { ListLink } from '@/components/ui/ListLink';
+import { PROJECT_COPY } from '@/lib/project/copy';
 import { STAGES, type Stage } from '@/types/record';
 import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
@@ -79,32 +80,42 @@ export function StageWorkspace({ data, show, shown }: { data: StagePageData; sho
   const base = `/orgs/${data.orgSlug}/projects/${data.projectId}`;
   // The counts and options, and the RE-4 rule for the changed filter: lib/question/route.ts, shared with the question page's column.
   const { counts, filters, sealNumber } = stageFilterSet(data.rows, data.changed);
-  const noDecision = counts.no_decision;
   const page = pageOf(data.rows, shown, LIST_PAGE_SIZE);
+  const { openFindings, overdueMitigations } = data.followUp;
+  const F = PROJECT_COPY.followUpCounts;
   return (
-    <div className="page-content">
+    <div className="page-content stage-route">
       <ArchivedBanner archived={data.projectArchived} />
-      <p><ListLink href={base}>{data.projectName}</ListLink></p>
+      <Breadcrumb items={[{ label: data.projectName, href: base }, { label: STAGE_TITLE[data.stage] }]} />
       <h1>{STAGE_TITLE[data.stage]}</h1>
-      {/* W-2's subtitle: the stage's topics, in module order. */}
-      <p className="text-muted">{QUESTION_COPY.stage.topics(moduleGroups(data.rows).map((g) => g.moduleTitle))}</p>
-      <p data-stage-summary>{STAGE_LIST_COPY.summary(data.rows.length, noDecision)}</p>
-      {/* Spec 7.2: the whole stage as a row of marks, every question (not the page the list shows), with its tally. */}
-      <div className="stage-route__marks">
-        <RouteRow
-          label={QUESTION_COPY.stage.routeLabel}
-          stops={stopsOf(data.rows, data.marks, (q) => questionHref(data, q), undefined, data.scopeAnswer)}
-          tally={tallyOfRows(data.rows, data.marks)}
-        />
+      {/* D1: the stage's name with its plain meaning. Then W-2's subtitle: the stage's topics, in module order. */}
+      <StageMeaning stage={data.stage} />
+      <p className="stage-route__topics">{QUESTION_COPY.stage.topics(moduleGroups(data.rows).map((g) => g.moduleTitle))}</p>
+      {/* Spec 7.2: the whole stage's tally in words, each kind beside its mark (every question, not the page the list shows). */}
+      <div className="stage-route__tally">
+        <p className="stage-route__count" data-stage-summary="">{STAGE_LIST_COPY.count(data.rows.length)}</p>
+        <ul className="stage-route__tally-parts" role="list">
+          {tallyParts(tallyOfRows(data.rows, data.marks)).map((t) => (
+            <li key={t.kind} className="stage-route__tally-part" data-mark-kind={t.kind}><MarkShape kind={t.kind} size={16} />{t.words}</li>
+          ))}
+        </ul>
       </div>
-      <StageFollowUpCounts orgSlug={data.orgSlug} projectId={data.projectId} stage={data.stage} counts={data.followUp} />
+      {/* The follow-up counts as links, each only above zero (plan 1C Task 3): the findings list and the stage's follow-up. */}
+      {openFindings > 0 || overdueMitigations > 0 ? (
+        <p className="stage-route__followup">
+          {openFindings > 0 ? <ListLink href={`${base}/findings`}>{`${openFindings} ${openFindings === 1 ? F.openFinding : F.openFindings}`}</ListLink> : null}
+          {overdueMitigations > 0 ? (
+            <ListLink href={`${base}#${data.stage}`}>{`${overdueMitigations} ${overdueMitigations === 1 ? F.overdueMitigation : F.overdueMitigations}`}</ListLink>
+          ) : null}
+        </p>
+      ) : null}
       {data.nothingRecorded
         ? <p>{QUESTION_COPY.stage.nothingRecorded}</p>
         : null}
       {data.changed !== null && data.review !== null ? (
         // W-2: "<review name>: changed since seal N in M questions. [Open review >]"; the banner prints all but the name.
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', alignItems: 'baseline' }}>
-          <strong>{QUESTION_COPY.stage.reviewName(data.review.name)}</strong>
+        <div className="stage-route__seal">
+          <strong>{QUESTION_COPY.stage.reviewName(data.review.name)}</strong>{' '}
           <StageSealBanner changed={data.changed} reviewHref={`${base}/reviews/${data.review.id}`} />
         </div>
       ) : null}
