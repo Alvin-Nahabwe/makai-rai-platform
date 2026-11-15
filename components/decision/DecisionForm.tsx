@@ -423,6 +423,10 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
     const bar = saveBar.current;
     const view = bar === null ? { top: 0, bottom: document.documentElement.clientHeight } : scrollerView(cardScroller(bar));
     const inPinnedRow = bar !== null && bar.contains(el) && getComputedStyle(bar).position === 'sticky';
+    // T10: while the sticky row is pinned, scrolling its scroller cannot move it (it is held at the scroller's foot); it
+    // only moves the card under a press on Save, and the press is lost. That happened when a box above the page frame (the
+    // offline notice) pushed the frame's foot, row and all, below the window's: the button's foot was past the window's.
+    if (inPinnedRow && pinnedBar(bar)) return;
     const foot = inPinnedRow ? view.bottom : footOfView();
     if (r.top >= view.top && r.bottom <= foot) return;
     el.scrollIntoView?.({ block: 'nearest', behavior: 'instant' });
