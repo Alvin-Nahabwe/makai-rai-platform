@@ -256,10 +256,9 @@ describe('every stylesheet reads the font variable the layout defines with a fal
   // app/global-error.tsx renders its own <html> without the font class. It loads none of this stylesheet today
   // (only app/layout.tsx imports it), but a page of that kind that did, or a second root layout, would leave the
   // variable unset, so every use keeps its fallback.
-  it('app/globals.css: --font-family reads --font-overpass with a valid fallback, and --font-display is the same family', () => {
+  it('app/globals.css: --font-family reads --font-overpass with a valid fallback', () => {
     const css = readFileSync(join(process.cwd(), 'app', 'globals.css'), 'utf8');
     expect(css).toMatch(/--font-family:\s*var\(--font-overpass,\s*system-ui\),/);
-    expect(css).toMatch(/--font-display:\s*var\(--font-family\);/);
   });
 
   it('no .css file under app or components reads a font variable without its fallback, or one of the retired families', () => {

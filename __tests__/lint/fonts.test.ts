@@ -12,7 +12,7 @@ import { execFileSync } from 'node:child_process';
  *  - no stylesheet asks for another one, whether it writes a number, a
  *    keyword or a `var(--font-weight-*)` token. Tokens are resolved against the
  *    `:root` block of app/globals.css, so a stylesheet that still says
- *    `var(--font-weight-medium)` is held to what that token now means.
+ *    `var(--font-weight-medium)` was held to what that token meant (the semibold role); Task 21 deleted the name.
  */
 
 const ALLOWED = new Set([400, 600, 700]);

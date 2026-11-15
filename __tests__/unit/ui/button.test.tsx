@@ -10,6 +10,31 @@ const CSS = readFileSync('components/ui/Button.css', 'utf8').replace(/\/\*[\s\S]
 const rules = [...CSS.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(([, selector, body]) => ({ selector: selector.trim(), body }));
 
 describe('Button', () => {
+  it('S4-6: the secondary button draws its label and border in the heading role, which is the link colour in light and the bright ink in dark', () => {
+    const secondary = rules.find((r) => r.selector === '.ui-button--secondary')!.body;
+    expect(secondary).toMatch(/border-color:\s*var\(--color-heading\)/);
+    expect(secondary).toMatch(/(?<![-\w])color:\s*var\(--color-heading\)/);
+    expect(rules.find((r) => r.selector === '.ui-button--secondary:hover')!.body).toMatch(/(?<![-\w])color:\s*var\(--color-heading\)/);
+    // Light is unchanged: the heading and link roles are the same navy there. Dark: the heading role is the bright ink.
+    const globals = readFileSync('app/globals.css', 'utf8');
+    const block = (selector: string) => {
+      const at = globals.indexOf(`${selector} {`);
+      expect(at, selector).toBeGreaterThanOrEqual(0);
+      return globals.slice(at, globals.indexOf('}', at));
+    };
+    const value = (b: string, name: string) => new RegExp(`--color-${name}:\\s*(#[0-9A-Fa-f]{6})`).exec(b)?.[1];
+    const light = block(':root');
+    expect(value(light, 'heading')).toMatch(/^#/);
+    expect(value(light, 'heading')).toBe(value(light, 'link'));
+    for (const dark of [block(":root:not([data-theme='light'])"), block(":root[data-theme='dark']")]) {
+      expect(value(dark, 'heading')).toMatch(/^#/);
+      expect(value(dark, 'heading')).toBe(value(dark, 'ink'));
+      // The enabled label is not the disabled one's muted ink.
+      expect(value(dark, 'heading')).not.toBe(value(dark, 'ink-muted'));
+      expect(value(dark, 'heading')).not.toBe(value(dark, 'link'));
+    }
+  });
+
   it('with no icon and not busy, the label is the button\'s direct text, with no wrapper element', () => {
     const html = renderToStaticMarkup(<Button variant="secondary">Save my version</Button>);
     expect(html).toMatch(/<button[^>]*>Save my version<\/button>/);

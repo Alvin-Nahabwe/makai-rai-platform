@@ -642,9 +642,9 @@
 }
 
 .shell-project__stage--current .shell-project__state {
-  /* The shell ink. Lane 7's peach role token for this line (the coordinator's ruling reversing D12) is read here once its
-     merge defines it in globals.css: a read of an undefined name fails the legacy-tokens lint (review I1). */
-  color: var(--color-shell-ink);
+  /* Peach (--color-on-shell-accent, #F4B983 in both themes, only on the navy shell; the coordinator's ruling reversing
+     D12), the shell ink as a fallback. */
+  color: var(--color-on-shell-accent, var(--color-shell-ink));
   font-weight: var(--font-weight-semibold);
 }
 

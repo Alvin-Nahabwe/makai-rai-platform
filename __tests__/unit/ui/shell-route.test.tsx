@@ -434,8 +434,8 @@ describe('fix round 4: the footer in the content column (D23, coordinator\'s opt
     expect(html).toMatch(/<span class="shell-theme__to-dark"><svg[^>]*aria-hidden="true"[\s\S]*?<\/svg><span class="shell-theme__label">Switch to dark theme<\/span><\/span>/);
   });
 
-  it('I1: the shell reads no variable that globals.css does not define (lane 7\'s on-shell accent comes with its own merge)', () => {
-    expect(css).not.toMatch(/--color-on-shell-accent/);
-    expect(ruleIn(css, '.shell-project__stage--current .shell-project__state')).toMatch(/color: var\(--color-shell-ink\);/);
+  it('I1: the shell reads --color-on-shell-accent, which globals.css defines, with the shell ink as its fallback', () => {
+    expect(readFileSync('app/globals.css', 'utf8')).toMatch(/--color-on-shell-accent:\s*#F4B983;/);
+    expect(ruleIn(css, '.shell-project__stage--current .shell-project__state')).toMatch(/color: var\(--color-on-shell-accent, var\(--color-shell-ink\)\);/);
   });
 });

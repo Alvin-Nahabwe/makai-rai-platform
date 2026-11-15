@@ -6,10 +6,13 @@ import type { Stage } from '@/types/record';
  * 'use client' imports it (ruling X-2); the form's words are lib/project/form/copy.ts, Archive's and Unarchive's
  * lib/project/write/copy.ts.
  */
-/** The archived banner's sentence, split around the words that link to All projects (lane 1's design review S5-1). */
+/**
+ * The archived banner's sentence, split around the words that link to the organisation's projects (lane 1's design review
+ * S5-1). The link says "Projects page", the page's own heading (owner's ruling of 15 Nov 2026 18:28).
+ */
 const ARCHIVED_BANNER = Object.freeze({
   before: 'This project is archived. Nothing in it can be changed. An Owner or Admin can unarchive it on the ',
-  link: 'All projects page',
+  link: 'Projects page',
   after: '.',
 });
 

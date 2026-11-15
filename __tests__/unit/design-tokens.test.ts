@@ -67,17 +67,9 @@ function declarationsOf(body: string): Record<string, string> {
   return out;
 }
 
-/** Names defined inside the `LEGACY ALIASES` block of :root (raw source, the comment marks its start). */
-function legacyNames(raw: string): string[] {
-  const start = raw.indexOf('/* LEGACY ALIASES');
-  if (start === -1) return [];
-  const end = raw.indexOf('}', start);
-  return Object.keys(declarations(raw.slice(start, end + 1)));
-}
-
 /** The colour roles of the plan's token table. Every dark block defines each one. */
 const COLOUR_ROLES = [
-  'shell', 'shell-ink', 'shell-muted', 'shell-hover', 'action', 'action-hover', 'on-action', 'action-text', 'selected',
+  'shell', 'shell-ink', 'shell-muted', 'shell-hover', 'on-shell-accent', 'action', 'action-hover', 'on-action', 'action-text', 'selected',
   'ground', 'surface', 'tint', 'ink', 'ink-muted', 'heading', 'link', 'border-container', 'border-control',
   'saved', 'saved-tint', 'overdue', 'mark', 'focus',
 ].map((r) => `--color-${r}`);
@@ -190,6 +182,15 @@ describe('design tokens', () => {
     }
   });
 
+  it('R7 (the sketch\'s "You are here"): the peach on the rail is #F4B983 in every theme and holds 4.5:1 on the shell and its hover', () => {
+    for (const theme of THEMES) {
+      for (const bg of ['color-shell', 'color-shell-hover']) {
+        expect(contrast(theme, 'color-on-shell-accent', bg), `on-shell-accent on ${bg}, ${theme}`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+    for (const block of [ROOT, DARK_MEDIA, DARK_ATTR]) expect(block['--color-on-shell-accent']?.toUpperCase()).toBe('#F4B983');
+  });
+
   it('1A: the colour roles of spec 7.1 hold their exact light values', () => {
     const spec: Record<string, string> = {
       '--color-shell': '#1A1F36', '--color-action': '#9A4D10', '--color-ground': '#F2F4F8', '--color-surface': '#FFFFFF',
@@ -199,12 +200,9 @@ describe('design tokens', () => {
     for (const [token, hex] of Object.entries(spec)) expect(ROOT[token]?.toUpperCase(), token).toBe(hex);
   });
 
-  it('1A: each dark block defines every colour role and no legacy name', () => {
-    const legacy = legacyNames(readFileSync('app/globals.css', 'utf8'));
-    expect(legacy.length).toBeGreaterThan(20);
+  it('1A: each dark block defines every colour role', () => {
     for (const [label, block] of [['media', DARK_MEDIA], ['attribute', DARK_ATTR]] as const) {
       for (const role of COLOUR_ROLES) expect(block[role], `dark (${label}) defines ${role}`).toBeDefined();
-      expect(Object.keys(block).filter((k) => legacy.includes(k)), `dark (${label}) legacy names`).toEqual([]);
     }
   });
 
@@ -238,45 +236,21 @@ describe('design tokens', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('1A: the legacy block is in :root and is marked for deletion', () => {
-    expect(readFileSync('app/globals.css', 'utf8')).toContain('/* LEGACY ALIASES: deleted by Task 21 */');
-  });
-
-  it('UX-33 NFR-A11Y-05 (legacy, until Task 21): the legacy names the rules still read hold the minimums the SRS 7.6.3 pairs set', () => {
-    // The 35 role pairs test the new roles; these tie each old name to a role that was tested.
+  it('UX-33 NFR-A11Y-05 (D-1, D-3, D-5, D-6): the field border, link, focus ring and stage label pairs hold their minimums as roles', () => {
+    // The 35 pairs above hold the roles; these are the SRS 7.6.3 pairs the retired legacy names stood for.
     const pairs: Array<[string, string, string, number]> = [
-      ['D-1 field border', 'form-field-border', 'surface-card', 3],
-      ['D-3 link on cards', 'link', 'surface-card', 4.5],
-      ['D-3 link on the page', 'link', 'surface-base', 4.5],
-      ['D-3 focus ring on cards', 'focus-ring', 'surface-card', 3],
-      ['D-3 focus ring on the page', 'focus-ring', 'surface-base', 3],
-      ['D-5 stage label', 'stage-fg', 'stage-bg', 4.5],
-      ['D-6 moderate text', 'tint-moderate-fg', 'tint-moderate-bg', 4.5],
+      ['D-1 field border', 'color-border-control', 'color-surface', 3],
+      ['D-3 link on cards', 'color-link', 'color-surface', 4.5],
+      ['D-3 link on the page', 'color-link', 'color-ground', 4.5],
+      ['D-3 focus ring on cards', 'color-focus', 'color-surface', 3],
+      ['D-3 focus ring on the page', 'color-focus', 'color-ground', 3],
+      ['D-5 stage label', 'color-ink', 'color-tint', 4.5],
+      ['D-6 moderate text', 'color-ink', 'color-tint', 4.5],
     ];
     for (const [id, fg, bg, min] of pairs) {
       for (const theme of THEMES) {
         expect(contrast(theme, fg, bg), `${id} (${fg} on ${bg}), ${theme}`).toBeGreaterThanOrEqual(min);
       }
-    }
-  });
-
-  it('1A: no legacy alias resolves to the overdue red or the saved green, which each mean one thing', () => {
-    const legacy = legacyNames(readFileSync('app/globals.css', 'utf8'));
-    const valueOf = (theme: Theme, name: string): string | undefined => {
-      const tokens = tokensFor(theme);
-      let value = tokens[name];
-      for (let hops = 0; value !== undefined && hops < 10; hops++) {
-        const ref = /^var\((--[\w-]+)\)$/.exec(value);
-        if (!ref) break;
-        value = tokens[ref[1]];
-      }
-      return value?.toUpperCase();
-    };
-    for (const theme of THEMES) {
-      const reserved = new Set([valueOf(theme, '--color-overdue'), valueOf(theme, '--color-saved')]);
-      expect(reserved.has(undefined)).toBe(false);
-      const offenders = legacy.filter((name) => reserved.has(valueOf(theme, name)));
-      expect(offenders, `${theme}: legacy names that resolve to overdue or saved`).toEqual([]);
     }
   });
 
@@ -314,14 +288,14 @@ describe('design tokens', () => {
     // The .form-group field rules are gone from app/globals.css with their last writer (the stage list's filter, now
     // chips): every field is the kit's, whose border the next case pins. The token keeps its pair in the colour case.
     expect(rules(css).flatMap((r) => r.selectors).filter((s) => s.includes('.form-group'))).toEqual([]);
-    expect(ruleFor(css, 'a')).toMatch(/color:\s*var\(--link\)/);
+    expect(ruleFor(css, 'a')).toMatch(/color:\s*var\(--color-link\)/);
     for (const stage of ['pre', 'in', 'post', 'cross']) {
       const rule = ruleFor(css, `.stage-indicator--${stage}`);
-      expect(rule, `.stage-indicator--${stage}`).toMatch(/color:\s*var\(--stage-fg\)/);
-      expect(rule, `.stage-indicator--${stage}`).toMatch(/background-color:\s*var\(--stage-bg\)/);
+      expect(rule, `.stage-indicator--${stage}`).toMatch(/color:\s*var\(--color-ink\)/);
+      expect(rule, `.stage-indicator--${stage}`).toMatch(/background-color:\s*var\(--color-tint\)/);
     }
     // 14 pixels at the 16-pixel root: the label was 12 pixels (D-5).
-    expect(ruleFor(css, '.stage-indicator')).toMatch(/font-size:\s*var\(--font-size-sm\)/);
+    expect(ruleFor(css, '.stage-indicator')).toMatch(/font-size:\s*var\(--font-size-small\)/);
   });
 
   it('UX-33 (D-1, D-2, D-3): the sign-in and reset fields and the links under them follow the same tokens', () => {
@@ -337,15 +311,7 @@ describe('design tokens', () => {
     for (const type of ['text', 'email', 'password']) {
       expect(css, `${type}: no .auth-card field rule is left to outrank the kit`).not.toContain(`.auth-card input[type="${type}"]`);
     }
-    expect(ruleFor(css, '.auth-footer a')).toMatch(/color:\s*var\(--link\)/);
-  });
-
-  it('UX-33 NFR-A11Y-05 (D-3): no rule paints text with --color-primary, which is 2.69:1 on dark cards; text uses --link', () => {
-    // --color-primary stays for backgrounds and borders (a white label on it is fine in both themes).
-    const offenders = rules(css)
-      .filter((r) => /(?<![-\w])color:\s*var\(--color-primary\)/.test(r.body))
-      .map((r) => r.selectors.join(', '));
-    expect(offenders).toEqual([]);
+    expect(ruleFor(css, '.auth-footer a')).toMatch(/color:\s*var\(--color-link\)/);
   });
 
   it('UX-33 (D-2, D-4, D-7): the focus ring stays on form fields, links in running text are underlined, the root font stays 16 pixels', () => {
@@ -375,10 +341,10 @@ describe('design tokens', () => {
 describe('buttons', () => {
   it('UX-33 NFR-A11Y-05: a hovered secondary button reads the page colour on the text colour, and that pair is at least 4.5:1 in every theme', () => {
     const hover = declarationsOf(ruleFor(css, '.btn--secondary:hover'));
-    expect(hover['background-color']).toBe('var(--text-primary)');
-    expect(hover['color']).toBe('var(--surface-base)');
+    expect(hover['background-color']).toBe('var(--color-heading)');
+    expect(hover['color']).toBe('var(--color-ground)');
     for (const theme of THEMES) {
-      expect(contrast(theme, 'surface-base', 'text-primary'), theme).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(theme, 'color-ground', 'color-heading'), theme).toBeGreaterThanOrEqual(4.5);
     }
   });
 });

@@ -3,8 +3,8 @@
     "kind": "removed",
     "deleted": "__tests__/unit/design-tokens.test.ts::UX-33 NFR-A11Y-05: every 7.6.3 token pair meets its minimum in every theme",
     "replacedBy": "__tests__/unit/design-tokens.test.ts::1A NFR-A11Y-05: the 35 colour pairs meet their minimum in light and in both dark blocks",
-    "property": "Each text and non-text colour pair the screens draw holds its WCAG minimum in light and both dark blocks: the new roles (field and control borders >= 3:1, links, stage and tint text >= 4.5:1, focus ring >= 3:1) in the 35 role pairs, and the seven old pairs on the legacy names the rules still read (field border, link, focus ring, stage label, moderate text) in the legacy-pairs case; the phone-menu bar pair (3:1 on the navy) has its own case",
-    "proof": "__tests__/unit/design-tokens.test.ts::1A NFR-A11Y-05: the 35 colour pairs meet their minimum in light and in both dark blocks; __tests__/unit/design-tokens.test.ts::UX-33 NFR-A11Y-05 (legacy, until Task 21): the legacy names the rules still read hold the minimums the SRS 7.6.3 pairs set; __tests__/unit/design-tokens.test.ts::UX-33 NFR-A11Y-05 (legacy, until Task 11): the phone menu button bars hold 3:1 on the navy in every theme",
+    "property": "Each text and non-text colour pair the screens draw holds its WCAG minimum in light and both dark blocks: the new roles (field and control borders >= 3:1, links, stage and tint text >= 4.5:1, focus ring >= 3:1) in the 35 role pairs, and the seven SRS 7.6.3 pairs (field border, link, focus ring, stage label, moderate text), now written as roles, in their own case; the Menu button's text pair (shell ink on the shell navy, 4.5:1) has its own case",
+    "proof": "__tests__/unit/design-tokens.test.ts::1A NFR-A11Y-05: the 35 colour pairs meet their minimum in light and in both dark blocks; __tests__/unit/design-tokens.test.ts::UX-33 NFR-A11Y-05 (D-1, D-3, D-5, D-6): the field border, link, focus ring and stage label pairs hold their minimums as roles; __tests__/unit/design-tokens.test.ts::UX-33 NFR-A11Y-05: the Menu button's text, shell ink on the shell navy, holds 4.5:1 in every theme",
     "task": "1A-1"
   },
   {
@@ -42,9 +42,9 @@
   {
     "kind": "removed",
     "deleted": "__tests__/unit/local-fonts.test.ts::app/globals.css: --font-family and --font-display keep a valid fallback inside their var()",
-    "replacedBy": "__tests__/unit/local-fonts.test.ts::app/globals.css: --font-family reads --font-overpass with a valid fallback, and --font-display is the same family",
-    "property": "globals.css reads the font variable the layout defines with a valid fallback (system-ui) inside the var(); there is one family now, so --font-display is the alias var(--font-family) and no longer carries a serif stack",
-    "proof": "__tests__/unit/local-fonts.test.ts::app/globals.css: --font-family reads --font-overpass with a valid fallback, and --font-display is the same family",
+    "replacedBy": "__tests__/unit/local-fonts.test.ts::app/globals.css: --font-family reads --font-overpass with a valid fallback",
+    "property": "globals.css reads the font variable the layout defines with a valid fallback (system-ui) inside the var(); there is one family now, and the --font-display alias was deleted with the legacy block in Task 21",
+    "proof": "__tests__/unit/local-fonts.test.ts::app/globals.css: --font-family reads --font-overpass with a valid fallback",
     "task": "1A-2"
   },
   {
@@ -3078,6 +3078,30 @@
     "property": "Supersedes the entry of lane 3 task 6 (fix 7), which held only while org A has no active project. The invited person lands on Home with ?welcome=1 and the landing renders the role's own control, which proves the GRANTED role and not only membership: whichever Home variant org A has, the one role-gated control is present for an assessor and a role lacking the permission would see none. Org A is reachable and org B answers 404, as before.",
     "proof": "The control is now matched as either Home variant's link: HOME_COPY.firstTimeCreate (FirstTimeHome, gated project:create) or PROJECT_COPY.start / HOME_COPY.continueRecording (the recorder's Home, gated decision:write), one anchored regular expression, .first(), asserted visible when can('assessor','project:create') && can('assessor','decision:write') and count 0 otherwise. The two variants divide the roles as before, and the case no longer depends on whether earlier specs created a project in org A. The two checks of the case (org A reachable, org B 404) are unchanged.",
     "task": "plan 1B (lane 3 task 7: hand-in fixes, I1)"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/design-tokens.test.ts::UX-33 NFR-A11Y-05 (D-3): no rule paints text with --color-primary, which is 2.69:1 on dark cards; text uses --link",
+    "replacedBy": "__tests__/unit/design-tokens.test.ts::1A (usage): no rule paints text with the action colour, which is a fill; text uses --color-action-text",
+    "property": "No rule of app/globals.css paints text with the action fill colour; text uses the action-text role. Task 21 deleted --color-primary (an alias of --color-action) and --link, so the old case had nothing left to read.",
+    "proof": "__tests__/unit/design-tokens.test.ts::1A (usage): no rule paints text with the action colour, which is a fill; text uses --color-action-text. The case parses every screen rule of app/globals.css (comments and @media print removed) and fails on any rule whose body has `color: var(--color-action)`, listing its selectors.",
+    "task": "1A-21"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/project-page.test.tsx::UX-31 S5-1: the archived banner's words \"All projects page\" link to the organisation's projects, for every role; the sentence is today's",
+    "replacedBy": "__tests__/unit/project-page.test.tsx::UX-31 S5-1: the archived banner's words \"Projects page\" link to the organisation's projects, for every role; the sentence is the owner's ruling of 15 Nov 18:28",
+    "property": "The archived banner's link goes to the organisation's projects, for every role, and the sentence's three parts join to PROJECT_COPY.archivedBanner. The owner ruled on 15 Nov 2026 18:28 that the words are \"Projects page\" (the page's own heading), not \"All projects page\"; the link's target is unchanged.",
+    "proof": "The case now requires the joined parts to equal 'This project is archived. Nothing in it can be changed. An Owner or Admin can unarchive it on the Projects page.' literal for literal, and for each of the five roles the banner body to be before + <a href=\"/orgs/o/projects\">Projects page</a> + after. Only the pinned words and the title change.",
+    "task": "final hand-in item 5 (owner's ruling of 15 Nov 2026 18:28)"
+  },
+  {
+    "kind": "wording",
+    "changed": "__tests__/unit/ui/shell-route.test.tsx::I1: the shell reads no variable that globals.css does not define (lane 7's on-shell accent comes with its own merge)",
+    "replacedBy": "__tests__/unit/ui/shell-route.test.tsx::I1: the shell reads --color-on-shell-accent, which globals.css defines, with the shell ink as its fallback",
+    "property": "Every variable the shell's stylesheet reads is defined by globals.css, and the current stage's state line reads the peach on-shell accent. The accent token is now defined (ADR 0022's exception, lane 7), so the case that pinned the shell ink while the token was missing is reversed, as the coordinator's ruling reversing D12 intended.",
+    "proof": "The case requires app/globals.css to define --color-on-shell-accent as #F4B983 and the rule .shell-project__stage--current .shell-project__state to read color: var(--color-on-shell-accent, var(--color-shell-ink)); the fallback is the shell ink. The legacy-tokens lint's (a) case fails any read of a name globals.css does not define.",
+    "task": "final hand-in item 3 (the shell reads the accent)"
   },
   {
     "kind": "structure",
