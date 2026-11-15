@@ -20,6 +20,13 @@ const F = DECISION_FORM_COPY;
 
 test.beforeEach(async ({ page }) => { failOnDialog(page); });
 
+/** Waits until a saved draft in this browser's storage holds `needle` (the draft write is debounced). */
+async function draftHolds(page: Page, needle: string): Promise<void> {
+  await page.waitForFunction(
+    ([prefix, n]) => Object.keys(localStorage).some((k) => k.startsWith(prefix) && (localStorage.getItem(k) ?? '').includes(n)),
+    ['makrai.draft.v1:', needle] as const, { timeout: 10_000 });
+}
+
 /** Whether the save row is pinned to the screen's foot now, by geometry, and its top. */
 async function bar(page: Page): Promise<{ pinned: boolean; top: number; position: string }> {
   return page.locator('.decision-save-bar').evaluate((el) => {
@@ -330,9 +337,27 @@ test('R6-1: with the kept-evidence box shown on the frame a draft is restored, w
   await page.locator('input[type="file"]').setInputFiles({ name: 'kept-r6.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\nkept r6\n') });
   expect((await reply).status()).toBe(201);
   await expect(page.getByText(/^Uploaded kept-r6\.pdf /)).toBeVisible();
-  await page.waitForTimeout(500); // the draft write is debounced
+  await draftHolds(page, '"evidenceIds":["'); // the draft write is debounced: wait for the draft in storage
   await page.reload(); await waitForQuestionPage(page);
   await expect(page.locator('[data-kept-evidence]')).toBeVisible();
+  expect((await page.locator('.decision-fields').boundingBox())?.height ?? 0, 'the size container is laid out').toBeGreaterThan(0);
+  const done = await page.getByRole('radio', { name: 'Done', exact: true }).boundingBox();
+  const reason = await page.getByLabel(`${F.fields.reason} ${FIELD_COPY.required}`, { exact: true }).boundingBox();
+  expect(done?.height ?? 0, 'Done radio is drawn').toBeGreaterThan(0);
+  expect(reason?.height ?? 0, 'Reason box is drawn').toBeGreaterThan(0);
+});
+
+test('M-r7-1: with the "not uploaded before the page closed" line shown on the frame a draft is restored, wide, the Done radio and the Reason box are drawn', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await actAsSeat(page, 'admin'); await openQuestionIn(page, Q); await fillValid(page);
+  // Hold the upload open so the draft names the file as still moving when the page reloads (M-18).
+  await page.route(/\/evidence$/, () => { /* never answered */ });
+  await page.locator('input[type="file"]').setInputFiles({ name: 'mid-r7.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\nmid r7\n') });
+  await expect(page.getByText(/^Uploading mid-r7\.pdf/)).toBeVisible();
+  await draftHolds(page, '"notUploaded":["');
+  await page.unroute(/\/evidence$/);
+  await page.reload(); await waitForQuestionPage(page);
+  await expect(page.getByText('mid-r7.pdf was not uploaded before the page closed. Choose the file again.')).toBeVisible();
   expect((await page.locator('.decision-fields').boundingBox())?.height ?? 0, 'the size container is laid out').toBeGreaterThan(0);
   const done = await page.getByRole('radio', { name: 'Done', exact: true }).boundingBox();
   const reason = await page.getByLabel(`${F.fields.reason} ${FIELD_COPY.required}`, { exact: true }).boundingBox();
