@@ -119,9 +119,10 @@ for (const role of ['viewer', 'reviewer'] as const) {
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.locator('section[data-region="open-work"]').screenshot({ path: `test-results/reading-view/${role}-1280-open-work.png` });
     await page.locator('[data-region="reading-aside"]').screenshot({ path: `test-results/reading-view/${role}-1280-aside.png` });
+    // Captured with transitions finished: a shot inside the button's 160 ms colour transition reads as a grey, disabled button (lane 7's review of S4-6).
     await page.emulateMedia({ colorScheme: 'dark' });
-    await card.screenshot({ path: `test-results/reading-view/${role}-1280-card-dark.png` });
-    await page.locator('section[data-region="open-work"]').screenshot({ path: `test-results/reading-view/${role}-1280-open-work-dark.png` });
+    await card.screenshot({ path: `test-results/reading-view/${role}-1280-card-dark.png`, animations: 'disabled' });
+    await page.locator('section[data-region="open-work"]').screenshot({ path: `test-results/reading-view/${role}-1280-open-work-dark.png`, animations: 'disabled' });
     await page.emulateMedia({ colorScheme: 'light' });
     await page.setViewportSize({ width: 375, height: 812 });
     await page.locator('section[data-region="open-work"]').screenshot({ path: `test-results/reading-view/${role}-375-open-work.png` });
