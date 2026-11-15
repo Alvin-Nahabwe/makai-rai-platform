@@ -121,7 +121,7 @@
   margin-block-end: 2px;
   color: var(--color-action-text);
   font-size: var(--font-size-small);
-  font-weight: 800;
+  font-weight: var(--font-weight-bold);
   line-height: 1.3;
 }
 
