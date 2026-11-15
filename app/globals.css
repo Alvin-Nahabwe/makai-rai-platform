@@ -13,6 +13,7 @@
   --color-shell-ink: #FFFFFF;
   --color-shell-muted: #B7BCD3;
   --color-shell-hover: #262C4A;
+  --color-on-shell-accent: #F4B983; /* "You are here" on the rail: 9.37:1 on the shell, 7.86:1 on shell-hover */
   --color-action: #9A4D10;          /* a fill: never text */
   --color-action-hover: #7F3F0C;
   --color-on-action: #FFFFFF;
@@ -182,6 +183,7 @@
     --color-shell-ink: #ECEEF4;
     --color-shell-muted: #AEB4C4;
     --color-shell-hover: #1E2338;
+    --color-on-shell-accent: #F4B983; /* 11.18:1 on the shell, 8.96:1 on shell-hover */
     --color-action: #9A4D10;
     --color-action-hover: #7F3F0C;
     --color-on-action: #FFFFFF;
@@ -212,6 +214,7 @@
   --color-shell-ink: #ECEEF4;
   --color-shell-muted: #AEB4C4;
   --color-shell-hover: #1E2338;
+  --color-on-shell-accent: #F4B983; /* 11.18:1 on the shell, 8.96:1 on shell-hover */
   --color-action: #9A4D10;
   --color-action-hover: #7F3F0C;
   --color-on-action: #FFFFFF;

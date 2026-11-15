@@ -77,7 +77,7 @@ function legacyNames(raw: string): string[] {
 
 /** The colour roles of the plan's token table. Every dark block defines each one. */
 const COLOUR_ROLES = [
-  'shell', 'shell-ink', 'shell-muted', 'shell-hover', 'action', 'action-hover', 'on-action', 'action-text', 'selected',
+  'shell', 'shell-ink', 'shell-muted', 'shell-hover', 'on-shell-accent', 'action', 'action-hover', 'on-action', 'action-text', 'selected',
   'ground', 'surface', 'tint', 'ink', 'ink-muted', 'heading', 'link', 'border-container', 'border-control',
   'saved', 'saved-tint', 'overdue', 'mark', 'focus',
 ].map((r) => `--color-${r}`);
@@ -188,6 +188,15 @@ describe('design tokens', () => {
         expect(contrast(theme, fg, bg), `${name} (${fg} on ${bg}), ${theme}`).toBeGreaterThanOrEqual(min);
       }
     }
+  });
+
+  it('R7 (the sketch\'s "You are here"): the peach on the rail is #F4B983 in every theme and holds 4.5:1 on the shell and its hover', () => {
+    for (const theme of THEMES) {
+      for (const bg of ['color-shell', 'color-shell-hover']) {
+        expect(contrast(theme, 'color-on-shell-accent', bg), `on-shell-accent on ${bg}, ${theme}`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+    for (const block of [ROOT, DARK_MEDIA, DARK_ATTR]) expect(block['--color-on-shell-accent']?.toUpperCase()).toBe('#F4B983');
   });
 
   it('1A: the colour roles of spec 7.1 hold their exact light values', () => {
