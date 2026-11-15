@@ -5,7 +5,7 @@
  */
 export const AUTHZ_COPY = Object.freeze({
   decisionFormNote: Object.freeze({
-    reviewer: 'Only Owners, Admins and Assessors can record decisions. You can read them and raise a finding.',
-    viewer: 'Only Owners, Admins and Assessors can record decisions. You can read them.',
+    reviewer: 'You can read this record and raise a finding. Owners, admins and assessors can change it.',
+    viewer: 'You can read this record. Owners, admins and assessors can change it.',
   }),
 });
