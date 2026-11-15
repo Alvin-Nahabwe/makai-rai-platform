@@ -19,7 +19,6 @@ import { IDLE_TEXTS } from '@/lib/auth/session/copy';
 import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
-import './idle.css';
 
 /** Why the session ended, as the clock tells it; null when the server ended it before either deadline. */
 export type EndedReason = 'idle' | 'absolute' | null;
@@ -44,8 +43,7 @@ export function IdleEndedNotice({ signInHref, reason }: { signInHref: string; re
   return (
     <div role="alert" className="shell-idle__ended">
       <Banner kind="session" action={<a href={signInHref}>{IDLE_TEXTS.signInAgain}</a>}>
-        <p>{why}</p>
-        <p>{IDLE_TEXTS.endedKept}</p>
+        <p>{why} {IDLE_TEXTS.endedKept}</p>
       </Banner>
     </div>
   );
@@ -262,11 +260,9 @@ export default function IdleWarning({
           </Button>
         }
       >
-        <div className="shell-idle__body">
-          <p>{IDLE_TEXTS.warningBody}</p>
-          <p>{IDLE_TEXTS.warningKept}</p>
-          {failed ? <p role="alert" className="shell-idle__failed">{IDLE_TEXTS.stayFailed}</p> : null}
-        </div>
+        {/* One paragraph, so no stylesheet of its own: this component is in every page's first visit, S-04's too. */}
+        <p>{IDLE_TEXTS.warningBody} {IDLE_TEXTS.warningKept}</p>
+        {failed ? <p role="alert" className="shell-idle__failed">{IDLE_TEXTS.stayFailed}</p> : null}
       </Dialog>
     </div>
   );

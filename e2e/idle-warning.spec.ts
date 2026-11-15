@@ -215,7 +215,7 @@ test.describe('idle-sign-out warning on the 12-hour server', () => {
       const notice = page.getByRole('alert').filter({ hasText: ENDED });
       await expect(notice).toBeVisible(SHORT);
       // The server ended it before the deadline (the cookies were cleared): the clock cannot say why, so no reason is given.
-      await expect(notice).toHaveText(`${IDLE_TEXTS.endedElsewhere}${ENDED}${IDLE_TEXTS.signInAgain}`);
+      await expect(notice).toHaveText(`${IDLE_TEXTS.endedElsewhere} ${ENDED}${IDLE_TEXTS.signInAgain}`);
       const link = notice.getByRole('link', { name: IDLE_TEXTS.signInAgain });
       await expect(link).toHaveAttribute('href', `/login?callbackUrl=${encodeURIComponent(path)}`);
       expect(page.url()).toContain(path);
@@ -568,7 +568,7 @@ test.describe('idle-sign-out warning on the seam server (MAKRAI_TEST_IDLE_SECOND
       await page.waitForTimeout(Math.max(0, expires * 1000 + 5_000 - Date.now())); // real time, no request
       await expect(page.getByRole('dialog')).toHaveCount(0, SHORT);
       const notice = page.getByRole('alert').filter({ hasText: IDLE_TEXTS.endedIdle });
-      await expect(notice).toHaveText(`${IDLE_TEXTS.endedIdle}${ENDED}${IDLE_TEXTS.signInAgain}`, SHORT);
+      await expect(notice).toHaveText(`${IDLE_TEXTS.endedIdle} ${ENDED}${IDLE_TEXTS.signInAgain}`, SHORT);
       await expect(page.locator('main')).toBeVisible(); // the page stays as it was, behind no modal
       expect(await page.evaluate(() => document.querySelector('main')?.closest('[inert]') !== null)).toBe(false);
 
