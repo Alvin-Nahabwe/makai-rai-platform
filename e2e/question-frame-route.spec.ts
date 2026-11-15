@@ -133,10 +133,12 @@ async function fullTally(page: Page, baseURL: string, info: TestInfo, label: str
     const gap = parseFloat(getComputedStyle(tally).columnGap);
     const tallyNeeds = Math.round(items.reduce((w, li) => w + li.getBoundingClientRect().width, 0) + gap * (items.length - 1));
     const lineTops = new Set(items.map((li) => Math.round(li.getBoundingClientRect().top)));
+    // An item broken across rows would be taller than one line (each is one 24px unit).
+    const splitItems = items.filter((li) => li.getBoundingClientRect().height > 30).length;
     const r = (el: Element) => el.getBoundingClientRect();
     return {
       stripWidth: Math.round(r(strip).width), stripTop: Math.round(r(strip).top), stripBottom: Math.round(r(strip).bottom),
-      tallyNeeds, tallyHas: Math.round(tally.clientWidth), tallyRows: lineTops.size, tallyHeight: Math.round(r(tally).height),
+      tallyNeeds, tallyHas: Math.round(tally.clientWidth), tallyRows: lineTops.size, tallyHeight: Math.round(r(tally).height), splitItems,
       crumbsWidth: Math.round(r(crumbs).width), followWidth: Math.round(r(follow).width),
       crumbsRowTop: Math.round(r(crumbs).top), followTop: Math.round(r(follow).top), tips: strip.querySelectorAll('.ui-term-tip__button').length,
     };
@@ -167,7 +169,7 @@ async function seedEveryKind(baseURL: string, name?: string): Promise<string> {
   return projectId;
 }
 
-test('fix rounds 1-2 (I1, N1, owner 11:00): the full tally with every (i) at 1280x800 and 1440x900, and long project names at 1280: the strip\'s rows and the slot', async ({ page, baseURL }, info) => {
+test('fix rounds 1-2 (I1, N1, owners 11:00 and 12:28): the full tally with every (i): one row at 1440, at most two at 1280 and 1160 breaking only between items; long project names at 1280 keep the breadcrumb one line', async ({ page, baseURL }, info) => {
   const results: Record<string, Awaited<ReturnType<typeof fullTally>>> = {};
   const projectId = await seedEveryKind(baseURL!);
   for (const [w, h] of [[1280, 800], [1440, 900], [1160, 800]] as const) {
@@ -179,7 +181,8 @@ test('fix rounds 1-2 (I1, N1, owner 11:00): the full tally with every (i) at 128
     results[`${w}x${h}`] = await fullTally(page, baseURL!, info, `${w}x${h}`);
     await shot(page, info, `full-tally-${w}x${h}`);
   }
-  // N1: project names of 60 and 200 characters (the limit) at 1280: the breadcrumb stays one line, cut with an ellipsis.
+  // N1: project names of 60 and 200 characters (the limit) at 1280: the breadcrumb stays one line, cut with an ellipsis,
+  // so the slot is where it is with the fixture's short name.
   for (const length of [60, 200]) {
     const name = `Antenatal Risk Triage Model ${'for the fourteen centres of the region '.repeat(6)}`.slice(0, length - 6).trimEnd().padEnd(length - 6, 's')
       + ` ${String(Date.now()).slice(-5)}`;
@@ -193,15 +196,19 @@ test('fix rounds 1-2 (I1, N1, owner 11:00): the full tally with every (i) at 128
     results[`1280x800-name${length}`] = await fullTally(page, baseURL!, info, `1280x800-name${length}`);
     const crumbs = await box(page.locator('.question-top .ui-breadcrumb'));
     expect(crumbs.height, `the breadcrumb is one line with a ${length}-character name`).toBeLessThanOrEqual(30);
-    expect(results[`1280x800-name${length}`].slotTop, `slot with a ${length}-character name`).toBeLessThanOrEqual(230);
+    expect(results[`1280x800-name${length}`].slotTop, `slot with a ${length}-character name`).toBe(results['1280x800'].slotTop);
     await shot(page, info, `full-tally-1280x800-name${length}`);
   }
-  const r1280 = results['1280x800'];
-  // Every (i): two follow-up counts, five defined status words and the personal data question.
-  expect(r1280.tips).toBe(8);
-  expect(r1280.tallyRows, `the tally needs ${r1280.tallyNeeds}px of ${r1280.tallyHas}px at 1280`).toBe(1);
-  expect(r1280.followTop, 'the follow-up counts are on the breadcrumb\'s row').toBeLessThanOrEqual(r1280.crumbsRowTop + 4);
-  expect(r1280.slotTop, `the decision slot starts at ${r1280.slotTop}px at 1280x800`).toBeLessThanOrEqual(230);
+  // The owner's ruling of 12:28 (option a): one row from 1440; below it at most two rows, breaking only between items.
+  expect(results['1280x800'].tips, 'every (i): two counts, five status words, the personal data question').toBe(8);
+  expect(results['1440x900'].tallyRows, 'one row at 1440').toBe(1);
+  for (const key of ['1280x800', '1160x800']) {
+    expect(results[key].tallyRows, `${key}: at most two rows`).toBeLessThanOrEqual(2);
+    expect(results[key].splitItems, `${key}: no item broken across rows`).toBe(0);
+  }
+  expect(results['1280x800'].followTop, 'the follow-up counts are on the breadcrumb\'s row').toBeLessThanOrEqual(results['1280x800'].crumbsRowTop + 4);
+  // Recorded for lane 2 (the card is sized from it): about 250px at 1280x800 with the full tally on two rows.
+  expect(results['1280x800'].slotTop, `the decision slot starts at ${results['1280x800'].slotTop}px at 1280x800`).toBeLessThanOrEqual(260);
 });
 
 test('R4: the top strip at 1280 is one line of breadcrumb and one of tally, with the follow-up counts as links and their definitions one press away', async ({ page, baseURL }, info) => {

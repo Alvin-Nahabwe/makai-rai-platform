@@ -42,12 +42,20 @@ export type QuestionTopStripProps = {
 };
 
 /** One count of the follow-up: a link with its term marked, the link described by the term's definition, then its (i). */
-function FollowUpCount({ href, words, of, className, icon }: {
+function FollowUpCount({ href, words, of, className, icon, red }: {
   href: string; words: string; of: typeof TERM_FINDING | typeof TERM_MITIGATION; className?: string; icon?: ReactNode;
+  /** A word inside `words` drawn in the overdue red (spec 7.1: red only on the word "overdue" and the clock). */
+  red?: string;
 }): ReactElement {
+  let text: ReactNode = words;
+  if (red !== undefined) {
+    const at = words.indexOf(red);
+    if (at < 0) throw new Error(`QuestionTopStrip: "${words}" does not hold "${red}"`);
+    text = <>{words.slice(0, at)}<span className="question-top__overdue-word">{red}</span>{words.slice(at + red.length)}</>;
+  }
   return (
     <span className="question-top__count">
-      <Link className={className} href={href} prefetch={false} aria-describedby={termTipIds(of).definition}>{icon}<Term of={of}>{words}</Term></Link>
+      <Link className={className} href={href} prefetch={false} aria-describedby={termTipIds(of).definition}>{icon}<Term of={of}>{text}</Term></Link>
       <TermTip of={of} label={F.whatIs(of.term)} />
     </span>
   );
@@ -85,7 +93,7 @@ export function QuestionTopStrip({ stage, n, total }: QuestionTopStripProps): Re
           ) : null}
           {overdueMitigations > 0 ? (
             <FollowUpCount of={TERM_MITIGATION} href={`${projectHref}#${stage.stage}`} className="question-top__overdue"
-              icon={<Icon name="clock" size={16} />}
+              icon={<Icon name="clock" size={16} />} red={F.overdueWord}
               words={`${overdueMitigations} ${overdueMitigations === 1 ? C.overdueMitigation : C.overdueMitigations}`} />
           ) : null}
         </p>
@@ -102,7 +110,8 @@ export function QuestionTopStrip({ stage, n, total }: QuestionTopStripProps): Re
             const pd = TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION;
             return (
               <li key={k} className="ui-mark" data-mark-kind={k}>
-                <MarkShape kind={k} size={16} /><b>{count}</b> <Term of={pd}>{F.personalDataAnswered.term}</Term>{F.personalDataAnswered.after}
+                {/* The words in one span: the item is a flex row, whose gap would otherwise open between the term and "answered". */}
+                <MarkShape kind={k} size={16} /><b>{count}</b> <span><Term of={pd}>{F.personalDataAnswered.term}</Term>{F.personalDataAnswered.after}</span>
                 <TermTip of={pd} label={F.whatIsTerm(pd.term)} />
               </li>
             );

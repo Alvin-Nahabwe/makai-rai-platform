@@ -79,7 +79,7 @@ describe('S-12 shell', () => {
     // Lane 1 Task 1: the seal note sits above the decision slot, which holds the decision's regions (its stub until lane 2's
     // card merges); the list of ways teams address this is inside the guidance aside (mocked here), not a section of its own.
     expect([...html.matchAll(/data-region="([a-z-]+)"/g)].map((m) => m[1]))
-      .toEqual(['question', 'seal-note', 'decision-slot', 'current-decision', 'answer-form', 'evidence-block', 'way-on', 'finding-link']);
+      .toEqual(['question', 'seal-note', 'decision-slot', 'current-decision', 'answer-form', 'evidence-block', 'finding-link', 'way-on']);
     // The evidence block is named once, by its fieldset legend (evidence-components.test.tsx), not by a heading of its own.
     expect(html.match(/<section[^>]*aria-labelledby=/g)).toHaveLength(5);
     expect(html).toMatch(/<section data-region="evidence-block">/);

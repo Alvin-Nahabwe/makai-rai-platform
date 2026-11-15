@@ -12,9 +12,10 @@
  * The arithmetic of the two breakpoints, as before: from 1024px the window holds the rail (248px), the main area's padding
  * (2 x 2rem, components/layout/shell.css) and, where scroll bars take space, its scroll bar (15px in Chromium on Linux,
  * 17px on Windows). At 1160px that leaves 1160 - 248 - 64 - 17 = 831px: a 16rem route column, the 2rem gap and a main
- * column of 33.9rem. At 1440px it leaves 1111px: 312 + 32 + 30rem + 32 + 15rem = 1096, so the main column keeps 30rem
- * beside both. The page no longer adds the old `.page-content` padding on top of the shell's (the sketch's work area is
- * padded once, 0 32px), so the columns are the sketch's widths at 1440.
+ * column of 33.9rem. From 1440px the columns are the sketch's 312, 512 and 240px (design fix S1a-2): 1440 - 248 - 64 =
+ * 1128px holds 312 + 32 + 512 + 32 + 240 exactly; where a scroll bar takes 15 or 17px, the main column gives them up
+ * (each track is minmax(0, its width)), so nothing scrolls sideways. Wider windows keep those widths. The page no longer
+ * adds the old `.page-content` padding on top of the shell's (the sketch's work area is padded once, 0 32px).
  *
  * The two strips cancel the shell's padding of the main area (shell.css: 1rem, 2rem from 1024px) to reach its edges, as
  * the sketch draws them; the values below follow shell.css and change with it.
@@ -95,20 +96,21 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  /* 12px between kinds (the sketch's 16 less 4): with every kind at two digits and each defined word's (i), the row needs
-     about 930px, which leaves room in the 951px a 1280 window with a 17px scroll bar gives it (fix round 1). */
+  /* 12px between kinds (the sketch's 16 less 4). The owner's ruling of 12:28 (option a): when the full tally does not fit
+     (below 1440px) it wraps to a second row, only BETWEEN items: each item, its count, words and (i), never breaks. */
   gap: var(--space-1) var(--space-3);
   margin: 0;
   padding: 0;
   list-style: none;
-  font-size: 0.9375rem;
-  line-height: 1.6;
+  font-size: var(--font-size-small);
+  line-height: var(--target-min);
 }
 
-/* Each kind: its mark, then the bold count and the words (the mark's colour is the kit's, StatusMark.css). */
+/* Each kind: its mark, then the bold count and the words (the mark's colour is the kit's, StatusMark.css); one unit. */
 .question-top__tally > li {
   gap: 6px;
   color: var(--color-ink);
+  white-space: nowrap;
 }
 
 .question-top__tally > li > .ui-mark__shape {
@@ -126,7 +128,7 @@
   align-items: center;
   gap: var(--space-1) var(--space-4);
   margin: 0 0 0 auto;
-  font-size: 0.9375rem;
+  font-size: var(--font-size-small);
 }
 
 .question-top__count {
@@ -146,7 +148,10 @@
   text-underline-offset: 3px;
 }
 
-.question-top__count > a.question-top__overdue {
+/* Spec 7.1 over the sketch (design fix S1a-5): the overdue count is an ink link; red only on the clock and the word
+   "overdue". */
+.question-top__overdue .ui-icon,
+.question-top__overdue-word {
   color: var(--color-overdue);
 }
 
@@ -194,7 +199,7 @@
   padding: 0 var(--space-2);
   border-radius: var(--radius-control);
   color: var(--color-ink-muted);
-  font-size: 0.9375rem;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-semibold);
   text-decoration: none;
 }
@@ -227,6 +232,12 @@ a.position-strip__step:hover {
   block-size: 4px;
   border-radius: 2px;
   background: var(--color-mark);
+}
+
+/* No length of line on a side with no neighbour (design fix S1b-1): the first question has none before, the last none after. */
+.position-strip__here--first::before,
+.position-strip__here--last::after {
+  visibility: hidden;
 }
 
 .position-strip__here b {
@@ -318,7 +329,7 @@ a.position-strip__step:hover {
 
 @media (width >= 90rem) {
   .question-workspace {
-    grid-template-columns: 19.5rem minmax(30rem, 32rem) minmax(15rem, 20rem);
+    grid-template-columns: minmax(0, 312px) minmax(0, 512px) minmax(0, 240px);
     grid-template-rows: auto;
     grid-template-areas: "route main guide";
   }

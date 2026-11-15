@@ -146,14 +146,17 @@ describe('the read-only question page (plan 1C Task 7)', () => {
     const m = main(html);
     expect(m).toContain('<section data-region="current-decision" aria-labelledby="s12-current-decision" class="reading-decision"><div class="reading-decision__head"><h2 id="s12-current-decision">What the team decided</h2>');
     expect(m).toContain('<section data-region="open-work" aria-labelledby="s12-open-work" class="still-open"><h2 id="s12-open-work">Still open on this question: 2 findings</h2>');
-    // The main column holds the question, the card and what is still open, in that order and nothing else: the seal note
-    // (a sentence about saving) and the foot's way on are the writer's; the reader's way on is in the aside.
-    expect(regions(m)).toEqual(['question', 'current-decision', 'open-work']);
+    // The main column holds the question, the card, a Reviewer's raise link under it (coordinator's ruling on review
+    // S1a-4) and what is still open, in that order and nothing else: the seal note (a sentence about saving) and the
+    // foot's way on are the writer's; the reader's way on is in the aside. A Viewer gets no finding link.
+    expect(regions(m)).toEqual(['question', 'current-decision', 'finding-link', 'open-work']);
+    expect(regions(main(await render(VIEWER)))).toEqual(['question', 'current-decision', 'open-work']);
     expect(m).toMatch(/<\/section><section data-region="open-work"/);
     expect(m).not.toContain('data-permission-note');
-    // The guidance column: the reader's aside first, then the guidance, then the finding link.
+    // The guidance column: the reader's aside first, then the guidance; no finding link there any more.
     const g = guide(html);
-    expect(regions(g).slice(0, 3)).toEqual(['reading-aside', 'guidance', 'finding-link']);
+    expect(regions(g).slice(0, 2)).toEqual(['reading-aside', 'guidance']);
+    expect(g).not.toContain('data-region="finding-link"');
     expect(aside(html)).toContain(`<p class="reading-aside__note" data-permission-note="true">`);
     expect(aside(html)).toContain(AUTHZ_COPY.decisionFormNote.reviewer);
     expect(aside(await render(VIEWER))).toContain(AUTHZ_COPY.decisionFormNote.viewer);
@@ -379,14 +382,16 @@ describe('the read-only question page (plan 1C Task 7)', () => {
     expect(viewer).toContain('data-region="guidance"');
   });
 
-  it('review M2: a Reviewer with an open platform-raised finding sees it once, in the open-work list, and the raise link stays in the aside', async () => {
+  it('review M2: a Reviewer with an open platform-raised finding sees it once, in the open-work list, and the raise link sits under the decision', async () => {
     const html = await render(REVIEWER);
     expect(html.split('href="/orgs/acme-health/projects/p1/findings/f1"')).toHaveLength(2);
     expect(main(html)).toContain('href="/orgs/acme-health/projects/p1/findings/f1"');
     expect(html).not.toContain(QUESTION_COPY.findingLink.view);
-    const g = guide(html);
-    expect(g).toContain('data-region="finding-link"');
-    expect(g).toContain(QUESTION_COPY.findingLink.raise);
+    const m = main(html);
+    expect(m.indexOf('data-region="finding-link"')).toBeGreaterThan(m.indexOf('data-region="current-decision"'));
+    expect(m.indexOf('data-region="finding-link"')).toBeLessThan(m.indexOf('data-region="open-work"'));
+    expect(m).toContain(QUESTION_COPY.findingLink.raise);
+    expect(guide(html)).not.toContain('data-region="finding-link"');
   });
 
   it('workshop walk S3: a reader on a question the personal data answer switched off reads the sentence under the code line', async () => {

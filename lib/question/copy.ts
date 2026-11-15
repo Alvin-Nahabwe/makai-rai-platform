@@ -25,6 +25,8 @@ export const QUESTION_COPY = Object.freeze({
     whatIs: (term: string): string => `What is a ${term}?`,
     /** The accessible name of the (i) beside a term that carries its own article: "What is the personal data question?". */
     whatIsTerm: (term: string): string => `What is ${term}?`,
+    /** The word of PROJECT_COPY.followUpCounts.overdueMitigation(s) drawn in red in the strip (spec 7.1). */
+    overdueWord: 'overdue',
     /**
      * The tally's words for the personal data question once answered (lane 6, vocabulary owner: the vocabulary's term,
      * never "scope question"), after its bold count: "1 personal data question answered": the term without its article,

@@ -83,7 +83,9 @@ function readingRegions(data: QuestionPanelData, openWork: QuestionOpenWork | nu
  *     earlier-wording disclosure;
  *  4. a reader's reading regions; the seal note (only for a question in a seal); the decision slot (components/question/
  *     DecisionSlot.tsx: lane 2's decision card for a person who may record, nothing for a reader); a reader's way on;
- *  5. the guidance aside (with the risk areas and the folded list of ways teams address this), then the finding link;
+ *  5. the guidance aside (with the risk areas and the folded list of ways teams address this); the finding link is no
+ *     longer here (coordinator's ruling on S1a-4): a writer's is in the decision card (the slot's stub until it merges),
+ *     a Reviewer's under the reading view's decision;
  *  6. the route column (`route`).
  * The page itself renders no part of the decision for a person who may record: no "Current decision", no answer form, no
  * withdraw, no way on. Exported so a unit test renders the markup without the loader.
@@ -104,9 +106,6 @@ export function QuestionPanelRegions({ data, openWork, route, stage }: {
   // This question's row of the stage list: its open findings, for the decision card's sentence. A stage list that lacks
   // this question is a defect, said by name, never "nothing open".
   const openFindingsOnQuestion = openFindingsOf(stage, question.id);
-  // The Findings section: for a person who may record, when there is an open finding to view or they may raise one; for
-  // a reader, only when they may raise one (R4), since the reader's open findings are listed in the main column.
-  const showFindings = data.canWrite ? data.openFinding !== null || data.canRaiseFinding : data.canRaiseFinding;
   // A reader's regions (lane 1 Task 3): the decision card and what is still open in the main column, the reader's aside
   // (sealed copy, the note, the way on) at the top of the guidance column. `next` is the frame's own (neighbourOf), so
   // the reader's "Next: question n" counts the way the position strip and the decision card do.
@@ -143,6 +142,16 @@ export function QuestionPanelRegions({ data, openWork, route, stage }: {
             ) : null}
           </section>
           {reading === null ? null : reading.decision}
+          {/* Coordinator's ruling on review S1a-4: a reader who may raise a finding (a Reviewer) finds the link in the
+              decision area, under the decision and before what is still open; a Viewer gets nothing. The reader's open
+              findings are in "Still open", so the link is the raise link only. Writers get it from the decision card. */}
+          {reading !== null && data.canRaiseFinding ? (
+            <section data-region="finding-link" aria-labelledby="s12-finding-link">
+              <h2 id="s12-finding-link">{Q.headings.findings}</h2>
+              <QuestionFindingLink orgSlug={data.orgSlug} projectId={data.projectId} stage={data.stage} questionId={question.id}
+                currentVersionId={data.current?.id ?? null} openFinding={null} canRaise={data.canRaiseFinding} />
+            </section>
+          ) : null}
           {reading === null ? null : reading.openWork}
           {/* A reader's sealed copy is in the reader's aside; a writer's seal note stands above the decision card. */}
           {reading === null ? sealNote : null}
@@ -156,22 +165,6 @@ export function QuestionPanelRegions({ data, openWork, route, stage }: {
               <SuggestedControls contentSemver={data.contentSemver} questionId={question.id} tickedOptions={data.current?.optionsInPlace ?? []} />
             ) : null}
           </QuestionContent>
-          {/* Exactly when QuestionFindingLink renders something, so no heading stands over nothing. A reader's open findings are
-              in "Still open on this question", so here the reader gets only the raise link (review M2), not the same finding twice. */}
-          {showFindings ? (
-            <section data-region="finding-link" aria-labelledby="s12-finding-link">
-              <h2 id="s12-finding-link">{Q.headings.findings}</h2>
-              <QuestionFindingLink
-                orgSlug={data.orgSlug}
-                projectId={data.projectId}
-                stage={data.stage}
-                questionId={question.id}
-                currentVersionId={data.current?.id ?? null}
-                openFinding={data.canWrite ? data.openFinding : null}
-                canRaise={data.canRaiseFinding}
-              />
-            </section>
-          ) : null}
         </div>
         {/* The stage's questions (RouteColumn), last in the DOM at every width; workspace.css places it. */}
         {route === undefined ? null : <div className="question-workspace__route">{route}</div>}

@@ -20,8 +20,8 @@
 .question-content__body {
   margin: 0 0 var(--space-6);
   color: var(--color-ink);
-  font-size: 0.9375rem;
-  line-height: 1.6;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
 }
 
 /* The risk areas directly under "Why this is asked" (owner 17.5): the label with its definition, then one link each. */
@@ -64,7 +64,7 @@
 /* The area's code after its name, in small type (voice rule 8: words before codes). */
 .question-content__area-code {
   color: var(--color-ink-muted);
-  font-size: 0.8125rem;
+  font-size: var(--font-size-small);
 }
 
 /* "Ways teams address this (n)": one folded control, the list opening in place (spec 9.3; sketch `.help`). */
@@ -78,7 +78,7 @@
   gap: var(--space-2);
   min-block-size: 44px;
   color: var(--color-link);
-  font-size: 0.9375rem;
+  font-size: var(--font-size-body);
   font-weight: var(--font-weight-semibold);
   text-decoration: underline;
   text-underline-offset: 3px;

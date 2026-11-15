@@ -67,7 +67,7 @@ export function PositionStrip({ previous, next, n, total, marks, currentId, scop
           <Icon name="chevron-left" size={20} />{mark(previous.questionId, 16)}{named(F.previous(previous.text, previous.number, words(previous.questionId)), previous.number)}
         </Link>
       ) : <span className="position-strip__step" />}
-      <p className="position-strip__here" aria-current="step">
+      <p className={`position-strip__here${previous === null ? ' position-strip__here--first' : ''}${next === null ? ' position-strip__here--last' : ''}`} aria-current="step">
         <span className="position-strip__ring">{mark(currentId, 20)}</span>
         <b>{place(n, total)}</b>
         <span className="visually-hidden">{F.hereStatus(words(currentId))}</span>

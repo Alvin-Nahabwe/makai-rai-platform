@@ -73,25 +73,27 @@ const strip = (html: string): string => between(html, '<nav class="position-stri
 const nameOf = (link: string): string => link.replace(/<svg[\s\S]*?<\/svg>/g, '').replace(/<[^>]+>/g, '');
 
 describe('the question page frame: DOM order', () => {
-  it('strip/breadcrumb, h1, code, seal note, decision slot, guidance, finding link, route; nothing reordered by CSS', async () => {
+  it('strip/breadcrumb, h1, code, seal note, decision slot (with the writer\'s finding link in the stub), guidance, route; nothing reordered by CSS', async () => {
     const html = await render();
     const at = (s: string) => html.indexOf(s);
     expect(inOrder([
       at('<div class="question-top"'), at('<nav class="position-strip"'), at('<h1 id="question-heading"'), at('class="question-frame__code"'),
-      at('data-region="seal-note"'), at('data-region="decision-slot"'), at('<aside'), at('data-region="finding-link"'), at('<div class="question-workspace__route">'),
+      at('data-region="seal-note"'), at('data-region="decision-slot"'), at('data-region="finding-link"'), at('<aside'), at('<div class="question-workspace__route">'),
     ]), html).toBe(true);
     const css = readFileSync('components/question/workspace.css', 'utf8');
     expect(css).not.toMatch(/^\s*order\s*:/m);
     expect(css).not.toMatch(/flex-direction:\s*(row|column)-reverse/);
   });
 
-  it('the main column holds the question, the seal note and the slot; the guide column the aside and the finding link; the route its own', async () => {
+  it('the main column holds the question, the seal note and the slot (the finding link inside it); the guide column the aside alone; the route its own', async () => {
     const html = await render();
     const main = between(html, '<div class="question-workspace__main">', '<div class="question-workspace__guide">');
     for (const s of ['data-region="question"', 'data-region="seal-note"', 'data-region="decision-slot"']) expect(main).toContain(s);
     expect(main).not.toContain('<aside');
     const guide = between(html, '<div class="question-workspace__guide">', '<div class="question-workspace__route">');
-    for (const s of ['<aside', 'data-region="finding-link"']) expect(guide).toContain(s);
+    expect(guide).toContain('<aside');
+    expect(guide).not.toContain('data-region="finding-link"');
+    expect(main).toContain('data-region="finding-link"');
     expect(html.slice(html.indexOf('<div class="question-workspace__route">'))).toContain('the route');
     expect(html).not.toMatch(/<(nav|div)[^>]*style=/);
   });
@@ -158,7 +160,11 @@ describe('the top strip (R4), shown from 1160px', () => {
   it('the open findings and the overdue mitigations, each a link only above zero, to the targets StageFollowUpCounts uses; the overdue one with the clock', async () => {
     const html = top(await render());
     expect(html).toMatch(/<a[^>]*href="\/orgs\/acme-health\/projects\/p1\/findings"[^>]*>[\s\S]*?11 open findings[\s\S]*?<\/a>/);
-    expect(html).toMatch(/<a[^>]*class="question-top__overdue"[^>]*href="\/orgs\/acme-health\/projects\/p1#pre-processing"[^>]*>[\s\S]*?<svg class="ui-icon"[\s\S]*?1 overdue mitigation[\s\S]*?<\/a>/);
+    // Spec 7.1 (design fix S1a-5): an ink link; red only on the clock and the word "overdue".
+    expect(html).toMatch(/<a[^>]*class="question-top__overdue"[^>]*href="\/orgs\/acme-health\/projects\/p1#pre-processing"[^>]*>[\s\S]*?<svg class="ui-icon"[\s\S]*?1 <span class="question-top__overdue-word">overdue<\/span> mitigation[\s\S]*?<\/a>/);
+    const css = readFileSync('components/question/workspace.css', 'utf8');
+    expect(css).toMatch(/\.question-top__overdue \.ui-icon,\s*\.question-top__overdue-word \{\s*color: var\(--color-overdue\);/);
+    expect(css).not.toMatch(/a\.question-top__overdue \{[^}]*color/);
     const one = top(await render(PANEL, stageFixture({ followUp: { openFindings: 1, overdueMitigations: 0 } })));
     expect(one).toContain('1 open finding<');
     expect(one).not.toMatch(/overdue mitigation/);
@@ -239,6 +245,28 @@ describe('the position strip, under 1160px (phone sketch)', () => {
   });
 });
 
+describe('design fix round 1', () => {
+  const css = readFileSync('components/question/workspace.css', 'utf8');
+  it('S1a-2: from 1440px the columns are the sketch\'s 312, 512 and 240px', () => {
+    expect(css).toMatch(/@media \(width >= 90rem\) \{\s*\.question-workspace \{\s*grid-template-columns: minmax\(0, 312px\) minmax\(0, 512px\) minmax\(0, 240px\);/);
+  });
+  it('S1a-6 and owner 12:28 (a): the strip at 14px; each tally item one unbreakable unit, so a wrap falls only between items', () => {
+    expect(css).toMatch(/\.question-top__tally \{[^}]*font-size: var\(--font-size-small\);/);
+    expect(css).toMatch(/\.question-top__follow \{[^}]*font-size: var\(--font-size-small\);/);
+    expect(css).toMatch(/\.question-top__tally > li \{[^}]*white-space: nowrap;/);
+    expect(css).not.toMatch(/0\.9375rem/);
+    expect(readFileSync('components/question/QuestionContent.css', 'utf8')).not.toMatch(/0\.9375rem|0\.8125rem/);
+  });
+  it('S1b-1: no length of line on a side with no neighbour', async () => {
+    const first = strip(await render({ ...PANEL, position: { index: 0, total: 24, previousId: null, nextId: 'Q-PP-02' } }));
+    expect(first).toContain('class="position-strip__here position-strip__here--first"');
+    const last = strip(await render({ ...PANEL, position: { index: 23, total: 24, previousId: 'Q-PP-22', nextId: null } }));
+    expect(last).toContain('class="position-strip__here position-strip__here--last"');
+    expect(strip(await render())).toContain('class="position-strip__here"');
+    expect(css).toMatch(/\.position-strip__here--first::before,\s*\.position-strip__here--last::after \{\s*visibility: hidden;/);
+  });
+});
+
 describe('the guidance aside', () => {
   it('What good looks like, Why this is asked, the risk areas under it as linked labels (name, then code in small type), then Ways teams address this as one folded details with the list inside', async () => {
     const html = await render();
@@ -269,10 +297,12 @@ describe('the guidance aside', () => {
     expect(html).not.toContain('Ways teams address this');
   });
 
-  it('the finding link keeps its place in the guidance column after the aside', async () => {
+  it('coordinator\'s ruling on review S1a-4: the writer\'s finding link is in the decision slot (the stub, until lane 2\'s card carries it), after the form and before the way on; none in the guidance column', async () => {
     const html = await render();
-    expect(html.indexOf('</aside>')).toBeLessThan(html.indexOf('data-region="finding-link"'));
-    expect(html).toContain('finding link');
+    const slot = between(html, 'data-region="decision-slot"', 'data-region="way-on"');
+    expect(slot.indexOf('data-region="answer-form"')).toBeLessThan(slot.indexOf('data-region="finding-link"'));
+    expect(slot).toContain('finding link');
+    expect(html.split('data-region="finding-link"')).toHaveLength(2);
   });
 });
 

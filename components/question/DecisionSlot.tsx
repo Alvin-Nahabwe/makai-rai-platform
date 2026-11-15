@@ -6,6 +6,7 @@ import { WithdrawDecision } from '@/components/decision/WithdrawDecision';
 import { canWithdrawVersion } from '@/lib/question/draft';
 import { QUESTION_COPY } from '@/lib/question/copy';
 import { WayOn } from '@/components/question/WayOn';
+import { QuestionFindingLink } from '@/components/findings/QuestionFindingLink';
 
 const Q = QUESTION_COPY;
 
@@ -27,7 +28,9 @@ export type DecisionSlotProps = {
  * through this slot and nothing else, so the frame never holds the decision's own parts.
  *
  * STUB. Until lane 2's card merges, this body is what the page rendered for a person who may record before the Route
- * rebuild: the current decision, the answer form with WithdrawDecision under it, and the way on to the next question.
+ * rebuild: the current decision, the answer form with WithdrawDecision under it, the finding link (the open finding or
+ * "Raise a finding about this question"; coordinator's ruling on review S1a-4: it moved here from the guidance column,
+ * and lane 2's card carries it after a save), and the way on to the next question. The card replaces all of it.
  * At the merge the whole body below becomes ONE line:
  *     return <DecisionCard {...props} />;
  * (with `import { DecisionCard } from '@/components/decision/DecisionCard';`), and the imports this stub alone uses go.
@@ -63,6 +66,13 @@ export function DecisionSlot(props: DecisionSlotProps): ReactElement | null {
           />
         ) : null}
       </section>
+      {data.openFinding !== null || data.canRaiseFinding ? (
+        <section data-region="finding-link" aria-labelledby="s12-finding-link">
+          <h2 id="s12-finding-link">{Q.headings.findings}</h2>
+          <QuestionFindingLink orgSlug={data.orgSlug} projectId={data.projectId} stage={data.stage} questionId={question.id}
+            currentVersionId={data.current?.id ?? null} openFinding={data.openFinding} canRaise={data.canRaiseFinding} />
+        </section>
+      ) : null}
       <WayOn next={next} stageHref={stageHref} />
     </div>
   );

@@ -104,7 +104,8 @@ test('the column starts at 72.5rem: at 1160 the main column keeps 30rem beside a
   const guide3 = await box(page.locator('.question-workspace__guide'));
   expect(main3.width, 'the main column at 1440').toBeGreaterThanOrEqual(480);
   expect(route3.width).toBeGreaterThanOrEqual(256);
-  expect(guide3.width).toBeGreaterThanOrEqual(256);
+  // The sketch's 240px guidance column from 1440 (design fix S1a-2).
+  expect(guide3.width).toBeGreaterThanOrEqual(232);
   expect(main3.x).toBeGreaterThanOrEqual(route3.x + route3.width);
   expect(guide3.x).toBeGreaterThanOrEqual(main3.x + main3.width);
   // The ways teams address this are one folded control at every width (spec 9.3): closed until pressed.
@@ -115,18 +116,18 @@ test('the column starts at 72.5rem: at 1160 the main column keeps 30rem beside a
   expect(guide4.y, 'at 1430 the guide is below the main column').toBeGreaterThanOrEqual(main4.y + main4.height);
 });
 
-test('at 375 by 812 the page is one column in reading order: heading, current decision, form, guidance, finding link; nothing scrolls sideways; the end of the page clears the fixed save bar', async ({ page, baseURL }) => {
+test('at 375 by 812 the page is one column in reading order: heading, current decision, form, finding link (in the decision), guidance; nothing scrolls sideways; the end of the page clears the fixed save bar', async ({ page, baseURL }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await openQuestion(page, 'assessor', Q, baseURL!);
   const order = [
-    heading(page), page.locator('section[data-region="current-decision"]'), form(page), aside(page), page.locator('section[data-region="finding-link"]'),
+    heading(page), page.locator('section[data-region="current-decision"]'), form(page), page.locator('section[data-region="finding-link"]'), aside(page),
   ];
   const boxes = await Promise.all(order.map(box));
   for (let i = 1; i < boxes.length; i++) {
     expect(boxes[i].y, `region ${i} is below region ${i - 1}`).toBeGreaterThanOrEqual(boxes[i - 1].y + boxes[i - 1].height);
   }
   const follows = await page.evaluate(() => {
-    const els = ['#question-heading', 'section[data-region="current-decision"]', 'section[data-region="answer-form"]', 'aside[data-region="guidance"]', 'section[data-region="finding-link"]']
+    const els = ['#question-heading', 'section[data-region="current-decision"]', 'section[data-region="answer-form"]', 'section[data-region="finding-link"]', 'aside[data-region="guidance"]']
       .map((s) => document.querySelector(s)!);
     return els.slice(1).map((el, i) => (els[i].compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0);
   });
@@ -200,8 +201,17 @@ for (const role of ['viewer', 'reviewer'] as const) {
     await expect(page.locator('form:not(.route-column__filter)')).toHaveCount(0);
     await expect(page.locator('[data-region="answer-form"]')).toHaveCount(0);
     await expect(page.locator('.decision-save-bar')).toHaveCount(0);
+    // Coordinator's ruling on review S1a-4: a Reviewer's raise link sits under the decision in the main column, before
+    // what is still open; none in the guidance column; a Viewer has none.
     const raise = page.getByRole('link', { name: QUESTION_COPY.findingLink.raise });
     await expect(raise).toHaveCount(role === 'reviewer' ? 1 : 0);
+    await expect(page.locator('.question-workspace__guide [data-region="finding-link"]')).toHaveCount(0);
+    if (role === 'reviewer') {
+      const decided = await box(page.locator('[data-region="current-decision"]'));
+      const raised = await box(raise);
+      expect(raised.y, 'the raise link is under the decision').toBeGreaterThanOrEqual(decided.y + decided.height);
+      expect(raised.y, 'and above what is still open').toBeLessThan((await box(open)).y);
+    }
     // The open finding is listed once, in the main column, not again in the aside (review M2); what is still open closes the
     // column, and the way on is the reader's aside's one primary link (lane 1 Task 3, viewer-reading.png).
     await expect(page.getByRole('link', { name: QUESTION_COPY.findingLink.view })).toHaveCount(0);
