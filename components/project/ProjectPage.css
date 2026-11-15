@@ -388,6 +388,11 @@
   color: var(--color-ink-muted);
 }
 
+/* The stage name's (i) in the stacked next step sits on the text's middle, not 4.5 px above it (design review N1). */
+.next-step-block--stacked .ui-term-tip {
+  vertical-align: middle;
+}
+
 .stage-line__primary {
   margin-block-start: var(--space-3);
 }
