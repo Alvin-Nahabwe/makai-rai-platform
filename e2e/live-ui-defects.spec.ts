@@ -63,7 +63,7 @@ test('U12 (b): the organisation chooser shows its links on the card, at 4.5:1 or
     await page.waitForURL((url) => url.pathname !== '/login');
     await page.goto('/');
     await expect(page.locator(`a[href="/orgs/${fx.org.slug}/dashboard"]`)).toBeVisible();
-    expect(await contrastOf(page, '.auth-card nav a', '.auth-card', 'color')).toBeGreaterThanOrEqual(4.5);
+    expect(await contrastOf(page, '.org-chooser .ui-plate__link', '.org-chooser .ui-plate', 'color')).toBeGreaterThanOrEqual(4.5);
     await expect(page.getByRole('heading', { level: 1, name: ORG_COPY.chooser.heading })).toBeVisible();
   } finally {
     await context.close();
