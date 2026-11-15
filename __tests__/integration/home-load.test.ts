@@ -1,15 +1,18 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { OrgRole } from '@prisma/client';
-import { loadContinueTarget, loadNextStep } from '@/lib/home/load';
+import { loadContinueTarget, loadHome, loadNextStep } from '@/lib/home/load';
+import { lastSavedBy } from '@/lib/home/queries';
 import { openQuestionIds, stageView } from '@/lib/data/projects';
 import { currentDecisionRows } from '@/lib/data/decisions';
 import { withOrg } from '@/lib/data/tenant';
 import { questionApplies, questionsInStage, runningContent } from '@/lib/content/loader';
 import { loadQuestionPanel } from '@/lib/question/panel';
-import { STAGES } from '@/types/record';
+import { STAGES, type Stage } from '@/types/record';
 import { resetDb, testDb } from '../helpers/db';
 import { useFixtureContent } from '../helpers/content';
-import { addDecision, addProject, buildOrg, ctxFor, type FixtureDecision, type OrgFixture } from '../helpers/recordFixture';
+import { withTriggersDisabled } from '../helpers/triggers';
+import { sealFixture } from '../helpers/sealFixture';
+import { addDecision, addFinding, addFindingEvent, addMitigationVersion, addProject, addStageReview, buildOrg, ctxFor, type FixtureDecision, type OrgFixture } from '../helpers/recordFixture';
 
 /**
  * Plan 1B Task 9 (slice 3): `loadNextStep`, Home's "Your next step" for a person who records (rule C2). Records come from
@@ -30,7 +33,7 @@ beforeEach(async () => {
 const save = (f: OrgFixture, projectId: string, d: Omit<FixtureDecision, 'contentVersionId'>) =>
   addDecision(f, projectId, { status: 'done', ...d, contentVersionId: cv });
 const next = (role: OrgRole, f: OrgFixture = fx) => loadNextStep(ctxFor(f, role), f.members[role].userId);
-const ids = (stage: typeof PP | typeof IP) => questionsInStage(runningContent(), stage).map((q) => q.id);
+const ids = (stage: Stage) => questionsInStage(runningContent(), stage).map((q) => q.id);
 
 describe('loadNextStep', () => {
   it("Review Focus 2: a member of A and B who saved in B after A gets A's project under A and B's under B", async () => {
@@ -236,5 +239,233 @@ describe('loadContinueTarget', () => {
     const page = await target('assessor', p);
     expect(page).toEqual({ stage: home?.stage, questionId: home?.questionId, label: 'continue' });
     expect(home).toMatchObject({ projectId: p.id, stage: IP, questionId: q[3] });
+  });
+});
+
+/**
+ * Plan 1B Task 9 (the rest): `loadHome`, Home's data for every role and state (spec 9.1), the variant chosen in review
+ * M13's order from `ctx.role`. Records come from the record fixture builder; the loader runs as the app role.
+ */
+describe('loadHome', () => {
+  const now = new Date();
+  const home = (role: OrgRole, f: OrgFixture = fx, userId: string = f.members[role].userId, name: string = f.members[role].name) =>
+    loadHome(ctxFor(f, role), { userId, name }, { orgSlug: f.org.slug, welcome: false, today, now });
+  const daysAgo = (n: number) => new Date(now.getTime() - n * 86_400_000).toISOString();
+  async function receivedAt(id: string, when: string): Promise<void> {
+    await withTriggersDisabled('decision_versions', () => testDb.$executeRawUnsafe(
+      `UPDATE "decision_versions" SET "receivedAt" = $1::timestamptz WHERE "id" = $2`, when, id), ['decision_versions_refuse_row']);
+  }
+  const href = (f: OrgFixture, projectId: string, stage: Stage, q: string) => `/orgs/${f.org.slug}/projects/${projectId}/stages/${stage}/questions/${q}`;
+
+  it('M13: with no active project, a viewer and a reviewer get first-time with canCreate false; an owner, admin and assessor with canCreate true', async () => {
+    await addProject(fx, { name: 'Only archived', archived: true });
+    for (const role of ['viewer', 'reviewer'] as const) {
+      expect(await home(role), role).toEqual({ variant: 'first-time', base: expect.objectContaining({ role, archivedCount: 1 }), canCreate: false });
+    }
+    for (const role of ['owner', 'admin', 'assessor'] as const) {
+      expect(await home(role), role).toEqual({ variant: 'first-time', base: expect.objectContaining({ role, archivedCount: 1 }), canCreate: true });
+    }
+  });
+
+  it('the base carries the organisation, the role and the person the page passed, never another id', async () => {
+    await addProject(fx, { name: 'Active' });
+    await addProject(fx, { name: 'Gone', archived: true });
+    const data = await loadHome(ctxFor(fx, 'assessor'), { userId: fx.members.assessor.userId, name: 'Shown name' },
+      { orgSlug: fx.org.slug, welcome: true, today, now });
+    expect(data.base).toEqual({
+      orgSlug: fx.org.slug, orgId: fx.org.id, orgName: fx.org.name, role: 'assessor', userId: fx.members.assessor.userId,
+      userName: 'Shown name', welcome: true, archivedCount: 1,
+    });
+  });
+
+  it('T9.5: a viewer gets variant viewer and a reviewer variant reviewer, with no next step and no recording link', async () => {
+    const p = await addProject(fx);
+    await save(fx, p.id, { stage: PP, questionId: 'Q-PP-01' });
+    // Versions under their own ids (a role changed since) still give no next step.
+    await save(fx, p.id, { stage: PP, questionId: 'Q-PP-02', by: 'viewer' });
+    await save(fx, p.id, { stage: PP, questionId: 'Q-PP-03', by: 'reviewer' });
+    const viewer = await home('viewer');
+    const reviewer = await home('reviewer');
+    expect(viewer.variant).toBe('viewer');
+    expect(reviewer.variant).toBe('reviewer');
+    for (const data of [viewer, reviewer]) {
+      expect('next' in data).toBe(false);
+      expect('focus' in data).toBe(false);
+      expect(JSON.stringify(data)).not.toMatch(/"href"|"current"|\/questions\//);
+    }
+  });
+
+  it('recorder: the focus is the next step\'s project, its three stages with counts equal to stageView\'s, stops from the kit\'s marks and the next open question of each stage', async () => {
+    const other = await addProject(fx, { name: 'Other' });
+    const p = await addProject(fx, { name: 'Focus' });
+    await save(fx, other.id, { stage: PP, questionId: 'Q-PP-09', by: 'owner' });
+    await save(fx, p.id, { stage: PP, questionId: 'Q-PP-GATE-SENSITIVE', status: null, scopeAnswer: 'no', by: 'owner' });
+    await save(fx, p.id, { stage: PP, questionId: 'Q-PP-02', status: 'partly' });
+    await save(fx, p.id, { stage: PP, questionId: 'Q-PP-01' });
+    await save(fx, p.id, { stage: IP, questionId: 'Q-IP-01', by: 'owner' });
+    const data = await home('assessor');
+    if (data.variant !== 'recorder') throw new Error(`expected recorder, got ${data.variant}`);
+    expect(data.next).toMatchObject({ projectId: p.id, stage: PP, questionId: 'Q-PP-03' });
+    expect(data.otherProjects).toBe(1);
+    expect(data.lead).toBeNull();
+    expect(data.focus?.projectId).toBe(p.id);
+    expect(data.focus?.projectName).toBe('Focus');
+    expect(data.focus?.stages.map((s) => s.stage)).toEqual([...STAGES]);
+    const counts = await stageView(ctxFor(fx, 'assessor'), p.id, today);
+    for (const s of data.focus?.stages ?? []) {
+      expect({ stage: s.stage, noDecision: s.noDecision, openFindings: s.openFindings, overdueMitigations: s.overdueMitigations }).toEqual({
+        stage: s.stage, noDecision: counts[s.stage].noDecision, openFindings: counts[s.stage].openFindings, overdueMitigations: counts[s.stage].overdueMitigations,
+      });
+      expect(s.stops.map((x) => x.id)).toEqual(ids(s.stage));
+    }
+    const pre = data.focus?.stages[0];
+    const kind = (q: string) => pre?.stops.find((x) => x.id === q);
+    expect(kind('Q-PP-01')).toEqual({ id: 'Q-PP-01', kind: 'done', title: runningContent().questions.get('Q-PP-01')?.text, href: href(fx, p.id, PP, 'Q-PP-01'), current: false });
+    expect(kind('Q-PP-02')?.kind).toBe('partly');
+    expect(kind('Q-PP-GATE-SENSITIVE')).toMatchObject({ kind: 'scope_answered', scopeAnswer: 'no' });
+    expect(kind('Q-PP-13')?.kind).toBe('does_not_apply');
+    expect(kind('Q-PP-14')?.kind).toBe('does_not_apply');
+    expect(kind('Q-PP-03')).toMatchObject({ kind: 'no_decision', current: true });
+    expect(data.focus?.stages.flatMap((s) => s.stops).filter((x) => x.current).map((x) => x.id)).toEqual(['Q-PP-03']);
+    expect(pre?.tally).toEqual({ done: 1, partly: 1, scope_answered: 1, does_not_apply: 2, no_decision: ids(PP).length - 5, doneNoEvidence: 1 });
+    expect(data.focus?.stages.map((s) => s.nextOpen)).toEqual([
+      { questionId: 'Q-PP-03', questionText: runningContent().questions.get('Q-PP-03')?.text, position: { n: 3, of: ids(PP).length } },
+      { questionId: ids(IP)[1], questionText: runningContent().questions.get(ids(IP)[1])?.text, position: { n: 2, of: ids(IP).length } },
+      { questionId: ids('post-processing')[0], questionText: expect.any(String), position: { n: 1, of: ids('post-processing').length } },
+    ]);
+  });
+
+  it('recorder: "since" starts at the person\'s last saved change and holds the changes of others after it, never their own', async () => {
+    const p = await addProject(fx);
+    const old = await save(fx, p.id, { stage: PP, questionId: 'Q-PP-05', by: 'owner' });
+    await receivedAt(old.id, daysAgo(3));
+    await save(fx, p.id, { stage: PP, questionId: 'Q-PP-01' });
+    const mine = await testDb.decisionVersion.findFirstOrThrow({ where: { projectId: p.id, questionId: 'Q-PP-01' } });
+    await save(fx, p.id, { stage: IP, questionId: 'Q-IP-02', by: 'owner' });
+    const data = await home('assessor');
+    if (data.variant !== 'recorder') throw new Error(`expected recorder, got ${data.variant}`);
+    expect(data.since?.from).toBe(mine.receivedAt.toISOString());
+    expect(data.since?.more).toBe(false);
+    expect(data.since?.groups).toEqual([expect.objectContaining({ who: expect.objectContaining({ userId: fx.members.owner.userId }), stage: IP, count: 1 })]);
+  });
+
+  it('an owner with no saved entry gets no next step and no "since"; the focus is the most recently updated active project', async () => {
+    const older = await addProject(fx, { name: 'Older' });
+    const newer = await addProject(fx, { name: 'Newer' });
+    await save(fx, older.id, { stage: PP, questionId: 'Q-PP-01' });
+    const data = await home('owner');
+    if (data.variant !== 'recorder') throw new Error(`expected recorder, got ${data.variant}`);
+    expect(data.next).toBeNull();
+    expect(data.since).toBeNull();
+    expect(data.focus).toMatchObject({ projectId: newer.id, projectName: 'Newer' });
+    expect(data.focus?.stages.flatMap((s) => s.stops).some((x) => x.current)).toBe(false);
+    expect(data.otherProjects).toBe(1);
+  });
+
+  it('an assessor with no saved entry gets first-open of the most recently updated project, which is also the focus', async () => {
+    await addProject(fx, { name: 'Older' });
+    const newer = await addProject(fx, { name: 'Newer' });
+    const data = await home('assessor');
+    if (data.variant !== 'recorder') throw new Error(`expected recorder, got ${data.variant}`);
+    expect(data.next).toMatchObject({ projectId: newer.id, rule: 'first-open', questionId: ids(PP)[0] });
+    expect(data.focus?.projectId).toBe(newer.id);
+    expect(data.since).toBeNull();
+  });
+
+  it('owner and admin lead lists: overdue mitigations and open findings with no mitigation of active projects only; none for an assessor', async () => {
+    const p = await addProject(fx, { name: 'Active' });
+    const gone = await addProject(fx, { name: 'Archived' });
+    const late = await addFinding(fx, p.id, { stage: PP, source: 'team' });
+    const lateMitigation = await addMitigationVersion(fx, late.id, { status: 'planned', owner: 'assessor', dueDate: '2026-11-01' });
+    const bare = await addFinding(fx, p.id, { stage: IP, source: 'team' });
+    const onTime = await addFinding(fx, p.id, { stage: PP, source: 'team' });
+    const onTimeMitigation = await addMitigationVersion(fx, onTime.id, { status: 'in_progress', owner: 'assessor', dueDate: '2026-12-01' });
+    const withdrawn = await addFinding(fx, p.id, { stage: PP, source: 'team' });
+    await addFindingEvent(fx, withdrawn.id, { kind: 'withdrawn' });
+    const goneLate = await addFinding(fx, gone.id, { stage: PP, source: 'team' });
+    await addMitigationVersion(fx, goneLate.id, { status: 'planned', owner: 'assessor', dueDate: '2026-11-01' });
+    await addFinding(fx, gone.id, { stage: PP, source: 'team' });
+    await testDb.project.update({ where: { id: gone.id }, data: { archivedAt: new Date() } });
+    for (const role of ['owner', 'admin'] as const) {
+      const data = await home(role);
+      if (data.variant !== 'recorder') throw new Error(`expected recorder, got ${data.variant}`);
+      expect(data.lead?.overdue.map((m) => m.mitigationId), role).toEqual([lateMitigation.mitigationId]);
+      expect(data.lead?.withoutMitigation.map((f) => f.id), role).toEqual([bare.id]);
+      expect(data.lead?.multiProject, role).toBe(false);
+    }
+    const assessor = await home('assessor');
+    if (assessor.variant !== 'recorder') throw new Error(`expected recorder, got ${assessor.variant}`);
+    expect(assessor.lead).toBeNull();
+    expect(assessor.assigned.map((m) => m.mitigationId).sort()).toEqual([lateMitigation.mitigationId, onTimeMitigation.mitigationId].sort());
+    await addProject(fx, { name: 'Second active' });
+    const owner = await home('owner');
+    if (owner.variant !== 'recorder') throw new Error(`expected recorder, got ${owner.variant}`);
+    expect(owner.lead?.multiProject).toBe(true);
+  });
+
+  it('viewer: what the team recorded in the last 14 days, and what is still open in each active project', async () => {
+    const p = await addProject(fx, { name: 'Active' });
+    const gone = await addProject(fx, { name: 'Archived' });
+    const old = await save(fx, p.id, { stage: PP, questionId: 'Q-PP-01' });
+    await receivedAt(old.id, daysAgo(20));
+    await save(fx, p.id, { stage: PP, questionId: 'Q-PP-02', by: 'owner' });
+    await save(fx, gone.id, { stage: PP, questionId: 'Q-PP-03' });
+    await testDb.project.update({ where: { id: gone.id }, data: { archivedAt: new Date() } });
+    const data = await home('viewer');
+    if (data.variant !== 'viewer') throw new Error(`expected viewer, got ${data.variant}`);
+    expect(data.recent).toEqual({ groups: [expect.objectContaining({ projectId: p.id, count: 1, who: expect.objectContaining({ userId: fx.members.owner.userId }) })], more: false });
+    expect(data.open.map((o) => [o.projectId, o.projectName])).toEqual([[p.id, 'Active']]);
+    const counts = await stageView(ctxFor(fx, 'viewer'), p.id, today);
+    expect(data.open[0].stages.map((s) => s.noDecision)).toEqual(STAGES.map((s) => counts[s].noDecision));
+    expect(data.open[0].stages[0].stops.find((x) => x.id === 'Q-PP-02')).toEqual({ id: 'Q-PP-02', kind: 'done', title: expect.any(String) });
+  });
+
+  it('reviewer: reviews not sealed, sealed reviews with changes since, and the open findings they raised, of active projects', async () => {
+    const p = await addProject(fx, { name: 'Active' });
+    const gone = await addProject(fx, { name: 'Archived' });
+    const unsealed = await addStageReview(fx, p.id, { stage: PP });
+    const changed = await addStageReview(fx, p.id, { stage: IP });
+    const steady = await addStageReview(fx, p.id, { stage: 'post-processing' });
+    await save(fx, p.id, { stage: IP, questionId: 'Q-IP-01' });
+    await sealFixture(fx, changed.id, { projectId: p.id });
+    await sealFixture(fx, steady.id, { projectId: p.id });
+    await save(fx, p.id, { stage: IP, questionId: 'Q-IP-02' });
+    const mine = await addFinding(fx, p.id, { stage: PP, source: 'team', by: 'reviewer' });
+    const withdrawnMine = await addFinding(fx, p.id, { stage: PP, source: 'team', by: 'reviewer' });
+    await addFindingEvent(fx, withdrawnMine.id, { kind: 'withdrawn' });
+    await addFinding(fx, p.id, { stage: PP, source: 'team', by: 'assessor' });
+    await addStageReview(fx, gone.id, { stage: PP });
+    await addFinding(fx, gone.id, { stage: PP, source: 'team', by: 'reviewer' });
+    await testDb.project.update({ where: { id: gone.id }, data: { archivedAt: new Date() } });
+    const data = await home('reviewer');
+    if (data.variant !== 'reviewer') throw new Error(`expected reviewer, got ${data.variant}`);
+    expect(data.unsealed.map((r) => r.id)).toEqual([unsealed.id]);
+    expect(data.changedSinceSeal.map((r) => r.id)).toEqual([changed.id]);
+    expect(data.raisedByMe.map((f) => f.id)).toEqual([mine.id]);
+  });
+
+  it('Review Focus 2: Home reads nothing of another organisation for a member of both', async () => {
+    const b = await buildOrg({ label: 'b' });
+    const u = fx.members.assessor;
+    await testDb.membership.create({ data: { orgId: b.org.id, userId: u.userId, role: 'assessor' } });
+    const asUInB: OrgFixture = { ...b, members: { ...b.members, assessor: { ...u, orgId: b.org.id, orgSlug: b.org.slug } } };
+    const pa = await addProject(fx, { name: 'Alpha project of A' });
+    const pb = await addProject(b, { name: 'Beta project of B' });
+    await save(fx, pa.id, { stage: PP, questionId: 'Q-PP-01' });
+    await save(asUInB, pb.id, { stage: IP, questionId: 'Q-IP-01' });
+    await save(b, pb.id, { stage: IP, questionId: 'Q-IP-02', by: 'owner' });
+    await save(fx, pa.id, { stage: PP, questionId: 'Q-PP-02', by: 'owner' });
+    const data = await home('assessor', fx, u.userId, u.name);
+    if (data.variant !== 'recorder') throw new Error(`expected recorder, got ${data.variant}`);
+    expect(data.next).toMatchObject({ projectId: pa.id, stage: PP });
+    expect(await lastSavedBy(ctxFor(fx, 'assessor'), u.userId)).toMatchObject({ projectId: pa.id });
+    expect(data.since?.groups.map((g) => [g.projectId, g.who.userId])).toEqual([[pa.id, fx.members.owner.userId]]);
+    const text = JSON.stringify(data);
+    for (const s of [pb.id, 'Beta project of B', b.org.id, b.org.name, b.members.owner.userId, b.members.owner.name]) expect(text).not.toContain(s);
+  });
+
+  it('T9.7: a read that fails is an error, never an empty Home', async () => {
+    const ghost: OrgFixture = { ...fx, org: { ...fx.org, id: 'no-such-organisation' } };
+    await expect(home('owner', ghost, fx.members.owner.userId)).rejects.toThrow();
   });
 });

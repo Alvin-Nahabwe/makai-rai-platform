@@ -1,7 +1,8 @@
 import { Prisma } from '@prisma/client';
 import { withOrg, type OrgContext } from '@/lib/data/tenant';
+import { userRefs } from '@/lib/data/views';
 import type { Stage } from '@/types/record';
-import type { SavedRef } from '@/lib/home/types';
+import type { ChangeGroup, SavedRef } from '@/lib/home/types';
 
 /**
  * Home's reads (plan 1B Task 9), server only. Each runs inside `withOrg`, so forced row-level security scopes every table
@@ -69,4 +70,62 @@ export function lastSavedInSql(projectId: string, userId: string): Prisma.Sql {
     WHERE v."projectId" = ${projectId} AND v."enteredById" = ${userId}
     ORDER BY v."receivedAt" DESC, v."versionNumber" DESC
     LIMIT 1`;
+}
+
+/**
+ * The organisation's saved changes after `since` (spec 9.1's "Since your last saved change" and the Viewer's last 14 days):
+ * decision versions entered (a withdrawal included), findings raised and seals made, grouped by day, person, kind,
+ * project and stage, newest first, at most `limitGroups` groups, with `more` when there are others. `excludeUserId` leaves
+ * that person's own changes out (the reader's); `null` leaves nobody out. Archived projects never supply a change (T9.4).
+ * Names come from `userRefs` inside the same transaction, for the ids of this organisation's rows only (T9.3), so a
+ * former member carries the mark. An id with no account row is an error: accounts are scrubbed, never deleted (FR-EXP-03).
+ */
+export async function changesSince(
+  ctx: OrgContext, opts: { since: Date; excludeUserId: string | null; limitGroups: number },
+): Promise<{ groups: ChangeGroup[]; more: boolean }> {
+  if (!Number.isInteger(opts.limitGroups) || opts.limitGroups < 1) throw new RangeError(`changesSince: limitGroups must be a whole number from 1, not ${opts.limitGroups}`);
+  if (Number.isNaN(opts.since.getTime())) throw new RangeError('changesSince: since is not a time');
+  return withOrg(ctx, async (tx) => {
+    const rows = await tx.$queryRaw<ChangeRow[]>(changesSinceSql(opts));
+    const kept = rows.slice(0, opts.limitGroups);
+    const refs = await userRefs(tx, kept.map((r) => r.who));
+    const groups = kept.map(({ who, latestAt, ...rest }): ChangeGroup => {
+      const ref = refs.get(who);
+      if (ref === undefined) throw new Error(`changesSince: ${who}, who made a change in project ${rest.projectId}, has no account row`);
+      return { ...rest, latestAt: latestAt.toISOString(), who: ref };
+    });
+    return { groups, more: rows.length > opts.limitGroups };
+  });
+}
+
+type ChangeRow = Omit<ChangeGroup, 'who' | 'latestAt'> & { who: string; latestAt: Date };
+
+/**
+ * `changesSince`'s one statement, a tagged template so every value is a bound parameter (T9.6); exported only so the
+ * query-plan probe can EXPLAIN the very statement that runs. Run inside `withOrg`: row-level security on every table it
+ * reads is the organisation filter. A change's day is its date in East Africa Time, UTC+3 with no daylight saving, the
+ * zone `eatDate` gives "today" in (D5). One row past the cap is read, so `more` needs no second count.
+ */
+export function changesSinceSql(opts: { since: Date; excludeUserId: string | null; limitGroups: number }): Prisma.Sql {
+  const since = opts.since.toISOString();
+  return Prisma.sql`
+    WITH "changes" AS (
+      SELECT v."orgId", v."projectId", v."stage", v."enteredById" AS "who", 'decisions' AS "kind", v."questionId" AS "item", v."receivedAt" AS "at"
+      FROM "decision_versions" v WHERE v."receivedAt" > ${since}::timestamptz
+      UNION ALL
+      SELECT f."orgId", f."projectId", f."stage", f."raisedById", 'finding', f."id", f."raisedAt"
+      FROM "findings" f WHERE f."raisedAt" > ${since}::timestamptz
+      UNION ALL
+      SELECT s."orgId", r."projectId", r."stage", s."sealedById", 'seal', s."id", s."sealedAt"
+      FROM "seals" s JOIN "stage_reviews" r ON r."orgId" = s."orgId" AND r."id" = s."stageReviewId"
+      WHERE s."sealedAt" > ${since}::timestamptz
+    )
+    SELECT to_char((c."at" AT TIME ZONE 'UTC') + interval '3 hours', 'YYYY-MM-DD') AS "day", max(c."at") AS "latestAt",
+      c."who" AS "who", c."kind" AS "kind", count(DISTINCT c."item")::int AS "count",
+      c."projectId" AS "projectId", p."name" AS "projectName", c."stage" AS "stage"
+    FROM "changes" c JOIN "projects" p ON p."orgId" = c."orgId" AND p."id" = c."projectId"
+    WHERE p."archivedAt" IS NULL AND (${opts.excludeUserId}::text IS NULL OR c."who" <> ${opts.excludeUserId}::text)
+    GROUP BY 1, c."who", c."kind", c."projectId", p."name", c."stage"
+    ORDER BY "latestAt" DESC, "day" DESC, c."kind", c."projectId", c."stage", c."who"
+    LIMIT ${opts.limitGroups + 1}`;
 }
