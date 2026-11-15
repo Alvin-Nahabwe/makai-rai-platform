@@ -246,13 +246,6 @@
   }
 }
 
-/* Off a shell page (the public, gate, error and not-found pages) the root frame makes no box, so those pages lay out
-   exactly as before the frame existed; lane 5's `body:has(.gate--public)` flex column then sees the header, main and
-   footer as body's own children and the footer stays on the screen's foot (re-review round 4, N1). */
-.page-frame:not(:has(> .shell)) {
-  display: contents;
-}
-
 /* ── From 1024 px on screen: the footer in the content column (review D23; the coordinator's option iii) ──
    The root layout's frame (app/layout.tsx: the page, then its one footer) is the content's one scroller: a grid of the
    rail's column and the content column. The shell is a subgrid of it, so the rail spans main's row and the footer's and

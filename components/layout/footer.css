@@ -88,3 +88,11 @@
     border-block-start: 1px solid var(--color-shell-hover);
   }
 }
+
+/* Off a shell page (the public, gate, error and not-found pages) the root frame makes no box, so those pages lay out
+   exactly as before the frame existed: lane 5's `body:has(.gate--public)` flex column then sees the header, main and
+   footer as body's own children and the footer stays on the screen's foot (re-review round 4, N1). The rule is in this
+   file, not shell.css: the public pages load no shell stylesheet, and every page loads the footer's. */
+.page-frame:not(:has(> .shell)) {
+  display: contents;
+}
