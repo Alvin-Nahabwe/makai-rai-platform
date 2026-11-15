@@ -134,7 +134,10 @@ describe('NFR-PERF-02 X-7: S-04 loads kit stylesheets only through styles entrie
     // frame's rules (the person block, Help, Sign out, M-41) are in components/layout/gate-signed-in.css, which GateFrame
     // imports and S-04's GatePublicFrame does not.
     const sheets = [...importers(routeRoots()).keys()].filter((f) => f.endsWith('.css') && !isKitSheet(f)).sort();
-    expect(sheets).toEqual(['app/globals.css', 'components/layout/gate.css']);
+    // The shared footer sheet is rendered on every page (UX-03), so S-04 loads it too; auth.css and the signed-in sheet stay out.
+    expect(sheets).toEqual(['app/globals.css', 'components/layout/footer.css', 'components/layout/gate.css']);
+    expect(sheets).not.toContain('components/auth/auth.css');
+    expect(sheets).not.toContain('components/layout/gate-signed-in.css');
   });
 });
 
