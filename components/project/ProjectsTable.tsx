@@ -53,7 +53,8 @@ export function ProjectsTable({ orgSlug, rows, canUnarchive, canCreate, target }
     );
   }
   const ordered = [...rows.filter((r) => !r.archived), ...rows.filter((r) => r.archived)];
-  const anyArchived = ordered.some((r) => r.archived);
+  const archivedIds = ordered.filter((r) => r.archived).map((r) => r.id);
+  const anyArchived = archivedIds.length > 0;
   const bothGroups = anyArchived && ordered.some((r) => !r.archived);
   const withActions = canUnarchive && anyArchived;
   const columns: TableColumn<Key>[] = [
@@ -73,12 +74,14 @@ export function ProjectsTable({ orgSlug, rows, canUnarchive, canCreate, target }
             : <p className="projects-list__state">{C.active}</p>}
         </>
       ),
-      actions: withActions && r.archived ? <UnarchiveProjectButton orgSlug={orgSlug} projectId={r.id} projectName={r.name} /> : null,
+      actions: withActions && r.archived
+        ? <div className="projects-list__actions"><UnarchiveProjectButton orgSlug={orgSlug} projectId={r.id} projectName={r.name} /></div>
+        : null,
     },
   }));
   return (
-    <div id={PROJECTS_LIST_ID} className="projects-list">
-      <ProjectsListAnnouncer>
+    <div id={PROJECTS_LIST_ID} className="projects-list" data-archived-ids={archivedIds.join(' ')}>
+      <ProjectsListAnnouncer archivedIds={archivedIds}>
         {!canUnarchive && anyArchived ? <p className="projects-list__note">{C.whoCanUnarchive}</p> : null}
         <Table caption={C.caption} captionHidden={!bothGroups} columns={columns} rows={tableRows} rowHeaderKey="project" />
       </ProjectsListAnnouncer>

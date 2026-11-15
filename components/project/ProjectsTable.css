@@ -127,14 +127,16 @@
   }
 }
 
-/* As cards: the plate, then Unarchive directly under it with no "Actions" label; an active row's empty cell is left out. */
+/* As cards: the plate, then Unarchive directly under it with no "Actions" label. Only the Actions cell (the kit's end
+   column) is touched: its label is hidden, and when it holds no Unarchive (an active row) it gives up its margin, so it
+   takes no room and stays in the accessibility tree as an empty cell (re-review N4). */
 @container (width < 640px) {
-  .projects-list .ui-table tbody td:not(:has(button)) {
+  .projects-list .ui-table tbody td.ui-table__end .ui-table__cell-label {
     display: none;
   }
 
-  .projects-list .ui-table tbody td .ui-table__cell-label {
-    display: none;
+  .projects-list .ui-table tbody td.ui-table__end:not(:has(.projects-list__actions)) {
+    margin-block-start: 0;
   }
 
   .projects-list .ui-table tbody td .ui-button {

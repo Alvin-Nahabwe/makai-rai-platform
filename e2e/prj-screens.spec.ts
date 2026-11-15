@@ -309,6 +309,75 @@ test('L5-4 L5-13: after a successful unarchive the row says Active and focus is 
   expect(await page.locator('#projects-list [role="region"]').evaluate((el) => getComputedStyle(el).outlineStyle)).toBe('solid');
 });
 
+/** The list's status line on S-32 (design review 16): one polite line above the table. */
+const listStatus = (page: Page) => page.locator('#projects-list .projects-list__status[role="status"]');
+const rowOf = (page: Page, name: string) => page.locator('#projects-list tr', { hasText: name });
+
+test('re-review N1: the Unarchive sentence appears only once the refreshed list shows the row as Active, with no Unarchive button', async ({ browser }) => {
+  const name = `PRJ announce after refresh ${RUN}`;
+  await addProject(fx, { name, archived: true });
+  const page = await signedIn(browser, fx.members.owner);
+  await page.goto(path('/projects'));
+  // hold the refresh (the RSC request of this page) so the moment between the 204 and the new list can be seen
+  let release = () => {};
+  const held = new Promise<void>((ok) => { release = ok; });
+  let refreshes = 0;
+  await page.route((url) => url.pathname === path('/projects'), async (r) => {
+    if (r.request().headers().rsc === '1') { refreshes += 1; await held; }
+    await r.continue();
+  });
+  await page.getByRole('button', { name: PROJECT_WRITE_COPY.unarchive.named(name) }).click();
+  await expect.poll(() => refreshes).toBeGreaterThan(0);
+  // the 204 has landed and the refresh is held: the row still reads Archived, so the line says nothing yet
+  await expect(rowOf(page, name).locator('.projects-list__state')).toHaveText(PROJECT_COPY.allProjects.archived);
+  await expect(listStatus(page)).toHaveText('');
+  release();
+  await expect(listStatus(page)).toHaveText(PROJECT_WRITE_COPY.unarchive.unarchived(name));
+  // at the moment the sentence is there, the row reads Active and offers no Unarchive
+  expect(await rowOf(page, name).locator('.projects-list__state').textContent()).toBe(PROJECT_COPY.allProjects.active);
+  await expect(page.getByRole('button', { name: PROJECT_WRITE_COPY.unarchive.named(name) })).toHaveCount(0);
+  await expect(page.locator('#projects-list [role="region"]')).toBeFocused();
+});
+
+test('re-review N2: a 409 not_archived (another person unarchived it first) is announced once the row is Active', async ({ browser }) => {
+  const name = `PRJ announce not archived ${RUN}`;
+  const p = await addProject(fx, { name, archived: true });
+  const page = await signedIn(browser, fx.members.owner);
+  await page.goto(path('/projects'));
+  // another session unarchives it first, from this page's own origin and cookies
+  const status = await page.evaluate(async (url) => (await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ requestId: crypto.randomUUID() }) })).status,
+    `/api/v1/orgs/${fx.org.slug}/projects/${p.id}/unarchive`);
+  expect(status).toBe(204);
+  const answers: number[] = [];
+  page.on('response', (r) => { if (r.url().endsWith('/unarchive')) answers.push(r.status()); });
+  await page.getByRole('button', { name: PROJECT_WRITE_COPY.unarchive.named(name) }).click();
+  await expect(listStatus(page)).toHaveText(PROJECT_WRITE_COPY.unarchive.unarchived(name));
+  expect(answers).toEqual([409]);
+  await expect(rowOf(page, name).locator('.projects-list__state')).toHaveText(PROJECT_COPY.allProjects.active);
+});
+
+test('re-review N2: a 409 request_id_reused and a 409 that is not the API\'s JSON never announce, and the row stays Archived', async ({ browser }) => {
+  const name = `PRJ announce refused ${RUN}`;
+  await addProject(fx, { name, archived: true });
+  const page = await signedIn(browser, fx.members.owner);
+  await page.goto(path('/projects'));
+  // request_id_reused: the API's own error body; nothing was written, the page refreshes and still lists it archived
+  await page.route('**/unarchive', (r) => r.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'conflict', code: 'request_id_reused' }) }));
+  let refreshed = false;
+  page.on('request', (r) => { if (r.headers().rsc === '1') refreshed = true; });
+  await page.getByRole('button', { name: PROJECT_WRITE_COPY.unarchive.named(name) }).click();
+  await expect.poll(() => refreshed).toBe(true);
+  await page.waitForLoadState('networkidle');
+  await expect(rowOf(page, name).locator('.projects-list__state')).toHaveText(PROJECT_COPY.allProjects.archived);
+  await expect(listStatus(page)).toHaveText('');
+  // a 409 whose body is not the API's JSON: the outcome is not known, so the row's own line says so and offers Retry
+  await page.unroute('**/unarchive');
+  await page.route('**/unarchive', (r) => r.fulfill({ status: 409, contentType: 'text/html', body: '<html>conflict</html>' }));
+  await page.getByRole('button', { name: PROJECT_WRITE_COPY.unarchive.named(name) }).click();
+  await expect(page.getByRole('status').filter({ hasText: PROJECT_WRITE_COPY.unarchive.lost })).toBeVisible();
+  await expect(listStatus(page)).toHaveText('');
+});
+
 test('UX-27 L5-14: after a successful create the form stays busy until the new page has loaded, and a second Enter sends nothing', async ({ browser }) => {
   const page = await signedIn(browser, fx.members.assessor);
   await page.goto(path('/projects/new'));

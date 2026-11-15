@@ -50,15 +50,19 @@ function focusList(): void {
  * the refresh, while the pressed button or Retry still exists, focus moves to the list itself (`focusList`), which
  * outlives the refresh and holds the project where it now appears (ruling L5-13, carried to the one list of plan 1B
  * Task 12). The list's status line (ProjectsListAnnouncer, above the table) then says what happened, "<name> is active
- * again. Your team can change it.": this control's own line goes with it, but the list's line outlives the refresh.
+ * again. Your team can change it.", once the refreshed list no longer shows the project archived (re-review N1): this
+ * control's own line goes with it, but the list's line outlives the refresh.
  */
 export function UnarchiveProjectButton(p: { orgSlug: string; projectId: string; projectName?: string }): ReactElement {
   const router = useRouter();
   const announce = useProjectsListAnnounce();
-  /** Writes `sentence` into the list's status line; outside a Projects list there is none, which on S-32 is a mistake. */
+  /**
+   * Asks the list's status line to say `sentence` once the refreshed list no longer shows this project archived
+   * (re-review N1); outside a Projects list there is no line, which on S-32 is a mistake.
+   */
   function say(sentence: string): void {
     if (announce === null) console.error('UnarchiveProjectButton: no Projects list status line to write in');
-    else announce(sentence);
+    else announce.sayWhenActive(p.projectId, sentence);
   }
   const retry = useRef<RetryState>(FRESH);
   const box = useRef<HTMLSpanElement>(null);
@@ -84,7 +88,7 @@ export function UnarchiveProjectButton(p: { orgSlug: string; projectId: string; 
     inFlight.current = true;
     setBusy(true);
     setLine('');
-    if (announce !== null) announce('');   // the list's line spoke of an earlier Unarchive: clear it before this one's answer
+    if (announce !== null) announce.clear();   // the list's line spoke of an earlier Unarchive: clear it before this one's answer
     const { requestId, state } = requestIdFor(retry.current, {});
     retry.current = state;
     const outcome = await sendWrite(`/api/v1/orgs/${p.orgSlug}/projects/${p.projectId}/unarchive`, 'POST', { requestId }, { onSlow: () => setLine(C.slow) });

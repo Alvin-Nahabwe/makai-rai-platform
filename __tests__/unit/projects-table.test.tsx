@@ -167,10 +167,30 @@ describe('Projects, one list (plan 1B Task 12)', () => {
     expect(src).toMatch(/if \(code === 'not_archived' && p\.projectName !== undefined\) say\(C\.unarchived\(/);
   });
 
+  it('re-review N1: the list says an Unarchive happened only once the list it renders no longer shows that project archived', async () => {
+    const { announcedLine } = await import('@/components/project/ProjectsListAnnouncer');
+    const pending = { projectId: 'b', sentence: 'Shelved is active again. Your team can change it.' };
+    expect(announcedLine(null, ['b'])).toBe('');
+    expect(announcedLine(pending, ['a', 'b'])).toBe('');   // the refresh has not landed: b is still rendered archived
+    expect(announcedLine(pending, ['a'])).toBe(pending.sentence);   // the refreshed list no longer has b among its archived rows
+    expect(announcedLine(pending, [])).toBe(pending.sentence);
+    // the list hands the announcer exactly the ids it renders as archived
+    const html = render([row('a', 'Alive'), row('b', 'Shelved', true)], { canUnarchive: true });
+    expect(html).toContain('data-archived-ids="b"');
+  });
+
+  it('re-review N4: on cards only the Actions cell is collapsed when it holds no Unarchive, not every cell without a button', () => {
+    const css = readFileSync('components/project/ProjectsTable.css', 'utf8');
+    expect(css).not.toMatch(/td:not\(:has\(button\)\)/);
+    expect(css).toMatch(/td\.ui-table__end:not\(:has\(\.projects-list__actions\)\)/);
+    const [, shelved] = bodyRows(render([row('a', 'Alive'), row('b', 'Shelved', true)], { canUnarchive: true }));
+    expect(shelved).toMatch(/<td role="cell" class="ui-table__end">.*<div class="projects-list__actions">/);
+  });
+
   it('design review 16: the announce function exists inside the Projects list and is null outside it (no silent provider loss)', async () => {
     const { ProjectsListAnnouncer, useProjectsListAnnounce } = await import('@/components/project/ProjectsListAnnouncer');
     function Probe() { return <i>{useProjectsListAnnounce() === null ? 'none' : 'line'}</i>; }
-    expect(renderToStaticMarkup(<ProjectsListAnnouncer><Probe /></ProjectsListAnnouncer>)).toContain('<i>line</i>');
+    expect(renderToStaticMarkup(<ProjectsListAnnouncer archivedIds={[]}><Probe /></ProjectsListAnnouncer>)).toContain('<i>line</i>');
     expect(renderToStaticMarkup(<Probe />)).toContain('<i>none</i>');
     // and the table, with its Unarchive controls, sits inside the provider
     const html = render([row('b', 'Shelved', true)], { canUnarchive: true });
