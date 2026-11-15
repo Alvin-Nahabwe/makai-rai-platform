@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { IssuedDocumentView } from '@/types/api';
 import type { SendOutcome } from '@/lib/client/retrySafeWrite';
-import { DOCUMENTS_COPY, MSG_PREVIEW_SERVER, MSG_ROLE_CHANGED, MSG_SEAL_CHECK_FAILED, SEAL_CHECK_FAILED } from '@/lib/documents/copy';
+import { DOCUMENTS_COPY, MSG_ISSUE_NO_REPLY, MSG_PREVIEW_SERVER, MSG_ROLE_CHANGED, MSG_SEAL_CHECK_FAILED, SEAL_CHECK_FAILED } from '@/lib/documents/copy';
 import { generateReducer, type GenerateState } from '@/lib/documents/generate';
 import { GenerateDocumentForm, NeverSealed, fromRecordLine, issuedMessage } from '@/components/documents/GenerateDocumentForm';
 import { IssuedDocumentsList } from '@/components/documents/IssuedDocumentsList';
@@ -87,7 +87,7 @@ describe('S-18 words (plan 1A Task 18c (c))', () => {
     expect(after(issuing, rejected(409, 'x')).message).toBe('Not issued. Something went wrong. Nothing was issued. Please try again.');
     expect(after(previewing, { kind: 'rejected', status: 429, body: { error: 'x', code: 'rate_limited', retryAfterSeconds: 60 } }).message).toBe('Preview not shown. Too many attempts. Try again in 1 minute.');
     expect(after(previewing, { kind: 'rejected', status: 429, body: { error: 'x', code: 'rate_limited', retryAfterSeconds: 120 } }).message).toBe('Preview not shown. Too many attempts. Try again in 2 minutes.');
-    expect(after(issuing, { kind: 'not_saved', reason: 'network' }).message).toBe('Not issued yet: no reply from the server. It may have arrived. Retry is safe: it will not issue twice.');
+    expect(after(issuing, { kind: 'not_saved', reason: 'network' }).message).toBe(MSG_ISSUE_NO_REPLY);
   });
 
   it('a server field message the screen knows is shown; one it does not know never is', () => {
@@ -123,6 +123,6 @@ describe('S-18 words (plan 1A Task 18c (c))', () => {
       'Withdrawn. Your earlier request may have done it. The reason shown is the one recorded.', 'Not confirmed. It may already have been withdrawn. Reload the page to see.',
       'Not withdrawn. Your role in this organisation no longer allows this. Ask an Owner or Admin.', 'Not withdrawn. This project is archived. Owners and Admins can unarchive it.',
     ]);
-    expect(A.WITHDRAW_LOST).toBe('Not withdrawn yet: no reply from the server. It may have arrived. Retry is safe: it will not withdraw twice.');
+    expect(A.WITHDRAW_LOST).toBe(DOCUMENTS_COPY.actions.withdrawLost);
   });
 });

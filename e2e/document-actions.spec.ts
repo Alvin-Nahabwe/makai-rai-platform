@@ -52,7 +52,7 @@ async function issuedCard(baseURL: string): Promise<{ projectId: string; reviewI
 let shared: Promise<{ projectId: string; reviewId: string; documentId: string }> | undefined;
 const sharedCard = (baseURL: string) => (shared ??= issuedCard(baseURL));
 const s18Of = (c: { projectId: string; reviewId: string }) => `/orgs/${org.slug}/projects/${c.projectId}/reviews/${c.reviewId}/documents`;
-const LOST = 'Not withdrawn yet: no reply from the server. It may have arrived. Retry is safe: it will not withdraw twice.';
+const LOST = DOCUMENTS_COPY.actions.withdrawLost;
 const withdrawRoute = (documentId: string) => `**/api/v1/orgs/${org.slug}/documents/${documentId}/withdrawal`;
 const textRoute = (documentId: string) => `**/api/v1/orgs/${org.slug}/documents/${documentId}/text`;
 const body409 = { error: 'already_withdrawn', code: 'already_withdrawn' };

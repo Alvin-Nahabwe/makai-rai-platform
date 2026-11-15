@@ -11,7 +11,7 @@ import { IssuedDocumentsList } from '@/components/documents/IssuedDocumentsList'
 import { ReviewDocumentsList } from '@/components/documents/ReviewDocumentsList';
 import { typedToSend } from '@/lib/documents/generate';
 import { SLOW_MS, type SendOutcome, type sendWrite } from '@/lib/client/retrySafeWrite';
-import { DOCUMENTS_COPY, MSG_PREVIEW_SERVER, NOT_RECORDED_AT_ISSUE, SEALED_NOTE, STATEMENT } from '@/lib/documents/copy';
+import { DOCUMENTS_COPY, MSG_ISSUE_NO_REPLY, MSG_PREVIEW_SERVER, NOT_RECORDED_AT_ISSUE, SEALED_NOTE, STATEMENT } from '@/lib/documents/copy';
 import { formatFingerprint } from '@/lib/seal/format';
 import { loadFieldMap } from '@/lib/documents/fieldMaps';
 import { HOSTILE_STRINGS } from '../helpers/hostile';
@@ -150,7 +150,7 @@ describe('S-18 form', () => {
   });
 
   it('UX-20 (C4 CR-3, F10): S-18 has its own failure lines; none claims the answer is kept on the device, Retry is offered where it is safe, and "Nothing was issued" is said only where the client knows it', () => {
-    const NO_REPLY = 'Not issued yet: no reply from the server. It may have arrived. Retry is safe: it will not issue twice.';
+    const NO_REPLY = MSG_ISSUE_NO_REPLY;
     const issuing = generateReducer({ phase: 'editing', typed: {}, message: null, retry: false }, { kind: 'send', to: 'issuing' });
     const previewing = generateReducer({ phase: 'editing', typed: {}, message: null, retry: false }, { kind: 'send' });
     const rejected = (status: number, code: string): SendOutcome<unknown> => ({ kind: 'rejected', status, body: { error: 'x', code } });

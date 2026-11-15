@@ -6,7 +6,7 @@ import type { OrgRole } from '@prisma/client';
 import { testDb } from '../__tests__/helpers/db';
 import { expectNoSeriousA11yViolations, settleHover } from './helpers/a11y';
 import { expectMainDoesNotScroll, org, seat, signIn, tabTo } from './helpers/s18';
-import { DOCUMENTS_COPY } from '../lib/documents/copy';
+import { DOCUMENTS_COPY, MSG_ISSUE_NO_REPLY } from '../lib/documents/copy';
 import { failOnDialog } from './helpers/dialogs';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { expectNoHorizontalScroll } from './helpers/reflow';
@@ -170,7 +170,7 @@ test('UX-20 UX-27: a lost Issue says it may have arrived, with [Retry], and Retr
   });
   await page.getByRole('button', { name: 'Issue this document' }).click();
   const alert = page.getByRole('alert').filter({ hasText: 'Not issued yet' });
-  await expect(alert).toContainText('Not issued yet: no reply from the server. It may have arrived. Retry is safe: it will not issue twice.');
+  await expect(alert).toContainText(MSG_ISSUE_NO_REPLY);
   await expect(alert.getByRole('button', { name: 'Retry' })).toBeVisible();
   expect(await testDb.issuedDocument.count({ where: { stageReviewId: reviewId } })).toBe(0);
   await alert.getByRole('button', { name: 'Retry' }).click();

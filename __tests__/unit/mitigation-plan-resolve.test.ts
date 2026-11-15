@@ -9,7 +9,7 @@ import { controlsForArea, controlsForQuestion } from '@/lib/content/suggestions'
 import { loadFieldMap } from '@/lib/documents/fieldMaps';
 import {
   GATE_DERIVED_NA, textErasedLine, NOT_RECORDED_AT_ISSUE, SEALED_NOTE, STATEMENT,
-  PROJECT_MARK, decisionSource, fromQuestion, outsideRoleLine, personalDataAnswerLine,
+  PROJECT_MARK, decisionSource, findingOnQuestion, fromQuestion, outsideRoleLine, personalDataAnswerLine, wordsThenCode,
 } from '@/lib/documents/copy';
 import { SOURCE_RESOLVERS, resolveFields, type DocumentSnapshot, type SealedDecision, type SealedFinding, type SealedStage } from '@/lib/documents/resolve';
 
@@ -19,6 +19,8 @@ import { SOURCE_RESOLVERS, resolveFields, type DocumentSnapshot, type SealedDeci
  */
 
 const content = loadContent('0.0.1-fixture');
+/** A shortfall finding's title (lane 6 rows C1, C2): its question's words in the content the seal was made on, then its code. */
+const T = (q: string): string => findingOnQuestion(content.questions.get(q)?.text as string, q);
 const mpMap: FieldMap = loadFieldMap('mitigation_plan');
 const CV: ContentRef = { contentVersionId: 'cv1', semver: '0.0.1-fixture', contentHash: 'h' };
 const user = (name: string): UserRef => ({ userId: `u-${name}`, name, formerMember: false });
@@ -149,7 +151,7 @@ describe('the mitigation plan resolvers', () => {
       mitigations: [{ what: 'Second coder', owner: 'Amina N.', due: '2026-11-10', status: 'planned', control: 'C-03' }],
     }] });
     const mp3 = text(r, 'MP-03') as string;
-    for (const s of ['Source: From question Q-PP-12', 'Assigned to: Amina N.', 'PP-02', 'Labels drift', 'Coders disagree.', '29 Oct 2026', 'Second coder', 'Amina N.', '10 Nov 2026', 'Planned', 'C-03']) expect(mp3).toContain(s);
+    for (const s of [`Source: question Q-PP-12`, 'Assigned to: Amina N.', 'PP-02', 'Labels drift', 'Coders disagree.', '29 Oct 2026', 'Second coder', 'Amina N.', '10 Nov 2026', 'Planned', 'C-03']) expect(mp3).toContain(s);
     const mp4 = text(r, 'MP-04') as string;
     for (const g of controlsForArea(content, 'PP-02')) for (const c of g.controls) expect(mp4).toContain(`${c.control.id} ${c.control.name}`);
   });
@@ -177,9 +179,9 @@ describe('the mitigation plan resolvers', () => {
     const ids = [...first, ...rest].flatMap((g) => g.controls.map((x) => x.control.id));
     expect(ids).toEqual(['C-03', 'C-04', 'C-05', 'C-07']);
     const name = (id: string) => content.controls.get(id)?.name as string;
-    const area = (id: string) => `${id} ${content.areas.get(id)?.name as string}`;
+    const area = (id: string) => wordsThenCode(content.areas.get(id)?.name as string, id);
     expect(text(r, 'MP-04')).toBe([
-      '1. Finding on Q-PP-09',
+      `1. ${T('Q-PP-09')}`,
       `Risk areas of question Q-PP-09: ${area('PP-02')}; ${area('PP-04')}`,
       `Controls: ${ids.map((id) => `${id} ${name(id)}`).join('; ')}`,
     ].join('\n'));
@@ -192,7 +194,7 @@ describe('the mitigation plan resolvers', () => {
       { riskArea: null, questionId: null, title: 'Neither' },
     ] });
     const mp4 = text(r, 'MP-04') as string;
-    expect(mp4).toContain('1. With area\nRisk area: PP-02');
+    expect(mp4).toContain(`1. With area\nRisk area: ${wordsThenCode(content.areas.get('PP-02')?.name as string, 'PP-02')}`);
     expect(mp4).not.toContain('C-12');            // Q-PP-12's area PP-07 is not read when the finding has its own area
     expect(mp4).not.toContain('Q-PP-10');
     expect(mp4).not.toContain('Neither');
@@ -343,7 +345,7 @@ describe('the ruled words a new document prints (plan 1A Task 18c)', () => {
         }] }] },
       ],
     });
-    expect(text(r, 'MP-03')).toContain('1. Open one\nSource: Raised by the team\nRisk area: PP-02');
+    expect(text(r, 'MP-03')).toContain(`1. Open one\nSource: Raised by the team\nRisk area: ${wordsThenCode(content.areas.get('PP-02')?.name as string, 'PP-02')}`);
     expect(text(r, 'MP-03')).toContain('\nStatus: Open');
     expect(text(r, 'MP-03')).not.toContain('State:');
     const mp6 = text(r, 'MP-06') as string;

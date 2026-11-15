@@ -10,6 +10,12 @@ import { formatDay } from '@/lib/format/dates';
 export const STATEMENT = 'Made from this team\'s own records in the MAK-AI RAI Platform. It is not an ethics approval, audit, certification or compliance statement.';
 /** The design spec's sentence (DESIGN-SPEC.md:424, the owner's decision of 14 November 2026) over 6.5, D8, R-56. */
 export const SEALED_NOTE = 'The platform keeps this seal. No outside body has time-stamped it.';
+/**
+ * The sealed note for a document drawn from `count` seals (lane 6 row D18): a document prints the chosen seal and the latest seal of each
+ * other sealed stage it uses (resolve.ts `sealsOf`), so up to three. One seal keeps the owner's sentence; more take its plural.
+ */
+export const sealedNote = (count: number): string =>
+  (count === 1 ? SEALED_NOTE : 'The platform keeps the seals this document is made from. No outside body has time-stamped them.');
 export const NOT_RECORDED = 'Not recorded';                                           // FR-DOC-02, D1
 export const NOT_RECORDED_AT_ISSUE = 'Not recorded: this stage had no seal when the document was issued'; // FR-DOC-05, D3; C#273
 /** A question with no decision inside a field that has another value (the owner's decision of 14 November 2026, walk finding S1). */
@@ -51,9 +57,13 @@ export const PROJECT_FIELDS: readonly string[] = ['name', 'description', ...META
 
 // SRS 7.5.6, "Erased text field" and "Erased evidence file": the lines that stand in place of erased text.
 export const FILE_NAME_ERASED = 'File name erased';
-export const textErasedLine = (date: string): string => `Text erased on ${formatDay(date)} on the organisation's instruction.`;
+// Lane 6 rows A1, A2 (B 189, B 277, C 281, C 282): "at the organisation's request". Documents are read by outsiders, so "the", not "your".
+// components/decision/** shows textErasedLine on screen too; there the vocabulary term `erased` reads "your organisation's request".
+/** Who asked for an erasure, as a document says it: the end of both erasure lines. */
+export const AT_ORGANISATION_REQUEST = "at the organisation's request.";
+export const textErasedLine = (date: string): string => `Text erased on ${formatDay(date)} ${AT_ORGANISATION_REQUEST}`;
 export const fileErasedLine = (name: string, date: string): string =>
-  `${name} . File erased on ${formatDay(date)} on the organisation's instruction. Its fingerprint is kept, so seals that include it still check.`;
+  `${name}: file erased on ${formatDay(date)} ${AT_ORGANISATION_REQUEST} Its fingerprint is kept, so seals that include it still check.`;
 /** The gate-derived line (SRS 7.5.6 "Gate-derived N/A", FR-CNT-04), as ruled in G-c3 (a). */
 export const GATE_DERIVED_NA = 'Does not apply: the team answered No to the personal data question';
 
@@ -67,6 +77,13 @@ export const decidedInLine = (who: string, period: string): string => `Decided b
 /** The short source of a finding or of a gate-derived line: "From question <Q-id> (decision version <n>)". */
 export const fromQuestion = (questionId: string, version?: number): string =>
   `From question ${questionId}${version === undefined ? '' : ` (decision version ${version})`}`;
+/** The source of a finding raised from a decision: "question <Q-id> (decision version <n>)", after "Source: " (lane 6 row D18: said once). */
+export const questionSource = (questionId: string, version?: number): string =>
+  `question ${questionId}${version === undefined ? '' : ` (decision version ${version})`}`;
+/** A finding raised with no title (a shortfall): its question's words, then its code (lane 6 rows C1, C2; voice rule 8). */
+export const findingOnQuestion = (words: string, questionId: string): string => `Finding on the question: ${words} (${questionId})`;
+/** A named item with a code, words first and the code after (voice rule 8): "Techno-solutionist Bias (PP-01)" (lane 6 row C12). */
+export const wordsThenCode = (words: string, code: string): string => `${words} (${code})`;
 /** A gate decision's answer (FR-DOC-02 B38). */
 export const personalDataAnswerLine = (answer: string): string => `Answer to the personal data question: ${answer}`;
 /** Who a mitigation is assigned to (C2 "Assigned to", over "Owner"). */
@@ -123,9 +140,24 @@ export const ERASABLE_FIELDS: ReadonlyArray<readonly [table: string, key: string
 
 /** The words of the S-18 failure lines (queued for the owner; used as written until the owner rules). Free of any claim about the device. */
 export const MSG_PREVIEW_SERVER = 'Preview not shown. The server had a problem. Try again.';
-export const MSG_ISSUE_NO_REPLY = 'Not issued yet: no reply from the server. It may have arrived. Retry is safe: it will not issue twice.';
+/**
+ * Lane 6 row A3 (CONSOLIDATED rule 3; section 8 rows 1 and 7). Shown after no reply, a reply that is not the API's, or a 5xx. "It will not
+ * issue twice" holds: Retry resends the same request id for the same body (GenerateDocumentForm `submitIssue`, `requestIdFor`), and the
+ * route replays a stored id (lib/data/documents.ts `issueDocument`, `idempotentWrite`).
+ */
+export const MSG_ISSUE_NO_REPLY = 'Not issued yet. We did not get a reply, so the document may already be issued. Select Retry. It will not issue twice.';
 export const MSG_ROLE_CHANGED = 'Preview not shown. Your role in this organisation no longer allows this. Ask an Owner or Admin.';
 export const MSG_SEAL_CHECK_FAILED = 'This seal cannot be used because it no longer matches the record. Contact MAK-AI through Help and contact.';
+/**
+ * Lane 6 row F3, route 17 (the PDF): LD-12's words. The reference is its own field beside the message in the answer (lib/http/toResponse.ts),
+ * which the browser shows as it is (the PDF link is a plain link), so the sentence points at it rather than holding it.
+ */
+export const MSG_DOCUMENT_CHECK_FAILED = 'This document failed its safety check, so it was not opened. Write to MAK-AI and give the reference shown with this message.';
+/**
+ * Lane 6 row F3, preview and issue: another stage's latest seal no longer matches its rows. S-18 never shows this text (it shows its own line
+ * for any 5xx), so it names no reference.
+ */
+export const MSG_OTHER_SEAL_CHECK_FAILED = 'This document was not made because a seal of another stage no longer matches the record.';
 
 /** One "<day> hh:mm:ss UTC" for an instant (FR-DOC-02: UTC, to the second). */
 export function utcSecond(iso: string): string {
@@ -236,7 +268,8 @@ export const DOCUMENTS_COPY = Object.freeze({
     withdrawConsequence: (document: string): string => `Withdraw this ${document}? It will be marked Withdrawn in the list, with your reason. The PDF is kept and can still be downloaded.`,
     withdrawn: 'Withdrawn.',
     withdrawTaken: 'Not withdrawn by you. Someone else withdrew it first. Their reason is shown.',
-    withdrawLost: 'Not withdrawn yet: no reply from the server. It may have arrived. Retry is safe: it will not withdraw twice.',
+    /** Lane 6 row A4: the pattern of MSG_ISSUE_NO_REPLY. A Retry resends the same request id for the same reason (DocumentActions `withdrawSend`), and a document is withdrawn once (409 already_withdrawn). */
+    withdrawLost: 'Not withdrawn yet. We did not get a reply, so the document may already be withdrawn. Select Retry. It will not withdraw twice.',
     withdrawOther: 'Not withdrawn. Reload the page and try again.',
     withdrawSignedOut: 'Not withdrawn. You are signed out. Sign in again, then come back.',
     withdrawEarlier: 'Withdrawn. Your earlier request may have done it. The reason shown is the one recorded.',
@@ -255,5 +288,7 @@ export const DOCUMENTS_COPY = Object.freeze({
     chooseEthics: 'Choose Approval granted, Submitted or Not required.',
     notOfState: 'This does not belong to the state you chose.',
     chooseDocument: 'Choose a data card, a model card or a mitigation plan.',
+    /** A body that is not a JSON object (lane 6 row E13; E-API-17). The same words as HTTP_COPY.unreadable (lib/http/copy.ts). */
+    unreadable: 'The request could not be read. Reload the page and try again.',
   }),
 });

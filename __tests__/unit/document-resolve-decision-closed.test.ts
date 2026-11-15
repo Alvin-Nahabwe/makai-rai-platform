@@ -64,12 +64,12 @@ const card = (s: Spec) => resolveFields(mc, snap('model_card', 'in-processing', 
 describe('a mitigation closed by a decision, as a document prints it (D-408)', () => {
   it('FR-FND-06 FR-DOC-01: MP-05 prints "Closed because the decision changed." under the finding for a done decision_changed with no text and no tombstone', () => {
     const text = fieldText(plan({ what: null, kind: 'decision_changed' }), 'MP-05');
-    expect(text).toBe(`1. Labels drift\nSource: From question Q-PP-01\nRisk area: none\nDescription: Coders disagree.\nStatus: Closed\nClosed by Amina N. on 30 Oct 2026.\n${CHANGED}`);
+    expect(text).toBe(`1. Labels drift\nSource: question Q-PP-01\nRisk area: none\nDescription: Coders disagree.\nStatus: Closed\nClosed by Amina N. on 30 Oct 2026.\n${CHANGED}`);
   });
 
   it('FR-FND-06 FR-DOC-01: MP-05 prints "Closed because the decision was withdrawn." under the finding for a done decision_withdrawn', () => {
     expect(fieldText(plan({ what: null, kind: 'decision_withdrawn' }), 'MP-05'))
-      .toBe(`1. Labels drift\nSource: From question Q-PP-01\nRisk area: none\nDescription: Coders disagree.\nStatus: Closed\nClosed by Amina N. on 30 Oct 2026.\n${WITHDRAWN}`);
+      .toBe(`1. Labels drift\nSource: question Q-PP-01\nRisk area: none\nDescription: Coders disagree.\nStatus: Closed\nClosed by Amina N. on 30 Oct 2026.\n${WITHDRAWN}`);
   });
 
   it('FR-FND-06 FR-DOC-01: MC-24 of the model card lists neither decision kind as a done mitigation', () => {

@@ -4,7 +4,7 @@ import { STAGES } from '@/types/record';
 import type { FindingView, MitigationVersionView, UserRef } from '@/types/api';
 import { loadContent } from '@/lib/content/loader';
 import { loadFieldMap } from '@/lib/documents/fieldMaps';
-import { CLOSED_NO_LONGER_APPLIES, closedByLine, textErasedLine } from '@/lib/documents/copy';
+import { CLOSED_NO_LONGER_APPLIES, closedByLine, findingOnQuestion, textErasedLine } from '@/lib/documents/copy';
 import { resolveFields, type DocumentSnapshot, type SealedDecision, type SealedStage } from '@/lib/documents/resolve';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
 
@@ -17,6 +17,8 @@ import { FINDINGS_COPY } from '@/lib/findings/copy';
  */
 
 const content = loadContent('0.0.1-fixture');
+/** A shortfall finding's title (lane 6 rows C1, C2): its question's words in the content the seal was made on, then its code. */
+const T = (q: string): string => findingOnQuestion(content.questions.get(q)?.text as string, q);
 const user = (name: string): UserRef => ({ userId: `u-${name}`, name, formerMember: false });
 const CHANGED = FINDINGS_COPY.mitigation.closedBecauseDecisionChanged;
 const WITHDRAWN = FINDINGS_COPY.mitigation.closedBecauseDecisionWithdrawn;
@@ -127,7 +129,7 @@ describe('a closing record is not a mitigation (ruling 1)', () => {
 
   it('MP-05 lists only the real done mitigations after the findings', () => {
     const t = fieldText(walk(), 'MP-05') as string;
-    expect(t.endsWith(`${CHANGED}\n1. Hold two listening sessions.\nFinding: Finding on Q-PP-03\nAssigned to: Asha Assessor\nDue: 30 Nov 2026`)).toBe(true);
+    expect(t.endsWith(`${CHANGED}\n1. Hold two listening sessions.\nFinding: ${T('Q-PP-03')}\nAssigned to: Asha Assessor\nDue: 30 Nov 2026`)).toBe(true);
     expect(t).not.toMatch(/^\d+\. Closed because/m);
     expect(t).not.toContain('Due: 14 Nov 2026');
   });
@@ -145,31 +147,31 @@ describe('a closing record is not a mitigation (ruling 1)', () => {
 describe('the closing line under its finding (rulings 2 and 3)', () => {
   it('"Closed by <who entered it> on <day>." then "Closed because the decision was withdrawn." for a withdrawal', () => {
     const t = fieldText(walk(), 'MP-05') as string;
-    expect(t).toContain('2. Finding on Q-PP-04\nSource: From question Q-PP-04\nRisk area: none\nStatus: Closed\nClosed by Asha Assessor on 14 Nov 2026.\nClosed because the decision was withdrawn.');
+    expect(t).toContain(`2. ${T('Q-PP-04')}\nSource: question Q-PP-04\nRisk area: none\nStatus: Closed\nClosed by Asha Assessor on 14 Nov 2026.\nClosed because the decision was withdrawn.`);
   });
 
   it('a change of the finding\'s own question prints "Closed because the decision changed."', () => {
-    expect(fieldText(walk(), 'MP-05')).toContain(`3. Finding on Q-PP-13\nSource: From question Q-PP-13\nRisk area: none\nStatus: Closed\n${closedByLine('Asha Assessor', '14 Nov 2026')}\n${CHANGED}`);
+    expect(fieldText(walk(), 'MP-05')).toContain(`3. ${T('Q-PP-13')}\nSource: question Q-PP-13\nRisk area: none\nStatus: Closed\n${closedByLine('Asha Assessor', '14 Nov 2026')}\n${CHANGED}`);
   });
 
   it('a version of another question answering No prints the "no longer applies" sentence (the gate case)', () => {
     const t = fieldText(plan([{ id: 'f-1', questionId: 'Q-PP-01', state: 'closed_mitigation', mitigations: [{ id: 'mv-1', seq: 1, kind: 'decision_changed', by: 'Joan K.', closes: 'dv-gate' }] }],
       { decisions: [{ questionId: GATE, id: 'dv-gate', scope: 'no' }] }), 'MP-05');
-    expect(t).toBe(`1. Finding on Q-PP-01\nSource: From question Q-PP-01\nRisk area: none\nStatus: Closed\nClosed by Joan K. on 14 Nov 2026.\n${CLOSED_NO_LONGER_APPLIES}`);
+    expect(t).toBe(`1. ${T('Q-PP-01')}\nSource: question Q-PP-01\nRisk area: none\nStatus: Closed\nClosed by Joan K. on 14 Nov 2026.\n${CLOSED_NO_LONGER_APPLIES}`);
     expect(CLOSED_NO_LONGER_APPLIES).toBe('Closed because this question no longer applies: the team answered No to the personal data question.');
   });
 
   it('a version that the snapshot does not hold prints the closing line with no cause sentence', () => {
     const t = fieldText(plan([{ id: 'f-1', questionId: 'Q-PP-01', state: 'closed_mitigation', mitigations: [{ id: 'mv-1', seq: 1, kind: 'decision_changed', closes: 'dv-gone' }] }],
       { decisions: [{ questionId: 'Q-PP-01', id: 'dv-later' }] }), 'MP-05');
-    expect(t).toBe('1. Finding on Q-PP-01\nSource: From question Q-PP-01\nRisk area: none\nStatus: Closed\nClosed by Asha Assessor on 14 Nov 2026.');
+    expect(t).toBe(`1. ${T('Q-PP-01')}\nSource: question Q-PP-01\nRisk area: none\nStatus: Closed\nClosed by Asha Assessor on 14 Nov 2026.`);
   });
 });
 
 describe('the finding\'s status (ruling 4) and an open finding (ruling 5)', () => {
   it('"Closed" for a finding closed with no real done mitigation; "Closed by a mitigation" for one closed by a real one', () => {
     const t = fieldText(walk(), 'MP-05') as string;
-    expect(t).toContain('1. Finding on Q-PP-03\nSource: From question Q-PP-03\nRisk area: none\nStatus: Closed by a mitigation\n\n2. ');
+    expect(t).toContain(`1. ${T('Q-PP-03')}\nSource: question Q-PP-03\nRisk area: none\nStatus: Closed by a mitigation\n\n2. `);
     expect(t).toContain('Q-PP-04\nRisk area: none\nStatus: Closed\n');
   });
 
@@ -181,8 +183,8 @@ describe('the finding\'s status (ruling 4) and an open finding (ruling 5)', () =
     const r = walk();
     const t = fieldText(r, 'MP-03') as string;
     expect(t).toBe([
-      '1. Finding on Q-PP-08\nSource: From question Q-PP-08\nRisk area: none\nRaised on: 14 Nov 2026\nStatus: Open',
-      '1. Finding on Q-PP-08\nMitigation 1: Write the data source register and file it with the ethics application.\nAssigned to: Olive Owner\nDue: 15 Jan 2027\nStatus: Planned',
+      `1. ${T('Q-PP-08')}\nSource: question Q-PP-08\nRisk area: none\nRaised on: 14 Nov 2026\nStatus: Open`,
+      `1. ${T('Q-PP-08')}\nMitigation 1: Write the data source register and file it with the ethics application.\nAssigned to: Olive Owner\nDue: 15 Jan 2027\nStatus: Planned`,
     ].join('\n'));
     expect(t).not.toMatch(/Closed/);
   });
@@ -190,15 +192,15 @@ describe('the finding\'s status (ruling 4) and an open finding (ruling 5)', () =
   it('an open finding whose only mitigation is a closing record prints "Mitigations: None"', () => {
     const t = fieldText(plan([{ id: 'f-1', questionId: 'Q-PP-01', state: 'open', mitigations: [{ id: 'mv-1', seq: 1, kind: 'decision_changed', closes: 'dv-1' }] }],
       { decisions: [{ questionId: 'Q-PP-01', id: 'dv-1' }] }), 'MP-03') as string;
-    expect(t.split('\n').slice(-2)).toEqual(['1. Finding on Q-PP-01', 'Mitigations: None']);
+    expect(t.split('\n').slice(-2)).toEqual([`1. ${T('Q-PP-01')}`, 'Mitigations: None']);
     expect(t).not.toMatch(/Closed/);
   });
 
   it('a finding closed by a real done mitigation prints exactly as it does today', () => {
     const r = plan([{ id: 'f-1', questionId: 'Q-PP-03', state: 'closed_mitigation', mitigations: [{ id: 'mv-1', seq: 1, what: 'Hold two listening sessions.', due: '2026-11-30' }] }]);
     expect(fieldText(r, 'MP-05')).toBe([
-      '1. Finding on Q-PP-03\nSource: From question Q-PP-03\nRisk area: none\nStatus: Closed by a mitigation',
-      '1. Hold two listening sessions.\nFinding: Finding on Q-PP-03\nAssigned to: Asha Assessor\nDue: 30 Nov 2026',
+      `1. ${T('Q-PP-03')}\nSource: question Q-PP-03\nRisk area: none\nStatus: Closed by a mitigation`,
+      `1. Hold two listening sessions.\nFinding: ${T('Q-PP-03')}\nAssigned to: Asha Assessor\nDue: 30 Nov 2026`,
     ].join('\n'));
     expect(fieldText(r, 'MP-02')).toBe('Open findings: 0. Closed by a mitigation: 1. Closed by an accepted risk: 0.\nMitigations planned: 0, in progress: 0, done: 1, cancelled: 0, overdue: 0.');
   });
@@ -209,17 +211,17 @@ describe('a closing-kind row that is not a closing record takes the ordinary pat
     const r = plan([{ id: 'f-1', questionId: 'Q-PP-01', state: 'closed_mitigation', mitigations: [{ id: 'mv-1', seq: 2, v: 2, kind: 'decision_changed', what: 'Rechecked the labels.', closes: 'dv-1' }] }],
       { decisions: [{ questionId: 'Q-PP-01', id: 'dv-1' }] });
     const t = fieldText(r, 'MP-05') as string;
-    expect(t).toContain('\n1. Rechecked the labels.\nFinding: Finding on Q-PP-01\nAssigned to: Asha Assessor\nDue: 14 Nov 2026');
+    expect(t).toContain(`\n1. Rechecked the labels.\nFinding: ${T('Q-PP-01')}\nAssigned to: Asha Assessor\nDue: 14 Nov 2026`);
     expect(t).not.toContain('Closed by Asha');
     expect(fieldText(r, 'MP-02')).toContain('done: 1,');
   });
 
   it('a version 1 decision-kind row with text prints its text; with a tombstone prints the erasure line', () => {
     const withText = fieldText(plan([{ id: 'f-1', questionId: 'Q-PP-01', state: 'closed_mitigation', mitigations: [{ id: 'mv-1', seq: 1, kind: 'decision_withdrawn', what: 'Recheck', closes: 'dv-1' }] }]), 'MP-05') as string;
-    expect(withText).toContain('\n1. Recheck\nFinding: Finding on Q-PP-01');
+    expect(withText).toContain(`\n1. Recheck\nFinding: ${T('Q-PP-01')}`);
     expect(withText).not.toContain('Closed by Asha');
     const erased = fieldText(plan([{ id: 'f-1', questionId: 'Q-PP-01', state: 'closed_mitigation', mitigations: [{ id: 'mv-1', seq: 1, kind: 'decision_changed', closes: 'dv-1' }] }], { erased: ['mv-1'] }), 'MP-05') as string;
-    expect(erased).toContain(`\n1. ${textErasedLine('2026-11-14')}\nFinding: Finding on Q-PP-01`);
+    expect(erased).toContain(`\n1. ${textErasedLine('2026-11-14')}\nFinding: ${T('Q-PP-01')}`);
     expect(erased).not.toContain('Closed by Asha');
   });
 
@@ -310,7 +312,7 @@ describe('the lead\'s readings 2 to 7', () => {
 
   it('reading 6: MP-05 with no real done mitigation left prints the findings only', () => {
     const t = fieldText(plan([WALK[2]], { decisions: WALK_DECISIONS }), 'MP-05');
-    expect(t).toBe(`1. Finding on Q-PP-04\nSource: From question Q-PP-04\nRisk area: none\nStatus: Closed\nClosed by Asha Assessor on 14 Nov 2026.\n${WITHDRAWN}`);
+    expect(t).toBe(`1. ${T('Q-PP-04')}\nSource: question Q-PP-04\nRisk area: none\nStatus: Closed\nClosed by Asha Assessor on 14 Nov 2026.\n${WITHDRAWN}`);
   });
 
   it('reading 7: a closing record\'s row stays a source of the document wherever it was one', () => {

@@ -6,7 +6,7 @@ import { documentDraft, documentViews, issueDocument, listDocuments, previewDocu
 import { requestDigest } from '@/lib/data/idempotency';
 import { withOrg } from '@/lib/data/tenant';
 import { RENDERERS, type Renderer } from '@/lib/documents/render';
-import { MSG_SEAL_CHECK_FAILED, NOT_RECORDED_AT_ISSUE, textErasedLine } from '@/lib/documents/copy';
+import { AT_ORGANISATION_REQUEST, MSG_SEAL_CHECK_FAILED, NOT_RECORDED_AT_ISSUE, textErasedLine } from '@/lib/documents/copy';
 import { resetDb, testDb } from '../helpers/db';
 // Aliased: the name starts with "use", and react-hooks/rules-of-hooks reads any such call as a React hook.
 import { useFixtureContent as publishFixtureContent } from '../helpers/content';
@@ -377,7 +377,7 @@ describe('the seal is checked against its rows before anything is rendered (M13)
     });
     const p = await previewDocument(ctx(), admin(), { ...body(), projectId: s.projectId, reviewId: s.reviewId, sealId: s.sealId });
     expect(p.text).toContain(`Text erased on ${new Date().getUTCDate()} `);
-    expect(p.text).toContain("on the organisation's instruction.");
+    expect(p.text).toContain(AT_ORGANISATION_REQUEST);
     expect((await issue({ projectId: s.projectId, reviewId: s.reviewId, sealId: s.sealId })).value.id).toBeTruthy();
   });
 
