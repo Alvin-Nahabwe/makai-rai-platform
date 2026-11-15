@@ -125,6 +125,7 @@ export function failureOf(o: Refused): UploadFailure {
   if (status === 409 && body.code === 'project_archived') return 'archived';
   if (status === 403) return 'role_changed';
   if (status === 401) return 'signed_out';
+  if (status === 422) return 'refused';
   return 'cut_off';
 }
 

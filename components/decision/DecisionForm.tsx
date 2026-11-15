@@ -1,21 +1,30 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactElement } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactElement, type ReactNode } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { EvidenceBlock } from '@/components/evidence/EvidenceBlock';
 import { ConflictView } from '@/components/decision/ConflictView';
 import { DecisionFields, FIELD_LABEL, FIELD_TARGET } from '@/components/decision/DecisionFields';
-import { SaveStatus } from '@/components/decision/SaveStatus';
+import { SaveStatus, unsavedShown } from '@/components/decision/SaveStatus';
+import { HELD_ON_SAVE, SaveHeldContext } from '@/components/decision/SaveHeld';
 import { Button } from '@/components/ui/Button';
 import { Callout } from '@/components/ui/Callout';
+import { Definition, Term } from '@/components/ui/Definition';
+import { TermTip } from '@/components/ui/TermTip';
 import { decisionFormNote } from '@/lib/authz/permissionNotes';
 import { signInAgainHref } from '@/lib/auth/idle';
 import { openDraftStore, type DraftStore, type StoredDraft } from '@/lib/client/drafts';
 import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafeWrite';
-import { OUTSIDE_ROLE_LABELS, problemSummary } from '@/lib/decision/copy';
+import { FINDING_NOTE, OUTSIDE_ROLE_LABELS, STATUS_OPTIONS, problemSummary } from '@/lib/decision/copy';
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
 import { EVIDENCE_COPY } from '@/lib/evidence/copy';
+import { QUESTION_COPY } from '@/lib/question/copy';
+import { TERM_ACCEPTED_RISK, TERM_FINDING, TERM_NOT_YET, TERM_PARTLY, TERM_VERSION_OF_A_DECISION } from '@/lib/vocabulary/terms';
+import { termPattern } from '@/lib/vocabulary/firstUse';
+import type { DefinedEntry } from '@/lib/vocabulary/types';
 import { formatTime } from '@/lib/format/dates';
+import { declaredDateFromParts } from '@/lib/decision/rules';
 import { draftErrors, draftFromCurrent, draftHeldForGate, draftKeyFor, isDecision, isDraftValue, keptEvidenceLine, toSaveBody, type DecisionDraft } from '@/lib/question/draft';
 import type { QuestionPanelData } from '@/lib/question/panel';
 import { conflictCurrent, gateStatus, navigationForOutcome, savingStatus, statusForOutcome, type SaveStatus as SaveStatusValue } from '@/lib/question/saveOutcome';
@@ -24,7 +33,18 @@ import type { DecisionVersionView, EvidenceItemView } from '@/types/api';
 import type { FieldError, UtcInstant } from '@/types/record';
 import '@/components/ui/buttonStyles';
 
-export type DecisionFormProps = { data: QuestionPanelData };
+/** The way on beside Save (R2): the next question that applies in this stage, or null on the stage's last question. */
+export type NextQuestion = { questionId: string; text: string; href: string; number: number; total: number };
+
+/**
+ * `nextQuestion` and `stageHref` come from the decision card (DecisionCard.tsx); without them (a unit test of the form
+ * alone) the save bar has no way on. The line on what this save will do reads the panel's own shortfall finding.
+ * `foot` is the card's foot (its History and finding links), rendered after the form inside SaveHeldContext so its links
+ * are text while a Save waits or is out. `ownOrigin` is the platform's public origin, read on the server, for the
+ * evidence block's link names (VersionEvidenceList `platformOrigin`; null: no link is the platform's own). `lead` is the
+ * card's phone saved block, rendered before the form inside SaveHeldContext so its history link is held too (review A A3c-2).
+ */
+export type DecisionFormProps = { data: QuestionPanelData; nextQuestion?: NextQuestion | null; stageHref?: string; foot?: ReactNode; lead?: ReactNode; ownOrigin?: string | null };
 
 const NO_RETRY: RetryState = { requestId: null, sentBody: null };
 const F = DECISION_FORM_COPY;
@@ -55,15 +75,165 @@ const fileList = (names: readonly string[]) => names.join(', ');
  * form. The evidence block lives in this client tree, so its callbacks are this form's (EVD RE-1), and it is
  * remounted with the current version's id so a save that made a new version gives it the new `initial` (EVD RE-4).
  */
-export function DecisionForm({ data }: DecisionFormProps): ReactElement | null {
+export function DecisionForm({ data, nextQuestion = null, stageHref, foot, lead, ownOrigin = null }: DecisionFormProps): ReactElement | null {
   if (!data.canWrite) {
     const note = decisionFormNote(data.viewer.role, data.projectArchived);
     return note === null ? null : <p data-permission-note>{note}</p>;
   }
-  return <WritableDecisionForm data={data} />;
+  return <WritableDecisionForm data={data} nextQuestion={nextQuestion} stageHref={stageHref} foot={foot} lead={lead} ownOrigin={ownOrigin} />;
 }
 
-function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
+/**
+ * What this save will do (R2; spec 9.3 item 6), as one sentence, then the version it becomes. The words are
+ * DECISION_FORM_COPY.consequence's, each true of lib/data/findings.ts (that file's comment says how); "open" is the
+ * question's open shortfall finding, the one a save acts on (`data.openFinding`, openShortfallForQuestion), never a team
+ * finding. The version is one above the newer of the base the form holds and the version on the page: the same number as
+ * the corner's mark after a refresh, and a stale base meets the conflict view before any save (review round 1).
+ * `finding` is true when the sentence uses the word, so its definition goes beside it.
+ */
+export function consequenceOf(d: DecisionDraft, data: QuestionPanelData, base: number | null): { text: string; finding: boolean; tips: DefinedEntry[] } {
+  const C = F.consequence;
+  // Coordinator (T3c item 7): the version line only while the answer differs from the saved version; render only.
+  const version = answerDiffers(d, data) ? C.version(Math.max(base ?? 0, data.current?.versionNumber ?? 0) + 1) : '';
+  const join = (sentence: string) => (version === '' ? sentence : sentence === '' ? version : `${sentence} ${version}`);
+  if (data.question.type === 'gate') {
+    return { text: join(d.scopeAnswer === null ? '' : C.scope[d.scopeAnswer]), finding: false, tips: [] };
+  }
+  const label = STATUS_OPTIONS.find((o) => o.value === d.status)?.label;
+  // Lane 6's first-use rule (T3c item 10b): with no status chosen no card's definition shows, so the line gives Partly, Not
+  // yet and "version" each its (i); "finding" has its definition after the line. "accepted risk" in the owner's sentence too.
+  if (d.status === null || label === undefined) {
+    return { text: join(FINDING_NOTE), finding: true, tips: version === '' ? [TERM_PARTLY, TERM_NOT_YET] : [TERM_PARTLY, TERM_NOT_YET, TERM_VERSION_OF_A_DECISION] };
+  }
+  const open = data.openFinding !== null;
+  if (d.status === 'partly' || d.status === 'not_yet') {
+    return open ? { text: join(C.keepsOpen(label)), finding: true, tips: [] } : { text: join(C.raises(label)), finding: true, tips: [TERM_ACCEPTED_RISK] };
+  }
+  return { text: join(open ? C.closesNot(label) : C.raisesNone(label)), finding: open, tips: [] };
+}
+
+/**
+ * The line's words with the first use of "finding" (when its definition follows the line) and of each `tips` term marked
+ * as the term (lane 6's `Term`), each tip term followed by its (i) (lane 6's `TermTip`, named "What does "<term>" mean?").
+ * The words stay exactly as written.
+ */
+export function ConsequenceWords({ text, finding, tips }: { text: string; finding: boolean; tips: readonly DefinedEntry[] }): ReactElement {
+  const entries: Array<{ of: DefinedEntry; tip: boolean }> = [...(finding ? [{ of: TERM_FINDING as DefinedEntry, tip: false }] : []), ...tips.map((of) => ({ of, tip: true }))];
+  const uses = entries
+    .map((e) => ({ ...e, m: termPattern(e.of.term, 'iu').exec(text) }))
+    .filter((u): u is typeof u & { m: RegExpExecArray } => u.m !== null)
+    .sort((a, b) => a.m.index - b.m.index);
+  const parts: ReactNode[] = [];
+  let from = 0;
+  for (const u of uses) {
+    if (u.m.index < from) continue;
+    parts.push(text.slice(from, u.m.index));
+    parts.push(<Term key={u.of.id} of={u.of}>{u.m[0]}</Term>);
+    from = u.m.index + u.m[0].length;
+    // "version 2" reads as one: its (i) follows the number, not the word.
+    const number = u.of.id === TERM_VERSION_OF_A_DECISION.id ? /^\s\d+/.exec(text.slice(from)) : null;
+    if (number !== null) { parts.push(number[0]); from += number[0].length; }
+    if (u.tip) parts.push(<TermTip key={`${u.of.id}-tip`} of={u.of} label={F.whatMeans(u.of.term)} id={`decision-consequence-tip-${u.of.id}`} />);
+  }
+  parts.push(text.slice(from));
+  return <>{parts}</>;
+}
+
+/**
+ * Whether the form's answer differs from the saved version (the coordinator's rule for the version line, T3c item 7): any
+ * answer differs when there is no saved decision (none yet, or a withdrawal); otherwise any field the save sends, the
+ * evidence in any order, and the date when one is typed (the date opens empty, and an empty date is not a different
+ * answer); and every answer while the saved version was answered against other wording (its content version). Render only: what a save sends, and the server's own "unchanged" refusal (lib/data/decisions.ts), are untouched.
+ */
+export function answerDiffers(d: DecisionDraft, data: QuestionPanelData): boolean {
+  const c = data.current;
+  if (!isDecision(c)) return true;
+  // Review A A3c-3: the server's "unchanged" rule also needs the same content version (lib/data/decisions.ts `repeats`), so
+  // the same answer saved against newer wording than the current version's is a new version.
+  if (c.content.semver !== data.contentSemver) return true;
+  const o = draftFromCurrent(data);
+  const sorted = (a: readonly string[]) => [...a].sort().join('\n');
+  if (d.status !== o.status || d.scopeAnswer !== o.scopeAnswer || d.reasonCode !== o.reasonCode || d.reason !== o.reason) return true;
+  if (sorted(d.optionsInPlace) !== sorted(o.optionsInPlace) || sorted(d.evidenceIds) !== sorted(o.evidenceIds)) return true;
+  if (JSON.stringify(d.decidedBy) !== JSON.stringify(o.decidedBy)) return true;
+  if (d.date.day === '' && d.date.month === '' && d.date.year === '') return false;
+  const typed = declaredDateFromParts(d.date);
+  return !('date' in typed) || typed.date !== c.declaredDate;
+}
+
+/**
+ * Plan 1C C4 (spec 9.7, "Save and Retry are one control whose label changes"): whether the form's one submit control reads
+ * "Retry". Exactly when today's separate Retry would have re-sent the same request: a request was sent, the answer the field
+ * holds is the one it carried (`requestIdFor` gives its id back), and either the reply offered a retry or a restored draft's
+ * Save was pressed and never confirmed. While a pressed Retry's own request is out it keeps its label (D-398 item 4: it stays
+ * the same control, busy, with focus); while a Save's request is out the control reads "Save decision", disabled.
+ */
+export function saveControlIsRetry(s: {
+  retry: RetryState; body: Record<string, unknown>; status: SaveStatusValue | null; restoredPressed: boolean; saving: boolean; retrying: boolean;
+}): boolean {
+  if (s.saving) return s.retrying;
+  return s.retry.requestId !== null
+    && requestIdFor(s.retry, s.body, () => '').requestId === s.retry.requestId
+    && (s.status?.next === 'retry' || (s.status === null && s.restoredPressed));
+}
+
+/**
+ * The wait card's lines (UX-30): "Waiting for {files} to finish uploading." for the files still uploading, and, the owner's
+ * words of 15 Nov 2026 14:30 (review B-M5), "{name} did not upload. Retry it, remove it, or save without it." for each
+ * failed or refused file, which will not finish by itself.
+ */
+export function WaitLines({ uploading, failed }: { uploading: readonly string[]; failed: readonly string[] }): ReactElement | null {
+  if (uploading.length === 0 && failed.length === 0) return null;
+  return (
+    <>
+      {uploading.length > 0 ? <p>{F.waiting.before}<bdi>{fileList(uploading)}</bdi>{F.waiting.after}</p> : null}
+      {failed.map((name) => <p key={name}><bdi>{name}</bdi>{F.waiting.failed}</p>)}
+    </>
+  );
+}
+
+/**
+ * The way on beside Save (R2, R9): "Next: <question>" with "Question n of N", or on the stage's last question the line that
+ * says so and All questions. Review B-I1: while a Save waits for an upload or a link, or its request is out (`held`), the
+ * next question's words are text, not a link, and quieter, so the card's own control cannot take the person away from a
+ * Save that has not gone yet (following it unmounts the form and its uploads). Leaving by the browser or the route column
+ * is unchanged.
+ */
+export function NextWay({ next, stageHref, held }: { next: NextQuestion | null; stageHref?: string; held: boolean }): ReactElement | null {
+  if (next !== null) {
+    const words = <><span className="decision-next__words">{F.card.next(next.text)}</span><span className="decision-next__position">{F.card.position(next.number, next.total)}</span></>;
+    return held
+      ? <p className="decision-next decision-next--held" data-next-held>{words}</p>
+      : <Link className="decision-next" href={next.href} {...{ [HELD_ON_SAVE]: '' }}>{words}</Link>;
+  }
+  if (stageHref === undefined) return null;
+  // Review A I-1: on the stage's last question, All questions is held as Next is.
+  return (
+    <p className="decision-next decision-next--last">
+      {QUESTION_COPY.foot.last}{' '}
+      {held
+        ? <span className="decision-next--held" data-next-held>{QUESTION_COPY.nav.allQuestions}</span>
+        : <Link href={stageHref} {...{ [HELD_ON_SAVE]: '' }}>{QUESTION_COPY.nav.allQuestions}</Link>}
+    </p>
+  );
+}
+
+/**
+ * Whether the save bar covers the screen's foot now (W-3 narrow, and the owner's Option A of 15 Nov 2026 on wide screens):
+ * fixed to the bottom at 768 px and below; above that it is `position: sticky` at the bottom of the card's form, which is
+ * pinned exactly while its own place is below the fold, so it is read from geometry: its box reaches the screen's foot and
+ * is on the screen. In the flow (static: an open withdrawal confirmation on a phone) it covers nothing.
+ */
+function pinnedBar(bar: HTMLElement): boolean {
+  const position = getComputedStyle(bar).position;
+  if (position === 'fixed') return true;
+  if (position !== 'sticky') return false;
+  const r = bar.getBoundingClientRect();
+  const foot = document.documentElement.clientHeight;
+  return r.top < foot && r.bottom >= foot - 1;
+}
+
+function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead, ownOrigin = null }: DecisionFormProps): ReactElement {
   const router = useRouter();
   const key = draftKeyFor(data);
   const currentNumber = data.current?.versionNumber ?? null;
@@ -113,6 +283,9 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
   // D-398 item 4: a pressed Retry stays mounted, busy, while its own request is out, so focus stays on it.
   const [retrying, setRetrying] = useState(false);
   const saveBar = useRef<HTMLDivElement | null>(null);
+  // The one submit control (C4): after a Retry's answer that leaves it reading "Save decision", focus moves to the bar.
+  const submit = useRef<HTMLButtonElement | null>(null);
+  const retryLabel = useRef(false);
   // Set when a Retry's request is answered, or a send removed a focused control of the bar: if nothing else took focus,
   // the bar takes it.
   const afterRetry = useRef(false);
@@ -131,9 +304,12 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
   // A new current version arrived (a save, or someone else's, after router.refresh): open from it, as on a new page.
   if ((data.current?.id ?? null) !== seenCurrentId) {
     setSeenCurrentId(data.current?.id ?? null);
-    // Only when the field holds nothing of the person's that the new version lacks, and no link's request is out: the
-    // block that sent it would be replaced, and the link lost with it (as a file that is uploading edits the answer).
-    if (conflict === null && !typedSinceCurrent && !uploads.linkAdding) {
+    // Only when the field holds nothing of the person's that the new version lacks, and no link's request or file upload
+    // is out: the block that sent it would be replaced, and the link or the file lost with it. Review B I-r4-1: "Save
+    // without this file" saves while the file uploads, and the new version's remount aborted that upload and dropped it
+    // without a word (e2e/decision-save-without-upload.spec.ts); kept, it finishes and edits the answer, so the next Save
+    // adds it as the "Saved without" line promises.
+    if (conflict === null && !typedSinceCurrent && !uploads.linkAdding && uploads.uploading.length === 0) {
       setValue(draftFromCurrent(data));
       setBase(currentNumber);
       setRetry(NO_RETRY);
@@ -185,10 +361,14 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
   useEffect(() => {
     if (!afterRetry.current) return;
     afterRetry.current = false;
-    if (document.activeElement === null || document.activeElement === document.body) saveBar.current?.focus();
+    // C4: the Retry is the one submit control relabelled, not removed; when the answer leaves it reading "Save decision",
+    // the Retry the person had is gone as before, and the bar takes focus as it did then.
+    const active = document.activeElement;
+    if (active === null || active === document.body || (active === submit.current && !retryLabel.current)) saveBar.current?.focus();
   });
 
-  // W-3 narrow: the fixed save bar's height is the space the page reserves under its content (DecisionForm.css).
+  // W-3 narrow: the fixed save bar's height is the space the page reserves under its content (DecisionForm.css); on wide
+  // screens (Option A) the pinned row's height is the scrolling box's scroll padding at its foot.
   // Measured after every render too, not only by the observer below: a render that grows the bar (the unsaved line
   // appearing on the first edit) is followed at once by the next key, and the observer reports only at the next
   // rendering frame, so a Tab before that frame scrolled the next field into view above the bar's old height and the
@@ -207,24 +387,30 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
     if (h < was || !(focused instanceof HTMLElement) || bar.contains(focused) || !(bar.closest('form')?.contains(focused) ?? false)) return;
     // Covered: its lower edge under the bar's top, and it is on the screen at all (one the person scrolled away from stays).
     const r = focused.getBoundingClientRect();
-    if (getComputedStyle(bar).position === 'fixed' && r.bottom > bar.getBoundingClientRect().top && r.top < document.documentElement.clientHeight) {
+    if (pinnedBar(bar) && r.bottom > bar.getBoundingClientRect().top && r.top < document.documentElement.clientHeight) {
       focused.scrollIntoView({ block: 'nearest', behavior: 'instant' });
     }
   }, []);
   useLayoutEffect(applyBarHeight);
 
   /**
-   * Brings what took focus wholly into view, unless it already is: between the screen's top and the fixed bar's top (or
-   * the screen's foot when the bar is in the flow). A press on a control that is in view must not move the page, or the
-   * press ends on whatever slid under it and is lost.
+   * Brings what took focus wholly into view, unless it already is: between the screen's top and the top of the bar while
+   * it covers the screen's foot (fixed, or pinned on a wide screen), or the screen's foot when the bar is in its place. A
+   * control inside the bar is measured against the screen's foot: the bar holds it. A press on a control that is in view
+   * must not move the page, or the press ends on whatever slid under it and is lost.
    */
   const footOfView = useCallback((): number => {
     const bar = saveBar.current;
-    return bar !== null && getComputedStyle(bar).position === 'fixed' ? bar.getBoundingClientRect().top : document.documentElement.clientHeight;
+    return bar !== null && pinnedBar(bar) ? bar.getBoundingClientRect().top : document.documentElement.clientHeight;
   }, []);
   const reveal = useCallback((el: Element): void => {
     const r = el.getBoundingClientRect();
-    if (r.top >= 0 && r.bottom <= footOfView()) return;
+    // Review B M-r4-2: only the wide screens' pinned (sticky) row holds its controls at the screen's foot; the phone's fixed
+    // bar is measured as it was at 757f56ca (footOfView), so a control its own overflow clips is still scrolled into view.
+    const bar = saveBar.current;
+    const inPinnedRow = bar !== null && bar.contains(el) && getComputedStyle(bar).position === 'sticky';
+    const foot = inPinnedRow ? document.documentElement.clientHeight : footOfView();
+    if (r.top >= 0 && r.bottom <= foot) return;
     el.scrollIntoView?.({ block: 'nearest', behavior: 'instant' });
   }, [footOfView]);
 
@@ -272,6 +458,15 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
     keep({ baseVersionNumber: latest.current.base, value: next, savedAt: new Date().toISOString(), savePressedAt: null, retry: latest.current.retry });
   }, [keep]);
 
+  /**
+   * Reviews A M-1 and B M-r4-3: a focused way off the page (Next, All questions, a foot link) that a Save waiting or out turns
+   * into text would leave focus on the page body; the bar takes it after that render (the after-Retry effect above).
+   */
+  const leaveHeldLink = useCallback((): void => {
+    const a = document.activeElement;
+    if (a instanceof HTMLElement && a.closest(`[${HELD_ON_SAVE}]`) !== null) afterRetry.current = true;
+  }, []);
+
   const send = useCallback(async (d: DecisionDraft, saveBase: number | null, state: RetryState, omitted: string[], auto = false, fromRetry = false): Promise<void> => {
     if (sending.current) return;
     sending.current = true;
@@ -287,6 +482,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
     // after the render that removed it and again after the answer (the effect below moves focus only from the body).
     const focusInBar = saveBar.current?.contains(document.activeElement) ?? false;
     if (focusInBar && !fromRetry) afterRetry.current = true;
+    leaveHeldLink();
     setSaving(true);
     setRetrying(fromRetry);
     setErrors([]);
@@ -366,7 +562,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
       if (current !== null) setConflict(current);
     }
     setStatus(next);
-  }, [data, key, keep, router]);
+  }, [data, key, keep, router, leaveHeldLink]);
 
   // NFR-REL-05: one automatic retry when the browser says it is online again, of the unchanged draft, same id.
   useEffect(() => {
@@ -387,6 +583,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
 
   /** Starts or ends the wait of a pressed Save, for the callout and for the block's next report. */
   function hold(on: boolean): void {
+    if (on) leaveHeldLink();
     waitingNow.current = on;
     setWaiting(on);
   }
@@ -441,9 +638,13 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
     };
   });
 
+  /**
+   * The one Save/Retry control's press (C4), and a submit by Enter in a field: "Retry" takes the path today's Retry took
+   * (`fromRetry`: it stays the pressed, busy control while its request is out), "Save decision" the path Save took.
+   */
   function onSubmit(e: FormEvent<HTMLFormElement>): void {
     e.preventDefault();
-    save(false);
+    if (isRetry) save(false, uploads, base, true); else save(false);
   }
 
   const deciderName = (() => {
@@ -458,15 +659,23 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
 
   const signInHref = signInAgainHref(value.href, '');
   const waitingFiles = [...uploads.uploading, ...uploads.failed];
+  const consequence = consequenceOf(value, data, base);
+  const isRetry = saveControlIsRetry({
+    retry, body: toSaveBody(value, data, base) as unknown as Record<string, unknown>, status, restoredPressed, saving, retrying,
+  });
+  useLayoutEffect(() => { retryLabel.current = isRetry; });
 
+  const held = waiting || saving;
   return (
-    // SC 2.4.11: a control that takes focus anywhere in the answer form, the evidence block included, is brought wholly
-    // into view, instantly rather than with the page's smooth scroll (app/globals.css:225): the browser reveals a focused
-    // text control's caret, not its box, in a scroll it issues after this handler, and when both animate the browser's
-    // wins and leaves the box 2 px below the fold at <= 768 px, where the document and not .app-main scrolls. An instant
-    // scroll lands first, and the browser's if-needed reveal then finds the caret already in view. When the error
-    // summary's first line takes focus, the whole summary is brought into view, so its list is not left under the bar.
-    // A control already wholly in view is left where it is (reveal).
+    <SaveHeldContext.Provider value={held}>
+    {lead}
+    {/* SC 2.4.11: a control that takes focus anywhere in the answer form, the evidence block included, is brought wholly
+        into view, instantly rather than with the page's smooth scroll (app/globals.css:225): the browser reveals a focused
+        text control's caret, not its box, in a scroll it issues after this handler, and when both animate the browser's
+        wins and leaves the box 2 px below the fold at <= 768 px, where the document and not .app-main scrolls. An instant
+        scroll lands first, and the browser's if-needed reveal then finds the caret already in view. When the error
+        summary's first line takes focus, the whole summary is brought into view, so its list is not left under the bar.
+        A control already wholly in view is left where it is (reveal). */}
     <form method="post" noValidate onSubmit={onSubmit} onFocus={(e) => { const t: Element = e.target; reveal(t === summary.current ? t.parentElement ?? t : t); }} data-region-form="answer-form" data-ready={ready ? 'true' : undefined} aria-labelledby="s12-answer-form">
       {conflict !== null ? (
         <ConflictView
@@ -534,6 +743,9 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
             unaddedLinkRefusals={linkRefusals}
             initialLink={typedLink}
             onLinkInput={(l) => setTypedLink((o) => (o.url === l.url && o.label === l.label ? o : l))}
+            examples={data.runningQuestion.evidenceExamples} decisionCard keptCount={extraEvidenceIds.length}
+            saveWithout={waiting || waitingFiles.length === 0 ? null : { label: F.saveWithout(waitingFiles.length), onPress: () => save(true) }}
+            ownOrigin={ownOrigin}
           />
         </section>
 
@@ -555,7 +767,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
         {waiting ? (
           <div className="decision-form__box" data-upload-wait>
             <Callout kind="note">
-              {waitingFiles.length > 0 ? <p>{F.waiting.before}<bdi>{fileList(waitingFiles)}</bdi>{F.waiting.after}</p> : null}
+              <WaitLines uploading={uploads.uploading} failed={uploads.failed} />
               {/* With no file to wait for, the wait is for a link, whether or not its report has been rendered yet. */}
               {uploads.linkAdding || waitingFiles.length === 0 ? <p>{EVIDENCE_COPY.link.waiting}</p> : null}
               <div className="form-actions">
@@ -567,24 +779,56 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
         ) : null}
         </div>
 
+        {/* R2: one line on what this save will do, after the fields and the evidence and before Save. Not a live region: it
+            follows the choice as the person makes it, and the save's own status line announces what happened. */}
+        <div className="decision-consequence">
+          <svg className="decision-consequence__icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
+            <circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7.5v.5" />
+          </svg>
+          <div>
+            <p data-consequence><ConsequenceWords {...consequence} /></p>
+            {consequence.finding ? <Definition of={TERM_FINDING} as="p" /> : null}
+          </div>
+        </div>
+
         {/* tabIndex -1: after a Retry's answer removes the Retry, focus comes here, beside the status line, not to the page. */}
+        {/* Option A (owner, 15 Nov 2026): above 768 px the bar is sticky at the foot of the form, so it pins to the screen's foot
+            while its place is below the fold and returns to it at the card's end (DecisionForm.css); the inner box carries the
+            pinned look, which a scroll-state query sets on the bar's descendants. One bar, one Save, at every width. */}
         <div className="decision-save-bar" ref={saveBar} tabIndex={-1}>
+          <div className="decision-save-bar__pin">
+          <div className="decision-save-bar__row">
           <div className="form-actions">
-            <Button variant="primary" type="submit" disabled={saving}>{F.save}</Button>
-            {status?.next === 'retry' || (status === null && restoredPressed) || (saving && retrying)
-              ? <Button variant="secondary" busy={saving} onClick={() => save(false, uploads, base, true)}>{F.retry}</Button>
-              : null}
+            {/* C4: one control, "Save decision" or "Retry". A pressed Retry is busy, not disabled, while its request is out, so
+                it keeps focus (D-398 item 4); Save is disabled while its request is out. */}
+            <Button variant="primary" type="submit" ref={submit} disabled={saving && !retrying} busy={saving && retrying}>{isRetry ? F.retry : F.save}</Button>
             {/* Native links in the kit's button classes: ButtonLink is next/link, and the gate link carries data-gate-link. */}
             {status?.next === 'sign_in' ? <a className="ui-button ui-button--secondary" href={signInHref}>{F.signInAgain}</a> : null}
             {status?.next === 'go' && status.action !== undefined ? <a className="ui-button ui-button--secondary" href={status.action.href} data-gate-link>{status.action.label}</a> : null}
+          </div>
+          {/* R2, R9: the way on beside Save, a quiet link, never a second orange control; text while a Save waits or is out (B-I1). */}
+          <NextWay next={nextQuestion} stageHref={stageHref} held={held} />
           </div>
           <SaveStatus status={status} draftSavedAt={draftSavedAt} storageUnavailable={storageUnavailable} />
           {leftOut.length > 0 && status !== null && (status.id === 'M-03' || status.id === 'M-04')
             ? <p>{F.savedWithout.before}<bdi>{fileList(leftOut)}</bdi>{leftOut.length === 1 ? F.savedWithout.after : F.savedWithout.afterMany}</p>
             : null}
+          </div>
         </div>
         </fieldset>
+        {/* Design N1: the unsaved line's words after its first sentence, under the bar's own place in the card, so the pinned
+            bar stays one line taller and these show when it is back in its place. Hidden from assistive technology: the bar's
+            live span reads the whole sentence. Not drawn on a phone, whose fixed bar shows the whole line (DecisionForm.css).
+            After the fieldset, not in it, so the bar stays the fieldset's last child: drawn inside it on the frame a restored
+            draft is read (the fieldset enabled, the fields refilled), Chromium left the fields' inline-size container
+            (.decision-fields, DecisionFields.css) 0 px tall, every field undrawn, until the next layout. Inside the div the
+            conflict view hides, so it is hidden with the form. */}
+        {unsavedShown({ status, draftSavedAt, storageUnavailable })
+          ? <p className="text-muted decision-unsaved-more" aria-hidden="true" data-unsaved-more>{F.unsavedMore}</p>
+          : null}
       </div>
     </form>
+    {foot}
+    </SaveHeldContext.Provider>
   );
 }

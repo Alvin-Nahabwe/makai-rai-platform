@@ -5,6 +5,9 @@ import { Select } from '@/components/ui/Select';
 
 /** Plan 1A Task 4: Select (decision B11: a styled closed control, base-select where supported). */
 
+/** Select's markup at c1c933b6 for `base` below (no aria-describedby prop): rendered from that commit's file, 15 Nov 2026. */
+const SELECT_AT_070 = "<div class=\"ui-field\"><label class=\"ui-field__label\" for=\"s\">Main reason</label><div class=\"ui-field__hint\" id=\"s-hint\">h</div><div class=\"ui-select__wrap\"><select class=\"ui-select\" id=\"s\" name=\"s\" aria-invalid=\"false\" aria-describedby=\"s-hint\"><option value=\"a\">A</option></select><span class=\"ui-select__icon\"><svg class=\"ui-icon\" width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" focusable=\"false\"><path d=\"m6 9 6 6 6-6\"></path></svg></span></div></div>";
+
 const selectOf = (html: string) => html.match(/<select [^>]*>/)?.[0] ?? '';
 
 describe('Select', () => {
@@ -31,6 +34,14 @@ describe('Select', () => {
     expect(select).toContain('aria-describedby="s-hint s-error"');
     expect(select).toContain('class="ui-select ui-select--invalid"');
     expect(html).toContain('<option value="a" selected="">A</option>');
+  });
+
+  it('aria-describedby (additive): the caller\'s ids follow the hint and come before the error; without it the markup is the one of release 0.7.0', () => {
+    const base = { id: 's', name: 's', label: 'Main reason', hint: 'h', options: [{ value: 'a', label: 'A' }] } as const;
+    expect(selectOf(renderToStaticMarkup(<Select {...base} aria-describedby="s-use" error="Choose one." />))).toContain('aria-describedby="s-hint s-use s-error"');
+    expect(selectOf(renderToStaticMarkup(<Select {...base} aria-describedby="s-use" hint={undefined} />))).toContain('aria-describedby="s-use"');
+    // Without the prop, the markup the kit's Select produced before the prop existed (release 0.7.0, c1c933b6), pinned.
+    expect(renderToStaticMarkup(<Select {...base} />)).toBe(SELECT_AT_070);
   });
 
   it('without an error, aria-invalid is false', () => {

@@ -23,6 +23,9 @@ const Q2_TEXT = (JSON.parse(readFileSync('__tests__/fixtures/content/0.0.1-fixtu
   stages: Record<string, { modules: Array<{ questions: Array<{ id: string; text: string }> }> }>;
 }).stages['pre-processing'].modules.flatMap((m) => m.questions).find((q) => q.id === 'Q-PP-02')!.text;
 
+/** The words as a literal in a pattern. */
+const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 test.beforeEach(async ({ page }) => { failOnDialog(page); });
 
 /** Presses Tab until the focused element satisfies `match`; fails after 80 presses. */
@@ -57,8 +60,8 @@ async function placeAt(control: Locator, top: number): Promise<void> {
 
 test('UX-42 NFR-A11Y-02: keyboard-only Next moves focus to the new question heading', async ({ page, baseURL }) => {
   await openQuestion(page, 'assessor', Q, baseURL!);
-  // The way on after the decision (the decision slot; lane 2's card holds its own Next link at the merge).
-  await page.locator('[data-region="way-on"]').getByRole('link', { name: `Next question: ${Q2_TEXT}`, exact: true }).focus();
+  // The way on is the merged card's "Next: <question>" link in its Save row (lane 2's card, at the merge).
+  await page.locator('.decision-save-bar').getByRole('link', { name: new RegExp(`^Next: ${escapeRe(Q2_TEXT)}`) }).focus();
   await page.keyboard.press('Enter');
   // The h1 is the question in words (plan 1C decision C1, cut); its code line "Q-PP-02 · {module}" follows it.
   const heading = page.getByRole('heading', { level: 1, name: Q2_TEXT, exact: true });
@@ -80,7 +83,7 @@ test('Shell gap 3: arriving at a question by loading it, or by a click, focuses 
   expect(await ringOf(page)).toEqual({ focused: true, ring: false });
   await page.screenshot({ path: 'test-results/route-T1/arrival-load-1280.png' });
   // A click on the way on: the next question's heading takes focus, still with no ring.
-  await page.locator('[data-region="way-on"]').getByRole('link', { name: `Next question: ${Q2_TEXT}`, exact: true }).click();
+  await page.locator('.decision-save-bar').getByRole('link', { name: new RegExp(`^Next: ${escapeRe(Q2_TEXT)}`) }).click();
   await expect(page.getByRole('heading', { level: 1, name: Q2_TEXT, exact: true })).toBeFocused();
   expect(await ringOf(page)).toEqual({ focused: true, ring: false });
   await page.screenshot({ path: 'test-results/route-T1/arrival-click-1280.png' });
@@ -113,6 +116,9 @@ test('NFR-A11Y-02: J-05 by keyboard alone: status, reason, decided by, Today, Sa
   await page.keyboard.type('Compared a rule-based alert with the model, by keyboard.');
   await tabTo(page, 'Decided by', (e) => e.tag === 'select' && e.label === 'Decided by (required)');
   await expectFocusVisibleAndUncovered(page);
+  // Decided by starts empty on a first decision (spec 9.3 item 4, owner OQ1 (a)): typing chooses the person, "You (...)".
+  await page.keyboard.type('You');
+  await expect(page.locator('#decision-decided-by option:checked')).toHaveText(/^You \(/);
   await tabTo(page, 'Today', (e) => e.tag === 'button' && e.name === 'Today');
   await expectFocusVisibleAndUncovered(page);
   await page.keyboard.press('Enter');
@@ -146,6 +152,8 @@ for (const height of [800, 568]) test(`SPEC-2 W-3 NFR-A11Y-02 SC 2.4.11: at 320 
     // The first edit adds the unsaved line to the bar, which grows over the field that has focus: it must be scrolled clear.
     if (what === 'the first status radio') { await page.keyboard.press('Space'); await expectFocusVisibleAndUncovered(page); }
     if (what === 'the reason') await page.keyboard.type('Compared a rule-based alert with the model, at 320 px.');
+    // Decided by starts empty on a first decision (owner OQ1 (a)): typing chooses the person, "You (...)".
+    if (what === 'Decided by') await page.keyboard.type('You');
     if (what === 'Today') await page.keyboard.press('Enter');
   }
   await page.keyboard.press('Enter');

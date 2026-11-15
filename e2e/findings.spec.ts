@@ -442,7 +442,7 @@ test('R4: on the question page the line reads that the finding can now be closed
   let loads = 0;
   page.on('load', () => { loads++; });
   await page.getByRole('radio', { name: 'Done', exact: true }).check();
-  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`).fill('The labels were checked again.');
+  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`, { exact: true }).fill('The labels were checked again.');
   await page.getByRole('button', { name: 'Today', exact: true }).click();
   await page.getByRole('button', { name: 'Save decision' }).click();
   await expect(region.getByText(QUESTION_COPY.findingLink.closable)).toBeVisible();

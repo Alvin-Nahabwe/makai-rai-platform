@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { SealMarker } from '@/components/review/SealMarker';
+import { PLATFORM_ZONE } from '@/components/decision/zone';
 import { VersionEvidenceList } from '@/components/evidence/VersionEvidenceList';
 import { StatusMark } from '@/components/ui/StatusMark';
 import { WITHDRAWAL_CODE_LABELS, deciderLabel } from '@/lib/decision/copy';
@@ -9,6 +10,9 @@ import { QUESTION_COPY } from '@/lib/question/copy';
 import { markKindOf } from '@/lib/ui/marks';
 import type { DecisionVersionView } from '@/types/api';
 import type { SealRef } from '@/types/seal';
+
+/** East Africa time, the zone "Entered by" is written in (components/decision/zone.ts). */
+const ZONE = PLATFORM_ZONE;
 
 export type HistoryEntry = {
   version: DecisionVersionView;
@@ -20,9 +24,10 @@ export type HistoryEntry = {
 /**
  * S-13's list (FR-DEC-04, FR-DEC-08, FR-CNT-07; 7.5.6, 7.5.8): every version newest first, each with its status (or
  * "Withdrawn: <code>"), reason or the erased line, who decided with the declared date at its precision, who entered
- * it with the received time (a `<time>` carrying the exact instant), the question as worded in that version, its
+ * it with the received time in East Africa time, its zone named (a `<time>` carrying the exact instant), the question as worded in that version, its
  * evidence (EVD's slot) and its seals (REV-b's slot). A server component: every record text is a React child, so it
- * is shown as text and never as markup (NFR-SEC-11). Each entry carries `data-version-number`.
+ * is shown as text and never as markup (NFR-SEC-11). Each entry carries `data-version-number`, and its version line
+ * `data-decision-version` (lane 6's copy rule X-1, through the coordinator).
  */
 export function DecisionHistoryList({ orgSlug, entries, isScopeQuestion = false }: {
   orgSlug: string; entries: HistoryEntry[];
@@ -30,12 +35,14 @@ export function DecisionHistoryList({ orgSlug, entries, isScopeQuestion = false 
   isScopeQuestion?: boolean;
 }): ReactElement {
   const H = QUESTION_COPY.history;
+  // Lane 6's SealMarker `defineTerms` (ruling X-5): the page's first seal marker defines "seal" beside its first use.
+  const firstSealed = entries.findIndex((e) => e.seals.length > 0);
   return (
     <ol className="decision-history" style={{ listStyle: 'none', padding: 0 }}>
-      {entries.map(({ version: v, wording, seals }) => (
+      {entries.map(({ version: v, wording, seals }, i) => (
         <li key={v.id} data-version-number={v.versionNumber} className="card" style={{ marginBottom: '0.75rem' }}>
-          <h2 style={{ fontSize: '1.1rem' }}>{H.version(v.versionNumber)}</h2>
-          <SealMarker seals={seals} />
+          <h2 style={{ fontSize: '1.1rem' }} data-decision-version={v.versionNumber}>{H.version(v.versionNumber)}</h2>
+          <SealMarker seals={seals} defineTerms={i === firstSealed} />
           <dl>
             <dt>{H.status}</dt>
             {/* A withdrawn version keeps its words and no mark; any other shows the kit's mark with its words (spec 7.2). */}
@@ -48,7 +55,7 @@ export function DecisionHistoryList({ orgSlug, entries, isScopeQuestion = false 
             <dt>{H.enteredBy}</dt>
             <dd>
               {`${v.enteredBy.formerMember ? QUESTION_COPY.current.formerMember(v.enteredBy.name) : v.enteredBy.name}, `}
-              <time dateTime={v.receivedAt}>{`${formatDay(v.receivedAt)} ${formatTime(v.receivedAt)}`}</time>
+              <time dateTime={v.receivedAt}>{`${formatDay(v.receivedAt, ZONE)} ${formatTime(v.receivedAt, ZONE)}`}</time>
             </dd>
             {wording !== null ? (<><dt>{H.questionThen}</dt><dd>{wording.text}</dd><dt>{H.goodPracticeThen}</dt><dd>{wording.expectedPractice}</dd></>) : null}
             <dt>{H.evidence}</dt>

@@ -112,7 +112,7 @@ describe('The route column: one line of the stage\'s questions', () => {
 
   it('every row\'s mark is the kit\'s StatusMark at 24 px (the open one inside the ring), hidden from assistive technology beside the status words', async () => {
     for (const r of rowsOf(await column(data(ROWS), 'Q-PP-17'))) {
-      expect(r.body, r.id).toMatch(/<span class="route-line__node[^"]*" aria-hidden="true"><span class="ui-mark ui-mark--[a-z_]+" data-mark-kind="[a-z_]+"><svg class="ui-mark__shape" width="24" height="24"/);
+      expect(r.body, r.id).toMatch(/<span class="route-line__node[^"]*" aria-hidden="true"><span class="ui-mark ui-mark--[a-z_]+" data-mark-kind="[a-z_]+"><svg class="ui-mark__shape" data-shape-kind="[a-z_]+" width="24" height="24"/);
       expect(r.body, r.id).toMatch(/<span class="status-label">[^<]*\p{L}/u);
     }
   });
@@ -222,7 +222,7 @@ describe('The route column: folded runs', () => {
     expect(run.summary).toContain('class="route-line__title">Questions 7 to 22<');
     // Read aloud (or as text) the label and the tally are two phrases, not one run of numbers: "Questions 7 to 22, 4 done".
     expect(run.summary).toMatch(/class="route-line__title">Questions 7 to 22<\/span><span class="visually-hidden">, <\/span><span class="route-line__tally">/);
-    const marks = [...run.summary.matchAll(/<svg class="ui-mark__shape" width="(\d+)"/g)].map((m) => Number(m[1]));
+    const marks = [...run.summary.matchAll(/<svg class="ui-mark__shape" data-shape-kind="[a-z_]+" width="(\d+)"/g)].map((m) => Number(m[1]));
     expect(marks).toEqual(Array(16).fill(16));
     const runRows = STAGE22.slice(6);
     const { tallyOfRows, lineTallyWords } = await import('@/lib/question/route');

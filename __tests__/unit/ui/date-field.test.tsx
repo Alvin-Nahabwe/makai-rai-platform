@@ -9,6 +9,8 @@ import { UI_COPY } from '@/lib/ui/copy';
 const EMPTY = { day: '', month: '', year: '' };
 const render = (props: Partial<DateFieldProps> = {}) =>
   renderToStaticMarkup(<DateField idPrefix="decision" legend="Decided on" value={EMPTY} onChange={() => {}} {...props} />);
+/** DateField's markup at c1c933b6 for `render()` (no aria-describedby prop): rendered from that commit's file, 15 Nov 2026. */
+const DATE_AT_070 = "<fieldset class=\"ui-date\"><legend class=\"ui-date__legend\">Decided on</legend><div class=\"ui-date__parts\"><div class=\"ui-date__part ui-date__part--day\"><label class=\"ui-date__label\" for=\"decision-day\">Day</label><input class=\"ui-input\" id=\"decision-day\" type=\"text\" inputMode=\"numeric\" autoComplete=\"off\" maxLength=\"2\" aria-invalid=\"false\" value=\"\"/></div><div class=\"ui-date__part ui-date__part--month\"><label class=\"ui-date__label\" for=\"decision-month\">Month</label><input class=\"ui-input\" id=\"decision-month\" type=\"text\" inputMode=\"numeric\" autoComplete=\"off\" maxLength=\"2\" aria-invalid=\"false\" value=\"\"/></div><div class=\"ui-date__part ui-date__part--year\"><label class=\"ui-date__label\" for=\"decision-year\">Year</label><input class=\"ui-input\" id=\"decision-year\" type=\"text\" inputMode=\"numeric\" autoComplete=\"off\" maxLength=\"4\" aria-invalid=\"false\" value=\"\"/></div></div></fieldset>";
 const inputs = (html: string) => html.match(/<input [^>]*>/g) ?? [];
 
 describe('DateField', () => {
@@ -47,6 +49,13 @@ describe('DateField', () => {
       expect(i).toContain('aria-describedby="decision-hint decision-declaredDate-error"');
       expect(i).toContain('aria-invalid="true"');
     }
+  });
+
+  it('aria-describedby (additive): a line the caller places outside the fieldset describes every box, before the error; without it the markup is the one of release 0.7.0', () => {
+    const outside = render({ 'aria-describedby': 'decision-date-hint', errorId: 'decision-declaredDate-error', error: 'Enter a real date.' });
+    for (const i of outside.match(/<input[^>]*>/g) ?? []) expect(i).toContain('aria-describedby="decision-date-hint decision-declaredDate-error"');
+    // Without the prop, the markup the kit's DateField produced before the prop existed (release 0.7.0, c1c933b6), pinned.
+    expect(render()).toBe(DATE_AT_070);
   });
 
   it('the error id defaults to idPrefix-error, and without an error the inputs do not reference it', () => {

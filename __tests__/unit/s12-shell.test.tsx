@@ -54,7 +54,7 @@ const CURRENT = {
   id: 'dv2', projectId: 'p1', stage: 'pre-processing', questionId: 'Q-PP-01', versionNumber: 2,
   optionsInPlace: ['Alternatives analysis'], evidence: [{ id: 'e1' }],
   status: 'done', scopeAnswer: null, reasonCode: null, reason: 'r', decidedBy: null, declaredDate: null,
-  enteredBy: { userId: 'u2', name: 'Joseph K.', formerMember: false },
+  enteredBy: { userId: 'u2', name: 'Joseph K.', formerMember: false }, receivedAt: '2026-11-10T08:30:00.000Z',
 } as unknown as DecisionVersionView;
 const PANEL: QuestionPanelData = {
   orgSlug: 'acme-health', projectId: 'p1', projectArchived: false, stage: 'pre-processing',
@@ -76,20 +76,23 @@ beforeEach(() => {
 describe('S-12 shell', () => {
   it('FR-DEC-01 UX-08: S-12 shell regions in order, each but the evidence block labelled by a heading, evidence block inside the answer form', async () => {
     const html = renderToStaticMarkup(await QuestionPanelRegions({ stage: stageFixture(), data: PANEL }));
-    // Lane 1 Task 1: the seal note sits above the decision slot, which holds the decision's regions (its stub until lane 2's
-    // card merges); the list of ways teams address this is inside the guidance aside (mocked here), not a section of its own.
+    // The seal note sits above the decision card (lane 2's, through the slot), which is the one answer-form section holding
+    // everything of the decision, the evidence block and the finding links among it: no current-decision region, no region
+    // of its own for the finding link or the way on for a writer. The list of ways teams address this is inside the guidance
+    // aside (mocked here), not a section of its own.
     expect([...html.matchAll(/data-region="([a-z-]+)"/g)].map((m) => m[1]))
-      .toEqual(['question', 'seal-note', 'decision-slot', 'current-decision', 'answer-form', 'evidence-block', 'finding-link', 'way-on']);
+      .toEqual(['question', 'seal-note', 'answer-form', 'evidence-block']);
     // The evidence block is named once, by its fieldset legend (evidence-components.test.tsx), not by a heading of its own.
-    expect(html.match(/<section[^>]*aria-labelledby=/g)).toHaveLength(5);
+    expect(html.match(/<section[^>]*aria-labelledby=/g)).toHaveLength(3);
     expect(html).toMatch(/<section data-region="evidence-block">/);
-    expect(html).toMatch(/data-region="answer-form"[\s\S]*data-region="evidence-block"[\s\S]*<\/section>[\s\S]*<\/section>[\s\S]*data-region="finding-link"/);
+    expect(html).toMatch(/<h2 id="s12-answer-form">Your decision<\/h2>/);
+    expect(html).toMatch(/data-region="answer-form"[\s\S]*data-region="evidence-block"[\s\S]*<\/section>[\s\S]*class="decision-card__raise"/);
   });
 
   it('UX-08: every labelled region is named by a heading of the page that it points to, and the evidence block has no heading of its own', async () => {
     const html = renderToStaticMarkup(await QuestionPanelRegions({ stage: stageFixture(), data: PANEL }));
     const labelled = [...html.matchAll(/aria-labelledby="([^"]+)"/g)].map((m) => m[1]);
-    expect(new Set(labelled).size).toBe(5);
+    expect(new Set(labelled).size).toBe(3);
     expect(html).not.toContain('s12-evidence');
     for (const id of labelled) expect(html, id).toMatch(new RegExp(`<h([1-3]) id="${id}"[^>]*>[^<]+</h\\1>`));
     // The list of ways teams address this opens in place inside the aside (question-frame.test.tsx): no section of its own.
@@ -105,7 +108,7 @@ describe('S-12 shell', () => {
     expect(html).not.toContain('data-region="suggestions"');
     // The aside gets no count, no risk areas (the personal data question has none of its own) and no list.
     expect(propsSeen.QuestionContent).toEqual({ question: gate, suggestionCount: 0, riskAreas: [], children: null });
-    expect(html.match(/<section[^>]*aria-labelledby=/g)).toHaveLength(5);
+    expect(html.match(/<section[^>]*aria-labelledby=/g)).toHaveLength(3);
   });
 
   it('UX-31 FR-PRJ-03: an archived project shows the archived banner on S-12', async () => {
@@ -122,11 +125,13 @@ describe('S-12 shell', () => {
     const content = propsSeen.QuestionContent as { question: unknown; suggestionCount: number; riskAreas: unknown[]; children: { props: unknown } };
     expect(content).toMatchObject({ question: QUESTION, suggestionCount: 3, riskAreas: [] });
     expect(content.children.props).toEqual({ contentSemver: '0.0.1-fixture', questionId: 'Q-PP-01', tickedOptions: ['Alternatives analysis'] });
-    expect(propsSeen.CurrentDecision).toEqual({
-      orgSlug: 'acme-health', current: CURRENT, historyCount: 2, seals: PANEL.seals,
-      historyHref: '/orgs/acme-health/projects/p1/stages/pre-processing/questions/Q-PP-01/history',
-      isScopeQuestion: false,
-    });
+    // The current decision is the card's own, from the panel data: the saved version, the count of versions and the history
+    // address (the CurrentDecision slot is no longer rendered for a writer).
+    expect(propsSeen.CurrentDecision).toBeUndefined();
+    const html = renderToStaticMarkup(await QuestionPanelRegions({ stage: stageFixture(), data: PANEL }));
+    expect(html).toContain('Saved as version 2');
+    expect(html).toContain('href="/orgs/acme-health/projects/p1/stages/pre-processing/questions/Q-PP-01/history"');
+    expect(html).toContain('History: 2 versions');
     expect(propsSeen.SealNote).toEqual({ seals: PANEL.seals, nextVersionNumber: 3 });
     expect(propsSeen.EvidenceBlock).toMatchObject({ orgSlug: 'acme-health', projectId: 'p1', initial: [{ id: 'e1' }], disabled: false });
     expect(propsSeen.QuestionFindingLink).toEqual({
@@ -140,7 +145,8 @@ describe('S-12 shell', () => {
     expect(propsSeen.SealNote).toMatchObject({ nextVersionNumber: 1 });
     expect(propsSeen.EvidenceBlock).toMatchObject({ initial: [], disabled: false });
     expect((propsSeen.QuestionContent as { children: { props: unknown } }).children.props).toMatchObject({ tickedOptions: [] });
-    expect(propsSeen.QuestionFindingLink).toMatchObject({ currentVersionId: null });
+    // The card's foot (saved lines, history, finding links) shows only after a save: with no decision there is no finding link.
+    expect(propsSeen.QuestionFindingLink).toBeUndefined();
     for (const data of [{ ...PANEL, canWrite: false }, { ...PANEL, canWrite: false, projectArchived: true }]) {
       delete propsSeen.EvidenceBlock;
       const html = renderToStaticMarkup(await QuestionPanelRegions({ data, stage: stageFixture() }));

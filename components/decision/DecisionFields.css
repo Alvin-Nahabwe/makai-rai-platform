@@ -16,3 +16,158 @@
   max-inline-size: var(--measure-reading);
   color: var(--color-ink-muted);
 }
+
+/* The main reason's line on when to use it, under its select: close under the field, the field's space after it. */
+.decision-fields__reason-code > .ui-field {
+  margin-block-end: var(--space-2);
+}
+
+/*
+ * R3 (owner, 15 Nov 2026; the sketch's .opts): the status, or the personal data answer, as short cards in two columns,
+ * each the radio, the mark and the word, 44 px high; chosen, a 2 px border in the selected colour and its tint, the mark
+ * still beside the word, so the choice never rests on colour alone. RadioCards renders the sentences after the grid
+ * (helpBelow), in option order, and one shows: the sentence of the card that has focus, or else of the chosen card, or
+ * none. A hidden sentence still describes its radio (aria-describedby names it). Where :has() does not work, all show.
+ * The rules pair the nth card with the nth sentence: four options at most, every one with its sentence (STATUS_OPTIONS,
+ * SCOPE_OPTIONS); an option without one would shift the pairs.
+ */
+.decision-fields__choice .ui-radio-cards__list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.decision-fields__choice .ui-radio-card {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--target-primary);
+  padding: var(--space-1) var(--space-3);
+}
+
+.decision-fields__choice .ui-radio-card:has(:checked) {
+  padding: calc(var(--space-1) - 2px) calc(var(--space-3) - 2px);
+  background-color: color-mix(in srgb, var(--color-selected) 8%, var(--color-surface));
+}
+
+.decision-fields__choice .ui-radio-card__label {
+  flex: 1;
+  line-height: 1.2;
+}
+
+.decision-fields__choice .ui-radio-cards__helps > .ui-radio-card__help {
+  margin: var(--space-2) 0 0;
+  padding: 0;
+}
+
+@supports selector(:has(*)) {
+  .decision-fields__choice .ui-radio-cards__helps > .ui-radio-card__help {
+    display: none;
+  }
+
+  .decision-fields__choice .ui-radio-cards:has(.ui-radio-card:nth-child(1) :focus) .ui-radio-cards__helps > :nth-child(1),
+  .decision-fields__choice .ui-radio-cards:has(.ui-radio-card:nth-child(2) :focus) .ui-radio-cards__helps > :nth-child(2),
+  .decision-fields__choice .ui-radio-cards:has(.ui-radio-card:nth-child(3) :focus) .ui-radio-cards__helps > :nth-child(3),
+  .decision-fields__choice .ui-radio-cards:has(.ui-radio-card:nth-child(4) :focus) .ui-radio-cards__helps > :nth-child(4),
+  .decision-fields__choice .ui-radio-cards:not(:has(:focus)):has(.ui-radio-card:nth-child(1) :checked) .ui-radio-cards__helps > :nth-child(1),
+  .decision-fields__choice .ui-radio-cards:not(:has(:focus)):has(.ui-radio-card:nth-child(2) :checked) .ui-radio-cards__helps > :nth-child(2),
+  .decision-fields__choice .ui-radio-cards:not(:has(:focus)):has(.ui-radio-card:nth-child(3) :checked) .ui-radio-cards__helps > :nth-child(3),
+  .decision-fields__choice .ui-radio-cards:not(:has(:focus)):has(.ui-radio-card:nth-child(4) :checked) .ui-radio-cards__helps > :nth-child(4) {
+    display: block;
+  }
+}
+
+/* A phone narrower than 360 px: one card per row, so "Not applicable" keeps one line. */
+@media (max-width: 359px) {
+  .decision-fields__choice .ui-radio-cards__list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/*
+ * One row (the sketch's .row): Decided by beside Decided on, both from the top; the date's three boxes sit in the row and
+ * its Today and "Same date as" buttons wrap under them inside its column. The card is the container. Design finish
+ * review M2: the chosen name never wraps or is cut, so Decided by keeps at least 16rem; side by side needs that, the gap,
+ * and room for the three boxes and one shortcut on its line (about 25rem), so below 42rem of the card the two stack, each
+ * the card's width.
+ */
+.decision-fields {
+  container-type: inline-size;
+}
+
+.decision-fields__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  column-gap: var(--space-4);
+  align-items: start;
+}
+
+@container (min-width: 42rem) {
+  .decision-fields__row {
+    grid-template-columns: minmax(16rem, 1fr) minmax(0, 1.5fr);
+  }
+}
+
+/*
+ * Design finish review M3: the two "Same date as" shortcuts are conveniences, so they are quiet, as the kit's quiet
+ * button (no fill, no border, the link colour, underlined), in small type so each keeps one line in the card; Today, the
+ * first button, stays the date's one bordered button. They stay native buttons, in the tab order, with their words
+ * (DateField draws every button after Today from `shortcuts`). On a screen too narrow for a shortcut's words they wrap
+ * rather than being cut.
+ */
+.decision-fields .ui-date__actions > .ui-button ~ .ui-button {
+  border-color: transparent;
+  background-color: transparent;
+  color: var(--color-link);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-regular);
+  text-align: start;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.decision-fields .ui-date__actions > .ui-button ~ .ui-button:hover {
+  background-color: var(--color-tint);
+}
+
+/*
+ * Design finish review m3: "(required)" in the label's own weight and ink (bold, --color-ink, as .ui-field__label and the
+ * legends) after every label of the card, as it is inside the personal data question's legend ("Answer (required)",
+ * whose words the legend holds as one text, pinned by a protected test).
+ */
+.decision-fields .ui-field__required {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-ink);
+}
+
+/* The starting note ("The form shows the current decision...") sits clear of the first group under it. */
+.decision-fields__note {
+  margin: 0 0 var(--space-4);
+  max-inline-size: var(--measure-reading);
+}
+
+/*
+ * Lead's ruling D5: inside the card the groups keep the sketch's 16 px between them (its fieldset, textarea and .row
+ * margins), not the kit's 24 px; the hint lines under a field keep their 8 px above the next group's 16.
+ */
+.decision-fields .ui-radio-cards,
+.decision-fields .ui-checkbox-group,
+.decision-fields .ui-date,
+.decision-fields > .ui-field {
+  margin-block-end: var(--space-4);
+}
+
+.decision-fields__help,
+.decision-fields__count {
+  margin-block-end: var(--space-4);
+}
+
+/* The date's hint (lead's ruling D3): under the row, one line of small type; every date box names it. */
+.decision-fields__date-hint {
+  margin: calc(-1 * var(--space-2)) 0 var(--space-4);
+  font-size: var(--font-size-small);
+  color: var(--color-ink-muted);
+}
+
+/* Inside the row the date's group ends with its buttons; the hint under the row carries the space. */
+.decision-fields__row > .ui-date,
+.decision-fields__row > .ui-field {
+  margin-block-end: var(--space-4);
+}

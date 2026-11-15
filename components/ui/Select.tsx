@@ -21,6 +21,8 @@ export type SelectProps = {
   options?: readonly FieldOption[];
   /** Options in labelled groups, after `options`. */
   groups?: ReadonlyArray<{ label: string; options: readonly FieldOption[] }>;
+  /** Further ids that describe the select (a line the caller places itself), after the hint and before the error. */
+  'aria-describedby'?: string;
 };
 
 /** An option's words only: a native option holds text, so a FieldOption's `hint` is not shown here. */
@@ -33,6 +35,7 @@ const optionOf = (o: FieldOption) => <option key={o.value} value={o.value}>{o.la
  */
 export function Select({
   id, name, label, hint, error, required = false, disabled = false, value, defaultValue, onChange, placeholder, options = [], groups = [],
+  'aria-describedby': callerDescribedBy,
 }: SelectProps): ReactElement {
   const hintId = given(hint) ? `${id}-hint` : undefined;
   const errorId = `${id}-error`;
@@ -44,7 +47,7 @@ export function Select({
         <select
           className={given(error) ? 'ui-select ui-select--invalid' : 'ui-select'} id={id} name={name} required={required}
           disabled={disabled} value={value} defaultValue={defaultValue} onChange={onChange}
-          aria-invalid={given(error)} aria-describedby={describedBy(hintId, given(error) && errorId)}
+          aria-invalid={given(error)} aria-describedby={describedBy(hintId, callerDescribedBy, given(error) && errorId)}
         >
           {placeholder === undefined ? null : <option value="">{placeholder}</option>}
           {options.map(optionOf)}

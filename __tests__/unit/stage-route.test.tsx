@@ -178,7 +178,7 @@ describe('All questions: the page\'s head', () => {
     expect(parts.map((p) => `${p.n} ${p.word}${p.extra === null ? '' : ` ${p.extra}`}`).join(', '))
       .toBe(tallyWords(tallyOfRows(ROWS, d.marks)).replace(/\b1 answered\b/, STAGE_LIST_COPY.line.personalDataAnswered(1)));
     // Each part's mark is the kit's shape alone at 16 px, beside its words; no hidden words.
-    expect([...h.matchAll(/<li class="stage-route__tally-part">(<span data-term="[^"]+">)?<span class="stage-route__keep stage-route__lead"><svg class="ui-mark__shape" width="16"/g)]).toHaveLength(parts.length);
+    expect([...h.matchAll(/<li class="stage-route__tally-part">(<span data-term="[^"]+">)?<span class="stage-route__keep stage-route__lead"><svg class="ui-mark__shape" data-shape-kind="[a-z_]+" width="16"/g)]).toHaveLength(parts.length);
     expect(h.split('stage-route__tally-parts')[1].split('</ul>')[0]).not.toContain('ui-mark__words');
     expect(h).not.toContain('ui-route-row');
     expect(h).not.toContain('<progress');

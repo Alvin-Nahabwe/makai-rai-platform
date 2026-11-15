@@ -377,6 +377,21 @@ describe('the read-only question page (plan 1C Task 7)', () => {
     expect([...html.matchAll(/class="[^"]*still-open__overdue[^"]*"/g)]).toHaveLength(1);
   });
 
+  it('7.2 R8: the Done mark is the filled green check, a disc and a check painted by CSS, with its word', async () => {
+    const html = await render(VIEWER);
+    const decision = html.match(/<section data-region="current-decision"[\s\S]*?<\/section>/)![0];
+    expect(decision).toContain('data-mark-kind="done"');
+    const svg = /<svg[^>]*>([\s\S]*?)<\/svg>/.exec(decision)![1];
+    // The kit's shape for done (status-mark.test.tsx's EXPECTED_SHAPES; owner's ruling R8, 15 Nov 2026): the disc and the
+    // check, each painted by its own class in StatusMark.css, no colour in the markup.
+    const shapes = [...svg.matchAll(/<(\w+)\b/g)].map((m) => m[1]);
+    expect(shapes).toEqual(['circle', 'path']);
+    expect(svg).toMatch(/<circle class="ui-mark__done-disc"/);
+    expect(svg).toMatch(/<path class="ui-mark__done-check"/);
+    expect(svg).not.toMatch(/#[0-9a-f]{3,6}|rgb\(|green/i);
+    expect(textOf(decision)).toContain('Done');
+  });
+
   it('the way on: "Next: question n" as the page\'s one primary link, with "Question n of N in <stage>" under it', async () => {
     const a = aside(await render(VIEWER));
     expect(a).toMatch(/<a class="ui-button ui-button--primary" href="\/orgs\/acme-health\/projects\/p1\/stages\/pre-processing\/questions\/Q-PP-02">Next: question 2<span class="ui-button__icon">/);
@@ -498,17 +513,21 @@ describe('the read-only question page (plan 1C Task 7)', () => {
     expect(c).not.toContain('<figure');
   });
 
-  it('a person who may record keeps the form: answer-form and "Current decision", no reading regions and no "What the team decided", even with openWork', async () => {
+  it('a person who may record keeps the form: the one answer-form card ("Your decision", no separate "Current decision"), no reading regions and no "What the team decided", even with openWork', async () => {
     const writer: QuestionPanelData = { ...PANEL, viewer: { ...PANEL.viewer, role: 'assessor' }, canWrite: true, canRaiseFinding: true };
     const withWork = await render(writer, WORK);
     expect(withWork).toContain('data-region="answer-form"');
-    expect(withWork).toContain(`<h2 id="s12-current-decision">${QUESTION_COPY.headings.current}</h2>`);
+    expect(withWork).toContain('<h2 id="s12-answer-form">Your decision</h2>');
+    expect(withWork).not.toContain('data-region="current-decision"');
+    expect(withWork).not.toContain(QUESTION_COPY.headings.current);
     expect(withWork).not.toContain('data-region="open-work"');
     expect(withWork).not.toContain('data-region="reading-aside"');
     expect(withWork).not.toContain('What the team decided');
-    expect(withWork).toContain('See all versions (2)');
+    expect(withWork).toContain(QUESTION_COPY.reading.history(2));
     expect(withWork).toContain('data-region="seal-note"');
-    expect(withWork).toContain('data-region="way-on"');
+    // The way on is inside the card's Save row now (Next: ..., Question n of N), not a region of its own.
+    expect(withWork).not.toContain('data-region="way-on"');
+    expect(withWork).toContain('Next: ');
     expect(withWork).toBe(await render(writer, null));
   });
 });

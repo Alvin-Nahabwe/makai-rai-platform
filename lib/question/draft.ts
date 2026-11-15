@@ -41,11 +41,16 @@ export const isDecision = (v: DecisionVersionView | null): v is DecisionVersionV
 
 /**
  * FR-DEC-01: a new version opens from the current version's fields; FR-DEC-10 and UX-10: the date is always
- * empty on open. With no decision (none yet, or a withdrawal) the form is empty and "Decided by" is the viewer.
+ * empty on open. With no decision the form is empty: on a first decision "Decided by" is empty too (spec 9.3 item 4,
+ * owner OQ1 (a), plan 1C Task 12); after a withdrawal it is the viewer.
  */
 export function draftFromCurrent(data: QuestionPanelData): DecisionDraft {
   const href = questionHref(data, data.question.id);
   const c = data.current;
+  if (c === null) {
+    return { status: null, scopeAnswer: null, optionsInPlace: [], reasonCode: null, reason: '', decidedBy: null,
+      date: { ...EMPTY_DATE }, evidenceIds: [], notUploaded: [], href };
+  }
   if (!isDecision(c)) {
     return { status: null, scopeAnswer: null, optionsInPlace: [], reasonCode: null, reason: '', decidedBy: { kind: 'member', userId: data.viewer.userId },
       date: { ...EMPTY_DATE }, evidenceIds: [], notUploaded: [], href };

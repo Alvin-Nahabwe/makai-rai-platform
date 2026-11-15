@@ -25,9 +25,17 @@ export type SaveStatusProps = { status: SaveStatusValue | null; draftSavedAt: Ut
  * `role="alert"` element for every failure, both in the first markup and empty until there is something to say,
  * so the first change is announced (a live region added with its text is often not read). Only the region of the
  * current message holds text, so each message is announced once. When the browser cannot keep drafts, a line that would
- * say the text is kept reads its no-storage form, and a failure's announcement carries the no-storage sentence too. The unsaved line (plan line
- * 925's sentence) and the no-storage line are plain text beside them: they change on every key and are not announced.
+ * say the text is kept reads its no-storage form, and a failure's announcement carries the no-storage sentence too. The
+ * no-storage line is plain text beside them. The unsaved line (plan line 925's sentence) is announced once (plan 1C C7): it
+ * sits in a polite, atomic live span that is always in the markup and holds only the sentence, so the span is there before
+ * the line appears and its words, the same on every key, change once. No `role` on it: `role="status"` stays one element
+ * (e2e/helpers/session.ts `saveStatus`). The sentence carries no time today, so there is no time span beside it.
  */
+/** Whether the unsaved line shows: the field holds text not saved, kept in this browser (alone, or after "Saved" typed past). */
+export function unsavedShown({ status, draftSavedAt, storageUnavailable }: SaveStatusProps): boolean {
+  return !storageUnavailable && draftSavedAt !== null && (status === null || status.id === 'M-03' || status.id === 'M-04');
+}
+
 export function SaveStatus({ status, draftSavedAt, storageUnavailable }: SaveStatusProps): ReactElement {
   const text = status === null ? '' : (storageUnavailable ? WITHOUT_STORAGE[status.id] ?? status.text : status.text);
   const polite = status !== null && status.live === 'polite' ? text : '';
@@ -43,9 +51,16 @@ export function SaveStatus({ status, draftSavedAt, storageUnavailable }: SaveSta
       {storageUnavailable && assertive === '' ? <p className="text-muted">{NO_STORAGE}</p> : null}
       {/* The unsaved line also follows "Saved" when the person typed past the save: the field then holds newer text than
           the one saved, and it is in this browser only (ruling on CR-1). */}
-      {!storageUnavailable && draftSavedAt !== null && (status === null || status.id === 'M-03' || status.id === 'M-04')
-        ? <p className="text-muted">{DECISION_FORM_COPY.unsaved}</p>
-        : null}
+      {/* Design N1 (SC 2.4.11): on a wide screen the save bar can be pinned to the screen's foot, where the whole sentence
+          (three lines) grew it over the focused field. There the live span is clipped, not removed, so a screen reader still
+          reads the whole sentence once, and the eye sees its first sentence only, beside it; the rest follows the bar in
+          the card (DecisionForm), seen when the bar is back in its place. On a phone the live span shows as before. */}
+      <p className="text-muted save-status__unsaved">
+        <span aria-live="polite" aria-atomic="true" className="save-status__unsaved-live">
+          {unsavedShown({ status, draftSavedAt, storageUnavailable }) ? DECISION_FORM_COPY.unsaved : ''}
+        </span>
+        {unsavedShown({ status, draftSavedAt, storageUnavailable }) ? <span className="save-status__unsaved-short" aria-hidden="true">{DECISION_FORM_COPY.unsavedShort}</span> : null}
+      </p>
     </div>
   );
 }

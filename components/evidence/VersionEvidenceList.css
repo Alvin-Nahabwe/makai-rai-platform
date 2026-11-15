@@ -1,0 +1,7 @@
+/* After a web link's name, the host it really goes to (T3 item 8, webLink): regular weight and muted ink, in its own
+   element, so a name that copies the words cannot pass for them. With the renderer (review A3-1), so the history, reading
+   and finding pages draw it as the decision card does. */
+.evidence-item__host {
+  font-weight: var(--font-weight-regular);
+  color: var(--color-ink-muted);
+}

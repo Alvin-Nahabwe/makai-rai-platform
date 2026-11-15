@@ -6,18 +6,25 @@ import { DateField } from '@/components/ui/DateField';
 import { RadioCards } from '@/components/ui/RadioCards';
 import { Select } from '@/components/ui/Select';
 import { TextArea } from '@/components/ui/TextArea';
-import {
-  FINDING_NOTE, OUTSIDE_ROLE_LABELS, REASON_HELP, SCOPE_OPTIONS, STATUS_OPTIONS, reasonCount,
-} from '@/lib/decision/copy';
+import { OUTSIDE_ROLE_LABELS, SCOPE_OPTIONS, STATUS_OPTIONS, reasonCount } from '@/lib/decision/copy';
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
+import { textErasedLine } from '@/lib/documents/copy';
 import { REASON_MAX } from '@/lib/decision/rules';
 import { formatDeclaredDate } from '@/lib/format/dates';
 import { dateParts, isDecision, type DecisionDraft } from '@/lib/question/draft';
 import type { QuestionPanelData } from '@/lib/question/panel';
-import { OUTSIDE_ROLES, type Decider, type FieldError } from '@/types/record';
+import { TERM_DONE, TERM_NOT_APPLICABLE, TERM_NOT_YET, TERM_PARTLY } from '@/lib/vocabulary/terms';
+import { OUTSIDE_ROLES, type DecisionStatus, type Decider, type FieldError } from '@/types/record';
 import './DecisionFields.css';
 
 const F = DECISION_FORM_COPY;
+
+/**
+ * Lane 6's first-use rule (lane 2 T3c item 10a): each status card's word is the status's term and its help sentence is
+ * the status's definition (STATUS_OPTIONS' help is the vocabulary's own sentence), so the card is the term's first use with
+ * its definition beside it, and the Not applicable sentence is not read as a use of "Does not apply".
+ */
+const STATUS_TERMS: Readonly<Record<DecisionStatus, { id: string }>> = { done: TERM_DONE, partly: TERM_PARTLY, not_yet: TERM_NOT_YET, not_applicable: TERM_NOT_APPLICABLE };
 
 export interface DecisionFieldsProps {
   data: QuestionPanelData; value: DecisionDraft; errors: FieldError[]; disabled: boolean;
@@ -54,11 +61,14 @@ export function DecisionFields({ data, value, errors, disabled, onChange }: Deci
   const set = (patch: Partial<DecisionDraft>) => onChange({ ...value, ...patch });
   const current = isDecision(data.current) ? data.current : null;
 
+  // R3 (owner, 15 Nov 2026): four short cards in two columns, each the radio, the mark and the word; each card's sentence
+  // shows under the grid for the card that has focus, or else the chosen one (DecisionFields.css). What the status will do
+  // is the consequence line before Save (R2), not a hint under the legend.
   const statusGroup = (
     <RadioCards
-      name="status" legend={F.fields.status} legendHint={FINDING_NOTE} disabled={disabled} error={err('status')}
+      name="status" legend={F.fields.status} disabled={disabled} error={err('status')} columns={2} helpBelow
       value={value.status ?? ''}
-      options={STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label, help: o.help, id: `decision-status-${o.value}` }))}
+      options={STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label, help: o.help, mark: o.value, id: `decision-status-${o.value}`, term: STATUS_TERMS[o.value].id }))}
       onChange={(next) => {
         const status = STATUS_OPTIONS.find((o) => o.value === next)?.value ?? null;
         // A reason code belongs to one status (OD-C2 (a)); it does not follow the person to another.
@@ -70,7 +80,7 @@ export function DecisionFields({ data, value, errors, disabled, onChange }: Deci
 
   const scopeGroup = (
     <RadioCards
-      name="scopeAnswer" legend={F.scopeLegend} legendHint={F.scopeNote} disabled={disabled} error={err('scopeAnswer')}
+      name="scopeAnswer" legend={F.scopeLegend} legendHint={F.scopeNote} disabled={disabled} error={err('scopeAnswer')} columns={2} helpBelow
       value={value.scopeAnswer ?? ''}
       options={SCOPE_OPTIONS.map((o) => ({ value: o.value, label: o.label, help: o.help, id: `decision-scope-${o.value}` }))}
       onChange={(next) => set({ scopeAnswer: SCOPE_OPTIONS.find((o) => o.value === next)?.value ?? null })}
@@ -99,14 +109,24 @@ export function DecisionFields({ data, value, errors, disabled, onChange }: Deci
   ) : null;
 
   const codes = value.status === 'not_yet' || value.status === 'not_applicable' ? data.reasonCodes.filter((c) => c.status === value.status) : null;
+  // The chosen main reason, of the chosen status: its signed-off line on when to use it sits under the select, and what the
+  // reason must say for it joins the reason's hint (spec 9.3 items 2 and 3; plan 1C Task 5 item 4).
+  const chosenCode = q.type !== 'gate' && codes !== null ? codes.find((c) => c.code === value.reasonCode) ?? null : null;
   const reasonCode = q.type !== 'gate' && codes !== null ? (
-    <Select
-      id="decision-reason-code" name="reasonCode" label={F.fields.reasonCode} required placeholder={F.chooseOne}
-      value={value.reasonCode ?? ''} disabled={disabled} error={err('reasonCode')}
-      options={codes.map((c) => ({ value: c.code, label: c.label }))}
-      onChange={(e) => set({ reasonCode: e.target.value === '' ? null : e.target.value })}
-    />
+    <div className="decision-fields__reason-code">
+      <Select
+        id="decision-reason-code" name="reasonCode" label={F.fields.reasonCode} required placeholder={F.chooseOne}
+        value={value.reasonCode ?? ''} disabled={disabled} error={err('reasonCode')}
+        aria-describedby={chosenCode !== null && chosenCode.useWhen !== '' ? 'decision-reason-code-use' : undefined}
+        options={codes.map((c) => ({ value: c.code, label: c.label }))}
+        onChange={(e) => set({ reasonCode: e.target.value === '' ? null : e.target.value })}
+      />
+      {chosenCode !== null && chosenCode.useWhen !== '' ? <p id="decision-reason-code-use" className="decision-fields__help">{chosenCode.useWhen}</p> : null}
+    </div>
   ) : null;
+  // Ruling (a), 15 Nov 2026: the reason's hint is the question's own signed-off prompt (content 5.1.0), not one line for all.
+  const erased = current?.reasonErased?.erasedOn ?? null;
+  const reasonHelp = [data.runningQuestion.reasonPrompt, chosenCode?.reasonMustSay ?? ''].filter((t) => t !== '').join(' ');
 
   // A former member who decided the current version stays selectable, named as the record names them.
   const listed = new Set([data.viewer.userId, ...data.members.map((m) => m.userId)]);
@@ -119,23 +139,32 @@ export function DecisionFields({ data, value, errors, disabled, onChange }: Deci
 
   return (
     <div className="decision-fields">
-      {current !== null ? <p>{F.startingNote}</p> : null}
+      {current !== null ? <p className="decision-fields__note">{F.startingNote}</p> : null}
       {checklist}
-      {q.type === 'gate' ? scopeGroup : statusGroup}
+      <div className="decision-fields__choice">{q.type === 'gate' ? scopeGroup : statusGroup}</div>
       {reasonCode}
 
       <div className="decision-fields__reason">
         <TextArea
-          id="decision-reason" name="reason" label={F.fields.reason} required value={value.reason} disabled={disabled}
-          maxLength={REASON_MAX} count={(n) => reasonCount(n)} describedBy={['decision-reason-help']} error={err('reason')}
+          id="decision-reason" name="reason" label={F.fields.reason} required value={value.reason} disabled={disabled} rows={4}
+          maxLength={REASON_MAX} count={(n) => reasonCount(n)} error={err('reason')}
+          describedBy={erased === null ? ['decision-reason-help'] : ['decision-reason-help', 'decision-reason-erased']}
           onChange={(e) => set({ reason: e.target.value })}
         />
-        <p id="decision-reason-help" className="decision-fields__help">{REASON_HELP}</p>
+        <p id="decision-reason-help" className="decision-fields__help">{reasonHelp}</p>
+        {/* The current version's reason was erased on the organisation's instruction: the box opens empty, and says why
+            (review round 1, A-I1; the reading view says the same, CurrentDecision). */}
+        {erased === null ? null : <p id="decision-reason-erased" className="decision-fields__help">{textErasedLine(erased)}</p>}
       </div>
 
+      {/* One row (the sketch's .row): Decided by beside Decided on; the date's shortcuts wrap under its boxes, and below about
+          430 px of the card the two stack (DecisionFields.css, a container query). */}
+      <div className="decision-fields__row">
+      {/* Starts empty on a first decision (owner OQ1 (a)): the empty first option keeps the browser from showing the first
+          member as chosen while the answer holds no one. */}
       <Select
         id="decision-decided-by" name="decidedBy" label={F.fields.decidedBy} required value={deciderValue(value.decidedBy)}
-        disabled={disabled} error={err('decidedBy')}
+        disabled={disabled} error={err('decidedBy')} placeholder={F.chooseOne}
         options={[
           { value: `member:${data.viewer.userId}`, label: F.you(data.viewer.name) },
           ...data.members.map((m) => ({ value: `member:${m.userId}`, label: m.name })),
@@ -146,10 +175,13 @@ export function DecisionFields({ data, value, errors, disabled, onChange }: Deci
       />
 
       <DateField
-        idPrefix="decision" legend={F.fields.declaredDate} required hint={F.dateHelp} value={value.date} disabled={disabled}
+        idPrefix="decision" legend={F.fields.declaredDate} required aria-describedby="decision-date-hint" value={value.date} disabled={disabled}
         error={err('declaredDate')} errorId="decision-declaredDate-error" showToday shortcuts={shortcuts}
         onChange={(date) => set({ date })}
       />
+      </div>
+      {/* Lead's ruling D3: the date's hint under the row, one line of small type; every box names it. */}
+      <p id="decision-date-hint" className="decision-fields__date-hint">{F.dateHelp}</p>
     </div>
   );
 }

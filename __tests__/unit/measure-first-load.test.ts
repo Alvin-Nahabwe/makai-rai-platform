@@ -43,6 +43,7 @@ const CHUNKS = {
   login: noise(40_000, 13), // /login: 100 000 + 40 000 bytes stays under 160 KB
   dash: noise(95_000, 14), // dashboard: 100 000 + 95 000 bytes is over 190 KB
   mid: noise(78_000, 15), // 100 000 + 78 000 bytes is about 174 KB: over 160, under 190
+  question: noise(95_800, 16), // 100 000 + 95 800 bytes is about 191 KB: over 190, under 192
 };
 
 function manifestFor(key: string, entries: Record<string, string[]>): string {
@@ -59,6 +60,8 @@ interface FakeOptions {
   dashboard?: boolean;
   /** Adds three routes of about 174 KB each: (gate)/acceptances, its child, and the neighbour (authenticated)/account. */
   midRoutes?: boolean;
+  /** Adds the question page and a neighbouring signed-in route, both with the ~191 KB question chunk. */
+  questionRoute?: boolean;
   /** Skips writing this chunk file although the manifests name it. */
   omitChunk?: keyof typeof CHUNKS;
 }
@@ -86,6 +89,11 @@ function fakeBuild(opts: FakeOptions = {}): string {
         `server/app/${dir}/page_client-reference-manifest.js`,
         manifestFor(`/${dir}/page`, { [`[project]/app/${dir}/page`]: ['static/chunks/mid.js'] }),
       );
+    }
+  }
+  if (opts.questionRoute) {
+    for (const dir of ['(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]', '(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]']) {
+      write(`server/app/${dir}/page_client-reference-manifest.js`, manifestFor(`/${dir}/page`, { [`[project]/app/${dir}/page`]: ['static/chunks/question.js'] }));
     }
   }
   if (opts.dashboard !== false) {
@@ -258,4 +266,16 @@ it('NFR-PERF-01: the verify job measures first-load JavaScript right after the s
   expect(measure?.run?.trim()).toBe('node scripts/measure_first_load.mjs .next');
   expect(measure).not.toHaveProperty('continue-on-error');
   expect(measure).not.toHaveProperty('if');
+});
+
+it('owner ruling 15 Nov 2026 18:00: the question page alone is held to 192 KB; its neighbour with the same weight keeps 190', () => {
+  const Q_KB = kb(gz(CHUNKS.root) + gz(CHUNKS.question));
+  expect(Number(Q_KB)).toBeGreaterThan(190); // the fixture is over 190, so a pass proves the 192 budget is applied
+  expect(Number(Q_KB)).toBeLessThan(192);
+  const r = run([fakeBuild({ dashboard: false, questionRoute: true }), '--exceptions', exceptionsFile([])]);
+  expect(r.stdout).toContain(`route=/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId] firstLoadKB=${Q_KB} budgetKB=192`);
+  expect(r.stdout).toContain(`route=/orgs/[slug]/projects/[id]/stages/[stage] firstLoadKB=${Q_KB} budgetKB=190`);
+  expect(r.status).toBe(1);
+  expect(r.stderr).toContain('/orgs/[slug]/projects/[id]/stages/[stage] is');
+  expect(r.stderr).not.toContain('/questions/[questionId]');
 });

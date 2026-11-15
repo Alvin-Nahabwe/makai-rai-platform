@@ -70,7 +70,7 @@ describe('RouteRow', () => {
     ]);
     for (const { kind, body } of items(html)) {
       // The mark is the kit's shape for that kind (the stops draw the same one at 20 px), at 16 px and aria-hidden.
-      const shape = body.match(/^<svg class="ui-mark__shape" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">(.*?)<\/svg>/);
+      const shape = body.match(/^<svg class="ui-mark__shape" data-shape-kind="[a-z_]+" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">(.*?)<\/svg>/);
       expect(shape, kind).not.toBeNull();
       const stopShape = renderToStaticMarkup(<RouteRow label="x" stops={[{ id: 'a', kind, title: 't' }]} tally={{}} />).match(/<svg[^>]*>(.*?)<\/svg>/)![1];
       expect(shape![1], kind).toBe(stopShape);

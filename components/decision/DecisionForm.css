@@ -43,6 +43,20 @@
   color: var(--color-link);
 }
 
+/* A phone of 400 px or less: the summary sits tighter (12 px padding, its first line at the body size), so at 320 by 568
+   its whole list, the empty Decided by of a first decision included, stays above the fixed save bar (SC 2.4.11). */
+@media (max-width: 400px) {
+  [data-error-summary].card,
+  [data-error-summary].card:hover {
+    padding: var(--space-3);
+  }
+
+  [data-error-summary] > p {
+    margin-block-end: var(--space-1);
+    font-size: var(--font-size-body);
+  }
+}
+
 /* The save bar takes focus after a send removed its focused control (D-398 item 4): a programmatic focus shows no
    :focus-visible ring, so the bar draws one, as the summary's first line does. */
 .decision-save-bar:focus {
@@ -110,5 +124,254 @@
 
   html:has([data-region="answer-form"] .more-menu[open] .ui-confirm) {
     scroll-padding-block-end: 0;
+  }
+}
+
+/*
+ * Option A (the owner's ruling of 15 Nov 2026, 11:45): above 768 px the Save row (Save, the way on, the save status) pins to
+ * the screen's foot like the phone's bar while its own place in the card is below the fold, and returns to that place when
+ * the person scrolls to it. It is the same bar, sticky at the bottom of the answer form's fieldset (its last child), so it is
+ * pinned exactly while its place is below the fold and nothing in the card is hidden or repeated. DecisionForm measures its
+ * height into --decision-save-bar-h, and the element that scrolls at this width (the document from 769 to 1023 px, the shell's
+ * main region from 1024 px, components/layout/shell.css) keeps that much clear at its foot, so a field that takes focus, or
+ * a summary link's field, lands above the row (SC 2.4.11; DecisionForm's footOfView reads "pinned" from geometry). The row
+ * spans the card's width (its padding taken back); its surface and top rule are the phone bar's tokens. The rule shows only
+ * while it is pinned (a scroll-state query, read by the bar's descendants; modern-web-guidance state-aware-sticky-headers),
+ * and always where scroll-state queries are unknown. Nothing changes size when it pins, and nothing animates.
+ */
+@media (min-width: 769px) {
+  .decision-save-bar {
+    position: sticky;
+    inset-block-end: 0;
+    z-index: 2;
+    container: decision-save-bar / scroll-state;
+  }
+
+  .decision-card .decision-save-bar {
+    margin-inline: calc(-1 * var(--space-6));
+  }
+
+  .decision-save-bar__pin {
+    padding-block: var(--space-3);
+    border-block-start: 1px solid transparent;
+    background-color: var(--color-surface);
+  }
+
+  .decision-card .decision-save-bar__pin {
+    padding-inline: var(--space-6);
+  }
+
+  @container decision-save-bar scroll-state(stuck: block-end) {
+    .decision-save-bar__pin {
+      border-block-start-color: var(--color-border-control);
+    }
+  }
+
+  @supports not (container-type: scroll-state) {
+    .decision-save-bar__pin {
+      border-block-start-color: var(--color-border-control);
+    }
+  }
+
+  html:has(.decision-save-bar),
+  .shell__main:has(.decision-save-bar) {
+    scroll-padding-block-end: var(--decision-save-bar-h, 0px);
+  }
+}
+
+/* Design N1 (SC 2.4.11): the unsaved line's first sentence beside its clipped live span; the rest under the bar's place. */
+.save-status__unsaved-short,
+.decision-unsaved-more {
+  display: none;
+}
+
+@media (min-width: 769px) {
+  .save-status__unsaved-live:not(:empty) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .save-status__unsaved-short {
+    display: inline;
+  }
+
+  .decision-unsaved-more {
+    display: block;
+    margin-block: 0;
+  }
+}
+
+/* From 1024 px the shell's main region scrolls and has 32 px of padding (shell.css), and a sticky box stops at its scroll
+   container's padding edge: the row would float 32 px above the screen's foot with the card showing under it. Its inset
+   takes that padding back, so it pins to the foot itself. */
+@media (min-width: 1024px) {
+  .decision-save-bar {
+    inset-block-end: calc(-1 * var(--space-8));
+  }
+}
+
+/* R2 (the sketch's .guide): the line on what this save will do, after the fields and the evidence and before Save. The
+   info icon in navy and the sentence in ink on the ground's tint; the definition of "finding" under it, muted. */
+.decision-consequence {
+  display: flex;
+  gap: var(--space-2);
+  margin-block-end: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-control);
+  background-color: var(--color-ground);
+  color: var(--color-ink);
+}
+
+.decision-consequence__icon {
+  flex: none;
+  margin-block-start: 2px;
+  fill: none;
+  stroke: var(--color-heading);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.decision-consequence p {
+  margin: 0;
+  max-inline-size: var(--measure-reading);
+}
+
+/* R2 (the sketch's .act): Save on the left, the next question on the right with "Question n of N" under it. */
+.decision-save-bar__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-4);
+}
+
+.decision-save-bar__row > .form-actions {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* Beside Save while 12rem is left for it (a line break is decided on that basis), up to 26rem wide; under Save, at the
+   right, when the card is narrower. */
+.decision-next {
+  flex: 1 1 12rem;
+  max-inline-size: 26rem;
+  margin-inline-start: auto;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.35;
+  text-align: end;
+  color: var(--color-link);
+}
+
+/* Review B-I1: while a Save waits or is out, the next question's words are text, not a link: quieter, in the muted ink. */
+.decision-next--held {
+  margin-block: 0;
+  font-weight: var(--font-weight-regular);
+  color: var(--color-ink-muted);
+}
+
+.decision-next--last {
+  margin: 0;
+  font-weight: var(--font-weight-regular);
+  color: var(--color-ink-muted);
+}
+
+/* The next question's words on two lines at most, ending in an ellipsis when cut (design finish review M4), so a cut is
+   seen; the whole text stays the link's name. Chromium draws no ellipsis on a clamped last line that is aligned to the
+   end and ends on a whole word (seen at 1280 px in the T3a screenshots), so the words are aligned to the start inside a
+   box as wide as they are, pushed to the end: a short title still sits at the right. */
+.decision-next__words {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  margin-inline-start: auto;
+  text-align: start;
+}
+
+.decision-next__position {
+  display: block;
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-ink-muted);
+}
+
+/* R9, a phone: Save stays the one orange control in the fixed bar; the next question is a quiet link beside it, its words
+   on one line ending in an ellipsis and "Question n of N" under them in small type (design finish review M4), so the
+   bar stays as short as Save. */
+@media (max-width: 768px) {
+  .decision-save-bar__row {
+    flex-wrap: nowrap;
+  }
+
+  /* Save keeps its label on one line; the link takes what is left. */
+  .decision-save-bar__row > .form-actions {
+    flex: none;
+  }
+
+  .decision-save-bar__row .ui-button {
+    white-space: nowrap;
+  }
+
+  .decision-next {
+    flex: 1 1 0;
+    min-inline-size: 0;
+    font-size: var(--font-size-small);
+  }
+
+  /* One line cut with an ellipsis (a one-line clamp drew none at 375 px in Chromium; seen in the T3a screenshots). */
+  .decision-next__words {
+    display: block;
+    -webkit-line-clamp: none;
+    line-clamp: none;
+    white-space: nowrap;
+  }
+}
+
+/*
+ * Spec 9.7, every save state in the card (T3b item 6): the status line by Save carries an icon beside its words, so no
+ * state is told by colour alone and an alert is never red: a clock while saving or slow (M-01, M-02), the saved check in the
+ * saved green (M-03, M-04), a warning triangle in ink for every failure (the alert region). The icon is CSS on a region that
+ * has words, never markup: the live regions hold their sentence and nothing else (protected tests read their text), and
+ * generated content with no text is not read. The kit's own icons (components/ui/icons.tsx: clock, circle-check,
+ * triangle-alert), drawn as a mask in the text colour; the system text colour in forced colours.
+ */
+.save-status [role="status"]:not(:empty)::before,
+.save-status [role="alert"]:not(:empty)::before {
+  content: '';
+  display: inline-block;
+  inline-size: 1.125em;
+  block-size: 1.125em;
+  margin-inline-end: var(--space-2);
+  vertical-align: -0.2em;
+  background-color: currentColor;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 6v6l4 2'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+.save-status [role="status"]:is([data-message-id="M-03"], [data-message-id="M-04"])::before {
+  background-color: var(--color-saved);
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='m16 9-5.5 5.5L8 12'/%3E%3C/svg%3E");
+}
+
+.save-status [role="alert"]:not(:empty)::before {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3'/%3E%3Cpath d='M12 9v4'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E");
+}
+
+@media (forced-colors: active) {
+  .save-status [role="status"]:not(:empty)::before,
+  .save-status [role="alert"]:not(:empty)::before {
+    forced-color-adjust: none;
+    background-color: CanvasText;
   }
 }

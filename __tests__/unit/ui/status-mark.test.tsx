@@ -6,7 +6,10 @@ import { StatusMark } from '@/components/ui/StatusMark';
 import type { StatusMarkKind } from '@/components/ui/types';
 import { text, textOf } from '@/__tests__/helpers/markup';
 
-/** Plan 1A Task 3, spec 7.2: status is a shape and a word, in ink, never a colour and never a tick. */
+/**
+ * Plan 1A Task 3, spec 7.2: status is a shape and a word, in ink. One exception, the owner's ruling R8 (15 Nov 2026, over
+ * spec D4): done is the sketch's filled green check, a disc in the saved green with a check in the surface colour.
+ */
 
 const KINDS: readonly StatusMarkKind[] = ['done', 'partly', 'not_yet', 'not_applicable', 'does_not_apply', 'scope_answered', 'no_decision'];
 
@@ -20,9 +23,9 @@ function shapeOf(html: string): string[] {
 
 const SLASH = 'line stroke=currentColor stroke-linecap=round stroke-width=2 x1=6.3 x2=17.7 y1=17.7 y2=6.3';
 const EXPECTED_SHAPES: Record<StatusMarkKind, string[]> = {
-  done: ['circle cx=12 cy=12 fill=currentColor r=8'],
+  done: ['circle class=ui-mark__done-disc cx=12 cy=12 r=9', 'path class=ui-mark__done-check d=M8 12.5l2.7 2.7L16 9.8 fill=none stroke-linecap=round stroke-linejoin=round stroke-width=2.2'],
   partly: ['circle cx=12 cy=12 fill=none r=8 stroke=currentColor stroke-width=2', 'path d=M12 4a8 8 0 0 1 0 16z fill=currentColor'],
-  not_yet: ['circle cx=12 cy=12 fill=none r=8 stroke=currentColor stroke-width=2.5'],
+  not_yet: ['circle cx=12 cy=12 fill=none r=8 stroke=currentColor stroke-width=3.5'],
   not_applicable: ['circle cx=12 cy=12 fill=none r=8 stroke=currentColor stroke-width=2', SLASH],
   does_not_apply: ['circle cx=12 cy=12 fill=none r=8 stroke=currentColor stroke-dasharray=3 2.6 stroke-width=2', SLASH],
   scope_answered: ['rect fill=currentColor height=14 width=14 x=5 y=5'],
@@ -31,7 +34,7 @@ const EXPECTED_SHAPES: Record<StatusMarkKind, string[]> = {
 
 
 describe('StatusMark (spec 7.2)', () => {
-  it('7.2: each kind draws its shape in currentColor and has no tick', () => {
+  it('7.2: each kind draws its shape with its colour from CSS; only done has a check (R8)', () => {
     for (const kind of KINDS) {
       const html = renderToStaticMarkup(<StatusMark kind={kind} />);
       expect(html).toContain(`data-mark-kind="${kind}"`);
@@ -71,7 +74,7 @@ describe('StatusMark (spec 7.2)', () => {
   });
 });
 
-describe('StatusMark.css: the mark is ink, never another colour', () => {
+describe('StatusMark.css: the mark is ink, never another colour, but for done\'s green check (R8)', () => {
   const css = readFileSync('components/ui/StatusMark.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
 
   it('.ui-mark sets color: var(--color-mark)', () => {
@@ -83,7 +86,9 @@ describe('StatusMark.css: the mark is ink, never another colour', () => {
   /**
    * Every rule in every tracked stylesheet whose selector names the mark (`.ui-mark`, `.ui-mark--*`, `.ui-mark__*`) or the
    * route row's stops (`.ui-route-row__stop*`, `.ui-route-row__point`), checked for the paint it sets. The mark block is
-   * --color-mark, its words ink; a route stop or point may set only --color-mark or inherit; nothing sets fill or stroke.
+   * --color-mark, its words ink; a route stop or point may set only --color-mark or inherit; nothing sets fill or stroke but
+   * done's two parts (R8): the disc filled in the saved green and the check stroked in the surface colour, and in forced
+   * colours the system's text and canvas colours.
    */
   it('no stylesheet paints a mark or a route stop in any colour but the mark\'s, or sets its fill or stroke', () => {
     const sheets = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '*.css'], { encoding: 'utf8' }).split('\n').filter(Boolean);
@@ -100,7 +105,10 @@ describe('StatusMark.css: the mark is ink, never another colour', () => {
         checked += 1;
         for (const [, prop, raw] of body.matchAll(/(?:^|;)\s*(color|fill|stroke)\s*:\s*([^;]+)/g)) {
           const value = raw.trim();
-          const allowed = prop !== 'color' ? false
+          const done = /\.ui-mark__done-(disc|check)(?![\w-])/.exec(selector)?.[1];
+          const allowed = done === 'disc' ? prop === 'fill' && ['var(--color-saved)', 'CanvasText'].includes(value)
+            : done === 'check' ? prop === 'stroke' && ['var(--color-surface)', 'Canvas'].includes(value)
+            : prop !== 'color' ? false
             : stop ? /^(var\(--color-mark\)|inherit)$/.test(value)
             : /\.ui-mark__words(?![\w-])/.test(selector) ? value === 'var(--color-ink)'
             : value === 'var(--color-mark)';

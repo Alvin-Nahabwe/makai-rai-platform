@@ -159,10 +159,30 @@ describe('lib/decision/form/copy.ts', () => {
     expect(DECISION_FORM_COPY.noStorage).toBe('This browser cannot keep a copy of your text. Save before you leave this page.');
   });
 
-  it('the field labels and the personal data question\'s line', () => {
+  it('R2: the card\'s heading, the way on, and the consequence sentences as the owner checks them', () => {
+    const C = DECISION_FORM_COPY.consequence;
+    expect(DECISION_FORM_COPY.card.heading).toBe('Your decision');
+    expect(DECISION_FORM_COPY.card.next('Who is affected?')).toBe('Next: Who is affected?');
+    expect(DECISION_FORM_COPY.card.position(5, 22)).toBe('Question 5 of 22');
+    expect(`${C.keepsOpen('Partly')} ${C.version(2)}`).toBe('Saving \u2018Partly\u2019 keeps a finding open for this question until your team closes it. This save becomes version 2.');
+    // The owner's sentence, exact (ruled 15 Nov 2026, 11:45).
+    expect(C.raises('Not yet')).toBe('Saving \u2018Not yet\u2019 raises a finding for this question, unless its last finding was closed as an accepted risk at this level or a worse one and no version since was Done or Not applicable.');
+    expect(DECISION_FORM_COPY.card.savedAs(2)).toBe('Saved as version 2 \u00b7 ');
+    expect(DECISION_FORM_COPY.card.enteredBy('Joseph K.')).toBe('Entered by: Joseph K. on ');
+    expect(DECISION_FORM_COPY.conflict.notChosen).toBe('not chosen yet');
+    expect(C.raisesNone('Done')).toBe('Saving \u2018Done\u2019 raises no finding.');
+    expect(C.closesNot('Not applicable')).toBe("Saving \u2018Not applicable\u2019 does not close the open finding by itself. Your team closes it on the finding's page.");
+    expect(C.scope).toEqual({
+      yes: 'Saving \u2018Yes\u2019 means the questions about consent and anonymisation apply to this project.',
+      no: 'Saving \u2018No\u2019 means the questions about consent and anonymisation do not apply to this project.',
+      not_sure: 'Saving \u2018Not sure\u2019 means the questions about consent and anonymisation still apply.',
+    });
+  });
+
+  it('the field labels (spec 9.3: "Reason", "Decided on") and the personal data question\'s line', () => {
     expect(DECISION_FORM_COPY.fields).toEqual({
       status: 'Status', scopeAnswer: 'Answer', optionsInPlace: 'Which of these are in place?', reasonCode: 'Main reason',
-      reason: 'Explain your decision', decidedBy: 'Decided by', declaredDate: 'When was this decided?',
+      reason: 'Reason', decidedBy: 'Decided by', declaredDate: 'Decided on',
     });
     expect(DECISION_FORM_COPY.scopeLegend).toBe('Answer (required)');
     expect(DECISION_FORM_COPY.scopeNote).toBe(TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION.definition);

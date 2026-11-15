@@ -7,7 +7,7 @@ import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
 import { statusText } from '@/lib/question/stageList';
 import { keptEvidenceLine } from '@/lib/question/draft';
 import { formatDeclaredDate, formatTime } from '@/lib/format/dates';
-import { evidenceDisplayName } from '@/components/evidence/VersionEvidenceList';
+import { evidenceDisplayName } from '@/components/evidence/EvidenceItemText';
 import { conflictText } from '@/lib/question/saveOutcome';
 import { declaredDateFromParts } from '@/lib/decision/rules';
 import type { DecisionDraft } from '@/lib/question/draft';
@@ -64,7 +64,8 @@ export function ConflictView(p: ConflictViewProps): ReactElement {
   const mine: Array<[string, string]> = [
     [C.status, statusWords({ status: p.mine.status, scopeAnswer: p.mine.scopeAnswer, withdrawalCode: null })],
     [C.reason, p.mine.reason],
-    [C.decidedBy, `${p.mineDecidedBy ?? ''}${'field' in mineDate ? '' : `, ${formatDeclaredDate(mineDate.date)}`}`],
+    // A first decision's draft may have no decider yet: say so, never "Decided by: , 14 Nov 2026" (review round 1, B-M3).
+    [C.decidedBy, `${p.mineDecidedBy || C.notChosen}${'field' in mineDate ? '' : `, ${formatDeclaredDate(mineDate.date)}`}`],
     [C.evidence, (p.mineEvidence ?? []).length === 0 ? C.none : (p.mineEvidence ?? []).join(', ')],
     ...((p.mineKeptEvidence ?? 0) > 0 ? [[C.also, keptEvidenceLine(p.mineKeptEvidence ?? 0)] as [string, string]] : []),
   ];

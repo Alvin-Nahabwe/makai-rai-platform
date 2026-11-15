@@ -153,11 +153,18 @@ export async function waitForQuestionPage(page: Page): Promise<void> {
   });
 }
 
-/** Fills the S-12 form with a valid answer: Done, a reason, decided by the person, Today; `over` changes any part. */
+/**
+ * Fills the S-12 form with a valid answer: Done, a reason, decided by the person, Today; `over` changes any part. Decided by
+ * starts empty on a first decision (owner OQ1 (a)), so with no `decidedBy` the person is chosen when the field is empty; a
+ * re-decision keeps the decider it opened with, as before. The reason box is found by its exact name: "Reason (required)"
+ * is also part of "Main reason (required)".
+ */
 export async function fillValid(page: Page, over: { status?: string | null; reason?: string; decidedBy?: string; day?: string; month?: string; year?: string } = {}): Promise<void> {
   if (over.status !== null) await page.getByRole('radio', { name: over.status ?? 'Done', exact: true }).check();
-  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`).fill(over.reason ?? 'Compared a rule-based alert with the model.');
-  if (over.decidedBy !== undefined) await page.getByLabel('Decided by (required)').selectOption({ label: over.decidedBy });
+  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`, { exact: true }).fill(over.reason ?? 'Compared a rule-based alert with the model.');
+  const decider = page.getByLabel('Decided by (required)');
+  if (over.decidedBy !== undefined) await decider.selectOption({ label: over.decidedBy });
+  else if ((await decider.inputValue()) === '') await decider.selectOption((await decider.locator('option', { hasText: /^You \(/ }).getAttribute('value'))!);
   if (over.day === undefined && over.month === undefined && over.year === undefined) {
     await page.getByRole('button', { name: 'Today', exact: true }).click();
   } else {

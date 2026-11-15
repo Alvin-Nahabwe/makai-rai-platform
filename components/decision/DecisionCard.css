@@ -1,0 +1,149 @@
+/*
+ * "Your decision" (owner's ruling R2; the locked sketch's form{}, .fh and .saved; lead's rulings D1 and D5): one white
+ * card on the ground, a 1 px container border, the surface radius, 24 px padding and the kit's soft surface shadow. The
+ * header holds the heading and, in its corner on one line, the saved shape and "Saved as version N · <date>". The rest of
+ * the saved mark (its dates and its line on the platform), who decided and entered, and the history link sit quietly at
+ * the card's foot, after the Save row and before More actions.
+ */
+.decision-card {
+  box-sizing: border-box;
+  padding: var(--space-6);
+  border: 1px solid var(--color-border-container);
+  border-radius: var(--radius-surface);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-surface);
+}
+
+/* The sketch's .fh: the heading and the corner on one baseline, 16 px above the first field. */
+.decision-card__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-4);
+  margin-block-end: var(--space-4);
+}
+
+.decision-card__head > h2 {
+  margin: 0;
+  font-size: var(--font-size-h2);
+}
+
+.decision-card__none {
+  margin: 0;
+  font-size: var(--font-size-small);
+  color: var(--color-ink-muted);
+}
+
+/* The sketch's .saved: the check and the words in the saved green, small and bold. */
+.decision-card__saved {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-saved);
+}
+
+.decision-card__saved-shape {
+  display: inline-flex;
+}
+
+/* The corner's saved shape (design finish review m4): Done's filled green disc and its check in the surface colour, as
+   StatusMark.css paints Done; in forced colours the disc is the system text colour and the check the canvas. */
+.decision-card__saved-disc {
+  fill: var(--color-saved);
+}
+
+.decision-card__saved-check {
+  stroke: var(--color-surface);
+}
+
+@media (forced-colors: active) {
+  .decision-card__saved-disc {
+    fill: CanvasText;
+  }
+
+  .decision-card__saved-check {
+    stroke: Canvas;
+  }
+}
+
+/* The seal markers of the current version, first in the foot (T3 item 7): quiet, no list bullets. */
+.decision-card__meta .seal-markers {
+  margin: 0 0 var(--space-1);
+  padding: 0;
+  list-style: none;
+}
+
+/* The whole saved mark is the phone's (below); wide, its parts are the corner and the foot's lines. */
+.decision-card__saved-block {
+  display: none;
+}
+
+/* Design finish review m1 (the sketch's .pri): Save is 48 px high with 24 px each side. */
+.decision-card .decision-save-bar__row .ui-button--primary {
+  min-height: 48px;
+  padding-inline: var(--space-6);
+}
+
+/* The foot: quiet lines after the Save row, before More actions. */
+.decision-card__meta {
+  margin-block-start: var(--space-4);
+  font-size: var(--font-size-small);
+  color: var(--color-ink-muted);
+}
+
+.decision-card__meta p {
+  margin: 0;
+}
+
+.decision-card__meta a {
+  color: var(--color-link);
+}
+
+/* Reviews B M-r4-3 and A M-1: while a Save waits or is out, a foot link's words are text in the muted ink, as Next's are. */
+.decision-held-link {
+  color: var(--color-ink-muted);
+}
+
+/* More actions, quiet, after the foot. */
+.decision-card__more {
+  margin-block-start: var(--space-3);
+}
+
+/*
+ * A phone (spec 7.3: "the most visible thing after the question"; workspace-phone-saved.png): the whole saved mark, first
+ * in the card, above the heading; the corner's one line and the foot's saved lines would repeat it, so they go. The card
+ * keeps 16 px of padding so the fields keep their width.
+ */
+@media (max-width: 768px) {
+  .decision-card {
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-4);
+  }
+
+  .decision-card__saved-block {
+    display: block;
+    order: -1;
+    margin-block-end: var(--space-4);
+  }
+
+  .decision-card__corner:has(.decision-card__saved),
+  .decision-card__saved-lines {
+    display: none;
+  }
+}
+
+/* A small phone (the page keeps 16 px each side at 768 px and below, app/globals.css): the card runs to the screen's edges,
+   its side borders and corners dropped, so its 16 px padding stands where the page's was and the fields, the error summary
+   and an open withdrawal keep the whole width of the screen (SC 1.4.10 at 320 px; register D-398 item 1). */
+@media (max-width: 640px) {
+  .decision-card {
+    margin-inline: calc(-1 * var(--space-4));
+    border-inline: 0;
+    border-radius: 0;
+  }
+}

@@ -5,9 +5,8 @@ import { runningContent } from '@/lib/content/loader';
 import { QUESTION_COPY } from '@/lib/question/copy';
 
 /**
- * The decision slot's STUB (components/question/DecisionSlot.tsx), until lane 2's DecisionCard merges: for a person who
- * may record, what the page rendered for them before (the current decision, the answer form with WithdrawDecision, the
- * way on); for a reader, nothing, as the card will.
+ * The decision slot (components/question/DecisionSlot.tsx), now lane 2's DecisionCard: for a person who may record, the
+ * one answer-form card with the way on inside it; for a reader, nothing.
  */
 vi.mock('next/navigation', async (original) => ({ ...(await original<typeof import('next/navigation')>()), useRouter: () => ({ refresh() {} }), usePathname: () => '/x' }));
 vi.mock('@/components/evidence/EvidenceBlock', () => ({ EvidenceBlock: () => null }));
@@ -23,10 +22,10 @@ const DATA: QuestionPanelData = {
 const STAGE_HREF = '/orgs/acme-health/projects/p1/stages/pre-processing';
 const NEXT = { questionId: 'Q-PP-05', text: 'Next words?', href: `${STAGE_HREF}/questions/Q-PP-05`, number: 5, total: 24 };
 
-describe('DecisionSlot (stub)', () => {
-  it('returns null for a reader, archived or not', () => {
+describe('DecisionSlot (lane 2\'s card)', () => {
+  it('renders nothing for a reader, archived or not', () => {
     for (const data of [{ ...DATA, canWrite: false }, { ...DATA, canWrite: false, projectArchived: true }]) {
-      expect(DecisionSlot({ data, next: NEXT, stageHref: STAGE_HREF, openFindingsOnQuestion: 0 })).toBeNull();
+      expect(renderToStaticMarkup(<DecisionSlot data={data} next={NEXT} stageHref={STAGE_HREF} openFindingsOnQuestion={0} />)).toBe('');
     }
   });
 
@@ -36,12 +35,17 @@ describe('DecisionSlot (stub)', () => {
     expect(html).not.toContain(`>${QUESTION_COPY.headings.findings}</h2>`);
   });
 
-  it('for a writer: the current decision, the answer form, then the way on to the next question in words and All questions', () => {
+  it('for a writer: one answer-form card (no current-decision region), the form, then the way on to the next question in words and All questions inside it', () => {
     const html = renderToStaticMarkup(<DecisionSlot data={DATA} next={NEXT} stageHref={STAGE_HREF} openFindingsOnQuestion={0} />);
     const at = (s: string) => html.indexOf(s);
-    expect([at('data-region="current-decision"'), at('data-region="answer-form"'), at('<form'), at('data-region="way-on"')].every((n, i, a) => n >= 0 && (i === 0 || n > a[i - 1])), html).toBe(true);
-    expect(html).toContain(`<a href="${NEXT.href}">${QUESTION_COPY.foot.next('Next words?')}</a><a href="${STAGE_HREF}">All questions</a>`);
+    expect([at('data-region="answer-form"'), at('<form'), at('Save decision'), at(`href="${NEXT.href}"`)].every((n, i, a) => n >= 0 && (i === 0 || n > a[i - 1])), html).toBe(true);
+    expect(html).not.toContain('data-region="current-decision"');
+    expect(html).not.toContain('data-region="way-on"');
+    expect(html).toContain('Next: Next words?');
+    expect(html).toContain('Question 5 of 24');
     const last = renderToStaticMarkup(<DecisionSlot data={DATA} next={null} stageHref={STAGE_HREF} openFindingsOnQuestion={0} />);
-    expect(last).toContain(`<span>${QUESTION_COPY.foot.last}</span><a href="${STAGE_HREF}">All questions</a>`);
+    expect(last).toContain(QUESTION_COPY.foot.last);
+    expect(last).toContain(`href="${STAGE_HREF}"`);
+    expect(last).not.toContain('Question 5 of 24');
   });
 });

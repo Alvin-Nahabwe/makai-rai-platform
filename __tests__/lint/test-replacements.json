@@ -2297,6 +2297,102 @@
   },
   {
     "kind": "rule",
+    "changed": "__tests__/unit/decision-components.test.tsx::UX-09: a native radio group named Status, four options in order, the finding note, and the reason code only with Not applicable or Not yet",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::UX-09 R2: a native radio group named Status, four options in order, and the reason code only with Not applicable or Not yet; the finding note is no longer under the legend",
+    "property": "DecisionFields renders the Status group as a native radio group named Status with the four options in order, and the main reason only for Not yet and Not applicable (the codes of the chosen status only). The finding note no longer sits under the Status legend: the owner's ruling R2 (15 Nov 2026) puts one line on what this save will do after the fields and the evidence and before Save, and with no status chosen that line is the same FINDING_NOTE followed by the version this save becomes.",
+    "proof": "Every assertion of the case is unchanged but one: `expect(h).toContain(FINDING_NOTE)` became `expect(h).not.toContain(FINDING_NOTE)`, so the note cannot come back under the legend as well. The note's new place is pinned by __tests__/unit/decision-card.test.tsx::no status chosen keeps the meaning of the old note; a first decision becomes version 1, which requires the card's [data-consequence] line to hold `${FINDING_NOTE} This save becomes version 1.`, and by the case 'every status, with and without an open finding, ends with this save's version'. Seen RED (the old assertion failed once the hint left the legend), GREEN after the change.",
+    "task": "Route rebuild lane 2 task 1 (the decision card)"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/decision-components.test.tsx::UX-12: the reason helper and the count in text, linked to the field",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::UX-12 ruling (a): the reason hint is the own prompt of the question, and the count in text, linked to the field",
+    "property": "The reason's hint is the question's own signed-off prompt (runningQuestion.reasonPrompt, content 5.1.0) in the element decision-reason-help, which the textarea names in aria-describedby, and the count reads as text (212 / 4,000 characters). Coordinator's ruling (a) of 15 Nov 2026 and spec 9.3 item 3 replace the one generic line, REASON_HELP, that every question showed (design-target gap 9).",
+    "proof": "The count and aria-describedby assertions are unchanged; `expect(h).toContain('Say what is in place, where it is recorded, and what is missing.')` became `expect(h).toContain(`<p id=\"decision-reason-help\" class=\"decision-fields__help\">${PANEL.runningQuestion.reasonPrompt}</p>`)`, which pins the element, its id and the prompt as its whole text. __tests__/unit/decision-card.test.tsx::ruling (a): the label is \"Reason\" and its hint is the question's own prompt, with the count requires the same with a real prompt and that the generic sentence appears nowhere, and 'a chosen main reason shows when to use it under the select and adds what the reason must say to the hint' pins the added sentence. The server's M11.reasonMissing still names the generic sentence (__tests__/unit/decision-rules.test.ts, unchanged).",
+    "task": "Route rebuild lane 2 task 1 (the decision card)"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/decision-components.test.tsx::plan 1A Task 17: every control keeps its id and name, and each status card shows one symbol, its radio button",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::plan 1A Task 17 R3: every control keeps its id and name, and each status card shows its radio button and its status mark",
+    "property": "Every control of the decision form keeps its id and name, and each status card shows the native radio button, the status mark and the word: the owner's ruling R3 (15 Nov 2026, the locked sketch's .opts) puts the mark back in each card, and spec 7.5 asks for selection as a thicker border plus the mark. Workshop finding S12-d (two empty circles before a choice, Done's disc read as chosen) is answered by R8's filled green check for Done, which no longer resembles a chosen radio, and by the chosen card's 2 px border and tint.",
+    "proof": "The radio, option, reason-code, select, textarea and date assertions are unchanged; `expect(h.match(/class=\"ui-mark__shape\"/g)).toBeNull()` became `.toHaveLength(4)`, one mark per status card. __tests__/unit/decision-card.test.tsx::four short cards in two columns, each the radio, the mark and the word; its sentence kept as the radio's description requires, for each status, the label to hold exactly the radio, then the hidden mark's svg, then the word, and the help paragraph with its id; __tests__/unit/ui/status-mark.test.tsx pins Done's new shape.",
+    "task": "Route rebuild lane 2 task 1 (the decision card)"
+  },
+  {
+    "kind": "rule",
+    "changed": "e2e/helpers/session.ts::fillValid",
+    "replacedBy": "e2e/decision-save.spec.ts::FR-DEC-06 NFR-REL-04 UX-25 M-01 M-03: Save shows Saving, then Saved as version 1 only after the reply",
+    "property": "Every protected spec that fills the question page's form with fillValid (e2e/decision-save.spec.ts and e2e/decision-conflict.spec.ts; `grep -ln fillValid e2e` on 15 Nov 2026, the other callers are not protected) still saves an answer with a decider: Decided by now starts empty on a first decision (spec 9.3 item 4, owner OQ1 (a), plan 1C Task 12 Step 3), so fillValid chooses \"You (<name>)\" when the field is empty and no decidedBy is given, and leaves a re-decision's decider as it opened, exactly as before. The reason box is found by its exact name, because the label is now \"Reason\" (spec 9.3 item 3) and \"Reason (required)\" is also part of \"Main reason (required)\".",
+    "proof": "The named case opens a first decision on Q-PP-01 and calls fillValid(page) with no decidedBy (e2e/decision-save.spec.ts:23-24), so the Decided by select is empty and the new branch chooses the option whose text starts \"You (\"; the case then requires the status line SAVED_V1, \"Saved at <time> as version 1. Decided by: you.\" (:19), which fails if that branch does not choose the person. e2e/decision-save.spec.ts::UX-09 UX-11 M-03: choosing Not yet shows the reason code; Ethics committee is named in the confirmation (:324-333) proves the exact-name part: it chooses Not yet, so \"Main reason (required)\" is on the page, then calls fillValid with decidedBy, and the reason box is found only by its exact name. e2e/helpers/session.ts fillValid: the reason locator gains `{ exact: true }`; the Decided by locator is held in `decider`; `over.decidedBy` still selects by label; otherwise `if ((await decider.inputValue()) === '')` selects the \"You (\" option. No spec file changes. Both protected specs pass unchanged on the remote machine (lane 2 task 1 report, fix round 1).",
+    "task": "Route rebuild lane 2 task 1 (the decision card)"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/read-only-view.test.tsx::7.2: the Done mark draws no tick",
+    "replacedBy": "__tests__/unit/read-only-view.test.tsx::7.2 R8: the Done mark is the filled green check, a disc and a check painted by CSS, with its word",
+    "property": "The reading view's Done mark is the kit's done shape with its word Done. The owner's ruling R8 (15 Nov 2026) overrules spec D4: Done is the sketch's filled green check, so the case now requires the disc and the check, each with its own class (StatusMark.css paints the disc in --color-saved and the check in --color-surface), and still no colour in the markup.",
+    "proof": "Same render, same section, same `data-mark-kind=\"done\"` and the word Done; the primitives are now ['circle', 'path'] with the classes ui-mark__done-disc and ui-mark__done-check, and the markup holds no hex, rgb() or 'green'. __tests__/unit/ui/status-mark.test.tsx pins the exact primitives and that only those two classes may set a fill or a stroke, with exactly those colours.",
+    "task": "Route rebuild lane 2 task 1 (the decision card)"
+  },
+  {
+    "kind": "rule",
+    "changed": "e2e/no-score-helpers.spec.ts::spec 7.2 NFR-A11Y-05 (helper): a status mark is a shape and words in ink, with no tick and no green",
+    "replacedBy": "e2e/no-score-helpers.spec.ts::spec 7.2 R8 NFR-A11Y-05 (helper): a status mark is a shape and words in ink, with no tick and no green, but for Done's filled green check",
+    "property": "A status is not carried by colour: every mark is a shape and words, the mark's own colour --color-mark and its words --color-ink, with no tick and no green, as the 1A-15 entry for this case says. One exception, the owner's ruling R8 (15 Nov 2026, over spec D4), recorded by the coordinator for lane 2: Done's mark is the filled green check, its disc (.ui-mark__done-disc) filled with --color-saved and its check (.ui-mark__done-check) stroked with --color-surface. Only those two graphics, inside a .ui-mark__shape, are exempt, and only with exactly those paints; the word Done stays beside the mark. The 1A-15 entry's meaning holds for every other mark and is not edited.",
+    "proof": "Every pass and bad vector of the old case is kept unchanged. Added: a pass vector, the kit's Done check (both classes, saved green and surface); bad vectors for Done's disc in another green (fill not --color-saved), Done's check in ink (stroke not --color-surface), a tick path without the class beside the disc (still a tick), a Done mark whose own colour is the saved green (still green), a Partly mark drawn with Done's check and paints, and a shape drawn for Done inside a Partly mark (each a tick: the exemption holds only inside a shape StatusMark's MarkShape drew for Done, `svg.ui-mark__shape[data-shape-kind=\"done\"]`, whose nearest `[data-mark-kind]`, if any, is Done; review round 2, A N-2); and a pass vector, Done's check drawn alone with its words beside it, as the stage column's tally and the status cards draw it, and --color-surface undefined. e2e/helpers/noScore.ts expectStatusMarksInk carries the exemption; the TOKENS style gains --color-surface.",
+    "task": "Route rebuild lane 2 task 1, fix round 1 (R8, coordinator's ruling)"
+  },
+  {
+    "kind": "rule",
+    "changed": "e2e/prj-screens.spec.ts::UX-06: to-do counts come before recorded counts; status is words in ink, with no tick and no green (S-10 and S-08)",
+    "replacedBy": "e2e/prj-screens.spec.ts::UX-06 R8: to-do counts come before recorded counts; status is words in ink, with no tick and no green but Done's filled green check (S-10 and S-08)",
+    "property": "To-do counts come before recorded counts, and the status on S-10 and S-08 is not carried by colour: words in ink, with no tick and no green on any mark but Done's filled green check (owner's ruling R8, 15 Nov 2026), whose disc is --color-saved and check --color-surface with the word Done beside it. The 1A-15 entry for this case stands for every other mark.",
+    "proof": "The case body is unchanged: the indexOf('with no decision') < indexOf('Recorded') assertion and expectStatusMarksInk(page) on both screens. The helper's exemption for Done's two graphics, and that it still rejects every other green and tick, is asserted in e2e/no-score-helpers.spec.ts::spec 7.2 R8 NFR-A11Y-05 (helper): a status mark is a shape and words in ink, with no tick and no green, but for Done's filled green check.",
+    "task": "Route rebuild lane 2 task 1, fix round 1 (R8, coordinator's ruling)"
+  },
+  {
+    "kind": "rule",
+    "deleted": "e2e/no-score-helpers.spec.ts::UX-06 NFR-A11Y-05 (helper): status labels are words in a neutral colour, and the warning tint sits only on the three warning labels",
+    "replacedBy": "e2e/no-score-helpers.spec.ts::spec 7.2 R8 NFR-A11Y-05 (helper): a status mark is a shape and words in ink, with no tick and no green, but for Done's filled green check",
+    "property": "As the 1A-15 entry for this base case says (status is words in ink, its mark a shape in --color-mark, no tick and no green), with the one exception the owner ruled on 15 Nov 2026 (R8): Done's filled green check, its disc --color-saved and its check --color-surface, the word Done beside it. This entry only follows the 1A-15 entry's replacement case to its new title; the 1A-15 entry is not edited.",
+    "proof": "spec 7.2 R8 NFR-A11Y-05 (helper): a status mark is a shape and words in ink, with no tick and no green, but for Done's filled green check: every vector of the 1A-15 case is kept; the R8 vectors are listed in this file's entry for that case's title change (lane 2 task 1, fix round 1).",
+    "task": "Route rebuild lane 2 task 1, fix round 1 (R8, coordinator's ruling)"
+  },
+  {
+    "kind": "rule",
+    "deleted": "e2e/prj-screens.spec.ts::UX-06: to-do counts come before recorded counts; status labels are neutral and the warning tint stays on the allowed labels (S-10 and S-08)",
+    "replacedBy": "e2e/prj-screens.spec.ts::UX-06 R8: to-do counts come before recorded counts; status is words in ink, with no tick and no green but Done's filled green check (S-10 and S-08)",
+    "property": "As the 1A-15 entry for this base case says (to-do counts before recorded counts; status in ink, no tick and no green), with Done's filled green check excepted (R8, owner 15 Nov 2026). This entry only follows the 1A-15 entry's replacement case to its new title; the 1A-15 entry is not edited.",
+    "proof": "UX-06 R8: to-do counts come before recorded counts; status is words in ink, with no tick and no green but Done's filled green check (S-10 and S-08): the case body is unchanged (indexOf order and expectStatusMarksInk on both screens); it passes on the remote machine (lane 2 task 1, fix round 1).",
+    "task": "Route rebuild lane 2 task 1, fix round 1 (R8, coordinator's ruling)"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/evidence-components.test.tsx::NFR-SEC-11 E14 F2: a link address with a right-to-left override shows without it, inside bdi; the href stays as stored",
+    "replacedBy": "__tests__/unit/evidence-components.test.tsx::NFR-SEC-11 E14 F2: a link address with a right-to-left override shows without it, inside bdi; the href is the one parse of the stored address",
+    "property": "A stored link address carrying bidi controls is shown without them, inside bdi, and the anchor goes where the reader is told it goes. T3 item 8 (the coordinator's security ruling of 15 Nov 2026, routed from lane 1): the href and the host shown come from ONE parse, lib/evidence/format.ts webLink, so the href is the parsed address (a control in the path percent-encoded, as the browser would send it) rather than the stored string, and a labelled link names the host it goes to, \"<label> (<host>, opens another site)\", instead of repeating the whole address.",
+    "proof": "Same render (VersionEvidenceList) of the same address 'https://e.org/\\u202Eexe.pdf' with no label and with 'Ethics'; the no-controls-in-text and bdi assertions are unchanged; `expect(html).toContain(`href=\"${url}\"`)` became `toContain('href=\"https://e.org/%E2%80%AEexe.pdf\"')`, and the text the labelled link shows became 'Ethics (e.org, opens another site)'. The three new cases in the same file's describe 'T3 item 8' pin a label claiming another site, 'https:evil.example' and bidi controls in the host. Seen RED before EvidenceItemText used webLink, GREEN after.",
+    "task": "Route rebuild lane 2 task 3a (the card's finish)"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/evidence-components.test.tsx::UX-30 FR-RM-01: upload lines are text and no progress element exists",
+    "replacedBy": "__tests__/unit/evidence-components.test.tsx::UX-30 FR-RM-01 C5: an uploading line is text, with one native progress element inside [data-upload-progress], labelled with the file",
+    "property": "An upload's state is told in text (\"Uploading <name>: x of y MB.\", unchanged), and no score-like progress drawing appears: plan 1C decision C5 adds exactly one native <progress value max> per uploading file, inside <span data-upload-progress>, named \"Uploading <file>\", which e2e/helpers/noScore.ts already allows there and only there (1A data-attributes table). A failed or finished file has none, and nothing has role=progressbar.",
+    "proof": "Same render of the same uploading item: the text assertion is unchanged; `not.toMatch(/<progress|role=\"progressbar\"/)` became one <progress> with value 800000, max 2400000 and aria-label \"Uploading costing.xlsx\" directly inside [data-upload-progress], no role=progressbar, and no <progress> for a failed or finished file. The browser side is e2e/evidence-block.spec.ts::UX-30 NFR-PERF-06 C5: under the Poor profile the line shows changing byte counts as text, and its one progress element sits in [data-upload-progress] (changed with this entry) and e2e/decision-pinned-save.spec.ts (B-I1 C5 case). Seen RED before EvidenceBlockView drew it, GREEN after.",
+    "task": "Route rebuild lane 2 task 3b (C5)"
+  },
+  {
+    "kind": "rule",
+    "changed": "e2e/evidence-block.spec.ts::UX-30 NFR-PERF-06: under the Poor profile the line shows changing byte counts as text and no progress element",
+    "replacedBy": "e2e/evidence-block.spec.ts::UX-30 NFR-PERF-06 C5: under the Poor profile the line shows changing byte counts as text, and its one progress element sits in [data-upload-progress]",
+    "property": "Under the Poor profile the upload line's byte counts change, as text, with the large-file note; per plan 1C C5 the only progress element on the page is the file's own <progress> inside [data-upload-progress], and nothing has role=progressbar outside one.",
+    "proof": "Same flow; `expect(page.locator('progress, [role=\"progressbar\"]')).toHaveCount(0)` became: every progress or progressbar on the page is a <progress> directly inside [data-upload-progress] (count of those outside it 0), while the file uploads.",
+    "task": "Route rebuild lane 2 task 3b (C5)"
+  },
+  {
+    "kind": "rule",
     "changed": "__tests__/integration/findings-close-by-decision.test.ts::FR-FND-06: a decision that already closed its mitigation is not offered again, and a second close writes nothing",
     "replacedBy": "__tests__/integration/findings-close-by-decision.test.ts::FR-FND-06: a decision that already closed its finding is not offered again after a reopen, and a second close writes nothing",
     "property": "A decision version whose closing record exists is not offered to close its finding again, and a second close by it answers 422 on decisionVersionId and writes nothing. The old case reached that state by closing while a Planned mitigation kept the finding open, which route 11 now refuses (route decision R11, security review 0.7.0 L-2: 409 finding_has_open_work); the case now reaches it the only way left, closing the finding and then reopening it.",
@@ -2518,6 +2614,86 @@
     "property": "A person on S-07 (`/`) is shown the idle warning from the session deadlines when they can be read, and none when they cannot; the administrator is redirected before S-07 renders.",
     "proof": "Plan 1B Task 1 moved `/` to app/(gate)/page.tsx and its IdleWarning to the group layout app/(gate)/layout.tsx (the plan: \"Its own IdleWarning and <main> go, because the group layout now renders them\"). The case now renders S-07 as Next serves it, the layout around the page (`GateLayout({ children: await LandingPage() })`): with readSessionDeadlines mocked to { secondsLeft: 3000, absoluteSecondsLeft: 500000 } it asserts data-seconds-left=\"3000\" for the empty state (with the page's emptyBody inside) and for the organisation picker; mocked to null it asserts no data-seconds-left and the layout's one fixed log line idle_deadline_unreadable. The administrator's NEXT_REDIRECT and readSessionDeadlines not being called by the page are kept unchanged. The module's identity mock adds tryResolveIdentity, which the layout calls, returning the same identity. The link between the layout and `/`: __tests__/lint/gate-group.test.ts::C1: (gate) holds exactly acceptances, change-password and the root page. The layout alone is also covered by __tests__/unit/ui/gate-frame.test.tsx::signed in, it renders the warning from the session deadlines, and none with one fixed log line when they cannot be read. Seen red: with the layout's IdleWarning disabled (`false && deadlines`), the new case fails.",
     "task": "plan 1B Task 1 (the gate frame and the (gate) route group), ruling L5-3"
+  },
+  {
+    "kind": "rule",
+    "changed": "e2e/decision-save.spec.ts::UX-30: a failed upload is never waited out by itself; Save without it leaves it out and names it",
+    "replacedBy": "e2e/decision-save.spec.ts::UX-30: a failed upload is never waited out by itself; Save without it leaves it out and names it",
+    "property": "A failed upload is never waited out: Save waits and names the file, Save without this file leaves it out, and the line after the save names it. The owner's ruling of 15 Nov 2026, 14:30 (review B-M5): the wait card says a failed or refused file did not upload and what the person can do, \"<name> did not upload. Retry it, remove it, or save without it.\", instead of waiting for it to finish uploading, which it will not do by itself.",
+    "proof": "Only the wait card's expectation changed: `getByText('Waiting for kept-eight-bad.pdf to finish uploading.')` became `getByText('kept-eight-bad.pdf did not upload. Retry it, remove it, or save without it.')`. Every other step is unchanged: the failed upload, the press of Save, no decision request while it waits, DECISION_FORM_COPY.saveWithout(1), the request without the failed file's id, the saved line, DECISION_FORM_COPY.savedWithout with kept-eight-bad.pdf, and the history. WaitLines (components/decision/DecisionForm.tsx) writes the failed files' sentence (DECISION_FORM_COPY.waiting.failed) and keeps \"Waiting for … to finish uploading.\" for files still uploading; __tests__/unit/decision-card.test.tsx pins both lines, and e2e/decision-save-without-upload.spec.ts requires the new sentence for a file that failed after it was left out.",
+    "task": "Route rebuild lane 2 task 3c (the owner's 14:30 rulings)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 UX-08: S-12 shell regions in order, each but the evidence block labelled by a heading, evidence block inside the answer form",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 UX-08: S-12 shell regions in order, each but the evidence block labelled by a heading, evidence block inside the answer form",
+    "property": "The page's writer regions are in a fixed DOM order, each labelled region by a heading, the evidence block inside the answer form. After the join the decision card replaces lane 1's stub: the order is question, seal note, answer-form (the one card, h2 \"Your decision\"), the evidence block inside it; the finding links sit in the card's foot, and there is no decision-slot, current-decision, finding-link or way-on region.",
+    "proof": "The case asserts the exact region order ['question','seal-note','answer-form','evidence-block'], 3 labelled sections, the h2 \"Your decision\", the evidence block inside the answer form followed by the card's foot (decision-card__raise). Seen red: dropping 'evidence-block' from the expected list fails it. The fixture's current version gains receivedAt, which the decision card formats (the card is real in this file, not mocked).",
+    "task": "Route rebuild lane 2 task 4 (the join with lane 1's question page)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::UX-08: every labelled region is named by a heading of the page that it points to, and the evidence block has no heading of its own",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::UX-08: every labelled region is named by a heading of the page that it points to, and the evidence block has no heading of its own",
+    "property": "Every labelled region is named by a heading of the page it points to; the evidence block has no heading of its own.",
+    "proof": "Only the count of labelled regions changed, 5 to 3 (question, seal note, answer-form: the stub's current-decision and finding-link sections are gone with the stub); the loop still requires each aria-labelledby id to match a heading in the rendered page. The fixture's current version gains receivedAt, which the decision card formats (the card is real in this file, not mocked).",
+    "task": "Route rebuild lane 2 task 4 (the join with lane 1's question page)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::FR-SUG-02 UX-08: for the gate question (nothing to suggest) the page renders no Ways teams address this section and no link to it",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::FR-SUG-02 UX-08: for the gate question (nothing to suggest) the page renders no Ways teams address this section and no link to it",
+    "property": "For the personal data question the page renders no Ways teams address this section and no link to it; the aside gets no count, no risk areas and no list.",
+    "proof": "Only the count of labelled sections changed, 5 to 3, for the same reason as the regions case; the not.toContain checks and the QuestionContent props expectation are unchanged. The fixture's current version gains receivedAt, which the decision card formats (the card is real in this file, not mocked).",
+    "task": "Route rebuild lane 2 task 4 (the join with lane 1's question page)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::UX-31 FR-PRJ-03: an archived project shows the archived banner on S-12",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::UX-31 FR-PRJ-03: an archived project shows the archived banner on S-12",
+    "property": "An archived project shows the archived banner on S-12, above the regions.",
+    "proof": "No assertion changed. The fixture's current version gains receivedAt, which the decision card formats (the card is real in this file, not mocked).",
+    "task": "Route rebuild lane 2 task 4 (the join with lane 1's question page)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 (helper): each region's component gets the props its contract row names, from the panel data",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 (helper): each region's component gets the props its contract row names, from the panel data",
+    "property": "Each region's component gets the props its contract row names, from the panel data. The current decision is no longer a CurrentDecision slot for a writer: the card shows it from the same panel data.",
+    "proof": "The CurrentDecision props expectation is replaced by CurrentDecision being unrendered for a writer plus the card's output from the panel: \"Saved as version 2\", the history href /orgs/acme-health/projects/p1/stages/pre-processing/questions/Q-PP-01/history, and \"History: 2 versions\". The QuestionContent, SealNote, EvidenceBlock and QuestionFindingLink props expectations are unchanged. The fixture's current version gains receivedAt, which the decision card formats (the card is real in this file, not mocked).",
+    "task": "Route rebuild lane 2 task 4 (the join with lane 1's question page)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 FR-DEC-06 UX-14 (helper): with no decision yet the next version is 1, and a read-only or archived panel has no evidence block to change",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::FR-DEC-01 FR-DEC-06 UX-14 (helper): with no decision yet the next version is 1, and a read-only or archived panel has no evidence block to change",
+    "property": "With no decision yet the next version is 1 (the seal note's nextVersionNumber), the evidence block starts empty and enabled, nothing is ticked, and a read-only or archived panel has no evidence block.",
+    "proof": "The SealNote, EvidenceBlock, tickedOptions and read-only expectations are unchanged. The expectation currentVersionId null on the QuestionFindingLink becomes: no finding link is rendered with no decision, because the card's foot (saved lines, history, finding links) is shown only once a version exists; the panel here is opened with its open finding still set, so the absence is the card's rule, not the data's. The fixture's current version gains receivedAt, which the decision card formats (the card is real in this file, not mocked).",
+    "task": "Route rebuild lane 2 task 4 (the join with lane 1's question page)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/s12-shell.test.tsx::NFR-SEC-02 FR-DEC-01: the page asks for record:read in this organisation, then loads the panel for this question",
+    "replacedBy": "__tests__/unit/s12-shell.test.tsx::NFR-SEC-02 FR-DEC-01: the page asks for record:read in this organisation, then loads the panel for this question",
+    "property": "The page asks for record:read in this organisation, then loads the panel for this question and the stage list with the same context.",
+    "proof": "No assertion changed. The fixture's current version gains receivedAt, which the decision card formats (the card is real in this file, not mocked).",
+    "task": "Route rebuild lane 2 task 4 (the join with lane 1's question page)"
+  },
+  {
+    "kind": "rule",
+    "changed": "e2e/question-frame.spec.ts::at 375 by 812 the page is one column in reading order: heading, current decision, form, finding link (in the decision), guidance; nothing scrolls sideways; the end of the page clears the fixed save bar",
+    "replacedBy": "e2e/question-frame.spec.ts::at 375 by 812 the page is one column in reading order: heading, the decision card, guidance; nothing scrolls sideways; the end of the page clears the fixed save bar",
+    "property": "At 375 by 812 the page is one column whose regions follow each other on the screen and in the document in reading order, nothing scrolls sideways, and the end of the page clears the fixed save bar. The merged decision card (owner's ruling R2) is one region holding the current decision, the form and, after a save, the finding link, so the order is heading, the decision card, guidance.",
+    "proof": "The case now requires no section[data-region=\"current-decision\"] or section[data-region=\"finding-link\"] on the page (toHaveCount(0)), then the same box-below-box and compareDocumentPosition checks over #question-heading, section[data-region=\"answer-form\"] and aside[data-region=\"guidance\"] (follows equals [true, true]); the no-horizontal-scroll and route-column-above-the-fixed-bar checks are unchanged. It failed 10 of 10 at b4a9dc00 waiting for the stub's current-decision section (x10 diagnosis class (a)).",
+    "task": "Route rebuild lane 2 task 5 (lane 1's cases re-expressed on the merged card)"
+  },
+  {
+    "kind": "rule",
+    "changed": "e2e/question-frame.spec.ts::S9: at ${width} by ${height}, after a save on the first question, the foot's Next question link is below the form, scrolls into view clear of the save bar, and opens the next question",
+    "replacedBy": "e2e/question-frame.spec.ts::S9: at ${width} by ${height}, after a save on the first question, the card's Next link in its Save row is on the screen, clear of the save bar, and opens the next question",
+    "property": "After a save on the first question, at 1280 by 900 and 375 by 812, the way on to the next question is one link, a target of at least 24 px, wholly on the screen once scrolled to, and it opens Q-PP-02. With the merged card (owner's ruling R2, R9) the way on is the card's \"Next: <question>\" link in its Save row (.decision-save-bar), inside the card, not a foot below the form; in the fixed or pinned bar it is the bar's own control, so it cannot be under it.",
+    "proof": "The case waits for the card's saved mark to leave \"No decision yet.\", requires [data-region=\"way-on\"] to be absent, one link named /^Next: / in .decision-save-bar, contained in section[data-region=\"answer-form\"], its box on the screen with height >= 24 and bottom <= the viewport height after scrollIntoView, then clicks it and requires the Q-PP-02 code line. It failed 10 of 10 at b4a9dc00 on the stub's current-decision section (x10 diagnosis class (a)).",
+    "task": "Route rebuild lane 2 task 5 (lane 1's cases re-expressed on the merged card)"
   },
   {
     "kind": "rule",
