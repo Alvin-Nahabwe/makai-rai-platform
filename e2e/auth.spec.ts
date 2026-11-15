@@ -28,7 +28,9 @@ test.describe('Authentication Flow', () => {
     // (lib/org-dispatch.ts); either way the account's own dashboard answers, signed in.
     const res = await page.goto(`/orgs/${seat.orgSlug}/dashboard`);
     expect(res?.status()).toBe(200);
-    await expect(page.locator('h1')).toContainText(HOME_COPY.heading);
+    // Home (plan 1B Task 10): its tab title names it, and its one h1 is the welcome ("Welcome back, <name>.").
+    await expect(page).toHaveTitle(new RegExp(`^${HOME_COPY.titles.home} · `));
+    await expect(page.locator('h1')).toContainText(/^Welcome/);
     await context.close();
   });
 });

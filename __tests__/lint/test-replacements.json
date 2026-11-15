@@ -2222,5 +2222,149 @@
     "property": "Every shell page shows no image but the platform's own logos, each its own file with its own alt text in its own place, and every icon is hidden from assistive technology.",
     "proof": "Supersedes the earlier entry for this title (code review I1, 15 November 2026: that version allowed any image with alt \"\" or \"MAK-AI\"). The case now reads each image's src attribute, alt and place and allows only five pairs: /logo-makai-white-154.webp with \"\" inside .shell-rail__brand, with \"MAK-AI RAI Platform\" inside .shell-topbar__brand, with \"MAK-AI\" in footer.shell-footer; /logo-dswb-white-125.webp with \"Data Science Without Borders\" in the footer; /logo-makai-252.png with \"MAK-AI\" as .auth-logo on the sign-in pages. The self-test 'UX-41 (self-test): a stray image is reported, whatever its alt, and a logo out of its place too' shows a decorative image elsewhere (/uploads/chart.png, alt \"\"), an image borrowing a logo's alt, and each logo file out of its place are all reported.",
     "task": "lane 3 task 1, fix round 2"
+  },
+  {
+    "kind": "structure",
+    "deleted": "__tests__/unit/prj-components.test.tsx::SRS 11.2 FR-PRJ-04: the project card shows per-stage counts, no assessment count and no completed count",
+    "replacedBy": "__tests__/unit/home/home-view.test.tsx::SRS 11.2 FR-PRJ-04: the stage plates show per-stage counts, no assessment count and no completed count, and Home reads no assessment",
+    "property": "Home shows each stage of a project with its own counts, and shows no assessment count and no completed count; the Home page and its code read no assessment.",
+    "proof": "ProjectCard is deleted with the list-page Home (plan 1B Task 10 deletes it). The replacement renders a recorder's Home and a Viewer's Home and requires each stage plate's own counts (\"11 open findings\", \"18 no decision\"), forbids /Assessments?|completed/ in the markup, and reads the dashboard page, lib/home/load.ts and every components/home/*.tsx for the same .assessments / assessments: / tx.assessment patterns the old case read in the page and ProjectCard.",
+    "task": "lane 3 Task 3 (plan 1B Task 10: Home rebuilt as the welcome, every variant)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::UX-06 (R12-16, R13-7): in an overdue mitigation line only the word Overdue is a status-label--warning element, a due one is plain text, and each status word is a status-label",
+    "replacedBy": "__tests__/unit/home/home-view.test.tsx::UX-06 (spec 7.1): in a mitigation line only the word Overdue is red, outside any status word; a due one is plain text; no status word carries a warning class",
+    "property": "On Home an overdue mitigation is said in words and only the word Overdue is red, with \": was due <date>\" plain after it; a mitigation not yet due reads \"Due <date>\" in plain text; each status word (Planned, In progress) is plain ink with no warning class.",
+    "proof": "MyMitigationsList is deleted (Home was its only importer); its lines are now \"Assigned to you\" plates (components/home/AssignedToYou.tsx). The replacement renders one overdue and one due mitigation and requires exactly one red span in the section, holding the word Overdue alone and followed by \": was due 28 Oct 2026\" as plain text, \"Due 20 Nov 2026\" outside any red element, the status words Planned and In progress in the plate's status element, and no status-label--warning or badge--moderate class.",
+    "task": "lane 3 Task 3 (plan 1B Task 10: Home rebuilt as the welcome, every variant)"
+  },
+  {
+    "kind": "structure",
+    "deleted": "__tests__/unit/prj-components.test.tsx::FR-PRJ-04 F11: a mitigation with no text says \"No text recorded.\" and a recorded one does not",
+    "replacedBy": "__tests__/unit/home/home-view.test.tsx::FR-PRJ-04 F11: a mitigation whose text was erased says so, and a recorded one does not",
+    "property": "A mitigation whose text is null (erased) says the erased sentence once, and a mitigation with text shows its text instead.",
+    "proof": "MyMitigationsList is deleted; the replacement renders two \"Assigned to you\" plates, one with what: null and one with text, and requires PROJECT_COPY.followUp.erased exactly once and the recorded text.",
+    "task": "lane 3 Task 3 (plan 1B Task 10: Home rebuilt as the welcome, every variant)"
+  },
+  {
+    "kind": "structure",
+    "deleted": "__tests__/unit/prj-components.test.tsx::FR-PRJ-04: S-08 empty states say who can create a project and that the person owns no open mitigations",
+    "replacedBy": "__tests__/unit/home/home-view.test.tsx::first time: one sentence and one action for a role that can create; the ask line for a Reviewer or Viewer (M13)",
+    "property": "With no project, a role that can create a project gets the way to create one and no other role does; each of the others is told who can create one; a person with no mitigation is told that none is assigned to them.",
+    "proof": "DashboardView is deleted. The replacement renders the first-visit Home for owner, admin and assessor (exactly one link, \"Create a project\" to /orgs/o/projects/new, and no ask line) and for reviewer and viewer (the spec's \"Ask an Owner, Admin or Assessor to create your project.\" and no create link). That no mitigation is assigned is said by HOME_COPY.assignedNone, required in home-view.test.tsx \"gap 3: \\\"Assigned to you\\\" holds the person's mitigations ...\" with assigned: [].",
+    "task": "lane 3 Task 3 (plan 1B Task 10: Home rebuilt as the welcome, every variant)"
+  },
+  {
+    "kind": "structure",
+    "deleted": "__tests__/unit/prj-components.test.tsx::FR-PRJ-04: the welcome notice appears only with welcome=1, with the organisation name and the role",
+    "replacedBy": "__tests__/unit/home/home-view.test.tsx::after joining (?welcome=1): the h1 is the welcome line, with the role's sentence from the vocabulary as plain text",
+    "property": "After joining (?welcome=1) Home welcomes the person to the organisation by its name and says their role; without it, it does not.",
+    "proof": "DashboardView rendered WelcomeNotice; Home renders WelcomeLine as its h1 (plan 1B Task 10). The replacement renders a Reviewer's Home with welcome: true and requires the one h1 to be welcomeLine(\"Makerere AI Lab\", \"a Reviewer\") with the Reviewer's vocabulary sentence, and the same Home with welcome: false not to carry that sentence.",
+    "task": "lane 3 Task 3 (plan 1B Task 10: Home rebuilt as the welcome, every variant)"
+  },
+  {
+    "kind": "structure",
+    "deleted": "__tests__/unit/prj-components.test.tsx::UX-07 FR-PRJ-04: the dashboard shows no total of mitigations and no emoji",
+    "replacedBy": "__tests__/unit/home/home-view.test.tsx::UX-07 FR-PRJ-04: Home shows no total of mitigations and no emoji",
+    "property": "Home shows no total of mitigations and no emoji.",
+    "proof": "DashboardView is deleted; the replacement renders an Owner's Home with two assigned mitigations and the lead lists and forbids a parenthesised count, \"N mitigations in total\", \"in all\" and any Extended_Pictographic character.",
+    "task": "lane 3 Task 3 (plan 1B Task 10: Home rebuilt as the welcome, every variant)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::(module)",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::no time-zone sentence on Home or the project page",
+    "property": "The S-10 and S-09/S-32 views still render from loaded data with their slots mocked; nothing else in the module changed.",
+    "proof": "Removed with the S-08 describe block: its constants (OVERDUE_ITEM, DUE_ITEM, emptyDashboard), the WelcomeNotice mock and its welcomeProps, and the imports of DashboardView, MyMitigationsList, ProjectCard, FollowUpItem and DashboardData (all deleted or unused). HomeView is imported instead, for \"no time-zone sentence on Home or the project page\", which now renders the first-visit Home and requires its welcome h1 (not vacuous) and no East Africa / UTC+3 / EAT. No other module line changed.",
+    "task": "lane 3 Task 3 (plan 1B Task 10: Home rebuilt as the welcome, every variant)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-03: S-32 lists the archived project under Archived with Unarchive for an owner, and the dashboard leaves it out",
+    "replacedBy": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-03: S-32 lists the archived project under Archived with Unarchive for an owner, and the dashboard leaves it out",
+    "property": "S-32 lists the archived project under Archived with Unarchive for an owner; Home leaves the archived project out and shows the active one with its per-stage open findings as a link, and no score.",
+    "proof": "Home is rendered through loadHome and HomeView (renderDashboard now does that). The per-stage line \"Pre-processing: n open findings, n overdue mitigations\" is now the stage plate: the case requires, inside data-stage=\"pre-processing\", a link to findings?stage=pre-processing reading \"n open finding(s)\". The Counted/Shelved and no-score expectations are unchanged.",
+    "task": "lane 3 Task 3 (plan 1B Task 10: Home rebuilt as the welcome, every variant)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-04: a person owning one overdue mitigation sees it in \"my mitigations\" with its due date",
+    "replacedBy": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-04: a person owning one overdue mitigation sees it in \"my mitigations\" with its due date",
+    "property": "A person owning one overdue mitigation sees it on Home, under \"Assigned to you\", with Overdue and its due date.",
+    "proof": "The heading is now HOME_COPY.assignedHeading (\"Assigned to you\", spec 9.1) and the empty sentence HOME_COPY.assignedNone; the \">Overdue</span>: was due 28 Oct 2026\" expectation is unchanged.",
+    "task": "lane 3 Task 3 (plan 1B Task 10: Home rebuilt as the welcome, every variant)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-04 NFR-SEC-02: my mitigations lists only the signed-in person's, and is not empty",
+    "replacedBy": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-04 NFR-SEC-02: my mitigations lists only the signed-in person's, and is not empty",
+    "property": "myMitigations lists only the signed-in person's open mitigations and is not empty, and Home shows the reader's own, never another person's.",
+    "proof": "The myMitigations half is unchanged (as the viewer). A Viewer's Home has no \"Assigned to you\" (spec 9.1), so the page half is rendered as the assessor, who owns the overdue one: it requires \"was due 28 Oct 2026\" (the assessor's) and forbids \"Due 20 Nov 2026\" (the viewer's): the same property, read from the other owner.",
+    "task": "lane 3 Task 3 (plan 1B Task 10: Home rebuilt as the welcome, every variant)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-04 NFR-SEC-02 (P7): the dashboard page lists the signed-in person's mitigations whatever the query says",
+    "replacedBy": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-04 NFR-SEC-02 (P7): the dashboard page lists the signed-in person's mitigations whatever the query says",
+    "property": "The Home page shows the signed-in person's mitigations and never those of an id passed in the query.",
+    "proof": "The session is now the owner's (a person who records; a Viewer's Home lists no mitigations, spec 9.1); the query still names the assessor, whose mitigation is due 1 Jan 2099. The case requires that mitigation absent and HOME_COPY.assignedNone (the owner owns none) present.",
+    "task": "lane 3 Task 3 (plan 1B Task 10: Home rebuilt as the welcome, every variant)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-04: S-08 counts the archived projects, so an organisation with only archived ones is not told it has none",
+    "replacedBy": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-04: S-08 counts the archived projects, so an organisation with only archived ones is not told it has none",
+    "property": "An organisation whose only project is archived is told it has no active project and where the archived ones are, never that it has none, and a person who can create has exactly one way to create one.",
+    "proof": "Home is loadHome + HomeView: the data is the first-visit variant with no active project and archivedCount 1. The case requires HOME_COPY.noActiveProjects followed by the All projects link in one paragraph, no \"No projects yet\", and exactly one \"Create a project\" link to /projects/new. The old order (the header's New project before the sentence) is gone with the header button: the first visit has one action after its sentence (spec 9.1).",
+    "task": "lane 3 Task 3 (plan 1B Task 10: Home rebuilt as the welcome, every variant)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/integration/prj-stage-view.test.ts::(module)",
+    "replacedBy": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-04: S-08 counts the archived projects, so an organisation with only archived ones is not told it has none",
+    "property": "Home is rendered as the page renders it, from the real database, for the cases that read it.",
+    "proof": "loadDashboard and DashboardView are deleted (plan 1B Task 10); the module imports loadHome and HomeView, and renderDashboard renders HomeView over loadHome (a new homeData helper, now the day given at 09:00 UTC). No other module line changed.",
+    "task": "lane 3 Task 3 (plan 1B Task 10: Home rebuilt as the welcome, every variant)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-04 NFR-SEC-02: my mitigations lists only the signed-in person's, and is not empty",
+    "replacedBy": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-04 NFR-SEC-02: my mitigations lists only the signed-in person's, and is not empty",
+    "property": "myMitigations lists only the signed-in person's open mitigations and is not empty, and the Viewer's Home shows the Viewer's own mitigation and never the assessor's.",
+    "proof": "Supersedes the earlier entry for this case, whose premise (\"A Viewer's Home has no 'Assigned to you'\") fix round 1 overtook: a Viewer's Home now shows 'Assigned to you' when something is assigned to them. The page half is rendered as the Viewer again, as at the base: it requires 'Due 20 Nov 2026' (the Viewer's) and forbids 'was due 28 Oct 2026' (the assessor's). The data half is unchanged.",
+    "task": "lane 3 Task 3, fix round 2 (code review I1; design review #4, #12)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-04 NFR-SEC-02 (P7): the dashboard page lists the signed-in person's mitigations whatever the query says",
+    "replacedBy": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-04 NFR-SEC-02 (P7): the dashboard page lists the signed-in person's mitigations whatever the query says",
+    "property": "The Home page shows only the signed-in person's mitigations and never those of an id passed in the query.",
+    "proof": "Supersedes the earlier entry, whose premise (a Viewer's Home lists no mitigations) fix round 1 overtook. The session is the Viewer's again, as at the base, with the query naming the assessor, whose mitigation is due 1 Jan 2099. The Viewer owns none here, so the page shows no 'Assigned to you' section at all: the case forbids 'Due 1 Jan 2099', HOME_COPY.assignedHeading and HOME_COPY.assignedNone.",
+    "task": "lane 3 Task 3, fix round 2 (code review I1; design review #4, #12)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-04: a person owning one overdue mitigation sees it in \"my mitigations\" with its due date",
+    "replacedBy": "__tests__/integration/prj-stage-view.test.ts::FR-PRJ-04: a person owning one overdue mitigation sees it in \"my mitigations\" with its due date",
+    "property": "A person owning one overdue mitigation sees it on Home under 'Assigned to you' with the word Overdue and its due date, both red (spec 7.1, 9.1).",
+    "proof": "The pattern now requires the date in its own red span: '>Overdue</span>: was due <span class=\"home-overdue\">28 Oct 2026</span>' (design review #4: spec 7.1 and 9.1 make an overdue date red too). The heading and empty-sentence expectations are unchanged.",
+    "task": "lane 3 Task 3, fix round 2 (code review I1; design review #4, #12)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::UX-06 (R12-16, R13-7): in an overdue mitigation line only the word Overdue is a status-label--warning element, a due one is plain text, and each status word is a status-label",
+    "replacedBy": "__tests__/unit/home/home-view.test.tsx::UX-06 (spec 7.1, 9.1): in a mitigation line the word Overdue and the overdue date are red, outside any status word; a due one is plain text; no status word carries a warning class",
+    "property": "On Home an overdue mitigation is said in words: the word Overdue and the overdue date are red (spec 7.1, 9.1), the words between them are ink; a mitigation not yet due reads 'Due <date>' in plain text; each status word is plain ink with no warning class.",
+    "proof": "Supersedes the earlier entry's replacement, which held 'only the word Overdue' red (design review #4: spec 7.1 and 9.1 make the date red too). The replacement case renders one overdue and one due mitigation in 'Assigned to you' and requires exactly two red spans, the word then the date, with ': was due ' between them as plain text, 'Due 20 Nov 2026' outside any red element, the status words Planned and In progress, and no status-label--warning or badge--moderate class.",
+    "task": "lane 3 Task 3, fix round 2 (code review I1; design review #4, #12)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/prj-components.test.tsx::FR-FUP-02 (page half) FR-PRJ-02: S-10 states the zone and that stages can be recorded in any order",
+    "replacedBy": "__tests__/unit/prj-components.test.tsx::no time-zone sentence on Home or the project page",
+    "property": "No country-specific time-zone line on screen: neither Home nor S-10 says East Africa, UTC+3 or EAT, and S-10 still says that stages can be recorded in any order.",
+    "proof": "The replacement's not-vacuous check now expects the first visit's h1, HOME_COPY.welcomeFirst ('Welcome, <name>.'), because a first visit no longer says 'Welcome back' (design review #12). The zone and any-order expectations are unchanged.",
+    "task": "lane 3 Task 3, fix round 2 (code review I1; design review #4, #12)"
   }
 ]

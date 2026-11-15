@@ -4,18 +4,15 @@ import type { ReactElement } from 'react';
 import { HOME_COPY } from '@/lib/home/copy';
 import { positionWords } from '@/lib/ui/copy';
 import type { NextStep } from '@/lib/home/types';
-import type { DashboardData } from '@/lib/data/projects';
 import { decode, textOf } from '../../helpers/markup';
 import { HOSTILE_STRINGS } from '../../helpers/hostile';
 
 /**
- * Plan 1B Task 10, slice 3 cut: Home's "Your next step" card, as static markup (as prj-components.test.tsx renders
- * DashboardView). The card is a server component; LocalTime writes the UTC day on the server render.
+ * Plan 1B Task 10: Home's "Your next step" card (sketch home.png), as static markup. The card is a server component; LocalTime writes the UTC day on the server render.
  */
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }), useParams: () => ({ slug: 'o' }) }));
 
 const { NextStepCard } = await import('@/components/home/NextStepCard');
-const { DashboardView } = await import('@/components/project/DashboardView');
 
 const NEXT: NextStep = {
   projectId: 'p1', projectName: 'Antenatal risk triage', stage: 'pre-processing', questionId: 'Q-PP-05',
@@ -29,9 +26,6 @@ const links = (h: string): Array<[string, string]> =>
   [...h.matchAll(/<a\b[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/g)].map((m) => [textOf(m[2]).trim(), decode(m[1])]);
 const linksNamed = (h: string, names: string[]) => links(h).filter(([t]) => names.includes(t));
 
-const DASHBOARD: DashboardData = {
-  orgSlug: 'org-a', orgName: 'Org', role: 'assessor', welcome: false, canCreate: true, projects: [], mine: [], projectNames: new Map(), archivedCount: 0,
-};
 
 describe('NextStepCard', () => {
   it('recorder: names the question in words with its reason, position and two controls; the code is not alone at a line end', () => {
@@ -41,24 +35,20 @@ describe('NextStepCard', () => {
     expect(textOf(h)).toContain(positionWords(5, 22));
     // The plan's "code not alone at a line's end" is held by the indexOf case below: stripped markup has no line ends.
     expect(textOf(h)).toContain(HOME_COPY.nextStepHeading);
-    expect(textOf(h)).toContain(HOME_COPY.projectOf('Antenatal risk triage'));
+    expect(textOf(h)).toContain('Antenatal risk triage');
     expect(textOf(h)).toContain('Pre-processing');
   });
 
-  it('F2: the project line and the stage name are separate lines, never joined as text', () => {
+  it('the sketch\'s "where" line: the stage, the question\'s place, then the project, each kept whole', () => {
     const h = card();
-    // Text as a block-aware reader takes it: each closing block tag ends a line, an inline one does not.
-    const lines = textOf(h.replace(/<\/(p|div|h2|section)>/g, '\n')).split('\n').map((l) => l.trim());
-    expect(lines).toContain(HOME_COPY.projectOf('Antenatal risk triage'));
-    expect(lines).toContain('Pre-processing');
-    expect(lines.join('\n')).not.toMatch(/Antenatal risk triage[^\n]*Pre-processing/);
-    expect(h).toMatch(/<p[^>]*>Project: <bdi>Antenatal risk triage<\/bdi><\/p>\s*<p[^>]*>Pre-processing<\/p>/);
+    expect(textOf(h)).toContain(`Pre-processing · ${positionWords(5, 22)} · Antenatal risk triage`);
+    expect(h).toMatch(/<p class="home-next__where"><span class="home-stage-name"><span data-term="stage-1">Pre-processing<\/span><\/span> · Question 5 of 22 · <bdi>Antenatal risk triage<\/bdi><\/p>/);
   });
 
   it('is a section labelled by its h2 #next-step', () => {
     const h = card();
     expect(h).toMatch(/^<section[^>]*aria-labelledby="next-step"/);
-    expect(h).toContain(`<h2 id="next-step">${HOME_COPY.nextStepHeading}</h2>`);
+    expect(h).toMatch(new RegExp(`<h2 id="next-step"[^>]*>${HOME_COPY.nextStepHeading}</h2>`));
   });
 
   it('the question in words comes first, its code after it', () => {
@@ -102,7 +92,6 @@ describe('NextStepCard', () => {
     for (const s of HOSTILE_STRINGS) {
       const h = card({ projectName: s, questionText: s });
       expect(h).not.toContain(s.startsWith('<') ? '<script>' : '<img');
-      expect(textOf(h)).toContain(HOME_COPY.projectOf(s));
       expect(textOf(h)).toContain(s);
     }
   });
@@ -111,36 +100,5 @@ describe('NextStepCard', () => {
     const h = card();
     expect(h).toContain('<bdi>Antenatal risk triage</bdi>');
     expect(h).toContain(`<bdi>${NEXT.questionText}</bdi>`);
-  });
-});
-
-describe('DashboardView with a next step', () => {
-  it('puts the section after the page header and before Active projects', () => {
-    const h = html(<DashboardView data={DASHBOARD} next={NEXT} />);
-    const at = h.indexOf('id="next-step"');
-    expect(at).toBeGreaterThan(h.indexOf(`>${HOME_COPY.heading}</h1>`));
-    expect(at).toBeLessThan(h.indexOf('id="active-projects"'));
-  });
-
-  it('with next null, or no next, renders no #next-step and no Continue recording', () => {
-    for (const h of [html(<DashboardView data={DASHBOARD} next={null} />), html(<DashboardView data={DASHBOARD} />)]) {
-      expect(h).not.toContain('id="next-step"');
-      expect(h).not.toContain(HOME_COPY.continueRecording);
-      expect(h).not.toContain(HOME_COPY.nextStepHeading);
-    }
-  });
-
-  it("with a next step, Home's header New project is secondary and Continue recording the page's only primary", () => {
-    const h = html(<DashboardView data={DASHBOARD} next={NEXT} />);
-    const controls = [...h.matchAll(/<a\b[^>]*class="([^"]*)"[^>]*>([\s\S]*?)<\/a>/g)].map((m) => [textOf(m[2]).trim(), m[1].split(/\s+/)] as const);
-    expect(controls.find(([t]) => t === HOME_COPY.newProject)?.[1]).toContain('ui-button--secondary');
-    expect(controls.filter(([, c]) => c.includes('ui-button--primary')).map(([t]) => t)).toEqual([HOME_COPY.continueRecording]);
-  });
-
-  it("with no next step, or next null, Home's header New project stays primary", () => {
-    for (const h of [html(<DashboardView data={DASHBOARD} next={null} />), html(<DashboardView data={DASHBOARD} />)]) {
-      const link = [...h.matchAll(/<a\b[^>]*class="([^"]*)"[^>]*>([\s\S]*?)<\/a>/g)].find((m) => textOf(m[2]).trim() === HOME_COPY.newProject);
-      expect(link?.[1].split(/\s+/)).toContain('ui-button--primary');
-    }
   });
 });
