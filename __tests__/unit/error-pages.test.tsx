@@ -177,7 +177,7 @@ describe('the gate frame look on the root pages', () => {
     expect(img).toContain(`height="${MAKAI_LOGO.height}"`);
     expect(img).toContain('alt=""');
     expect(img).toContain('decoding="async"');
-    expect(frameOf(html)).toMatch(/<img [^>]*\/><p [^>]*>MAK-AI RAI Platform<\/p>/);
+    expect(frameOf(html)).toMatch(new RegExp(`<img [^>]*/><p [^>]*>${escapeRe(PRODUCT_NAME)}</p>`));
     expect(frameOf(html)).not.toContain('<a ');
     // .gate__logo in gate.css: a block with var(--space-1) under it.
     const css = readFileSync('components/layout/gate.css', 'utf8');
@@ -193,6 +193,84 @@ describe('the gate frame look on the root pages', () => {
     const size = String(GATE_LOOK.heading.fontSize);
     for (const [width] of steps) expect(size).toContain(`(100cqi - ${(Number(width) - 0.01).toFixed(2)}rem)*99999`);
     expect(size).toBe('clamp(clamp(var(--font-size-h3),(100cqi - 11.99rem)*99999,var(--font-size-h2)),(100cqi - 23.99rem)*99999,var(--font-size-h1))');
+  });
+
+  it("drift guard: the card, the main area, the product name and the band copy gate.css's values, and the 1024 px and 320 px switches", () => {
+    const css = readFileSync('components/layout/gate.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    // Split the sheet into its top level and its at-rule blocks (brace matching; no at-rule here nests another).
+    const blocks: Record<string, string> = {};
+    let top = '';
+    for (let i = 0; i < css.length; ) {
+      const at = css.indexOf('@', i);
+      const stop = at < 0 ? css.length : at;
+      top += css.slice(i, stop);
+      if (at < 0) break;
+      const open = css.indexOf('{', at);
+      let depth = 1;
+      let j = open + 1;
+      for (; depth > 0; j++) depth += css[j] === '{' ? 1 : css[j] === '}' ? -1 : 0;
+      blocks[css.slice(at, open).trim()] = css.slice(open + 1, j - 1);
+      i = j;
+    }
+    const wideKey = Object.keys(blocks).find((k) => /^@media \(min-width: [\d.]+px\)$/.test(k)) ?? '';
+    const WIDE = blocks[wideKey];
+    const SMALL_BLOCK = blocks['@media (max-width: 19.98rem)'];
+    expect(WIDE, 'the 1024 px switch').toBeDefined();
+    expect(SMALL_BLOCK, 'the 320 px switch').toBeDefined();
+    const narrowEnd = Object.keys(blocks).find((k) => /^@media \(max-width: [\d.]+px\)$/.test(k)) ?? '';
+    const decls = (scope: string, selector: string) => {
+      const rule = [...scope.matchAll(/([^{}]+)\{([^{}]*)\}/g)].find((m) => m[1].trim() === selector);
+      expect(rule, `${selector} in its scope`).toBeDefined();
+      return Object.fromEntries(
+        (rule?.[2] ?? '').split(';').map((d) => d.trim()).filter(Boolean).map((d) => [d.slice(0, d.indexOf(':')).trim(), d.slice(d.indexOf(':') + 1).trim()]),
+      ) as Record<string, string>;
+    };
+    const zero = (v: string) => (v === '0' ? '0px' : v);
+    const pair = (v: string): [string, string] => {
+      const [a, b = a] = v.split(/\s+(?![^()]*\))/);
+      return [a, b];
+    };
+    const up = (narrow: string, wide: string, at: string) => `clamp(${narrow},(100vw - ${at})*99999,${wide})`;
+    const down = (narrow: string, wide: string) => `clamp(${wide},(${px1023} - 100vw)*99999,${narrow})`;
+    const switchPx = Number(/min-width: ([\d.]+)px/.exec(wideKey)?.[1]);
+    const px1023 = `${(switchPx - 0.02).toFixed(2)}px`;
+    const SMALL = /max-width: ([\d.]+rem)/.exec(Object.keys(blocks).find((k) => k.includes('19.98rem')) ?? '')?.[1] ?? '';
+    const UP = (narrow: string, wide: string, at = px1023) => up(narrow, wide, at);
+    expect(narrowEnd, 'the band below the switch').toBe(`@media (max-width: ${px1023})`);
+    expect(SMALL).not.toBe('');
+
+    const card = decls(top, '.gate__card');
+    const cardWide = decls(WIDE, '.gate__card');
+    const cardSmall = decls(SMALL_BLOCK, '.gate__card');
+    const [cardPadBlock, cardPadInline] = pair(card.padding);
+    expect(GATE_LOOK.card.maxInlineSize).toBe(`max(${card['max-inline-size']},(${px1023} - 100vw)*99999)`);
+    expect(GATE_LOOK.card.paddingBlock).toBe(UP(cardPadBlock, pair(cardWide.padding)[0]));
+    expect(GATE_LOOK.card.paddingInline).toBe(UP(UP(cardSmall['padding-inline'], cardPadInline, SMALL), pair(cardWide.padding)[1]));
+    expect(GATE_LOOK.card.backgroundColor).toBe(card['background-color']);
+    const [edgeWidth, ...edgeRest] = card.border.split(/\s+(?![^()]*\))/);
+    const edge = edgeRest.join(' ');
+    expect(GATE_LOOK.card.borderBlock).toBe(`${edgeWidth} ${edge}`);
+    expect(GATE_LOOK.card.borderInline).toBe(`${UP(zero(cardSmall['border-inline']), edgeWidth, SMALL)} ${edge}`);
+    expect(GATE_LOOK.card.borderRadius).toBe(UP(zero(cardSmall['border-radius']), card['border-radius'], SMALL));
+
+    const main = decls(top, '.gate__main');
+    const mainWide = decls(WIDE, '.gate__main');
+    const mainSmall = decls(SMALL_BLOCK, '.gate__main');
+    expect(GATE_LOOK.area.paddingBlock).toBe(UP(main.padding, mainWide.padding));
+    expect(GATE_LOOK.area.paddingInline).toBe(UP(UP(zero(mainSmall['padding-inline']), main.padding, SMALL), mainWide.padding));
+
+    const product = decls(top, '.gate__product');
+    expect(GATE_LOOK.product).toMatchObject({ color: product.color, fontSize: product['font-size'], fontWeight: product['font-weight'] });
+
+    const header = decls(top, '.gate__header');
+    const headerWide = decls(WIDE, '.gate__header');
+    expect(GATE_LOOK.column.backgroundColor).toBe(header['background-color']);
+    expect(GATE_LOOK.column.color).toBe(header.color);
+    const [bandWidth, ...bandEdge] = header['border-block-end'].split(/\s+(?![^()]*\))/);
+    const [colWidth, ...colEdge] = headerWide['border-inline-end'].split(/\s+(?![^()]*\))/);
+    expect(bandEdge.join(' ')).toBe(colEdge.join(' '));
+    expect(GATE_LOOK.column.borderBlockEnd).toBe(`${down(bandWidth, zero(headerWide['border-block-end']))} ${bandEdge.join(' ')}`);
+    expect(GATE_LOOK.column.borderInlineEnd).toBe(`${UP('0px', colWidth)} ${colEdge.join(' ')}`);
   });
 
   it('no stylesheet and no GateFrame: the root not-found page, the card and the frame styles import no CSS and nothing of the gate frame', () => {

@@ -20,8 +20,9 @@ export const metadata: Metadata = { title: pageTitle(NOT_FOUND_COPY.title) };
  * member of the organisation in the address, with the same words for all
  * three (components/layout/NotFoundCard.tsx holds them). It takes no props and
  * echoes nothing from the request: echoing the path, a slug or an
- * organisation name would tell a non-member that the organisation exists. The
- * one thing it reads is the session cookie's two deadlines, through
+ * organisation name would tell a non-member that the organisation exists. It
+ * reads two things: the visitor's identity, signed in or not (below), and,
+ * only when signed in, the session cookie's two deadlines, through
  * readSessionDeadlines(await headers()), which return numbers about the
  * visitor's own session and nothing about the address. Next sends status 404
  * before streaming starts
@@ -59,7 +60,7 @@ export const metadata: Metadata = { title: pageTitle(NOT_FOUND_COPY.title) };
  */
 export default async function NotFound() {
   const signedIn = (await tryResolveIdentity()) !== null;
-  const deadlines = await readSessionDeadlines(await headers());
+  const deadlines = signedIn ? await readSessionDeadlines(await headers()) : null;
   return (
     <>
       {deadlines ? <IdleWarning idleSeconds={idleLimitSeconds()} {...deadlines} /> : null}

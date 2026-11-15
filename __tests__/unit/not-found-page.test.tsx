@@ -116,6 +116,15 @@ describe('S-31 not-found page', () => {
     expect(errorSpy).not.toHaveBeenCalled();
   });
 
+  it('UX-43 (S-31 part): readable deadlines without a valid session (a revoked cookie) give no idle warning', async () => {
+    readSessionDeadlinesMock.mockResolvedValue({ secondsLeft: 600, absoluteSecondsLeft: 100000 });
+    tryResolveIdentityMock.mockResolvedValue(null);
+    const html = renderToStaticMarkup(await NotFound());
+    expect(html).not.toMatch(/shell-idle|<dialog/);
+    expect(readSessionDeadlinesMock).not.toHaveBeenCalled();
+    expect(html).toContain(M27);
+  });
+
   it('UX-43 (S-31 part): a signed-out visitor gets no dialog and nothing is logged', async () => {
     readSessionDeadlinesMock.mockResolvedValue(null);
     const html = renderToStaticMarkup(await NotFound());
