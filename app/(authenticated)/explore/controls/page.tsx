@@ -5,7 +5,8 @@ import { runningContent } from '@/lib/content/loader';
 import { loadResources } from '@/lib/content/resources';
 import { GUIDANCE_COPY } from '@/lib/guidance/copy';
 import { pageTitle } from '@/lib/ui/title';
-import { TERM_CONTROL, TERM_MITIGATION, TERM_RISK_AREA } from '@/lib/vocabulary/terms';
+import { TERM_CONTROL, TERM_MITIGATION, TERM_MODEL_CARD, TERM_RISK_AREA } from '@/lib/vocabulary/terms';
+import { usesTerm } from '@/components/review/markTerms';
 import './ControlsLibraryPage.css';
 
 export const metadata = { title: pageTitle(GUIDANCE_COPY.titles.controls) };
@@ -33,6 +34,11 @@ export default function ControlsPage() {
   if (unknown) throw new Error(`control ${unknown.id} has type ${unknown.type}, which S-27 has no section for`);
   const areasOf = (controlId: string) => [...c.areas.values()].filter((a) => a.controls?.includes(controlId));
 
+  // The page's first use of "model card" is in a control's description (C-17 in the running content): the first card, in
+  // page order, whose description holds it marks it and shows its definition (ruling X-5; FX2).
+  const modelCardCard = TYPES.flatMap(({ type }) => controls.filter((k) => k.type === type))
+    .find((k) => usesTerm(k.description, TERM_MODEL_CARD))?.id;
+
   return (
     <div className="controls-page page-content" id="controls-library-page">
       <header className="controls-page__header">
@@ -55,7 +61,7 @@ export default function ControlsPage() {
             <div className="controls-page__grid">
               {ofType.map((k) => (
                 <div key={k.id} id={k.id} className="controls-page__item">
-                  <ControlCard control={k} resources={resources} headingLevel={3} />
+                  <ControlCard control={k} resources={resources} headingLevel={3} defineModelCard={k.id === modelCardCard} />
                   <p className="controls-page__areas">
                     <span>{C.riskAreas}</span>{' '}
                     {areasOf(k.id).map((a, i) => (

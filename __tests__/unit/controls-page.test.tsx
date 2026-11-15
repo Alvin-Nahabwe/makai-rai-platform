@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import ControlsPage from '@/app/(authenticated)/explore/controls/page';
 import { runningContent } from '@/lib/content/loader';
 import { GUIDANCE_COPY } from '@/lib/guidance/copy';
-import { TERM_CONTROL, TERM_MITIGATION, TERM_RISK_AREA } from '@/lib/vocabulary/terms';
+import { TERM_CONTROL, TERM_MITIGATION, TERM_MODEL_CARD, TERM_RISK_AREA } from '@/lib/vocabulary/terms';
 
 /** React's escaping of a text child, for the copy's apostrophes and ampersands. */
 const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/'/g, '&#x27;');
@@ -22,6 +22,19 @@ vi.mock('@/lib/content/resources', async () => {
 const GUARD_PATTERNS = ['-e', '["\'`]/templates/', '-e', '["\'`]/notebooks/', '-e', 'notebooks/technical', '-e', 'NOTEBOOK_BASE_URL'];
 
 describe('S-27, the controls page', () => {
+  it('FX2 (B5 concern 2): the first card whose description says "model card" marks it, with its definition next; no other card does', () => {
+    const html = renderToStaticMarkup(<ControlsPage />);
+    expect(html.match(new RegExp(`data-term="${TERM_MODEL_CARD.id}"`, 'g'))).toHaveLength(1);
+    expect(html.match(new RegExp(`data-definition="${TERM_MODEL_CARD.id}"`, 'g'))).toHaveLength(1);
+    // Outside the control names (which the crawl skips, ruling X-1 (3); C-17's is "Model Documentation (Model Card)"), the
+    // marked use is the page's first.
+    const text = html.replace(/<h3 class="ctl-card__title">[^<]*<\/h3>/g, '');
+    const first = text.search(/model cards?(?![\p{L}\p{N}])/iu);
+    expect(text.slice(first - 40, first)).toContain(`<span data-term="${TERM_MODEL_CARD.id}">`);
+    expect(html).toMatch(new RegExp(`<span data-term="${TERM_MODEL_CARD.id}">model cards?</span>[^<]*</p><p class="ui-definition" data-definition="${TERM_MODEL_CARD.id}">`, 'i'));
+  });
+
+
   it('FR-SUG-04 FR-SUG-05 FR-SUG-06: S-27 lists every control with only released notebooks and passed templates', () => {
     const html = renderToStaticMarkup(<ControlsPage />);
     const c = runningContent();
