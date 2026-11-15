@@ -38,6 +38,8 @@ import AppShell from '@/components/layout/AppShell';
 import PublicHeader from '@/components/layout/PublicHeader';
 import IdleWarning from '@/components/layout/IdleWarning';
 import { SEAL_PROOF_HREF } from '@/components/review/reviewText';
+import * as TERMS from '@/lib/vocabulary/terms';
+import { TERM_FINDING, TERM_SEAL, TERM_STAGE_REVIEW } from '@/lib/vocabulary/terms';
 
 const W1 = [
   'When your team seals a stage review, the platform saves the decisions and evidence in it at that moment. After that, nobody can change what was sealed. If a file must be deleted later (for example for privacy), the platform shows that it was deleted.',
@@ -91,7 +93,7 @@ describe('the Help page', () => {
     expect(html).not.toMatch(/<main\b/);
   });
 
-  it('L2-69: 97 entries in 8 groups, in the file\'s order and with the file\'s group names', () => {
+  it('L2-69: 97 entries in 8 groups, in the file\'s order, each group under its heading', () => {
     const groups = helpVocabulary();
     expect(groups.map((g) => [g.name, g.entries.length])).toEqual([
       ['People, organisations and accounts', 17], ['Projects, stages and questions', 16], ['Recording a decision', 19],
@@ -107,7 +109,21 @@ describe('the Help page', () => {
     expect(groups[0].entries.at(-1)?.id).toBe('legal-name');
     const html = page();
     const h3 = [...html.matchAll(/<h3 id="help-group-(\d+)">([^<]+)<\/h3>/g)].map((m) => [m[1], m[2].replace(/&amp;/g, '&')]);
-    expect(h3).toEqual(groups.map((g, i) => [String(i + 1), g.name]));
+    expect(h3).toEqual(groups.map((g, i) => [String(i + 1), g.heading]));
+  });
+
+  it('B5 (D5): two group headings are shown as Help names them, so each defined term is first used in its own entry', () => {
+    const groups = helpVocabulary();
+    const headings = Object.fromEntries(groups.map((g) => [g.name, g.heading]));
+    // The display map is Help's words; the vocabulary's group names are unchanged.
+    expect(headings['Findings and follow-up']).toBe(HELP_COPY.words.groupHeadings['Findings and follow-up']);
+    expect(headings['Stage reviews, seals and documents']).toBe(HELP_COPY.words.groupHeadings['Stage reviews, seals and documents']);
+    for (const g of groups) if (!(g.name in HELP_COPY.words.groupHeadings)) expect(g.heading, g.name).toBe(g.name);
+    // No heading holds a term the page defines: the term's own entry is its first use.
+    const defined = Object.values(TERMS).filter((t) => t.defineOnFirstUse && !['owner', 'admin', 'assessor', 'reviewer', 'viewer'].includes(t.id));
+    for (const g of groups) for (const t of defined) {
+      expect(g.heading, `${g.heading} / ${t.term}`).not.toMatch(new RegExp(`(?<![\\p{L}\\p{N}])${t.term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').split(/\s+/).join('\\s+')}s?(?![\\p{L}\\p{N}])`, 'iu'));
+    }
   });
 
   it('L2-69: no historical concept and no concept without a definition is listed', () => {
@@ -130,17 +146,26 @@ describe('the Help page', () => {
     expect(readFileSync('lib/help/vocabulary.ts').includes(Buffer.from([0xe2, 0x80, 0xa6]))).toBe(true);
   });
 
-  it('L2-69 L2-29a: every <dt data-term> is followed directly by its <dd data-definition>, as text, never the Definition component', () => {
+  it('L2-69 L2-29a B5: every term is followed directly by its definition; a defined term uses Term and Definition, the others plain text', () => {
     const html = page();
-    const pairs = [...html.matchAll(/<dt data-term="([^"]+)">([\s\S]*?)<\/dt><dd data-definition="([^"]+)">([\s\S]*?)<\/dd>/g)];
     const entries = helpVocabulary().flatMap((g) => g.entries);
-    expect(pairs.map((m) => m[1])).toEqual(entries.map((e) => e.id));
-    for (const m of pairs) expect(m[3]).toBe(m[1]);
+    const plainPair = /<dt data-term="([^"]+)">([^<]*)<\/dt><dd data-definition="([^"]+)">([^<]*)<\/dd>/g;
+    const termPair = /<dt><span data-term="([^"]+)">([^<]*)<\/span><\/dt><dd><span class="ui-definition" data-definition="([^"]+)">([^<]*)<\/span><\/dd>/g;
+    const pairs = [...html.matchAll(new RegExp(`${plainPair.source}|${termPair.source}`, 'g'))]
+      .map((m) => (m[1] === undefined ? { id: m[5], term: m[6], defId: m[7], definition: m[8], component: true } : { id: m[1], term: m[2], defId: m[3], definition: m[4], component: false }));
+    expect(pairs.map((p) => p.id)).toEqual(entries.map((e) => e.id));
+    for (const p of pairs) expect(p.defId).toBe(p.id);
     expect(html.match(/<dt\b/g)).toHaveLength(97);
     expect(html.match(/<dd\b/g)).toHaveLength(97);
-    for (const m of pairs) expect(m[2] + m[4]).not.toMatch(/<[a-z]/i);
-    const src = readFileSync('app/help/page.tsx', 'utf8');
-    expect(src).not.toMatch(/Definition|<Term\b|dangerouslySetInnerHTML/);
+    // Exactly the concepts the first-use rule checks use the components (the brief's rule), with the vocabulary's words.
+    const checked = new Set(Object.values(TERMS).filter((t) => t.defineOnFirstUse).map((t) => t.id as string));
+    for (const p of pairs) expect(p.component, p.id).toBe(checked.has(p.id));
+    expect(pairs.filter((p) => p.component).length).toBeGreaterThan(0);
+    for (const t of [TERM_FINDING, TERM_STAGE_REVIEW, TERM_SEAL]) {
+      expect(html).toContain(`<dt><span data-term="${t.id}">`);
+      expect(html).toContain(`<span class="ui-definition" data-definition="${t.id}">${t.definition.replace(/'/g, '&#x27;')}</span>`);
+    }
+    expect(readFileSync('app/help/page.tsx', 'utf8')).not.toMatch(/dangerouslySetInnerHTML/);
   });
 
   it('W1 (FR-PUB-04 UX-03): "What sealing means" is the two paragraphs, word for word, and says what a seal does not show', () => {
@@ -185,7 +210,7 @@ describe('the Help page', () => {
     expect(text(page())).not.toMatch(/UNCST|Uganda/);
   });
 
-  it('X-2: the files that import Help\'s modules are exactly these three server files, none of them a client file', () => {
+  it('X-2: the files that import Help\'s modules are exactly these four server files, none of them a client file', () => {
     const files = ['app', 'components', 'lib'].flatMap((root) => readdirSync(root, { recursive: true, encoding: 'utf8' }).map((f) => `${root}/${f}`))
       .filter((f) => /\.(ts|tsx)$/.test(f));
     // Any spelling: the alias or a relative path, single or double quotes.
@@ -194,6 +219,8 @@ describe('the Help page', () => {
       'app/(authenticated)/orgs/[slug]/projects/[id]/reviews/[reviewId]/page.tsx',
       'app/(public)/about/page.tsx',
       'app/help/page.tsx',
+      // B5: the Help list reads its group headings from Help's copy module (ruling D5).
+      'lib/help/vocabulary.ts',
     ]);
     for (const f of importers) expect(readFileSync(f, 'utf8'), f).not.toMatch(/^['"]use client['"]/m);
   });
