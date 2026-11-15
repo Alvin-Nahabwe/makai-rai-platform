@@ -72,7 +72,7 @@ test('C11: after a saved decision, Continue recording opens the next question wi
   });
   if (!res.ok()) throw new Error(`seeding ${IP[1]} answered ${res.status()}: ${await res.text()}`);
   await page.goto(`/orgs/${fx.org.slug}/dashboard`);
-  const homeCode = (await page.locator('.next-step__code').textContent())?.trim() ?? '';
+  const homeCode = (await page.locator('.home-next__code').textContent())?.trim() ?? '';
   expect(homeCode).toBe(IP[2]);
   await page.goto(projectPage(project.id));
   await expect(primary(page, PROJECT_COPY.start)).toHaveCount(0);

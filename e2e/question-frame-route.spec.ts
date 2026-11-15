@@ -11,7 +11,9 @@ import { QUESTION_COPY } from '../lib/question/copy';
  * tally, the follow-up counts with their definitions), the position strip under it, the guidance aside (risk areas, the
  * folded list), print, the frame's states, and the 1280 by 800 gate (spec 9.3 item 7, joint with lane 2): the decision
  * slot must start at or above 230px with a long real question in the heading, so the card can put "Save decision" inside
- * 800. Screenshots go to this test's output folder (fetched with `remote.sh --fetch`).
+ * 800. Screenshots go to this test's output folder (fetched with `remote.sh --fetch`). Since the join (lane 2 task 4) the
+ * slot holds the decision card alone, `[data-region="answer-form"]`, so the slot's top is the card's top; a reader gets no
+ * card.
  */
 const Q = 'Q-PP-01';
 const RUNNING = (JSON.parse(readFileSync('data/content/index.json', 'utf8')) as { running: string }).running;
@@ -71,7 +73,7 @@ test('spec 9.3 item 7 (joint gate): at 1280 by 800, with the real Q-PP-01 in the
     const range = document.createRange();
     range.selectNodeContents(h);
     const lines = [...range.getClientRects()];
-    const slot = document.querySelector('[data-region="decision-slot"]')!.getBoundingClientRect();
+    const slot = document.querySelector('[data-region="answer-form"]')!.getBoundingClientRect();
     const top = document.querySelector('.question-top')!.getBoundingClientRect();
     return {
       topStripBottom: Math.round(top.bottom), h1Top: Math.round(h.getBoundingClientRect().top), h1Bottom: Math.round(h.getBoundingClientRect().bottom),
@@ -149,7 +151,7 @@ async function fullTally(page: Page, baseURL: string, info: TestInfo, label: str
     range.selectNodeContents(h);
     return {
       h1LastLineBottom: Math.round(Math.max(...[...range.getClientRects()].map((x) => x.bottom))),
-      slotTop: Math.round(document.querySelector('[data-region="decision-slot"]')!.getBoundingClientRect().top),
+      slotTop: Math.round(document.querySelector('[data-region="answer-form"]')!.getBoundingClientRect().top),
     };
   });
   const all = { ...m, ...slot };
@@ -373,11 +375,11 @@ test('frame states (spec 9.7): archived, sealed, switched off, nothing recorded,
     await openQuestion(page, 'assessor', Q, baseURL!, projectId);
     const note = page.locator('section[data-region="seal-note"]');
     await expect(note).toBeVisible();
-    expect((await box(note)).y).toBeLessThan((await box(page.locator('[data-region="decision-slot"]'))).y);
+    expect((await box(note)).y).toBeLessThan((await box(page.locator('[data-region="answer-form"]'))).y);
     await shot(page, info, `state-sealed-${w}`);
     // The reading view in the same grid.
     await openQuestion(page, 'viewer', Q, baseURL!, projectId);
-    await expect(page.locator('[data-region="decision-slot"]')).toHaveCount(0);
+    await expect(page.locator('[data-region="answer-form"]')).toHaveCount(0);
     await shot(page, info, `state-reading-viewer-${w}`);
   }
   // Switched off: the personal data question answered No; Q-PP-13 says it does not apply under its code line.
