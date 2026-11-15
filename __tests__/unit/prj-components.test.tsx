@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { OrgRole } from '@prisma/client';
-import type { FollowUpItem, StageCounts } from '@/types/api';
+import type { StageCounts } from '@/types/api';
 import type { StatusMarkKind } from '@/components/ui/types';
 import { tallyOf } from '@/lib/ui/marks';
 import type { ProjectRoutes } from '@/lib/project/routes';
