@@ -192,14 +192,12 @@ describe('The route column: its open and next question', () => {
   });
 });
 
-describe('The route column: fix round 4, first use of a defined term in a question', () => {
-  it('a row whose words first use a defined term gets its (i) after its link; the open question\'s own words (the page\'s h1) count as used before', async () => {
+describe('The route column: fix round 5, no first-use tips in the column', () => {
+  it('a row whose words use a defined term gets no (i) in the column: it is a <nav>, which the first-use rule does not read, and a tip there could repeat one the page shows (lead\'s ruling R2)', async () => {
     const MC = 'Have you created or updated a model card for this model?';
-    const rs = [row('Q-PP-01'), row('Q-PP-02', { text: MC }), row('Q-PP-03')];
-    const h = await column(data(rs), 'Q-PP-01');
-    expect(rowsOf(h).find((r) => r.id === 'Q-PP-02')!.body).toMatch(/<\/a><span class="route-line__tips"><span class="ui-term-tip">/);
-    const asH1 = await column(data([row('Q-PP-01', { text: 'Is the model card published?' }), row('Q-PP-02', { text: MC })]), 'Q-PP-01');
-    expect(asH1).not.toContain('ui-term-tip');
+    const h = await column(data([row('Q-PP-01'), row('Q-PP-02', { text: MC }), row('Q-PP-03')]), 'Q-PP-01');
+    expect(h).not.toContain('ui-term-tip');
+    expect(h).not.toContain('route-line__tips');
   });
 });
 

@@ -163,6 +163,37 @@ test('the stage page, as the route\'s page variant, has no horizontal scroll at 
   await expectNoHorizontalScroll(page);
 });
 
+test('fix round 5 (S3-N7): the first-use (i) on a stage-page row sits right of the title, on its first line, and adds no height, at 1440, 1280, 375 and 320', async ({ page, baseURL }, testInfo) => {
+  const projectId = await newProject(baseURL!);
+  await actAsSeat(page, 'assessor');
+  for (const [width, height] of [[1440, 900], [1280, 800], [375, 812], [320, 640]] as const) {
+    await page.setViewportSize({ width, height });
+    await page.goto(stagePath(projectId, 'in-processing'));
+    // Q-IP-12, "Have you created or updated a model card for this model?", is the page's first use of "model card".
+    const row = page.locator('[data-question-id="Q-IP-12"]');
+    await expect(row.locator('.route-line__tips .ui-term-tip')).toHaveCount(1);
+    const m = await row.evaluate((li) => {
+      const box = (el: Element) => el.getBoundingClientRect();
+      const title = li.querySelector('.route-line__title')!;
+      const tip = li.querySelector('.ui-term-tip__button')!;
+      return {
+        li: box(li), link: box(li.querySelector(':scope > a')!), title: box(title), tip: box(tip),
+        line: parseFloat(getComputedStyle(title).lineHeight),
+      };
+    });
+    const at = `${width}x${height}`;
+    expect(m.tip.left, `${at}: the (i) starts right of the title's start (not in the mark column)`).toBeGreaterThan(m.title.left);
+    expect(m.tip.right, `${at}: the (i) is inside the row`).toBeLessThanOrEqual(m.li.right + 0.5);
+    expect(m.tip.left - m.title.right, `${at}: the (i) follows the words closely, not at the far edge of the row`).toBeLessThanOrEqual(24);
+    expect(Math.abs(m.tip.top + m.tip.height / 2 - (m.title.top + m.line / 2)), `${at}: the (i) is level with the title's first line`).toBeLessThanOrEqual(4);
+    expect(m.li.height, `${at}: the (i) adds no height to the row`).toBeLessThanOrEqual(m.link.height + 2);
+    if (width === 1440 || width === 375) {
+      await row.screenshot({ path: testInfo.outputPath(`stage-row-tip-${width}.png`), animations: 'disabled' });
+      await page.screenshot({ path: testInfo.outputPath(`stage-${width}-first-view.png`), animations: 'disabled' });
+    }
+  }
+});
+
 test('fix round 3 (S3-N1): with the personal data question answered and every kind in the tally, the stage page reflows at 320 by 640', async ({ page, baseURL }, testInfo) => {
   test.setTimeout(90_000);
   const projectId = await newProject(baseURL!);
