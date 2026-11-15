@@ -14,7 +14,8 @@ const FRESH: RetryState = { requestId: null, sentBody: null };
 const C = PROJECT_WRITE_COPY.archive;
 
 /**
- * The Archive control of S-10 (FR-PRJ-03, UX-29, UX-27; SRS 7.4.2 row S-10). The button opens an inline confirmation
+ * The Archive control of S-10 (FR-PRJ-03, UX-29, UX-27; SRS 7.4.2 row S-10), last in the page's quiet "This project" row
+ * and drawn quiet (spec 7.5: never the primary colour, never beside the primary button). The button opens an inline confirmation
  * that names the project and what archiving does; confirming sends route 21 with a request id that a Retry repeats
  * (a request that had arrived is answered again, not refused). One `role="status"` line says what became of it, and
  * it stays across the `router.refresh()` that follows: this component keeps its place in the tree, so it also stays
@@ -119,7 +120,7 @@ export function ArchiveProjectControl(p: { orgSlug: string; projectId: string; p
   return (
     <div className="archive-control" ref={box} tabIndex={-1}>
       {!p.archived && !busy && !canRetry ? (
-        <Button ref={trigger} variant="secondary" disabled={stopped} onClick={() => setConfirming(true)}>{C.trigger}</Button>
+        <Button ref={trigger} variant="quiet" icon="archive" disabled={stopped} onClick={() => setConfirming(true)}>{C.trigger}</Button>
       ) : null}
       {!p.archived && confirming ? (
         <InlineConfirm

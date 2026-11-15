@@ -60,7 +60,8 @@ async function tabUntil(page: Page, name: RegExp, opts: { inside?: string; max?:
   throw new Error(`tabUntil: no focus stop matched ${name} in ${max} presses`);
 }
 
-const FOLLOW_UP = 'section[aria-labelledby^="follow-up-"]';
+/** S-10's overdue mitigation plates (Route R5: one kit plate per mitigation, its text a link to its finding). */
+const FOLLOW_UP = '.stage-line__plate--overdue';
 
 /** True when a source file under `roots`, outside `components/followup/`, imports `components/followup/<component>`. */
 export function slotImported(roots: readonly string[], component: string): boolean {
@@ -113,7 +114,7 @@ test('NFR-A11Y-02 FR-FUP-01: keyboard only, a member reaches an overdue mitigati
   const { fx, url } = await projectWithFollowUp();
   const page = await signedIn(browser, fx.members.owner);
   await openProject(page, url);
-  await tabUntil(page, new RegExp(`^${PROJECT_COPY.followUp.view.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`), { inside: FOLLOW_UP }); await expectFocusVisibleAndUncovered(page);
+  await tabUntil(page, /\S/, { inside: FOLLOW_UP }); await expectFocusVisibleAndUncovered(page);
   await page.keyboard.press('Enter'); await expect(page).toHaveURL(/\/findings\//);
 });
 
@@ -124,8 +125,9 @@ for (const width of [1280, 360, 320]) for (const theme of ['light', 'dark'] as c
     await page.setViewportSize({ width, height: 900 }); await page.emulateMedia({ colorScheme: theme });
     await openProject(page, url);
     await expectNoSeriousA11yViolations(page, `S-10 follow-up ${width} ${theme}`);
-    await expect(page.getByText(/^Overdue: was due \d{1,2} [A-Z][a-z]{2} \d{4}$/).first()).toBeVisible();
-    // spec 7.1: the word Overdue is drawn in the overdue role (red), the rest of the line in ink
+    await expect(page.locator(FOLLOW_UP).getByText(new RegExp(`^${PROJECT_COPY.wasDue('\\d{1,2} [A-Z][a-z]{2} \\d{4}')}$`)).first()).toBeVisible();
+    // spec 7.1: the word Overdue (the first red element, on the stage's Overdue line) is drawn in the overdue role (red), the
+    // rest of its line, the count, in ink
     const [word, role, rest] = await page.locator('.followup-overdue').first().evaluate((el) => {
       const probe = document.createElement('span');
       probe.style.color = 'var(--color-overdue)';

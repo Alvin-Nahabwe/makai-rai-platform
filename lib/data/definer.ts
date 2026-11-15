@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { OrgRole, Prisma } from '@prisma/client';
 import { AppError } from '../http/errors';
+import { ADMIN_ROUTE_COPY } from '../http/api/copy';
 import { identityLaneClient } from './identityClient';
 
 /**
@@ -36,6 +37,14 @@ const DEFINER_ERRORS: Readonly<Record<string, number>> = Object.freeze({
   request_reference_required: 422,
 });
 
+/**
+ * The text of a definer refusal whose code the routes also answer with their own words: the same code says the same thing
+ * whichever layer refuses (E-API-40). Every other code's text is the code, as before.
+ */
+const DEFINER_MESSAGES: Readonly<Record<string, string>> = Object.freeze({
+  not_platform_admin: ADMIN_ROUTE_COPY.notPlatformAdmin,
+});
+
 /** The `makrai:<code>` of a definer refusal, or null for any other error. */
 function definerErrorCode(e: unknown): string | null {
   if (typeof e !== 'object' || e === null) return null;
@@ -57,7 +66,7 @@ async function callDefiner<T>(run: () => Promise<T>): Promise<T> {
   } catch (e) {
     const code = definerErrorCode(e);
     if (code === null) throw e;
-    throw new AppError(DEFINER_ERRORS[code], code);
+    throw new AppError(DEFINER_ERRORS[code], code, Object.hasOwn(DEFINER_MESSAGES, code) ? DEFINER_MESSAGES[code] : undefined);
   }
 }
 

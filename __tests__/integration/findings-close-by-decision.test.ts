@@ -5,6 +5,7 @@ import type { StoredDecisionStatus } from '@/types/record';
 import type { OrgContext } from '@/lib/data/tenant';
 import { closeByDecision, findingDetail, findingsToCloseByDecision, listFindings, reopenFinding, updateMitigation } from '@/lib/data/findings';
 import { eatDate } from '@/lib/followup/overdue';
+import { FINDINGS_COPY } from '@/lib/findings/copy';
 import { resetDb, testDb } from '../helpers/db';
 import { useFixtureContent } from '../helpers/content';
 import { captureLogs } from '../helpers/logCapture';
@@ -101,16 +102,32 @@ describe('findingsToCloseByDecision and closeByDecision (FR-FND-06, FR-DEC-08)',
     expect(next).toMatchObject({ versionNumber: 2, kind: 'decision_changed', status: 'in_progress' });
   });
 
-  it('FR-FND-06: a decision that already closed its mitigation is not offered again, and a second close writes nothing', async () => {
-    const v1 = await dec('not_yet'); const f = await shortfallFor(v1);
-    await addMitigationVersion(fx, f.id, { status: 'planned', owner: 'assessor', dueDate: '2026-12-01' });   // keeps it open
-    const v2 = await dec('done');
+  it('FR-FND-06: a decision that already closed its finding is not offered again after a reopen, and a second close writes nothing', async () => {
+    const v1 = await dec('not_yet'); const f = await shortfallFor(v1); const v2 = await dec('done');
     await close(f.id, v2.id);
+    await reopenFinding(ctx, assessor, { requestId: randomUUID(), reason: 'Not fixed after all', eventCode: null, projectId: p.id, findingId: f.id }, D);
     expect((await findingDetail(ctx, p.id, f.id)).state).toBe('open');
     expect(await findingsToCloseByDecision(ctx, p.id)).toEqual([]);
     const before = await mitigationCount();
     await expect(close(f.id, v2.id)).rejects.toMatchObject({ status: 422, extra: { fields: [{ field: 'decisionVersionId' }] } });
     expect(await mitigationCount()).toBe(before);
+  });
+
+  it('FR-FND-06 (R11, L-2): while a mitigation is Planned or In progress the close answers 409 finding_has_open_work with the sentence and writes nothing', async () => {
+    for (const status of ['planned', 'in_progress'] as const) {
+      const v1 = await dec('not_yet', 'Q-PP-01'); const f = await shortfallFor(v1);
+      const m = await addMitigationVersion(fx, f.id, { status, owner: 'assessor', dueDate: '2026-12-01' });
+      const v2 = await dec('done');
+      const before = await mitigationCount();
+      await expect(close(f.id, v2.id)).rejects.toMatchObject({ status: 409, code: 'finding_has_open_work', message: FINDINGS_COPY.failures.openWork });
+      expect(await mitigationCount()).toBe(before);
+      expect((await findingDetail(ctx, p.id, f.id)).state).toBe('open');
+      // Cancelled is not open work: the same close then goes through and closes the finding.
+      await addMitigationVersion(fx, f.id, { mitigationId: m.mitigationId, status: 'cancelled', owner: 'assessor', dueDate: '2026-12-01' });
+      expect((await close(f.id, v2.id)).value).toMatchObject({ kind: 'decision_changed', status: 'done', closureDecisionVersionId: v2.id });
+      expect((await findingDetail(ctx, p.id, f.id)).state).toBe('closed_mitigation');
+    }
+    expect(FINDINGS_COPY.failures.openWork).toBe(FINDINGS_COPY.finding.closeBlocked);
   });
 
   it('FR-FND-06 UX-15: with the running content not published, the S-14 reads still answer (no 503)', async () => {

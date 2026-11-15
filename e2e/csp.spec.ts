@@ -66,7 +66,7 @@ function productionCsp(): string {
 /** Every `page.tsx` git tracks: the source of the route list. Never empty, or the sweep
  * would visit nothing and pass. */
 function pageFiles(): string[] {
-  const files = execFileSync('git', ['ls-files', 'app/**/page.tsx', 'app/page.tsx'], { encoding: 'utf8' })
+  const files = execFileSync('git', ['ls-files', 'app/**/page.tsx'], { encoding: 'utf8' })
     .split('\n')
     .filter(Boolean);
   if (files.length === 0) throw new Error('git ls-files found no page.tsx under app/, so there is nothing to sweep');
@@ -175,8 +175,8 @@ function whoFor(file: string): Who {
   // The signed-in shell it shows a member is the shell every signed-in page shows, which the owner's sweep covers.
   if (file.startsWith('app/help/')) return 'anonymous';
   if (file.startsWith('app/(authenticated)/admin/')) return 'admin';
-  if (file === 'app/(authenticated)/acceptances/page.tsx') return 'unaccepted';
-  if (file === 'app/page.tsx' || file.startsWith('app/(authenticated)/')) return 'owner';
+  if (file === 'app/(gate)/acceptances/page.tsx') return 'unaccepted';
+  if (file.startsWith('app/(gate)/') || file.startsWith('app/(authenticated)/')) return 'owner';
   throw new Error(`${file}: not under a route group this spec knows how to sign in for`);
 }
 

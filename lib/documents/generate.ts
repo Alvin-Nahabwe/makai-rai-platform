@@ -1,5 +1,5 @@
 import type { SendOutcome } from '@/lib/client/retrySafeWrite';
-import { DOCUMENTS_COPY, ETHICS_APPROVED, ETHICS_NOT_REQUIRED, MSG_ISSUE_NO_REPLY, MSG_PREVIEW_SERVER, MSG_SEAL_CHECK_FAILED, type DocumentPhase } from './copy';
+import { DOCUMENTS_COPY, ETHICS_APPROVED, ETHICS_NOT_REQUIRED, MSG_ISSUE_NO_REPLY, MSG_OTHER_SEAL_CHECK_FAILED, MSG_PREVIEW_SERVER, OTHER_SEAL_NEXT_STEP, MSG_SEAL_CHECK_FAILED, type DocumentPhase } from './copy';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
 
 /**
@@ -45,12 +45,20 @@ export type GenerateEvent =
  * nothing). After an Issue that got no reply, or a 5xx, the client cannot know: that line says the document may have been issued and
  * that Retry is safe, which holds because Issue replays on its request id (idempotentWrite).
  */
+/** A refusal because a seal no longer matches its record: not a lost reply, and the same on every retry. */
+function isIntegrityFailure(outcome: Exclude<SendOutcome<unknown>, { kind: 'saved' }>): boolean {
+  return outcome.kind === 'rejected' && outcome.status === 500 && outcome.body.code === 'integrity_failure';
+}
+
 function refusalMessage(outcome: Exclude<SendOutcome<unknown>, { kind: 'saved' }>, inPhase: DocumentPhase): string {
   if (outcome.kind === 'not_saved') return inPhase === 'issuing' ? MSG_ISSUE_NO_REPLY : R.lost;
   const { status, body } = outcome;
   if (status === 409 && body.code === 'project_archived') return R.archived(inPhase);
   if (status === 403 && body.code === 'forbidden') return R.role(inPhase);
   if (status === 401) return R.signedOut(inPhase);
+  // A seal of another stage failed its check (lib/data/documents.ts, 500 integrity_failure). The check runs before anything is
+  // written, so nothing was issued, and a retry meets the same seal: say why, and offer no Retry (see `isIntegrityFailure`).
+  if (isIntegrityFailure(outcome)) return R.field(inPhase, `${MSG_OTHER_SEAL_CHECK_FAILED} ${OTHER_SEAL_NEXT_STEP}`);
   if (status >= 500) return inPhase === 'issuing' ? MSG_ISSUE_NO_REPLY : MSG_PREVIEW_SERVER;
   if (status === 422 && body.fields !== undefined && body.fields.length > 0) {
     const message = body.fields[0].message;
@@ -81,7 +89,7 @@ export function generateReducer(s: GenerateState, e: GenerateEvent): GenerateSta
       const refused = e.outcome.kind === 'rejected' && e.outcome.status === 422
         ? (e.outcome.body.fields ?? []).filter((f) => f.field.startsWith(TYPED_PREFIX) && isKnownFieldMessage(f.message)).map((f) => ({ fieldId: f.field.slice(TYPED_PREFIX.length), message: f.message }))
         : [];
-      return { phase: 'failed', typed: s.typed, message: refusalMessage(e.outcome, inPhase), ...(refused.length > 0 ? { refused } : {}), retry: e.outcome.kind === 'not_saved' || e.outcome.status >= 500, failedIn: inPhase };
+      return { phase: 'failed', typed: s.typed, message: refusalMessage(e.outcome, inPhase), ...(refused.length > 0 ? { refused } : {}), retry: e.outcome.kind === 'not_saved' || (e.outcome.status >= 500 && !isIntegrityFailure(e.outcome)), failedIn: inPhase };
     }
   }
 }

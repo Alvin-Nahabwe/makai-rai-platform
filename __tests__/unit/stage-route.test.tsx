@@ -93,7 +93,9 @@ describe('All questions: the stage as a row of marks', () => {
     const stops = [...h.matchAll(/<li class="ui-route-row__stop[^"]*" data-mark-kind="([a-z_]+)"/g)].map((m) => m[1]);
     expect(stops).toHaveLength(60);
     expect(stops.slice(0, 4)).toEqual(['done', 'done', 'done', 'no_decision']);
-    expect(h).toContain('<p class="ui-route-row__tally">3 done (1 with no evidence attached), 57 no decision</p>');
+    // The tally is the kit's list keyed by the marks (lane 4 Task B); read together its items are the tally in words.
+    const tally = [...h.matchAll(/<li class="ui-route-row__tally-item"[^>]*>(.*?)<\/li>/g)].map((m) => m[1].replace(/<[^>]+>/g, ''));
+    expect(tally.join(', ')).toBe('3 done (1 with no evidence attached), 57 no decision');
     expect(h).not.toContain('<progress');
     expect(h).not.toMatch(/\d\s?%/);
   });

@@ -10,6 +10,7 @@ import { isUniqueViolation, uniqueViolationIndex, isDatabaseUnavailable } from '
 import { NotFoundError, ForbiddenError } from '@/lib/data/tenant';
 import { UnauthenticatedError, PasswordChangeRequiredError } from '@/lib/auth/identity';
 import { API_COPY } from '@/lib/http/api/copy';
+import { HTTP_COPY } from '@/lib/http/copy';
 
 /**
  * A look-alike of `DriverAdapterError` from `@prisma/driver-adapter-utils`, which package.json does not list (it comes in
@@ -93,7 +94,19 @@ describe('lib/http/errors, toResponse, assertSameOrigin, pgErrors', () => {
     expect(new RateLimitedError(30, 'export_busy').extra).toEqual({ retryAfterSeconds: 30 });
     expect(new RateLimitedError(120).extra).toEqual({ retryAfterSeconds: 120 });
     const r = toResponse(new RateLimitedError(1.2));
-    expect([r.status, await r.json()]).toEqual([429, { error: 'Too many requests. Please try again later.', code: 'rate_limited', retryAfterSeconds: 2 }]);
+    expect([r.status, await r.json()]).toEqual([429, { error: HTTP_COPY.rateLimited(2), code: 'rate_limited', retryAfterSeconds: 2 }]);
+  });
+
+  it('E-API-9, E-API-11, E-API-13, E-API-14: the answers say what a person can do, and the wait and the date are the body\'s own', async () => {
+    expect(new RateLimitedError(30).message).toBe('Too many attempts. Wait 1 minute, then try again.');
+    expect(new RateLimitedError(60).message).toBe('Too many attempts. Wait 1 minute, then try again.');
+    expect(new RateLimitedError(61).message).toBe('Too many attempts. Wait 2 minutes, then try again.');
+    expect(new RateLimitedError(30, 'export_busy').message).toBe(HTTP_COPY.exportBusy);
+    expect(new ErasedError('2026-11-02').message).toBe('This record was erased on 2 Nov 2026.');
+    expect(new AcceptancesRequiredError(['terms']).message).toBe('Accept the updated terms before you continue.');
+    const cross = toResponse(await Promise.resolve().then(() => { try { assertSameOrigin(req({ origin: 'https://evil.example', host: 'makrai.org' })); } catch (e) { return e; } }));
+    expect(await cross.json()).toEqual({ error: HTTP_COPY.outOfDate, code: 'cross_origin' });
+    expect(HTTP_COPY.outOfDate).toBe('This page is out of date. Reload it and try again.');
   });
 
   it('NFR-MNT-01: an AppError status outside 400 to 599 is refused where it is thrown, not when toResponse answers', () => {
@@ -263,7 +276,7 @@ describe('lib/http/errors, toResponse, assertSameOrigin, pgErrors', () => {
     try { assertSameOrigin(req({ origin: 'null', host: 'makrai.org' })); } catch (e) { caught = e; }
     expect(caught).toBeInstanceOf(AppError);
     const r = toResponse(caught);
-    expect([r.status, await r.json()]).toEqual([403, { error: 'Cross-origin request rejected', code: 'cross_origin' }]);
+    expect([r.status, await r.json()]).toEqual([403, { error: HTTP_COPY.outOfDate, code: 'cross_origin' }]);
   });
 
   it('NFR-SEC-08: assertSameOrigin compares host and port, and refuses an Origin when the request has no Host', () => {

@@ -209,6 +209,26 @@ async function nextFindingSeq(orgId: string, findingId: string): Promise<number>
   return n;
 }
 
+/**
+ * A closing record as route 11 wrote it before route decision R11 (releases up to 0.7.0), when it still accepted a close
+ * while a mitigation was Planned or In progress: version 1 of a new mitigation, status done, kind `decision_changed` (or
+ * `decision_withdrawn`), no `what`, owned and entered by the member who pressed, due `dueDate`, `closureDecisionVersionId`
+ * the decision version. Route 11 now refuses that close (409 `finding_has_open_work`), but stored data can hold it, and
+ * the pages still read it (B2 `closeBlocked`, R2's history line).
+ */
+export async function addPreR11ClosingRecord(fx: OrgFixture, findingId: string,
+  c: { decisionVersionId: string; withdrawn?: boolean; by?: OrgRole; dueDate: CalendarDate }): Promise<{ id: string; mitigationId: string }> {
+  const by = member(fx, c.by, 'assessor');
+  const mitigationId = randomUUID();
+  const row = await testDb.mitigationVersion.create({ data: {
+    orgId: fx.org.id, findingId, mitigationId, versionNumber: 1, baseVersionNumber: null, what: null, changeNote: null,
+    ownerUserId: by.userId, dueDate: new Date(`${c.dueDate}T00:00:00Z`), status: 'done', kind: c.withdrawn ? 'decision_withdrawn' : 'decision_changed',
+    followsControl: null, closureNote: null, closureDecisionVersionId: c.decisionVersionId, cancelReason: null,
+    enteredById: by.userId, enteredByRole: by.role, findingSeq: await nextFindingSeq(fx.org.id, findingId), ...request(),
+  } });
+  return { id: row.id, mitigationId };
+}
+
 export async function addFindingEvent(fx: OrgFixture, findingId: string, e: { kind: 'reopened' | 'withdrawn'; by?: OrgRole }): Promise<{ id: string; findingSeq: number }> {
   const findingSeq = await nextFindingSeq(fx.org.id, findingId);
   const row = await testDb.findingEvent.create({ data: {

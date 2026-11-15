@@ -95,7 +95,7 @@ function resolveAdminPassword(): string {
  */
 export async function main() {
   const adminEmail = process.env.ADMIN_EMAIL || 'admin@air.ug';
-  const adminName = process.env.ADMIN_NAME || 'Platform Admin';
+  const adminName = process.env.ADMIN_NAME || 'MAK-AI administrator';
 
   const existingAdmin = await identityDb.user.findUnique({ where: { email: adminEmail } });
   if (!existingAdmin) {

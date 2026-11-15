@@ -254,7 +254,10 @@ const SCREENS: Screen[] = [
     // that says it does). Plan 1A Task 17 moved focus from a wrapper around the confirmation, which the browser scrolled
     // wholly into view, to its Cancel button, which the browser's own focus scroll may bring in without the confirmation.
     // Settling it needs a run with InlineConfirm's reveal switched off (components/ui, lane 1's); none has been made.
-    name: 'archive project (S-10)', who: 'owner', expect: { wide: 'strip', narrow: 'strip' },
+    // Since Route R5 (lane 4 Task A) Archive is the last control of the page, in the "This project" row at its foot, so at
+    // 1280 its confirmation opens past the end of the page as it stands before opening: 'no-strip', where it was 'strip'
+    // while the control sat in the page header. The narrow page is long enough to cut it with a strip.
+    name: 'archive project (S-10)', who: 'owner', expect: { wide: 'no-strip', narrow: 'strip' },
     open: async (page) => {
       // A fixed name, so the heading wraps the same way in every run (project names need not be unique; the page shows one).
       const name = 'Confirm archive project';

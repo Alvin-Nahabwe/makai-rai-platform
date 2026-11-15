@@ -57,7 +57,7 @@ function manifestFor(key: string, entries: Record<string, string[]>): string {
 
 interface FakeOptions {
   dashboard?: boolean;
-  /** Adds three routes of about 174 KB each: (authenticated)/acceptances, its child, and the neighbour (authenticated)/account. */
+  /** Adds three routes of about 174 KB each: (gate)/acceptances, its child, and the neighbour (authenticated)/account. */
   midRoutes?: boolean;
   /** Skips writing this chunk file although the manifests name it. */
   omitChunk?: keyof typeof CHUNKS;
@@ -81,10 +81,10 @@ function fakeBuild(opts: FakeOptions = {}): string {
     }),
   );
   if (opts.midRoutes) {
-    for (const dir of ['acceptances', 'acceptances/history', 'account']) {
+    for (const dir of ['(gate)/acceptances', '(gate)/acceptances/history', '(authenticated)/account']) {
       write(
-        `server/app/(authenticated)/${dir}/page_client-reference-manifest.js`,
-        manifestFor(`/(authenticated)/${dir}/page`, { [`[project]/app/(authenticated)/${dir}/page`]: ['static/chunks/mid.js'] }),
+        `server/app/${dir}/page_client-reference-manifest.js`,
+        manifestFor(`/${dir}/page`, { [`[project]/app/${dir}/page`]: ['static/chunks/mid.js'] }),
       );
     }
   }
@@ -145,7 +145,7 @@ it('NFR-PERF-01: a build within budget exits 0, polyfills and CSS are not counte
 
 it('NFR-PERF-01: S-05 sits in the signed-in group but is a public page, so it is held to 160 KB while its neighbours keep 190', () => {
   // SRS line 3189: every public page (S-01 to S-06, S-28) is held to 160 KB. S-05, the acceptances page, is at
-  // app/(authenticated)/acceptances/page.tsx (contract S-05 row), so the group of the route directory cannot tell.
+  // app/(gate)/acceptances/page.tsx (contract S-05 row), so the group of the route directory cannot tell.
   expect(Number(MID_KB)).toBeGreaterThan(160);
   expect(Number(MID_KB)).toBeLessThan(190);
   const r = run([fakeBuild({ dashboard: false, midRoutes: true }), '--exceptions', exceptionsFile([])]);
@@ -157,7 +157,7 @@ it('NFR-PERF-01: S-05 sits in the signed-in group but is a public page, so it is
   expect(r.stderr).not.toContain('/account');
   expect(r.stderr).not.toContain('/acceptances/history');
   // The list is a named constant of the script, with the route directory as the build writes it.
-  expect(readFileSync('scripts/measure_first_load.mjs', 'utf8')).toMatch(/PUBLIC_OUTSIDE_PUBLIC_GROUP = \[\s*'\(authenticated\)\/acceptances',\s*\/\/[^\n]*\n\s*'help',?\s*\]/);
+  expect(readFileSync('scripts/measure_first_load.mjs', 'utf8')).toMatch(/PUBLIC_OUTSIDE_PUBLIC_GROUP = \[\s*'\(gate\)\/acceptances',\s*\/\/[^\n]*\n\s*'help',?\s*\]/);
 });
 
 it('NFR-PERF-01: a listed exception passes until its route is gone, then the stale entry fails', () => {

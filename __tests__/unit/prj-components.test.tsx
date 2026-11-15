@@ -3,6 +3,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { OrgRole } from '@prisma/client';
 import type { FollowUpItem, StageCounts } from '@/types/api';
+import type { StatusMarkKind } from '@/components/ui/types';
+import { tallyOf } from '@/lib/ui/marks';
+import type { ProjectRoutes } from '@/lib/project/routes';
 import { STAGES, type Stage } from '@/types/record';
 import { can } from '@/lib/authz/policy';
 import { projectActions } from '@/lib/projects/can';
@@ -19,14 +22,11 @@ import type { DashboardData, ProjectOverviewData } from '@/lib/data/projects';
  * renderToStaticMarkup does not await async components, so the page files only load and pass data). Nothing here
  * clicks or moves focus: that is `e2e/prj-screens.spec.ts`.
  */
-const reviewSummaryProps = vi.hoisted(() => [] as Array<Record<string, unknown>>);
 const welcomeProps = vi.hoisted(() => [] as Array<Record<string, unknown>>);
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }), useParams: () => ({ slug: 'o' }) }));
-vi.mock('@/components/review/StageReviewsSummary', () => ({ StageReviewsSummary: (p: Record<string, unknown>) => { reviewSummaryProps.push(p); return null; } }));
 vi.mock('@/components/account/WelcomeNotice', () => ({ WelcomeNotice: (p: Record<string, unknown>) => { welcomeProps.push(p); return null; } }));
 
-const { StageColumn } = await import('@/components/project/StageColumn');
-const { ProjectOverview } = await import('@/components/project/ProjectOverview');
+const { ProjectPage } = await import('@/components/project/ProjectPage');
 const { DashboardView } = await import('@/components/project/DashboardView');
 const { MyMitigationsList } = await import('@/components/project/MyMitigationsList');
 const { ProjectCard } = await import('@/components/dashboard/ProjectCard');
@@ -55,30 +55,57 @@ function overview(o: { role?: OrgRole; archived?: boolean; counts?: StageCounts 
     can: projectActions(o.role ?? 'owner', archived),
   };
 }
-const renderPage = (o: Parameters<typeof overview>[0]) => renderToStaticMarkup(<ProjectOverview data={overview(o)} />);
+/** Each stage's row of marks as lib/project/routes.ts shapes it, from the counts: one stop per question. */
+function routesOf(d: ProjectOverviewData): ProjectRoutes {
+  return Object.fromEntries(STAGES.map((s) => {
+    const c = d.counts[s];
+    const kinds: StatusMarkKind[] = [
+      ...Array<StatusMarkKind>(c.byStatus.done).fill('done'), ...Array<StatusMarkKind>(c.byStatus.partly).fill('partly'),
+      ...Array<StatusMarkKind>(c.byStatus.not_yet).fill('not_yet'), ...Array<StatusMarkKind>(c.byStatus.not_applicable).fill('not_applicable'),
+      ...Array<StatusMarkKind>(c.notApplicableByGate).fill('does_not_apply'), ...Array<StatusMarkKind>(c.noDecision).fill('no_decision'),
+    ];
+    while (kinds.length < c.questions) kinds.push('scope_answered');
+    const stops = kinds.map((kind, i) => ({ id: `${s}-${i}`, kind, title: `Question ${i}`, href: `/orgs/o/projects/p1/stages/${s}/questions/${s}-${i}`, current: false }));
+    return [s, { stops, tally: tallyOf(kinds, c.doneWithoutEvidence), noDecision: stops.filter((x) => x.kind === 'no_decision').map((x) => ({ id: x.id, text: x.title, href: x.href })) }];
+  })) as ProjectRoutes;
+}
+const renderPage = (o: Parameters<typeof overview>[0]) => { const d = overview(o); return renderToStaticMarkup(<ProjectPage data={d} routes={routesOf(d)} continueTo={null} />); };
+/** The pre-processing line of the page, with these counts in every stage. */
+const preLine = (counts: StageCounts) => { const html = renderPage({ counts }); return html.slice(html.indexOf('<section class="stage-line" id="pre-processing"'), html.indexOf('<section class="stage-line" id="in-processing"')); };
+const textOf = (markup: string) => markup.replace(/<[^>]+>/g, '');
 
 describe('S-10 (Task 5)', () => {
   it('UX-06 FR-PRJ-02: to-do counts come before recorded counts in each stage column', () => {
-    const html = renderToStaticMarkup(<StageColumn orgSlug="o" projectId="p" stage="pre-processing" counts={COUNTS}>{null}</StageColumn>);
-    expect(html.indexOf('Still open in this stage')).toBeLessThan(html.indexOf('9 questions with no decision'));
-    expect(html.indexOf('9 questions with no decision')).toBeLessThan(html.indexOf('Recorded so far'));
-    expect(html.indexOf('Recorded so far')).toBeLessThan(html.indexOf('7 done (2 with no evidence attached)'));
-    expect(html).toContain('3 open findings'); expect(html).toContain('1 overdue mitigation');
+    const html = preLine(COUNTS);
+    // Read as text: the tally's count is bold and its word marked as the term's first use, with its (i) beside it, whose
+    // definition is left out here (lane 4 Task B).
+    const t = textOf(html.replace(/<span class="ui-term-tip">.*?<\/span><\/span><\/span>/g, ''));
+    expect(t.indexOf('Still open in this stage')).toBeLessThan(t.indexOf('9 questions with no decision'));
+    expect(t.indexOf('9 questions with no decision')).toBeLessThan(t.indexOf('Recorded so far'));
+    expect(t.indexOf('Recorded so far')).toBeLessThan(t.indexOf('7 done (2 with no evidence attached)'));
+    expect(html).toContain('3 open findings'); expect(textOf(html)).toContain(`${PROJECT_COPY.followUp.overdue}: ${PROJECT_COPY.mitigationCount(1)}`);
     expect(html).not.toMatch(/%|score|complete/i);
   });
 
   it('UX-06 (R12-16, spec 7.2): each status phrase of a stage column is the kit\'s mark with its words in ink, and none carries the warning class', () => {
-    const html = renderToStaticMarkup(<StageColumn orgSlug="o" projectId="p" stage="pre-processing" counts={COUNTS}>{null}</StageColumn>);
-    const items = [...html.matchAll(/<li class="stage-column__tally-item">(<svg class="ui-mark__shape"[^>]*aria-hidden="true"[^>]*>[\s\S]*?<\/svg>)<span>([^<]*)<\/span><\/li>/g)];
-    expect(items.map((m) => m[2])).toEqual(['7 done (2 with no evidence attached)', expect.stringMatching(/^\d+ partly$/), expect.stringMatching(/^\d+ not yet$/), expect.stringMatching(/^\d+ not applicable$/), '1 answered']);
+    const line = preLine(COUNTS);
+    const html = line.slice(line.indexOf('<div class="stage-line__stop stage-line__stop--recorded"'), line.indexOf('<div class="stage-line__stop stage-line__stop--reviews"'));
+    // Each question's stop is the kit's shape, hidden from assistive technology, in a stop that names its status in words
+    // (drawn without a link on S-10: lead's ruling on C5).
+    expect(html.match(/<li class="ui-route-row__stop" data-mark-kind="[a-z_]+"><span class="ui-route-row__point"><svg class="ui-mark__shape"[^>]*aria-hidden="true"/g)).toHaveLength(24);
+    // The tally is the kit's list keyed by the marks (lane 4 Task B): one item per kind, read without its (i).
+    const tally = [...html.matchAll(/<li class="ui-route-row__tally-item"[^>]*>(.*?)<\/li>/g)].map((m) => textOf(m[1].replace(/<span class="ui-term-tip">.*?<\/span><\/span><\/span>/, '')));
+    expect(tally).toEqual(['7 done (2 with no evidence attached)', expect.stringMatching(/^\d+ partly$/), expect.stringMatching(/^\d+ not yet$/), expect.stringMatching(/^\d+ not applicable$/), '1 answered']);
     expect(html).not.toMatch(/status-label|warning/);
   });
 
   it('FR-PRJ-02: the stage column says how many open findings have no mitigation yet, and counts gated questions as not applying, beside those marked not applicable', () => {
-    const html = renderToStaticMarkup(<StageColumn orgSlug="o" projectId="p" stage="pre-processing" counts={{ ...COUNTS, notApplicableByGate: 2 }}>{null}</StageColumn>);
-    expect(html).toContain('3 open findings</a> (1 of them with no mitigation yet)');
-    expect(html).toContain('<span>2 not applicable</span>');
-    expect(html).toContain('<span>2 do not apply</span>');
+    const html = preLine({ ...COUNTS, notApplicableByGate: 2 });
+    expect(html).toContain('<a href="/orgs/o/projects/p1/findings?stage=pre-processing">3 open findings</a>');
+    expect(textOf(html)).toContain('3 open findings (1 of them with no mitigation yet)');
+    const tally = [...html.matchAll(/<li class="ui-route-row__tally-item"[^>]*>(.*?)<\/li>/g)].map((m) => textOf(m[1].replace(/<span class="ui-term-tip">.*?<\/span><\/span><\/span>/, '')));
+    expect(tally).toContain('2 not applicable');
+    expect(tally).toContain('2 do not apply');
   });
 
   it('FR-RM-04: no stage column and no page adds the three stages together', () => {
@@ -87,7 +114,8 @@ describe('S-10 (Task 5)', () => {
 
   it('UX-31 FR-PRJ-03: an archived project shows the banner and no form or Archive control on S-10', () => {
     const html = renderPage({ archived: true, role: 'owner' });
-    expect(html).toContain(PROJECT_COPY.archivedBanner);
+    // Read as text: the words "All projects page" are a link inside the sentence (S5-1, lane 4 Task B round 1).
+    expect(textOf(html)).toContain(PROJECT_COPY.archivedBanner);
     expect(html).not.toMatch(/<form|Archive project|Edit project/);
   });
 
@@ -109,8 +137,8 @@ describe('S-10 (Task 5)', () => {
     const html = renderPage({});
     const line = 'To share your record outside the team, seal a stage review and create a document from it.';
     expect(html.split(line)).toHaveLength(2);
-    // The end of the stage list (the jump links and the three columns), found by balancing its <div>s.
-    const start = html.indexOf('<div class="stage-list">');
+    // The end of the stages (the jump links and the three lines), found by balancing their frame's <div>s.
+    const start = html.indexOf('<div class="project-lines-frame">');
     expect(start).toBeGreaterThan(-1);
     const tags = /<(\/?)div\b[^>]*>/g;
     tags.lastIndex = start;
@@ -122,28 +150,28 @@ describe('S-10 (Task 5)', () => {
     }
     expect(end).toBeGreaterThan(start);
     expect(html.indexOf(line)).toBeGreaterThan(end);
-    expect(html.indexOf(line)).toBeLessThan(html.indexOf('Findings for this project'));
+    expect(html.indexOf(line)).toBeLessThan(html.indexOf(`>${PROJECT_COPY.findings}</a>`));
     expect(html).not.toContain('Team working view');
   });
 
-  it('S-10 (kit page header): a person with no action on the project gets no empty actions wrapper; an owner gets it, with Archive', () => {
+  it('S-10 (Route R5): the page header has no actions wrapper for any role; the owner\'s Archive control sits in the "This project" row', () => {
     expect(renderPage({ role: 'viewer' })).not.toContain('ui-page-header__actions');
     const owner = renderPage({ role: 'owner' });
-    expect(owner).toContain('ui-page-header__actions');
-    expect(owner).toContain('class="archive-control"');
+    expect(owner).not.toContain('ui-page-header__actions');
+    expect(owner.slice(owner.indexOf('<nav class="project-actions"'))).toContain('class="archive-control"');
   });
 
   it('FR-PRJ-02: a new project shows "No decisions recorded yet" in each stage', () => {
-    expect(renderPage({ counts: ZERO }).split('<p>No decisions recorded yet</p>')).toHaveLength(4);
+    expect(renderPage({ counts: ZERO }).split('<p class="ui-route-row__tally">No decisions recorded yet</p>')).toHaveLength(4);
   });
 
   it('UX-36: each stage is a plain block, named by its heading, that names its three to-do counts', () => {
     const html = renderPage({});
-    expect(html.match(/<section class="stage-column" id="[a-z-]+" data-stage="[a-z-]+" aria-labelledby="[a-z-]+">/g)).toHaveLength(3);
+    expect(html.match(/<section class="stage-line" id="[a-z-]+" data-stage="[a-z-]+" aria-labelledby="[a-z-]+">/g)).toHaveLength(3);
     expect(html).not.toContain('<details');
-    const pre = html.slice(html.indexOf('<section class="stage-column" id="pre-processing"'), html.indexOf('<section class="stage-column" id="in-processing"'));
-    expect(pre).toMatch(/<h2 id="[a-z-]+">Pre-processing<\/h2>/);
-    for (const count of ['9 questions with no decision', '3 open findings', '1 overdue mitigation']) expect(pre).toContain(count);
+    const pre = textOf(preLine(COUNTS));
+    expect(preLine(COUNTS)).toMatch(/<h2 id="[a-z-]+"><span data-term="stage-1">Pre-processing<\/span><\/h2>/);
+    for (const count of ['9 questions with no decision', '3 open findings', `${PROJECT_COPY.followUp.overdue}: ${PROJECT_COPY.mitigationCount(1)}`]) expect(pre).toContain(count);
   });
 
   it('FR-PRJ-03 UX-29: archive, export and open-review actions follow the role and the archived state', () => {
@@ -155,11 +183,11 @@ describe('S-10 (Task 5)', () => {
     }
   });
 
-  it('FR-PRJ-03: S-10 passes canOpen to each stage\'s review summary and shows Export project only with team:export', () => {
+  it('FR-PRJ-03: S-10 offers Open a stage review on each stage\'s line only with review:open on a live project, and Download records only with team:export', () => {
     for (const role of ['owner', 'reviewer', 'viewer'] as const) for (const archived of [false, true]) {
-      reviewSummaryProps.length = 0;
       const html = renderPage({ role, archived });
-      expect(reviewSummaryProps.splice(0).map((p) => p.canOpen)).toEqual(STAGES.map(() => can(role, 'review:open') && !archived));
+      const open = STAGES.map((s) => html.includes(`href="/orgs/o/projects/p1/reviews/new?stage=${s}"`));
+      expect(open).toEqual(STAGES.map(() => can(role, 'review:open') && !archived));
       expect(html.includes(PROJECT_COPY.overview.downloadRecords)).toBe(can(role, 'team:export'));
     }
   });

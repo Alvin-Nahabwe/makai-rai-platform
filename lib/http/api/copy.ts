@@ -36,3 +36,16 @@ export const INVITATION_ROUTE_COPY = Object.freeze({
   /** Route 32's 409 `wrong_account` (audit E-API-32, which replaces A 269 for this text: the coordinator's ruling Q8). */
   wrongAccount: 'This invitation was sent to a different email address. Sign out, then open the link again.',
 });
+
+/** The administrator routes' own answers (`app/api/admin/**`; audit E-API-40, E-API-41). The `code` of each is unchanged. */
+export const ADMIN_ROUTE_COPY = Object.freeze({
+  /** 403 `not_platform_admin` (E-API-40). */
+  notPlatformAdmin: 'Only the MAK-AI administrator can do this.',
+  /** 409 `organisation_archived` (E-API-41); the form maps the code (lib/admin/forms/copy.ts). */
+  organisationArchived: 'This organisation is archived.',
+});
+
+/** The My account preferences route's own answer (`app/api/users/me/preferences/route.ts`; audit E-API-38). */
+export const PREFERENCES_ROUTE_COPY = Object.freeze({
+  onlyReminder: 'Only the reminder email setting can be changed here.',
+});
