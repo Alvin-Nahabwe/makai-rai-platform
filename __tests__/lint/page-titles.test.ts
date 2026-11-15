@@ -33,7 +33,15 @@ function pagesUnder(dir: string): string[] {
   });
 }
 
-const PAGES = pagesUnder('app');
+/**
+ * A page inside a parallel-route slot (`@slot/`, e.g. app/(authenticated)/@project/, owner ruling R4) is not a page of its
+ * own: it renders beside the page the address names, which owns the title. Slot pages are held to the opposite rule below
+ * (no metadata at all, so a slot can never replace the page's title).
+ */
+const isSlotPage = (f: string): boolean => f.split('/').some((seg) => seg.startsWith('@'));
+const ALL_PAGES = pagesUnder('app');
+const PAGES = ALL_PAGES.filter((f) => !isSlotPage(f));
+const SLOT_PAGES = ALL_PAGES.filter(isSlotPage);
 const code = (f: string): string => readFileSync(f, 'utf8');
 /** The source without comments, so a comment that names a token cannot satisfy a check for it. */
 const withoutComments = (s: string): string => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:\\])\/\/.*$/gm, '$1');
@@ -48,6 +56,11 @@ describe('page titles (spec 7.5)', () => {
       return STATIC.test(s) === DYNAMIC.test(s) || !s.includes('pageTitle(');
     });
     expect(wrong).toEqual([]);
+  });
+
+  it('1A spec 7.5 (route task 1): a parallel-route slot\'s page exports no metadata, so the title stays the page\'s', () => {
+    expect(SLOT_PAGES.length).toBeGreaterThanOrEqual(1);
+    expect(SLOT_PAGES.filter((f) => { const s = withoutComments(code(f)); return STATIC.test(s) || DYNAMIC.test(s); })).toEqual([]);
   });
 
   it('1A spec 7.5: no page file spells out the product name or says Toolkit', () => {

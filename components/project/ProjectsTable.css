@@ -1,0 +1,145 @@
+/* S-32, Projects (plan 1B Task 12): the kit's Table dressed as the Route's list surface, as the findings sketch draws its
+   table (records/plans/2026-11-11-ux-redesign/directions/surfaces/findings.html): a white surface with a container border
+   on the cool ground, a quiet header row, each row header the item plate (the name in words, its small line, then its one
+   line of state). The Actions column is sized to its content. Only tokens; every colour holds in both themes. Under
+   640 px of the table's own width the kit's card layout takes over and the surface's chrome is dropped. */
+
+.projects-list .ui-table__caption {
+  margin-block-end: var(--space-3);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-ink-muted);
+}
+
+/* The list's status line (what Unarchive did) and the one line saying who can unarchive: quiet lines above the surface.
+   The status line stays in the accessibility tree while empty (a live region must exist before its text changes); it
+   only gives up its margin. */
+.projects-list__status:empty {
+  margin: 0;
+}
+
+.projects-list__status,
+.projects-list__note {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-small);
+  color: var(--color-ink);
+}
+
+.projects-list__name {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-link);
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+  overflow-wrap: anywhere;
+}
+
+.projects-list__name:hover {
+  text-decoration-thickness: 2px;
+}
+
+.projects-list__line,
+.projects-list__state {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-body);
+}
+
+.projects-list__line {
+  color: var(--color-ink-muted);
+  overflow-wrap: anywhere;
+}
+
+/* The state in ink, with the archive icon before "Archived" (spec 7.5: status by shape and word, in ink). */
+.projects-list__state {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-ink);
+}
+
+/* Focus moved here by Unarchive (UnarchiveProjectButton sets the mark): the ring shows even after a mouse press. */
+.projects-list .ui-table-wrap[data-focus-moved]:focus {
+  outline: var(--focus-width) solid var(--color-focus);
+  outline-offset: var(--focus-offset);
+}
+
+/* While more projects remain: the count line and "Show more" (the page writes it after the list). */
+.projects-more {
+  margin: 0 0 var(--space-6);
+  font-size: var(--font-size-small);
+  color: var(--color-ink);
+}
+
+.projects-more a {
+  font-size: var(--font-size-body);
+}
+
+@container (width >= 640px) {
+  .projects-list .ui-table {
+    border-collapse: separate;
+    border-spacing: 0;
+    border: 1px solid var(--color-border-container);
+    border-radius: var(--radius-surface);
+    background-color: var(--color-surface);
+  }
+
+  .projects-list .ui-table thead th {
+    block-size: 2.5rem;
+    padding: var(--space-2) var(--space-3);
+    border-block-end: 1px solid var(--color-border-container);
+    background-color: color-mix(in srgb, var(--color-ground) 60%, var(--color-surface));
+    font-size: var(--font-size-small);
+    color: var(--color-heading);
+  }
+
+  .projects-list .ui-table thead th:first-child {
+    border-start-start-radius: calc(var(--radius-surface) - 1px);
+  }
+
+  .projects-list .ui-table thead th:last-child {
+    border-start-end-radius: calc(var(--radius-surface) - 1px);
+  }
+
+  .projects-list .ui-table tbody th,
+  .projects-list .ui-table tbody td {
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .projects-list .ui-table tbody tr:last-child > * {
+    border-block-end: 0;
+  }
+
+  /* The Actions column takes the width of its button; a status sentence under it gets a measure of its own. */
+  .projects-list .ui-table th:nth-child(2),
+  .projects-list .ui-table td:nth-child(2) {
+    inline-size: 1%;
+    white-space: nowrap;
+  }
+
+  .projects-list .ui-table td:nth-child(2) [role='status']:not(:empty) {
+    display: block;
+    inline-size: 18rem;
+    margin-block-start: var(--space-1);
+    white-space: normal;
+    text-align: start;
+  }
+}
+
+/* As cards: the plate, then Unarchive directly under it with no "Actions" label. Only the Actions cell (the kit's end
+   column) is touched: its label is hidden, and when it holds no Unarchive (an active row) it gives up its margin, so it
+   takes no room and stays in the accessibility tree as an empty cell (re-review N4). */
+@container (width < 640px) {
+  .projects-list .ui-table tbody td.ui-table__end .ui-table__cell-label {
+    display: none;
+  }
+
+  .projects-list .ui-table tbody td.ui-table__end:not(:has(.projects-list__actions)) {
+    margin-block-start: 0;
+  }
+
+  .projects-list .ui-table tbody td .ui-button {
+    min-block-size: var(--target-primary);
+  }
+}

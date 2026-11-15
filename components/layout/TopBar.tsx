@@ -1,10 +1,16 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type MouseEvent, type ToggleEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode, type ToggleEvent } from 'react';
+import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Icon } from '@/components/ui/Icon';
 import Rail from '@/components/layout/Rail';
+import { ShellPlace } from '@/components/layout/ShellPlace';
+import { MAKAI_LOGO } from '@/components/layout/logos';
 import { SHELL_COPY } from '@/lib/shell/copy';
+import { orgHref } from '@/lib/org-nav';
+import { railOrgSlug } from '@/lib/shell/nav';
+import { PRODUCT_NAME } from '@/lib/ui/title';
 import type { ShellData } from '@/lib/shell/types';
 import './shell.css';
 
@@ -27,7 +33,9 @@ function isPopoverOpen(panel: HTMLElement): boolean {
 /**
  * The top bar and the panel that holds the rail (plan 1A Task 11, rulings L2-44 to L2-46; modern-web-guidance `navbar`).
  *
- * Below 1024 px the bar shows the product name and a Menu button; the button opens the panel natively with popovertarget,
+ * Below 1024 px the bar shows the Menu button, then the MAK-AI logo linking Home (named "MAK-AI RAI Platform"), or, when a
+ * project is in context (the `@project` slot, owner ruling R4), the stage and the project and "All questions" in its place
+ * (shell.css hides the logo then: there is no room for both at 320 px). The button opens the panel natively with popovertarget,
  * with JavaScript or without it, and the browser closes it on Escape or a press outside and returns focus. From 1024 px CSS
  * hides the bar and shows the panel in the rail's column, open or not (components/layout/shell.css).
  *
@@ -37,8 +45,13 @@ function isPopoverOpen(panel: HTMLElement): boolean {
  * client navigation; closes it when the viewport reaches 1024 px. In a browser without popovers a click on the button
  * toggles a class the closed-state rule also reads. The `popover` property is never written: attributes only.
  */
-export default function TopBar({ shell, title }: { shell: ShellData; title: string }) {
+export default function TopBar({ shell, project }: { shell: ShellData; project?: ReactNode }) {
   const pathname = usePathname();
+  // The bar's logo links to the address's organisation, else the server's homeSlug. The rail's brand also remembers the
+  // last of the person's organisations seen while it stayed mounted (Rail's lastSeen), so on a page with no slug in its
+  // address (/account, /help) a person in several organisations can find the two pointing at different organisations
+  // (code review M4, accepted: each is one of the person's own, and the rail's Home item is beside the rail's brand).
+  const home = orgHref(railOrgSlug(pathname, null, shell), '/dashboard');
   const barRef = useRef<HTMLElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const lastPathname = useRef(pathname);
@@ -104,16 +117,22 @@ export default function TopBar({ shell, title }: { shell: ShellData; title: stri
   return (
     <>
       <header className="shell-topbar" ref={barRef}>
-        <span className="shell-topbar__title">{title}</span>
         <button type="button" className="shell-topbar__menu-button" popoverTarget={PANEL_ID} aria-controls={PANEL_ID}
           aria-expanded={expanded} onClick={onMenuClick}>
           <Icon name="menu" />
           {SHELL_COPY.menu}
         </button>
+        {/* `/` only redirects (to the chooser, a gate or /login), so it is not prefetched, as in PublicHeader. */}
+        <Link href={home} className="shell-topbar__brand" prefetch={home === '/' ? false : undefined}>
+          {/* eslint-disable-next-line @next/next/no-img-element -- a file already sized for the drawn logo (logos.ts). */}
+          <img src={MAKAI_LOGO.src} srcSet={MAKAI_LOGO.srcSet} width={MAKAI_LOGO.width} height={MAKAI_LOGO.height}
+            alt={PRODUCT_NAME} decoding="async" className="shell-topbar__logo" />
+        </Link>
+        {project ? <ShellPlace name="bar">{project}</ShellPlace> : null}
       </header>
       <div id={PANEL_ID} className="shell-topbar__panel" popover="auto" ref={panelRef} onClick={onPanelClick}
         onBeforeToggle={onBeforeToggle} onToggle={(e) => setExpanded(e.newState === 'open')}>
-        <Rail shell={shell} />
+        <Rail shell={shell} project={project} />
       </div>
     </>
   );

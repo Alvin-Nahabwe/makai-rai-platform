@@ -1,7 +1,7 @@
 import type { Stage } from '@/types/record';
 
 /**
- * The words of the project screens (audit B, as plan 1A Task 17 rules them): All projects (S-32), the project page (S-10)
+ * The words of the project screens (audit B, as plan 1A Task 17 rules them): Projects (S-32), the project page (S-10)
  * with its stage columns and follow-up lists, and the follow-up words Home shares with it. Server only: no file with
  * 'use client' imports it (ruling X-2); the form's words are lib/project/form/copy.ts, Archive's and Unarchive's
  * lib/project/write/copy.ts.
@@ -58,14 +58,31 @@ export const PROJECT_COPY = Object.freeze({
   whatMeans: (term: string) => `What does "${term}" mean?`,
   /** S-32 reached from the rail's Findings link with no project to go to (plan 1A Task 12, L2-65). */
   chooseForFindings: 'Choose a project to see its findings.',
+  /** S-32, Projects: one list, active and archived (plan 1B Task 12; spec 8, rule C8). The key keeps its 1A name. */
   allProjects: Object.freeze({
-    heading: 'All projects',
+    heading: 'Projects',
     newProject: 'New project',
+    /** The table's caption, which also names its region: what the list holds and its fixed order (C8: no sorting). */
+    caption: 'Active projects first, then archived ones',
+    columns: Object.freeze({ project: 'Project', actions: 'Actions' }),
+    /** A plate's line of state: the word, and for an archived project the archive icon before it. */
     active: 'Active',
     archived: 'Archived',
-    noActive: 'No active projects.',
-    noArchived: 'No archived projects.',
+    /** No project at all: the title, then TERM_PROJECT's definition and one of the two sentences (plan 1B Task 12). */
+    empty: Object.freeze({
+      title: 'No projects yet',
+      create: 'Create a project to start.',
+      /** Spec 9.1's sentence, as plan 1B gives it for Home's HOME_COPY.firstTimeAsk (Task 10, the Home stream). */
+      ask: 'Ask an Owner, Admin or Assessor to create your project.',
+    }),
     showMore: 'Show more',
+    /** The line before "Show more" while more projects remain (design review 15; voice rule 11). */
+    showing: (shown: number, total: number) => `Showing ${shown} of ${total} projects.`,
+    archivedNotShown: (n: number) => (n === 1
+      ? '1 archived project is not shown yet. Archived projects come last.'
+      : `${n} archived projects are not shown yet. Archived projects come last.`),
+    /** For a person who cannot unarchive, once, when an archived project is listed (spec 9.7; lane 3 lead's ruling). */
+    whoCanUnarchive: 'Owners and Admins can unarchive a project.',
   }),
   /** The words of a project's descriptive line (S-08, S-10, S-32; audit B rows 364 to 369). */
   descriptive: Object.freeze({

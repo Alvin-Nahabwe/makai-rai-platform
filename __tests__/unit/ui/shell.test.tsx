@@ -35,16 +35,22 @@ const noOrg: ShellData = { userId: 'n1', userName: 'N', platformLabel: null, rol
 function at(pathname: string): void {
   pathnameMock.mockReturnValue(pathname);
 }
+/**
+ * React 19 emits a <link rel="preload" as="image"> for the logo's <img> ahead of the markup (in a page, Next.js puts it in
+ * <head>); these tests read the shell's own markup, so it is cut off. The logo itself: __tests__/unit/ui/shell-route.test.tsx.
+ */
+const withoutPreloads = (html: string) => html.replace(/^(<link rel="preload"[^>]*>)+/, '');
 function rail(pathname: string, data: ShellData = shell): string {
   at(pathname);
-  return renderToStaticMarkup(<Rail shell={data} />);
+  return withoutPreloads(renderToStaticMarkup(<Rail shell={data} />));
 }
 function page(pathname: string, data: ShellData = shell, children = <p>page</p>): string {
   at(pathname);
-  return renderToStaticMarkup(<AppShell shell={data}>{children}</AppShell>);
+  return withoutPreloads(renderToStaticMarkup(<AppShell shell={data}>{children}</AppShell>));
 }
 const stripTags = (html: string) => html.replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
-const navOf = (html: string) => /<nav [^>]*>[\s\S]*?<\/nav>/.exec(html)?.[0] ?? '';
+/** The rail's navigation, without its brand link (the logo and the platform's name, tested in shell-route.test.tsx). */
+const navOf = (html: string) => (/<nav [^>]*>[\s\S]*?<\/nav>/.exec(html)?.[0] ?? '').replace(/<a [^>]*class="shell-rail__brand"[^>]*>[\s\S]*?<\/a>/, '');
 const linkLabels = (html: string) => [...navOf(html).matchAll(/<a [^>]*>([\s\S]*?)<\/a>/g)].map((m) => stripTags(m[1]));
 function roleText(html: string): string | null {
   const m = /<span class="shell-rail__role">([\s\S]*?)<\/span>/.exec(html);
@@ -78,7 +84,9 @@ describe('the one navigation tree (L2-44)', () => {
     expect(button![0]).toContain('type="button"');
     expect(html).toMatch(/<div [^>]*id="shell-menu"[^>]*popover="auto"|<div [^>]*popover="auto"[^>]*id="shell-menu"/);
     expect(html).toMatch(/<div [^>]*class="shell-topbar__panel"/);
-    expect(html).toMatch(/<header class="shell-topbar"><span class="shell-topbar__title">MAK-AI RAI Platform<\/span>/);
+    // Route task 1: the Menu button first, then the MAK-AI logo linking Home, named "MAK-AI RAI Platform".
+    expect(html).toMatch(/<header class="shell-topbar"><button [^>]*class="shell-topbar__menu-button"/);
+    expect(html).toMatch(/<a class="shell-topbar__brand" href="\/orgs\/a\/dashboard"><img [^>]*alt="MAK-AI RAI Platform"/);
   });
 
   it('1A Task 11 L2-44: AppShell puts its children first inside <main id="main-content" tabindex="-1" class="shell__main">, and nothing of the shell is in main', () => {
@@ -105,15 +113,17 @@ describe('the one navigation tree (L2-44)', () => {
     for (const l of links.filter((x) => x.includes('shell-rail__item') && !x.includes('aria-current'))) expect(l).toContain('class="shell-rail__item"');
   });
 
-  it('1A Task 11 L2-52: the rail holds the product name, the switcher, the navigation, Sign out and the theme switch, in that order', () => {
+  it('1A Task 11 L2-52: the rail holds the brand (the logo and the product name), the switcher, the navigation, Sign out and the theme switch, in that order', () => {
     const html = rail('/orgs/a/dashboard');
     expect(html).toMatch(/^<nav class="shell-rail" aria-label="Main">/);
     expect(html).toMatch(/<\/nav>$/);
-    const order = ['<p class="shell-rail__product">MAK-AI RAI Platform</p>', 'class="shell-rail__org"', '<div class="shell-rail__nav">', 'class="shell-rail__lower"', 'class="shell-rail__signout"', 'class="shell-theme'];
+    const order = ['<span class="shell-rail__product">MAK-AI RAI Platform</span>', 'class="shell-rail__org"', '<div class="shell-rail__nav">', 'class="shell-rail__lower"', 'class="shell-rail__signout"', 'class="shell-theme'];
     const positions = order.map((s) => html.indexOf(s));
     for (const p of positions) expect(p).toBeGreaterThanOrEqual(0);
     expect([...positions].sort((x, y) => x - y)).toEqual(positions);
-    expect(html).not.toMatch(/<img|<aside/);
+    // One image, the MAK-AI logo (route task 1), and no aside.
+    expect([...html.matchAll(/<img /g)]).toHaveLength(1);
+    expect(html).not.toMatch(/<aside/);
   });
 
   it('1A Task 11 L2-52 L2-61: no organisation, no switcher block; and none for the administrator', () => {
@@ -166,7 +176,7 @@ describe('the rail, ported from the sidebar (UX-02, UX-41)', () => {
       orgs: [{ slug: 'a', name: '<img src=y onerror=alert(2)>' }],
     };
     const html = rail('/orgs/a/dashboard', hostile);
-    expect(html).not.toMatch(/<img src=|<b>x/);
+    expect(html).not.toMatch(/<img src=[xy]|<b>x/);
     expect(html).toContain('&lt;img src=x');
     expect(html).toContain('&lt;img src=y');
     expect(html).toContain('&lt;b&gt;x');
@@ -190,18 +200,22 @@ describe('the rail, ported from the sidebar (UX-02, UX-41)', () => {
     }
   });
 
-  it('1A Task 12 L2-48: the organisation rail lists Home, Projects, Findings, Guidance, Help, Members, Organisation details, My account at their addresses', () => {
+  it('1A Task 12 L2-48 (spec 7.5): the organisation rail lists Home, Projects, Findings, Guidance, Help, Members, Organisation, My account at their addresses', () => {
     const html = rail('/orgs/a/dashboard');
-    expect(linkLabels(html)).toEqual(['Home', 'Projects', 'Findings', 'Guidance', 'Help', 'Members', 'Organisation details', 'My account']);
+    expect(linkLabels(html)).toEqual(['Home', 'Projects', 'Findings', 'Guidance', 'Help', 'Members', 'Organisation', 'My account']);
     const hrefs = [...navOf(html).matchAll(/<a [^>]*href="([^"]*)"/g)].map((m) => m[1].replace(/&amp;/g, '&'));
     expect(hrefs).toEqual([
       '/orgs/a/dashboard', '/orgs/a/projects', '/orgs/a/projects?for=findings', '/explore/framework', '/help',
       '/orgs/a/settings/members', '/orgs/a/settings/organisation', '/account',
     ]);
-    // Members and Organisation details, then the person, then My account, in the lower list.
+    // Members and Organisation in the lower list; then, in the rail's pinned foot (fix round 3, review D4), the person, then
+    // My account.
     const lower = /<ul class="shell-rail__lower">([\s\S]*?)<\/ul>/.exec(html)?.[1] ?? '';
-    expect(lower.indexOf('Organisation details')).toBeLessThan(lower.indexOf('shell-rail__person'));
-    expect(lower.indexOf('shell-rail__person')).toBeLessThan(lower.indexOf('My account'));
+    expect(lower.indexOf('Members<')).toBeGreaterThanOrEqual(0);
+    expect(lower.indexOf('Organisation<')).toBeGreaterThan(lower.indexOf('Members<'));
+    const foot = /<ul class="shell-rail__account">([\s\S]*?)<\/ul>/.exec(html)?.[1] ?? '';
+    expect(foot.indexOf('shell-rail__person')).toBeGreaterThanOrEqual(0);
+    expect(foot.indexOf('shell-rail__person')).toBeLessThan(foot.indexOf('My account'));
   });
 
   it('S4: on Help, My account and Guidance the five organisation links go to the person\'s home organisation, not to Home', () => {
@@ -254,7 +268,7 @@ describe('the rail, ported from the sidebar (UX-02, UX-41)', () => {
 
   it('M-41 UX-26: the Sign out button sits inside the SignOutWithDraftsGuard slot, with the person\'s own id', () => {
     const source = readFileSync('components/layout/Rail.tsx', 'utf8');
-    expect(source).toMatch(/<SignOutWithDraftsGuard userId=\{shell\.userId\}>\s*<button type="button" className="shell-rail__signout"[\s\S]*?SHELL_COPY\.signOut[\s\S]*?<\/button>\s*<\/SignOutWithDraftsGuard>/);
+    expect(source).toMatch(/<SignOutWithDraftsGuard userId=\{shell\.userId\} onPhase=\{showSignOut\}>\s*<button type="button" className="shell-rail__signout"[\s\S]*?SHELL_COPY\.signOut[\s\S]*?<\/button>\s*<\/SignOutWithDraftsGuard>/);
     expect(rail('/orgs/a/dashboard')).toMatch(/<button type="button" class="shell-rail__signout">[\s\S]*?Sign out<\/button>/);
   });
 
@@ -313,8 +327,10 @@ describe('the rail, ported from the sidebar (UX-02, UX-41)', () => {
   it('1A Task 12 L2-66 S4: the rail\'s Sign out clears this person\'s last-project keys before signing out', () => {
     const source = readFileSync('components/layout/Rail.tsx', 'utf8');
     // Since ruling L5-11 the sign-out goes through signOutClearingDrafts, which also sweeps the keys and navigates only
-    // when the session ended; a refusal is logged by name and the person stays on the page.
-    expect(source).toMatch(/onClick=\{\(\) => \{\s*clearLastProjects\(shell\.userId\);\s*void signOutClearingDrafts\(shell\.userId, '\/login'\)\.catch\(/);
+    // when the session ended; a refusal is logged by name, the person stays on the page, and the rail says they are still
+    // signed in (__tests__/unit/sign-out-refused.test.tsx).
+    expect(source).toMatch(/onClick=\{\(\) => \{ void signOutFromRail\(shell\.userId, showSignOut, signOutPending\); \}\}/);
+    expect(source).toMatch(/clearLastProjects\(userId\);\s*try \{\s*await signOutClearingDrafts\(userId, '\/login'\);\s*\} catch/);
   });
 });
 
@@ -384,7 +400,7 @@ describe('the public pages load no shell stylesheet (plan 1A Task 12, fix round 
     expect(start).toBeGreaterThan(0);
     const block = globals.slice(start);
     const shell = readFileSync('components/layout/shell.css', 'utf8');
-    for (const sel of ['.shell-public-header {', '.shell-footer {', '.shell-theme--on-light {', '.shell-theme__to-light {', '.shell-idle__failed {']) {
+    for (const sel of ['.shell-public-header {', '.shell-theme--on-light {', '.shell-theme__to-light {', '.shell-idle__failed {']) {
       // at the start of a line: the top-level rule, not the print rule's indented selector list
       expect(block.split('\n'), sel).toContain(sel);
       expect(shell.split('\n'), sel).not.toContain(sel);
@@ -392,6 +408,12 @@ describe('the public pages load no shell stylesheet (plan 1A Task 12, fix round 
     // The print rule is in both, byte for byte: globals.css for the public pages, and the end of shell.css for the signed-in
     // pages. shell.css used to be linked before globals.css and now follows it there, so without the copy the top bar's own
     // `display: flex` (below 1024 px) and the panel's `display: block` (from 1024 px) would beat the print rule at every width.
+    // Route task 1: the footer's own rules left globals.css for its component-local sheet, which only Footer.tsx imports
+    // (a public page loads it with the root layout; it never reaches shell.css, the F1a case above).
+    const footer = readFileSync('components/layout/footer.css', 'utf8');
+    expect(footer.split('\n')).toContain('.shell-footer {');
+    expect(globals.split('\n')).not.toContain('.shell-footer {');
+    expect(shell.split('\n')).not.toContain('.shell-footer {');
     const print = (css: string) => css.slice(css.lastIndexOf('/* ── Print: the page\'s content only ── */'));
     expect(print(block)).toMatch(/^\/\* ── Print[\s\S]*@media print \{[\s\S]*\.shell-footer[\s\S]*\}\n$/);
     expect(print(shell)).toBe(print(block));
@@ -439,8 +461,9 @@ describe('the theme switch (L2-47)', () => {
     for (const onLight of [false, true]) {
       const html = renderToStaticMarkup(<ThemeToggle onLight={onLight} />);
       expect(html).toMatch(new RegExp(`^<button type="button" class="${onLight ? 'shell-theme shell-theme--on-light' : 'shell-theme'}">`));
-      expect(html).toMatch(/<span class="shell-theme__to-dark"><svg[^>]*aria-hidden="true"[\s\S]*?<\/svg>Switch to dark theme<\/span>/);
-      expect(html).toMatch(/<span class="shell-theme__to-light"><svg[^>]*aria-hidden="true"[\s\S]*?<\/svg>Switch to light theme<\/span>/);
+      // The words in their own span (fix round 4: the rail shows the switch as an icon and keeps the words as its name).
+      expect(html).toMatch(/<span class="shell-theme__to-dark"><svg[^>]*aria-hidden="true"[\s\S]*?<\/svg><span class="shell-theme__label">Switch to dark theme<\/span><\/span>/);
+      expect(html).toMatch(/<span class="shell-theme__to-light"><svg[^>]*aria-hidden="true"[\s\S]*?<\/svg><span class="shell-theme__label">Switch to light theme<\/span><\/span>/);
       expect(html).not.toMatch(/aria-pressed|aria-label|title=/);
       expect(html).not.toMatch(/\p{Extended_Pictographic}|◐/u);
       for (const m of html.matchAll(/<svg[^>]*>/g)) expect(m[0]).toContain('aria-hidden="true"');
@@ -468,7 +491,7 @@ describe('the public header (L2-55)', () => {
 describe('the top bar on its own', () => {
   it('1A Task 11 L2-44: TopBar renders the bar and the panel as two siblings, the panel after the bar', () => {
     at('/orgs/a/dashboard');
-    const html = renderToStaticMarkup(<TopBar shell={shell} title="T" />);
-    expect(html).toMatch(/^<header class="shell-topbar"><span class="shell-topbar__title">T<\/span><button [^>]*>[\s\S]*?<\/button><\/header><div [^>]*id="shell-menu"/);
+    const html = withoutPreloads(renderToStaticMarkup(<TopBar shell={shell} />));
+    expect(html).toMatch(/^<header class="shell-topbar"><button [^>]*>[\s\S]*?<\/button><a [^>]*class="shell-topbar__brand"[^>]*>[\s\S]*?<\/a><\/header><div [^>]*id="shell-menu"/);
   });
 });

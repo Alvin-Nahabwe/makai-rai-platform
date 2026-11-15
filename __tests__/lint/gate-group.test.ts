@@ -45,7 +45,11 @@ const code = (file: string) => readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\
 
 /** The page routes of `app`, as screen-stages.mjs labels them, without the development-only gallery (404 in production). */
 const routesOf = (appDir: string): string[] =>
-  (routeFiles(appDir) as string[]).filter((f) => f.endsWith('/page.tsx')).map((f) => routeLabel(f) as string).sort();
+  (routeFiles(appDir) as string[]).filter((f) => f.endsWith('/page.tsx')).map((f) => routeLabel(f) as string)
+    // A parallel-route slot folder (`@project`) is never part of a URL: Next's docs, parallel-routes.md: "slots are not route
+    // segments and do not affect the URL structure". Its pages (the shell's @project mirrors) are not addresses.
+    .filter((r) => !r.split('/').some((segment) => segment.startsWith('@')))
+    .sort();
 
 /** The 38 page addresses at the base of this task (c1c933b6), from screen-stages.mjs's walk of app/ that day. */
 const ROUTES_AT_BASE = [

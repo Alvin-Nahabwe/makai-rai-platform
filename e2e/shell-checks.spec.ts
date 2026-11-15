@@ -58,6 +58,29 @@ async function contextFor(browser: Browser, signedIn: boolean, colorScheme: 'lig
   return context;
 }
 
+/**
+ * UX-41 with the logos (route task 1): the only images a shell page may show, each as [file, alt, place]. The MAK-AI logo
+ * is decorative beside the visible name in the rail's brand (alt ""), names the narrow bar's link to Home ("MAK-AI RAI
+ * Platform"), and is "MAK-AI" in the footer and on the sign-in pages (their own sized file); the DSWB logo is in the
+ * footer only. The file is read from both `src` and `srcset` (a 2x screen shows the srcset's file). Anything else is
+ * reported, whatever its alt.
+ */
+type Place = 'rail-brand' | 'bar-brand' | 'footer' | 'sign-in' | 'gate-brand' | 'other';
+type ShownImage = { src: string; srcset: string | null; alt: string | null; place: Place };
+const MAKAI_SET = '/logo-makai-white-154.webp 1x, /logo-makai-white-308.webp 2x';
+const LOGO_PLACES: ReadonlyArray<ShownImage> = [
+  { src: '/logo-makai-white-154.webp', srcset: MAKAI_SET, alt: '', place: 'rail-brand' },
+  { src: '/logo-makai-white-154.webp', srcset: MAKAI_SET, alt: 'MAK-AI RAI Platform', place: 'bar-brand' },
+  { src: '/logo-makai-white-154.webp', srcset: MAKAI_SET, alt: 'MAK-AI', place: 'footer' },
+  // Lane 5's gate frame (components/layout/GateFrame.tsx, `.gate__brand`; the not-found page draws the same brand in `[data-gate-look]`, app/not-found.tsx): the same logo, decorative beside the name (ruling I-3).
+  { src: '/logo-makai-white-154.webp', srcset: MAKAI_SET, alt: '', place: 'gate-brand' },
+  { src: '/logo-dswb-white-125.webp', srcset: '/logo-dswb-white-125.webp 1x, /logo-dswb-white-250.webp 2x', alt: 'Data Science Without Borders', place: 'footer' },
+  { src: '/logo-makai-252.png', srcset: '/logo-makai-252.png 1x, /logo-makai-504.png 2x', alt: 'MAK-AI', place: 'sign-in' },
+];
+function strayImages(images: readonly ShownImage[]): string[] {
+  return images.filter((i) => !LOGO_PLACES.some((l) => l.src === i.src && l.srcset === i.srcset && l.alt === i.alt && l.place === i.place))
+    .map((i) => `${i.src} srcset=${JSON.stringify(i.srcset)} alt=${JSON.stringify(i.alt)} in ${i.place}`);
+}
 /** Runs `check` on every shell page, signed in or out as the page needs, in one context per kind. */
 async function onEveryShellPage(
   browser: Browser,
@@ -164,16 +187,36 @@ test.describe('shell pages, checked with the harness helpers', () => {
     });
   }
 
-  test('UX-41: no image but the logo, and every icon hidden from assistive technology', async ({ browser }) => {
+  test('UX-41: no image but the logos, and every icon hidden from assistive technology', async ({ browser }) => {
     await onEveryShellPage(browser, 'light', 1280, async (page, label) => {
-      const images = await page.locator('img').evaluateAll((els) => els.map((e) => e.getAttribute('alt')));
-      expect(images.filter((alt) => alt !== 'MAK-AI'), `${label}: images other than the logo`).toEqual([]);
+      // Where each image sits is read in the page (a function of this file is not sent to the browser).
+      const images = await page.locator('img').evaluateAll((els) => els.map((e) => ({
+        src: e.getAttribute('src') ?? '', srcset: e.getAttribute('srcset'), alt: e.getAttribute('alt'),
+        place: (e.closest('.shell-rail__brand') ? 'rail-brand' : e.closest('.shell-topbar__brand') ? 'bar-brand'
+          : e.closest('footer.shell-footer') ? 'footer' : e.classList.contains('auth-logo') ? 'sign-in'
+          : e.closest('.gate__brand, [data-gate-look] > :first-child') ? 'gate-brand' : 'other') as Place,
+      })));
+      expect(strayImages(images), `${label}: images other than the logos, each in its own place`).toEqual([]);
       const exposed = await page
         .locator('svg:not([aria-hidden="true"]), .icon:not([aria-hidden="true"])')
         // The Next.js development indicator is not part of the product and exists only under `next dev`.
         .evaluateAll((els) => els.filter((e) => !e.closest('[data-nextjs-dev-tools-button], nextjs-portal')).map((e) => `${e.tagName.toLowerCase()}.${e.getAttribute('class') ?? ''}`));
       expect(exposed, `${label}: icons without aria-hidden="true"`).toEqual([]);
     });
+  });
+
+  test('UX-41 (self-test): a stray image is reported, whatever its alt, a logo out of its place, and a foreign 2x file', () => {
+    expect(strayImages(LOGO_PLACES)).toEqual([]);
+    // A decorative image anywhere else, an image that borrows a logo's alt, a logo file in the wrong place, and a logo's
+    // own src and alt in its own place but another file for 2x screens, each fail.
+    expect(strayImages([
+      { src: '/uploads/chart.png', srcset: null, alt: '', place: 'other' },
+      { src: '/x.png', srcset: null, alt: 'MAK-AI', place: 'footer' },
+      { src: '/logo-makai-white-154.webp', srcset: MAKAI_SET, alt: '', place: 'other' },
+      { src: '/logo-dswb-white-125.webp', srcset: '/logo-dswb-white-125.webp 1x, /logo-dswb-white-250.webp 2x', alt: 'Data Science Without Borders', place: 'rail-brand' },
+      { src: '/logo-makai-white-154.webp', srcset: '/logo-makai-white-154.webp 1x, /stray-2x.webp 2x', alt: '', place: 'rail-brand' },
+      { src: '/logo-makai-white-154.webp', srcset: MAKAI_SET, alt: 'MAK-AI', place: 'gate-brand' },
+    ])).toHaveLength(6);
   });
 
   test('UX-33 NFR-A11Y-02: a focused form field has a visible focus outline', async ({ page }) => {
@@ -214,7 +257,10 @@ test.describe('shell pages, checked with the harness helpers', () => {
       const own = `/orgs/${slug}/dashboard`;
       const urls = requests.urls();
       const ownIndex = urls.findIndex((u) => u.endsWith(own));
-      const left = urls.filter((u, i) => i !== ownIndex && !u.includes('/_next/') && !prefetches.has(u) && !/\/favicon[^/]*\.png$/.test(u));
+      // The logo files (route task 1: the rail's, and the footer's, which load lazily) are the page's images, not requests of
+      // the warning.
+      const left = urls.filter((u, i) => i !== ownIndex && !u.includes('/_next/') && !prefetches.has(u) && !/\/favicon[^/]*\.png$/.test(u)
+        && !/\/logo-(makai|dswb)-white-\d+\.webp$/.test(u));
       expect(left).toEqual([]);
     } finally {
       await context.close();

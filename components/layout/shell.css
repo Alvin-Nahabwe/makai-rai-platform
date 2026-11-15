@@ -1,8 +1,8 @@
 /* The shell (plan 1A Task 11; spec 7.1 and 8): the navy rail, the top bar and its menu panel below 1024 px, the
    organisation switcher, the theme switch, the public header, the footer and the session dialogs' wrapper. Role tokens
    only. The rail is navy in both themes; its current item is an orange fill with white text, and no text on the rail or
-   the bar is ever orange. Focus is the global :focus-visible ring (--color-focus), kept clear of every overflow edge.
-   Nothing animates. */
+   the bar is in the action orange (spec 7.1; "You are here" takes lane 7's on-shell accent, peach, when it lands). Focus is the global :focus-visible ring (--color-focus), kept clear of every overflow edge.
+   Nothing animates on a timer: the rail's scroll cue follows the scroll position only. */
 
 /* ── The frame ── */
 .shell {
@@ -15,28 +15,146 @@
   padding: var(--space-4);
 }
 
+/* One gutter round the page: the shell's main gives it (16 px, 32 px from 1024 px), so a page root that brings its own
+   (.page-content in app/globals.css, Help's .help) drops its inline and top padding here. Its bottom padding stays, as
+   the decision form's fixed Save bar sizes it (components/decision/DecisionForm.css). A page with neither root (S-05)
+   keeps the shell's gutter. */
+.shell__main > :is(.page-content, .help) {
+  padding-inline: 0;
+  padding-block-start: 0;
+}
+
+/* The page's first block starts one gutter down: its own top margin (the kit's page header has 32 px, for space under a
+   breadcrumb) would otherwise collapse through the root and add to the gutter. */
+.shell__main > :is(.page-content, .help) > :first-child {
+  margin-block-start: 0;
+}
+
 /* ── The top bar (below 1024 px): ordinary flow content, neither sticky nor fixed ── */
 .shell-topbar {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2) var(--space-4);
-  padding: var(--space-2) var(--space-4);
+  gap: var(--space-2);
+  /* One inline padding on every page (review D21), so the Menu button never moves between pages. */
+  padding: var(--space-2) var(--space-3);
+  /* The bar's bottom edge, for the same reason as the rail's (the dark theme's navy against its ground). An inset shadow,
+     not a border, so the bar stays 60 px high: the Menu panel opens at 3.75rem without JavaScript. */
+  box-shadow: inset 0 -1px 0 var(--color-border-container);
   background-color: var(--color-shell);
   color: var(--color-shell-ink);
 }
 
-.shell-topbar__title {
+/* The MAK-AI logo, linking Home; replaced by the project context when one is in the bar (no room for both at 320 px). */
+.shell-topbar__brand {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  min-block-size: var(--target-primary);
+  margin-inline-start: var(--space-2);
+}
+
+.shell-topbar__logo {
+  display: block;
+}
+
+.shell-topbar:has(.shell-bar-project) .shell-topbar__brand {
+  display: none;
+}
+
+/* ── The narrow top bar's project context: the stage, the project under it (cut with an ellipsis), "All questions" ── */
+.shell-bar-project {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--space-2);
   min-width: 0;
-  overflow-wrap: anywhere;
+}
+
+.shell-bar-project__where {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  line-height: var(--line-height-heading);
+}
+
+.shell-bar-project__stage {
+  overflow: hidden;
+  font-weight: var(--font-weight-bold);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.shell-bar-project__name {
+  overflow: hidden;
+  color: var(--color-shell-muted);
+  font-size: var(--font-size-small);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* On a project-level page the name stands alone, on the first line. */
+.shell-bar-project__name:only-child {
+  color: var(--color-shell-ink);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-bold);
+}
+
+.shell-bar-project__all {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  min-block-size: var(--target-primary);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-shell-muted);
+  border-radius: var(--radius-control);
+  color: var(--color-shell-ink);
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-semibold);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.shell-bar-project__all:hover {
+  background-color: var(--color-shell-hover);
+  /* a:hover in app/globals.css (0,1,1) would paint it the link colour, navy on navy. */
+  color: var(--color-shell-ink);
+}
+
+/* With a project in the bar, its three parts share the row: the controls' inline padding steps down one size so that
+   "Pre-processing" stays whole at 375 px. */
+.shell-topbar:has(.shell-bar-project) .shell-topbar__menu-button,
+.shell-bar-project__all {
+  padding-inline: var(--space-2);
+}
+
+/* Below 360 px one row cannot hold the Menu button, the stage and "All questions": the bar takes a second row, with the
+   stage and the project across it. Only the boxes move: the reading and focus order stay Menu, stage, All questions. */
+@media (max-width: 359.98px) {
+  .shell-topbar:has(.shell-bar-project) {
+    flex-wrap: wrap;
+  }
+
+  .shell-bar-project {
+    display: contents;
+  }
+
+  .shell-bar-project__all {
+    order: 1;
+    margin-inline-start: auto;
+  }
+
+  .shell-bar-project__where {
+    flex-basis: 100%;
+    order: 2;
+  }
 }
 
 .shell-topbar__menu-button {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
+  flex: none;
   min-block-size: var(--target-primary);
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--color-shell-muted);
@@ -46,6 +164,11 @@
   font: inherit;
   font-weight: var(--font-weight-semibold);
   cursor: pointer;
+}
+
+.shell-topbar__menu-button[aria-expanded="true"] {
+  /* The panel is open (review D20): the button shows it, as the rail shows a hovered item. */
+  background-color: var(--color-shell-hover);
 }
 
 .shell-topbar__menu-button:hover {
@@ -85,17 +208,14 @@
     box-shadow: var(--shadow-surface);
   }
 
-  .shell-rail__product {
+  /* The bar shows the logo below 1024 px, and the rail in the Menu panel does not repeat it; when the bar holds a project's
+     context in the logo's place, the panel's rail keeps its brand, so the logo and the link Home are one press away. */
+  .shell-topbar:not(:has(.shell-bar-project)) + .shell-topbar__panel .shell-rail__brand {
     display: none;
   }
 }
 
 @media (min-width: 1024px) {
-  .shell {
-    display: grid;
-    grid-template-columns: var(--rail-width) minmax(0, 1fr);
-  }
-
   .shell-topbar {
     display: none;
   }
@@ -110,12 +230,15 @@
     z-index: 1;
     width: auto;
     height: 100vh;
+    /* The rail's own parts scroll: the upper part when it must, beside a pinned foot (review D4). The panel scrolls as a
+       whole only when the foot alone is taller than the window (under about 230 px), so Sign out stays reachable (M3). */
     overflow-y: auto;
+    /* In the dark theme the shell navy and the page ground are 1.04:1 apart: the edge keeps the rail from merging into
+       the page. A container border, so it is quiet in the light theme, where the navy already stands apart. */
+    border-inline-end: 1px solid var(--color-border-container);
   }
 
   .shell__main {
-    overflow-y: auto;
-    max-height: 100vh;
     padding: var(--space-8);
     /* One stacking context for main at level auto: no z-index inside it, however high, can pass the rail's z-index 1
        (and the sign-out warning in it). It makes no containing block, so fixed and sticky descendants are unchanged. */
@@ -123,25 +246,218 @@
   }
 }
 
-/* ── The rail ── */
+/* ── From 1024 px on screen: the footer in the content column (review D23; the coordinator's option iii) ──
+   The root layout's frame (app/layout.tsx: the page, then its one footer) is the content's one scroller: a grid of the
+   rail's column and the content column. The shell is a subgrid of it, so the rail spans main's row and the footer's and
+   stays whole beside the band, sticky at the top; main and the band share the content column, and the band ends it.
+   The frame's 32 px end padding is the edge lane 2's pinned Save row is built against (sticky, its end inset of -32 px
+   takes the padding back: it pins on the screen's foot, as when main scrolled itself with 32 px of padding). The band
+   and the rail take that padding back with a negative end margin, so at the end of the scroll the band ends on the
+   screen's foot and the rail is still 100vh. The frame sets no scroll-behavior and does not inherit the document's
+   smooth scroll, so focus moves scroll it at once, as main did. Screen only: print keeps the plain flow (the print rule
+   at the end of this file is a byte copy of globals.css's). Below 1024 px nothing here applies: the document scrolls. */
+@media screen and (min-width: 1024px) {
+  .page-frame:has(> .shell) {
+    display: grid;
+    grid-template-columns: var(--rail-width) minmax(0, 1fr);
+    /* Two rows for boxes a layout puts before the shell inside the frame (today one: the idle warning's, which also holds
+       its signed-out notice; e2e/shell-project.spec.ts holds the count), then main's row, which takes the rest of a short
+       page so the band still ends on the screen's foot, then the band's. :has() and subgrid are Baseline widely
+       available, so there is no fallback for a browser without them. */
+    grid-template-rows: repeat(2, auto) [shell-start] 1fr [footer-start] auto [shell-end];
+    block-size: 100vh;
+    overflow-y: auto;
+    padding-block-end: var(--space-8);
+  }
+
+  .page-frame:has(> .shell) > * {
+    grid-column: 1 / -1;
+  }
+
+  .page-frame > .shell {
+    display: grid;
+    grid-template-columns: subgrid;
+    grid-template-rows: subgrid;
+    grid-row: shell-start / shell-end;
+    min-height: 0;
+  }
+
+  .shell-topbar__panel {
+    grid-column: 1;
+    grid-row: 1 / -1;
+    margin-block-end: calc(-1 * var(--space-8));
+  }
+
+  .shell__main {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  /* The band in the content column, its content on the page's gutter (review D24), where main's content starts. */
+  .page-frame > .shell ~ .shell-footer {
+    grid-column: 2;
+    grid-row: footer-start / shell-end;
+    margin-block-end: calc(-1 * var(--space-8));
+    padding-inline: var(--space-8);
+  }
+
+  .page-frame > .shell ~ .shell-footer .shell-footer__inner {
+    margin-inline: 0;
+  }
+}
+
+/* ── The rail: a part that scrolls when it must, and a pinned foot ── */
 .shell-rail {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
   min-block-size: 100%;
-  /* Room on every side for the 3 px focus ring and its offset, inside the panel's scroll edge. */
-  padding: var(--space-4) var(--space-3);
+}
+
+/* Room on every side for the 3 px focus ring and its offset, inside the scroll edge; 8 px between groups (review D4 c). */
+.shell-rail__scroll {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+}
+
+.shell-rail__foot {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  /* The rail's edge token, as the footer's top rule (review M2; --color-shell-hover is 1.2:1 on the navy). */
+  border-block-start: 1px solid var(--color-border-container);
+}
+
+.shell-rail__account {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+}
+
+@media (min-width: 1024px) {
+  .shell-rail {
+    block-size: 100%;
+  }
+
+  /* The upper part scrolls when the screen is too short for it; the foot stays. A thin scrollbar in the rail's colours
+     (thumb 8.6:1 on the navy), and a cue at each edge that has more beyond it (modern-web-guidance
+     scrollability-affordance-hints): the navy fades over the content there, with a hairline. */
+  .shell-rail__scroll {
+    flex: 1 1 auto;
+    min-block-size: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    /* A focused item scrolled into view stops clear of the cue at either edge. */
+    scroll-padding-block: var(--space-6);
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-shell-muted) transparent;
+    container-type: scroll-state;
+  }
+
+  .shell-rail__scroll::before,
+  .shell-rail__scroll::after {
+    content: "";
+    display: block;
+    flex: none;
+    position: sticky;
+    z-index: 1;
+    block-size: var(--space-6);
+    pointer-events: none;
+    opacity: 0;
+  }
+
+  /* A sticky box's inset resolves inside the scroller's padding: each cue takes back the 8 px, so it sits on the real
+     edge and no sliced line of text shows between it and the edge (review I3). */
+  .shell-rail__scroll::before {
+    inset-block-start: calc(-1 * var(--space-2));
+    margin-block-end: calc(-1 * var(--space-6));
+    border-block-start: 1px solid var(--color-shell-muted);
+    background: linear-gradient(var(--color-shell), transparent);
+  }
+
+  /* The bottom fade ends on the foot's rule, with no hairline of its own, so there is one rule there, not two (M2). */
+  .shell-rail__scroll::after {
+    inset-block-end: calc(-1 * var(--space-2));
+    margin-block-start: calc(-1 * var(--space-6));
+    background: linear-gradient(transparent, var(--color-shell));
+  }
+
+  @container scroll-state(scrollable: block-start) {
+    .shell-rail__scroll::before {
+      opacity: 1;
+    }
+  }
+
+  @container scroll-state(scrollable: block-end) {
+    .shell-rail__scroll::after {
+      opacity: 1;
+    }
+  }
+
+  /* Without scroll-state queries but with scroll-driven animations: the same cue, shown by the scroll position (it follows
+     the scroll, never a timer). A browser with neither keeps the cues at opacity 0: the thin scrollbar alone says the part
+     scrolls (review I2; a zero-length animation on the document timeline would hold the top cue on for good). */
+  @supports (animation-timeline: scroll()) and (not (container-type: scroll-state)) {
+    .shell-rail__scroll::before,
+    .shell-rail__scroll::after {
+      animation: shell-rail-cue linear both;
+      animation-timeline: scroll();
+    }
+
+    .shell-rail__scroll::before {
+      animation-range: 0 2rem;
+    }
+
+    .shell-rail__scroll::after {
+      animation-direction: reverse;
+      animation-range: calc(100% - 2rem) 100%;
+    }
+  }
+}
+
+@keyframes shell-rail-cue {
+  to {
+    opacity: 1;
+  }
 }
 
 /* The sign-out warning (SignOutWithDraftsGuard) is a surface box inside the rail: it takes the page's ink, not the rail's. */
 .shell-rail [data-sign-out-drafts] {
   color: var(--color-ink);
 }
+/* The brand (the locked sketch's "Mak-AI / MAK-AI RAI Platform"): the logo, the platform's name under it, one link Home. */
+.shell-rail__brand {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-control);
+  color: var(--color-shell-ink);
+  text-decoration: none;
+}
+
+.shell-rail__brand:hover {
+  /* a:hover in app/globals.css (0,1,1) would paint it the link colour, navy on navy. */
+  color: var(--color-shell-ink);
+}
+
+.shell-rail__brand:hover .shell-rail__product {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.shell-rail__logo {
+  display: block;
+}
+
 .shell-rail__product {
-  padding-inline: var(--space-3);
   color: var(--color-shell-muted);
   font-size: var(--font-size-small);
-  font-weight: var(--font-weight-semibold);
   overflow-wrap: anywhere;
 }
 
@@ -149,19 +465,20 @@
   display: flex;
   flex: 1 0 auto;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-2);
 }
 
+/* Items at the sketch's 44 px pitch, with no gap between them (review D4 a, D8). */
 .shell-rail__nav ul {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: 0;
   list-style: none;
 }
 
 .shell-rail__lower {
   margin-block-start: auto;
-  padding-block-start: var(--space-4);
+  padding-block-start: var(--space-2);
   border-block-start: 1px solid var(--color-shell-hover);
 }
 
@@ -217,8 +534,157 @@
 
 .shell-rail__actions {
   display: flex;
+  flex-direction: row;
+  gap: var(--space-1);
+}
+
+/* Sign out and the theme switch share one row (lead's ruling, rail fit): Sign out takes the room and keeps its words; the
+   switch is a 44 px square showing its icon, its words kept as its accessible name (they change with the theme). */
+.shell-rail__actions > :first-child {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+
+.shell-rail__actions .shell-theme {
+  flex: none;
+  justify-content: center;
+  inline-size: var(--target-primary);
+  padding-inline: 0;
+}
+
+.shell-rail__actions .shell-theme__label {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ── The rail's project block (owner ruling R4; the locked sketch's `.lines`): the project, the stage sentence, the three
+   stages with a line mark and one line of state. The stage in the address sits on the lighter navy plate; its "You are
+   here" is shell ink, not orange: spec 7.1 puts no orange text on the navy, so the orange is the disc on its line mark. ── */
+.shell-project {
+  display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  padding-block-start: var(--space-2);
+}
+
+.shell-project__name {
+  padding-inline: var(--space-2);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-bold);
+  overflow-wrap: anywhere;
+}
+
+.shell-project__name a {
+  /* A 24 px target (UX-34): the stage sentence that spaced it from the first stage line has left the rail. */
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--target-min);
+  color: var(--color-shell-ink);
+  text-decoration: none;
+}
+
+.shell-project__name a:hover {
+  color: var(--color-shell-ink);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.shell-rail__nav .shell-project__stages {
+  gap: 0;
+}
+
+.shell-project__stage {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+  min-block-size: 48px;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  color: var(--color-shell-ink);
+  font-weight: var(--font-weight-semibold);
+  text-decoration: none;
+}
+
+/* The lighter plate marks the current stage alone; a hovered stage underlines its name (review D13). */
+.shell-project__stage--current {
+  background-color: var(--color-shell-hover);
+  color: var(--color-shell-ink);
+}
+
+.shell-project__stage:hover {
+  /* a:hover in app/globals.css (0,1,1) would paint it the link colour, navy on navy. */
+  color: var(--color-shell-ink);
+}
+
+.shell-project__stage:hover .shell-project__stage-name {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.shell-project__stage-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  /* A word breaks only when it cannot fit at all, so "Post-processing" stays whole in the rail's column. */
+  overflow-wrap: break-word;
+}
+
+.shell-project__state {
+  color: var(--color-shell-muted);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-heading);
+}
+
+.shell-project__stage--current .shell-project__state {
+  /* The shell ink. Lane 7's peach role token for this line (the coordinator's ruling reversing D12) is read here once its
+     merge defines it in globals.css: a read of an undefined name fails the legacy-tokens lint (review I1). */
+  color: var(--color-shell-ink);
+  font-weight: var(--font-weight-semibold);
+}
+
+.shell-project__mark {
+  overflow: visible;
+}
+
+.shell-project__mark path {
+  fill: none;
+  stroke: var(--color-shell-muted);
+  stroke-width: 4;
+  stroke-linecap: round;
+  opacity: 0.55;
+}
+
+.shell-project__stage--started .shell-project__mark path {
+  opacity: 1;
+}
+
+.shell-project__stage--current .shell-project__mark path {
+  stroke: var(--color-shell-ink);
+  opacity: 1;
+}
+
+.shell-project__mark circle {
+  fill: var(--color-action);
+  stroke: var(--color-shell-ink);
+  stroke-width: 2;
+}
+
+@media (forced-colors: active) {
+  .shell-project__stage--current {
+    border-color: CanvasText;
+    border-inline-start-width: 4px;
+  }
+
+  .shell-project__mark path,
+  .shell-project__mark circle {
+    stroke: CanvasText;
+  }
 }
 
 /* ── The organisation switcher ── */
@@ -229,8 +695,9 @@
 }
 
 .shell-org > .shell-org__name {
-  padding: var(--space-2) var(--space-3);
-  font-weight: var(--font-weight-semibold);
+  padding: var(--space-1) var(--space-3);
+  /* A quieter line than the brand above it (review D3): 14 px, regular. */
+  font-size: var(--font-size-small);
   overflow-wrap: anywhere;
 }
 

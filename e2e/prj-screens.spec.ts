@@ -6,6 +6,7 @@ import {
   addAcceptedRisk, addFinding, addMitigationVersion, addProject, buildOrg, type FixtureAccount, type OrgFixture,
 } from '../__tests__/helpers/recordFixture';
 import { testDb } from '../__tests__/helpers/db';
+import { escapeRe } from '../__tests__/helpers/escapeRe';
 import type { Stage } from '../types/record';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { failOnDialog } from './helpers/dialogs';
@@ -137,8 +138,10 @@ test('UX-06 R8: to-do counts come before recorded counts; status is words in ink
 
 test('NFR-A11Y-02 FR-PRJ-03: keyboard only, an owner opens S-10, archives with the inline confirmation, and sees the banner', async ({ browser }) => {
   const page = await signedIn(browser, fx.members.owner);
-  await page.goto(path('/dashboard'));
-  await tabUntil(page, new RegExp(KEYBOARD_NAME));
+  // From the projects list: Home now shows one project's stages (plan 1B Task 10), not a card per project.
+  await page.goto(path('/projects'));
+  // Anchored to the whole text: the kit Table's focusable scroll region also holds the name in its text, and Enter does nothing there.
+  await tabUntil(page, new RegExp(`^${escapeRe(KEYBOARD_NAME)}$`));
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(new RegExp(`/projects/${keyboardProject.id}$`));
   await tabUntil(page, /^Archive project$/);
@@ -273,19 +276,20 @@ test('L5-4 D-398: after a failed unarchive focus is on Retry, and stays on Retry
   await button.focus();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('status').filter({ hasText: PROJECT_WRITE_COPY.unarchive.lost })).toBeVisible();
-  const retry = page.locator('li', { hasText: name }).getByRole('button', { name: PROJECT_WRITE_COPY.unarchive.retry, exact: true });
+  const retry = page.locator('#projects-list tr', { hasText: name }).getByRole('button', { name: PROJECT_WRITE_COPY.unarchive.retry, exact: true });
   await expect(retry).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(retry).toBeFocused();
   await expect(retry).toHaveAttribute('aria-busy', 'true');
   release();
   await expect(page.getByRole('button', { name: PROJECT_WRITE_COPY.unarchive.named(name) })).toHaveCount(0);
-  // ruling L5-13: the success after a Retry leaves focus on the Active heading, where the project now is, not on the body
-  await expect(page.locator('section[aria-labelledby="projects-active"] li', { hasText: name })).toBeVisible();
-  await expect(page.locator('#projects-active')).toBeFocused();
+  // ruling L5-13 (plan 1B Task 12, one list): the success after a Retry leaves focus on the list, where the project is now an
+  // active row, not on the body
+  await expect(page.locator('#projects-list tr', { hasText: name }).locator('.projects-list__state')).toHaveText(PROJECT_COPY.allProjects.active);
+  await expect(page.locator('#projects-list [role="region"]')).toBeFocused();
 });
 
-test('L5-4 L5-13: after a successful unarchive the row is under Active and focus is on the Active heading, not the page body; the pressed button shows the kit\'s spinner while its request is held', async ({ browser }) => {
+test('L5-4 L5-13: after a successful unarchive the row says Active and focus is on the projects list, not the page body; the pressed button shows the kit\'s spinner while its request is held', async ({ browser }) => {
   const name = `PRJ focus unarchived ${RUN}`;
   await addProject(fx, { name, archived: true });
   const page = await signedIn(browser, fx.members.owner);
@@ -300,9 +304,81 @@ test('L5-4 L5-13: after a successful unarchive the row is under Active and focus
   await expect(button.locator('.ui-button__spinner[aria-hidden="true"]')).toHaveCount(1);
   await expect(button).toBeFocused();
   release();
-  await expect(page.locator('section[aria-labelledby="projects-active"] li', { hasText: name })).toBeVisible();
-  await expect(page.locator('#projects-active')).toBeFocused();
+  await expect(page.locator('#projects-list tr', { hasText: name }).locator('.projects-list__state')).toHaveText(PROJECT_COPY.allProjects.active);
+  await expect(page.locator('#projects-list [role="region"]')).toBeFocused();
   expect(await page.evaluate(() => document.activeElement === document.body)).toBe(false);
+  // design review 16: the list's status line says what happened, after the refresh, and the focused region shows its ring
+  await expect(page.locator('#projects-list .projects-list__status[role="status"]')).toHaveText(PROJECT_WRITE_COPY.unarchive.unarchived(name));
+  expect(await page.locator('#projects-list [role="region"]').evaluate((el) => getComputedStyle(el).outlineStyle)).toBe('solid');
+});
+
+/** The list's status line on S-32 (design review 16): one polite line above the table. */
+const listStatus = (page: Page) => page.locator('#projects-list .projects-list__status[role="status"]');
+const rowOf = (page: Page, name: string) => page.locator('#projects-list tr', { hasText: name });
+
+test('re-review N1: the Unarchive sentence appears only once the refreshed list shows the row as Active, with no Unarchive button', async ({ browser }) => {
+  const name = `PRJ announce after refresh ${RUN}`;
+  await addProject(fx, { name, archived: true });
+  const page = await signedIn(browser, fx.members.owner);
+  await page.goto(path('/projects'));
+  // hold the refresh (the RSC request of this page) so the moment between the 204 and the new list can be seen
+  let release = () => {};
+  const held = new Promise<void>((ok) => { release = ok; });
+  let refreshes = 0;
+  await page.route((url) => url.pathname === path('/projects'), async (r) => {
+    if (r.request().headers().rsc === '1') { refreshes += 1; await held; }
+    await r.continue();
+  });
+  await page.getByRole('button', { name: PROJECT_WRITE_COPY.unarchive.named(name) }).click();
+  await expect.poll(() => refreshes).toBeGreaterThan(0);
+  // the 204 has landed and the refresh is held: the row still reads Archived, so the line says nothing yet
+  await expect(rowOf(page, name).locator('.projects-list__state')).toHaveText(PROJECT_COPY.allProjects.archived);
+  await expect(listStatus(page)).toHaveText('');
+  release();
+  await expect(listStatus(page)).toHaveText(PROJECT_WRITE_COPY.unarchive.unarchived(name));
+  // at the moment the sentence is there, the row reads Active and offers no Unarchive
+  expect(await rowOf(page, name).locator('.projects-list__state').textContent()).toBe(PROJECT_COPY.allProjects.active);
+  await expect(page.getByRole('button', { name: PROJECT_WRITE_COPY.unarchive.named(name) })).toHaveCount(0);
+  await expect(page.locator('#projects-list [role="region"]')).toBeFocused();
+});
+
+test('re-review N2: a 409 not_archived (another person unarchived it first) is announced once the row is Active', async ({ browser }) => {
+  const name = `PRJ announce not archived ${RUN}`;
+  const p = await addProject(fx, { name, archived: true });
+  const page = await signedIn(browser, fx.members.owner);
+  await page.goto(path('/projects'));
+  // another session unarchives it first, from this page's own origin and cookies
+  const status = await page.evaluate(async (url) => (await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ requestId: crypto.randomUUID() }) })).status,
+    `/api/v1/orgs/${fx.org.slug}/projects/${p.id}/unarchive`);
+  expect(status).toBe(204);
+  const answers: number[] = [];
+  page.on('response', (r) => { if (r.url().endsWith('/unarchive')) answers.push(r.status()); });
+  await page.getByRole('button', { name: PROJECT_WRITE_COPY.unarchive.named(name) }).click();
+  await expect(listStatus(page)).toHaveText(PROJECT_WRITE_COPY.unarchive.unarchived(name));
+  expect(answers).toEqual([409]);
+  await expect(rowOf(page, name).locator('.projects-list__state')).toHaveText(PROJECT_COPY.allProjects.active);
+});
+
+test('re-review N2: a 409 request_id_reused and a 409 that is not the API\'s JSON never announce, and the row stays Archived', async ({ browser }) => {
+  const name = `PRJ announce refused ${RUN}`;
+  await addProject(fx, { name, archived: true });
+  const page = await signedIn(browser, fx.members.owner);
+  await page.goto(path('/projects'));
+  // request_id_reused: the API's own error body; nothing was written, the page refreshes and still lists it archived
+  await page.route('**/unarchive', (r) => r.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'conflict', code: 'request_id_reused' }) }));
+  let refreshed = false;
+  page.on('request', (r) => { if (r.headers().rsc === '1') refreshed = true; });
+  await page.getByRole('button', { name: PROJECT_WRITE_COPY.unarchive.named(name) }).click();
+  await expect.poll(() => refreshed).toBe(true);
+  await page.waitForLoadState('networkidle');
+  await expect(rowOf(page, name).locator('.projects-list__state')).toHaveText(PROJECT_COPY.allProjects.archived);
+  await expect(listStatus(page)).toHaveText('');
+  // a 409 whose body is not the API's JSON: the outcome is not known, so the row's own line says so and offers Retry
+  await page.unroute('**/unarchive');
+  await page.route('**/unarchive', (r) => r.fulfill({ status: 409, contentType: 'text/html', body: '<html>conflict</html>' }));
+  await page.getByRole('button', { name: PROJECT_WRITE_COPY.unarchive.named(name) }).click();
+  await expect(page.getByRole('status').filter({ hasText: PROJECT_WRITE_COPY.unarchive.lost })).toBeVisible();
+  await expect(listStatus(page)).toHaveText('');
 });
 
 test('UX-27 L5-14: after a successful create the form stays busy until the new page has loaded, and a second Enter sends nothing', async ({ browser }) => {
@@ -602,12 +678,35 @@ for (const width of [1280, 360, 320]) {
 }
 
 test('NFR-SEC-11 FR-PRJ-01: hostile project text shows as text on S-08, S-10 and S-32', async ({ browser }) => {
-  const page = await signedIn(browser, fx.members.owner);
+  // A Viewer: Home (plan 1B Task 10) names every active project only in a Viewer's "Still open"; a person who records
+  // sees one project's stages, which need not be this one. S-10 and S-32 read the same for every role.
+  const page = await signedIn(browser, fx.members.viewer);
   failOnDialog(page);
+  const name = HOSTILE_STRINGS[0];
   for (const p of [path('/dashboard'), path(`/projects/${hostileProject.id}`), path('/projects')]) {
     await page.goto(p);
-    await expect(page.getByText(HOSTILE_STRINGS[0]).first()).toBeVisible();
+    // Every place the name appears, shown or not (on S-10 the rail's project block, the page itself, and the narrow top
+    // bar's copy, hidden from 1024 px), holds it as text: the element's own text is the literal markup, and no element
+    // was parsed out of it. At least one occurrence is visible.
+    const occurrences = page.getByText(name, { exact: true });
+    const count = await occurrences.count();
+    expect(count, `${p}: the name appears`).toBeGreaterThan(0);
+    for (let i = 0; i < count; i += 1) {
+      const node = occurrences.nth(i);
+      expect(await node.evaluate((el) => el.textContent), `${p} #${i}`).toBe(name);
+      expect(await node.evaluate((el) => el.querySelector('script, img') === null), `${p} #${i}: no element inside`).toBe(true);
+    }
+    await expect(occurrences.filter({ visible: true }).first()).toBeVisible();
+    expect(await page.evaluate(() => [...document.querySelectorAll('script')].some((s) => (s.textContent ?? '').trim() === 'alert(1)')),
+      `${p}: no script element made from the name`).toBe(false);
   }
+  // S-10 at 1280 px: the top bar's copy of the name is in the markup but not shown, and not in the accessibility tree.
+  await page.goto(path(`/projects/${hostileProject.id}`));
+  const barCopy = page.locator('.shell-bar-project__name');
+  await expect(barCopy).toHaveText(name);
+  await expect(barCopy).toBeHidden();
+  // display: none on the bar takes it and everything in it out of the accessibility tree.
+  expect(await barCopy.evaluate((el) => getComputedStyle(el.closest('.shell-topbar')!).display)).toBe('none');
 });
 
 const SENTINELS: Record<Stage, number> = { 'pre-processing': 41, 'in-processing': 28, 'post-processing': 13 };   // in-processing gets one more below, with the mitigation   // open findings per stage after the extra in-processing finding below (28 + 1 = 29); the sum, 83, must appear nowhere
@@ -615,7 +714,9 @@ test('FR-RM-04 UX-06 UX-07: each stage count on S-10 and S-08 is a whole number 
   test.setTimeout(120_000);
   const sentinels = { 'pre-processing': [41], 'in-processing': [29], 'post-processing': [13] };
   const sum = Object.values(sentinels).reduce((n, [count]) => n + count, 0);
-  const sentinelOrg = await buildOrg({ label: 'prjsent' });
+  // Fixture text with no digits: Home (plan 1B Task 10) lists an Owner's findings with no mitigation by title, and the
+  // default titles ("Fixture title 83") would put the sum on the page as the team's own words, not as a count.
+  const sentinelOrg = await buildOrg({ label: 'prjsent', text: (field) => `Sentinel ${field}` });
   // The organisation's name carries buildOrg's random run id, whose digits can be the sum (about one id in 150 holds a whole
   // "83"), and S-10 prints the project's name in its heading and breadcrumb ("Projects › name", Route R5). Both are the
   // test's own text, so the check is told to leave them out (`ownText`). Here the project's name always holds the sum, so a

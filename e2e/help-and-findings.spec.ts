@@ -52,7 +52,8 @@ async function scrollSettled(page: Page): Promise<void> {
   await page.evaluate(
     () =>
       new Promise<void>((resolve) => {
-        const position = () => `${window.scrollY}:${document.querySelector('.shell-topbar__panel')?.scrollTop ?? 0}`;
+        // The panel scrolls below 1024 px; from 1024 px the rail's upper part does (route task 1, fix round 3).
+        const position = () => `${window.scrollY}:${document.querySelector('.shell-topbar__panel')?.scrollTop ?? 0}:${document.querySelector('.shell-rail__scroll')?.scrollTop ?? 0}`;
         let last = position();
         let still = 0;
         const tick = () => {
@@ -175,7 +176,8 @@ test.describe('Findings from the rail (P2, L2-64 to L2-66)', () => {
     page.on('pageerror', (e) => errors.push(e.message));
     await page.goto(`/orgs/${fx.org.slug}/projects/${a.id}`);
     await hydrated(page, '.shell-rail__signout');
-    await expect(rail(page).getByRole('link')).toHaveText(['Home', 'Projects', 'Findings', 'Guidance', 'Help', 'Members', 'Organisation details', 'My account']);
+    // The rail's items (its brand and, on a project's page, the project block are links too: e2e/shell-project.spec.ts).
+    await expect(rail(page).locator('a.shell-rail__item')).toHaveText(['Home', 'Projects', 'Findings', 'Guidance', 'Help', 'Members', 'Organisation', 'My account']);
     const before = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
     await rail(page).locator('.shell-theme').click();
     await expect.poll(() => page.evaluate(() => document.documentElement.getAttribute('data-theme'))).not.toBe(before);
@@ -183,10 +185,10 @@ test.describe('Findings from the rail (P2, L2-64 to L2-66)', () => {
     await page.waitForURL((u) => u.pathname === `/orgs/${fx.org.slug}/projects` && u.searchParams.get('for') === 'findings');
     const main = page.getByRole('main');
     await expect(main.getByText(CHOOSE, { exact: true })).toBeVisible();
-    // F6 (b): clear space between the line and the Active heading.
+    // F6 (b): clear space between the line and the list under it (plan 1B Task 12: one list, no Active heading).
     const below = await page.evaluate((text) => {
       const line = [...document.querySelectorAll('main p')].find((p) => p.textContent === text)!;
-      return document.getElementById('projects-active')!.getBoundingClientRect().top - line.getBoundingClientRect().bottom;
+      return document.getElementById('projects-list')!.getBoundingClientRect().top - line.getBoundingClientRect().bottom;
     }, CHOOSE);
     expect(below).toBeGreaterThanOrEqual(16);
     for (const p of [a, b]) await expect(main.locator(`a[href="/orgs/${fx.org.slug}/projects/${p.id}/findings"]`)).toHaveCount(1);

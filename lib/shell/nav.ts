@@ -1,6 +1,7 @@
 import { currentOrgSlug, isNavActive, orgHref } from '@/lib/org-nav';
 import { SHELL_COPY } from '@/lib/shell/copy';
 import type { RailItem, ShellOrg } from '@/lib/shell/types';
+import { STAGES, type Stage } from '@/types/record';
 
 /**
  * The rail's items and the role under the person's name (plan 1A Task 11, ruling L2-49), as pure functions of the address and
@@ -132,4 +133,12 @@ export function roleUnderName(pathname: string, roleLabels: Readonly<Record<stri
   if (!Object.hasOwn(roleLabels, slug)) return null;
   const label = roleLabels[slug];
   return typeof label === 'string' ? label : null;
+}
+
+/**
+ * The stage a project page's `[stage]` param names, or null (no param, or not one of the three stages): compared as a value
+ * in STAGES, never as a property lookup.
+ */
+export function stageParam(stage: string | undefined): Stage | null {
+  return STAGES.find((s) => s === stage) ?? null;
 }

@@ -119,16 +119,17 @@ test.describe('skip link, footer and landmarks (SRS 7.1.1)', () => {
     }
   });
 
-  test("UX-03: Help and contact resolves to S-28's Help and contact part", async ({ page }) => {
+  test("UX-03 (spec 8 line 271): the footer's Help and contact resolves to Help's contact section", async ({ page }) => {
     await page.goto('/login');
     await page.getByRole('link', { name: 'Help and contact' }).click();
-    await expect(page).toHaveURL(/\/about#help-and-contact$/);
-    await expect(page.locator('#help-and-contact')).toBeVisible();
+    await expect(page).toHaveURL(/\/help#contact$/);
+    await expect(page.locator('#contact')).toBeVisible();
   });
 
   test('UX-03: the signed-out pages have a header with the product name, About and Sign in', async ({ page }) => {
     await page.goto('/about');
-    const header = page.locator('body > header.shell-public-header');
+    // The root layout's frame holds the page and its footer (fix round 4, D23); the header is the page's first box in it.
+    const header = page.locator('.page-frame > header.shell-public-header');
     await expect(header.getByRole('link')).toHaveText(['MAK-AI RAI Platform', 'About', 'Sign in']);
   });
 
@@ -157,7 +158,9 @@ async function checkShell(page: import('@playwright/test').Page, url: string): P
   expect(await page.evaluate(() => !!document.activeElement?.closest('main')), `${url}: focus moves into main`).toBe(true);
 
   const credit = readCreditLine();
-  const footer = page.locator('body > footer');
+  // One footer, the frame's last box after the page (fix round 4, D23: on a signed-in page it ends the content column).
+  await expect(page.getByRole('contentinfo'), url).toHaveCount(1);
+  const footer = page.locator('.page-frame > footer:last-child');
   await expect(footer, url).toContainText(credit.text);
   await expect(footer.locator('a'), url).toHaveText([credit.licence, 'Terms and privacy', 'About', 'Help and contact']);
 }

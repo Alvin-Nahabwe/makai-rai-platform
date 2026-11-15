@@ -263,7 +263,10 @@ test.describe('S-04 and S-05 in a browser', () => {
     // S-21 keeps the shell, as for a person in no organisation: Guidance, Help and My account.
     await page.goto('/account');
     await expect(nav).toBeVisible();
-    expect(await nav.getByRole('link').evaluateAll((els) => els.map((e) => e.getAttribute('href')))).toEqual(['/explore/framework', '/help', '/account']);
+    // The logo's link (`.shell-rail__brand`) is the one link built from the organisation's slug when there is one: for this
+    // person it must go to `/` (which sends them back to the gate), never to `/orgs/...`. It is first in DOM order.
+    expect(await nav.getByRole('link').evaluateAll((els) => els.map((e) => e.getAttribute('href')))).toEqual(['/', '/explore/framework', '/help', '/account']);
+    await expect(nav.locator('a.shell-rail__brand')).toHaveAttribute('href', '/');
     await expect(nav).not.toContainText(fx.org.name);
     // Accepting moves on by a client-side navigation to /, which sends a person whose last organisation is known straight to
     // its dashboard; the shared signed-in layout must then give the rail that organisation without a reload.
@@ -272,7 +275,8 @@ test.describe('S-04 and S-05 in a browser', () => {
     for (const box of await page.getByRole('checkbox').all()) await box.check();
     await page.getByRole('button', { name: ACCEPTANCES_COPY.submit }).click();
     await page.waitForURL((u) => u.pathname === `/orgs/${fx.org.slug}/dashboard`);
-    await expect(nav.locator(`a[href="/orgs/${fx.org.slug}/dashboard"]`)).toHaveCount(1);
+    // The Home item is one link; the logo's link (`.shell-rail__brand`) goes to the same address and is not an item.
+    await expect(nav.locator(`a:not(.shell-rail__brand)[href="/orgs/${fx.org.slug}/dashboard"]`)).toHaveCount(1);
     await expect(nav.locator(`a[href="/orgs/${fx.org.slug}/projects"]`)).toHaveCount(1);
     await page.context().close();
   });

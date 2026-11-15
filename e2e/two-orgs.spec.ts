@@ -8,6 +8,8 @@ import { INVITATION_COPY } from '../lib/invitations/copy';
 import { INVITATION_PAGE_COPY } from '../lib/org/copy';
 import { roleWithArticle } from '../lib/org/copy';
 import { MEMBERS_COPY } from '../lib/org/members/copy';
+import { HOME_COPY } from '../lib/home/copy';
+import { PROJECT_COPY } from '../lib/project/copy';
 import fs from 'node:fs';
 import type { OrgRole } from '@prisma/client';
 import { can } from '../lib/authz/policy';
@@ -133,12 +135,19 @@ test.describe('an invitation moves a third person into an org, at the invited ro
     // --- Step C: land in org A, at the role that was actually granted —
     // checked two ways: (1) org A is reachable and org B is not (this
     // person was never invited to B), (2) the role-appropriate UI renders
-    // — `assessor` has `project:create`, so "New project" is
-    // visible, tying this back to the same O-13 control this suite checks
-    // elsewhere and proving the GRANTED role, not just membership.
+    // — the rebuilt Home has two variants, by whether org A has an active
+    // project (other specs create one there before this file runs in CI):
+    // the first-time page (FirstTimeHome) offers "Create a project" for a
+    // role with `project:create`; the recorder's Home offers "Start
+    // recording" / "Continue recording" for a role with `decision:write`.
+    // Either control, role-gated, proves the GRANTED role, not just
+    // membership. ("New project" no longer sits on Home: spec 9.1.)
     await thirdPage.waitForURL(`**/orgs/${orgA.slug}/dashboard?welcome=1`);
-    const startLink = thirdPage.getByRole('link', { name: 'New project' });
-    if (can('assessor', 'project:create')) {
+    const escapeRe = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const startLink = thirdPage.getByRole('link', {
+      name: new RegExp(`^(${[HOME_COPY.firstTimeCreate, PROJECT_COPY.start, HOME_COPY.continueRecording].map(escapeRe).join('|')})$`),
+    }).first();
+    if (can('assessor', 'project:create') && can('assessor', 'decision:write')) {
       await expect(startLink).toBeVisible();
     } else {
       await expect(startLink).toHaveCount(0);
