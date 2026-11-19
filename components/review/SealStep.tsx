@@ -7,6 +7,9 @@ import { isReviewBody, sealRequestRefusal } from './reviewText';
 import { retryAfter } from './retryStore';
 import { Button, ButtonLink } from '@/components/ui/Button';
 import { StatusRegion } from '@/components/ui/StatusRegion';
+import { Term } from '@/components/ui/Definition';
+import { TermTip } from '@/components/ui/TermTip';
+import { TERM_SEAL } from '@/lib/vocabulary/terms';
 import { REVIEW_COPY } from '@/lib/review/copy';
 import type { SealStepState } from '@/lib/review/sealStep';
 import type { Stage } from '@/types/record';
@@ -23,7 +26,8 @@ const NO_ID: RetryState = { requestId: null, sentBody: null };
  * (lib/review/sealStep.ts), so a role never sees a control it cannot use (design §4, anti-goal 4). "Ask a reviewer to
  * seal this stage" posts the seal request and then shows the waiting line in place of the button, with focus moved to it
  * so a keyboard or screen reader user is not left on a control that is gone. "Open and seal this stage" posts the same
- * request and goes to the review's seal page; "Seal this stage" is a link to that page, the existing seal flow.
+ * request and goes to the review's seal page; "Seal this stage" is a link to that page, the existing seal flow. A damaged
+ * latest seal says so first (fix round 1), then offers the role's control, if it has one.
  *
  * The request id is kept in memory until the request is answered, so pressing again after a lost reply sends the same
  * id; the request is idempotent per stage, so even a new id returns the review the first one opened.
@@ -35,7 +39,7 @@ export function SealStep({ orgSlug, projectId, stage, state }: SealStepProps): R
   const [status, setStatus] = useState('');
   const [alert, setAlert] = useState('');
   const retry = useRef<RetryState>(NO_ID);
-  const waitingRef = useRef<HTMLParagraphElement>(null);
+  const waitingRef = useRef<HTMLSpanElement>(null);
   const base = `/orgs/${encodeURIComponent(orgSlug)}/projects/${encodeURIComponent(projectId)}`;
 
   // After the request, the button is gone: focus moves to the line that replaced it.
@@ -72,34 +76,56 @@ export function SealStep({ orgSlug, projectId, stage, state }: SealStepProps): R
     if (refusal.refresh) router.refresh();
   }
 
-  const shown: SealStepState = state.kind === 'ask' && asked !== null ? { kind: 'waiting', reviewId: asked } : state;
+  // After an ask (also the re-request on a damaged seal) the server's state is "waiting" on the review it returned.
+  const askedFrom = state.kind === 'ask' || (state.kind === 'damaged' && state.action === 'ask');
+  const shown: SealStepState = askedFrom && asked !== null ? { kind: 'waiting', reviewId: asked } : state;
+  const askButton = (
+    <Button variant="secondary" busy={busy} onClick={() => { void send(C.ask, (review) => { setBusy(false); setAsked(review.id); router.refresh(); }); }}>
+      {C.ask}
+    </Button>
+  );
+  const sealLink = (reviewId: string) => <ButtonLink variant="secondary" href={`${base}/reviews/${encodeURIComponent(reviewId)}/seal`}>{C.seal}</ButtonLink>;
+  // Each state's first use of "seal" (the vocabulary defines it at first use) is marked as the term, with its (i) right
+  // after it in the same line, never inside the control: the stage page's own pattern (its tally, StageLine's damage line).
+  const firstUse = (words: ReactElement | string) => (
+    <p className="seal-step__line"><Term of={TERM_SEAL}>{words}</Term><TermTip of={TERM_SEAL} label={C.whatMeans(TERM_SEAL.term)} /></p>
+  );
   let step: ReactElement;
   switch (shown.kind) {
     case 'hidden':
       return null;
     case 'sealed':
+      // "sealed" is not a use of the term "seal" (whole words, lib/vocabulary/firstUse.ts termPattern).
       step = <p className="seal-step__line">{C.sealed}</p>;
       break;
     case 'waiting':
-      // A focus target after the request, as the project's other status lines are (role status, tabIndex -1).
-      step = <p className="seal-step__line" role="status" ref={waitingRef} tabIndex={-1}>{C.waiting}</p>;
+      // A focus target after the request, as the project's other status lines are (role status, tabIndex -1); the (i)
+      // sits after it, outside the status.
+      step = firstUse(<span className="seal-step__status" role="status" ref={waitingRef} tabIndex={-1}>{C.waiting}</span>);
       break;
     case 'seal':
-      step = <ButtonLink variant="secondary" href={`${base}/reviews/${encodeURIComponent(shown.reviewId)}/seal`}>{C.seal}</ButtonLink>;
+      step = firstUse(sealLink(shown.reviewId));
       break;
     case 'ask':
-      step = (
-        <Button variant="secondary" busy={busy} onClick={() => { void send(C.ask, (review) => { setBusy(false); setAsked(review.id); router.refresh(); }); }}>
-          {C.ask}
-        </Button>
-      );
+      step = firstUse(askButton);
       break;
     case 'open_and_seal':
-      step = (
+      step = firstUse(
         // Still busy while the seal page loads, so the button cannot send again.
         <Button variant="secondary" busy={busy} onClick={() => { void send(C.openAndSeal, (review) => { router.push(`${base}/reviews/${encodeURIComponent(review.id)}/seal`); }); }}>
           {C.openAndSeal}
-        </Button>
+        </Button>,
+      );
+      break;
+    case 'damaged':
+      // The damage is said first, in the words the review and project pages use (reviewStateLine); it is the step's first
+      // use of "seal", so the control after it carries no second (i).
+      step = (
+        <>
+          {firstUse(REVIEW_COPY.state.damaged)}
+          {shown.action === 'seal' ? <p className="seal-step__line">{sealLink(shown.reviewId)}</p> : null}
+          {shown.action === 'ask' ? <p className="seal-step__line">{askButton}</p> : null}
+        </>
       );
       break;
   }

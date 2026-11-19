@@ -154,6 +154,10 @@ export const REVIEW_COPY = Object.freeze({
     /** The request is idempotent per stage (clause 10), so pressing again returns the review it may already have opened. */
     lost: (button: string): string => `Not opened yet. We did not get a reply in time, so the review may already be open. Select ${button} again. It will not open twice.`,
     server: (button: string): string => `Not opened. The server had a problem. Select ${button} again.`,
+    /** A number another open took on both of the service's tries (fix round 1): pressing again returns the review that open made. */
+    numberTaken: (button: string): string => `Not opened. Someone opened a review of this stage at the same moment. Select ${button} again.`,
+    /** The name of the (i) button beside the step's first use of "seal", as the project page's (lib/project/copy.ts whatMeans). */
+    whatMeans: (term: string): string => `What does "${term}" mean?`,
   }),
 
   /** The components other pages mount (names and props frozen, ruling T18-c). */

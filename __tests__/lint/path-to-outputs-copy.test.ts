@@ -58,6 +58,7 @@ describe('path-to-outputs copy has no claims (SRS 7.5.3)', () => {
     assertNoClaims('seal step copy', {
       ask: S.ask, waiting: S.waiting, seal: S.seal, openAndSeal: S.openAndSeal, sealed: S.sealed,
       lostAsk: S.lost(S.ask), lostOpenAndSeal: S.lost(S.openAndSeal), serverAsk: S.server(S.ask), serverOpenAndSeal: S.server(S.openAndSeal),
+      numberTakenAsk: S.numberTaken(S.ask), numberTakenOpenAndSeal: S.numberTaken(S.openAndSeal), whatMeansSeal: S.whatMeans('seal'),
     });
   });
 

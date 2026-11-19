@@ -6,3 +6,8 @@
 .seal-step__line {
   margin: 0;
 }
+
+/* A damaged seal's line, then its control (fix round 1). */
+.seal-step__line + .seal-step__line {
+  margin-block-start: var(--space-2);
+}
