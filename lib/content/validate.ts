@@ -247,11 +247,7 @@ function checkVersion(c: LoadedContent, bytes: ReadonlyMap<string, Buffer>, vers
   opts: { baselineDir: string; proposalFile: string | null; completeness: boolean }, say: (p: string) => void): void {
   const rawBank = parseBytes(bytes.get('questionBank.json')!) as Json;
   const rawAreas = parseBytes(bytes.get('assessmentAreas.json')!) as Json;
-  try {
-    parseBytes(bytes.get('projectConfig.json')!);
-  } catch (e) {
-    say(`projectConfig.json is not valid JSON (${(e as Error).message})`);
-  }
+  // projectConfig.json is parsed, and its two optional keys checked, by the loader (buildLoadedContent), so a file that is not JSON never reaches here.
   const questions = [...c.questions.values()];
 
   checkStructure(c, rawBank, rawAreas, questions, say);

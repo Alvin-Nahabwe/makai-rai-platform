@@ -7,6 +7,7 @@ import { AppError } from '@/lib/http/errors';
 import * as root from '@/lib/content/root';
 import { contentRoot } from '@/lib/content/root';
 import { FIXTURE_QUESTION_IDS } from '../helpers/content';
+import { contentWith, OWNER_TABLE } from '../helpers/contentWith';
 
 /**
  * The one loader of a content version (FR-CNT-01 to 04, 06, 07). Every case runs on H0's fixture bundle
@@ -407,5 +408,42 @@ describe('buildLoadedContent refuses a version it cannot read whole', () => {
   it('FR-CNT-07 NFR-SEC-11: a versions that is a string is refused as a malformed index, not matched by substring', () => {
     vi.spyOn(root, 'readContentIndex').mockReturnValue({ running: '0.0.1-fixture', versions: '0.0.1-fixture-rc1' as unknown as string[] });
     expect(() => loadContent('0.0.1-fixture')).toThrow('content index.json: versions is not a list of strings');
+  });
+});
+
+describe('content keys: stage applicability and the control switch', () => {
+  it('G7 G6: the fixture carries neither key, so applicability is null and controls are off', () => {
+    const c = runningContent();
+    expect(c.stageApplicability).toBeNull();
+    expect(c.controlSuggestionsApproved).toBe(false);
+  });
+  it('G7 G6: the real 5.1.0 bundle is dormant with controls off', () => {
+    const c = buildLoadedContent('5.1.0', (f) => readFileSync(join('data/content/5.1.0', f)));
+    expect(c.stageApplicability).toBeNull();
+    expect(c.controlSuggestionsApproved).toBe(false);
+  });
+  it('G7: a valid table loads, frozen', () => {
+    const c = contentWith({ stageApplicability: OWNER_TABLE });
+    expect(c.stageApplicability?.concept).toEqual(['pre-processing']);
+    expect(Object.isFrozen(c.stageApplicability)).toBe(true);
+  });
+  const { concept, ...noConcept } = OWNER_TABLE;
+  it.each([
+    ['a missing key', noConcept],
+    ['an empty list', { ...OWNER_TABLE, concept: [] }],
+    ['a duplicate stage', { ...OWNER_TABLE, concept: ['pre-processing', 'pre-processing'] }],
+    ['an unknown stage', { ...OWNER_TABLE, concept: ['pre-processing', 'during'] }],
+    ['an unknown development stage key', { ...OWNER_TABLE, beta: ['pre-processing'] }],
+    ['a non-object', ['pre-processing']],
+    ['a non-list value', { ...OWNER_TABLE, concept: 'pre-processing' }],
+  ])('G7: buildLoadedContent refuses %s', (_n, table) => {
+    expect(concept).toBeDefined();
+    expect(() => contentWith({ stageApplicability: table })).toThrow(/content 0\.0\.1-fixture: .*stageApplicability/);
+  });
+  it.each([false, 'true', 1, null])('G6: buildLoadedContent refuses controlSuggestionsApproved %j', (v) => {
+    expect(() => contentWith({ controlSuggestionsApproved: v })).toThrow(/controlSuggestionsApproved/);
+  });
+  it('G6: controlSuggestionsApproved true loads as true', () => {
+    expect(contentWith({ controlSuggestionsApproved: true }).controlSuggestionsApproved).toBe(true);
   });
 });

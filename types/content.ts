@@ -1,3 +1,4 @@
+import type { DevelopmentStage } from '@prisma/client';
 import type { Stage, DocumentType } from './record';
 
 export type ContentSemver = string;
@@ -111,4 +112,11 @@ export interface LoadedContent {
   controls: ReadonlyMap<string, ContentControl>;
   reasonCodes: readonly ReasonCodeEntry[];
   documentHelp: DocumentHelpFile;
+  /**
+   * Which stages apply at each development stage (`projectConfig.json` stageApplicability); null when the content has no
+   * table, which leaves every stage applying (G7 dormant).
+   */
+  stageApplicability: Readonly<Record<DevelopmentStage, readonly Stage[]>> | null;
+  /** True only when `projectConfig.json` says `"controlSuggestionsApproved": true`; absent means false (controls hidden, G6). */
+  controlSuggestionsApproved: boolean;
 }
