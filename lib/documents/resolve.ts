@@ -20,7 +20,7 @@ import { formatFingerprint } from '@/lib/seal/format';
 import {
   CLOSED_NO_LONGER_APPLIES, CONTROLS_AFTER_APPROVAL, ETHICS_APPROVED, ETHICS_NOT_REQUIRED, ETHICS_SUBMITTED, FILE_NAME_ERASED, FINDING_CLOSED, GATE_DERIVED_NA, assignedToLine, closedByLine,
   noDecisionLine, checkAgainLine, decidedByLine, decidedInLine, decisionSource,
-  doneEvidenceLine, evidenceFileLine, fileErasedLine, findingOnQuestion, findingStatusLine, formatUtcDay, fromQuestion, lastCheckNoteLine, outsideOtherBodyLine, outsideRoleLine, personalDataAnswerLine,
+  doneEvidenceLine, evidenceFileLine, fileErasedLine, findingOnQuestion, findingOnRemovedQuestion, findingStatusLine, formatUtcDay, fromQuestion, lastCheckNoteLine, outsideOtherBodyLine, outsideRoleLine, personalDataAnswerLine,
   questionSource, reviewLineText, docTextErasedLine, draftReviewLine, utcSecond, wordsThenCode,
 } from './copy';
 import type { ResolvedField } from './render';
@@ -71,9 +71,19 @@ export type SealedStage = SnapshotStage & { seal: StageSeal };
 /**
  * Where a snapshot's rows come from: seals (an issued document), or the current answers at `takenAt` (a draft; ADR 0023).
  * `omittedAnswers` counts the current answers a draft left out because the running content no longer holds their question
- * (conflict 23): the working report's page 1 prints a line for them, so nothing is dropped without a word.
+ * (conflict 23): the working report's page 1 is to print a line for them (Task 7), so nothing is dropped without a word.
  */
-export type SnapshotProvenance = { kind: 'sealed' } | { kind: 'draft'; takenAt: UtcInstant; omittedAnswers: number };
+export type SnapshotProvenance =
+  | { kind: 'sealed' }
+  | {
+    kind: 'draft'; takenAt: UtcInstant; omittedAnswers: number;
+    /**
+     * Finding id -> its question's words in the content version its raising decision was recorded against, for each title-less
+     * shortfall finding whose question the running content no longer holds; null when that version is not listed or lacks the
+     * question (Task 6 fix I1). Such a finding prints from here, never from the running content, and is never dropped.
+     */
+    recordedQuestionWords: ReadonlyMap<string, string | null>;
+  };
 export interface DocumentSnapshot {
   provenance: SnapshotProvenance;
   documentType: DocumentType;
@@ -435,7 +445,17 @@ function sealedQuestionWords(sealed: SnapshotStage, snap: DocumentSnapshot, ques
  */
 function findingTitle(f: FindingView, sealed: SnapshotStage, snap: DocumentSnapshot): string {
   if (f.title !== null) return f.title;
-  if (f.source === 'shortfall' && f.questionId !== null) return findingOnQuestion(sealedQuestionWords(sealed, snap, f.questionId), f.questionId);
+  if (f.source === 'shortfall' && f.questionId !== null) {
+    switch (snap.provenance.kind) {
+      case 'sealed': return findingOnQuestion(sealedQuestionWords(sealed, snap, f.questionId), f.questionId);
+      case 'draft': {
+        // A draft's manifest names the running content, so a question it still holds reads as before (a moved one included).
+        if (running(snap).questions.has(f.questionId)) return findingOnQuestion(sealedQuestionWords(sealed, snap, f.questionId), f.questionId);
+        const words = snap.provenance.recordedQuestionWords.get(f.id) ?? null;
+        return words === null ? findingOnRemovedQuestion(f.questionId) : findingOnQuestion(words, f.questionId);
+      }
+    }
+  }
   return textOf(snap, 'findings', f.id, 'title', null);
 }
 

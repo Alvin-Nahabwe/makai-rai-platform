@@ -13,9 +13,14 @@ meant "never sealed" (D3).
 
 ## Decision
 
-- `DocumentSnapshot.provenance` is a discriminated union: `{ kind: 'sealed' }` or `{ kind: 'draft'; takenAt; omittedAnswers }`.
+- `DocumentSnapshot.provenance` is a discriminated union: `{ kind: 'sealed' }` or
+  `{ kind: 'draft'; takenAt; omittedAnswers; recordedQuestionWords }`.
   `omittedAnswers` counts the current answers a draft leaves out because the running content no longer holds their question
-  (Task 6, conflict 23); each is logged at warn as `DRAFT_ORPHAN_DECISION` with its id, and the working report prints a line for them.
+  in that stage (removed from the content, or moved to another stage; Task 6, conflict 23). Each is logged at warn as
+  `DRAFT_ORPHAN_DECISION` with its id. Task 7 is to print a line for them on the working report; until it does, the count
+  reaches no reader. `recordedQuestionWords` holds, for each title-less shortfall finding whose question the running content
+  no longer holds, that question's words in the content version its raising decision was recorded against (null when that
+  version is not listed or lacks the question; Task 6 fix I1).
 - Each stage's `seal` is `StageSeal` (`kind: 'sealed'`, today's fields) or `StageDraft` (`kind: 'draft'`,
   `key: 'draft:<stage>'`, `takenAt`, and the stage's reviews by name and state, never their seals).
 - `SealedSnapshot` narrows the snapshot to sealed provenance and sealed stages. `readDocumentSnapshot`
@@ -43,6 +48,10 @@ meant "never sealed" (D3).
   - MP-01 names the stage's review state: none, open, or the last one sealed.
   - MP-04 reads the running content and lists suggested controls only when its risk-area mapping is approved. Until
     then it prints a placeholder (anti-goal 3).
+  - A title-less shortfall finding on a question the running content no longer holds is printed, never dropped and never a
+    throw: its question's id with the wording of the content version its raising decision was recorded against, or, when that
+    wording cannot be found, "<id> · question no longer in the framework". A question the running content still holds, a
+    moved one included, reads as before. A sealed document's findings are unchanged.
   - A draft returns no seal ids, so nothing it prints can be recorded as a seal a document used.
 
 ## Consequences
@@ -56,7 +65,9 @@ meant "never sealed" (D3).
 - The draft builder (`readDraftRecord` in `lib/data/documents.ts`, Task 6) fills `StageDraft.openReview` (the stage's newest review
   with no seal) and `lastSealedReview` (its newest review with one) through a relation filter on `stage_reviews` that selects no
   seal column, and never reads a seal's row, manifest or sealed answers. `__tests__/integration/draft-record.test.ts` builds a
-  draft through a transaction that throws on any access to `seal` or `issuedDocument` or any raw query naming those tables.
+  draft through a transaction that throws on any access to the `seal`, `issuedDocument` or `issuedDocumentSeal` delegate, and on
+  a `$queryRaw`, `$queryRawUnsafe` or `$executeRawUnsafe` whose text names `seals`, `issued_documents` or `issued_document_seals`.
+  Those three raw methods are the ones the builder uses; the guard does not cover `$executeRaw` or `$queryRawTyped`.
 
 ## Alternatives rejected
 

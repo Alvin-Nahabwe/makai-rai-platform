@@ -117,6 +117,8 @@ export const questionSource = (questionId: string, version?: number): string =>
   `question ${questionId}${version === undefined ? '' : ` (decision version ${version})`}`;
 /** A finding raised with no title (a shortfall): its question's words, then its code (lane 6 rows C1, C2; voice rule 8). */
 export const findingOnQuestion = (words: string, questionId: string): string => `Finding on the question: ${words} (${questionId})`;
+/** A draft's title-less shortfall finding whose question no content version this deployment lists still holds (Task 6 fix I1). */
+export const findingOnRemovedQuestion = (questionId: string): string => `${questionId} · question no longer in the framework`;
 /** A named item with a code, words first and the code after (voice rule 8): "Techno-solutionist Bias (PP-01)" (lane 6 row C12). */
 export const wordsThenCode = (words: string, code: string): string => `${words} (${code})`;
 /** A gate decision's answer (FR-DOC-02 B38). */

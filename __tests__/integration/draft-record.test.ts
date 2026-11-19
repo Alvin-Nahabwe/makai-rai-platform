@@ -1,3 +1,4 @@
+import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -8,7 +9,8 @@ import { NotFoundError, withOrg, type TenantTx } from '@/lib/data/tenant';
 import { draftSnapshot, liveDecisionRows, readDocumentSnapshot, readDraftRecord, type DraftRecord } from '@/lib/data/documents';
 import { loadFieldMap } from '@/lib/documents/fieldMaps';
 import { resolveFields } from '@/lib/documents/resolve';
-import { DRAFT_PROJECT_MARK, GATE_DERIVED_NA, NOT_RECORDED_YET, PROJECT_MARK, docTextErasedLine, draftReviewLine } from '@/lib/documents/copy';
+import { DRAFT_PROJECT_MARK, GATE_DERIVED_NA, NOT_RECORDED_YET, PROJECT_MARK, docTextErasedLine, draftReviewLine, findingOnQuestion } from '@/lib/documents/copy';
+import type { LoadedQuestion } from '@/types/content';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
 import { loadContent } from '@/lib/content/loader';
 import { SEAL_SOURCE_TABLES, type SealSourceRows } from '@/lib/integrity/sealCheck.mjs';
@@ -250,9 +252,52 @@ describe('the draft record (Task 6)', () => {
     expect(r.stages['pre-processing'].decisions.has('Q-ZZ-99')).toBe(false);
     expect(r.stages['pre-processing'].decisions.has('Q-PP-12')).toBe(true);
     expect(r.omittedAnswers).toBe(1);
-    expect(draftSnapshot(r, 'data_card', 'pre-processing').provenance).toEqual({ kind: 'draft', takenAt: r.takenAt, omittedAnswers: 1 });
+    expect(draftSnapshot(r, 'data_card', 'pre-processing').provenance).toEqual({ kind: 'draft', takenAt: r.takenAt, omittedAnswers: 1, recordedQuestionWords: new Map() });
     // The finding on the orphan question is still the stage's, and every draft resolves.
     expect(r.stages['pre-processing'].findings).toHaveLength(1);
+    for (const { type, stage } of DRAFTS) expect(() => resolveFields(loadFieldMap(type), draftSnapshot(r, type, stage), {})).not.toThrow();
+  });
+
+  /** A shortfall finding as the decision service raises it (`onShortfallSaved`, lib/data/findings.ts): no title, no description. */
+  const raiseShortfall = (questionId: string, decisionVersionId: string) => testDb.finding.create({ data: {
+    orgId: fx.org.id, projectId, stage: 'pre-processing', source: 'shortfall', questionId, decisionVersionId, riskArea: null, title: null,
+    description: null, raisedById: fx.members.assessor.userId, requestId: randomUUID(), requestDigest: createHash('sha256').update(randomUUID()).digest('hex'),
+  } });
+  /** The draft mitigation plan of pre-processing's three finding fields, as printed. */
+  const planFindingTexts = (r: DraftRecord): string[] => {
+    const out = resolveFields(loadFieldMap('mitigation_plan'), draftSnapshot(r, 'mitigation_plan', 'pre-processing'), {});
+    return out.fields.map((f) => f.text ?? '');
+  };
+
+  it('I1: a title-less shortfall finding on a question the running content removed prints that question in the wording of the version its decision was recorded against', async () => {
+    // Recorded against 0.0.1-fixture; the running content becomes 0.0.2-fixture without Q-PP-01 (whose 0.0.2 wording differs).
+    const recordedWords = loadContent('0.0.1-fixture').questions.get('Q-PP-01')?.text as string;
+    const partly = await decide('pre-processing', 'Q-PP-01', { status: 'partly' });
+    const finding = await raiseShortfall('Q-PP-01', partly.id);
+    await addMitigationVersion(fx, finding.id, { status: 'planned', owner: 'assessor', dueDate: '2026-12-01' });
+    await useFixtureContent('0.0.2-fixture');
+    const running = loadContent('0.0.2-fixture').questions as Map<string, LoadedQuestion>;
+    const removed = running.get('Q-PP-01') as LoadedQuestion;
+    expect(removed.text).not.toBe(recordedWords);
+    running.delete('Q-PP-01');
+    try {
+      const r = await readDraft();
+      expect(r.stages['pre-processing'].findings.map((f) => f.finding.title)).toEqual([null]);
+      const texts = planFindingTexts(r);
+      expect(texts.some((t) => t.includes(findingOnQuestion(recordedWords, 'Q-PP-01')))).toBe(true);
+      expect(texts.some((t) => t.includes(removed.text))).toBe(false);
+      for (const { type, stage } of DRAFTS) expect(() => resolveFields(loadFieldMap(type), draftSnapshot(r, type, stage), {})).not.toThrow();
+    } finally {
+      running.set('Q-PP-01', removed);
+    }
+  });
+
+  it('I1: when no content version holds the removed question either, the finding prints its id and the fixed line, and is not dropped', async () => {
+    const orphan = await decide('pre-processing', 'Q-ZZ-99', { status: 'partly' });
+    await raiseShortfall('Q-ZZ-99', orphan.id);
+    const r = await readDraft();
+    const texts = planFindingTexts(r);
+    expect(texts.some((t) => t.includes('Q-ZZ-99 · question no longer in the framework'))).toBe(true);
     for (const { type, stage } of DRAFTS) expect(() => resolveFields(loadFieldMap(type), draftSnapshot(r, type, stage), {})).not.toThrow();
   });
 

@@ -454,8 +454,41 @@ export interface DraftRecord {
   today: CalendarDate;
   erasures: DocumentSnapshot['erasures'];
   developmentStage: string | null;
-  /** Current answers left out because the running content no longer holds their question (conflict 23); Task 7's page 1 prints a line for them. */
+  /** Current answers left out because the running content no longer holds their question (conflict 23); Task 7's page 1 is to print a line for them. */
   omittedAnswers: number;
+  /** See `SnapshotProvenance`: the recorded wording of each title-less shortfall finding's question the running content lacks (fix I1). */
+  recordedQuestionWords: ReadonlyMap<string, string | null>;
+}
+
+/**
+ * For each title-less shortfall finding of the stages whose question the running content does not hold, that question's words in the
+ * content version its raising decision was recorded against, or null when this deployment does not list that version
+ * (`unknown_content_version`), the version lacks the question, or the finding names no decision (Task 6 fix I1). A draft prints such a
+ * finding from this, so a question a release removed never makes the draft throw and its finding is never dropped.
+ */
+async function recordedQuestionWordsOf(tx: TenantTx, stages: Iterable<SnapshotStage>, content: LoadedContent): Promise<Map<string, string | null>> {
+  const wanted = [...stages].flatMap((s) => s.findings.map((sf) => sf.finding))
+    .filter((f) => f.source === 'shortfall' && f.title === null && f.questionId !== null && !content.questions.has(f.questionId));
+  const out = new Map<string, string | null>();
+  if (wanted.length === 0) return out;
+  const versionIds = [...new Set(wanted.flatMap((f) => (f.decisionVersionId === null ? [] : [f.decisionVersionId])))];
+  const rows = await tx.decisionVersion.findMany({ where: { id: { in: versionIds } }, select: { id: true, contentVersionId: true } });
+  const recordedIn = new Map(rows.map((r) => [r.id, r.contentVersionId]));
+  const loaded = new Map<string, LoadedContent | null>();
+  for (const contentVersionId of new Set(rows.map((r) => r.contentVersionId))) {
+    try {
+      loaded.set(contentVersionId, loadContent((await contentRefById(tx, contentVersionId)).semver));
+    } catch (e) {
+      if (!(e instanceof AppError && e.code === 'unknown_content_version')) throw e;
+      loaded.set(contentVersionId, null);
+    }
+  }
+  for (const f of wanted) {
+    const cv = f.decisionVersionId === null ? undefined : recordedIn.get(f.decisionVersionId);
+    const recorded = cv === undefined ? null : loaded.get(cv) ?? null;
+    out.set(f.id, recorded?.questions.get(f.questionId as string)?.text ?? null);
+  }
+  return out;
 }
 
 /**
@@ -519,13 +552,14 @@ export async function readDraftRecord(tx: TenantTx, projectId: string, viewer: A
     takenAt: at.toISOString(), stages: every,
     stagesWithAnswers: STAGES.filter((st) => every[st].manifest.decisions.some((d) => 'id' in d)),
     contents, project, organisationName, today, erasures, developmentStage: project.metadata.developmentStage ?? null, omittedAnswers,
+    recordedQuestionWords: await recordedQuestionWordsOf(tx, Object.values(every), content),
   };
 }
 
 /** The draft snapshot of one document of a draft record (pure): the one resolver reads it as it reads an issued one (ADR 0023). */
 export function draftSnapshot(r: DraftRecord, documentType: DocumentType, reviewStage: Stage): DocumentSnapshot {
   return {
-    provenance: { kind: 'draft', takenAt: r.takenAt, omittedAnswers: r.omittedAnswers }, documentType, reviewStage, chosen: r.stages[reviewStage],
+    provenance: { kind: 'draft', takenAt: r.takenAt, omittedAnswers: r.omittedAnswers, recordedQuestionWords: r.recordedQuestionWords }, documentType, reviewStage, chosen: r.stages[reviewStage],
     stages: r.stages, contents: r.contents, project: r.project, organisationName: r.organisationName, today: r.today, erasures: r.erasures,
   };
 }
