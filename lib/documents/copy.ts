@@ -123,6 +123,29 @@ export const findingOnRemovedQuestion = (questionId: string): string => `${quest
 export const NO_RISK_AREA_GROUP = 'Raised by the team, no risk area';
 /** Page 1: the heading of open items whose question a release has since removed, so no area can be named for them. */
 export const REMOVED_QUESTION_GROUP = 'On questions no longer in the framework';
+/** The name of the whole draft PDF and of page 1 on its own (the document title and the footer's first line). */
+export const WORKING_REPORT_TITLE = 'Working report';
+/** Page 1 of the working report as a PDF (path to outputs, Task 8): its headings follow the design (G1), the rest is plain labels. */
+export const WORKING_REPORT_PAGE = Object.freeze({
+  title: 'Where this project stands',
+  nextSteps: 'Next steps',
+  riskAccepted: 'Risk accepted by the team',
+  inPlace: 'Already in place',
+  doesNotApply: "Doesn't apply",
+  nothingOpen: 'Nothing is open.',
+  nothingInPlace: 'No question is recorded as done yet.',
+  nothingNotApplicable: 'No question is recorded as not applying.',
+  question: 'Question',
+  answer: 'Answer',
+  alsoTouches: 'Also touches',
+  controls: 'Suggested controls',
+  hasNotebook: 'notebook available',
+  reason: 'Reason',
+  /** Printed only when some current answers could not be shown because the running content no longer holds their question (conflict 23). */
+  omitted: (n: number): string => (n === 1
+    ? '1 recorded answer is not shown here, because its question is no longer in the framework.'
+    : `${n} recorded answers are not shown here, because their questions are no longer in the framework.`),
+});
 /** A named item with a code, words first and the code after (voice rule 8): "Techno-solutionist Bias (PP-01)" (lane 6 row C12). */
 export const wordsThenCode = (words: string, code: string): string => `${words} (${code})`;
 /** A gate decision's answer (FR-DOC-02 B38). */

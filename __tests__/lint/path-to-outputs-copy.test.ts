@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CONTROLS_AFTER_APPROVAL, DRAFT_PROJECT_MARK, NOT_RECORDED_YET, NOT_SEALED, NO_RISK_AREA_GROUP, REMOVED_QUESTION_GROUP, TYPED_AT_ISSUE, draftLine, draftReviewLine,
+  CONTROLS_AFTER_APPROVAL, DRAFT_PROJECT_MARK, NOT_RECORDED_YET, NOT_SEALED, NO_RISK_AREA_GROUP, REMOVED_QUESTION_GROUP, TYPED_AT_ISSUE, WORKING_REPORT_PAGE, WORKING_REPORT_TITLE, draftLine, draftReviewLine,
 } from '@/lib/documents/copy';
 import { TERM_WORKING_REPORT } from '@/lib/vocabulary/terms';
 import { assertNoClaims } from '../helpers/copyClaims';
@@ -26,6 +26,12 @@ describe('path-to-outputs copy has no claims (SRS 7.5.3)', () => {
 
   it('the page 1 group headings hold no claim (Task 7)', () => {
     assertNoClaims('working report page 1 headings', { NO_RISK_AREA_GROUP, REMOVED_QUESTION_GROUP });
+  });
+
+  it('page 1 of the working report PDF holds no claim (Task 8)', () => {
+    assertNoClaims('working report PDF copy', {
+      WORKING_REPORT_TITLE, ...WORKING_REPORT_PAGE, omitted: WORKING_REPORT_PAGE.omitted(1), omittedMany: WORKING_REPORT_PAGE.omitted(3),
+    });
   });
 
   it('the draft line prints the platform zone, as the design fixes it', () => {

@@ -781,7 +781,7 @@ function checkSealsAgainstRows(
 /** Prisma's interactive-transaction default is 5 s; the snapshot of a large review reads more rows than that allows on a slow disk. */
 const READ_TIMEOUT_MS = 15_000;
 
-const sealsOf = (snap: SealedSnapshot, ids: readonly string[]): RenderInput['seals'] => ids.map((id) => {
+const sealsOf = (snap: SealedSnapshot, ids: readonly string[]): Extract<RenderInput['stamp'], { kind: 'issued' }>['seals'] => ids.map((id) => {
   const stage = STAGES.map((s) => snap.stages[s]).find((s) => s?.seal.sealId === id);
   if (stage === undefined || stage === null) throw new Error(`documents: the document used seal ${id}, which is not in its snapshot`);
   return { sealId: id, sealNumber: stage.seal.sealNumber, reviewId: stage.seal.reviewId, reviewName: stage.seal.reviewName, fingerprint: stage.seal.fingerprint };
@@ -812,7 +812,7 @@ async function build(type: DocumentType, renderer: Renderer, snap: SealedSnapsho
   const map = loadFieldMap(type);
   const resolved = resolveFields(map, snap, typed);
   const input: RenderInput = {
-    map, fields: resolved.fields, seals: sealsOf(snap, resolved.sealIds), issuedAt: issuedAt.toISOString(),
+    map, fields: resolved.fields, stamp: { kind: 'issued', issuedAt: issuedAt.toISOString(), seals: sealsOf(snap, resolved.sealIds) },
     organisationName: snap.organisationName, projectName: snap.project.name,
   };
   return { map, resolved, rendered: await renderer(input) };

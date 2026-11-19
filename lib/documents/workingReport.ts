@@ -1,5 +1,5 @@
 import type { LoadedContent, LoadedQuestion } from '@/types/content';
-import type { Stage, UtcInstant } from '@/types/record';
+import type { DocumentType, Stage, UtcInstant } from '@/types/record';
 import { STAGES } from '@/types/record';
 import type { DraftRecord } from '@/lib/data/documents';
 import { loadResources } from '@/lib/content/resources';
@@ -163,4 +163,33 @@ export function buildWorkingReportSummary(r: DraftRecord, content: LoadedContent
   }
 
   return { takenAt: r.takenAt, controlsShown, omittedAnswers: r.omittedAnswers, nextSteps, riskAccepted: accepted.map((a) => a.row), inPlace, doesNotApply };
+}
+
+// ─── The parts of the report, in order ────────────────────────────────────────────────────────────
+
+/** What a download or the screen asks for: the whole report, page 1, one card, or the plan of one stage. */
+export type WorkingReportPart = 'all' | 'summary' | 'data_card' | 'model_card' | `mitigation_plan:${Stage}`;
+/** One page-group of the report: page 1, or one draft document read at a stage. Mapped to PDF pages and to screen sections alike. */
+export type ReportPageRef = { kind: 'summary' } | { kind: 'document'; documentType: DocumentType; reviewStage: Stage };
+
+/** The stage each card is read at: the data card is the pre-processing document and the model card the in-processing one (their field maps name those stages). */
+const CARD_STAGE = { data_card: 'pre-processing', model_card: 'in-processing' } as const satisfies Partial<Record<DocumentType, Stage>>;
+
+/**
+ * The order of the report, defined here once (conflict 14): page 1, the data card, the model card, then a mitigation plan for each stage with
+ * answers, in stage order. A single part is that part alone, so a plan asked for by name is made even for a stage with no answers yet.
+ */
+export function workingReportPages(r: DraftRecord, part: WorkingReportPart): ReportPageRef[] {
+  const card = (documentType: 'data_card' | 'model_card'): ReportPageRef => ({ kind: 'document', documentType, reviewStage: CARD_STAGE[documentType] });
+  const plan = (reviewStage: Stage): ReportPageRef => ({ kind: 'document', documentType: 'mitigation_plan', reviewStage });
+  switch (part) {
+    case 'all': return [{ kind: 'summary' }, card('data_card'), card('model_card'), ...r.stagesWithAnswers.map(plan)];
+    case 'summary': return [{ kind: 'summary' }];
+    case 'data_card': case 'model_card': return [card(part)];
+    default: {
+      const stage = part.slice('mitigation_plan:'.length) as Stage;
+      if (!STAGES.includes(stage)) throw new Error(`workingReportPages: unknown part ${JSON.stringify(part)}`);
+      return [plan(stage)];
+    }
+  }
 }

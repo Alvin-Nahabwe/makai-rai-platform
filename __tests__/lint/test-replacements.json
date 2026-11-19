@@ -3150,5 +3150,13 @@
     "property": "The hand-built sealed snapshot is unchanged in content; only the provenance discriminants the type now requires are added.",
     "proof": "Two module lines change and none is added: sealedStage's seal literal gains kind: 'sealed' before sealId, and snapshot's returned object gains provenance: { kind: 'sealed' } before documentType. Both are the discriminants that DocumentSnapshot's draft provenance (ADR 0023) makes required, and both name the sealed arm, so every resolver takes the path it took before. Every case body is byte-identical to 5a34457e; the cases still assert sealIds, NOT_RECORDED_AT_ISSUE and the fingerprint line as before, and pass.",
     "task": "path to outputs, Task 5"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/document-render.test.ts::(module)",
+    "replacedBy": "__tests__/unit/document-render.test.ts::FR-PUB-01 FR-DOC-02 (SRS 7.5.3): the printed copy holds no claim word outside the allowed statement, and no form of \"fail\"",
+    "property": "Every case renders the same issued input; only the shape changes from {issuedAt, seals} to stamp: {kind: 'issued', issuedAt, seals}.",
+    "proof": "One module line changes and none is added: input()'s returned object takes stamp: { kind: 'issued', issuedAt, seals } where it took seals and issuedAt side by side. RenderInput (path to outputs, Task 8) now carries what the footer says the document is as one stamp, issued or draft, and this is the issued arm with the same two values. Every case body is byte-identical to its previous version, and the cases still assert the footer's issue time, the statement, the sealed note and the printed fields as before, and pass. working-report-pdf.test.ts also compares an issued data card and plan with their output captured before the change.",
+    "task": "path to outputs, Task 8"
   }
 ]

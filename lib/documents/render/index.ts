@@ -7,10 +7,14 @@ import { renderModelCard } from './modelCard';
 
 /** One field as the frame prints it: label, text (null prints "Not recorded") and the provenance line (contract Services row). */
 export type ResolvedField = { fieldId: string; label: string; section: string; text: string | null; provenance: string };
-export type RenderInput = {
-  map: FieldMap; fields: ResolvedField[]; seals: Array<SealRef & { fingerprint: string }>;
-  issuedAt: UtcInstant; organisationName: string; projectName: string;
-};
+/**
+ * What the footer says the document is. An issued document names its time of issue and the seals it drew on. A draft names when its answers
+ * were read, and has no seals, no fingerprint and no issue time to print (path to outputs, anti-goal 1).
+ */
+export type RenderStamp =
+  | { kind: 'issued'; issuedAt: UtcInstant; seals: Array<SealRef & { fingerprint: string }> }
+  | { kind: 'draft'; takenAt: UtcInstant };
+export type RenderInput = { map: FieldMap; fields: ResolvedField[]; stamp: RenderStamp; organisationName: string; projectName: string };
 export type Renderer = (input: RenderInput) => Promise<{ pdf: Buffer; plainText: string }>;
 
 /** The renderer of each document type. A type with no renderer is `null` (S-18 offers only the types that have one). */

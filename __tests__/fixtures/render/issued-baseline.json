@@ -1,0 +1,63 @@
+{
+ "data_card": {
+  "plainText": "Data card\nOrganisation: Org\nProject: Project\n\nMotivation\n\nDC-01 Purpose: why was this dataset created?\nAnswer 0 for DC-01\n\nDC-02 Creators\nAnswer 1 for DC-02\nFrom Q-PP-12 v1.\n\nDC-03 Funding source\nNot recorded\n\nComposition\n\nDC-04 What do the instances represent?\nAnswer 3 for DC-04\nFrom Q-PP-12 v1.\n\nDC-05 Total instance count\nAnswer 4 for DC-05\n\nDC-06 Data types included\nAnswer 5 for DC-06\nFrom Q-PP-12 v1.\n\nData card, issued 3 Nov 2026 10:42:07 UTC\nMade from this team's own records in the MAK-AI RAI Platform. It is not an ethics approval, audit, certification or compliance statement.\nThe platform keeps this seal. No outside body has time-stamped it.\n",
+  "pages": [
+   [
+    "Data card",
+    "Organisation: Org",
+    "Project: Project",
+    "Motivation",
+    "DC-01 Purpose: why was this dataset created?",
+    "Answer 0 for DC-01",
+    "DC-02 Creators",
+    "Answer 1 for DC-02",
+    "From Q-PP-12 v1.",
+    "DC-03 Funding source",
+    "Not recorded",
+    "Composition",
+    "DC-04 What do the instances represent?",
+    "Answer 3 for DC-04",
+    "From Q-PP-12 v1.",
+    "DC-05 Total instance count",
+    "Answer 4 for DC-05",
+    "DC-06 Data types included",
+    "Answer 5 for DC-06",
+    "From Q-PP-12 v1.",
+    "Data card, issued 3 Nov 2026 10:42:07 UTC",
+    "Made from this team's own records in the MAK-AI RAI Platform. It is not an ethics approval, audit, certification or compliance statement.",
+    "The platform keeps this seal. No outside body has time-stamped it."
+   ]
+  ]
+ },
+ "mitigation_plan": {
+  "plainText": "Mitigation plan\nOrganisation: Org\nProject: Project\n\nScope\n\nMP-01 Stage and review\nAnswer 0 for MP-01\n\nMP-02 Number of findings and mitigations\nAnswer 1 for MP-02\nFrom Q-PP-12 v1.\n\nRemaining risks: open findings and accepted risks\n\nMP-03 Open findings and their mitigations\nNot recorded\n\nMP-04 Controls the framework suggests for each open finding\nAnswer 3 for MP-04\nFrom Q-PP-12 v1.\n\nMP-06 Accepted risks\nAnswer 4 for MP-06\n\nFindings closed by a mitigation\n\nMP-05 Findings closed, with their evidence\nAnswer 5 for MP-05\nFrom Q-PP-12 v1.\n\nMitigation plan, issued 3 Nov 2026 10:42:07 UTC\nMade from this team's own records in the MAK-AI RAI Platform. It is not an ethics approval, audit, certification or compliance statement.\nThe platform keeps this seal. No outside body has time-stamped it.\n",
+  "pages": [
+   [
+    "Mitigation plan",
+    "Organisation: Org",
+    "Project: Project",
+    "Scope",
+    "MP-01 Stage and review",
+    "Answer 0 for MP-01",
+    "MP-02 Number of findings and mitigations",
+    "Answer 1 for MP-02",
+    "From Q-PP-12 v1.",
+    "Remaining risks: open findings and accepted risks",
+    "MP-03 Open findings and their mitigations",
+    "Not recorded",
+    "MP-04 Controls the framework suggests for each open finding",
+    "Answer 3 for MP-04",
+    "From Q-PP-12 v1.",
+    "MP-06 Accepted risks",
+    "Answer 4 for MP-06",
+    "Findings closed by a mitigation",
+    "MP-05 Findings closed, with their evidence",
+    "Answer 5 for MP-05",
+    "From Q-PP-12 v1.",
+    "Mitigation plan, issued 3 Nov 2026 10:42:07 UTC",
+    "Made from this team's own records in the MAK-AI RAI Platform. It is not an ethics approval, audit, certification or compliance statement.",
+    "The platform keeps this seal. No outside body has time-stamped it."
+   ]
+  ]
+ }
+}
