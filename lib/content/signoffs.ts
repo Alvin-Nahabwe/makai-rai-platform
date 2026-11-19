@@ -26,7 +26,8 @@ export type SignOffPayload =
   | {
       batch: 'risk-mapping';
       questions: Array<{ id: string; gaps: string[]; optionAreas: Record<string, string[]> | null }>;
-      areas: Array<{ id: string; controls: string[] }>;
+      areas: Array<{ id: string; controls: Array<{ id: string; name: string; type: string; description: string;
+        resources: Array<{ title: string; url: string; type: string | null }> }> }>;
     };
 
 const QUESTION_SET = 'question-set:';
@@ -67,7 +68,19 @@ export function signOffPayload(c: LoadedContent, batch: SignOffBatch): SignOffPa
         optionAreas: q.optionGapMap === undefined ? null
           : Object.fromEntries(Object.entries(q.optionGapMap).map(([o, es]) => [o, es.map((e) => (typeof e === 'string' ? e : e.area))])),
       })),
-      areas: [...c.areas.values()].map((a) => ({ id: a.id, controls: [...(a.controls ?? [])] })),
+      // Each area's controls with every field the question page and the report show, so a control's text changed after the
+      // sign-off leaves this batch unsigned (anti-goal 3).
+      areas: [...c.areas.values()].map((a) => ({
+        id: a.id,
+        controls: (a.controls ?? []).map((id) => {
+          const k = c.controls.get(id);
+          if (k === undefined) throw new Error(`signOffPayload: area ${a.id} lists control ${id}, which the content does not define`);
+          return {
+            id: k.id, name: k.name, type: k.type, description: k.description,
+            resources: (k.resources ?? []).map((r) => ({ title: r.title, url: r.url, type: r.type ?? null })),
+          };
+        }),
+      })),
     };
   }
   if (isStage(batch)) {

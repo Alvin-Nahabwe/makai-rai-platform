@@ -457,6 +457,28 @@ describe('sign-offs and completeness', () => {
     expect(check(dir).join('\n')).toMatch(/risk-mapping.*sha256/);
   });
 
+  it('G6: a control text or resource url changed after the risk-mapping sign-off changes the hash and is refused', () => {
+    const dir = completeCopy('0.0.1-fixture'); signAll(dir);
+    const cfgPath = join(dir, 'projectConfig.json');
+    write(cfgPath, { ...json(cfgPath), controlSuggestionsApproved: true });
+    const pl = signOffPayload(loadDir(dir), 'risk-mapping');
+    const f = json(join(dir, 'signoffs.json'));
+    f.records.push({ batch: 'risk-mapping', approver: 'Owner', at: AT, sha256: signOffHash(pl), items: signOffItems(pl) });
+    write(join(dir, 'signoffs.json'), f);
+    expect(check(dir)).toEqual([]);
+    const areasPath = join(dir, 'assessmentAreas.json');
+    const original = json(areasPath);
+    const used = original.controls.find((k: Json) => original.areas.some((a: Json) => (a.controls ?? []).includes(k.id)) && (k.resources ?? []).length > 0);
+    expect(used).toBeDefined();
+    for (const edit of [(k: Json) => { k.description += ' More.'; }, (k: Json) => { k.resources[0].url += '/x'; }, (k: Json) => { k.name += '!'; }]) {
+      const copy = JSON.parse(JSON.stringify(original));
+      edit(copy.controls.find((k: Json) => k.id === used.id));
+      write(areasPath, copy);
+      expect(signOffHash(signOffPayload(loadDir(dir), 'risk-mapping'))).not.toBe(signOffHash(pl));
+      expect(check(dir).join('\n')).toMatch(/risk-mapping.*sha256/);
+    }
+  });
+
   it('G6: a version without the switch needs no risk-mapping record', () => {
     const dir = completeCopy('0.0.1-fixture'); signAll(dir);
     expect(check(dir)).toEqual([]);

@@ -572,6 +572,9 @@ function checkTexts(q: LoadedQuestion, say: (p: string) => void): void {
   }
 }
 
+/** Every batch a record may name: the seven required ones and the conditional `risk-mapping`. */
+const KNOWN_BATCHES: readonly SignOffBatch[] = [...SIGN_OFF_BATCHES, ...CONDITIONAL_SIGN_OFF_BATCHES];
+
 /** For each batch, its latest record (by `at`) must match the current texts (FR-CNT-02); malformed records are named. */
 function checkSignOffs(c: LoadedContent, records: readonly unknown[], say: (p: string) => void): void {
   const latest = new Map<SignOffBatch, { at: number; record: Json; index: number }>();
@@ -579,7 +582,7 @@ function checkSignOffs(c: LoadedContent, records: readonly unknown[], say: (p: s
     const where = `signoffs.json records[${i}]`;
     if (!isRecord(r)) return say(`${where} is not an object`);
     const batch = r.batch;
-    if (typeof batch !== 'string' || !([...SIGN_OFF_BATCHES, ...CONDITIONAL_SIGN_OFF_BATCHES] as readonly string[]).includes(batch)) return say(`${where}: batch ${JSON.stringify(batch)} is not one of the seven batches or risk-mapping`);
+    if (typeof batch !== 'string' || !(KNOWN_BATCHES as readonly string[]).includes(batch)) return say(`${where}: batch ${JSON.stringify(batch)} is not one of the seven batches or risk-mapping`);
     const label = `${where} (${batch})`;
     let ok = true;
     if (typeof r.approver !== 'string' || r.approver.trim() === '') { say(`${label}: approver is empty`); ok = false; }
@@ -592,7 +595,7 @@ function checkSignOffs(c: LoadedContent, records: readonly unknown[], say: (p: s
     if (prev === undefined || at >= prev.at) latest.set(batch as SignOffBatch, { at, record: r, index: i });
   });
   // A version that turns suggested controls on also needs the experts' risk-mapping approval (G6), so content alone cannot switch them on.
-  const required = c.controlSuggestionsApproved ? [...SIGN_OFF_BATCHES, ...CONDITIONAL_SIGN_OFF_BATCHES] : SIGN_OFF_BATCHES;
+  const required = c.controlSuggestionsApproved ? KNOWN_BATCHES : SIGN_OFF_BATCHES;
   for (const batch of required) {
     const l = latest.get(batch);
     if (l === undefined) {
