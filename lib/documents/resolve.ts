@@ -180,6 +180,14 @@ function stageGap(snap: DocumentSnapshot, s: SnapshotStage | null): string | nul
   }
 }
 
+/** Whether the snapshot is a draft: the rules that differ for a draft (typed values, the typed gap) read this. */
+function isDraft(snap: DocumentSnapshot): boolean {
+  switch (snap.provenance.kind) {
+    case 'sealed': return false;
+    case 'draft': return true;
+  }
+}
+
 /** The gap lines: a field that prints one is not recorded (FR-DOC-08), and the line prints once in it. */
 const isGap = (t: string | null): boolean => t === NOT_RECORDED_AT_ISSUE || t === NOT_RECORDED_YET;
 
@@ -675,17 +683,19 @@ function sealLine(seal: StageSeal): string {
   return `Seal ${seal.sealNumber} of ${seal.reviewName}: sealed ${at} by ${seal.sealedBy.name} (${word(REVIEW_COPY.roleWords, seal.sealedByRole, 'role')}); decisions entered by ${n} ${n === 1 ? 'person' : 'people'}. Fingerprint ${formatFingerprint(seal.fingerprint, 'full')}`;
 }
 
-function resolveMeta(source: Extract<FieldSource, { kind: 'meta' }>, snap: DocumentSnapshot): ResolvedPart {
-  if (source.item === 'seals') {
-    switch (snap.provenance.kind) {
-      case 'sealed': {
-        const seals = sealsOf(snap).map(sealOf);
-        return part({ text: seals.map(sealLine).join('\n'), stageKeys: seals.map((x) => x.sealId) });
-      }
-      // MP-10, DC-33, MC-31 in a draft: no seal, no fingerprint, no stage key (design §7).
-      case 'draft': return part({ text: NOT_SEALED });
+/** The seals field: each seal the document used, or in a draft `NOT_SEALED` (MP-10, DC-33, MC-31) with no fingerprint or stage key (design §7). */
+function sealsPart(snap: DocumentSnapshot): ResolvedPart {
+  switch (snap.provenance.kind) {
+    case 'sealed': {
+      const seals = sealsOf(snap).map(sealOf);
+      return part({ text: seals.map(sealLine).join('\n'), stageKeys: seals.map((x) => x.sealId) });
     }
+    case 'draft': return part({ text: NOT_SEALED });
   }
+}
+
+function resolveMeta(source: Extract<FieldSource, { kind: 'meta' }>, snap: DocumentSnapshot): ResolvedPart {
+  if (source.item === 'seals') return sealsPart(snap);
   if (source.item === 'deciders') {
     const names = new Set<string>();
     for (const s of sealsOf(snap)) for (const d of s.decisions.values()) { const who = deciderText(d); if (who !== null) names.add(who); }
@@ -764,18 +774,24 @@ function notApplicableList(snap: DocumentSnapshot): ResolvedPart {
  * decision, FR-FND-01), lists its question's risk areas and the controls they reach: the set its question page suggests, every
  * control once (FR-SUG-01; workshop walk 2, N3). A finding with neither is not listed.
  */
+/**
+ * The content MP-04 reads its controls from, or null when it may suggest none. An issued plan reads the content its seal was made on,
+ * as it always has. A draft reads the running content, and only once experts have approved its mapping (anti-goal 3; Task 3's switch).
+ */
+function controlsContent(snap: DocumentSnapshot): LoadedContent | null {
+  switch (snap.provenance.kind) {
+    case 'sealed': return loadContent(snap.chosen.manifest.content.semver);
+    case 'draft': {
+      const c = running(snap);
+      return controlSuggestionsOn(c) ? c : null;
+    }
+  }
+}
+
 function mappedControls(snap: DocumentSnapshot): ResolvedPart {
   const s = snap.chosen;
-  let c: LoadedContent;
-  switch (snap.provenance.kind) {
-    // An issued plan reads the content its seal was made on, as it always has.
-    case 'sealed': c = loadContent(s.manifest.content.semver); break;
-    // A draft suggests controls only once experts have approved the running content's mapping (anti-goal 3; Task 3's switch).
-    case 'draft':
-      c = running(snap);
-      if (!controlSuggestionsOn(c)) return part({ text: CONTROLS_AFTER_APPROVAL, stageKeys: [stageKey(s)] });
-      break;
-  }
+  const c = controlsContent(snap);
+  if (c === null) return part({ text: CONTROLS_AFTER_APPROVAL, stageKeys: [stageKey(s)] });
   const sources: RowRef[] = [];
   const listed = ({ finding }: SealedFinding) => finding.state === 'open' && (finding.riskArea !== null || finding.questionId !== null);
   const blocks = s.findings.filter(listed).map(({ finding }) => {
@@ -838,7 +854,7 @@ export function resolveFields(map: FieldMap, snap: DocumentSnapshot, typed: Read
   sources: Array<{ sourceTable: string; sourceId: string; field: string | null }>; sealIds: string[];
 } {
   assertOneProvenance(snap);
-  const draft = snap.provenance.kind === 'draft';
+  const draft = isDraft(snap);
   const values: Readonly<Record<string, string>> = draft ? {} : typed;
   const named = new Map<string, string[]>();
   for (const e of map.fields) {
