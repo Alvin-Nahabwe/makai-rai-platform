@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { ShellProjectPlace } from '@/components/layout/ShellPlace';
 import { SHELL_PROJECT_COPY, stageStateLine } from '@/lib/shell/project/copy';
+import { PROJECT_COPY } from '@/lib/project/copy';
 import type { ShellProject } from '@/lib/shell/types';
 import type { Stage } from '@/types/record';
 
@@ -17,6 +18,8 @@ const NAME_ID = 'shell-project-name';
 const projectHref = (orgSlug: string, id: string) => `/orgs/${orgSlug}/projects/${id}`;
 /** A stage's All questions page (S-11): the stage page itself, `…/stages/<stage>`; there is no `…/questions` list page. */
 const stageHref = (orgSlug: string, id: string, stage: Stage) => `${projectHref(orgSlug, id)}/stages/${stage}`;
+/** The working report (path to outputs, G1): a project-level page, open to every role that can read the project. */
+const reportHref = (orgSlug: string, id: string) => `${projectHref(orgSlug, id)}/report`;
 
 /**
  * A stage's line mark, as the locked sketch draws it (assigned.html, `.lines`): a short rule, brighter for a started stage,
@@ -33,7 +36,7 @@ function LineMark({ current }: { current: boolean }) {
 }
 
 /**
- * The rail's project block (owner ruling R4; sketch `1-the-route.png`, left column under the navigation): the project's name
+ * The rail's project block (owner ruling R4; the Working report link under the stages, path to outputs G1; sketch `1-the-route.png`, left column under the navigation): the project's name
  * linking to its page, then the three stages in order (the sentence about the stages stays on the project page: the lead's
  * rail-fit ruling, so the three lines fit a laptop's first view), each linking to its
  * All questions page with one line of state (lib/shell/project/copy.ts). The stage in the address is `aria-current=
@@ -65,6 +68,8 @@ export function RailProjectBlock({ project, orgSlug, currentStage }: Props) {
           );
         })}
       </ul>
+      {/* Not prefetched: the report reads every stage's answers, and a prefetch from every page of the project would do that unseen. */}
+      <Link href={reportHref(orgSlug, project.id)} prefetch={false} className="shell-project__report">{PROJECT_COPY.workingReport.railLink}</Link>
     </div>
   );
 }

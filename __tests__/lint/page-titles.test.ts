@@ -80,7 +80,7 @@ describe('page titles (spec 7.5)', () => {
   // is proven page by page in __tests__/integration/page-titles-tenancy.test.ts.
   it('1A R10-2: each signed-in page that names its organisation or project in generateMetadata defines a cache() load, calls the two gates and maps the gate\'s not-found through orNotFound', () => {
     const named = PAGES.filter((f) => f.startsWith('app/(authenticated)/orgs/') && DYNAMIC.test(code(f)));
-    expect(named.length).toBe(18); // 6 organisation pages and 12 project pages
+    expect(named.length).toBe(19); // 6 organisation pages and 13 project pages
     const wrong = named.filter((f) => {
       const s = withoutComments(code(f));
       return !/= cache\(/.test(s) || !s.includes('requireIdentity(') || !s.includes('requireOrgContextFor(') || !s.includes('await orNotFound(');

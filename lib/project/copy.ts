@@ -17,7 +17,25 @@ const ARCHIVED_BANNER = Object.freeze({
 });
 
 export const PROJECT_COPY = Object.freeze({
-  titles: Object.freeze({ project: 'Project', editProject: 'Edit project' }),
+  titles: Object.freeze({ project: 'Project', editProject: 'Edit project', workingReport: 'Working report' }),
+  /**
+   * The working report page and its rail entry (path to outputs, Task 10; design G1). The page's other words are the PDF's
+   * (lib/documents/copy.ts: WORKING_REPORT_PAGE, draftLine, DOCUMENT_TITLES), so the screen and the download say the same things.
+   * "Working report" in the rail is fixed copy.
+   */
+  workingReport: Object.freeze({
+    railLink: 'Working report',
+    downloadHeading: 'Download as PDF',
+    downloadAll: 'Download the whole working report (PDF)',
+    /** Names the list of one-part links. */
+    partsHeading: 'Or download one part',
+    /** One part's link: its name, then the kind. The size is not known until the PDF is made, so none is printed. */
+    partLink: (name: string): string => `${name} (PDF)`,
+    /** The heading of a stage's draft plan, and the name of its link. */
+    planTitle: (planName: string, stageName: string): string => `${planName}, ${stageName}`,
+    /** Where an open item sits: its stage, and its question when it has one. */
+    placeOf: (stageName: string, questionId: string | null): string => (questionId === null ? stageName : `${stageName}, question ${questionId}`),
+  }),
   /** S-10's one primary action (plan 1C C11): after a save of the person's in this project, and before one. */
   continue: 'Continue recording',
   start: 'Start recording',

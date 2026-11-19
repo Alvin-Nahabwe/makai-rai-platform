@@ -243,7 +243,7 @@ The route is the stage drawn as one line, a mark per question.
 
 **The row of marks** (`<RouteRow>`). One mark per question in a wrapping row, joined by a 2 px line in `--color-mark`, then a tally list: a 16 px shape, a bold count and the words. Each stop's accessible text is "title: status words". The current stop is ringed 2 px in `--color-action-text` and carries `aria-current="step"`. There is no fill, percentage or total. A defined status word can carry an (i) `<TermTip>` on its first use.
 
-**The rail** (`components/layout/Rail.tsx`, `ShellProject.tsx`, `shell.css`; ruling R4). On a project the rail shows the project's name and its three stages, each with a line mark and one line of state, such as "Not started" or "You are here · 24 questions". The current stage sits on a `--color-shell-hover` plate, and its state line is in the peach `--color-on-shell-accent` (#F4B983), 9.37:1 on the shell and 7.86:1 on the plate in light, 11.18:1 and 8.96:1 in dark. This is the one orange text on navy; every other rail text is `--color-shell-ink` or `--color-shell-muted` (ADR 0022). The mark on the current stage's line is an orange disc, `--color-action`, ringed in shell ink. The current rail item (Home, Projects and so on) is an action-orange fill with white text.
+**The rail** (`components/layout/Rail.tsx`, `ShellProject.tsx`, `shell.css`; ruling R4). On a project the rail shows the project's name and its three stages, each with a line mark and one line of state, such as "Not started" or "You are here · 24 questions". Under the stages is one link, "Working report" (`.shell-project__report`, 44 px high, shell ink, underlined on hover, not prefetched), to the project's working report. The current stage sits on a `--color-shell-hover` plate, and its state line is in the peach `--color-on-shell-accent` (#F4B983), 9.37:1 on the shell and 7.86:1 on the plate in light, 11.18:1 and 8.96:1 in dark. This is the one orange text on navy; every other rail text is `--color-shell-ink` or `--color-shell-muted` (ADR 0022). The mark on the current stage's line is an orange disc, `--color-action`, ringed in shell ink. The current rail item (Home, Projects and so on) is an action-orange fill with white text.
 
 ## The saved mark
 
@@ -358,6 +358,14 @@ S-10, `components/project/ProjectPage.tsx`, `StageLine.tsx`, `ProjectPage.css` (
 Home has one "New project" for an Owner, an Admin and an Assessor.
 
 What is built and stays: counts are words and numerals for one stage, with no percentage and no total or bar across stages, and at most one `data-stage-bar` bar per stage on S-10; an overdue plate is an `<ItemPlate>` whose "was due <date>" alone is in `--color-overdue`.
+
+## The working report
+
+`components/report/WorkingReportView.tsx` and `report.css`, the page `…/projects/<id>/report` (path to outputs, G1). It refines the project page's world and adds no new one: one column at `--max-width-narrow`, the h1 and h2 steps of the type scale, hairlines in `--color-border-container` between items, no card around a section and no colour for a status. It holds links only: one primary `.ui-button--primary` link downloads the whole report as a PDF and a row of text links downloads each part. It has no button and no field, so there is nothing a role can see and not use. The answers are page 1 ("Where this project stands") and then each draft document, with each field as a code and label beside its text and a small provenance line.
+
+- **The draft line** is the one box that carries the page's draft state: a 2 px `--color-heading` border on `--color-tint`, semibold, always the first block. On screen it is `position: sticky` at the top of the scroll area, so it stays in view wherever the report is scrolled to. In print it is `position: fixed`, which the browser repeats on every printed page; the content sits in a real table whose empty header group is as tall as the line and is repeated too, so no text of any page starts under it (a header group on a `div` is not repeated). Its words are `draftLine` of `lib/documents/copy.ts`, the same as the PDF's.
+- **Print** is black on white whatever the theme and omits the downloads.
+- **No score.** Nothing on the page counts or rates the project; the one number is a field's own answer.
 
 ## Voice and vocabulary
 

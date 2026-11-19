@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CONTROLS_AFTER_APPROVAL, DRAFT_PROJECT_MARK, NOT_RECORDED_YET, NOT_SEALED, NO_RISK_AREA_GROUP, REMOVED_QUESTION_GROUP, TYPED_AT_ISSUE, WORKING_REPORT_PAGE, WORKING_REPORT_TITLE, draftLine, draftReviewLine,
 } from '@/lib/documents/copy';
+import { PROJECT_COPY } from '@/lib/project/copy';
 import { TERM_WORKING_REPORT } from '@/lib/vocabulary/terms';
 import { assertNoClaims } from '../helpers/copyClaims';
 
@@ -31,6 +32,15 @@ describe('path-to-outputs copy has no claims (SRS 7.5.3)', () => {
   it('page 1 of the working report PDF holds no claim (Task 8)', () => {
     assertNoClaims('working report PDF copy', {
       WORKING_REPORT_TITLE, ...WORKING_REPORT_PAGE, omitted: WORKING_REPORT_PAGE.omitted(1), omittedMany: WORKING_REPORT_PAGE.omitted(3),
+    });
+  });
+
+  it('the working report page and its rail entry hold no claim (Task 10)', () => {
+    const W = PROJECT_COPY.workingReport;
+    assertNoClaims('working report page copy', {
+      title: PROJECT_COPY.titles.workingReport, railLink: W.railLink, downloadHeading: W.downloadHeading, downloadAll: W.downloadAll,
+      partsHeading: W.partsHeading, partLink: W.partLink('Data card'), planTitle: W.planTitle('Mitigation plan', 'Pre-processing'),
+      placeOfStage: W.placeOf('Pre-processing', null), placeOfQuestion: W.placeOf('Pre-processing', 'Q-PP-01'),
     });
   });
 
