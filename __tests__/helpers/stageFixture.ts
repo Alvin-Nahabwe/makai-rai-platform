@@ -24,6 +24,6 @@ export function stageFixture(over: {
   return {
     orgSlug: 'acme-health', orgId: 'o1', projectId: 'p1', projectName: over.projectName ?? 'Antenatal Risk Triage Model', projectArchived: false,
     stage, viewerId: 'u1', rows, nothingRecorded: true, changed: null, review: null,
-    followUp: over.followUp ?? { openFindings: 0, overdueMitigations: 0 }, marks, scopeAnswer: null,
+    followUp: over.followUp ?? { openFindings: 0, overdueMitigations: 0 }, marks, scopeAnswer: null, sealStep: { kind: 'hidden' },
   };
 }

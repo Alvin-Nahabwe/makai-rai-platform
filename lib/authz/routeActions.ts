@@ -50,6 +50,8 @@ export const ROUTE_ACTIONS: Record<string, Partial<Record<Method, Action>>> = {
   'app/api/v1/orgs/[slug]/projects/[id]/findings/[findingId]/withdrawal/route.ts': { POST: 'finding:withdraw' },
   'app/api/v1/orgs/[slug]/projects/[id]/findings/[findingId]/close-by-decision/route.ts': { POST: 'mitigation:write' },
   'app/api/v1/orgs/[slug]/projects/[id]/reviews/route.ts': { POST: 'review:open' },
+  // Design G2 (path to outputs): the seal request opens the stage's review, so it consults review:open.
+  'app/api/v1/orgs/[slug]/projects/[id]/reviews/seal-request/route.ts': { POST: 'review:open' },
   'app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/seals/route.ts': { POST: 'review:seal' },
   'app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/seals/[sealId]/check/route.ts': { GET: 'record:read' },
   'app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/documents/preview/route.ts': { POST: 'document:generate' },
@@ -104,6 +106,7 @@ export const RETRY_KEYED_WRITES: Readonly<Record<string, readonly Method[]>> = {
   'app/api/v1/orgs/[slug]/projects/[id]/findings/[findingId]/withdrawal/route.ts': ['POST'],
   'app/api/v1/orgs/[slug]/projects/[id]/findings/[findingId]/close-by-decision/route.ts': ['POST'],
   'app/api/v1/orgs/[slug]/projects/[id]/reviews/route.ts': ['POST'],
+  'app/api/v1/orgs/[slug]/projects/[id]/reviews/seal-request/route.ts': ['POST'],
   'app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/seals/route.ts': ['POST'],
   'app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/documents/route.ts': ['POST'],
   'app/api/v1/orgs/[slug]/documents/[documentId]/withdrawal/route.ts': ['POST'],

@@ -279,6 +279,8 @@ const REQUESTS: Record<string, Partial<Record<Method, RequestSpec>>> = {
     decisionVersionId: need(ids, 'body.decisionVersionId', `${P}findings/[findingId]/close-by-decision/route.ts`),
   } satisfies Omit<CloseByDecisionRequest, 'requestId'>) } },
   [`${P}reviews/route.ts`]: { POST: { body: () => ({ stage: STAGE, preparedFor: null } satisfies Omit<OpenReviewRequest, 'requestId'>) } },
+  // Design G2 (path to outputs): the seal request's body is exactly { requestId, stage }.
+  [`${P}reviews/seal-request/route.ts`]: { POST: { body: () => ({ stage: STAGE }) } },
   [`${P}reviews/[reviewId]/seals/route.ts`]: { POST: { body: () => ({} satisfies Omit<SealRequest, 'requestId'>) } },
   [`${P}reviews/[reviewId]/seals/[sealId]/check/route.ts`]: { GET: {} },
   [`${P}reviews/[reviewId]/documents/preview/route.ts`]: { POST: { body: (ids) => ({

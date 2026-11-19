@@ -1,0 +1,8 @@
+/* The seal step under a stage page's heading (design G2): one control or one status line, then its two live regions. */
+.seal-step {
+  margin-block: var(--space-3) 0;
+}
+
+.seal-step__line {
+  margin: 0;
+}

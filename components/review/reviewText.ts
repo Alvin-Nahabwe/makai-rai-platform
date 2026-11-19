@@ -158,6 +158,22 @@ export function openRefusal(out: Refused): RefusalLine {
 }
 
 /**
+ * The seal step's refusals (design G2), on the open form's rules: its words for a sign-out, a rate limit, an archived
+ * project and a lowered role, since the request opens a review. A server problem names the button pressed (`button`),
+ * which sends the same request id again. A number another open took (the service already tried twice) means a review of
+ * the stage is open: the page reloads and shows it, with nothing to say.
+ */
+export function sealRequestRefusal(out: Refused, button: string): RefusalLine {
+  const { status, body } = out;
+  if (body.code === 'number_taken') return { message: '', retry: false, refresh: true };
+  if (status === 401) return { message: REVIEW_COPY.open.signedOut, retry: false, refresh: false };
+  if (status === 429 || body.code === 'rate_limited') return { message: REVIEW_COPY.open.rateLimited(waitMinutes(body.retryAfterSeconds)), retry: false, refresh: false };
+  if (body.code === 'project_archived') return { message: REVIEW_COPY.open.archived, retry: false, refresh: false };
+  if (status === 403 && body.code === 'forbidden') return { message: REVIEW_COPY.open.roleChanged, retry: false, refresh: false };
+  return { message: REVIEW_COPY.sealStep.server(button), retry: status >= 500, refresh: false };
+}
+
+/**
  * Whether a 2xx body is the seal route 13 answers (S-17 hunt H2): a reply that is not is treated as "may have been
  * sealed", so the same request id is kept and Retry replays it, instead of the page breaking on a bad fingerprint.
  */

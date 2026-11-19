@@ -3,6 +3,7 @@ import {
   CONTROLS_AFTER_APPROVAL, DRAFT_PROJECT_MARK, NOT_RECORDED_YET, NOT_SEALED, NO_RISK_AREA_GROUP, REMOVED_QUESTION_GROUP, TYPED_AT_ISSUE, WORKING_REPORT_PAGE, WORKING_REPORT_TITLE, draftLine, draftReviewLine,
 } from '@/lib/documents/copy';
 import { PROJECT_COPY } from '@/lib/project/copy';
+import { REVIEW_COPY } from '@/lib/review/copy';
 import { TERM_WORKING_REPORT } from '@/lib/vocabulary/terms';
 import { assertNoClaims } from '../helpers/copyClaims';
 
@@ -49,6 +50,14 @@ describe('path-to-outputs copy has no claims (SRS 7.5.3)', () => {
     assertNoClaims('project page progress copy', {
       whatYouGet: O.whatYouGet, openReport: O.openReport, progressName: O.progressName(15, 24),
       nextContinue: O.nextQuestion(16, true), nextView: O.nextQuestion(16, false), doesNotApply: O.doesNotApply,
+    });
+  });
+
+  it('the seal step and its refusals hold no claim (Task 13)', () => {
+    const S = REVIEW_COPY.sealStep;
+    assertNoClaims('seal step copy', {
+      ask: S.ask, waiting: S.waiting, seal: S.seal, openAndSeal: S.openAndSeal, sealed: S.sealed,
+      lostAsk: S.lost(S.ask), lostOpenAndSeal: S.lost(S.openAndSeal), serverAsk: S.server(S.ask), serverOpenAndSeal: S.server(S.openAndSeal),
     });
   });
 

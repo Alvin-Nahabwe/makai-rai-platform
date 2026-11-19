@@ -3,7 +3,7 @@ import { assertCan, NotFoundError, withOrg, type OrgContext, type TenantTx } fro
 import { STAGES, type Actor, type DecisionStatus, type DecisionVersionRow, type ScopeAnswer, type Stage, type WriteOutcome } from '@/types/record';
 import type { ChangedSinceSeal, OpenReviewRequest, StageReviewView } from '@/types/api';
 import type { LoadedContent } from '@/types/content';
-import { ConflictError, ValidationFailed } from '@/lib/http/errors';
+import { AppError, ConflictError, ValidationFailed } from '@/lib/http/errors';
 import { idempotentWrite } from '@/lib/data/idempotency';
 import { assertProjectWritable } from '@/lib/data/projectGuard';
 import { uniqueViolationIndex } from '@/lib/data/pgErrors';
@@ -37,6 +37,10 @@ export const PREPARED_FOR_MAX = 120;
 export const PREPARED_FOR_TOO_LONG = `The note can have at most ${PREPARED_FOR_MAX} characters.`;
 /** K0a's unique index on (orgId, projectId, stage, numberInStage): a concurrent open in the same stage took the number (SRS 5.3 item 3). */
 const NUMBER_INDEX = 'stage_reviews_orgId_projectId_stage_numberInStage_key';
+/** K0a's unique index on (orgId, requestId): the request id is already on another review (a seal request reusing an open's id). */
+const REQUEST_INDEX = 'stage_reviews_orgId_requestId_key';
+/** The receipt route of the seal request (`request_receipts.route`). */
+const ROUTE_SEAL_REQUEST = 'app/api/v1/orgs/[slug]/projects/[id]/reviews/seal-request/route.ts::POST';
 
 
 /**
@@ -78,6 +82,28 @@ async function reviewViews(tx: TenantTx, rows: readonly ReviewRow[]): Promise<St
 }
 
 /**
+ * Inserts the stage's next numbered review in `tx` and returns its row (FR-REV-01): the number is one more than the
+ * stage's highest, read in the same transaction, and the opener, request id and digest are stamped on the row. The one
+ * insert both `openStageReview` and `requestSeal` make (conflict 13). A concurrent insert of the same number fails on
+ * NUMBER_INDEX, which each caller maps to `number_taken`.
+ */
+async function insertNumberedReview(
+  tx: TenantTx, ctx: OrgContext,
+  r: { projectId: string; stage: Stage; preparedFor: string | null; openedById: string; requestId: string; digest: string },
+): Promise<ReviewRow> {
+  const [{ n }] = await tx.$queryRaw<{ n: number }[]>`
+    SELECT (coalesce(max("numberInStage"), 0) + 1)::int AS n FROM stage_reviews
+    WHERE "orgId" = ${ctx.orgId} AND "projectId" = ${r.projectId} AND "stage" = ${r.stage}`;
+  return tx.stageReview.create({
+    data: {
+      orgId: ctx.orgId, projectId: r.projectId, stage: r.stage, numberInStage: n, preparedFor: r.preparedFor,
+      openedById: r.openedById, requestId: r.requestId, requestDigest: r.digest,
+    },
+    select: REVIEW_SELECT,
+  });
+}
+
+/**
  * Opens a stage review (FR-REV-01; contract route row 12). The name is the platform's (`stageReviewName`), the number
  * the next of the stage, the opener the session's; the client sends only the stage and the note. Inside
  * `idempotentWrite`'s transaction: the project must be writable (`project_archived`, or not found for a project the
@@ -95,15 +121,8 @@ export async function openStageReview(
       table: 'stage_reviews', requestId: a.requestId, digest, actorUserId: actor.userId,
       write: async (tx) => {
         await assertProjectWritable(tx, a.projectId);
-        const [{ n }] = await tx.$queryRaw<{ n: number }[]>`
-          SELECT (coalesce(max("numberInStage"), 0) + 1)::int AS n FROM stage_reviews
-          WHERE "orgId" = ${ctx.orgId} AND "projectId" = ${a.projectId} AND "stage" = ${a.stage}`;
-        const row = await tx.stageReview.create({
-          data: {
-            orgId: ctx.orgId, projectId: a.projectId, stage: a.stage, numberInStage: n, preparedFor,
-            openedById: actor.userId, requestId: a.requestId, requestDigest: digest,
-          },
-          select: REVIEW_SELECT,
+        const row = await insertNumberedReview(tx, ctx, {
+          projectId: a.projectId, stage: a.stage, preparedFor, openedById: actor.userId, requestId: a.requestId, digest,
         });
         return (await reviewViews(tx, [row]))[0];
       },
@@ -114,6 +133,78 @@ export async function openStageReview(
     if (uniqueViolationIndex(e) === NUMBER_INDEX) throw new ConflictError('number_taken');
     throw e;
   }
+}
+
+/**
+ * The seal request (design G2; SRS FR-DOC-09 clause 10): a role holding `review:open` asks for the stage to be sealed.
+ * Idempotent per stage: the stage's newest review with no seal is returned and nothing is opened; with none, a review is
+ * opened exactly as `openStageReview` opens one, with no note. `openStageReview` is unchanged and may still open further
+ * reviews (FR-REV-01).
+ *
+ * Retry-safe by the receipt mode of `idempotentWrite` (conflict 6: the "return the open review" path inserts no row, so
+ * the record mode, which demands a stamped new row, does not fit), whose transaction runs at READ COMMITTED. Inside it:
+ * the project must be writable, then a transaction-scoped advisory lock keyed by the project and the stage serialises
+ * every seal request of the stage, then the lookup and the insert each read what earlier requests committed. Two
+ * requests for one stage therefore open at most one review. Under REPEATABLE READ the second would read a snapshot taken
+ * before the first committed and open a second review, so this transaction must never run at that level. Lock order:
+ * the request's receipt lock (idempotentWrite), the project row (FOR SHARE), then the stage lock.
+ *
+ * `opened` is true only when this request opened the review (the route answers 201, else 200). A review opened by a
+ * concurrent `openStageReview`, which takes no stage lock, can take the number: the attempt rolls back, leaving no
+ * receipt, and runs once more, which returns that review; a second collision answers 409 `number_taken`. A request id
+ * already on a review (one used to open a review) answers 409 `request_id_reused`.
+ */
+export async function requestSeal(
+  ctx: OrgContext, actor: Actor, a: { projectId: string; stage: Stage; requestId: string }, digest: string,
+): Promise<WriteOutcome<StageReviewView> & { opened: boolean }> {
+  assertCan(ctx, 'review:open');
+  if (!STAGES.includes(a.stage)) throw new ValidationFailed([{ field: 'stage', message: REVIEW_COPY.open.stageInvalid }]);
+  const viewOf = async (tx: TenantTx, id: string) =>
+    (await reviewViews(tx, [await tx.stageReview.findUniqueOrThrow({ where: { id }, select: REVIEW_SELECT })]))[0];
+  const attempt = () => idempotentWrite<{ review: StageReviewView; opened: boolean }>(ctx, {
+    table: 'request_receipts', route: ROUTE_SEAL_REQUEST, requestId: a.requestId, digest, actorUserId: actor.userId,
+    write: async (tx) => {
+      await assertProjectWritable(tx, a.projectId);
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended('makrai.seal-request:' || ${a.projectId}::text || ':' || ${a.stage}::text, 0))`;
+      const open = await tx.$queryRaw<{ id: string }[]>`
+        SELECT r."id" FROM stage_reviews r
+        WHERE r."orgId" = ${ctx.orgId} AND r."projectId" = ${a.projectId} AND r."stage" = ${a.stage}
+          AND NOT EXISTS (SELECT 1 FROM seals s WHERE s."orgId" = r."orgId" AND s."stageReviewId" = r."id")
+        ORDER BY r."numberInStage" DESC LIMIT 1`;
+      if (open.length === 1) return { review: await viewOf(tx, open[0].id), opened: false };
+      const row = await insertNumberedReview(tx, ctx, {
+        projectId: a.projectId, stage: a.stage, preparedFor: null, openedById: actor.userId, requestId: a.requestId, digest,
+      });
+      return { review: (await reviewViews(tx, [row]))[0], opened: true };
+    },
+    receipt: (r) => ({ rowId: r.review.id }),
+    replay: async (tx, receipt) => {
+      // Every receipt of this route names the review it answered.
+      if (receipt.rowId === null) throw new TypeError('requestSeal: a seal-request receipt carries no review id');
+      return { review: await viewOf(tx, receipt.rowId), opened: false };
+    },
+  });
+  const mapped = (e: unknown): unknown => {
+    const index = uniqueViolationIndex(e);
+    if (index === NUMBER_INDEX) return new ConflictError('number_taken');
+    if (index === REQUEST_INDEX) return new AppError(409, 'request_id_reused');
+    return e;
+  };
+  let out: WriteOutcome<{ review: StageReviewView; opened: boolean }>;
+  try {
+    out = await attempt();
+  } catch (e) {
+    // The number index alone means FR-REV-01's open (which takes no stage lock) committed a review of this stage after
+    // this request looked: the attempt rolled back with no receipt, so the same request runs once more and returns that
+    // review, as clause 10 asks. A second collision is answered 409 `number_taken`.
+    if (uniqueViolationIndex(e) !== NUMBER_INDEX) throw mapped(e);
+    try {
+      out = await attempt();
+    } catch (again) {
+      throw mapped(again);
+    }
+  }
+  return { replayed: out.replayed, value: out.value.review, opened: !out.replayed && out.value.opened };
 }
 
 /**

@@ -9,6 +9,8 @@ import { stageFilterSet, tallyOfRows, tallyParts } from '@/lib/question/route';
 import { LIST_PAGE_SIZE, pageOf } from '@/lib/ui/showMore';
 import { ArchivedBanner } from '@/components/project/ArchivedBanner';
 import { StageSealBanner } from '@/components/review/StageSealBanner';
+import { SealStep } from '@/components/review/SealStep';
+import { sealStepTexts } from '@/lib/review/sealStep';
 import { StageQuestionList } from '@/components/decision/StageQuestionList';
 import { StageMeaning, stageTerm } from '@/components/question/StageMeaning';
 import { routeTermTips } from '@/components/question/termTips';
@@ -118,6 +120,8 @@ export function StageWorkspace({ data, show, shown }: { data: StagePageData; sho
       {/* D1: the stage's name with its plain meaning. Then W-2's subtitle: the stage's topics, in module order. */}
       <StageMeaning stage={data.stage} />
       <p className="stage-route__topics">{QUESTION_COPY.stage.topics(moduleGroups(data.rows).map((g) => g.moduleTitle))}</p>
+      {/* Design G2: the seal step for the viewer's role, under the heading (lib/review/sealStep.ts decides what it shows). */}
+      <SealStep orgSlug={data.orgSlug} projectId={data.projectId} stage={data.stage} state={data.sealStep} />
       {/* Spec 7.2: the whole stage's tally in words, each kind beside its mark (every question, not the page the list shows). */}
       <div className="stage-route__tally">
         <p className="stage-route__count" data-stage-summary="">{STAGE_LIST_COPY.count(data.rows.length)}</p>
@@ -181,7 +185,7 @@ export function StageWorkspace({ data, show, shown }: { data: StagePageData; sho
         total={data.rows.length} sealNumber={sealNumber} marks={data.marks} scopeAnswer={data.scopeAnswer}
         termTips={routeTermTips([
           // The page's words ahead of the rows, in reading order (fix round 4): a term they use is not first used in a row.
-          STAGE_TITLE[data.stage], QUESTION_COPY.stage.topics(moduleGroups(data.rows).map((g) => g.moduleTitle)),
+          STAGE_TITLE[data.stage], QUESTION_COPY.stage.topics(moduleGroups(data.rows).map((g) => g.moduleTitle)), ...sealStepTexts(data.sealStep),
           STAGE_LIST_COPY.count(data.rows.length), ...tallyParts(tallyOfRows(data.rows, data.marks)).map((t) => t.words),
           ...(openFindings > 0 ? [F.openFindings] : []), ...(overdueMitigations > 0 ? [F.overdueMitigations] : []),
           ...(data.nothingRecorded ? [QUESTION_COPY.stage.nothingRecorded] : []),
